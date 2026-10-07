@@ -990,7 +990,7 @@ Karar metinleri §16.10'dadır (T1–T42). Burada yalnız "neden reddedildi" ve 
 
 ---
 
-### 17.14 OP karar register'ı (OP-1–OP-70)
+### 17.14 OP karar register'ı (OP-1–OP-71)
 
 | OP | Konu | Statü | Garanti | Dayanak |
 |---|---|---|---|---|
@@ -1064,6 +1064,7 @@ Karar metinleri §16.10'dadır (T1–T42). Burada yalnız "neden reddedildi" ve 
 | OP-68 | Sürümleme ve CI: ürün SemVer'i ile protokol semantik sürümü ayrı; sunucu+servisler ortak sürüm, SDK'lar kendi SemVer'i ve uyumluluk tablosu, son iki minor güvenlik desteği; PR / gece / sürüm CI aşamaları; derleme önbelleği ve değişene göre test; Conventional Commits ile üretilen CHANGELOG, ayrı güvenlik başlığı; amd64/arm64 imzalı imajlar, trusted publishing (§16.4.4a) | FROZEN TECHNICAL; PD (araçlar, destek penceresi) | UDC | F-4…F-10; SA-36…SA-39; OP-56; SA-59 |
 | OP-69 | Geliştirici deneyimi: `just dev` ile tek komutluk yerel ortam (Postgres, NATS, SoftHSM, KMS taklidi, Mailpit, izleme); geliştirme modu yok, yerel karşılıklar kullanılır (TI-9); yerel ve CI aynı `just` komutları; `bacon` ve hafif pre-commit; `just gen` ile üretilen dosyalar commitlenir ve CI'da denetlenir; 15 dakikalık ilk gün (§16.4.4b) | FROZEN TECHNICAL; PD (araçlar) | UDC | TI-9; OP-65; OP-67; B24 |
 | OP-70 | Dokümantasyon: spec `docs/spec/` altında bölüm başına dosya (İngilizce dosya adları), içerik ve ID'ler değişmez, içindekiler sayfası; kök README İngilizce kısa tanıtım; ayrı ADR yok, kayıt tabloları karar kaydıdır ve “decision” etiketli PR ile güncellenir; Mermaid C4 diyagramları; üretilen API/kod dokümanı; alarm başına runbook; İngilizce dokümanlar, spec şimdilik Türkçe, ilk çeviri “Kısaca Access” (§16.4.4c) | FROZEN TECHNICAL; PD (araçlar) | — | OP-64; OP-65; OP-67; OP-2 |
+| OP-71 | Süreç: trunk-based, kısa ömürlü dallar, yalnız squash merge, doğrusal `main`; Claude PR açar, Adem inceleyip birleştirir (onay sayısı kuralı kullanılmaz); PR şablonu, ≤ 400 satır hedefi, `decision` etiketi; güvenlik bildirimi özel kanaldan; `main` koruması, push protection, CODEOWNERS ve hassas yol etiketi; CONTRIBUTING, CODE_OF_CONDUCT, SECURITY (§16.4.4d) | FROZEN TECHNICAL; PD (şablonlar) | — | SA-60; SA-14; OP-70; OP-68 |
 
 ---
 

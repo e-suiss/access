@@ -2,7 +2,7 @@
 
 **Bu bölümün kuralları.**
 - **Bileşen kimlikleri (MD-19.5).** Bileşenler **CMP-*n*** adını taşır. "C*n*" biçimi yalnız ontology kararlarını (C1–C34) gösterir; C15 de dahil (C15 = delegability kararı, §5). Bileşen notları §16.3.3'tedir.
-- Bu bölüm ve §17 normatif kararları **OP-*n*** ailesiyle numaralar (OP-1–OP-70). Register özeti §17.14'tedir. Bölüm içi yerel etiketler: §17.1 at-most-once senaryoları **OP-S1…OP-S12** (§8.5 yüzeyleri S1–S11 ile karışmasın diye), OP-60 binding re-anchor adımları **RB-0…RB-6** (RA-n etiketi yalnız §15.18 CR-45'tedir). Bileşen anlamında çıplak C*n* kullanılmaz, CMP-*n* kullanılır.
+- Bu bölüm ve §17 normatif kararları **OP-*n*** ailesiyle numaralar (OP-1–OP-71). Register özeti §17.14'tedir. Bölüm içi yerel etiketler: §17.1 at-most-once senaryoları **OP-S1…OP-S12** (§8.5 yüzeyleri S1–S11 ile karışmasın diye), OP-60 binding re-anchor adımları **RB-0…RB-6** (RA-n etiketi yalnız §15.18 CR-45'tedir). Bileşen anlamında çıplak C*n* kullanılmaz, CMP-*n* kullanılır.
 - Garanti sınıfları §3.3'teki gibidir. Kısaltmalar: BS = GUARANTEED BY SEMANTICS, UDC = GUARANTEED UNDER DECLARED CAPABILITY/POLICY, NG = NOT GUARANTEED. Fail-closed her yerde geçerlidir (MD-8).
 - Sayı ve ölçümler epistemik etiketleriyle verilir. Ölçümlerin mutlak değerleri tek ortama aittir: Apple M4, Rust 1.98.1, PostgreSQL 18.6, Docker. Taşınabilir olan oranlardır. ENGINEERING ASSUMPTION (EA) değerleri ölçülmüş sayı gibi yazılmaz.
 
@@ -444,6 +444,17 @@ Saat ve rastgelelik porttur: güvenilir zaman (TI-10) tek kaynaktan gelir ve tes
 4. **API ve kod dokümanı.** API dokümanı OpenAPI belgesinden üretilir (OP-65); crate dokümanı `rustdoc` ile (OP-64 `missing_docs`); SDK dokümanları OpenAPI'den beslenir. Kullanıcı doküman sitesi ilk sürüme yakın kurulur.
 5. **Runbook'lar.** `docs/runbooks/` altında her alarm için bir dosya (OP-67); ortak şablon: anlamı, etkisi, teşhis, düzeltme, haber verilecekler.
 6. **Dil.** Kök README, CONTRIBUTING, runbook'lar, API ve kod dokümanı İngilizcedir. Spec şimdilik Türkçedir (OP-64); ilk çeviri adımı “Kısaca Access” bölümünün İngilizcesidir (`docs/overview.md`).
+
+#### 16.4.4d OP-71 Süreç ve katkı
+
+**Statü: FROZEN TECHNICAL (trunk-based, PR ile birleştirme, Adem'in birleştirmesi, güvenlik bildiriminin özel kanalı); PD (şablonlar, etiketler, satır hedefi).** SA-60 (F-13…F-18) aynen geçerlidir.
+
+1. **Branch modeli.** Trunk-based: `main` her zaman çalışır durumdadır; iş kısa ömürlü dallarda yapılır (`feat/…`, `fix/…`, `docs/…`). Birleştirme yalnız squash ile; PR başlığı Conventional Commits biçimindedir ve `main`'de tek commit olur; `main` geçmişi doğrusaldır.
+2. **Çalışma akışı.** Claude dal açar, değişikliği yapar, testleri çalıştırır, dalı pushlar ve PR açar; CI çalışır; Adem inceler ve birleştirir. Birleştirme yetkisi yalnız Adem'dedir. PR'lar Adem'in hesabıyla açıldığından GitHub'ın onay sayısı kuralı kullanılmaz (kişi kendi PR'ını onaylayamaz); inceleme, birleştirmenin yalnız Adem tarafından yapılmasıdır (F-17). Bu akış branch koruması açıldığında spec çalışmaları dahil bütün değişikliklere uygulanır.
+3. **PR kuralları.** Şablon: ne ve neden, etkilenen spec kuralları (ID ile), test, kırıcı değişiklik, hassas yolda kısa tehdit değerlendirmesi (F-18). Hedef 400 satırın altı; büyük iş birden çok PR'a bölünür. Birleştirme koşulu: CI yeşil, şablon dolu. Karar değiştiren PR `decision` etiketi taşır (OP-70).
+4. **Issue'lar ve etiketler.** Hata ve özellik şablonları. Güvenlik açığı herkese açık issue olarak bildirilmez; `SECURITY.md` GitHub özel güvenlik bildirimine yönlendirir (SA-14). Etiketler: `decision`, `security-sensitive`, `good first issue`, `phase:0`…`phase:3`, bileşen etiketleri. Sürüm kapsamı milestone'larla izlenir.
+5. **GitHub ayarları.** `main` koruması: PR zorunlu, gerekli CI kontrolleri, imzalı commit, doğrusal geçmiş, force-push ve silme yasak. Push protection ve secret scanning açık (F-13). Yalnız squash merge. `CODEOWNERS` bütün depo için Adem; hassas yollar (Kernel, kripto, store, signer, kimlik doğrulama akışları, göçler) ayrıca işaretlenir ve bu yollara dokunan PR'lar `security-sensitive` etiketi alır.
+6. **Açık kaynak dosyaları.** `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md` (Contributor Covenant 2.1 uyarlaması), `SECURITY.md`, `.github/` altında PR ve issue şablonları ve `CODEOWNERS`; `LICENSE` lisans seçilince (D4).
 
 #### 16.4.5 OP-5 Bağımlılık yığını ve yasaklar
 

@@ -1,0 +1,15 @@
+# Default owner for the whole repository.
+*                               @ademceper
+
+# Security-sensitive paths (F-18): changes here need a threat assessment in the pull request.
+/crates/kernel/                 @ademceper
+/crates/crypto/                 @ademceper
+/crates/store/                  @ademceper
+/crates/sandbox/                @ademceper
+/crates/identity-oauth/         @ademceper
+/crates/identity-session/       @ademceper
+/crates/identity-webauthn/      @ademceper
+/crates/identity-federation/    @ademceper
+/bins/access-signer/            @ademceper
+/bins/access-gw-*/              @ademceper
+**/migrations/                  @ademceper

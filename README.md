@@ -22,4 +22,4 @@ Access will be fully open source. The license has not been chosen yet; until a `
 
 ## Contributing
 
-Contribution guidelines will be published in `CONTRIBUTING.md`. Code, comments, commit messages and pull requests are written in English.
+See [CONTRIBUTING.md](CONTRIBUTING.md). Code, comments, commit messages and pull requests are written in English. Report vulnerabilities privately as described in [SECURITY.md](SECURITY.md).
