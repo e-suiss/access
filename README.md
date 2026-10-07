@@ -11765,6 +11765,17 @@ Diğer bölümlerde adı geçen güvence, risk ve sınır adayları aşağıdaki
 | F-11 | Evaluator arşivi | Open reference evaluator'ın her sürümü ve vektörleri imzalı ve arşivlidir; replay eski sürümle yapılabilir | A3 |
 | F-12 | Güvenlik verisi hijyeni | Tedarik zinciri kararlarında kullanılan sayılar ölçümle veya kaynakla; SEO/LLM kaynaklı sayılar reddedilir | RR-34 |
 
+**Depo ve geliştirme güvenliği (SA-60).**
+
+| # | Kural | Ayrıntı |
+|---|---|---|
+| F-13 | Sır sızıntısı önleme | `gitleaks` commit öncesi kancası ve CI taraması; GitHub push protection açık; yerel geliştirmede gerçek sır yoktur, `.env` dosyaları git'e giremez. Sızan sır önce iptal edilir veya değiştirilir, sonra geçmiş temizlenir; geçmiş temizliği tek başına yeterli değildir |
+| F-14 | Statik analiz | CodeQL (Rust, TypeScript) ve Semgrep; spec'e özgü kurallar Semgrep ile yazılır (ör. `store` dışında SQL yok, `Secret` tipi biçimlendirilemez); yüksek önemli bulgu birleştirmeyi durdurur |
+| F-15 | Bağımlılık güncellemesi | Renovate; F-2'deki 7 günlük bekleme uygulanır; bilinen bir güvenlik açığını kapatan güncelleme beklemez; her güncelleme testlerden ve `cargo-vet`'ten geçer |
+| F-16 | Depo koruması | `main`'e doğrudan push yok; her değişiklik PR ve geçen CI ile girer; imzalı commit zorunlu; `main`'de force-push ve geçmiş yeniden yazımı yasak |
+| F-17 | İnceleme | Claude'un yazdığı her değişikliği Adem inceler ve birleştirir. Yapay zekâ incelemesi SLSA Source L4'ün ikinci insan incelemesi sayılmaz; ekibe ikinci bir insan katılana kadar Source L4 iddia edilmez (SA-38) |
+| F-18 | Hassas değişiklikler | Kripto, Kernel, imza, kimlik doğrulama akışları, RLS politikaları ve SQL'e dokunan PR'larda kısa tehdit değerlendirmesi zorunludur; bu yollar `CODEOWNERS`'ta hassas olarak işaretlenir |
+
 **xz dersi.** Tek maintainer'a bağımlı kritik bileşenler RR-19 olarak izlenir; build-time kod (build.rs, proc-macro) çalışma zamanı kodundan daha sıkı incelenir.
 
 | ID | Karar | Statü | Sınıf | Gerekçe | Kaynak |
@@ -11776,6 +11787,7 @@ Diğer bölümlerde adı geçen güvence, risk ve sınır adayları aşağıdaki
 | SA-38 | SLSA Build L3 hedefi attest-build-provenance ile; seviye pazarlamada kullanılmaz; Source L4 iki kişilik inceleme | EA | UDC (U49) | L3 doğrulanmadı | — |
 | SA-39 | Release checkpoint Access witness'larıyla co-sign | FROZEN | UDC | Kendi şeffaflık mekanizmasını kendi release'ine uygular | — |
 | SA-40 | FM-16: tespit + önleme birlikte (önleme: imza, provenance, cooldown; tespit: reproducible + replay) | FROZEN | NG (önleme) / UDC (tespit) | — | F-9 |
+| SA-60 | Depo ve geliştirme güvenliği: sır taraması ve push protection, sızan sırda önce iptal; CodeQL + Semgrep (spec'e özgü kurallar); Renovate 7 gün bekleme ve güvenlik istisnası; korunan `main`, imzalı commit; Adem'in incelemesi zorunlu, Source L4 ikinci insan katılana kadar iddia edilmez; hassas yollarda tehdit değerlendirmesi (F-13…F-18) | FROZEN | UDC | Açık kaynak depoda sızıntı anında herkese açıktır; iki kişilik ekipte inceleme kuralı dürüstçe tanımlanır | F-2; SA-38 |
 
 ### 14.8 Test ve doğrulama stratejisi
 
@@ -11832,6 +11844,34 @@ Diğer bölümlerde adı geçen güvence, risk ve sınır adayları aşağıdaki
 | SA-45 | MR7 iki ilişkidir (domain ve realm/tenant); MR6 RFC 9700 exact matching'e göre tanımlıdır | FROZEN (MR7), PD (MR6 — çıkarım, teyit gerekir) | UDC | İki izolasyon ekseni (MD-5) | — |
 | SA-46 | Yük testi coordinated-omission'sız; Keycloak sayıları yalnız kıyas | EA | — | Ölçüm doğruluğu | — |
 | SA-47 | Split-brain kuralı: grace 0 + failover 30 s; security event'leri senkron commit | PD | UDC (U51) | Split-brain ölçümü (SA-T16) | — |
+
+#### 14.8.1 SA-59 Test katmanlarının aşamaları ve test disiplini
+
+**Statü: FROZEN (aşama sırası, kural kapsaması, flaky kuralı); PD (süre bütçesi, araçlar).** SA-T1…SA-T18 katmanları aynen geçerlidir; bu bölüm hangisinin ne zaman zorunlu olduğunu belirler.
+
+**Aşamalar.**
+
+| Aşama | Zorunlu katmanlar |
+|---|---|
+| 0 — ilk satır koddan itibaren | Birim testleri; gerçek Postgres ile entegrasyon testleri; normatif vektörler (SA-T1); property-based testler (SA-T7); bilinen saldırı regresyonu (SA-T12); Wycheproof (SA-T11); şema güvenlik testleri (OP-66) |
+| 1 — ilk açık sürümden önce | Dış conformance süitleri, önce OIDF (SA-T2); fuzz, en riskli ayrıştırıcılar önce (SA-T9); karşılaştırmalı testler (SA-T10, T42); metamorfik testler (SA-T8); sabit zaman testleri (SA-T13); yük testi (SA-T17); bağımsız denetim (SA-17) |
+| 2 — ilk sürümden sonra | Deterministik simülasyon (SA-T14); uyumluluk matrisi (SA-T3); Kani (SA-T6); Jepsen/Elle ve split-brain (SA-T15, SA-T16) |
+| 3 — uzmanlık gerektirenler | Lean karşılaştırması (SA-T4); TLA+, Tamarin, ProVerif modelleri (SA-T5) |
+
+Bir katmanın aşaması geldiğinde o katman birleştirme veya sürüm kapısı olur; önceki aşamalar gevşetilmez.
+
+**Testlerin yeri.** Birim testleri kodun yanında (`#[cfg(test)]`); crate entegrasyon testleri crate'in `tests/` klasöründe; uçtan uca testler ayrı `e2e` crate'inde; conformance, karşılaştırmalı test ve uyumluluk laboratuvarı `conformance/`, fuzz hedefleri `fuzz/`, yük testleri `load/` altında (OP-62).
+
+**Yeterlilik ölçüsü.**
+- Satır kapsama yüzdesi hedef değildir.
+- **Kural kapsaması:** her normatif kuralın (INV, SI, TI, PI, CI, EI) en az bir testi vardır (SAI-1); test kural ID'sini adında veya yorumunda taşır (ör. `inv_2_single_write_path`); CI testi olmayan kuralları raporlar.
+- **Mutation testing:** Kernel ve karar çekirdeği (CMP-24, CMP-4) için `cargo-mutants`; yakalanmayan mutant birleştirme kapısıdır (Aşama 1'den itibaren).
+
+**Disiplin.**
+- Her PR'da çalışan testler ≤ 10 dakika (PD); uzun katmanlar gece çalışır.
+- Kararsız (flaky) test 24 saat içinde karantinaya alınır ve issue açılır; otomatik yeniden deneme ile geçirme yapılmaz.
+- Test adları davranışı anlatır (ör. `deny_when_grant_expired`).
+- Snapshot testleri (`insta`) yalnız büyük çıktılar içindir (hata yanıtları, OpenAPI belgesi, explain çıktısı); snapshot değişikliği PR'da açıkça incelenir.
 
 ### 14.9 Uyum
 
@@ -11890,6 +11930,7 @@ Diğer bölümlerde adı geçen güvence, risk ve sınır adayları aşağıdaki
 | SA-56 | **Sertifika başvuru listesi; şu an odak değildir.** Aşağıdaki sertifikalar hedef listesidir, zaman taahhüdü yoktur ve talep/pazar ihtiyacına göre sıralanır: OpenID Certified (OP Basic, Config, Dynamic, Form Post, oturum kapatma), FAPI 2.0 OP sertifikası (IDP-12), ISO 27001 + 27017 + 27018, SOC 2 Type I/II, Türkiye'deki bankalar için BDDK dış hizmet uyum belgeleri ve Türkiye bölgesinde veri yerleşimi (§17.4), HIPAA, FedRAMP. Mevcut taahhütler değişmez: OIDF conformance süiti CI'dadır (B9, AG-17); SA-17 (custodial hizmet için SOC 2 Type II, ilk açık sürümden önce crystal-box denetimi) | WATCH (liste); SA-17 FROZEN kalır | — | Ürün öncelikleri sertifikadan önce gelir; liste kurumsal satış sorularına hazırlık içindir | SA-17; IDP-12; B9 |
 | SA-57 | **Güvenlik güveni: bug bounty ve açık güvenlik sayfası.** Bug bounty ilk açık sürümle başlar. Herkese açık güvenlik sayfası bütün güvenlik duyurularını (GHSA), bağımsız denetim raporlarını (SA-17), CVD politikasını ve düzeltme sürelerini tek yerde yayınlar. SA-14, SA-16, SA-17 ve B20 aynen geçerlidir | FROZEN (başlangıç zamanı, açık sayfa); PD (ödül tablosu, platform) | — | Yeni ürünün güvenlik geçmişi yoktur; güven dış araştırma ve şeffaflıkla kazanılır | SA-14; SA-16; SA-17; B20 |
 | SA-58 | **Açık kaynak SAML IdP test süiti.** Pazarda olgun bir IdP tarafı SAML conformance süiti olmadığı için Access, herhangi bir SAML IdP'yi test eden bağımsız bir süit yazar ve açık kaynak yayınlar (D4). İçerik: (1) standart uyum testleri (imza yeri ve c14n, NameID, binding'ler, `SubjectConfirmation` ve zaman alanları, metadata); (2) bilinen saldırıların regresyon testleri (XML imza sarmalama/XSW, yorum enjeksiyonu, imzasız assertion kabulü, imzalı çıktının authN olmadan üretilmesi; §10.6.1 CVE listesi); (3) gerçek SP profilleri (§10.6.1 profil tablosu). Access süiti her derlemede CI'da koşar (T42, IDP-40). Süit Access'ten bağımsızdır ve tarafsız tasarlanır: Access'e özel davranış ödüllendirilmez (E24); diğer IdP'ler (Keycloak, authentik vb.) kullanabilir | FROZEN (süitin varlığı, açıklık, tarafsızlık, CI kapısı); PD (kapsam ve yayın zamanı) | — | IdP tarafı SAML doğrulamasının pazardaki boşluğu kapanır; bağımsız süiti geçmek yeni ürün için kanıttır; topluluk katkısıdır (B24) | T42; IDP-40; D4; B24 |
+| SA-59 | Test katmanları dört aşamada zorunlu olur (0: ilk koddan; 1: ilk açık sürümden önce; 2: sonra; 3: uzmanlık gerektirenler); testlerin yeri; satır kapsama hedef değil, kural kapsaması ve Kernel/karar çekirdeği için mutation testing; PR ≤ 10 dk, flaky karantina ve otomatik tekrar yasağı, davranışı anlatan test adları, sınırlı snapshot (§14.8.1) | FROZEN (aşama sırası, kural kapsaması, flaky kuralı); PD (süreler, araçlar) | — | İki kişilik ekip için 18 katman sıralanmadan uygulanamaz; en ucuz ve en çok hata yakalayan katmanlar önce gelir | SA-T1…SA-T18; SAI-1; OP-62; OP-66 |
 
 ### 14.10 Açık sorular
 
@@ -13090,7 +13131,7 @@ SAI aralıkları: SAI-1…SAI-39 §14'e (kullanılan SAI-1…9), SAI-40…SAI-59
 
 **Bu bölümün kuralları.**
 - **Bileşen kimlikleri (MD-19.5).** Bileşenler **CMP-*n*** adını taşır. "C*n*" biçimi yalnız ontology kararlarını (C1–C34) gösterir; C15 de dahil (C15 = delegability kararı, §5). Bileşen notları §16.3.3'tedir.
-- Bu bölüm ve §17 normatif kararları **OP-*n*** ailesiyle numaralar (OP-1–OP-61). Register özeti §17.14'tedir. Bölüm içi yerel etiketler: §17.1 at-most-once senaryoları **OP-S1…OP-S12** (§8.5 yüzeyleri S1–S11 ile karışmasın diye), OP-60 binding re-anchor adımları **RB-0…RB-6** (RA-n etiketi yalnız §15.18 CR-45'tedir). Bileşen anlamında çıplak C*n* kullanılmaz, CMP-*n* kullanılır.
+- Bu bölüm ve §17 normatif kararları **OP-*n*** ailesiyle numaralar (OP-1–OP-67). Register özeti §17.14'tedir. Bölüm içi yerel etiketler: §17.1 at-most-once senaryoları **OP-S1…OP-S12** (§8.5 yüzeyleri S1–S11 ile karışmasın diye), OP-60 binding re-anchor adımları **RB-0…RB-6** (RA-n etiketi yalnız §15.18 CR-45'tedir). Bileşen anlamında çıplak C*n* kullanılmaz, CMP-*n* kullanılır.
 - Garanti sınıfları §3.3'teki gibidir. Kısaltmalar: BS = GUARANTEED BY SEMANTICS, UDC = GUARANTEED UNDER DECLARED CAPABILITY/POLICY, NG = NOT GUARANTEED. Fail-closed her yerde geçerlidir (MD-8).
 - Sayı ve ölçümler epistemik etiketleriyle verilir. Ölçümlerin mutlak değerleri tek ortama aittir: Apple M4, Rust 1.98.1, PostgreSQL 18.6, Docker. Taşınabilir olan oranlardır. ENGINEERING ASSUMPTION (EA) değerleri ölçülmüş sayı gibi yazılmaz.
 
@@ -13358,6 +13399,127 @@ CI kapıları (birleştirme koşulu):
 
 Tip düzeyi kapsam: `access-store` bir tenant/domain/realm kapsamı olmadan sorgu tipini derlemez (MD-2 son madde). Branded lifetime (`generativity`) belirli yanlış kullanımları derleme zamanında engeller. **İzin verilmeyen ifade:** "kiracı izolasyonunu derleyici garanti eder". Asıl savunma RLS ve bileşik anahtarlardır (OP-12).
 
+#### 16.4.3a OP-62 Depo ve klasör yapısı
+
+**Statü: FROZEN TECHNICAL (tek depo, bağımlılık kuralları); PD (klasör ve crate adları). Garanti: UDC (CI kapılarının uygulanması).**
+
+**Tek depo (monorepo).** Rust sunucusu, SDK'lar, Kernel bağlamaları, yardımcı servisler, konsol, conformance ve dağıtım dosyaları tek depodadır: bir API değişikliği sunucuyu, SDK'ları ve konsolu tek commit'te değiştirir ve birlikte test edilir. **İstisna:** açık kaynak SAML IdP test süiti (SA-58) tarafsızlık için ayrı depodadır.
+
+**Klasör yapısı.**
+
+```text
+access/
+├── Cargo.toml            Rust workspace
+├── crates/               kütüphaneler; iş mantığı burada
+│   ├── kernel/           no_std çekirdek (CMP-24)
+│   ├── proto/            protokol tipleri
+│   ├── parse/            bütün ayrıştırıcılar
+│   ├── crypto/           aws-lc-rs sarmalayıcısı
+│   ├── sandbox/          seccomp/Landlock/prctl
+│   ├── store/            PostgreSQL erişimi, RLS, tipte kapsam
+│   ├── internal-api/     iki plane arasındaki tek sözleşme
+│   ├── authority-*/      authority plane bileşenleri (aşağıda)
+│   ├── identity-*/       identity plane bileşenleri (aşağıda)
+│   ├── http/             HTTP katmanı (her iki plane)
+│   ├── telemetry/        log, trace, metrik, OCSF
+│   └── testkit/          ortak test yardımcıları
+├── bins/                 çalıştırılabilir programlar; ince, yalnız birleştirir
+│   ├── access-server/    authority ve identity çekirdekleri (OP-2 süreçleri; small-provider profili tek binary)
+│   ├── access-signer/    CMP-22a/b
+│   ├── access-gw-saml/ -ldap/ -kerberos/ -radius/ -wsfed/   CMP-23.x
+│   ├── access-parser-worker/
+│   └── access-cli/       yönetim, `access ssh login` (IDP-32), replay
+├── services/             Access'in sunduğu ayrı servisler
+│   ├── executor/         B21, AG-40
+│   ├── proxy/            B22, IDP-30: Envoy/Caddy paketleri ve yapılandırma aracı
+│   ├── iys/              B23
+│   └── linux-client/     IDP-32: daemon, PAM ve NSS modülleri
+├── sdks/                 T41
+│   ├── openapi/          API tanımı (SDK'ların kaynağı)
+│   ├── bindings/         Kernel bağlamaları (uniffi, Wasm, C ABI)
+│   └── typescript/ python/ go/ java/ dotnet/ swift/ kotlin/ react-native/
+├── web/                  konsol ve gömülebilir UI bileşenleri (TN-133)
+├── conformance/          OIDF, karşılaştırmalı testler (T42), uyumluluk laboratuvarı (IDP-40), test vektörleri
+├── fuzz/                 fuzz hedefleri
+├── load/                 açık yük testi düzeneği (OP-61)
+├── deploy/               Docker, Helm, örnek altyapı
+├── docs/                 spec, mimari karar kayıtları, diyagramlar
+├── xtask/                geliştirme otomasyonu ve kural kontrolleri
+└── .github/              CI
+```
+
+**Crate bölünmesi.** OP-3'teki temel crate'ler korunur; `access-authority` ve `access-identity` spec bileşenlerine göre bölünür:
+- authority: `authority-core` (CMP-4), `authority-sequencer` (CMP-3), `authority-ingest` (CMP-8), `authority-checkpoint` (CMP-6), `authority-query` (CMP-9, CMP-11), `authority-export` (CMP-12);
+- identity: `identity-oauth` (CMP-15.1), `identity-session` (15.2), `identity-account` (15.3), `identity-scim` (15.4), `identity-admin` (15.5), `identity-ui` (15.6), `identity-webauthn` (15.7), `identity-federation` (15.10).
+
+Her crate tek bir spec bileşenine karşılık gelir. Crate'ler ihtiyaç doğdukça açılır; ilk sürümde yalnız kullanılanlar vardır. Bölme ilkesi ve adlar bu bölümdedir.
+
+**Bağımlılık yönü (CI'da `xtask` ile zorlanır; ihlal birleştirmeyi durdurur).**
+
+| Crate | Bağımlı olabileceği iç crate'ler |
+|---|---|
+| `kernel` | hiçbiri |
+| `proto` | kernel |
+| `parse`, `crypto` | kernel, proto |
+| `store` | kernel, proto |
+| `authority-*` | kernel, proto, parse, crypto, store, internal-api, telemetry; **`identity-*` yasak** |
+| `identity-*` | kernel, proto, parse, crypto, store, internal-api, telemetry; **`authority-*` yasak** |
+| `http` | plane'lerin servis arayüzleri |
+| `bins/*` | hepsi; iş mantığı içermez |
+| `sdks/bindings` | kernel, proto |
+| `services/*` | yalnız herkese açık parçalar: kernel, proto, SDK'lar; iç crate'ler yasak |
+
+İki plane yalnız `internal-api` üzerinden konuşur: identity plane authority üretmez (INV-12) ve authority çekirdeği identity deposuna erişmez (SEC19) kuralları kod düzeyinde korunur. Yardımcı servislerin iç crate'lere erişememesi, protocol'de ayrıcalıklı yol olmadığını (B21, B22, E24) kodda kanıtlar: müşterinin kendi yürütücüsü veya proxy'si aynı parçalarla aynı şeyi yapabilir.
+
+#### 16.4.3b OP-63 Kod içi mimari kalıplar
+
+**Statü: FROZEN TECHNICAL (saf çekirdek, portlar, outbox, güvenliği gevşeten ayar yasağı); PD (adlandırma, zaman aşımı değerleri). Garanti: UDC.**
+
+**1. Katmanlar: saf çekirdek, ince kabuk (portlar ve adaptörler).** Her bileşen crate'i dört katmana ayrılır:
+
+| Katman | İçerik | Kural |
+|---|---|---|
+| `domain` | İş kuralları ve tipler | Saf: veritabanı, ağ, saat ve rastgelelik yoktur; aynı girdi aynı çıktıyı verir (TI-3) |
+| `ports` | Dış ihtiyaçların arayüzleri: `Store`, `Clock`, `Signer`, `Rng`, `Outbox` | Yalnız trait tanımı |
+| `app` | Kullanım senaryoları | `domain`'i çağırır; dış dünyaya yalnız `ports` üzerinden dokunur |
+| `adapters` | Portların gerçek uygulamaları (PostgreSQL, HTTP, KMS) | Genelde `store`, `http`, `crypto` crate'lerinde |
+
+Saat ve rastgelelik porttur: güvenilir zaman (TI-10) tek kaynaktan gelir ve testte sabitlenebilir. Kernel bu modelin en saf hâlidir (OP-1).
+
+**2. Async ve eşzamanlılık.** Sunucularda Tokio çok iş parçacıklı çalışma zamanı kullanılır. Protokol mantığı (OAuth, SAML, SCIM akışları) I/O içermeyen (sans-I/O) durum makineleri olarak yazılır; ağ işini kabuk yapar. Async kod bloklanmaz: Argon2 ve ağır kriptografik işler `spawn_blocking` ile ayrılır. Her dış çağrının zaman aşımı vardır; kanallar ve kuyruklar sınırlıdır. İptal güvenliği: yarıda kesilen istek yarım iş bırakmaz.
+
+**3. Transaction, outbox, idempotency** (TI-6, TI-7, TI-8'in kod kalıbı):
+- Her kullanım senaryosu tek bir veritabanı transaction'ında çalışır (`UnitOfWork`).
+- Dışarıya her etki (webhook, SSF/CAEP sinyali, e-posta, Relay olayı) aynı transaction'da outbox'a yazılır ve commit'ten sonra ayrı bir süreç tarafından gönderilir; doğrudan gönderim yoktur.
+- İmza, yanıt ve dış istek dayandığı kayıt kalıcı olmadan çıkmaz (TI-6).
+- Değişiklik yapan her istek `Idempotency-Key` taşır; anahtar istek özetiyle saklanır. Aynı anahtar aynı içerikle ilk sonucu döndürür; farklı içerikle hata döner.
+
+**4. Yapılandırma.** İki tür ayar karıştırılmaz:
+- **Süreç ayarı** (port, veritabanı adresi, log seviyesi): katmanlı (varsayılan < dosya < ortam değişkeni), tipli ve açılışta doğrulanır; hatalı ayarla süreç başlamaz. Sırlar dosyada veya ortam değişkeninde bulunmaz; süreç kendi workload kimliğiyle KMS'ten alır (§15).
+- **Kiracı ayarı** (client, redirect URI, upstream IdP, politika): veritabanındadır ve yalnız `idp.*` domain action Exercise'ıyla değişir (MD-14); dosyayla değişmez.
+- **Özellik bayrakları:** isteğe bağlı protokoller derleme zamanında açılır/kapanır (Cargo feature). Güvenliği gevşeten hiçbir bayrak, ayar veya "geliştirme modu" kodda tanımlı değildir (TI-9).
+
+#### 16.4.3c OP-64 Kod kalitesi kuralları
+
+**Statü: FROZEN TECHNICAL (dil, lint kapısı, tipli kimlik, hata ve log kuralları); PD (lint ayrıntıları). Garanti: UDC (CI ve inceleme).** OP-3, OP-4 ve OP-8'deki kurallar aynen geçerlidir; bu bölüm onları tamamlar.
+
+1. **Dil.** Kod, tanımlayıcılar, kod yorumları, commit mesajları, PR ve issue metinleri İngilizcedir. Spec şimdilik Türkçedir. Spec terimleri (Grant, Mandate, Exercise, Acceptance, ValidityContract…) kodda birebir kullanılır; eş anlamlı uydurulmaz.
+2. **Biçimlendirme ve araç sürümü.** `rustfmt` ayarı depodadır; biçimsiz kod CI'da reddedilir. Rust sürümü `rust-toolchain.toml` ile sabittir (edition 2024).
+3. **Lint'ler.** Workspace düzeyinde tek yerde tanımlanır (`[workspace.lints]`): OP-3'teki `deny` listesi; `unsafe_code = "forbid"` varsayılan, yalnız OP-3 allowlist'indeki crate'lerde açılır; `clippy::pedantic` uyarı seviyesinde; herkese açık crate'lerde `missing_docs` yasak. CI'da her uyarı hatadır.
+4. **Tipli kimlikler.** Her kimlik kendi tipindedir (`GrantId`, `DomainId`, `TenantId`, `RealmId`…); hiçbir kimlik çıplak `String` veya `Uuid` olarak dolaşmaz.
+5. **Hata yönetimi.**
+   - Kütüphanelerde tipli hatalar (`thiserror`); her crate kendi hata türünü tanımlar.
+   - Yetki kararı (ALLOW / DENY / REQUIRE_ACTION) bir sonuçtur, hata değildir; hata yalnız işlemin yapılamadığını bildirir.
+   - Dışarıya hata biçimi RFC 9457 Problem Details'tır; hata kodları kalıcıdır.
+   - İç ayrıntı (stack trace, SQL hatası, dosya yolu) yanıta girmez.
+   - Kimlik doğrulama ve hesap varlığıyla ilgili hatalar dışarıya tek biçimdedir (numaralandırma-nötr, TN-96).
+6. **Loglama.** Yapılandırılmış log (`tracing`). Sır, token, anahtar ve kişisel veri taşıyan tipler kendini maskeler (`secrecy`, türetilmiş `Debug` yok; §17.8); bu tipler loga açık metin olarak yazılamaz. Seviyeler: `error` müdahale gerektirir; `warn` beklenmeyen ama yönetilen durum; `info` önemli iş olayı; `debug`/`trace` geliştirme.
+7. **Yorum ve doküman.**
+   - Yorum neyi değil nedeni anlatır.
+   - Bir spec kuralını uygulayan kod kuralın ID'sini anar (ör. `// INV-2: single write path`); spec ile kod arasında iz sürülebilir.
+   - Her `unsafe` bloğunun üstünde `// SAFETY:` açıklaması zorunludur.
+   - `TODO` yalnız bir issue numarasıyla yazılır.
+
 #### 16.4.4 OP-4 Build ve panic profili
 
 **Statü: FROZEN TECHNICAL. Garanti: UDC (lint + build profili).**
@@ -13420,6 +13582,40 @@ Crate envanteri, sürüm tarihleri ve olgunluk tabloları bu bölümün **normat
 - İç RPC ConnectRPC/Protobuf'tur. Rust implementasyonlarının olgunluğu doğrulanmadı ve OQ-MD1'e eklenir. Olgunluk yetersizse gRPC uyumlu bir Rust yığını (tonic sınıfı) eşdeğer kabul edilir. Bu yalnız iç bağlamadır, protocol yolunda değildir.
 - Suiss kolaylık API'leri ve identity plane'in admin API'si (CMP-15.5) authority değişikliği için ADP `commit`'e derlenir ve AIS ister (MD-14).
 - Kiracının veya müşterinin sunucu tarafında yürüttüğü Turing-tam kod yoktur (ayrıntı §2).
+
+#### 16.4.6a OP-65 API aileleri ve ortak API kuralları
+
+**Statü: FROZEN TECHNICAL (aileler, sürümleme, şema zinciri, ortak kurallar); PD (araç seçimleri, süreler). Garanti: UDC.** OP-6, TN-110, TN-112 ve TN-113 aynen geçerlidir.
+
+**1. API aileleri.**
+
+| Aile | Kullanan | Kural |
+|---|---|---|
+| Standart protokol uçları (OAuth/OIDC, SAML, SCIM, AuthZEN, SSF, `.well-known`, OIDF) | Dış uygulamalar, IdP'ler, PEP'ler | Standardın birebir aynısı; uzantı yalnız standardın izin verdiği yerde (OP-6, TI-17) |
+| Yönetim API'si (REST) | Kiracı backend'i, konsol, GitOps uzlaştırıcısı | Aşağıdaki ortak kurallar; yazmalar Exercise'a derlenir (TN-110) |
+| Karar API'si (ADP: AuthZEN + Access uzantıları) | PEP'ler, SDK `authorize` modülü | §9 protocol kuralları |
+| Frontend API | Gömülü UI bileşenleri, tarayıcı ve mobil istemciler (TN-133) | Kiracının özel alan adında; kendi çerez, CORS ve CSRF kuralları; aşağıdaki ortak kurallar |
+| İç RPC (ConnectRPC/Protobuf) | Access süreçleri | Dışarıya açık değildir (OP-6) |
+
+**2. Sürümleme.** Yönetim ve Frontend API'sinde ana sürüm adrestedir (`/v1/...`); bir ana sürüm içinde yalnız eklemeli değişiklik yapılır. Kaldırma önce `Deprecation` (RFC 9745) ve `Sunset` (RFC 8594) başlıklarıyla duyurulur. Standart protokoller kendi sürümlemesini izler. İç RPC'de Protobuf uyumluluk kuralları CI'da `buf breaking` ile denetlenir.
+
+**3. Şema zinciri.**
+- Yönetim ve Frontend API'si **koddan** belgelenir (TN-112): OpenAPI belgesi Rust kodundan üretilir ve `sdks/openapi/` altında depoya commitlenir.
+- CI, koddan yeniden üretilen belgenin commitlenmiş belgeyle aynı olduğunu ve ana sürüm artırılmadan kırıcı değişiklik yapılmadığını denetler; ihlal birleştirmeyi durdurur.
+- SDK'lar bu belgeden üretilir (T41).
+- İç RPC'de **şema önce** gelir: `.proto` dosyaları yazılır, kod ondan üretilir.
+
+**4. Ortak kurallar (Yönetim ve Frontend API'si).**
+- Hata biçimi RFC 9457 (OP-64).
+- Sayfalama opak imleçle; sayfa numarası veya offset yoktur.
+- Değişiklik yapan her istekte `Idempotency-Key` (MKT-D15, OP-63).
+- Eşzamanlı güncelleme: kaynak sürümü `ETag` olarak döner; güncelleme `If-Match` ister; uyuşmazlıkta 412.
+- Dış kimlikler opak ve türe göre öneklidir (ör. `grt_…` Grant, `rlm_…` realm); içeride UUIDv7 (MD-18).
+- Alan adları `snake_case`.
+- Zaman RFC 3339, UTC.
+- Büyük tamsayılar (tutar, sayaç) JSON'da string olarak taşınır (OP-8 TypeScript profili).
+- Her yanıtta `Request-Id` başlığı.
+- Hız sınırı bilgisi standart `RateLimit` başlıklarıyla döner.
 
 #### 16.4.7 OP-7 PostgreSQL 18 asgari sürüm
 
@@ -14012,6 +14208,17 @@ RLS ile ilgili yayımlanmış CVE'ler gerekçe kanıtıdır. Numaraları doğrul
 
 ---
 
+#### 17.2.9 OP-66 Veri katmanı kod kuralları
+
+**Statü: FROZEN TECHNICAL (ORM yok, SQL yalnız `store`'da, şema güvenlik testleri, gerçek Postgres ile test, üretim verisi yasağı); PD (araç ayrıntıları). Garanti: UDC.** OP-11–OP-18 ve OP-55 aynen geçerlidir.
+
+1. **SQL yazımı.** ORM kullanılmaz. Sorgular derleme zamanında şemaya karşı denetlenen düz SQL'dir (`sqlx::query!`); sorgu meta verisi depoya commitlenir (offline mod), CI veritabanı olmadan derler. Gerekçe: RLS, `SET LOCAL`, bileşik anahtarlar ve append-only tablolar SQL'in tam kontrolünü ister.
+2. **SQL'in yeri.** SQL yalnız `store` crate'indedir; iş mantığı veritabanını yalnız portlar üzerinden görür (OP-63). Başka crate'te SQL bulunması CI'da reddedilir.
+3. **Göç dosyaları.** Zaman damgalı ve açıklayıcı ad (ör. `20261008120000_add_grant_index.sql`). Commitlenmiş göç değiştirilmez; düzeltme yeni göçtür. Her göç PR'ında kontrol listesi: genişletme mi daraltma mı (OP-55), kilit süresi, büyük tabloya etkisi, yeni tabloda RLS ve kapsam sütunları.
+4. **Şema güvenlik testleri (CI).** Her tabloda RLS açık ve FORCE; kapsam sütunu (`domain_id` veya `tenant_id` + `realm_id`) PK önekinde (OP-12); append-only tablolarda UPDATE/DELETE yetkisi kapalı (OP-17); uygulama rolü tablo sahibi değil (OP-55). İhlal birleştirmeyi durdurur.
+5. **Test verisi.** Testler gerçek PostgreSQL ile çalışır (testcontainers); taklit veritabanı kullanılmaz. Şema bir kez kurulur, her test template veritabanından kendi temiz kopyasını alır; testler paralel ve bağımsızdır. Test verisi kodla üretilir (builder/factory). Yerel geliştirme sentetik tohum verisiyle yapılır; gerçek müşteri verisi test veya geliştirme ortamına girmez.
+6. **Küçük kurallar.** Durum alanları Postgres `ENUM` değil, `CHECK` kısıtlı `text`'tir (expand/contract uyumu). JSONB yalnız gerçekten şemasız veri içindir; sorgulanan veya kısıt gereken alan normal sütundur. Sık çalışan sorguların planı CI'da `EXPLAIN` ile denetlenir (OP-15).
+
 ### 17.3 Olay dağıtımı ve iptal yayılımı
 
 #### 17.3.1 Authority plane olayları
@@ -14517,6 +14724,16 @@ Kademeli bozulma tablosu, OP-45 kurallarıyla birlikte normatiftir:
 
 Kurallar: telemetri body/PII taşımaz; telemetri hiçbir karar girdisi değildir; audit sorusu telemetriden değil kayıttan cevaplanır.
 
+#### 17.8.3 OP-67 Gözlemlenebilirlik kod kuralları
+
+**Statü: FROZEN TECHNICAL (korelasyon, kalıcı olay adları, sağlık uçlarının iç ağda olması, alarm-runbook bağı); PD (alan listesi, araçlar). Garanti: UDC.** OP-47 ve §17.8.2 aynen geçerlidir.
+
+1. **Korelasyon.** Her istek W3C `traceparent` izleme kimliği taşır; istemci gönderdiyse o kullanılır, yoksa üretilir. Kimlik HTTP, iç RPC, outbox ve signer boyunca taşınır; `Request-Id` (OP-65) bu kimliğe bağlıdır.
+2. **Ortak log alanları.** Her log satırında `trace_id`, `span_id`, `service`, `version`, `event` (kalıcı olay adı, ör. `grant.issued`, `login.failed`), `outcome` ve gerekiyorsa takma adlı aktör kimliği bulunur. Yayımlanmış olay adı değiştirilmez; alarmlar ve panolar bu adlara dayanır.
+3. **Sağlık uçları.** Her süreçte `/livez` (süreç ayakta mı), `/readyz` (trafiğe hazır mı: veritabanı, signer ve bağımlı bileşenler) ve metrik çıkışı. Hazır olmayan süreç trafik almaz (MD-8). Sağlık uçları iç ağdadır.
+4. **Yerel gözlemlenebilirlik.** Yerel geliştirme ortamı hafif bir izleme yığınıyla (Grafana ve bir trace arka ucu) gelir ve üretimle aynı OpenTelemetry çıktısını kullanır.
+5. **Alarm ve runbook.** §17.8.2'deki her alarm, ne yapılacağını anlatan bir runbook'a bağlanır.
+
 ---
 
 ### 17.9 Dağıtım ve operatör deneyimi
@@ -14783,7 +15000,7 @@ Karar metinleri §16.10'dadır (T1–T42). Burada yalnız "neden reddedildi" ve 
 
 ---
 
-### 17.14 OP karar register'ı (OP-1–OP-61)
+### 17.14 OP karar register'ı (OP-1–OP-67)
 
 | OP | Konu | Statü | Garanti | Dayanak |
 |---|---|---|---|---|
@@ -14848,6 +15065,12 @@ Karar metinleri §16.10'dadır (T1–T42). Burada yalnız "neden reddedildi" ve 
 | OP-59 | Kiracı/domain bazında geri yükleme | FROZEN (vaat sınırı) | — / NG (HL-32) | — |
 | OP-60 | Aynı provider içinde binding re-anchor (self-handover / aynı provider profili; RB-0…RB-6; §16.6.1) | FROZEN TECHNICAL | BS (root yetkisi) / UDC (fencing; prospektif `superseded-at`, CR-45 semantiği) / HL-34 | OQ-CR3 (kapandı), CR-45 (§15.18) |
 | OP-61 | **Açık ve tekrarlanabilir ölçek ölçümü.** Yük testi düzeneği açık kaynak yayınlanır. Ölçülenler: hücre başına saniyede giriş, saniyede yetki kararı, p50/p99 gecikme, 100 milyon kullanıcılık veri seti, ani yük artışı, düğüm/AZ kaybı. Sonuçlar her sürümle ortam bilgisiyle (donanım, ayar, sürüm) yayınlanır. EA değerleri ölçüldükçe ölçülmüş değere geçer; ölçülmemiş sayı satış dilinde kullanılmaz (§3.3a, B15). İlk müşterilerle (tasarım ortakları) gerçek yük verisi toplanır. Gerekçe: canlı kanıt zamanla gelir; tekrarlanabilir ölçüm yeni ürüne doğrulanabilir güven verir | FROZEN TECHNICAL (açık düzenek, ortamlı yayın, ölçülmemiş sayı yasağı); EA (hedef değerler) | — | OQ-1; §4.10; §3.3a |
+| OP-62 | Tek depo (SAML IdP test süiti ayrı depo, SA-58); klasör yapısı; `authority-*` ve `identity-*` crate'lerinin spec bileşenlerine göre bölünmesi (ihtiyaç doğdukça); bağımlılık yönü kuralları CI'da: plane'ler yalnız `internal-api` üzerinden konuşur, yardımcı servisler iç crate'lere bağımlı olamaz (§16.4.3a) | FROZEN TECHNICAL (tek depo, bağımlılık kuralları); PD (adlar) | UDC (CI kapısı) | OP-3; INV-12; SEC19; E24 |
+| OP-63 | Kod içi mimari: crate başına `domain`/`ports`/`app`/`adapters` katmanları, saat ve rastgelelik port; sans-I/O protokol durum makineleri, bloklamayan async, zaman aşımları ve sınırlı kuyruklar; `UnitOfWork`, yalnız outbox ile dış etki, idempotency anahtarı; süreç ayarı ile kiracı ayarı ayrımı, güvenliği gevşeten bayrak yasağı (§16.4.3b) | FROZEN TECHNICAL (kalıplar, yasaklar); PD (adlar, değerler) | UDC | TI-3; TI-6; TI-7; TI-8; TI-9; TI-10; MD-14 |
+| OP-64 | Kod kalitesi: kod, yorum, commit ve PR İngilizce (spec şimdilik Türkçe); rustfmt ve sabit toolchain; workspace lint'leri ve uyarı = hata; tipli kimlikler; tipli hatalar, karar ≠ hata, RFC 9457, iç ayrıntı sızmaz, numaralandırma-nötr; maskeleyen sır/PII tipleri; spec ID'li yorumlar, `SAFETY:` ve issue'lu `TODO` (§16.4.3c) | FROZEN TECHNICAL; PD (lint ayrıntıları) | UDC | OP-3; OP-4; OP-8; TN-96; §17.8 |
+| OP-65 | API: beş aile (standart protokol, yönetim, karar, Frontend API, iç RPC); `/v1` ana sürüm, yalnız eklemeli değişiklik, Deprecation/Sunset; OpenAPI koddan üretilip commitlenir, CI eşitlik ve kırıcı değişiklik kapısı, SDK'lar ondan; iç RPC şema önce (`buf breaking`); ortak kurallar: RFC 9457, opak imleç, Idempotency-Key, ETag/If-Match, önekli opak kimlik, snake_case, RFC 3339, büyük sayı string, Request-Id, RateLimit (§16.4.6a) | FROZEN TECHNICAL; PD (araçlar) | UDC | OP-6; TN-110; TN-112; TN-133; MD-18 |
+| OP-66 | Veri katmanı: ORM yok, derleme zamanında denetlenen SQL (`sqlx::query!`, offline meta veri); SQL yalnız `store`'da; göç adlandırma, değişmezlik ve PR kontrol listesi; CI şema güvenlik testleri (RLS FORCE, PK öneki, append-only, rol sahipliği); gerçek Postgres ile paralel testler, builder ile test verisi, üretim verisi yasağı; `CHECK`'li text durumlar, sınırlı JSONB, sorgu planı kapısı (§17.2.9) | FROZEN TECHNICAL; PD (araçlar) | UDC | OP-12; OP-15; OP-17; OP-55; OP-63 |
+| OP-67 | Gözlemlenebilirlik kod kuralları: W3C `traceparent` korelasyonu bütün süreçlerde; ortak log alanları ve kalıcı olay adları; iç ağda `/livez`, `/readyz` ve metrik, hazır olmayan süreç trafik almaz; yerel izleme yığını; her alarm bir runbook'a bağlı (§17.8.3) | FROZEN TECHNICAL; PD (alanlar, araçlar) | UDC | OP-47; OP-65; MD-8 |
 
 ---
 
@@ -15470,9 +15693,9 @@ Hiçbiri bir B'yi değiştiremez.
 | AG-1…43, AGI-1…8 | §11.22 | |
 | TN-1…137, TNI-1…13 | §12.8–12.9 | |
 | G/U/N, DL, HL, RR, SEC1–SEC32 | §13 | HL/RR kanonik numaraları §13.5/§13.9 |
-| SA-1…58, SAI-1…9 | §14 | |
+| SA-1…60, SAI-1…9 | §14 | |
 | CR-1…52, SAI-40…46 | §15.21–15.22 | |
-| FA-1…14, T1–T42, RT1–RT30, HL-1…14, OP-1…61, OPI-1…6 | §16–§17 | T-kararlarının kanonik metni §16.10 |
+| FA-1…14, T1–T42, RT1–RT30, HL-1…14, OP-1…67, OPI-1…6 | §16–§17 | T-kararlarının kanonik metni §16.10 |
 | B1–B24, H1–H17, D1–D11 | §18 | |
 
 ### 19.2 Statü
