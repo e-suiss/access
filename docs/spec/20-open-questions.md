@@ -17,7 +17,7 @@
 
 ### 20.3 Kalan editoryal işler
 1. §13 numaralandırması §13.13'tedir. "§13'e aday" satırlarının kaynak bölümlerdeki metinleri (§9.11.2, §10.12, §11, §12.10, §15.20, §17.13) henüz yeni G/U/N/HL/RR numaralarına atıf vermiyor.
-2. §10.2.1 kural 1 identifier-first (enumeration-nötr) olarak düzeltilecek; TN-96 kanoniktir.
+2. ~~§10.2.1 kural 1 identifier-first olarak düzeltilecek~~ — tamamlandı: §10.2.1 ve CR-40 TN-96'ya göre düzeltildi.
 3. §6 PI-15 ve §13 U27'ye aynı-provider self-handover notu eklenecek.
 4. SYNC-DERIVED tablolar `domain_id` ile anahtarlanır; ek olarak `tenant_id` + RLS FORCE (§17'deki "çıkarım" etiketi kaldırılacak).
 5. §13.7.1 CT3 örneklerine kalıcı silme, realm imza anahtarı rotasyonu, yönetici göç dışa aktarımı; hesap durumu DENY overlay PD satırı eklenecek.

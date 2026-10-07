@@ -116,7 +116,7 @@ Access kullanan bir ürün şu cevapları güvenilir şekilde alır:
 | Delegation | Authority'nin taşınma biçimi; tek başına sonuç değil |
 | Trusted Effect | Domain execution'ı Access'e çeker; Access'in gözlemleyemediği şeyi vaat eder |
 
-Authority Exercise iki yönü birlikte tutar: geriye doğru provenance (root → delegation → Mandate) ve ileriye doğru envelope (Access'in tanımladığı, effect'in uyması gereken sınır). Effect'e değil envelope'a kadar uzanır. Kesin ontology anlamı C30'dur: bir intent nonce'u için ilk committed ALLOW ile doğan canonical entity. Ticari value metric de budur (B17).
+Authority Exercise iki yönü birlikte tutar: geriye doğru provenance (root → delegation → Mandate) ve ileriye doğru envelope (Access'in tanımladığı, effect'in uyması gereken sınır). Effect'e değil envelope'a kadar uzanır. Kesin ontology anlamı C30'dur: bir intent nonce'u için ilk committed ALLOW ile doğan canonical entity. Ticari value metric de budur (B17). Value metric bir ölçü birimidir, fatura birimi değildir: fatura Exercise sayısına göre kesilmez (B5, MD-17).
 
 Unit of value Authority Exercise'tır. Identity plane'in ürettiği login, oturum ve token tabloda "ön koşul" olarak reddedilmiştir. Identity plane için türetilmiş ürün metrikleri (kurtarma yeniden tetikleme oranı, phishing-resistant kimlik doğrulama oranı) §18.4'tedir. Bunlar unit of value veya fatura birimi değildir.
 

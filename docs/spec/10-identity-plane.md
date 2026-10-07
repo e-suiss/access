@@ -270,7 +270,7 @@ Kurallar:
 - Rate limit zorunludur → §12.
 
 **Enumeration ve zamanlama (MD-18; bağlayıcı).**
-1. Login akışı kullanıcı adı ve parolayı birlikte alır, ardından MFA gelir. Identity-first akış kullanılmaz.
+1. Login akışı önce tanımlayıcıyı alır (identifier-first, TN-96). İkinci adım hesap var olsun olmasın aynıdır: passkey seçeneği ve parola formu her zaman gösterilir; MFA sonra gelir. Hesap varlığı hiçbir kanalda sızmaz (CR-40).
 2. **Var olmayan kullanıcı için dummy Argon2 çalıştırılmaz**, çünkü DoS üretir. Bunun yerine adaptif gecikme uygulanır: koşan başarılı login ortalaması tutulur ve başarısız yanıt bu ortalamaya doldurulur (Rauthy modeli).
 3. `max_hash_threads` semaforu ve `hash_await_warn_time` metriği eklenir. Kuyruk doluluğu kullanıcının var olup olmamasına bağlı değildir.
 4. IP başına başarısız giriş sayacı ve üstel kara liste uygulanır. Değerler: 7 denemede 60 s, 10'da 600 s, 15'te 900 s, 20'de 3600 s, 25'te 24 saat (Rauthy değerleri; varsayılan, PD).
@@ -688,7 +688,7 @@ Her kenar süreci bu katmanlara yalnız iç API ile erişir (MD-1).
 
 | Format | Kural |
 |---|---|
-| persistent | Varsayılan. Rastgele 32 bayt, base64url. `(identity_subject_id, sp_entity_id)` UNIQUE (`pairwise_subjects`). HMAC durumsuz mod opsiyoneldir; anahtar rotasyonu ID'leri değiştirir (uyarı). **Asla e-posta.** Affiliation (`SPNameQualifier`) desteklenir. |
+| persistent | Varsayılan. Rastgele 32 bayt, base64url. `(identity_subject_id, sp_entity_id)` UNIQUE (`pairwise_subjects`). HMAC ile durumsuz türetme kullanılmaz (IDP-24): anahtar sızıntısı bütün ID'leri çözülebilir kılar ve anahtar rotasyonu ID'leri değiştirir. Kullanıcı isteğinde pairwise değer yenilenebilir. **Asla e-posta.** Affiliation (`SPNameQualifier`) desteklenir. |
 | transient | Her assertion'da yeni üretilir. |
 | emailAddress | Yalnız SP gerektirirse (Google) ve kiracı açık izin verirse. |
 | unspecified | Legacy; SP başına. |

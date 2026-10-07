@@ -18,7 +18,7 @@ The planned layout is described in the specification (§16.4.3a, OP-62): a singl
 
 ## License
 
-Access will be fully open source. The license has not been chosen yet; until a `LICENSE` file is added, no license is granted.
+Access is fully open source under the [Apache License 2.0](LICENSE).
 
 ## Contributing
 
