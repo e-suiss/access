@@ -2,7 +2,7 @@
 
 **Bu bölümün kuralları.**
 - **Bileşen kimlikleri (MD-19.5).** Bileşenler **CMP-*n*** adını taşır. "C*n*" biçimi yalnız ontology kararlarını (C1–C34) gösterir; C15 de dahil (C15 = delegability kararı, §5). Bileşen notları §16.3.3'tedir.
-- Bu bölüm ve §17 normatif kararları **OP-*n*** ailesiyle numaralar (OP-1–OP-71). Register özeti §17.14'tedir. Bölüm içi yerel etiketler: §17.1 at-most-once senaryoları **OP-S1…OP-S12** (§8.5 yüzeyleri S1–S11 ile karışmasın diye), OP-60 binding re-anchor adımları **RB-0…RB-6** (RA-n etiketi yalnız §15.18 CR-45'tedir). Bileşen anlamında çıplak C*n* kullanılmaz, CMP-*n* kullanılır.
+- Bu bölüm ve §17 normatif kararları **OP-*n*** ailesiyle numaralar (OP-1–OP-72). Register özeti §17.14'tedir. Bölüm içi yerel etiketler: §17.1 at-most-once senaryoları **OP-S1…OP-S12** (§8.5 yüzeyleri S1–S11 ile karışmasın diye), OP-60 binding re-anchor adımları **RB-0…RB-6** (RA-n etiketi yalnız §15.18 CR-45'tedir). Bileşen anlamında çıplak C*n* kullanılmaz, CMP-*n* kullanılır.
 - Garanti sınıfları §3.3'teki gibidir. Kısaltmalar: BS = GUARANTEED BY SEMANTICS, UDC = GUARANTEED UNDER DECLARED CAPABILITY/POLICY, NG = NOT GUARANTEED. Fail-closed her yerde geçerlidir (MD-8).
 - Sayı ve ölçümler epistemik etiketleriyle verilir. Ölçümlerin mutlak değerleri tek ortama aittir: Apple M4, Rust 1.98.1, PostgreSQL 18.6, Docker. Taşınabilir olan oranlardır. ENGINEERING ASSUMPTION (EA) değerleri ölçülmüş sayı gibi yazılmaz.
 
@@ -455,6 +455,16 @@ Saat ve rastgelelik porttur: güvenilir zaman (TI-10) tek kaynaktan gelir ve tes
 4. **Issue'lar ve etiketler.** Hata ve özellik şablonları. Güvenlik açığı herkese açık issue olarak bildirilmez; `SECURITY.md` GitHub özel güvenlik bildirimine yönlendirir (SA-14). Etiketler: `decision`, `security-sensitive`, `good first issue`, `phase:0`…`phase:3`, bileşen etiketleri. Sürüm kapsamı milestone'larla izlenir.
 5. **GitHub ayarları.** `main` koruması: PR zorunlu, gerekli CI kontrolleri, imzalı commit, doğrusal geçmiş, force-push ve silme yasak. Push protection ve secret scanning açık (F-13). Yalnız squash merge. `CODEOWNERS` bütün depo için Adem; hassas yollar (Kernel, kripto, store, signer, kimlik doğrulama akışları, göçler) ayrıca işaretlenir ve bu yollara dokunan PR'lar `security-sensitive` etiketi alır.
 6. **Açık kaynak dosyaları.** `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md` (Contributor Covenant 2.1 uyarlaması), `SECURITY.md`, `.github/` altında PR ve issue şablonları ve `CODEOWNERS`; `LICENSE` lisans seçilince (D4).
+
+#### 16.4.4e OP-72 Performans disiplini
+
+**Statü: FROZEN TECHNICAL (iki katmanlı ölçüm, ölçümsüz optimizasyon yasağı, güvenlik kontrolünün hız için gevşetilmemesi); PD (eşikler, araçlar, bütçe değerleri); bütçe değerleri EA.** OP-5, OP-33, OP-61 ve SA-T17 aynen geçerlidir.
+
+1. **Mikro benchmark'lar.** Sıcak yollar için `benches/` altında (`criterion` veya `divan`): Kernel karar değerlendirmesi (⊑, ∩, normalize), CBOR kodlama ve digest, imza doğrulama (Ed25519, ES256, COSE), token üretimi ve doğrulaması, parser'lar (JSON, SAML XML, CBOR), Argon2 (OP-5 ölçümü buradan yapılır).
+2. **İki katmanlı gerileme denetimi.** Her PR'da talimat sayısı tabanlı ölçüm (`iai-callgrind`/`gungraun`): gürültüden bağımsızdır; sıcak yollarda eşiği (PD: %5) aşan artış uyarı verir, Kernel'de birleştirmeyi durdurur. Her gece sabit, ayrılmış bir makinede gerçek süre benchmark'ları ve yük testi (OP-61) koşar; sonuçlar zaman serisi olarak izlenir.
+3. **Performans bütçeleri.** Her istek türü (karar API'si, token üretimi, giriş, introspection) için bütçe yazılır. Değerler EA'dır ve ölçüldükçe güncellenir; aşım gece raporunda görünür. Bütçe iç hedeftir, satış iddiası değildir (§3.3a, B15).
+4. **Profil araçları.** `samply` veya `cargo flamegraph` (CPU), `tokio-console` (async bekleme), `dhat` (bellek); `just bench` ve `just profile` komutlarıyla (OP-69).
+5. **Kural.** Önce doğruluk, sonra ölçüm, sonra optimizasyon. Ölçümsüz optimizasyon yapılmaz; `unsafe` kullanımı, bir güvenlik kontrolünün önbelleğe alınması veya bir doğrulama adımının atlanması ölçümle gerekçelendirilir ve hassas yol incelemesinden geçer (F-18). Bir güvenlik kontrolü hız için gevşetilmez (TI-9, MD-8).
 
 #### 16.4.5 OP-5 Bağımlılık yığını ve yasaklar
 

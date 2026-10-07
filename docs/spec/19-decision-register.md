@@ -17,7 +17,7 @@
 | G/U/N, DL, HL, RR, SEC1–SEC32 | §13 | HL/RR kanonik numaraları §13.5/§13.9 |
 | SA-1…60, SAI-1…9 | §14 | |
 | CR-1…52, SAI-40…46 | §15.21–15.22 | |
-| FA-1…14, T1–T42, RT1–RT30, HL-1…14, OP-1…71, OPI-1…6 | §16–§17 | T-kararlarının kanonik metni §16.10 |
+| FA-1…14, T1–T42, RT1–RT30, HL-1…14, OP-1…72, OPI-1…6 | §16–§17 | T-kararlarının kanonik metni §16.10 |
 | B1–B24, H1–H17, D1–D11 | §18 | |
 
 ### 19.2 Statü

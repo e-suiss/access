@@ -19,7 +19,9 @@ just dev    # starts PostgreSQL, NATS, SoftHSM, a KMS emulator, Mailpit and obse
 just test   # runs the same tests as CI on pull requests
 ```
 
-Other commands: `just check` (the same checks as CI), `just gen` (regenerate OpenAPI, Protobuf, sqlx metadata and Kernel bindings), `just db-reset`.
+Other commands: `just check` (the same checks as CI), `just gen` (regenerate OpenAPI, Protobuf, sqlx metadata and Kernel bindings), `just db-reset`, `just bench` (benchmarks) and `just profile` (profiling with `samply`/`cargo flamegraph`, `tokio-console`, `dhat`).
+
+Performance work follows one rule: correctness first, then measurement, then optimization. Unmeasured optimizations are not accepted, and a security check is never weakened for speed (OP-72).
 
 There is no "development mode": security controls are never disabled locally. Local equivalents (SoftHSM, a KMS emulator, Mailpit) replace production components instead (TI-9).
 

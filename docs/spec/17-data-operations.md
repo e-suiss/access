@@ -990,7 +990,7 @@ Karar metinleri §16.10'dadır (T1–T42). Burada yalnız "neden reddedildi" ve 
 
 ---
 
-### 17.14 OP karar register'ı (OP-1–OP-71)
+### 17.14 OP karar register'ı (OP-1–OP-72)
 
 | OP | Konu | Statü | Garanti | Dayanak |
 |---|---|---|---|---|
@@ -1065,6 +1065,7 @@ Karar metinleri §16.10'dadır (T1–T42). Burada yalnız "neden reddedildi" ve 
 | OP-69 | Geliştirici deneyimi: `just dev` ile tek komutluk yerel ortam (Postgres, NATS, SoftHSM, KMS taklidi, Mailpit, izleme); geliştirme modu yok, yerel karşılıklar kullanılır (TI-9); yerel ve CI aynı `just` komutları; `bacon` ve hafif pre-commit; `just gen` ile üretilen dosyalar commitlenir ve CI'da denetlenir; 15 dakikalık ilk gün (§16.4.4b) | FROZEN TECHNICAL; PD (araçlar) | UDC | TI-9; OP-65; OP-67; B24 |
 | OP-70 | Dokümantasyon: spec `docs/spec/` altında bölüm başına dosya (İngilizce dosya adları), içerik ve ID'ler değişmez, içindekiler sayfası; kök README İngilizce kısa tanıtım; ayrı ADR yok, kayıt tabloları karar kaydıdır ve “decision” etiketli PR ile güncellenir; Mermaid C4 diyagramları; üretilen API/kod dokümanı; alarm başına runbook; İngilizce dokümanlar, spec şimdilik Türkçe, ilk çeviri “Kısaca Access” (§16.4.4c) | FROZEN TECHNICAL; PD (araçlar) | — | OP-64; OP-65; OP-67; OP-2 |
 | OP-71 | Süreç: trunk-based, kısa ömürlü dallar, yalnız squash merge, doğrusal `main`; Claude PR açar, Adem inceleyip birleştirir (onay sayısı kuralı kullanılmaz); PR şablonu, ≤ 400 satır hedefi, `decision` etiketi; güvenlik bildirimi özel kanaldan; `main` koruması, push protection, CODEOWNERS ve hassas yol etiketi; CONTRIBUTING, CODE_OF_CONDUCT, SECURITY (§16.4.4d) | FROZEN TECHNICAL; PD (şablonlar) | — | SA-60; SA-14; OP-70; OP-68 |
+| OP-72 | Performans: sıcak yollar için mikro benchmark'lar; PR'da talimat sayısı tabanlı gerileme kapısı (Kernel'de birleştirmeyi durdurur), gece ayrılmış makinede gerçek süre ve yük testi; istek türü başına EA bütçeleri (iç hedef); profil araçları ve `just bench`/`just profile`; ölçümsüz optimizasyon yok, güvenlik kontrolü hız için gevşetilmez (§16.4.4e) | FROZEN TECHNICAL; PD (eşikler, araçlar); EA (bütçeler) | — | OP-5; OP-33; OP-61; SA-T17; TI-9 |
 
 ---
 
