@@ -34,3 +34,4 @@ Bu klasör Access'in kanonik spec'idir. Spec ana bölüm başına bir dosyaya b�
 | [20. Açık Sorular, Adem Kararları ve Kalan İşler](20-open-questions.md) |
 | [Ek A. ID aileleri](appendix-a-id-families.md) |
 | [Ek B. Özellik envanteri ve yapım sırası](appendix-b-feature-inventory.md) (normatif değil) |
+| [Ek C. Saklama ve silme kuralları](appendix-c-retention-rules.md) (veri; OP-74) |

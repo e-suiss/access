@@ -785,7 +785,7 @@ Uyarı: EDPB koordineli uygulama raporu (18 Şubat 2026; 32 otorite, 764 veri so
 
 - KVKK'nın üç yönlü ayrımı (Yönetmelik, RG 28.10.2017/30224, m.4) identity plane'e eşlenir: **silme** (göreli erişilemezlik) = mezar taşı + SCIM 404; **yok etme** (mutlak) = sert silme + kullanıcı anahtarının kripto parçalanması + yedeklerin sona ermesi; **anonim hâle getirme** = denetim satırlarında özne referansının geri döndürülemez koparılması (özet yeterli değildir).
 - **Periyodik imha** birinci sınıf bir iştir; aralığı **6 ayı geçemez** (Yönetmelik m.11: "bu süre her hâlde altı ayı geçemez") — bu bir azami aralıktır, saklama süresi değildir. Veri sahibi talebi en geç 30 gün (KVKK m.13); "üç ay" rakamı **doğrulanmadı** ve kullanılmaz.
-- **İki saat ayrıdır**: hareketsizlik saati (45/90 gün devre dışı; 12.3.1) ve imha saati (≤ 6 ay).
+- **İki saat ayrıdır**: hareketsizlik saati (45/90 gün devre dışı; 12.3.1) ve imha saati (saklama sınıfının Ek C kuralı; imha işi sürekli çalışır).
 - GDPR m.17(3) istisnaları ve ICO "beyond use" yedek ilkesi uygulanır.
 - Authority log tarafında saklama T39'un "400 gün uygunluk POLICY DEFAULT" kuralıdır; leaf hash ve digest'ler süresizdir. PII ile authority log'un çakıştığı yerde INV-30 geçerlidir: existence/attribution/lineage silinmez, body redakte edilir. *[BY SEMANTICS (INV-30); UNDER DECLARED POLICY (süreler)]*
 - Hamburg 900.000 € ceza örneği bağlamdır.
@@ -803,7 +803,7 @@ Uyarı: EDPB koordineli uygulama raporu (18 Şubat 2026; 32 otorite, 764 veri so
 | TN-75 | SCIM olayı = identity plane durum değişimi + Claim; hareket eden çalışan birikmesi rule-shaped episode ile kesilir; extensional Grant'lar offboarding'de açık seçim | FROZEN | BY SEMANTICS (INV-31); UNDER DECLARED POLICY (extensional) | SCIM `active` semantiği tanımsız | INV-31, E6 |
 | TN-76 | Kullanıcı kimliği asla yeniden kullanılmaz; SCIM 404 (asla 410); tekillik canlı + mezar taşı; riske katmanlı emeklilik; e-posta varsayılan asla; mezar taşı asla karar girdisi | FROZEN (kimlik, 404, tekillik, karar yasağı), PD (e-posta stratejisi) | UNDER DECLARED CAPABILITY | RFC 7644 §3.6; Yahoo 2013; E14 ile aynı ilke | — |
 | TN-77 | Authority log: T39/INV-30; identity plane PII: kullanıcı başına anahtar, 30 gün (min 24 s) imha gecikmesi, şifreli metin üzerinde özet zinciri, imha kanıtı | FROZEN (T39/INV-30), PD (gecikme) | BY SEMANTICS (INV-30); UNDER DECLARED CAPABILITY (PII) | İki nesne, iki mekanizma | — |
-| TN-78 | KVKK silme/yok etme/anonimleştirme eşlemesi; periyodik imha ≤ 6 ay; talep ≤ 30 gün; hareketsizlik ve imha saatleri ayrı | FROZEN (mevzuat tavanları), PD (aralık) | UNDER DECLARED POLICY | KVKK birincil metni | T39 |
+| TN-78 | KVKK silme/yok etme/anonimleştirme eşlemesi; otomatik imha işi sürekli çalışır (6 aylık periyodik imha tavanının altında; süreler Ek C); talep ≤ 30 gün; hareketsizlik ve imha saatleri ayrı | FROZEN (mevzuat tavanları), PD (aralık) | UNDER DECLARED POLICY | KVKK birincil metni | T39 |
 | TN-79 | Kişi dışa aktarımı özet/MFA sırrı içermez, step-up + denetim + hız sınırı; domain dışa aktarımı (B3) ve yönetici göç dışa aktarımı ayrı nesneler | PD (içerik), FROZEN (ayrım) | UNDER DECLARED CAPABILITY | m.20(4), m.32 | — |
 
 #### 12.3.6 TN-H6 — Kayıt ve numaralandırma önleme

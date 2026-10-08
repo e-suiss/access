@@ -209,6 +209,30 @@ RLS ile ilgili yayımlanmış CVE'ler gerekçe kanıtıdır. Numaraları doğrul
 5. **Test verisi.** Testler gerçek PostgreSQL ile çalışır (testcontainers); taklit veritabanı kullanılmaz. Şema bir kez kurulur, her test template veritabanından kendi temiz kopyasını alır; testler paralel ve bağımsızdır. Test verisi kodla üretilir (builder/factory). Yerel geliştirme sentetik tohum verisiyle yapılır; gerçek müşteri verisi test veya geliştirme ortamına girmez.
 6. **Küçük kurallar.** Durum alanları Postgres `ENUM` değil, `CHECK` kısıtlı `text`'tir (expand/contract uyumu). JSONB yalnız gerçekten şemasız veri içindir; sorgulanan veya kısıt gereken alan normal sütundur. Sık çalışan sorguların planı CI'da `EXPLAIN` ile denetlenir (OP-15).
 
+#### 17.2.10 OP-73 Fiziksel silme yok
+
+**Statü: FROZEN TECHNICAL (Adem kararı; Suiss ürünlerinin ortak veri kuralı). Garanti: BS (uygulama yollarında satır silinmez); hukuki "silme" niteliği N-42.**
+
+1. **Satır silinmez.** Uygulama ve operasyon yollarında `DELETE`, `TRUNCATE` ve veri taşıyan tablo/bölüm için `DROP` yoktur. Uygulama veritabanı rolünün `DELETE`/`TRUNCATE` yetkisi yoktur; CI SQL lint'i bu ifadeleri reddeder.
+2. **Yumuşak silme.** "Silme" bir durum geçişidir: durum alanı + `deleted_at` + tombstone. Sorgular varsayılan olarak silinmiş kayıtları dışlar; kayıt fiziksel olarak kalır.
+3. **Kişisel verinin silinmesi (KVKK/GDPR) = crypto-shredding.** Kişisel alanlar özne başına DEK ile şifrelidir; silme talebinde DEK KMS/HSM'de imha edilir, satırlar okunamaz ciphertext olarak kalır (CMP-15.9, T39). Yüzey dili §13.8'e uyar ("kişisel alanlar okunamaz hâle getirildi").
+4. **Saklama süresinin dolması.** Kayıt yumuşak silinir ve kişisel alanlar crypto-shred edilir; eski bölümler soğuk arşive taşınır (bölüm ayrılır ve nesne deposuna aktarılır), imha edilmez.
+5. **Türetilmiş depolar.** Yeniden kurulum yeni sürümlü tabloya yapılır; eski sürüm arşivlenir.
+6. **Kapsam.** Kural bütün Suiss ürünlerinde aynıdır (Access, Relay ve sonrakiler).
+
+#### 17.2.11 OP-74 Saklama ve silme modeli
+
+**Statü: FROZEN TECHNICAL (Adem kararı; Suiss ürünlerinin ortak veri kuralı). Süre ve dayanak değerleri Ek C'dedir (veri). Garanti: BS (imha ve saklama kararlarının kaydı); crypto-shredding'in hukuki niteliği bölgeye göre Ek C.1.**
+
+1. **Anahtar kişi × saklama sınıfı başınadır.** Kişisel alanlar özne ve saklama sınıfı (ör. kimlik/KYC, işlem, muhasebe, ticari ileti onayı, profil, bildirim içeriği) başına ayrı DEK ile şifrelenir. Silme talebinde yükümlülüğü olmayan sınıfların DEK'i hemen imha edilir; diğerleri kendi süresiyle yaşar.
+2. **Kanuni saklama.** Her saklama sınıfı bölge ve kiracı sektör şablonuna göre bir kural taşır: dayanak, süre, başlangıç olayı (ör. hesap kapanışı, takvim yılı sonu, onayın sona ermesi) ve varsa azami süre. Süre dolunca DEK otomatik imha edilir; azami süreli kayıtlarda (ör. trafik/erişim logları) süreden uzun saklama yapılmaz. Kiracı süreyi yalnız uzatabilir, azami sınırı aşamaz.
+3. **Dava ve regülatör saklaması.** Regülatör, kolluk veya mahkeme talebi ya da makul olarak öngörülen dava kaydı geldiğinde ilgili özne veya kapsam için saklama otomatik başlar ve açıkça kaldırılana kadar bütün DEK imhalarını durdurur; kanuni süre dolmuş olsa bile.
+4. **Silme talebi.** Yükümlülüğü olmayan sınıflar imha edilir; yükümlülüğü olan sınıflar kanuni saklamada kalır ve normal hiçbir işlemde (bildirim, pazarlama, arama, konsol) kullanılamaz. Talep sahibine bölgenin cevap süresi içinde, saklanan sınıfları genel kanuni dayanaklarıyla bildiren cevap verilir. Şüpheli işlem bildirimine bağlı saklamalar talep sahibine açıklanmaz; cevap metni bildirimin varlığını ele vermez.
+5. **Okunabilir çıkarma.** Saklamadaki veri yalnız uyum rolünce, iki kişilik onay ve denetim kaydıyla, okunabilir hâlde çıkarılır; süreç 24 saat içinde tamamlanabilir olmalıdır. Regülatöre yalnız ciphertext verilmez.
+6. **İmhanın koşulları.** İmha DEK'in bütün kopyalarını kapsar (önbellek, yedek, HSM/KMS yedeği; beyanlı tavan süre, §15.12). Şifreli verinin yanında özneye bağlanabilen düz metin (açık kimlik, IP, arama özeti) bırakılmaz; arama ve eşleme için gereken özetler de ilgili sınıfın anahtarıyla türetilir. Simetrik şifreleme AES-256 sınıfındadır.
+7. **Bastırma kayıtları.** "Bir daha gönderme" kayıtları (pazarlama reddi, aranmama talebi) tanımlayıcının anahtarlı özeti olarak tutulur ve özne silmesinde imha edilmez; yalnız bastırma için kullanılır.
+8. **Fiziksel silme yoktur (OP-73).** İmha edilmiş verinin ciphertext'i arşivde kalır.
+
 ### 17.3 Olay dağıtımı ve iptal yayılımı
 
 #### 17.3.1 Authority plane olayları
@@ -491,7 +515,7 @@ leaf_hash         = H(0x00 ‖ det-CBOR({domain, pos, kind, recorded_at, prev, f
 ```
 
 Kurallar:
-1. **Redaksiyon ve seçici açıklama leaf hash'i bozmaz.** Body'ler salt'lı commitment'la bağlıdır. Redaksiyon body'yi, salt'ı ve DEK'i siler (crypto-shredding); commitment ve leaf hash kalır (INV-30, C34). Leaf yalnız leaf çekirdeğine ve alan commitment'larının köküne bağlıdır. Bir alanı açmadan yalnız `FieldCommit`'ini vermek leaf'i, `prev` zincirini ve Merkle kökünü yeniden hesaplamaya yeter. Salt, düşük entropili değerlerin commitment'tan kaba kuvvetle çıkarılmasını engeller.
+1. **Redaksiyon ve seçici açıklama leaf hash'i bozmaz.** Body'ler salt'lı commitment'la bağlıdır. Redaksiyon DEK'i imha eder (crypto-shredding): body ve salt DEK ile şifreli olarak kalır ve okunamaz; commitment ve leaf hash kalır; satır silinmez (OP-73) (INV-30, C34). Leaf yalnız leaf çekirdeğine ve alan commitment'larının köküne bağlıdır. Bir alanı açmadan yalnız `FieldCommit`'ini vermek leaf'i, `prev` zincirini ve Merkle kökünü yeniden hesaplamaya yeter. Salt, düşük entropili değerlerin commitment'tan kaba kuvvetle çıkarılmasını engeller.
 2. **İmzalı bayt'lar yeniden kodlanmaz.** AIS, AAS, WebAuthn assertion, ID token, SET alındığı bayt'larla saklanır; doğrulama o bayt'lar üzerindedir (TI-11). Deterministic CBOR yalnız Access'in kendisinin hesapladığı digest'ler için kanoniktir.
 3. **AIS her commit/continue kaydında** proof store'dadır ve digest'i `proof_commit`'tedir. Redakte export'ta yalnız digest'i kalır.
 4. **Claim record'u** Claim alan kümesini taşır; `ingest_time = recorded_at`; ingest disposition header alanıdır; `quarantine:quota` yalnız qualifying etkiyi düşürür, narrowing etkisini değil.
@@ -544,7 +568,7 @@ Authority plane retention tablosu normatiftir:
 | Veri | Varsayılan | Mekanizma | Dayanak |
 |---|---|---|---|
 | Zarf header alanları + alan salt'ları, alan/body/proof commitment'ları, digest'ler, leaf/Merkle yapısı, AIS digest'leri | **Süresiz** | Silinmez | INV-30, G23 |
-| Exercise body'leri (intent değerleri) | Canlı derivation'a gerekmiyorsa **400 gün** sonra redaksiyon uygunluğu (POLICY DEFAULT) | Redaksiyon = body + salt + DEK silme + derived index temizliği; redaksiyon Exercise'ı kayıtlıdır | SEC32, C34 |
+| Exercise body'leri (intent değerleri) | Canlı derivation'a gerekmiyorsa **400 gün** sonra redaksiyon uygunluğu (POLICY DEFAULT) | Redaksiyon = DEK imhası; body ve salt okunamaz kalır; türetilmiş indeks yeniden kurulur (OP-73); redaksiyon Exercise'ı kayıtlıdır | SEC32, C34 |
 | Claim değerleri | Kullanan canlı episode/decision yoksa aynı kural | Aynı | E26 |
 | "Canlı derivation" tespiti | Açık episode, açık ValidityContract, açık REQUIRE_ACTION nonce'u, devam eden Exercise | Derived sorgu; **belirsizse redakte etme** | INV-30 |
 | Raw carrier evidence | Claim değeriyle aynı | Aynı | P19 kural 5 |
@@ -556,7 +580,7 @@ Authority plane retention tablosu normatiftir:
 Identity denetim log'u:
 - **Sıcak katman** PG'dedir: 30–90 gün, realm/tenant başına ayarlanabilir. **Soğuk katman** S3'te OCSF + Parquet biçimindedir, süresiz veya kiracı kararıdır. Analitik katman ClickHouse'tur, opsiyonel ve DERIVED'dir (OP-47).
 - Saklama bölüm ayırma/düşürme ile yapılır, asla toplu `DELETE` ile yapılmaz.
-- Olay iskeleti uzun, PII kısa yaşar. İskelet (takma adlı özne kimliği, olay tipi, sonuç, zaman) 12 ay veya daha uzun tutulur. IP, user-agent ve e-posta özne başına anahtarla şifreli ayrı tabloda tutulur ve kısa sürede (örnek 6 ay) crypto-shred edilir.
+- Olay iskeleti uzun, PII kısa yaşar. İskelet (takma adlı özne kimliği, olay tipi, sonuç, zaman) 12 ay veya daha uzun tutulur. IP, user-agent ve e-posta özne × saklama sınıfı anahtarıyla şifreli ayrı tabloda tutulur ve sınıfın Ek C kuralına göre crypto-shred edilir (ör. Türkiye'de trafik kayıtları 5651 gereği 2 yıl; OP-74).
 - Her alan "PII mi" ve "saklama sınıfı" etiketiyle işaretlenir.
 
 **Sınır:** Kiracının "saklamayı 30 güne indir" ayarı yalnız identity denetim olaylarına ve authority body'lerine (400 gün POLICY DEFAULT, domain hukuki süreye göre ayarlar) uygulanır. **Authority log header'larına ve commitment'lara uygulanamaz**; bunlar süresizdir (INV-30). Bu sınır kiracı arayüzünde açıkça yazılır.
@@ -990,7 +1014,7 @@ Karar metinleri §16.10'dadır (T1–T42). Burada yalnız "neden reddedildi" ve 
 
 ---
 
-### 17.14 OP karar register'ı (OP-1–OP-72)
+### 17.14 OP karar register'ı (OP-1–OP-74)
 
 | OP | Konu | Statü | Garanti | Dayanak |
 |---|---|---|---|---|
@@ -1066,6 +1090,8 @@ Karar metinleri §16.10'dadır (T1–T42). Burada yalnız "neden reddedildi" ve 
 | OP-70 | Dokümantasyon: spec `docs/spec/` altında bölüm başına dosya (İngilizce dosya adları), içerik ve ID'ler değişmez, içindekiler sayfası; kök README İngilizce kısa tanıtım; ayrı ADR yok, kayıt tabloları karar kaydıdır ve “decision” etiketli PR ile güncellenir; Mermaid C4 diyagramları; üretilen API/kod dokümanı; alarm başına runbook; İngilizce dokümanlar, spec şimdilik Türkçe, ilk çeviri “Kısaca Access” (§16.4.4c) | FROZEN TECHNICAL; PD (araçlar) | — | OP-64; OP-65; OP-67; OP-2 |
 | OP-71 | Süreç: trunk-based, kısa ömürlü dallar, yalnız squash merge, doğrusal `main`; Claude PR açar, Adem inceleyip birleştirir (onay sayısı kuralı kullanılmaz); PR şablonu, ≤ 400 satır hedefi, `decision` etiketi; güvenlik bildirimi özel kanaldan; `main` koruması, push protection, CODEOWNERS ve hassas yol etiketi; CONTRIBUTING, CODE_OF_CONDUCT, SECURITY (§16.4.4d) | FROZEN TECHNICAL; PD (şablonlar) | — | SA-60; SA-14; OP-70; OP-68 |
 | OP-72 | Performans: sıcak yollar için mikro benchmark'lar; PR'da talimat sayısı tabanlı gerileme kapısı (Kernel'de birleştirmeyi durdurur), gece ayrılmış makinede gerçek süre ve yük testi; istek türü başına EA bütçeleri (iç hedef); profil araçları ve `just bench`/`just profile`; ölçümsüz optimizasyon yok, güvenlik kontrolü hız için gevşetilmez (§16.4.4e) | FROZEN TECHNICAL; PD (eşikler, araçlar); EA (bütçeler) | — | OP-5; OP-33; OP-61; SA-T17; TI-9 |
+| OP-73 | Fiziksel silme yok: uygulama ve operasyon yollarında `DELETE`/`TRUNCATE`/veri `DROP` yok (rol yetkisi + CI lint); silme = yumuşak silme (durum + `deleted_at` + tombstone); kişisel veri silme = crypto-shredding; saklama sonu = yumuşak silme + crypto-shred + soğuk arşiv; bütün Suiss ürünlerinde aynı (§17.2.10) | FROZEN TECHNICAL | BS; hukuki silme niteliği N-42 | Adem kararı |
+| OP-74 | Saklama ve silme modeli: DEK kişi × saklama sınıfı başına; kanuni saklama (dayanak + süre + başlangıç olayı + azami süre; süre sonunda otomatik imha); dava/regülatör saklaması imhayı durdurur; silme talebinde yükümlülüksüz sınıflar imha, diğerleri kullanımdan kaldırılır; okunabilir çıkarma iki kişilik onayla ≤ 24 saat; şüpheli işlem bildirimi gizliliği; bastırma kayıtları anahtarlı özet; değerler Ek C (§17.2.11) | FROZEN TECHNICAL | BS | Adem kararı |
 
 ---
 

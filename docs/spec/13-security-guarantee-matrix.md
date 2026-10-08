@@ -554,7 +554,7 @@ Aşağıdakiler de POLICY DEFAULT'tur (semantik invariant değildir); sıkılaş
 | Argon2 eşzamanlılığı | Semaphore N = floor(bellek·0.5/m); acquire timeout 500 ms → 503 | — | U47 |
 | Enumeration | Adaptive delay + varlıktan bağımsız semaphore; dummy Argon2 yok; aynı status/body/header/redirect | — | MD-18 |
 | Security event yazımı | `synchronous_commit=on` | — | U51 |
-| Exercise / audit body saklama | 400 gün (SEC32) daraltılabilir; digest'ler süresiz (pseudonymous iskelet, GDPR Art.5 gerekçesi §14.9); PII alanları ≤ 6 ay sonra crypto-shred | Kiracı kararı (PCI 12 ay vb.) | SEC32 |
+| Exercise / audit body saklama | Genel varsayılan 400 gün (SEC32); sektör şablonu uzatır (ör. ödeme kuruluşu denetim izi 10 yıl, Ek C.3); kısaltma yok (OP-74); digest'ler süresiz (pseudonymous iskelet, GDPR Art.5 gerekçesi §14.9); PII alanları saklama sınıfının Ek C kuralına göre crypto-shred | Kiracı yalnız uzatır | SEC32; OP-74 |
 | HTTP sınırları | Header/slowloris timeout 5–10 s; HTTP/2 `max_concurrent_streams` 100, `max_header_list_size` 8 KB; 0-RTT kapalı | Daraltma serbest | — |
 | Parser sınırları | Derinlik ≤ 32; JSON/CBOR boyut önce; x509/DER ≤ 8 KB; WebAuthn CBOR ~8 KB; regex desen ≤ 256 | Daraltma serbest | §14.6 |
 | Provider kararı yeniden değerlendirme (replay agent) | CT3 %100, CT2 %1 (= §13.7.7) | — | §13.7.7 |
