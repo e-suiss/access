@@ -307,7 +307,7 @@ access/
 ├── sdks/                 T41
 │   ├── openapi/          API tanımı (SDK'ların kaynağı)
 │   ├── bindings/         Kernel bağlamaları (uniffi, Wasm, C ABI)
-│   └── typescript/ python/ go/ java/ dotnet/ swift/ kotlin/ react-native/
+│   └── typescript/ python/ go/ java/ dotnet/ elixir/ php/ ruby/ swift/ kotlin/ react-native/ flutter/
 ├── web/                  konsol ve gömülebilir UI bileşenleri (TN-133)
 ├── conformance/          OIDF, karşılaştırmalı testler (T42), uyumluluk laboratuvarı (IDP-40), test vektörleri
 ├── fuzz/                 fuzz hedefleri
@@ -890,10 +890,10 @@ Bu register T-kararlarının **tek kanonik kopyasıdır**. §12 ve §15'teki kop
 - **T41** SDK'lar:
   1. **Her dilde tek paket, iki modül.** Paket `auth` (giriş, oturum, kullanıcı/organizasyon yönetimi; identity plane) ve `authorize` (karar isteme ve uygulama, PEP; authority plane) modüllerini taşır. Modüller kod düzeyinde ayrıdır: `auth` modülü authority üretmez (INV-12). Yalnız authority plane'i kullanan kiracı (external IdP, F3) aynı paketi kurar ve yalnız `authorize` modülünü kullanır.
   2. **Ayrı doğrulama paketi.** Access müşterisi olmayan doğrulayıcılar (karşı taraf, denetçi, internetsiz cihaz) için yalnız Offline Verifier Core'u taşıyan hafif paket (CMP-17, §1.4 vaat 7).
-  3. **Backend dilleri, gün-1:** TypeScript/Node, Python, Go, Java, .NET. Ardından PHP ve Ruby.
-  4. **Mobil, gün-1:** iOS (Swift), Android (Kotlin), React Native (Expo dahil). Ardından Flutter. Mobil paketler TN-133 bileşenlerinin mobil karşılıklarını, passkey ve platform biyometrisini, oturum ve token yenilemeyi (single-flight) taşır.
+  3. **Backend dilleri:** TypeScript/Node, Python, Go, Java, .NET, Elixir, PHP, Ruby. Elixir, Elixir ile yazılan Suiss ürünleri (Relay) ve Elixir kiracıları içindir.
+  4. **Mobil:** iOS (Swift), Android (Kotlin), React Native (Expo dahil), Flutter. Mobil paketler TN-133 bileşenlerinin mobil karşılıklarını, passkey ve platform biyometrisini, oturum ve token yenilemeyi (single-flight) taşır.
   5. **Web:** React; diğer çatılar web components ile (TN-133).
-  6. **Üretim yöntemi.** API istemcileri OpenAPI tanımından üretilir. Karar, doğrulama ve kanonik kodlama her dilde aynı Kernel'den gelir (CMP-24; uniffi ile Swift/Kotlin/Python, Wasm ile tarayıcı/Node, C ABI ile Go/Java/.NET). Elle yazılan katman yalnız dile özgü kolaylık katmanıdır. Gerekçe: diller arası aynı girdi → aynı karar; yetki ürününde diller arası farklı karar kabul edilemez. Kernel bağlamalarının conformance vektörlerini geçmesi her dilde CI kapısıdır (TI-RT12).
+  6. **Üretim yöntemi.** API istemcileri OpenAPI tanımından üretilir. Karar, doğrulama ve kanonik kodlama her dilde aynı Kernel'den gelir (CMP-24; uniffi ile Swift/Kotlin/Python, Wasm ile tarayıcı/Node, C ABI ile Go/Java/.NET/PHP/Ruby/Dart, Rustler NIF ile Elixir). Elle yazılan katman yalnız dile özgü kolaylık katmanıdır. Gerekçe: diller arası aynı girdi → aynı karar; yetki ürününde diller arası farklı karar kabul edilemez. Kernel bağlamalarının conformance vektörlerini geçmesi her dilde CI kapısıdır (TI-RT12).
 
   Statü: FROZEN (1, 2, 6); PD (3–5'teki dil ve platform listeleri, sıra).
 - **T42** Protokol bileşenleri Rust'ta yazılır ve olgun referanslarla karşılaştırmalı test edilir (MD-1 bedelinin kabulü ve risk azaltma):
