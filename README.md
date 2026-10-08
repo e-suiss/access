@@ -82,7 +82,7 @@ Rust (single backend), PostgreSQL, NATS, HSM/KMS-backed keys, React for UI compo
 
 ## Related projects
 
-- **[Relay](https://github.com/e-suiss/relay)** — notification, messaging and event orchestration. Access and Relay run independently and work together without extra setup.
+- **[Relay](https://github.com/e-suiss/relay)** — notification, messaging and event orchestration. Access and Relay are parts of one system and are always deployed together: Access sends its messages through Relay, and Relay uses Access for sign-in, credentials and approvals.
 
 ## Contributing
 
