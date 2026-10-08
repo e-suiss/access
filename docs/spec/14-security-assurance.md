@@ -380,7 +380,7 @@ Bir katmanın aşaması geldiğinde o katman birleştirme veya sürüm kapısı 
 
 ### 14.9 Uyum
 
-**İlke.** Uyum, §13 guarantee satırlarının yeniden etiketlenmesidir; uyum için yeni bir güvenlik iddiası icat edilmez. Hukuki nitelendirmeler (sınıf, kapsam, süre) aksi belirtilmedikçe ikincil kaynaklara dayanır ve **hukuki teyit gerektirir**.
+**İlke.** Uyum, §13 guarantee satırlarının yeniden etiketlenmesidir; uyum için yeni bir güvenlik iddiası icat edilmez. Hukuki nitelendirmeler (sınıf, kapsam, süre) bölge ve sektöre göre veri olarak tutulur (Ek C); kaynakların çeliştiği ya da belirsiz kaldığı yerde en kısıtlayıcı yorum varsayılandır (Ek C.5).
 
 **CRA — Cyber Resilience Act (MD-12). Adem kararı bekleniyor; varsayılan bu (D-10).**
 
@@ -397,9 +397,9 @@ Bir katmanın aşaması geldiğinde o katman birleştirme veya sürüm kapısı 
 **GDPR / KVKK ve saklama.**
 
 1. **Minimizasyon ve pseudonymity.** Pairwise `sub` ve domain-pairwise PartyRef varsayılandır (MD-10); authority-relevant kişisel parametreler mümkünse opaque ref'tir (SEC32); LINDDUN etiketleri §14.2'dedir.
-2. **Silme hakkı (GDPR Art.17).** Identity plane hesap silme akışı kişisel alanları siler veya crypto-shred eder; Authority Record append-only'dir ve redaksiyon uygular (C34; redaksiyon ≠ erase, HL-9, N-11). Crypto-shredding hukuki anlamda silme sayılmaz (EDPB 01/2025 yorumu; N-42); bu nedenle crypto-shred yalnız "erişilemez kılma" olarak anlatılır (§13.8).
-3. **Saklama.** Exercise/audit body saklama 400 gün PD'dir ve daraltılabilir; digest'ler süresizdir. Süresiz digest'in gerekçesi: kişisel veri içermeyen pseudonymous iskelettir ve hesap verebilirlik amacıyla sınırlıdır (GDPR Art.5 saklama sınırlaması ile dengeleme; hukuki teyit gerekir). PII alanları ≤ 6 ay sonra crypto-shred edilir, Merkle özeti ciphertext üzerindedir. Saklama süresi kiracı kararıdır (PCI 12 ay, CNIL 6–12 ay gibi; tedarikçilerde 30–90 gün + streaming export).
-4. **KVKK.** Periyodik imha ≤ 6 ay aralıkla; pasif hesaplar 45/90 gün kademeli deaktivasyon — PD.
+2. **Silme hakkı (GDPR Art.17).** Identity plane hesap silme akışı kişisel alanları crypto-shred eder; satırlar fiziksel olarak silinmez (OP-73); Authority Record append-only'dir ve redaksiyon uygular (C34; redaksiyon ≠ erase, HL-9, N-11). Crypto-shredding hukuki anlamda silme sayılmaz (EDPB 01/2025 yorumu; N-42); bu nedenle crypto-shred yalnız "erişilemez kılma" olarak anlatılır (§13.8).
+3. **Saklama.** Exercise/audit body saklamasının genel varsayılanı 400 gündür; kiracının sektör şablonu (Ek C.3) süreyi uzatır, kiracı yalnız uzatabilir ve kanuni sürenin altına inemez (OP-74). Digest'ler süresizdir; gerekçe: kişisel veri içermeyen pseudonymous iskelettir ve hesap verebilirlik amacıyla sınırlıdır (GDPR Art.5 saklama sınırlaması ile dengeleme). PII alanları saklama sınıflarının Ek C kuralına göre crypto-shred edilir; Merkle özeti ciphertext üzerindedir.
+4. **KVKK.** Otomatik imha işi sürekli çalışır; KVKK Silme Yönetmeliği'nin 6 aylık periyodik imha tavanının altındadır. Bu bir saklama süresi değil, imha işinin çalışma sıklığıdır; süreler Ek C'den gelir. Pasif hesaplar 45/90 gün kademeli deaktivasyon — PD.
 5. **Audit erişimi.** Audit örneklenmez; audit okuması sorgu başına loglanır; imzalı checkpoint; alan kümesi PII etiketli.
 
 **Denetim log'u ve non-repudiation.** NIST 800-53 AU ailesi ve PCI DSS Req.10 için **operasyonel erişim log'u** (yönetici, destek, operatör eylemleri) append-only ve tamper-evident tutulur; bu log **canonical değildir ve karar girdisi değildir** (TI-18). Authority Record'un kendisi canonical kayıttır. AU-10 non-repudiation yalnız teknik anlamdadır (imza ile attribution); hukuki non-repudiation iddia edilmez (EI-24). PCI DSS 4.0.1 metni doğrulanmadı.
@@ -428,7 +428,7 @@ Bir katmanın aşaması geldiğinde o katman birleştirme veya sürüm kapısı 
 | SA-49 | SBOM, VEX ve provenance ücretsiz ve her sürümde | FROZEN | — | B3; CRA | — |
 | SA-50 | Crypto-shredding ≠ silme; yüzeylerde "silindi" denmez | FROZEN | NG (N-42) | EDPB 01/2025 yorumu | — |
 | SA-51 | Operasyonel erişim log'u append-only, tamper-evident, canonical değil, karar girdisi değil | FROZEN | UDC | TI-18 | — |
-| SA-52 | Saklama: 400 gün PD daraltılabilir; digest süresiz (pseudonymous iskelet); PII ≤ 6 ay crypto-shred; kiracı süreyi seçer | PD | — | Hesap verebilirlik ile saklama sınırlaması dengesi | SEC32 |
+| SA-52 | Saklama: genel varsayılan 400 gün; sektör şablonu uzatır, kiracı yalnız uzatabilir (OP-74, Ek C); digest süresiz (pseudonymous iskelet); PII saklama sınıfının Ek C kuralına göre crypto-shred | PD | — | Hesap verebilirlik ile saklama sınırlaması dengesi | SEC32; OP-74 |
 | SA-53 | Sektörel eşleme tablosu yeni iddia üretmez; her satır §13 satırına bağlanır | FROZEN | — | İddia disiplini | — |
 | SA-54 | PSD2 dinamik bağlama AAS intent digest ile; TR ödeme uygulama-kontrollü faktör sınıfı (MD-11) | FROZEN | UDC | Mevzuat uyumu | MD-11 |
 | SA-55 | ASVS 5.0 kontrol listesi; WCAG 2.2 3.3.8 zorunlu | PD | — | Erişilebilir kimlik doğrulama | — |

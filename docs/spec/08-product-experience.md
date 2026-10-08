@@ -392,7 +392,7 @@ Sınıflar: sonucun sabitlenmesi UDC; sonucun istemcide öğrenilmesi NOT GUARAN
 
 #### 8.15.1 Giriş UX kuralları ve çözümleri
 
-> Bu tablonun satır etiketleri X-L1…X-L18'dir; landscape kararları L1–L28 ile karışmaz. Tablodaki "§8.17.8.1 E-n" atıfları açıklama ilkeleridir, ecosystem kararları E1–E39 değildir.
+> Bu tablonun satır etiketleri X-L1…X-L18'dir; landscape kararları L1–L28 ile karışmaz. Tablodaki "§8.17.8.1 E-n" atıfları açıklama ilkeleridir, ecosystem kararları E1–E40 değildir.
 
 | # | Giriş UX kuralı | Dürüstlük kuralı (§8) | Gerilim | Çözüm (bağlayıcı) | Gerekçe |
 |---|---|---|---|---|---|
@@ -983,7 +983,7 @@ Executor pause desteklemiyorsa bu açıkça yazar (Work §15.2); ortak düğme h
 
 ##### 8.17.8.1 İlkeler
 
-> Bu tablodaki E-1…E-7 yerel açıklama ilkesi etiketleridir. Ecosystem kararları E1–E39 ve §13.11 epoch satırlarıyla (EP-n) karışmaması için başka bölümlerden "§8.17.8.1 E-n" diye atıf yapılır.
+> Bu tablodaki E-1…E-7 yerel açıklama ilkesi etiketleridir. Ecosystem kararları E1–E40 ve §13.11 epoch satırlarıyla (EP-n) karışmaması için başka bölümlerden "§8.17.8.1 E-n" diye atıf yapılır.
 
 | # | İlke | Dayanak |
 |---|---|---|

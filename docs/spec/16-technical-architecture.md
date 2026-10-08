@@ -2,7 +2,7 @@
 
 **Bu bölümün kuralları.**
 - **Bileşen kimlikleri (MD-19.5).** Bileşenler **CMP-*n*** adını taşır. "C*n*" biçimi yalnız ontology kararlarını (C1–C34) gösterir; C15 de dahil (C15 = delegability kararı, §5). Bileşen notları §16.3.3'tedir.
-- Bu bölüm ve §17 normatif kararları **OP-*n*** ailesiyle numaralar (OP-1–OP-72). Register özeti §17.14'tedir. Bölüm içi yerel etiketler: §17.1 at-most-once senaryoları **OP-S1…OP-S12** (§8.5 yüzeyleri S1–S11 ile karışmasın diye), OP-60 binding re-anchor adımları **RB-0…RB-6** (RA-n etiketi yalnız §15.18 CR-45'tedir). Bileşen anlamında çıplak C*n* kullanılmaz, CMP-*n* kullanılır.
+- Bu bölüm ve §17 normatif kararları **OP-*n*** ailesiyle numaralar (OP-1–OP-74). Register özeti §17.14'tedir. Bölüm içi yerel etiketler: §17.1 at-most-once senaryoları **OP-S1…OP-S12** (§8.5 yüzeyleri S1–S11 ile karışmasın diye), OP-60 binding re-anchor adımları **RB-0…RB-6** (RA-n etiketi yalnız §15.18 CR-45'tedir). Bileşen anlamında çıplak C*n* kullanılmaz, CMP-*n* kullanılır.
 - Garanti sınıfları §3.3'teki gibidir. Kısaltmalar: BS = GUARANTEED BY SEMANTICS, UDC = GUARANTEED UNDER DECLARED CAPABILITY/POLICY, NG = NOT GUARANTEED. Fail-closed her yerde geçerlidir (MD-8).
 - Sayı ve ölçümler epistemik etiketleriyle verilir. Ölçümlerin mutlak değerleri tek ortama aittir: Apple M4, Rust 1.98.1, PostgreSQL 18.6, Docker. Taşınabilir olan oranlardır. ENGINEERING ASSUMPTION (EA) değerleri ölçülmüş sayı gibi yazılmaz.
 
@@ -109,7 +109,7 @@ Identity plane tam bir IdP olduğu için (MD-13) CMP-15 alt bileşenlere açıl�
 | CMP-15.6 | **Login / hosted UI / tema / konsol BFF** | Hosted login, script çalıştırmayan şablon kabuğu, realm teması, konsol için çerez tabanlı BFF | PROJECTION / OPERATIONAL | Identity core süreci | Çerez tek başına authority değişikliğini yetkilendiremez (MD-14). Çerez yalnız gezinmeyi ve identity plane'in kendi ekranlarını taşır; authority grafiği ve audit okuması AIS (CT0) veya holder-bound okuma projection'ı ister. Ayrıntı §8, §12 |
 | CMP-15.7 | **WebAuthn RP + authenticator registry** | WebAuthn RP ve authenticator registry görevi | CANONICAL (identity) | Identity core süreci | `authenticator-binding` Claim'leri yalnız public materyal digest'i |
 | CMP-15.8 | **Claim issuer + custody signer + regime key-event store** | `authentication`/`authenticator-binding`/`identity-binding.*` issuance; attested TEE custody signer (T32); controller-custodian key-event history | CANONICAL (identity) | Identity core süreci + TEE | Authority plane'e yalnız Claim (INV-12, TI-15) |
-| CMP-15.9 | **PII vault** | Kullanıcı/Party başına DEK ile alan şifreleme; silme = crypto-shredding | CANONICAL (identity) | Identity store | Authority log'da yalnız PartyRef (pseudonymous) |
+| CMP-15.9 | **PII vault** | Kişi × saklama sınıfı başına DEK ile alan şifreleme (OP-74); silme = crypto-shredding | CANONICAL (identity) | Identity store | Authority log'da yalnız PartyRef (pseudonymous) |
 | CMP-15.10 | **Identity federation (OpenID Federation, upstream IdP)** | OIDF entity statement'ları, trust chain, upstream IdP bağlantıları | PROJECTION / DERIVED cache | Identity core süreci | Trust bootstrap rolü (authority) CMP-14'tedir; L26 issuer rol engeli korunur. Ayrıntı §10 |
 | CMP-22 | **Signer süreçleri** | (a) Authority signer: domain kapsamlı operasyonel anahtar (MD-6) ile receipt/PAP/token/checkpoint/SET/status list imzası. (b) Identity signer: realm başına JOSE anahtar seti (1 aktif + N pasif). Ağ syscall'ı yok (seccomp), Landlock ile yalnız key store okunur, `memfd_secret`; istek Unix domain socket + `SCM_CREDENTIALS` ile kimliklenir | OPERATIONAL (anahtar materyali) | Ayrı süreçler; (a) ve (b) anahtar deposu veya operatör rolü paylaşmaz (T31) | Anahtar evaluator değildir. FIPS profilinde operasyonel anahtar HSM'dedir. Signer kayıtta digest'i olmayan Decision artefaktını imzalamaz (TI-12; CMP-7 kuralı signer sınırında da denetlenir). Kaynak: MD-6 |
 | CMP-23 | **Kenar protokol gateway'leri** | CMP-23.1 SAML IdP; CMP-23.2 LDAP (salt okunur); CMP-23.3 Kerberos/SPNEGO; CMP-23.4 RADIUS; CMP-23.5 WS-Fed | OPERATIONAL (gateway) | Her biri ayrı süreç; identity core'u iç API'den tüketir | XML/ASN.1 ayrıştırma ayrı, yok edilebilir worker'da (MD-18 SAML satırı). Kerberos C FFI yalnız izole süreçte (MD-1, MD-2). Ayrıntı §10 |
@@ -303,7 +303,6 @@ access/
 ├── services/             Access'in sunduğu ayrı servisler
 │   ├── executor/         B21, AG-40
 │   ├── proxy/            B22, IDP-30: Envoy/Caddy paketleri ve yapılandırma aracı
-│   ├── iys/              B23
 │   └── linux-client/     IDP-32: daemon, PAM ve NSS modülleri
 ├── sdks/                 T41
 │   ├── openapi/          API tanımı (SDK'ların kaynağı)

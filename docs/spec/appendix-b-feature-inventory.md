@@ -125,7 +125,7 @@ Depo iskeleti, Rust workspace, CI aşamaları, lint ve biçim, geliştirme ortam
 
 #### Açık kaynak bileşenler
 
-- [ ] **Access tamamen açık kaynak** — Core, Kernel, iki plane sunucusu, gateway'ler, konsol, Experience backend, analitik, SDK'lar, verifier, conformance suite, replica agent, Executor/Proxy/İYS açıktır; kapalı enterprise özelliği yoktur. _Kaynak:_ §18.9 D4. _Durum:_ belirtilmemiş (Adem kararı; lisans biçimi açık).
+- [ ] **Access tamamen açık kaynak** — Core, Kernel, iki plane sunucusu, gateway'ler, konsol, Experience backend, analitik, SDK'lar, verifier, conformance suite, replica agent, Executor/Proxy açıktır; kapalı enterprise özelliği yoktur. _Kaynak:_ §18.9 D4. _Durum:_ belirtilmemiş (Adem kararı; lisans biçimi açık).
 - [ ] **Self-host tamamen ücretsiz** — _Kaynak:_ §18.9 D4 notu. _Durum:_ belirtilmemiş.
 - [ ] **Tek bakımcılı bağımlılıkların açık kaynak fork'u** — 6 ay yanıtsızlıkta fork. _Kaynak:_ T42 madde 5. _Durum:_ PD (eşik).
 
@@ -170,7 +170,7 @@ Depo iskeleti, Rust workspace, CI aşamaları, lint ve biçim, geliştirme ortam
 - [ ] **SolarWinds sınıfı (FM-16) tespit + önleme** — _Kaynak:_ F-9, SA-40. _Durum:_ belirtilmemiş (FROZEN).
 - [ ] **Depo ve geliştirme güvenliği (SA-60)** — gitleaks + push protection; CodeQL + Semgrep; Renovate; korunan `main`, imzalı commit; Adem incelemesi; hassas yollarda tehdit değerlendirmesi ve CODEOWNERS. _Kaynak:_ §14.7 F-13…F-18; SA-60. _Durum:_ belirtilmemiş (FROZEN).
 
-#### Mühendislik standartları (OP-62…OP-72)
+#### Mühendislik standartları (OP-62…OP-74)
 
 - [ ] **OP-62 Monorepo ve klasör yapısı, bağımlılık yönü kuralları** — Tek depo; bağımlılık yönü kuralları CI'da zorlanır. _Kaynak:_ OP-62. _Durum:_ belirtilmemiş (FROZEN TECHNICAL).
 - [ ] **OP-63 Kod içi mimari** — Saf çekirdek / ports-adapters, sans-I/O, UnitOfWork, outbox, idempotency, yapılandırma ayrımı. _Kaynak:_ OP-63. _Durum:_ belirtilmemiş (FROZEN TECHNICAL).
@@ -673,9 +673,11 @@ PostgreSQL şeması, kiracılık eksenleri ve RLS, domain log, sequencer, outbox
 
 - [ ] **Altı çapraz kiracı izolasyon testi CI'da zorunlu** — Şema değişmezi CI, ikiz kiracı diferansiyel, proptest, token karışıklığı fuzzer (+ DomainID vektörü), gizli kanal, ayarlanmamış GUC. _Kaynak:_ §12.1.3; TN-23. _Durum:_ PD.
 
-#### Mühendislik standartları (OP-62…OP-72)
+#### Mühendislik standartları (OP-62…OP-74)
 
 - [ ] **OP-66 Veri katmanı** — ORM yok, `sqlx::query!`, şema güvenlik testleri, gerçek Postgres testleri. _Kaynak:_ OP-66. _Durum:_ belirtilmemiş.
+- [ ] **OP-73 Fiziksel silme yok** — Uygulama rolünde `DELETE`/`TRUNCATE` yetkisi yok, CI SQL lint'i; yumuşak silme (durum + `deleted_at` + tombstone); kişisel veri silme = crypto-shredding; saklama sonu = soğuk arşiv. _Kaynak:_ OP-73. _Durum:_ belirtilmemiş (FROZEN TECHNICAL).
+- [ ] **OP-74 Saklama ve silme modeli** — Kişi × saklama sınıfı DEK'i, kanuni saklama kuralları (Ek C), dava/regülatör saklaması, silme talebi akışı, iki kişilik okunabilir çıkarma (≤ 24 saat), bastırma kayıtları. _Kaynak:_ OP-74; Ek C. _Durum:_ belirtilmemiş (FROZEN TECHNICAL).
 
 ### Bu aşamada doğrulanacak sınırlar
 
@@ -3058,7 +3060,7 @@ Yönetim API'si, konsol, CLI, SDK'lar, webhook ve dış çağrı noktaları, Git
 
 - [ ] **Uç nokta izin manifesti CI kontrolü + otomatik 403/404 testleri** — _Kaynak:_ §12.5.1; TN-113. _Durum:_ belirtilmemiş (FROZEN).
 
-#### Mühendislik standartları (OP-62…OP-72)
+#### Mühendislik standartları (OP-62…OP-74)
 
 - [ ] **OP-65 API aileleri ve şema zinciri** — API kuralları (bkz. K11). _Kaynak:_ OP-65. _Durum:_ belirtilmemiş (FROZEN TECHNICAL).
 - [ ] **OP-67 Gözlemlenebilirlik kod kuralları** — _Kaynak:_ OP-67. _Durum:_ belirtilmemiş.
@@ -3222,7 +3224,7 @@ Hesap yaşam döngüsü ve kurtarma, B2B organizasyonlar, gömülü bileşenler 
 #### Hesap durumları ve devre dışı bırakma
 
 - [ ] **Hesap durumu: disabled mesajı** — Admin'e "Sign-in disabled"; doğrulanmış kullanıcıya "Your account's sign-in is turned off by *Acme*". _Kaynak:_ §8.8, §8.15.2. _Durum:_ belirtilmemiş
-- [ ] **Atıl/pasif hesap süpürmesi ve deaktivasyonu** — Yerleşik hareketsizlik süpürmesi; eşik 45/90 gün kurumsal (KVKK kademeli deaktivasyon), 2 yıl tüketici; break-glass muaf; periyodik imha ≤ 6 ay aralıkla. _Kaynak:_ §12.3.1, §14.9; TN-51. _Durum:_ PD
+- [ ] **Atıl/pasif hesap süpürmesi ve deaktivasyonu** — Yerleşik hareketsizlik süpürmesi; eşik 45/90 gün kurumsal (KVKK kademeli deaktivasyon), 2 yıl tüketici; break-glass muaf; otomatik imha işi sürekli çalışır (KVKK 6 aylık periyot tavanının altında). _Kaynak:_ §12.3.1, §14.9; TN-51. _Durum:_ PD
 
 #### Hesap kurtarma: ilkeler ve authority etkisi
 
@@ -3262,7 +3264,7 @@ Hesap yaşam döngüsü ve kurtarma, B2B organizasyonlar, gömülü bileşenler 
 #### Hesap silme ve veri hakları
 
 - [ ] **Hesap silme** — Hesabın silinmesi; identity plane kişisel alanları siler veya crypto-shred eder, Authority Record redaksiyon uygular (GDPR Art.17). Tombstone, SCIM 404; dürüst mesaj: "Your account is deleted. Some records are kept until *date*…; history entries are redacted, not removed." _Kaynak:_ §2.2.1, §8.10, §14.9; X38, X-L11. _Durum:_ belirtilmemiş (saklama PD)
-- [ ] **Silme = crypto-shredding** — Kullanıcı/Party başına DEK yok edilerek PII silinir. _Kaynak:_ CMP-15.9; CR-32, T31. _Durum:_ belirtilmemiş
+- [ ] **Silme = crypto-shredding** — Kişi × saklama sınıfı başına DEK imha edilerek PII okunamaz hâle getirilir; satır kalır. _Kaynak:_ CMP-15.9; CR-32, T31; OP-73; OP-74. _Durum:_ belirtilmemiş
 - [ ] **Kendi hesabının self-servis yönetimi ve veri taşınabilirlik/silme talepleri (S11)** — Kullanıcı hangi yöntemlerle giriş yaptığını, kurtarma yollarını, bağlı hesapları yönetir; verilerini alır veya silme talep eder. _Kaynak:_ §8.5 S11. _Durum:_ belirtilmemiş
 
 #### Göç, içe aktarım ve çıkış (taşınabilirlik)
@@ -3547,8 +3549,8 @@ Hesap yaşam döngüsü ve kurtarma, B2B organizasyonlar, gömülü bileşenler 
 
 - [ ] **Redaksiyon: "Redacted — fingerprint verifiable"** — Audit kayıtları silinmez, redakte edilir (redaksiyon ≠ erase); body yalnız canlı derivation'a gerekmediğinde redakte edilir ve digest doğrulanabilir kalır. _Kaynak:_ §5.11; §8.10; §8.12; §13.8; C34; INV-30; U22; XI-21. _Durum:_ belirtilmemiş.
 - [ ] **Redaksiyon mekanizması (T39, crypto-shredding)** — Salt'lı body commitment, body başına DEK; body + salt + DEK silinir, leaf hash/commitment ve digest süresiz kalır; 400 gün uygunluk. _Kaynak:_ §17.6.1, §17.6.9; C34; INV-30; OP-42; RT27; T39. _Durum:_ belirtilmemiş (FROZEN TECHNICAL); PD (400 gün).
-- [ ] **Saklama politikası (authority saklama tablosu)** — Exercise/audit body 400 gün sonra redaksiyon uygunluğu (daraltılabilir), header/commitment/digest süresiz; belirsizse redakte etme; PII ≤ 6 ay sonra crypto-shred; kiracı süreyi seçer. _Kaynak:_ §13.7.9; §14.9; §17.6.7; OP-40; SA-52; SEC32. _Durum:_ PD / POLICY DEFAULT (süreler).
-- [ ] **Olay iskeleti uzun, PII kısa** — İskelet ≥ 12 ay; IP/UA/e-posta özne anahtarıyla şifreli, ~6 ay sonra crypto-shred; alan başına PII ve saklama sınıfı etiketi. _Kaynak:_ §17.6.7; OP-40. _Durum:_ POLICY DEFAULT.
+- [ ] **Saklama politikası (authority saklama tablosu)** — Exercise/audit body genel varsayılan 400 gün sonra redaksiyon uygunluğu; sektör şablonu uzatır, kısaltma yok; header/commitment/digest süresiz; belirsizse redakte etme; PII saklama sınıfının Ek C kuralına göre crypto-shred. _Kaynak:_ §13.7.9; §14.9; §17.6.7; OP-40; OP-74; SA-52; SEC32; Ek C. _Durum:_ PD / POLICY DEFAULT (süreler).
+- [ ] **Olay iskeleti uzun, PII kısa** — İskelet ≥ 12 ay; IP/UA/e-posta özne × saklama sınıfı anahtarıyla şifreli, sınıfın Ek C kuralına göre crypto-shred; alan başına PII ve saklama sınıfı etiketi. _Kaynak:_ §17.6.7; OP-40. _Durum:_ POLICY DEFAULT.
 - [ ] **Kiracı saklama sınırının arayüzde açık yazılması** — "30 güne indir" header'lara uygulanamaz; arayüzde yazılır. _Kaynak:_ §17.6.7. _Durum:_ belirtilmemiş.
 - [ ] **Opaque ref kişisel parametreler** — Kişisel veri taşıyan authority-relevant parametreler mümkünse opaque ref. _Kaynak:_ SEC32. _Durum:_ belirtilmemiş.
 
@@ -3627,7 +3629,7 @@ Hesap yaşam döngüsü ve kurtarma, B2B organizasyonlar, gömülü bileşenler 
 
 #### PII koruması ve redaksiyon
 
-- [ ] **PII vault (alan şifreleme)** — Kişisel veriler ayrı PII vault'ta, tenant anahtarlı, `tenant_id` + RLS FORCE ve kullanıcı/Party başına DEK ile tutulur; authority log'da yalnız pseudonymous PartyRef bulunur. _Kaynak:_ §3.1b; §5.1; §5.16; §17.1.4; §17.6.9; CMP-15.9; I4; OP-42. _Durum:_ belirtilmemiş.
+- [ ] **PII vault (alan şifreleme)** — Kişisel veriler ayrı PII vault'ta, tenant anahtarlı, `tenant_id` + RLS FORCE ve kişi × saklama sınıfı başına DEK ile tutulur (OP-74); authority log'da yalnız pseudonymous PartyRef bulunur. _Kaynak:_ §3.1b; §5.1; §5.16; §17.1.4; §17.6.9; CMP-15.9; I4; OP-42. _Durum:_ belirtilmemiş.
 - [ ] **Redaksiyon geri çağırma değildir** — Önceki alıcılardan veri geri çağrılmaz. _Kaynak:_ §6.6; SI-15. _Durum:_ belirtilmemiş.
 - [ ] **Derived okumada redaksiyon yeniden kontrolü** — _Kaynak:_ §17.6.7; SI-15. _Durum:_ belirtilmemiş.
 - [ ] **Telemetride redaksiyon takibi** — Redakte body'den türetilmiş değer telemetride kalmaz. _Kaynak:_ §17.8.1; OP-47. _Durum:_ belirtilmemiş.
@@ -4674,7 +4676,7 @@ SCIM, SAML, LDAP, Kerberos, RADIUS, WS-Fed, OpenID Federation, FAPI 2, CIBA, ups
 
 ## Aşama 11 — Entegrasyonlar ve servisler
 
-Forward-auth ve Access Proxy, Linux ve SSH, İK provisioning, İYS, PAM/fraud/IGA/SIEM entegrasyonları, Suiss ürünleriyle dikişler.
+Forward-auth ve Access Proxy, Linux ve SSH, İK provisioning, İYS izin olayları, PAM/fraud/IGA/SIEM entegrasyonları, Suiss ürünleriyle dikişler.
 
 ### K01 Kimlik doğrulama yöntemleri
 
@@ -4870,7 +4872,7 @@ Forward-auth ve Access Proxy, Linux ve SSH, İK provisioning, İYS, PAM/fraud/IG
 #### Yardımcı servisler
 
 - [ ] **Access Proxy servisi (Envoy/Caddy paketleri)** — Ayrı servis, yapılandırma aracıyla; forward-auth uç noktası; kiracının kendi proxy'si aynı kararları alır. _Kaynak:_ §18.7 B22; IDP-30; OP-62 `services/proxy/`. _Durum:_ belirtilmemiş (FROZEN STRATEGY).
-- [ ] **Access İYS servisi** — Pazarlama izni değişikliklerini İleti Yönetim Sistemi'ne kaydeder ve durumu geri bildirir; İYS alanları (tarih, kaynak, kanal, alıcı) eksiksiz üretilir; opsiyonel. _Kaynak:_ §18.7 B23; B23; IDP-37; OP-62 `services/iys/`. _Durum:_ belirtilmemiş (FROZEN STRATEGY).
+- [ ] **İYS izin olayı** — Her pazarlama izni değişikliği İYS'nin istediği alanlarla (izin tarihi, kaynak, kanal, alıcı, alıcı türü) olay olarak yayınlanır; Relay bağlıysa İYS'ye Relay yazar ve kayıt durumu Access'e geri bildirilir, değilse kiracı olayı kendi İYS entegratörüne iletir. _Kaynak:_ §18.7 B23; IDP-37; E40. _Durum:_ belirtilmemiş (FROZEN STRATEGY).
 - [ ] **Linux client servisi (daemon, PAM, NSS)** — _Kaynak:_ IDP-32; OP-62. _Durum:_ belirtilmemiş.
 
 ### K13 Denetim, kayıt, şeffaflık ve dışa aktarım
@@ -4902,7 +4904,7 @@ Forward-auth ve Access Proxy, Linux ve SSH, İK provisioning, İYS, PAM/fraud/IG
 #### Rıza ve izinler
 
 - [ ] **Consent (contribution sınıfı) vs scheme consent ayrımı** — PSD2/OB consent Pay UI'ında yönetilir, Grant'a link ile bağlanır. _Kaynak:_ §8.11. _Durum:_ belirtilmemiş.
-- [ ] **Pazarlama izni İYS kaydı** — Bkz. K12 (B23). _Kaynak:_ §18.7 B23. _Durum:_ belirtilmemiş.
+- [ ] **Pazarlama izni İYS kaydı** — Relay üzerinden (B23); bkz. İYS izin olayı. _Kaynak:_ §18.7 B23. _Durum:_ belirtilmemiş.
 
 #### Mevzuat ve standart eşlemeleri
 
@@ -4935,7 +4937,7 @@ Forward-auth ve Access Proxy, Linux ve SSH, İK provisioning, İYS, PAM/fraud/IG
 - [ ] **Payment mandate ≠ Access Mandate; Pay authorization ≠ ALLOW; network token ≠ authority** — _Kaynak:_ §7.9.9.3; E21. _Durum:_ belirtilmemiş.
 - [ ] **KYC uygulaması değil; IAL3 IDV yok** — NFC kimlik, yüz eşleştirme, canlılık, uzaktan tespit yapılmaz. _Kaynak:_ §10.3.1; IDP-34. _Durum:_ belirtilmemiş.
 - [ ] **Access Proxy motoru sıfırdan yazılmaz** — _Kaynak:_ IDP-30. _Durum:_ belirtilmemiş.
-- [ ] **Access İYS'ye doğrudan yazmaz** — Ayrı İYS servisi yazar. _Kaynak:_ IDP-37. _Durum:_ belirtilmemiş.
+- [ ] **Access İYS'ye doğrudan yazmaz** — İYS'ye yalnız Relay yazar; Relay yoksa kiracının entegratörü. _Kaynak:_ IDP-37; B23. _Durum:_ belirtilmemiş.
 
 #### Yetki modeli
 

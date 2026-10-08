@@ -50,7 +50,6 @@ flowchart TB
     subgraph companions["Companion services"]
         exec["Executor"]
         proxy["Access Proxy<br/>(Envoy or Caddy)"]
-        iys["İYS service"]
     end
 
     nats{{"NATS"}}
@@ -74,10 +73,10 @@ flowchart TB
 
     exec -->|public decision API| acore
     proxy -->|forward-auth / ext_authz| acore
-    iys -->|webhooks| icore
 ```
 
 Notes:
 - The authority core has no access to the identity store; the identity plane passes identity to the authority plane only as Claims (INV-12, SEC19).
+- İYS (Turkey's commercial message consent registry) is written by Relay, not Access: Access publishes consent-change events (B23, E40).
 - Signers hold key material outside the HTTP processes and have no network syscalls (OP-2, MD-6).
-- Companion services use only public APIs and crates; they have no privileged path (B21–B23, OP-62).
+- Companion services use only public APIs and crates; they have no privileged path (B21, B22, OP-62).
