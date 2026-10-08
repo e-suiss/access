@@ -46,16 +46,19 @@ Access treats both questions as first-class:
 
 ## How it works
 
-```text
-            ┌──────────────────────────────┐
-  people ──►│        Identity plane         │──► SSO to apps (OIDC, SAML, ...)
-  agents ──►│  sign-in · sessions · orgs    │
-            └──────────────┬───────────────┘
-                           │ identity facts only
-            ┌──────────────▼───────────────┐
-  apps ────►│        Authority plane        │──► allow / deny / require action
-            │  grants · decisions · records │──► verifiable decision records
-            └──────────────────────────────┘
+```mermaid
+flowchart TB
+    people["People"] -->|"sign in · passkeys · SSO"| idp
+    agents["AI agents"] -->|"identity · delegated access"| idp
+    subgraph access["Access"]
+        idp["Identity plane<br/>sign-in · sessions · organizations<br/>OIDC · SAML · SCIM · LDAP"]
+        auth["Authority plane<br/>grants · mandates · decisions"]
+        idp -->|"identity facts only"| auth
+    end
+    idp -->|"SSO tokens · assertions"| apps["Applications"]
+    apps -->|"may this actor do this now?"| auth
+    auth -->|"allow · deny · require action"| apps
+    auth -->|"signed decision records"| verifiers["Auditors · counterparties<br/>(offline verification)"]
 ```
 
 Signing in never grants authority by itself: the identity plane passes facts, and the authority plane decides.
