@@ -2,7 +2,7 @@
 
 Thank you for your interest in Access. This guide explains how to set up a development environment, the rules code must follow, and how changes get merged.
 
-The project is at the specification stage; implementation has not started. The rules below are already binding and are defined in the specification under [`docs/spec/`](docs/spec/README.md) (written in Turkish). An English overview is in [`docs/overview.md`](docs/overview.md).
+The project is in active design; implementation has not started. The rules below are already binding.
 
 ## Reporting security issues
 
@@ -27,7 +27,7 @@ There is no "development mode": security controls are never disabled locally. Lo
 
 ## Code rules (summary)
 
-The full rules are in the specification: repository layout (OP-62), architecture patterns (OP-63), code quality (OP-64), API (OP-65), data layer (OP-66), observability (OP-67), testing (SA-59) and supply chain (§14.7).
+The full rules are in the project specification: repository layout (OP-62), architecture patterns (OP-63), code quality (OP-64), API (OP-65), data layer (OP-66), observability (OP-67), testing (SA-59) and supply chain (§14.7).
 
 - Code, comments, commit messages and pull requests are in English.
 - `rustfmt` and the workspace lints apply; warnings are errors in CI.

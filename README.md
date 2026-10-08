@@ -1,25 +1,90 @@
 # Access
 
-Access is Suiss's identity and authority product: a complete identity provider (OIDC/OAuth 2.1, SAML, SCIM, LDAP, Kerberos, RADIUS, WS-Fed, OpenID Federation, MCP) with an authority plane on top that decides, for every request, whether **this actor, on this authority, may do this exact thing now** — and keeps a verifiable record of the answer.
+**Open-source identity and authority for people, organizations and AI agents.**
 
-It is built for a world where AI agents act on behalf of people and organizations: delegation is explicit and only ever narrows, holding an authority is separate from being able to exercise it, revocation takes effect immediately, and decision records can be verified by third parties without asking Access.
+Access is a complete identity provider with an authority layer on top. It signs people in, federates with the systems they already use, and decides — for every request — whether *this actor, on this authority, may do this exact thing now*. Every decision leaves a record that third parties can verify without asking Access.
 
-- **Overview (English):** [docs/overview.md](docs/overview.md)
-- **Specification (Turkish, normative):** [docs/spec/](docs/spec/README.md)
-- **Architecture diagrams:** [docs/architecture/](docs/architecture/README.md)
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+![Status: pre-alpha](https://img.shields.io/badge/status-pre--alpha-orange.svg)
 
-## Status
+---
 
-Specification stage. The canonical specification is frozen; implementation has not started yet. Engineering conventions (repository layout, architecture patterns, code quality, API, data, testing, supply chain, observability, CI/release, developer experience, documentation) are defined in the specification (§14, §16, §17).
+## Why Access
 
-## Repository layout
+Most identity systems answer *who are you?* and stop there. Authorization is left to roles, scopes and application code — and breaks down as soon as AI agents act on someone's behalf.
 
-The planned layout is described in the specification (§16.4.3a, OP-62): a single repository containing the Rust workspace (`crates/`, `bins/`), companion services (`services/`), SDKs (`sdks/`), web components and console (`web/`), conformance and test suites, deployment files and documentation (`docs/`).
+Access treats both questions as first-class:
 
-## License
+- **Identity** — a full IdP: sign-in, passkeys, MFA, sessions, organizations, SSO, provisioning and federation.
+- **Authority** — explicit grants and delegations that only ever narrow, checked on every action, revoked immediately, and recorded with proof.
 
-Access is fully open source under the [Apache License 2.0](LICENSE).
+## Features
+
+**Identity provider**
+- OpenID Connect and OAuth 2.1 (PKCE, PAR, DPoP, token exchange, CIBA, FAPI 2)
+- SAML 2.0, SCIM 2.0, LDAP, Kerberos, RADIUS, WS-Federation, OpenID Federation
+- Passkeys (WebAuthn), TOTP, passwordless email, step-up authentication
+- B2B organizations: invitations, verified domains, self-service SSO and SCIM setup
+- Embeddable UI components and hosted pages, theming and localization
+
+**Authority**
+- Grants, mandates and delegation chains that can only narrow
+- Allow / deny / require-action decisions with explanations
+- Approvals with exact intent binding; no impersonation, ever
+- Immediate revocation with cascade
+- Signed, independently verifiable decision records and an offline verifier
+
+**Built for AI agents**
+- Agent identities with accountable human owners
+- MCP authorization server, token vault and scoped release of upstream credentials
+- Human approval flows for agent actions
+
+**Operations**
+- Self-hosted or Suiss-hosted — same code, no paid-only features
+- PostgreSQL storage, hardware-backed signing keys (HSM/KMS)
+- Audit logs, webhooks, SIEM streams, multi-region cells
+
+## How it works
+
+```text
+            ┌──────────────────────────────┐
+  people ──►│        Identity plane         │──► SSO to apps (OIDC, SAML, ...)
+  agents ──►│  sign-in · sessions · orgs    │
+            └──────────────┬───────────────┘
+                           │ identity facts only
+            ┌──────────────▼───────────────┐
+  apps ────►│        Authority plane        │──► allow / deny / require action
+            │  grants · decisions · records │──► verifiable decision records
+            └──────────────────────────────┘
+```
+
+Signing in never grants authority by itself: the identity plane passes facts, and the authority plane decides.
+
+## Getting started
+
+Access is in active design; implementation has not started yet. When the first build lands, local development will be one command:
+
+```sh
+git clone https://github.com/e-suiss/access.git
+cd access
+just dev    # PostgreSQL, NATS, SoftHSM, KMS emulator, Mailpit
+just test
+```
+
+SDKs are planned for TypeScript/Node, Python, Go, Java, .NET, Elixir, PHP and Ruby, plus iOS, Android, React Native and Flutter.
+
+## Tech stack
+
+Rust (single backend), PostgreSQL, NATS, HSM/KMS-backed keys, React for UI components.
+
+## Related projects
+
+- **[Relay](https://github.com/e-suiss/relay)** — notification, messaging and event orchestration. Access and Relay run independently and work together without extra setup.
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md). Code, comments, commit messages and pull requests are written in English. Report vulnerabilities privately as described in [SECURITY.md](SECURITY.md).
+Contributions are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request, and report vulnerabilities privately as described in [SECURITY.md](SECURITY.md).
+
+## License
+
+Access is open source under the [Apache License 2.0](LICENSE).
