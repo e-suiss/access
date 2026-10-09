@@ -1,0 +1,29 @@
+[package]
+name = "suiss-access-kernel"
+description = "Access Kernel (CMP-24): the single no_std implementation of Access semantics."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[lib]
+name = "access_kernel"
+
+[lints]
+workspace = true
+
+# OP-72
+[target.'cfg(any(target_os = "linux", target_os = "macos"))'.dev-dependencies]
+divan = { workspace = true }
+gungraun = { workspace = true, features = ["default"] }
+
+# OP-84
+[[bench]]
+name = "kernel_wallclock"
+harness = false
+
+[[bench]]
+name = "kernel_instructions"
+harness = false

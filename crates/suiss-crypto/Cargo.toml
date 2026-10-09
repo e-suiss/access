@@ -1,0 +1,18 @@
+[package]
+name = "suiss-crypto"
+description = "Suiss shared cryptography: deterministic CBOR, digests, COSE, proof verification, signer and HSM/KMS (OP-76)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[features]
+default = ["std"]
+# OP-76
+verify = []
+std = ["verify"]
+
+[lints]
+workspace = true
