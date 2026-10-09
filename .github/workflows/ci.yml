@@ -155,7 +155,8 @@ jobs:
             echo "::notice::crates/sandbox does not exist yet; nothing to test"
             exit 0
           fi
-          cargo test --locked -p access-sandbox --lib --doc
+          cargo test --locked -p access-sandbox --lib
+          cargo test --locked -p access-sandbox --doc
           just test-sandbox
         env:
           ACCESS_SANDBOX_REQUIRE_MEMFD_SECRET: "1"
