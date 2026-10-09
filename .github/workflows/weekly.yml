@@ -1,0 +1,69 @@
+# SA-23, OP-68, §14.5
+name: Weekly
+
+on:
+  schedule:
+    - cron: "41 2 * * 0"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: weekly-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+  RUST_BACKTRACE: "1"
+
+jobs:
+  sanitizers:
+    name: sanitizer (${{ matrix.sanitizer }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        sanitizer: [address, leak, thread]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Read the pinned sanitizer toolchain from the justfile
+        id: nightly
+        run: |
+          toolchain="$(sed -n 's/^sanitizer_nightly := "\(.*\)"$/\1/p' justfile)"
+          test -n "$toolchain"
+          echo "toolchain=$toolchain" >> "$GITHUB_OUTPUT"
+      - uses: ./.github/actions/setup
+        with:
+          cache-key: sanitizer-${{ matrix.sanitizer }}
+          toolchain: ${{ steps.nightly.outputs.toolchain }}
+          components: rust-src
+      - name: Test suite under the sanitizer
+        env:
+          SANITIZER: ${{ matrix.sanitizer }}
+        run: just sanitize "$SANITIZER"
+
+  checksec-release:
+    name: checksec-release
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+        with:
+          cache-key: release
+          tools: auditable
+      # SA-23, §14.5
+      - name: Release build
+        run: just release-build x86_64-unknown-linux-gnu
+      - name: Hardening assertion
+        run: just checksec target/x86_64-unknown-linux-gnu/release/access-server

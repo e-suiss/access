@@ -1,0 +1,277 @@
+# OP-68, SA-59, OP-80, OP-69, OP-71
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions: {}
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+  RUST_BACKTRACE: "1"
+
+jobs:
+  fast:
+    name: fast
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+        with:
+          cache-key: lint
+      - name: Format (OP-64)
+        run: just fmt-check
+      - name: Clippy, warnings are errors (OP-64)
+        run: just lint
+      - name: Repository rules (OP-62, OP-3, OP-66)
+        run: just rules
+
+  test:
+    name: test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    services:
+      # OP-66, SA-59
+      postgres:
+        image: postgres@sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336 # 18.6-trixie
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ci-only-not-a-secret
+          POSTGRES_INITDB_ARGS: --auth=scram-sha-256 --data-checksums
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 30
+    env:
+      DATABASE_URL: postgres://postgres:ci-only-not-a-secret@localhost:5432/postgres
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+        with:
+          cache-key: test
+          tools: nextest
+      - name: Tests (SA-59 phase 0 layers)
+        run: just test
+      - name: Binary hardening (SA-23, §14.5)
+        run: |
+          cargo build --locked -p access-server
+          just checksec target/debug/access-server
+
+  cross:
+    name: cross
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+        with:
+          cache-key: cross
+          tools: wasmtime
+      # CMP-24, MD-1, T41
+      - name: Kernel cross-compilation
+        run: just cross
+
+  supply-chain:
+    name: supply-chain
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+        with:
+          cache-key: tools
+          tools: deny vet
+      - name: cargo-deny (F-1)
+        run: just deny
+      - name: cargo-vet (F-1)
+        run: just vet
+
+  secrets:
+    name: secrets
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      # F-13, F-2
+      - name: Install gitleaks 8.30.1
+        env:
+          GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+        run: |
+          curl -fsSL -o "$RUNNER_TEMP/gitleaks.tar.gz" \
+            https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz
+          echo "$GITLEAKS_SHA256  $RUNNER_TEMP/gitleaks.tar.gz" | sha256sum --check --strict
+          tar -xzf "$RUNNER_TEMP/gitleaks.tar.gz" -C "$RUNNER_TEMP" gitleaks
+      - name: Scan history
+        run: '"$RUNNER_TEMP/gitleaks" git --redact --no-banner --exit-code 1 .'
+
+  sandbox:
+    name: sandbox
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+        with:
+          cache-key: test
+      - name: Linux sandbox tests
+        run: |
+          if [[ ! -f crates/sandbox/Cargo.toml ]]; then
+            echo "::notice::crates/sandbox does not exist yet; nothing to test"
+            exit 0
+          fi
+          cargo test --locked -p access-sandbox
+
+  bench-instructions:
+    name: bench-instructions
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: ./.github/actions/setup
+        with:
+          cache-key: bench
+          tools: gungraun
+      - name: Install Valgrind
+        run: sudo apt-get update -q && sudo apt-get install -y -q --no-install-recommends valgrind
+      # OP-72
+      - name: Baseline (base commit)
+        env:
+          BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          if [[ -z "$BASE_SHA" || "$BASE_SHA" =~ ^0+$ ]] || ! git cat-file -e "$BASE_SHA^{commit}" 2>/dev/null; then
+            echo "::notice::no base commit; recording the current numbers only"
+            echo "HAVE_BASELINE=false" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          head="$(git rev-parse HEAD)"
+          git checkout --quiet "$BASE_SHA"
+          if [[ -f crates/kernel/benches/kernel_instructions.rs ]]; then
+            just bench-instructions --save-baseline=base
+            echo "HAVE_BASELINE=true" >> "$GITHUB_ENV"
+          else
+            echo "HAVE_BASELINE=false" >> "$GITHUB_ENV"
+          fi
+          git checkout --quiet "$head"
+      - name: Kernel regression gate (fails above 5 %)
+        run: |
+          if [[ "$HAVE_BASELINE" == true ]]; then
+            just bench-instructions --baseline=base --callgrind-limits='ir=5%'
+          else
+            just bench-instructions
+          fi
+
+  web:
+    name: web
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+        with:
+          cache-key: wasm
+          tools: wasm-bindgen
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.21.0
+          cache: npm
+          # OP-97
+          cache-dependency-path: |
+            sdks/typescript/package-lock.json
+            web/console/package-lock.json
+      - name: Install (lockfile only, no install scripts)
+        run: just web-install
+      - name: Lint, type check, format (OP-83)
+        run: just web-check
+      - name: Unit tests
+        run: just web-test
+      - name: Keep the Wasm build for the browser tests
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: kernel-wasm
+          path: sdks/typescript/wasm
+          retention-days: 1
+          if-no-files-found: error
+
+  web-e2e:
+    name: web-e2e
+    needs: web
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    container:
+      image: mcr.microsoft.com/playwright@sha256:eff16c30e6f3f4af0a03fa4b706120d5e9b0891c344a27d64559aff5900a4a27 # v1.63.0-noble
+      options: --ipc=host
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.21.0
+          cache: npm
+          cache-dependency-path: |
+            sdks/typescript/package-lock.json
+            web/console/package-lock.json
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: kernel-wasm
+          path: sdks/typescript/wasm
+      - name: Browser end-to-end, visual and WCAG 2.2 AA tests
+        run: |
+          (cd sdks/typescript && npm ci)
+          cd web/console
+          npm ci
+          npm run e2e
+      - name: Upload the Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: playwright-report
+          path: web/console/playwright-report
+          retention-days: 7

@@ -1,0 +1,447 @@
+# OP-68, F-4, F-8, F-10, OP-79, OP-85
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions: {}
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+  IMAGE: ghcr.io/e-suiss/access
+
+jobs:
+  build:
+    name: build (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - { arch: amd64, runner: ubuntu-24.04, target: x86_64-unknown-linux-gnu }
+          - { arch: arm64, runner: ubuntu-24.04-arm, target: aarch64-unknown-linux-gnu }
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+        with:
+          cache: "false"
+          tools: auditable cyclonedx syft
+      - name: Build (cargo auditable, --locked, remapped paths)
+        env:
+          TARGET: ${{ matrix.target }}
+        run: just release-build "$TARGET"
+      - name: Hardening assertion (SA-23)
+        env:
+          TARGET: ${{ matrix.target }}
+        run: just checksec "target/$TARGET/release/access-server"
+      - name: Stage binary and SBOMs (F-5)
+        env:
+          TARGET: ${{ matrix.target }}
+          ARCH: ${{ matrix.arch }}
+        run: |
+          mkdir -p dist
+          bin="dist/access-server-linux-$ARCH"
+          cp "target/$TARGET/release/access-server" "$bin"
+          just sbom "$TARGET" "$bin" "$RUNNER_TEMP/sbom"
+          for f in "$RUNNER_TEMP"/sbom/*.json; do
+            base="$(basename "$f")"
+            mv "$f" "dist/${base%%.*}-linux-$ARCH.${base#*.}"
+          done
+          (cd dist && sha256sum -- * > "SHA256SUMS-linux-$ARCH")
+          cat "dist/SHA256SUMS-linux-$ARCH"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: dist-${{ matrix.arch }}
+          path: dist
+          if-no-files-found: error
+
+  # OP-79, F-4, SAI-7, U50
+  rebuild:
+    name: rebuild (${{ matrix.arch }}, informational)
+    needs: build
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    continue-on-error: true
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: amd64, runner: ubuntu-24.04, target: x86_64-unknown-linux-gnu }
+          - { arch: arm64, runner: ubuntu-24.04-arm, target: aarch64-unknown-linux-gnu }
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+        with:
+          cache: "false"
+          tools: auditable
+      - name: Second build
+        env:
+          TARGET: ${{ matrix.target }}
+        run: just release-build "$TARGET"
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: dist-${{ matrix.arch }}
+          path: first
+      - name: Compare digests
+        env:
+          TARGET: ${{ matrix.target }}
+          ARCH: ${{ matrix.arch }}
+        run: |
+          first="$(sha256sum "first/access-server-linux-$ARCH" | cut -d' ' -f1)"
+          second="$(sha256sum "target/$TARGET/release/access-server" | cut -d' ' -f1)"
+          {
+            echo "### Second build, linux-$ARCH (informational, OP-79)"
+            echo
+            echo "| build | sha256 |"
+            echo "|---|---|"
+            echo "| release | \`$first\` |"
+            echo "| second | \`$second\` |"
+            echo
+            if [[ "$first" == "$second" ]]; then echo "Digests match."; else echo "Digests differ. This does not block the release."; fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # F-8
+  test:
+    name: test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    services:
+      postgres:
+        image: postgres@sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336 # 18.6-trixie
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ci-only-not-a-secret
+          POSTGRES_INITDB_ARGS: --auth=scram-sha-256 --data-checksums
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 30
+    env:
+      DATABASE_URL: postgres://postgres:ci-only-not-a-secret@localhost:5432/postgres
+      NEXTEST_PROFILE: ci
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+        with:
+          cache: "false"
+          tools: nextest
+      - name: Tests
+        run: just test
+      - name: Test-result predicate
+        env:
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          mkdir -p predicates
+          python3 -I .github/scripts/test-result-predicate.py target/nextest/ci/junit.xml "$RUN_URL" \
+            Cargo.lock rust-toolchain.toml .config/nextest.toml > predicates/test-result.json
+          jq -e '.result == "PASSED"' predicates/test-result.json
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: test-result
+          path: predicates
+          if-no-files-found: error
+
+  publish:
+    name: publish
+    needs: [build, test]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write # create the GitHub release
+      id-token: write # Sigstore keyless signing and attestations (F-6, F-7)
+      attestations: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0 # git-cliff reads the commit history and tags
+      - uses: ./.github/actions/setup
+        with:
+          cache: "false"
+          tools: git-cliff cosign
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: dist-*
+          path: dist
+          merge-multiple: true
+      - name: Build provenance (F-6, SLSA)
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: |
+            dist/access-server-linux-amd64
+            dist/access-server-linux-arm64
+      - name: SBOM attestation, amd64 (F-8)
+        uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e # v4.1.0
+        with:
+          subject-path: dist/access-server-linux-amd64
+          sbom-path: dist/access-server-linux-amd64.cdx.json
+      - name: SBOM attestation, arm64 (F-8)
+        uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e # v4.1.0
+        with:
+          subject-path: dist/access-server-linux-arm64
+          sbom-path: dist/access-server-linux-arm64.cdx.json
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: test-result
+          path: ${{ runner.temp }}/predicates
+      - name: Test-result attestation (F-8)
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: |
+            dist/access-server-linux-amd64
+            dist/access-server-linux-arm64
+          predicate-type: https://in-toto.io/attestation/test-result/v0.1
+          predicate-path: ${{ runner.temp }}/predicates/test-result.json
+      # F-5, F-8
+      - name: VEX document
+        env:
+          TAG: ${{ github.ref_name }}
+          SERVER_URL: ${{ github.server_url }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          version="${TAG#v}"
+          products=()
+          for arch in amd64 arm64; do
+            sum="$(sha256sum "dist/access-server-linux-$arch" | cut -d' ' -f1)"
+            products+=("pkg:generic/access-server@$version?arch=$arch&checksum=sha256:$sum")
+          done
+          python3 -I .github/scripts/openvex.py supply-chain/vex/statements.json \
+            "$SERVER_URL/$REPOSITORY/releases/tag/$TAG#vex" "Suiss" "$(git log -1 --format=%cI)" \
+            "${products[@]}" > dist/access-server.openvex.json
+          cat dist/access-server.openvex.json
+      - name: VEX attestation (F-8)
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: |
+            dist/access-server-linux-amd64
+            dist/access-server-linux-arm64
+          predicate-type: https://openvex.dev/ns/v0.2.0
+          predicate-path: dist/access-server.openvex.json
+      # F-7
+      - name: Sigstore keyless signatures (F-7)
+        run: |
+          for file in dist/*; do
+            cosign sign-blob --yes --bundle "$file.sigstore.json" "$file"
+          done
+      # OP-68, B20
+      - name: Release notes
+        run: git cliff --latest --strip all > "$RUNNER_TEMP/notes.md"
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: gh release create "$TAG" dist/* --verify-tag --title "$TAG" --notes-file "$RUNNER_TEMP/notes.md"
+
+  image:
+    name: image (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - { arch: amd64, runner: ubuntu-24.04 }
+          - { arch: arm64, runner: ubuntu-24.04-arm }
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - name: Build and push by digest
+        id: build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: deploy/docker/Dockerfile
+          platforms: linux/${{ matrix.arch }}
+          outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
+          provenance: false
+          sbom: false
+      - name: Export digest
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/digests"
+          touch "$RUNNER_TEMP/digests/${DIGEST#sha256:}"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: digest-${{ matrix.arch }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  image-publish:
+    name: image-publish
+    needs: [image, test]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+        with:
+          cache: "false"
+          tools: cosign syft
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: digest-*
+          path: ${{ runner.temp }}/digests
+          merge-multiple: true
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - name: Create the multi-arch manifest
+        id: manifest
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          version="${TAG#v}"
+          sources=()
+          for d in "$RUNNER_TEMP"/digests/*; do sources+=("$IMAGE@sha256:$(basename "$d")"); done
+          docker buildx imagetools create -t "$IMAGE:$version" "${sources[@]}"
+          digest="$(docker buildx imagetools inspect "$IMAGE:$version" --format '{{json .Manifest}}' | jq -r .digest)"
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+      - name: Sign the image (F-7)
+        env:
+          DIGEST: ${{ steps.manifest.outputs.digest }}
+        run: cosign sign --yes "$IMAGE@$DIGEST"
+      - name: Image provenance (F-6)
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ steps.manifest.outputs.digest }}
+          push-to-registry: true
+      # F-8
+      - name: Image SBOM and VEX
+        env:
+          DIGEST: ${{ steps.manifest.outputs.digest }}
+          TAG: ${{ github.ref_name }}
+          SERVER_URL: ${{ github.server_url }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/image"
+          syft scan "registry:$IMAGE@$DIGEST" -o "cyclonedx-json=$RUNNER_TEMP/image/sbom.cdx.json"
+          python3 -I .github/scripts/openvex.py supply-chain/vex/statements.json \
+            "$SERVER_URL/$REPOSITORY/releases/tag/$TAG#vex-image" "Suiss" "$(git log -1 --format=%cI)" \
+            "pkg:oci/access@$DIGEST?repository_url=ghcr.io/e-suiss/access" > "$RUNNER_TEMP/image/openvex.json"
+      - name: Image SBOM attestation (F-8)
+        uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e # v4.1.0
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ steps.manifest.outputs.digest }}
+          sbom-path: ${{ runner.temp }}/image/sbom.cdx.json
+          push-to-registry: true
+      - name: Image VEX attestation (F-8)
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ steps.manifest.outputs.digest }}
+          predicate-type: https://openvex.dev/ns/v0.2.0
+          predicate-path: ${{ runner.temp }}/image/openvex.json
+          push-to-registry: true
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: test-result
+          path: ${{ runner.temp }}/predicates
+      - name: Image test-result attestation (F-8)
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ steps.manifest.outputs.digest }}
+          predicate-type: https://in-toto.io/attestation/test-result/v0.1
+          predicate-path: ${{ runner.temp }}/predicates/test-result.json
+          push-to-registry: true
+
+  # OP-68, OP-85, F-10
+  publish-crates:
+    name: publish-crates
+    needs: [publish, image-publish]
+    if: vars.PUBLISH_CRATES == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+        with:
+          cache: "false"
+      - uses: rust-lang/crates-io-auth-action@c6f97d42243bad5fab37ca0427f495c86d5b1a18 # v1.0.5
+        id: auth
+      - name: Publish the Kernel
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+        run: cargo publish --locked -p suiss-access-kernel
+
+  # OP-68, OP-85, F-10
+  publish-npm:
+    name: publish-npm
+    needs: [publish, image-publish]
+    if: vars.PUBLISH_NPM == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+        with:
+          cache: "false"
+          tools: wasm-bindgen
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24.21.0
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+      - name: Build
+        run: |
+          just web-install
+          just wasm
+      - name: Publish the TypeScript SDK
+        working-directory: sdks/typescript
+        run: npm publish --provenance --access public

@@ -1,0 +1,4 @@
+# OP-84
+self-hosted-runner:
+  labels:
+    - bench

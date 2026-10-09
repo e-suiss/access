@@ -1,0 +1,210 @@
+# OP-68, SA-59, F-1, OP-72, OP-84, OP-71
+name: Nightly
+
+on:
+  schedule:
+    - cron: "23 1 * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: nightly-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+  RUST_BACKTRACE: "1"
+
+jobs:
+  audit:
+    name: audit
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+        with:
+          cache-key: tools
+          tools: audit
+      # F-1
+      - name: cargo-audit
+        run: just audit
+
+  supply-chain-watch:
+    name: supply-chain-watch
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+        with:
+          cache-key: lint
+      # F-2
+      - name: Cooldown (F-2)
+        env:
+          XTASK_ONLINE: "1"
+        run: cargo xtask check cooldown
+      - name: Maintainer watch list (F-2)
+        env:
+          XTASK_ONLINE: "1"
+        run: cargo xtask check maintainer-watchlist
+
+  test-full:
+    name: test-full
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    services:
+      postgres:
+        image: postgres@sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336 # 18.6-trixie
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ci-only-not-a-secret
+          POSTGRES_INITDB_ARGS: --auth=scram-sha-256 --data-checksums
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 30
+    env:
+      DATABASE_URL: postgres://postgres:ci-only-not-a-secret@localhost:5432/postgres
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+        with:
+          cache-key: test
+          tools: nextest
+      - name: Full suite, including long-running tests
+        run: just test-full
+
+  ios:
+    name: ios-simulator
+    runs-on: macos-15
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+        with:
+          cache-key: ios
+      # CMP-24, MD-1, T41
+      - name: Kernel tests in the iOS simulator
+        run: just cross-ios
+
+  android:
+    name: android-emulator
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+        with:
+          cache-key: android
+      - name: Enable KVM for the emulator
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Use the NDK linker for Android
+        run: |
+          linker="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android24-clang"
+          test -x "$linker"
+          echo "CARGO_TARGET_X86_64_LINUX_ANDROID_LINKER=$linker" >> "$GITHUB_ENV"
+      # CMP-24, MD-1, T41
+      - name: Kernel tests in the Android emulator
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          disable-animations: true
+          emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect
+          script: just cross-android
+
+  mutants:
+    name: mutants
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+        with:
+          cache-key: test
+          tools: nextest mutants
+      # SA-59
+      - name: cargo-mutants (report only)
+        run: |
+          status=0
+          just mutants || status=$?
+          case "$status" in
+            0) ;;
+            2|3) echo "::warning::cargo-mutants found missed or timed-out mutants (report-only until stage 1)" ;;
+            *) exit "$status" ;;
+          esac
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: mutants-report
+          path: mutants.out
+          retention-days: 30
+          if-no-files-found: ignore
+
+  bench-wallclock:
+    name: bench-wallclock
+    # OP-84
+    if: github.ref == 'refs/heads/main' && github.repository == 'e-suiss/access'
+    runs-on: [self-hosted, linux, bench]
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+        with:
+          cache-key: bench-wallclock
+      # OP-72, OP-84
+      - name: Wall-clock benchmarks
+        run: |
+          mkdir -p bench-results
+          {
+            echo "commit: $GITHUB_SHA"
+            echo "date: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo "host: $(uname -srm)"
+            echo "governor: $(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_governor 2>/dev/null || echo unknown)"
+            echo
+          } > bench-results/wallclock.txt
+          just bench | tee -a bench-results/wallclock.txt
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: bench-wallclock-${{ github.run_id }}
+          path: bench-results
+          retention-days: 90
+          if-no-files-found: error
