@@ -1,0 +1,11 @@
+/target/
+node_modules/
+dist/
+
+# F-13, OP-69
+.env
+.env.*
+!.env.example
+
+.DS_Store
+*.swp

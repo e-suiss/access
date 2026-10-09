@@ -1,0 +1,86 @@
+[workspace]
+resolver = "3"
+members = ["crates/*", "bins/*", "sdks/bindings/wasm", "xtask"]
+
+[workspace.package]
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.99"
+license = "Apache-2.0"
+repository = "https://github.com/e-suiss/access"
+publish = false
+
+# F-3, SA-35
+[workspace.dependencies]
+access-kernel = { package = "suiss-access-kernel", path = "crates/kernel", default-features = false }
+access-crypto = { path = "crates/crypto", default-features = false }
+access-telemetry = { path = "crates/telemetry", default-features = false }
+access-http = { path = "crates/http", default-features = false }
+access-sandbox = { path = "crates/sandbox", default-features = false }
+
+# F-2
+secrecy = { version = "0.10.3", default-features = false }
+zeroize = { version = "1.9.0", default-features = false }
+subtle = { version = "2.6.1", default-features = false }
+static_assertions = { version = "1.1.0", default-features = false }
+thiserror = { version = "2.0.21", default-features = false }
+serde = { version = "1.0.229", default-features = false }
+serde_json = { version = "1.0.151", default-features = false }
+toml = { version = "1.1.6", default-features = false }
+tracing = { version = "0.1.44", default-features = false }
+tracing-subscriber = { version = "0.3.23", default-features = false }
+tokio = { version = "1.53.1", default-features = false }
+axum = { version = "0.8.9", default-features = false }
+tower = { version = "0.5.3", default-features = false }
+tower-http = { version = "0.7.1", default-features = false }
+figment = { version = "0.10.19", default-features = false }
+proptest = { version = "1.11.0", default-features = false }
+http-body-util = { version = "0.1.3", default-features = false }
+time = { version = "0.3.55", default-features = false }
+# SA-22
+landlock = { version = "0.4.7", default-features = false }
+seccompiler = { version = "0.5.0", default-features = false }
+rustix = { version = "1.1.5", default-features = false }
+libc = { version = "0.2.190", default-features = false }
+# OP-72
+divan = { version = "0.1.21", default-features = false }
+gungraun = { version = "=0.20.0", default-features = false }
+# OP-83
+wasm-bindgen = { version = "=0.2.129", default-features = false }
+
+[workspace.lints.rust]
+# R-2, OP-3
+unsafe_code = "forbid"
+missing_docs = "deny"
+unreachable_pub = "deny"
+unused_must_use = "deny"
+rust_2024_compatibility = { level = "deny", priority = -1 }
+
+[workspace.lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+# OP-3, OP-4, R-3
+unwrap_used = "deny"
+expect_used = "deny"
+indexing_slicing = "deny"
+panic = "deny"
+unimplemented = "deny"
+todo = "deny"
+unreachable = "deny"
+# R-1
+arithmetic_side_effects = "deny"
+cast_possible_truncation = "deny"
+cast_possible_wrap = "deny"
+cast_sign_loss = "deny"
+# OP-64
+dbg_macro = "deny"
+print_stdout = "deny"
+print_stderr = "deny"
+mem_forget = "deny"
+
+# OP-4, SA-21
+[profile.release]
+overflow-checks = true
+panic = "unwind"
+lto = "thin"
+codegen-units = 1
+debug = "line-tables-only"
