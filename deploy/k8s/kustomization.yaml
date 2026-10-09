@@ -1,0 +1,11 @@
+# OP-50, §14.5, OP-51
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: access
+resources:
+  - namespace.yaml
+  - serviceaccount.yaml
+  - deployment.yaml
+  - service.yaml
+  - poddisruptionbudget.yaml
+  - networkpolicy.yaml

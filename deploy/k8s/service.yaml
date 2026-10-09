@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: access-server
+  labels:
+    app.kubernetes.io/name: access-server
+    app.kubernetes.io/part-of: access
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: access-server
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+      protocol: TCP
