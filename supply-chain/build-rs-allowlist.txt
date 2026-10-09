@@ -1,0 +1,23 @@
+# F-2, SA-34
+bincode-next
+figment
+getrandom
+gungraun
+gungraun-common
+gungraun-macros
+httparse
+libc
+proc-macro2
+proc-macro2-diagnostics
+quote
+rustix
+rustversion
+serde
+serde_core
+serde_json
+thiserror
+uncased
+valuable
+wasm-bindgen
+wasm-bindgen-shared
+zmij

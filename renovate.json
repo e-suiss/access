@@ -1,0 +1,58 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "description": "F-15: dependency updates wait 7 days (F-2) unless they fix a known vulnerability; every update passes the tests and cargo-vet.",
+  "extends": [
+    "config:recommended",
+    "helpers:pinGitHubActionDigests"
+  ],
+  "minimumReleaseAge": "7 days",
+  "internalChecksFilter": "strict",
+  "labels": [
+    "dependencies"
+  ],
+  "vulnerabilityAlerts": {
+    "enabled": true,
+    "minimumReleaseAge": null,
+    "labels": [
+      "security"
+    ]
+  },
+  "osvVulnerabilityAlerts": true,
+  "lockFileMaintenance": {
+    "enabled": true,
+    "schedule": [
+      "before 6am on monday"
+    ]
+  },
+  "packageRules": [
+    {
+      "description": "Rust crates in one pull request (F-2, F-15).",
+      "matchManagers": [
+        "cargo"
+      ],
+      "groupName": "rust dependencies"
+    },
+    {
+      "description": "npm packages in one pull request (OP-83).",
+      "matchManagers": [
+        "npm"
+      ],
+      "groupName": "npm dependencies"
+    },
+    {
+      "description": "GitHub Actions stay pinned to a commit SHA with a version comment (F-2).",
+      "matchManagers": [
+        "github-actions"
+      ],
+      "groupName": "github actions",
+      "pinDigests": true
+    },
+    {
+      "description": "The Rust toolchain is pinned in rust-toolchain.toml and adopted after the same cooldown (OP-64, F-2).",
+      "matchDepNames": [
+        "rust"
+      ],
+      "groupName": "rust toolchain"
+    }
+  ]
+}

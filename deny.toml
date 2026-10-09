@@ -1,0 +1,114 @@
+# F-1, OP-5, CR-14
+
+[graph]
+all-features = false
+no-default-features = false
+
+[output]
+feature-depth = 1
+
+[advisories]
+unmaintained = "all"
+unsound = "all"
+yanked = "deny"
+ignore = []
+
+# F-1
+[licenses]
+allow = [
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "MIT",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Unicode-3.0",
+    "Zlib",
+    "CC0-1.0",
+]
+confidence-threshold = 0.93
+unused-allowed-license = "allow"
+
+[licenses.private]
+ignore = true
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+allow-wildcard-paths = true
+highlight = "all"
+deny = [
+    # F-1, MD-1
+    { crate = "openssl", reason = "F-1: aws-lc-rs only" },
+    { crate = "openssl-sys", reason = "F-1: aws-lc-rs only" },
+    # CR-14
+    { crate = "rsa", reason = "CR-14: Marvin timing side channel, no fix" },
+    { crate = "ring", reason = "CR-14: aws-lc-rs only" },
+    # CR-14
+    { crate = "libcrux", reason = "CR-14" },
+    { crate = "libcrux-ml-kem", reason = "CR-14" },
+    { crate = "libcrux-ml-dsa", reason = "CR-14" },
+    { crate = "libcrux-aesgcm", reason = "CR-14" },
+    { crate = "libcrux-sha3", reason = "CR-14" },
+    { crate = "libcrux-ecdh", reason = "CR-14" },
+    { crate = "libcrux-ed25519", reason = "CR-14" },
+    { crate = "libcrux-hkdf", reason = "CR-14" },
+    { crate = "libcrux-hmac", reason = "CR-14" },
+    { crate = "libcrux-kem", reason = "CR-14" },
+    { crate = "libcrux-signature", reason = "CR-14" },
+    # CR-14
+    { crate = "ml-kem", reason = "CR-14: unaudited" },
+    { crate = "ml-dsa", reason = "CR-14: RUSTSEC-2025-0144" },
+    { crate = "slh-dsa", reason = "CR-14: unaudited" },
+    { crate = "pqcrypto", reason = "CR-14: PQ comes from aws-lc-rs" },
+    { crate = "pqcrypto-mlkem", reason = "CR-14: PQ comes from aws-lc-rs" },
+    { crate = "pqcrypto-mldsa", reason = "CR-14: PQ comes from aws-lc-rs" },
+    { crate = "pqcrypto-kyber", reason = "CR-14: PQ comes from aws-lc-rs" },
+    { crate = "pqcrypto-dilithium", reason = "CR-14: PQ comes from aws-lc-rs" },
+    { crate = "pqcrypto-sphincsplus", reason = "CR-14: PQ comes from aws-lc-rs" },
+    { crate = "pqcrypto-traits", reason = "CR-14: PQ comes from aws-lc-rs" },
+    # OP-5
+    { crate = "openidconnect", reason = "OP-5: client library, depends on rsa" },
+    { crate = "josekit", reason = "OP-5: depends on C OpenSSL" },
+    { crate = "ntex", reason = "OP-5: ecosystem and maintenance" },
+    { crate = "poem", reason = "OP-5: ecosystem and maintenance" },
+    { crate = "h3", reason = "OP-5: ecosystem and maintenance" },
+    { crate = "gamlastan", reason = "OP-5: not a SAML domain model (XSW defence)" },
+    { crate = "serde_stacker", reason = "OP-5, §14.6: unbounded JSON depth" },
+    { crate = "unshare", reason = "OP-5: unmaintained" },
+    { crate = "cap", reason = "OP-5: aborts when the limit is exceeded" },
+    # OP-5, P-256
+    { crate = "p256", reason = "OP-5: aws-lc-rs is 7.6x/4.9x faster" },
+    { crate = "diesel@<2.3.8", reason = "OP-5: RUSTSEC-2026-0136" },
+    # OP-4, SA-22
+    { crate = "io-uring", reason = "SA-22" },
+    { crate = "tokio-uring", reason = "SA-22" },
+    { crate = "rio", reason = "SA-22" },
+    { crate = "glommio", reason = "SA-22" },
+    { crate = "monoio", reason = "SA-22" },
+    # SA-32
+    { crate = "fancy-regex", reason = "SA-32: backtracking" },
+    { crate = "pcre2", reason = "SA-32: backtracking" },
+    { crate = "pcre2-sys", reason = "SA-32: backtracking" },
+    { crate = "onig", reason = "SA-32: backtracking" },
+    { crate = "onig_sys", reason = "SA-32: backtracking" },
+]
+
+[[bans.features]]
+crate = "jsonwebtoken"
+deny = ["rust_crypto"]
+
+[[bans.features]]
+crate = "serde_json"
+deny = ["unbounded_depth"]
+
+[[bans.features]]
+crate = "rustls"
+deny = ["ring"]
+
+# F-1
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []

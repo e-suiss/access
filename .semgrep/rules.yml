@@ -1,0 +1,101 @@
+# F-14
+rules:
+  - id: sql-outside-store
+    # OP-66
+    message: >-
+      Database access outside crates/store (OP-66). Move the query into the
+      store crate and call it through a port.
+    severity: ERROR
+    languages: [rust]
+    paths:
+      exclude:
+        - "crates/store/**"
+        - "xtask/**"
+    pattern-either:
+      - pattern: sqlx::query(...)
+      - pattern: sqlx::query_as(...)
+      - pattern: sqlx::query_scalar(...)
+      - pattern: sqlx::query!(...)
+      - pattern: sqlx::query_as!(...)
+      - pattern: sqlx::query_scalar!(...)
+      - pattern-regex: '\b(sqlx|tokio_postgres|deadpool_postgres)::'
+
+  - id: secret-formatted
+    # SA-26, CR-35, OP-64
+    message: >-
+      An exposed secret is formatted or logged (SA-26, CR-35). Secrets are never
+      printed; log a fingerprint or a redacted marker instead.
+    severity: ERROR
+    languages: [rust]
+    # OP-69
+    paths:
+      exclude:
+        - "**/tests/**"
+        - "**/tests.rs"
+    patterns:
+      - pattern-not-inside: |
+          mod tests { ... }
+      - pattern-either:
+        - pattern: format!(..., $S.expose(), ...)
+        - pattern: format!(..., $S.expose_secret(), ...)
+        - pattern: write!(..., $S.expose(), ...)
+        - pattern: write!(..., $S.expose_secret(), ...)
+        - pattern: writeln!(..., $S.expose(), ...)
+        - pattern: writeln!(..., $S.expose_secret(), ...)
+        - pattern: panic!(..., $S.expose(), ...)
+        - pattern: panic!(..., $S.expose_secret(), ...)
+        - pattern-regex: '\b(trace|debug|info|warn|error|event)!\([^;]*\.expose(_secret)?\(\)'
+        - pattern-regex: '\b(e?print(ln)?|format(_args)?|write(ln)?|panic|unreachable|todo|assert(_eq|_ne)?)!\([^;]*\.expose(_secret)?\(\)'
+
+  - id: secret-compared-with-eq
+    # SA-26, §14.5
+    message: >-
+      An exposed secret is compared with == or != (§14.5). Use Secret::ct_eq or
+      Secret::ct_eq_bytes.
+    severity: ERROR
+    languages: [rust]
+    pattern-either:
+      - pattern: $A.expose() == $B
+      - pattern: $A == $B.expose()
+      - pattern: $A.expose() != $B
+      - pattern: $A != $B.expose()
+      - pattern: $A.expose_secret() == $B
+      - pattern: $A == $B.expose_secret()
+      - pattern: $A.expose_secret() != $B
+      - pattern: $A != $B.expose_secret()
+
+  - id: unwrap-in-non-test-code
+    # OP-3, OP-4, R-3
+    message: >-
+      unwrap()/expect() outside tests (OP-3, OP-4). Return a typed error; a
+      decision is not an error (OP-64).
+    severity: ERROR
+    languages: [rust]
+    paths:
+      exclude:
+        - "**/tests/**"
+        - "**/benches/**"
+        - "**/tests.rs"
+        - "xtask/**"
+    patterns:
+      - pattern-either:
+          - pattern: $X.unwrap()
+          - pattern: $X.expect(...)
+      - pattern-not-inside: |
+          mod tests { ... }
+
+  - id: process-exit-in-library
+    # SA-21, OP-4
+    message: >-
+      std::process::exit in a library crate (SA-21). Return an error and let the
+      binary decide.
+    severity: ERROR
+    languages: [rust]
+    paths:
+      include:
+        - "crates/**"
+        - "services/**"
+    pattern-either:
+      - pattern: std::process::exit(...)
+      - pattern: process::exit(...)
+      - pattern: std::process::abort()

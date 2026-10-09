@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# OP-69, F-13
+set -euo pipefail
+
+cargo fmt --all -- --check
+
+if ! command -v gitleaks >/dev/null 2>&1; then
+    echo "pre-commit: gitleaks is not installed; install it to scan staged changes (F-13)." >&2
+    exit 1
+fi
+gitleaks git --staged --redact --no-banner --config .gitleaks.toml
