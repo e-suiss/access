@@ -21,4 +21,4 @@ Please include:
 
 ## Scope
 
-The project is at the specification stage; no released software exists yet. Reports about the specification's security design are welcome through the same private channel.
+The project is pre-alpha; no release exists yet. Reports about the code on `main` and about the security design are welcome through the same private channel. A running server also publishes its contact details at `/.well-known/security.txt` (RFC 9116).

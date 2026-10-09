@@ -41,7 +41,7 @@ Access treats both questions as first-class:
 
 **Operations**
 - Self-hosted or Suiss-hosted — same code, no paid-only features
-- PostgreSQL storage, hardware-backed signing keys (HSM/KMS)
+- PostgreSQL storage, hardware-backed signing keys (HSM over PKCS#11)
 - Audit logs, webhooks, SIEM streams, multi-region cells
 
 ## How it works
@@ -65,20 +65,23 @@ Signing in never grants authority by itself: the identity plane passes facts, an
 
 ## Getting started
 
-Access is in active design; implementation has not started yet. When the first build lands, local development will be one command:
+Access is pre-alpha: the project foundation (workspace, CI gates, local environment) is in place and the Kernel is next. To build and test:
 
 ```sh
 git clone https://github.com/e-suiss/access.git
 cd access
-just dev    # PostgreSQL, NATS, SoftHSM, KMS emulator, Mailpit
-just test
+just dev     # PostgreSQL, NATS, SoftHSM (PKCS#11), Mailpit, observability
+just check   # formatting, lints, repository rules, dependency policy
+just test    # the same tests CI runs on every change
 ```
+
+You need Rust (the pinned toolchain installs itself from `rust-toolchain.toml`), [`just`](https://github.com/casey/just) and Docker.
 
 SDKs are planned for TypeScript/Node, Python, Go, Java, .NET, Elixir, PHP and Ruby, plus iOS, Android, React Native and Flutter.
 
 ## Tech stack
 
-Rust (single backend), PostgreSQL, NATS, HSM/KMS-backed keys, React for UI components.
+Rust (single backend), PostgreSQL, NATS, HSM-backed keys over PKCS#11, React for UI components.
 
 ## Related projects
 

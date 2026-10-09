@@ -2,7 +2,7 @@
 
 Thank you for your interest in Access. This guide explains how to set up a development environment, the rules code must follow, and how changes get merged.
 
-The project is in active design; implementation has not started. The rules below are already binding.
+Access is pre-alpha: the specification is largely settled and the implementation is at its foundation stage. Nothing is stable yet, and the rules below are already binding.
 
 ## Reporting security issues
 
@@ -10,20 +10,44 @@ Do **not** open a public issue for a vulnerability. Follow [`SECURITY.md`](SECUR
 
 ## Development environment
 
-Once the codebase exists, getting started will take three steps (OP-69):
+You need [rustup](https://rustup.rs) (the toolchain version is pinned in `rust-toolchain.toml` and installed automatically), [`just`](https://github.com/casey/just), [`cargo-nextest`](https://nexte.st) and Docker with Compose v2. Then (OP-69):
 
 ```sh
 git clone https://github.com/e-suiss/access.git
 cd access
-just dev    # starts PostgreSQL, NATS, SoftHSM, a KMS emulator, Mailpit and observability
+just dev    # starts the local services and waits until they are healthy
 just test   # runs the same tests as CI on pull requests
 ```
 
-Other commands: `just check` (the same checks as CI), `just gen` (regenerate OpenAPI, Protobuf, sqlx metadata and Kernel bindings), `just db-reset`, `just bench` (benchmarks) and `just profile` (profiling with `samply`/`cargo flamegraph`, `tokio-console`, `dhat`).
+`just dev` starts these services with Docker Compose (`deploy/compose/`). Every port is published on `127.0.0.1` only; if one is taken, override it with the matching `ACCESS_DEV_*_PORT` variable.
+
+| Service | Purpose | Address |
+| --- | --- | --- |
+| PostgreSQL 18 | Database `access`; runtime role `access_app` (no `DELETE`/`TRUNCATE`), owner role `access_owner` | `127.0.0.1:5432` |
+| NATS (JetStream) | Messaging | `127.0.0.1:4222`, monitoring `:8222` |
+| SoftHSM 2 (PKCS#11) | Local HSM/KMS; token `access-dev` | `just dev-hsm --show-slots` |
+| Mailpit | Captures outgoing e-mail; nothing is delivered | `http://127.0.0.1:8025`, SMTP `:1025` |
+| OpenTelemetry Collector | Receives OTLP traces, metrics and logs | `127.0.0.1:4317` (gRPC), `:4318` (HTTP) |
+| Jaeger, Prometheus, Grafana | Traces, metrics and dashboards | `http://127.0.0.1:16686`, `:9090`, `:3300` |
+
+The credentials in `deploy/compose/compose.yaml` are synthetic, local-only values. Never put a real secret in the local environment, and never commit a `.env` file.
+
+Other commands:
+
+- `just check`: the same checks as CI (format, lints, repository rules, dependency policy).
+- `just dev-down`: stops the services; the database volume is kept.
+- `just db-reset`: recreates the database from scratch and loads the synthetic seed data.
+- `just psql`: a `psql` shell as the runtime role.
+- `just image`: builds the `access-server` container image (distroless, non-root).
+- `just mkcert <host>`: a locally trusted certificate for a custom domain. WebAuthn works on `localhost` without one.
+- `just bench`: benchmarks.
+- `bacon`: rebuilds and re-runs clippy on every save; `bacon test` does the same for the tests.
+
+A [dev container](.devcontainer/devcontainer.json) with the same toolchain is available if you prefer one; run `just dev` on the host.
 
 Performance work follows one rule: correctness first, then measurement, then optimization. Unmeasured optimizations are not accepted, and a security check is never weakened for speed (OP-72).
 
-There is no "development mode": security controls are never disabled locally. Local equivalents (SoftHSM, a KMS emulator, Mailpit) replace production components instead (TI-9).
+There is no "development mode": security controls are never disabled locally. Local equivalents (SoftHSM (PKCS#11), Mailpit) replace production components instead (TI-9).
 
 ## Code rules (summary)
 
