@@ -1,0 +1,57 @@
+# L27, §9.4.2
+
+[[standard]]
+id = "RFC 9457"
+title = "Problem Details for HTTP APIs"
+status = "published"
+normative = true
+used_by = ["crates/http"]
+
+[[standard]]
+id = "RFC 9116"
+title = "A File Format to Aid in Security Vulnerability Disclosure (security.txt)"
+status = "published"
+normative = true
+used_by = ["crates/http"]
+
+[[standard]]
+id = "RFC 3339"
+title = "Date and Time on the Internet: Timestamps"
+status = "published"
+normative = true
+used_by = ["crates/http"]
+
+[[standard]]
+id = "WCAG 2.2"
+title = "Web Content Accessibility Guidelines 2.2, level AA"
+status = "published"
+normative = true
+used_by = ["web/console"]
+
+[[standard]]
+id = "CycloneDX 1.5"
+title = "CycloneDX software bill of materials"
+status = "published"
+normative = false
+used_by = [".github/workflows/release.yml"]
+
+[[standard]]
+id = "SPDX 2.3"
+title = "Software Package Data Exchange"
+status = "published"
+normative = false
+used_by = [".github/workflows/release.yml"]
+
+[[standard]]
+id = "OpenVEX 0.2.0"
+title = "OpenVEX vulnerability exploitability exchange"
+status = "published"
+normative = false
+used_by = [".github/workflows/release.yml"]
+
+[[standard]]
+id = "in-toto test-result v0.1"
+title = "in-toto attestation predicate for test results"
+status = "draft"
+normative = false
+used_by = [".github/workflows/release.yml"]

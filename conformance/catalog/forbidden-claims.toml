@@ -1,0 +1,857 @@
+# §3.1d
+# B2, B3, B5, §1.4, §3.3a, §8.10, §13.8, §15.1.2, §18.2
+# CR-50, F-17, SA-12, SA-38, SA-50, OP-79, B15, B20, D4, SAI-1
+
+[scan]
+docs = ["*.md", "*.mdx", ".github/**", "web/**", "sdks/**"]
+ui = ["web/**", "sdks/**", "**/locales/**", "**/i18n/**"]
+exclude = ["docs/**", "target/**", "**/node_modules/**", "conformance/catalog/**", "xtask/**", "CLAUDE.md"]
+extensions = ["md", "mdx", "txt", "html", "ts", "tsx", "js", "jsx", "json", "yml", "yaml", "ftl", "po", "vue", "svelte"]
+
+[vocab]
+competitor = [
+  "Keycloak", "Okta", "Auth0", "Entra", "Azure AD", "Ping", "ForgeRock", "Cognito", "Zitadel",
+  "Ory", "Hydra", "Authentik", "Authelia", "Kanidm", "Rauthy", "FusionAuth", "Logto", "Casdoor",
+  "WorkOS", "Clerk", "Stytch", "Descope", "SpiceDB", "OpenFGA", "Cerbos", "Permit.io",
+  "any other IdP", "other identity providers",
+]
+
+[benchmark]
+units = [
+  "µs", "μs", "ns", "ms", "req/s", "requests/s", "requests per second", "rps", "qps", "tps",
+  "ops/s", "logins/s", "logins per second", "tokens/s", "decisions/s", "x faster", "× faster",
+  "times faster", "% faster", "x slower", "× slower",
+]
+markers = ["pending reproduction", "benches/"]
+
+# CR-50, MD-15, B15, §3.3a, §15.1.2
+
+[[claim]]
+id = "formally-verified"
+scope = "all"
+phrases = ["formally verified", "formally proven", "formal verification guarantees", "mathematically proven secure"]
+negation = true
+sources = ["§3.3a", "§15.1.2", "CR-50", "B15", "MD-15"]
+honest = "Name the scope: which property of which model is machine-checked with which tool, and what is outside it."
+
+[[claim]]
+id = "proven-secure"
+scope = "all"
+phrases = ["proven secure", "provably secure", "proven to be secure", "unhackable", "100% secure"]
+negation = true
+sources = ["CR-50", "§15.1.2", "B15"]
+honest = "State the guarantee class and the declared limits of each claim (§3.3)."
+
+[[claim]]
+id = "constant-time-guaranteed"
+scope = "all"
+phrases = [
+  "constant-time guaranteed", "guaranteed constant-time", "guaranteed constant time", "proven constant-time",
+  "proven constant time", "immune to timing attacks", "no timing leaks", "zero timing leakage",
+]
+negation = true
+sources = ["CR-50", "§15.1.2", "§13.8", "HL-16"]
+rows = ["N-46"]
+honest = "Measured as constant-time (dudect / asm snapshot); the compiler gives no guarantee."
+
+[[claim]]
+id = "quantum-safe"
+scope = "all"
+phrases = ["quantum-safe", "quantum safe", "quantum-resistant", "quantum resistant", "quantum-proof", "post-quantum secure"]
+allow = ["re-anchor"]
+negation = true
+sources = ["CR-50", "§13.8", "§15.20"]
+rows = ["N-37", "N-55"]
+honest = "Re-anchored records are verifiable at a verifier that trusted the PQ anchor before the break; later records are not covered."
+
+[[claim]]
+id = "compiler-tenant-isolation"
+scope = "all"
+phrases = [
+  "compiler guarantees tenant isolation", "tenant isolation is guaranteed by the compiler",
+  "isolation is guaranteed by the compiler", "compiler-guaranteed isolation", "compiler-guaranteed tenant isolation",
+]
+negation = true
+sources = ["§3.3a", "§8.10", "§13.8", "§16.4.3", "B15"]
+honest = "Queries without a tenant/domain scope don't compile; isolation is additionally enforced by row-level security."
+
+[[claim]]
+id = "secure-because-rust"
+scope = "all"
+phrases = [
+  "secure because it is written in rust", "secure because it's written in rust", "rust makes it secure",
+  "rust guarantees security", "memory safety makes it secure",
+]
+negation = true
+sources = ["§3.3a", "CR-50"]
+honest = "Name the specific defect classes Rust's type system rules out; the rest is covered by tests and review."
+
+[[claim]]
+id = "slsa-level"
+scope = "all"
+phrases = ["slsa l3", "slsa level 3", "slsa build l3", "slsa build level 3", "slsa l4", "source l4", "slsa source level 4", "slsa certified"]
+allow = ["target", "not claimed", "not verified", "unverified"]
+negation = true
+sources = ["F-17", "SA-38", "§13.8"]
+rows = ["U49"]
+honest = "Release provenance is signed (attest-build-provenance); the SLSA level is not verified and not used in marketing."
+
+[[claim]]
+id = "reproducible-builds"
+scope = "all"
+phrases = ["reproducible builds", "reproducible build", "reproducibly built", "bit-for-bit reproducible", "byte-for-byte reproducible"]
+allow = ["not guaranteed", "not committed", "not a guarantee", "not a release gate", "informational", "best effort", "goal", "target"]
+negation = true
+sources = ["OP-79", "OP-49", "U50", "SAI-7"]
+rows = ["U50", "SAI-7"]
+honest = "Builds are made easier to reproduce (pinned toolchain, --locked, path remap); a second build is compared for information only."
+
+[[claim]]
+id = "audited-means-secure"
+scope = "all"
+phrases = ["audited = secure", "audited and therefore secure", "certified secure"]
+negation = true
+sources = ["§13.8"]
+honest = "An independent audit was performed on <date>; the report is here."
+
+[[claim]]
+id = "cra-compliant"
+scope = "all"
+phrases = ["cra compliant", "cra-compliant", "cra certified", "compliant with the cyber resilience act"]
+allow = ["readiness", "preparation", "preparing"]
+negation = true
+sources = ["§13.8", "SA-48"]
+honest = "CRA readiness: SBOM, CVD process and support period are published."
+
+[[claim]]
+id = "tamper-proof"
+scope = "all"
+phrases = ["tamper-proof", "tamperproof", "tamper proof"]
+negation = true
+sources = ["§13.8"]
+honest = "Tamper-evident (checked against independent witnesses) — only where witnesses are configured."
+
+# B15, §8.10, §13.8
+
+[[claim]]
+id = "revoked-everywhere-instantly"
+scope = "all"
+phrases = [
+  "revoked everywhere instantly", "revoked everywhere immediately", "instantly revoked everywhere",
+  "immediately revoked everywhere", "revocation everywhere instantly", "instant global revocation",
+  "revokes everywhere instantly", "revoked everywhere at once",
+]
+negation = true
+sources = ["§8.10", "§13.8", "B15", "CI-9"]
+rows = ["N-2"]
+honest = "Effective now for new requests; offline devices may honor until T if they follow their profile."
+
+[[claim]]
+id = "signed-out-everywhere"
+scope = "all"
+phrases = ["signed out everywhere", "logged out everywhere", "sessions ended everywhere instantly", "all access removed"]
+negation = true
+sources = ["§8.10", "§13.8", "B15", "§12.4"]
+honest = "Sessions ended; apps that already hold a token may keep access until T (≤ token lifetime)."
+
+[[claim]]
+id = "agent-stopped"
+scope = "all"
+phrases = ["agent stopped", "stops agents", "stops the agent", "stops your agents", "stop agents instantly", "halts agents", "kill switch"]
+negation = true
+sources = ["§8.10", "§13.8", "§18.2", "B15", "EI-11", "HL-13"]
+rows = ["N-5"]
+honest = "Authority revoked. Agent: running / paused (confirmed) / unknown."
+
+[[claim]]
+id = "effect-guaranteed"
+scope = "all"
+phrases = ["exactly-once execution", "exactly once execution", "guarantees the action happened", "guarantees the effect", "exactly-once effects"]
+negation = true
+sources = ["§8.10", "§13.8", "must-never #10", "INV-18"]
+rows = ["N-5"]
+honest = "Allowed · Owner: reported done / unknown."
+
+[[claim]]
+id = "timely-signal-delivery"
+scope = "all"
+phrases = [
+  "guaranteed delivery", "guaranteed signal delivery", "guaranteed real-time delivery",
+  "notified of every change", "notified of every key change",
+]
+negation = true
+sources = ["§13.8"]
+rows = ["N-2", "N-38"]
+honest = "Signals are best effort and trigger a re-check; key changes Access has received appear in Changes."
+
+[[claim]]
+id = "nothing-lost"
+scope = "all"
+phrases = ["nothing was lost", "nothing is ever lost", "lossless recovery", "zero data loss guaranteed"]
+negation = true
+sources = ["§8.10", "§13.8", "B15"]
+rows = ["N-14"]
+honest = "Changes after <time of N> may be lost; repeat revocations made after then."
+
+[[claim]]
+id = "throughput-guarantee"
+scope = "all"
+phrases = ["guaranteed throughput", "throughput guarantee", "guaranteed logins per second", "guaranteed requests per second"]
+negation = true
+sources = ["B15", "§3.3a", "HL-1"]
+honest = "Same hardware budget and Argon2 cost, target: X (pending reproduction)."
+
+[[claim]]
+id = "always-available"
+scope = "all"
+phrases = ["always available", "100% uptime", "never goes down", "zero downtime guarantee"]
+negation = true
+sources = ["§13.8"]
+rows = ["N-20"]
+honest = "Offline and continuity windows with their conditions; the SLA covers service availability."
+
+# SA-12, §8.10, §13.8
+
+[[claim]]
+id = "passkey-takeover-proof"
+scope = "all"
+phrases = [
+  "cannot be phished", "can't be phished", "unphishable", "phishing-proof", "cannot be stolen", "can't be stolen",
+  "cannot be taken over", "can't be taken over", "account takeover impossible", "impossible to take over",
+  "passkeys prevent token theft", "passkeys stop token theft", "prevents session theft",
+]
+sources = ["§3.3a", "§8.10", "§13.8", "B15", "SA-12"]
+rows = ["N-41"]
+honest = "Passkeys are origin-bound and phishing-resistant; device binding separately protects against session theft."
+
+[[claim]]
+id = "verified-claim"
+scope = "all"
+phrases = ["verified identity", "identity verified", "email verified", "claim verified", "verified by access"]
+negation = true
+sources = ["§8.10", "§13.8", "INV-14"]
+rows = ["N-1"]
+honest = "<Issuer> says (signed); Confirmed you can receive email at a…@… (date)."
+
+[[claim]]
+id = "unique-person"
+scope = "all"
+phrases = ["sybil-resistant", "sybil-proof", "sybil resistant", "unique person guarantee", "guarantees a unique person"]
+negation = true
+sources = ["§13.8"]
+rows = ["N-17"]
+honest = "Shown as the issuer's claim."
+
+[[claim]]
+id = "prompt-injection-proof"
+scope = "all"
+phrases = ["prompt-injection-proof", "prompt injection proof", "immune to prompt injection", "prevents prompt injection", "secure against ai misuse"]
+negation = true
+sources = ["§13.8"]
+rows = ["N-10"]
+honest = "The agent can only use what you delegated, within limits."
+
+[[claim]]
+id = "cross-app-unlinkable"
+scope = "all"
+phrases = [
+  "cannot be linked across apps", "can't be linked across apps", "cannot be correlated across",
+  "fully unlinkable", "complete unlinkability", "perfect unlinkability",
+]
+negation = true
+sources = ["§13.8"]
+rows = ["N-31"]
+honest = "Each app sees a different user number; timing, network and device data may still allow correlation."
+
+[[claim]]
+id = "fully-isolated-infrastructure"
+scope = "all"
+phrases = ["fully isolated infrastructure", "completely isolated infrastructure", "no side channels", "side-channel free", "side-channel-free"]
+allow = ["dedicated"]
+negation = true
+sources = ["§13.8", "MD-17"]
+rows = ["N-32"]
+honest = "Logical isolation; hardware isolation with the dedicated option."
+
+[[claim]]
+id = "suiss-cannot-access"
+scope = "all"
+phrases = ["suiss can't access your keys", "suiss cannot access your keys", "suiss can't see your data", "suiss cannot see your data"]
+sources = ["§13.8"]
+rows = ["N-16", "N-22"]
+honest = "Keys held by Suiss for you — you can move them to your own device; data minimisation is described instead."
+
+[[claim]]
+id = "legally-binding"
+scope = "all"
+phrases = ["legally binding approval", "legally binding signature"]
+negation = true
+sources = ["§13.8", "EI-24"]
+rows = ["N-21"]
+honest = "Not said (EI-24)."
+
+[[claim]]
+id = "data-deleted"
+scope = "all"
+phrases = ["all your data is gone", "your data has been deleted", "instantly deleted", "permanently erased"]
+negation = true
+sources = ["§8.10", "§13.8", "SA-50", "OP-73"]
+rows = ["N-42"]
+honest = "Personal fields are made unreadable within the declared period; the pseudonymous audit skeleton is kept."
+
+[[claim]]
+id = "trusted-agent"
+scope = "all"
+phrases = ["trusted agent", "trusted agents"]
+negation = true
+sources = ["B15", "§18.2"]
+honest = "AI agent · acting for X · operated by Y."
+
+[[claim]]
+id = "only-product"
+scope = "all"
+phrases = ["the only product", "the only identity provider", "the only idp", "first and only", "the first product to"]
+allow = ["as of", "comparison set"]
+negation = true
+sources = ["B15", "§3.4", "§18.2"]
+honest = "State the comparison set, the date and the counter-example that would refute it."
+
+[[claim]]
+id = "faster-than-competitor"
+scope = "all"
+phrases = ["faster than {competitor}", "outperforms {competitor}", "{competitor} is slower", "fastest idp", "fastest identity provider"]
+negation = true
+sources = ["B15", "§3.3a", "§4.10"]
+honest = "Performance targets are engineering assumptions; publish only same-run ratios, pending reproduction."
+
+# X24, X41, §8.10
+
+[[claim]]
+id = "ui-trust-language"
+scope = "ui"
+phrases = ["trusted device", "trust this device", "remember this device", "trusted source", "trusted provider", "verified app"]
+sources = ["§8.10", "§8.8", "X24"]
+honest = "Don't ask for a second step on this device for 30 days / Accepted for sign-in."
+
+[[claim]]
+id = "ui-full-access"
+scope = "ui"
+phrases = ["full access", "all permissions", "admin can do everything", "includes future actions", "permission granted forever"]
+sources = ["§8.10", "INV-9"]
+honest = "All non-protected actions in X as of catalog vN; future actions not included."
+
+[[claim]]
+id = "ui-impersonation"
+scope = "ui"
+phrases = ["log in as", "login as user", "view as user", "impersonate"]
+sources = ["§8.10", "must-never #19"]
+honest = "Request support access (the user's delegation) / Emergency access (break-glass)."
+
+[[claim]]
+id = "ui-revocation-queue"
+scope = "ui"
+phrases = ["pending revocation", "revoke queued", "approve anyway", "pause authority", "transfer to agent", "remember this decision", "always allow"]
+sources = ["§8.10", "§13.8", "HL-5"]
+honest = "Not confirmed — checking; Suspend; Delegate; Create a delegation for similar requests…"
+
+[[claim]]
+id = "ui-enumeration"
+scope = "ui"
+phrases = ["no account with this email", "this account is locked", "wrong password"]
+sources = ["§8.10", "SA-11", "U44"]
+rows = ["N-46"]
+honest = "We couldn't sign you in with these details."
+
+# E22, E33, §18.2, §2.5
+
+[[claim]]
+id = "agent-platform"
+scope = "all"
+phrases = ["agent platform", "agent orchestrator", "agent orchestration", "agent marketplace", "orchestrates agents", "orchestrates your agents"]
+negation = true
+sources = ["§18.2", "§2.5", "E24"]
+honest = "Access decides and records what agents may do; running and orchestrating agents belongs to their owner."
+
+[[claim]]
+id = "payment-limit-product"
+scope = "all"
+phrases = ["spending limit", "spending limits", "payment limit", "payment limits", "spend controls", "spend management"]
+negation = true
+sources = ["§18.2", "E21", "X15"]
+honest = "Authority limits are not financial limits; money holds belong to the payment owner."
+
+[[claim]]
+id = "risk-fraud-engine"
+scope = "all"
+phrases = ["fraud engine", "fraud detection engine", "risk engine", "risk scoring engine", "trust score", "reputation score"]
+negation = true
+sources = ["§18.2", "E22", "must-never #8"]
+honest = "Access decides the authority part and emits events and signals for risk and fraud layers."
+
+[[claim]]
+id = "security-tooling-product"
+scope = "all"
+phrases = [
+  "is a siem", "siem product", "siem solution", "built-in siem", "replaces your siem",
+  "is a dlp", "dlp product", "dlp solution", "data loss prevention", "pam session recording", "session recording",
+]
+negation = true
+sources = ["§18.2", "E22", "E33", "MD-13"]
+honest = "Access produces audit events and streams for SIEM, DLP and PAM layers; it is not one of them."
+
+[[claim]]
+id = "workflow-product"
+scope = "all"
+phrases = ["workflow engine", "approval queue", "approval inbox", "approval workflow product", "execution engine", "distributed transaction coordinator"]
+negation = true
+sources = ["§18.2", "X5", "XI-7", "must-never #6", "must-never #7"]
+honest = "Access records approvals bound to an exact intent; queues and workflows belong to the coordinator."
+
+[[claim]]
+id = "certified-ecosystem"
+scope = "all"
+phrases = ["certified by suiss", "suiss certified", "suiss-certified", "certified ecosystem", "suiss-approved vendors"]
+negation = true
+sources = ["§18.2", "P2", "B9"]
+honest = "Conformance results are published; conformance is not endorsement."
+
+[[claim]]
+id = "mandatory-suiss"
+scope = "all"
+phrases = ["requires suiss access", "requires a suiss account", "suiss lock-in"]
+negation = true
+sources = ["§18.2", "§2.5"]
+honest = "Other Suiss products use Access through the same open contract third parties use."
+
+[[claim]]
+id = "lightweight-idp"
+scope = "all"
+phrases = ["lightweight idp", "lightweight identity provider", "light idp", "compliance product"]
+negation = true
+sources = ["§18.2", "H17"]
+honest = "Access is a complete identity provider with an authority plane."
+
+# D4, B2, B3, B5, B20
+
+[[claim]]
+id = "enterprise-edition"
+scope = "all"
+phrases = [
+  "enterprise edition", "enterprise-only", "enterprise only feature", "closed-source", "closed source",
+  "open core", "open-core", "proprietary edition", "paid-only feature", "paid-only features", "premium edition",
+]
+negation = true
+sources = ["D4", "B3"]
+honest = "Access is entirely open source (Apache-2.0); revenue comes from hosting, support and SLA."
+
+[[claim]]
+id = "dual-license"
+scope = "all"
+phrases = ["dual license", "dual-license", "dual licensed", "dual-licensed", "dual licensing", "commercial license"]
+negation = true
+sources = ["D4"]
+honest = "Licensed under Apache License 2.0 only."
+
+[[claim]]
+id = "paid-security-fixes"
+scope = "all"
+phrases = [
+  "paid security patches", "paid security fixes", "security fixes for paying customers",
+  "security patches for paying customers", "security updates for paying customers",
+  "security fixes only in", "security patches only in", "security updates only in",
+]
+negation = true
+sources = ["B20", "B3"]
+honest = "Security fixes are always released in the open-source version."
+
+[[claim]]
+id = "semantic-billing-unit"
+scope = "all"
+phrases = [
+  "per mau", "per-mau", "per monthly active user", "per active user", "per login", "per-login",
+  "per sso connection", "per-sso-connection", "per connection pricing", "per decision", "per exercise",
+  "per grant", "per agent pricing", "per-agent pricing", "per approver", "per authentication", "per mfa user",
+  "per realm pricing", "per token",
+]
+negation = true
+sources = ["B5", "B17"]
+honest = "Semantic counters (users, logins, SSO connections, decisions, grants, agents) are never billing units."
+
+[[claim]]
+id = "protocol-fee"
+scope = "all"
+phrases = ["protocol license fee", "protocol licensing fee", "protocol royalty", "protocol royalties", "participation fee", "certification fee"]
+negation = true
+sources = ["B2"]
+honest = "The protocol is open, royalty-free and vendor-neutral."
+
+# §13.4, SAI-1
+
+[[claim]]
+id = "n03-revocation-stops-executor"
+scope = "all"
+phrases = ["revocation stops the executor", "revoking stops the agent", "revocation halts running"]
+negation = true
+sources = ["§13.4", "§13.8", "SAI-1"]
+rows = ["N-3"]
+honest = "Authority revoked. Agent: running / paused (confirmed) / unknown."
+
+[[claim]]
+id = "n04-offline-instant-revocation"
+scope = "all"
+phrases = ["instantly at offline verifiers", "immediately at offline verifiers", "offline verifiers see revocations immediately", "offline revocation is instant"]
+negation = true
+sources = ["§13.4", "§13.8", "SAI-1"]
+rows = ["N-4"]
+honest = "Offline verifiers honor revocation within their declared freshness window."
+
+[[claim]]
+id = "n06-mapping-correctness"
+scope = "all"
+phrases = ["mapping is safe", "mapping is equivalent", "guaranteed equivalent mapping", "verified schema mapping"]
+negation = true
+sources = ["§13.4", "§13.8", "SAI-1"]
+rows = ["N-6"]
+honest = "Publisher declares it narrows v2; Access can't verify meaning."
+
+[[claim]]
+id = "n07-faithful-rendering"
+scope = "all"
+phrases = ["any surface renders faithfully", "rendering is always faithful", "what you see is always what you sign"]
+negation = true
+sources = ["§13.4", "§13.8", "SAI-1"]
+rows = ["N-7"]
+honest = "Conformant surfaces render the exact digest; non-conformant surfaces are not covered."
+
+[[claim]]
+id = "n08-approver-understood"
+scope = "all"
+phrases = ["approval guarantees correctness", "guarantees the approver understood", "approvers always read"]
+negation = true
+sources = ["§13.4", "§13.8", "SAI-1"]
+rows = ["N-8"]
+honest = "Records your approval. Access then re-checks the request."
+
+[[claim]]
+id = "n09-independent-approvers"
+scope = "all"
+phrases = ["independent approvers", "collusion-proof", "collusion proof", "prevents collusion"]
+negation = true
+sources = ["§13.4", "§13.8", "SAI-1"]
+rows = ["N-9"]
+honest = "Different people, different devices."
+
+[[claim]]
+id = "n11-recipients-forget"
+scope = "all"
+phrases = ["recalls shared copies", "redaction removes all copies", "shared data is recalled"]
+negation = true
+sources = ["§13.4", "§13.8", "SAI-1"]
+rows = ["N-11"]
+honest = "Redacted — fingerprint verifiable; copies shared earlier are not recalled."
+
+[[claim]]
+id = "n12-no-policy-inference"
+scope = "all"
+phrases = ["policy cannot be inferred", "prevents policy inference", "policy inference is impossible"]
+negation = true
+sources = ["§13.4", "§13.8", "SAI-1"]
+rows = ["N-12"]
+honest = "Disclosure is scoped; repeated queries can still reveal parts of a policy."
+
+[[claim]]
+id = "n13-provider-cannot-equivocate"
+scope = "all"
+phrases = ["equivocation is impossible", "prevents equivocation", "provider cannot equivocate", "provider decisions are always correct"]
+negation = true
+sources = ["§13.4", "§13.8", "SAI-1"]
+rows = ["N-13"]
+honest = "Equivocation is detectable with independent witnesses, not preventable."
+
+[[claim]]
+id = "n15-verifier-reports-true"
+scope = "all"
+phrases = ["verifier reports are always accurate", "offline reports are always true"]
+negation = true
+sources = ["§13.4", "§13.8", "SAI-1"]
+rows = ["N-15"]
+honest = "Offline reports are the reporting verifier's claim."
+
+[[claim]]
+id = "n18-sole-root-recovery"
+scope = "all"
+phrases = ["recover from root key compromise within the domain", "root compromise is recoverable in-domain"]
+negation = true
+sources = ["§13.4", "§13.8", "SAI-1"]
+rows = ["N-18"]
+honest = "A sole-root compromise cannot be recovered inside the domain; use multi-root setups."
+
+[[claim]]
+id = "n19-genesis-legitimacy"
+scope = "all"
+phrases = ["guarantees the right people created", "genesis is always legitimate"]
+negation = true
+sources = ["§13.4", "§13.8", "SAI-1"]
+rows = ["N-19"]
+honest = "Genesis records who set up the domain; its legitimacy is not judged."
+
+[[claim]]
+id = "n23-agent-complies"
+scope = "all"
+phrases = ["agents always follow the explanation", "agents always comply"]
+negation = true
+sources = ["§13.4", "§13.8", "SAI-1"]
+rows = ["N-23"]
+honest = "Explanations are advisory; the next decision is enforced, not the agent's compliance."
+
+[[claim]]
+id = "n24-ambient-sessions"
+scope = "all"
+phrases = ["distinguishes ambient sessions", "ambient sessions are always detected"]
+negation = true
+sources = ["§13.4", "§13.8", "SAI-1"]
+rows = ["N-24"]
+honest = "External systems are outside Access; ambient sessions there are not distinguished."
+
+[[claim]]
+id = "n25-undo-effects"
+scope = "all"
+phrases = ["undoes everything done during a compromise", "rolls back compromised actions", "reverses effects of a compromise"]
+negation = true
+sources = ["§13.4", "§13.8", "SAI-1"]
+rows = ["N-25"]
+honest = "Revocation is prospective; past effects are not reversed."
+
+[[claim]]
+id = "n26-forged-pap-after-key-theft"
+scope = "all"
+phrases = ["forged receipts are always rejected", "stolen provider keys cannot forge"]
+negation = true
+sources = ["§13.4", "§13.8", "SAI-1"]
+rows = ["N-26"]
+honest = "Within the window before detection, verifiers accept up to their local ceilings."
+
+[[claim]]
+id = "n27-timeout-result"
+scope = "all"
+phrases = ["you always know whether the commit succeeded"]
+negation = true
+sources = ["§13.4", "§13.8", "SAI-1"]
+rows = ["N-27"]
+honest = "Not confirmed — checking."
+
+[[claim]]
+id = "n28-time-lies"
+scope = "all"
+phrases = ["time can never be manipulated", "tamper-proof time"]
+negation = true
+sources = ["§13.4", "§13.8", "SAI-1"]
+rows = ["N-28"]
+honest = "Time terms rely on independent time sources and witnesses."
+
+[[claim]]
+id = "n29-storage-corruption"
+scope = "all"
+phrases = ["immune to storage corruption", "corruption can never cause a wrong decision"]
+negation = true
+sources = ["§13.4", "§13.8", "SAI-1"]
+rows = ["N-29"]
+honest = "Silent corruption is detected against commitments; decisions before detection are not covered."
+
+[[claim]]
+id = "n30-malicious-witnesses"
+scope = "all"
+phrases = ["safe even if all witnesses are malicious", "even if every witness lies"]
+negation = true
+sources = ["§13.4", "§13.8", "SAI-1"]
+rows = ["N-30"]
+honest = "Witness checks assume at least one honest witness."
+
+[[claim]]
+id = "n33-memory-key-theft"
+scope = "all"
+phrases = ["keys cannot be stolen from memory", "keys are safe even if the host is compromised"]
+negation = true
+sources = ["§13.4", "§13.8", "SAI-1"]
+rows = ["N-33"]
+honest = "A host compromise exposes keys in process memory for the declared window."
+
+[[claim]]
+id = "n34-zeroize-all-copies"
+scope = "all"
+phrases = ["erases every copy of the secret", "secrets leave no trace in memory", "guaranteed memory wiping"]
+negation = true
+sources = ["§13.4", "§13.8", "SAI-1"]
+rows = ["N-34"]
+honest = "Secrets are zeroized on drop; copies in registers, swap or dumps are not covered."
+
+[[claim]]
+id = "n35-compiler-constant-time"
+scope = "all"
+phrases = ["compiler preserves constant-time", "constant-time by construction"]
+negation = true
+sources = ["§13.4", "§13.8", "SAI-1"]
+rows = ["N-35"]
+honest = "Measured as constant-time (dudect/asm snapshot); the compiler gives no guarantee."
+
+[[claim]]
+id = "n36-verified-http-layer"
+scope = "all"
+phrases = ["formally verified http", "verified async runtime", "entire stack is verified"]
+negation = true
+sources = ["§13.4", "§13.8", "SAI-1"]
+rows = ["N-36"]
+honest = "Formal scope is the kernel and semantics; HTTP and async layers are tested, not verified."
+
+[[claim]]
+id = "n39-jwt-only-revocation"
+scope = "all"
+phrases = ["jwt revocation is immediate", "revokes jwts before expiry"]
+negation = true
+sources = ["§13.4", "§13.8", "SAI-1"]
+rows = ["N-39"]
+honest = "Resource servers that only check JWTs see revocation at token expiry."
+
+[[claim]]
+id = "n40-offline-tokens-one-step"
+scope = "all"
+phrases = ["offline tokens revoked in one step", "offline tokens revoked in a single operation"]
+negation = true
+sources = ["§13.4", "§13.8", "SAI-1"]
+rows = ["N-40"]
+honest = "Revoked for new requests; offline tokens expire at the latest at T."
+
+[[claim]]
+id = "n43-unlimited-signing"
+scope = "all"
+phrases = ["unlimited signing throughput", "hsm throughput is unlimited"]
+negation = true
+sources = ["§13.4", "§13.8", "SAI-1"]
+rows = ["N-43"]
+honest = "Signing throughput is bounded by the declared HSM/KMS ceiling."
+
+[[claim]]
+id = "n44-verified-publishers"
+scope = "all"
+phrases = ["publisher identity is cryptographically verified", "verified crates.io publishers", "verified npm publishers"]
+negation = true
+sources = ["§13.4", "§13.8", "SAI-1"]
+rows = ["N-44"]
+honest = "Registry publisher identity is trust-on-first-use; dependencies are reviewed and vendored."
+
+[[claim]]
+id = "n45-otp-phishing-resistant"
+scope = "all"
+phrases = ["totp is phishing-resistant", "sms otp is phishing-resistant", "push mfa is phishing-resistant", "otp prevents phishing"]
+negation = true
+sources = ["§13.4", "§13.8", "SAI-1"]
+rows = ["N-45"]
+honest = "TOTP, push and SMS codes can be phished; passkeys are phishing-resistant."
+
+[[claim]]
+id = "n47-verified-deps-bug-free"
+scope = "all"
+phrases = ["audited dependencies are bug-free", "verified libraries are bug-free", "verified dependencies have no bugs"]
+negation = true
+sources = ["§13.4", "§13.8", "SAI-1"]
+rows = ["N-47"]
+honest = "Audits and proofs narrow risk; dependencies are still tested and monitored."
+
+[[claim]]
+id = "n48-unlinkable-after-optin"
+scope = "all"
+phrases = ["unlinkable even after sharing", "stays unlinkable after you share"]
+negation = true
+sources = ["§13.4", "§13.8", "SAI-1"]
+rows = ["N-48"]
+honest = "Once you share an identifier with an app, that app can link your sign-ins."
+
+[[claim]]
+id = "n49-zero-day-detection"
+scope = "all"
+phrases = ["catches all vulnerabilities", "detects zero-days before release", "finds every vulnerability"]
+negation = true
+sources = ["§13.4", "§13.8", "SAI-1"]
+rows = ["N-49"]
+honest = "Fuzzing and review find some defect classes; unknown dependency flaws remain possible."
+
+[[claim]]
+id = "n50-dpop-on-compromised-device"
+scope = "all"
+phrases = ["dpop protects compromised devices", "safe even on a compromised device"]
+negation = true
+sources = ["§13.4", "§13.8", "SAI-1"]
+rows = ["N-50"]
+honest = "Holder binding stops stolen tokens from being used elsewhere, not on the compromised device."
+
+[[claim]]
+id = "n51-rp-logout"
+scope = "all"
+phrases = ["logs you out of every app", "ends every app session"]
+negation = true
+sources = ["§13.4", "§13.8", "SAI-1"]
+rows = ["N-51"]
+honest = "Sessions ended; apps that already hold a token may keep access until T."
+
+[[claim]]
+id = "n52-regulatory-compliance"
+scope = "all"
+phrases = ["psd2 compliant", "psd2-compliant", "sca compliant", "regulatory compliance guaranteed"]
+negation = true
+sources = ["§13.4", "§13.8", "SAI-1"]
+rows = ["N-52"]
+honest = "Provides SCA building blocks and templates; compliance is the deployer's assessment."
+
+[[claim]]
+id = "n53-non-sdk-pep"
+scope = "all"
+phrases = ["any pep enforces correctly", "all peps are safe"]
+negation = true
+sources = ["§13.4", "§13.8", "SAI-1"]
+rows = ["N-53"]
+honest = "Guarantees hold for conformant PEPs (SDK or declared conformance)."
+
+[[claim]]
+id = "n54-leaked-upstream-token"
+scope = "all"
+phrases = ["leaked upstream tokens cannot be used", "upstream tokens are always bound"]
+negation = true
+sources = ["§13.4", "§13.8", "SAI-1"]
+rows = ["N-54"]
+honest = "Unbound upstream tokens are short-lived and single-audience; a leak is usable until expiry."
+
+[[claim]]
+id = "n56-db-change-detection"
+scope = "all"
+phrases = ["all database changes are detected immediately", "database tampering is always detected"]
+negation = true
+sources = ["§13.4", "§13.8", "SAI-1"]
+rows = ["N-56"]
+honest = "Changes are detectable once the audit Merkle checkpoint is published."
+
+[[claim]]
+id = "n57-async-dr-no-loss"
+scope = "all"
+phrases = ["no data loss on failover", "zero data loss disaster recovery", "zero rpo"]
+negation = true
+sources = ["§13.4", "§13.8", "SAI-1"]
+rows = ["N-57"]
+honest = "The async DR profile has RPO > 0; recent writes can be lost."
+
+[[claim]]
+id = "n58-per-tenant-restore"
+scope = "all"
+phrases = ["per-tenant restore", "per-realm restore", "restore a single tenant"]
+negation = true
+sources = ["§13.4", "§13.8", "SAI-1"]
+rows = ["N-58"]
+honest = "Restores are whole-database; per-tenant row-level restore is not offered."
+
+[[claim]]
+id = "n59-single-node-durability"
+scope = "all"
+phrases = ["single-node mode never loses data", "single node is fully durable"]
+negation = true
+sources = ["§13.4", "§13.8", "SAI-1"]
+rows = ["N-59"]
+honest = "Single-node profile: acknowledged writes can be lost with the node or disk."

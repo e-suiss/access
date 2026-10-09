@@ -1,0 +1,46 @@
+# OP-89, RR-19, T42
+
+# OP-89
+threshold_months = 6
+
+[[crate]]
+name = "spiffe"
+repository = "https://github.com/maxlambrecht/rust-spiffe"
+sources = ["OP-87", "OP-89"]
+reason = "Single owner on crates.io; personal repository; SPIFFE Workload API client"
+
+[[crate]]
+name = "connectrpc"
+repository = "https://github.com/connectrpc/connect-rust"
+sources = ["OP-87", "OP-89"]
+reason = "Pre-1.0; one listed maintainer writes most commits; internal RPC (fallback: tonic)"
+
+[[crate]]
+name = "async-nats"
+repository = "https://github.com/nats-io/nats.rs"
+sources = ["OP-87", "OP-89"]
+reason = "Organisation repository, but most recent commits come from one developer"
+
+[[crate]]
+name = "bergshamra"
+repository = "https://github.com/kushaldas/bergshamra"
+sources = ["T42", "RR-19", "RR-20"]
+reason = "Single developer; XMLDSig/XMLEnc/C14N under the SAML layer"
+
+[[crate]]
+name = "webauthn-rs"
+repository = "https://github.com/kanidm/webauthn-rs"
+sources = ["T42", "RR-19"]
+reason = "Correlated maintainers with ldap3_proto and concread (same team)"
+
+[[crate]]
+name = "ldap3_proto"
+repository = "https://github.com/kanidm/ldap3"
+sources = ["T42", "RR-19"]
+reason = "Correlated maintainers with webauthn-rs and concread (same team)"
+
+[[crate]]
+name = "concread"
+repository = "https://github.com/kanidm/concread"
+sources = ["T42", "RR-19"]
+reason = "Correlated maintainers with webauthn-rs and ldap3_proto (same team)"

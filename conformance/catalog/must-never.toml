@@ -1,0 +1,480 @@
+# OP-81
+
+[[rule]]
+id = "MUST-NEVER-1"
+family = "MUST-NEVER"
+section = "2.8"
+status = "frozen"
+stage = 3
+title = "Never infer authority from identity or authentication"
+tests = []
+
+[[rule]]
+id = "MUST-NEVER-2"
+family = "MUST-NEVER"
+section = "2.8"
+status = "frozen"
+stage = 1
+title = "Never let restriction policy mint authority"
+tests = []
+
+[[rule]]
+id = "MUST-NEVER-3"
+family = "MUST-NEVER"
+section = "2.8"
+status = "frozen"
+stage = 3
+title = "Never let risk, claims or posture create authority"
+tests = []
+
+[[rule]]
+id = "MUST-NEVER-4"
+family = "MUST-NEVER"
+section = "2.8"
+status = "frozen"
+stage = 3
+title = "Never amplify authority via delegation, projection, federation or offline"
+tests = []
+
+[[rule]]
+id = "MUST-NEVER-5"
+family = "MUST-NEVER"
+section = "2.8"
+status = "frozen"
+stage = 3
+title = "Never own domain truth; consume attributed inputs only"
+tests = []
+
+[[rule]]
+id = "MUST-NEVER-6"
+family = "MUST-NEVER"
+section = "2.8"
+status = "frozen"
+stage = 3
+title = "Never become a workflow engine or hold step state"
+tests = []
+
+[[rule]]
+id = "MUST-NEVER-7"
+family = "MUST-NEVER"
+section = "2.8"
+status = "frozen"
+stage = 3
+title = "Never become an execution engine or transaction coordinator"
+tests = []
+
+[[rule]]
+id = "MUST-NEVER-8"
+family = "MUST-NEVER"
+section = "2.8"
+status = "frozen"
+stage = 3
+title = "Never operate a global reputation or trust score"
+tests = []
+
+[[rule]]
+id = "MUST-NEVER-9"
+family = "MUST-NEVER"
+section = "2.8"
+status = "frozen"
+stage = 3
+title = "Never act on a Claim outside explicit issuer acceptance"
+tests = []
+
+[[rule]]
+id = "MUST-NEVER-10"
+family = "MUST-NEVER"
+section = "2.8"
+status = "frozen"
+stage = 3
+title = "Never promise that an effect happened, was correct or stopped"
+tests = []
+
+[[rule]]
+id = "MUST-NEVER-11"
+family = "MUST-NEVER"
+section = "2.8"
+status = "frozen"
+stage = 3
+title = "Never fail open"
+tests = []
+
+[[rule]]
+id = "MUST-NEVER-12"
+family = "MUST-NEVER"
+section = "2.8"
+status = "frozen"
+stage = 3
+title = "Never reuse an ALLOW beyond its bound intent envelope"
+tests = []
+
+[[rule]]
+id = "MUST-NEVER-13"
+family = "MUST-NEVER"
+section = "2.8"
+status = "frozen"
+stage = 6
+title = "Never give first-party products privileges unavailable to third parties"
+tests = []
+
+[[rule]]
+id = "MUST-NEVER-14"
+family = "MUST-NEVER"
+section = "2.8"
+status = "frozen"
+stage = 3
+title = "Never require private context beyond authority-relevant facts"
+tests = []
+
+[[rule]]
+id = "MUST-NEVER-15"
+family = "MUST-NEVER"
+section = "2.8"
+status = "frozen"
+stage = 5
+title = "Never execute customer-supplied Turing-complete code server-side"
+tests = []
+
+[[rule]]
+id = "MUST-NEVER-16"
+family = "MUST-NEVER"
+section = "2.8"
+status = "frozen"
+stage = 5
+title = "Never match redirect_uri except by exact string comparison"
+tests = []
+
+[[rule]]
+id = "MUST-NEVER-17"
+family = "MUST-NEVER"
+section = "2.8"
+status = "frozen"
+stage = 7
+title = "Never let administrators set or choose user credentials"
+tests = []
+
+[[rule]]
+id = "MUST-NEVER-18"
+family = "MUST-NEVER"
+section = "2.8"
+status = "frozen"
+stage = 5
+title = "Never let tenants define or override reserved protocol claims"
+tests = []
+
+[[rule]]
+id = "MUST-NEVER-19"
+family = "MUST-NEVER"
+section = "2.8"
+status = "frozen"
+stage = 7
+title = "Never let operators or admins impersonate users"
+tests = []
+
+[[rule]]
+id = "OP-54-RL1"
+family = "OP-54-RL"
+section = "17.9.8"
+status = "frozen"
+title = "Revocation broadcast over Redis pub/sub"
+tests = []
+
+[[rule]]
+id = "OP-54-RL2"
+family = "OP-54-RL"
+section = "17.9.8"
+status = "frozen"
+title = "Routing revocation, session and lock reads to replicas"
+tests = []
+
+[[rule]]
+id = "OP-54-RL3"
+family = "OP-54-RL"
+section = "17.9.8"
+status = "frozen"
+title = "Active-active or LWW via logical replication"
+tests = []
+
+[[rule]]
+id = "OP-54-RL4"
+family = "OP-54-RL"
+section = "17.9.8"
+status = "frozen"
+title = "Multi-primary without quorum"
+tests = []
+
+[[rule]]
+id = "OP-54-RL5"
+family = "OP-54-RL"
+section = "17.9.8"
+status = "frozen"
+title = "Synchronous writes across continents"
+tests = []
+
+[[rule]]
+id = "OP-54-RL6"
+family = "OP-54-RL"
+section = "17.9.8"
+status = "frozen"
+title = "synchronous_commit=on with a single standby"
+tests = []
+
+[[rule]]
+id = "OP-54-RL7"
+family = "OP-54-RL"
+section = "17.9.8"
+status = "frozen"
+title = "Embedded distributed cache (Infinispan/Hazelcast style)"
+tests = []
+
+[[rule]]
+id = "OP-54-RL8"
+family = "OP-54-RL"
+section = "17.9.8"
+status = "frozen"
+title = "Independent per-node account rate limits"
+tests = []
+
+[[rule]]
+id = "OP-54-RL9"
+family = "OP-54-RL"
+section = "17.9.8"
+status = "frozen"
+title = "Bloom-filter-based revocation list"
+tests = []
+
+[[rule]]
+id = "OP-54-RL10"
+family = "OP-54-RL"
+section = "17.9.8"
+status = "frozen"
+title = "Standing emergency admin account in the database"
+tests = []
+
+[[rule]]
+id = "OP-54-RL11"
+family = "OP-54-RL"
+section = "17.9.8"
+status = "frozen"
+title = "Returning 400 invalid_grant on failover"
+tests = []
+
+[[rule]]
+id = "OP-54-RL12"
+family = "OP-54-RL"
+section = "17.9.8"
+status = "frozen"
+title = "Cross-cell promote without fence proof"
+tests = []
+
+[[rule]]
+id = "OP-3-G1"
+family = "OP-3-G"
+section = "16.4.3"
+status = "frozen"
+title = "cargo geiger forbids unsafe outside allowlist"
+tests = []
+
+[[rule]]
+id = "OP-3-G2"
+family = "OP-3-G"
+section = "16.4.3"
+status = "frozen"
+title = "Grep ban on async, tokio, sqlx, reqwest in pure Kernel modules"
+tests = []
+
+[[rule]]
+id = "OP-3-G3"
+family = "OP-3-G"
+section = "16.4.3"
+status = "frozen"
+title = "cargo-vet, cargo-deny and cargo-auditable checks"
+tests = []
+
+[[rule]]
+id = "OP-3-G4"
+family = "OP-3-G"
+section = "16.4.3"
+status = "frozen"
+title = "Byte-level golden-vector tests for deterministic CBOR encoder"
+tests = []
+
+[[rule]]
+id = "OP-3-G5"
+family = "OP-3-G"
+section = "16.4.3"
+status = "frozen"
+title = "OIDF conformance suite"
+tests = []
+
+[[rule]]
+id = "OP-3-G6"
+family = "OP-3-G"
+section = "16.4.3"
+status = "frozen"
+title = "Clippy denies unwrap, panic, indexing and arithmetic side effects"
+tests = []
+
+[[rule]]
+id = "GHSA-r5fr-9gmv-jggh"
+family = "ADVISORY"
+section = "14.3"
+status = "frozen"
+title = "SCIM filter recursion exhausts the stack"
+aliases = ["CVE-2026-46689", "GHSA-2pm5-6m23-h692"]
+tests = []
+
+[[rule]]
+id = "GHSA-qcxq-75wr-5cm8"
+family = "ADVISORY"
+section = "14.3"
+status = "frozen"
+title = "Unauthenticated LDAP/BER decoding recursion"
+aliases = ["GHSA-qcrp-p3rq-pffr"]
+tests = []
+
+[[rule]]
+id = "GHSA-xxwr-vvr3-2g9f"
+family = "ADVISORY"
+section = "14.3"
+status = "frozen"
+title = "Modify::Set logic flaw allows authenticated arbitrary writes"
+tests = []
+
+[[rule]]
+id = "GHSA-84jc-3hj2-hwc7"
+family = "ADVISORY"
+section = "14.3"
+status = "frozen"
+title = "Image validators run before authorization; PNG panic"
+tests = []
+
+[[rule]]
+id = "GHSA-53hj-r94p-8c8f"
+family = "ADVISORY"
+section = "14.3"
+status = "frozen"
+title = "Non-constant-time client_secret comparison"
+aliases = ["RAUTHY-005"]
+tests = []
+
+[[rule]]
+id = "GHSA-gpxg-fx2g-qxj2"
+family = "ADVISORY"
+section = "14.3"
+status = "frozen"
+title = "Stored HTML/SVG injection via profile fields"
+aliases = ["RAUTHY-007"]
+tests = []
+
+[[rule]]
+id = "GHSA-x8cg-3c8h-gw55"
+family = "ADVISORY"
+section = "14.3"
+status = "frozen"
+title = "login_hint mistaken for identity proof; sub not compared"
+tests = []
+
+[[rule]]
+id = "GHSA-j4gj-f54h-56j5"
+family = "ADVISORY"
+section = "14.3"
+status = "frozen"
+title = "RADIUS module logs passwords"
+tests = []
+
+[[rule]]
+id = "GHSA-hh34-7jqq-3f73"
+family = "ADVISORY"
+section = "14.3"
+status = "frozen"
+title = "Reusable authorization codes and short PKCE verifiers accepted"
+tests = []
+
+[[rule]]
+id = "CVE-2026-4633"
+family = "ADVISORY"
+section = "14.3"
+status = "frozen"
+title = "Identity-first login error messages enable account enumeration"
+aliases = ["GHSA-rhgq-f8x5-j2jc"]
+tests = []
+
+[[rule]]
+id = "RAUTHY-006"
+family = "ADVISORY"
+section = "14.3"
+status = "frozen"
+title = "Reachable unwrap enables denial of service"
+tests = []
+
+[[rule]]
+id = "RAUTHY-009"
+family = "ADVISORY"
+section = "14.3"
+status = "frozen"
+title = "Private key committed to repository"
+tests = []
+
+[[rule]]
+id = "RAUTHY-004"
+family = "ADVISORY"
+section = "14.3"
+status = "frozen"
+title = "Zero page_size causes division by zero"
+tests = []
+
+[[rule]]
+id = "RAUTHY-008"
+family = "ADVISORY"
+section = "14.3"
+status = "frozen"
+title = "Development ports listening on 0.0.0.0"
+tests = [
+  "bins/access-server/src/config.rs::default_listen_address_is_loopback",
+]
+
+[[rule]]
+id = "RAUTHY-001"
+family = "ADVISORY"
+section = "14.3"
+status = "frozen"
+title = "RSA implementation vulnerabilities"
+aliases = ["GHSA-9c48-w39g-hm26", "CVE-2026-21895", "CVE-2023-49092"]
+tests = []
+
+[[rule]]
+id = "GHSA-h395-gr6q-cpjc"
+family = "ADVISORY"
+section = "14.3"
+status = "frozen"
+title = "JOSE signature verification flaw"
+aliases = ["CVE-2026-25537"]
+tests = []
+
+[[rule]]
+id = "RUSTSEC-2026-0003"
+family = "ADVISORY"
+section = "14.3"
+status = "frozen"
+title = "Constant-time primitive flaw"
+aliases = ["CVE-2026-23519"]
+tests = []
+
+[[rule]]
+id = "GHSA-75rw-34q6-72cr"
+family = "ADVISORY"
+section = "14.3"
+status = "frozen"
+title = "Signature forgery via third-party block key confusion"
+aliases = ["GHSA-p9w4-585h-g3c7"]
+tests = []
+
+[[rule]]
+id = "RUSTSEC-2024-0437"
+family = "ADVISORY"
+section = "14.3"
+status = "frozen"
+title = "Uncontrolled recursion in XML parsing"
+aliases = ["CVE-2025-53605", "RUSTSEC-2026-0195"]
+tests = []

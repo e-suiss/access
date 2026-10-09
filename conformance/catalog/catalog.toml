@@ -1,0 +1,16 @@
+# OP-81, SAI-1, SA-59, INV-2
+
+current_stage = 0
+
+enforced_families = [
+  "CI", "INV", "EI", "XI", "PI", "SI", "TI", "TI-RT", "SAI", "IDI", "AGI", "TNI", "OPI",
+  "G", "U", "N", "HL",
+  "MUST-NEVER", "OP-54-RL", "OP-3-G", "ADVISORY", "AB",
+]
+
+test_roots = ["crates", "bins", "xtask", "sdks"]
+
+[[stage_overrides]]
+family = "N"
+stage = 0
+reason = "OP-96: every N-1…N-59 row needs an honest-wording test from stage 0 (Ek B stage 0, NG/PU item)"

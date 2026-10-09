@@ -1,0 +1,233 @@
+# OP-81
+
+[[rule]]
+id = "SA-6"
+family = "SA"
+section = "14.2"
+status = "decision"
+title = "Threat model as code, linked to guarantees and tests in CI"
+tests = [
+  "xtask/src/catalog.rs::sa_6_threat_without_known_row_is_reported",
+]
+
+[[rule]]
+id = "SA-14"
+family = "SA"
+section = "14.4"
+status = "decision"
+title = "security.txt, SECURITY.md, GHSA reporting with 90-day embargo"
+tests = [
+  "crates/http/tests/router.rs::security_txt_has_required_fields",
+]
+
+[[rule]]
+id = "SA-21"
+family = "SA"
+section = "14.5"
+status = "decision"
+title = "No request-path panics; unwind in network processes, abort only isolated"
+tests = [
+  "crates/http/tests/router.rs::panic_in_handler_becomes_500_problem_and_service_survives",
+]
+
+[[rule]]
+id = "SA-22"
+family = "SA"
+section = "14.5"
+status = "decision"
+stage = 4
+title = "Landlock, seccomp, capability drop sandboxing; io_uring banned"
+tests = [
+  "bins/access-server/tests/lockdown.rs",
+  "crates/http/tests/router.rs::healthz_reports_landlock_abi",
+  "crates/sandbox/src/linux/seccomp.rs::narrowed_phase_is_a_subset_of_startup",
+  "crates/sandbox/src/linux/seccomp.rs::no_allowlist_contains_io_uring",
+  "crates/sandbox/src/linux/seccomp.rs::no_profile_allows_exec_or_fork",
+  "crates/sandbox/tests/lockdown.rs",
+  "crates/sandbox/tests/lockdown.rs::main",
+]
+
+[[rule]]
+id = "SA-23"
+family = "SA"
+section = "14.5"
+status = "decision"
+title = "No nightly stack protector or CFI; sanitizers weekly; checksec gate"
+tests = [
+  "xtask/src/policy_scan.rs::sa_23_sanitizer_outside_weekly_job_is_rejected",
+  "xtask/src/policy_scan.rs::sa_23_stack_protector_flag_is_rejected",
+]
+
+[[rule]]
+id = "SA-24"
+family = "SA"
+section = "14.5"
+status = "decision"
+title = "Restricted pod security, distroless non-root images; gVisor not default"
+tests = [
+  "xtask/src/policy_scan.rs::sa_24_gvisor_runtime_class_is_rejected",
+]
+
+[[rule]]
+id = "SA-26"
+family = "SA"
+section = "14.5"
+status = "decision"
+stage = 4
+title = "Secret<T> discipline and hashed token storage in DB"
+tests = ["crates/crypto/src/secret.rs"]
+
+[[rule]]
+id = "SA-59"
+family = "SA"
+section = "14.9"
+status = "decision"
+title = "Test layer phases, rule coverage, no flaky-test retries"
+tests = [
+  "xtask/src/policy_scan.rs::sa_59_nonzero_retries_are_rejected",
+]
+
+[[rule]]
+id = "CR-35"
+family = "CR"
+section = "15.21"
+status = "decision"
+stage = 2
+title = "Workload identity bootstrap with log redaction and secret-free backups"
+tests = ["crates/telemetry/tests/redaction_canary.rs"]
+
+[[rule]]
+id = "R-2"
+family = "R"
+section = "14.5"
+status = "decision"
+title = "No unsafe or FFI outside the allowlist"
+tests = ["crates/sandbox/tests/lockdown.rs"]
+
+[[rule]]
+id = "R-3"
+family = "R"
+section = "14.5"
+status = "decision"
+title = "No panics on the request path"
+tests = [
+  "crates/http/tests/router.rs::panic_in_handler_becomes_500_problem_and_service_survives",
+]
+
+[[rule]]
+id = "R-5"
+family = "R"
+section = "14.5"
+status = "decision"
+title = "Explicit HTTP limits"
+tests = ["crates/http/tests/router.rs::oversized_body_is_rejected"]
+
+[[rule]]
+id = "OP-2"
+family = "OP"
+section = "17.14"
+status = "decision"
+stage = 4
+title = "Process topology"
+tests = [
+  "crates/sandbox/src/linux/seccomp.rs::parser_worker_has_no_socket_syscalls",
+  "crates/sandbox/src/linux/seccomp.rs::signer_has_no_network_syscalls",
+  "crates/sandbox/tests/lockdown.rs",
+]
+
+[[rule]]
+id = "OP-4"
+family = "OP"
+section = "17.14"
+status = "decision"
+stage = 1
+title = "Build and panic profile"
+tests = [
+  "crates/sandbox/src/linux/seccomp.rs::no_allowlist_contains_io_uring",
+  "crates/sandbox/tests/lockdown.rs",
+]
+
+[[rule]]
+id = "OP-49"
+family = "OP"
+section = "17.14"
+status = "decision"
+title = "Distroless non-root image, digest pins, no third-party image catalogs"
+tests = [
+  "xtask/src/policy_scan.rs::op_49_bitnami_image_is_rejected",
+  "xtask/src/policy_scan.rs::op_49_unpinned_image_is_rejected_but_build_stage_is_not",
+]
+
+[[rule]]
+id = "OP-63"
+family = "OP"
+section = "17.14"
+status = "decision"
+stage = 2
+title = "In-code architecture layers, ports, sans-I/O and outbox"
+tests = [
+  "bins/access-server/src/config.rs::unknown_configuration_key_is_rejected",
+  "xtask/src/policy.rs::component_crate_without_layers_is_reported",
+]
+
+[[rule]]
+id = "OP-64"
+family = "OP"
+section = "17.14"
+status = "decision"
+stage = 5
+title = "Code quality rules: English, lints, typed IDs and errors"
+tests = ["crates/telemetry/tests/redaction_canary.rs"]
+
+[[rule]]
+id = "OP-70"
+family = "OP"
+section = "17.14"
+status = "decision"
+stage = 7
+title = "Documentation: per-section spec files, registers as decisions, no ADRs"
+tests = ["xtask/src/policy.rs::adr_directory_is_rejected"]
+
+[[rule]]
+id = "OP-81"
+family = "OP"
+section = "16.4.4f"
+status = "decision"
+title = "Untracked docs directory; CI must still see rule IDs"
+tests = [
+  "xtask/src/catalog.rs::g38_ti_rt12_regeneration_follows_the_spec_and_keeps_curation",
+]
+
+[[rule]]
+id = "OP-90"
+family = "OP"
+section = "16.4.4f"
+status = "decision"
+title = "Process does not start when sandbox lockdown cannot be established"
+tests = [
+  "bins/access-server/tests/lockdown.rs",
+  "bins/access-server/tests/lockdown.rs::op_90_server_refuses_to_start_without_lockdown",
+]
+
+[[rule]]
+id = "OP-92"
+family = "OP"
+section = "16.4.4f"
+status = "decision"
+title = "Minimum Landlock ABI V4 with TCP bind/connect restriction"
+tests = [
+  "crates/http/tests/router.rs::healthz_reports_landlock_abi",
+  "crates/sandbox/tests/lockdown.rs",
+]
+
+[[rule]]
+id = "OP-93"
+family = "OP"
+section = "16.4.4f"
+status = "decision"
+title = "Completed OP-62 crate dependency table, enforced by xtask"
+tests = [
+  "xtask/src/rules_deps.rs::http_may_use_plane_crates_but_telemetry_may_not_use_proto",
+  "xtask/src/rules_deps.rs::kernel_depending_on_suiss_ledger_is_rejected",
+  "xtask/src/rules_deps.rs::normal_dependency_on_testkit_is_rejected",
+]

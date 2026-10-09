@@ -1,0 +1,395 @@
+# OP-81
+# OP-82, SA-5, SA-6
+
+[[threat]]
+id = "TH-1"
+title = "Malicious user"
+stride = ["E"]
+linddun = []
+rows = ["G1", "G2", "G3"]
+tests = []
+
+[[threat]]
+id = "TH-2"
+title = "Compromised user (AiTM)"
+stride = ["S"]
+linddun = []
+rows = ["N-41", "N-45"]
+refs = ["§13.7.3"]
+tests = []
+
+[[threat]]
+id = "TH-3"
+title = "Malicious agent"
+stride = ["S", "E"]
+linddun = []
+rows = ["DL-6", "PI-11"]
+tests = []
+
+[[threat]]
+id = "TH-4"
+title = "Compromised agent"
+stride = ["S", "E"]
+linddun = []
+rows = ["DL-6", "PI-11"]
+tests = []
+
+[[threat]]
+id = "TH-5"
+title = "Hallucinating model"
+stride = ["T", "E"]
+linddun = []
+rows = ["RR-12"]
+tests = []
+
+[[threat]]
+id = "TH-6"
+title = "Prompt injection"
+stride = ["T", "E"]
+linddun = []
+rows = ["RR-12"]
+tests = []
+
+[[threat]]
+id = "TH-7"
+title = "Malicious executor"
+stride = ["T", "R"]
+linddun = []
+rows = ["U1", "U2", "N-3"]
+tests = []
+
+[[threat]]
+id = "TH-8"
+title = "Malicious PEP or verifier"
+stride = ["T", "R"]
+linddun = []
+rows = ["U1", "U2", "N-3"]
+tests = []
+
+[[threat]]
+id = "TH-9"
+title = "Malicious operator"
+stride = ["T", "I", "E"]
+linddun = ["Detecting", "Data disclosure"]
+rows = ["DL-1", "DL-4"]
+refs = ["§13.2"]
+tests = []
+
+[[threat]]
+id = "TH-10"
+title = "Peer domain / federation abuse"
+stride = ["E"]
+linddun = ["Linking"]
+rows = ["INV-17", "G52"]
+tests = []
+
+[[threat]]
+id = "TH-11"
+title = "Party key theft"
+stride = ["S"]
+linddun = []
+rows = ["U14", "U25", "U41", "G47"]
+tests = []
+
+[[threat]]
+id = "TH-12"
+title = "Instance key theft"
+stride = ["S"]
+linddun = []
+rows = ["U14", "U25", "U41", "G47"]
+tests = []
+
+[[threat]]
+id = "TH-13"
+title = "Provider key theft"
+stride = ["S"]
+linddun = []
+rows = ["U14", "U25", "U41", "G47"]
+tests = []
+
+[[threat]]
+id = "TH-14"
+title = "Approval fatigue"
+stride = ["S", "E"]
+linddun = ["Unawareness"]
+rows = ["SEC17", "SEC28"]
+tests = []
+
+[[threat]]
+id = "TH-15"
+title = "Push bombing"
+stride = ["S", "E"]
+linddun = ["Unawareness"]
+rows = ["SEC17", "SEC28"]
+tests = []
+
+[[threat]]
+id = "TH-16"
+title = "Consent phishing"
+stride = ["S", "E"]
+linddun = ["Unawareness"]
+rows = ["SEC17", "SEC28"]
+tests = []
+
+[[threat]]
+id = "TH-17"
+title = "Confused deputy"
+stride = ["E"]
+linddun = []
+rows = ["PI-7", "DL-6"]
+tests = []
+
+[[threat]]
+id = "TH-18"
+title = "Collusion"
+stride = ["E"]
+linddun = []
+rows = ["PI-7", "DL-6"]
+tests = []
+
+[[threat]]
+id = "TH-19"
+title = "Explanation probing"
+stride = ["I"]
+linddun = ["Identifying", "Data disclosure"]
+rows = ["DL-7", "SEC24", "SEC29"]
+tests = []
+
+[[threat]]
+id = "TH-20"
+title = "Audit export exfiltration"
+stride = ["I"]
+linddun = ["Identifying", "Data disclosure"]
+rows = ["DL-7", "SEC24", "SEC29"]
+tests = []
+
+[[threat]]
+id = "TH-21"
+title = "Publisher compromise"
+stride = ["S", "T"]
+linddun = []
+rows = ["SEC9", "SEC16", "G45"]
+tests = []
+
+[[threat]]
+id = "TH-22"
+title = "IdP compromise"
+stride = ["S", "T"]
+linddun = []
+rows = ["SEC9", "SEC16", "G45"]
+tests = []
+
+[[threat]]
+id = "TH-23"
+title = "HR issuer compromise"
+stride = ["S", "T"]
+linddun = []
+rows = ["SEC9", "SEC16", "G45"]
+tests = []
+
+[[threat]]
+id = "TH-24"
+title = "Equivocation"
+stride = ["T", "R"]
+linddun = []
+rows = ["DL-4", "DL-5"]
+refs = ["§13.6"]
+tests = []
+
+[[threat]]
+id = "TH-25"
+title = "Lost suffix"
+stride = ["T", "R"]
+linddun = []
+rows = ["DL-4", "DL-5"]
+refs = ["§13.6"]
+tests = []
+
+[[threat]]
+id = "TH-26"
+title = "Forced migration abuse"
+stride = ["T", "R"]
+linddun = []
+rows = ["DL-4", "DL-5"]
+refs = ["§13.6"]
+tests = []
+
+[[threat]]
+id = "TH-27"
+title = "Clock manipulation"
+stride = ["T", "S"]
+linddun = []
+rows = ["PI-7"]
+refs = ["§13.7.8", "K-2"]
+tests = []
+
+[[threat]]
+id = "TH-28"
+title = "Replay"
+stride = ["T", "S"]
+linddun = []
+rows = ["PI-7"]
+refs = ["§13.7.8", "K-2"]
+tests = []
+
+[[threat]]
+id = "TH-29"
+title = "Downgrade"
+stride = ["T", "S"]
+linddun = []
+rows = ["PI-7"]
+refs = ["§13.7.8", "K-2"]
+tests = []
+
+[[threat]]
+id = "TH-30"
+title = "DoS on decision path"
+stride = ["D"]
+linddun = []
+rows = ["SI-20"]
+refs = ["§14.6"]
+tests = []
+
+[[threat]]
+id = "TH-31"
+title = "Malicious surface"
+stride = ["S", "T"]
+linddun = ["Unawareness"]
+rows = ["DL-2", "N-2", "N-38"]
+tests = []
+
+[[threat]]
+id = "TH-32"
+title = "Forged event"
+stride = ["S", "T"]
+linddun = ["Unawareness"]
+rows = ["DL-2", "N-2", "N-38"]
+tests = []
+
+[[threat]]
+group = "identity plane"
+ordinal = 1
+title = "AiTM kits, infostealers, device code phishing, session hijacking"
+stride = ["S", "I"]
+linddun = ["Linking", "Identifying"]
+rows = ["N-41", "N-45", "HL-23"]
+tests = []
+
+[[threat]]
+group = "identity plane"
+ordinal = 2
+title = "Golden SAML, authentication process tampering, MFA request generation"
+stride = ["S", "E"]
+linddun = []
+rows = ["SEC28"]
+refs = ["§13.2"]
+tests = []
+
+[[threat]]
+group = "identity plane"
+ordinal = 3
+title = "Account enumeration and credential stuffing"
+stride = ["I", "D"]
+linddun = ["Identifying"]
+rows = ["U44", "U46", "N-46"]
+tests = []
+
+[[threat]]
+group = "identity plane"
+ordinal = 4
+title = "Cross-RP correlation"
+stride = []
+linddun = ["Linking", "Identifying"]
+rows = ["DL-9", "U40", "N-31"]
+tests = []
+
+[[threat]]
+group = "hosting"
+ordinal = 1
+title = "Co-tenant side channel"
+stride = ["I"]
+linddun = ["Data disclosure"]
+rows = ["DL-10", "U54", "N-32"]
+tests = []
+
+# §14.2
+
+[[abuse_case]]
+id = "AB-1"
+family = "AB"
+section = "14.2"
+status = "frozen"
+title = "Agent wears down a human to collect approvals"
+tests = []
+
+[[abuse_case]]
+id = "AB-2"
+family = "AB"
+section = "14.2"
+status = "frozen"
+title = "Budget splitting"
+tests = []
+
+[[abuse_case]]
+id = "AB-3"
+family = "AB"
+section = "14.2"
+status = "frozen"
+title = "Infiltrating rule-shaped selection through HR feed manipulation"
+tests = []
+
+[[abuse_case]]
+id = "AB-4"
+family = "AB"
+section = "14.2"
+status = "frozen"
+title = "Bootstrap and admission abuse"
+tests = []
+
+[[abuse_case]]
+id = "AB-5"
+family = "AB"
+section = "14.2"
+status = "frozen"
+title = "Revocation race"
+tests = []
+
+[[abuse_case]]
+id = "AB-6"
+family = "AB"
+section = "14.2"
+status = "frozen"
+title = "Offline slice abuse"
+tests = []
+
+[[abuse_case]]
+id = "AB-7"
+family = "AB"
+section = "14.2"
+status = "frozen"
+title = "Schema mapping manipulation"
+tests = []
+
+[[abuse_case]]
+id = "AB-8"
+family = "AB"
+section = "14.2"
+status = "frozen"
+title = "Delegation chain laundering"
+tests = []
+
+[[abuse_case]]
+id = "AB-9"
+family = "AB"
+section = "14.2"
+status = "frozen"
+title = "Capacity spoofing (false acting-for claim)"
+tests = []
+
+[[abuse_case]]
+id = "AB-10"
+family = "AB"
+section = "14.2"
+status = "frozen"
+title = "Cross-product confused deputy"
+tests = []

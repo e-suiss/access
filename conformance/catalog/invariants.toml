@@ -1,0 +1,2170 @@
+# OP-81
+
+[[rule]]
+id = "CI-1"
+family = "CI"
+section = "6.1"
+status = "canonical"
+title = "Single positive source"
+tests = []
+
+[[rule]]
+id = "CI-2"
+family = "CI"
+section = "6.1"
+status = "canonical"
+stage = 6
+title = "Everything else only narrows"
+tests = []
+
+[[rule]]
+id = "CI-3"
+family = "CI"
+section = "6.1"
+status = "canonical"
+title = "Non-amplification everywhere"
+tests = []
+
+[[rule]]
+id = "CI-4"
+family = "CI"
+section = "6.1"
+status = "canonical"
+title = "Narrowing is prospectively authoritative; expansion is explicit"
+tests = []
+
+[[rule]]
+id = "CI-5"
+family = "CI"
+section = "6.1"
+status = "canonical"
+title = "Holding ≠ exercisable"
+tests = []
+
+[[rule]]
+id = "CI-6"
+family = "CI"
+section = "6.1"
+status = "canonical"
+title = "Provenance is faithful"
+tests = []
+
+[[rule]]
+id = "CI-7"
+family = "CI"
+section = "6.1"
+status = "canonical"
+title = "Decision ≠ Effect"
+tests = []
+
+[[rule]]
+id = "CI-8"
+family = "CI"
+section = "6.1"
+status = "canonical"
+title = "Allow is envelope-bound"
+tests = []
+
+[[rule]]
+id = "CI-9"
+family = "CI"
+section = "6.1"
+status = "canonical"
+title = "Semantic state ≠ propagation ≠ physical enforcement"
+tests = []
+
+[[rule]]
+id = "CI-10"
+family = "CI"
+section = "6.1"
+status = "canonical"
+title = "Foreign ≠ local"
+tests = []
+
+[[rule]]
+id = "CI-11"
+family = "CI"
+section = "6.1"
+status = "canonical"
+title = "One owner per fact"
+tests = []
+
+[[rule]]
+id = "CI-12"
+family = "CI"
+section = "6.1"
+status = "canonical"
+title = "Fail-closed"
+tests = []
+
+[[rule]]
+id = "CI-13"
+family = "CI"
+section = "6.1"
+status = "canonical"
+stage = 3
+title = "No implicit super-authority"
+tests = []
+
+[[rule]]
+id = "CI-14"
+family = "CI"
+section = "6.1"
+status = "canonical"
+title = "Approval authority ≠ execution authority"
+tests = []
+
+[[rule]]
+id = "CI-15"
+family = "CI"
+section = "6.1"
+status = "canonical"
+stage = 2
+title = "One authority per domain object; no global provider; no semantic privilege"
+tests = []
+
+[[rule]]
+id = "INV-1"
+family = "INV"
+section = "6.2"
+status = "canonical"
+stage = 3
+title = "Single positive source"
+tests = []
+
+[[rule]]
+id = "INV-2"
+family = "INV"
+section = "6.2"
+status = "canonical"
+stage = 2
+title = "Single write path (authority state)"
+tests = []
+
+[[rule]]
+id = "INV-3"
+family = "INV"
+section = "6.2"
+status = "canonical"
+stage = 3
+title = "Non-amplification"
+tests = []
+
+[[rule]]
+id = "INV-4"
+family = "INV"
+section = "6.2"
+status = "canonical"
+stage = 3
+title = "Single basis, faithful lineage, explicit capacity"
+tests = []
+
+[[rule]]
+id = "INV-5"
+family = "INV"
+section = "6.2"
+status = "canonical"
+stage = 3
+title = "Terminal invalidity, monotone cascade"
+tests = []
+
+[[rule]]
+id = "INV-6"
+family = "INV"
+section = "6.2"
+status = "canonical"
+stage = 1
+title = "Restriction is an overlay"
+tests = []
+
+[[rule]]
+id = "INV-7"
+family = "INV"
+section = "6.2"
+status = "canonical"
+stage = 1
+title = "No non-monotonic granting"
+tests = []
+
+[[rule]]
+id = "INV-8"
+family = "INV"
+section = "6.2"
+status = "canonical"
+stage = 1
+title = "Decidable canonical algebra"
+tests = []
+
+[[rule]]
+id = "INV-9"
+family = "INV"
+section = "6.2"
+status = "canonical"
+stage = 1
+title = "Explicit delegability, express-only reserved powers"
+tests = []
+
+[[rule]]
+id = "INV-10"
+family = "INV"
+section = "6.2"
+status = "canonical"
+stage = 3
+title = "Meta-authority asymmetry"
+tests = []
+
+[[rule]]
+id = "INV-11"
+family = "INV"
+section = "6.2"
+status = "canonical"
+stage = 3
+title = "Holding ≠ exercisability; actor is explicit"
+tests = []
+
+[[rule]]
+id = "INV-12"
+family = "INV"
+section = "6.2"
+status = "canonical"
+stage = 3
+title = "Identity ≠ Authority, structurally"
+tests = []
+
+[[rule]]
+id = "INV-13"
+family = "INV"
+section = "6.2"
+status = "canonical"
+stage = 3
+title = "Instance continuity"
+tests = []
+
+[[rule]]
+id = "INV-14"
+family = "INV"
+section = "6.2"
+status = "canonical"
+stage = 3
+title = "Claim ≠ Truth"
+tests = []
+
+[[rule]]
+id = "INV-15"
+family = "INV"
+section = "6.2"
+status = "canonical"
+stage = 3
+title = "Use-scoped acceptance"
+tests = []
+
+[[rule]]
+id = "INV-16"
+family = "INV"
+section = "6.2"
+status = "canonical"
+stage = 3
+title = "Selection ≠ grant"
+tests = []
+
+[[rule]]
+id = "INV-17"
+family = "INV"
+section = "6.2"
+status = "canonical"
+stage = 3
+title = "Foreign ≠ local"
+tests = []
+
+[[rule]]
+id = "INV-18"
+family = "INV"
+section = "6.2"
+status = "canonical"
+stage = 3
+title = "Decision ≠ Effect"
+tests = []
+
+[[rule]]
+id = "INV-19"
+family = "INV"
+section = "6.2"
+status = "canonical"
+stage = 3
+title = "Allow is envelope-bound"
+tests = []
+
+[[rule]]
+id = "INV-20"
+family = "INV"
+section = "6.2"
+status = "canonical"
+stage = 3
+title = "Approval ≠ execution"
+tests = []
+
+[[rule]]
+id = "INV-21"
+family = "INV"
+section = "6.2"
+status = "canonical"
+stage = 2
+title = "At-most-once consumption"
+tests = []
+
+[[rule]]
+id = "INV-22"
+family = "INV"
+section = "6.2"
+status = "canonical"
+stage = 2
+title = "Decisions declare their basis; relied-upon ALLOW is recorded"
+tests = []
+
+[[rule]]
+id = "INV-23"
+family = "INV"
+section = "6.2"
+status = "canonical"
+stage = 3
+title = "No backdating; normative time is domain time"
+tests = []
+
+[[rule]]
+id = "INV-24"
+family = "INV"
+section = "6.2"
+status = "canonical"
+stage = 6
+title = "Bounded staleness; signals carry no safety"
+tests = []
+
+[[rule]]
+id = "INV-25"
+family = "INV"
+section = "6.2"
+status = "canonical"
+title = "One owner per fact"
+tests = []
+
+[[rule]]
+id = "INV-26"
+family = "INV"
+section = "6.2"
+status = "canonical"
+stage = 1
+title = "Fail closed"
+tests = []
+
+[[rule]]
+id = "INV-27"
+family = "INV"
+section = "6.2"
+status = "canonical"
+stage = 1
+title = "Semantic determinism"
+tests = []
+
+[[rule]]
+id = "INV-28"
+family = "INV"
+section = "6.2"
+status = "canonical"
+stage = 12
+title = "No implicit super-authority"
+tests = []
+
+[[rule]]
+id = "INV-29"
+family = "INV"
+section = "6.2"
+status = "canonical"
+stage = 3
+title = "No semantic privilege; custody ≠ root"
+tests = []
+
+[[rule]]
+id = "INV-30"
+family = "INV"
+section = "6.2"
+status = "canonical"
+stage = 2
+title = "Immutable history, redactable body"
+tests = []
+
+[[rule]]
+id = "INV-31"
+family = "INV"
+section = "6.2"
+status = "canonical"
+stage = 3
+title = "Holding episode continuity"
+tests = []
+
+[[rule]]
+id = "INV-32"
+family = "INV"
+section = "6.9"
+status = "candidate"
+stage = 2
+title = "No identifier reuse"
+tests = []
+
+[[rule]]
+id = "INV-33"
+family = "INV"
+section = "6.9"
+status = "candidate"
+stage = 2
+title = "IdP concepts reduce to primitives; derived index never writes or decides"
+tests = []
+
+[[rule]]
+id = "INV-34"
+family = "INV"
+section = "6.9"
+status = "candidate"
+stage = 3
+title = "Derived answers agree"
+tests = []
+
+[[rule]]
+id = "INV-35"
+family = "INV"
+section = "6.9"
+status = "candidate"
+stage = 3
+title = "Moves name both ends"
+tests = []
+
+[[rule]]
+id = "INV-36"
+family = "INV"
+section = "6.9"
+status = "candidate"
+stage = 1
+title = "Restriction language stays decidable and forbid-only"
+tests = []
+
+[[rule]]
+id = "INV-37"
+family = "INV"
+section = "6.9"
+status = "candidate"
+stage = 3
+title = "Tenant, Realm and Cell are not authority inputs"
+tests = []
+
+[[rule]]
+id = "INV-38"
+family = "INV"
+section = "6.9"
+status = "candidate"
+stage = 6
+title = "Cross-domain unlinkability by default"
+tests = []
+
+[[rule]]
+id = "INV-39"
+family = "INV"
+section = "6.9"
+status = "candidate"
+stage = 8
+title = "Binding and merge never merge authority"
+tests = []
+
+[[rule]]
+id = "INV-40"
+family = "INV"
+section = "6.9"
+status = "candidate"
+stage = 8
+title = "Recovery is never weaker than what it recovers"
+tests = []
+
+[[rule]]
+id = "INV-41"
+family = "INV"
+section = "6.9"
+status = "candidate"
+stage = 6
+title = "Content causality for projections"
+tests = []
+
+[[rule]]
+id = "EI-1"
+family = "EI"
+section = "6.3"
+status = "canonical"
+title = "One source of truth per semantic fact"
+tests = []
+
+[[rule]]
+id = "EI-2"
+family = "EI"
+section = "6.3"
+status = "canonical"
+title = "Authority is created only by an authority provider"
+tests = []
+
+[[rule]]
+id = "EI-3"
+family = "EI"
+section = "6.3"
+status = "canonical"
+title = "Domain truth is never created by Access"
+tests = []
+
+[[rule]]
+id = "EI-4"
+family = "EI"
+section = "6.3"
+status = "canonical"
+stage = 11
+title = "Work Gate never expands authority"
+tests = []
+
+[[rule]]
+id = "EI-5"
+family = "EI"
+section = "6.3"
+status = "canonical"
+stage = 11
+title = "Work may end authority only through a narrow channel"
+tests = []
+
+[[rule]]
+id = "EI-6"
+family = "EI"
+section = "6.3"
+status = "canonical"
+stage = 9
+title = "Identity Claim never directly becomes authority"
+tests = []
+
+[[rule]]
+id = "EI-7"
+family = "EI"
+section = "6.3"
+status = "canonical"
+title = "Party identity is product-neutral"
+tests = []
+
+[[rule]]
+id = "EI-8"
+family = "EI"
+section = "6.3"
+status = "canonical"
+stage = 3
+title = "Domain admission is an authority act"
+tests = []
+
+[[rule]]
+id = "EI-9"
+family = "EI"
+section = "6.3"
+status = "canonical"
+stage = 7
+title = "Relay delivery never changes authority truth"
+tests = []
+
+[[rule]]
+id = "EI-10"
+family = "EI"
+section = "6.3"
+status = "canonical"
+title = "Effect receipt never rewrites decision history"
+tests = []
+
+[[rule]]
+id = "EI-11"
+family = "EI"
+section = "6.3"
+status = "canonical"
+stage = 3
+title = "Revocation commit never claims physical stop"
+tests = []
+
+[[rule]]
+id = "EI-12"
+family = "EI"
+section = "6.3"
+status = "canonical"
+title = "Foreign identity never implies foreign authority"
+tests = []
+
+[[rule]]
+id = "EI-13"
+family = "EI"
+section = "6.3"
+status = "canonical"
+title = "First-party products have no hidden authority path"
+tests = []
+
+[[rule]]
+id = "EI-14"
+family = "EI"
+section = "6.3"
+status = "canonical"
+title = "Cross-product references do not imply ownership"
+tests = []
+
+[[rule]]
+id = "EI-15"
+family = "EI"
+section = "6.3"
+status = "canonical"
+title = "Private context does not cross by implication"
+tests = []
+
+[[rule]]
+id = "EI-16"
+family = "EI"
+section = "6.3"
+status = "canonical"
+stage = 3
+title = "Schema publication never broadens authority"
+tests = []
+
+[[rule]]
+id = "EI-17"
+family = "EI"
+section = "6.3"
+status = "canonical"
+stage = 6
+title = "Every PEP effect backed by an Exercise whose actor holds the basis"
+tests = []
+
+[[rule]]
+id = "EI-18"
+family = "EI"
+section = "6.3"
+status = "canonical"
+stage = 3
+title = "Approval is an authority act bound to an exact digest"
+tests = []
+
+[[rule]]
+id = "EI-19"
+family = "EI"
+section = "6.3"
+status = "canonical"
+title = "Risk, posture and tooling only narrow"
+tests = []
+
+[[rule]]
+id = "EI-20"
+family = "EI"
+section = "6.3"
+status = "canonical"
+stage = 13
+title = "Single authoritative lineage per AuthorityDomain"
+tests = []
+
+[[rule]]
+id = "EI-21"
+family = "EI"
+section = "6.3"
+status = "canonical"
+stage = 3
+title = "Fail closed at authority boundary; truth only from fact owner"
+tests = []
+
+[[rule]]
+id = "EI-22"
+family = "EI"
+section = "6.3"
+status = "canonical"
+title = "Absence never implies success"
+tests = []
+
+[[rule]]
+id = "EI-23"
+family = "EI"
+section = "6.3"
+status = "canonical"
+stage = 3
+title = "No cross-product atomicity as a semantic requirement"
+tests = []
+
+[[rule]]
+id = "EI-24"
+family = "EI"
+section = "6.3"
+status = "canonical"
+stage = 3
+title = "Accountability ≠ authority ≠ liability"
+tests = []
+
+[[rule]]
+id = "EI-25"
+family = "EI"
+section = "7.8"
+status = "candidate"
+stage = 5
+title = "Identity plane config changes are Exercises"
+tests = []
+
+[[rule]]
+id = "EI-26"
+family = "EI"
+section = "7.8"
+status = "candidate"
+stage = 9
+title = "Possession is never release authority"
+tests = []
+
+[[rule]]
+id = "EI-27"
+family = "EI"
+section = "7.8"
+status = "candidate"
+stage = 3
+title = "Commercial tenancy never enters authority"
+tests = []
+
+[[rule]]
+id = "XI-1"
+family = "XI"
+section = "6.4"
+status = "canonical"
+stage = 8
+title = "Every displayed state has one owner"
+tests = []
+
+[[rule]]
+id = "XI-2"
+family = "XI"
+section = "6.4"
+status = "canonical"
+stage = 8
+title = "The status ladder never collapses"
+tests = []
+
+[[rule]]
+id = "XI-3"
+family = "XI"
+section = "6.4"
+status = "canonical"
+stage = 3
+title = "Surfaces are projections; no optimistic authority"
+tests = []
+
+[[rule]]
+id = "XI-4"
+family = "XI"
+section = "6.4"
+status = "canonical"
+stage = 8
+title = "Expansion is explicit, attributable and previewed"
+tests = []
+
+[[rule]]
+id = "XI-5"
+family = "XI"
+section = "6.4"
+status = "canonical"
+stage = 8
+title = "Narrowing is always near"
+tests = []
+
+[[rule]]
+id = "XI-6"
+family = "XI"
+section = "6.4"
+status = "canonical"
+stage = 3
+title = "Approve never overrides"
+tests = []
+
+[[rule]]
+id = "XI-7"
+family = "XI"
+section = "6.4"
+status = "canonical"
+stage = 3
+title = "Access has no inbox"
+tests = []
+
+[[rule]]
+id = "XI-8"
+family = "XI"
+section = "6.4"
+status = "canonical"
+stage = 3
+title = "Exact intent or no approval"
+tests = []
+
+[[rule]]
+id = "XI-9"
+family = "XI"
+section = "6.4"
+status = "canonical"
+stage = 8
+title = "Explanations are derived, owner-attributed and scoped"
+tests = []
+
+[[rule]]
+id = "XI-10"
+family = "XI"
+section = "6.4"
+status = "canonical"
+stage = 8
+title = "Capacity is always visible and derived"
+tests = []
+
+[[rule]]
+id = "XI-11"
+family = "XI"
+section = "6.4"
+status = "canonical"
+stage = 8
+title = "Offered actions = exercisable actions"
+tests = []
+
+[[rule]]
+id = "XI-12"
+family = "XI"
+section = "6.4"
+status = "canonical"
+stage = 5
+title = "Wording never exceeds its guarantee class"
+tests = []
+
+[[rule]]
+id = "XI-13"
+family = "XI"
+section = "6.4"
+status = "canonical"
+stage = 7
+title = "One canonical term, one UI term"
+tests = []
+
+[[rule]]
+id = "XI-14"
+family = "XI"
+section = "6.4"
+status = "canonical"
+stage = 8
+title = "Two limits are two facts"
+tests = []
+
+[[rule]]
+id = "XI-15"
+family = "XI"
+section = "6.4"
+status = "canonical"
+stage = 8
+title = "Rule-shaped authority explained in two parts; stale is not removed"
+tests = []
+
+[[rule]]
+id = "XI-16"
+family = "XI"
+section = "6.4"
+status = "canonical"
+stage = 8
+title = "Cross-domain items carry domain and freshness"
+tests = []
+
+[[rule]]
+id = "XI-17"
+family = "XI"
+section = "6.4"
+status = "canonical"
+stage = 9
+title = "Agents are shown as agents"
+tests = []
+
+[[rule]]
+id = "XI-18"
+family = "XI"
+section = "6.4"
+status = "canonical"
+stage = 6
+title = "No first-party surface path"
+tests = []
+
+[[rule]]
+id = "XI-19"
+family = "XI"
+section = "6.4"
+status = "canonical"
+stage = 3
+title = "Repetition becomes explicit policy, never silent accumulation"
+tests = []
+
+[[rule]]
+id = "XI-20"
+family = "XI"
+section = "6.4"
+status = "canonical"
+stage = 13
+title = "Degraded states show the safe default"
+tests = []
+
+[[rule]]
+id = "XI-21"
+family = "XI"
+section = "6.4"
+status = "canonical"
+stage = 8
+title = "History is shown, never rewritten"
+tests = []
+
+[[rule]]
+id = "XI-22"
+family = "XI"
+section = "6.4"
+status = "canonical"
+stage = 8
+title = "Private context never surfaces"
+tests = []
+
+[[rule]]
+id = "XI-23"
+family = "XI"
+section = "8.19"
+status = "candidate"
+stage = 6
+title = "Sign-in is never authority; sign-out is never revocation"
+tests = []
+
+[[rule]]
+id = "XI-24"
+family = "XI"
+section = "8.19"
+status = "candidate"
+stage = 5
+title = "Unauthenticated surfaces assert nothing about an account"
+tests = []
+
+[[rule]]
+id = "XI-25"
+family = "XI"
+section = "8.19"
+status = "candidate"
+stage = 8
+title = "Protected strings survive branding and translation"
+tests = []
+
+[[rule]]
+id = "XI-26"
+family = "XI"
+section = "8.19"
+status = "candidate"
+stage = 7
+title = "Support access is always a visible delegation"
+tests = []
+
+[[rule]]
+id = "PI-1"
+family = "PI"
+section = "6.5"
+status = "canonical"
+title = "Every protocol object maps to an existing ontology class"
+tests = []
+
+[[rule]]
+id = "PI-2"
+family = "PI"
+section = "6.5"
+status = "canonical"
+title = "Standard semantics never silently override Access semantics"
+tests = []
+
+[[rule]]
+id = "PI-3"
+family = "PI"
+section = "6.5"
+status = "canonical"
+stage = 3
+title = "No external artifact is authority without Acceptance and Grant"
+tests = []
+
+[[rule]]
+id = "PI-4"
+family = "PI"
+section = "6.5"
+status = "canonical"
+stage = 3
+title = "Every authority read or write goes through one Exercise contract"
+tests = []
+
+[[rule]]
+id = "PI-5"
+family = "PI"
+section = "6.5"
+status = "canonical"
+stage = 3
+title = "Decision has exactly three outcomes; protocol errors produce no effect"
+tests = []
+
+[[rule]]
+id = "PI-6"
+family = "PI"
+section = "6.5"
+status = "canonical"
+stage = 13
+title = "Domain decisions reproducible from spec and Record Export without provider"
+tests = []
+
+[[rule]]
+id = "PI-7"
+family = "PI"
+section = "6.5"
+status = "canonical"
+stage = 3
+title = "Actor derived only from Instance-signed Actor Intent Statement"
+tests = []
+
+[[rule]]
+id = "PI-8"
+family = "PI"
+section = "6.5"
+status = "canonical"
+stage = 5
+title = "Decision receipt is not a credential; projections are narrowed subsets"
+tests = []
+
+[[rule]]
+id = "PI-9"
+family = "PI"
+section = "6.5"
+status = "canonical"
+stage = 6
+title = "Events, event loss or reordering never widen authority"
+tests = []
+
+[[rule]]
+id = "PI-10"
+family = "PI"
+section = "6.5"
+status = "canonical"
+stage = 5
+title = "Projection refresh is a new decision; token revoke is not grant.revoke"
+tests = []
+
+[[rule]]
+id = "PI-11"
+family = "PI"
+section = "6.5"
+status = "canonical"
+stage = 5
+title = "Every authority-bearing projection is holder-bound; no bearer authority"
+tests = []
+
+[[rule]]
+id = "PI-12"
+family = "PI"
+section = "6.5"
+status = "canonical"
+stage = 1
+title = "Must-understand: verifiers reject unknown mandatory features"
+tests = []
+
+[[rule]]
+id = "PI-13"
+family = "PI"
+section = "6.5"
+status = "canonical"
+stage = 6
+title = "No privileged Claim class, endpoint or anchor for any first party"
+tests = []
+
+[[rule]]
+id = "PI-14"
+family = "PI"
+section = "6.5"
+status = "canonical"
+stage = 3
+title = "No hidden first-party dependency; remaining dependencies are declared"
+tests = []
+
+[[rule]]
+id = "PI-15"
+family = "PI"
+section = "6.5"
+status = "canonical"
+stage = 2
+title = "Provider binding changes only via domain.handover or domain.recover Exercise"
+tests = []
+
+[[rule]]
+id = "PI-16"
+family = "PI"
+section = "6.5"
+status = "canonical"
+stage = 3
+title = "Explanations respect disclosure scope and leak no hidden authority"
+tests = []
+
+[[rule]]
+id = "PI-17"
+family = "PI"
+section = "6.5"
+status = "canonical"
+stage = 12
+title = "Approved content is the digest of executed content"
+tests = []
+
+[[rule]]
+id = "PI-18"
+family = "PI"
+section = "6.5"
+status = "canonical"
+title = "Layers shared with Work are under common governance"
+tests = []
+
+[[rule]]
+id = "PI-19"
+family = "PI"
+section = "6.5"
+status = "canonical"
+stage = 3
+title = "Schemas and catalogs used only via exact digest pin"
+tests = []
+
+[[rule]]
+id = "PI-20"
+family = "PI"
+section = "6.5"
+status = "canonical"
+stage = 6
+title = "Offline consumption only from pre-drawn lineage budget slices"
+tests = []
+
+[[rule]]
+id = "PI-21"
+family = "PI"
+section = "6.5"
+status = "canonical"
+stage = 1
+title = "Version and profile identity are part of signed content"
+tests = []
+
+[[rule]]
+id = "PI-22"
+family = "PI"
+section = "6.5"
+status = "canonical"
+title = "Claim ingest is not Acceptance; offline Claims never change authority"
+tests = []
+
+[[rule]]
+id = "PI-23"
+family = "PI"
+section = "6.5"
+status = "canonical"
+stage = 3
+title = "Batches are not atomic; each item is its own Exercise"
+tests = []
+
+[[rule]]
+id = "PI-24"
+family = "PI"
+section = "6.5"
+status = "canonical"
+stage = 3
+title = "Each federation mechanism has a distinct protocol counterpart"
+tests = []
+
+[[rule]]
+id = "SI-1"
+family = "SI"
+section = "6.6"
+status = "canonical"
+stage = 2
+title = "No attribution of an Exercise without the actor's key"
+tests = []
+
+[[rule]]
+id = "SI-2"
+family = "SI"
+section = "6.6"
+status = "canonical"
+stage = 3
+title = "Custody, hosting, operation and conformance confer nothing"
+tests = []
+
+[[rule]]
+id = "SI-3"
+family = "SI"
+section = "6.6"
+status = "canonical"
+stage = 3
+title = "Compromise blast radius equals the declared use"
+tests = []
+
+[[rule]]
+id = "SI-4"
+family = "SI"
+section = "6.6"
+status = "canonical"
+stage = 3
+title = "Containment is one attributable act; un-containment is expansion"
+tests = []
+
+[[rule]]
+id = "SI-5"
+family = "SI"
+section = "6.6"
+status = "canonical"
+stage = 3
+title = "No approval without the approver's own act on exact digest"
+tests = []
+
+[[rule]]
+id = "SI-6"
+family = "SI"
+section = "6.6"
+status = "canonical"
+stage = 1
+title = "Fail closed under attack"
+tests = []
+
+[[rule]]
+id = "SI-7"
+family = "SI"
+section = "6.6"
+status = "canonical"
+stage = 3
+title = "Every post-revocation window is pre-declared"
+tests = []
+
+[[rule]]
+id = "SI-8"
+family = "SI"
+section = "6.6"
+status = "canonical"
+stage = 3
+title = "Security inputs are recorded inputs"
+tests = []
+
+[[rule]]
+id = "SI-9"
+family = "SI"
+section = "6.6"
+status = "canonical"
+stage = 3
+title = "Compromise is handled prospectively"
+tests = []
+
+[[rule]]
+id = "SI-10"
+family = "SI"
+section = "6.6"
+status = "canonical"
+stage = 3
+title = "Ingest-time cutoff is affirmative"
+tests = []
+
+[[rule]]
+id = "SI-11"
+family = "SI"
+section = "6.6"
+status = "canonical"
+stage = 6
+title = "Inclusion over assertion after recovery and handover"
+tests = []
+
+[[rule]]
+id = "SI-12"
+family = "SI"
+section = "6.6"
+status = "canonical"
+stage = 13
+title = "Witness independence"
+tests = []
+
+[[rule]]
+id = "SI-13"
+family = "SI"
+section = "6.6"
+status = "canonical"
+stage = 6
+title = "Custody is declared; ingested key-events are visible"
+tests = []
+
+[[rule]]
+id = "SI-14"
+family = "SI"
+section = "6.6"
+status = "canonical"
+stage = 3
+title = "Disclosure is monotone in authority"
+tests = []
+
+[[rule]]
+id = "SI-15"
+family = "SI"
+section = "6.6"
+status = "canonical"
+stage = 8
+title = "Consequential reads and exports are recorded Exercises"
+tests = []
+
+[[rule]]
+id = "SI-16"
+family = "SI"
+section = "6.6"
+status = "canonical"
+stage = 9
+title = "Data is never instruction"
+tests = []
+
+[[rule]]
+id = "SI-17"
+family = "SI"
+section = "6.6"
+status = "canonical"
+stage = 3
+title = "Every proof is bound"
+tests = []
+
+[[rule]]
+id = "SI-18"
+family = "SI"
+section = "6.6"
+status = "canonical"
+stage = 3
+title = "Downgrade is expansion"
+tests = []
+
+[[rule]]
+id = "SI-19"
+family = "SI"
+section = "6.6"
+status = "canonical"
+stage = 3
+title = "Independence is checked, not assumed"
+tests = []
+
+[[rule]]
+id = "SI-20"
+family = "SI"
+section = "6.6"
+status = "canonical"
+stage = 1
+title = "Bounded evaluation"
+tests = []
+
+[[rule]]
+id = "SI-21"
+family = "SI"
+section = "6.6"
+status = "canonical"
+stage = 2
+title = "Expansion about you is visible to you"
+tests = []
+
+[[rule]]
+id = "SI-22"
+family = "SI"
+section = "6.6"
+status = "canonical"
+stage = 3
+title = "No emergency path outside the Exercise"
+tests = []
+
+[[rule]]
+id = "TI-1"
+family = "TI"
+section = "6.7"
+status = "canonical"
+stage = 2
+title = "Only the log is canonical"
+tests = []
+
+[[rule]]
+id = "TI-2"
+family = "TI"
+section = "6.7"
+status = "canonical"
+stage = 2
+title = "Single writer by storage, not by belief"
+tests = []
+
+[[rule]]
+id = "TI-3"
+family = "TI"
+section = "6.7"
+status = "canonical"
+title = "Basis is q−1"
+tests = []
+
+[[rule]]
+id = "TI-4"
+family = "TI"
+section = "6.7"
+status = "canonical"
+stage = 2
+title = "Complete read-set"
+tests = []
+
+[[rule]]
+id = "TI-5"
+family = "TI"
+section = "6.7"
+status = "canonical"
+stage = 3
+title = "No ALLOW from replicas"
+tests = []
+
+[[rule]]
+id = "TI-6"
+family = "TI"
+section = "6.7"
+status = "canonical"
+stage = 2
+title = "Durability fence"
+tests = []
+
+[[rule]]
+id = "TI-7"
+family = "TI"
+section = "6.7"
+status = "canonical"
+stage = 2
+title = "One commit, all effects"
+tests = []
+
+[[rule]]
+id = "TI-8"
+family = "TI"
+section = "6.7"
+status = "canonical"
+stage = 2
+title = "Idempotent nonce"
+tests = []
+
+[[rule]]
+id = "TI-9"
+family = "TI"
+section = "6.7"
+status = "canonical"
+stage = 1
+title = "No fail-open code path"
+tests = [
+  "bins/access-server/src/config.rs::unknown_configuration_key_is_rejected",
+]
+
+[[rule]]
+id = "TI-10"
+family = "TI"
+section = "6.7"
+status = "canonical"
+stage = 1
+title = "No semantic timers"
+tests = []
+
+[[rule]]
+id = "TI-11"
+family = "TI"
+section = "6.7"
+status = "canonical"
+stage = 1
+title = "Verbatim signatures, Access-computed digests"
+tests = []
+
+[[rule]]
+id = "TI-12"
+family = "TI"
+section = "6.7"
+status = "canonical"
+stage = 6
+title = "Every Decision-produced signed artifact is provable"
+tests = []
+
+[[rule]]
+id = "TI-13"
+family = "TI"
+section = "6.7"
+status = "canonical"
+stage = 13
+title = "Mirror before witness (⊇ replica-before-ack)"
+tests = []
+
+[[rule]]
+id = "TI-14"
+family = "TI"
+section = "6.7"
+status = "canonical"
+stage = 1
+title = "Bounded, deterministic restriction"
+tests = []
+
+[[rule]]
+id = "TI-15"
+family = "TI"
+section = "6.7"
+status = "canonical"
+stage = 4
+title = "Identity plane speaks only Claims"
+tests = []
+
+[[rule]]
+id = "TI-16"
+family = "TI"
+section = "6.7"
+status = "canonical"
+stage = 2
+title = "Rebuildable derivations"
+tests = []
+
+[[rule]]
+id = "TI-17"
+family = "TI"
+section = "6.7"
+status = "canonical"
+stage = 1
+title = "No Suiss-specific dependency in the protocol path"
+tests = []
+
+[[rule]]
+id = "TI-18"
+family = "TI"
+section = "6.7"
+status = "canonical"
+stage = 7
+title = "Telemetry is not input"
+tests = []
+
+[[rule]]
+id = "TI-19"
+family = "TI"
+section = "6.7"
+status = "canonical"
+stage = 2
+title = "Monotone trusted time"
+tests = []
+
+[[rule]]
+id = "TI-20"
+family = "TI"
+section = "6.7"
+status = "canonical"
+stage = 3
+title = "Disclosure filter last and monotone"
+tests = []
+
+[[rule]]
+id = "TI-RT1"
+family = "TI-RT"
+section = "6.8"
+status = "canonical"
+stage = 2
+title = "Provider state is a record-fold; divergent widening effects quarantined"
+tests = []
+
+[[rule]]
+id = "TI-RT2"
+family = "TI-RT"
+section = "6.8"
+status = "canonical"
+stage = 2
+title = "Trusted time kept within bound by two independent sources"
+tests = []
+
+[[rule]]
+id = "TI-RT3"
+family = "TI-RT"
+section = "6.8"
+status = "canonical"
+stage = 2
+title = "Commit time bounded by intent validity and nonce retention horizon"
+tests = []
+
+[[rule]]
+id = "TI-RT4"
+family = "TI-RT"
+section = "6.8"
+status = "canonical"
+stage = 2
+title = "Derived and leader state built only from Genesis fold or verified snapshot"
+tests = []
+
+[[rule]]
+id = "TI-RT5"
+family = "TI-RT"
+section = "6.8"
+status = "canonical"
+stage = 6
+title = "Domain Metadata freshness measured by independent witness cosign"
+tests = []
+
+[[rule]]
+id = "TI-RT6"
+family = "TI-RT"
+section = "6.8"
+status = "canonical"
+stage = 1
+title = "Operational keys bound to DomainID and checked by verifiers"
+tests = []
+
+[[rule]]
+id = "TI-RT7"
+family = "TI-RT"
+section = "6.8"
+status = "canonical"
+stage = 3
+title = "Claim currency determined by issuer order; ties disqualify"
+tests = []
+
+[[rule]]
+id = "TI-RT8"
+family = "TI-RT"
+section = "6.8"
+status = "canonical"
+stage = 3
+title = "Consumption release never exceeds draw per Exercise or projection"
+tests = []
+
+[[rule]]
+id = "TI-RT9"
+family = "TI-RT"
+section = "6.8"
+status = "canonical"
+stage = 3
+title = "Per-commit work is bounded; bulk episode effects computed lazily"
+tests = []
+
+[[rule]]
+id = "TI-RT10"
+family = "TI-RT"
+section = "6.8"
+status = "canonical"
+stage = 2
+title = "Position-bearing identifiers to sub-audit viewers are opaque keyed tokens"
+tests = []
+
+[[rule]]
+id = "TI-RT11"
+family = "TI-RT"
+section = "6.8"
+status = "canonical"
+stage = 13
+title = "Canonical record identity is its witnessed replicated commitment"
+tests = []
+
+[[rule]]
+id = "TI-RT12"
+family = "TI-RT"
+section = "6.8"
+status = "canonical"
+stage = 0
+title = "Every semantic rule lives in normative text and conformance vectors"
+tests = [
+  "xtask/src/catalog.rs::g38_ti_rt12_regeneration_follows_the_spec_and_keeps_curation",
+]
+
+[[rule]]
+id = "SAI-1"
+family = "SAI"
+section = "14.11"
+status = "candidate"
+title = "Every guarantee row maps to a test, vector or proof"
+tests = [
+  "xtask/src/catalog.rs::sai_1_uncovered_rule_of_the_current_stage_is_reported",
+]
+
+[[rule]]
+id = "SAI-2"
+family = "SAI"
+section = "14.11"
+status = "candidate"
+title = "Recursive parsers check depth before recursing; overflow is an error"
+tests = []
+
+[[rule]]
+id = "SAI-3"
+family = "SAI"
+section = "14.11"
+status = "candidate"
+stage = 3
+title = "Infrastructure failures never produce ALLOW, active=true or new tokens"
+tests = []
+
+[[rule]]
+id = "SAI-4"
+family = "SAI"
+section = "14.11"
+status = "candidate"
+stage = 5
+title = "Responses for never-cached subjects come from canonical source or fail closed"
+tests = []
+
+[[rule]]
+id = "SAI-5"
+family = "SAI"
+section = "14.11"
+status = "candidate"
+stage = 5
+title = "Login, signup, reset and recovery responses hide account existence"
+tests = []
+
+[[rule]]
+id = "SAI-6"
+family = "SAI"
+section = "14.11"
+status = "candidate"
+stage = 5
+title = "Mutations in one domain or realm never affect another's decisions"
+tests = []
+
+[[rule]]
+id = "SAI-7"
+family = "SAI"
+section = "14.11"
+status = "candidate"
+title = "Every published artifact reproducible and in co-signed release checkpoint"
+tests = []
+
+[[rule]]
+id = "SAI-8"
+family = "SAI"
+section = "14.11"
+status = "candidate"
+title = "Secret types never printed or serialized; compared in constant time"
+tests = ["crates/crypto/src/secret.rs"]
+
+[[rule]]
+id = "SAI-9"
+family = "SAI"
+section = "14.11"
+status = "candidate"
+stage = 4
+title = "Authority artifacts valid only under domain-scoped excerpt-bound keys"
+tests = []
+
+[[rule]]
+id = "SAI-40"
+family = "SAI"
+section = "15.22.1"
+status = "candidate"
+class = "BS"
+stage = 1
+title = "Signature algorithm allowlist never comes from header"
+tests = []
+
+[[rule]]
+id = "SAI-41"
+family = "SAI"
+section = "15.22.1"
+status = "candidate"
+class = "BS"
+stage = 1
+title = "Single canonical acceptance"
+tests = []
+
+[[rule]]
+id = "SAI-42"
+family = "SAI"
+section = "15.22.1"
+status = "candidate"
+class = "UDC"
+stage = 1
+title = "Constant-time secret comparison"
+tests = []
+
+[[rule]]
+id = "SAI-43"
+family = "SAI"
+section = "15.22.1"
+status = "candidate"
+class = "BS"
+stage = 3
+title = "Unauthorized is indistinguishable from nonexistent"
+tests = []
+
+[[rule]]
+id = "SAI-44"
+family = "SAI"
+section = "15.22.1"
+status = "candidate"
+class = "BS"
+stage = 14
+title = "Composite integrity"
+tests = []
+
+[[rule]]
+id = "SAI-45"
+family = "SAI"
+section = "15.22.1"
+status = "candidate"
+class = "UDC"
+title = "Signer isolation"
+tests = []
+
+[[rule]]
+id = "SAI-46"
+family = "SAI"
+section = "15.22.1"
+status = "candidate"
+class = "BS"
+stage = 4
+title = "No signing with unpublished keys"
+tests = []
+
+[[rule]]
+id = "IDI-1"
+family = "IDI"
+section = "10.11"
+status = "candidate"
+class = "BS"
+stage = 5
+title = "Identity plane configuration changes only via ADP commit"
+tests = []
+
+[[rule]]
+id = "IDI-2"
+family = "IDI"
+section = "10.11"
+status = "candidate"
+class = "BS"
+stage = 5
+title = "Credentials and login identifiers are realm-local; email is never a key"
+tests = []
+
+[[rule]]
+id = "IDI-3"
+family = "IDI"
+section = "10.11"
+status = "candidate"
+class = "BS"
+stage = 6
+title = "Attestations and risk signals never create Instance, KeyBinding or Grant"
+tests = []
+
+[[rule]]
+id = "IDI-4"
+family = "IDI"
+section = "10.11"
+status = "candidate"
+class = "BS"
+stage = 5
+title = "Realm RP ID change with passkeys requires irreversible CT3 action"
+tests = []
+
+[[rule]]
+id = "IDI-5"
+family = "IDI"
+section = "10.11"
+status = "candidate"
+class = "BS"
+stage = 5
+title = "Reject WebAuthn credentials whose BE flag changes or BE=0 with BS=1"
+tests = []
+
+[[rule]]
+id = "IDI-6"
+family = "IDI"
+section = "10.11"
+status = "candidate"
+class = "BS"
+stage = 1
+title = "Accepted signature alg comes from allowlist, never artifact header"
+tests = []
+
+[[rule]]
+id = "IDI-7"
+family = "IDI"
+section = "10.11"
+status = "candidate"
+class = "BS"
+stage = 5
+title = "Signed identity outputs only from completed authentication or session events"
+tests = []
+
+[[rule]]
+id = "IDI-8"
+family = "IDI"
+section = "10.11"
+status = "candidate"
+class = "BS"
+stage = 10
+title = "SAML verified node and processed node must be identical"
+tests = []
+
+[[rule]]
+id = "IDI-9"
+family = "IDI"
+section = "10.11"
+status = "candidate"
+class = "BS"
+stage = 6
+title = "Trust chains, VCs, CIBA or upstream tokens never create Grants alone"
+tests = []
+
+[[rule]]
+id = "IDI-10"
+family = "IDI"
+section = "10.11"
+status = "candidate"
+class = "BS"
+stage = 9
+title = "URL-form client_id never resolves to local or DCR registration"
+tests = []
+
+[[rule]]
+id = "IDI-11"
+family = "IDI"
+section = "10.11"
+status = "candidate"
+class = "UDC"
+stage = 10
+title = "Edge gateways never write directly to authority or identity stores"
+tests = []
+
+[[rule]]
+id = "IDI-12"
+family = "IDI"
+section = "10.11"
+status = "candidate"
+class = "BS"
+stage = 10
+title = "Unverifiable federation trust chain cuts off that issuer's Claims"
+tests = []
+
+[[rule]]
+id = "AGI-1"
+family = "AGI"
+section = "11.22.2"
+status = "candidate"
+stage = 9
+title = "Prior actors in projections derived only from Access lineage"
+tests = []
+
+[[rule]]
+id = "AGI-2"
+family = "AGI"
+section = "11.22.2"
+status = "candidate"
+stage = 9
+title = "Possessing a credential or state handle is never authority"
+tests = []
+
+[[rule]]
+id = "AGI-3"
+family = "AGI"
+section = "11.22.2"
+status = "candidate"
+stage = 6
+title = "Every Access projection issued to an agent Instance is cnf-bound"
+tests = []
+
+[[rule]]
+id = "AGI-4"
+family = "AGI"
+section = "11.22.2"
+status = "candidate"
+stage = 9
+title = "Agent Instance can never satisfy human-presence RequirementTerms"
+tests = []
+
+[[rule]]
+id = "AGI-5"
+family = "AGI"
+section = "11.22.2"
+status = "candidate"
+stage = 9
+title = "Viewer-dependent results never marked with shared public cache scope"
+tests = []
+
+[[rule]]
+id = "AGI-6"
+family = "AGI"
+section = "11.22.2"
+status = "candidate"
+stage = 9
+title = "Client-returned opaque state is at most a nonce reference"
+tests = []
+
+[[rule]]
+id = "AGI-7"
+family = "AGI"
+section = "11.22.2"
+status = "candidate"
+stage = 9
+title = "Inbound ID-JAG, act chains and agent cards enter only via Acceptance"
+tests = []
+
+[[rule]]
+id = "AGI-8"
+family = "AGI"
+section = "11.22.2"
+status = "candidate"
+stage = 9
+title = "Agent's own-request contribution only via user's own Instance AIS"
+tests = []
+
+[[rule]]
+id = "TNI-1"
+family = "TNI"
+section = "12.9"
+status = "candidate"
+stage = 3
+title = "Tenant, organization and email are never authority inputs"
+tests = []
+
+[[rule]]
+id = "TNI-2"
+family = "TNI"
+section = "12.9"
+status = "candidate"
+stage = 4
+title = "Realm keys and domain operational keys are strictly separated"
+tests = []
+
+[[rule]]
+id = "TNI-3"
+family = "TNI"
+section = "12.9"
+status = "candidate"
+stage = 2
+title = "Tenant isolation enforced by keys, composite FKs and forced RLS"
+tests = []
+
+[[rule]]
+id = "TNI-4"
+family = "TNI"
+section = "12.9"
+status = "candidate"
+stage = 8
+title = "Recovery is never weaker than what it protects"
+tests = []
+
+[[rule]]
+id = "TNI-5"
+family = "TNI"
+section = "12.9"
+status = "candidate"
+stage = 8
+title = "Proof of ownership invalidates all prior credentials and sessions"
+tests = []
+
+[[rule]]
+id = "TNI-6"
+family = "TNI"
+section = "12.9"
+status = "candidate"
+stage = 7
+title = "No action may write or choose another Party's credentials"
+tests = []
+
+[[rule]]
+id = "TNI-7"
+family = "TNI"
+section = "12.9"
+status = "candidate"
+stage = 3
+title = "No grant above own effective set; moves cannot amplify"
+tests = []
+
+[[rule]]
+id = "TNI-8"
+family = "TNI"
+section = "12.9"
+status = "candidate"
+stage = 8
+title = "Lifecycle events change authority only through Claims and Exercises"
+tests = []
+
+[[rule]]
+id = "TNI-9"
+family = "TNI"
+section = "12.9"
+status = "candidate"
+stage = 5
+title = "Resumed suspended authentication cannot raise assurance"
+tests = []
+
+[[rule]]
+id = "TNI-10"
+family = "TNI"
+section = "12.9"
+status = "candidate"
+stage = 2
+title = "Tombstones never decide; user identifiers are never reused"
+tests = []
+
+[[rule]]
+id = "TNI-11"
+family = "TNI"
+section = "12.9"
+status = "candidate"
+stage = 8
+title = "Merging identities never merges authority"
+tests = []
+
+[[rule]]
+id = "TNI-12"
+family = "TNI"
+section = "12.9"
+status = "candidate"
+stage = 7
+title = "Console sessions cannot read or write authority state"
+tests = []
+
+[[rule]]
+id = "TNI-13"
+family = "TNI"
+section = "12.9"
+status = "candidate"
+stage = 7
+title = "Support access is delegation, never impersonation"
+tests = []
+
+[[rule]]
+id = "OPI-1"
+family = "OPI"
+section = "17.13"
+status = "candidate"
+stage = 2
+title = "Outbox consumer progress never skips reconstructable state"
+tests = []
+
+[[rule]]
+id = "OPI-2"
+family = "OPI"
+section = "17.13"
+status = "candidate"
+stage = 13
+title = "No security reads from asynchronous replicas"
+tests = []
+
+[[rule]]
+id = "OPI-3"
+family = "OPI"
+section = "17.13"
+status = "candidate"
+stage = 5
+title = "Cache miss never means not revoked; unreachable source means deny"
+tests = []
+
+[[rule]]
+id = "OPI-4"
+family = "OPI"
+section = "17.13"
+status = "candidate"
+stage = 13
+title = "Identity security writes not acknowledged before sync quorum"
+tests = []
+
+[[rule]]
+id = "OPI-5"
+family = "OPI"
+section = "17.13"
+status = "candidate"
+stage = 13
+title = "No last-writer-wins conflict resolution for security state"
+tests = []
+
+[[rule]]
+id = "OPI-6"
+family = "OPI"
+section = "17.13"
+status = "candidate"
+stage = 2
+title = "Identity security change and its audit record share one transaction"
+tests = []

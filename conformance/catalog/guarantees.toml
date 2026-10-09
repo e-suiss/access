@@ -1,0 +1,3071 @@
+# OP-81
+
+[[rule]]
+id = "G1"
+family = "G"
+section = "13.4"
+status = "canonical"
+class = "BS"
+stage = 3
+title = "Positive authority originates only via meta-Exercise in Anchor lineage"
+tests = []
+
+[[rule]]
+id = "G2"
+family = "G"
+section = "13.4"
+status = "canonical"
+class = "BS"
+stage = 3
+title = "Non-amplification: child within parent, projection within source"
+tests = []
+
+[[rule]]
+id = "G3"
+family = "G"
+section = "13.4"
+status = "canonical"
+class = "BS"
+stage = 3
+title = "Every Exercise draws from all lineage budgets; units consumed at most once"
+tests = []
+
+[[rule]]
+id = "G4"
+family = "G"
+section = "13.4"
+status = "canonical"
+class = "BS"
+stage = 3
+title = "Revocation denies every later online commit, continue or projection"
+tests = []
+
+[[rule]]
+id = "G5"
+family = "G"
+section = "13.4"
+status = "canonical"
+class = "BS"
+stage = 3
+title = "Invalidity is terminal and cascading; nothing revives"
+tests = []
+
+[[rule]]
+id = "G6"
+family = "G"
+section = "13.4"
+status = "canonical"
+class = "BS"
+stage = 3
+title = "Restrictions only narrow; removing or loosening one is widening"
+tests = []
+
+[[rule]]
+id = "G7"
+family = "G"
+section = "13.4"
+status = "canonical"
+class = "BS"
+stage = 3
+title = "A Claim is a decision input only within its Acceptance use"
+tests = []
+
+[[rule]]
+id = "G8"
+family = "G"
+section = "13.4"
+status = "canonical"
+class = "BS"
+stage = 3
+title = "Issuer compromise yields only the declared effect of its use"
+tests = []
+
+[[rule]]
+id = "G9"
+family = "G"
+section = "13.4"
+status = "canonical"
+class = "BS"
+stage = 3
+title = "Ingest-time cutoff narrows and terminally closes dependent episodes"
+tests = []
+
+[[rule]]
+id = "G10"
+family = "G"
+section = "13.4"
+status = "canonical"
+class = "BS"
+stage = 3
+title = "Foreign authority only via foreign Acceptance and bridging ceiling"
+tests = []
+
+[[rule]]
+id = "G11"
+family = "G"
+section = "13.4"
+status = "canonical"
+class = "BS"
+stage = 3
+title = "Unaccepted schema versions or mappings never change Grant scope"
+tests = []
+
+[[rule]]
+id = "G12"
+family = "G"
+section = "13.4"
+status = "canonical"
+class = "BS"
+stage = 3
+title = "Approval is a single-use contribution Exercise bound to exact digest"
+tests = []
+
+[[rule]]
+id = "G13"
+family = "G"
+section = "13.4"
+status = "canonical"
+class = "BS"
+stage = 3
+title = "Approved digest equals the Exercise's surface-independent intent digest"
+tests = []
+
+[[rule]]
+id = "G14"
+family = "G"
+section = "13.4"
+status = "canonical"
+class = "BS"
+stage = 3
+title = "Actor attribution only via actor Instance KeyBinding-signed AIS"
+tests = []
+
+[[rule]]
+id = "G15"
+family = "G"
+section = "13.4"
+status = "canonical"
+class = "BS"
+stage = 3
+title = "Capacity lies within basis Grant agency; Anonymous holds nothing"
+tests = []
+
+[[rule]]
+id = "G16"
+family = "G"
+section = "13.4"
+status = "canonical"
+class = "BS"
+stage = 3
+title = "Access decisions are never UNKNOWN; protocol errors produce no effect"
+tests = []
+
+[[rule]]
+id = "G17"
+family = "G"
+section = "13.4"
+status = "canonical"
+class = "BS"
+stage = 1
+title = "Same records and inputs yield same decision and consumption"
+tests = []
+
+[[rule]]
+id = "G18"
+family = "G"
+section = "13.4"
+status = "canonical"
+class = "BS"
+stage = 6
+title = "Decision is not a credential; projections are holder-bound"
+tests = []
+
+[[rule]]
+id = "G19"
+family = "G"
+section = "13.4"
+status = "canonical"
+class = "BS"
+stage = 3
+title = "Events, event loss or reordering never widen authority"
+tests = []
+
+[[rule]]
+id = "G20"
+family = "G"
+section = "13.4"
+status = "canonical"
+class = "BS"
+stage = 1
+title = "Must-understand fails closed; downgrade counts as widening"
+tests = []
+
+[[rule]]
+id = "G21"
+family = "G"
+section = "13.4"
+status = "canonical"
+class = "BS"
+stage = 13
+title = "Single authoritative lineage per domain; stale provider artifacts invalid"
+tests = []
+
+[[rule]]
+id = "G22"
+family = "G"
+section = "13.4"
+status = "canonical"
+class = "BS"
+stage = 3
+title = "Authority cannot be backdated"
+tests = []
+
+[[rule]]
+id = "G23"
+family = "G"
+section = "13.4"
+status = "canonical"
+class = "BS"
+stage = 2
+title = "Record existence, attribution, lineage, digest and time are undeletable"
+tests = []
+
+[[rule]]
+id = "G24"
+family = "G"
+section = "13.4"
+status = "canonical"
+class = "BS"
+stage = 3
+title = "First party, hosting, custody or operator carry no special authority"
+tests = []
+
+[[rule]]
+id = "G25"
+family = "G"
+section = "13.4"
+status = "canonical"
+class = "BS"
+title = "In-envelope use within open ValidityContract window classed as in-authority"
+tests = []
+
+[[rule]]
+id = "G26"
+family = "G"
+section = "13.4"
+status = "canonical"
+class = "BS"
+stage = 3
+title = "Batches are not atomic; each item is its own Exercise"
+tests = []
+
+[[rule]]
+id = "G27"
+family = "G"
+section = "13.4"
+status = "canonical"
+class = "BS"
+stage = 3
+title = "Explanations, search and events never exceed viewer authority"
+tests = []
+
+[[rule]]
+id = "G28"
+family = "G"
+section = "13.4"
+status = "canonical"
+class = "BS"
+stage = 3
+title = "Consequential reads and exports are recorded attributable Exercises"
+tests = []
+
+[[rule]]
+id = "G29"
+family = "G"
+section = "13.4"
+status = "canonical"
+class = "BS"
+stage = 12
+title = "Break-glass and containment only via pre-issued reserved Grants"
+tests = []
+
+[[rule]]
+id = "G30"
+family = "G"
+section = "13.4"
+status = "canonical"
+class = "BS"
+stage = 11
+title = "Satisfied Gate is not ALLOW; Work cannot meet Access requirements"
+tests = []
+
+[[rule]]
+id = "G31"
+family = "G"
+section = "13.4"
+status = "canonical"
+class = "BS"
+stage = 3
+title = "Revocation is not stop; continuation DENY is semantic"
+tests = []
+
+[[rule]]
+id = "G32"
+family = "G"
+section = "13.4"
+status = "canonical"
+class = "BS"
+stage = 13
+title = "Replay divergence never blocks handover or recovery"
+tests = []
+
+[[rule]]
+id = "G33"
+family = "G"
+section = "13.4"
+status = "canonical"
+class = "BS"
+stage = 13
+title = "Derived layer never overrides canonical log or recorded effects"
+tests = []
+
+[[rule]]
+id = "G34"
+family = "G"
+section = "13.4"
+status = "canonical"
+class = "BS"
+stage = 2
+title = "Record corruption never alters log content; identity is commitment"
+tests = []
+
+[[rule]]
+id = "G35"
+family = "G"
+section = "13.4"
+status = "canonical"
+class = "BS"
+stage = 1
+title = "Artifacts signed with another domain's operational key are rejected"
+tests = []
+
+[[rule]]
+id = "G36"
+family = "G"
+section = "13.4"
+status = "canonical"
+class = "BS"
+stage = 3
+title = "Ambiguous issuer order disqualifies; stale Claims open no episode"
+tests = []
+
+[[rule]]
+id = "G37"
+family = "G"
+section = "13.4"
+status = "canonical"
+class = "BS"
+stage = 3
+title = "No implicit leakage; position identifiers opaque to sub-audit viewers"
+tests = []
+
+[[rule]]
+id = "G38"
+family = "G"
+section = "13.4"
+status = "canonical"
+class = "BS"
+stage = 0
+title = "Spec wins over implementation on divergence"
+tests = [
+  "xtask/src/catalog.rs::g38_ti_rt12_regeneration_follows_the_spec_and_keeps_curation",
+]
+
+[[rule]]
+id = "G39"
+family = "G"
+section = "13.4"
+status = "canonical"
+class = "BS"
+stage = 8
+title = "UI never reports unknown state as confirmed or not recorded"
+tests = []
+
+[[rule]]
+id = "G40"
+family = "G"
+section = "13.4"
+status = "canonical"
+class = "BS"
+stage = 2
+title = "Retry with same nonce never creates a duplicate Exercise"
+tests = []
+
+[[rule]]
+id = "G41"
+family = "G"
+section = "13.4"
+status = "canonical"
+class = "BS"
+stage = 3
+title = "No ALLOW without commit"
+tests = []
+
+[[rule]]
+id = "G42"
+family = "G"
+section = "13.4"
+status = "canonical"
+class = "BS"
+stage = 4
+title = "No unsigned artifact is published"
+tests = []
+
+[[rule]]
+id = "G43"
+family = "G"
+section = "13.4"
+status = "canonical"
+class = "BS"
+stage = 4
+title = "No freshly signed stale status during derived outage"
+tests = []
+
+[[rule]]
+id = "G44"
+family = "G"
+section = "13.4"
+status = "canonical"
+class = "BS"
+stage = 3
+title = "Over-quota Claim bursts open no episodes; narrowing prioritized"
+tests = []
+
+[[rule]]
+id = "G45"
+family = "G"
+section = "13.4"
+status = "canonical"
+class = "BS"
+stage = 3
+title = "Identity plane outputs are only Claims; Grant is sole positive source"
+tests = []
+
+[[rule]]
+id = "G46"
+family = "G"
+section = "13.4"
+status = "canonical"
+class = "BS"
+stage = 1
+title = "Authority artifacts valid only with domain-bound operational or binding key"
+tests = []
+
+[[rule]]
+id = "G47"
+family = "G"
+section = "13.4"
+status = "canonical"
+class = "BS"
+stage = 1
+title = "DomainID is must-understand; cross-domain signed keys rejected"
+tests = []
+
+[[rule]]
+id = "G48"
+family = "G"
+section = "13.4"
+status = "canonical"
+class = "BS"
+stage = 3
+title = "No error state on decision path yields ALLOW or new token"
+tests = []
+
+[[rule]]
+id = "G49"
+family = "G"
+section = "13.4"
+status = "canonical"
+class = "BS"
+stage = 5
+title = "Never-cached subjects are not valid without canonical lookup"
+tests = []
+
+[[rule]]
+id = "G50"
+family = "G"
+section = "13.4"
+status = "canonical"
+class = "BS"
+stage = 5
+title = "Identity login and refresh return 503 when backend unreachable"
+tests = []
+
+[[rule]]
+id = "G51"
+family = "G"
+section = "13.4"
+status = "canonical"
+class = "BS"
+stage = 3
+title = "authz_epoch cache is advisory and never a widening source"
+tests = []
+
+[[rule]]
+id = "G52"
+family = "G"
+section = "13.4"
+status = "canonical"
+class = "BS"
+stage = 6
+title = "Cross-domain Party correlation only via recorded bridging Grant"
+tests = []
+
+[[rule]]
+id = "G53"
+family = "G"
+section = "13.4"
+status = "canonical"
+class = "BS"
+stage = 7
+title = "Support access is a Grant; no impersonation of users"
+tests = []
+
+[[rule]]
+id = "G54"
+family = "G"
+section = "13.4"
+status = "canonical"
+class = "BS"
+stage = 5
+title = "Identity plane configuration changes go through meta-Exercise"
+tests = []
+
+[[rule]]
+id = "G55"
+family = "G"
+section = "13.4"
+status = "canonical"
+class = "BS"
+stage = 1
+title = "Algorithm allowlist from metadata; none and JWS EdDSA rejected"
+tests = []
+
+[[rule]]
+id = "G56"
+family = "G"
+section = "13.4"
+status = "canonical"
+class = "BS"
+stage = 1
+title = "Arithmetic overflow in authority evaluation yields DENY"
+tests = []
+
+[[rule]]
+id = "G57"
+family = "G"
+section = "13.4"
+status = "canonical"
+class = "BS"
+stage = 5
+title = "No new tokens or assertions after identity session termination"
+tests = []
+
+[[rule]]
+id = "G58"
+family = "G"
+section = "13.4"
+status = "canonical"
+class = "BS"
+stage = 3
+title = "No splicing of delegation chains from two valid tokens"
+tests = []
+
+[[rule]]
+id = "G59"
+family = "G"
+section = "13.4"
+status = "canonical"
+class = "BS"
+stage = 9
+title = "Token vault release requires an ALLOWed Exercise"
+tests = []
+
+[[rule]]
+id = "G60"
+family = "G"
+section = "13.4"
+status = "canonical"
+class = "BS"
+stage = 1
+title = "Non-canonical CBOR, signatures or oversized input rejected"
+tests = []
+
+[[rule]]
+id = "G61"
+family = "G"
+section = "13.4"
+status = "canonical"
+class = "BS"
+stage = 4
+title = "No artifacts signed with unpublished keys"
+tests = []
+
+[[rule]]
+id = "G62"
+family = "G"
+section = "13.4"
+status = "canonical"
+class = "BS"
+stage = 3
+title = "Unauthorized requesters get identical responses for existing and nonexistent"
+tests = []
+
+[[rule]]
+id = "G63"
+family = "G"
+section = "13.4"
+status = "canonical"
+class = "BS"
+stage = 12
+title = "Operational break-glass path never produces authority decisions"
+tests = []
+
+[[rule]]
+id = "G64"
+family = "G"
+section = "13.4"
+status = "canonical"
+class = "BS"
+stage = 13
+title = "No commit with divergent semantics during mixed-version rolling upgrade"
+tests = []
+
+[[rule]]
+id = "U1"
+family = "U"
+section = "13.4"
+status = "canonical"
+class = "UDC"
+stage = 6
+title = "PEP enforces decision before effect"
+tests = []
+
+[[rule]]
+id = "U2"
+family = "U"
+section = "13.4"
+status = "canonical"
+class = "UDC"
+stage = 6
+title = "Verifier honors horizon, status and slice; revocation window closes"
+tests = []
+
+[[rule]]
+id = "U3"
+family = "U"
+section = "13.4"
+status = "canonical"
+class = "UDC"
+stage = 6
+title = "Group-audience slice sum stays within slice"
+tests = []
+
+[[rule]]
+id = "U4"
+family = "U"
+section = "13.4"
+status = "canonical"
+class = "UDC"
+stage = 6
+title = "Detection of hiding or reordering in offline report chain"
+tests = []
+
+[[rule]]
+id = "U5"
+family = "U"
+section = "13.4"
+status = "canonical"
+class = "UDC"
+stage = 9
+title = "Executor checks at checkpoints and confirms stop"
+tests = []
+
+[[rule]]
+id = "U6"
+family = "U"
+section = "13.4"
+status = "canonical"
+class = "UDC"
+stage = 6
+title = "Executed body equals approved digest"
+tests = []
+
+[[rule]]
+id = "U7"
+family = "U"
+section = "13.4"
+status = "canonical"
+class = "UDC"
+stage = 12
+title = "Render shown to user equals render in AAS"
+tests = []
+
+[[rule]]
+id = "U8"
+family = "U"
+section = "13.4"
+status = "canonical"
+class = "UDC"
+stage = 6
+title = "Upstream binding across PEP chains"
+tests = []
+
+[[rule]]
+id = "U9"
+family = "U"
+section = "13.4"
+status = "canonical"
+class = "UDC"
+stage = 13
+title = "Equivocation detection"
+tests = []
+
+[[rule]]
+id = "U10"
+family = "U"
+section = "13.4"
+status = "canonical"
+class = "UDC"
+stage = 13
+title = "No loss of acknowledged revocations or CT3 in forced recovery"
+tests = []
+
+[[rule]]
+id = "U11"
+family = "U"
+section = "13.4"
+status = "canonical"
+class = "UDC"
+stage = 13
+title = "Old provider actually stops writing"
+tests = []
+
+[[rule]]
+id = "U12"
+family = "U"
+section = "13.4"
+status = "canonical"
+class = "UDC"
+stage = 13
+title = "Old-key artifacts actually rejected after recovery"
+tests = []
+
+[[rule]]
+id = "U13"
+family = "U"
+section = "13.4"
+status = "canonical"
+class = "UDC"
+stage = 1
+title = "Detection of wrong provider decisions"
+tests = []
+
+[[rule]]
+id = "U14"
+family = "U"
+section = "13.4"
+status = "canonical"
+class = "UDC"
+stage = 4
+title = "Actor key used only by the actor"
+tests = []
+
+[[rule]]
+id = "U15"
+family = "U"
+section = "13.4"
+status = "canonical"
+class = "UDC"
+stage = 4
+title = "Custodian cannot impersonate without the user's act"
+tests = []
+
+[[rule]]
+id = "U16"
+family = "U"
+section = "13.4"
+status = "canonical"
+class = "UDC"
+stage = 13
+title = "Provider operator cannot perform recovery"
+tests = []
+
+[[rule]]
+id = "U17"
+family = "U"
+section = "13.4"
+status = "canonical"
+class = "UDC"
+stage = 3
+title = "Approvers are distinct people, devices and surfaces"
+tests = []
+
+[[rule]]
+id = "U18"
+family = "U"
+section = "13.4"
+status = "canonical"
+class = "UDC"
+title = "Rate, throttling, oracle and structuring controls"
+tests = []
+
+[[rule]]
+id = "U19"
+family = "U"
+section = "13.4"
+status = "canonical"
+class = "UDC"
+stage = 6
+title = "Intermittent revocation propagation within delta"
+tests = []
+
+[[rule]]
+id = "U20"
+family = "U"
+section = "13.4"
+status = "canonical"
+class = "UDC"
+stage = 9
+title = "Agent's real-world identity and runtime configuration"
+tests = []
+
+[[rule]]
+id = "U21"
+family = "U"
+section = "13.4"
+status = "canonical"
+class = "UDC"
+stage = 13
+title = "Proof that a record existed by time T"
+tests = []
+
+[[rule]]
+id = "U22"
+family = "U"
+section = "13.4"
+status = "canonical"
+class = "UDC"
+stage = 8
+title = "Redacted content cannot be recovered"
+tests = []
+
+[[rule]]
+id = "U23"
+family = "U"
+section = "13.4"
+status = "canonical"
+class = "UDC"
+stage = 2
+title = "Central PEP replay yields a single effect"
+tests = []
+
+[[rule]]
+id = "U24"
+family = "U"
+section = "13.4"
+status = "canonical"
+class = "UDC"
+stage = 13
+title = "Forced recovery is always possible without lock-in"
+tests = []
+
+[[rule]]
+id = "U25"
+family = "U"
+section = "13.4"
+status = "canonical"
+class = "UDC"
+stage = 6
+title = "Stolen provider key impact bounded by verifier local ceilings"
+tests = []
+
+[[rule]]
+id = "U26"
+family = "U"
+section = "13.4"
+status = "canonical"
+class = "UDC"
+stage = 6
+title = "Custodian-signed regime key events visible in Party's Changes view"
+tests = []
+
+[[rule]]
+id = "U27"
+family = "U"
+section = "13.4"
+status = "canonical"
+class = "UDC"
+stage = 13
+title = "Off-lineage old-key artifacts rejected after cooperative handover"
+tests = []
+
+[[rule]]
+id = "U28"
+family = "U"
+section = "13.4"
+status = "canonical"
+class = "UDC"
+stage = 13
+title = "AIS from lost recovery suffix opens no second Exercise"
+tests = []
+
+[[rule]]
+id = "U29"
+family = "U"
+section = "13.4"
+status = "canonical"
+class = "UDC"
+stage = 2
+title = "Time-bound terms do not drift with clock jumps"
+tests = []
+
+[[rule]]
+id = "U30"
+family = "U"
+section = "13.4"
+status = "canonical"
+class = "UDC"
+stage = 2
+title = "No decisions on corrupted rows after silent corruption is detected"
+tests = []
+
+[[rule]]
+id = "U31"
+family = "U"
+section = "13.4"
+status = "canonical"
+class = "UDC"
+stage = 3
+title = "Timed-out result fixed at end of intent validity window"
+tests = []
+
+[[rule]]
+id = "U32"
+family = "U"
+section = "13.4"
+status = "canonical"
+class = "UDC"
+stage = 13
+title = "Acknowledged records survive DB primary failover"
+tests = []
+
+[[rule]]
+id = "U33"
+family = "U"
+section = "13.4"
+status = "canonical"
+class = "UDC"
+stage = 13
+title = "No dual writers after region loss"
+tests = []
+
+[[rule]]
+id = "U34"
+family = "U"
+section = "13.4"
+status = "canonical"
+class = "UDC"
+stage = 3
+title = "Bulk meta-Exercise does not lock the domain"
+tests = []
+
+[[rule]]
+id = "U35"
+family = "U"
+section = "13.4"
+status = "canonical"
+class = "UDC"
+stage = 13
+title = "Fast session_epoch revocation propagation within latency bounds"
+tests = []
+
+[[rule]]
+id = "U36"
+family = "U"
+section = "13.4"
+status = "canonical"
+class = "UDC"
+stage = 5
+title = "Revoked session accepted by JWT-only RS at most token lifetime plus skew"
+tests = []
+
+[[rule]]
+id = "U37"
+family = "U"
+section = "13.4"
+status = "canonical"
+class = "UDC"
+stage = 5
+title = "Strict introspection returns active=false when freshness unprovable"
+tests = []
+
+[[rule]]
+id = "U38"
+family = "U"
+section = "13.4"
+status = "canonical"
+class = "UDC"
+stage = 7
+title = "Signal-consuming RS ends session within declared time after revocation event"
+tests = []
+
+[[rule]]
+id = "U39"
+family = "U"
+section = "13.4"
+status = "canonical"
+class = "UDC"
+stage = 3
+title = "Pre-signed identity tokens remain valid within lifetime during backend outage"
+tests = []
+
+[[rule]]
+id = "U40"
+family = "U"
+section = "13.4"
+status = "canonical"
+class = "UDC"
+stage = 5
+title = "Pairwise sub prevents RPs correlating the same user"
+tests = []
+
+[[rule]]
+id = "U41"
+family = "U"
+section = "13.4"
+status = "canonical"
+class = "UDC"
+stage = 4
+title = "Stolen operational key impact bounded by key lifetime and verifier ceiling"
+tests = []
+
+[[rule]]
+id = "U42"
+family = "U"
+section = "13.4"
+status = "canonical"
+class = "UDC"
+stage = 4
+title = "No key material leaks from the signer process"
+tests = []
+
+[[rule]]
+id = "U43"
+family = "U"
+section = "13.4"
+status = "canonical"
+class = "UDC"
+stage = 10
+title = "Parser worker memory corruption or panic cannot reach signer"
+tests = []
+
+[[rule]]
+id = "U44"
+family = "U"
+section = "13.4"
+status = "canonical"
+class = "UDC"
+stage = 5
+title = "No account-existence differences in responses; timing below threshold"
+tests = []
+
+[[rule]]
+id = "U45"
+family = "U"
+section = "13.4"
+status = "canonical"
+class = "UDC"
+stage = 1
+title = "Secret comparisons are constant-time"
+tests = []
+
+[[rule]]
+id = "U46"
+family = "U"
+section = "13.4"
+status = "canonical"
+class = "UDC"
+stage = 5
+title = "Brute-force ceiling holds even if global rate store fails"
+tests = []
+
+[[rule]]
+id = "U47"
+family = "U"
+section = "13.4"
+status = "canonical"
+class = "UDC"
+stage = 5
+title = "Argon2 password hashing load does not starve other endpoints"
+tests = []
+
+[[rule]]
+id = "U48"
+family = "U"
+section = "13.4"
+status = "canonical"
+class = "UDC"
+stage = 1
+title = "Parser resource use bounded by input size"
+tests = []
+
+[[rule]]
+id = "U49"
+family = "U"
+section = "13.4"
+status = "canonical"
+class = "UDC"
+stage = 13
+title = "Provenance of published binaries and images is verifiable"
+tests = []
+
+[[rule]]
+id = "U50"
+family = "U"
+section = "13.4"
+status = "canonical"
+class = "UDC"
+title = "Reproducible builds yield identical digests (goal, not guarantee)"
+tests = []
+
+[[rule]]
+id = "U51"
+family = "U"
+section = "13.4"
+status = "canonical"
+class = "UDC"
+stage = 2
+title = "Acknowledged security events are never lost"
+tests = []
+
+[[rule]]
+id = "U52"
+family = "U"
+section = "13.4"
+status = "canonical"
+class = "UDC"
+stage = 13
+title = "Identity audit records reach tamper-evident checkpoint within one second"
+tests = []
+
+[[rule]]
+id = "U53"
+family = "U"
+section = "13.4"
+status = "canonical"
+class = "UDC"
+stage = 7
+title = "Audit records never sampled; audit reads also logged"
+tests = []
+
+[[rule]]
+id = "U54"
+family = "U"
+section = "13.4"
+status = "canonical"
+class = "UDC"
+stage = 13
+title = "Dedicated compute removes co-tenant microarchitectural side channels"
+tests = []
+
+[[rule]]
+id = "U55"
+family = "U"
+section = "13.4"
+status = "canonical"
+class = "UDC"
+stage = 5
+title = "DPoP proofs cannot be replayed"
+tests = []
+
+[[rule]]
+id = "U56"
+family = "U"
+section = "13.4"
+status = "canonical"
+class = "UDC"
+stage = 14
+title = "Releases ship only after passing vectors, DRT and proofs"
+tests = []
+
+[[rule]]
+id = "U57"
+family = "U"
+section = "13.4"
+status = "canonical"
+class = "UDC"
+stage = 12
+title = "Support Grants are time-limited, recorded and user-visible"
+tests = []
+
+[[rule]]
+id = "U58"
+family = "U"
+section = "13.4"
+status = "canonical"
+class = "UDC"
+stage = 8
+title = "Crypto-shredded PII unreadable after key destruction"
+tests = []
+
+[[rule]]
+id = "U59"
+family = "U"
+section = "13.4"
+status = "canonical"
+class = "UDC"
+stage = 2
+title = "Database queries without domain or tenant scope cannot compile or run"
+tests = []
+
+[[rule]]
+id = "U60"
+family = "U"
+section = "13.4"
+status = "canonical"
+class = "UDC"
+stage = 6
+title = "Stale projection rejected for content written after it"
+tests = []
+
+[[rule]]
+id = "U61"
+family = "U"
+section = "13.4"
+status = "canonical"
+class = "UDC"
+stage = 3
+title = "Advisory cache staleness bounded and never yields ALLOW"
+tests = []
+
+[[rule]]
+id = "U62"
+family = "U"
+section = "13.4"
+status = "canonical"
+class = "UDC"
+stage = 11
+title = "Domain regulatory template rules enforced on decision path"
+tests = []
+
+[[rule]]
+id = "U63"
+family = "U"
+section = "13.4"
+status = "canonical"
+class = "UDC"
+stage = 6
+title = "MCP list cache causes no cross-tenant disclosure"
+tests = []
+
+[[rule]]
+id = "U64"
+family = "U"
+section = "13.4"
+status = "canonical"
+class = "UDC"
+stage = 6
+title = "subscriptions/listen stream carries no events past horizon"
+tests = []
+
+[[rule]]
+id = "U65"
+family = "U"
+section = "13.4"
+status = "canonical"
+class = "UDC"
+stage = 9
+title = "Brokered unbound upstream tokens are short-lived, single-audience"
+tests = []
+
+[[rule]]
+id = "U66"
+family = "U"
+section = "13.4"
+status = "canonical"
+class = "UDC"
+stage = 9
+title = "Vault and broker enforce G59 on every release path"
+tests = []
+
+[[rule]]
+id = "U67"
+family = "U"
+section = "13.4"
+status = "canonical"
+class = "UDC"
+stage = 8
+title = "Account recovery cooling gives legitimate owner an objection window"
+tests = []
+
+[[rule]]
+id = "U68"
+family = "U"
+section = "13.4"
+status = "canonical"
+class = "UDC"
+stage = 13
+title = "Existed-by-T holds after algorithm break for PQ re-anchored records"
+tests = []
+
+[[rule]]
+id = "U69"
+family = "U"
+section = "13.4"
+status = "canonical"
+class = "UDC"
+stage = 5
+title = "Leaked database secrets and opaque tokens not directly reusable"
+tests = []
+
+[[rule]]
+id = "U70"
+family = "U"
+section = "13.4"
+status = "canonical"
+class = "UDC"
+stage = 2
+title = "Detection of identity audit log changes before published checkpoint"
+tests = []
+
+[[rule]]
+id = "U71"
+family = "U"
+section = "13.4"
+status = "canonical"
+class = "UDC"
+stage = 13
+title = "Superseded binding key rejected for new production after re-anchor"
+tests = []
+
+[[rule]]
+id = "N-1"
+family = "N"
+section = "13.4"
+status = "canonical"
+class = "NG/PU"
+stage = 0
+title = "Truth of a signed Claim"
+tests = []
+
+[[rule]]
+id = "N-2"
+family = "N"
+section = "13.4"
+status = "canonical"
+class = "NG/PU"
+stage = 0
+title = "Timely delivery of events and signals"
+tests = []
+
+[[rule]]
+id = "N-3"
+family = "N"
+section = "13.4"
+status = "canonical"
+class = "NG/PU"
+stage = 0
+title = "Revocation stopping a running executor without confirmation"
+tests = []
+
+[[rule]]
+id = "N-4"
+family = "N"
+section = "13.4"
+status = "canonical"
+class = "NG/PU"
+stage = 0
+title = "Immediate revocation at offline verifiers"
+tests = []
+
+[[rule]]
+id = "N-5"
+family = "N"
+section = "13.4"
+status = "canonical"
+class = "NG/PU"
+stage = 0
+title = "Effect occurrence, correctness or exactly-once execution"
+tests = []
+
+[[rule]]
+id = "N-6"
+family = "N"
+section = "13.4"
+status = "canonical"
+class = "NG/PU"
+stage = 0
+title = "Semantic correctness of accepted compatibility mappings"
+tests = []
+
+[[rule]]
+id = "N-7"
+family = "N"
+section = "13.4"
+status = "canonical"
+class = "NG/PU"
+stage = 0
+title = "Faithful rendering by non-conformant surfaces"
+tests = []
+
+[[rule]]
+id = "N-8"
+family = "N"
+section = "13.4"
+status = "canonical"
+class = "NG/PU"
+stage = 0
+title = "Approver actually read, understood or decided wisely"
+tests = []
+
+[[rule]]
+id = "N-9"
+family = "N"
+section = "13.4"
+status = "canonical"
+class = "NG/PU"
+stage = 0
+title = "Independence of apparently independent people; collusion resistance"
+tests = []
+
+[[rule]]
+id = "N-10"
+family = "N"
+section = "13.4"
+status = "canonical"
+class = "NG/PU"
+stage = 0
+title = "Model prompt-injection resistance; detecting compromised authorized agents"
+tests = []
+
+[[rule]]
+id = "N-11"
+family = "N"
+section = "13.4"
+status = "canonical"
+class = "NG/PU"
+stage = 0
+title = "Recipients forgetting disclosed data; redaction erasing distributed copies"
+tests = []
+
+[[rule]]
+id = "N-12"
+family = "N"
+section = "13.4"
+status = "canonical"
+class = "NG/PU"
+stage = 0
+title = "Full prevention of policy inference from decision surface"
+tests = []
+
+[[rule]]
+id = "N-13"
+family = "N"
+section = "13.4"
+status = "canonical"
+class = "NG/PU"
+stage = 0
+title = "Prevention of wrong provider decisions or equivocation"
+tests = []
+
+[[rule]]
+id = "N-14"
+family = "N"
+section = "13.4"
+status = "canonical"
+class = "NG/PU"
+stage = 0
+title = "Losslessness of forced recovery without witnesses or replicas"
+tests = []
+
+[[rule]]
+id = "N-15"
+family = "N"
+section = "13.4"
+status = "canonical"
+class = "NG/PU"
+stage = 0
+title = "Truth of malicious verifier reports or lost-device reports"
+tests = []
+
+[[rule]]
+id = "N-16"
+family = "N"
+section = "13.4"
+status = "canonical"
+class = "NG/PU"
+stage = 0
+title = "Custodian not impersonating the Party in non-user-gated custodial mode"
+tests = []
+
+[[rule]]
+id = "N-17"
+family = "N"
+section = "13.4"
+status = "canonical"
+class = "NG/PU"
+stage = 0
+title = "Personhood uniqueness (Sybil resistance)"
+tests = []
+
+[[rule]]
+id = "N-18"
+family = "N"
+section = "13.4"
+status = "canonical"
+class = "NG/PU"
+stage = 0
+title = "In-domain recovery from sole root compromise"
+tests = []
+
+[[rule]]
+id = "N-19"
+family = "N"
+section = "13.4"
+status = "canonical"
+class = "NG/PU"
+stage = 0
+title = "Legitimacy of Genesis"
+tests = []
+
+[[rule]]
+id = "N-20"
+family = "N"
+section = "13.4"
+status = "canonical"
+class = "NG/PU"
+stage = 0
+title = "Availability of Access"
+tests = []
+
+[[rule]]
+id = "N-21"
+family = "N"
+section = "13.4"
+status = "canonical"
+class = "NG/PU"
+stage = 0
+title = "Legal non-repudiation or liability"
+tests = []
+
+[[rule]]
+id = "N-22"
+family = "N"
+section = "13.4"
+status = "canonical"
+class = "NG/PU"
+stage = 0
+title = "Operator unable to read body content"
+tests = []
+
+[[rule]]
+id = "N-23"
+family = "N"
+section = "13.4"
+status = "canonical"
+class = "NG/PU"
+stage = 0
+title = "Agent complying with explanations or remediation"
+tests = []
+
+[[rule]]
+id = "N-24"
+family = "N"
+section = "13.4"
+status = "canonical"
+class = "NG/PU"
+stage = 0
+title = "Distinguishing ambient sessions from the user in external systems"
+tests = []
+
+[[rule]]
+id = "N-25"
+family = "N"
+section = "13.4"
+status = "canonical"
+class = "NG/PU"
+stage = 0
+title = "Reversal of effects performed during a compromise window"
+tests = []
+
+[[rule]]
+id = "N-26"
+family = "N"
+section = "13.4"
+status = "canonical"
+class = "NG/PU"
+stage = 0
+title = "Preventing forged PAP or receipt acceptance after provider key theft"
+tests = []
+
+[[rule]]
+id = "N-27"
+family = "N"
+section = "13.4"
+status = "canonical"
+class = "NG/PU"
+stage = 0
+title = "Client knowing commit result on timeout before Access replies"
+tests = []
+
+[[rule]]
+id = "N-28"
+family = "N"
+section = "13.4"
+status = "canonical"
+class = "NG/PU"
+stage = 0
+title = "Correct time-bound terms when all time sources and witnesses lie"
+tests = []
+
+[[rule]]
+id = "N-29"
+family = "N"
+section = "13.4"
+status = "canonical"
+class = "NG/PU"
+stage = 0
+title = "Preventing wrong decisions from undetected silent storage corruption"
+tests = []
+
+[[rule]]
+id = "N-30"
+family = "N"
+section = "13.4"
+status = "canonical"
+class = "NG/PU"
+stage = 0
+title = "Rejecting off-lineage signatures when all witnesses are malicious"
+tests = []
+
+[[rule]]
+id = "N-31"
+family = "N"
+section = "13.4"
+status = "canonical"
+class = "NG/PU"
+stage = 0
+title = "No cross-domain or cross-RP correlation via keys, timing or behavior"
+tests = []
+
+[[rule]]
+id = "N-32"
+family = "N"
+section = "13.4"
+status = "canonical"
+class = "NG/PU"
+stage = 0
+title = "No co-tenant microarchitectural side channels on shared hardware"
+tests = []
+
+[[rule]]
+id = "N-33"
+family = "N"
+section = "13.4"
+status = "canonical"
+class = "NG/PU"
+stage = 0
+title = "Operational key not stolen from memory after host compromise"
+tests = []
+
+[[rule]]
+id = "N-34"
+family = "N"
+section = "13.4"
+status = "canonical"
+class = "NG/PU"
+stage = 0
+title = "zeroize erasing every copy of a secret"
+tests = []
+
+[[rule]]
+id = "N-35"
+family = "N"
+section = "13.4"
+status = "canonical"
+class = "NG/PU"
+stage = 0
+title = "Compiler and CPU preserving constant-time code"
+tests = []
+
+[[rule]]
+id = "N-36"
+family = "N"
+section = "13.4"
+status = "canonical"
+class = "NG/PU"
+stage = 0
+title = "Formal verification of async runtime and HTTP layer"
+tests = []
+
+[[rule]]
+id = "N-37"
+family = "N"
+section = "13.4"
+status = "canonical"
+class = "NG/PU"
+stage = 0
+title = "Post-quantum security of WebAuthn and passkey ceremonies"
+tests = []
+
+[[rule]]
+id = "N-38"
+family = "N"
+section = "13.4"
+status = "canonical"
+class = "NG/PU"
+stage = 0
+title = "Timely, ordered delivery of SSF/CAEP signals"
+tests = []
+
+[[rule]]
+id = "N-39"
+family = "N"
+section = "13.4"
+status = "canonical"
+class = "NG/PU"
+stage = 0
+title = "Revocation before token expiry at JWT-only RS"
+tests = []
+
+[[rule]]
+id = "N-40"
+family = "N"
+section = "13.4"
+status = "canonical"
+class = "NG/PU"
+stage = 0
+title = "Revoking offline-held tokens in a single operation"
+tests = []
+
+[[rule]]
+id = "N-41"
+family = "N"
+section = "13.4"
+status = "canonical"
+class = "NG/PU"
+stage = 0
+title = "Passkeys preventing post-authentication session or token theft"
+tests = []
+
+[[rule]]
+id = "N-42"
+family = "N"
+section = "13.4"
+status = "canonical"
+class = "NG/PU"
+stage = 0
+title = "Crypto-shredding counting as GDPR erasure"
+tests = []
+
+[[rule]]
+id = "N-43"
+family = "N"
+section = "13.4"
+status = "canonical"
+class = "NG/PU"
+stage = 0
+title = "Sustained HSM/KMS signing throughput beyond declared ceiling"
+tests = []
+
+[[rule]]
+id = "N-44"
+family = "N"
+section = "13.4"
+status = "canonical"
+class = "NG/PU"
+stage = 0
+title = "Cryptographic verification of crates.io/npm publisher identity"
+tests = []
+
+[[rule]]
+id = "N-45"
+family = "N"
+section = "13.4"
+status = "canonical"
+class = "NG/PU"
+stage = 0
+title = "TOTP, push and SMS OTP resisting AiTM phishing"
+tests = []
+
+[[rule]]
+id = "N-46"
+family = "N"
+section = "13.4"
+status = "canonical"
+class = "NG/PU"
+stage = 0
+title = "Zero timing leakage of account existence over the network"
+tests = []
+
+[[rule]]
+id = "N-47"
+family = "N"
+section = "13.4"
+status = "canonical"
+class = "NG/PU"
+stage = 0
+title = "Audited or formally verified dependencies being bug-free"
+tests = []
+
+[[rule]]
+id = "N-48"
+family = "N"
+section = "13.4"
+status = "canonical"
+class = "NG/PU"
+stage = 0
+title = "Unlinkability within an RP after user opt-in disclosure"
+tests = []
+
+[[rule]]
+id = "N-49"
+family = "N"
+section = "13.4"
+status = "canonical"
+class = "NG/PU"
+stage = 0
+title = "Pre-release detection of unknown dependency 0-days"
+tests = []
+
+[[rule]]
+id = "N-50"
+family = "N"
+section = "13.4"
+status = "canonical"
+class = "NG/PU"
+stage = 0
+title = "DPoP/DBSC protection on a compromised client device"
+tests = []
+
+[[rule]]
+id = "N-51"
+family = "N"
+section = "13.4"
+status = "canonical"
+class = "NG/PU"
+stage = 0
+title = "RP closing its own session after logout"
+tests = []
+
+[[rule]]
+id = "N-52"
+family = "N"
+section = "13.4"
+status = "canonical"
+class = "NG/PU"
+stage = 0
+title = "Regulatory compliance (PSD2 SCA, Turkish GKD)"
+tests = []
+
+[[rule]]
+id = "N-53"
+family = "N"
+section = "13.4"
+status = "canonical"
+class = "NG/PU"
+stage = 0
+title = "Correct cache scope and stream horizon in non-SDK PEP code"
+tests = []
+
+[[rule]]
+id = "N-54"
+family = "N"
+section = "13.4"
+status = "canonical"
+class = "NG/PU"
+stage = 0
+title = "Leaked unbound brokered upstream token not misused within horizon"
+tests = []
+
+[[rule]]
+id = "N-55"
+family = "N"
+section = "13.4"
+status = "canonical"
+class = "NG/PU"
+stage = 0
+title = "PQ-verifiable existed-by-T for records after last PQ re-anchor"
+tests = []
+
+[[rule]]
+id = "N-56"
+family = "N"
+section = "13.4"
+status = "canonical"
+class = "NG/PU"
+stage = 0
+title = "Detecting DB-level changes before the identity audit Merkle checkpoint"
+tests = []
+
+[[rule]]
+id = "N-57"
+family = "N"
+section = "13.4"
+status = "canonical"
+class = "NG/PU"
+stage = 0
+title = "No data loss in identity plane async DR profile"
+tests = []
+
+[[rule]]
+id = "N-58"
+family = "N"
+section = "13.4"
+status = "canonical"
+class = "NG/PU"
+stage = 0
+title = "Per-tenant or per-realm row-level restore in identity plane"
+tests = []
+
+[[rule]]
+id = "N-59"
+family = "N"
+section = "13.4"
+status = "canonical"
+class = "NG/PU"
+stage = 0
+title = "Acked write durability on node loss in single-node profile"
+tests = []
+
+[[rule]]
+id = "HL-1"
+family = "HL"
+section = "13.5"
+status = "canonical"
+class = "NG"
+title = "Per-domain throughput limited by single sequencer"
+tests = []
+
+[[rule]]
+id = "HL-2"
+family = "HL"
+section = "13.5"
+status = "canonical"
+class = "NG"
+title = "Wrong decisions by provider or operator cannot be prevented"
+tests = []
+
+[[rule]]
+id = "HL-3"
+family = "HL"
+section = "13.5"
+status = "canonical"
+class = "NG"
+title = "Revocation delayed during offline window"
+tests = []
+
+[[rule]]
+id = "HL-4"
+family = "HL"
+section = "13.5"
+status = "canonical"
+class = "NG"
+title = "Lost suffix in forced recovery, including slice double-spend"
+tests = []
+
+[[rule]]
+id = "HL-5"
+family = "HL"
+section = "13.5"
+status = "canonical"
+class = "NG"
+stage = 8
+title = "Client cannot know outcome on timeout"
+tests = []
+
+[[rule]]
+id = "HL-6"
+family = "HL"
+section = "13.5"
+status = "canonical"
+class = "NG"
+title = "Drift if all time sources and witnesses lie together"
+tests = []
+
+[[rule]]
+id = "HL-7"
+family = "HL"
+section = "13.5"
+status = "canonical"
+class = "PU"
+title = "Equivocation detectable but not preventable"
+tests = []
+
+[[rule]]
+id = "HL-8"
+family = "HL"
+section = "13.5"
+status = "canonical"
+class = "NG"
+stage = 1
+title = "Correlated breach via shared HSM partition or cross-domain key acceptance"
+tests = []
+
+[[rule]]
+id = "HL-9"
+family = "HL"
+section = "13.5"
+status = "canonical"
+class = "NG"
+stage = 8
+title = "No physical erasure; redaction is not erase"
+tests = []
+
+[[rule]]
+id = "HL-10"
+family = "HL"
+section = "13.5"
+status = "canonical"
+class = "NG"
+title = "Merkle index reveals position"
+tests = []
+
+[[rule]]
+id = "HL-11"
+family = "HL"
+section = "13.5"
+status = "canonical"
+class = "NG"
+title = "Status list herd privacy bounded by list size"
+tests = []
+
+[[rule]]
+id = "HL-12"
+family = "HL"
+section = "13.5"
+status = "canonical"
+class = "NG"
+title = "Cross-implementation determinism limited to test vector coverage"
+tests = []
+
+[[rule]]
+id = "HL-13"
+family = "HL"
+section = "13.5"
+status = "canonical"
+class = "PU"
+stage = 3
+title = "Revocation does not stop an already running effect"
+tests = []
+
+[[rule]]
+id = "HL-14"
+family = "HL"
+section = "13.5"
+status = "canonical"
+class = "NG"
+title = "TEE/SE side channels and hardware lying about secure clock"
+tests = []
+
+[[rule]]
+id = "HL-15"
+family = "HL"
+section = "13.5"
+status = "canonical"
+class = "NG"
+stage = 14
+title = "Async runtime and HTTP layer outside formal verification"
+tests = []
+
+[[rule]]
+id = "HL-16"
+family = "HL"
+section = "13.5"
+status = "canonical"
+class = "NG"
+stage = 14
+title = "Compiler and CPU do not guarantee constant-time execution"
+tests = []
+
+[[rule]]
+id = "HL-17"
+family = "HL"
+section = "13.5"
+status = "canonical"
+class = "NG"
+stage = 14
+title = "Co-tenant side channels on shared hardware, Postgres or cache"
+tests = []
+
+[[rule]]
+id = "HL-18"
+family = "HL"
+section = "13.5"
+status = "canonical"
+class = "NG"
+title = "Residual cross-domain linkability via KeyBinding, timing, network"
+tests = []
+
+[[rule]]
+id = "HL-19"
+family = "HL"
+section = "13.5"
+status = "canonical"
+class = "NG"
+stage = 14
+title = "No PQC in WebAuthn/passkeys; new assertions forgeable post-CRQC"
+tests = []
+
+[[rule]]
+id = "HL-20"
+family = "HL"
+section = "13.5"
+status = "canonical"
+class = "NG"
+title = "HSM/KMS throughput ceiling and correlated shared quota exhaustion"
+tests = []
+
+[[rule]]
+id = "HL-21"
+family = "HL"
+section = "13.5"
+status = "canonical"
+class = "NG"
+title = "In-memory secrets readable on host compromise beyond zeroize"
+tests = []
+
+[[rule]]
+id = "HL-22"
+family = "HL"
+section = "13.5"
+status = "canonical"
+class = "NG"
+stage = 6
+title = "Stateless token revocation not effective before expiry at RS"
+tests = []
+
+[[rule]]
+id = "HL-23"
+family = "HL"
+section = "13.5"
+status = "canonical"
+class = "NG"
+stage = 5
+title = "Phishing-resistant authentication does not prevent session or token theft"
+tests = []
+
+[[rule]]
+id = "HL-24"
+family = "HL"
+section = "13.5"
+status = "canonical"
+class = "NG"
+title = "No registry publisher signatures; supply chain attacks only detectable and containable"
+tests = []
+
+[[rule]]
+id = "HL-25"
+family = "HL"
+section = "13.5"
+status = "retired"
+title = "Retired; merged into HL-20"
+tests = []
+
+[[rule]]
+id = "HL-26"
+family = "HL"
+section = "13.5"
+status = "retired"
+title = "Retired; merged into HL-19"
+tests = []
+
+[[rule]]
+id = "HL-27"
+family = "HL"
+section = "13.5"
+status = "canonical"
+class = "PU"
+stage = 14
+title = "FIPS and PQ profiles cannot be combined (no FIPS ML-DSA)"
+tests = []
+
+[[rule]]
+id = "HL-28"
+family = "HL"
+section = "13.5"
+status = "retired"
+title = "Retired; merged into HL-16 and HL-21"
+tests = []
+
+[[rule]]
+id = "HL-29"
+family = "HL"
+section = "13.5"
+status = "canonical"
+class = "NG"
+stage = 14
+title = "Formal assurance limited to proof scope"
+tests = []
+
+[[rule]]
+id = "HL-30"
+family = "HL"
+section = "13.5"
+status = "retired"
+title = "Retired; merged into HL-22"
+tests = []
+
+[[rule]]
+id = "HL-31"
+family = "HL"
+section = "13.5"
+status = "canonical"
+class = "NG"
+stage = 13
+title = "Identity plane async DR has RPO greater than zero"
+tests = []
+
+[[rule]]
+id = "HL-32"
+family = "HL"
+section = "13.5"
+status = "canonical"
+class = "NG"
+stage = 13
+title = "No per-tenant or per-realm row-level restore in identity plane"
+tests = []
+
+[[rule]]
+id = "HL-33"
+family = "HL"
+section = "13.5"
+status = "canonical"
+class = "NG"
+stage = 2
+title = "Postgres superuser and RLS-exempt roles escape DB-level protections"
+tests = []
+
+[[rule]]
+id = "HL-34"
+family = "HL"
+section = "13.5"
+status = "canonical"
+class = "NG"
+title = "Binding re-anchor must precede old binding key compromise"
+tests = []
+
+[[rule]]
+id = "HL-35"
+family = "HL"
+section = "13.5"
+status = "canonical"
+class = "NG"
+title = "Leaked realm signing key enables Golden SAML-style forgery"
+tests = []
+
+[[rule]]
+id = "HL-36"
+family = "HL"
+section = "13.5"
+status = "canonical"
+class = "NG"
+title = "Client identity takeover via expired or resold CIMD domain"
+tests = []
+
+[[rule]]
+id = "HL-37"
+family = "HL"
+section = "13.5"
+status = "canonical"
+class = "NG"
+title = "MCP server tenant isolation logic bugs cause cross-tenant disclosure"
+tests = []
+
+[[rule]]
+id = "HL-38"
+family = "HL"
+section = "13.5"
+status = "canonical"
+class = "NG"
+title = "Help desk social engineering and contact channel loss"
+tests = []
+
+[[rule]]
+id = "HL-39"
+family = "HL"
+section = "13.5"
+status = "canonical"
+class = "NG"
+title = "Product invitation email abused as phishing channel"
+tests = []
+
+[[rule]]
+id = "HL-40"
+family = "HL"
+section = "13.5"
+status = "canonical"
+class = "NG"
+stage = 13
+title = "Single-node profile may lose acked writes on node/disk loss"
+tests = []
+
+[[rule]]
+id = "HL-41"
+family = "HL"
+section = "13.5"
+status = "canonical"
+class = "NG"
+title = "New tenants can configure CT2+ without SEC18 cooling"
+tests = []
+
+[[rule]]
+id = "DL-1"
+family = "DL"
+section = "13.1"
+status = "canonical"
+class = "NG"
+stage = 4
+title = "Custodian can impersonate Party unless custody is user-gated"
+tests = []
+
+[[rule]]
+id = "DL-2"
+family = "DL"
+section = "13.1"
+status = "canonical"
+class = "NG"
+title = "Approval Surface operator can show misleading render for another digest"
+tests = []
+
+[[rule]]
+id = "DL-3"
+family = "DL"
+section = "13.1"
+status = "canonical"
+title = "Use after revocation within declared offline window"
+tests = []
+
+[[rule]]
+id = "DL-4"
+family = "DL"
+section = "13.1"
+status = "canonical"
+class = "NG"
+title = "Provider evaluation errors and equivocation only detectable, not preventable"
+tests = []
+
+[[rule]]
+id = "DL-5"
+family = "DL"
+section = "13.1"
+status = "canonical"
+class = "NG"
+title = "Lost suffix in forced recovery"
+tests = []
+
+[[rule]]
+id = "DL-6"
+family = "DL"
+section = "13.1"
+status = "canonical"
+class = "NG"
+title = "Authorized malicious or compromised actor can cause harm within authority"
+tests = []
+
+[[rule]]
+id = "DL-7"
+family = "DL"
+section = "13.1"
+status = "canonical"
+class = "NG"
+stage = 3
+title = "Decision surface acts as a policy oracle"
+tests = []
+
+[[rule]]
+id = "DL-8"
+family = "DL"
+section = "13.1"
+status = "canonical"
+class = "NG"
+title = "Fail-closed halts consequential effects when Access is unavailable"
+tests = []
+
+[[rule]]
+id = "DL-9"
+family = "DL"
+section = "13.1"
+status = "canonical"
+class = "NG"
+title = "Residual cross-domain and cross-RP linkability"
+tests = []
+
+[[rule]]
+id = "DL-10"
+family = "DL"
+section = "13.1"
+status = "canonical"
+class = "NG"
+stage = 6
+title = "Co-tenant side channels on shared compute infrastructure"
+tests = []
+
+[[rule]]
+id = "RR-1"
+family = "RR"
+section = "13.9"
+status = "reference"
+title = "Custodian impersonation in custodial mode"
+tests = []
+
+[[rule]]
+id = "RR-2"
+family = "RR"
+section = "13.9"
+status = "reference"
+title = "Unfaithful or compromised approval surface"
+tests = []
+
+[[rule]]
+id = "RR-3"
+family = "RR"
+section = "13.9"
+status = "reference"
+title = "Abuse within offline or intermittent window"
+tests = []
+
+[[rule]]
+id = "RR-4"
+family = "RR"
+section = "13.9"
+status = "reference"
+title = "Provider wrong decision or equivocation"
+tests = []
+
+[[rule]]
+id = "RR-5"
+family = "RR"
+section = "13.9"
+status = "reference"
+stage = 13
+title = "Lost suffix without witness or replica"
+tests = []
+
+[[rule]]
+id = "RR-6"
+family = "RR"
+section = "13.9"
+status = "reference"
+title = "Authorized malicious actor or collusion"
+tests = []
+
+[[rule]]
+id = "RR-7"
+family = "RR"
+section = "13.9"
+status = "reference"
+title = "Policy oracle threshold inference"
+tests = []
+
+[[rule]]
+id = "RR-8"
+family = "RR"
+section = "13.9"
+status = "reference"
+title = "Availability cost of fail-closed"
+tests = []
+
+[[rule]]
+id = "RR-9"
+family = "RR"
+section = "13.9"
+status = "reference"
+title = "Ambiguous publisher mapping semantics"
+tests = []
+
+[[rule]]
+id = "RR-10"
+family = "RR"
+section = "13.9"
+status = "reference"
+title = "Sole root compromise"
+tests = []
+
+[[rule]]
+id = "RR-11"
+family = "RR"
+section = "13.9"
+status = "reference"
+title = "Denial of service through narrowing"
+tests = []
+
+[[rule]]
+id = "RR-12"
+family = "RR"
+section = "13.9"
+status = "reference"
+stage = 9
+title = "Prompt injection or model error within Grant and Mandate"
+tests = []
+
+[[rule]]
+id = "RR-13"
+family = "RR"
+section = "13.9"
+status = "reference"
+stage = 3
+title = "Effects executed during compromise window"
+tests = []
+
+[[rule]]
+id = "RR-14"
+family = "RR"
+section = "13.9"
+status = "reference"
+title = "Forged PAP/receipt acceptance before provider key theft detected"
+tests = []
+
+[[rule]]
+id = "RR-15"
+family = "RR"
+section = "13.9"
+status = "reference"
+title = "Party unaware of un-ingested regime key events"
+tests = []
+
+[[rule]]
+id = "RR-16"
+family = "RR"
+section = "13.9"
+status = "reference"
+title = "No formally verified Argon2 implementation"
+tests = []
+
+[[rule]]
+id = "RR-17"
+family = "RR"
+section = "13.9"
+status = "reference"
+stage = 1
+title = "No verified RS256 implementation; Marvin flaw unpatched in rsa crate"
+tests = []
+
+[[rule]]
+id = "RR-18"
+family = "RR"
+section = "13.9"
+status = "reference"
+stage = 5
+title = "OAuth/OIDC AS written from scratch in Rust"
+tests = []
+
+[[rule]]
+id = "RR-19"
+family = "RR"
+section = "13.9"
+status = "reference"
+title = "Correlated single-maintainer critical dependencies (bus factor)"
+tests = []
+
+[[rule]]
+id = "RR-20"
+family = "RR"
+section = "13.9"
+status = "reference"
+title = "SAML/XML complexity: c14n, signature wrapping, libxml2-class bugs"
+tests = []
+
+[[rule]]
+id = "RR-21"
+family = "RR"
+section = "13.9"
+status = "reference"
+title = "Malicious packages via unsigned crates.io/npm publishing"
+tests = []
+
+[[rule]]
+id = "RR-22"
+family = "RR"
+section = "13.9"
+status = "reference"
+title = "Residual linkability via claims, cnf keys and timing"
+tests = []
+
+[[rule]]
+id = "RR-23"
+family = "RR"
+section = "13.9"
+status = "reference"
+title = "Co-tenant side channel"
+tests = []
+
+[[rule]]
+id = "RR-24"
+family = "RR"
+section = "13.9"
+status = "reference"
+title = "Account enumeration timing channel"
+tests = []
+
+[[rule]]
+id = "RR-25"
+family = "RR"
+section = "13.9"
+status = "reference"
+stage = 13
+title = "Pre-signed tokens accepted until expiry during identity degraded window"
+tests = []
+
+[[rule]]
+id = "RR-26"
+family = "RR"
+section = "13.9"
+status = "reference"
+title = "Compiler breaks constant-time code"
+tests = []
+
+[[rule]]
+id = "RR-27"
+family = "RR"
+section = "13.9"
+status = "reference"
+title = "Bugs in async/HTTP layer outside formal scope"
+tests = []
+
+[[rule]]
+id = "RR-28"
+family = "RR"
+section = "13.9"
+status = "reference"
+stage = 10
+title = "Kerberos C FFI introduces memory-unsafe code"
+tests = []
+
+[[rule]]
+id = "RR-29"
+family = "RR"
+section = "13.9"
+status = "reference"
+title = "Phishable authentication factors (TOTP, push, SMS)"
+tests = []
+
+[[rule]]
+id = "RR-30"
+family = "RR"
+section = "13.9"
+status = "reference"
+title = "Post-authentication token or session theft, including DPoP key misuse"
+tests = []
+
+[[rule]]
+id = "RR-31"
+family = "RR"
+section = "13.9"
+status = "reference"
+title = "HSM/KMS throughput and quota correlation"
+tests = []
+
+[[rule]]
+id = "RR-32"
+family = "RR"
+section = "13.9"
+status = "reference"
+title = "Missing post-quantum support in WebAuthn"
+tests = []
+
+[[rule]]
+id = "RR-33"
+family = "RR"
+section = "13.9"
+status = "reference"
+title = "Unclear CRA classification and manufacturer scope"
+tests = []
+
+[[rule]]
+id = "RR-34"
+family = "RR"
+section = "13.9"
+status = "reference"
+title = "Fake or inflated security data used as decision input"
+tests = []
+
+[[rule]]
+id = "RR-35"
+family = "RR"
+section = "13.9"
+status = "reference"
+stage = 14
+title = "Records before PQ re-anchor lack PQ-verifiable existed-by-T"
+tests = []
+
+[[rule]]
+id = "RR-36"
+family = "RR"
+section = "13.9"
+status = "reference"
+stage = 3
+title = "Harvest-now-decrypt-later on encrypted identity tokens"
+tests = []
+
+[[rule]]
+id = "RR-37"
+family = "RR"
+section = "13.9"
+status = "reference"
+title = "Immature ML-DSA implementations may accept forged signatures"
+tests = []
+
+[[rule]]
+id = "RR-38"
+family = "RR"
+section = "13.9"
+status = "reference"
+stage = 6
+title = "Managed platforms may lack memory hardening backends"
+tests = []
+
+[[rule]]
+id = "RR-39"
+family = "RR"
+section = "13.9"
+status = "reference"
+title = "Unused; reserved ID"
+tests = []
+
+[[rule]]
+id = "RR-40"
+family = "RR"
+section = "13.9"
+status = "retired"
+title = "Retired; merged into RR-18"
+tests = []
+
+[[rule]]
+id = "RR-41"
+family = "RR"
+section = "13.9"
+status = "retired"
+title = "Emekli → RR-19"
+tests = []
+
+[[rule]]
+id = "RR-42"
+family = "RR"
+section = "13.9"
+status = "retired"
+title = "Emekli → RR-20"
+tests = []
+
+[[rule]]
+id = "RR-43"
+family = "RR"
+section = "13.9"
+status = "reference"
+title = "Brokered upstream tokens stay bearer due to missing DPoP support"
+tests = []
+
+[[rule]]
+id = "RR-44"
+family = "RR"
+section = "13.9"
+status = "reference"
+stage = 6
+title = "Mainstream MCP clients limited to Public scope until AIS support"
+tests = []
+
+[[rule]]
+id = "RR-45"
+family = "RR"
+section = "13.9"
+status = "reference"
+stage = 8
+title = "RP ID change invalidates passkeys, forcing weakest recovery path"
+tests = []
+
+[[rule]]
+id = "SEC1"
+family = "SEC"
+section = "13.10"
+status = "frozen"
+stage = 14
+title = "Verdict is secure with declared limits; no model-level vulnerability"
+tests = []
+
+[[rule]]
+id = "SEC2"
+family = "SEC"
+section = "13.10"
+status = "frozen"
+stage = 8
+title = "Each security claim belongs to exactly one guarantee class"
+tests = []
+
+[[rule]]
+id = "SEC3"
+family = "SEC"
+section = "13.10"
+status = "frozen"
+title = "Access security responsibility limited to four areas"
+tests = []
+
+[[rule]]
+id = "SEC4"
+family = "SEC"
+section = "13.10"
+status = "frozen"
+stage = 1
+title = "Cryptographic requirements: tamper-evidence, non-repudiation, transport forward secrecy"
+tests = []
+
+[[rule]]
+id = "SEC5"
+family = "SEC"
+section = "13.10"
+status = "frozen"
+stage = 14
+title = "Trust model table defines semantic never-boundaries per component"
+tests = []
+
+[[rule]]
+id = "SEC6"
+family = "SEC"
+section = "13.10"
+status = "frozen"
+title = "Security invariants are SI-1 through SI-22"
+tests = []
+
+[[rule]]
+id = "SEC7"
+family = "SEC"
+section = "13.10"
+status = "frozen"
+stage = 3
+title = "Consequence Tier is a derived policy classification, not ontology"
+tests = []
+
+[[rule]]
+id = "SEC8"
+family = "SEC"
+section = "13.10"
+status = "frozen"
+stage = 3
+title = "Policy defaults live in Genesis; tightening narrows, loosening broadens"
+tests = []
+
+[[rule]]
+id = "SEC9"
+family = "SEC"
+section = "13.10"
+status = "frozen"
+stage = 3
+title = "Issuer compromise procedure: cutoff, quarantine, closure, reconcile"
+tests = []
+
+[[rule]]
+id = "SEC10"
+family = "SEC"
+section = "13.10"
+status = "frozen"
+stage = 3
+title = "CT2+ requires human contribution or fresh phishing-resistant presence assertion"
+tests = []
+
+[[rule]]
+id = "SEC11"
+family = "SEC"
+section = "13.10"
+status = "frozen"
+stage = 3
+title = "Citing a terminated actor Instance's contribution defaults to REQUIRE_ACTION"
+tests = []
+
+[[rule]]
+id = "SEC12"
+family = "SEC"
+section = "13.10"
+status = "frozen"
+stage = 3
+title = "party.compromise overlay applies to Instances created after occurredAt"
+tests = []
+
+[[rule]]
+id = "SEC13"
+family = "SEC"
+section = "13.10"
+status = "frozen"
+stage = 6
+title = "Consumption-bearing offline slices limited to single verifier or shared counter"
+tests = []
+
+[[rule]]
+id = "SEC14"
+family = "SEC"
+section = "13.10"
+status = "frozen"
+stage = 6
+title = "No new contracts to verifiers with overdue offline reports"
+tests = []
+
+[[rule]]
+id = "SEC15"
+family = "SEC"
+section = "13.10"
+status = "frozen"
+stage = 3
+title = "Compromise impact query is derived, not a new object"
+tests = []
+
+[[rule]]
+id = "SEC16"
+family = "SEC"
+section = "13.10"
+status = "frozen"
+stage = 3
+title = "Fourteen-day probation for CT2+ intents via compatibility mapping"
+tests = []
+
+[[rule]]
+id = "SEC17"
+family = "SEC"
+section = "13.10"
+status = "frozen"
+stage = 4
+title = "Custodial keys are user-gated; CT3 holders non-custodial by default"
+tests = []
+
+[[rule]]
+id = "SEC18"
+family = "SEC"
+section = "13.10"
+status = "frozen"
+stage = 6
+title = "New authenticator bindings cannot satisfy CT2+ for 24 hours"
+tests = []
+
+[[rule]]
+id = "SEC19"
+family = "SEC"
+section = "13.10"
+status = "frozen"
+stage = 3
+title = "Identity plane custody keys never used in provider role"
+tests = []
+
+[[rule]]
+id = "SEC20"
+family = "SEC"
+section = "13.10"
+status = "frozen"
+stage = 4
+title = "Provider cannot custody root recovery keys"
+tests = []
+
+[[rule]]
+id = "SEC21"
+family = "SEC"
+section = "13.10"
+status = "frozen"
+stage = 13
+title = "Provider signing key compromise handled via domain.recover from checkpoint N"
+tests = []
+
+[[rule]]
+id = "SEC22"
+family = "SEC"
+section = "13.10"
+status = "frozen"
+stage = 13
+title = "Rollback guard with witness and replica checks plus post-recovery quarantine"
+tests = []
+
+[[rule]]
+id = "SEC23"
+family = "SEC"
+section = "13.10"
+status = "frozen"
+stage = 13
+title = "Revocation and CT3 acked only after witness co-sign and replica"
+tests = []
+
+[[rule]]
+id = "SEC24"
+family = "SEC"
+section = "13.10"
+status = "frozen"
+stage = 3
+title = "RestrictionPolicies may be undisclosed, revealing only class to requesters"
+tests = []
+
+[[rule]]
+id = "SEC25"
+family = "SEC"
+section = "13.10"
+status = "frozen"
+stage = 13
+title = "Inclusion proofs require exact content, commitment and witnessed checkpoint"
+tests = []
+
+[[rule]]
+id = "SEC26"
+family = "SEC"
+section = "13.10"
+status = "frozen"
+stage = 3
+title = "Assurance table: batching CT1 only, CT3 multi-party with delay"
+tests = []
+
+[[rule]]
+id = "SEC27"
+family = "SEC"
+section = "13.10"
+status = "frozen"
+stage = 6
+title = "Availability via pre-issued continuity envelopes, never fail-open"
+tests = []
+
+[[rule]]
+id = "SEC28"
+family = "SEC"
+section = "13.10"
+status = "frozen"
+stage = 3
+title = "Rate limit overruns are protocol rejections; throttling is RestrictionPolicy DENY"
+tests = []
+
+[[rule]]
+id = "SEC29"
+family = "SEC"
+section = "13.10"
+status = "frozen"
+stage = 3
+title = "Pseudonymous deep subtree identities and separate audit-read Grant by default"
+tests = []
+
+[[rule]]
+id = "SEC30"
+family = "SEC"
+section = "13.10"
+status = "frozen"
+stage = 3
+title = "First disclosure to new recipient CT2; declassification CT3"
+tests = []
+
+[[rule]]
+id = "SEC31"
+family = "SEC"
+section = "13.10"
+status = "frozen"
+stage = 3
+title = "Advisory checks and explains are telemetry, not canonical records"
+tests = []
+
+[[rule]]
+id = "SEC32"
+family = "SEC"
+section = "13.10"
+status = "frozen"
+stage = 2
+title = "Exercise body redactable after 400 days; digests kept indefinitely"
+tests = []
