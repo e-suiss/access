@@ -3,6 +3,7 @@
 set shell := ["bash", "-euo", "pipefail", "-c"]
 
 # CMP-24, MD-1, T41
+not_lockdown := "not (package(access-sandbox) and binary(lockdown))"
 kernel_targets := "wasm32-unknown-unknown wasm32-wasip1 aarch64-apple-ios aarch64-apple-ios-sim aarch64-linux-android x86_64-linux-android"
 
 default:
@@ -12,7 +13,7 @@ check: fmt-check lint rules deny
 
 # SA-59
 test:
-    cargo nextest run --workspace --locked --no-tests=pass
+    cargo nextest run --workspace --locked --no-tests=pass -E '{{not_lockdown}}'
     cargo test --workspace --locked --doc
 
 fmt:
@@ -27,6 +28,7 @@ lint:
 
 # OP-62, OP-3
 rules:
+    cargo fetch --locked
     cargo xtask check
 
 # F-1
@@ -132,8 +134,20 @@ sanitizer_nightly := "nightly-2026-10-01"
 
 # SA-59
 test-full:
-    cargo nextest run --workspace --locked --no-tests=pass --run-ignored all
+    cargo nextest run --workspace --locked --no-tests=pass --run-ignored all -E '{{not_lockdown}}'
     cargo test --workspace --locked --doc
+    just test-sandbox
+
+# SA-22, OP-90
+test-sandbox:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    bin="$(cargo test --locked -p access-sandbox --test lockdown --no-run --message-format=json | jq -r 'select(.executable != null and .target.name == "lockdown") | .executable')"
+    if [[ "$(uname -s)" == Linux && "$(id -u)" != 0 ]]; then
+        sudo --preserve-env=ACCESS_SANDBOX_REQUIRE_MEMFD_SECRET "$bin"
+    else
+        "$bin"
+    fi
 
 # F-14
 semgrep:
