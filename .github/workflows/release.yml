@@ -413,7 +413,7 @@ jobs:
       - name: Publish the Kernel
         env:
           CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
-        run: cargo publish --locked -p eesuiss-access-kernel
+        run: cargo publish --locked -p esuiss-access-kernel
 
   # OP-68, OP-85, F-10
   publish-npm:
