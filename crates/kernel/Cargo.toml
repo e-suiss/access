@@ -1,5 +1,5 @@
 [package]
-name = "eesuiss-access-kernel"
+name = "esuiss-access-kernel"
 description = "Access Kernel (CMP-24): the single no_std implementation of Access semantics."
 version.workspace = true
 edition.workspace = true

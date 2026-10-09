@@ -32,7 +32,7 @@ dependencies = [
 name = "access-kernel-wasm"
 version = "0.0.0"
 dependencies = [
- "eesuiss-access-kernel",
+ "esuiss-access-kernel",
  "wasm-bindgen",
 ]
 
@@ -277,14 +277,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "eesuiss-access-kernel"
-version = "0.0.0"
-dependencies = [
- "divan",
- "gungraun",
-]
-
-[[package]]
 name = "either-or-both"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -328,6 +320,14 @@ checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
  "windows-sys",
+]
+
+[[package]]
+name = "esuiss-access-kernel"
+version = "0.0.0"
+dependencies = [
+ "divan",
+ "gungraun",
 ]
 
 [[package]]

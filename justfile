@@ -36,19 +36,19 @@ deny:
     cargo deny --locked check
 
 cross:
-    for t in {{kernel_targets}}; do cargo build --locked -p eesuiss-access-kernel --target "$t"; done
+    for t in {{kernel_targets}}; do cargo build --locked -p esuiss-access-kernel --target "$t"; done
     # OP-76
     for t in {{kernel_targets}}; do cargo build --locked -p esuiss-crypto --no-default-features --features verify --target "$t"; done
     for t in {{kernel_targets}}; do cargo build --locked -p esuiss-restriction --target "$t"; done
-    CARGO_TARGET_WASM32_WASIP1_RUNNER=wasmtime cargo test --locked -p eesuiss-access-kernel --target wasm32-wasip1
+    CARGO_TARGET_WASM32_WASIP1_RUNNER=wasmtime cargo test --locked -p esuiss-access-kernel --target wasm32-wasip1
 
 cross-ios:
-    CARGO_TARGET_AARCH64_APPLE_IOS_SIM_RUNNER="{{justfile_directory()}}/scripts/ios-sim-runner.sh" cargo test --locked -p eesuiss-access-kernel --target aarch64-apple-ios-sim
+    CARGO_TARGET_AARCH64_APPLE_IOS_SIM_RUNNER="{{justfile_directory()}}/scripts/ios-sim-runner.sh" cargo test --locked -p esuiss-access-kernel --target aarch64-apple-ios-sim
 
 cross-android target="x86_64-linux-android":
     CARGO_TARGET_X86_64_LINUX_ANDROID_RUNNER="{{justfile_directory()}}/scripts/android-runner.sh" \
     CARGO_TARGET_AARCH64_LINUX_ANDROID_RUNNER="{{justfile_directory()}}/scripts/android-runner.sh" \
-    cargo test --locked -p eesuiss-access-kernel --target {{target}}
+    cargo test --locked -p esuiss-access-kernel --target {{target}}
 
 # OP-83
 wasm:
@@ -163,15 +163,15 @@ audit:
 
 # OP-72, OP-84
 bench *args:
-    cargo bench --locked -p eesuiss-access-kernel --bench kernel_wallclock -- {{args}}
+    cargo bench --locked -p esuiss-access-kernel --bench kernel_wallclock -- {{args}}
 
 # OP-72
 bench-instructions *args:
-    cargo bench --locked -p eesuiss-access-kernel --bench kernel_instructions -- {{args}}
+    cargo bench --locked -p esuiss-access-kernel --bench kernel_instructions -- {{args}}
 
 # SA-59
 mutants *args:
-    cargo mutants --package eesuiss-access-kernel --test-tool nextest {{args}}
+    cargo mutants --package esuiss-access-kernel --test-tool nextest {{args}}
 
 # SA-23, §14.5
 sanitize kind:
