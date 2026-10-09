@@ -1,0 +1,21 @@
+[package]
+name = "access-crypto"
+description = "Cryptography for Access: secret hygiene today; the aws-lc-rs wrapper lands with the Kernel."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+secrecy = { workspace = true }
+subtle = { workspace = true }
+zeroize = { workspace = true, features = ["alloc"] }
+
+[dev-dependencies]
+static_assertions = { workspace = true }
+serde = { workspace = true }
+
+[lints]
+workspace = true
