@@ -1,0 +1,20 @@
+[package]
+name = "access-kernel-wasm"
+description = "WebAssembly binding of the Access Kernel for the TypeScript SDK and console (OP-8, OP-83)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+# OP-62
+access-kernel = { workspace = true }
+wasm-bindgen = { workspace = true, features = ["std"] }
+
+[lints]
+workspace = true
