@@ -1,5 +1,5 @@
 [package]
-name = "suiss-crypto"
+name = "esuiss-crypto"
 description = "Suiss shared cryptography: deterministic CBOR, digests, COSE, proof verification, signer and HSM/KMS (OP-76)."
 version.workspace = true
 edition.workspace = true

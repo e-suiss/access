@@ -1,5 +1,5 @@
 [package]
-name = "suiss-ledger"
+name = "esuiss-ledger"
 description = "Suiss shared ledger platform: domain log, sequencer, outbox, checkpoint, witness, replica (OP-76)."
 version.workspace = true
 edition.workspace = true

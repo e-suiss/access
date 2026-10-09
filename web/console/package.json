@@ -1,5 +1,5 @@
 {
-  "name": "@suiss/access-console",
+  "name": "@esuiss/access-console",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -15,7 +15,7 @@
     "format:check": "prettier --check ."
   },
   "dependencies": {
-    "@suiss/access": "file:../../sdks/typescript",
+    "@esuiss/access": "file:../../sdks/typescript",
     "react": "19.3.0",
     "react-dom": "19.3.0"
   },

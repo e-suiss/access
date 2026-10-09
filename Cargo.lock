@@ -32,7 +32,7 @@ dependencies = [
 name = "access-kernel-wasm"
 version = "0.0.0"
 dependencies = [
- "suiss-access-kernel",
+ "eesuiss-access-kernel",
  "wasm-bindgen",
 ]
 
@@ -277,6 +277,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "eesuiss-access-kernel"
+version = "0.0.0"
+dependencies = [
+ "divan",
+ "gungraun",
+]
+
+[[package]]
 name = "either-or-both"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -321,6 +329,18 @@ dependencies = [
  "libc",
  "windows-sys",
 ]
+
+[[package]]
+name = "esuiss-crypto"
+version = "0.0.0"
+
+[[package]]
+name = "esuiss-ledger"
+version = "0.0.0"
+
+[[package]]
+name = "esuiss-restriction"
+version = "0.0.0"
 
 [[package]]
 name = "figment"
@@ -978,26 +998,6 @@ name = "subtle"
 version = "2.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "13c2bddecc57b384dee18652358fb23172facb8a2c51ccc10d74c157bdea3292"
-
-[[package]]
-name = "suiss-access-kernel"
-version = "0.0.0"
-dependencies = [
- "divan",
- "gungraun",
-]
-
-[[package]]
-name = "suiss-crypto"
-version = "0.0.0"
-
-[[package]]
-name = "suiss-ledger"
-version = "0.0.0"
-
-[[package]]
-name = "suiss-restriction"
-version = "0.0.0"
 
 [[package]]
 name = "syn"

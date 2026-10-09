@@ -1,5 +1,5 @@
 {
-  "name": "@suiss/access",
+  "name": "@esuiss/access",
   "version": "0.0.0",
   "description": "Access TypeScript SDK. Kernel semantics come from the Access Kernel compiled to WebAssembly.",
   "private": true,

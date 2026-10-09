@@ -12,7 +12,7 @@ publish = false
 
 # F-3, SA-35
 [workspace.dependencies]
-access-kernel = { package = "suiss-access-kernel", path = "crates/kernel", default-features = false }
+access-kernel = { package = "eesuiss-access-kernel", path = "crates/kernel", default-features = false }
 access-crypto = { path = "crates/crypto", default-features = false }
 access-telemetry = { path = "crates/telemetry", default-features = false }
 access-http = { path = "crates/http", default-features = false }

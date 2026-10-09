@@ -1,4 +1,4 @@
-import { loadKernel } from "@suiss/access";
+import { loadKernel } from "@esuiss/access";
 import { useEffect, useState } from "react";
 
 type KernelState =

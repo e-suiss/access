@@ -1,5 +1,5 @@
 [package]
-name = "suiss-restriction"
+name = "esuiss-restriction"
 description = "Suiss shared restriction engine: Access Restriction Profile evaluation and explanation (OP-76, E43)."
 version.workspace = true
 edition.workspace = true
