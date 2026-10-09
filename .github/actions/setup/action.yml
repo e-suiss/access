@@ -44,8 +44,8 @@ runs:
           args=(--profile minimal)
           [[ -n "$COMPONENTS" ]] && args+=(--component "$COMPONENTS")
           rustup toolchain install "$TOOLCHAIN" "${args[@]}"
-        else
-          rustup toolchain install
+        elif ! rustup toolchain install 2>/dev/null; then
+          rustup show active-toolchain
         fi
         rustc --version --verbose
 
@@ -55,25 +55,27 @@ runs:
       env:
         WANTED: ${{ inputs.tools }}
       run: |
-        declare -A pinned=(
-          [nextest]=cargo-nextest@0.9.146
-          [deny]=cargo-deny@0.20.2
-          [audit]=cargo-audit@0.22.2
-          [auditable]=cargo-auditable@0.7.6
-          [cyclonedx]=cargo-cyclonedx@0.5.9
-          [mutants]=cargo-mutants@27.1.0
-          [git-cliff]=git-cliff@2.14.2
-          [wasmtime]=wasmtime@49.0.1
-          [gungraun]=gungraun-runner@0.20.0
-          [syft]=syft@1.52.0
-          [cosign]=cosign@3.1.3
-          [wasm-bindgen]=wasm-bindgen@0.2.129
-        )
+        pinned() {
+          case "$1" in
+            nextest) echo cargo-nextest@0.9.146 ;;
+            deny) echo cargo-deny@0.20.2 ;;
+            audit) echo cargo-audit@0.22.2 ;;
+            auditable) echo cargo-auditable@0.7.6 ;;
+            cyclonedx) echo cargo-cyclonedx@0.5.9 ;;
+            mutants) echo cargo-mutants@27.1.0 ;;
+            git-cliff) echo git-cliff@2.14.2 ;;
+            wasmtime) echo wasmtime@49.0.1 ;;
+            gungraun) echo gungraun-runner@0.20.0 ;;
+            syft) echo syft@1.52.0 ;;
+            cosign) echo cosign@3.1.3 ;;
+            wasm-bindgen) echo wasm-bindgen@0.2.129 ;;
+          esac
+        }
         list="just@1.58.0"
         vet=false
         for name in $WANTED; do
           if [[ "$name" == vet ]]; then vet=true; continue; fi
-          spec="${pinned[$name]:-}"
+          spec="$(pinned "$name")"
           if [[ -z "$spec" ]]; then echo "::error::unknown tool '$name'"; exit 1; fi
           list="$list,$spec"
         done
