@@ -56,7 +56,7 @@ spec:
       containers:
         - name: access-server
           # OP-49
-          image: ghcr.io/e-suiss/access-server@sha256:0000000000000000000000000000000000000000000000000000000000000000
+          image: ghcr.io/e-suiss/access@sha256:0000000000000000000000000000000000000000000000000000000000000000
           imagePullPolicy: IfNotPresent
           env:
             # RAUTHY-008, §14.3
