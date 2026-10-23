@@ -166,8 +166,8 @@ intent-envelope = {
 
 restriction-outcome =
     "no_objection"
-  / { deny: { policy: policy-ref, policy_version: digest, undisclosed: bool } }
-  / { require: requirement-set }
+  / { deny: { policy: policy-ref, policy_version: digest, ? undisclosed: true } }
+  / { require: [+ requirement-term] }
 
 blocker-class =
     "no-covering-authority" / "outside-instance-limits" / "restricted"
@@ -192,6 +192,7 @@ blocker = {
 
 unmet-term = {
   term: requirement-term,
+  missing: uint .ge 1,
   position: position,
   satisfiable_by_actor: bool,
 }
@@ -207,7 +208,79 @@ decision = {
   outcome: "allow" / "deny" / "require_action",
   ? blockers: [+ blocker],
   ? unmet: [+ unmet-term],
-  versions: spec-versions,
+  ? relied_on: [+ id],
+  ? versions: spec-versions,
+}
+
+; ---------------------------------------------------------------- evaluation input (OP-111 m.1)
+
+capacity = "own" / { for: party-ref }
+
+budget-state = {
+  window: "total" / { rolling_s: uint },
+  remaining: uint,
+  demand: uint,
+  ? resets_at: trusted-time,
+}
+
+hop = {
+  authority: canonical-authority,
+  ? status: "revoked" / "lapsed",
+  ? conditions_fail: true,
+  ? budgets: [+ budget-state],
+}
+
+basis = {
+  hops: [+ hop],
+  capacities: [+ capacity],
+}
+
+mandate = {
+  authority: authority-set,
+  ? requirements: [+ requirement-term],
+}
+
+policy-result = {
+  policy: policy-ref,
+  version: digest,
+  outcome: restriction-outcome,
+}
+
+proof = {
+  id: id,
+  kind: "claim" / "contribution" / "authentication" / "foreign_authority",
+  class: ident,
+  position: uint,
+  time: trusted-time,
+  party: party-ref,
+  instance: instance-ref,
+  issuer: party-ref,
+  ? bound_instance: instance-ref,
+  ? bound_intent: digest,
+  ? bound_resource: resource-ref,
+  ? assurance: { + ident => uint },
+  ? consumed: true,
+}
+
+catalog = {
+  ? catalogs: [+ { catalog: digest, actions: [+ action-ref] }],
+  ? reserved: [+ action-ref],
+  ? purposes: [+ { purpose: purpose-ref, below: [+ purpose-ref] }],
+}
+
+evaluation-input = {
+  mode: "commit" / "continue" / "check",
+  intent: intent-envelope,
+  intent_digest: digest,
+  now: trusted-time,
+  ? actor_instance: instance-ref,
+  ? actor_is_agent: true,
+  ? mandate: mandate,
+  capacity: capacity,
+  bases: [* basis],
+  ? restrictions: [+ policy-result],
+  ? proofs: [+ proof],
+  catalog: catalog,
 }
 
 ; ---------------------------------------------------------------- validity contract (§9.12)

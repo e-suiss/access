@@ -1,5 +1,7 @@
 //! Decision Combinator (§5.8, §9.6, OP-111): deny-overrides, no UNKNOWN (INV-26).
 
+pub mod codec;
+
 use alloc::collections::BTreeSet;
 use alloc::string::String;
 use alloc::vec::Vec;

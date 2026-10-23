@@ -137,7 +137,7 @@ pub(crate) fn map(entries: impl IntoIterator<Item = (&'static str, Option<Value>
     )
 }
 
-fn single(v: &Value) -> Result<(&str, &Value), ModelError> {
+pub(crate) fn single(v: &Value) -> Result<(&str, &Value), ModelError> {
     match v {
         Value::Map(entries) => match entries.as_slice() {
             [(Value::Text(k), inner)] => Ok((k.as_str(), inner)),
@@ -147,7 +147,7 @@ fn single(v: &Value) -> Result<(&str, &Value), ModelError> {
     }
 }
 
-fn tagged(key: &'static str, v: Value) -> Value {
+pub(crate) fn tagged(key: &'static str, v: Value) -> Value {
     map([(key, Some(v))])
 }
 
@@ -855,7 +855,7 @@ impl Canonical for DelegationTerms {
     }
 }
 
-fn word<T: Copy>(v: &Value, table: &[(&str, T)]) -> Result<T, ModelError> {
+pub(crate) fn word<T: Copy>(v: &Value, table: &[(&str, T)]) -> Result<T, ModelError> {
     let t = text(v)?;
     table
         .iter()
@@ -864,11 +864,11 @@ fn word<T: Copy>(v: &Value, table: &[(&str, T)]) -> Result<T, ModelError> {
         .ok_or(ModelError::Unknown)
 }
 
-fn word_of<T: Copy + PartialEq>(x: T, table: &[(&'static str, T)]) -> Value {
+pub(crate) fn word_of<T: Copy + PartialEq>(x: T, table: &[(&'static str, T)]) -> Value {
     Value::text(table.iter().find(|(_, y)| *y == x).map_or("", |(k, _)| k))
 }
 
-const PROOF_KINDS: [(&str, ProofKind); 4] = [
+pub(crate) const PROOF_KINDS: [(&str, ProofKind); 4] = [
     ("claim", ProofKind::Claim),
     ("contribution", ProofKind::Contribution),
     ("authentication", ProofKind::Authentication),

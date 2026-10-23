@@ -15,15 +15,18 @@ def main():
         except (json.JSONDecodeError, AttributeError):
             continue
         for case in cases:
-            if not isinstance(case, dict) or "cbor" not in case:
+            if not isinstance(case, dict):
                 continue
-            want = bytes.fromhex(case["cbor"])
-            got = cbor2.dumps(cbor2.loads(want), canonical=True)
-            if got == want:
-                checked += 1
-            else:
-                failed += 1
-                print(f"FAIL {path} {case['id']}: re-encoding differs")
+            for field in ("cbor", "input", "decision"):
+                if field not in case:
+                    continue
+                want = bytes.fromhex(case[field])
+                got = cbor2.dumps(cbor2.loads(want), canonical=True)
+                if got == want:
+                    checked += 1
+                else:
+                    failed += 1
+                    print(f"FAIL {path} {case['id']}.{field}: re-encoding differs")
     print(f"{checked} vectors identical, {failed} failed")
     sys.exit(1 if failed else 0)
 

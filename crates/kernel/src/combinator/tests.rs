@@ -1,5 +1,6 @@
 use alloc::collections::{BTreeMap, BTreeSet};
-use alloc::string::ToString;
+use alloc::format;
+use alloc::string::{String, ToString};
 use alloc::vec;
 use alloc::vec::Vec;
 
@@ -496,4 +497,211 @@ fn fuel_exhaustion_is_a_rejection() {
     };
     assert_eq!(evaluate(&input, &mut Fuel(1)), Err(Rejection::Fuel));
     assert!(evaluate(&input, &mut Fuel(2)).is_ok());
+}
+
+impl World {
+    fn owned(&self) -> codec::OwnedInput {
+        codec::OwnedInput {
+            mode: self.mode,
+            intent: self.intent.clone(),
+            intent_digest: d(1),
+            now: 50_000,
+            actor_instance: Some(Id([1; 16])),
+            actor_is_agent: self.agent,
+            mandate: self.mandate.clone(),
+            capacity: self.capacity,
+            bases: self.bases.clone(),
+            restrictions: self.restrictions.clone(),
+            proofs: self.proofs.clone(),
+            catalog: self.catalog.clone(),
+        }
+    }
+}
+
+fn deny_policy(n: u8, undisclosed: bool) -> PolicyResult {
+    PolicyResult {
+        policy: Id([n; 16]),
+        version: d(2),
+        outcome: RestrictionOutcome::Deny(PolicyDeny {
+            policy: Id([n; 16]),
+            version: d(2),
+            undisclosed,
+        }),
+    }
+}
+
+fn scenarios() -> Vec<(&'static str, World)> {
+    let mut out = vec![("allow", World::new())];
+    let mut w = World::new();
+    w.bases[0].hops[1].authority.authority.actions.exact.clear();
+    out.push(("deny-no-covering-authority-hop1", w));
+    let mut w = World::new();
+    let mut narrow = authority();
+    narrow.actions.exact.clear();
+    w.mandate = Some(Mandate {
+        authority: narrow,
+        requirements: BTreeSet::new(),
+    });
+    out.push(("deny-outside-instance-limits", w));
+    let mut w = World::new();
+    w.restrictions.push(deny_policy(7, true));
+    out.push(("deny-restricted", w));
+    let mut w = World::new();
+    w.bases[0].hops[0].budgets.push(BudgetState {
+        window: BudgetWindow::RollingSeconds(60),
+        remaining: 0,
+        demand: 1,
+        resets_at: Some(70_000),
+    });
+    out.push(("deny-budget-rolling", w));
+    let mut w = World::new();
+    w.bases[0].hops[1].budgets.push(BudgetState {
+        window: BudgetWindow::Total,
+        remaining: 5,
+        demand: 6,
+        resets_at: None,
+    });
+    out.push(("deny-budget-total", w));
+    let mut w = World::new();
+    w.bases[0].hops[0].authority.constraints.validity = Window {
+        from: 0,
+        until: 49_999,
+    };
+    out.push(("deny-expired", w));
+    let mut w = World::new();
+    w.bases[0].hops[1].authority.constraints.validity = Window {
+        from: 60_000,
+        until: 90_000,
+    };
+    out.push(("deny-not-yet-valid", w));
+    let mut w = World::new();
+    w.bases[0].hops[0].status = HopStatus::Revoked;
+    out.push(("deny-revoked", w));
+    let mut w = World::new();
+    w.bases[0].hops[1].conditions_hold = false;
+    out.push(("deny-lapsed", w));
+    let mut w = World::new();
+    w.capacity = Capacity::For(Id([5; 16]));
+    out.push(("deny-capacity-mismatch", w));
+    out.extend(requirement_scenarios());
+    out
+}
+
+fn requirement_scenarios() -> Vec<(&'static str, World)> {
+    let mut out = Vec::new();
+    let mut w = World::new();
+    w.bases[0].hops[1]
+        .authority
+        .requirements
+        .insert(approval(true));
+    out.push(("require-step-up", w));
+    let mut w = World::new();
+    w.bases[0].hops[1]
+        .authority
+        .requirements
+        .insert(approval(true));
+    w.agent = true;
+    out.push(("require-human-presence-agent", w));
+    let mut w = World::new();
+    w.bases[0].hops[1]
+        .authority
+        .requirements
+        .insert(approval(true));
+    w.proofs.push(step_up_proof());
+    out.push(("allow-with-proof", w));
+    let mut w = World::new();
+    w.bases[0].hops[1]
+        .authority
+        .requirements
+        .insert(approval(true));
+    w.restrictions.push(deny_policy(7, false));
+    out.push(("deny-overrides-require", w));
+    let mut w = World::new();
+    w.restrictions.push(PolicyResult {
+        policy: Id([8; 16]),
+        version: d(3),
+        outcome: RestrictionOutcome::Require([approval(false)].into_iter().collect()),
+    });
+    out.push(("require-from-restriction", w));
+    let mut w = World::new();
+    let mut sourced = approval(false);
+    sourced.source = Some(crate::model::SubjectSelector::Party(Id([42; 16])));
+    w.bases[0].hops[0].authority.requirements.insert(sourced);
+    w.proofs.push(step_up_proof());
+    out.push(("deny-source-not-accepted", w));
+    let mut w = World::new();
+    w.mode = Mode::Check;
+    w.bases.clear();
+    out.push(("check-no-basis", w));
+    let mut w = World::new();
+    w.mode = Mode::Check;
+    let mut revoked = hop();
+    revoked.status = HopStatus::Revoked;
+    let mut needs = hop();
+    needs.authority.requirements.insert(approval(false));
+    w.bases = vec![basis(vec![revoked]), basis(vec![needs])];
+    out.push(("check-first-require", w));
+    let mut w = World::new();
+    w.bases.push(basis(vec![hop()]));
+    out.push(("reject-commit-two-bases", w));
+    out
+}
+
+// CR-49, OP-111 m.1: the CBOR bridge for the F0 reference evaluator
+#[test]
+fn decision_vectors_match() {
+    extern crate std;
+    use crate::codec::Canonical;
+    use core::fmt::Write as _;
+    use suiss_crypto::dcbor::{Limits, encode};
+    let hex = |b: &[u8]| {
+        b.iter().fold(String::new(), |mut h, x| {
+            let _ = write!(h, "{x:02x}");
+            h
+        })
+    };
+    let mut json = String::from(
+        "{\n \"rule\": \"OP-111\",\n \"track\": \"core\",\n \"version\": 1,\n \"operation\": \"combinator.evaluate\",\n \"fuel\": 10000,\n \"cases\": [\n",
+    );
+    let all = scenarios();
+    for (i, (id, w)) in all.iter().enumerate() {
+        let owned = w.owned();
+        let input = owned.to_bytes().unwrap();
+        let back = codec::OwnedInput::from_bytes(&input).unwrap();
+        assert_eq!(back.to_bytes().unwrap(), input, "{id}");
+        let expect = match evaluate(&back.input(), &mut Fuel(10_000)) {
+            Ok(dec) => {
+                assert_eq!(Ok(dec.clone()), w.run(), "{id}");
+                format!(
+                    "\"decision\": \"{}\"",
+                    hex(&encode(&codec::decision_value(&dec), Limits::CEILING).unwrap())
+                )
+            }
+            Err(Rejection::Input) => "\"rejection\": \"input\"".to_string(),
+            Err(Rejection::Fuel) => "\"rejection\": \"fuel\"".to_string(),
+        };
+        let sep = if i + 1 == all.len() { "" } else { "," };
+        let _ = writeln!(
+            json,
+            "  {{\"id\": \"{id}\", \"input\": \"{}\", {expect}}}{sep}",
+            hex(&input)
+        );
+    }
+    json.push_str(" ]\n}\n");
+    #[cfg(not(target_os = "wasi"))]
+    if std::env::var_os("ACCESS_UPDATE_VECTORS").is_some() {
+        std::fs::write(
+            concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../../conformance/vectors/core/1/decision.json"
+            ),
+            &json,
+        )
+        .unwrap();
+        return;
+    }
+    assert_eq!(
+        include_str!("../../../../conformance/vectors/core/1/decision.json"),
+        json
+    );
 }

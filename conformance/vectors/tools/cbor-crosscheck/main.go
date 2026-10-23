@@ -15,10 +15,7 @@ import (
 )
 
 type file struct {
-	Cases []struct {
-		ID   string `json:"id"`
-		CBOR string `json:"cbor"`
-	} `json:"cases"`
+	Cases []map[string]any `json:"cases"`
 }
 
 func main() {
@@ -52,26 +49,30 @@ func main() {
 			return nil
 		}
 		for _, c := range f.Cases {
-			if c.CBOR == "" {
-				continue
+			id, _ := c["id"].(string)
+			for _, field := range []string{"cbor", "input", "decision"} {
+				h, ok := c[field].(string)
+				if !ok {
+					continue
+				}
+				want, err := hex.DecodeString(h)
+				if err != nil {
+					return err
+				}
+				var v any
+				if err := dec.Unmarshal(want, &v); err != nil {
+					fmt.Printf("FAIL %s %s.%s: decode: %v\n", path, id, field, err)
+					failed++
+					continue
+				}
+				got, err := enc.Marshal(v)
+				if err != nil || !bytes.Equal(got, want) {
+					fmt.Printf("FAIL %s %s.%s: re-encoding differs\n", path, id, field)
+					failed++
+					continue
+				}
+				checked++
 			}
-			want, err := hex.DecodeString(c.CBOR)
-			if err != nil {
-				return err
-			}
-			var v any
-			if err := dec.Unmarshal(want, &v); err != nil {
-				fmt.Printf("FAIL %s %s: decode: %v\n", path, c.ID, err)
-				failed++
-				continue
-			}
-			got, err := enc.Marshal(v)
-			if err != nil || !bytes.Equal(got, want) {
-				fmt.Printf("FAIL %s %s: re-encoding differs\n", path, c.ID)
-				failed++
-				continue
-			}
-			checked++
 		}
 		return nil
 	})
