@@ -50,6 +50,12 @@ _ndk target +cmd:
     #!/usr/bin/env bash
     set -euo pipefail
     case "{{target}}" in
+      *-apple-ios*)
+        if [[ "$(uname -s)" != Darwin ]]; then
+          echo "{{target}}: needs the iOS SDK (psm, OP-104 m.7); built by cross-ios on macOS" >&2
+          exit 0
+        fi
+        ;;
       *-linux-android)
         var="CC_$(echo '{{target}}' | tr '-' '_')"
         if [[ -z "${!var:-}" ]]; then
@@ -65,6 +71,7 @@ _ndk target +cmd:
     {{cmd}}
 
 cross-ios:
+    for t in aarch64-apple-ios aarch64-apple-ios-sim; do cargo build --locked -p esuiss-restriction --target "$t"; done
     CARGO_TARGET_AARCH64_APPLE_IOS_SIM_RUNNER="{{justfile_directory()}}/scripts/ios-sim-runner.sh" cargo test --locked -p esuiss-access-kernel --target aarch64-apple-ios-sim
 
 cross-android target="x86_64-linux-android":

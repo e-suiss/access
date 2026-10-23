@@ -14,3 +14,10 @@ paths = [
     '''(^|/)package-lock\.json$''',
     '''^supply-chain/imports\.lock$''',
 ]
+
+[[allowlists]]
+description = "Test JWTs signed with public test keys (CR-56 vectors); other rules still apply here"
+targetRules = ["jwt"]
+paths = [
+    '''^conformance/vectors/.+\.json$''',
+]
