@@ -29,6 +29,8 @@ sha2 = { version = "0.11.1", default-features = false }
 ed25519-dalek = { version = "3.0.0", default-features = false }
 curve25519-dalek = { version = "5.0.0", default-features = false }
 p256 = { version = "0.14.0", default-features = false, features = ["ecdsa"] }
+# OP-104
+cedar-policy = { version = "=4.13.0", default-features = false }
 thiserror = { version = "2.0.21", default-features = false }
 serde = { version = "1.0.229", default-features = false }
 serde_json = { version = "1.0.151", default-features = false }

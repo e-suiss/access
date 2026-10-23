@@ -41,6 +41,8 @@ cross:
     for t in {{kernel_targets}}; do cargo build --locked -p esuiss-crypto --no-default-features --features verify --target "$t"; done
     for t in {{kernel_targets}}; do cargo build --locked -p esuiss-restriction --target "$t"; done
     CARGO_TARGET_WASM32_WASIP1_RUNNER=wasmtime cargo test --locked -p esuiss-access-kernel --target wasm32-wasip1
+    # E43
+    CARGO_TARGET_WASM32_WASIP1_RUNNER=wasmtime cargo test --locked -p esuiss-restriction --target wasm32-wasip1
 
 cross-ios:
     CARGO_TARGET_AARCH64_APPLE_IOS_SIM_RUNNER="{{justfile_directory()}}/scripts/ios-sim-runner.sh" cargo test --locked -p esuiss-access-kernel --target aarch64-apple-ios-sim

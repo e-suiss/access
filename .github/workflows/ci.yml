@@ -90,6 +90,18 @@ jobs:
         with:
           cache-key: cross
           tools: wasmtime
+      # OP-104 m.7
+      - name: Use the NDK compiler for Android
+        run: |
+          bin="$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          test -x "$bin/aarch64-linux-android24-clang"
+          test -x "$bin/x86_64-linux-android24-clang"
+          {
+            echo "CC_aarch64_linux_android=$bin/aarch64-linux-android24-clang"
+            echo "AR_aarch64_linux_android=$bin/llvm-ar"
+            echo "CC_x86_64_linux_android=$bin/x86_64-linux-android24-clang"
+            echo "AR_x86_64_linux_android=$bin/llvm-ar"
+          } >> "$GITHUB_ENV"
       # CMP-24, MD-1, T41
       - name: Kernel cross-compilation
         run: just cross

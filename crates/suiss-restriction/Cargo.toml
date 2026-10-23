@@ -8,5 +8,13 @@ license.workspace = true
 repository.workspace = true
 publish = false
 
+[dependencies]
+cedar-policy = { workspace = true }
+serde_json = { workspace = true, features = ["std"] }
+thiserror = { workspace = true, features = ["std"] }
+
+[dev-dependencies]
+proptest = { workspace = true, features = ["std"] }
+
 [lints]
 workspace = true
