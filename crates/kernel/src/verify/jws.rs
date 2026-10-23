@@ -70,6 +70,9 @@ fn algorithm(name: &str) -> Option<Algorithm> {
     match name {
         "Ed25519" => Some(Algorithm::Ed25519),
         "ES256" => Some(Algorithm::Es256),
+        "ML-DSA-44" => Some(Algorithm::MlDsa44),
+        "ML-DSA-65" => Some(Algorithm::MlDsa65),
+        "ML-DSA-87" => Some(Algorithm::MlDsa87),
         _ => None,
     }
 }
@@ -170,7 +173,7 @@ pub fn verify_compact(
 ) -> Result<Verified, JwsError> {
     let parts = split(token)?;
     let kid = parts.header.kid.ok_or(JwsError::Header)?;
-    if !keys.allowed.contains(&parts.header.alg) {
+    if !keys.allowed.contains(&parts.header.alg) || !parts.header.alg.enabled() {
         return Err(JwsError::Algorithm);
     }
     if parts.header.typ != typ {
@@ -201,7 +204,7 @@ pub fn verify_with_key(
     if parts.header.kid.is_some() {
         return Err(JwsError::Header);
     }
-    if !allowed.contains(&parts.header.alg) {
+    if !allowed.contains(&parts.header.alg) || !parts.header.alg.enabled() {
         return Err(JwsError::Algorithm);
     }
     if parts.header.typ != typ {

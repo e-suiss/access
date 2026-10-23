@@ -69,6 +69,29 @@ pub trait Canonical: Sized {
     }
 }
 
+/// A stored or foreign value: either understood, or carrying something this Kernel version does
+/// not know. A value that is not understood covers nothing (OP-108 m.4, must-understand).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Stored<T> {
+    /// Fully understood.
+    Known(T),
+    /// Contains an unknown field or variant; never covers anything.
+    NotUnderstood,
+}
+
+/// Decodes a stored or foreign value. Unknown fields or variants give
+/// [`Stored::NotUnderstood`]; non-canonical bytes and other errors are still rejected.
+///
+/// # Errors
+/// [`ModelError`] other than [`ModelError::Unknown`].
+pub fn decode_stored<T: Canonical>(bytes: &[u8]) -> Result<Stored<T>, ModelError> {
+    match T::from_bytes(bytes) {
+        Ok(v) => Ok(Stored::Known(v)),
+        Err(ModelError::Unknown) => Ok(Stored::NotUnderstood),
+        Err(e) => Err(e),
+    }
+}
+
 pub(crate) struct Fields<'a> {
     entries: Vec<(&'a str, &'a Value, bool)>,
 }

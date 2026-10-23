@@ -324,3 +324,30 @@ fn golden_vectors_match() {
         "run with ACCESS_UPDATE_VECTORS=1 and review the diff"
     );
 }
+
+// OP-108 m.4: stored values with unknown parts are read as not understood
+#[test]
+fn stored_values_with_unknown_parts_are_not_understood() {
+    let a = sample();
+    let bytes = a.to_bytes().unwrap();
+    assert_eq!(
+        decode_stored::<CanonicalAuthority>(&bytes),
+        Ok(Stored::Known(a.clone()))
+    );
+    let newer = with(&a.to_value(), "geo_fence", Value::Bool(true));
+    let newer = suiss_crypto::dcbor::encode(&newer, Limits::CEILING).unwrap();
+    assert_eq!(
+        decode_stored::<CanonicalAuthority>(&newer),
+        Ok(Stored::NotUnderstood)
+    );
+    assert_eq!(
+        CanonicalAuthority::from_bytes(&newer),
+        Err(ModelError::Unknown)
+    );
+    let mut non_canonical = bytes.clone();
+    non_canonical.push(0);
+    assert!(matches!(
+        decode_stored::<CanonicalAuthority>(&non_canonical),
+        Err(ModelError::Cbor(_))
+    ));
+}

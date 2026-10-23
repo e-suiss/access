@@ -241,7 +241,29 @@ impl PublicKey {
     fn p256_bytes(&self) -> Vec<u8> {
         match self {
             Self::P256(b) => b.clone(),
-            Self::Ed25519(_) => Vec::new(),
+            Self::Ed25519(_) | Self::MlDsa(..) => Vec::new(),
         }
     }
+}
+
+// CR-55 m.1, Ek B: AKP is modelled from day one and off by default
+#[test]
+fn ml_dsa_is_modelled_but_off() {
+    let mut ks = keys();
+    assert_eq!(
+        ks.insert([5; 32], PublicKey::MlDsa(Algorithm::MlDsa65, vec![0; 1952])),
+        Ok(())
+    );
+    assert_eq!(
+        ks.insert([6; 32], PublicKey::MlDsa(Algorithm::MlDsa65, vec![0; 1951])),
+        Err(SignatureError::Length)
+    );
+    ks.allowed.insert(Algorithm::MlDsa65);
+    let prot = std_header(Algorithm::MlDsa65, [5; 32]);
+    let msg = sign1(&prot, empty(), b"p", &[0; 3309]);
+    assert_eq!(
+        verify_sign1(&PureBackend, &msg, &ks, CT),
+        Err(CoseError::Algorithm)
+    );
+    assert!(!Algorithm::MlDsa44.enabled() && Algorithm::Ed25519.enabled());
 }

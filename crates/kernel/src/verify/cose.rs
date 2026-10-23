@@ -16,6 +16,12 @@ pub enum Algorithm {
     Esp256,
     /// ES256, −7 (verify only, MD-3).
     Es256,
+    /// ML-DSA-44, −48; modelled, off by default (CR-55 m.1).
+    MlDsa44,
+    /// ML-DSA-65, −49; modelled, off by default.
+    MlDsa65,
+    /// ML-DSA-87, −50; modelled, off by default.
+    MlDsa87,
 }
 
 impl Algorithm {
@@ -26,13 +32,29 @@ impl Algorithm {
             Self::Ed25519 => -19,
             Self::Esp256 => -9,
             Self::Es256 => -7,
+            Self::MlDsa44 => -48,
+            Self::MlDsa65 => -49,
+            Self::MlDsa87 => -50,
         }
     }
 
+    /// Whether this Kernel can verify it; ML-DSA has no provider yet (CR-55 m.1).
+    #[must_use]
+    pub const fn enabled(self) -> bool {
+        matches!(self, Self::Ed25519 | Self::Esp256 | Self::Es256)
+    }
+
     fn from_cose(id: i64) -> Option<Self> {
-        [Self::Ed25519, Self::Esp256, Self::Es256]
-            .into_iter()
-            .find(|a| a.cose() == id)
+        [
+            Self::Ed25519,
+            Self::Esp256,
+            Self::Es256,
+            Self::MlDsa44,
+            Self::MlDsa65,
+            Self::MlDsa87,
+        ]
+        .into_iter()
+        .find(|a| a.cose() == id)
     }
 }
 
@@ -43,6 +65,8 @@ pub enum PublicKey {
     Ed25519([u8; 32]),
     /// P-256 public key, SEC1 encoding.
     P256(Vec<u8>),
+    /// `AKP` ML-DSA public key (RFC 9964); modelled from day one, off by default.
+    MlDsa(Algorithm, Vec<u8>),
 }
 
 impl PublicKey {
@@ -71,6 +95,19 @@ impl PublicKey {
                     .map(|_| ())
                     .map_err(|_| SignatureError::NonCanonicalKey)
             }
+            Self::MlDsa(alg, key) => {
+                let expected = match alg {
+                    Algorithm::MlDsa44 => 1312,
+                    Algorithm::MlDsa65 => 1952,
+                    Algorithm::MlDsa87 => 2592,
+                    _ => return Err(SignatureError::NonCanonicalKey),
+                };
+                if key.len() == expected {
+                    Ok(())
+                } else {
+                    Err(SignatureError::Length)
+                }
+            }
         }
     }
 
@@ -79,7 +116,7 @@ impl PublicKey {
             (self, alg),
             (Self::Ed25519(_), Algorithm::Ed25519)
                 | (Self::P256(_), Algorithm::Esp256 | Algorithm::Es256)
-        )
+        ) || matches!(self, Self::MlDsa(a, _) if *a == alg)
     }
 }
 
@@ -228,7 +265,7 @@ pub fn verify_sign1(
         return Err(CoseError::Unprotected);
     }
     let h = protected(prot)?;
-    if !keys.allowed.contains(&h.alg) {
+    if !keys.allowed.contains(&h.alg) || !h.alg.enabled() {
         return Err(CoseError::Algorithm);
     }
     if h.content_type != content_type {
@@ -242,6 +279,7 @@ pub fn verify_sign1(
     match key {
         PublicKey::Ed25519(pk) => ed25519(backend, pk, &tbs, sig)?,
         PublicKey::P256(pk) => p256(backend, pk, &tbs, sig, true)?,
+        PublicKey::MlDsa(..) => return Err(CoseError::Algorithm),
     }
     Ok(Verified {
         algorithm: h.alg,
