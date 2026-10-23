@@ -1,0 +1,8 @@
+# F-14: tests, benches, fuzz targets and conformance vectors use fixed keys, nonces and salts on purpose.
+name: Access CodeQL configuration
+paths-ignore:
+  - "**/tests.rs"
+  - "**/tests/**"
+  - "**/benches/**"
+  - fuzz
+  - conformance/vectors
