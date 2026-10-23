@@ -1,0 +1,69 @@
+[package]
+name = "access-fuzz"
+version = "0.0.0"
+edition = "2024"
+publish = false
+license = "Apache-2.0"
+
+[package.metadata]
+cargo-fuzz = true
+
+[workspace]
+members = ["."]
+
+[dependencies]
+libfuzzer-sys = "=0.4.13"
+access-kernel = { package = "esuiss-access-kernel", path = "../crates/kernel" }
+suiss-crypto = { package = "esuiss-crypto", path = "../crates/suiss-crypto", default-features = false, features = ["verify"] }
+suiss-restriction = { package = "esuiss-restriction", path = "../crates/suiss-restriction" }
+
+[profile.release]
+debug = 1
+
+[[bin]]
+name = "dcbor_decode"
+path = "fuzz_targets/dcbor_decode.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "model_decode"
+path = "fuzz_targets/model_decode.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "json_parse"
+path = "fuzz_targets/json_parse.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "cose_verify"
+path = "fuzz_targets/cose_verify.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "jws_verify"
+path = "fuzz_targets/jws_verify.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "sd_jwt_verify"
+path = "fuzz_targets/sd_jwt_verify.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "merkle_proofs"
+path = "fuzz_targets/merkle_proofs.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "restriction_compile"
+path = "fuzz_targets/restriction_compile.rs"
+test = false
+doc = false

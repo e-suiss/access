@@ -171,6 +171,13 @@ test-sandbox:
         "$bin"
     fi
 
+# SA-44, OP-103 criterion 6
+fuzz target seconds="60":
+    cd fuzz && cargo +{{sanitizer_nightly}} fuzz run {{target}} -- -max_total_time={{seconds}} -rss_limit_mb=2048
+
+fuzz-all seconds="60":
+    for t in $(cd fuzz && cargo +{{sanitizer_nightly}} fuzz list); do just fuzz "$t" {{seconds}}; done
+
 # OP-106 m.24
 vectors-crosscheck:
     cd conformance/vectors/tools/cbor-crosscheck && go run . ../..
