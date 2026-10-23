@@ -1,4 +1,6 @@
 # F-2, SA-34
+aws-lc-rs
+aws-lc-sys
 bincode-next
 borsh
 cedar-policy
