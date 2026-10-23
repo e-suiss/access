@@ -105,6 +105,10 @@ jobs:
       # CMP-24, MD-1, T41
       - name: Kernel cross-compilation
         run: just cross
+      # OP-56, OP-106 m.24
+      - name: Vector cross-check with an independent encoder
+        working-directory: conformance/vectors/tools/cbor-crosscheck
+        run: go run . ../..
 
   supply-chain:
     name: supply-chain

@@ -39,7 +39,13 @@ pub enum Rejection {
     /// Input outside the contract (e.g. `commit` without a basis).
     #[error("malformed input")]
     Input,
+    /// Lineage deeper than [`MAX_LINEAGE`] (OP-108 m.10, SI-20).
+    #[error("lineage too deep")]
+    Limit,
 }
+
+/// Maximum lineage depth on the Kernel and commit paths (OP-108 m.10).
+pub const MAX_LINEAGE: usize = 16;
 
 /// Evaluation mode (§9.5).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -434,6 +440,9 @@ fn evaluate_basis(
 ) -> Result<Decision, Rejection> {
     if basis.hops.is_empty() {
         return Err(Rejection::Input);
+    }
+    if basis.hops.len() > MAX_LINEAGE {
+        return Err(Rejection::Limit);
     }
     let mut blockers = Vec::new();
     let mut terms: Vec<(RequirementTerm, Position)> = Vec::new();

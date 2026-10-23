@@ -477,6 +477,16 @@ fn modes() {
     assert_eq!(w.run(), Err(Rejection::Input));
 }
 
+// OP-108 m.10
+#[test]
+fn lineage_deeper_than_sixteen_is_rejected() {
+    let mut w = World::new();
+    w.bases = vec![basis(vec![hop(); MAX_LINEAGE])];
+    assert_eq!(w.run().map(|dec| dec.outcome), Ok(Outcome::Allow));
+    w.bases = vec![basis(vec![hop(); MAX_LINEAGE + 1])];
+    assert_eq!(w.run(), Err(Rejection::Limit));
+}
+
 // OP-111 m.7
 #[test]
 fn fuel_exhaustion_is_a_rejection() {
@@ -679,6 +689,7 @@ fn decision_vectors_match() {
             }
             Err(Rejection::Input) => "\"rejection\": \"input\"".to_string(),
             Err(Rejection::Fuel) => "\"rejection\": \"fuel\"".to_string(),
+            Err(Rejection::Limit) => "\"rejection\": \"limit\"".to_string(),
         };
         let sep = if i + 1 == all.len() { "" } else { "," };
         let _ = writeln!(
