@@ -23,7 +23,7 @@ const CONFIG_EXTENSIONS: &[&str] = &["toml", "yml", "yaml", "json", "env", "ini"
 
 /// Directories whose configuration is third-party data, not our switches:
 /// cargo-vet audit records quote other projects' notes.
-const CONFIG_SKIP_PREFIXES: &[&str] = &["supply-chain/"];
+const CONFIG_SKIP_PREFIXES: &[&str] = &["supply-chain/", "conformance/vectors/external/"];
 
 /// Splits an identifier or literal into lower-case words.
 pub(crate) fn words(atom: &str) -> Vec<String> {
