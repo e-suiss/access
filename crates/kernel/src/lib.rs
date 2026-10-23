@@ -7,10 +7,13 @@ extern crate alloc;
 
 pub mod algebra;
 pub mod codec;
+pub mod combinator;
 pub mod digest;
 pub mod intent;
 pub mod json;
 pub mod model;
+pub mod requirement;
+pub mod restriction;
 pub mod validity;
 pub mod verify;
 
