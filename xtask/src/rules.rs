@@ -50,5 +50,9 @@ pub(crate) fn checks() -> Vec<Check> {
             name: "panic-profile",
             run: profile::check,
         },
+        Check {
+            name: "secret-compare",
+            run: source::check_secret_compare,
+        },
     ]
 }

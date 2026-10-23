@@ -814,3 +814,87 @@ mod tests {
         ));
     }
 }
+
+const SECRET_COMPARE: &str = "secret-compare";
+
+/// CR-39 m.2: secrets are compared only with `ct_eq`; `*_vartime` functions never take a secret.
+pub(crate) fn secret_compare_violations(rel_path: &str, src: &str) -> Vec<Violation> {
+    let Lexed { code, .. } = lex(src);
+    let mut out = Vec::new();
+    for (i, line) in code.lines().enumerate() {
+        let n = i.saturating_add(1);
+        let exposed = line.contains(".expose()");
+        if exposed
+            && (line.contains("==")
+                || line.contains("!=")
+                || line.contains(".eq(")
+                || line.contains(".cmp("))
+        {
+            out.push(violation(
+                SECRET_COMPARE,
+                rel_path,
+                n,
+                "an exposed secret is compared with ==, !=, eq or cmp; use ct_eq (CR-39 m.2)"
+                    .to_owned(),
+            ));
+        }
+        if let Some(pos) = line.find("_vartime(")
+            && line.get(..pos).is_some_and(|head| head.contains("fn "))
+            && line.get(pos..).is_some_and(|tail| tail.contains("Secret"))
+        {
+            out.push(violation(
+                SECRET_COMPARE,
+                rel_path,
+                n,
+                "a *_vartime function takes a Secret (CR-39 m.2)".to_owned(),
+            ));
+        }
+    }
+    out
+}
+
+pub(crate) fn check_secret_compare(root: &Path) -> Result<Vec<Violation>, String> {
+    let mut out = Vec::new();
+    for (rel_path, path) in rust_files(root)? {
+        if !is_test_file(&rel_path) && !rel_path.starts_with("xtask/") {
+            out.extend(secret_compare_violations(&rel_path, &read(&path)?));
+        }
+    }
+    Ok(out)
+}
+
+#[cfg(test)]
+mod secret_compare_tests {
+    use super::*;
+
+    // CR-39 m.2
+    #[test]
+    fn comparing_an_exposed_secret_is_rejected() {
+        let bad = "fn f(s: &Secret<[u8; 32]>, t: &[u8]) -> bool { s.expose() == t }\n";
+        assert_eq!(
+            secret_compare_violations("crates/x/src/lib.rs", bad).len(),
+            1
+        );
+        let bad = "fn f(s: &Secret<[u8; 32]>, t: &[u8; 32]) -> bool { s.expose().eq(t) }\n";
+        assert_eq!(
+            secret_compare_violations("crates/x/src/lib.rs", bad).len(),
+            1
+        );
+        let ok = "fn f(s: &Secret<[u8; 32]>, t: &[u8]) -> bool { s.ct_eq_bytes(t) }\n";
+        assert!(secret_compare_violations("crates/x/src/lib.rs", ok).is_empty());
+        let in_comment = "// s.expose() == t\nfn f() {}\n";
+        assert!(secret_compare_violations("crates/x/src/lib.rs", in_comment).is_empty());
+    }
+
+    // CR-39 m.2
+    #[test]
+    fn vartime_functions_never_take_secrets() {
+        let bad = "pub fn lookup_vartime(key: &Secret<[u8; 32]>) -> usize { 0 }\n";
+        assert_eq!(
+            secret_compare_violations("crates/x/src/lib.rs", bad).len(),
+            1
+        );
+        let ok = "pub fn lookup_vartime(index: u32) -> usize { 0 }\n";
+        assert!(secret_compare_violations("crates/x/src/lib.rs", ok).is_empty());
+    }
+}

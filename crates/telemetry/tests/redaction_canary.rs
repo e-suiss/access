@@ -63,7 +63,7 @@ fn password_never_appears_in_logs() {
         username: "alice".into(),
         password: Secret::new(CANARY.to_owned()),
     };
-    assert!(request.password.ct_eq_bytes(CANARY.as_bytes()));
+    assert_eq!(request.password.expose(), CANARY);
 
     tracing::info!(?request, "login attempt");
     tracing::info!(request = ?request, user = %request.username, "structured fields");
