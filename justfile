@@ -39,10 +39,30 @@ cross:
     for t in {{kernel_targets}}; do cargo build --locked -p esuiss-access-kernel --target "$t"; done
     # OP-76
     for t in {{kernel_targets}}; do cargo build --locked -p esuiss-crypto --no-default-features --features verify --target "$t"; done
-    for t in {{kernel_targets}}; do cargo build --locked -p esuiss-restriction --target "$t"; done
+    # OP-104 m.7
+    for t in {{kernel_targets}}; do just _ndk "$t" cargo build --locked -p esuiss-restriction --target "$t"; done
     CARGO_TARGET_WASM32_WASIP1_RUNNER=wasmtime cargo test --locked -p esuiss-access-kernel --target wasm32-wasip1
     # E43
     CARGO_TARGET_WASM32_WASIP1_RUNNER=wasmtime cargo test --locked -p esuiss-restriction --target wasm32-wasip1
+
+[private]
+_ndk target +cmd:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    case "{{target}}" in
+      *-linux-android)
+        var="CC_$(echo '{{target}}' | tr '-' '_')"
+        if [[ -z "${!var:-}" ]]; then
+          bin="$(ls -d "${ANDROID_NDK_HOME:-/nonexistent}"/toolchains/llvm/prebuilt/*/bin 2>/dev/null | head -1 || true)"
+          if [[ ! -x "$bin/{{target}}24-clang" ]]; then
+            echo "{{target}}: Android NDK required (OP-104 m.7); set ANDROID_NDK_HOME or $var" >&2
+            exit 1
+          fi
+          export "$var=$bin/{{target}}24-clang" "AR_$(echo '{{target}}' | tr '-' '_')=$bin/llvm-ar"
+        fi
+        ;;
+    esac
+    {{cmd}}
 
 cross-ios:
     CARGO_TARGET_AARCH64_APPLE_IOS_SIM_RUNNER="{{justfile_directory()}}/scripts/ios-sim-runner.sh" cargo test --locked -p esuiss-access-kernel --target aarch64-apple-ios-sim

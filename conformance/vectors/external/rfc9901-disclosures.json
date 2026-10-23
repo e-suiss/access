@@ -1,0 +1,531 @@
+{
+ "rule": "CR-55 m.7",
+ "track": "interop",
+ "version": 1,
+ "operation": "verify.sd_jwt.disclosure",
+ "source": "RFC 9901, every SHA-256 Hash / Disclosure example; name and value decoded independently by Python",
+ "cases": [
+  {
+   "digest": "jsu9yVulwQQlhFlM_3JlzMaSFzglhQG0DpfayQwLUK4",
+   "disclosure": "WyIyR0xDNDJzS1F2ZUNmR2ZyeU5STjl3IiwgImdpdmVuX25hbWUiLCAiSm9obiJd",
+   "name": "given_name",
+   "value": "\"John\""
+  },
+  {
+   "digest": "TGf4oLbgwd5JQaHyKVQZU9UdGE0w5rtDsrZzfUaomLo",
+   "disclosure": "WyJlbHVWNU9nM2dTTklJOEVZbnN4QV9BIiwgImZhbWlseV9uYW1lIiwgIkRvZSJd",
+   "name": "family_name",
+   "value": "\"Doe\""
+  },
+  {
+   "digest": "JzYjH4svliH0R3PyEMfeZu6Jt69u5qehZo7F7EPYlSE",
+   "disclosure": "WyI2SWo3dE0tYTVpVlBHYm9TNXRtdlZBIiwgImVtYWlsIiwgImpvaG5kb2VAZXhhbXBsZS5jb20iXQ",
+   "name": "email",
+   "value": "\"johndoe@example.com\""
+  },
+  {
+   "digest": "PorFbpKuVu6xymJagvkFsFXAbRoc2JGlAUA2BA4o7cI",
+   "disclosure": "WyJlSThaV205UW5LUHBOUGVOZW5IZGhRIiwgInBob25lX251bWJlciIsICIrMS0yMDItNTU1LTAxMDEiXQ",
+   "name": "phone_number",
+   "value": "\"+1-202-555-0101\""
+  },
+  {
+   "digest": "XQ_3kPKt1XyX7KANkqVR6yZ2Va5NrPIvPYbyMvRKBMM",
+   "disclosure": "WyJRZ19PNjR6cUF4ZTQxMmExMDhpcm9BIiwgInBob25lX251bWJlcl92ZXJpZmllZCIsIHRydWVd",
+   "name": "phone_number_verified",
+   "value": "true"
+  },
+  {
+   "digest": "XzFrzwscM6Gn6CJDc6vVK8BkMnfG8vOSKfpPIZdAfdE",
+   "disclosure": "WyJBSngtMDk1VlBycFR0TjRRTU9xUk9BIiwgImFkZHJlc3MiLCB7InN0cmVldF9hZGRyZXNzIjogIjEyMyBNYWluIFN0IiwgImxvY2FsaXR5IjogIkFueXRvd24iLCAicmVnaW9uIjogIkFueXN0YXRlIiwgImNvdW50cnkiOiAiVVMifV0",
+   "name": "address",
+   "value": "{\"street_address\":\"123 Main St\",\"locality\":\"Anytown\",\"region\":\"Anystate\",\"country\":\"US\"}"
+  },
+  {
+   "digest": "gbOsI4Edq2x2Kw-w5wPEzakob9hV1cRD0ATN3oQL9JM",
+   "disclosure": "WyJQYzMzSk0yTGNoY1VfbEhnZ3ZfdWZRIiwgImJpcnRoZGF0ZSIsICIxOTQwLTAxLTAxIl0",
+   "name": "birthdate",
+   "value": "\"1940-01-01\""
+  },
+  {
+   "digest": "CrQe7S5kqBAHt-nMYXgc6bdt2SH5aTY1sU_M-PgkjPI",
+   "disclosure": "WyJHMDJOU3JRZmpGWFE3SW8wOXN5YWpBIiwgInVwZGF0ZWRfYXQiLCAxNTcwMDAwMDAwXQ",
+   "name": "updated_at",
+   "value": "1570000000"
+  },
+  {
+   "digest": "pFndjkZ_VCzmyTa6UjlZo3dh-ko8aIKQc9DlGzhaVYo",
+   "disclosure": "WyJsa2x4RjVqTVlsR1RQVW92TU5JdkNBIiwgIlVTIl0",
+   "name": null,
+   "value": "\"US\""
+  },
+  {
+   "digest": "7Cf6JkPudry3lcbwHgeZ8khAv1U1OSlerP0VkBJrWZ0",
+   "disclosure": "WyJuUHVvUW5rUkZxM0JJZUFtN0FuWEZBIiwgIkRFIl0",
+   "name": null,
+   "value": "\"DE\""
+  },
+  {
+   "digest": "fOBUSQvo46yQO-wRwXBcGqvnbKIueISEL961_Sjd4do",
+   "disclosure": "WyIyR0xDNDJzS1F2ZUNmR2ZyeU5STjl3IiwgImFkZHJlc3MiLCB7InN0cmVldF9hZGRyZXNzIjogIlNjaHVsc3RyLiAxMiIsICJsb2NhbGl0eSI6ICJTY2h1bHBmb3J0YSIsICJyZWdpb24iOiAiU2FjaHNlbi1BbmhhbHQiLCAiY291bnRyeSI6ICJERSJ9XQ",
+   "name": "address",
+   "value": "{\"street_address\":\"Schulstr. 12\",\"locality\":\"Schulpforta\",\"region\":\"Sachsen-Anhalt\",\"country\":\"DE\"}"
+  },
+  {
+   "digest": "9gjVuXtdFROCgRrtNcGUXmF65rdezi_6Er_j76kmYyM",
+   "disclosure": "WyIyR0xDNDJzS1F2ZUNmR2ZyeU5STjl3IiwgInN0cmVldF9hZGRyZXNzIiwgIlNjaHVsc3RyLiAxMiJd",
+   "name": "street_address",
+   "value": "\"Schulstr. 12\""
+  },
+  {
+   "digest": "6vh9bq-zS4GKM_7GpggVbYzzu6oOGXrmNVGPHP75Ud0",
+   "disclosure": "WyJlbHVWNU9nM2dTTklJOEVZbnN4QV9BIiwgImxvY2FsaXR5IiwgIlNjaHVscGZvcnRhIl0",
+   "name": "locality",
+   "value": "\"Schulpforta\""
+  },
+  {
+   "digest": "KURDPh4ZC19-3tiz-Df39V8eidy1oV3a3H1Da2N0g88",
+   "disclosure": "WyI2SWo3dE0tYTVpVlBHYm9TNXRtdlZBIiwgInJlZ2lvbiIsICJTYWNoc2VuLUFuaGFsdCJd",
+   "name": "region",
+   "value": "\"Sachsen-Anhalt\""
+  },
+  {
+   "digest": "WN9r9dCBJ8HTCsS2jKASxTjEyW5m5x65_Z_2ro2jfXM",
+   "disclosure": "WyJlSThaV205UW5LUHBOUGVOZW5IZGhRIiwgImNvdW50cnkiLCAiREUiXQ",
+   "name": "country",
+   "value": "\"DE\""
+  },
+  {
+   "digest": "9gjVuXtdFROCgRrtNcGUXmF65rdezi_6Er_j76kmYyM",
+   "disclosure": "WyIyR0xDNDJzS1F2ZUNmR2ZyeU5STjl3IiwgInN0cmVldF9hZGRyZXNzIiwgIlNjaHVsc3RyLiAxMiJd",
+   "name": "street_address",
+   "value": "\"Schulstr. 12\""
+  },
+  {
+   "digest": "6vh9bq-zS4GKM_7GpggVbYzzu6oOGXrmNVGPHP75Ud0",
+   "disclosure": "WyJlbHVWNU9nM2dTTklJOEVZbnN4QV9BIiwgImxvY2FsaXR5IiwgIlNjaHVscGZvcnRhIl0",
+   "name": "locality",
+   "value": "\"Schulpforta\""
+  },
+  {
+   "digest": "KURDPh4ZC19-3tiz-Df39V8eidy1oV3a3H1Da2N0g88",
+   "disclosure": "WyI2SWo3dE0tYTVpVlBHYm9TNXRtdlZBIiwgInJlZ2lvbiIsICJTYWNoc2VuLUFuaGFsdCJd",
+   "name": "region",
+   "value": "\"Sachsen-Anhalt\""
+  },
+  {
+   "digest": "WN9r9dCBJ8HTCsS2jKASxTjEyW5m5x65_Z_2ro2jfXM",
+   "disclosure": "WyJlSThaV205UW5LUHBOUGVOZW5IZGhRIiwgImNvdW50cnkiLCAiREUiXQ",
+   "name": "country",
+   "value": "\"DE\""
+  },
+  {
+   "digest": "HvrKX6fPV0v9K_yCVFBiLFHsMaxcD_114Em6VT8x1lg",
+   "disclosure": "WyJRZ19PNjR6cUF4ZTQxMmExMDhpcm9BIiwgImFkZHJlc3MiLCB7Il9zZCI6IFsiNnZoOWJxLXpTNEdLTV83R3BnZ1ZiWXp6dTZvT0dYcm1OVkdQSFA3NVVkMCIsICI5Z2pWdVh0ZEZST0NnUnJ0TmNHVVhtRjY1cmRlemlfNkVyX2o3NmttWXlNIiwgIktVUkRQaDRaQzE5LTN0aXotRGYzOVY4ZWlkeTFvVjNhM0gxRGEyTjBnODgiLCAiV045cjlkQ0JKOEhUQ3NTMmpLQVN4VGpFeVc1bTV4NjVfWl8ycm8yamZYTSJdfV0",
+   "name": "address",
+   "value": "{\"_sd\":[\"6vh9bq-zS4GKM_7GpggVbYzzu6oOGXrmNVGPHP75Ud0\",\"9gjVuXtdFROCgRrtNcGUXmF65rdezi_6Er_j76kmYyM\",\"KURDPh4ZC19-3tiz-Df39V8eidy1oV3a3H1Da2N0g88\",\"WN9r9dCBJ8HTCsS2jKASxTjEyW5m5x65_Z_2ro2jfXM\"]}"
+  },
+  {
+   "digest": "X6ZAYOII2vPN40V7xExZwVwz7yRmLNcVwt5DL8RLv4g",
+   "disclosure": "WyIyR0xDNDJzS1F2ZUNmR2ZyeU5STjl3IiwgInN1YiIsICI2YzVjMGE0OS1iNTg5LTQzMWQtYmFlNy0yMTkxMjJhOWVjMmMiXQ",
+   "name": "sub",
+   "value": "\"6c5c0a49-b589-431d-bae7-219122a9ec2c\""
+  },
+  {
+   "digest": "ommFAicVT8LGHCB0uywx7fYuo3MHYKO15cz-RZEYM5Q",
+   "disclosure": "WyJlbHVWNU9nM2dTTklJOEVZbnN4QV9BIiwgImdpdmVuX25hbWUiLCAiXHU1OTJhXHU5MGNlIl0",
+   "name": "given_name",
+   "value": "\"太郎\""
+  },
+  {
+   "digest": "C9inp6YoRaEXR427zYJP7Qrk1WH_8bdwOA_YUrUnGQU",
+   "disclosure": "WyI2SWo3dE0tYTVpVlBHYm9TNXRtdlZBIiwgImZhbWlseV9uYW1lIiwgIlx1NWM3MVx1NzUzMCJd",
+   "name": "family_name",
+   "value": "\"山田\""
+  },
+  {
+   "digest": "Kuet1yAa0HIQvYnOVd59hcViO9Ug6J2kSfqYRBeowvE",
+   "disclosure": "WyJlSThaV205UW5LUHBOUGVOZW5IZGhRIiwgImVtYWlsIiwgIlwidW51c3VhbCBlbWFpbCBhZGRyZXNzXCJAZXhhbXBsZS5qcCJd",
+   "name": "email",
+   "value": "\"\\\"unusual email address\\\"@example.jp\""
+  },
+  {
+   "digest": "s0BKYsLWxQQeU8tVlltM7MKsIRTrEIa1PkJmqxBBf5U",
+   "disclosure": "WyJRZ19PNjR6cUF4ZTQxMmExMDhpcm9BIiwgInBob25lX251bWJlciIsICIrODEtODAtMTIzNC01Njc4Il0",
+   "name": "phone_number",
+   "value": "\"+81-80-1234-5678\""
+  },
+  {
+   "digest": "6aUhzYhZ7SJ1kVmagQAO3u2ETN2CC1aHheZpKnaF0_E",
+   "disclosure": "WyJBSngtMDk1VlBycFR0TjRRTU9xUk9BIiwgInN0cmVldF9hZGRyZXNzIiwgIlx1Njc3MVx1NGVhY1x1OTBmZFx1NmUyZlx1NTMzYVx1ODI5ZFx1NTE2Y1x1NTcxMlx1ZmYxNFx1NGUwMVx1NzZlZVx1ZmYxMlx1MjIxMlx1ZmYxOCJd",
+   "name": "street_address",
+   "value": "\"東京都港区芝公園４丁目２−８\""
+  },
+  {
+   "digest": "rvJd6iq6T5ejmsBMoGwuNXh9qAAFATAci40oidEeVsA",
+   "disclosure": "WyJQYzMzSk0yTGNoY1VfbEhnZ3ZfdWZRIiwgImxvY2FsaXR5IiwgIlx1Njc3MVx1NGVhY1x1OTBmZCJd",
+   "name": "locality",
+   "value": "\"東京都\""
+  },
+  {
+   "digest": "PzzcVu0qbMuBGSjulfewzkesD9zutOExn5EWNwkrQ-k",
+   "disclosure": "WyJHMDJOU3JRZmpGWFE3SW8wOXN5YWpBIiwgInJlZ2lvbiIsICJcdTZlMmZcdTUzM2EiXQ",
+   "name": "region",
+   "value": "\"港区\""
+  },
+  {
+   "digest": "uNHoWYhXsZhVJCNE2Dqy-zqt7t69gJKy5QaFv7GrMX4",
+   "disclosure": "WyJsa2x4RjVqTVlsR1RQVW92TU5JdkNBIiwgImNvdW50cnkiLCAiSlAiXQ",
+   "name": "country",
+   "value": "\"JP\""
+  },
+  {
+   "digest": "MMldOFFzB2d0umlmpTIaGerhWdU_PpYfLvKhh_f_9aY",
+   "disclosure": "WyJ5eXRWYmRBUEdjZ2wyckk0QzlHU29nIiwgImJpcnRoZGF0ZSIsICIxOTQwLTAxLTAxIl0",
+   "name": "birthdate",
+   "value": "\"1940-01-01\""
+  },
+  {
+   "digest": "vTwe3raHIFYgFA3xaUD2aMxFz5oDo8iBu05qKlOg9Lw",
+   "disclosure": "WyIyR0xDNDJzS1F2ZUNmR2ZyeU5STjl3IiwgInRpbWUiLCAiMjAxMi0wNC0yM1QxODoyNVoiXQ",
+   "name": "time",
+   "value": "\"2012-04-23T18:25Z\""
+  },
+  {
+   "digest": "7h4UE9qScvDKodXVCuoKfKBJpVBfXMF_TmAGVaZe3Sc",
+   "disclosure": "WyJlbHVWNU9nM2dTTklJOEVZbnN4QV9BIiwgInZlcmlmaWNhdGlvbl9wcm9jZXNzIiwgImYyNGM2Zi02ZDNmLTRlYzUtOTczZS1iMGQ4NTA2ZjNiYzciXQ",
+   "name": "verification_process",
+   "value": "\"f24c6f-6d3f-4ec5-973e-b0d8506f3bc7\""
+  },
+  {
+   "digest": "G5EnhOAOoU9X_6QMNvzFXjpEA_Rc-AEtm1bG_wcaKIk",
+   "disclosure": "WyI2SWo3dE0tYTVpVlBHYm9TNXRtdlZBIiwgInR5cGUiLCAiZG9jdW1lbnQiXQ",
+   "name": "type",
+   "value": "\"document\""
+  },
+  {
+   "digest": "WpxQ4HSoEtcTmCCKOeDslB_emucYLz2oO8oHNr1bEVQ",
+   "disclosure": "WyJlSThaV205UW5LUHBOUGVOZW5IZGhRIiwgIm1ldGhvZCIsICJwaXBwIl0",
+   "name": "method",
+   "value": "\"pipp\""
+  },
+  {
+   "digest": "9wpjVPWuD7PK0nsQDL8B06lmdgV3LVybhHydQpTNyLI",
+   "disclosure": "WyJRZ19PNjR6cUF4ZTQxMmExMDhpcm9BIiwgInRpbWUiLCAiMjAxMi0wNC0yMlQxMTozMFoiXQ",
+   "name": "time",
+   "value": "\"2012-04-22T11:30Z\""
+  },
+  {
+   "digest": "IhwFrWUB63RcZq9yvgZ0XPc7Gowh3O2kqXeBIswg1B4",
+   "disclosure": "WyJBSngtMDk1VlBycFR0TjRRTU9xUk9BIiwgImRvY3VtZW50IiwgeyJ0eXBlIjogImlkY2FyZCIsICJpc3N1ZXIiOiB7Im5hbWUiOiAiU3RhZHQgQXVnc2J1cmciLCAiY291bnRyeSI6ICJERSJ9LCAibnVtYmVyIjogIjUzNTU0NTU0IiwgImRhdGVfb2ZfaXNzdWFuY2UiOiAiMjAxMC0wMy0yMyIsICJkYXRlX29mX2V4cGlyeSI6ICIyMDIwLTAzLTIyIn1d",
+   "name": "document",
+   "value": "{\"type\":\"idcard\",\"issuer\":{\"name\":\"Stadt Augsburg\",\"country\":\"DE\"},\"number\":\"53554554\",\"date_of_issuance\":\"2010-03-23\",\"date_of_expiry\":\"2020-03-22\"}"
+  },
+  {
+   "digest": "tYJ0TDucyZZCRMbROG4qRO5vkPSFRxFhUELc18CSl3k",
+   "disclosure": "WyJQYzMzSk0yTGNoY1VfbEhnZ3ZfdWZRIiwgeyJfc2QiOiBbIjl3cGpWUFd1RDdQSzBuc1FETDhCMDZsbWRnVjNMVnliaEh5ZFFwVE55TEkiLCAiRzVFbmhPQU9vVTlYXzZRTU52ekZYanBFQV9SYy1BRXRtMWJHX3djYUtJayIsICJJaHdGcldVQjYzUmNacTl5dmdaMFhQYzdHb3doM08ya3FYZUJJc3dnMUI0IiwgIldweFE0SFNvRXRjVG1DQ0tPZURzbEJfZW11Y1lMejJvTzhvSE5yMWJFVlEiXX1d",
+   "name": null,
+   "value": "{\"_sd\":[\"9wpjVPWuD7PK0nsQDL8B06lmdgV3LVybhHydQpTNyLI\",\"G5EnhOAOoU9X_6QMNvzFXjpEA_Rc-AEtm1bG_wcaKIk\",\"IhwFrWUB63RcZq9yvgZ0XPc7Gowh3O2kqXeBIswg1B4\",\"WpxQ4HSoEtcTmCCKOeDslB_emucYLz2oO8oHNr1bEVQ\"]}"
+  },
+  {
+   "digest": "S_498bbpKzB6Eanftss0xc7cOaoneRr3pKr7NdRmsMo",
+   "disclosure": "WyJHMDJOU3JRZmpGWFE3SW8wOXN5YWpBIiwgImdpdmVuX25hbWUiLCAiTWF4Il0",
+   "name": "given_name",
+   "value": "\"Max\""
+  },
+  {
+   "digest": "Wxh_sV3iRH9bgrTBJi-aYHNCLt-vjhX1sd-igOf_9lk",
+   "disclosure": "WyJsa2x4RjVqTVlsR1RQVW92TU5JdkNBIiwgImZhbWlseV9uYW1lIiwgIk1cdTAwZmNsbGVyIl0",
+   "name": "family_name",
+   "value": "\"Müller\""
+  },
+  {
+   "digest": "hvDXhwmGcJQsBCA2OtjuLAcwAMpDsaU0nkovcKOqWNE",
+   "disclosure": "WyJuUHVvUW5rUkZxM0JJZUFtN0FuWEZBIiwgIm5hdGlvbmFsaXRpZXMiLCBbIkRFIl1d",
+   "name": "nationalities",
+   "value": "[\"DE\"]"
+  },
+  {
+   "digest": "WNA-UNK7F_zhsAb9syWO6IIQ1uHlTmOU8r8CvJ0cIMk",
+   "disclosure": "WyI1YlBzMUlxdVpOYTBoa2FGenp6Wk53IiwgImJpcnRoZGF0ZSIsICIxOTU2LTAxLTI4Il0",
+   "name": "birthdate",
+   "value": "\"1956-01-28\""
+  },
+  {
+   "digest": "RiOiCn6_w5ZHaadkQMrcQJf0Jte5RwurRs54231DTlo",
+   "disclosure": "WyI1YTJXMF9OcmxFWnpmcW1rXzdQcS13IiwgInBsYWNlX29mX2JpcnRoIiwgeyJjb3VudHJ5IjogIklTIiwgImxvY2FsaXR5IjogIlx1MDBkZXlra3ZhYlx1MDBlNmphcmtsYXVzdHVyIn1d",
+   "name": "place_of_birth",
+   "value": "{\"country\":\"IS\",\"locality\":\"Þykkvabæjarklaustur\"}"
+  },
+  {
+   "digest": "_O-wJiH3enSB4ROHntToQT8JmLtz-mhO2f1c89XoerQ",
+   "disclosure": "WyJ5MXNWVTV3ZGZKYWhWZGd3UGdTN1JRIiwgImFkZHJlc3MiLCB7ImxvY2FsaXR5IjogIk1heHN0YWR0IiwgInBvc3RhbF9jb2RlIjogIjEyMzQ0IiwgImNvdW50cnkiOiAiREUiLCAic3RyZWV0X2FkZHJlc3MiOiAiV2VpZGVuc3RyYVx1MDBkZmUgMjIifV0",
+   "name": "address",
+   "value": "{\"locality\":\"Maxstadt\",\"postal_code\":\"12344\",\"country\":\"DE\",\"street_address\":\"Weidenstraße 22\"}"
+  },
+  {
+   "digest": "otkxuT14nBiwzNJ3MPaOitOl9pVnXOaEHal_xkyNfKI",
+   "disclosure": "WyJIYlE0WDhzclZXM1FEeG5JSmRxeU9BIiwgImJpcnRoX21pZGRsZV9uYW1lIiwgIlRpbW90aGV1cyJd",
+   "name": "birth_middle_name",
+   "value": "\"Timotheus\""
+  },
+  {
+   "digest": "-aSznId9mWM8ocuQolCllsxVggq1-vHW4OtnhUtVmWw",
+   "disclosure": "WyJDOUdTb3VqdmlKcXVFZ1lmb2pDYjFBIiwgInNhbHV0YXRpb24iLCAiRHIuIl0",
+   "name": "salutation",
+   "value": "\"Dr.\""
+  },
+  {
+   "digest": "IKbrYNn3vA7WEFrysvbdBJjDDU_EvQIr0W18vTRpUSg",
+   "disclosure": "WyJreDVrRjE3Vi14MEptd1V4OXZndnR3IiwgIm1zaXNkbiIsICI0OTEyMzQ1Njc4OSJd",
+   "name": "msisdn",
+   "value": "\"49123456789\""
+  },
+  {
+   "digest": "0HZmnSIPz337kSWe7C34l--88gzJi-eBJ2Vz_HJwATg",
+   "disclosure": "WyIyR0xDNDJzS1F2ZUNmR2ZyeU5STjl3IiwgImdpdmVuX25hbWUiLCAiRXJpa2EiXQ",
+   "name": "given_name",
+   "value": "\"Erika\""
+  },
+  {
+   "digest": "I00fcFUoDXCucp5yy2ujqPssDVGaWNiUliNz_awD0gc",
+   "disclosure": "WyJlbHVWNU9nM2dTTklJOEVZbnN4QV9BIiwgImZhbWlseV9uYW1lIiwgIk11c3Rlcm1hbm4iXQ",
+   "name": "family_name",
+   "value": "\"Mustermann\""
+  },
+  {
+   "digest": "Lai6IU6d7GQagXR7AvGTrnXgSld3z8EIg_fv3fOZ1Wg",
+   "disclosure": "WyI2SWo3dE0tYTVpVlBHYm9TNXRtdlZBIiwgImJpcnRoZGF0ZSIsICIxOTYzLTA4LTEyIl0",
+   "name": "birthdate",
+   "value": "\"1963-08-12\""
+  },
+  {
+   "digest": "ALZERsSn5WNiEXdCksW8I5qQw3_NpAnRqpSAZDudgw8",
+   "disclosure": "WyJlSThaV205UW5LUHBOUGVOZW5IZGhRIiwgInN0cmVldF9hZGRyZXNzIiwgIkhlaWRlc3RyYVx1MDBkZmUgMTciXQ",
+   "name": "street_address",
+   "value": "\"Heidestraße 17\""
+  },
+  {
+   "digest": "D__W_uYcvRz3tvUnIJvBDHiTc7C__qHd0xNKwIs_w9k",
+   "disclosure": "WyJRZ19PNjR6cUF4ZTQxMmExMDhpcm9BIiwgImxvY2FsaXR5IiwgIktcdTAwZjZsbiJd",
+   "name": "locality",
+   "value": "\"Köln\""
+  },
+  {
+   "digest": "xOPy9-gJALK6UbWKFLR85cOByUD3AbNwFg3I3YfQE_I",
+   "disclosure": "WyJBSngtMDk1VlBycFR0TjRRTU9xUk9BIiwgInBvc3RhbF9jb2RlIiwgIjUxMTQ3Il0",
+   "name": "postal_code",
+   "value": "\"51147\""
+  },
+  {
+   "digest": "eBpCXU1J5dhH2g4t8QYNW5ExS9AxUVblUodoLYoPho0",
+   "disclosure": "WyJQYzMzSk0yTGNoY1VfbEhnZ3ZfdWZRIiwgImNvdW50cnkiLCAiREUiXQ",
+   "name": "country",
+   "value": "\"DE\""
+  },
+  {
+   "digest": "RTz3qTmFNHbpWrrOMZS41F474kFqRv3vIPqth6PUhlM",
+   "disclosure": "WyJHMDJOU3JRZmpGWFE3SW8wOXN5YWpBIiwgImFkZHJlc3MiLCB7Il9zZCI6IFsiQUxaRVJzU241V05pRVhkQ2tzVzhJNXFRdzNfTnBBblJxcFNBWkR1ZGd3OCIsICJEX19XX3VZY3ZSejN0dlVuSUp2QkRIaVRjN0NfX3FIZDB4Tkt3SXNfdzlrIiwgImVCcENYVTFKNWRoSDJnNHQ4UVlOVzVFeFM5QXhVVmJsVW9kb0xZb1BobzAiLCAieE9QeTktZ0pBTEs2VWJXS0ZMUjg1Y09CeVVEM0FiTndGZzNJM1lmUUVfSSJdfV0",
+   "name": "address",
+   "value": "{\"_sd\":[\"ALZERsSn5WNiEXdCksW8I5qQw3_NpAnRqpSAZDudgw8\",\"D__W_uYcvRz3tvUnIJvBDHiTc7C__qHd0xNKwIs_w9k\",\"eBpCXU1J5dhH2g4t8QYNW5ExS9AxUVblUodoLYoPho0\",\"xOPy9-gJALK6UbWKFLR85cOByUD3AbNwFg3I3YfQE_I\"]}"
+  },
+  {
+   "digest": "y50czc0ISChy_bsba1dMoUuAOQ5AMmOSfGoEe81v1FU",
+   "disclosure": "WyJsa2x4RjVqTVlsR1RQVW92TU5JdkNBIiwgIm5hdGlvbmFsaXRpZXMiLCBbIkRFIl1d",
+   "name": "nationalities",
+   "value": "[\"DE\"]"
+  },
+  {
+   "digest": "90CT8AaBPbn5X8nRXkesju1i0BqhWqZ3wqD4jF-qDGk",
+   "disclosure": "WyJuUHVvUW5rUkZxM0JJZUFtN0FuWEZBIiwgInNleCIsIDJd",
+   "name": "sex",
+   "value": "2"
+  },
+  {
+   "digest": "KjAXgAA9N5WHEDtRIh4u5Mn1ZsWixhhWAiX-A4QiwgA",
+   "disclosure": "WyI1YlBzMUlxdVpOYTBoa2FGenp6Wk53IiwgImJpcnRoX2ZhbWlseV9uYW1lIiwgIkdhYmxlciJd",
+   "name": "birth_family_name",
+   "value": "\"Gabler\""
+  },
+  {
+   "digest": "KUViaaLnY5jSML90G29OOLENPbbXfhSjSPMjZaGkxAE",
+   "disclosure": "WyI1YTJXMF9OcmxFWnpmcW1rXzdQcS13IiwgImxvY2FsaXR5IiwgIkJlcmxpbiJd",
+   "name": "locality",
+   "value": "\"Berlin\""
+  },
+  {
+   "digest": "YbsT0S76VqXCVsd1jUSlwKPDgmALeB1uZclFHXf-USQ",
+   "disclosure": "WyJ5MXNWVTV3ZGZKYWhWZGd3UGdTN1JRIiwgImNvdW50cnkiLCAiREUiXQ",
+   "name": "country",
+   "value": "\"DE\""
+  },
+  {
+   "digest": "1Crn03WmUeRWp4zwPvvCKXl9ZaQp-cdQV_gHdaGSWow",
+   "disclosure": "WyJIYlE0WDhzclZXM1FEeG5JSmRxeU9BIiwgInBsYWNlX29mX2JpcnRoIiwgeyJfc2QiOiBbIktVVmlhYUxuWTVqU01MOTBHMjlPT0xFTlBiYlhmaFNqU1BNalphR2t4QUUiLCAiWWJzVDBTNzZWcVhDVnNkMWpVU2x3S1BEZ21BTGVCMXVaY2xGSFhmLVVTUSJdfV0",
+   "name": "place_of_birth",
+   "value": "{\"_sd\":[\"KUViaaLnY5jSML90G29OOLENPbbXfhSjSPMjZaGkxAE\",\"YbsT0S76VqXCVsd1jUSlwKPDgmALeB1uZclFHXf-USQ\"]}"
+  },
+  {
+   "digest": "gkvy0FuvBBvj0hs2ZNwxcqOlf8mu2-kCE7-Nb2QxuBU",
+   "disclosure": "WyJDOUdTb3VqdmlKcXVFZ1lmb2pDYjFBIiwgIjEyIiwgdHJ1ZV0",
+   "name": "12",
+   "value": "true"
+  },
+  {
+   "digest": "y6SFrVFRyq50IbRJviTZqqjQWz0tLiuCmMeO0KqazGI",
+   "disclosure": "WyJreDVrRjE3Vi14MEptd1V4OXZndnR3IiwgIjE0IiwgdHJ1ZV0",
+   "name": "14",
+   "value": "true"
+  },
+  {
+   "digest": "hrY4HnmF5b5JwC9eTzaFCUceIQAaIdhrqUXQNCWbfZI",
+   "disclosure": "WyJIM28xdXN3UDc2MEZpMnllR2RWQ0VRIiwgIjE2IiwgdHJ1ZV0",
+   "name": "16",
+   "value": "true"
+  },
+  {
+   "digest": "CVKnly5P90yJs3EwtxQiOtUczaXCYNA4IczRaohrMDg",
+   "disclosure": "WyJPQktsVFZsdkxnLUFkd3FZR2JQOFpBIiwgIjE4IiwgdHJ1ZV0",
+   "name": "18",
+   "value": "true"
+  },
+  {
+   "digest": "1tEiyzPRYOKsf7SsYGMgPZKsOT1lQZRxHXA0r5_Bwkk",
+   "disclosure": "WyJNMEpiNTd0NDF1YnJrU3V5ckRUM3hBIiwgIjIxIiwgdHJ1ZV0",
+   "name": "21",
+   "value": "true"
+  },
+  {
+   "digest": "a44-g2Gr8_3AmJw2XZ8kI1y0Qz_ze9iOcW2W3RLpXGg",
+   "disclosure": "WyJEc210S05ncFY0ZEFIcGpyY2Fvc0F3IiwgIjY1IiwgZmFsc2Vd",
+   "name": "65",
+   "value": "false"
+  },
+  {
+   "digest": "2r009dzvHuVrWrRXT5kJMmHnqEHHnWe0MLVZw8PATB8",
+   "disclosure": "WyJlSzVvNXBIZmd1cFBwbHRqMXFoQUp3IiwgImFnZV9lcXVhbF9vcl9vdmVyIiwgeyJfc2QiOiBbIjF0RWl5elBSWU9Lc2Y3U3NZR01nUFpLc09UMWxRWlJ4SFhBMHI1X0J3a2siLCAiQ1ZLbmx5NVA5MHlKczNFd3R4UWlPdFVjemFYQ1lOQTRJY3pSYW9ock1EZyIsICJhNDQtZzJHcjhfM0FtSncyWFo4a0kxeTBRel96ZTlpT2NXMlczUkxwWEdnIiwgImdrdnkwRnV2QkJ2ajBoczJaTnd4Y3FPbGY4bXUyLWtDRTctTmIyUXh1QlUiLCAiaHJZNEhubUY1YjVKd0M5ZVR6YUZDVWNlSVFBYUlkaHJxVVhRTkNXYmZaSSIsICJ5NlNGclZGUnlxNTBJYlJKdmlUWnFxalFXejB0TGl1Q21NZU8wS3FhekdJIl19XQ",
+   "name": "age_equal_or_over",
+   "value": "{\"_sd\":[\"1tEiyzPRYOKsf7SsYGMgPZKsOT1lQZRxHXA0r5_Bwkk\",\"CVKnly5P90yJs3EwtxQiOtUczaXCYNA4IczRaohrMDg\",\"a44-g2Gr8_3AmJw2XZ8kI1y0Qz_ze9iOcW2W3RLpXGg\",\"gkvy0FuvBBvj0hs2ZNwxcqOlf8mu2-kCE7-Nb2QxuBU\",\"hrY4HnmF5b5JwC9eTzaFCUceIQAaIdhrqUXQNCWbfZI\",\"y6SFrVFRyq50IbRJviTZqqjQWz0tLiuCmMeO0KqazGI\"]}"
+  },
+  {
+   "digest": "WTpI7RcM3gxZruRpXzezSbkbOr93PVFvWx8woJ3j1cE",
+   "disclosure": "WyJqN0FEZGIwVVZiMExpMGNpUGNQMGV3IiwgImFnZV9pbl95ZWFycyIsIDYyXQ",
+   "name": "age_in_years",
+   "value": "62"
+  },
+  {
+   "digest": "LezjabRqiZOXzEYmVZf8RMi9xAkd3_M1LZ8U7E4s3u4",
+   "disclosure": "WyJXcHhKckZ1WDh1U2kycDRodDA5anZ3IiwgImFnZV9iaXJ0aF95ZWFyIiwgMTk2M10",
+   "name": "age_birth_year",
+   "value": "1963"
+  },
+  {
+   "digest": "W14XHbUffzuW4IFMjpSTb1melWxUWf4N_o2ldkkIqc8",
+   "disclosure": "WyJhdFNtRkFDWU1iSlZLRDA1bzNKZ3RRIiwgImlzc3VhbmNlX2RhdGUiLCAiMjAyMC0wMy0xMSJd",
+   "name": "issuance_date",
+   "value": "\"2020-03-11\""
+  },
+  {
+   "digest": "78jg77-GYBeX8IQfoELPyL0DYPdmfZo0JgViV0_lKCM",
+   "disclosure": "WyI0S3lSMzJvSVp0LXprV3ZGcWJVTEtnIiwgImV4cGlyeV9kYXRlIiwgIjIwMzAtMDMtMTIiXQ",
+   "name": "expiry_date",
+   "value": "\"2030-03-12\""
+  },
+  {
+   "digest": "6ZNISDst62ymlrOAkadjdD5ZulT5A299J78SLhM__Os",
+   "disclosure": "WyJjaEJDc3loeWgtSjg2SS1hd1FEaUNRIiwgImlzc3VpbmdfYXV0aG9yaXR5IiwgIkRFIl0",
+   "name": "issuing_authority",
+   "value": "\"DE\""
+  },
+  {
+   "digest": "_ohJVIQIBsU4updNS4_w4Kb1MHqJ0L9qLGshWq6JXQs",
+   "disclosure": "WyJmbE5QMW5jTXo5TGctYzlxTUl6XzlnIiwgImlzc3VpbmdfY291bnRyeSIsICJERSJd",
+   "name": "issuing_country",
+   "value": "\"DE\""
+  },
+  {
+   "digest": "1cF5hLwkhMNIaqfWJrXI7NMWedL-9f6Y2PA52yPjSZI",
+   "disclosure": "WyIyR0xDNDJzS1F2ZUNmR2ZyeU5STjl3IiwgImF0Y0NvZGUiLCAiSjA3QlgwMyJd",
+   "name": "atcCode",
+   "value": "\"J07BX03\""
+  },
+  {
+   "digest": "Hiy6WWueLD5bn16298tPv7GXhmldMDOTnBi-CZbphNo",
+   "disclosure": "WyJlbHVWNU9nM2dTTklJOEVZbnN4QV9BIiwgIm1lZGljaW5hbFByb2R1Y3ROYW1lIiwgIkNPVklELTE5IFZhY2NpbmUgTW9kZXJuYSJd",
+   "name": "medicinalProductName",
+   "value": "\"COVID-19 Vaccine Moderna\""
+  },
+  {
+   "digest": "Lb027q691jXXl-jC73vi8ebOj9smx3C-_og7gA4TBQE",
+   "disclosure": "WyI2SWo3dE0tYTVpVlBHYm9TNXRtdlZBIiwgIm1hcmtldGluZ0F1dGhvcml6YXRpb25Ib2xkZXIiLCAiTW9kZXJuYSBCaW90ZWNoIl0",
+   "name": "marketingAuthorizationHolder",
+   "value": "\"Moderna Biotech\""
+  },
+  {
+   "digest": "R2fGbfA07Z_YlkqmNZyma1xyyx1XstIiS6B1Ybl2JZ4",
+   "disclosure": "WyJlSThaV205UW5LUHBOUGVOZW5IZGhRIiwgIm5leHRWYWNjaW5hdGlvbkRhdGUiLCAiMjAyMS0wOC0xNlQxMzo0MDoxMloiXQ",
+   "name": "nextVaccinationDate",
+   "value": "\"2021-08-16T13:40:12Z\""
+  },
+  {
+   "digest": "JzjLgtP29dP-B3td12P674gFmK2zy81HMtBgf6CJNWg",
+   "disclosure": "WyJRZ19PNjR6cUF4ZTQxMmExMDhpcm9BIiwgImNvdW50cnlPZlZhY2NpbmF0aW9uIiwgIkdFIl0",
+   "name": "countryOfVaccination",
+   "value": "\"GE\""
+  },
+  {
+   "digest": "zJK_eSMXjwM8dXmMZLnI8FGM08zJ3_ubGeEMJ-5TBy0",
+   "disclosure": "WyJBSngtMDk1VlBycFR0TjRRTU9xUk9BIiwgImRhdGVPZlZhY2NpbmF0aW9uIiwgIjIwMjEtMDYtMjNUMTM6NDA6MTJaIl0",
+   "name": "dateOfVaccination",
+   "value": "\"2021-06-23T13:40:12Z\""
+  },
+  {
+   "digest": "b0eUsvGP-ODDdFoY4NlzlXc3tDslWJtCJF75Nw8Oj_g",
+   "disclosure": "WyJQYzMzSk0yTGNoY1VfbEhnZ3ZfdWZRIiwgIm9yZGVyIiwgIjMvMyJd",
+   "name": "order",
+   "value": "\"3/3\""
+  },
+  {
+   "digest": "3nzLq81M2oN06wdv1shHvOEJVxZ5KLmdDkHEDJABWEI",
+   "disclosure": "WyJHMDJOU3JRZmpGWFE3SW8wOXN5YWpBIiwgImdlbmRlciIsICJGZW1hbGUiXQ",
+   "name": "gender",
+   "value": "\"Female\""
+  },
+  {
+   "digest": "Pn1sWi06G4LJrnn-_RT0RbM_HTdxnPJQuX2fzWv_JOU",
+   "disclosure": "WyJsa2x4RjVqTVlsR1RQVW92TU5JdkNBIiwgImJpcnRoRGF0ZSIsICIxOTYxLTA4LTE3Il0",
+   "name": "birthDate",
+   "value": "\"1961-08-17\""
+  },
+  {
+   "digest": "lF9uzdsw7HplGLc714Tr4WO7MGJza7tt7QFleCX4Itw",
+   "disclosure": "WyJuUHVvUW5rUkZxM0JJZUFtN0FuWEZBIiwgImdpdmVuTmFtZSIsICJNYXJpb24iXQ",
+   "name": "givenName",
+   "value": "\"Marion\""
+  },
+  {
+   "digest": "1lSQBNY24q0Th6OGzthq-7-4l6cAaxrYXOGZpeW_lnA",
+   "disclosure": "WyI1YlBzMUlxdVpOYTBoa2FGenp6Wk53IiwgImZhbWlseU5hbWUiLCAiTXVzdGVybWFubiJd",
+   "name": "familyName",
+   "value": "\"Mustermann\""
+  },
+  {
+   "digest": "TCmzrl7K2gev_du7pcMIyzRLHp-Yeg-Fl_cxtrUvPxg",
+   "disclosure": "WyI1YTJXMF9OcmxFWnpmcW1rXzdQcS13IiwgImFkbWluaXN0ZXJpbmdDZW50cmUiLCAiUHJheGlzIFNvbW1lcmdhcnRlbiJd",
+   "name": "administeringCentre",
+   "value": "\"Praxis Sommergarten\""
+  },
+  {
+   "digest": "V7kJBLK78TmVDOmrfJ7ZuUPHuK_2cc7yZRa4qV1txwM",
+   "disclosure": "WyJ5MXNWVTV3ZGZKYWhWZGd3UGdTN1JRIiwgImJhdGNoTnVtYmVyIiwgIjE2MjYzODI3MzYiXQ",
+   "name": "batchNumber",
+   "value": "\"1626382736\""
+  },
+  {
+   "digest": "1V_K-8lDQ8iFXBFXbZY9ehqR4HabWCi5T0ybIzZPeww",
+   "disclosure": "WyJIYlE0WDhzclZXM1FEeG5JSmRxeU9BIiwgImhlYWx0aFByb2Zlc3Npb25hbCIsICI4ODMxMTAwMDAwMTUzNzYiXQ",
+   "name": "healthProfessional",
+   "value": "\"883110000015376\""
+  }
+ ]
+}

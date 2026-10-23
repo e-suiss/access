@@ -259,3 +259,52 @@ fn key_binding_rules() {
     let unexpected = format!("{p}{}", kb_jwt(&p, "pep:shop", "n-1", 1_000));
     assert_eq!(run(&unexpected).map(|_| ()), Err(SdJwtError::KeyBinding));
 }
+
+#[derive(serde::Deserialize)]
+struct Rfc9901 {
+    cases: Vec<Rfc9901Case>,
+}
+
+#[derive(serde::Deserialize)]
+struct Rfc9901Case {
+    digest: String,
+    disclosure: String,
+    name: Option<String>,
+    value: String,
+}
+
+// RFC 9901 interop: digests and disclosure parsing match every example of the RFC
+#[test]
+fn rfc9901_disclosure_examples() {
+    let v: Rfc9901 = serde_json::from_str(include_str!(
+        "../../../../../conformance/vectors/external/rfc9901-disclosures.json"
+    ))
+    .unwrap();
+    let (mut parsed, mut floats) = (0, 0);
+    for c in &v.cases {
+        assert_eq!(digest_of(&c.disclosure), c.digest);
+        match parse_disclosure(&c.disclosure) {
+            Ok(d) => {
+                let expected = json::parse(c.value.as_bytes(), 4096).unwrap();
+                let (name, value) = match d {
+                    Disclosed::Property(name, value) => (Some(name), value),
+                    Disclosed::Element(value) => (None, value),
+                };
+                assert_eq!(
+                    (name, value),
+                    (c.name.clone(), expected),
+                    "{}",
+                    c.disclosure
+                );
+                parsed += 1;
+            }
+            Err(SdJwtError::Json(JsonError::Number)) => floats += 1,
+            Err(e) => panic!("{}: {e}", c.disclosure),
+        }
+    }
+    assert_eq!(parsed + floats, v.cases.len());
+    assert!(
+        parsed > 80,
+        "{parsed} parsed, {floats} with non-integer numbers"
+    );
+}

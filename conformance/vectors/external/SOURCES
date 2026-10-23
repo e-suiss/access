@@ -1,2 +1,3 @@
 C2SP/wycheproof 7a325932231bd7a724c791c8b0d65ea4d6d2f435 testvectors_v1 (Apache-2.0)
 novifinancial/ed25519-speccheck 65519336fda78a3d016e947df6d82848aca0c9da cases.json (Apache-2.0)
+RFC 9901 (www.rfc-editor.org/rfc/rfc9901.txt) disclosure examples, extracted by tools/rfc9901_disclosures.py
