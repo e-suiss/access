@@ -2,3 +2,8 @@
 //! verification, signer and HSM/KMS abstraction.
 
 #![cfg_attr(not(feature = "std"), no_std)]
+
+extern crate alloc;
+
+#[cfg(feature = "verify")]
+pub mod dcbor;

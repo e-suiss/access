@@ -13,6 +13,7 @@ publish = false
 # F-3, SA-35
 [workspace.dependencies]
 access-kernel = { package = "esuiss-access-kernel", path = "crates/kernel", default-features = false }
+suiss-crypto = { package = "esuiss-crypto", path = "crates/suiss-crypto", default-features = false }
 access-crypto = { path = "crates/crypto", default-features = false }
 access-telemetry = { path = "crates/telemetry", default-features = false }
 access-http = { path = "crates/http", default-features = false }
@@ -23,6 +24,11 @@ secrecy = { version = "0.10.3", default-features = false }
 zeroize = { version = "1.9.0", default-features = false }
 subtle = { version = "2.6.1", default-features = false }
 static_assertions = { version = "1.1.0", default-features = false }
+# CR-54, CR-55
+sha2 = { version = "0.11.1", default-features = false }
+ed25519-dalek = { version = "3.0.0", default-features = false }
+curve25519-dalek = { version = "5.0.0", default-features = false }
+p256 = { version = "0.14.0", default-features = false, features = ["ecdsa"] }
 thiserror = { version = "2.0.21", default-features = false }
 serde = { version = "1.0.229", default-features = false }
 serde_json = { version = "1.0.151", default-features = false }

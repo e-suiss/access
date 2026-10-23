@@ -1,5 +1,6 @@
 # F-2, SA-34
 bincode-next
+curve25519-dalek
 figment
 getrandom
 gungraun
@@ -7,6 +8,7 @@ gungraun-common
 gungraun-macros
 httparse
 libc
+num-traits
 proc-macro2
 proc-macro2-diagnostics
 quote

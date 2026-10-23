@@ -14,5 +14,11 @@ default = ["std"]
 verify = []
 std = ["verify"]
 
+[dependencies]
+thiserror = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true, features = ["std"] }
+
 [lints]
 workspace = true
