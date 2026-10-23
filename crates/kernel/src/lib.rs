@@ -5,6 +5,13 @@
 
 extern crate alloc;
 
+pub mod algebra;
+pub mod codec;
+pub mod digest;
+pub mod intent;
+pub mod model;
+pub mod validity;
+
 /// Version of the Kernel public API (OP-1 rule 4: every semantic version's Kernel is kept).
 pub const API_VERSION: ApiVersion = ApiVersion { major: 0, minor: 0 };
 

@@ -11,6 +11,19 @@ publish = false
 [lib]
 name = "access_kernel"
 
+[dependencies]
+suiss-crypto = { workspace = true, features = ["verify"] }
+sha2 = { workspace = true }
+ed25519-dalek = { workspace = true }
+curve25519-dalek = { workspace = true }
+p256 = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+serde = { workspace = true, features = ["derive", "std"] }
+serde_json = { workspace = true, features = ["std"] }
+proptest = { workspace = true, features = ["std"] }
+
 [lints]
 workspace = true
 

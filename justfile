@@ -149,6 +149,12 @@ test-sandbox:
         "$bin"
     fi
 
+# OP-106 m.24
+vectors-crosscheck:
+    cd conformance/vectors/tools/cbor-crosscheck && go run . ../..
+    [ -x target/vectors-venv/bin/python ] || (python3 -m venv target/vectors-venv && target/vectors-venv/bin/pip install --quiet cbor2==5.7.1)
+    target/vectors-venv/bin/python -I conformance/vectors/tools/cbor_crosscheck.py conformance/vectors
+
 # F-14
 semgrep:
     semgrep scan --config .semgrep/ --error --metrics=off

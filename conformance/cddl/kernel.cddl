@@ -1,0 +1,259 @@
+; Access Kernel core data model (RFC 8610).
+; Encoding: deterministic CBOR, RFC 8949 §4.2.1; no floats, no tags, no null (OP-106).
+; Defaults are never written: a missing field is its default. Arrays that are sets are sorted
+; by the bytes of each element's canonical encoding, without repeats.
+
+; ---------------------------------------------------------------- primitives
+
+digest = [hash-alg, bstr .size 32]
+hash-alg = -16
+
+trusted-time = uint .size 8
+time-window = [from: trusted-time, until: trusted-time]
+
+id = bstr .size 16
+domain-id = digest
+party-ref = id
+instance-ref = id
+grant-id = id
+policy-ref = id
+
+ident = tstr .regexp "[a-z][a-z0-9_]{0,62}"
+namespace = tstr .regexp "[a-z][a-z0-9_-]{0,62}(\\.[a-z][a-z0-9_-]{0,62}){0,7}"
+unit = tstr .regexp "[a-z][a-z0-9_]{0,15}"
+path-segment = tstr .size (1..128)
+
+amount = int .size 8
+
+; ---------------------------------------------------------------- references
+
+action-ref = {
+  namespace: namespace,
+  name: ident,
+  major: uint,
+  schema: digest,
+}
+
+resource-ref = {
+  namespace: namespace,
+  path: [+ path-segment],
+  incarnation: uint,
+}
+
+purpose-ref = { code: ident } / { work: digest } / { aim: digest }
+
+; ---------------------------------------------------------------- selectors
+
+resource-selector = { exact: resource-ref } / structural-selector
+
+structural-selector = {
+  namespace: namespace,
+  ? prefix: [+ path-segment],
+  ? type: ident,
+  ? where: { + ident => equality-value },
+}
+
+subject-selector =
+    { party: party-ref }
+  / { pred: [+ conjunct] }
+  / "public"
+  / { foreign: { domain: domain-id, authority_class: ident } }
+
+conjunct = { claim_class: ident, ? value: equality-value }
+
+equality-value = tstr / bstr / int / bool
+
+; ---------------------------------------------------------------- parameter bounds (nine closed types)
+
+param-bound =
+    { enum: [+ tstr] }
+  / { eq: equality-value }
+  / { range: { ? min: amount, ? max: amount, unit: unit } }
+  / { count_max: uint }
+  / { interval: time-window }
+  / { resource: resource-selector }
+  / { subject: subject-selector }
+  / { purpose: [+ purpose-ref] }
+  / { flag: bool }
+
+param-value =
+    { enum: tstr }
+  / { eq: equality-value }
+  / { amount: { value: amount, unit: unit } }
+  / { count: uint }
+  / { interval: time-window }
+  / { resource: resource-ref }
+  / { subject: party-ref }
+  / { purpose: purpose-ref }
+  / { flag: bool }
+
+; ---------------------------------------------------------------- authority
+
+action-set = {
+  ? exact: [+ action-ref],
+  ? prefix: [+ { namespace: namespace, catalog: digest }],
+}
+
+authority-set = {
+  actions: action-set,
+  resource: resource-selector,
+  ? params: { + ident => param-bound },
+  ? recipient: subject-selector,
+  ? purpose: [+ purpose-ref],
+}
+
+while-condition =
+    { instance_alive: instance-ref }
+  / { claim_held: { class: ident, subject: subject-selector, acceptance: digest } }
+
+budget-term = {
+  dimension: "count" / { amount: unit },
+  capacity: uint,
+  window: "total" / { rolling_s: uint },
+}
+
+constraint-set = {
+  validity: time-window,
+  ? while: [+ while-condition],
+  ? budget: [+ budget-term],
+}
+
+delegation-terms = {
+  ? depth: uint .ge 1,
+  ? downstream_holder_class: subject-selector,
+}
+
+requirement-term = {
+  proof_kind: "claim" / "contribution" / "authentication" / "foreign_authority",
+  class: ident,
+  ? count: uint .ge 2,
+  ? binding: "actor_instance" / "intent_digest" / "resource",
+  ? freshness_ms: uint,
+  ? independence: { distinct: "party" / "instance" / "issuer" },
+  ? consumption: "single_use",
+  ? source: subject-selector,
+  ? assurance: { + ident => uint },
+}
+
+requirement-set = [* requirement-term]
+
+canonical-authority = {
+  authority: authority-set,
+  constraints: constraint-set,
+  delegation: delegation-terms,
+  requirements: requirement-set,
+}
+
+; ---------------------------------------------------------------- intent
+
+intent-envelope = {
+  action: action-ref,
+  resources: [+ resource-ref],
+  ? params: { + ident => param-value },
+  ? opaque: { + ident => digest },
+  ? recipient: party-ref,
+  ? purpose: purpose-ref,
+  ? context: {
+    ? work: digest,
+    ? commitment: digest,
+    ? step: digest,
+    ? upstream_exercise: digest,
+  },
+  validity: time-window,
+}
+
+; ---------------------------------------------------------------- restriction and decision
+
+restriction-outcome =
+    "no_objection"
+  / { deny: { policy: policy-ref, policy_version: digest, undisclosed: bool } }
+  / { require: requirement-set }
+
+blocker-class =
+    "no-covering-authority" / "outside-instance-limits" / "restricted"
+  / "budget-exhausted" / "ended" / "capacity-mismatch" / "source-not-accepted"
+  / "schema-not-accepted" / "nonce-closed" / "foreign-status-unavailable"
+
+position = "instance" / { hop: uint } / "anchor" / "domain-policy" / "foreign" / "actor-side"
+
+resolver = { grantor_of_hop: uint } / "root" / "restriction-owner" / "issuer"
+         / "domain-admin" / "actor" / "actor-party" / "time"
+
+remediation = "route-to-coordinator" / "refresh-claim" / "self-authenticate"
+            / { wait_until: trusted-time } / "not-satisfiable-by-actor" / "new-request-required"
+
+blocker = {
+  class: blocker-class,
+  ? subcode: tstr,
+  position: position,
+  resolver: resolver,
+  remediation: remediation,
+}
+
+unmet-term = {
+  term: requirement-term,
+  position: position,
+  satisfiable_by_actor: bool,
+}
+
+spec-versions = {
+  core: uint,
+  meta_schema: uint,
+  ? profiles: { + ident => uint },
+  ? schemas: [+ digest],
+}
+
+decision = {
+  outcome: "allow" / "deny" / "require_action",
+  ? blockers: [+ blocker],
+  ? unmet: [+ unmet-term],
+  versions: spec-versions,
+}
+
+; ---------------------------------------------------------------- validity contract (§9.12)
+
+validity-contract = {
+  issuing_exercise: digest,
+  basis_ref: bstr,
+  holder: digest,
+  audience: [+ tstr],
+  bounds: authority-set,
+  profile: {
+    class: "online" / "intermittent" / "offline" / "long-running",
+    variant: "online-strict" / "bounded-staleness" / "revalidate-on-reconnect"
+           / "checkpointed-offline" / "checkpoint-continuation",
+    ? params: { + ident => uint },
+  },
+  horizon: trusted-time,
+  ? max_staleness_ms: uint,
+  ? freshness_sources: [+ tstr],
+  ? revalidation: { ? every_uses: uint, ? on_reconnect: true, ? action_classes: [+ ident] },
+  ? offline_slice: [+ { budget_term: digest, amount: uint, unit: unit / "count" }],
+  ? local_requirements: requirement-set,
+  verifier_profile_ref: digest,
+  clock: { source_class: ident, skew_ms: uint },
+  ? must_understand: [+ ident],
+}
+
+; ---------------------------------------------------------------- record envelope (§17.6.1, OP-106)
+
+record-kind = "genesis" / "opening" / "decision" / "claim"
+
+record-envelope = {
+  ? domain: domain-id,
+  pos: uint,
+  kind: record-kind,
+  recorded_at: trusted-time,
+  ? prev: digest,
+  fields: { + ident => any },
+  field_salt: { + ident => bstr .size 32 },
+}
+
+leaf-core = {
+  ? domain: domain-id,
+  pos: uint,
+  kind: record-kind,
+  recorded_at: trusted-time,
+  ? prev: digest,
+  field_root: bstr .size 32,
+}
