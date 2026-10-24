@@ -44,7 +44,7 @@ impl Algorithm {
         matches!(self, Self::Ed25519 | Self::Esp256 | Self::Es256)
     }
 
-    fn from_cose(id: i64) -> Option<Self> {
+    pub(crate) fn from_cose(id: i64) -> Option<Self> {
         [
             Self::Ed25519,
             Self::Esp256,

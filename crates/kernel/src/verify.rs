@@ -2,6 +2,7 @@
 
 pub mod cose;
 pub mod jws;
+pub mod key_scope;
 pub mod sd_jwt;
 
 use curve25519_dalek::Scalar;

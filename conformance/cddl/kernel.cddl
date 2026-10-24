@@ -330,3 +330,56 @@ leaf-core = {
   ? prev: digest,
   field_root: bstr .size 32,
 }
+
+; ---------------------------------------------------------------- key scope (CR-58, T20, TI-RT6)
+
+cose-alg = -19 / -9 / -7 / -48 / -49 / -50
+
+public-key = { ed25519: bstr .size 32 }
+           / { p256: bstr .size 65 }
+           / { ml_dsa: [cose-alg, bstr] }
+
+; RFC 7638 SHA-256 thumbprint of the key; the Kernel recomputes it (CR-55 m.4).
+key-id = bstr .size 32
+
+key-usage = "receipt" / "pap" / "token" / "checkpoint" / "set" / "status-list"
+
+operational-key = {
+  kid: key-id,
+  alg: cose-alg,
+  key: public-key,
+  valid_from: trusted-time,
+  valid_until: trusted-time,
+  usage: [+ key-usage],
+}
+
+; Payload of a COSE_Sign1 signed by a binding key, content type "application/access-key-excerpt+cbor".
+key-excerpt = {
+  domain: domain-id,
+  key: operational-key,
+}
+
+binding-scope = "domain" / { provider: [+ domain-id] }
+
+binding-key = {
+  kid: key-id,
+  alg: cose-alg,
+  key: public-key,
+  scope: binding-scope,
+  ? superseded: { at: digest, cited: digest },
+}
+
+; Payload of a COSE_Sign1 signed by a binding key, content type "application/access-domain-metadata+cbor".
+domain-metadata = {
+  domain: domain-id,
+  genesis: digest,
+  issued_at: trusted-time,
+  binding: [+ binding-key],
+  algorithms: [+ cose-alg],
+  operational_window_max_ms: uint .le 86400000,
+  operational_keys: [* operational-key],
+  min_versions: spec-versions,
+  ? caps: { ? horizon_max_ms: uint, ? slice_max: { + unit => amount } },
+  ? hybrid: "classic" / "both" / "pq",
+  ? discovery: bstr,
+}

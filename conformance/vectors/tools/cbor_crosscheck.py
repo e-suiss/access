@@ -1,4 +1,4 @@
-"""Re-encodes every "cbor" vector with cbor2 (OP-106 m.24). Usage: python -I cbor_crosscheck.py <vectors dir>"""
+"""Re-encodes every CBOR field of every vector with cbor2 (OP-106 m.24). Usage: python -I cbor_crosscheck.py <vectors dir>"""
 
 import json
 import pathlib
@@ -17,10 +17,16 @@ def main():
         for case in cases:
             if not isinstance(case, dict):
                 continue
-            for field in ("cbor", "input", "decision"):
+            for field in ("cbor", "input", "decision", "metadata", "domain", "excerpt", "key", "child", "parent", "holder"):
                 if field not in case:
                     continue
                 want = bytes.fromhex(case[field])
+                if field == "excerpt":
+                    if want[:1] != b"\xd2":
+                        failed += 1
+                        print(f"FAIL {path} {case['id']}.{field}: not tag 18")
+                        continue
+                    want = want[1:]
                 got = cbor2.dumps(cbor2.loads(want), canonical=True)
                 if got == want:
                     checked += 1
