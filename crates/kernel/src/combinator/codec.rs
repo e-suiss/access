@@ -598,6 +598,32 @@ fn remediation(r: Remediation) -> Value {
     }
 }
 
+/// Sorts blockers by the bytes of their canonical encoding and drops repeats (OP-114 m.2).
+pub(crate) fn order_blockers(v: &mut Vec<Blocker>) {
+    order_by(v, blocker);
+}
+
+/// Sorts unmet terms by the bytes of their canonical encoding (OP-114 m.3).
+pub(crate) fn order_unmet(v: &mut Vec<Unmet>) {
+    order_by(v, unmet);
+}
+
+fn order_by<T>(v: &mut Vec<T>, encode: impl Fn(&T) -> Value) {
+    let mut keyed: Vec<(Vec<u8>, T)> = v
+        .drain(..)
+        .map(|x| {
+            (
+                suiss_crypto::dcbor::encode(&encode(&x), suiss_crypto::dcbor::Limits::CEILING)
+                    .unwrap_or_default(),
+                x,
+            )
+        })
+        .collect();
+    keyed.sort_by(|a, b| a.0.cmp(&b.0));
+    keyed.dedup_by(|a, b| a.0 == b.0);
+    v.extend(keyed.into_iter().map(|(_, x)| x));
+}
+
 fn blocker(b: &Blocker) -> Value {
     map([
         ("class", Some(word_of(b.class, &CLASSES))),

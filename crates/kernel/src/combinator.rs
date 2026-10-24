@@ -310,7 +310,12 @@ fn blocker(
     }
 }
 
-fn hop_blockers(k: u64, hop: &Hop, input: &EvaluationInput<'_>, out: &mut Vec<Blocker>) {
+fn hop_blockers(
+    k: u64,
+    hop: &Hop,
+    input: &EvaluationInput<'_>,
+    out: &mut Vec<Blocker>,
+) -> Result<(), Rejection> {
     let at = Position::Hop(k);
     let grantor = Resolver::GrantorOfHop(k);
     if !covers(&hop.authority.authority, input.intent, input.catalog) {
@@ -380,7 +385,9 @@ fn hop_blockers(k: u64, hop: &Hop, input: &EvaluationInput<'_>, out: &mut Vec<Bl
                     Resolver::Time,
                     Remediation::WaitUntil(t),
                 ),
-                _ => blocker(
+                // OP-114 m.11
+                (BudgetWindow::RollingSeconds(_), None) => return Err(Rejection::Input),
+                (BudgetWindow::Total, _) => blocker(
                     BlockerClass::BudgetExhausted,
                     None,
                     at,
@@ -390,6 +397,7 @@ fn hop_blockers(k: u64, hop: &Hop, input: &EvaluationInput<'_>, out: &mut Vec<Bl
             });
         }
     }
+    Ok(())
 }
 
 fn mandate_and_restrictions(
@@ -449,7 +457,7 @@ fn evaluate_basis(
     for (k, hop) in basis.hops.iter().enumerate() {
         fuel.spend(1)?;
         let k = u64::try_from(k).map_err(|_| Rejection::Input)?;
-        hop_blockers(k, hop, input, &mut blockers);
+        hop_blockers(k, hop, input, &mut blockers)?;
         terms.extend(
             hop.authority
                 .requirements
@@ -505,9 +513,8 @@ fn evaluate_basis(
             }
         }
     }
-    blockers.sort();
-    blockers.dedup();
-    unmet.sort();
+    codec::order_blockers(&mut blockers);
+    codec::order_unmet(&mut unmet);
     let outcome = if !blockers.is_empty() {
         Outcome::Deny
     } else if !unmet.is_empty() {
@@ -539,6 +546,26 @@ fn policy_subcode(policy: &Id) -> String {
 /// # Errors
 /// [`Rejection`]: not a decision, nothing is recorded.
 pub fn evaluate(input: &EvaluationInput<'_>, fuel: &mut Fuel) -> Result<Decision, Rejection> {
+    // OP-114 m.13
+    let window = input.intent.validity;
+    if input.now < window.from || input.now > window.until {
+        return Err(Rejection::Input);
+    }
+    // OP-114 m.11
+    let unresettable = |b: &BudgetState| {
+        matches!(b.window, BudgetWindow::RollingSeconds(_))
+            && b.resets_at.is_none()
+            && b.demand > b.remaining
+    };
+    if input
+        .bases
+        .iter()
+        .flat_map(|basis| &basis.hops)
+        .flat_map(|hop| &hop.budgets)
+        .any(unresettable)
+    {
+        return Err(Rejection::Input);
+    }
     match input.mode {
         Mode::Commit | Mode::Continue => match input.bases {
             [basis] => Ok(evaluate_basis(basis, input, fuel)?),
@@ -571,8 +598,7 @@ pub fn evaluate(input: &EvaluationInput<'_>, fuel: &mut Fuel) -> Result<Decision
                     Remediation::RouteToCoordinator,
                 ));
             }
-            denied.sort();
-            denied.dedup();
+            codec::order_blockers(&mut denied);
             Ok(Decision {
                 outcome: Outcome::Deny,
                 blockers: denied,

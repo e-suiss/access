@@ -655,7 +655,142 @@ fn requirement_scenarios() -> Vec<(&'static str, World)> {
     let mut w = World::new();
     w.bases.push(basis(vec![hop()]));
     out.push(("reject-commit-two-bases", w));
+    out.extend(ordering_scenarios());
     out
+}
+
+// OP-114 m.2, m.5, m.11, m.13, m.14
+fn ordering_scenarios() -> Vec<(&'static str, World)> {
+    let mut out = Vec::new();
+    let mut w = World::new();
+    w.restrictions.push(deny_policy(7, false));
+    w.bases[0].hops[1].status = HopStatus::Revoked;
+    w.bases[0].hops[0].authority.constraints.validity.until = 40_000;
+    w.capacity = Capacity::For(party(9));
+    out.push(("deny-four-blocker-classes", w));
+    let mut w = World::new();
+    for h in &mut w.bases[0].hops {
+        h.authority.requirements.insert(approval(true));
+    }
+    w.proofs.push(step_up_proof());
+    out.push(("allow-inherited-term-counts-once", w));
+    let mut w = World::new();
+    for h in &mut w.bases[0].hops {
+        h.authority.requirements.insert(approval(true));
+    }
+    out.push(("require-inherited-term-at-first-hop", w));
+    let mut w = World::new();
+    w.mode = Mode::Check;
+    let mut needs = hop();
+    needs.authority.requirements.insert(approval(false));
+    needs.status = HopStatus::Revoked;
+    let mut uncovered = hop();
+    uncovered.authority.authority.actions.exact.clear();
+    w.bases = vec![basis(vec![needs]), basis(vec![uncovered])];
+    out.push(("check-deny-merges-blockers-only", w));
+    let mut w = World::new();
+    w.bases[0].hops[0].budgets.push(BudgetState {
+        window: BudgetWindow::RollingSeconds(60),
+        remaining: 0,
+        demand: 1,
+        resets_at: None,
+    });
+    out.push(("reject-rolling-budget-without-reset", w));
+    let mut w = World::new();
+    w.bases[0].hops[0]
+        .authority
+        .requirements
+        .insert(approval(true));
+    let mut future = step_up_proof();
+    future.time = 60_000;
+    w.proofs.push(future);
+    out.push(("require-future-dated-proof", w));
+    let mut w = World::new();
+    w.mode = Mode::Check;
+    w.bases.clear();
+    w.restrictions.push(deny_policy(7, false));
+    let mut narrow = authority();
+    narrow.actions.exact.clear();
+    w.mandate = Some(Mandate {
+        authority: narrow,
+        requirements: BTreeSet::new(),
+    });
+    out.push(("check-no-basis-only-no-covering", w));
+    let mut w = World::new();
+    w.mode = Mode::Check;
+    let mut bad = hop();
+    bad.budgets.push(BudgetState {
+        window: BudgetWindow::RollingSeconds(60),
+        remaining: 0,
+        demand: 1,
+        resets_at: None,
+    });
+    w.bases = vec![basis(vec![hop()]), basis(vec![bad])];
+    out.push(("reject-check-bad-later-candidate", w));
+    let mut w = World::new();
+    w.intent.validity.until = 40_000;
+    out.push(("reject-intent-expired", w));
+    let mut w = World::new();
+    w.intent.validity.from = 60_000;
+    out.push(("reject-intent-not-yet-valid", w));
+    out
+}
+
+// OP-114 m.2, m.5, m.11, m.13, m.14
+#[test]
+fn ordering_and_merging_rules() {
+    let all: BTreeMap<&str, World> = ordering_scenarios().into_iter().collect();
+    let d = all["deny-four-blocker-classes"].run().unwrap();
+    let classes: Vec<BlockerClass> = d.blockers.iter().map(|b| b.class).collect();
+    assert_eq!(classes.len(), 4);
+    let enc: Vec<Vec<u8>> = d
+        .blockers
+        .iter()
+        .map(|b| {
+            let mut one = vec![b.clone()];
+            codec::order_blockers(&mut one);
+            suiss_crypto::dcbor::encode(
+                &codec::decision_value(&Decision {
+                    outcome: Outcome::Deny,
+                    blockers: one,
+                    unmet: Vec::new(),
+                    relied_on: Vec::new(),
+                }),
+                suiss_crypto::dcbor::Limits::CEILING,
+            )
+            .unwrap()
+        })
+        .collect();
+    let mut sorted = enc.clone();
+    sorted.sort();
+    assert_eq!(enc, sorted);
+
+    let d = all["allow-inherited-term-counts-once"].run().unwrap();
+    assert_eq!((d.outcome, d.relied_on.len()), (Outcome::Allow, 1));
+    let d = all["require-inherited-term-at-first-hop"].run().unwrap();
+    assert_eq!(d.outcome, Outcome::RequireAction);
+    assert_eq!(
+        d.unmet.iter().map(|u| u.position).collect::<Vec<_>>(),
+        vec![Position::Hop(0)]
+    );
+    let d = all["require-future-dated-proof"].run().unwrap();
+    assert_eq!(d.outcome, Outcome::RequireAction);
+    let d = all["check-no-basis-only-no-covering"].run().unwrap();
+    assert_eq!(
+        d.blockers.iter().map(|b| b.class).collect::<Vec<_>>(),
+        vec![BlockerClass::NoCoveringAuthority]
+    );
+    let d = all["check-deny-merges-blockers-only"].run().unwrap();
+    assert_eq!((d.outcome, d.unmet.len()), (Outcome::Deny, 0));
+    assert_eq!(d.blockers.len(), 2);
+    for id in [
+        "reject-check-bad-later-candidate",
+        "reject-rolling-budget-without-reset",
+        "reject-intent-expired",
+        "reject-intent-not-yet-valid",
+    ] {
+        assert_eq!(all[id].run(), Err(Rejection::Input), "{id}");
+    }
 }
 
 // CR-49, OP-111 m.1: the CBOR bridge for the F0 reference evaluator

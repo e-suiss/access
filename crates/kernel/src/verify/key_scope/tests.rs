@@ -249,6 +249,9 @@ fn scenarios() -> Vec<(&'static str, Case)> {
     c.signer = Signer::Ed(2);
     out.push(("binding-wrong-signer", c));
     let mut c = Case::new();
+    c.binding_mut().alg = Algorithm::Esp256;
+    out.push(("binding-alg-mismatch", c));
+    let mut c = Case::new();
     c.content_type = METADATA_CONTENT_TYPE;
     out.push(("excerpt-content-type", c));
     out
@@ -307,6 +310,7 @@ fn each_step_rejects_its_case() {
                 crate::verify::SignatureError::Invalid,
             ))),
         ),
+        ("binding-alg-mismatch", Some(KeyScopeError::Algorithm)),
         (
             "excerpt-content-type",
             Some(KeyScopeError::Signature(CoseError::ContentType)),
