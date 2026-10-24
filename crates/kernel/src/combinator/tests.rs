@@ -1066,3 +1066,183 @@ fn cve_regression_vectors_match() {
         json
     );
 }
+
+struct Rng(u64);
+
+impl Rng {
+    fn next(&mut self) -> u64 {
+        self.0 ^= self.0 << 13;
+        self.0 ^= self.0 >> 7;
+        self.0 ^= self.0 << 17;
+        self.0
+    }
+
+    fn below(&mut self, n: u64) -> u64 {
+        self.next().checked_rem(n).unwrap_or(0)
+    }
+
+    fn chance(&mut self, percent: u64) -> bool {
+        self.below(100) < percent
+    }
+}
+
+fn random_hop(r: &mut Rng) -> Hop {
+    let mut h = hop();
+    if r.chance(10) {
+        h.authority.authority.actions.exact.clear();
+    }
+    match r.below(10) {
+        0 => h.authority.constraints.validity.until = 40_000,
+        1 => h.authority.constraints.validity.from = 60_000,
+        _ => {}
+    }
+    h.status = match r.below(12) {
+        0 => HopStatus::Revoked,
+        1 => HopStatus::Lapsed,
+        _ => HopStatus::Active,
+    };
+    h.conditions_hold = !r.chance(8);
+    if r.chance(20) {
+        let rolling = r.chance(50);
+        h.budgets.push(BudgetState {
+            window: if rolling {
+                BudgetWindow::RollingSeconds(60)
+            } else {
+                BudgetWindow::Total
+            },
+            remaining: r.below(3),
+            demand: 1,
+            resets_at: (rolling && !r.chance(10)).then_some(70_000),
+        });
+    }
+    if r.chance(10) {
+        h.authority.authority.recipient = Some(SubjectSelector::Party(party(5)));
+    }
+    if r.chance(25) {
+        h.authority.requirements.insert(approval(r.chance(50)));
+    }
+    h
+}
+
+fn random_world(r: &mut Rng) -> World {
+    let mut w = World::new();
+    w.mode = match r.below(5) {
+        0 => Mode::Check,
+        1 => Mode::Continue,
+        _ => Mode::Commit,
+    };
+    let bases = if w.mode == Mode::Check { r.below(4) } else { 1 };
+    w.bases = (0..bases)
+        .map(|_| {
+            let mut b = basis((0..=r.below(4)).map(|_| random_hop(r)).collect());
+            if r.chance(50) {
+                b.capacities.insert(Capacity::For(party(9)));
+            }
+            b
+        })
+        .collect();
+    if r.chance(50) {
+        w.intent.recipient = Some(party(5));
+    }
+    for n in 0..r.below(3) {
+        let id = u8::try_from(n).unwrap().checked_add(7).unwrap();
+        w.restrictions.push(match r.below(3) {
+            0 => deny_policy(id, r.chance(30)),
+            1 => PolicyResult {
+                policy: Id([id; 16]),
+                version: d(2),
+                outcome: RestrictionOutcome::Require(
+                    [approval(r.chance(50))].into_iter().collect(),
+                ),
+            },
+            _ => PolicyResult {
+                policy: Id([id; 16]),
+                version: d(2),
+                outcome: RestrictionOutcome::NoObjection,
+            },
+        });
+    }
+    for n in 0..r.below(3) {
+        let mut p = step_up_proof();
+        p.id = Id([u8::try_from(n).unwrap().checked_add(3).unwrap(); 16]);
+        p.consumed = r.chance(20);
+        p.time = [1, 49_999, 60_000][usize::try_from(r.below(3)).unwrap()];
+        if r.chance(20) {
+            p.assurance.clear();
+        }
+        w.proofs.push(p);
+    }
+    if r.chance(10) {
+        w.capacity = Capacity::For(party(9));
+    }
+    if r.chance(25) {
+        let mut a = authority();
+        if r.chance(30) {
+            a.actions.exact.clear();
+        }
+        w.mandate = Some(Mandate {
+            authority: a,
+            requirements: BTreeSet::new(),
+        });
+    }
+    w.agent = r.chance(30);
+    w
+}
+
+// OP-112 m.4: random inputs for the nightly Kernel ↔ F0 differential run
+#[test]
+#[ignore = "nightly: set ACCESS_RANDOM_VECTORS to an output directory"]
+fn random_inputs_for_f0() {
+    extern crate std;
+    use crate::codec::Canonical;
+    use core::fmt::Write as _;
+    use suiss_crypto::dcbor::{Limits, encode};
+    let Some(dir) = std::env::var_os("ACCESS_RANDOM_VECTORS") else {
+        return;
+    };
+    let count: u64 = std::env::var("ACCESS_RANDOM_COUNT")
+        .ok()
+        .and_then(|c| c.parse().ok())
+        .unwrap_or(10_000);
+    let seed: u64 = std::env::var("ACCESS_RANDOM_SEED")
+        .ok()
+        .and_then(|c| c.parse().ok())
+        .unwrap_or(0x005e_edac_ce55)
+        | 1;
+    let mut r = Rng(seed);
+    let mut json = format!(
+        "{{\n \"rule\": \"OP-112\",\n \"track\": \"core\",\n \"version\": 1,\n \"operation\": \"combinator.evaluate\",\n \"seed\": {seed},\n \"fuel\": 10000,\n \"cases\": [\n"
+    );
+    for i in 0..count {
+        let w = random_world(&mut r);
+        let input = w.owned().to_bytes().unwrap();
+        let back = codec::OwnedInput::from_bytes(&input).unwrap();
+        let expect = match evaluate(&back.input(), &mut Fuel(10_000)) {
+            Ok(dec) => format!(
+                "\"decision\": \"{}\"",
+                hex_of(&encode(&codec::decision_value(&dec), Limits::CEILING).unwrap())
+            ),
+            Err(Rejection::Input) => "\"rejection\": \"input\"".to_string(),
+            Err(Rejection::Fuel) => "\"rejection\": \"fuel\"".to_string(),
+            Err(Rejection::Limit) => "\"rejection\": \"limit\"".to_string(),
+        };
+        let sep = if i + 1 == count { "" } else { "," };
+        let _ = writeln!(
+            json,
+            "  {{\"id\": \"random-{i}\", \"input\": \"{}\", {expect}}}{sep}",
+            hex_of(&input)
+        );
+    }
+    json.push_str(" ]\n}\n");
+    let path = std::path::PathBuf::from(dir).join("core/1");
+    std::fs::create_dir_all(&path).unwrap();
+    std::fs::write(path.join("random.json"), json).unwrap();
+}
+
+fn hex_of(b: &[u8]) -> String {
+    use core::fmt::Write as _;
+    b.iter().fold(String::new(), |mut h, x| {
+        let _ = write!(h, "{x:02x}");
+        h
+    })
+}

@@ -196,6 +196,13 @@ f0:
     [ -x target/f0-venv/bin/python ] || (python3 -m venv target/f0-venv && target/f0-venv/bin/pip install --quiet --require-hashes -r conformance/reference/f0/requirements.txt)
     target/f0-venv/bin/python -I conformance/reference/f0/run.py conformance/vectors
 
+# OP-112 m.4
+f0-random count="10000" seed="1":
+    rm -rf target/random-vectors
+    ACCESS_RANDOM_VECTORS="{{justfile_directory()}}/target/random-vectors" ACCESS_RANDOM_COUNT={{count}} ACCESS_RANDOM_SEED={{seed}} cargo test --locked -q -p esuiss-access-kernel --lib random_inputs_for_f0 -- --ignored
+    [ -x target/f0-venv/bin/python ] || (python3 -m venv target/f0-venv && target/f0-venv/bin/pip install --quiet --require-hashes -r conformance/reference/f0/requirements.txt)
+    target/f0-venv/bin/python -I conformance/reference/f0/run.py target/random-vectors
+
 # F-14
 semgrep:
     semgrep scan --config .semgrep/ --error --metrics=off
