@@ -76,6 +76,24 @@ jobs:
           cargo build --locked -p access-server
           just checksec target/debug/access-server
 
+  # OP-105
+  smt:
+    name: smt
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+        with:
+          cache-key: test
+          tools: nextest
+      - name: Restriction change analysis with the pinned cvc5 (OP-105, F-2)
+        run: just smt-test
+
   cross:
     name: cross
     runs-on: ubuntu-24.04

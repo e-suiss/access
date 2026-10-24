@@ -161,11 +161,27 @@ mkcert host:
 # SA-23, F-2
 sanitizer_nightly := "nightly-2026-10-01"
 
-# SA-59
+# SA-59, OP-105
 test-full:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    ACCESS_CVC5="$(scripts/cvc5-fetch.sh target/cvc5)"
+    export ACCESS_CVC5
     cargo nextest run --workspace --locked --no-tests=pass --run-ignored all -E '{{not_lockdown}}'
     cargo test --workspace --locked --doc
     just test-sandbox
+
+# OP-105, F-2
+smt-fetch:
+    scripts/cvc5-fetch.sh target/cvc5
+
+# OP-105
+smt-test:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    ACCESS_CVC5="$(scripts/cvc5-fetch.sh target/cvc5)"
+    export ACCESS_CVC5
+    cargo nextest run --locked -p esuiss-restriction-analysis --run-ignored all --no-tests=fail
 
 # SA-22, OP-90
 test-sandbox:
