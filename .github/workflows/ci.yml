@@ -71,6 +71,9 @@ jobs:
           tools: nextest
       - name: Tests (SA-59 phase 0 layers)
         run: just test
+      # OP-116 m.6
+      - name: Kernel vectors through the uniffi Python binding
+        run: just uniffi-test
       - name: Binary hardening (SA-23, §14.5)
         run: |
           cargo build --locked -p access-server
@@ -120,8 +123,8 @@ jobs:
             echo "CC_x86_64_linux_android=$bin/x86_64-linux-android24-clang"
             echo "AR_x86_64_linux_android=$bin/llvm-ar"
           } >> "$GITHUB_ENV"
-      # CMP-24, MD-1, T41
-      - name: Kernel cross-compilation
+      # CMP-24, MD-1, T41, OP-116 m.3
+      - name: Kernel and uniffi binding cross-compilation
         run: just cross
       # OP-56, OP-106 m.24
       - name: Vector cross-check with an independent encoder
@@ -268,7 +271,8 @@ jobs:
         run: just web-install
       - name: Lint, type check, format (OP-83)
         run: just web-check
-      - name: Unit tests
+      # OP-116 m.6
+      - name: Unit tests and Kernel vectors through the Wasm binding
         run: just web-test
       - name: Keep the Wasm build for the browser tests
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
