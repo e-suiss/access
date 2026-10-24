@@ -78,7 +78,7 @@ fn decision_vectors() {
             ),
         }
     }
-    assert_eq!(cases(&v).len(), 20);
+    assert_eq!(cases(&v).len(), 34);
 }
 
 // OP-116 m.6, CR-57
@@ -359,7 +359,9 @@ fn intent_digest_matches_the_kernel() {
         "../../../../conformance/vectors/core/1/decision.json"
     ));
     for c in cases(&v) {
-        let owned = OwnedInput::from_bytes(&unhex(s(c, "input"))).unwrap();
+        let Ok(owned) = OwnedInput::from_bytes(&unhex(s(c, "input"))) else {
+            continue;
+        };
         let expect = intent::intent_digest(&owned.intent).unwrap();
         assert_eq!(
             intent_digest(&owned.intent.to_bytes().unwrap()),
@@ -599,7 +601,7 @@ fn validity_is_checked_at_the_moment_of_use() {
     let stale = contract(ProfileVariant::BoundedStaleness);
     let name = |r: Result<(), Error>| r.map_err(|e| e.name());
     assert_eq!(
-        check_validity(&strict, 5_000, "pep:shop", geo(), None, true),
+        check_validity(&strict, 5_000, "pep:shop", geo(), None, true, 60_000),
         Ok(())
     );
     assert_eq!(
@@ -609,7 +611,8 @@ fn validity_is_checked_at_the_moment_of_use() {
             "pep:shop",
             vec![],
             None,
-            true
+            true,
+            60_000
         )),
         Err("must-understand".to_string())
     );
@@ -620,7 +623,8 @@ fn validity_is_checked_at_the_moment_of_use() {
             "pep:bank",
             geo(),
             None,
-            true
+            true,
+            60_000
         )),
         Err("audience".to_string())
     );
@@ -631,7 +635,8 @@ fn validity_is_checked_at_the_moment_of_use() {
             "pep:shop",
             geo(),
             None,
-            true
+            true,
+            60_000
         )),
         Err("expired".to_string())
     );
@@ -642,12 +647,13 @@ fn validity_is_checked_at_the_moment_of_use() {
             "pep:shop",
             geo(),
             None,
-            false
+            false,
+            60_000
         )),
         Err("online-required".to_string())
     );
     assert_eq!(
-        check_validity(&stale, 5_000, "pep:shop", geo(), Some(4_500), false),
+        check_validity(&stale, 5_000, "pep:shop", geo(), Some(4_500), false, 60_000),
         Ok(())
     );
     assert_eq!(
@@ -657,7 +663,8 @@ fn validity_is_checked_at_the_moment_of_use() {
             "pep:shop",
             geo(),
             Some(3_000),
-            false
+            false,
+            60_000
         )),
         Err("stale".to_string())
     );
@@ -668,12 +675,13 @@ fn validity_is_checked_at_the_moment_of_use() {
             "pep:shop",
             geo(),
             None,
-            false
+            false,
+            60_000
         )),
         Err("stale".to_string())
     );
     assert_eq!(
-        check_validity(&[0xa0], 0, "pep:shop", geo(), None, true),
+        check_validity(&[0xa0], 0, "pep:shop", geo(), None, true, 60_000),
         Err(Error::Input)
     );
 }

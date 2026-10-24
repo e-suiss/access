@@ -513,6 +513,7 @@ pub fn check_validity(
     understood: Vec<String>,
     last_refresh: Option<TrustedTime>,
     online: bool,
+    skew_ms: u64,
 ) -> Result<(), Error> {
     let contract: ValidityContract = decode(contract)?;
     let understood: BTreeSet<String> = understood.into_iter().collect();
@@ -522,6 +523,7 @@ pub fn check_validity(
         understood: &understood,
         last_refresh,
         online,
+        skew_ms,
     };
     validity::check(&contract, &ctx).map_err(Error::Validity)
 }

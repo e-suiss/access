@@ -164,7 +164,7 @@ class Vectors(unittest.TestCase):
         self.assertEqual(outcome(lambda: k.intent_digest(empty)), ("error", "input"))
         self.assertEqual(outcome(lambda: k.verify_metadata(empty, empty)), ("error", "input"))
         self.assertEqual(
-            outcome(lambda: k.check_validity(empty, 0, "pep:shop", [], None, True)), ("error", "input")
+            outcome(lambda: k.check_validity(empty, 0, "pep:shop", [], None, True, 60_000)), ("error", "input")
         )
         ed = cbor_map([(tstr("ed25519"), bstr(b64url("6kpsY-KcUgq-9VB7Ey7F-ZVHdq6-vnuSQh7qaRRG0iw")))])
         keys = key_set([(bytes([1]) * 32, ed)], [-19])

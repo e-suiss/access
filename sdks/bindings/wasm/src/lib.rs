@@ -137,8 +137,18 @@ pub fn check_validity(
     understood: Vec<String>,
     last_refresh: Option<u64>,
     online: bool,
+    skew_ms: u64,
 ) -> Result<(), JsError> {
-    binding::check_validity(contract, now, audience, understood, last_refresh, online).map_err(js)
+    binding::check_validity(
+        contract,
+        now,
+        audience,
+        understood,
+        last_refresh,
+        online,
+        skew_ms,
+    )
+    .map_err(js)
 }
 
 /// RFC 9162 inclusion proof; `path` is the 32-byte hashes concatenated.

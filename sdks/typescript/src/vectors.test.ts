@@ -133,7 +133,7 @@ describe("Kernel vectors through the Wasm binding", () => {
         "decision" in c ? { ok: field(c, "decision") } : { error: field(c, "rejection") };
       expect(got, c.id).toEqual(want);
     }
-    expect(v.cases).toHaveLength(20);
+    expect(v.cases).toHaveLength(34);
   });
 
   it("cve-regressions.json", async () => {
@@ -178,7 +178,7 @@ describe("Kernel vectors through the Wasm binding", () => {
             };
       expect(got, c.id).toEqual(want);
     }
-    expect(v.cases).toHaveLength(15);
+    expect(v.cases).toHaveLength(17);
   });
 
   it("key-scope.json", async () => {
@@ -198,7 +198,7 @@ describe("Kernel vectors through the Wasm binding", () => {
       const want = "error" in c ? { error: field(c, "error") } : { ok: field(c, "key") };
       expect(got, c.id).toEqual(want);
     }
-    expect(v.cases).toHaveLength(22);
+    expect(v.cases).toHaveLength(23);
   });
 
   it("jose-attack-classes.json", async () => {
@@ -277,7 +277,7 @@ describe("Kernel vectors through the Wasm binding", () => {
     expect(outcome(() => k.verifyMetadata(empty, empty))).toEqual({ error: "input" });
     expect(
       outcome(() => {
-        k.checkValidity(empty, 0n, "pep:shop", [], undefined, true);
+        k.checkValidity(empty, 0n, "pep:shop", [], undefined, true, 60_000n);
       }),
     ).toEqual({
       error: "input",

@@ -330,6 +330,7 @@ pub fn check_validity(
     understood: Vec<String>,
     last_refresh: Option<u64>,
     online: bool,
+    skew_ms: u64,
 ) -> Result<(), KernelError> {
     Ok(binding::check_validity(
         &contract,
@@ -338,6 +339,7 @@ pub fn check_validity(
         understood,
         last_refresh,
         online,
+        skew_ms,
     )?)
 }
 
