@@ -168,3 +168,67 @@ fn psychic_signature_is_rejected_before_the_backend() {
         Err(SignatureError::Length)
     );
 }
+
+#[derive(serde::Deserialize)]
+struct Acvp<T> {
+    tests: Vec<T>,
+}
+
+#[derive(serde::Deserialize)]
+struct EcdsaCase {
+    #[serde(rename = "tcId")]
+    id: u64,
+    #[serde(rename = "testPassed")]
+    passed: bool,
+    message: String,
+    qx: String,
+    qy: String,
+    r: String,
+    s: String,
+}
+
+#[derive(serde::Deserialize)]
+struct EddsaCase {
+    #[serde(rename = "tcId")]
+    id: u64,
+    #[serde(rename = "testPassed")]
+    passed: bool,
+    message: String,
+    q: String,
+    signature: String,
+}
+
+fn padded(hex: &str) -> Vec<u8> {
+    let b = bytes(hex);
+    [alloc::vec![0; 32_usize.checked_sub(b.len()).unwrap()], b].concat()
+}
+
+// CR-51 V8/V9: NIST ACVP SigVer for the two algorithms the Kernel verifies
+#[test]
+fn acvp_sigver() {
+    let e: Acvp<EcdsaCase> = serde_json::from_str(include_str!(
+        "../../../../conformance/vectors/external/acvp-ecdsa-sigver-fips186-5.json"
+    ))
+    .unwrap();
+    for t in &e.tests {
+        let key = [alloc::vec![0x04], padded(&t.qx), padded(&t.qy)].concat();
+        let sig = [padded(&t.r), padded(&t.s)].concat();
+        let ok = p256(&PureBackend, &key, &bytes(&t.message), &sig, false).is_ok();
+        assert_eq!(ok, t.passed, "ECDSA tcId {}", t.id);
+    }
+    let d: Acvp<EddsaCase> = serde_json::from_str(include_str!(
+        "../../../../conformance/vectors/external/acvp-eddsa-sigver-1.0.json"
+    ))
+    .unwrap();
+    for t in &d.tests {
+        let ok = ed25519(
+            &PureBackend,
+            &bytes(&t.q),
+            &bytes(&t.message),
+            &bytes(&t.signature),
+        )
+        .is_ok();
+        assert_eq!(ok, t.passed, "EdDSA tcId {}", t.id);
+    }
+    assert_eq!((e.tests.len(), d.tests.len()), (7, 5));
+}

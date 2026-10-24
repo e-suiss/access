@@ -172,3 +172,33 @@ fn tagged_digest_round_trips_and_contexts_differ() {
     let direct: Hash = Sha256::digest(b"access/intent/v1\x00x").into();
     assert_eq!(d.0, direct);
 }
+
+#[derive(serde::Deserialize)]
+struct Sha {
+    tests: Vec<ShaCase>,
+}
+
+#[derive(serde::Deserialize)]
+struct ShaCase {
+    #[serde(rename = "tcId")]
+    id: u64,
+    msg: String,
+    len: usize,
+    md: String,
+}
+
+// CR-51 m.3: SHA-256 known answers (NIST ACVP SHA2-256 AFT)
+#[test]
+fn sha256_acvp_known_answers() {
+    use sha2::{Digest as _, Sha256};
+    let v: Sha = serde_json::from_str(include_str!(
+        "../../../../conformance/vectors/external/acvp-sha2-256-1.0.json"
+    ))
+    .unwrap();
+    for t in &v.tests {
+        let msg = &bytes(&t.msg)[..t.len / 8];
+        let md: [u8; 32] = Sha256::digest(msg).into();
+        assert_eq!(md.to_vec(), bytes(&t.md), "tcId {}", t.id);
+    }
+    assert_eq!(v.tests.len(), 512);
+}
