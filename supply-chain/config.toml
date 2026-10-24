@@ -167,7 +167,7 @@ version = "0.2.2"
 criteria = "safe-to-deploy"
 
 [[exemptions.crypto-bigint]]
-version = "0.7.5"
+version = "0.7.6"
 criteria = "safe-to-deploy"
 
 [[exemptions.crypto-common]]
@@ -179,7 +179,7 @@ version = "0.2.2"
 criteria = "safe-to-deploy"
 
 [[exemptions.ctutils]]
-version = "0.4.4"
+version = "0.4.5"
 criteria = "safe-to-deploy"
 
 [[exemptions.curve25519-dalek]]

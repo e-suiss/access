@@ -2,6 +2,12 @@
 # Each entry names the advisory; an entry whose version is no longer locked is an error.
 
 [[exception]]
+crate = "crypto-bigint"
+version = "0.7.6"
+advisory = "RUSTSEC-2026-0387"
+
+# ctutils 0.4.5 is required by crypto-bigint 0.7.6 and also carries the RUSTSEC-2026-0385 fix.
+[[exception]]
 crate = "ctutils"
-version = "0.4.4"
-advisory = "RUSTSEC-2026-0385"
+version = "0.4.5"
+advisory = "RUSTSEC-2026-0387"
