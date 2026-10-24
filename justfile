@@ -225,12 +225,12 @@ fuzz-all seconds="60":
 # OP-106 m.24
 vectors-crosscheck:
     cd conformance/vectors/tools/cbor-crosscheck && go run . ../..
-    [ -x target/vectors-venv/bin/python ] || (python3 -m venv target/vectors-venv && target/vectors-venv/bin/pip install --quiet cbor2==5.7.1)
+    target/vectors-venv/bin/python -I -c 'import cbor2' 2>/dev/null || (rm -rf target/vectors-venv && python3 -m venv target/vectors-venv && target/vectors-venv/bin/pip install --quiet cbor2==5.7.1)
     target/vectors-venv/bin/python -I conformance/vectors/tools/cbor_crosscheck.py conformance/vectors
 
 # OP-112, CR-49 m.2
 f0:
-    [ -x target/f0-venv/bin/python ] || (python3 -m venv target/f0-venv && target/f0-venv/bin/pip install --quiet --require-hashes -r conformance/reference/f0/requirements.txt)
+    target/f0-venv/bin/python -I -c 'import cbor2' 2>/dev/null || (rm -rf target/f0-venv && python3 -m venv target/f0-venv && target/f0-venv/bin/pip install --quiet --require-hashes -r conformance/reference/f0/requirements.txt)
     target/f0-venv/bin/python -I conformance/reference/f0/run.py conformance/vectors
 
 # CR-39 m.5, SA-T13
@@ -241,7 +241,7 @@ dudect:
 f0-random count="10000" seed="1":
     rm -rf target/random-vectors
     ACCESS_RANDOM_VECTORS="{{justfile_directory()}}/target/random-vectors" ACCESS_RANDOM_COUNT={{count}} ACCESS_RANDOM_SEED={{seed}} cargo test --locked -q -p esuiss-access-kernel --lib random_inputs_for_f0 -- --ignored
-    [ -x target/f0-venv/bin/python ] || (python3 -m venv target/f0-venv && target/f0-venv/bin/pip install --quiet --require-hashes -r conformance/reference/f0/requirements.txt)
+    target/f0-venv/bin/python -I -c 'import cbor2' 2>/dev/null || (rm -rf target/f0-venv && python3 -m venv target/f0-venv && target/f0-venv/bin/pip install --quiet --require-hashes -r conformance/reference/f0/requirements.txt)
     target/f0-venv/bin/python -I conformance/reference/f0/run.py target/random-vectors
 
 # F-14

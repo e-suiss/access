@@ -24,7 +24,13 @@ fn op_90_server_refuses_to_start_without_lockdown() {
     if lockdown_possible() {
         return;
     }
-    let mut child = Command::new(env!("CARGO_BIN_EXE_access-server"))
+    let mut command = Command::new(env!("CARGO_BIN_EXE_access-server"));
+    for (key, _) in std::env::vars_os() {
+        if key.to_string_lossy().starts_with("ACCESS_") {
+            command.env_remove(key);
+        }
+    }
+    let mut child = command
         .env("ACCESS_LISTEN", "127.0.0.1:0")
         .env("ACCESS_CONFIG", "/nonexistent/access.toml")
         .stdout(std::process::Stdio::piped())
@@ -44,6 +50,10 @@ fn op_90_server_refuses_to_start_without_lockdown() {
     };
     let output = child.wait_with_output().expect("output");
     let logs = String::from_utf8_lossy(&output.stdout);
+    let errors = String::from_utf8_lossy(&output.stderr);
     assert!(!status.success(), "exit status: {status}");
-    assert!(logs.contains("refusing to start"), "logs: {logs}");
+    assert!(
+        logs.contains("refusing to start"),
+        "logs: {logs}\nstderr: {errors}"
+    );
 }
