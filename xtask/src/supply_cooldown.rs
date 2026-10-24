@@ -1,6 +1,7 @@
 //! `cooldown` (F-2, SA-34): every crates.io package in `Cargo.lock` was published
 //! at least seven days ago, so a hijacked release has time to be noticed and
-//! yanked before we build with it.
+//! yanked before we build with it. A release that fixes a known advisory is listed in
+//! `supply-chain/cooldown-exceptions.toml` and does not wait (F-15).
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -19,6 +20,7 @@ pub(crate) const COOLDOWN_DAYS: i64 = 7;
 
 const CRATES_IO: &str = "registry+https://github.com/rust-lang/crates.io-index";
 const CACHE_FILE: &str = "target/xtask-cooldown-cache.json";
+const EXCEPTIONS_FILE: &str = "supply-chain/cooldown-exceptions.toml";
 const USER_AGENT: &str = "access-xtask cooldown check (https://github.com/e-suiss/access)";
 
 /// A locked package: name, version, source.
@@ -136,12 +138,76 @@ fn fetch(name: &str, version: &str) -> Result<String, String> {
         .ok_or_else(|| format!("{url}: no created_at"))
 }
 
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Exceptions {
+    #[serde(default)]
+    exception: Vec<Exception>,
+}
+
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Exception {
+    #[serde(rename = "crate")]
+    name: String,
+    version: String,
+    advisory: String,
+}
+
+fn advisory_id(s: &str) -> bool {
+    s.strip_prefix("RUSTSEC-").is_some_and(|rest| {
+        let (year, num) = rest.split_once('-').unwrap_or_default();
+        year.len() == 4
+            && num.len() == 4
+            && year.bytes().chain(num.bytes()).all(|b| b.is_ascii_digit())
+    })
+}
+
+/// F-15: the exceptions, each naming a `RustSec` advisory and a locked crate version.
+pub(crate) fn exceptions(text: &str, locked: &[Locked]) -> (Vec<String>, Vec<Violation>) {
+    let violation = |message: String| Violation {
+        rule: RULE,
+        path: PathBuf::from(EXCEPTIONS_FILE),
+        message,
+    };
+    let parsed: Exceptions = match toml::from_str(text) {
+        Ok(p) => p,
+        Err(e) => return (Vec::new(), vec![violation(e.to_string())]),
+    };
+    let mut keys = Vec::new();
+    let mut out = Vec::new();
+    for e in parsed.exception {
+        let key = format!("{}@{}", e.name, e.version);
+        if !advisory_id(&e.advisory) {
+            out.push(violation(format!(
+                "{key}: advisory must be a RUSTSEC-YYYY-NNNN id (F-15)"
+            )));
+        } else if !locked
+            .iter()
+            .any(|p| p.name == e.name && p.version == e.version)
+        {
+            out.push(violation(format!(
+                "{key}: not in Cargo.lock; remove the stale exception"
+            )));
+        } else {
+            keys.push(key);
+        }
+    }
+    (keys, out)
+}
+
 pub(crate) fn online() -> bool {
     std::env::var("XTASK_ONLINE").is_ok_and(|v| v == "1")
 }
 
 pub(crate) fn check(root: &Path) -> Result<Vec<Violation>, String> {
     let locked = parse_lock(&read(&root.join("Cargo.lock"))?)?;
+    let exceptions_path = root.join(EXCEPTIONS_FILE);
+    let (excepted, mut out) = if exceptions_path.exists() {
+        exceptions(&read(&exceptions_path)?, &locked)
+    } else {
+        (Vec::new(), Vec::new())
+    };
     let cache_path = root.join(CACHE_FILE);
     let mut cache = load_cache(&cache_path);
     let now = SystemTime::now()
@@ -149,7 +215,6 @@ pub(crate) fn check(root: &Path) -> Result<Vec<Violation>, String> {
         .map_err(|e| e.to_string())
         .and_then(|d| i64::try_from(d.as_secs()).map_err(|e| e.to_string()))?;
     let online = online();
-    let mut out = Vec::new();
     let mut unchecked = 0_usize;
     let mut fetched_any = false;
     for pkg in locked
@@ -177,7 +242,7 @@ pub(crate) fn check(root: &Path) -> Result<Vec<Violation>, String> {
             .get(&key)
             .and_then(|ts| parse_timestamp(ts).map(|t| (ts, t)))
         {
-            Some((ts, t)) if too_new(t, now) => out.push(Violation {
+            Some((ts, t)) if too_new(t, now) && !excepted.contains(&key) => out.push(Violation {
                 rule: RULE,
                 path: PathBuf::from("Cargo.lock"),
                 message: format!(
@@ -221,6 +286,24 @@ mod tests {
         assert!(too_new(now - 6 * 86_400, now));
         assert!(!too_new(now - 7 * 86_400, now));
         assert!(!too_new(93 * 86_400 + 80_000, now));
+    }
+
+    #[test]
+    fn exceptions_need_an_advisory_and_a_locked_version() {
+        let locked = vec![Locked {
+            name: "ctutils".into(),
+            version: "0.4.4".into(),
+            source: Some(CRATES_IO.into()),
+        }];
+        let ok = "[[exception]]\ncrate = \"ctutils\"\nversion = \"0.4.4\"\nadvisory = \"RUSTSEC-2026-0385\"\n";
+        let (keys, v) = exceptions(ok, &locked);
+        assert_eq!((keys, v.len()), (vec!["ctutils@0.4.4".to_string()], 0));
+        let bad_id = ok.replace("RUSTSEC-2026-0385", "CVE-2026-1");
+        assert_eq!(exceptions(&bad_id, &locked).1.len(), 1);
+        let stale = ok.replace("0.4.4", "0.4.3");
+        assert_eq!(exceptions(&stale, &locked).1.len(), 1);
+        let unknown = format!("{ok}reason = \"x\"\n");
+        assert_eq!(exceptions(&unknown, &locked).1.len(), 1);
     }
 
     #[test]

@@ -1,0 +1,7 @@
+# F-15: a release that fixes a known advisory does not wait for the F-2 cooldown.
+# Each entry names the advisory; an entry whose version is no longer locked is an error.
+
+[[exception]]
+crate = "ctutils"
+version = "0.4.4"
+advisory = "RUSTSEC-2026-0385"
