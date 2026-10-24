@@ -389,3 +389,9 @@ domain-metadata = {
   ? hybrid: "classic" / "both" / "pq",
   ? discovery: bstr,
 }
+
+; Result of verifyCoseSign1 in the bindings (OP-116 m.9).
+cose-verified = {
+  kid: key-id,
+  payload: bstr,
+}
