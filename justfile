@@ -196,6 +196,10 @@ f0:
     [ -x target/f0-venv/bin/python ] || (python3 -m venv target/f0-venv && target/f0-venv/bin/pip install --quiet --require-hashes -r conformance/reference/f0/requirements.txt)
     target/f0-venv/bin/python -I conformance/reference/f0/run.py conformance/vectors
 
+# CR-39 m.5, SA-T13
+dudect:
+    ACCESS_DUDECT=1 cargo test --locked --release -p access-crypto --test dudect -- --ignored --nocapture
+
 # OP-112 m.4
 f0-random count="10000" seed="1":
     rm -rf target/random-vectors
