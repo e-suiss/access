@@ -109,6 +109,9 @@ jobs:
       - name: Vector cross-check with an independent encoder
         working-directory: conformance/vectors/tools/cbor-crosscheck
         run: go run . ../..
+      # OP-112, CR-49 m.2
+      - name: F0 reference evaluator on the vectors
+        run: just f0
 
   supply-chain:
     name: supply-chain

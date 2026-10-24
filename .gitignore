@@ -12,3 +12,4 @@ dist/
 
 # SA-59
 proptest-regressions/
+__pycache__/
