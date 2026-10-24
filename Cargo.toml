@@ -18,6 +18,7 @@ access-crypto = { path = "crates/crypto", default-features = false }
 access-telemetry = { path = "crates/telemetry", default-features = false }
 access-http = { path = "crates/http", default-features = false }
 access-sandbox = { path = "crates/sandbox", default-features = false }
+suiss-restriction = { package = "esuiss-restriction", path = "crates/suiss-restriction", default-features = false }
 
 # F-2
 secrecy = { version = "0.10.3", default-features = false }
@@ -33,6 +34,8 @@ p256 = { version = "0.14.0", default-features = false, features = ["ecdsa"] }
 aws-lc-rs = { version = "1.18.2", default-features = false, features = ["aws-lc-sys"] }
 # OP-104
 cedar-policy = { version = "=4.13.0", default-features = false }
+# OP-105
+cedar-policy-symcc = { version = "=0.7.0", default-features = false }
 thiserror = { version = "2.0.21", default-features = false }
 serde = { version = "1.0.229", default-features = false }
 serde_json = { version = "1.0.151", default-features = false }

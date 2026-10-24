@@ -26,6 +26,8 @@ pub(crate) enum Class {
     Http,
     Telemetry,
     Sandbox,
+    /// `restriction-analysis`: control-plane SMT analysis with an external solver (OP-105).
+    RestrictionAnalysis,
     Testkit,
     Bin,
     Bindings,
@@ -47,6 +49,7 @@ pub(crate) fn classify(dir: &str) -> Option<Class> {
         ("crates", "http") => Class::Http,
         ("crates", "telemetry") => Class::Telemetry,
         ("crates", "sandbox") => Class::Sandbox,
+        ("crates", "restriction-analysis") => Class::RestrictionAnalysis,
         ("crates", "testkit") => Class::Testkit,
         ("crates", "suiss-ledger") => Class::SuissLedger,
         ("crates", n) if n.starts_with("suiss-") && !n.contains('/') => Class::Suiss,
@@ -67,14 +70,16 @@ pub(crate) fn classify(dir: &str) -> Option<Class> {
 fn allowed_targets(from: Class) -> Option<&'static [Class]> {
     use Class::{
         Authority, Bin, Bindings, Crypto, Http, Identity, InternalApi, Kernel, Parse, Proto,
-        Sandbox, Sdk, Service, Store, Suiss, SuissLedger, Telemetry, Testkit, Tooling,
+        RestrictionAnalysis, Sandbox, Sdk, Service, Store, Suiss, SuissLedger, Telemetry, Testkit,
+        Tooling,
     };
     let targets: &'static [Class] = match from {
         // OP-93
         Bin | Testkit => return None,
         // OP-93
         Kernel => &[Suiss],
-        Tooling | Sandbox => &[],
+        // OP-105
+        Tooling | Sandbox | RestrictionAnalysis => &[],
         // OP-76
         Suiss | SuissLedger => &[Suiss, SuissLedger],
         // OP-93
@@ -272,6 +277,30 @@ mod tests {
             member("crates/http", &[("crates/testkit", None)]),
         ]);
         assert_eq!(v.len(), 1);
+    }
+
+    // OP-105
+    #[test]
+    fn restriction_analysis_stays_out_of_the_kernel_and_the_planes() {
+        let ok = run(&[
+            member("crates/suiss-restriction", &[]),
+            member(
+                "crates/restriction-analysis",
+                &[("crates/suiss-restriction", None)],
+            ),
+            member(
+                "bins/access-server",
+                &[("crates/restriction-analysis", None)],
+            ),
+        ]);
+        assert!(ok.is_empty());
+        for from in ["crates/kernel", "crates/suiss-restriction", "crates/http"] {
+            let bad = run(&[
+                member("crates/restriction-analysis", &[]),
+                member(from, &[("crates/restriction-analysis", None)]),
+            ]);
+            assert_eq!(bad.len(), 1, "{from}");
+        }
     }
 
     #[test]

@@ -1,0 +1,27 @@
+# OP-105, F-2: the cvc5 solver for cedar-policy-symcc. The version moves only together with
+# cedar-policy-symcc. `sha256` pins the release archive, `binary_sha256` the executable inside it;
+# esuiss-restriction-analysis refuses to run any other binary.
+
+version = "1.3.1"
+release = "https://github.com/cvc5/cvc5/releases/tag/cvc5-1.3.1"
+published = "2025-09-24"
+symcc = "cedar-policy-symcc 0.7.0 (README: cvc5-1.3.1)"
+build = "static, without GPL components (modified BSD; bundled licences under licenses/)"
+
+[platform.linux-x86_64]
+url = "https://github.com/cvc5/cvc5/releases/download/cvc5-1.3.1/cvc5-Linux-x86_64-static.zip"
+sha256 = "1a1cda20d2df4938fa4944a69f33ddc9172e319ece0eed0aa09c4d7abede3ed1"
+binary = "cvc5-Linux-x86_64-static/bin/cvc5"
+binary_sha256 = "3ac157cf769c8fbaafe72e16179f062950c55a0537efb2bd15d5bc4d6793b16b"
+
+[platform.linux-aarch64]
+url = "https://github.com/cvc5/cvc5/releases/download/cvc5-1.3.1/cvc5-Linux-arm64-static.zip"
+sha256 = "fe2b661834a82fd8830f7a757c340f0e20041fa41e19b038fa02ace0eaf1c6f2"
+binary = "cvc5-Linux-arm64-static/bin/cvc5"
+binary_sha256 = "93dc476a691fb31ec444dadc0f441335d37c572133d929bc6bff9db54e29b55b"
+
+[platform.macos-aarch64]
+url = "https://github.com/cvc5/cvc5/releases/download/cvc5-1.3.1/cvc5-macOS-arm64-static.zip"
+sha256 = "a0e7f5b03b1bc4284fbfff7cdfb08c704801701cf7ece83a13f8a505e7581215"
+binary = "cvc5-macOS-arm64-static/bin/cvc5"
+binary_sha256 = "6b93983220a5aefe7ff80238b0312274aa6c51e442e8adbdc00f47979adc60a8"

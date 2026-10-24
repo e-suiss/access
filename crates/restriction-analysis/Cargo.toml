@@ -1,0 +1,21 @@
+[package]
+name = "esuiss-restriction-analysis"
+description = "Control-plane SMT analysis of Access Restriction Profile changes: SymCC with a pinned cvc5 (OP-105)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+suiss-restriction = { workspace = true }
+cedar-policy = { workspace = true }
+cedar-policy-symcc = { workspace = true }
+sha2 = { workspace = true }
+thiserror = { workspace = true, features = ["std"] }
+tokio = { workspace = true, features = ["process", "rt", "time"] }
+toml = { workspace = true, features = ["std", "parse", "serde"] }
+
+[lints]
+workspace = true

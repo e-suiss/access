@@ -161,6 +161,17 @@ struct Meta {
     undisclosed: bool,
 }
 
+/// A compiled user policy with its annotations, for the control-plane SMT analysis (OP-105).
+#[derive(Clone, Copy, Debug)]
+pub struct PolicyView<'a> {
+    /// `@id`.
+    pub id: &'a str,
+    /// `@require` reference; `None` for a plain DENY `forbid`.
+    pub require: Option<&'a str>,
+    /// The Cedar policy under its engine-internal id.
+    pub policy: &'a Policy,
+}
+
 const BASE_PERMIT: &str = "access-base-permit";
 
 /// A compiled forbid-only policy set.
@@ -271,6 +282,36 @@ impl Engine {
             meta,
             limits,
         })
+    }
+
+    /// The schema the set was validated against.
+    #[must_use]
+    pub fn schema(&self) -> &Schema {
+        &self.schema
+    }
+
+    /// The fixed base `permit` (OP-103 criterion 1).
+    #[must_use]
+    pub fn base_permit(&self) -> Option<&Policy> {
+        self.policies.policy(&PolicyId::new(BASE_PERMIT))
+    }
+
+    /// The user `forbid` policies, ordered by internal id; `None` if the engine state is
+    /// inconsistent.
+    #[must_use]
+    pub fn policies(&self) -> Option<Vec<PolicyView<'_>>> {
+        self.meta
+            .iter()
+            .map(|(internal, m)| {
+                self.policies
+                    .policy(&PolicyId::new(internal))
+                    .map(|policy| PolicyView {
+                        id: &m.id,
+                        require: m.require.as_deref(),
+                        policy,
+                    })
+            })
+            .collect()
     }
 
     /// Evaluates one request (OP-104 m.2, m.4, m.5).
