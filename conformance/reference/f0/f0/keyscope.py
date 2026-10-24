@@ -129,6 +129,10 @@ def check_domain_metadata(value):
     kids = [binding["kid"] for binding in value["binding"]]
     if len(set(kids)) != len(kids):
         fail("binding kid listed twice")
+    for binding in value["binding"]:
+        # CR-58 m.9
+        if thumbprint(binding["key"]) != binding["kid"]:
+            fail("binding kid is not the key thumbprint")
 
 
 def decode_payload(data, check):
@@ -193,6 +197,7 @@ COSE_ERROR_NAMES = {
     "unknown-kid": "unknown-binding",
     "content-type": "content-type",
     "signature": "signature",
+    "key-alg": "algorithm",
 }
 
 
@@ -207,6 +212,7 @@ def operational_key(metadata_bytes, domain_bytes, excerpt_bytes, usage, iat):
             EXCERPT_CONTENT_TYPE,
             metadata["algorithms"],
             {kid: binding["key"] for kid, binding in bindings.items()},
+            key_algs={kid: binding["alg"] for kid, binding in bindings.items()},
         )
     except CoseError as error:
         raise KeyScopeError(COSE_ERROR_NAMES.get(error.name, f"cose:{error.name}"))

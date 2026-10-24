@@ -132,36 +132,49 @@ def restriction_results(evaluation, fuel):
     return blockers, requirements
 
 
+def first_occurrences(requirements):
+    # OP-114 m.5
+    seen = set()
+    unique = []
+    for term, position in requirements:
+        if encode(term) not in seen:
+            seen.add(encode(term))
+            unique.append((term, position))
+    return unique
+
+
+def position_rank(position):
+    # OP-114 m.5
+    if isinstance(position, dict):
+        return (0, position["hop"])
+    return (1, 0) if position == "instance" else (2, 0)
+
+
 def evaluate_candidate(basis, evaluation, global_blockers, global_requirements, fuel):
     blockers = list(global_blockers)
-    requirements = list(global_requirements)
-    if basis is None:
-        blockers.append(no_covering_authority(0))
-    else:
-        for k, hop in enumerate(basis["hops"]):
-            # OP-111 m.7
-            fuel.spend()
-            blockers.extend(hop_blockers(k, hop, evaluation))
-            requirements.extend((term, hop_position(k)) for term in hop["authority"]["requirements"])
-        # OP-111 m.8
-        if not any(same(capacity, evaluation["capacity"]) for capacity in basis["capacities"]):
-            blockers.append(capacity_mismatch())
+    requirements = []
+    for k, hop in enumerate(basis["hops"]):
+        # OP-111 m.7
+        fuel.spend()
+        blockers.extend(hop_blockers(k, hop, evaluation))
+        requirements.extend((term, hop_position(k)) for term in hop["authority"]["requirements"])
+    # OP-111 m.8
+    if not any(same(capacity, evaluation["capacity"]) for capacity in basis["capacities"]):
+        blockers.append(capacity_mismatch())
+    requirements.extend(global_requirements)
+    requirements.sort(key=lambda entry: position_rank(entry[1]))
     # OP-111 m.3, m.4, m.5
-    unmet, relied, requirement_blockers = resolve(requirements, evaluation, fuel)
+    unmet, relied, requirement_blockers = resolve(first_occurrences(requirements), evaluation, fuel)
     blockers.extend(requirement_blockers)
     return blockers, unmet, relied
 
 
-def blocker_order(blocker):
-    # OP-108 m.5
-    return (blocker["class"].encode("utf-8"), encode(blocker))
-
-
-def as_set(items, key=encode):
+def as_set(items):
+    # OP-114 m.2, m.3
     by_encoding = {}
     for item in items:
         by_encoding[encode(item)] = item
-    return sorted(by_encoding.values(), key=key)
+    return [by_encoding[key] for key in sorted(by_encoding)]
 
 
 def make_decision(blockers, unmet, relied):
@@ -174,7 +187,7 @@ def make_decision(blockers, unmet, relied):
     else:
         decision["outcome"] = "allow"
     if blockers:
-        decision["blockers"] = as_set(blockers, key=blocker_order)
+        decision["blockers"] = as_set(blockers)
     if unmet:
         decision["unmet"] = as_set(unmet)
     if decision["outcome"] == "allow" and relied:
@@ -189,6 +202,13 @@ def evaluate(evaluation, fuel_budget):
     if mode in ("commit", "continue") and len(bases) != 1:
         # OP-111 m.6
         raise Rejection("input", f"{mode} needs exactly one declared basis")
+    start, until = evaluation["intent"]["validity"]
+    # OP-114 m.13
+    if not start <= evaluation["now"] <= until:
+        raise Rejection("input", "now is outside the intent validity")
+    if mode == "check" and not bases:
+        # OP-114 m.14
+        return make_decision([no_covering_authority(0)], [], [])
     global_blockers, global_requirements = restriction_results(evaluation, fuel)
     if "mandate" in evaluation:
         mandate = evaluation["mandate"]
@@ -199,9 +219,8 @@ def evaluate(evaluation, fuel_budget):
     if mode in ("commit", "continue"):
         # OP-111 m.6
         return make_decision(*evaluate_candidate(bases[0], evaluation, global_blockers, global_requirements, fuel))
-    candidates = bases if bases else [None]
     decisions = []
-    for basis in candidates:
+    for basis in bases:
         blockers, unmet, relied = evaluate_candidate(basis, evaluation, global_blockers, global_requirements, fuel)
         decisions.append((blockers, unmet, relied))
     # OP-111 m.6
@@ -212,8 +231,8 @@ def evaluate(evaluation, fuel_budget):
         if not blockers:
             return make_decision(blockers, unmet, relied)
     all_blockers = [blocker for blockers, _, _ in decisions for blocker in blockers]
-    all_unmet = [term for _, unmet, _ in decisions for term in unmet]
-    return make_decision(all_blockers, all_unmet, [])
+    # OP-114 m.14
+    return make_decision(all_blockers, [], [])
 
 
 def evaluate_bytes(data, fuel_budget):

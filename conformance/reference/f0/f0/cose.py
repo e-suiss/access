@@ -97,7 +97,7 @@ def signature_input(protected, payload):
     return encode(["Signature1", protected, b"", payload])
 
 
-def verify_sign1(data, content_type, allowed, keys, access_native=True):
+def verify_sign1(data, content_type, allowed, keys, access_native=True, key_algs=None):
     message = decode_tagged(data)
     protected, unprotected, payload, signature = check_shape(message)
     header = decode_protected(protected)
@@ -113,6 +113,9 @@ def verify_sign1(data, content_type, allowed, keys, access_native=True):
     # CR-55 m.4
     if kid not in keys:
         raise CoseError("unknown-kid")
+    # CR-58 m.9, CR-7
+    if key_algs is not None and key_algs[kid] != alg:
+        raise CoseError("key-alg")
     key = keys[kid]
     key_type = ALGORITHM_KEY_TYPE[alg]
     # CR-56 row 4, CR-55 m.3
