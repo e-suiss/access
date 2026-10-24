@@ -39,19 +39,21 @@ def same(a, b):
     return encode(a) == encode(b)
 
 
-def decode_canonical(data):
+def decode_canonical(data, int_keys=False):
+    if not isinstance(data, bytes):
+        fail("not bytes")
     try:
         value = cbor2.loads(data)
     except Exception as error:
         fail(f"not CBOR: {error}")
-    check_data_model(value, 1)
+    check_data_model(value, 1, int_keys)
     # OP-106 m.1
     if encode(value) != data:
         fail("not deterministic CBOR")
     return value
 
 
-def check_data_model(value, depth):
+def check_data_model(value, depth, int_keys=False):
     # OP-106 m.5
     if depth > MAX_DEPTH:
         fail("nesting too deep")
@@ -73,7 +75,7 @@ def check_data_model(value, depth):
         if len(value) > MAX_ITEMS:
             fail("too many items")
         for item in value:
-            check_data_model(item, depth + 1)
+            check_data_model(item, depth + 1, int_keys)
         return
     if isinstance(value, dict):
         # OP-106 m.5
@@ -81,9 +83,9 @@ def check_data_model(value, depth):
             fail("too many items")
         for key, item in value.items():
             # OP-106 m.4
-            if not isinstance(key, str):
+            if not isinstance(key, str) and not (int_keys and type(key) is int):
                 fail("map key is not text")
-            check_data_model(item, depth + 1)
+            check_data_model(item, depth + 1, int_keys)
         return
     # OP-106 m.2, m.3, m.4
     fail(f"value type not allowed: {type(value).__name__}")
