@@ -8,7 +8,8 @@ F0 is written from the protocol specification and the CDDL in `conformance/cddl/
 
 | Module | Contents |
 |---|---|
-| `f0/codec.py` | Strict decoding: deterministic CBOR, no floats, tags or null, unknown fields rejected, sets sorted and unique, structural limits |
+| `f0/dcbor.py` | Byte-by-byte deterministic CBOR check: shortest form, no indefinite lengths, floats, tags or simple values, key order, depth, item and string limits; the first error met wins |
+| `f0/codec.py` | Strict decoding into the data model: unknown fields rejected, sets sorted and unique, CDDL types |
 | `f0/algebra.py` | `⊑`, `∩` and `normalize` for the nine bound types, selectors, authority sets, and the child-within-parent check |
 | `f0/intent.py` | Whether an authority set covers an intent |
 | `f0/requirement.py` | The requirement resolver: proof matching, earliest-position selection, single-use consumption |
@@ -29,4 +30,4 @@ python -m venv .venv
 .venv/bin/python -I conformance/reference/f0/run.py conformance/vectors
 ```
 
-The runner walks every vector file, runs the cases whose operation F0 supports (`combinator.evaluate`, `algebra.child_within_parent`, `verify.cose_sign1`, `key_scope.operational_key` and `verify.ed25519`), prints per-file counts and `N passed, M failed` with each failure, and exits non-zero if anything failed.
+The runner walks every vector file, runs the cases whose operation F0 supports (`combinator.evaluate`, `algebra.child_within_parent`, `verify.cose_sign1`, `key_scope.operational_key`, `verify.ed25519` and `dcbor.decode`), prints per-file counts and `N passed, M failed` with each failure, and exits non-zero if anything failed.

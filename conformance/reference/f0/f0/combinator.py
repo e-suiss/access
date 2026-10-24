@@ -51,8 +51,6 @@ def budget_exhausted(k, state):
             "resolver": {"grantor_of_hop": k},
             "remediation": "route-to-coordinator",
         }
-    if "resets_at" not in state:
-        raise Rejection("input", "rolling budget without resets_at")
     return {
         "class": "budget-exhausted",
         "position": hop_position(k),
@@ -195,6 +193,18 @@ def make_decision(blockers, unmet, relied):
     return decision
 
 
+def evaluate_with_context(basis, evaluation, fuel):
+    # OP-117 m.21
+    global_blockers, global_requirements = restriction_results(evaluation, fuel)
+    if "mandate" in evaluation:
+        mandate = evaluation["mandate"]
+        # OP-111 m.2, OP-117 m.9
+        if not intent_covered(mandate["authority"], evaluation["intent"], evaluation["catalog"]):
+            global_blockers.append(outside_instance_limits())
+        global_requirements.extend((term, "instance") for term in mandate.get("requirements", []))
+    return evaluate_candidate(basis, evaluation, global_blockers, global_requirements, fuel)
+
+
 def evaluate(evaluation, fuel_budget):
     fuel = Fuel(fuel_budget)
     mode = evaluation["mode"]
@@ -206,27 +216,26 @@ def evaluate(evaluation, fuel_budget):
     # OP-114 m.13
     if not start <= evaluation["now"] <= until:
         raise Rejection("input", "now is outside the intent validity")
+    for basis in bases:
+        for hop in basis["hops"]:
+            for state in hop.get("budgets", []):
+                # OP-114 m.11
+                if state["window"] != "total" and state["demand"] > state["remaining"] and "resets_at" not in state:
+                    raise Rejection("input", "rolling budget without resets_at")
     if mode == "check" and not bases:
         # OP-114 m.14
         return make_decision([no_covering_authority(0)], [], [])
-    global_blockers, global_requirements = restriction_results(evaluation, fuel)
-    if "mandate" in evaluation:
-        mandate = evaluation["mandate"]
-        # OP-111 m.2
-        if not intent_covered(mandate["authority"], evaluation["intent"], evaluation["catalog"]):
-            global_blockers.append(outside_instance_limits())
-        global_requirements.extend((term, "instance") for term in mandate.get("requirements", []))
     if mode in ("commit", "continue"):
         # OP-111 m.6
-        return make_decision(*evaluate_candidate(bases[0], evaluation, global_blockers, global_requirements, fuel))
+        return make_decision(*evaluate_with_context(bases[0], evaluation, fuel))
     decisions = []
     for basis in bases:
-        blockers, unmet, relied = evaluate_candidate(basis, evaluation, global_blockers, global_requirements, fuel)
-        decisions.append((blockers, unmet, relied))
-    # OP-111 m.6
-    for blockers, unmet, relied in decisions:
+        blockers, unmet, relied = evaluate_with_context(basis, evaluation, fuel)
+        # OP-117 m.21
         if not blockers and not unmet:
             return make_decision(blockers, unmet, relied)
+        decisions.append((blockers, unmet, relied))
+    # OP-111 m.6
     for blockers, unmet, relied in decisions:
         if not blockers:
             return make_decision(blockers, unmet, relied)

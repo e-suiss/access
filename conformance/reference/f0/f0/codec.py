@@ -2,10 +2,9 @@ import re
 
 import cbor2
 
+from . import dcbor
 
-MAX_DEPTH = 16
-MAX_ITEMS = 256
-MAX_STRING = 64 * 1024
+
 MAX_SELECTOR_CONDITIONS = 32
 MAX_HOPS = 16
 
@@ -43,20 +42,18 @@ def decode_canonical(data, int_keys=False):
     if not isinstance(data, bytes):
         fail("not bytes")
     try:
-        value = cbor2.loads(data)
-    except Exception as error:
-        fail(f"not CBOR: {error}")
-    check_data_model(value, 1, int_keys)
+        dcbor.check(data)
+    except dcbor.DecodeError as error:
+        fail(f"not deterministic CBOR: {error.name}")
+    value = cbor2.loads(data)
+    check_data_model(value, int_keys)
     # OP-106 m.1
     if encode(value) != data:
         fail("not deterministic CBOR")
     return value
 
 
-def check_data_model(value, depth, int_keys=False):
-    # OP-106 m.5
-    if depth > MAX_DEPTH:
-        fail("nesting too deep")
+def check_data_model(value, int_keys=False):
     if isinstance(value, bool):
         return
     if isinstance(value, int):
@@ -65,27 +62,17 @@ def check_data_model(value, depth, int_keys=False):
             fail("integer out of range")
         return
     if isinstance(value, (bytes, str)):
-        size = len(value) if isinstance(value, bytes) else len(value.encode("utf-8"))
-        # OP-106 m.5
-        if size > MAX_STRING:
-            fail("string too long")
         return
     if isinstance(value, list):
-        # OP-106 m.5
-        if len(value) > MAX_ITEMS:
-            fail("too many items")
         for item in value:
-            check_data_model(item, depth + 1, int_keys)
+            check_data_model(item, int_keys)
         return
     if isinstance(value, dict):
-        # OP-106 m.5
-        if len(value) > MAX_ITEMS:
-            fail("too many items")
         for key, item in value.items():
             # OP-106 m.4
             if not isinstance(key, str) and not (int_keys and type(key) is int):
                 fail("map key is not text")
-            check_data_model(item, depth + 1, int_keys)
+            check_data_model(item, int_keys)
         return
     # OP-106 m.2, m.3, m.4
     fail(f"value type not allowed: {type(value).__name__}")

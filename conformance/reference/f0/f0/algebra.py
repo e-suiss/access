@@ -362,10 +362,19 @@ def authority_within(child, parent, catalog):
     return True
 
 
+def covered_actions(action_set, catalog):
+    # OP-117 m.8
+    covered = list(action_set.get("exact", []))
+    for prefix in action_set.get("prefix", []):
+        covered.extend(resolve_prefix(prefix, catalog) or [])
+    return unique_sorted(covered)
+
+
 def actions_intersect(left, right, catalog):
-    left_actions = resolve_actions(left, catalog) or []
-    common = [action for action in left_actions if action_covered(action, right, catalog)]
-    return {"exact": unique_sorted(common)} if common else {}
+    # OP-117 m.8
+    right_actions = covered_actions(right, catalog)
+    common = [action for action in covered_actions(left, catalog) if contains(right_actions, action)]
+    return {"exact": common} if common else {}
 
 
 def authority_intersect(left, right, catalog):

@@ -4,7 +4,7 @@ import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
-from f0 import ed25519
+from f0 import dcbor, ed25519
 from f0.algebra import child_within_parent
 from f0.codec import Rejection, decode_canonical, decode_canonical_authority, decode_subject_selector, encode
 from f0.combinator import evaluate_bytes
@@ -72,7 +72,16 @@ def run_ed25519(case, document):
     return {"result": result}, reason
 
 
+def run_dcbor_decode(case, document):
+    try:
+        dcbor.check(bytes.fromhex(case["data"]))
+    except dcbor.DecodeError as error:
+        return {"error": error.name}, None
+    return {"valid": True}, None
+
+
 OPERATIONS = {
+    "dcbor.decode": (run_dcbor_decode, ("valid", "error")),
     "combinator.evaluate": (run_evaluate, ("decision", "rejection")),
     "algebra.child_within_parent": (run_child_within_parent, ("within", "rejection")),
     "verify.cose_sign1": (run_cose_sign1, ("kid", "payload", "error")),
