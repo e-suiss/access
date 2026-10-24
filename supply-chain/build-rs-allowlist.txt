@@ -1,14 +1,17 @@
 # F-2, SA-34
+anyhow
 aws-lc-rs
 aws-lc-sys
 bincode-next
 borsh
+camino
 cedar-policy
 cedar-policy-core
 curve25519-dalek
 defmt
 defmt-macros
 figment
+fs-err
 generic-array
 getrandom
 gungraun

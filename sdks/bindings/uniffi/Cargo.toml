@@ -1,0 +1,31 @@
+[package]
+name = "access-kernel-uniffi"
+description = "uniffi binding of the Access Kernel for Swift, Kotlin and Python (OP-116)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[lib]
+name = "access_kernel_uniffi"
+crate-type = ["lib", "cdylib", "staticlib"]
+
+# OP-116 m.6
+[[bin]]
+name = "uniffi-bindgen"
+path = "src/bin/uniffi-bindgen.rs"
+required-features = ["bindgen"]
+
+[features]
+bindgen = ["uniffi/cli", "uniffi/cargo-metadata"]
+
+[dependencies]
+# OP-62
+access-kernel = { workspace = true }
+thiserror = { workspace = true }
+uniffi = { workspace = true }
+
+[lints]
+workspace = true

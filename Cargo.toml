@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/*", "bins/*", "sdks/bindings/wasm", "xtask"]
+members = ["crates/*", "bins/*", "sdks/bindings/wasm", "sdks/bindings/uniffi", "xtask"]
 
 [workspace.package]
 version = "0.0.0"
@@ -60,6 +60,8 @@ divan = { version = "0.1.21", default-features = false }
 gungraun = { version = "=0.20.0", default-features = false }
 # OP-83
 wasm-bindgen = { version = "=0.2.129", default-features = false }
+# OP-116
+uniffi = { version = "=0.32.2", default-features = false }
 
 [workspace.lints.rust]
 # R-2, OP-3

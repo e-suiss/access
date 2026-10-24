@@ -5,6 +5,7 @@ set shell := ["bash", "-euo", "pipefail", "-c"]
 # CMP-24, MD-1, T41
 not_lockdown := "not (package(access-sandbox) and binary(lockdown))"
 kernel_targets := "wasm32-unknown-unknown wasm32-wasip1 aarch64-apple-ios aarch64-apple-ios-sim aarch64-linux-android x86_64-linux-android"
+mobile_targets := "aarch64-apple-ios aarch64-apple-ios-sim aarch64-linux-android x86_64-linux-android"
 
 default:
     @just --list
@@ -41,6 +42,8 @@ cross:
     for t in {{kernel_targets}}; do cargo build --locked -p esuiss-crypto --no-default-features --features verify --target "$t"; done
     # OP-104 m.7
     for t in {{kernel_targets}}; do just _ndk "$t" cargo build --locked -p esuiss-restriction --target "$t"; done
+    # OP-116 m.3
+    for t in {{mobile_targets}}; do just _ndk "$t" cargo build --locked -p access-kernel-uniffi --target "$t"; done
     CARGO_TARGET_WASM32_WASIP1_RUNNER=wasmtime cargo test --locked -p esuiss-access-kernel --target wasm32-wasip1
     # E43
     CARGO_TARGET_WASM32_WASIP1_RUNNER=wasmtime cargo test --locked -p esuiss-restriction --target wasm32-wasip1
@@ -66,12 +69,16 @@ _ndk target +cmd:
           fi
           export "$var=$bin/{{target}}24-clang" "AR_$(echo '{{target}}' | tr '-' '_')=$bin/llvm-ar"
         fi
+        linker="CARGO_TARGET_$(echo '{{target}}' | tr 'a-z-' 'A-Z_')_LINKER"
+        if [[ -z "${!linker:-}" ]]; then export "$linker=${!var}"; fi
         ;;
     esac
     {{cmd}}
 
 cross-ios:
     for t in aarch64-apple-ios aarch64-apple-ios-sim; do cargo build --locked -p esuiss-restriction --target "$t"; done
+    # OP-116 m.3
+    for t in aarch64-apple-ios aarch64-apple-ios-sim; do cargo build --locked -p access-kernel-uniffi --target "$t"; done
     CARGO_TARGET_AARCH64_APPLE_IOS_SIM_RUNNER="{{justfile_directory()}}/scripts/ios-sim-runner.sh" cargo test --locked -p esuiss-access-kernel --target aarch64-apple-ios-sim
 
 cross-android target="x86_64-linux-android":
@@ -87,8 +94,22 @@ wasm:
     cargo build --locked --release --target wasm32-unknown-unknown -p access-kernel-wasm
     wasm-bindgen --target web --out-dir sdks/typescript/wasm target/wasm32-unknown-unknown/release/access_kernel_wasm.wasm
 
+# OP-116 m.6
+uniffi-test:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cargo build --locked -p access-kernel-uniffi
+    case "$(uname -s)" in Darwin) ext=dylib ;; *) ext=so ;; esac
+    lib="target/debug/libaccess_kernel_uniffi.$ext"
+    out="target/uniffi/python"
+    rm -rf "$out" && mkdir -p "$out"
+    cargo run --locked --quiet -p access-kernel-uniffi --features bindgen --bin uniffi-bindgen -- \
+      generate --library "$lib" --language python --out-dir "$out"
+    cp "$lib" "$out/"
+    python3 -I sdks/bindings/uniffi/tests/vectors.py "$out"
+
 # OP-97
-npm_packages := "sdks/typescript web/console"
+npm_packages :="sdks/typescript web/console"
 
 # OP-83, §14.5
 web-install:
