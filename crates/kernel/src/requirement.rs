@@ -89,11 +89,13 @@ pub fn matches(term: &RequirementTerm, proof: &Proof, ctx: &Context<'_>) -> bool
             .as_ref()
             .is_some_and(|r| ctx.resources.contains(r)),
     };
-    let fresh = term.freshness_ms.is_none_or(|max| {
-        ctx.now
-            .checked_sub(proof.time)
-            .is_some_and(|age| age <= max)
-    });
+    // OP-114 m.7
+    let fresh = proof.time <= ctx.now
+        && term.freshness_ms.is_none_or(|max| {
+            ctx.now
+                .checked_sub(proof.time)
+                .is_some_and(|age| age <= max)
+        });
     let source = term
         .source
         .as_ref()
