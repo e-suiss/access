@@ -502,8 +502,8 @@ fn evaluate_basis(
                     .iter()
                     .find(|(t, _)| *t == term)
                     .map_or(Position::ActorSide, |(_, p)| *p);
-                let satisfiable_by_actor =
-                    !(input.actor_is_agent && term.assurance.contains_key(HUMAN_PRESENCE));
+                let satisfiable_by_actor = !(input.actor_is_agent
+                    && term.assurance.get(HUMAN_PRESENCE).is_some_and(|v| *v > 0));
                 unmet.push(Unmet {
                     term,
                     missing,
@@ -549,6 +549,11 @@ pub fn evaluate(input: &EvaluationInput<'_>, fuel: &mut Fuel) -> Result<Decision
     // OP-114 m.13
     let window = input.intent.validity;
     if input.now < window.from || input.now > window.until {
+        return Err(Rejection::Input);
+    }
+    // OP-117 m.7
+    let ids: BTreeSet<Id> = input.proofs.iter().map(|p| p.id).collect();
+    if ids.len() != input.proofs.len() {
         return Err(Rejection::Input);
     }
     // OP-114 m.11

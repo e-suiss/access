@@ -65,7 +65,26 @@ fn ctx(
         understood,
         last_refresh,
         online,
+        skew_ms: 60_000,
     }
+}
+
+// OP-117 m.12, m.13: the horizon is closed and the verifier's class skew caps the artefact's
+#[test]
+fn horizon_is_closed_and_skew_is_the_smaller_one() {
+    let vc = contract(ProfileVariant::OnlineStrict);
+    let none = BTreeSet::new();
+    let edge = vc.horizon + vc.clock_skew_ms;
+    assert_eq!(check(&vc, &ctx(edge, &none, true, None)), Ok(()));
+    assert_eq!(
+        check(&vc, &ctx(edge + 1, &none, true, None)),
+        Err(ValidityError::Expired)
+    );
+    let mut tight = ctx(vc.horizon + 1_000, &none, true, None);
+    tight.skew_ms = 999;
+    assert_eq!(check(&vc, &tight), Err(ValidityError::Expired));
+    tight.skew_ms = 1_000;
+    assert_eq!(check(&vc, &tight), Ok(()));
 }
 
 #[test]

@@ -83,6 +83,11 @@ pub enum SdJwtError {
 
 const KB_TYP: &str = "kb+jwt";
 
+/// Size of a whole presentation, checked before parsing (OP-117 m.6, PD).
+pub const MAX_PRESENTATION: usize = 256 * 1024;
+/// Disclosures in one presentation (OP-117 m.6, PD).
+pub const MAX_DISCLOSURES: usize = 256;
+
 fn digest_of(disclosure: &str) -> String {
     b64url_encode(&Sha256::digest(disclosure.as_bytes()))
 }
@@ -266,7 +271,13 @@ pub fn verify(
     rules: &Rules<'_>,
     origin: Origin,
 ) -> Result<Verified, SdJwtError> {
+    if presentation.len() > MAX_PRESENTATION {
+        return Err(SdJwtError::Format);
+    }
     let (prefix, kb) = presentation.rsplit_once('~').ok_or(SdJwtError::Format)?;
+    if prefix.split('~').skip(1).count() > MAX_DISCLOSURES {
+        return Err(SdJwtError::Format);
+    }
     let mut pieces = prefix.split('~');
     let jwt = pieces.next().ok_or(SdJwtError::Format)?;
     let issuer = verify_compact(backend, jwt, keys, rules.typ, origin)?;

@@ -356,6 +356,48 @@ fn cose_cases() -> Vec<(&'static str, Vec<u8>)> {
             ]),
         ),
     ]
+    .into_iter()
+    .chain(two_fault_cases())
+    .collect()
+}
+
+// OP-117 m.14: the first failing step wins
+fn two_fault_cases() -> Vec<(&'static str, Vec<u8>)> {
+    let base = || {
+        vec![
+            (Value::Unsigned(ALG), Value::int(-19)),
+            (Value::Unsigned(KID), Value::Bytes(vec![1; 32])),
+            (Value::Unsigned(CONTENT_TYPE), Value::text(CT)),
+        ]
+    };
+    let with = |entries: Vec<(Value, Value)>| {
+        let h = header(entries);
+        sign1(&h, empty(), b"x", &ed_signed(&h, b"x"))
+    };
+    vec![
+        ("two-faults-unprotected-and-unknown-label", {
+            let mut e = base();
+            e.push((Value::Unsigned(33), Value::Bytes(vec![])));
+            let h = header(e);
+            sign1(
+                &h,
+                Value::Map(vec![(Value::Unsigned(KID), Value::Bytes(vec![1; 32]))]),
+                b"x",
+                &ed_signed(&h, b"x"),
+            )
+        }),
+        (
+            "two-faults-content-type-and-unknown-kid",
+            with(vec![
+                (Value::Unsigned(ALG), Value::int(-19)),
+                (Value::Unsigned(KID), Value::Bytes(vec![3; 32])),
+                (
+                    Value::Unsigned(CONTENT_TYPE),
+                    Value::text("application/other"),
+                ),
+            ]),
+        ),
+    ]
 }
 
 fn cose_error(e: CoseError) -> &'static str {

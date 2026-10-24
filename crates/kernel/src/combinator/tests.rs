@@ -728,6 +728,27 @@ fn ordering_scenarios() -> Vec<(&'static str, World)> {
     w.bases = vec![basis(vec![hop()]), basis(vec![bad])];
     out.push(("reject-check-bad-later-candidate", w));
     let mut w = World::new();
+    w.proofs.push(step_up_proof());
+    let mut twin = step_up_proof();
+    twin.time = 2;
+    w.proofs.push(twin);
+    out.push(("reject-duplicate-proof-id", w));
+    let mut w = World::new();
+    w.bases[0].hops[0].authority.constraints.validity = Window {
+        from: 60_000,
+        until: 40_000,
+    };
+    out.push(("reject-inverted-hop-window", w));
+    let mut w = World::new();
+    w.intent.action.schema = d(10);
+    out.push(("deny-schema-digest-mismatch", w));
+    let mut w = World::new();
+    w.agent = true;
+    let mut zero = approval(false);
+    zero.assurance.insert(HUMAN_PRESENCE.to_string(), 0);
+    w.bases[0].hops[0].authority.requirements.insert(zero);
+    out.push(("require-human-presence-zero-agent", w));
+    let mut w = World::new();
     w.intent.validity.until = 40_000;
     out.push(("reject-intent-expired", w));
     let mut w = World::new();
@@ -783,6 +804,18 @@ fn ordering_and_merging_rules() {
     let d = all["check-deny-merges-blockers-only"].run().unwrap();
     assert_eq!((d.outcome, d.unmet.len()), (Outcome::Deny, 0));
     assert_eq!(d.blockers.len(), 2);
+    assert_eq!(
+        all["reject-duplicate-proof-id"].run(),
+        Err(Rejection::Input)
+    );
+    let d = all["deny-schema-digest-mismatch"].run().unwrap();
+    assert!(
+        d.blockers
+            .iter()
+            .all(|b| b.class == BlockerClass::NoCoveringAuthority)
+    );
+    let d = all["require-human-presence-zero-agent"].run().unwrap();
+    assert!(d.unmet.iter().all(|u| u.satisfiable_by_actor));
     for id in [
         "reject-check-bad-later-candidate",
         "reject-rolling-budget-without-reset",
@@ -813,7 +846,15 @@ fn decision_vectors_match() {
     for (i, (id, w)) in all.iter().enumerate() {
         let owned = w.owned();
         let input = owned.to_bytes().unwrap();
-        let back = codec::OwnedInput::from_bytes(&input).unwrap();
+        let Ok(back) = codec::OwnedInput::from_bytes(&input) else {
+            let sep = if i + 1 == all.len() { "" } else { "," };
+            let _ = writeln!(
+                json,
+                "  {{\"id\": \"{id}\", \"input\": \"{}\", \"rejection\": \"input\"}}{sep}",
+                hex(&input)
+            );
+            continue;
+        };
         assert_eq!(back.to_bytes().unwrap(), input, "{id}");
         let expect = match evaluate(&back.input(), &mut Fuel(10_000)) {
             Ok(dec) => {

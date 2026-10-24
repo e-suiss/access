@@ -76,6 +76,13 @@ pub fn digest(context: Context, canonical: &[u8]) -> Digest {
     Digest(h.finalize().into())
 }
 
+/// Domain identifier: the `access/genesis/v1` digest of the Genesis `record-envelope`, which has no
+/// `domain` field (OP-106 m.10, OP-117 m.2).
+#[must_use]
+pub fn domain_id(genesis_envelope: &[u8]) -> Digest {
+    digest(Context::Genesis, genesis_envelope)
+}
+
 fn prefixed(prefix: u8, parts: &[&[u8]]) -> Hash {
     let mut h = Sha256::new();
     h.update([prefix]);

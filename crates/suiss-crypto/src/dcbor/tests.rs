@@ -230,3 +230,129 @@ mod properties {
         }
     }
 }
+
+fn error_name(e: DecodeError) -> &'static str {
+    match e {
+        DecodeError::Truncated => "truncated",
+        DecodeError::TrailingBytes => "trailing-bytes",
+        DecodeError::NonShortest => "non-shortest",
+        DecodeError::Indefinite => "indefinite",
+        DecodeError::Reserved => "reserved",
+        DecodeError::Float => "float",
+        DecodeError::Tag => "tag",
+        DecodeError::Simple => "simple",
+        DecodeError::Utf8 => "utf8",
+        DecodeError::DuplicateKey => "duplicate-key",
+        DecodeError::KeyOrder => "key-order",
+        DecodeError::Depth => "depth",
+        DecodeError::Items => "items",
+        DecodeError::StringLength => "string-length",
+    }
+}
+
+fn decode_cases() -> Vec<(&'static str, Vec<u8>)> {
+    let nested = |containers: usize, leaf: &[u8]| {
+        [
+            vec![0x81_u8; containers.checked_sub(1).unwrap()],
+            leaf.to_vec(),
+        ]
+        .concat()
+    };
+    let string = |len: usize| {
+        let head = match u16::try_from(len) {
+            Ok(n) => [vec![0x59], n.to_be_bytes().to_vec()].concat(),
+            Err(_) => [
+                vec![0x5a],
+                u32::try_from(len).unwrap().to_be_bytes().to_vec(),
+            ]
+            .concat(),
+        };
+        [head, vec![0x61; len]].concat()
+    };
+    let array = |n: usize| {
+        let head = vec![
+            0x99,
+            u8::try_from(n >> 8).unwrap(),
+            u8::try_from(n & 0xff).unwrap(),
+        ];
+        [head, vec![0x00; n]].concat()
+    };
+    let mut out = vec![
+        ("depth-16-containers", nested(16, &[0x80])),
+        ("depth-16-with-scalar-leaf", nested(16, &[0x81, 0x00])),
+        ("depth-17-containers", nested(17, &[0x80])),
+        ("string-65536-bytes", string(65_536)),
+        ("string-65537-bytes", string(65_537)),
+        ("array-256-items", array(256)),
+        ("array-257-items", array(257)),
+    ];
+    for (id, h) in [
+        ("non-shortest-uint", "1817"),
+        ("non-shortest-length", "5800"),
+        ("indefinite-bytes", "5f42010243030405ff"),
+        ("indefinite-array", "9fff"),
+        ("reserved", "1c"),
+        ("float-half", "f90000"),
+        ("float-double", "fb3ff199999999999a"),
+        ("null", "f6"),
+        ("undefined", "f7"),
+        ("tag", "c11a514b67b0"),
+        ("tag-18-inside-value", "d2a0"),
+        ("bad-utf8", "62c328"),
+        ("key-order", "a203040102"),
+        ("duplicate-key", "a201020103"),
+        ("truncated", "a26161016162"),
+        ("trailing-bytes", "0000"),
+        ("empty", ""),
+    ] {
+        out.push((id, hex(h)));
+    }
+    out
+}
+
+// OP-106 m.5, OP-117 m.3, m.4: canonical decoding and structural limits
+#[test]
+fn decode_vectors_match() {
+    extern crate std;
+    use alloc::string::String;
+    use core::fmt::Write as _;
+    let to_hex = |b: &[u8]| {
+        b.iter().fold(String::new(), |mut h, x| {
+            let _ = write!(h, "{x:02x}");
+            h
+        })
+    };
+    let mut json = String::from(
+        "{\n \"rule\": \"OP-106\",\n \"track\": \"core\",\n \"version\": 1,\n \"operation\": \"dcbor.decode\",\n \"cases\": [\n",
+    );
+    let all = decode_cases();
+    for (i, (id, bytes)) in all.iter().enumerate() {
+        let expect = match decode(bytes, Limits::CEILING) {
+            Ok(_) => String::from("\"valid\": true"),
+            Err(e) => alloc::format!("\"error\": \"{}\"", error_name(e)),
+        };
+        let sep = if i + 1 == all.len() { "" } else { "," };
+        let _ = writeln!(
+            json,
+            "  {{\"id\": \"{id}\", \"data\": \"{}\", {expect}}}{sep}",
+            to_hex(bytes)
+        );
+    }
+    json.push_str(" ]\n}\n");
+    #[cfg(not(target_os = "wasi"))]
+    if std::env::var_os("ACCESS_UPDATE_VECTORS").is_some() {
+        std::fs::write(
+            concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../../conformance/vectors/core/1/cbor-decode.json"
+            ),
+            &json,
+        )
+        .unwrap();
+        return;
+    }
+    assert_eq!(
+        include_str!("../../../../conformance/vectors/core/1/cbor-decode.json"),
+        json
+    );
+}

@@ -87,24 +87,28 @@ fn header(bytes: &[u8]) -> Result<Header, JwsError> {
     let Json::Object(members) = json::parse(bytes, MAX_HEADER)? else {
         return Err(JwsError::Header);
     };
-    let (mut alg, mut kid, mut typ) = (None, None, None);
-    for (k, v) in &members {
-        let s = v.as_str().ok_or(JwsError::Header)?;
-        match k.as_str() {
-            "alg" => alg = Some(algorithm(s).ok_or(JwsError::Algorithm)?),
-            "kid" => {
-                let raw = b64url_decode(s).map_err(|_| JwsError::Header)?;
-                kid = Some(<[u8; 32]>::try_from(raw.as_slice()).map_err(|_| JwsError::Header)?);
-            }
-            "typ" => typ = Some(alloc::string::String::from(s)),
-            _ => return Err(JwsError::Header),
-        }
+    // OP-117 m.14, m.16
+    if members
+        .iter()
+        .any(|(k, v)| !matches!(k.as_str(), "alg" | "kid" | "typ") || v.as_str().is_none())
+    {
+        return Err(JwsError::Header);
     }
-    Ok(Header {
-        alg: alg.ok_or(JwsError::Header)?,
-        kid,
-        typ: typ.ok_or(JwsError::Header)?,
-    })
+    let member = |name: &str| {
+        members
+            .iter()
+            .find(|(k, _)| k == name)
+            .and_then(|(_, v)| v.as_str())
+    };
+    let alg = algorithm(member("alg").ok_or(JwsError::Header)?).ok_or(JwsError::Algorithm)?;
+    let kid = member("kid")
+        .map(|s| {
+            let raw = b64url_decode(s).map_err(|_| JwsError::Header)?;
+            <[u8; 32]>::try_from(raw.as_slice()).map_err(|_| JwsError::Header)
+        })
+        .transpose()?;
+    let typ = alloc::string::String::from(member("typ").ok_or(JwsError::Header)?);
+    Ok(Header { alg, kid, typ })
 }
 
 struct Parts<'a> {
@@ -250,10 +254,8 @@ pub enum ClaimError {
     Time,
 }
 
-fn seconds(ms: u64) -> Result<i64, ClaimError> {
-    ms.checked_div(1000)
-        .and_then(|s| i64::try_from(s).ok())
-        .ok_or(ClaimError::Time)
+fn millis(seconds: i64) -> Result<i64, ClaimError> {
+    seconds.checked_mul(1000).ok_or(ClaimError::Time)
 }
 
 /// Checks `iss`, `aud`, `exp`, `nbf` and `iat` of a JWT payload.
@@ -284,13 +286,13 @@ pub fn check_claims_json(claims: &Json, rules: &ClaimRules<'_>) -> Result<(), Cl
     if !aud_ok {
         return Err(ClaimError::Audience);
     }
-    let now = seconds(rules.now)?;
-    let skew = i64::try_from(rules.skew_ms.checked_div(1000).ok_or(ClaimError::Time)?)
-        .map_err(|_| ClaimError::Time)?;
+    // OP-117 m.17
+    let now = i64::try_from(rules.now).map_err(|_| ClaimError::Time)?;
+    let skew = i64::try_from(rules.skew_ms).map_err(|_| ClaimError::Time)?;
     let time = |name: &str| -> Result<Option<i64>, ClaimError> {
         claims
             .get(name)
-            .map(|v| v.as_int().ok_or(ClaimError::Time))
+            .map(|v| v.as_int().ok_or(ClaimError::Time).and_then(millis))
             .transpose()
     };
     let exp = time("exp")?.ok_or(ClaimError::Expired)?;

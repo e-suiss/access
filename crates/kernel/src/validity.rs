@@ -360,6 +360,8 @@ pub struct VerifierContext<'a> {
     pub last_refresh: Option<TrustedTime>,
     /// Whether the verifier is online at the moment of use.
     pub online: bool,
+    /// Clock skew of this artefact class; the artefact's own value may only narrow it (OP-117 m.13).
+    pub skew_ms: u64,
 }
 
 /// Why a validity contract does not allow use now.
@@ -398,7 +400,7 @@ pub fn check(vc: &ValidityContract, ctx: &VerifierContext<'_>) -> Result<(), Val
     }
     let latest = vc
         .horizon
-        .checked_add(vc.clock_skew_ms)
+        .checked_add(vc.clock_skew_ms.min(ctx.skew_ms))
         .ok_or(ValidityError::Overflow)?;
     if ctx.now > latest {
         return Err(ValidityError::Expired);
