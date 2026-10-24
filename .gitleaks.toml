@@ -21,3 +21,10 @@ targetRules = ["jwt"]
 paths = [
     '''^conformance/vectors/.+\.json$''',
 ]
+
+[[allowlists]]
+description = "Key scope vectors: hex public keys and signatures over test keys, no private material (CR-58); other rules still apply here"
+targetRules = ["generic-api-key"]
+paths = [
+    '''^conformance/vectors/core/1/key-scope\.json$''',
+]
