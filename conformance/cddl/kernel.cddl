@@ -342,6 +342,12 @@ public-key = { ed25519: bstr .size 32 }
 ; RFC 7638 SHA-256 thumbprint of the key; the Kernel recomputes it (CR-55 m.4).
 key-id = bstr .size 32
 
+; Verification keys by kid and the algorithms the caller's metadata allows (OP-116 m.2).
+key-set = {
+  keys: { + key-id => public-key },
+  allowed: [+ cose-alg],
+}
+
 key-usage = "receipt" / "pap" / "token" / "checkpoint" / "set" / "status-list"
 
 operational-key = {

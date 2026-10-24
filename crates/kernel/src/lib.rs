@@ -6,6 +6,7 @@
 extern crate alloc;
 
 pub mod algebra;
+pub mod binding;
 pub mod codec;
 pub mod combinator;
 pub mod digest;

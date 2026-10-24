@@ -41,7 +41,7 @@ pub enum KeyUsage {
     StatusList,
 }
 
-const USAGES: [(&str, KeyUsage); 6] = [
+pub(crate) const USAGES: [(&str, KeyUsage); 6] = [
     ("receipt", KeyUsage::Receipt),
     ("pap", KeyUsage::Pap),
     ("token", KeyUsage::Token),
@@ -405,6 +405,50 @@ impl Canonical for PublicKey {
         };
         key.check().map_err(|_| ModelError::Range)?;
         Ok(key)
+    }
+}
+
+// OP-116 m.2
+impl Canonical for KeySet {
+    fn to_value(&self) -> Value {
+        map([
+            (
+                "keys",
+                Some(Value::Map(
+                    self.keys
+                        .iter()
+                        .map(|(kid, key)| (Value::Bytes(kid.to_vec()), key.to_value()))
+                        .collect(),
+                )),
+            ),
+            (
+                "allowed",
+                Some(set_value(self.allowed.iter().map(|a| alg_value(*a)))),
+            ),
+        ])
+    }
+
+    fn from_value(v: &Value) -> Result<Self, ModelError> {
+        let mut f = Fields::of(v)?;
+        let Value::Map(entries) = f.req("keys")? else {
+            return Err(ModelError::Shape);
+        };
+        if entries.is_empty() {
+            return Err(ModelError::Range);
+        }
+        let mut set = KeySet::default();
+        for (kid, key) in entries {
+            if set
+                .keys
+                .insert(bytes32(kid)?, PublicKey::from_value(key)?)
+                .is_some()
+            {
+                return Err(ModelError::SetOrder);
+            }
+        }
+        set.allowed = set_of(f.req("allowed")?, true, alg_of)?;
+        f.done()?;
+        Ok(set)
     }
 }
 
