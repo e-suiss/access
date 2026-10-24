@@ -8,7 +8,8 @@ use super::*;
 use crate::intent::ContextRefs;
 use crate::model::{
     ActionRef, ActionSet, Binding, BudgetWindow, ConstraintSet, Consumption, DelegationTerms,
-    Independence, ProofKind, ResourceRef, ResourceSelector, Structural, Window,
+    Independence, ProofKind, ResourceRef, ResourceSelector, Structural, SubjectSelector,
+    WhileCondition, Window,
 };
 use crate::requirement::ProofBinding;
 use crate::restriction::PolicyDeny;
@@ -713,6 +714,355 @@ fn decision_vectors_match() {
     }
     assert_eq!(
         include_str!("../../../../conformance/vectors/core/1/decision.json"),
+        json
+    );
+}
+
+enum Cve {
+    Evaluate(World, Outcome, Option<BlockerClass>),
+    Delegate {
+        child: CanonicalAuthority,
+        parent: CanonicalAuthority,
+        holder: SubjectSelector,
+        within: bool,
+    },
+}
+
+fn party(n: u8) -> Id {
+    Id([n; 16])
+}
+
+fn delegate(child: CanonicalAuthority, holder: SubjectSelector, within: bool) -> Cve {
+    Cve::Delegate {
+        child,
+        parent: hop().authority,
+        holder,
+        within,
+    }
+}
+
+fn leaf() -> CanonicalAuthority {
+    let mut c = hop().authority;
+    c.delegation.depth = 0;
+    c
+}
+
+fn with_recipient(sel: &SubjectSelector, recipient: u8, allow: bool) -> Cve {
+    let mut w = World::new();
+    for h in &mut w.bases[0].hops {
+        h.authority.authority.recipient = Some(sel.clone());
+    }
+    w.intent.recipient = Some(party(recipient));
+    if allow {
+        Cve::Evaluate(w, Outcome::Allow, None)
+    } else {
+        Cve::Evaluate(w, Outcome::Deny, Some(BlockerClass::NoCoveringAuthority))
+    }
+}
+
+fn pinned_catalog(pin: u8) -> World {
+    let mut w = World::new();
+    let capture = ActionRef {
+        name: "capture".to_string(),
+        ..action()
+    };
+    w.catalog
+        .catalogs
+        .insert(d(20), [capture.clone()].into_iter().collect());
+    w.catalog
+        .catalogs
+        .insert(d(21), [capture, action()].into_iter().collect());
+    for h in &mut w.bases[0].hops {
+        h.authority.authority.actions = ActionSet {
+            exact: BTreeSet::new(),
+            prefix: [("pay".to_string(), d(pin))].into_iter().collect(),
+        };
+    }
+    w
+}
+
+const WILDCARD: &[&str] = &["CVE-2022-39341"];
+const MIXED: &[&str] = &["CVE-2026-24851", "CVE-2025-25196", "CVE-2025-48371"];
+const CONDITION: &[&str] = &["CVE-2025-64751"];
+const NESTED: &[&str] = &["CVE-2026-61709", "GHSA-h7w8-xr72-cv4r"];
+const PINNED: &[&str] = &["CVE-2022-23542"];
+const IMPERSONATION: &[&str] = &["CVE-2026-17526", "CVE-2026-109374"];
+
+fn cve_cases() -> Vec<(&'static str, &'static [&'static str], Cve)> {
+    let mut out: Vec<(&'static str, &'static [&'static str], Cve)> = Vec::new();
+    out.push((
+        "delegate-to-party",
+        WILDCARD,
+        delegate(leaf(), SubjectSelector::Party(party(2)), true),
+    ));
+    let mut c = hop().authority;
+    c.delegation.depth = 0;
+    out.push((
+        "delegate-to-public-leaf",
+        WILDCARD,
+        delegate(c, SubjectSelector::Public, true),
+    ));
+    let mut c = hop().authority;
+    c.delegation.depth = 0;
+    let mut p = hop().authority;
+    p.delegation.depth = 2;
+    c.delegation.depth = 1;
+    out.push((
+        "delegate-onward-to-public",
+        WILDCARD,
+        Cve::Delegate {
+            child: c,
+            parent: p,
+            holder: SubjectSelector::Public,
+            within: false,
+        },
+    ));
+    let mut p = hop().authority;
+    p.delegation.downstream_holder_class = Some(SubjectSelector::Public);
+    out.push((
+        "delegate-public-holder-class",
+        WILDCARD,
+        Cve::Delegate {
+            child: leaf(),
+            parent: p,
+            holder: SubjectSelector::Party(party(2)),
+            within: false,
+        },
+    ));
+
+    let mut p = hop().authority;
+    p.constraints
+        .conditions
+        .insert(WhileCondition::InstanceAlive(party(8)));
+    let mut kept = leaf();
+    kept.constraints
+        .conditions
+        .insert(WhileCondition::InstanceAlive(party(8)));
+    out.push((
+        "delegate-keeps-condition",
+        CONDITION,
+        Cve::Delegate {
+            child: kept,
+            parent: p.clone(),
+            holder: SubjectSelector::Party(party(2)),
+            within: true,
+        },
+    ));
+    out.push((
+        "delegate-drops-condition",
+        CONDITION,
+        Cve::Delegate {
+            child: leaf(),
+            parent: p,
+            holder: SubjectSelector::Party(party(2)),
+            within: false,
+        },
+    ));
+
+    out.extend(cve_evaluation_cases());
+    out
+}
+
+fn cve_evaluation_cases() -> Vec<(&'static str, &'static [&'static str], Cve)> {
+    let mut out: Vec<(&'static str, &'static [&'static str], Cve)> = Vec::new();
+    out.push((
+        "recipient-party-same",
+        MIXED,
+        with_recipient(&SubjectSelector::Party(party(5)), 5, true),
+    ));
+    out.push((
+        "recipient-party-other",
+        MIXED,
+        with_recipient(&SubjectSelector::Party(party(5)), 6, false),
+    ));
+    let pred = SubjectSelector::Pred(
+        [crate::model::Conjunct {
+            claim_class: "employee".to_string(),
+            value: None,
+        }]
+        .into_iter()
+        .collect(),
+    );
+    out.push((
+        "recipient-pred-not-party",
+        MIXED,
+        with_recipient(&pred, 5, false),
+    ));
+    let foreign = SubjectSelector::Foreign {
+        domain: d(30),
+        class: "auditor".to_string(),
+    };
+    out.push((
+        "recipient-foreign-not-party",
+        MIXED,
+        with_recipient(&foreign, 5, false),
+    ));
+
+    let mut w = World::new();
+    w.restrictions.push(deny_policy(7, false));
+    out.push((
+        "exclusion-over-covering-grant",
+        &["CVE-2022-21646"],
+        Cve::Evaluate(w, Outcome::Deny, Some(BlockerClass::Restricted)),
+    ));
+    let mut w = World::new();
+    w.restrictions = vec![deny_policy(7, false), deny_policy(8, false)];
+    out.push((
+        "two-exclusions",
+        NESTED,
+        Cve::Evaluate(w, Outcome::Deny, Some(BlockerClass::Restricted)),
+    ));
+    let mut w = World::new();
+    w.restrictions = vec![deny_policy(8, false), deny_policy(7, false)];
+    out.push((
+        "two-exclusions-reordered",
+        NESTED,
+        Cve::Evaluate(w, Outcome::Deny, Some(BlockerClass::Restricted)),
+    ));
+
+    let mut w = World::new();
+    w.bases[0].hops[0].authority.constraints.validity.until = 40_000;
+    out.push((
+        "expired-invitation",
+        &["CVE-2025-64708"],
+        Cve::Evaluate(w, Outcome::Deny, Some(BlockerClass::Ended)),
+    ));
+    let mut w = World::new();
+    w.bases[0].hops[0].budgets.push(BudgetState {
+        window: BudgetWindow::Total,
+        remaining: 0,
+        demand: 1,
+        resets_at: None,
+    });
+    out.push((
+        "invitation-reused",
+        &["CVE-2022-23555"],
+        Cve::Evaluate(w, Outcome::Deny, Some(BlockerClass::BudgetExhausted)),
+    ));
+
+    out.extend(cve_capacity_cases());
+    out
+}
+
+fn cve_capacity_cases() -> Vec<(&'static str, &'static [&'static str], Cve)> {
+    let mut out: Vec<(&'static str, &'static [&'static str], Cve)> = Vec::new();
+    out.push((
+        "prefix-current-catalog",
+        PINNED,
+        Cve::Evaluate(pinned_catalog(21), Outcome::Allow, None),
+    ));
+    out.push((
+        "prefix-old-catalog",
+        PINNED,
+        Cve::Evaluate(
+            pinned_catalog(20),
+            Outcome::Deny,
+            Some(BlockerClass::NoCoveringAuthority),
+        ),
+    ));
+
+    let mut w = World::new();
+    w.capacity = Capacity::For(party(9));
+    out.push((
+        "impersonate-admin",
+        IMPERSONATION,
+        Cve::Evaluate(w, Outcome::Deny, Some(BlockerClass::CapacityMismatch)),
+    ));
+    let mut wider = leaf();
+    wider.authority.actions.exact.insert(ActionRef {
+        name: "admin".to_string(),
+        ..action()
+    });
+    out.push((
+        "delegate-above-own-authority",
+        IMPERSONATION,
+        delegate(wider, SubjectSelector::Party(party(2)), false),
+    ));
+    out
+}
+
+// CR-57, §6.2, CR-49 m.4
+#[test]
+fn cve_regression_vectors_match() {
+    extern crate std;
+    use crate::codec::Canonical;
+    use core::fmt::Write as _;
+    use suiss_crypto::dcbor::{Limits, encode};
+    let hex = |b: &[u8]| {
+        b.iter().fold(String::new(), |mut h, x| {
+            let _ = write!(h, "{x:02x}");
+            h
+        })
+    };
+    let mut json = String::from(
+        "{\n \"rule\": \"CR-57\",\n \"track\": \"core\",\n \"version\": 1,\n \"fuel\": 10000,\n \"cases\": [\n",
+    );
+    let all = cve_cases();
+    let mut decisions = BTreeMap::new();
+    for (i, (id, cves, case)) in all.iter().enumerate() {
+        let refs = cves
+            .iter()
+            .map(|c| format!("\"{c}\""))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let body = match case {
+            Cve::Evaluate(w, outcome, class) => {
+                let dec = w.run().unwrap();
+                assert_eq!(dec.outcome, *outcome, "{id}");
+                assert_eq!(dec.blockers.first().map(|b| b.class), *class, "{id}");
+                let bytes = encode(&codec::decision_value(&dec), Limits::CEILING).unwrap();
+                decisions.insert(*id, bytes.clone());
+                format!(
+                    "\"operation\": \"combinator.evaluate\", \"input\": \"{}\", \"decision\": \"{}\"",
+                    hex(&w.owned().to_bytes().unwrap()),
+                    hex(&bytes)
+                )
+            }
+            Cve::Delegate {
+                child,
+                parent,
+                holder,
+                within,
+            } => {
+                let cat = Catalog::default();
+                assert_eq!(
+                    crate::algebra::child_within_parent(child, parent, holder, &cat),
+                    *within,
+                    "{id}"
+                );
+                format!(
+                    "\"operation\": \"algebra.child_within_parent\", \"child\": \"{}\", \"parent\": \"{}\", \"holder\": \"{}\", \"within\": {within}",
+                    hex(&child.to_bytes().unwrap()),
+                    hex(&parent.to_bytes().unwrap()),
+                    hex(&holder.to_bytes().unwrap()),
+                )
+            }
+        };
+        let sep = if i + 1 == all.len() { "" } else { "," };
+        let _ = writeln!(
+            json,
+            "  {{\"id\": \"{id}\", \"cve\": [{refs}], {body}}}{sep}"
+        );
+    }
+    json.push_str(" ]\n}\n");
+    assert_eq!(
+        decisions.get("two-exclusions"),
+        decisions.get("two-exclusions-reordered")
+    );
+    #[cfg(not(target_os = "wasi"))]
+    if std::env::var_os("ACCESS_UPDATE_VECTORS").is_some() {
+        std::fs::write(
+            concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../../conformance/vectors/core/1/cve-regressions.json"
+            ),
+            &json,
+        )
+        .unwrap();
+        return;
+    }
+    assert_eq!(
+        include_str!("../../../../conformance/vectors/core/1/cve-regressions.json"),
         json
     );
 }
