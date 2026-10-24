@@ -267,3 +267,177 @@ fn ml_dsa_is_modelled_but_off() {
     );
     assert!(!Algorithm::MlDsa44.enabled() && Algorithm::Ed25519.enabled());
 }
+
+fn cose_cases() -> Vec<(&'static str, Vec<u8>)> {
+    let ed = std_header(Algorithm::Ed25519, [1; 32]);
+    let es = std_header(Algorithm::Esp256, [2; 32]);
+    let good = sign1(&ed, empty(), b"payload", &ed_signed(&ed, b"payload"));
+    let low = p_signed(&es, b"p");
+    let high = [low[..32].to_vec(), sub_from_n(&low[32..])].concat();
+    let with = |entries: Vec<(Value, Value)>| {
+        let h = header(entries);
+        sign1(&h, empty(), b"x", &ed_signed(&h, b"x"))
+    };
+    let base = || {
+        vec![
+            (Value::Unsigned(ALG), Value::int(-19)),
+            (Value::Unsigned(KID), Value::Bytes(vec![1; 32])),
+            (Value::Unsigned(CONTENT_TYPE), Value::text(CT)),
+        ]
+    };
+    let mut crit = base();
+    crit.push((
+        Value::Unsigned(CRIT),
+        Value::Array(vec![Value::Unsigned(99)]),
+    ));
+    let mut extra = base();
+    extra.push((Value::Unsigned(33), Value::Bytes(vec![])));
+    let swapped = std_header(Algorithm::Ed25519, [2; 32]);
+    let unknown = std_header(Algorithm::Ed25519, [3; 32]);
+    let es256 = std_header(Algorithm::Es256, [2; 32]);
+    let ml = std_header(Algorithm::MlDsa65, [1; 32]);
+    vec![
+        ("valid-ed25519", good.clone()),
+        ("valid-esp256", sign1(&es, empty(), b"p", &low)),
+        ("untagged", good[1..].to_vec()),
+        (
+            "payload-tampered",
+            sign1(&ed, empty(), b"payloae", &ed_signed(&ed, b"payload")),
+        ),
+        ("esp256-high-s", sign1(&es, empty(), b"p", &high)),
+        (
+            "kid-in-unprotected",
+            sign1(
+                &ed,
+                Value::Map(vec![(Value::Unsigned(KID), Value::Bytes(vec![1; 32]))]),
+                b"payload",
+                &ed_signed(&ed, b"payload"),
+            ),
+        ),
+        (
+            "key-type-mismatch",
+            sign1(&swapped, empty(), b"x", &ed_signed(&swapped, b"x")),
+        ),
+        (
+            "kid-unknown",
+            sign1(&unknown, empty(), b"x", &ed_signed(&unknown, b"x")),
+        ),
+        (
+            "alg-eddsa",
+            with(vec![
+                (Value::Unsigned(ALG), Value::int(-8)),
+                (Value::Unsigned(KID), Value::Bytes(vec![1; 32])),
+                (Value::Unsigned(CONTENT_TYPE), Value::text(CT)),
+            ]),
+        ),
+        (
+            "alg-es256-not-allowed",
+            sign1(&es256, empty(), b"p", &p_signed(&es256, b"p")),
+        ),
+        ("alg-ml-dsa-65-off", sign1(&ml, empty(), b"p", &[0; 3309])),
+        ("crit", with(crit)),
+        ("header-unknown", with(extra)),
+        (
+            "content-type-missing",
+            with(vec![
+                (Value::Unsigned(ALG), Value::int(-19)),
+                (Value::Unsigned(KID), Value::Bytes(vec![1; 32])),
+            ]),
+        ),
+        (
+            "content-type-other",
+            with(vec![
+                (Value::Unsigned(ALG), Value::int(-19)),
+                (Value::Unsigned(KID), Value::Bytes(vec![1; 32])),
+                (
+                    Value::Unsigned(CONTENT_TYPE),
+                    Value::text("application/other"),
+                ),
+            ]),
+        ),
+    ]
+}
+
+fn cose_error(e: CoseError) -> &'static str {
+    match e {
+        CoseError::Cbor(_) => "cbor",
+        CoseError::Shape => "shape",
+        CoseError::Header => "header",
+        CoseError::Crit => "crit",
+        CoseError::Unprotected => "unprotected",
+        CoseError::Algorithm => "algorithm",
+        CoseError::UnknownKid => "unknown-kid",
+        CoseError::KeyType => "key-type",
+        CoseError::ContentType => "content-type",
+        CoseError::Signature(SignatureError::HighS) => "high-s",
+        CoseError::Signature(_) => "signature",
+    }
+}
+
+// CR-55 m.6, OP-106 m.24, §17.6.1: COSE golden vectors, byte for byte
+#[test]
+fn cose_vectors_match() {
+    extern crate std;
+    use crate::codec::Canonical;
+    use alloc::string::String;
+    use core::fmt::Write as _;
+    let hex = |b: &[u8]| {
+        b.iter().fold(String::new(), |mut h, x| {
+            let _ = write!(h, "{x:02x}");
+            h
+        })
+    };
+    let ks = keys();
+    let mut json = String::from(
+        "{\n \"rule\": \"CR-55\",\n \"track\": \"core\",\n \"version\": 1,\n \"operation\": \"verify.cose_sign1\",\n",
+    );
+    let _ = writeln!(json, " \"content_type\": \"{CT}\",");
+    let allowed = ks
+        .allowed
+        .iter()
+        .map(|a| alloc::format!("{}", a.cose()))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let _ = writeln!(json, " \"allowed\": [{allowed}],");
+    let keys = ks
+        .keys
+        .iter()
+        .map(|(kid, k)| alloc::format!("  \"{}\": \"{}\"", hex(kid), hex(&k.to_bytes().unwrap())))
+        .collect::<Vec<_>>()
+        .join(",\n");
+    let _ = write!(json, " \"keys\": {{\n{keys}\n }},\n \"cases\": [\n");
+    let all = cose_cases();
+    for (i, (id, msg)) in all.iter().enumerate() {
+        let expect = match verify_sign1(&PureBackend, msg, &ks, CT) {
+            Ok(v) => alloc::format!(
+                "\"kid\": \"{}\", \"payload\": \"{}\"",
+                hex(&v.kid),
+                hex(&v.payload)
+            ),
+            Err(e) => alloc::format!("\"error\": \"{}\"", cose_error(e)),
+        };
+        let sep = if i + 1 == all.len() { "" } else { "," };
+        let _ = writeln!(
+            json,
+            "  {{\"id\": \"{id}\", \"sign1\": \"{}\", {expect}}}{sep}",
+            hex(msg)
+        );
+    }
+    json.push_str(" ]\n}\n");
+    #[cfg(not(target_os = "wasi"))]
+    if std::env::var_os("ACCESS_UPDATE_VECTORS").is_some() {
+        std::fs::write(
+            concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../../conformance/vectors/core/1/cose.json"
+            ),
+            &json,
+        )
+        .unwrap();
+        return;
+    }
+    assert_eq!(
+        include_str!("../../../../../conformance/vectors/core/1/cose.json"),
+        json
+    );
+}

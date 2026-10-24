@@ -50,7 +50,7 @@ func main() {
 		}
 		for _, c := range f.Cases {
 			id, _ := c["id"].(string)
-			for _, field := range []string{"cbor", "input", "decision", "metadata", "domain", "excerpt", "key", "child", "parent", "holder"} {
+			for _, field := range []string{"cbor", "input", "decision", "metadata", "domain", "excerpt", "key", "child", "parent", "holder", "sign1"} {
 				h, ok := c[field].(string)
 				if !ok {
 					continue
@@ -59,7 +59,10 @@ func main() {
 				if err != nil {
 					return err
 				}
-				if field == "excerpt" {
+				if field == "excerpt" || field == "sign1" {
+					if (len(want) == 0 || want[0] != 0xd2) && c["error"] == "cbor" {
+						continue
+					}
 					if len(want) == 0 || want[0] != 0xd2 {
 						fmt.Printf("FAIL %s %s.%s: not tag 18\n", path, id, field)
 						failed++

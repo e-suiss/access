@@ -17,11 +17,13 @@ def main():
         for case in cases:
             if not isinstance(case, dict):
                 continue
-            for field in ("cbor", "input", "decision", "metadata", "domain", "excerpt", "key", "child", "parent", "holder"):
+            for field in ("cbor", "input", "decision", "metadata", "domain", "excerpt", "key", "child", "parent", "holder", "sign1"):
                 if field not in case:
                     continue
                 want = bytes.fromhex(case[field])
-                if field == "excerpt":
+                if field in ("excerpt", "sign1"):
+                    if want[:1] != b"\xd2" and case.get("error") == "cbor":
+                        continue
                     if want[:1] != b"\xd2":
                         failed += 1
                         print(f"FAIL {path} {case['id']}.{field}: not tag 18")
