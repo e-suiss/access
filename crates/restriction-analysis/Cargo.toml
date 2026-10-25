@@ -17,5 +17,9 @@ thiserror = { workspace = true, features = ["std"] }
 tokio = { workspace = true, features = ["process", "rt", "time"] }
 toml = { workspace = true, features = ["std", "parse", "serde"] }
 
+# OP-115 m.6
+[dev-dependencies]
+access-sandbox = { workspace = true }
+
 [lints]
 workspace = true

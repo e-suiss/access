@@ -6,7 +6,7 @@ use super::os;
 use crate::{Error, Step};
 
 /// Highest capability number the running kernel knows (`/proc/sys/kernel/cap_last_cap`).
-fn last_cap() -> Result<u32, Error> {
+pub(super) fn last_cap() -> Result<u32, Error> {
     let raw = std::fs::read_to_string("/proc/sys/kernel/cap_last_cap").map_err(|e| Error::Os {
         step: Step::Capabilities,
         source: e,

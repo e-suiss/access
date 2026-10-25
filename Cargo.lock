@@ -1104,6 +1104,7 @@ dependencies = [
 name = "esuiss-restriction-analysis"
 version = "0.0.0"
 dependencies = [
+ "access-sandbox",
  "cedar-policy",
  "cedar-policy-symcc",
  "esuiss-restriction",

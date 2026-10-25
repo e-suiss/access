@@ -58,6 +58,9 @@ impl Cli {
 
 #[cfg(target_os = "linux")]
 fn main() -> ExitCode {
+    if let Ok(name) = std::env::var(linux::PROBE_ENV) {
+        return linux::probe(&name);
+    }
     if let Ok(name) = std::env::var(linux::SCENARIO_ENV) {
         return linux::child(&name);
     }
@@ -90,8 +93,11 @@ fn main() -> ExitCode {
     let mut out = std::io::stdout();
     let lockdown = Lockdown::new(Profile::Server, LandlockAbi::V1).apply();
     let secret = SecretMemory::new(core::num::NonZeroUsize::MIN);
-    let ok =
-        matches!(lockdown, Err(Error::Unsupported)) && matches!(secret, Err(Error::Unsupported));
+    let confined = Lockdown::new(Profile::Solver, LandlockAbi::V1)
+        .confine(&mut std::process::Command::new("/usr/bin/true"));
+    let ok = matches!(lockdown, Err(Error::Unsupported))
+        && matches!(secret, Err(Error::Unsupported))
+        && matches!(confined, Err(Error::Unsupported));
     let _ = writeln!(out, "test {NAME} ... {}", if ok { "ok" } else { "FAILED" });
     if ok {
         ExitCode::SUCCESS
@@ -105,13 +111,14 @@ mod linux {
     use std::fs;
     use std::io::{ErrorKind, Write as _};
     use std::os::unix::process::ExitStatusExt as _;
-    use std::path::PathBuf;
+    use std::path::{Path, PathBuf};
     use std::process::{Command, ExitCode};
 
     use access_sandbox::{Error, LandlockAbi, Lockdown, Locked, Profile, RunAs, SecretMemory};
     use rustix::process::DumpableBehavior;
 
     pub(super) const SCENARIO_ENV: &str = "ACCESS_SANDBOX_SCENARIO";
+    pub(super) const PROBE_ENV: &str = "ACCESS_SANDBOX_PROBE";
     const REQUIRE_MEMFD_SECRET_ENV: &str = "ACCESS_SANDBOX_REQUIRE_MEMFD_SECRET";
     /// Exit code a child uses to report "capability not present on this kernel".
     const SKIP: u8 = 77;
@@ -203,6 +210,19 @@ mod linux {
             "signer_memfd_secret_memory_is_usable_after_lockdown",
             Expect::PassOrSkip,
         ),
+        // OP-115 m.6
+        (
+            "solver_child_runs_without_privileges_or_core_dumps",
+            Expect::Pass,
+        ),
+        ("solver_child_cannot_create_files", Expect::Pass),
+        ("solver_child_cannot_create_sockets", Expect::Pass),
+        ("solver_child_cannot_spawn_processes", Expect::Pass),
+        (
+            "solver_child_cannot_execute_undeclared_programs",
+            Expect::Pass,
+        ),
+        ("confine_refuses_profiles_that_cannot_exec", Expect::Pass),
     ];
 
     pub(super) fn scenario_names() -> impl Iterator<Item = &'static str> {
@@ -653,7 +673,169 @@ mod linux {
                     Err(e) => Err(format!("memfd_secret failed: {e} ({e:?})")),
                 }
             }
+            "solver_child_runs_without_privileges_or_core_dumps" => {
+                let o = confined_probe("report")?;
+                ensure(o.status.success(), probe_detail(&o))?;
+                pass()
+            }
+            "solver_child_cannot_create_files" => {
+                let probe = probe_tree()?;
+                let target = probe.join("out/created");
+                let o = confined_probe_at(&probe, "write")?;
+                ensure(o.status.success(), probe_detail(&o))?;
+                ensure(!target.exists(), "the confined child created a file")?;
+                pass()
+            }
+            "solver_child_cannot_create_sockets" => {
+                let o = confined_probe("socket")?;
+                killed_after_reached(&o)
+            }
+            "solver_child_cannot_spawn_processes" => {
+                let o = confined_probe("spawn")?;
+                killed_after_reached(&o)
+            }
+            "solver_child_cannot_execute_undeclared_programs" => {
+                let probe = probe_tree()?;
+                let other = probe.join("other");
+                fs::copy(probe.join("probe"), &other).map_err(|e| e.to_string())?;
+                let mut cmd = Command::new(&other);
+                cmd.env(PROBE_ENV, "report");
+                solver(&probe.join("probe"))
+                    .confine(&mut cmd)
+                    .map_err(|e| format!("confine failed: {e} ({e:?})"))?;
+                match cmd.output() {
+                    Err(e) if e.kind() == ErrorKind::PermissionDenied => pass(),
+                    other => Err(format!("undeclared program ran: {other:?}")),
+                }
+            }
+            "confine_refuses_profiles_that_cannot_exec" => {
+                for profile in [Profile::Server, Profile::Signer, Profile::ParserWorker] {
+                    let r = lockdown(profile).confine(&mut Command::new("/usr/bin/true"));
+                    ensure(
+                        matches!(r, Err(Error::ProfileCannotExec(p)) if p == profile),
+                        format!("{profile:?}: {r:?}"),
+                    )?;
+                }
+                pass()
+            }
             other => Err(format!("unknown scenario {other}")),
+        }
+    }
+
+    /// A copy of this test binary in a tree the post-lockdown identity can read, with a
+    /// world-writable `out/`, so only the sandbox stops a write there.
+    fn probe_tree() -> Result<PathBuf, String> {
+        use std::os::unix::fs::PermissionsExt as _;
+        let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+        let root =
+            std::env::temp_dir().join(format!("access-sandbox-probe-{}", std::process::id()));
+        fs::create_dir_all(root.join("out")).map_err(|e| e.to_string())?;
+        fs::copy(&exe, root.join("probe")).map_err(|e| e.to_string())?;
+        for (path, mode) in [
+            (root.clone(), 0o755),
+            (root.join("probe"), 0o755),
+            (root.join("out"), 0o777),
+        ] {
+            fs::set_permissions(&path, fs::Permissions::from_mode(mode))
+                .map_err(|e| e.to_string())?;
+        }
+        Ok(root)
+    }
+
+    /// The solver lockdown for `probe`: it may execute itself and the shared libraries under
+    /// `/usr` that a dynamically linked test binary needs.
+    fn solver(probe: &Path) -> Lockdown {
+        lockdown(Profile::Solver)
+            .allow_execute(probe)
+            .allow_execute("/usr")
+    }
+
+    fn confined_probe(action: &str) -> Result<std::process::Output, String> {
+        confined_probe_at(&probe_tree()?, action)
+    }
+
+    fn confined_probe_at(root: &Path, action: &str) -> Result<std::process::Output, String> {
+        let probe = root.join("probe");
+        let mut cmd = Command::new(&probe);
+        cmd.env(PROBE_ENV, action)
+            .env("PROBE_OUT", root.join("out/created"));
+        solver(&probe)
+            .confine(&mut cmd)
+            .map_err(|e| format!("confine failed: {e} ({e:?})"))?;
+        cmd.output()
+            .map_err(|e| format!("confined spawn failed: {e}"))
+    }
+
+    fn probe_detail(o: &std::process::Output) -> String {
+        format!(
+            "probe exit={:?} signal={:?} stdout: {} stderr: {}",
+            o.status.code(),
+            o.status.signal(),
+            String::from_utf8_lossy(&o.stdout).trim(),
+            String::from_utf8_lossy(&o.stderr).trim()
+        )
+    }
+
+    fn killed_after_reached(o: &std::process::Output) -> Check {
+        let reached = String::from_utf8_lossy(&o.stdout).contains(REACHED);
+        ensure(
+            o.status.signal() == Some(SIGSYS) && reached,
+            probe_detail(o),
+        )?;
+        pass()
+    }
+
+    /// Runs inside the confined child (OP-115 m.6).
+    pub(super) fn probe(action: &str) -> ExitCode {
+        let result = probe_action(action);
+        let mut out = std::io::stdout();
+        match result {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(msg) => {
+                let _ = writeln!(out, "{msg}");
+                ExitCode::FAILURE
+            }
+        }
+    }
+
+    fn probe_action(action: &str) -> Result<(), String> {
+        match action {
+            "report" => {
+                let nnp = rustix::thread::no_new_privs().map_err(|e| e.to_string())?;
+                ensure(nnp, "no_new_privs is not set")?;
+                let caps = rustix::thread::capabilities(None).map_err(|e| e.to_string())?;
+                ensure(
+                    caps.effective.is_empty()
+                        && caps.permitted.is_empty()
+                        && caps.inheritable.is_empty(),
+                    format!("capabilities left: {caps:?}"),
+                )?;
+                ensure(!rustix::process::geteuid().is_root(), "runs as root")?;
+                let core = rustix::process::getrlimit(rustix::process::Resource::Core);
+                ensure(
+                    core.current == Some(0) && core.maximum == Some(0),
+                    format!("core limit {core:?}"),
+                )?;
+                Ok(())
+            }
+            "write" => {
+                let target = std::env::var_os("PROBE_OUT").ok_or("PROBE_OUT unset")?;
+                match fs::write(&target, b"x") {
+                    Err(e) if e.kind() == ErrorKind::PermissionDenied => Ok(()),
+                    other => Err(format!("write was not denied: {other:?}")),
+                }
+            }
+            "socket" => {
+                reached();
+                let r = std::net::TcpStream::connect("127.0.0.1:9");
+                Err(format!("still alive after socket(AF_INET): {r:?}"))
+            }
+            "spawn" => {
+                reached();
+                let r = Command::new("/usr/bin/true").status();
+                Err(format!("still alive after spawning: {r:?}"))
+            }
+            other => Err(format!("unknown probe {other}")),
         }
     }
 

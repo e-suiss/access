@@ -11,7 +11,7 @@ use cedar_policy_symcc::solver::LocalSolver;
 use cedar_policy_symcc::{CedarSymCompiler, CompiledPolicy, CompiledPolicySet, Env};
 use suiss_restriction::{Engine, PolicyView};
 
-pub use solver::{Cvc5, Timeouts};
+pub use solver::{Confine, Cvc5, Timeouts};
 pub use suiss_restriction::{CompileError, Limits};
 
 /// The result of comparing an old and a new policy set.
@@ -122,6 +122,9 @@ pub enum AnalysisError {
     /// The configured cvc5 cannot be read or started.
     #[error("cvc5 unavailable")]
     SolverUnavailable,
+    /// The solver sandbox could not be prepared (OP-115 m.6).
+    #[error("solver sandbox unavailable")]
+    Sandbox,
     /// The configured cvc5 does not match the pin (OP-105).
     #[error("cvc5 does not match the pinned sha256")]
     PinMismatch,

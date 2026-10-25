@@ -14,11 +14,19 @@ pub(crate) fn apply(lockdown: &Lockdown) -> Result<Locked, Error> {
         lockdown.landlock_abi,
         &lockdown.read_only,
         &lockdown.read_write,
+        &lockdown.execute,
         &lockdown.tcp_connect,
         &lockdown.tcp_bind,
         lockdown.run_as,
     );
     Err(Error::Unsupported)
+}
+
+pub(crate) fn confine(
+    lockdown: &Lockdown,
+    _command: &mut std::process::Command,
+) -> Result<(), Error> {
+    apply(lockdown).map(|_| ())
 }
 
 pub(crate) fn narrow(_phase2: &Phase2) -> Result<(), Error> {

@@ -1,5 +1,6 @@
 //! The OQ-MD2 spike change cases against the pinned cvc5 (OP-105). Ignored unless the pinned
-//! solver is configured: run `just smt-test`.
+//! solver is configured: run `just smt-test`. The solver runs only inside its Linux sandbox
+//! (OP-115 m.6, OP-90).
 
 #![allow(
     clippy::unwrap_used,
@@ -7,12 +8,18 @@
     reason = "test code; the request-path lints (OP-3) do not apply"
 )]
 
+use std::path::Path;
+#[cfg(target_os = "linux")]
 use std::time::Duration;
 
+use access_sandbox::{LandlockAbi, Lockdown, Profile};
+#[cfg(target_os = "linux")]
+use esuiss_restriction_analysis::Side;
 use esuiss_restriction_analysis::{
-    AnalysisError, Cvc5, Limits, Side, Timeouts, Verdict, Widening, WideningReason, analyze,
+    AnalysisError, Cvc5, Limits, Timeouts, Verdict, Widening, WideningReason, analyze,
 };
 
+#[cfg(target_os = "linux")]
 const NEEDS: &str = "needs the pinned cvc5 in ACCESS_CVC5; run `just smt-test`";
 
 const SCHEMA: &str = r"
@@ -31,6 +38,15 @@ forbid(principal, action, resource) when { context.risk >= 70 || context.new_dev
 @id("deep-lineage") forbid(principal, action, resource) when { context.lineage_depth > 3 };
 "#;
 
+/// The solver profile (OP-115 m.6), as the analysis binary wires it.
+fn confine(command: &mut std::process::Command, solver: &Path) -> std::io::Result<()> {
+    Lockdown::new(Profile::Solver, LandlockAbi::REQUIRED)
+        .allow_execute(solver)
+        .confine(command)
+        .map_err(std::io::Error::other)
+}
+
+#[cfg(target_os = "linux")]
 fn cvc5() -> Cvc5 {
     let Some(path) = std::env::var_os("ACCESS_CVC5") else {
         panic!("ACCESS_CVC5 is not set: {NEEDS}");
@@ -41,10 +57,12 @@ fn cvc5() -> Cvc5 {
             query: Duration::from_secs(60),
             total: Duration::from_secs(300),
         },
+        confine,
     )
     .unwrap()
 }
 
+#[cfg(target_os = "linux")]
 fn check(new: &str) -> Result<Verdict, AnalysisError> {
     analyze(&cvc5(), SCHEMA, OLD, new, Limits::default())
 }
@@ -64,7 +82,7 @@ fn widening(v: Result<Verdict, AnalysisError>) -> Widening {
 // OP-105
 #[test]
 fn binary_other_than_the_pinned_cvc5_is_refused() {
-    let sh = Cvc5::pinned("/bin/sh", Timeouts::default()).unwrap();
+    let sh = Cvc5::pinned("/bin/sh", Timeouts::default(), confine).unwrap();
     assert_eq!(
         analyze(&sh, SCHEMA, OLD, OLD, Limits::default()),
         Err(AnalysisError::PinMismatch)
@@ -73,6 +91,7 @@ fn binary_other_than_the_pinned_cvc5_is_refused() {
 
 // OP-105
 #[test]
+#[cfg(target_os = "linux")]
 #[ignore = "needs the pinned cvc5 in ACCESS_CVC5; run `just smt-test`"]
 fn same_set_is_equivalent() {
     assert_eq!(check(OLD), Ok(Verdict::Equivalent));
@@ -80,6 +99,7 @@ fn same_set_is_equivalent() {
 
 // OP-105
 #[test]
+#[cfg(target_os = "linux")]
 #[ignore = "needs the pinned cvc5 in ACCESS_CVC5; run `just smt-test`"]
 fn a_tightened_thresholds_and_new_require_is_narrowing() {
     let new = edit("> 10000", "> 5000").replace("> 3", "> 2")
@@ -89,6 +109,7 @@ fn a_tightened_thresholds_and_new_require_is_narrowing() {
 
 // OP-105
 #[test]
+#[cfg(target_os = "linux")]
 #[ignore = "needs the pinned cvc5 in ACCESS_CVC5; run `just smt-test`"]
 fn a2_require_to_deny_is_narrowing() {
     let new = edit(
@@ -100,6 +121,7 @@ fn a2_require_to_deny_is_narrowing() {
 
 // OP-105
 #[test]
+#[cfg(target_os = "linux")]
 #[ignore = "needs the pinned cvc5 in ACCESS_CVC5; run `just smt-test`"]
 fn b1_dropped_disjunct_is_widening_of_the_requirement() {
     let w = widening(check(&edit(" || context.new_device", "")));
@@ -114,6 +136,7 @@ fn b1_dropped_disjunct_is_widening_of_the_requirement() {
 
 // OP-105
 #[test]
+#[cfg(target_os = "linux")]
 #[ignore = "needs the pinned cvc5 in ACCESS_CVC5; run `just smt-test`"]
 fn b2_deleted_forbid_is_widening_with_a_counterexample() {
     let w = widening(check(&edit(
@@ -127,6 +150,7 @@ fn b2_deleted_forbid_is_widening_with_a_counterexample() {
 
 // OP-105
 #[test]
+#[cfg(target_os = "linux")]
 #[ignore = "needs the pinned cvc5 in ACCESS_CVC5; run `just smt-test`"]
 fn b3_deny_to_require_is_widening() {
     let w = widening(check(&edit(
@@ -139,7 +163,7 @@ fn b3_deny_to_require_is_widening() {
 // OP-104 m.6
 #[test]
 fn b4_changed_require_reference_is_widening_before_any_solver_run() {
-    let unused = Cvc5::pinned("/nonexistent/cvc5", Timeouts::default()).unwrap();
+    let unused = Cvc5::pinned("/nonexistent/cvc5", Timeouts::default(), confine).unwrap();
     let new = edit(r#"@require("rs-step-up")"#, r#"@require("rs-step-up-v2")"#);
     let w = widening(analyze(&unused, SCHEMA, OLD, &new, Limits::default()));
     assert_eq!(
@@ -154,6 +178,7 @@ fn b4_changed_require_reference_is_widening_before_any_solver_run() {
 
 // OP-104 m.6
 #[test]
+#[cfg(target_os = "linux")]
 #[ignore = "needs the pinned cvc5 in ACCESS_CVC5; run `just smt-test`"]
 fn b4_requirement_moved_to_another_policy_is_widening() {
     let new = edit(
@@ -171,6 +196,7 @@ fn b4_requirement_moved_to_another_policy_is_widening() {
 
 // OP-105
 #[test]
+#[cfg(target_os = "linux")]
 #[ignore = "needs the pinned cvc5 in ACCESS_CVC5; run `just smt-test`"]
 fn b5_extra_conjunct_is_widening() {
     let w = widening(check(&edit(
@@ -182,6 +208,7 @@ fn b5_extra_conjunct_is_widening() {
 
 // OP-105
 #[test]
+#[cfg(target_os = "linux")]
 #[ignore = "needs the pinned cvc5 in ACCESS_CVC5; run `just smt-test`"]
 fn c_equivalent_rewrite_is_equivalent() {
     let new = r#"
@@ -197,6 +224,7 @@ forbid(principal, action == Action::"transfer", resource) when { context.amount 
 
 // OP-104 m.5
 #[test]
+#[cfg(target_os = "linux")]
 #[ignore = "needs the pinned cvc5 in ACCESS_CVC5; run `just smt-test`"]
 fn d_policy_that_can_overflow_is_reported() {
     let new = OLD.to_owned()
@@ -212,6 +240,7 @@ fn d_policy_that_can_overflow_is_reported() {
 
 // OP-104 m.5
 #[test]
+#[cfg(target_os = "linux")]
 #[ignore = "needs the pinned cvc5 in ACCESS_CVC5; run `just smt-test`"]
 fn d_old_set_that_can_error_is_reported() {
     let old = OLD.to_owned()
@@ -224,6 +253,7 @@ fn d_old_set_that_can_error_is_reported() {
 
 // OP-105
 #[test]
+#[cfg(target_os = "linux")]
 #[ignore = "needs the pinned cvc5 in ACCESS_CVC5; run `just smt-test`"]
 fn e_optional_entity_attribute_is_narrowing() {
     let new = OLD.to_owned()

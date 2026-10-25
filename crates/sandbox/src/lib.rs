@@ -29,6 +29,10 @@ pub enum Profile {
     /// Disposable parser worker (XML, ASN.1). No sockets at all; talks over inherited
     /// descriptors only; unlisted syscalls kill the process (isolated process, R-3).
     ParserWorker,
+    /// SMT solver worker (OP-115 m.6), entered by a child between fork and exec through
+    /// [`Lockdown::confine`]. No sockets, no file writes, no process creation; only the declared
+    /// executables run; unlisted syscalls kill the process (isolated process, R-3).
+    Solver,
 }
 
 impl Profile {
@@ -39,6 +43,7 @@ impl Profile {
             Self::Server => "server",
             Self::Signer => "signer",
             Self::ParserWorker => "parser-worker",
+            Self::Solver => "solver",
         }
     }
 }
@@ -116,6 +121,7 @@ pub struct Lockdown {
     landlock_abi: LandlockAbi,
     read_only: Vec<PathBuf>,
     read_write: Vec<PathBuf>,
+    execute: Vec<PathBuf>,
     tcp_connect: Vec<u16>,
     tcp_bind: Vec<u16>,
     run_as: Option<RunAs>,
@@ -130,6 +136,7 @@ impl Lockdown {
             landlock_abi,
             read_only: Vec::new(),
             read_write: Vec::new(),
+            execute: Vec::new(),
             tcp_connect: Vec::new(),
             tcp_bind: Vec::new(),
             run_as: None,
@@ -146,6 +153,12 @@ impl Lockdown {
     /// Executing files and creating device nodes, FIFOs, sockets or symlinks stay denied.
     pub fn allow_read_write(mut self, path: impl AsRef<Path>) -> Self {
         self.read_write.push(path.as_ref().to_path_buf());
+        self
+    }
+
+    /// Declares a path (file or directory tree) the process may read and execute but not modify.
+    pub fn allow_execute(mut self, path: impl AsRef<Path>) -> Self {
+        self.execute.push(path.as_ref().to_path_buf());
         self
     }
 
@@ -187,6 +200,24 @@ impl Lockdown {
     /// partially restricted state and must exit; it must never continue unsandboxed.
     pub fn apply(self) -> Result<Locked, Error> {
         imp::apply(&self)
+    }
+
+    /// Makes the child of `command` enter this lockdown between fork and exec (OP-115 m.6).
+    ///
+    /// Everything that can fail or allocate is prepared here, in the calling process; the child
+    /// only issues system calls: `RLIMIT_CORE` 0, `no_new_privs`, capability and identity
+    /// changes, Landlock, then seccomp. A child that cannot enter the lockdown never executes
+    /// the program, and the spawn fails. Only [`Profile::Solver`] allows the exec.
+    ///
+    /// # Errors
+    /// [`Error::ProfileCannotExec`] for other profiles, [`Error::RootWithoutRunAs`] or
+    /// [`Error::IdentityMismatch`] as for [`Lockdown::apply`], [`Error::Landlock`] or
+    /// [`Error::Seccomp`] when the rules cannot be built, [`Error::Unsupported`] off Linux.
+    pub fn confine(self, command: &mut std::process::Command) -> Result<(), Error> {
+        if self.profile != Profile::Solver {
+            return Err(Error::ProfileCannotExec(self.profile));
+        }
+        imp::confine(&self, command)
     }
 }
 
@@ -278,6 +309,9 @@ pub enum Error {
         /// Current gid.
         gid: u32,
     },
+    /// [`Lockdown::confine`] was called with a profile whose seccomp policy forbids `execve`.
+    #[error("profile {0:?} does not allow executing a program")]
+    ProfileCannotExec(Profile),
     /// [`RunAs::new`] got root or the `-1` sentinel.
     #[error("run-as identity must be a non-root uid and gid")]
     InvalidRunAs,

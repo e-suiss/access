@@ -73,6 +73,21 @@ pub(super) fn startup_filters(
     ])
 }
 
+/// The [`Profile::Solver`] filters, in installation order. The allowlist comes last, so the
+/// `seccomp` calls that install the others pass it.
+pub(super) fn solver_filters(arch: TargetArch) -> Result<Vec<BpfProgram>, Error> {
+    Ok(vec![
+        deny_io_uring(arch)?,
+        clone3_enosys(arch)?,
+        deny_write_open(arch)?,
+        compile(
+            allowlist(Profile::Solver, Phase::Narrowed, 0)?,
+            Profile::Solver,
+            arch,
+        )?,
+    ])
+}
+
 /// The phase 2 filter.
 pub(super) fn narrowed_filter(
     profile: Profile,
@@ -93,7 +108,7 @@ pub(super) const fn mismatch_action(profile: Profile) -> SeccompAction {
         // R-3
         Profile::Server => SeccompAction::Errno(libc::EPERM.unsigned_abs()),
         // R-3
-        Profile::Signer | Profile::ParserWorker => SeccompAction::KillProcess,
+        Profile::Signer | Profile::ParserWorker | Profile::Solver => SeccompAction::KillProcess,
     }
 }
 
@@ -108,6 +123,51 @@ fn deny_io_uring(arch: TargetArch) -> Result<BpfProgram, Error> {
         rules,
         SeccompAction::Allow,
         SeccompAction::Errno(libc::EPERM.unsigned_abs()),
+        arch,
+    )
+    .map_err(backend)?;
+    BpfProgram::try_from(filter).map_err(backend)
+}
+
+/// The `open` flags that create, truncate or write.
+fn write_open_flags() -> [u64; 5] {
+    [
+        libc::O_WRONLY,
+        libc::O_RDWR,
+        libc::O_CREAT,
+        libc::O_TRUNC,
+        libc::O_APPEND,
+    ]
+    .map(|f| u64::from(f.unsigned_abs()))
+}
+
+/// Opening a file to write or create it fails with `EACCES`, behind Landlock (OP-115 m.6).
+fn deny_write_open(arch: TargetArch) -> Result<BpfProgram, Error> {
+    let any_flag = |arg: u8| -> Result<Vec<SeccompRule>, Error> {
+        write_open_flags()
+            .iter()
+            .map(|&f| {
+                SeccompRule::new(vec![cond(
+                    arg,
+                    SeccompCmpArgLen::Dword,
+                    SeccompCmpOp::MaskedEq(f),
+                    f,
+                )?])
+                .map_err(backend)
+            })
+            .collect()
+    };
+    let mut rules = Rules::new();
+    rules.insert(libc::SYS_openat, any_flag(2)?);
+    #[cfg(target_arch = "x86_64")]
+    {
+        rules.insert(libc::SYS_open, any_flag(1)?);
+        rules.insert(libc::SYS_creat, Vec::new());
+    }
+    let filter = SeccompFilter::new(
+        rules,
+        SeccompAction::Allow,
+        SeccompAction::Errno(libc::EACCES.unsigned_abs()),
         arch,
     )
     .map_err(backend)?;
@@ -206,6 +266,24 @@ const COMMON: &[i64] = &[
     libc::SYS_getegid,
     libc::SYS_getrandom,
     libc::SYS_capget,
+];
+
+/// What a statically linked solver needs beyond [`COMMON`]: its own `execve`, libc start-up,
+/// time limits and resource queries (OP-115 m.6). cvc5 also raises its own stack limit, so the
+/// solver may set `RLIMIT_STACK` of itself; every other `prlimit64` only reads.
+const SOLVER: &[i64] = &[
+    libc::SYS_execve,
+    libc::SYS_set_tid_address,
+    libc::SYS_uname,
+    libc::SYS_sysinfo,
+    libc::SYS_getrusage,
+    libc::SYS_getitimer,
+    libc::SYS_setitimer,
+    libc::SYS_getcwd,
+    libc::SYS_sched_getparam,
+    libc::SYS_sched_getscheduler,
+    libc::SYS_sched_get_priority_max,
+    libc::SYS_sched_get_priority_min,
 ];
 
 /// Builds the allowlist for `profile` in `phase`.
@@ -389,7 +467,36 @@ fn profile_rules(rules: &mut Rules, profile: Profile, phase: Phase) -> Result<()
                 allow(rules, read_fs_x86);
             }
         }
+        Profile::Solver => {
+            // OP-115 m.6
+            rules.remove(&libc::SYS_tgkill);
+            allow(rules, read_fs);
+            #[cfg(target_arch = "x86_64")]
+            allow(rules, read_fs_x86);
+            solver_rules(rules)?;
+        }
     }
+    Ok(())
+}
+
+/// The [`SOLVER`] syscalls and the solver's `prlimit64` rule (OP-115 m.6).
+fn solver_rules(rules: &mut Rules) -> Result<(), Error> {
+    allow(rules, SOLVER);
+    #[cfg(target_arch = "x86_64")]
+    allow(rules, &[libc::SYS_arch_prctl, libc::SYS_time]);
+    let dword = SeccompCmpArgLen::Dword;
+    rules.insert(
+        libc::SYS_prlimit64,
+        vec![
+            SeccompRule::new(vec![cond(2, SeccompCmpArgLen::Qword, SeccompCmpOp::Eq, 0)?])
+                .map_err(backend)?,
+            SeccompRule::new(vec![
+                cond(0, dword.clone(), SeccompCmpOp::Eq, 0)?,
+                cond(1, dword, SeccompCmpOp::Eq, u64::from(libc::RLIMIT_STACK))?,
+            ])
+            .map_err(backend)?,
+        ],
+    );
     Ok(())
 }
 
@@ -397,7 +504,12 @@ fn profile_rules(rules: &mut Rules, profile: Profile, phase: Phase) -> Result<()
 mod tests {
     use super::*;
 
-    const PROFILES: [Profile; 3] = [Profile::Server, Profile::Signer, Profile::ParserWorker];
+    const PROFILES: [Profile; 4] = [
+        Profile::Server,
+        Profile::Signer,
+        Profile::ParserWorker,
+        Profile::Solver,
+    ];
     const PHASES: [Phase; 2] = [Phase::Startup, Phase::Narrowed];
 
     #[test]
@@ -465,12 +577,69 @@ mod tests {
     }
 
     #[test]
+    fn solver_has_no_socket_write_or_process_syscalls() {
+        // OP-115 m.6
+        let rules = allowlist(Profile::Solver, Phase::Narrowed, 1).unwrap();
+        for nr in [
+            libc::SYS_socket,
+            libc::SYS_socketpair,
+            libc::SYS_connect,
+            libc::SYS_bind,
+            libc::SYS_listen,
+            libc::SYS_accept4,
+            libc::SYS_sendto,
+            libc::SYS_recvfrom,
+            libc::SYS_sendmsg,
+            libc::SYS_recvmsg,
+            libc::SYS_mkdirat,
+            libc::SYS_unlinkat,
+            libc::SYS_renameat2,
+            libc::SYS_linkat,
+            libc::SYS_symlinkat,
+            libc::SYS_ftruncate,
+            libc::SYS_openat2,
+            libc::SYS_execveat,
+            libc::SYS_ptrace,
+            libc::SYS_kill,
+            libc::SYS_tgkill,
+            libc::SYS_seccomp,
+            libc::SYS_memfd_create,
+        ] {
+            assert!(!rules.contains_key(&nr), "solver allows {nr}");
+        }
+        let clone = rules.get(&libc::SYS_clone).unwrap();
+        assert_eq!(clone.len(), 1, "clone is limited to threads");
+        let prlimit = rules.get(&libc::SYS_prlimit64).unwrap();
+        assert_eq!(prlimit.len(), 2, "reads, or its own RLIMIT_STACK");
+    }
+
+    #[test]
+    fn solver_filters_compile_with_the_allowlist_last() {
+        let arch = target_arch().unwrap();
+        let filters = solver_filters(arch).unwrap();
+        assert_eq!(filters.len(), 4);
+        let last = compile(
+            allowlist(Profile::Solver, Phase::Narrowed, 0).unwrap(),
+            Profile::Solver,
+            arch,
+        )
+        .unwrap();
+        assert_eq!(filters.last(), Some(&last));
+        assert!(write_open_flags().iter().all(|f| *f != 0));
+    }
+
+    #[test]
     fn no_profile_allows_exec_or_fork() {
         // SA-22
         for profile in PROFILES {
             for phase in PHASES {
                 let rules = allowlist(profile, phase, 1).unwrap();
-                for nr in [libc::SYS_execve, libc::SYS_execveat, libc::SYS_ptrace] {
+                let exec: &[i64] = if profile == Profile::Solver {
+                    &[libc::SYS_execveat, libc::SYS_ptrace]
+                } else {
+                    &[libc::SYS_execve, libc::SYS_execveat, libc::SYS_ptrace]
+                };
+                for &nr in exec {
                     assert!(
                         !rules.contains_key(&nr),
                         "{profile:?} {phase:?} allows {nr}"

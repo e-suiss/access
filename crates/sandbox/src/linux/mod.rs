@@ -1,11 +1,13 @@
 //! Linux implementation of the SA-22 lockdown.
 
 mod caps;
+mod confine;
 mod fs;
 mod identity;
 mod seccomp;
 mod secretmem;
 
+pub(crate) use confine::confine;
 pub(crate) use secretmem::SecretMemory;
 
 use rustix::process::DumpableBehavior;

@@ -3,7 +3,8 @@
 
 use landlock::{
     ABI, Access, AccessFs, AccessNet, BitFlags, CompatLevel, Compatible, LandlockStatus, NetPort,
-    PathBeneath, PathFd, Ruleset, RulesetAttr, RulesetCreatedAttr, RulesetStatus, make_bitflags,
+    PathBeneath, PathFd, Ruleset, RulesetAttr, RulesetCreated, RulesetCreatedAttr, RulesetStatus,
+    make_bitflags,
 };
 
 use crate::{Error, LandlockAbi, Lockdown};
@@ -25,6 +26,27 @@ fn landlock_error(e: impl core::error::Error + Send + Sync + 'static) -> Error {
 
 /// Restricts the process to the declared paths and returns the kernel's Landlock ABI.
 pub(super) fn restrict(lockdown: &Lockdown) -> Result<u32, Error> {
+    let status = ruleset(lockdown)?.restrict_self().map_err(landlock_error)?;
+    if status.ruleset != RulesetStatus::FullyEnforced || !status.no_new_privs {
+        return Err(Error::Landlock(
+            format!("ruleset not fully enforced: {:?}", status.ruleset).into(),
+        ));
+    }
+    match status.landlock {
+        LandlockStatus::Available {
+            effective_abi,
+            kernel_abi,
+        } => Ok(kernel_abi
+            .and_then(|v| u32::try_from(v).ok())
+            .unwrap_or_else(|| abi_number(effective_abi))),
+        LandlockStatus::NotEnabled | LandlockStatus::NotImplemented => {
+            Err(Error::Landlock("landlock is not available".into()))
+        }
+    }
+}
+
+/// The ruleset for the declared paths and ports, created but not yet enforced.
+pub(super) fn ruleset(lockdown: &Lockdown) -> Result<RulesetCreated, Error> {
     let abi = to_abi(lockdown.landlock_abi);
     let handled = AccessFs::from_all(abi);
     let read_only: BitFlags<AccessFs> = make_bitflags!(AccessFs::{ReadFile | ReadDir});
@@ -33,6 +55,7 @@ pub(super) fn restrict(lockdown: &Lockdown) -> Result<u32, Error> {
             | make_bitflags!(AccessFs::{
                 WriteFile | RemoveFile | RemoveDir | MakeReg | MakeDir | Refer | Truncate
             }));
+    let execute = read_only | AccessFs::Execute;
 
     let ruleset = Ruleset::default()
         // SA-22
@@ -53,7 +76,8 @@ pub(super) fn restrict(lockdown: &Lockdown) -> Result<u32, Error> {
         .read_only
         .iter()
         .map(|p| (p, read_only))
-        .chain(lockdown.read_write.iter().map(|p| (p, read_write)));
+        .chain(lockdown.read_write.iter().map(|p| (p, read_write)))
+        .chain(lockdown.execute.iter().map(|p| (p, execute)));
     for (path, access) in rules {
         let is_dir = std::fs::metadata(path)
             .map_err(|e| Error::Landlock(Box::new(e)))?
@@ -82,23 +106,7 @@ pub(super) fn restrict(lockdown: &Lockdown) -> Result<u32, Error> {
         }
     }
 
-    let status = ruleset.restrict_self().map_err(landlock_error)?;
-    if status.ruleset != RulesetStatus::FullyEnforced || !status.no_new_privs {
-        return Err(Error::Landlock(
-            format!("ruleset not fully enforced: {:?}", status.ruleset).into(),
-        ));
-    }
-    match status.landlock {
-        LandlockStatus::Available {
-            effective_abi,
-            kernel_abi,
-        } => Ok(kernel_abi
-            .and_then(|v| u32::try_from(v).ok())
-            .unwrap_or_else(|| abi_number(effective_abi))),
-        LandlockStatus::NotEnabled | LandlockStatus::NotImplemented => {
-            Err(Error::Landlock("landlock is not available".into()))
-        }
-    }
+    Ok(ruleset)
 }
 
 fn abi_number(abi: ABI) -> u32 {

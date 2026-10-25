@@ -25,25 +25,36 @@ impl Default for Timeouts {
     }
 }
 
+/// Puts the solver child into its sandbox between fork and exec (OP-115 m.6). The binary that
+/// runs the analysis passes the `access-sandbox` solver profile for the solver at the given path;
+/// an error stops the solver from starting ([`AnalysisError::Sandbox`]).
+pub type Confine = fn(&mut std::process::Command, &Path) -> std::io::Result<()>;
+
 /// A cvc5 executable whose sha256 must match `supply-chain/cvc5.toml` (OP-105).
 #[derive(Clone, Debug)]
 pub struct Cvc5 {
     path: PathBuf,
     sha256: [u8; 32],
     timeouts: Timeouts,
+    confine: Confine,
 }
 
 impl Cvc5 {
     /// Binds the configured `path` to the pin for this platform. The file is hashed again
-    /// before every run.
+    /// before every run, and every run is confined by `confine`.
     ///
     /// # Errors
     /// [`AnalysisError::UnsupportedPlatform`] or [`AnalysisError::Pin`].
-    pub fn pinned(path: impl Into<PathBuf>, timeouts: Timeouts) -> Result<Self, AnalysisError> {
+    pub fn pinned(
+        path: impl Into<PathBuf>,
+        timeouts: Timeouts,
+        confine: Confine,
+    ) -> Result<Self, AnalysisError> {
         Ok(Self {
             path: path.into(),
             sha256: pin::binary_sha256(&pin::platform())?,
             timeouts,
+            confine,
         })
     }
 
@@ -61,6 +72,7 @@ impl Cvc5 {
             path,
             sha256,
             timeouts,
+            confine: |_, _| Ok(()),
         }
     }
 
@@ -97,6 +109,8 @@ impl Cvc5 {
             .kill_on_drop(true)
             .args(["--lang", "smt"])
             .arg(format!("--tlimit-per={ms}"));
+        // OP-115 m.6
+        (self.confine)(cmd.as_std_mut(), &self.path).map_err(|_| AnalysisError::Sandbox)?;
         LocalSolver::from_command(&mut cmd).map_err(|_| AnalysisError::SolverUnavailable)
     }
 }
