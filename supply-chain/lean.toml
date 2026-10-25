@@ -1,0 +1,21 @@
+# OP-119 m.3, F-2: the Lean 4 toolchain for the algebra model in conformance/lean. `version` must
+# match conformance/lean/lean-toolchain; scripts/lean-fetch.sh refuses an archive with another hash.
+
+version = "4.35.0"
+release = "https://github.com/leanprover/lean4/releases/tag/v4.35.0"
+published = "2026-10-12"
+
+[platform.linux-x86_64]
+url = "https://github.com/leanprover/lean4/releases/download/v4.35.0/lean-4.35.0-linux.tar.zst"
+sha256 = "7289597a44543246c9227b8cae501767e095ce17f6d448b95fc4a8dc97268f6d"
+dir = "lean-4.35.0-linux"
+
+[platform.linux-aarch64]
+url = "https://github.com/leanprover/lean4/releases/download/v4.35.0/lean-4.35.0-linux_aarch64.tar.zst"
+sha256 = "c8f0f8a3920e839718b1343e6781fd80a3e9b1024fbcd7078eb30f54e806b028"
+dir = "lean-4.35.0-linux_aarch64"
+
+[platform.macos-aarch64]
+url = "https://github.com/leanprover/lean4/releases/download/v4.35.0/lean-4.35.0-darwin_aarch64.tar.zst"
+sha256 = "c0c6f34f35ba1dcc5c4a5fd106fefab9eb5e8469712624dd2c868d51b63177c2"
+dir = "lean-4.35.0-darwin_aarch64"

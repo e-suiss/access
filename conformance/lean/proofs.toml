@@ -1,0 +1,125 @@
+# OP-119 m.3: proof status of the algebra model. `proved` means the theorem builds and depends on
+# no axiom outside `allowed_axioms`; `check-axioms.sh` fails otherwise. `stated` means the
+# statement is written and its proof is still open (it may use `sorry`).
+
+allowed_axioms = ["propext", "Classical.choice", "Quot.sound"]
+
+[[theorem]]
+name = "Access.boundLe_refl"
+rule = "L0-ALG-5"
+claim = "⊑ on bounds is reflexive"
+status = "proved"
+
+[[theorem]]
+name = "Access.boundLe_trans"
+rule = "L0-ALG-5"
+claim = "⊑ on bounds is transitive"
+status = "proved"
+
+[[theorem]]
+name = "Access.withinB_mono"
+rule = "L0-ALG-5"
+claim = "⊑ on bounds is sound: a value within the child bound is within the parent bound"
+status = "proved"
+
+[[theorem]]
+name = "Access.boundMeet_le"
+rule = "L0-ALG-5"
+claim = "a ∩ b ⊑ a and a ∩ b ⊑ b for bounds"
+status = "proved"
+
+[[theorem]]
+name = "Access.boundMeet_greatest"
+rule = "L0-ALG-5"
+claim = "every well-formed lower bound of two bounds is below their ∩"
+status = "proved"
+
+[[theorem]]
+name = "Access.boundNorm_idem"
+rule = "L0-ALG-5"
+claim = "normalize on bounds is idempotent"
+status = "proved"
+
+[[theorem]]
+name = "Access.boundNorm_within"
+rule = "L0-ALG-5"
+claim = "a normalized bound allows exactly the values the bound allows"
+status = "proved"
+
+[[theorem]]
+name = "Access.authLe_refl"
+rule = "L0-ALG-5, OP-124 m.2"
+claim = "⊑ on authority sets is reflexive on well-formed values (unique parameter keys)"
+status = "proved"
+
+[[theorem]]
+name = "Access.authLe_trans"
+rule = "L0-ALG-5"
+claim = "⊑ on authority sets is transitive"
+status = "proved"
+
+[[theorem]]
+name = "Access.authLe_sound"
+rule = "L0-ALG-5"
+claim = "if c ⊑ p, every intent c covers is covered by p"
+status = "proved"
+
+[[theorem]]
+name = "Access.authMeet_le"
+rule = "L0-ALG-5, L0-ALG-51"
+claim = "a ∩ b ⊑ a and a ∩ b ⊑ b for authority sets"
+status = "proved"
+
+[[theorem]]
+name = "Access.authMeet_greatest"
+rule = "L0-ALG-5, L0-ALG-51, OP-124 m.3"
+claim = "up to coverage, ∩ is the greatest lower bound: every lower bound covers nothing (≈ ⊥) or is below a ∩ b"
+status = "proved"
+
+[[theorem]]
+name = "Access.authMeet_greatest_wf"
+rule = "L0-ALG-5, L0-ALG-51"
+claim = "every lower bound that covers some action and has well-formed bounds is below a ∩ b"
+status = "proved"
+
+[[theorem]]
+name = "Access.authNorm_idem"
+rule = "L0-ALG-5, L0-ALG-52"
+claim = "normalize on authority sets is idempotent"
+status = "proved"
+
+[[theorem]]
+name = "Access.authNorm_covers"
+rule = "L0-ALG-5, L0-ALG-52, L0-EVAL-10, OP-124 m.4"
+claim = "a normalized authority set, with public recipient and subject bounds dropped, covers exactly the intents its input covers"
+status = "proved"
+
+[[theorem]]
+name = "Access.delegation_never_widens"
+rule = "L0-ALG-70"
+claim = "if child_within_parent holds, every use the child covers is covered by the parent"
+status = "proved"
+
+[[theorem]]
+name = "Access.chain_never_widens"
+rule = "L0-ALG-70"
+claim = "no Grant along a delegation chain covers a use its root does not"
+status = "proved"
+
+[[theorem]]
+name = "Access.delegation_depth_decreases"
+rule = "L0-ALG-73"
+claim = "delegation needs depth > 0 and strictly lowers it"
+status = "proved"
+
+[[theorem]]
+name = "Access.public_holder_is_leaf"
+rule = "L0-ALG-75"
+claim = "a Grant delegated to public cannot be delegated further"
+status = "proved"
+
+[[theorem]]
+name = "Access.authMeet_normal"
+rule = "L0-ALG-51"
+claim = "the ∩ of two normalized authority sets is normalized"
+status = "proved"

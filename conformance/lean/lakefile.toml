@@ -1,0 +1,14 @@
+name = "access-algebra"
+version = "0.1.0"
+defaultTargets = ["AccessAlgebra"]
+
+[leanOptions]
+autoImplicit = false
+relaxedAutoImplicit = false
+
+[[lean_lib]]
+name = "AccessAlgebra"
+
+[[lean_exe]]
+name = "vectors"
+root = "Vectors"
