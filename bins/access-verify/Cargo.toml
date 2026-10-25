@@ -1,0 +1,20 @@
+[package]
+name = "access-verify"
+description = "Reference Verifier (CMP-17, TI-17): offline verification of Access artefacts with the open Kernel."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+access-kernel = { workspace = true }
+
+[dev-dependencies]
+suiss-crypto = { workspace = true, features = ["verify"] }
+ed25519-dalek = { workspace = true }
+serde_json = { workspace = true, features = ["std"] }
+
+[lints]
+workspace = true

@@ -26,6 +26,7 @@ Each case has a `name`, its inputs and the expected result. Byte strings are low
 |---|---|
 | Rust Kernel | `just test` |
 | F0 reference evaluator | `just f0` |
+| [Reference Verifier](../bins/access-verify) (`access-verify`) | `cargo nextest run -p access-verify` |
 | TypeScript (Wasm) binding | `just web-test` |
 | Python (uniffi) binding | `just uniffi-test` |
 | Independent CBOR check (Go and Python) | `just vectors-crosscheck` |
