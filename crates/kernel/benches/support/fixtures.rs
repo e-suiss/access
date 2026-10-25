@@ -11,18 +11,10 @@ fn hex(s: &str) -> Vec<u8> {
         .collect()
 }
 
-/// Grows the heap by a fixed amount and frees it, so a bench's first allocations come from
-/// the same free top chunk whatever the fixture allocated before. The size stays under glibc's
-/// mmap and trim thresholds (128 KiB), so the space is kept (OP-72).
-fn warm_heap() {
-    drop(std::hint::black_box(vec![0_u8; 96 * 1024]));
-}
-
 /// Reads one case's hex field by scanning the text, without building a JSON tree: the freed
 /// nodes of a parsed tree change glibc's heap state and so the instruction count of the first
 /// allocations a bench makes (OP-72).
 fn field(json: &str, id: &str, key: &str) -> Vec<u8> {
-    warm_heap();
     let case = format!("\"id\": \"{id}\"");
     let key = format!("\"{key}\": \"");
     let Some((_, rest)) = json.split_once(&case) else {
