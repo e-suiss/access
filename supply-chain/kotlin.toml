@@ -1,0 +1,15 @@
+# OP-116 m.6, F-2: the Kotlin compiler and JNA for the uniffi Kotlin vector test on the JVM.
+# scripts/kotlin-fetch.sh refuses a download with another hash. The JDK is the runner's.
+
+[kotlinc]
+version = "2.4.21"
+release = "https://github.com/JetBrains/kotlin/releases/tag/v2.4.21"
+published = "2026-10-08"
+url = "https://github.com/JetBrains/kotlin/releases/download/v2.4.21/kotlin-compiler-2.4.21.zip"
+sha256 = "7cc140e76daf416a0424a5557f99afd7ca89ebd463ea1101261e3e01c33e75cd"
+
+[jna]
+version = "5.19.1"
+published = "2026-06-12"
+url = "https://repo1.maven.org/maven2/net/java/dev/jna/jna/5.19.1/jna-5.19.1.jar"
+sha256 = "4fb141dd8ef6b0585ffceea4bc49602fbc6312fa977e2c488794ea3e6aafecae"

@@ -37,6 +37,9 @@ jobs:
         run: just lint
       - name: Repository rules (OP-62, OP-3, OP-66)
         run: just rules
+      # CR-39 m.5, SA-T13
+      - name: Constant-time comparison assembly snapshot (difference = review)
+        run: just ct-asm
 
   test:
     name: test
@@ -94,8 +97,36 @@ jobs:
         with:
           cache-key: test
           tools: nextest
-      - name: Restriction change analysis with the pinned cvc5 (OP-105, F-2)
+      # OP-115 m.6
+      - name: Restriction change analysis with the pinned cvc5 in its sandbox (OP-105, F-2)
         run: just smt-test
+      - name: Seccomp kills reported by the kernel
+        if: failure()
+        run: sudo dmesg | grep -E 'type=1326|seccomp' || true
+
+  # OP-119 m.3, CR-49
+  lean:
+    name: lean
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # F-2
+      - name: Install the pinned Lean toolchain
+        run: scripts/lean-fetch.sh "$RUNNER_TEMP/lean" >> "$GITHUB_PATH"
+      - name: Build the algebra model and its proofs
+        working-directory: conformance/lean
+        run: lake build --wfail AccessAlgebra vectors
+      - name: No theorem marked proved depends on sorry
+        working-directory: conformance/lean
+        run: ./check-axioms.sh
+      - name: Model against the Kernel algebra vectors
+        working-directory: conformance/lean
+        run: lake exe vectors ../vectors/core/*/*.json
 
   cross:
     name: cross
@@ -126,6 +157,9 @@ jobs:
       # CMP-24, MD-1, T41, OP-116 m.3
       - name: Kernel and uniffi binding cross-compilation
         run: just cross
+      # OP-116 m.3
+      - name: Android uniffi cdylib links against the NDK sysroot
+        run: just android-link-check
       # OP-56, OP-106 m.24
       - name: Vector cross-check with an independent encoder
         working-directory: conformance/vectors/tools/cbor-crosscheck
@@ -150,6 +184,8 @@ jobs:
           tools: deny vet
       - name: cargo-deny (F-1)
         run: just deny
+      - name: No rsa crate, cargo tree -i rsa (CR-14, §10.4.5)
+        run: just no-rsa
       - name: cargo-vet (F-1)
         run: just vet
 
@@ -200,6 +236,47 @@ jobs:
           just test-sandbox
         env:
           ACCESS_SANDBOX_REQUIRE_MEMFD_SECRET: "1"
+      - name: Seccomp kills reported by the kernel
+        if: failure()
+        run: sudo dmesg | grep -E 'type=1326|seccomp' || true
+
+  # OP-116 m.6
+  uniffi-kotlin:
+    name: uniffi-kotlin
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+        with:
+          cache-key: test
+      - name: Kernel vectors through the uniffi Kotlin binding on the runner JDK (F-2)
+        run: |
+          java -version
+          just uniffi-test-kotlin
+
+  # OP-116 m.6
+  uniffi-swift:
+    name: uniffi-swift
+    runs-on: macos-15
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+        with:
+          cache-key: swift
+      - name: Kernel vectors through the uniffi Swift binding
+        run: |
+          swiftc --version
+          just uniffi-test-swift
 
   bench-instructions:
     name: bench-instructions

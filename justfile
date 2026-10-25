@@ -36,6 +36,23 @@ rules:
 deny:
     cargo deny --locked check
 
+# CR-14, §10.4.5, G46
+no-rsa:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    for manifest in Cargo.toml fuzz/Cargo.toml; do
+      if out="$(cargo tree --locked --manifest-path "$manifest" --workspace --target all -e all -i rsa 2>&1)"; then
+        echo "$out"
+        echo "$manifest: the rsa crate is in the dependency graph (CR-14, §10.4.5)" >&2
+        exit 1
+      fi
+      if ! grep -q 'did not match any packages' <<<"$out"; then
+        echo "$out" >&2
+        exit 1
+      fi
+      echo "$manifest: no rsa crate"
+    done
+
 cross:
     for t in {{kernel_targets}}; do cargo build --locked -p esuiss-access-kernel --target "$t"; done
     # OP-76
@@ -86,6 +103,33 @@ cross-android target="x86_64-linux-android":
     CARGO_TARGET_AARCH64_LINUX_ANDROID_RUNNER="{{justfile_directory()}}/scripts/android-runner.sh" \
     cargo test --locked -p esuiss-access-kernel --target {{target}}
 
+# OP-116 m.3
+android-link-check:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    ndk="${ANDROID_NDK_HOME:-${ANDROID_NDK_LATEST_HOME:-/nonexistent}}"
+    bin="$(ls -d "$ndk"/toolchains/llvm/prebuilt/*/bin 2>/dev/null | head -1 || true)"
+    if [[ ! -x "$bin/llvm-nm" ]]; then
+      echo "android-link-check: Android NDK required; set ANDROID_NDK_HOME" >&2
+      exit 1
+    fi
+    work="$(mktemp -d)"
+    trap 'rm -rf "$work"' EXIT
+    printf 'int main(void) { return 0; }\n' > "$work/main.c"
+    for t in aarch64-linux-android x86_64-linux-android; do
+      just _ndk "$t" cargo build --locked -p access-kernel-uniffi --target "$t"
+      dir="target/$t/debug"
+      so="$dir/libaccess_kernel_uniffi.so"
+      grep -q 'DYN (Shared object file)' <<<"$("$bin/llvm-readelf" -h "$so")"
+      syms="$("$bin/llvm-nm" -D --defined-only "$so")"
+      for f in api_version evaluate verify_consistency; do
+        grep -q " T uniffi_access_kernel_uniffi_fn_func_$f\$" <<<"$syms"
+      done
+      "$bin/${t}24-clang" "$work/main.c" -o "$work/$t" -L "$dir" \
+        -Wl,--no-as-needed -laccess_kernel_uniffi -Wl,--no-allow-shlib-undefined
+      echo "$t: $so links against the API 24 NDK sysroot and exports the binding"
+    done
+
 # OP-83
 wasm:
     want="$(grep -A1 '^name = "wasm-bindgen"$' Cargo.lock | sed -n 's/^version = "\(.*\)"$/\1/p')"; \
@@ -107,6 +151,47 @@ uniffi-test:
       generate --library "$lib" --language python --out-dir "$out"
     cp "$lib" "$out/"
     python3 -I sdks/bindings/uniffi/tests/vectors.py "$out"
+
+# OP-116 m.6, F-2
+uniffi-test-kotlin:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if ! command -v java >/dev/null || ! java -version >/dev/null 2>&1; then
+      echo "uniffi-test-kotlin: a JDK is required (java on PATH)" >&2
+      exit 1
+    fi
+    tools="$(scripts/kotlin-fetch.sh target/kotlin)"
+    cargo build --locked -p access-kernel-uniffi
+    case "$(uname -s)" in Darwin) ext=dylib ;; *) ext=so ;; esac
+    lib="target/debug/libaccess_kernel_uniffi.$ext"
+    out="target/uniffi/kotlin"
+    rm -rf "$out" && mkdir -p "$out"
+    cargo run --locked --quiet -p access-kernel-uniffi --features bindgen --bin uniffi-bindgen -- \
+      generate --library "$lib" --language kotlin --no-format --out-dir "$out"
+    cp "$lib" "$out/"
+    "$tools/kotlinc/bin/kotlinc" -nowarn -cp "$tools/jna.jar" -include-runtime -d "$out/vectors.jar" \
+      "$out/uniffi/access_kernel_uniffi/access_kernel_uniffi.kt" sdks/bindings/uniffi/tests/Vectors.kt
+    java -Djna.library.path="$out" -cp "$out/vectors.jar:$tools/jna.jar" VectorsKt conformance/vectors/core/1
+
+# OP-116 m.6
+uniffi-test-swift:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [[ "$(uname -s)" != Darwin ]]; then
+      echo "uniffi-test-swift: needs macOS (swiftc with CryptoKit)" >&2
+      exit 1
+    fi
+    cargo build --locked -p access-kernel-uniffi
+    lib="target/debug/libaccess_kernel_uniffi.dylib"
+    out="target/uniffi/swift"
+    rm -rf "$out" && mkdir -p "$out"
+    cargo run --locked --quiet -p access-kernel-uniffi --features bindgen --bin uniffi-bindgen -- \
+      generate --library "$lib" --language swift --out-dir "$out"
+    swiftc -parse-as-library -module-name AccessKernelVectors \
+      -Xcc -fmodule-map-file="$out/access_kernel_uniffiFFI.modulemap" -I "$out" \
+      -L target/debug -laccess_kernel_uniffi -o "$out/vectors" \
+      "$out/access_kernel_uniffi.swift" sdks/bindings/uniffi/tests/vectors.swift
+    "$out/vectors" conformance/vectors/core/1
 
 # OP-97
 npm_packages :="sdks/typescript web/console"
@@ -227,22 +312,62 @@ vectors-crosscheck:
     cd conformance/vectors/tools/cbor-crosscheck && go run . ../..
     target/vectors-venv/bin/python -I -c 'import cbor2' 2>/dev/null || (rm -rf target/vectors-venv && python3 -m venv target/vectors-venv && target/vectors-venv/bin/pip install --quiet cbor2==5.7.1)
     target/vectors-venv/bin/python -I conformance/vectors/tools/cbor_crosscheck.py conformance/vectors
+    target/vectors-venv/bin/python -I conformance/vectors/tools/record.py --check conformance/vectors/core/1/record.json
 
 # OP-112, CR-49 m.2
 f0:
     target/f0-venv/bin/python -I -c 'import cbor2' 2>/dev/null || (rm -rf target/f0-venv && python3 -m venv target/f0-venv && target/f0-venv/bin/pip install --quiet --require-hashes -r conformance/reference/f0/requirements.txt)
     target/f0-venv/bin/python -I conformance/reference/f0/run.py conformance/vectors
 
+# OP-119 m.3, F-2
+lean:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [[ -x "$HOME/.elan/bin/lake" ]]; then
+        PATH="$HOME/.elan/bin:$PATH"
+    elif ! command -v lake >/dev/null; then
+        PATH="$(scripts/lean-fetch.sh target/lean):$PATH"
+    fi
+    cd conformance/lean
+    lake build --wfail AccessAlgebra vectors
+    ./check-axioms.sh
+    lake exe vectors ../vectors/core/*/*.json
+
 # CR-39 m.5, SA-T13
 dudect:
     ACCESS_DUDECT=1 cargo test --locked --release -p access-crypto --test dudect -- --ignored --nocapture
 
-# OP-112 m.4
-f0-random count="10000" seed="1":
+# CR-39 m.5, SA-T13, SAI-42
+ctgrind:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [[ "$(uname -s)" != Linux ]] || ! command -v valgrind >/dev/null; then
+      echo "ctgrind needs Valgrind on Linux (CR-39 m.5); natively: cargo test --release -p access-crypto --test ctgrind" >&2
+      exit 1
+    fi
+    bin="$(cargo test --locked --release -p access-crypto --test ctgrind --no-run --message-format=json | jq -r 'select(.executable != null and .target.name == "ctgrind") | .executable')"
+    vg=(valgrind --tool=memcheck --error-exitcode=99 --track-origins=yes --quiet)
+    "${vg[@]}" "$bin" --test-threads=1
+    mkdir -p target
+    status=0
+    "${vg[@]}" "$bin" --test-threads=1 --ignored --exact control_variable_time_comparison_is_reported 2> target/ctgrind-control.log || status=$?
+    if [[ "$status" -ne 99 ]] || ! grep -q "uninitialised value" target/ctgrind-control.log; then
+      cat target/ctgrind-control.log >&2
+      echo "ctgrind: the variable-time control was not reported (exit $status); the harness is blind" >&2
+      exit 1
+    fi
+    echo "ctgrind: secret comparisons clean; the variable-time control was reported"
+
+# CR-39 m.5, SA-T13
+ct-asm *args:
+    python3 -I scripts/ct_asm.py {{args}}
+
+# OP-112 m.4, OP-119 m.6
+f0-random count="10000" seed="1" summary="":
     rm -rf target/random-vectors
     ACCESS_RANDOM_VECTORS="{{justfile_directory()}}/target/random-vectors" ACCESS_RANDOM_COUNT={{count}} ACCESS_RANDOM_SEED={{seed}} cargo test --locked -q -p esuiss-access-kernel --lib random_inputs_for_f0 -- --ignored
     target/f0-venv/bin/python -I -c 'import cbor2' 2>/dev/null || (rm -rf target/f0-venv && python3 -m venv target/f0-venv && target/f0-venv/bin/pip install --quiet --require-hashes -r conformance/reference/f0/requirements.txt)
-    target/f0-venv/bin/python -I conformance/reference/f0/run.py target/random-vectors
+    target/f0-venv/bin/python -I conformance/reference/f0/run.py target/random-vectors {{ if summary != "" { "--summary " + quote(summary) } else { "" } }}
 
 # F-14
 semgrep:

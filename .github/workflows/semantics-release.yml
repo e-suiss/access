@@ -1,0 +1,140 @@
+# OP-119 m.6, m.7, MD-15(b), OP-112 m.5, RT8, F-6, F-11
+name: Semantics release
+
+on:
+  push:
+    tags: ["f0-v*", "kernel-v*"]
+
+permissions: {}
+
+concurrency:
+  group: semantics-release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+
+jobs:
+  # OP-119 m.6: every condition must hold, or nothing is published
+  gate:
+    name: gate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read # the latest nightly DRT summary artifact
+    outputs:
+      drt-run: ${{ steps.drt.outputs.run }}
+      drt-commit: ${{ steps.drt.outputs.commit }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0 # compare the tagged commit with the commit the nightly DRT ran on
+      - uses: ./.github/actions/setup
+        with:
+          cache: "false"
+      - name: Tag names the declared version
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          case "$TAG" in
+            f0-v*)
+              declared="$(python3 -I -c 'import runpy, sys; print(runpy.run_path(sys.argv[1])["VERSION"])' conformance/reference/f0/f0/version.py)"
+              wanted="${TAG#f0-v}"
+              ;;
+            kernel-v*)
+              declared="$(cargo metadata --locked --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "esuiss-access-kernel") | .version')"
+              wanted="${TAG#kernel-v}"
+              ;;
+            *) echo "::error::unexpected tag $TAG"; exit 1 ;;
+          esac
+          if [[ "$declared" != "$wanted" ]]; then
+            echo "::error::tag $TAG but the declared version is $declared"
+            exit 1
+          fi
+      # OP-119 m.6: all vectors pass
+      - name: F0 on the vectors
+        run: just f0
+      - name: Kernel on the vectors
+        run: cargo test --locked -p esuiss-access-kernel
+      # OP-119 m.3, m.6
+      - name: Lean algebra proofs are proved
+        run: python3 -I .github/scripts/f0-drt.py lean conformance/lean/proofs.toml
+      # OP-119 m.6: the latest nightly DRT had zero mismatches over at least 10^7 inputs
+      - name: Latest nightly DRT
+        id: drt
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          run="$(gh api "repos/$REPOSITORY/actions/workflows/nightly.yml/runs?branch=main&status=completed&per_page=1" --jq '.workflow_runs[0].id // empty')"
+          if [[ -z "$run" ]]; then echo "::error::no completed nightly run on main"; exit 1; fi
+          artifact="$(gh api "repos/$REPOSITORY/actions/runs/$run/artifacts?name=f0-drt-summary" --jq '[.artifacts[] | select(.expired | not)][0].id // empty')"
+          if [[ -z "$artifact" ]]; then echo "::error::nightly run $run has no f0-drt-summary"; exit 1; fi
+          mkdir -p "$RUNNER_TEMP/drt"
+          gh api "repos/$REPOSITORY/actions/artifacts/$artifact/zip" > "$RUNNER_TEMP/drt/summary.zip"
+          unzip -o -q "$RUNNER_TEMP/drt/summary.zip" -d "$RUNNER_TEMP/drt"
+          python3 -I .github/scripts/f0-drt.py check "$RUNNER_TEMP/drt/f0-drt-summary.json"
+          commit="$(jq -r .commit "$RUNNER_TEMP/drt/f0-drt-summary.json")"
+          # the DRT counts only for the semantics it ran on
+          if ! git diff --quiet "$commit" "$GITHUB_SHA" -- crates/kernel conformance/reference/f0 conformance/vectors conformance/cddl; then
+            echo "::error::Kernel, F0 or vectors changed since the nightly DRT at $commit"
+            exit 1
+          fi
+          echo "run=$run" >> "$GITHUB_OUTPUT"
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
+
+  # OP-119 m.7, F-6, F-11
+  publish:
+    name: publish
+    needs: gate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write # create the GitHub release
+      id-token: write # Sigstore signing of the attestation (F-6)
+      attestations: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Archives and checksums
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          mkdir -p dist
+          core="$(python3 -I -c 'import runpy, sys; print(runpy.run_path(sys.argv[1])["CORE_VERSION"])' conformance/reference/f0/f0/version.py)"
+          # git archive is deterministic for a commit; gzip -n drops the timestamp
+          git archive --format=tar --prefix="access-f0-$TAG/" "$GITHUB_SHA" \
+            conformance/reference/f0 LICENSE | gzip -n -9 > "dist/access-f0-$TAG.tar.gz"
+          git archive --format=tar --prefix="access-vectors-$TAG/" "$GITHUB_SHA" \
+            conformance/vectors conformance/cddl conformance/README.md LICENSE | gzip -n -9 > "dist/access-vectors-core-$core-$TAG.tar.gz"
+          (cd dist && sha256sum -- *.tar.gz > SHA256SUMS)
+          cat dist/SHA256SUMS
+      - name: Build provenance (F-6)
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-checksums: dist/SHA256SUMS
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          DRT_RUN: ${{ needs.gate.outputs.drt-run }}
+          DRT_COMMIT: ${{ needs.gate.outputs.drt-commit }}
+          SERVER_URL: ${{ github.server_url }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          {
+            echo "Released after the semantic version gate: every vector passes in the Kernel and in F0,"
+            echo "the Lean algebra proofs are proved, and nightly run [$DRT_RUN]($SERVER_URL/$REPOSITORY/actions/runs/$DRT_RUN)"
+            echo "compared the Kernel and F0 on at least 10^7 random inputs at \`$DRT_COMMIT\` with no difference."
+            echo
+            echo "Verify an archive with \`sha256sum -c SHA256SUMS\` and \`gh attestation verify <file> --repo $REPOSITORY\`."
+            echo
+            echo '```'
+            cat dist/SHA256SUMS
+            echo '```'
+          } > "$RUNNER_TEMP/notes.md"
+          gh release create "$TAG" dist/* --verify-tag --title "$TAG" --notes-file "$RUNNER_TEMP/notes.md"
