@@ -5,6 +5,8 @@ use secrecy::{ExposeSecret, SecretBox};
 use subtle::ConstantTimeEq;
 use zeroize::Zeroize;
 
+use crate::dit::DitGuard;
+
 /// A secret value. Read it only through [`Secret::expose`], at the point of use.
 pub struct Secret<T: Zeroize> {
     inner: SecretBox<T>,
@@ -29,6 +31,7 @@ impl<const N: usize> Secret<[u8; N]> {
     /// Constant-time equality; only fixed-length secrets are compared (CR-39 m.2, m.3).
     #[must_use]
     pub fn ct_eq(&self, other: &Self) -> bool {
+        let _dit = DitGuard::new();
         self.expose().ct_eq(other.expose()).into()
     }
 
@@ -36,6 +39,7 @@ impl<const N: usize> Secret<[u8; N]> {
     /// is unequal; the length is public (CR-39 m.3).
     #[must_use]
     pub fn ct_eq_bytes(&self, candidate: &[u8]) -> bool {
+        let _dit = DitGuard::new();
         <&[u8; N]>::try_from(candidate).is_ok_and(|c| bool::from(self.expose().ct_eq(c)))
     }
 }

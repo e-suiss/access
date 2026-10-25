@@ -241,13 +241,16 @@ pub(crate) fn test_regions(code: &str) -> Vec<(usize, usize)> {
 }
 
 /// Finds the end of the item starting at `from`: the matching `}` of its first
-/// brace block, or the first `;` if that comes first.
+/// brace block, or the first `;` outside parentheses and brackets if that comes first.
 fn item_end(chars: &[char], from: usize) -> usize {
     let mut depth = 0_usize;
+    let mut nested = 0_usize;
     let mut i = from;
     while let Some(&c) = chars.get(i) {
         match c {
-            ';' if depth == 0 => return i,
+            '(' | '[' if depth == 0 => nested = nested.saturating_add(1),
+            ')' | ']' if depth == 0 => nested = nested.saturating_sub(1),
+            ';' if depth == 0 && nested == 0 => return i,
             '{' => depth = depth.saturating_add(1),
             '}' => {
                 depth = depth.saturating_sub(1);

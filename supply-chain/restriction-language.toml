@@ -1,0 +1,7 @@
+# INV-36, OP-119 m.8: the RestrictionPolicy language version and the cedar-policy release
+# it is bound to. `cargo xtask check restriction-language` fails when Cargo.lock or the
+# workspace pin differs. Changing either value is a semantic version change and passes the
+# release gate (OP-119 m.6, MD-15(b)).
+
+version = 1
+cedar-policy = "4.13.0"

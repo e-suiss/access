@@ -111,6 +111,33 @@ deny = [
     { crate = "rio", reason = "SA-22" },
     { crate = "glommio", reason = "SA-22" },
     { crate = "monoio", reason = "SA-22" },
+    # CR-13, CR-54: aws-lc-rs on the server, ed25519-dalek and p256 in the Kernel
+    { crate = "ring-compat", reason = "CR-13: aws-lc-rs only" },
+    { crate = "boring", reason = "CR-13: aws-lc-rs only" },
+    { crate = "boring-sys", reason = "CR-13: aws-lc-rs only" },
+    { crate = "native-tls", reason = "CR-13, CR-12: rustls with aws-lc-rs only" },
+    { crate = "mbedtls", reason = "CR-13: aws-lc-rs only" },
+    { crate = "wolfssl", reason = "CR-13: aws-lc-rs only" },
+    { crate = "botan", reason = "CR-13: aws-lc-rs only" },
+    { crate = "sodiumoxide", reason = "CR-13: aws-lc-rs only" },
+    { crate = "libsodium-sys", reason = "CR-13: aws-lc-rs only" },
+    { crate = "orion", reason = "CR-13: aws-lc-rs only" },
+    { crate = "ed25519-compact", reason = "CR-54: one Ed25519 acceptance set (CR-53)" },
+    { crate = "ed25519-zebra", reason = "CR-54, CR-11: ZIP-215 acceptance and batch verification" },
+    # CR-3: HMAC only for keyed derivation; RFC 6979 nonces are one
+    { crate = "hmac", wrappers = ["rfc6979"], reason = "CR-3, CR-13: HMAC comes from aws-lc-rs" },
+    # §9.7A.7: no external authorization engine
+    { crate = "openfga-rs", reason = "§9.7A.7" },
+    { crate = "openfga-client", reason = "§9.7A.7" },
+    { crate = "spicedb-client", reason = "§9.7A.7" },
+    { crate = "spicedb-rust", reason = "§9.7A.7" },
+    { crate = "authzed", reason = "§9.7A.7" },
+    { crate = "ory-keto-client", reason = "§9.7A.7" },
+    { crate = "casbin", reason = "§9.7A.7" },
+    { crate = "oso", reason = "§9.7A.7" },
+    { crate = "polar-core", reason = "§9.7A.7" },
+    { crate = "regorus", reason = "§9.7A.7" },
+    { crate = "burrego", reason = "§9.7A.7" },
     # SA-32
     { crate = "fancy-regex", reason = "SA-32: backtracking" },
     { crate = "pcre2", reason = "SA-32: backtracking" },
@@ -122,6 +149,11 @@ deny = [
 [[bans.features]]
 crate = "jsonwebtoken"
 deny = ["rust_crypto"]
+
+# CR-11
+[[bans.features]]
+crate = "ed25519-dalek"
+deny = ["batch"]
 
 [[bans.features]]
 crate = "serde_json"

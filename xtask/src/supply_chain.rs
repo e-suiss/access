@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 
 use crate::rules::files::{read, rel, walk};
 use crate::{Check, Violation};
-use cooldown::parse_lock;
+pub(crate) use cooldown::parse_lock;
 
 pub(crate) fn checks() -> Vec<Check> {
     vec![

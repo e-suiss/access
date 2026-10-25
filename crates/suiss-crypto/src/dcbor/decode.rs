@@ -144,7 +144,7 @@ impl<'a> Reader<'a> {
             4 => {
                 let n = Self::len(value, self.limits.items, DecodeError::Items)?;
                 let inner = self.enter(depth)?;
-                let mut items = Vec::with_capacity(n);
+                let mut items = Vec::new();
                 for _ in 0..n {
                     items.push(self.item(inner)?);
                 }
@@ -153,7 +153,7 @@ impl<'a> Reader<'a> {
             5 => {
                 let n = Self::len(value, self.limits.items, DecodeError::Items)?;
                 let inner = self.enter(depth)?;
-                let mut entries = Vec::with_capacity(n);
+                let mut entries = Vec::new();
                 let mut previous: Option<&'a [u8]> = None;
                 for _ in 0..n {
                     let start = self.pos;
