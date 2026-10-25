@@ -29,6 +29,14 @@ use access_kernel::{API_VERSION, ApiVersion};
 #[cfg(target_os = "linux")]
 use gungraun::{library_benchmark, library_benchmark_group, main};
 
+/// Drops a bench input outside the measured region, so the free cost of the fixture's heap
+/// layout is not counted (OP-72).
+#[cfg(target_os = "linux")]
+fn release<T>(out: (bool, T)) {
+    black_box(out.0);
+    drop(out.1);
+}
+
 #[cfg(target_os = "linux")]
 #[library_benchmark]
 fn api_version_compare() -> bool {
@@ -45,19 +53,25 @@ fn decode_canonical_authority(bytes: Vec<u8>) -> bool {
 
 #[cfg(target_os = "linux")]
 #[library_benchmark]
-#[bench::full(fixtures::authority())]
-fn subsumes_self(a: Option<CanonicalAuthority>) -> bool {
+#[bench::full(args = (fixtures::authority()), teardown = release)]
+fn subsumes_self(a: Option<CanonicalAuthority>) -> (bool, Option<CanonicalAuthority>) {
     let cat = Catalog::default();
-    a.is_some_and(|a| subsumes(black_box(&a.authority), black_box(&a.authority), &cat))
+    let ok = a
+        .as_ref()
+        .is_some_and(|a| subsumes(black_box(&a.authority), black_box(&a.authority), &cat));
+    (ok, a)
 }
 
 #[cfg(target_os = "linux")]
 #[library_benchmark]
-#[bench::allow(fixtures::decision_input("allow"))]
-#[bench::require(fixtures::decision_input("require-step-up"))]
-#[bench::deny(fixtures::decision_input("deny-overrides-require"))]
-fn evaluate_decision(input: Option<OwnedInput>) -> bool {
-    input.is_some_and(|i| evaluate(black_box(&i.input()), &mut Fuel(10_000)).is_ok())
+#[bench::allow(args = (fixtures::decision_input("allow")), teardown = release)]
+#[bench::require(args = (fixtures::decision_input("require-step-up")), teardown = release)]
+#[bench::deny(args = (fixtures::decision_input("deny-overrides-require")), teardown = release)]
+fn evaluate_decision(input: Option<OwnedInput>) -> (bool, Option<OwnedInput>) {
+    let ok = input
+        .as_ref()
+        .is_some_and(|i| evaluate(black_box(&i.input()), &mut Fuel(10_000)).is_ok());
+    (ok, input)
 }
 
 #[cfg(target_os = "linux")]
