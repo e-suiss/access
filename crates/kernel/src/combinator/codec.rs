@@ -12,8 +12,8 @@ use super::{
 };
 use crate::algebra::Catalog;
 use crate::codec::{
-    Canonical, Fields, ModelError, PROOF_KINDS, ident, map, map_value, opt_param_map, set_items,
-    set_of, set_value, single, tagged, text, uint, word, word_of,
+    Canonical, Fields, ModelError, PROOF_KINDS, Stored, assurance, ident, map, map_value,
+    set_items, set_of, set_value, single, tagged, text, uint, word, word_of,
 };
 use crate::digest::Digest;
 use crate::intent::IntentEnvelope;
@@ -205,13 +205,33 @@ impl Canonical for Hop {
     }
 }
 
+// OP-118 m.2
+fn stored_hop_value(h: &Stored<Hop>) -> Value {
+    match h {
+        Stored::Known(h) => h.to_value(),
+        Stored::NotUnderstood => map([("not_understood", Some(Value::Bool(true)))]),
+    }
+}
+
+fn stored_hop(v: &Value) -> Result<Stored<Hop>, ModelError> {
+    let mut f = Fields::of(v)?;
+    match f.opt("not_understood") {
+        None => Hop::from_value(v).map(Stored::Known),
+        Some(Value::Bool(true)) => {
+            f.done()?;
+            Ok(Stored::NotUnderstood)
+        }
+        Some(_) => Err(ModelError::Range),
+    }
+}
+
 impl Canonical for Basis {
     fn to_value(&self) -> Value {
         map([
             (
                 "hops",
                 Some(Value::Array(
-                    self.hops.iter().map(Canonical::to_value).collect(),
+                    self.hops.iter().map(stored_hop_value).collect(),
                 )),
             ),
             (
@@ -232,7 +252,7 @@ impl Canonical for Basis {
             return Err(ModelError::Range);
         }
         let b = Basis {
-            hops: hops.iter().map(Hop::from_value).collect::<Result<_, _>>()?,
+            hops: hops.iter().map(stored_hop).collect::<Result<_, _>>()?,
             capacities: set_of(f.req("capacities")?, true, capacity)?,
         };
         f.done()?;
@@ -378,7 +398,7 @@ impl Canonical for Proof {
                     .map(ResourceRef::from_value)
                     .transpose()?,
             },
-            assurance: opt_param_map(f.opt("assurance"), uint)?,
+            assurance: assurance(f.opt("assurance"))?,
             consumed: match f.opt("consumed") {
                 None => false,
                 Some(Value::Bool(true)) => true,

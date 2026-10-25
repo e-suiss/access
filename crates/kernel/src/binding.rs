@@ -116,7 +116,7 @@ pub enum Kind {
     Audience,
     /// `expired` (claims, validity).
     Expired,
-    /// `not yet valid`.
+    /// `not yet valid` (claims); `not-yet-valid` (validity).
     NotYetValid,
     /// `bad time claim`.
     Time,
@@ -246,7 +246,7 @@ const fn sd_jwt_kind(e: SdJwtError) -> Kind {
         SdJwtError::Collision => Kind::Collision,
         SdJwtError::KeyBinding => Kind::KeyBinding,
         SdJwtError::ConfirmationKey => Kind::ConfirmationKey,
-        SdJwtError::Claims(c) => claim_kind(c),
+        SdJwtError::Claims(c) | SdJwtError::IssuerClaims(c) => claim_kind(c),
     }
 }
 
@@ -254,6 +254,7 @@ const fn validity_name(e: ValidityError) -> &'static str {
     match e {
         ValidityError::Overflow => "overflow",
         ValidityError::Expired => "expired",
+        ValidityError::NotYetValid => "not-yet-valid",
         ValidityError::Audience => "audience",
         ValidityError::MustUnderstand => "must-understand",
         ValidityError::Stale => "stale",
@@ -265,6 +266,7 @@ const fn validity_kind(e: ValidityError) -> Kind {
     match e {
         ValidityError::Overflow => Kind::Overflow,
         ValidityError::Expired => Kind::Expired,
+        ValidityError::NotYetValid => Kind::NotYetValid,
         ValidityError::Audience => Kind::Audience,
         ValidityError::MustUnderstand => Kind::MustUnderstand,
         ValidityError::Stale => Kind::Stale,
@@ -502,10 +504,12 @@ pub fn verify_sd_jwt(
     Ok(out)
 }
 
-/// Checks a `validity-contract` at the moment of use (§9.12).
+/// Checks a `validity-contract` at the moment of use (§9.12). `iat` is the carrying artefact's
+/// signing time and `horizon_cap_ms` the effective horizon ceiling (OP-118 m.4).
 ///
 /// # Errors
 /// `input` or a validity name.
+#[allow(clippy::too_many_arguments, reason = "OP-116 m.9")]
 pub fn check_validity(
     contract: &[u8],
     now: TrustedTime,
@@ -514,6 +518,8 @@ pub fn check_validity(
     last_refresh: Option<TrustedTime>,
     online: bool,
     skew_ms: u64,
+    iat: TrustedTime,
+    horizon_cap_ms: u64,
 ) -> Result<(), Error> {
     let contract: ValidityContract = decode(contract)?;
     let understood: BTreeSet<String> = understood.into_iter().collect();
@@ -524,6 +530,8 @@ pub fn check_validity(
         last_refresh,
         online,
         skew_ms,
+        iat,
+        horizon_cap_ms,
     };
     validity::check(&contract, &ctx).map_err(Error::Validity)
 }

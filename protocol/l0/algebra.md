@@ -23,13 +23,13 @@ All comparisons are syntactic. No rule here calls out to a policy engine, a data
 - in new input, is rejected when the input is decoded ([L0-ENC-9](encoding.md#L0-ENC-9));
 - in a stored or external artifact, is read as unknown, and an unknown element is never covered: a bound, selector or condition the reader does not understand makes the value that contains it cover nothing.
 
-> **OPEN (O-13):** How is a stored authority that contains an unknown element represented in an evaluation input? The current data model has no form for it.
+<a id="L0-ALG-4a"></a>**L0-ALG-4a. Stored authority in an evaluation input.** When the layer that reads a stored Grant does not understand one of its elements, the hop is written in the evaluation input as exactly `{not_understood: true}`, with no other field. Such a hop covers nothing ([L0-EVAL-12a](evaluation.md#L0-EVAL-12a)). The hop is never dropped from the basis.
 
 <a id="L0-ALG-5"></a>**L0-ALG-5. Required properties.** For every type in this part an implementation MUST satisfy:
 
 - `⊑` is sound: if `c ⊑ p`, then every concrete value allowed by `c` is allowed by `p`;
-- `⊑` is reflexive and transitive;
-- `a ∩ b` is the greatest lower bound of `a` and `b` under `⊑`;
+- `⊑` is reflexive on every well-formed value (unique parameter keys, valid time windows) and transitive;
+- `a ∩ b` is the greatest lower bound of `a` and `b` under `⊑`, up to coverage: a value that covers nothing is equivalent to `⊥`;
 - `normalize` is idempotent, and `normalize(v)` allows exactly what `v` allows;
 - all three operations terminate.
 
@@ -84,7 +84,7 @@ If the value type does not match the bound type, the value is not within the bou
 
 Vectors: [`core/1/cve-regressions.json`](../../conformance/vectors/core/1/cve-regressions.json), `combinator.evaluate`: `prefix-current-catalog`, `prefix-old-catalog`.
 
-<a id="L0-ALG-32"></a>**L0-ALG-32. Unknown catalog.** If a prefix names a catalog digest that is not present in the input catalog, then: on the covering side (the parent, or the authority checked against an intent) the prefix covers nothing; on the covered side (the child) the subsumption check fails. In `∩`, a prefix with an unknown catalog covers nothing on either side.
+<a id="L0-ALG-32"></a>**L0-ALG-32. Unknown catalog.** If a prefix names a catalog digest that is not present in the input catalog, then: on the covering side (the parent, or the authority checked against an intent) the prefix covers nothing. The same holds on the covered side (the child): the prefix covers nothing, so it adds nothing that the parent must cover and never widens the child. In `∩`, a prefix with an unknown catalog covers nothing on either side.
 
 <a id="L0-ALG-33"></a>**L0-ALG-33. Action sets.** The actions an action set covers are its `exact` actions together with the actions each `prefix` resolves to under [L0-ALG-31](#L0-ALG-31). Reserved actions are covered only by `exact`. For action sets `c` and `p`, `c ⊑ p` holds when every action covered by `c` (its own prefixes resolved in their own pinned catalogs) is covered by `p`. `c ∩ p` covers exactly the actions covered by both. It is written as the resolved exact actions in `exact`, with no `prefix`.
 
@@ -147,7 +147,7 @@ An `authority-set` has five dimensions: `actions`, `resource`, `params`, `recipi
 
 <a id="L0-ALG-51"></a>**L0-ALG-51. Authority `∩`.** The intersection is taken dimension by dimension. A parameter, recipient or purpose bounded on one side only keeps that side's bound. If any dimension intersects to `⊥`, or no action is covered by both sides, the whole result is `⊥`. The result is normalized.
 
-<a id="L0-ALG-52"></a>**L0-ALG-52. Authority `normalize`.** Sets are sorted and unique; each bound is normalized; a `⊥` in any dimension makes the whole value `⊥`; unbounded dimensions are not written.
+<a id="L0-ALG-52"></a>**L0-ALG-52. Authority `normalize`.** Sets are sorted and unique; each bound is normalized; a `⊥` in any dimension makes the whole value `⊥`; unbounded dimensions are not written. A `public` recipient and a `public` subject bound are unbounded ([L0-EVAL-10](evaluation.md#L0-EVAL-10)) and are not written. Only an action set with neither `exact` nor `prefix` is written as `⊥`; an action set whose prefixes resolve to no action covers nothing but keeps its form.
 
 ## 8. Constraints, delegation and requirements
 
@@ -171,9 +171,23 @@ An `authority-set` has five dimensions: `actions`, `resource`, `params`, `recipi
 | `source` | subject selector of accepted issuers | any issuer |
 | `assurance` | map from dimension to minimum level | no floor |
 
-<a id="L0-ALG-60"></a>**L0-ALG-60. Assurance.** Each assurance dimension is a closed, ordered list of levels, written as integers; a higher integer is a stronger level.
+<a id="L0-ALG-60"></a>**L0-ALG-60. Assurance.** Each assurance dimension is a closed, ordered list of levels, written as integers. The set of dimensions is closed:
 
-> **OPEN (O-14):** Which assurance dimensions exist, and what is the ordered list of each? This version names only `human_presence`.
+| Dimension | Levels | Stronger level |
+|---|---|---|
+| `aal` | 1 to 3 (AAL1 to AAL3) | higher |
+| `loa_eidas` | 1 = low, 2 = substantial, 3 = high | higher |
+| `phishing_resistant` | 0 or 1 | higher |
+| `hardware_bound` | 0 or 1 | higher |
+| `non_custodial` | 0 or 1 | higher |
+| `uv` | 0 or 1 | higher |
+| `human_presence` | 0 or 1 | higher |
+| `app_controlled_factor` | 0 or 1 | higher |
+| `synced` | 0 or 1 | lower: a key that is not synced is the stronger one |
+
+<a id="L0-ALG-60a"></a>**L0-ALG-60a. Unknown dimension or level.** A dimension that is not in the table of [L0-ALG-60](#L0-ALG-60), or a level outside the dimension's range, in a requirement term or in a proof, is not a value of the data model. In an evaluation input it is an `input` rejection ([L0-EVAL-3](evaluation.md#L0-EVAL-3)).
+
+<a id="L0-ALG-60b"></a>**L0-ALG-60b. Authentication time.** `auth_time` is not an assurance dimension. How recent a proof must be is expressed by the term's `freshness_ms` and checked against the proof's `time` ([L0-EVAL-24](evaluation.md#L0-EVAL-24)).
 
 <a id="L0-ALG-61"></a>**L0-ALG-61. Requirement sets.** A requirement set `c` is at least as strict as `p` when every term of `p` appears in `c` with an identical encoding. There is no semantic ordering of terms.
 

@@ -7,12 +7,13 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 use crate::algebra::Catalog;
+use crate::codec::Stored;
 use crate::digest::Digest;
 use crate::intent::{IntentEnvelope, covers};
 use crate::model::{
     AuthoritySet, BudgetWindow, CanonicalAuthority, Id, RequirementTerm, TrustedTime,
 };
-use crate::requirement::{self, HUMAN_PRESENCE, Outcome as TermOutcome, Proof};
+use crate::requirement::{self, HUMAN_PRESENCE, Outcome as TermOutcome, Proof, check_assurance};
 use crate::restriction::RestrictionOutcome;
 
 /// Step budget (OP-108 m.11, OP-111 m.7).
@@ -107,8 +108,9 @@ pub struct Hop {
 /// A candidate basis: hops from the basis grant to the root, and the capacities its agency terms allow.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Basis {
-    /// Hops; never empty.
-    pub hops: Vec<Hop>,
+    /// Hops; never empty. A stored grant the reading layer did not understand covers nothing
+    /// (OP-108 m.4, OP-118 m.2).
+    pub hops: Vec<Stored<Hop>>,
     /// Allowed capacities.
     pub capacities: BTreeSet<Capacity>,
 }
@@ -457,6 +459,17 @@ fn evaluate_basis(
     for (k, hop) in basis.hops.iter().enumerate() {
         fuel.spend(1)?;
         let k = u64::try_from(k).map_err(|_| Rejection::Input)?;
+        let Stored::Known(hop) = hop else {
+            // OP-118 m.2
+            blockers.push(blocker(
+                BlockerClass::NoCoveringAuthority,
+                None,
+                Position::Hop(k),
+                Resolver::GrantorOfHop(k),
+                Remediation::RouteToCoordinator,
+            ));
+            continue;
+        };
         hop_blockers(k, hop, input, &mut blockers)?;
         terms.extend(
             hop.authority
@@ -535,6 +548,35 @@ fn evaluate_basis(
     })
 }
 
+fn known_hops(basis: &Basis) -> impl Iterator<Item = &Hop> {
+    basis.hops.iter().filter_map(|h| match h {
+        Stored::Known(h) => Some(h),
+        Stored::NotUnderstood => None,
+    })
+}
+
+fn assurance_known(input: &EvaluationInput<'_>) -> bool {
+    let hops = input
+        .bases
+        .iter()
+        .flat_map(known_hops)
+        .flat_map(|h| &h.authority.requirements);
+    let mandate = input.mandate.into_iter().flat_map(|m| &m.requirements);
+    let restrictions = input
+        .restrictions
+        .iter()
+        .filter_map(|r| match &r.outcome {
+            RestrictionOutcome::Require(t) => Some(t),
+            RestrictionOutcome::NoObjection | RestrictionOutcome::Deny(_) => None,
+        })
+        .flatten();
+    hops.chain(mandate)
+        .chain(restrictions)
+        .map(|t| &t.assurance)
+        .chain(input.proofs.iter().map(|p| &p.assurance))
+        .all(|a| check_assurance(a).is_ok())
+}
+
 fn policy_subcode(policy: &Id) -> String {
     let mut s = String::from("restricted/policy:");
     s.push_str(&crate::json::b64url_encode(&policy.0));
@@ -556,6 +598,10 @@ pub fn evaluate(input: &EvaluationInput<'_>, fuel: &mut Fuel) -> Result<Decision
     if ids.len() != input.proofs.len() {
         return Err(Rejection::Input);
     }
+    // OP-118 m.3
+    if !assurance_known(input) {
+        return Err(Rejection::Input);
+    }
     // OP-114 m.11
     let unresettable = |b: &BudgetState| {
         matches!(b.window, BudgetWindow::RollingSeconds(_))
@@ -565,7 +611,7 @@ pub fn evaluate(input: &EvaluationInput<'_>, fuel: &mut Fuel) -> Result<Decision
     if input
         .bases
         .iter()
-        .flat_map(|basis| &basis.hops)
+        .flat_map(known_hops)
         .flat_map(|hop| &hop.budgets)
         .any(unresettable)
     {

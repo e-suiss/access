@@ -150,9 +150,25 @@ Within the `cbor` step, the decoder reads the bytes in order and reports the fir
 
 Vectors: [`core/1/jose-attack-classes.json`](../../conformance/vectors/core/1/jose-attack-classes.json), operation `verify.jws_compact`. The file gives the expected `typ` and a key set mapping base64url `kid` to the base64url public key. Each case names the attack-class row it covers.
 
-<a id="L0-SIG-41"></a>**L0-SIG-41. Claims.** A JWT-carried authority artifact MUST contain `iss`, `aud` and `exp`. If `nbf` or `iat` is present it is checked. Current vectors do not exercise this rule.
+<a id="L0-SIG-41"></a>**L0-SIG-41. Claims.** A JWT-carried authority artifact MUST contain `iss`, `aud` and `exp`. `iss` MUST equal the expected issuer. `aud` is a string equal to this verifier, or a non-empty array that contains it. If `nbf` or `iat` is present it is checked ([L0-SIG-41a](#L0-SIG-41a)): each MUST satisfy `t × 1000 ≤ now + skew_ms`.
 
-<a id="L0-SIG-41a"></a>**L0-SIG-41a. JWT times.** JWT NumericDate values are in seconds. They are compared in milliseconds: the verifier multiplies the value by 1000, with checked arithmetic, and compares the result with `now` and the full `skew_ms` of the artifact class ([L0-VAL-14](validity.md#L0-VAL-14)). So `exp` is accepted while `now ≤ exp × 1000 + skew_ms`.
+<a id="L0-SIG-41a"></a>**L0-SIG-41a. JWT times.** JWT NumericDate values are in seconds. They are compared in milliseconds: the verifier multiplies the value by 1000, with checked arithmetic, and compares the result with `now` and the full `skew_ms` of the artifact class ([L0-VAL-14](validity.md#L0-VAL-14)). So `exp` is accepted while `now ≤ exp × 1000 + skew_ms`; the bound is inclusive. A negative `exp`, `nbf` or `iat` is `bad time claim`, because TrustedTime is unsigned.
+
+<a id="L0-SIG-41b"></a>**L0-SIG-41b. Claim reason codes.** The claim checks run in this order and the first failure is the result: `iss` (`issuer`), `aud` (`audience`), `exp` (`expired`, also when absent), `nbf` then `iat` (`not yet valid`). A time claim that is not an integer, or whose conversion overflows, is `bad time claim`. A payload that breaks the strict JSON profile is `payload: <JSON reason>`, where the JSON reasons are `input too large`, `nesting too deep`, `invalid UTF-8`, `syntax error`, `number not allowed` and `duplicate member`.
+
+| Expected | Cases |
+|---|---|
+| `accept` | `valid`, `exp-edge-inclusive`, `nbf-edge`, `iat-edge`, `aud-array-contains`, `json-depth-32` |
+| `reject: expired` | `exp-past`, `exp-missing` |
+| `reject: bad time claim` | `exp-not-integer`, `exp-overflow`, `exp-negative`, `nbf-negative`, `iat-negative` |
+| `reject: payload: number not allowed` | `exp-fraction` |
+| `reject: not yet valid` | `nbf-future`, `iat-future` |
+| `reject: issuer` | `iss-other`, `iss-missing` |
+| `reject: audience` | `aud-other`, `aud-empty-array`, `aud-missing` |
+| `reject: payload: nesting too deep` | `json-depth-33` |
+| `reject: payload: duplicate member` | `json-duplicate-member` |
+
+Vectors: [`core/1/jwt-claims.json`](../../conformance/vectors/core/1/jwt-claims.json), operation `verify.jws_compact`. The file gives `claims` (expected issuer, audience, `now` and `skew_ms`); a case that gives its own `claims` uses those instead.
 
 <a id="L0-SIG-42"></a>**L0-SIG-42. Attack classes.** Each of these attack classes MUST be rejected: `alg: none`; algorithm confusion (a public key used as an HMAC secret); a header `alg` choosing the accepted set; key type and algorithm mismatch; an embedded `jwk`; `jku` or `x5u` key URLs; an unanchored `x5c` chain; `kid` injection; an unknown `crit` extension; `b64: false`; an off-curve or non-canonical public key; ECDSA `r` or `s` equal to 0 or not less than `n`; DER or wrong-length ECDSA signatures; non-canonical or small-order Ed25519 values; JWE and nested JWT confusion; token type confusion; missing `iss`, `aud` or time claims; parser differentials (duplicate members, non-canonical base64url, invalid UTF-8).
 
@@ -167,7 +183,29 @@ Vectors: [`core/1/jose-attack-classes.json`](../../conformance/vectors/core/1/jo
 - an artifact bound to a holder MUST carry a Key Binding JWT, verified by RFC 9901 and [§3](#3-jws-compact);
 - each artifact kind has its own `typ`.
 
-Third-party vectors: [`vectors/external/rfc9901-disclosures.json`](../../conformance/vectors/external/rfc9901-disclosures.json). No core vector file exists yet.
+<a id="L0-SIG-51"></a>**L0-SIG-51. Issuer JWT claims.** The issuer-signed JWT MUST contain `iss` (a string) and `exp`. `exp`, `nbf` and `iat` are checked as in [L0-SIG-41a](#L0-SIG-41a). The issuer JWT needs no `aud`; the audience is bound by the Key Binding JWT's `aud`. A failure is `issuer claims: <claim reason>` ([L0-SIG-41b](#L0-SIG-41b)). These checks run on the issuer payload before any disclosure is applied.
+
+<a id="L0-SIG-52"></a>**L0-SIG-52. Key Binding JWT.** The Key Binding JWT has `typ` `kb+jwt` and no `kid`; it is verified with the `cnf.jwk` key of the issuer payload. Its `aud` MUST equal this verifier (`key binding claims: audience`), and its `nonce` and `sd_hash` MUST match (`key binding mismatch`). Its `iat` MUST lie in `[now − 300000, now + skew_ms]` (milliseconds; a window of 300 seconds), both ends included, with `iat` converted to milliseconds: an older `iat` is `key binding claims: expired`, a later one is `key binding claims: not yet valid`. The 300-second window is a provisional default.
+
+<a id="L0-SIG-53"></a>**L0-SIG-53. SD-JWT reason codes.**
+
+| Result | Meaning | Cases |
+|---|---|---|
+| `claims` | The disclosed claims, as JSON | `valid-all-disclosed`, `valid-partial`, `valid-holder-bound`, `kb-iat-oldest-edge`, `kb-iat-future-edge`, `issuer-exp-edge`, `issuer-aud-not-required` |
+| `not an SD-JWT presentation` | Not `<jwt>~<disclosure>~…~[<kb-jwt>]`, or too large | `not-a-presentation` |
+| `jws: <reason>` | Issuer JWT or Key Binding JWT rejected by [§3](#3-jws-compact) | |
+| `json: <JSON reason>` | Payload or a disclosure breaks the strict JSON profile | `disclosure-json-depth-33` |
+| `hash algorithm not allowed` | `_sd_alg` other than `sha-256` | `hash-alg-sha512` |
+| `malformed disclosure` | Malformed disclosure or `_sd` structure | `malformed-disclosure` |
+| `duplicate disclosure` | A disclosure presented or referenced twice | `duplicate-disclosure` |
+| `unreferenced disclosure` | A presented disclosure the payload does not reference | `unreferenced-disclosure` |
+| `claim name collision` | A disclosure would overwrite a claim | `claim-collision` |
+| `key binding mismatch` | Key Binding JWT missing, unexpected, or with a wrong `nonce` or `sd_hash` | `kb-missing`, `kb-unexpected`, `kb-wrong-nonce`, `kb-wrong-sd-hash` |
+| `bad confirmation key` | `cnf.jwk` is not an accepted key | |
+| `key binding claims: <claim reason>` | [L0-SIG-52](#L0-SIG-52) | `kb-wrong-audience`, `kb-iat-too-old`, `kb-iat-future` |
+| `issuer claims: <claim reason>` | [L0-SIG-51](#L0-SIG-51) | `issuer-iss-missing`, `issuer-exp-missing`, `issuer-expired`, `issuer-nbf-future`, `issuer-iat-future` |
+
+Vectors: [`core/1/sd-jwt.json`](../../conformance/vectors/core/1/sd-jwt.json), operation `verify.sd_jwt`. The file gives the issuer key set and the `context` (expected `typ`, audience, nonce, `now`, `skew_ms`). Third-party vectors: [`vectors/external/rfc9901-disclosures.json`](../../conformance/vectors/external/rfc9901-disclosures.json).
 
 ## 5. Operational key scope
 
@@ -183,7 +221,7 @@ A domain has one or more binding keys. Binding keys sign the Domain Metadata and
 | `usage` | The usage the artifact needs |
 | `iat` | The artifact's signing time |
 
-<a id="L0-SIG-60"></a>**L0-SIG-60. Metadata fields.** The verifier reads these authority fields of Domain Metadata: `domain`, `genesis`, `issued_at`, `binding` (each binding key's `kid`, `alg`, `key`, `scope` and optional `superseded`), `algorithms` (the single allowlist), `operational_window_max_ms` (at most 24 hours), `operational_keys`, `min_versions`, and optional `caps` and `hybrid`. `discovery` is opaque bytes and has no authority meaning.
+<a id="L0-SIG-60"></a>**L0-SIG-60. Metadata fields.** The verifier reads these authority fields of Domain Metadata: `domain`, `genesis`, `issued_at`, `binding` (each binding key's `kid`, `alg`, `key`, `scope` and optional `superseded`), `algorithms` (the single allowlist), `operational_window_max_ms` (at most 24 hours), `operational_keys`, `min_versions`, `adopted` (the spec versions the domain has adopted; a verifier reads adoption only from here), and optional `caps` and `hybrid`. `discovery` is opaque bytes and has no authority meaning.
 
 <a id="L0-SIG-61"></a>**L0-SIG-61. Signers.** Only a binding key signs Domain Metadata and key excerpts. The excerpt's content type is `application/access-key-excerpt+cbor`; Domain Metadata uses `application/access-domain-metadata+cbor`.
 
@@ -225,7 +263,7 @@ Vector: `excerpt-domain-mismatch`.
 
 Vector: `kid-not-thumbprint`.
 
-<a id="L0-SIG-68"></a>**L0-SIG-68. Step 6: algorithm.** The excerpt key's `alg` MUST be in the metadata `algorithms` and MUST match the key type ([L0-SIG-7](#L0-SIG-7)) (reason `algorithm`).
+<a id="L0-SIG-68"></a>**L0-SIG-68. Step 6: algorithm.** The excerpt key's `alg` MUST be in the metadata `algorithms` and MUST match the key type ([L0-SIG-7](#L0-SIG-7)), and the metadata `hybrid` policy MUST be one this verifier can satisfy ([L0-SIG-75a](#L0-SIG-75a)) (reason `algorithm`).
 
 Vectors: `alg-not-allowed`, `alg-key-type-mismatch`, `alg-es256-on-ed25519-key`.
 
@@ -243,10 +281,20 @@ Vectors: `valid-window-start`, `valid-window-end`, `iat-before-window`, `iat-aft
 
 <a id="L0-SIG-72"></a>**L0-SIG-72. Checked arithmetic.** All arithmetic in this section is checked ([L0-ENC-7](encoding.md#L0-ENC-7)); an overflow is a rejection.
 
-Vectors for this section: [`core/1/key-scope.json`](../../conformance/vectors/core/1/key-scope.json), operation `key_scope.operational_key`. Each case gives the metadata payload, the artifact domain, the excerpt, the usage and `iat`, and either the expected operational key or the expected reason. Valid cases: `valid-ed25519`, `valid-esp256`, `valid-window-start`, `valid-window-end`, `valid-provider-scope`.
+Vectors for this section: [`core/1/key-scope.json`](../../conformance/vectors/core/1/key-scope.json), operation `key_scope.operational_key`. Each case gives the metadata payload, the artifact domain, the excerpt, the usage and `iat`, and either the expected operational key or the expected reason. Valid cases: `valid-ed25519`, `valid-esp256`, `valid-window-start`, `valid-window-end`, `valid-provider-scope`, `hybrid-classic`, `hybrid-classic-esp256`.
 
 <a id="L0-SIG-75"></a>**L0-SIG-75. Hybrid policy.** Whether a verifier requires the classical signature, the post-quantum signature or both is read from the Domain Metadata `hybrid` field, never from the artifact.
 
-> **OPEN (O-23):** What do the values `classic`, `both` and `pq` require of a verifier?
+<a id="L0-SIG-75a"></a>**L0-SIG-75a. Hybrid values.** A missing `hybrid` field means `classic`.
+
+| Value | Requires |
+|---|---|
+| `classic` | A valid classical signature. A post-quantum signature, if present, is ignored. |
+| `both` | A valid classical signature and a valid ML-DSA signature ([L0-SIG-18](#L0-SIG-18)). |
+| `pq` | A valid ML-DSA signature. A classical signature, if present, is ignored. |
+
+While ML-DSA is not enabled, `both` and `pq` cannot be satisfied. Resolving an operational key of a domain whose metadata says `both` or `pq` then fails at step 6 with reason `algorithm` ([L0-SIG-68](#L0-SIG-68)); the verifier fails closed.
+
+Vectors: `key-scope.json`: `hybrid-classic`, `hybrid-classic-esp256`, `hybrid-both-ml-dsa-disabled`, `hybrid-pq-ml-dsa-disabled`, `hybrid-both-esp256`.
 
 <a id="L0-SIG-76"></a>**L0-SIG-76. Identity-plane keys.** Keys that sign identity tokens (OpenID Connect ID tokens, for example) are not operational keys and never sign an authority artifact. Matching their issuer, realm and `kid` is outside L0.

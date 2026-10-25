@@ -122,23 +122,27 @@ pub struct SpecVersions {
     pub schemas: BTreeSet<Digest>,
 }
 
+/// Highest consequence tier (§13.7.2).
+pub const MAX_CT: u8 = 3;
+
 /// Local acceptance ceilings a verifier reads from metadata, never from the artefact (T20).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct VerifierCaps {
-    /// Horizon ceiling.
-    pub horizon_max_ms: Option<u64>,
+    /// Horizon ceilings in milliseconds by consequence tier, 0 to [`MAX_CT`], written as
+    /// `"ct0"` to `"ct3"` (OP-118 m.4, OP-122 m.1).
+    pub horizon: BTreeMap<u8, u64>,
     /// Offline slice ceilings by budget unit.
     pub slice_max: BTreeMap<String, i64>,
 }
 
-/// Hybrid signature policy (CR-55 m.11).
+/// Hybrid signature policy; absent is [`Hybrid::Classic`] (CR-55 m.11, OP-118 m.5).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Hybrid {
-    /// Classic signature only.
+    /// Classic signature required; a PQ signature is ignored.
     Classic,
-    /// Classic and ML-DSA signatures.
+    /// Classic and ML-DSA signatures both required and valid.
     Both,
-    /// ML-DSA signature only.
+    /// ML-DSA signature required; a classic signature is ignored.
     Pq,
 }
 
@@ -167,6 +171,8 @@ pub struct DomainMetadata {
     pub operational_keys: Vec<OperationalKey>,
     /// Domain minimum versions.
     pub min_versions: SpecVersions,
+    /// Versions the domain has adopted (OP-120 m.7).
+    pub adopted: SpecVersions,
     /// Verifier ceilings.
     pub caps: Option<VerifierCaps>,
     /// Hybrid policy.
@@ -321,7 +327,11 @@ pub fn operational_key(
     if key.kid != thumbprint(&key.key) {
         return Err(KeyScopeError::Thumbprint);
     }
-    if !metadata.algorithms.contains(&key.alg) || !key.alg.enabled() || !key.fits() {
+    if !metadata.algorithms.contains(&key.alg)
+        || !key.alg.enabled()
+        || !key.fits()
+        || !hybrid_satisfiable(metadata.hybrid)
+    {
         return Err(KeyScopeError::Algorithm);
     }
     if !key.usage.contains(&usage) {
@@ -338,6 +348,11 @@ pub fn operational_key(
         return Err(KeyScopeError::Window);
     }
     Ok(key)
+}
+
+// OP-118 m.5, CR-55 m.1
+const fn hybrid_satisfiable(policy: Option<Hybrid>) -> bool {
+    matches!(policy, None | Some(Hybrid::Classic))
 }
 
 impl OperationalKey {
@@ -612,7 +627,17 @@ impl Canonical for SpecVersions {
 impl Canonical for VerifierCaps {
     fn to_value(&self) -> Value {
         map([
-            ("horizon_max_ms", self.horizon_max_ms.map(Value::Unsigned)),
+            (
+                "horizon",
+                (!self.horizon.is_empty()).then(|| {
+                    Value::Map(
+                        self.horizon
+                            .iter()
+                            .map(|(ct, ms)| (ct_key(*ct), Value::Unsigned(*ms)))
+                            .collect(),
+                    )
+                }),
+            ),
             ("slice_max", map_value(&self.slice_max, |n| Value::int(*n))),
         ])
     }
@@ -620,7 +645,11 @@ impl Canonical for VerifierCaps {
     fn from_value(v: &Value) -> Result<Self, ModelError> {
         let mut f = Fields::of(v)?;
         let out = Self {
-            horizon_max_ms: f.opt("horizon_max_ms").map(uint).transpose()?,
+            horizon: f
+                .opt("horizon")
+                .map(horizon_caps)
+                .transpose()?
+                .unwrap_or_default(),
             slice_max: opt_param_map(f.opt("slice_max"), int)?,
         };
         f.done()?;
@@ -653,6 +682,7 @@ impl Canonical for DomainMetadata {
                 )),
             ),
             ("min_versions", Some(self.min_versions.to_value())),
+            ("adopted", Some(self.adopted.to_value())),
             ("caps", self.caps.as_ref().map(Canonical::to_value)),
             ("hybrid", self.hybrid.map(|h| word_of(h, &HYBRIDS))),
             ("discovery", self.discovery.clone().map(Value::Bytes)),
@@ -680,6 +710,7 @@ impl Canonical for DomainMetadata {
                 OperationalKey::from_value,
             )?,
             min_versions: SpecVersions::from_value(f.req("min_versions")?)?,
+            adopted: SpecVersions::from_value(f.req("adopted")?)?,
             caps: f.opt("caps").map(VerifierCaps::from_value).transpose()?,
             hybrid: f.opt("hybrid").map(|h| word(h, &HYBRIDS)).transpose()?,
             discovery: f.opt("discovery").map(bytes).transpose()?,
@@ -691,6 +722,35 @@ impl Canonical for DomainMetadata {
         Ok(out)
     }
 }
+
+// OP-118 m.4
+fn horizon_caps(v: &Value) -> Result<BTreeMap<u8, u64>, ModelError> {
+    let mut f = Fields::of(v)?;
+    if f.is_empty() {
+        return Err(ModelError::Range);
+    }
+    let out = f
+        .drain(|k, ms| Ok((ct_of(k)?, uint(ms)?)))?
+        .into_iter()
+        .collect();
+    f.done()?;
+    Ok(out)
+}
+
+// OP-122 m.1
+fn ct_of(key: &str) -> Result<u8, ModelError> {
+    CT_KEYS
+        .iter()
+        .position(|k| *k == key)
+        .and_then(|i| u8::try_from(i).ok())
+        .ok_or(ModelError::Unknown)
+}
+
+fn ct_key(ct: u8) -> Value {
+    Value::text(CT_KEYS.get(usize::from(ct)).copied().unwrap_or(""))
+}
+
+const CT_KEYS: [&str; 4] = ["ct0", "ct1", "ct2", "ct3"];
 
 fn set_of_vec<T>(
     v: &Value,

@@ -4,7 +4,7 @@ A validity contract is the semantic contract of every reusable artifact: a porta
 
 A validity contract is a value. It carries no authority of its own. The container that embeds it (a portable authority proof or a token) is defined in L2; this part defines the contract's fields and the arithmetic and checks that every verifier applies.
 
-No conformance vectors exist yet for this part.
+Vectors for the acceptance end and the signing time: [`core/1/validity.json`](../../conformance/vectors/core/1/validity.json), operation `validity.check`.
 
 ## 1. Structure
 
@@ -17,7 +17,7 @@ No conformance vectors exist yet for this part.
 | `holder` | The holder's key binding; a contract is never a bearer contract |
 | `audience` | The verifiers the contract is valid at |
 | `bounds` | The authority the artifact can be used for: the Grant's authority intersected with the Mandate and limited to the intended actions, with action prefixes pinned to a catalog |
-| `profile` | Connectivity class, variant and parameters |
+| `profile` | Connectivity class, variant, the connectivity profile track `version`, and parameters |
 | `horizon` | Absolute end of validity (TrustedTime) |
 | `max_staleness_ms` | Δ: how old the verifier's status information may be |
 | `freshness_sources` | Where the verifier refreshes status |
@@ -64,7 +64,11 @@ accept_until = min(horizon, iat + cap)
 
 where `iat` is the artifact's signing time and `cap = cap_horizon(class, variant, CT)`: class and variant come from the verifier's own profile, and CT is the consequence tier of the intent the verifier is performing. The ceilings come only from the Domain Metadata and the verifier profile. The artifact's own declaration of a ceiling is never used. The computation is checked ([L0-VAL-20](#L0-VAL-20)).
 
-> **OPEN (O-18):** How does `cap_horizon(class, variant, CT)` map onto Domain Metadata `caps.horizon_max_ms` and the verifier profile?
+<a id="L0-VAL-10a"></a>**L0-VAL-10a. Ceiling sources.** Domain Metadata declares its ceilings as `caps.horizon`, a map from CT to milliseconds whose keys are the text strings `"ct0"`, `"ct1"`, `"ct2"` and `"ct3"` (integer map keys are used only in COSE headers, [L0-ENC-4](encoding.md#L0-ENC-4)). The Verifier Profile declares its ceilings in the same form for each class and variant. The effective ceiling `cap` is the smallest of all declared ceilings that apply to the class, variant and CT: the metadata's, the Verifier Profile's, and the protocol default for that class, variant and CT. If neither the metadata nor the Verifier Profile declares one, the protocol default applies.
+
+<a id="L0-VAL-10b"></a>**L0-VAL-10b. Who chooses the ceiling.** Choosing `cap` from the declared tables is the verifier's job. The check of this part takes `cap` and `iat` as given and computes `accept_until` from them; it never reads a ceiling from the contract.
+
+Vectors: `validity.json`: `cap-later-than-horizon-edge`, `cap-later-than-horizon-past`, `cap-earlier-than-horizon-edge`, `cap-earlier-than-horizon-past`, `cap-equal-to-horizon`, `cap-zero`, `cap-zero-past`, `cap-overflow`. Each case gives `iat`, `horizon_cap_ms` and `now`; the contract, audience, `online` and skew are given at file level, and a case may give its own `contract`, `online` or `last_refresh`.
 
 <a id="L0-VAL-11"></a>**L0-VAL-11. Within the horizon.** The horizon is inclusive: `now = horizon` is accepted. With the skew of [L0-VAL-14](#L0-VAL-14), the verifier accepts only when `now ≤ accept_until + skew`.
 
@@ -76,9 +80,28 @@ where `iat` is the artifact's signing time and `cap = cap_horizon(class, variant
 
 <a id="L0-VAL-14a"></a>**L0-VAL-14a. Where skew applies.** Skew is applied in exactly two places: at the end of acceptance (`now ≤ accept_until + skew`, [L0-VAL-11](#L0-VAL-11)) and to a future-dated signing time (`iat ≤ now + skew`). It is not applied to the key window ([L0-VAL-12](#L0-VAL-12)). Both additions are checked.
 
+<a id="L0-VAL-14b"></a>**L0-VAL-14b. Future-dated signing time.** If `iat > now + skew`, the artifact is rejected with reason `not-yet-valid`. This check is made before the acceptance end of [L0-VAL-11](#L0-VAL-11). `iat = now + skew` is accepted.
+
+Vectors: `validity.json`: `iat-future-edge`, `iat-future-past`.
+
 <a id="L0-VAL-15"></a>**L0-VAL-15. Bounds.** The intent the verifier is about to perform MUST be covered by `bounds` ([L0-EVAL-10](evaluation.md#L0-EVAL-10)), and every term in `local_requirements` MUST be satisfied locally. If a local requirement cannot be satisfied, the artifact is not accepted offline.
 
 <a id="L0-VAL-16"></a>**L0-VAL-16. Staleness.** If the contract has `max_staleness_ms`, the verifier's status information MUST be at most that old. If it is older, the verifier MUST NOT accept the artifact offline and may only ask online.
+
+<a id="L0-VAL-16a"></a>**L0-VAL-16a. Online and offline use.** `online` means the verifier obtains an online decision for this use; the contract is then checked only up to the acceptance end. Without an online decision, the variant decides:
+
+| Variant | Offline use |
+|---|---|
+| `online-strict` | Rejected: `online-required` |
+| `revalidate-on-reconnect` | Accepted up to the acceptance end; the next reconnect requires a new decision ([L0-VAL-17](#L0-VAL-17)) |
+| `bounded-staleness` | Accepted while `now − last_refresh ≤ max_staleness_ms`; otherwise `stale` |
+| `checkpointed-offline`, `checkpoint-continuation` | Accepted up to the acceptance end |
+
+Under `bounded-staleness`, a missing `max_staleness_ms`, a missing `last_refresh`, or a `last_refresh` later than `now` is `stale` ([L0-VAL-7](#L0-VAL-7)).
+
+<a id="L0-VAL-16b"></a>**L0-VAL-16b. Reason codes.** The checks run in this order and the first failure is the result: `must-understand`, `audience`, `not-yet-valid` ([L0-VAL-14b](#L0-VAL-14b)), `expired` ([L0-VAL-11](#L0-VAL-11)), then the offline rule of [L0-VAL-16a](#L0-VAL-16a) (`online-required`, `stale`). An overflow anywhere is `overflow` ([L0-VAL-20](#L0-VAL-20)).
+
+Vectors: `validity.json`: `online-strict-offline`, `reconnect-offline-accepted`, `reconnect-offline-horizon-edge`, `reconnect-offline-past-horizon`, `bounded-fresh`, `bounded-stale`, `bounded-no-refresh`, `bounded-future-refresh`, `bounded-online-ignores-refresh`, `checkpointed-offline-accepted`.
 
 <a id="L0-VAL-17"></a>**L0-VAL-17. Revalidation.** When a `revalidation` condition is met (a number of uses, a reconnect, or an action of a listed class), the verifier MUST obtain a new online decision before relying on the artifact again. Under `revalidate-on-reconnect` a reconnect always requires a new decision.
 

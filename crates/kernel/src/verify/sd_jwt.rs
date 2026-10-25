@@ -28,7 +28,7 @@ pub struct Rules<'a> {
     pub nonce: &'a str,
     /// Verifier time.
     pub now: TrustedTime,
-    /// Skew for the key binding `iat`, in milliseconds.
+    /// Clock skew in milliseconds, for the issuer JWT times and the key binding `iat`.
     pub skew_ms: u64,
 }
 
@@ -79,6 +79,9 @@ pub enum SdJwtError {
     /// Key binding claims wrong.
     #[error("key binding claims: {0}")]
     Claims(#[from] ClaimError),
+    /// Issuer JWT `iss` missing, or its `exp`, `nbf` or `iat` rejected (OP-122 m.4).
+    #[error("issuer claims: {0}")]
+    IssuerClaims(ClaimError),
 }
 
 const KB_TYP: &str = "kb+jwt";
@@ -87,6 +90,8 @@ const KB_TYP: &str = "kb+jwt";
 pub const MAX_PRESENTATION: usize = 256 * 1024;
 /// Disclosures in one presentation (OP-117 m.6, PD).
 pub const MAX_DISCLOSURES: usize = 256;
+/// Oldest accepted key binding `iat`, before `now` (OP-122 m.5, PD).
+pub const KB_MAX_AGE_MS: u64 = 300_000;
 
 fn digest_of(disclosure: &str) -> String {
     b64url_encode(&Sha256::digest(disclosure.as_bytes()))
@@ -241,15 +246,16 @@ fn check_key_binding(
     {
         return Err(SdJwtError::KeyBinding);
     }
+    // OP-122 m.5
     let iat = claims
         .get("iat")
         .and_then(Json::as_int)
-        .ok_or(ClaimError::Time)?;
-    let now = i64::try_from(rules.now.checked_div(1000).ok_or(ClaimError::Time)?)
-        .map_err(|_| ClaimError::Time)?;
-    let skew = i64::try_from(rules.skew_ms.checked_div(1000).ok_or(ClaimError::Time)?)
-        .map_err(|_| ClaimError::Time)?;
-    let lo = now.checked_sub(skew).ok_or(ClaimError::Time)?;
+        .ok_or(ClaimError::Time)
+        .and_then(jws::millis)?;
+    let now = i64::try_from(rules.now).map_err(|_| ClaimError::Time)?;
+    let skew = i64::try_from(rules.skew_ms).map_err(|_| ClaimError::Time)?;
+    let age = i64::try_from(KB_MAX_AGE_MS).map_err(|_| ClaimError::Time)?;
+    let lo = now.checked_sub(age).ok_or(ClaimError::Time)?;
     let hi = now.checked_add(skew).ok_or(ClaimError::Time)?;
     if iat < lo {
         return Err(ClaimError::Expired.into());
@@ -295,6 +301,14 @@ pub fn verify(
         }
     }
     let payload = json::parse(&issuer.payload, MAX_PAYLOAD)?;
+    if !matches!(payload, Json::Object(_)) {
+        return Err(SdJwtError::Disclosure);
+    }
+    // OP-122 m.4
+    if !matches!(payload.get("iss"), Some(Json::Str(_))) {
+        return Err(SdJwtError::IssuerClaims(ClaimError::Issuer));
+    }
+    jws::check_times(&payload, rules.now, rules.skew_ms).map_err(SdJwtError::IssuerClaims)?;
     let Json::Object(top) = payload else {
         return Err(SdJwtError::Disclosure);
     };

@@ -254,7 +254,15 @@ pub enum ClaimError {
     Time,
 }
 
-fn millis(seconds: i64) -> Result<i64, ClaimError> {
+/// A `NumericDate` in milliseconds; negative values are rejected, as `TrustedTime` is unsigned
+/// (OP-122 m.3a).
+///
+/// # Errors
+/// [`ClaimError::Time`].
+pub fn millis(seconds: i64) -> Result<i64, ClaimError> {
+    if seconds < 0 {
+        return Err(ClaimError::Time);
+    }
     seconds.checked_mul(1000).ok_or(ClaimError::Time)
 }
 
@@ -286,9 +294,17 @@ pub fn check_claims_json(claims: &Json, rules: &ClaimRules<'_>) -> Result<(), Cl
     if !aud_ok {
         return Err(ClaimError::Audience);
     }
-    // OP-117 m.17
-    let now = i64::try_from(rules.now).map_err(|_| ClaimError::Time)?;
-    let skew = i64::try_from(rules.skew_ms).map_err(|_| ClaimError::Time)?;
+    check_times(claims, rules.now, rules.skew_ms)
+}
+
+/// Checks `exp` (required), `nbf` and `iat` in milliseconds with the skew: the end is inclusive,
+/// `now ≤ exp × 1000 + skew` (OP-117 m.17, OP-122 m.3).
+///
+/// # Errors
+/// [`ClaimError`].
+pub fn check_times(claims: &Json, now: TrustedTime, skew_ms: u64) -> Result<(), ClaimError> {
+    let now = i64::try_from(now).map_err(|_| ClaimError::Time)?;
+    let skew = i64::try_from(skew_ms).map_err(|_| ClaimError::Time)?;
     let time = |name: &str| -> Result<Option<i64>, ClaimError> {
         claims
             .get(name)
@@ -296,7 +312,7 @@ pub fn check_claims_json(claims: &Json, rules: &ClaimRules<'_>) -> Result<(), Cl
             .transpose()
     };
     let exp = time("exp")?.ok_or(ClaimError::Expired)?;
-    if now >= exp.checked_add(skew).ok_or(ClaimError::Time)? {
+    if now > exp.checked_add(skew).ok_or(ClaimError::Time)? {
         return Err(ClaimError::Expired);
     }
     let latest_start = now.checked_add(skew).ok_or(ClaimError::Time)?;

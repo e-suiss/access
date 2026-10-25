@@ -1,3 +1,4 @@
+use alloc::collections::BTreeMap;
 use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
@@ -91,7 +92,7 @@ fn build(holder: bool) -> Built {
     let role = disclosure(r#"["s3","admin"]"#);
     let decoy = digest_of("decoy");
     let payload = format!(
-        r#"{{"iss":"https://access.example","_sd_alg":"sha-256","_sd":["{}","{decoy}"],"address":{{"_sd":["{}"]}},"roles":["staff",{{"...":"{}"}}]{}}}"#,
+        r#"{{"iss":"https://access.example","exp":2000,"_sd_alg":"sha-256","_sd":["{}","{decoy}"],"address":{{"_sd":["{}"]}},"roles":["staff",{{"...":"{}"}}]{}}}"#,
         digest_of(&given),
         digest_of(&region),
         digest_of(&role),
@@ -172,7 +173,7 @@ fn disclosure_rules() {
 
     let collide = disclosure(r#"["s1","iss","https://evil"]"#);
     let jwt = issuer_jwt(&format!(
-        r#"{{"iss":"https://access.example","_sd":["{}"]}}"#,
+        r#"{{"iss":"https://access.example","exp":2000,"_sd":["{}"]}}"#,
         digest_of(&collide)
     ));
     assert_eq!(
@@ -180,7 +181,7 @@ fn disclosure_rules() {
         Err(SdJwtError::Collision)
     );
 
-    let sha512 = issuer_jwt(r#"{"iss":"https://access.example","_sd_alg":"sha-512"}"#);
+    let sha512 = issuer_jwt(r#"{"iss":"https://access.example","exp":2000,"_sd_alg":"sha-512"}"#);
     assert_eq!(
         run(&format!("{sha512}~")).map(|_| ()),
         Err(SdJwtError::HashAlgorithm)
@@ -188,7 +189,7 @@ fn disclosure_rules() {
 
     let element_as_property = disclosure(r#"["s1","x"]"#);
     let jwt = issuer_jwt(&format!(
-        r#"{{"_sd":["{}"]}}"#,
+        r#"{{"iss":"https://access.example","exp":2000,"_sd":["{}"]}}"#,
         digest_of(&element_as_property)
     ));
     assert_eq!(
@@ -220,7 +221,12 @@ fn key_binding_rules() {
         run(&wrong_aud).map(|_| ()),
         Err(SdJwtError::Claims(ClaimError::Audience))
     );
-    let old = format!("{prefix}{}", kb_jwt(&prefix, "pep:shop", "n-1", 939));
+    // OP-122 m.5
+    for edge in [700, 1_060] {
+        let at = format!("{prefix}{}", kb_jwt(&prefix, "pep:shop", "n-1", edge));
+        assert!(run(&at).is_ok(), "{edge}");
+    }
+    let old = format!("{prefix}{}", kb_jwt(&prefix, "pep:shop", "n-1", 699));
     assert_eq!(
         run(&old).map(|_| ()),
         Err(SdJwtError::Claims(ClaimError::Expired))
@@ -306,5 +312,203 @@ fn rfc9901_disclosure_examples() {
     assert!(
         parsed > 80,
         "{parsed} parsed, {floats} with non-integer numbers"
+    );
+}
+
+// OP-122 m.4: the issuer JWT needs `iss` and `exp`; `exp`, `nbf`, `iat` follow the JWT rule
+#[test]
+fn issuer_jwt_claims() {
+    let check = |payload: &str| run(&format!("{}~", issuer_jwt(payload))).map(|_| ());
+    assert_eq!(
+        check(r#"{"iss":"https://access.example","exp":1060}"#),
+        Ok(())
+    );
+    assert_eq!(
+        check(r#"{"exp":2000}"#),
+        Err(SdJwtError::IssuerClaims(ClaimError::Issuer))
+    );
+    assert_eq!(
+        check(r#"{"iss":"https://access.example"}"#),
+        Err(SdJwtError::IssuerClaims(ClaimError::Expired))
+    );
+    assert_eq!(
+        check(r#"{"iss":"https://access.example","exp":939}"#),
+        Err(SdJwtError::IssuerClaims(ClaimError::Expired))
+    );
+    assert_eq!(
+        check(r#"{"iss":"https://access.example","exp":2000,"nbf":1061}"#),
+        Err(SdJwtError::IssuerClaims(ClaimError::NotYetValid))
+    );
+    assert_eq!(
+        check(r#"{"iss":"https://access.example","exp":2000,"iat":1061}"#),
+        Err(SdJwtError::IssuerClaims(ClaimError::NotYetValid))
+    );
+}
+
+fn issuer_only(rest: &str) -> String {
+    format!("{}~", issuer_jwt(&format!("{{{rest}}}")))
+}
+
+// OP-122 m.4, m.5, m.7
+fn vector_cases() -> Vec<(&'static str, String)> {
+    let b = build(false);
+    let hb = build(true);
+    let prefix = present(&hb, &[0]);
+    let kb = |iat| format!("{prefix}{}", kb_jwt(&prefix, "pep:shop", "n-1", iat));
+    let deep = disclosure(&format!(
+        r#"["s4","deep",{}0{}]"#,
+        "[".repeat(32),
+        "]".repeat(32)
+    ));
+    let deep_jwt = issuer_jwt(&format!(
+        r#"{{"iss":"https://access.example","exp":2000,"_sd":["{}"]}}"#,
+        digest_of(&deep)
+    ));
+    let collide = disclosure(r#"["s1","iss","https://evil"]"#);
+    let collide_jwt = issuer_jwt(&format!(
+        r#"{{"iss":"https://access.example","exp":2000,"_sd":["{}"]}}"#,
+        digest_of(&collide)
+    ));
+    alloc::vec![
+        ("valid-all-disclosed", present(&b, &[0, 1, 2])),
+        ("valid-partial", present(&b, &[1])),
+        ("valid-holder-bound", kb(1_000)),
+        ("kb-iat-oldest-edge", kb(700)),
+        ("kb-iat-too-old", kb(699)),
+        ("kb-iat-future-edge", kb(1_060)),
+        ("kb-iat-future", kb(1_061)),
+        ("kb-missing", prefix.clone()),
+        (
+            "kb-wrong-nonce",
+            format!("{prefix}{}", kb_jwt(&prefix, "pep:shop", "n-2", 1_000)),
+        ),
+        (
+            "kb-wrong-audience",
+            format!("{prefix}{}", kb_jwt(&prefix, "pep:bank", "n-1", 1_000)),
+        ),
+        (
+            "kb-wrong-sd-hash",
+            format!(
+                "{prefix}{}",
+                kb_jwt(&present(&hb, &[0, 1]), "pep:shop", "n-1", 1_000)
+            ),
+        ),
+        ("kb-unexpected", {
+            let p = present(&b, &[0]);
+            format!("{p}{}", kb_jwt(&p, "pep:shop", "n-1", 1_000))
+        }),
+        ("duplicate-disclosure", present(&b, &[0, 0])),
+        (
+            "unreferenced-disclosure",
+            format!("{}~{}~", b.jwt, disclosure(r#"["s9","extra","x"]"#)),
+        ),
+        (
+            "malformed-disclosure",
+            format!("{}~{}~", b.jwt, disclosure(r#"{"a":1}"#)),
+        ),
+        ("claim-collision", format!("{collide_jwt}~{collide}~")),
+        (
+            "hash-alg-sha512",
+            issuer_only(r#""iss":"https://access.example","exp":2000,"_sd_alg":"sha-512""#),
+        ),
+        ("not-a-presentation", b.jwt.clone()),
+        ("disclosure-json-depth-33", format!("{deep_jwt}~{deep}~")),
+        ("issuer-iss-missing", issuer_only(r#""exp":2000"#)),
+        (
+            "issuer-exp-missing",
+            issuer_only(r#""iss":"https://access.example""#),
+        ),
+        (
+            "issuer-exp-edge",
+            issuer_only(r#""iss":"https://access.example","exp":940"#),
+        ),
+        (
+            "issuer-expired",
+            issuer_only(r#""iss":"https://access.example","exp":939"#),
+        ),
+        (
+            "issuer-nbf-future",
+            issuer_only(r#""iss":"https://access.example","exp":2000,"nbf":1061"#),
+        ),
+        (
+            "issuer-iat-future",
+            issuer_only(r#""iss":"https://access.example","exp":2000,"iat":1061"#),
+        ),
+        (
+            "issuer-aud-not-required",
+            issuer_only(r#""iss":"https://access.example","exp":2000,"aud":"pep:other""#),
+        ),
+    ]
+}
+
+// OP-122 m.4, m.5, m.7: names shared by the Kernel, F0 and the bindings
+#[test]
+fn sd_jwt_vectors_match() {
+    extern crate std;
+    use crate::codec::Canonical as _;
+    use core::fmt::Write as _;
+    let key_set = keys().to_bytes().unwrap();
+    let r = rules();
+    let mut lines = Vec::new();
+    let mut got = BTreeMap::new();
+    for (id, p) in vector_cases() {
+        let out = crate::binding::verify_sd_jwt(
+            &p, &key_set, r.typ, r.audience, r.nonce, r.now, r.skew_ms,
+        )
+        .map_err(|e| e.name());
+        let expect = match &out {
+            Ok(claims) => format!("\"claims\": {claims}"),
+            Err(e) => format!("\"error\": \"{e}\""),
+        };
+        got.insert(id, out);
+        lines.push(format!(
+            "  {{\"id\": \"{id}\", \"presentation\": \"{p}\", {expect}}}"
+        ));
+    }
+    for id in [
+        "valid-all-disclosed",
+        "valid-holder-bound",
+        "kb-iat-oldest-edge",
+        "kb-iat-future-edge",
+        "issuer-exp-edge",
+        "issuer-aud-not-required",
+    ] {
+        assert!(got[id].is_ok(), "{id}");
+    }
+    assert_eq!(
+        got["kb-iat-too-old"],
+        Err("key binding claims: expired".to_string())
+    );
+    assert_eq!(
+        got["issuer-iss-missing"],
+        Err("issuer claims: issuer".to_string())
+    );
+    let mut json = format!(
+        "{{\n \"rule\": \"OP-122\",\n \"track\": \"core\",\n \"version\": 1,\n \"operation\": \"verify.sd_jwt\",\n \"keys\": {{\n  \"{}\": \"{}\"\n }},\n \"allowed\": [-19],\n \"context\": {{\"typ\": \"{}\", \"audience\": \"{}\", \"nonce\": \"{}\", \"now\": {}, \"skew_ms\": {}}},\n \"cases\": [\n",
+        b64url_encode(&[1; 32]),
+        b64url_encode(&issuer_key().verifying_key().to_bytes()),
+        r.typ,
+        r.audience,
+        r.nonce,
+        r.now,
+        r.skew_ms,
+    );
+    json.push_str(&lines.join(",\n"));
+    let _ = write!(json, "\n ]\n}}\n");
+    #[cfg(not(target_os = "wasi"))]
+    if std::env::var_os("ACCESS_UPDATE_VECTORS").is_some() {
+        std::fs::write(
+            concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../../conformance/vectors/core/1/sd-jwt.json"
+            ),
+            &json,
+        )
+        .unwrap();
+        return;
+    }
+    assert_eq!(
+        include_str!("../../../../../conformance/vectors/core/1/sd-jwt.json"),
+        json
     );
 }

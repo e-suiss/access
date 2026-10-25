@@ -125,10 +125,11 @@ pub fn verify_sd_jwt(
     binding::verify_sd_jwt(presentation, key_set, typ, audience, nonce, now, skew_ms).map_err(js)
 }
 
-/// Checks a `validity-contract` at the moment of use (§9.12).
+/// Checks a `validity-contract` at the moment of use (§9.12, OP-118 m.4).
 ///
 /// # Errors
 /// `input` or a validity name.
+#[allow(clippy::too_many_arguments, reason = "OP-116 m.9")]
 #[wasm_bindgen(js_name = checkValidity)]
 pub fn check_validity(
     contract: &[u8],
@@ -138,6 +139,8 @@ pub fn check_validity(
     last_refresh: Option<u64>,
     online: bool,
     skew_ms: u64,
+    iat: u64,
+    horizon_cap_ms: u64,
 ) -> Result<(), JsError> {
     binding::check_validity(
         contract,
@@ -147,6 +150,8 @@ pub fn check_validity(
         last_refresh,
         online,
         skew_ms,
+        iat,
+        horizon_cap_ms,
     )
     .map_err(js)
 }

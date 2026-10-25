@@ -59,6 +59,14 @@ def b64url(s):
     return base64.urlsafe_b64decode(s + "=" * (-len(s) % 4))
 
 
+def jose_keys(v):
+    keys = []
+    for kid, key in v["keys"].items():
+        raw = b64url(key)
+        keys.append((b64url(kid), cbor_map([(tstr("ed25519" if len(raw) == 32 else "p256"), bstr(raw))])))
+    return keys
+
+
 def outcome(f):
     try:
         return ("ok", f())
@@ -129,13 +137,50 @@ class Vectors(unittest.TestCase):
         for kid, key in v["keys"].items():
             raw = b64url(key)
             keys.append((b64url(kid), cbor_map([(tstr("ed25519" if len(raw) == 32 else "p256"), bstr(raw))])))
-        keys = key_set(keys, [-19, -7])
         for c in v["cases"]:
+            ks = key_set(keys, c.get("allowed", v["allowed"]))
             got = outcome(lambda: k.verify_jws_compact(
-                c["token"], keys, v["typ"], "https://access.example", "pep:shop", 1_500_000, 60_000
+                c["token"], ks, v["typ"], "https://access.example", "pep:shop", 1_500_000, 60_000
             ))
             self.assertEqual("accept" if got[0] == "ok" else "reject: " + got[1], c["expect"], c["id"])
         self.count("jose-attack-classes.json", len(v["cases"]))
+
+    # OP-122 m.7
+    def test_jwt_claims(self):
+        v = load("jwt-claims.json")
+        ks = key_set(jose_keys(v), v["allowed"])
+        for c in v["cases"]:
+            ctx = c.get("claims", v["claims"])
+            got = outcome(lambda: k.verify_jws_compact(
+                c["token"], ks, v["typ"], ctx["issuer"], ctx["audience"], ctx["now"], ctx["skew_ms"]
+            ))
+            self.assertEqual("accept" if got[0] == "ok" else "reject: " + got[1], c["expect"], c["id"])
+        self.count("jwt-claims.json", len(v["cases"]))
+
+    # OP-122 m.7
+    def test_sd_jwt(self):
+        v = load("sd-jwt.json")
+        ks = key_set(jose_keys(v), v["allowed"])
+        ctx = v["context"]
+        for c in v["cases"]:
+            got = outcome(lambda: json.loads(k.verify_sd_jwt(
+                c["presentation"], ks, ctx["typ"], ctx["audience"], ctx["nonce"], ctx["now"], ctx["skew_ms"]
+            )))
+            want = ("ok", c["claims"]) if "claims" in c else ("error", c["error"])
+            self.assertEqual(got, want, c["id"])
+        self.count("sd-jwt.json", len(v["cases"]))
+
+    # OP-118 m.4, OP-122 m.6
+    def test_validity(self):
+        v = load("validity.json")
+        for c in v["cases"]:
+            got = outcome(lambda: k.check_validity(
+                bytes.fromhex(c.get("contract", v["contract"])), c["now"], v["audience"], [],
+                c.get("last_refresh"), c.get("online", v["online"]), v["skew_ms"], c["iat"], c["horizon_cap_ms"],
+            ))
+            want = ("error", c["error"]) if "error" in c else ("ok", None)
+            self.assertEqual(got, want, c["id"])
+        self.count("validity.json", len(v["cases"]))
 
     def test_merkle(self):
         v = load("merkle.json")
@@ -164,7 +209,7 @@ class Vectors(unittest.TestCase):
         self.assertEqual(outcome(lambda: k.intent_digest(empty)), ("error", "input"))
         self.assertEqual(outcome(lambda: k.verify_metadata(empty, empty)), ("error", "input"))
         self.assertEqual(
-            outcome(lambda: k.check_validity(empty, 0, "pep:shop", [], None, True, 60_000)), ("error", "input")
+            outcome(lambda: k.check_validity(empty, 0, "pep:shop", [], None, True, 60_000, 0, 0)), ("error", "input")
         )
         ed = cbor_map([(tstr("ed25519"), bstr(b64url("6kpsY-KcUgq-9VB7Ey7F-ZVHdq6-vnuSQh7qaRRG0iw")))])
         keys = key_set([(bytes([1]) * 32, ed)], [-19])

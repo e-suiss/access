@@ -8,6 +8,13 @@
 digest = [hash-alg, bstr .size 32]
 hash-alg = -16
 
+; Digest contexts (OP-106 m.22, OP-117 m.1): digest = SHA-256(context ‖ 0x00 ‖ dCBOR(value)).
+; Each new digest kind adds a row "access/<kind>/v1" when the feature that produces it is adopted.
+;   intent-envelope                          "access/intent/v1"
+;   record-envelope of Genesis (domain-id)   "access/genesis/v1"
+; Hash prefixes (OP-106 m.12), raw SHA-256 without a context:
+;   0x00 Merkle leaf   0x01 Merkle interior node   0x02 field commitment   0x03 body commitment
+
 trusted-time = uint .size 8
 time-window = [from: trusted-time, until: trusted-time]
 
@@ -24,6 +31,9 @@ unit = tstr .regexp "[a-z][a-z0-9_]{0,15}"
 path-segment = tstr .size (1..128)
 
 amount = int .size 8
+
+; Consequence tier, CT0–CT3 (§13.7.2), as a text map key (OP-106 m.4, OP-122 m.1).
+ct-key = "ct0" / "ct1" / "ct2" / "ct3"
 
 ; ---------------------------------------------------------------- references
 
@@ -132,8 +142,14 @@ requirement-term = {
   ? independence: { distinct: "party" / "instance" / "issuer" },
   ? consumption: "single_use",
   ? source: subject-selector,
-  ? assurance: { + ident => uint },
+  ? assurance: assurance,
 }
+
+; The closed assurance dimensions of §10.1.6 (OP-118 m.3). For `synced` the lower level is the
+; stronger one.
+assurance-flag = "phishing_resistant" / "hardware_bound" / "non_custodial" / "uv"
+               / "human_presence" / "app_controlled_factor" / "synced"
+assurance = { + ( "aal" => 1..3 // "loa_eidas" => 1..3 // assurance-flag => 0..1 ) }
 
 requirement-set = [* requirement-term]
 
@@ -197,6 +213,11 @@ unmet-term = {
   satisfiable_by_actor: bool,
 }
 
+; Separate version tracks (§9.17.2). A verifier accepts every version up to the one it
+; implements (§9.17 compat k.5); a version the domain has not adopted has no effect there (k.2);
+; one below the domain's min_versions is a downgrade (k.4). Profiles compare by name only (k.6).
+; Action schemas are pinned by Acceptance, not ordered; connectivity profiles are named by the
+; validity-contract profile.
 spec-versions = {
   core: uint,
   meta_schema: uint,
@@ -223,12 +244,13 @@ budget-state = {
   ? resets_at: trusted-time,
 }
 
+; A stored grant the reading layer did not understand covers nothing (OP-108 m.4, OP-118 m.2).
 hop = {
   authority: canonical-authority,
   ? status: "revoked" / "lapsed",
   ? conditions_fail: true,
   ? budgets: [+ budget-state],
-}
+} / { not_understood: true }
 
 basis = {
   hops: [+ hop],
@@ -258,7 +280,7 @@ proof = {
   ? bound_instance: instance-ref,
   ? bound_intent: digest,
   ? bound_resource: resource-ref,
-  ? assurance: { + ident => uint },
+  ? assurance: assurance,
   ? consumed: true,
 }
 
@@ -295,6 +317,8 @@ validity-contract = {
     class: "online" / "intermittent" / "offline" / "long-running",
     variant: "online-strict" / "bounded-staleness" / "revalidate-on-reconnect"
            / "checkpointed-offline" / "checkpoint-continuation",
+    ; Connectivity profile track version (OP-120 m.8).
+    version: uint,
     ? params: { + ident => uint },
   },
   horizon: trusted-time,
@@ -312,23 +336,41 @@ validity-contract = {
 
 record-kind = "genesis" / "opening" / "decision" / "claim"
 
+; `kind` is "genesis" exactly at pos 0. Genesis has no `domain` and no `prev`; every later record
+; has both, `prev` being the leaf hash of the record before it (OP-106 m.10, m.11).
+; `field_salt` has exactly the names of `fields`; each salt is fresh from the RNG port (m.15).
+; FC(name) = SHA-256(0x02 ‖ salt ‖ dCBOR([name, value])).
 record-envelope = {
-  ? domain: domain-id,
-  pos: uint,
-  kind: record-kind,
-  recorded_at: trusted-time,
-  ? prev: digest,
+  record-header,
   fields: { + ident => any },
   field_salt: { + ident => bstr .size 32 },
 }
 
-leaf-core = {
+record-header = (
   ? domain: domain-id,
   pos: uint,
   kind: record-kind,
   recorded_at: trusted-time,
   ? prev: digest,
+)
+
+; field_root = RFC 9162 root over FC(name), ordered by the UTF-8 bytes of name (OP-106 m.13).
+; Leaf hash = SHA-256(0x00 ‖ dCBOR(leaf-core)); the leaf of the record is at index `pos` of its
+; domain log.
+leaf-core = {
+  record-header,
   field_root: bstr .size 32,
+}
+
+; A record with some fields withheld (§17.6.1 rule 1). Opened fields carry value and salt and their
+; commitments are recomputed; withheld fields carry only FC(name) as a digest. A name is in at most
+; one of `fields` and `withheld`, and at least one field is present. A withheld name only orders
+; its commitment and is not authenticated. A record-envelope is a disclosure with nothing withheld.
+record-disclosure = {
+  record-header,
+  ? fields: { + ident => any },
+  ? field_salt: { + ident => bstr .size 32 },
+  ? withheld: { + ident => digest },
 }
 
 ; ---------------------------------------------------------------- key scope (CR-58, T20, TI-RT6)
@@ -385,7 +427,11 @@ domain-metadata = {
   operational_window_max_ms: uint .le 86400000,
   operational_keys: [* operational-key],
   min_versions: spec-versions,
-  ? caps: { ? horizon_max_ms: uint, ? slice_max: { + unit => amount } },
+  ; Versions the domain has adopted; a version above them has no effect there (OP-120 m.7).
+  adopted: spec-versions,
+  ; Horizon ceilings in milliseconds by CT; the verifier passes the effective ceiling (OP-118 m.4).
+  ? caps: { ? horizon: { + ct-key => uint }, ? slice_max: { + unit => amount } },
+  ; Absent is "classic". While ML-DSA is disabled, "both" and "pq" fail closed (OP-118 m.5).
   ? hybrid: "classic" / "both" / "pq",
   ? discovery: bstr,
 }

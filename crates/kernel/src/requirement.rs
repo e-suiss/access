@@ -4,6 +4,7 @@ use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::vec::Vec;
 
 use crate::algebra::subject_le;
+use crate::codec::{Canonical, ModelError};
 use crate::combinator::{Fuel, Rejection};
 use crate::digest::Digest;
 use crate::model::{
@@ -13,6 +14,49 @@ use crate::model::{
 
 /// Assurance dimension that needs a human; an agent actor cannot satisfy it (OP-111 m.4).
 pub const HUMAN_PRESENCE: &str = "human_presence";
+
+/// Assurance dimension where the lower level is the stronger one (OP-118 m.3).
+pub const SYNCED: &str = "synced";
+
+/// The closed assurance dimensions with their lowest and highest level (§10.1.6, OP-118 m.3).
+pub const ASSURANCE_DIMENSIONS: [(&str, u64, u64); 9] = [
+    ("aal", 1, 3),
+    ("app_controlled_factor", 0, 1),
+    ("hardware_bound", 0, 1),
+    (HUMAN_PRESENCE, 0, 1),
+    ("loa_eidas", 1, 3),
+    ("non_custodial", 0, 1),
+    ("phishing_resistant", 0, 1),
+    (SYNCED, 0, 1),
+    ("uv", 0, 1),
+];
+
+/// Checks that every dimension is known and every level is in its range (OP-118 m.3).
+///
+/// # Errors
+/// [`ModelError::Unknown`] for a dimension outside [`ASSURANCE_DIMENSIONS`],
+/// [`ModelError::Range`] for a level outside its range; the first entry in key order wins.
+pub fn check_assurance(levels: &BTreeMap<alloc::string::String, u64>) -> Result<(), ModelError> {
+    for (dim, level) in levels {
+        let (_, low, high) = ASSURANCE_DIMENSIONS
+            .iter()
+            .find(|(d, _, _)| d == dim)
+            .ok_or(ModelError::Unknown)?;
+        if level < low || level > high {
+            return Err(ModelError::Range);
+        }
+    }
+    Ok(())
+}
+
+// OP-118 m.3
+fn meets_floor(dim: &str, floor: u64, level: u64) -> bool {
+    if dim == SYNCED {
+        level <= floor
+    } else {
+        level >= floor
+    }
+}
 
 /// What a proof is bound to.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -100,10 +144,12 @@ pub fn matches(term: &RequirementTerm, proof: &Proof, ctx: &Context<'_>) -> bool
         .source
         .as_ref()
         .is_none_or(|sel| subject_le(&SubjectSelector::Party(proof.issuer), sel));
-    let assurance = term
-        .assurance
-        .iter()
-        .all(|(dim, floor)| proof.assurance.get(dim).is_some_and(|v| v >= floor));
+    let assurance = term.assurance.iter().all(|(dim, floor)| {
+        proof
+            .assurance
+            .get(dim)
+            .is_some_and(|v| meets_floor(dim, *floor, *v))
+    });
     let usable = term.consumption == Consumption::Reusable || !proof.consumed;
     proof.kind == term.proof_kind
         && proof.class == term.class
@@ -136,7 +182,8 @@ fn independence_key(proof: &Proof, independence: Independence) -> Option<Id> {
     }
 }
 
-/// Resolves terms in canonical order; single-use proofs count once across terms (OP-111 m.3, m.5).
+/// Resolves terms in the order of their canonical bytes; single-use proofs count once across
+/// terms (OP-111 m.3, m.5).
 ///
 /// # Errors
 /// [`Rejection::Fuel`]: one unit per proof × term comparison (OP-111 m.7).
@@ -148,9 +195,15 @@ pub fn resolve(
 ) -> Result<Vec<(RequirementTerm, Outcome)>, Rejection> {
     let mut ordered: Vec<&Proof> = proofs.iter().collect();
     ordered.sort_by_key(|p| (p.position, p.id));
+    // OP-114 m.5, OP-122 m.2
+    let mut canonical: Vec<(Vec<u8>, &RequirementTerm)> = terms
+        .iter()
+        .map(|t| t.to_bytes().map(|b| (b, t)).map_err(|_| Rejection::Input))
+        .collect::<Result<_, _>>()?;
+    canonical.sort_by(|a, b| a.0.cmp(&b.0));
     let mut spent: BTreeSet<Id> = BTreeSet::new();
     let mut out = Vec::new();
-    for term in terms {
+    for (_, term) in canonical {
         let mut chosen: Vec<Id> = Vec::new();
         let mut keys: BTreeSet<Id> = BTreeSet::new();
         for proof in &ordered {

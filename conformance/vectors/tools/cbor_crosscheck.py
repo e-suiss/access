@@ -17,7 +17,7 @@ def main():
         for case in cases:
             if not isinstance(case, dict):
                 continue
-            for field in ("cbor", "input", "decision", "metadata", "domain", "excerpt", "key", "child", "parent", "holder", "sign1"):
+            for field in ("cbor", "input", "decision", "metadata", "domain", "excerpt", "key", "child", "parent", "holder", "sign1", "leaf_core", "record_disclosure"):
                 if field not in case:
                     continue
                 want = bytes.fromhex(case[field])

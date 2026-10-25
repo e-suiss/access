@@ -677,6 +677,13 @@ pub(crate) fn opt_param_map<T>(
         .map(Option::unwrap_or_default)
 }
 
+// OP-118 m.3
+pub(crate) fn assurance(v: Option<&Value>) -> Result<BTreeMap<String, u64>, ModelError> {
+    let levels = opt_param_map(v, uint)?;
+    crate::requirement::check_assurance(&levels)?;
+    Ok(levels)
+}
+
 pub(crate) fn map_value<T>(m: &BTreeMap<String, T>, write: impl Fn(&T) -> Value) -> Option<Value> {
     (!m.is_empty()).then(|| Value::Map(m.iter().map(|(k, v)| (Value::text(k), write(v))).collect()))
 }
@@ -983,7 +990,7 @@ impl Canonical for RequirementTerm {
                 .opt("source")
                 .map(SubjectSelector::from_value)
                 .transpose()?,
-            assurance: opt_param_map(f.opt("assurance"), uint)?,
+            assurance: assurance(f.opt("assurance"))?,
         };
         f.done()?;
         Ok(t)

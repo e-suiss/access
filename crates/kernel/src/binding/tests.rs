@@ -78,7 +78,105 @@ fn decision_vectors() {
             ),
         }
     }
-    assert_eq!(cases(&v).len(), 34);
+    assert_eq!(cases(&v).len(), 72);
+}
+
+// OP-122 m.7
+#[test]
+fn jwt_claim_vectors() {
+    let v = vectors(include_str!(
+        "../../../../conformance/vectors/core/1/jwt-claims.json"
+    ));
+    let keys = jose_keys(&v, &v["allowed"]);
+    for c in cases(&v) {
+        let ctx = c.get("claims").unwrap_or(&v["claims"]);
+        let got = match verify_jws_compact(
+            s(c, "token"),
+            &keys,
+            s(&v, "typ"),
+            s(ctx, "issuer"),
+            s(ctx, "audience"),
+            ctx["now"].as_u64().unwrap(),
+            ctx["skew_ms"].as_u64().unwrap(),
+        ) {
+            Ok(_) => "accept".to_string(),
+            Err(e) => format!("reject: {e}"),
+        };
+        assert_eq!(got, s(c, "expect"), "{}", c["id"]);
+    }
+    assert_eq!(cases(&v).len(), 23);
+}
+
+// OP-122 m.7
+#[test]
+fn sd_jwt_vectors() {
+    let v = vectors(include_str!(
+        "../../../../conformance/vectors/core/1/sd-jwt.json"
+    ));
+    let keys = jose_keys(&v, &v["allowed"]);
+    let ctx = &v["context"];
+    for c in cases(&v) {
+        let got = verify_sd_jwt(
+            s(c, "presentation"),
+            &keys,
+            s(ctx, "typ"),
+            s(ctx, "audience"),
+            s(ctx, "nonce"),
+            ctx["now"].as_u64().unwrap(),
+            ctx["skew_ms"].as_u64().unwrap(),
+        );
+        match c.get("claims") {
+            Some(want) => assert_eq!(
+                got.map(|t| serde_json::from_str::<J>(&t).unwrap()),
+                Ok(want.clone()),
+                "{}",
+                c["id"]
+            ),
+            None => assert_eq!(
+                got.map_err(|e| e.name()),
+                Err(s(c, "error").to_string()),
+                "{}",
+                c["id"]
+            ),
+        }
+    }
+    assert_eq!(cases(&v).len(), 26);
+}
+
+// OP-118 m.4
+#[test]
+fn validity_vectors() {
+    let v = vectors(include_str!(
+        "../../../../conformance/vectors/core/1/validity.json"
+    ));
+    let skew = v["skew_ms"].as_u64().unwrap();
+    let n = |c: &J, k: &str| c[k].as_u64().unwrap();
+    for c in cases(&v) {
+        let contract = unhex(
+            c.get("contract")
+                .unwrap_or(&v["contract"])
+                .as_str()
+                .unwrap(),
+        );
+        let online = c.get("online").unwrap_or(&v["online"]).as_bool().unwrap();
+        let got = check_validity(
+            &contract,
+            n(c, "now"),
+            s(&v, "audience"),
+            vec![],
+            c.get("last_refresh").and_then(J::as_u64),
+            online,
+            skew,
+            n(c, "iat"),
+            n(c, "horizon_cap_ms"),
+        )
+        .map_err(|e| e.name());
+        let want = c
+            .get("error")
+            .map_or(Ok(()), |e| Err(e.as_str().unwrap().to_string()));
+        assert_eq!(got, want, "{}", c["id"]);
+    }
+    assert_eq!(cases(&v).len(), 20);
 }
 
 // OP-116 m.6, CR-57
@@ -191,7 +289,16 @@ fn key_scope_vectors() {
     }
 }
 
-fn jose_keys(v: &J) -> Vec<u8> {
+fn jose_algs(allowed: &J) -> Vec<Algorithm> {
+    allowed
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|a| Algorithm::from_cose(a.as_i64().unwrap()).unwrap())
+        .collect()
+}
+
+fn jose_keys(v: &J, allowed: &J) -> Vec<u8> {
     let keys = v["keys"].as_object().unwrap().iter().map(|(kid, key)| {
         let raw = b64url_decode(key.as_str().unwrap()).unwrap();
         let key = match <[u8; 32]>::try_from(raw.as_slice()) {
@@ -203,7 +310,7 @@ fn jose_keys(v: &J) -> Vec<u8> {
             key,
         )
     });
-    key_set(keys, &[Algorithm::Ed25519, Algorithm::Es256])
+    key_set(keys, &jose_algs(allowed))
 }
 
 // OP-116 m.6, CR-56
@@ -212,12 +319,13 @@ fn jose_attack_class_vectors() {
     let v = vectors(include_str!(
         "../../../../conformance/vectors/core/1/jose-attack-classes.json"
     ));
-    let keys = jose_keys(&v);
+    let keys = jose_keys(&v, &v["allowed"]);
     let typ = s(&v, "typ");
     for c in cases(&v) {
+        let own = c.get("allowed").map(|a| jose_keys(&v, a));
         let got = verify_jws_compact(
             s(c, "token"),
-            &keys,
+            own.as_ref().unwrap_or(&keys),
             typ,
             "https://access.example",
             "pep:shop",
@@ -508,7 +616,7 @@ fn sd_jwt_presentation_returns_disclosed_claims() {
         b64url_encode(&[1; 32])
     );
     let payload = format!(
-        r#"{{"iss":"https://access.example","_sd_alg":"sha-256","_sd":["{digest}"],"n":-3,"ok":true,"z":null}}"#
+        r#"{{"iss":"https://access.example","exp":2000,"_sd_alg":"sha-256","_sd":["{digest}"],"n":-3,"ok":true,"z":null}}"#
     );
     let token = jwt(&issuer, &header, &payload);
     let run = |p: &str| {
@@ -524,7 +632,7 @@ fn sd_jwt_presentation_returns_disclosed_claims() {
     };
     assert_eq!(
         run(&format!("{token}~{disclosure}~")),
-        Ok(r#"{"iss":"https://access.example","n":-3,"ok":true,"z":null,"given_name":"Ada \"A\"\n"}"#.to_string())
+        Ok(r#"{"iss":"https://access.example","exp":2000,"n":-3,"ok":true,"z":null,"given_name":"Ada \"A\"\n"}"#.to_string())
     );
     assert_eq!(
         run(&format!("{token}~")).map(|c| c.contains("given_name")),
@@ -577,6 +685,7 @@ fn contract(variant: ProfileVariant) -> Vec<u8> {
         },
         class: variant.class(),
         variant,
+        profile_version: 1,
         params: BTreeMap::new(),
         horizon: 10_000,
         max_staleness_ms: (variant == ProfileVariant::BoundedStaleness).then_some(1_000),
@@ -599,89 +708,54 @@ fn validity_is_checked_at_the_moment_of_use() {
     let geo = || vec!["geo".to_string()];
     let strict = contract(ProfileVariant::OnlineStrict);
     let stale = contract(ProfileVariant::BoundedStaleness);
-    let name = |r: Result<(), Error>| r.map_err(|e| e.name());
+    let run = |c: &[u8], now, audience, understood, refresh, online| {
+        check_validity(
+            c, now, audience, understood, refresh, online, 60_000, 0, 100_000,
+        )
+        .map_err(|e| e.name())
+    };
+    let err = |n: &str| Err(n.to_string());
+    assert_eq!(run(&strict, 5_000, "pep:shop", geo(), None, true), Ok(()));
     assert_eq!(
-        check_validity(&strict, 5_000, "pep:shop", geo(), None, true, 60_000),
+        run(&strict, 5_000, "pep:shop", vec![], None, true),
+        err("must-understand")
+    );
+    assert_eq!(
+        run(&strict, 5_000, "pep:bank", geo(), None, true),
+        err("audience")
+    );
+    assert_eq!(
+        run(&strict, 70_001, "pep:shop", geo(), None, true),
+        err("expired")
+    );
+    assert_eq!(
+        run(&strict, 5_000, "pep:shop", geo(), None, false),
+        err("online-required")
+    );
+    assert_eq!(
+        run(&stale, 5_000, "pep:shop", geo(), Some(4_500), false),
         Ok(())
     );
     assert_eq!(
-        name(check_validity(
-            &strict,
-            5_000,
-            "pep:shop",
-            vec![],
-            None,
-            true,
-            60_000
-        )),
-        Err("must-understand".to_string())
+        run(&stale, 5_000, "pep:shop", geo(), Some(3_000), false),
+        err("stale")
     );
     assert_eq!(
-        name(check_validity(
-            &strict,
-            5_000,
-            "pep:bank",
-            geo(),
-            None,
-            true,
-            60_000
-        )),
-        Err("audience".to_string())
+        run(&stale, 5_000, "pep:shop", geo(), None, false),
+        err("stale")
     );
     assert_eq!(
-        name(check_validity(
-            &strict,
-            70_001,
+        check_validity(
+            &[0xa0],
+            0,
             "pep:shop",
             geo(),
             None,
             true,
-            60_000
-        )),
-        Err("expired".to_string())
-    );
-    assert_eq!(
-        name(check_validity(
-            &strict,
-            5_000,
-            "pep:shop",
-            geo(),
-            None,
-            false,
-            60_000
-        )),
-        Err("online-required".to_string())
-    );
-    assert_eq!(
-        check_validity(&stale, 5_000, "pep:shop", geo(), Some(4_500), false, 60_000),
-        Ok(())
-    );
-    assert_eq!(
-        name(check_validity(
-            &stale,
-            5_000,
-            "pep:shop",
-            geo(),
-            Some(3_000),
-            false,
-            60_000
-        )),
-        Err("stale".to_string())
-    );
-    assert_eq!(
-        name(check_validity(
-            &stale,
-            5_000,
-            "pep:shop",
-            geo(),
-            None,
-            false,
-            60_000
-        )),
-        Err("stale".to_string())
-    );
-    assert_eq!(
-        check_validity(&[0xa0], 0, "pep:shop", geo(), None, true, 60_000),
+            60_000,
+            0,
+            100_000
+        ),
         Err(Error::Input)
     );
 }

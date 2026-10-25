@@ -87,10 +87,91 @@ fn ed(header: &str) -> String {
     token_with(&h(header), PAYLOAD, &ed_sign)
 }
 
-fn cases() -> Vec<Case> {
-    let mut out = header_cases();
-    out.extend(signature_cases());
+/// The metadata allowlist of every case that does not name its own.
+const METADATA: &[Algorithm] = &[Algorithm::Ed25519, Algorithm::Es256];
+
+fn cases() -> Vec<(Case, &'static [Algorithm])> {
+    let mut out: Vec<(Case, &'static [Algorithm])> = header_cases()
+        .into_iter()
+        .chain(signature_cases())
+        .map(|c| (c, METADATA))
+        .collect();
+    out.extend(downgrade_cases());
     out
+}
+
+// CR-56 rows 2-4, CR-7, §10.4.5, G46
+fn downgrade_cases() -> Vec<(Case, &'static [Algorithm])> {
+    let es_header = h(r#"{"alg":"ES256","kid":"KID2","typ":"TYP"}"#);
+    let mut out = vec![
+        (
+            Case {
+                id: "metadata-es256-alg-ed25519",
+                row: 3,
+                token: ed(r#"{"alg":"Ed25519","kid":"KID1","typ":"TYP"}"#),
+                expect: Err(JwsError::Algorithm),
+            },
+            &[Algorithm::Es256][..],
+        ),
+        (
+            Case {
+                id: "metadata-ed25519-alg-es256",
+                row: 3,
+                token: token_with(&es_header, PAYLOAD, &es_sign),
+                expect: Err(JwsError::Algorithm),
+            },
+            &[Algorithm::Ed25519][..],
+        ),
+        (
+            Case {
+                id: "p256-key-alg-ed25519",
+                row: 4,
+                token: ed(r#"{"alg":"Ed25519","kid":"KID2","typ":"TYP"}"#),
+                expect: Err(JwsError::KeyType),
+            },
+            METADATA,
+        ),
+        (
+            Case {
+                id: "alg-hs256-p256-key",
+                row: 2,
+                token: token_with(
+                    &h(r#"{"alg":"HS256","kid":"KID2","typ":"TYP"}"#),
+                    PAYLOAD,
+                    &|_| vec![0x5a; 32],
+                ),
+                expect: Err(JwsError::Algorithm),
+            },
+            METADATA,
+        ),
+    ];
+    for (id, alg) in [
+        ("alg-rs256", "RS256"),
+        ("alg-ps256", "PS256"),
+        ("alg-rsa1-5", "RSA1_5"),
+    ] {
+        out.push((
+            Case {
+                id,
+                row: 3,
+                token: token_with(
+                    &h(&format!(r#"{{"alg":"{alg}","kid":"KID2","typ":"TYP"}}"#)),
+                    PAYLOAD,
+                    &|_| vec![0x5a; 256],
+                ),
+                expect: Err(JwsError::Algorithm),
+            },
+            METADATA,
+        ));
+    }
+    out
+}
+
+fn cose_ids(algs: &[Algorithm]) -> String {
+    algs.iter()
+        .map(|a| a.cose().to_string())
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 const ED_HEADER_CASES: [(&str, u8, &str, Result<(), JwsError>); 17] = [
@@ -317,8 +398,9 @@ fn signature_cases() -> Vec<Case> {
 // CR-56
 #[test]
 fn attack_class_vectors() {
-    let ks = keys();
-    for c in cases() {
+    for (c, allowed) in cases() {
+        let mut ks = keys();
+        ks.allowed = allowed.iter().copied().collect();
         let got = verify_compact(&PureBackend, &c.token, &ks, TYP, Origin::Native).map(|_| ());
         assert_eq!(got, c.expect, "{} (row {})", c.id, c.row);
     }
@@ -342,17 +424,26 @@ fn golden_vectors_match() {
         kid(2),
         b64url_encode(p_key().verifying_key().to_sec1_point(false).as_bytes())
     );
-    json.push_str(" },\n \"cases\": [\n");
+    let _ = write!(
+        json,
+        " }},\n \"allowed\": [{}],\n \"cases\": [\n",
+        cose_ids(METADATA)
+    );
     let all = cases();
-    for (i, c) in all.iter().enumerate() {
+    for (i, (c, allowed)) in all.iter().enumerate() {
         let expect = match &c.expect {
             Ok(()) => "accept".to_string(),
             Err(e) => format!("reject: {e}"),
         };
         let sep = if i + 1 == all.len() { "" } else { "," };
+        let own = if *allowed == METADATA {
+            String::new()
+        } else {
+            format!(", \"allowed\": [{}]", cose_ids(allowed))
+        };
         let _ = writeln!(
             json,
-            "  {{\"id\": \"{}\", \"row\": {}, \"token\": \"{}\", \"expect\": \"{expect}\"}}{sep}",
+            "  {{\"id\": \"{}\", \"row\": {}{own}, \"token\": \"{}\", \"expect\": \"{expect}\"}}{sep}",
             c.id, c.row, c.token
         );
     }
@@ -387,11 +478,12 @@ fn claim_rules() {
     assert!(check_claims(PAYLOAD.as_bytes(), &rules).is_ok());
     let at = |now| ClaimRules { now, ..rules };
     assert_eq!(
-        check_claims(PAYLOAD.as_bytes(), &at(2_059_999)).map(|_| ()),
+        check_claims(PAYLOAD.as_bytes(), &at(2_060_000)).map(|_| ()),
         Ok(())
     );
+    // OP-122 m.3
     assert_eq!(
-        check_claims(PAYLOAD.as_bytes(), &at(2_060_000)).map(|_| ()),
+        check_claims(PAYLOAD.as_bytes(), &at(2_060_001)).map(|_| ()),
         Err(ClaimError::Expired)
     );
     assert_eq!(
@@ -501,4 +593,166 @@ fn invalid_keys_are_refused_by_the_key_set() {
         Ok(())
     );
     assert_eq!(ks.keys.len(), 1);
+}
+
+fn nested(depth: usize) -> String {
+    format!(
+        r#"{{"iss":"https://access.example","aud":"pep:shop","exp":2000,"x":{}0{}}}"#,
+        "[".repeat(depth),
+        "]".repeat(depth)
+    )
+}
+
+// OP-122 m.3, m.7, OP-117 m.17
+fn claim_cases() -> Vec<(&'static str, String, u64)> {
+    let base = |rest: &str| format!(r#"{{"iss":"https://access.example","aud":"pep:shop"{rest}}}"#);
+    vec![
+        ("valid", PAYLOAD.to_string(), 1_500_000),
+        ("exp-edge-inclusive", PAYLOAD.to_string(), 2_060_000),
+        ("exp-past", PAYLOAD.to_string(), 2_060_001),
+        ("exp-missing", base(""), 1_500_000),
+        ("exp-not-integer", base(r#","exp":"2000""#), 1_500_000),
+        (
+            "exp-overflow",
+            base(r#","exp":9223372036854775807"#),
+            1_500_000,
+        ),
+        ("exp-fraction", base(r#","exp":2000.5"#), 1_500_000),
+        ("exp-negative", base(r#","exp":-1"#), 1_500_000),
+        ("nbf-negative", base(r#","exp":2000,"nbf":-1"#), 1_500_000),
+        ("iat-negative", base(r#","exp":2000,"iat":-1"#), 1_500_000),
+        ("nbf-edge", base(r#","exp":2000,"nbf":1560"#), 1_500_000),
+        ("nbf-future", base(r#","exp":2000,"nbf":1561"#), 1_500_000),
+        ("iat-edge", base(r#","exp":2000,"iat":1560"#), 1_500_000),
+        ("iat-future", base(r#","exp":2000,"iat":1561"#), 1_500_000),
+        (
+            "iss-other",
+            r#"{"iss":"https://evil","aud":"pep:shop","exp":2000}"#.to_string(),
+            1_500_000,
+        ),
+        (
+            "iss-missing",
+            r#"{"aud":"pep:shop","exp":2000}"#.to_string(),
+            1_500_000,
+        ),
+        (
+            "aud-other",
+            r#"{"iss":"https://access.example","aud":"pep:bank","exp":2000}"#.to_string(),
+            1_500_000,
+        ),
+        (
+            "aud-array-contains",
+            r#"{"iss":"https://access.example","aud":["pep:bank","pep:shop"],"exp":2000}"#
+                .to_string(),
+            1_500_000,
+        ),
+        (
+            "aud-empty-array",
+            r#"{"iss":"https://access.example","aud":[],"exp":2000}"#.to_string(),
+            1_500_000,
+        ),
+        (
+            "aud-missing",
+            r#"{"iss":"https://access.example","exp":2000}"#.to_string(),
+            1_500_000,
+        ),
+        ("json-depth-32", nested(31), 1_500_000),
+        ("json-depth-33", nested(32), 1_500_000),
+        (
+            "json-duplicate-member",
+            r#"{"iss":"https://access.example","aud":"pep:shop","exp":2000,"exp":3000}"#
+                .to_string(),
+            1_500_000,
+        ),
+    ]
+}
+
+fn claim_result(token: &str, now: u64) -> Result<(), String> {
+    let v = verify_compact(&PureBackend, token, &keys(), TYP, Origin::Native)
+        .map_err(|e| format!("{e}"))?;
+    let rules = ClaimRules {
+        issuer: "https://access.example",
+        audience: "pep:shop",
+        now,
+        skew_ms: 60_000,
+    };
+    check_claims(&v.payload, &rules)
+        .map(|_| ())
+        .map_err(|e| format!("{e}"))
+}
+
+// OP-122 m.3, m.7
+#[test]
+fn jwt_claim_vectors_match() {
+    use core::fmt::Write as _;
+    let all = claim_cases();
+    let got: alloc::collections::BTreeMap<&str, Result<(), String>> = all
+        .iter()
+        .map(|(id, payload, now)| {
+            (
+                *id,
+                claim_result(&token_with(&ed_header(), payload, &ed_sign), *now),
+            )
+        })
+        .collect();
+    for id in [
+        "valid",
+        "exp-edge-inclusive",
+        "nbf-edge",
+        "iat-edge",
+        "aud-array-contains",
+        "json-depth-32",
+    ] {
+        assert_eq!(got[id], Ok(()), "{id}");
+    }
+    assert_eq!(got["exp-past"], Err("expired".to_string()));
+    for id in ["exp-negative", "nbf-negative", "iat-negative"] {
+        assert_eq!(got[id], Err("bad time claim".to_string()), "{id}");
+    }
+    assert_eq!(
+        got["json-depth-33"],
+        Err("payload: nesting too deep".to_string())
+    );
+    let mut json = format!(
+        "{{\n \"rule\": \"OP-122\",\n \"track\": \"core\",\n \"version\": 1,\n \"operation\": \"verify.jws_compact\",\n \"typ\": \"{TYP}\",\n \"keys\": {{\n  \"{}\": \"{}\"\n }},\n \"allowed\": [{}],\n \"claims\": {{\"issuer\": \"https://access.example\", \"audience\": \"pep:shop\", \"now\": 1500000, \"skew_ms\": 60000}},\n \"cases\": [\n",
+        kid(1),
+        b64url_encode(&ed_key().verifying_key().to_bytes()),
+        cose_ids(&[Algorithm::Ed25519]),
+    );
+    let mut lines = Vec::new();
+    for (id, payload, now) in &all {
+        let expect = match &got[id] {
+            Ok(()) => "accept".to_string(),
+            Err(e) => format!("reject: {e}"),
+        };
+        let claims = if *now == 1_500_000 {
+            String::new()
+        } else {
+            format!(
+                ", \"claims\": {{\"issuer\": \"https://access.example\", \"audience\": \"pep:shop\", \"now\": {now}, \"skew_ms\": 60000}}"
+            )
+        };
+        lines.push(format!(
+            "  {{\"id\": \"{id}\"{claims}, \"token\": \"{}\", \"expect\": \"{expect}\"}}",
+            token_with(&ed_header(), payload, &ed_sign)
+        ));
+    }
+    json.push_str(&lines.join(",\n"));
+    let _ = write!(json, "\n ]\n}}\n");
+    #[cfg(not(target_os = "wasi"))]
+    if std::env::var_os("ACCESS_UPDATE_VECTORS").is_some() {
+        std::fs::write(
+            concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../../conformance/vectors/core/1/jwt-claims.json"
+            ),
+            &json,
+        )
+        .unwrap();
+        return;
+    }
+    assert_eq!(
+        include_str!("../../../../../conformance/vectors/core/1/jwt-claims.json"),
+        json
+    );
 }

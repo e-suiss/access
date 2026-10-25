@@ -13,10 +13,15 @@ pub mod digest;
 pub mod intent;
 pub mod json;
 pub mod model;
+pub mod record;
 pub mod requirement;
 pub mod restriction;
 pub mod validity;
 pub mod verify;
+pub mod version;
+
+#[cfg(test)]
+mod invariants;
 
 /// Version of the Kernel public API (OP-1 rule 4: every semantic version's Kernel is kept).
 pub const API_VERSION: ApiVersion = ApiVersion { major: 0, minor: 0 };

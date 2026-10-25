@@ -127,8 +127,13 @@ impl Case {
                     meta_schema: 1,
                     ..SpecVersions::default()
                 },
+                adopted: SpecVersions {
+                    core: 1,
+                    meta_schema: 1,
+                    ..SpecVersions::default()
+                },
                 caps: Some(VerifierCaps {
-                    horizon_max_ms: Some(72 * HOUR),
+                    horizon: BTreeMap::from([(0, 72 * HOUR), (3, HOUR)]),
                     slice_max: BTreeMap::new(),
                 }),
                 hybrid: None,
@@ -254,6 +259,30 @@ fn scenarios() -> Vec<(&'static str, Case)> {
     let mut c = Case::new();
     c.content_type = METADATA_CONTENT_TYPE;
     out.push(("excerpt-content-type", c));
+    out.extend(hybrid_scenarios());
+    out
+}
+
+// OP-118 m.5
+fn hybrid_scenarios() -> Vec<(&'static str, Case)> {
+    let mut out = Vec::new();
+    let mut c = Case::new();
+    c.metadata.hybrid = Some(Hybrid::Classic);
+    out.push(("hybrid-classic", c));
+    let mut c = Case::new();
+    c.metadata.hybrid = Some(Hybrid::Classic);
+    c.excerpt.key = op_key(p_pub(), Algorithm::Esp256);
+    out.push(("hybrid-classic-esp256", c));
+    let mut c = Case::new();
+    c.metadata.hybrid = Some(Hybrid::Both);
+    out.push(("hybrid-both-ml-dsa-disabled", c));
+    let mut c = Case::new();
+    c.metadata.hybrid = Some(Hybrid::Pq);
+    out.push(("hybrid-pq-ml-dsa-disabled", c));
+    let mut c = Case::new();
+    c.metadata.hybrid = Some(Hybrid::Both);
+    c.excerpt.key = op_key(p_pub(), Algorithm::Esp256);
+    out.push(("hybrid-both-esp256", c));
     out
 }
 
@@ -315,6 +344,14 @@ fn each_step_rejects_its_case() {
             "excerpt-content-type",
             Some(KeyScopeError::Signature(CoseError::ContentType)),
         ),
+        ("hybrid-classic", None),
+        ("hybrid-classic-esp256", None),
+        (
+            "hybrid-both-ml-dsa-disabled",
+            Some(KeyScopeError::Algorithm),
+        ),
+        ("hybrid-pq-ml-dsa-disabled", Some(KeyScopeError::Algorithm)),
+        ("hybrid-both-esp256", Some(KeyScopeError::Algorithm)),
     ];
     let all = scenarios();
     assert_eq!(all.len(), expect.len());
@@ -447,6 +484,43 @@ fn metadata_decoding_is_strict() {
         panic!("metadata is a map")
     };
     entries.push((Value::text("zzz_endpoint"), Value::text("https://x")));
+    let bytes = dcbor::encode(&Value::Map(entries), Limits::CEILING).unwrap();
+    assert_eq!(DomainMetadata::from_bytes(&bytes), Err(ModelError::Unknown));
+
+    // OP-118 m.4
+    for (ct, want) in [(3, Ok(())), (4, Err(ModelError::Unknown))] {
+        let mut caps = case.metadata.clone();
+        caps.caps = Some(VerifierCaps {
+            horizon: BTreeMap::from([(ct, HOUR)]),
+            slice_max: BTreeMap::new(),
+        });
+        assert_eq!(
+            DomainMetadata::from_bytes(&caps.to_bytes().unwrap()).map(|_| ()),
+            want,
+            "ct {ct}"
+        );
+    }
+    let mut empty_caps = case.metadata.clone();
+    empty_caps.caps = Some(VerifierCaps::default());
+    let Value::Map(mut entries) = empty_caps.to_value() else {
+        panic!("metadata is a map")
+    };
+    for (k, v) in &mut entries {
+        if *k == Value::text("caps") {
+            *v = Value::Map(vec![(Value::text("horizon"), Value::Map(vec![]))]);
+        }
+    }
+    let bytes = dcbor::encode(&Value::Map(entries), Limits::CEILING).unwrap();
+    assert_eq!(DomainMetadata::from_bytes(&bytes), Err(ModelError::Range));
+    let mut legacy = case.metadata.clone();
+    legacy.caps = None;
+    let Value::Map(mut entries) = legacy.to_value() else {
+        panic!("metadata is a map")
+    };
+    entries.push((
+        Value::text("caps"),
+        Value::Map(vec![(Value::text("horizon_max_ms"), Value::Unsigned(HOUR))]),
+    ));
     let bytes = dcbor::encode(&Value::Map(entries), Limits::CEILING).unwrap();
     assert_eq!(DomainMetadata::from_bytes(&bytes), Err(ModelError::Unknown));
 

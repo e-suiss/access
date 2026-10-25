@@ -118,10 +118,10 @@ fn matching_rules() {
         &ctx()
     ));
     let mut floor = t.clone();
-    floor.assurance.insert("method".to_string(), 2);
+    floor.assurance.insert("aal".to_string(), 2);
     assert!(!matches(&floor, &p, &ctx()));
     let mut strong = p.clone();
-    strong.assurance.insert("method".to_string(), 3);
+    strong.assurance.insert("aal".to_string(), 3);
     assert!(matches(&floor, &strong, &ctx()));
     let mut sourced = t.clone();
     sourced.source = Some(SubjectSelector::Party(id(101)));

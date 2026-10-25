@@ -7,9 +7,9 @@ use alloc::vec::Vec;
 use super::*;
 use crate::intent::ContextRefs;
 use crate::model::{
-    ActionRef, ActionSet, Binding, BudgetWindow, ConstraintSet, Consumption, DelegationTerms,
-    Independence, ProofKind, ResourceRef, ResourceSelector, Structural, SubjectSelector,
-    WhileCondition, Window,
+    ActionRef, ActionSet, Binding, Bound, BudgetWindow, ConstraintSet, Consumption,
+    DelegationTerms, Independence, ProofKind, ResourceRef, ResourceSelector, Structural,
+    SubjectSelector, WhileCondition, Window,
 };
 use crate::requirement::ProofBinding;
 use crate::restriction::PolicyDeny;
@@ -71,7 +71,7 @@ fn hop() -> Hop {
 
 fn basis(hops: Vec<Hop>) -> Basis {
     Basis {
-        hops,
+        hops: hops.into_iter().map(Stored::Known).collect(),
         capacities: [Capacity::Own].into_iter().collect(),
     }
 }
@@ -178,6 +178,20 @@ impl World {
         evaluate(&input, &mut Fuel(10_000))
     }
 
+    fn hop(&mut self, k: usize) -> &mut Hop {
+        match &mut self.bases[0].hops[k] {
+            Stored::Known(h) => h,
+            Stored::NotUnderstood => panic!("hop {k} is not understood"),
+        }
+    }
+
+    fn hops_mut(&mut self) -> impl Iterator<Item = &mut Hop> {
+        self.bases[0].hops.iter_mut().filter_map(|h| match h {
+            Stored::Known(h) => Some(h),
+            Stored::NotUnderstood => None,
+        })
+    }
+
     fn blockers(
         &self,
     ) -> Vec<(
@@ -209,7 +223,7 @@ fn allow_when_every_hop_covers() {
 #[test]
 fn blocker_table() {
     let mut w = World::new();
-    w.bases[0].hops[1].authority.authority.actions.exact.clear();
+    w.hop(1).authority.authority.actions.exact.clear();
     assert_eq!(
         w.blockers(),
         vec![(
@@ -270,13 +284,13 @@ fn blocker_table_restriction_and_budget() {
     );
 
     let mut w = World::new();
-    w.bases[0].hops[0].budgets.push(BudgetState {
+    w.hop(0).budgets.push(BudgetState {
         window: BudgetWindow::RollingSeconds(60),
         remaining: 0,
         demand: 1,
         resets_at: Some(70_000),
     });
-    w.bases[0].hops[1].budgets.push(BudgetState {
+    w.hop(1).budgets.push(BudgetState {
         window: BudgetWindow::Total,
         remaining: 5,
         demand: 6,
@@ -307,11 +321,11 @@ fn blocker_table_restriction_and_budget() {
 #[test]
 fn blocker_table_ended_and_capacity() {
     let mut w = World::new();
-    w.bases[0].hops[0].authority.constraints.validity = Window {
+    w.hop(0).authority.constraints.validity = Window {
         from: 0,
         until: 49_999,
     };
-    w.bases[0].hops[1].authority.constraints.validity = Window {
+    w.hop(1).authority.constraints.validity = Window {
         from: 60_000,
         until: 90_000,
     };
@@ -336,8 +350,8 @@ fn blocker_table_ended_and_capacity() {
     );
 
     let mut w = World::new();
-    w.bases[0].hops[0].status = HopStatus::Revoked;
-    w.bases[0].hops[1].conditions_hold = false;
+    w.hop(0).status = HopStatus::Revoked;
+    w.hop(1).conditions_hold = false;
     assert_eq!(
         w.blockers(),
         vec![
@@ -376,10 +390,7 @@ fn blocker_table_ended_and_capacity() {
 #[test]
 fn requirements_and_deny_overrides() {
     let mut w = World::new();
-    w.bases[0].hops[1]
-        .authority
-        .requirements
-        .insert(approval(true));
+    w.hop(1).authority.requirements.insert(approval(true));
     let dec = w.run().unwrap();
     assert_eq!(dec.outcome, Outcome::RequireAction);
     assert_eq!(
@@ -432,7 +443,7 @@ fn requirements_and_deny_overrides() {
     let mut w = World::new();
     let mut sourced = approval(false);
     sourced.source = Some(crate::model::SubjectSelector::Party(Id([42; 16])));
-    w.bases[0].hops[0].authority.requirements.insert(sourced);
+    w.hop(0).authority.requirements.insert(sourced);
     w.proofs.push(step_up_proof());
     assert_eq!(
         w.blockers(),
@@ -544,7 +555,7 @@ fn deny_policy(n: u8, undisclosed: bool) -> PolicyResult {
 fn scenarios() -> Vec<(&'static str, World)> {
     let mut out = vec![("allow", World::new())];
     let mut w = World::new();
-    w.bases[0].hops[1].authority.authority.actions.exact.clear();
+    w.hop(1).authority.authority.actions.exact.clear();
     out.push(("deny-no-covering-authority-hop1", w));
     let mut w = World::new();
     let mut narrow = authority();
@@ -558,7 +569,7 @@ fn scenarios() -> Vec<(&'static str, World)> {
     w.restrictions.push(deny_policy(7, true));
     out.push(("deny-restricted", w));
     let mut w = World::new();
-    w.bases[0].hops[0].budgets.push(BudgetState {
+    w.hop(0).budgets.push(BudgetState {
         window: BudgetWindow::RollingSeconds(60),
         remaining: 0,
         demand: 1,
@@ -566,7 +577,7 @@ fn scenarios() -> Vec<(&'static str, World)> {
     });
     out.push(("deny-budget-rolling", w));
     let mut w = World::new();
-    w.bases[0].hops[1].budgets.push(BudgetState {
+    w.hop(1).budgets.push(BudgetState {
         window: BudgetWindow::Total,
         remaining: 5,
         demand: 6,
@@ -574,22 +585,22 @@ fn scenarios() -> Vec<(&'static str, World)> {
     });
     out.push(("deny-budget-total", w));
     let mut w = World::new();
-    w.bases[0].hops[0].authority.constraints.validity = Window {
+    w.hop(0).authority.constraints.validity = Window {
         from: 0,
         until: 49_999,
     };
     out.push(("deny-expired", w));
     let mut w = World::new();
-    w.bases[0].hops[1].authority.constraints.validity = Window {
+    w.hop(1).authority.constraints.validity = Window {
         from: 60_000,
         until: 90_000,
     };
     out.push(("deny-not-yet-valid", w));
     let mut w = World::new();
-    w.bases[0].hops[0].status = HopStatus::Revoked;
+    w.hop(0).status = HopStatus::Revoked;
     out.push(("deny-revoked", w));
     let mut w = World::new();
-    w.bases[0].hops[1].conditions_hold = false;
+    w.hop(1).conditions_hold = false;
     out.push(("deny-lapsed", w));
     let mut w = World::new();
     w.capacity = Capacity::For(Id([5; 16]));
@@ -601,30 +612,18 @@ fn scenarios() -> Vec<(&'static str, World)> {
 fn requirement_scenarios() -> Vec<(&'static str, World)> {
     let mut out = Vec::new();
     let mut w = World::new();
-    w.bases[0].hops[1]
-        .authority
-        .requirements
-        .insert(approval(true));
+    w.hop(1).authority.requirements.insert(approval(true));
     out.push(("require-step-up", w));
     let mut w = World::new();
-    w.bases[0].hops[1]
-        .authority
-        .requirements
-        .insert(approval(true));
+    w.hop(1).authority.requirements.insert(approval(true));
     w.agent = true;
     out.push(("require-human-presence-agent", w));
     let mut w = World::new();
-    w.bases[0].hops[1]
-        .authority
-        .requirements
-        .insert(approval(true));
+    w.hop(1).authority.requirements.insert(approval(true));
     w.proofs.push(step_up_proof());
     out.push(("allow-with-proof", w));
     let mut w = World::new();
-    w.bases[0].hops[1]
-        .authority
-        .requirements
-        .insert(approval(true));
+    w.hop(1).authority.requirements.insert(approval(true));
     w.restrictions.push(deny_policy(7, false));
     out.push(("deny-overrides-require", w));
     let mut w = World::new();
@@ -637,7 +636,7 @@ fn requirement_scenarios() -> Vec<(&'static str, World)> {
     let mut w = World::new();
     let mut sourced = approval(false);
     sourced.source = Some(crate::model::SubjectSelector::Party(Id([42; 16])));
-    w.bases[0].hops[0].authority.requirements.insert(sourced);
+    w.hop(0).authority.requirements.insert(sourced);
     w.proofs.push(step_up_proof());
     out.push(("deny-source-not-accepted", w));
     let mut w = World::new();
@@ -664,18 +663,18 @@ fn ordering_scenarios() -> Vec<(&'static str, World)> {
     let mut out = Vec::new();
     let mut w = World::new();
     w.restrictions.push(deny_policy(7, false));
-    w.bases[0].hops[1].status = HopStatus::Revoked;
-    w.bases[0].hops[0].authority.constraints.validity.until = 40_000;
+    w.hop(1).status = HopStatus::Revoked;
+    w.hop(0).authority.constraints.validity.until = 40_000;
     w.capacity = Capacity::For(party(9));
     out.push(("deny-four-blocker-classes", w));
     let mut w = World::new();
-    for h in &mut w.bases[0].hops {
+    for h in w.hops_mut() {
         h.authority.requirements.insert(approval(true));
     }
     w.proofs.push(step_up_proof());
     out.push(("allow-inherited-term-counts-once", w));
     let mut w = World::new();
-    for h in &mut w.bases[0].hops {
+    for h in w.hops_mut() {
         h.authority.requirements.insert(approval(true));
     }
     out.push(("require-inherited-term-at-first-hop", w));
@@ -689,7 +688,7 @@ fn ordering_scenarios() -> Vec<(&'static str, World)> {
     w.bases = vec![basis(vec![needs]), basis(vec![uncovered])];
     out.push(("check-deny-merges-blockers-only", w));
     let mut w = World::new();
-    w.bases[0].hops[0].budgets.push(BudgetState {
+    w.hop(0).budgets.push(BudgetState {
         window: BudgetWindow::RollingSeconds(60),
         remaining: 0,
         demand: 1,
@@ -697,10 +696,7 @@ fn ordering_scenarios() -> Vec<(&'static str, World)> {
     });
     out.push(("reject-rolling-budget-without-reset", w));
     let mut w = World::new();
-    w.bases[0].hops[0]
-        .authority
-        .requirements
-        .insert(approval(true));
+    w.hop(0).authority.requirements.insert(approval(true));
     let mut future = step_up_proof();
     future.time = 60_000;
     w.proofs.push(future);
@@ -734,7 +730,7 @@ fn ordering_scenarios() -> Vec<(&'static str, World)> {
     w.proofs.push(twin);
     out.push(("reject-duplicate-proof-id", w));
     let mut w = World::new();
-    w.bases[0].hops[0].authority.constraints.validity = Window {
+    w.hop(0).authority.constraints.validity = Window {
         from: 60_000,
         until: 40_000,
     };
@@ -746,7 +742,7 @@ fn ordering_scenarios() -> Vec<(&'static str, World)> {
     w.agent = true;
     let mut zero = approval(false);
     zero.assurance.insert(HUMAN_PRESENCE.to_string(), 0);
-    w.bases[0].hops[0].authority.requirements.insert(zero);
+    w.hop(0).authority.requirements.insert(zero);
     out.push(("require-human-presence-zero-agent", w));
     let mut w = World::new();
     w.intent.validity.until = 40_000;
@@ -754,7 +750,285 @@ fn ordering_scenarios() -> Vec<(&'static str, World)> {
     let mut w = World::new();
     w.intent.validity.from = 60_000;
     out.push(("reject-intent-not-yet-valid", w));
+    out.extend(not_understood_scenarios());
+    out.extend(assurance_scenarios());
+    out.extend(public_scenarios());
     out
+}
+
+// OP-124 m.4: a `public` recipient or subject bound is no restriction
+fn public_scenarios() -> Vec<(&'static str, World)> {
+    let recipient = |with: bool| {
+        let mut w = World::new();
+        for h in w.hops_mut() {
+            h.authority.authority.recipient = Some(SubjectSelector::Public);
+        }
+        w.intent.recipient = with.then_some(party(5));
+        w
+    };
+    let subject = |with: bool| {
+        let mut w = World::new();
+        for h in w.hops_mut() {
+            h.authority
+                .authority
+                .params
+                .insert("payee".to_string(), Bound::Subject(SubjectSelector::Public));
+        }
+        if with {
+            w.intent.params.insert(
+                "payee".to_string(),
+                crate::intent::ParamValue::Subject(party(5)),
+            );
+        }
+        w
+    };
+    vec![
+        ("allow-public-recipient-with-recipient", recipient(true)),
+        ("allow-public-recipient-without-recipient", recipient(false)),
+        ("allow-public-subject-bound-with-value", subject(true)),
+        ("allow-public-subject-bound-without-value", subject(false)),
+    ]
+}
+
+// OP-124 m.4
+#[test]
+fn public_bounds_cover_with_and_without_a_value() {
+    for (id, w) in public_scenarios() {
+        assert_eq!(w.run().map(|d| d.outcome), Ok(Outcome::Allow), "{id}");
+    }
+}
+
+// OP-118 m.2
+fn not_understood_scenarios() -> Vec<(&'static str, World)> {
+    let mut out = Vec::new();
+    let mut w = World::new();
+    w.bases[0].hops[1] = Stored::NotUnderstood;
+    out.push(("deny-not-understood-hop1-commit", w));
+    let mut w = World::new();
+    w.mode = Mode::Continue;
+    w.bases[0].hops[0] = Stored::NotUnderstood;
+    w.hop(1).status = HopStatus::Revoked;
+    out.push(("deny-not-understood-hop0-continue", w));
+    let mut w = World::new();
+    w.hop(0).authority.requirements.insert(approval(false));
+    w.bases[0].hops[1] = Stored::NotUnderstood;
+    out.push(("deny-not-understood-keeps-unmet", w));
+    let mut w = World::new();
+    w.mode = Mode::Check;
+    let mut unknown = basis(vec![hop()]);
+    unknown.hops[0] = Stored::NotUnderstood;
+    w.bases = vec![unknown, basis(vec![hop()])];
+    out.push(("check-not-understood-then-allow", w));
+    let mut w = World::new();
+    w.mode = Mode::Check;
+    let mut unknown = basis(vec![hop(), hop()]);
+    unknown.hops[1] = Stored::NotUnderstood;
+    w.bases = vec![unknown];
+    out.push(("check-not-understood-only", w));
+    out
+}
+
+fn assured(term: &[(&str, u64)], proof: &[(&str, u64)]) -> World {
+    let mut w = World::new();
+    let mut t = approval(false);
+    t.assurance = term.iter().map(|(d, n)| ((*d).to_string(), *n)).collect();
+    w.hop(0).authority.requirements.insert(t);
+    let mut p = step_up_proof();
+    p.assurance = proof.iter().map(|(d, n)| ((*d).to_string(), *n)).collect();
+    w.proofs.push(p);
+    w
+}
+
+// OP-118 m.3
+fn assurance_floor_scenarios() -> Vec<(&'static str, World)> {
+    let mut out = Vec::new();
+    for (dim, at, below) in [
+        (
+            "aal",
+            "allow-assurance-aal-at-floor",
+            "require-assurance-aal-below-floor",
+        ),
+        (
+            "app_controlled_factor",
+            "allow-assurance-app-controlled-factor-at-floor",
+            "require-assurance-app-controlled-factor-below-floor",
+        ),
+        (
+            "hardware_bound",
+            "allow-assurance-hardware-bound-at-floor",
+            "require-assurance-hardware-bound-below-floor",
+        ),
+        (
+            HUMAN_PRESENCE,
+            "allow-assurance-human-presence-at-floor",
+            "require-assurance-human-presence-below-floor",
+        ),
+        (
+            "loa_eidas",
+            "allow-assurance-loa-eidas-at-floor",
+            "require-assurance-loa-eidas-below-floor",
+        ),
+        (
+            "non_custodial",
+            "allow-assurance-non-custodial-at-floor",
+            "require-assurance-non-custodial-below-floor",
+        ),
+        (
+            "phishing_resistant",
+            "allow-assurance-phishing-resistant-at-floor",
+            "require-assurance-phishing-resistant-below-floor",
+        ),
+        (
+            "uv",
+            "allow-assurance-uv-at-floor",
+            "require-assurance-uv-below-floor",
+        ),
+    ] {
+        let (_, _, high) = requirement::ASSURANCE_DIMENSIONS
+            .iter()
+            .find(|(d, _, _)| *d == dim)
+            .copied()
+            .unwrap();
+        out.push((at, assured(&[(dim, high)], &[(dim, high)])));
+        out.push((
+            below,
+            assured(&[(dim, high)], &[(dim, high.checked_sub(1).unwrap())]),
+        ));
+    }
+    out
+}
+
+// OP-118 m.3
+fn assurance_scenarios() -> Vec<(&'static str, World)> {
+    let mut out = assurance_floor_scenarios();
+    out.push((
+        "allow-assurance-loa-eidas-above-floor",
+        assured(&[("loa_eidas", 2)], &[("loa_eidas", 3)]),
+    ));
+    out.push((
+        "allow-assurance-synced-unsynced-meets-zero",
+        assured(&[("synced", 0)], &[("synced", 0)]),
+    ));
+    out.push((
+        "require-assurance-synced-inverted",
+        assured(&[("synced", 0)], &[("synced", 1)]),
+    ));
+    out.push((
+        "allow-assurance-synced-floor-one-unsynced",
+        assured(&[("synced", 1)], &[("synced", 0)]),
+    ));
+    out.push((
+        "require-assurance-missing-in-proof",
+        assured(&[("aal", 1)], &[("uv", 1)]),
+    ));
+    out.push((
+        "reject-assurance-unknown-dimension-term",
+        assured(&[("method", 1)], &[("aal", 3)]),
+    ));
+    out.push((
+        "reject-assurance-unknown-dimension-proof",
+        assured(&[("aal", 1)], &[("aal", 3), ("method", 1)]),
+    ));
+    out.push((
+        "reject-assurance-auth-time-is-not-a-dimension",
+        assured(&[("auth_time", 1)], &[("aal", 3)]),
+    ));
+    out.push((
+        "reject-assurance-aal-zero-term",
+        assured(&[("aal", 0)], &[("aal", 3)]),
+    ));
+    out.push((
+        "reject-assurance-aal-four-proof",
+        assured(&[("aal", 1)], &[("aal", 4)]),
+    ));
+    out.push((
+        "reject-assurance-flag-two-term",
+        assured(&[("uv", 2)], &[("uv", 1)]),
+    ));
+    // OP-122 m.2
+    let mut w = assured(
+        &[("synced", 1)],
+        &[("hardware_bound", 0), (HUMAN_PRESENCE, 1), ("synced", 0)],
+    );
+    let mut second = approval(false);
+    second.assurance.insert("hardware_bound".to_string(), 0);
+    w.hop(0).authority.requirements.insert(second);
+    out.push(("require-shared-single-use-proof-canonical-order", w));
+    let mut w = World::new();
+    w.mandate = Some(Mandate {
+        authority: authority(),
+        requirements: [{
+            let mut t = approval(false);
+            t.assurance.insert("loa_eidas".to_string(), 4);
+            t
+        }]
+        .into_iter()
+        .collect(),
+    });
+    out.push(("reject-assurance-out-of-range-mandate", w));
+    out
+}
+
+// OP-118 m.2, m.3
+#[test]
+fn not_understood_hops_and_closed_assurance() {
+    let all: BTreeMap<&str, World> = not_understood_scenarios()
+        .into_iter()
+        .chain(assurance_scenarios())
+        .collect();
+    let no_cover = |k| {
+        (
+            BlockerClass::NoCoveringAuthority,
+            None,
+            Position::Hop(k),
+            Resolver::GrantorOfHop(k),
+            Remediation::RouteToCoordinator,
+        )
+    };
+    assert_eq!(
+        all["deny-not-understood-hop1-commit"].blockers(),
+        vec![no_cover(1)]
+    );
+    let blockers = all["deny-not-understood-hop0-continue"].blockers();
+    assert!(blockers.contains(&no_cover(0)));
+    assert!(
+        blockers
+            .iter()
+            .all(|b| b.2 != Position::Hop(0) || *b == no_cover(0))
+    );
+    let d = all["deny-not-understood-keeps-unmet"].run().unwrap();
+    assert_eq!((d.outcome, d.unmet.len()), (Outcome::Deny, 1));
+    assert_eq!(
+        all["check-not-understood-then-allow"]
+            .run()
+            .unwrap()
+            .outcome,
+        Outcome::Allow
+    );
+    assert_eq!(
+        all["check-not-understood-only"].blockers(),
+        vec![no_cover(1)]
+    );
+    let d = all["require-shared-single-use-proof-canonical-order"]
+        .run()
+        .unwrap();
+    assert_eq!(
+        d.unmet
+            .iter()
+            .map(|u| u.term.assurance.keys().cloned().collect::<Vec<_>>())
+            .collect::<Vec<_>>(),
+        vec![vec!["hardware_bound".to_string()]]
+    );
+    for (id, w) in &all {
+        let got = w.run();
+        if id.starts_with("reject-") {
+            assert_eq!(got, Err(Rejection::Input), "{id}");
+        } else if id.starts_with("allow-") {
+            assert_eq!(got.map(|d| d.outcome), Ok(Outcome::Allow), "{id}");
+        } else if id.starts_with("require-") {
+            assert_eq!(got.map(|d| d.outcome), Ok(Outcome::RequireAction), "{id}");
+        }
+    }
 }
 
 // OP-114 m.2, m.5, m.11, m.13, m.14
@@ -925,7 +1199,7 @@ fn leaf() -> CanonicalAuthority {
 
 fn with_recipient(sel: &SubjectSelector, recipient: u8, allow: bool) -> Cve {
     let mut w = World::new();
-    for h in &mut w.bases[0].hops {
+    for h in w.hops_mut() {
         h.authority.authority.recipient = Some(sel.clone());
     }
     w.intent.recipient = Some(party(recipient));
@@ -948,7 +1222,7 @@ fn pinned_catalog(pin: u8) -> World {
     w.catalog
         .catalogs
         .insert(d(21), [capture, action()].into_iter().collect());
-    for h in &mut w.bases[0].hops {
+    for h in w.hops_mut() {
         h.authority.authority.actions = ActionSet {
             exact: BTreeSet::new(),
             prefix: [("pay".to_string(), d(pin))].into_iter().collect(),
@@ -1097,14 +1371,14 @@ fn cve_evaluation_cases() -> Vec<(&'static str, &'static [&'static str], Cve)> {
     ));
 
     let mut w = World::new();
-    w.bases[0].hops[0].authority.constraints.validity.until = 40_000;
+    w.hop(0).authority.constraints.validity.until = 40_000;
     out.push((
         "expired-invitation",
         &["CVE-2025-64708"],
         Cve::Evaluate(w, Outcome::Deny, Some(BlockerClass::Ended)),
     ));
     let mut w = World::new();
-    w.bases[0].hops[0].budgets.push(BudgetState {
+    w.hop(0).budgets.push(BudgetState {
         window: BudgetWindow::Total,
         remaining: 0,
         demand: 1,
@@ -1149,6 +1423,18 @@ fn cve_capacity_cases() -> Vec<(&'static str, &'static [&'static str], Cve)> {
         name: "admin".to_string(),
         ..action()
     });
+    // OP-124 m.1
+    let mut unknown = leaf();
+    unknown
+        .authority
+        .actions
+        .prefix
+        .insert(("pay".to_string(), d(77)));
+    out.push((
+        "delegate-child-prefix-unknown-catalog",
+        &[],
+        delegate(unknown, SubjectSelector::Party(party(2)), true),
+    ));
     out.push((
         "delegate-above-own-authority",
         IMPERSONATION,
@@ -1295,7 +1581,12 @@ fn random_hop(r: &mut Rng) -> Hop {
         h.authority.authority.recipient = Some(SubjectSelector::Party(party(5)));
     }
     if r.chance(25) {
-        h.authority.requirements.insert(approval(r.chance(50)));
+        let mut term = approval(r.chance(50));
+        // OP-118 m.3
+        if r.chance(30) {
+            term.assurance.insert("synced".to_string(), r.below(2));
+        }
+        h.authority.requirements.insert(term);
     }
     h
 }
@@ -1311,6 +1602,9 @@ fn random_world(r: &mut Rng) -> World {
     w.bases = (0..bases)
         .map(|_| {
             let mut b = basis((0..=r.below(4)).map(|_| random_hop(r)).collect());
+            if r.chance(5) {
+                b.hops[0] = Stored::NotUnderstood;
+            }
             if r.chance(50) {
                 b.capacities.insert(Capacity::For(party(9)));
             }
@@ -1345,6 +1639,10 @@ fn random_world(r: &mut Rng) -> World {
         p.time = [1, 49_999, 60_000][usize::try_from(r.below(3)).unwrap()];
         if r.chance(20) {
             p.assurance.clear();
+        }
+        // OP-118 m.3
+        if r.chance(40) {
+            p.assurance.insert("synced".to_string(), r.below(2));
         }
         w.proofs.push(p);
     }

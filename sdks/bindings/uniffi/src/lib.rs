@@ -253,8 +253,8 @@ pub fn verify_cose_sign1(
 /// # Errors
 /// `input` or a key-scope name.
 #[uniffi::export]
-pub fn verify_metadata(signed: Vec<u8>, trusted: Vec<u8>) -> Result<Vec<u8>, KernelError> {
-    Ok(binding::verify_metadata(&signed, &trusted)?)
+pub fn verify_metadata(metadata: Vec<u8>, trusted: Vec<u8>) -> Result<Vec<u8>, KernelError> {
+    Ok(binding::verify_metadata(&metadata, &trusted)?)
 }
 
 /// `domain-metadata`, artefact domain, signed excerpt, usage and `iat` to `operational-key`.
@@ -318,10 +318,11 @@ pub fn verify_sd_jwt(
     )?)
 }
 
-/// Checks a `validity-contract` at the moment of use (§9.12).
+/// Checks a `validity-contract` at the moment of use (§9.12, OP-118 m.4).
 ///
 /// # Errors
 /// `input` or a validity name.
+#[allow(clippy::too_many_arguments, reason = "OP-116 m.9")]
 #[uniffi::export]
 pub fn check_validity(
     contract: Vec<u8>,
@@ -331,6 +332,8 @@ pub fn check_validity(
     last_refresh: Option<u64>,
     online: bool,
     skew_ms: u64,
+    iat: u64,
+    horizon_cap_ms: u64,
 ) -> Result<(), KernelError> {
     Ok(binding::check_validity(
         &contract,
@@ -340,6 +343,8 @@ pub fn check_validity(
         last_refresh,
         online,
         skew_ms,
+        iat,
+        horizon_cap_ms,
     )?)
 }
 

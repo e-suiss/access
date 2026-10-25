@@ -92,6 +92,8 @@ pub struct ValidityContract {
     pub class: ProfileClass,
     /// Profile variant.
     pub variant: ProfileVariant,
+    /// Connectivity profile track version (OP-120 m.8).
+    pub profile_version: u64,
     /// Profile parameters.
     pub params: alloc::collections::BTreeMap<String, u64>,
     /// Absolute expiry.
@@ -223,6 +225,7 @@ impl Canonical for ValidityContract {
                 Some(map([
                     ("class", Some(word_of(self.class, &CLASSES))),
                     ("variant", Some(word_of(self.variant, &VARIANTS))),
+                    ("version", Some(Value::Unsigned(self.profile_version))),
                     ("params", profile_params),
                 ])),
             ),
@@ -269,6 +272,7 @@ impl Canonical for ValidityContract {
         if variant.class() != class {
             return Err(ModelError::Range);
         }
+        let profile_version = uint(p.req("version")?)?;
         let params = match p.opt("params") {
             None => alloc::collections::BTreeMap::new(),
             Some(m) => {
@@ -318,6 +322,7 @@ impl Canonical for ValidityContract {
             bounds: AuthoritySet::from_value(f.req("bounds")?)?,
             class,
             variant,
+            profile_version,
             params,
             horizon: uint(f.req("horizon")?)?,
             max_staleness_ms: f.opt("max_staleness_ms").map(uint).transpose()?,
@@ -358,10 +363,15 @@ pub struct VerifierContext<'a> {
     pub understood: &'a BTreeSet<String>,
     /// Last successful status refresh, for `bounded-staleness`.
     pub last_refresh: Option<TrustedTime>,
-    /// Whether the verifier is online at the moment of use.
+    /// Whether the verifier obtains an online decision for this use (OP-122 m.6).
     pub online: bool,
     /// Clock skew of this artefact class; the artefact's own value may only narrow it (OP-117 m.13).
     pub skew_ms: u64,
+    /// Signing time of the artefact that carries the contract.
+    pub iat: TrustedTime,
+    /// Effective horizon ceiling: the smallest declared one of metadata, Verifier Profile and
+    /// §13.7.2 for this class, variant and CT, chosen by the verifier (OP-118 m.4).
+    pub horizon_cap_ms: u64,
 }
 
 /// Why a validity contract does not allow use now.
@@ -370,7 +380,10 @@ pub enum ValidityError {
     /// Arithmetic overflow makes the contract invalid (OP-108 m.2).
     #[error("arithmetic overflow")]
     Overflow,
-    /// Past the horizon plus skew.
+    /// The carrying artefact's `iat` is later than now plus skew (OP-117 m.13).
+    #[error("not yet valid")]
+    NotYetValid,
+    /// Past the acceptance end plus skew.
     #[error("expired")]
     Expired,
     /// The verifier is not in the audience.
@@ -398,9 +411,20 @@ pub fn check(vc: &ValidityContract, ctx: &VerifierContext<'_>) -> Result<(), Val
     if !vc.audience.contains(ctx.audience) {
         return Err(ValidityError::Audience);
     }
-    let latest = vc
-        .horizon
-        .checked_add(vc.clock_skew_ms.min(ctx.skew_ms))
+    let skew = vc.clock_skew_ms.min(ctx.skew_ms);
+    // OP-117 m.13
+    let latest_iat = ctx.now.checked_add(skew).ok_or(ValidityError::Overflow)?;
+    if ctx.iat > latest_iat {
+        return Err(ValidityError::NotYetValid);
+    }
+    // OP-118 m.4
+    let accept_until = ctx
+        .iat
+        .checked_add(ctx.horizon_cap_ms)
+        .ok_or(ValidityError::Overflow)?
+        .min(vc.horizon);
+    let latest = accept_until
+        .checked_add(skew)
         .ok_or(ValidityError::Overflow)?;
     if ctx.now > latest {
         return Err(ValidityError::Expired);
@@ -409,12 +433,13 @@ pub fn check(vc: &ValidityContract, ctx: &VerifierContext<'_>) -> Result<(), Val
         return Ok(());
     }
     match vc.variant {
-        ProfileVariant::OnlineStrict | ProfileVariant::RevalidateOnReconnect => {
-            Err(ValidityError::OnlineRequired)
-        }
+        ProfileVariant::OnlineStrict => Err(ValidityError::OnlineRequired),
         ProfileVariant::BoundedStaleness => {
             let delta = vc.max_staleness_ms.ok_or(ValidityError::Stale)?;
-            let refreshed = ctx.last_refresh.ok_or(ValidityError::Stale)?;
+            let refreshed = ctx
+                .last_refresh
+                .filter(|t| *t <= ctx.now)
+                .ok_or(ValidityError::Stale)?;
             let limit = refreshed
                 .checked_add(delta)
                 .ok_or(ValidityError::Overflow)?;
@@ -424,7 +449,10 @@ pub fn check(vc: &ValidityContract, ctx: &VerifierContext<'_>) -> Result<(), Val
                 Ok(())
             }
         }
-        ProfileVariant::CheckpointedOffline | ProfileVariant::CheckpointContinuation => Ok(()),
+        // OP-122 m.6
+        ProfileVariant::RevalidateOnReconnect
+        | ProfileVariant::CheckpointedOffline
+        | ProfileVariant::CheckpointContinuation => Ok(()),
     }
 }
 

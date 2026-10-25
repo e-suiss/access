@@ -50,7 +50,7 @@ func main() {
 		}
 		for _, c := range f.Cases {
 			id, _ := c["id"].(string)
-			for _, field := range []string{"cbor", "input", "decision", "metadata", "domain", "excerpt", "key", "child", "parent", "holder", "sign1"} {
+			for _, field := range []string{"cbor", "input", "decision", "metadata", "domain", "excerpt", "key", "child", "parent", "holder", "sign1", "leaf_core", "record_disclosure"} {
 				h, ok := c[field].(string)
 				if !ok {
 					continue

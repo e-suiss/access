@@ -104,6 +104,31 @@ function keySet(
   ]);
 }
 
+interface ClaimContext {
+  readonly issuer: string;
+  readonly audience: string;
+  readonly now: number;
+  readonly skew_ms: number;
+}
+
+interface SdJwtContext {
+  readonly typ: string;
+  readonly audience: string;
+  readonly nonce: string;
+  readonly now: number;
+  readonly skew_ms: number;
+}
+
+function joseEntries(v: Vectors): (readonly [Uint8Array, Uint8Array])[] {
+  return Object.entries(v.keys ?? {}).map(([kid, key]) => {
+    const raw = b64url(key);
+    return [
+      b64url(kid),
+      cborMap([[tstr(raw.length === 32 ? "ed25519" : "p256"), bstr(raw)]]),
+    ] as const;
+  });
+}
+
 type Outcome<T> = { readonly ok: T } | { readonly error: string };
 
 function outcome<T>(f: () => T): Outcome<T> {
@@ -133,7 +158,7 @@ describe("Kernel vectors through the Wasm binding", () => {
         "decision" in c ? { ok: field(c, "decision") } : { error: field(c, "rejection") };
       expect(got, c.id).toEqual(want);
     }
-    expect(v.cases).toHaveLength(34);
+    expect(v.cases).toHaveLength(72);
   });
 
   it("cve-regressions.json", async () => {
@@ -152,7 +177,7 @@ describe("Kernel vectors through the Wasm binding", () => {
         expect(within, c.id).toBe(c["within"]);
       }
     }
-    expect(v.cases).toHaveLength(19);
+    expect(v.cases).toHaveLength(20);
   });
 
   it("cose.json", async () => {
@@ -198,26 +223,24 @@ describe("Kernel vectors through the Wasm binding", () => {
       const want = "error" in c ? { error: field(c, "error") } : { ok: field(c, "key") };
       expect(got, c.id).toEqual(want);
     }
-    expect(v.cases).toHaveLength(23);
+    expect(v.cases).toHaveLength(28);
   });
 
   it("jose-attack-classes.json", async () => {
     const v = await vectors("jose-attack-classes.json");
-    const keys = keySet(
-      Object.entries(v.keys ?? {}).map(([kid, key]) => {
-        const raw = b64url(key);
-        return [
-          b64url(kid),
-          cborMap([[tstr(raw.length === 32 ? "ed25519" : "p256"), bstr(raw)]]),
-        ] as const;
-      }),
-      [-19, -7],
-    );
+    const entries = Object.entries(v.keys ?? {}).map(([kid, key]) => {
+      const raw = b64url(key);
+      return [
+        b64url(kid),
+        cborMap([[tstr(raw.length === 32 ? "ed25519" : "p256"), bstr(raw)]]),
+      ] as const;
+    });
     for (const c of v.cases) {
+      const allowed = (c["allowed"] as readonly number[] | undefined) ?? v.allowed ?? [];
       const got = outcome(() =>
         k.verifyJwsCompact(
           field(c, "token"),
-          keys,
+          keySet(entries, allowed),
           v.typ ?? "",
           "https://access.example",
           "pep:shop",
@@ -227,7 +250,89 @@ describe("Kernel vectors through the Wasm binding", () => {
       );
       expect("ok" in got ? "accept" : `reject: ${got.error}`, c.id).toBe(field(c, "expect"));
     }
-    expect(v.cases).toHaveLength(27);
+    expect(v.cases).toHaveLength(34);
+  });
+
+  // OP-122 m.7
+  it("jwt-claims.json", async () => {
+    const v = await vectors("jwt-claims.json");
+    const keys = keySet(joseEntries(v), v.allowed ?? []);
+    const base = (v as unknown as { claims: ClaimContext }).claims;
+    for (const c of v.cases) {
+      const ctx = (c["claims"] as ClaimContext | undefined) ?? base;
+      const got = outcome(() =>
+        k.verifyJwsCompact(
+          field(c, "token"),
+          keys,
+          v.typ ?? "",
+          ctx.issuer,
+          ctx.audience,
+          BigInt(ctx.now),
+          BigInt(ctx.skew_ms),
+        ),
+      );
+      expect("ok" in got ? "accept" : `reject: ${got.error}`, c.id).toBe(field(c, "expect"));
+    }
+    expect(v.cases).toHaveLength(23);
+  });
+
+  // OP-122 m.7
+  it("sd-jwt.json", async () => {
+    const v = await vectors("sd-jwt.json");
+    const keys = keySet(joseEntries(v), v.allowed ?? []);
+    const ctx = (v as unknown as { context: SdJwtContext }).context;
+    for (const c of v.cases) {
+      const got = outcome(() =>
+        k.verifySdJwt(
+          field(c, "presentation"),
+          keys,
+          ctx.typ,
+          ctx.audience,
+          ctx.nonce,
+          BigInt(ctx.now),
+          BigInt(ctx.skew_ms),
+        ),
+      );
+      const want = "claims" in c ? { ok: c["claims"] } : { error: field(c, "error") };
+      expect("ok" in got ? { ok: JSON.parse(got.ok) as unknown } : got, c.id).toEqual(want);
+    }
+    expect(v.cases).toHaveLength(26);
+  });
+
+  // OP-118 m.4, OP-122 m.6
+  it("validity.json", async () => {
+    const url = new URL("../../../conformance/vectors/core/1/validity.json", import.meta.url);
+    const text = (await readFile(url, "utf8")).replace(/: (\d{16,})/g, ': "$1"');
+    const v = JSON.parse(text) as Vectors;
+    const doc = v as unknown as {
+      contract: string;
+      audience: string;
+      online: boolean;
+      skew_ms: number;
+    };
+    const num = (c: Case, name: string): bigint => BigInt(c[name] as number | string);
+    for (const c of v.cases) {
+      const contract = hex((c["contract"] as string | undefined) ?? doc.contract);
+      const online = (c["online"] as boolean | undefined) ?? doc.online;
+      const refresh = c["last_refresh"] === undefined ? undefined : num(c, "last_refresh");
+      const got = outcome(() => {
+        k.checkValidity(
+          contract,
+          num(c, "now"),
+          doc.audience,
+          [],
+          refresh,
+          online,
+          BigInt(doc.skew_ms),
+          num(c, "iat"),
+          num(c, "horizon_cap_ms"),
+        );
+        return true;
+      });
+      const want = "error" in c ? { error: field(c, "error") } : { ok: true };
+      expect(got, c.id).toEqual(want);
+    }
+    expect(v.cases).toHaveLength(20);
   });
 
   it("merkle.json", async () => {
@@ -277,7 +382,7 @@ describe("Kernel vectors through the Wasm binding", () => {
     expect(outcome(() => k.verifyMetadata(empty, empty))).toEqual({ error: "input" });
     expect(
       outcome(() => {
-        k.checkValidity(empty, 0n, "pep:shop", [], undefined, true, 60_000n);
+        k.checkValidity(empty, 0n, "pep:shop", [], undefined, true, 60_000n, 0n, 0n);
       }),
     ).toEqual({
       error: "input",

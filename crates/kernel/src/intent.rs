@@ -260,15 +260,17 @@ pub fn covers(set: &AuthoritySet, intent: &IntentEnvelope, cat: &Catalog) -> boo
             .resources
             .iter()
             .all(|r| resource_le(&ResourceSelector::Exact(r.clone()), &set.resource))
-        && set
-            .params
-            .iter()
-            .all(|(k, b)| intent.params.get(k).is_some_and(|v| satisfies(v, b, cat)))
+        && set.params.iter().all(|(k, b)| {
+            // OP-124 m.4
+            matches!(b, Bound::Subject(SubjectSelector::Public))
+                || intent.params.get(k).is_some_and(|v| satisfies(v, b, cat))
+        })
         && set.recipient.as_ref().is_none_or(|sel| {
-            intent
-                .recipient
-                .as_ref()
-                .is_some_and(|id| party_covered(id, sel))
+            *sel == SubjectSelector::Public
+                || intent
+                    .recipient
+                    .as_ref()
+                    .is_some_and(|id| party_covered(id, sel))
         })
         && set.purpose.as_ref().is_none_or(|ps| {
             intent

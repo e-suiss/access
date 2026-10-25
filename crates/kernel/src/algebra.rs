@@ -441,10 +441,18 @@ pub fn normalize(a: &AuthoritySet, cat: &Catalog) -> Result<Option<AuthoritySet>
 pub fn subsumes(c: &AuthoritySet, p: &AuthoritySet, cat: &Catalog) -> bool {
     cat.covered(&c.actions).is_subset(&cat.covered(&p.actions))
         && resource_le(&c.resource, &p.resource)
-        && p.params
-            .iter()
-            .all(|(k, pb)| c.params.get(k).is_some_and(|cb| bound_le(cb, pb, cat)))
-        && optional_le(c.recipient.as_ref(), p.recipient.as_ref(), subject_le)
+        && p.params.iter().all(|(k, pb)| {
+            // OP-124 m.4
+            matches!(pb, Bound::Subject(SubjectSelector::Public))
+                || c.params.get(k).is_some_and(|cb| bound_le(cb, pb, cat))
+        })
+        && optional_le(
+            c.recipient.as_ref(),
+            p.recipient
+                .as_ref()
+                .filter(|r| **r != SubjectSelector::Public),
+            subject_le,
+        )
         && optional_le(c.purpose.as_ref(), p.purpose.as_ref(), |x, y| {
             purpose_le(x, y, cat)
         })

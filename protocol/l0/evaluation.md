@@ -28,13 +28,15 @@ A decision has one of three outcomes: `allow`, `deny` or `require_action`. There
 | `proofs` | The proofs presented with the request |
 | `catalog` | Pinned action catalogs, reserved actions, and the declared purpose order |
 
-Each hop carries the Grant's `canonical-authority`, its `status` if it is revoked or lapsed, `conditions_fail` if a while-condition no longer holds, and the state of each budget it draws from.
+Each hop carries the Grant's `canonical-authority`, its `status` if it is revoked or lapsed, `conditions_fail` if a while-condition no longer holds, and the state of each budget it draws from. A hop whose stored Grant the reading layer did not understand is exactly `{not_understood: true}` ([L0-ALG-4a](algebra.md#L0-ALG-4a)).
 
-<a id="L0-EVAL-3"></a>**L0-EVAL-3. Decoding.** The input MUST be canonical ([L0-ENC-1](encoding.md#L0-ENC-1) to [L0-ENC-9](encoding.md#L0-ENC-9)), MUST match the CDDL `evaluation-input`, and MUST respect the limits of [L0-ENC-10](encoding.md#L0-ENC-10). A purpose order with a cycle is rejected ([L0-ALG-47](algebra.md#L0-ALG-47)). An input with two catalog entries for the same `catalog` digest, two purpose entries for the same purpose, or two proofs with the same `id` is rejected. Any failure is an `input` rejection.
+<a id="L0-EVAL-3"></a>**L0-EVAL-3. Decoding.** The input MUST be canonical ([L0-ENC-1](encoding.md#L0-ENC-1) to [L0-ENC-9](encoding.md#L0-ENC-9)), MUST match the CDDL `evaluation-input`, and MUST respect the limits of [L0-ENC-10](encoding.md#L0-ENC-10). A purpose order with a cycle is rejected ([L0-ALG-47](algebra.md#L0-ALG-47)). An input with two catalog entries for the same `catalog` digest, two purpose entries for the same purpose, or two proofs with the same `id` is rejected. An assurance dimension or level outside the closed list ([L0-ALG-60a](algebra.md#L0-ALG-60a)) is rejected. Any failure is an `input` rejection.
 
 Vector: `decision.json`: `reject-duplicate-proof-id`.
 
 <a id="L0-EVAL-4"></a>**L0-EVAL-4. Prepared facts.** The input is prepared outside the evaluator. In particular, the preparer computes the intent digest, each hop's revocation and lapse status, whether its while-conditions hold, each budget's remaining amount and the demand of this intent in the budget's unit, and each restriction policy's result. The evaluator takes these facts as given. It does not recompute `intent_digest`.
+
+<a id="L0-EVAL-4a"></a>**L0-EVAL-4a. Intent digest.** The evaluator never recomputes `intent_digest`. The Access layer that prepares the input computes it from the canonical `intent` ([L0-ENC-23](encoding.md#L0-ENC-23)). A digest supplied by the caller is never input: a preparer MUST NOT copy a requester's digest into `intent_digest`.
 
 ## 2. Intent coverage
 
@@ -42,8 +44,8 @@ Vector: `decision.json`: `reject-duplicate-proof-id`.
 
 - the intent's action is covered by the authority's action set ([L0-ALG-33](algebra.md#L0-ALG-33));
 - every resource of the intent is within the authority's resource selector ([L0-ALG-41](algebra.md#L0-ALG-41));
-- for every parameter the authority bounds, the intent has a value for it and the value is within the bound ([L0-ALG-13](algebra.md#L0-ALG-13));
-- if the authority has a `recipient`, the intent has a `recipient` and that Party is within the selector ([L0-ALG-45](algebra.md#L0-ALG-45));
+- for every parameter the authority bounds, the intent has a value for it and the value is within the bound ([L0-ALG-13](algebra.md#L0-ALG-13)), except that a `subject: public` bound is no restriction: it holds whether or not the intent has a value for the parameter;
+- if the authority has a `recipient` other than `public`, the intent has a `recipient` and that Party is within the selector ([L0-ALG-45](algebra.md#L0-ALG-45)). A `public` recipient is no restriction: it covers intents with and without a `recipient`;
 - if the authority has a `purpose`, the intent has a `purpose` and it is below some element of the authority's purpose set ([L0-ALG-47](algebra.md#L0-ALG-47)).
 
 Parameters the authority does not bound are not checked. Opaque parameters (digests in `opaque`) and context references are never checked against authority.
@@ -57,6 +59,10 @@ Vector: `decision.json`: `deny-schema-digest-mismatch`.
 <a id="L0-EVAL-12"></a>**L0-EVAL-12. Coverage on every hop.** Coverage is checked on every hop of the basis separately. Every hop whose authority does not cover the intent contributes its own `no-covering-authority` blocker at that hop.
 
 Vectors: [`core/1/decision.json`](../../conformance/vectors/core/1/decision.json), `combinator.evaluate`: `allow`, `deny-no-covering-authority-hop1`. [`core/1/cve-regressions.json`](../../conformance/vectors/core/1/cve-regressions.json): `recipient-party-other`, `prefix-old-catalog`.
+
+<a id="L0-EVAL-12a"></a>**L0-EVAL-12a. Hop not understood.** A hop written as `{not_understood: true}` covers nothing. It contributes exactly one blocker, `no-covering-authority` at that hop ([L0-EVAL-40](#L0-EVAL-40)), and no requirement terms. No validity, status, condition or budget check is made for it. The other hops of the basis are checked as usual.
+
+Vectors: `decision.json`: `deny-not-understood-hop1-commit`, `deny-not-understood-hop0-continue`, `deny-not-understood-keeps-unmet`, `check-not-understood-then-allow`, `check-not-understood-only`.
 
 <a id="L0-EVAL-13"></a>**L0-EVAL-13. Validity window.** A hop's validity window `[from, until]` is closed. If `now < from`, the hop has not started. If `now > until`, the hop has expired. Each produces the blocker given in [L0-EVAL-40](#L0-EVAL-40).
 
@@ -104,7 +110,9 @@ Requirement resolution decides which requirement terms the presented proofs sati
 
 <a id="L0-EVAL-20"></a>**L0-EVAL-20. Entries.** The entries to resolve are the pairs (term, position) collected by [L0-EVAL-16](#L0-EVAL-16), [L0-EVAL-18](#L0-EVAL-18) and [L0-EVAL-19](#L0-EVAL-19). The pool starts as all presented proofs.
 
-<a id="L0-EVAL-21"></a>**L0-EVAL-21. One term at a time.** Identical terms are merged: a term that comes from several hops, from the mandate or from restriction results is one term, however often it appears. Its position is the position of its first occurrence, in this order: hops from hop 0 upward, then `instance`, then `domain-policy`. The distinct terms are resolved one after another, in the order of the bytes of their canonical encoding. Each term either is satisfied by a chosen set of proofs or becomes an unmet term.
+<a id="L0-EVAL-21"></a>**L0-EVAL-21. One term at a time.** Identical terms are merged: a term that comes from several hops, from the mandate or from restriction results is one term, however often it appears. Its position is the position of its first occurrence, in this order: hops from hop 0 upward, then `instance`, then `domain-policy`. The distinct terms are resolved one after another, in the order of the bytes of their canonical encoding; a single-use proof two terms could use goes to the term that comes first in that order. Each term either is satisfied by a chosen set of proofs or becomes an unmet term.
+
+Vector: `decision.json`: `require-shared-single-use-proof-canonical-order`.
 
 A delegated Grant carries its parent's requirements ([L0-ALG-76](algebra.md#L0-ALG-76)), so counting a term once per hop would ask for the same step-up on every hop.
 
@@ -132,7 +140,9 @@ Vectors: `decision.json`: `allow-inherited-term-counts-once`, `require-inherited
 
 Vector: `decision.json`: `require-future-dated-proof`.
 
-<a id="L0-EVAL-25"></a>**L0-EVAL-25. Assurance.** For each dimension in the term's `assurance`, the proof MUST have the same dimension with a level at least the term's floor. A dimension missing from the proof does not meet the floor.
+<a id="L0-EVAL-25"></a>**L0-EVAL-25. Assurance.** For each dimension in the term's `assurance`, the proof MUST have the same dimension with a level that meets the term's floor: `level ≥ floor`, except for `synced`, where `level ≤ floor` ([L0-ALG-60](algebra.md#L0-ALG-60)). A floor `synced: 0` therefore asks for a key that is not synced. A dimension missing from the proof does not meet the floor.
+
+Vectors: `decision.json`: `allow-assurance-<dimension>-at-floor` and `require-assurance-<dimension>-below-floor` for each dimension other than `synced`, `allow-assurance-loa-eidas-above-floor`, `allow-assurance-synced-unsynced-meets-zero`, `require-assurance-synced-inverted`, `allow-assurance-synced-floor-one-unsynced`, `require-assurance-missing-in-proof`, and the rejections `reject-assurance-unknown-dimension-term`, `reject-assurance-unknown-dimension-proof`, `reject-assurance-auth-time-is-not-a-dimension`, `reject-assurance-aal-zero-term`, `reject-assurance-aal-four-proof`, `reject-assurance-flag-two-term`, `reject-assurance-out-of-range-mandate`.
 
 <a id="L0-EVAL-26"></a>**L0-EVAL-26. Count and independence.** A term needs `count` matching proofs (1 if not written). If the term has `independence`, the chosen proofs MUST all differ in the named field: `party`, `instance` or `issuer`.
 
@@ -196,7 +206,7 @@ Vector: `decision.json`: `check-deny-merges-blockers-only`.
 
 | Condition | Class / subcode | Position | Resolver | Remediation |
 |---|---|---|---|---|
-| Hop does not cover the intent | `no-covering-authority` | `hop(k)` | `grantor_of_hop(k)` | `route-to-coordinator` |
+| Hop does not cover the intent, or is not understood | `no-covering-authority` | `hop(k)` | `grantor_of_hop(k)` | `route-to-coordinator` |
 | Mandate does not cover the intent | `outside-instance-limits` | `instance` | `actor-party` | `route-to-coordinator` |
 | Restriction DENY | `restricted`, `restricted/policy:<ref>` | `domain-policy` | `restriction-owner` | `not-satisfiable-by-actor` |
 | Budget short, rolling window | `budget-exhausted` | `hop(k)` | `time` | `wait_until(resets_at)` |
@@ -236,13 +246,13 @@ Vector: `decision.json`: `deny-four-blocker-classes`.
 
 <a id="L0-EVAL-50"></a>**L0-EVAL-50. Overflow.** An arithmetic overflow while computing a decision makes the outcome `deny`. It never produces a partial `allow`.
 
-> **OPEN (O-11):** Which blocker does a DENY caused by overflow carry?
+<a id="L0-EVAL-50a"></a>**L0-EVAL-50a. No overflow in this version.** No rule of this version has arithmetic that can overflow. Budgets are compared, never subtracted. `now − time` ([L0-EVAL-24](#L0-EVAL-24)) is computed only when `time ≤ now`, and `count − s` ([L0-EVAL-29](#L0-EVAL-29)) only when `s ≤ count`. The only conversion that can fail gives an `input` rejection. A later rule that adds arithmetic MUST name the blocker its overflow produces; a rule that does not name one cannot enter L0.
 
 <a id="L0-EVAL-60"></a>**L0-EVAL-60. Rejection kinds.** A rejection is a reasoned refusal to evaluate. It has one of two kinds:
 
 | Kind | Causes |
 |---|---|
-| `input` | Non-canonical encoding, a schema mismatch with the CDDL, an unknown field or choice, a limit exceeded ([L0-ENC-10](encoding.md#L0-ENC-10)), a selector with too many conditions, an inverted time window, a cyclic purpose order, a duplicate catalog, purpose entry or proof id, a wrong number of bases in `commit` or `continue`, a restriction DENY naming another policy or version, an exhausted rolling budget without `resets_at`, `now` outside the intent's validity |
+| `input` | Non-canonical encoding, a schema mismatch with the CDDL, an unknown field or choice, an assurance dimension or level outside the closed list, a limit exceeded ([L0-ENC-10](encoding.md#L0-ENC-10)), a selector with too many conditions, an inverted time window, a cyclic purpose order, a duplicate catalog, purpose entry or proof id, a wrong number of bases in `commit` or `continue`, a restriction DENY naming another policy or version, an exhausted rolling budget without `resets_at`, `now` outside the intent's validity |
 | `fuel` | Fuel budget exhausted |
 
 <a id="L0-EVAL-61"></a>**L0-EVAL-61. A rejection is not an outcome.** A rejection produces no decision and no record, and does not consume the request nonce or any proof. To a party enforcing decisions, a rejection means only that there is no ALLOW.

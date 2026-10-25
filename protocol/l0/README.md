@@ -62,7 +62,10 @@ Conformance vectors live in [`conformance/vectors/`](../../conformance/vectors).
 | [`core/1/cose.json`](../../conformance/vectors/core/1/cose.json) | `verify.cose_sign1` | [L0-SIG-10](signatures.md#L0-SIG-10) to [L0-SIG-21](signatures.md#L0-SIG-21) |
 | [`core/1/jose-attack-classes.json`](../../conformance/vectors/core/1/jose-attack-classes.json) | `verify.jws_compact` | [L0-SIG-30](signatures.md#L0-SIG-30) to [L0-SIG-42](signatures.md#L0-SIG-42) |
 | [`core/1/ed25519-strict.json`](../../conformance/vectors/core/1/ed25519-strict.json) | `verify.ed25519` | [L0-SIG-3](signatures.md#L0-SIG-3) |
-| [`core/1/key-scope.json`](../../conformance/vectors/core/1/key-scope.json) | `key_scope.operational_key` | [L0-SIG-60](signatures.md#L0-SIG-60) to [L0-SIG-72](signatures.md#L0-SIG-72) |
+| [`core/1/key-scope.json`](../../conformance/vectors/core/1/key-scope.json) | `key_scope.operational_key` | [L0-SIG-60](signatures.md#L0-SIG-60) to [L0-SIG-72](signatures.md#L0-SIG-72), [L0-SIG-75a](signatures.md#L0-SIG-75a) |
+| [`core/1/jwt-claims.json`](../../conformance/vectors/core/1/jwt-claims.json) | `verify.jws_compact` | [L0-SIG-41](signatures.md#L0-SIG-41) to [L0-SIG-41b](signatures.md#L0-SIG-41b), [L0-ENC-15](encoding.md#L0-ENC-15) |
+| [`core/1/sd-jwt.json`](../../conformance/vectors/core/1/sd-jwt.json) | `verify.sd_jwt` | [L0-SIG-50](signatures.md#L0-SIG-50) to [L0-SIG-53](signatures.md#L0-SIG-53) |
+| [`core/1/validity.json`](../../conformance/vectors/core/1/validity.json) | `validity.check` | [L0-VAL-10](validity.md#L0-VAL-10) to [L0-VAL-11](validity.md#L0-VAL-11), [L0-VAL-14b](validity.md#L0-VAL-14b), [L0-VAL-16a](validity.md#L0-VAL-16a), [L0-VAL-16b](validity.md#L0-VAL-16b) |
 
 <a id="L0-GEN-5"></a>**L0-GEN-5.** An implementation conforms to core version 1 only if it produces the expected result for every vector of every operation it implements. For `combinator.evaluate` the expected result is the exact bytes of the canonical `decision`, or the named rejection kind. For verification operations it is acceptance with the expected output, or rejection with the named reason.
 
@@ -78,15 +81,7 @@ Vectors are also checked against third-party sources where these exist: [`confor
 
 ## Open issues
 
-These questions are open in this draft. Each is also marked in place.
-
-| # | Where | Question |
-|---|---|---|
-| O-11 | [evaluation.md](evaluation.md#L0-EVAL-50) | Which blocker does a DENY caused by arithmetic overflow carry? |
-| O-13 | [algebra.md](algebra.md#L0-ALG-4) | How is a stored authority that contains an unknown element represented in an evaluation input? |
-| O-14 | [algebra.md](algebra.md#L0-ALG-60) | Which assurance dimensions exist, and what is the ordered value list of each? |
-| O-18 | [validity.md](validity.md#L0-VAL-10) | How does `cap_horizon(class, variant, CT)` map onto Domain Metadata `caps.horizon_max_ms` and the Verifier Profile? |
-| O-23 | [signatures.md](signatures.md#L0-SIG-75) | What do the Domain Metadata `hybrid` values `classic`, `both` and `pq` require of a verifier? |
+No question is open in this draft.
 
 ### Closed in this draft
 
@@ -102,15 +97,20 @@ These questions are open in this draft. Each is also marked in place.
 | O-8 Duplicate entries | [L0-EVAL-3](evaluation.md#L0-EVAL-3) |
 | O-9 Action set `∩` | [L0-ALG-33](algebra.md#L0-ALG-33) |
 | O-10 Schema digest mismatch | [L0-EVAL-11](evaluation.md#L0-EVAL-11) |
+| O-11 Overflow blocker | [L0-EVAL-50a](evaluation.md#L0-EVAL-50a) |
 | O-12 `versions` | [L0-EVAL-43](evaluation.md#L0-EVAL-43) |
+| O-13 Stored authority not understood | [L0-ALG-4a](algebra.md#L0-ALG-4a), [L0-EVAL-12a](evaluation.md#L0-EVAL-12a) |
+| O-14 Assurance dimensions | [L0-ALG-60](algebra.md#L0-ALG-60), [L0-ALG-60a](algebra.md#L0-ALG-60a), [L0-ALG-60b](algebra.md#L0-ALG-60b), [L0-EVAL-25](evaluation.md#L0-EVAL-25) |
 | O-15 Dependency bounds | [L0-VAL-5a](validity.md#L0-VAL-5a) |
 | O-16 Horizon inclusive | [L0-VAL-11](validity.md#L0-VAL-11) |
-| O-17 Clock skew | [L0-VAL-14](validity.md#L0-VAL-14), [L0-VAL-14a](validity.md#L0-VAL-14a) |
+| O-17 Clock skew | [L0-VAL-14](validity.md#L0-VAL-14), [L0-VAL-14a](validity.md#L0-VAL-14a), [L0-VAL-14b](validity.md#L0-VAL-14b) |
+| O-18 Horizon ceiling | [L0-VAL-10a](validity.md#L0-VAL-10a), [L0-VAL-10b](validity.md#L0-VAL-10b) |
 | O-19 Rejection order | [L0-SIG-21](signatures.md#L0-SIG-21) |
 | O-29 JWS rejection order | [L0-SIG-21a](signatures.md#L0-SIG-21a) |
 | O-20 JWS header | [L0-SIG-33](signatures.md#L0-SIG-33) |
 | O-21 JWT times | [L0-SIG-41a](signatures.md#L0-SIG-41a) |
 | O-22 `_sd_alg` | [L0-SIG-50](signatures.md#L0-SIG-50) |
+| O-23 Hybrid policy | [L0-SIG-75a](signatures.md#L0-SIG-75a) |
 | O-24 ML-DSA thumbprint | [L0-SIG-66](signatures.md#L0-SIG-66) |
 | O-25 Blocker order | [L0-EVAL-41](evaluation.md#L0-EVAL-41) |
 | O-26 Requirement order | [L0-EVAL-21](evaluation.md#L0-EVAL-21) |
