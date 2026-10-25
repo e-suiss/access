@@ -310,6 +310,28 @@ fn decode_cases() -> Vec<(&'static str, Vec<u8>)> {
     out
 }
 
+// TI-RT12
+fn decode_rules(id: &str) -> &'static [&'static str] {
+    match id {
+        "depth-16-containers" | "depth-16-with-scalar-leaf" => &["L0-ENC-10", "L0-ENC-10a"],
+        "depth-17-containers" => &["L0-ENC-10", "L0-ENC-10a", "L0-ENC-12", "L0-ENC-9a"],
+        "string-65536-bytes" => &["L0-ENC-10", "L0-ENC-10b"],
+        "string-65537-bytes" => &["L0-ENC-10", "L0-ENC-10b", "L0-ENC-12", "L0-ENC-9a"],
+        "array-256-items" => &["L0-ENC-10"],
+        "array-257-items" => &["L0-ENC-10", "L0-ENC-12", "L0-ENC-9a"],
+        "non-shortest-uint"
+        | "non-shortest-length"
+        | "indefinite-bytes"
+        | "indefinite-array"
+        | "key-order"
+        | "duplicate-key" => &["L0-ENC-1", "L0-ENC-9a"],
+        "float-half" | "float-double" => &["L0-ENC-2", "L0-ENC-8", "L0-ENC-9a"],
+        "null" | "undefined" | "bad-utf8" => &["L0-ENC-2", "L0-ENC-9a"],
+        "tag" | "tag-18-inside-value" => &["L0-ENC-3", "L0-ENC-9a"],
+        _ => &["L0-ENC-9a"],
+    }
+}
+
 // OP-106 m.5, OP-117 m.3, m.4: canonical decoding and structural limits
 #[test]
 fn decode_vectors_match() {
@@ -332,9 +354,14 @@ fn decode_vectors_match() {
             Err(e) => alloc::format!("\"error\": \"{}\"", error_name(e)),
         };
         let sep = if i + 1 == all.len() { "" } else { "," };
+        let rules = decode_rules(id)
+            .iter()
+            .map(|r| alloc::format!("\"{r}\""))
+            .collect::<alloc::vec::Vec<_>>()
+            .join(", ");
         let _ = writeln!(
             json,
-            "  {{\"id\": \"{id}\", \"data\": \"{}\", {expect}}}{sep}",
+            "  {{\"id\": \"{id}\", \"rules\": [{rules}], \"data\": \"{}\", {expect}}}{sep}",
             to_hex(bytes)
         );
     }

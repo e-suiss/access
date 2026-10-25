@@ -18,6 +18,9 @@ use crate::model::{
     Structural, SubjectSelector, WhileCondition, Window,
 };
 
+/// Most conditions one subject or resource selector may hold (L0-ENC-13).
+pub const MAX_SELECTOR_CONDITIONS: usize = 32;
+
 /// Why a CBOR value is not a value of the model.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum ModelError {
@@ -481,7 +484,8 @@ impl Canonical for ResourceSelector {
             None => BTreeMap::new(),
             Some(w) => {
                 let mut wf = Fields::of(w)?;
-                if wf.entries.is_empty() {
+                // L0-ENC-13
+                if wf.entries.is_empty() || wf.entries.len() > MAX_SELECTOR_CONDITIONS {
                     return Err(ModelError::Range);
                 }
                 let mut out = BTreeMap::new();
@@ -543,7 +547,14 @@ impl Canonical for SubjectSelector {
         }
         match single(v)? {
             ("party", id) => Ok(Self::Party(Canonical::from_value(id)?)),
-            ("pred", c) => Ok(Self::Pred(set_of(c, true, Conjunct::from_value)?)),
+            ("pred", c) => {
+                let c: BTreeSet<Conjunct> = set_of(c, true, Conjunct::from_value)?;
+                // L0-ENC-13
+                if c.len() > MAX_SELECTOR_CONDITIONS {
+                    return Err(ModelError::Range);
+                }
+                Ok(Self::Pred(c))
+            }
             ("foreign", inner) => {
                 let mut f = Fields::of(inner)?;
                 let s = Self::Foreign {

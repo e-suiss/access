@@ -8,7 +8,7 @@ Vectors for the acceptance end and the signing time: [`core/1/validity.json`](..
 
 ## 1. Structure
 
-<a id="L0-VAL-1"></a>**L0-VAL-1. Fields.** A validity contract is the CDDL `validity-contract`:
+<a id="L0-VAL-1"></a><!-- no-vector: definition: lists the contract fields; their checks are in the rules below -->**L0-VAL-1. Fields.** A validity contract is the CDDL `validity-contract`:
 
 | Field | Meaning |
 |---|---|
@@ -28,7 +28,7 @@ Vectors for the acceptance end and the signing time: [`core/1/validity.json`](..
 | `clock` | Accepted clock source class and skew tolerance |
 | `must_understand` | Extensions the verifier must understand |
 
-<a id="L0-VAL-2"></a>**L0-VAL-2. Derived semantic fields.** Three semantic properties are derived from these fields: the horizon (`horizon`), the freshness profile (`profile`, `max_staleness_ms`, `freshness_sources`) and the revalidation condition (`revalidation`).
+<a id="L0-VAL-2"></a><!-- no-vector: definition: names the derived properties -->**L0-VAL-2. Derived semantic fields.** Three semantic properties are derived from these fields: the horizon (`horizon`), the freshness profile (`profile`, `max_staleness_ms`, `freshness_sources`) and the revalidation condition (`revalidation`).
 
 <a id="L0-VAL-3"></a>**L0-VAL-3. Profile classes and variants.** The class set is closed: `online`, `intermittent`, `offline`, `long-running`. Each variant belongs to exactly one class:
 
@@ -44,11 +44,13 @@ A contract whose `class` is not the class of its `variant` is malformed and MUST
 
 ## 2. Computing the horizon
 
-<a id="L0-VAL-5"></a>**L0-VAL-5. Horizon bound.** When a contract is issued, its horizon MUST NOT be later than the earliest dependency bound of the authority it rests on, and MUST NOT exceed the profile's maximum. This computation is part of the core semantics and uses checked arithmetic.
+<a id="L0-VAL-5"></a>**L0-VAL-5. Horizon bound.** When a contract is issued, its horizon MUST NOT be later than the earliest dependency bound of the authority it rests on, and MUST NOT exceed the profile's maximum. This computation is part of the core semantics and uses checked arithmetic: the horizon is the smallest of `issued_at + profile_max_ms` and every dependency bound, and an overflow of the addition is `overflow`.
 
-<a id="L0-VAL-5a"></a>**L0-VAL-5a. Dependency bounds.** The dependency bounds are the `validity.until` of every hop, and `time + freshness_ms` of every proof the decision relied on that has a `freshness_ms`. The operational key window and budget windows are not dependency bounds.
+Vectors: [`core/1/horizon.json`](../../conformance/vectors/core/1/horizon.json), operation `validity.horizon`. Each case gives `issued_at`, the `dependency_bounds` and `profile_max_ms`, and either the expected `horizon` or `error: "overflow"`.
 
-<a id="L0-VAL-6"></a>**L0-VAL-6. Narrowing is monotone.** A contract derived by narrowing another contract MUST NOT have a later horizon or a larger Δ than the contract it narrows.
+<a id="L0-VAL-5a"></a><!-- no-vector: no-operation: dependency bounds are gathered when a contract is issued, which arrives with PAP and token issuance (Ek B Stage 4) -->**L0-VAL-5a. Dependency bounds.** The dependency bounds are the `validity.until` of every hop, and `time + freshness_ms` of every proof the decision relied on that has a `freshness_ms`. The operational key window and budget windows are not dependency bounds.
+
+<a id="L0-VAL-6"></a><!-- no-vector: no-operation: contract narrowing arrives with PAP and token issuance (Ek B Stage 4) -->**L0-VAL-6. Narrowing is monotone.** A contract derived by narrowing another contract MUST NOT have a later horizon or a larger Δ than the contract it narrows.
 
 <a id="L0-VAL-7"></a>**L0-VAL-7. Staleness is consumed.** The staleness window Δ is measured from the verifier's last status refresh. It is consumed as time passes and is never extended by the absence of events, by missing acknowledgements, or by clock drift.
 
@@ -82,9 +84,9 @@ Vectors: `validity.json`: `cap-later-than-horizon-edge`, `cap-later-than-horizon
 
 <a id="L0-VAL-14b"></a>**L0-VAL-14b. Future-dated signing time.** If `iat > now + skew`, the artifact is rejected with reason `not-yet-valid`. This check is made before the acceptance end of [L0-VAL-11](#L0-VAL-11). `iat = now + skew` is accepted.
 
-Vectors: `validity.json`: `iat-future-edge`, `iat-future-past`.
+Vectors: `validity.json`: `iat-future-edge`, `iat-future-past`; the contract's own skew narrows the verifier's in `contract-skew-narrows-edge` and `contract-skew-narrows-past`.
 
-<a id="L0-VAL-15"></a>**L0-VAL-15. Bounds.** The intent the verifier is about to perform MUST be covered by `bounds` ([L0-EVAL-10](evaluation.md#L0-EVAL-10)), and every term in `local_requirements` MUST be satisfied locally. If a local requirement cannot be satisfied, the artifact is not accepted offline.
+<a id="L0-VAL-15"></a><!-- no-vector: no-operation: offline bounds and local-requirement checks arrive with PAP and token verification (Ek B Stage 4) -->**L0-VAL-15. Bounds.** The intent the verifier is about to perform MUST be covered by `bounds` ([L0-EVAL-10](evaluation.md#L0-EVAL-10)), and every term in `local_requirements` MUST be satisfied locally. If a local requirement cannot be satisfied, the artifact is not accepted offline.
 
 <a id="L0-VAL-16"></a>**L0-VAL-16. Staleness.** If the contract has `max_staleness_ms`, the verifier's status information MUST be at most that old. If it is older, the verifier MUST NOT accept the artifact offline and may only ask online.
 
@@ -101,11 +103,11 @@ Under `bounded-staleness`, a missing `max_staleness_ms`, a missing `last_refresh
 
 <a id="L0-VAL-16b"></a>**L0-VAL-16b. Reason codes.** The checks run in this order and the first failure is the result: `must-understand`, `audience`, `not-yet-valid` ([L0-VAL-14b](#L0-VAL-14b)), `expired` ([L0-VAL-11](#L0-VAL-11)), then the offline rule of [L0-VAL-16a](#L0-VAL-16a) (`online-required`, `stale`). An overflow anywhere is `overflow` ([L0-VAL-20](#L0-VAL-20)).
 
-Vectors: `validity.json`: `online-strict-offline`, `reconnect-offline-accepted`, `reconnect-offline-horizon-edge`, `reconnect-offline-past-horizon`, `bounded-fresh`, `bounded-stale`, `bounded-no-refresh`, `bounded-future-refresh`, `bounded-online-ignores-refresh`, `checkpointed-offline-accepted`.
+Vectors: `validity.json`: `online-strict-offline`, `reconnect-offline-accepted`, `reconnect-offline-horizon-edge`, `reconnect-offline-past-horizon`, `bounded-fresh`, `bounded-stale`, `bounded-no-refresh`, `bounded-future-refresh`, `bounded-online-ignores-refresh`, `checkpointed-offline-accepted`, `audience-other`, `must-understand-unknown`. A contract whose class does not match its variant is an `input` rejection: `class-variant-mismatch`.
 
 <a id="L0-VAL-17"></a>**L0-VAL-17. Revalidation.** When a `revalidation` condition is met (a number of uses, a reconnect, or an action of a listed class), the verifier MUST obtain a new online decision before relying on the artifact again. Under `revalidate-on-reconnect` a reconnect always requires a new decision.
 
-<a id="L0-VAL-18"></a>**L0-VAL-18. Offline slice.** For a consumption-bearing action the total drawn locally from a slice entry MUST NOT exceed its `amount`, in its `unit`. Consumption beyond the slice cannot happen offline. The slice was drawn from the lineage budgets when the contract was issued, so the same capacity cannot be spent twice centrally.
+<a id="L0-VAL-18"></a><!-- no-vector: no-operation: offline slice consumption arrives with PAP and token verification (Ek B Stage 4) -->**L0-VAL-18. Offline slice.** For a consumption-bearing action the total drawn locally from a slice entry MUST NOT exceed its `amount`, in its `unit`. Consumption beyond the slice cannot happen offline. The slice was drawn from the lineage budgets when the contract was issued, so the same capacity cannot be spent twice centrally.
 
 <a id="L0-VAL-19"></a>**L0-VAL-19. Profile and must-understand.** The verifier MUST NOT accept a contract its own profile does not support, and MUST reject a contract with any `must_understand` entry it does not recognise.
 

@@ -1,0 +1,13 @@
+{
+ "rule": "OP-126",
+ "track": "core",
+ "version": 1,
+ "operation": "validity.horizon",
+ "cases": [
+  {"id": "profile-max-is-earliest", "rules": ["L0-VAL-5"], "issued_at": 1000, "dependency_bounds": [90000, 50000], "profile_max_ms": 10000, "horizon": 11000},
+  {"id": "dependency-is-earliest", "rules": ["L0-VAL-5"], "issued_at": 1000, "dependency_bounds": [90000, 5000], "profile_max_ms": 10000, "horizon": 5000},
+  {"id": "dependency-equals-profile-max", "rules": ["L0-VAL-5"], "issued_at": 1000, "dependency_bounds": [11000], "profile_max_ms": 10000, "horizon": 11000},
+  {"id": "no-dependency-bounds", "rules": ["L0-VAL-5"], "issued_at": 1000, "dependency_bounds": [], "profile_max_ms": 10000, "horizon": 11000},
+  {"id": "profile-max-overflow", "rules": ["L0-VAL-5", "L0-VAL-20"], "issued_at": 18446744073709551615, "dependency_bounds": [5000], "profile_max_ms": 1, "error": "overflow"}
+ ]
+}

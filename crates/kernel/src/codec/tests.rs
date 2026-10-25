@@ -306,7 +306,18 @@ fn golden_vectors_match() {
             h
         });
         let sep = if i + 1 == cases.len() { "" } else { "," };
-        let _ = writeln!(json, "  {{\"id\": \"{name}\", \"cbor\": \"{hex}\"}}{sep}");
+        // TI-RT12
+        let rules = crate::vector_rules::field(match *name {
+            "canonical_authority.full" => &["L0-ENC-1", "L0-ENC-4", "L0-ENC-6"],
+            "canonical_authority.minimal" => &["L0-ENC-1", "L0-ENC-4", "L0-ENC-5"],
+            "bound.range.negative" => &["L0-ENC-1", "L0-ENC-7"],
+            "digest" => &["L0-ENC-1", "L0-ENC-20", "L0-ENC-21"],
+            _ => &["L0-ENC-1"],
+        });
+        let _ = writeln!(
+            json,
+            "  {{\"id\": \"{name}\", {rules}, \"cbor\": \"{hex}\"}}{sep}"
+        );
     }
     json.push_str(" ]\n}\n");
     #[cfg(not(target_os = "wasi"))]

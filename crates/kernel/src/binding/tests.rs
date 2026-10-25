@@ -60,8 +60,9 @@ fn decision_vectors() {
     let v = vectors(include_str!(
         "../../../../conformance/vectors/core/1/decision.json"
     ));
-    let fuel = v["fuel"].as_u64().unwrap();
+    let file_fuel = v["fuel"].as_u64().unwrap();
     for c in cases(&v) {
+        let fuel = c.get("fuel").and_then(J::as_u64).unwrap_or(file_fuel);
         let got = evaluate(&unhex(s(c, "input")), fuel);
         match c.get("decision") {
             Some(d) => assert_eq!(
@@ -78,7 +79,7 @@ fn decision_vectors() {
             ),
         }
     }
-    assert_eq!(cases(&v).len(), 72);
+    assert_eq!(cases(&v).len(), 149);
 }
 
 // OP-122 m.7
@@ -104,7 +105,7 @@ fn jwt_claim_vectors() {
         };
         assert_eq!(got, s(c, "expect"), "{}", c["id"]);
     }
-    assert_eq!(cases(&v).len(), 23);
+    assert_eq!(cases(&v).len(), 24);
 }
 
 // OP-122 m.7
@@ -140,7 +141,7 @@ fn sd_jwt_vectors() {
             ),
         }
     }
-    assert_eq!(cases(&v).len(), 26);
+    assert_eq!(cases(&v).len(), 27);
 }
 
 // OP-118 m.4
@@ -176,7 +177,7 @@ fn validity_vectors() {
             .map_or(Ok(()), |e| Err(e.as_str().unwrap().to_string()));
         assert_eq!(got, want, "{}", c["id"]);
     }
-    assert_eq!(cases(&v).len(), 20);
+    assert_eq!(cases(&v).len(), 25);
 }
 
 // OP-116 m.6, CR-57

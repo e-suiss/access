@@ -107,7 +107,8 @@ func u64(_ v: Any?) -> UInt64 { (v as! NSNumber).uint64Value }
 func testDecision() {
     let v = load("decision.json")
     for c in cases(v) {
-        let got = outcome { hex(try evaluate(input: hex(c["input"] as! String), fuel: u64(v["fuel"]))) }
+        let fuel = u64(c["fuel"] ?? v["fuel"])
+        let got = outcome { hex(try evaluate(input: hex(c["input"] as! String), fuel: fuel)) }
         let want: Outcome = c["decision"] != nil
             ? .ok(c["decision"] as! String) : .error(c["rejection"] as! String)
         expect(got, want, c["id"]!)

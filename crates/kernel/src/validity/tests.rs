@@ -375,6 +375,49 @@ fn offline_use_follows_the_variant() {
     );
 }
 
+// L0-VAL-3, L0-VAL-13, L0-VAL-14, L0-VAL-19
+fn contract_scenarios() -> Vec<(&'static str, ValidityContract, u64)> {
+    let base = || contract(ProfileVariant::OnlineStrict);
+    let mut other = base();
+    other.audience = ["pep:bank".to_string()].into_iter().collect();
+    let mut ext = base();
+    ext.must_understand.insert("geofence".to_string());
+    let mut narrow = base();
+    narrow.clock_skew_ms = 500;
+    let mut mismatch = base();
+    mismatch.class = ProfileClass::Offline;
+    vec![
+        ("audience-other", other, 5_000),
+        ("must-understand-unknown", ext, 5_000),
+        ("contract-skew-narrows-edge", narrow.clone(), 10_500),
+        ("contract-skew-narrows-past", narrow, 10_501),
+        ("class-variant-mismatch", mismatch, 5_000),
+    ]
+}
+
+// TI-RT12
+fn validity_rules(id: &str) -> &'static [&'static str] {
+    match id {
+        "cap-overflow" => &["L0-ENC-7", "L0-VAL-10", "L0-VAL-20"],
+        "iat-future-edge" | "iat-future-past" => &["L0-VAL-14a", "L0-VAL-14b", "L0-VAL-16b"],
+        "online-strict-offline" | "checkpointed-offline-accepted" => &["L0-VAL-16a", "L0-VAL-16b"],
+        "reconnect-offline-accepted" | "reconnect-offline-horizon-edge" => {
+            &["L0-VAL-16a", "L0-VAL-17"]
+        }
+        "reconnect-offline-past-horizon" => &["L0-VAL-11", "L0-VAL-16a", "L0-VAL-16b"],
+        "bounded-fresh" | "bounded-stale" => &["L0-VAL-16", "L0-VAL-16a"],
+        "bounded-no-refresh" | "bounded-future-refresh" => &["L0-VAL-7", "L0-VAL-16a"],
+        "bounded-online-ignores-refresh" => &["L0-VAL-16a"],
+        "audience-other" => &["L0-VAL-13", "L0-VAL-16b"],
+        "must-understand-unknown" => &["L0-VAL-16b", "L0-VAL-19"],
+        "contract-skew-narrows-edge" | "contract-skew-narrows-past" => {
+            &["L0-VAL-11", "L0-VAL-14", "L0-VAL-14a"]
+        }
+        "class-variant-mismatch" => &["L0-VAL-3"],
+        _ => &["L0-VAL-10", "L0-VAL-10a", "L0-VAL-10b", "L0-VAL-11"],
+    }
+}
+
 // OP-118 m.4, OP-122 m.6, m.7, OP-106 m.24
 #[test]
 fn validity_vectors_match() {
@@ -400,12 +443,17 @@ fn validity_vectors_match() {
     let mut lines = Vec::new();
     for (id, iat, cap, now) in cap_scenarios() {
         lines.push(alloc::format!(
-            "  {{\"id\": \"{id}\", \"iat\": {iat}, \"horizon_cap_ms\": {cap}, \"now\": {now}, {}}}",
+            "  {{\"id\": \"{id}\", {}, \"iat\": {iat}, \"horizon_cap_ms\": {cap}, \"now\": {now}, {}}}",
+            crate::vector_rules::field(validity_rules(id)),
             expect(cap_check(iat, cap, now))
         ));
     }
     for c in profile_scenarios() {
-        let mut fields = alloc::format!("\"id\": \"{}\"", c.id);
+        let mut fields = alloc::format!(
+            "\"id\": \"{}\", {}",
+            c.id,
+            crate::vector_rules::field(validity_rules(c.id))
+        );
         if c.variant != ProfileVariant::OnlineStrict {
             let _ = write!(
                 fields,
@@ -423,6 +471,29 @@ fn validity_vectors_match() {
             "  {{{fields}, \"iat\": 0, \"horizon_cap_ms\": 100000, \"now\": {}, {}}}",
             c.now,
             expect(profile_check(&c))
+        ));
+    }
+    for (id, vc, now) in contract_scenarios() {
+        let bytes = vc.to_bytes().unwrap();
+        let got = crate::binding::check_validity(
+            &bytes,
+            now,
+            "pep:shop",
+            Vec::new(),
+            None,
+            true,
+            1_000,
+            0,
+            100_000,
+        );
+        let expect = match got {
+            Ok(()) => "\"valid\": true".to_string(),
+            Err(e) => alloc::format!("\"error\": \"{}\"", e.name()),
+        };
+        lines.push(alloc::format!(
+            "  {{\"id\": \"{id}\", {}, \"contract\": \"{}\", \"iat\": 0, \"horizon_cap_ms\": 100000, \"now\": {now}, {expect}}}",
+            crate::vector_rules::field(validity_rules(id)),
+            hex(&bytes)
         ));
     }
     json.push_str(&lines.join(",\n"));
@@ -444,3 +515,5 @@ fn validity_vectors_match() {
         json
     );
 }
+
+mod horizon_vectors;

@@ -369,8 +369,14 @@ fn vector_cases() -> Vec<(&'static str, String)> {
         r#"{{"iss":"https://access.example","exp":2000,"_sd":["{}"]}}"#,
         digest_of(&collide)
     ));
+    let plain = disclosure(r#"["s5","nickname","ada"]"#);
+    let plain_jwt = issuer_jwt(&format!(
+        r#"{{"iss":"https://access.example","exp":2000,"_sd":["{}"]}}"#,
+        digest_of(&plain)
+    ));
     alloc::vec![
         ("valid-all-disclosed", present(&b, &[0, 1, 2])),
+        ("valid-sd-alg-absent", format!("{plain_jwt}~{plain}~")),
         ("valid-partial", present(&b, &[1])),
         ("valid-holder-bound", kb(1_000)),
         ("kb-iat-oldest-edge", kb(700)),
@@ -441,6 +447,21 @@ fn vector_cases() -> Vec<(&'static str, String)> {
     ]
 }
 
+// TI-RT12
+fn sd_rules(id: &str) -> &'static [&'static str] {
+    match id {
+        "valid-holder-bound" => &["L0-SIG-50", "L0-SIG-52"],
+        "disclosure-json-depth-33" => &["L0-ENC-10", "L0-ENC-15", "L0-SIG-50"],
+        "issuer-iss-missing" | "issuer-exp-missing" | "issuer-aud-not-required" => &["L0-SIG-51"],
+        "issuer-exp-edge" | "issuer-expired" | "issuer-nbf-future" | "issuer-iat-future" => {
+            &["L0-SIG-41a", "L0-SIG-51"]
+        }
+        "not-a-presentation" => &["L0-SIG-53"],
+        id if id.starts_with("kb-") => &["L0-SIG-52"],
+        _ => &["L0-SIG-50"],
+    }
+}
+
 // OP-122 m.4, m.5, m.7: names shared by the Kernel, F0 and the bindings
 #[test]
 fn sd_jwt_vectors_match() {
@@ -462,7 +483,8 @@ fn sd_jwt_vectors_match() {
         };
         got.insert(id, out);
         lines.push(format!(
-            "  {{\"id\": \"{id}\", \"presentation\": \"{p}\", {expect}}}"
+            "  {{\"id\": \"{id}\", {}, \"presentation\": \"{p}\", {expect}}}",
+            crate::vector_rules::field(sd_rules(id))
         ));
     }
     for id in [
@@ -484,7 +506,7 @@ fn sd_jwt_vectors_match() {
         Err("issuer claims: issuer".to_string())
     );
     let mut json = format!(
-        "{{\n \"rule\": \"OP-122\",\n \"track\": \"core\",\n \"version\": 1,\n \"operation\": \"verify.sd_jwt\",\n \"keys\": {{\n  \"{}\": \"{}\"\n }},\n \"allowed\": [-19],\n \"context\": {{\"typ\": \"{}\", \"audience\": \"{}\", \"nonce\": \"{}\", \"now\": {}, \"skew_ms\": {}}},\n \"cases\": [\n",
+        "{{\n \"rule\": \"OP-122\",\n \"track\": \"core\",\n \"version\": 1,\n \"operation\": \"verify.sd_jwt\",\n \"keys\": {{\n  \"{}\": \"{}\"\n }},\n \"allowed\": [-19],\n \"context\": {{\"typ\": \"{}\", \"audience\": \"{}\", \"nonce\": \"{}\", \"now\": {}, \"skew_ms\": {}}},\n {},\n \"cases\": [\n",
         b64url_encode(&[1; 32]),
         b64url_encode(&issuer_key().verifying_key().to_bytes()),
         r.typ,
@@ -492,6 +514,7 @@ fn sd_jwt_vectors_match() {
         r.nonce,
         r.now,
         r.skew_ms,
+        crate::vector_rules::field(&["L0-SIG-53"]),
     );
     json.push_str(&lines.join(",\n"));
     let _ = write!(json, "\n ]\n}}\n");

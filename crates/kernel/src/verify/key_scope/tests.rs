@@ -292,7 +292,7 @@ fn error_name(e: KeyScopeError) -> String {
         KeyScopeError::Signature(CoseError::ContentType) => "content-type".into(),
         KeyScopeError::Signature(CoseError::Signature(_)) => "signature".into(),
         KeyScopeError::Signature(other) => alloc::format!("cose:{other}"),
-        KeyScopeError::Payload(other) => alloc::format!("payload:{other}"),
+        KeyScopeError::Payload(_) => "payload".into(),
         KeyScopeError::Superseded => "superseded".into(),
         KeyScopeError::OutOfScope => "outside-binding-scope".into(),
         KeyScopeError::DomainMismatch => "domain-mismatch".into(),
@@ -532,6 +532,46 @@ fn metadata_decoding_is_strict() {
     );
 }
 
+// TI-RT12
+fn key_scope_rules(id: &str) -> &'static [&'static str] {
+    match id {
+        "valid-ed25519" => &[
+            "L0-SIG-61",
+            "L0-SIG-63",
+            "L0-SIG-66",
+            "L0-SIG-67",
+            "L0-SIG-68",
+            "L0-SIG-69",
+            "L0-SIG-71",
+            "L0-SIG-75a",
+            "L2-SIG-2",
+            "L2-SIG-3",
+        ],
+        "valid-esp256" => &["L0-SIG-7", "L0-SIG-68", "L2-SIG-2"],
+        "valid-window-start" | "valid-window-end" | "iat-before-window" | "iat-after-window" => {
+            &["L0-SIG-71", "L0-VAL-12", "L2-SIG-3"]
+        }
+        "valid-provider-scope" | "storm-0558-other-domain" | "provider-scope-out" => &["L0-SIG-65"],
+        "excerpt-domain-mismatch" => &["L0-SIG-66"],
+        "usage-not-declared" => &["L0-SIG-69", "L2-SIG-3"],
+        "window-too-long" | "window-inverted" => &["L0-SIG-70", "L0-SIG-72"],
+        "window-over-24h" => &["L0-SIG-70"],
+        "kid-not-thumbprint" => &["L0-SIG-67"],
+        "alg-not-allowed" => &["L0-SIG-2", "L0-SIG-68"],
+        "alg-key-type-mismatch" | "alg-es256-on-ed25519-key" => &["L0-SIG-7", "L0-SIG-68"],
+        "binding-superseded" => &["L0-SIG-64"],
+        "binding-unknown" => &["L0-SIG-63"],
+        "binding-wrong-signer" => &["L0-SIG-61", "L0-SIG-63"],
+        "binding-alg-mismatch" => &["L0-SIG-21", "L0-SIG-63a"],
+        "binding-kid-not-thumbprint" => &["L0-SIG-62a"],
+        "excerpt-content-type" => &["L0-SIG-16", "L0-SIG-61", "L0-SIG-63"],
+        "hybrid-both-ml-dsa-disabled" | "hybrid-pq-ml-dsa-disabled" | "hybrid-both-esp256" => {
+            &["L0-SIG-68", "L0-SIG-75", "L0-SIG-75a"]
+        }
+        _ => &["L0-SIG-75", "L0-SIG-75a"],
+    }
+}
+
 // CR-58, OP-106 m.24
 #[test]
 fn key_scope_vectors_match() {
@@ -548,26 +588,62 @@ fn key_scope_vectors_match() {
         _ => String::new(),
     };
     let mut json = String::from(
-        "{\n \"rule\": \"CR-58\",\n \"track\": \"core\",\n \"version\": 1,\n \"operation\": \"key_scope.operational_key\",\n \"cases\": [\n",
+        "{\n \"rule\": \"CR-58\",\n \"track\": \"core\",\n \"version\": 1,\n \"operation\": \"key_scope.operational_key\",\n",
     );
-    let all = scenarios();
-    for (i, (id, c)) in all.iter().enumerate() {
-        let expect = match c.run() {
-            Ok(k) => alloc::format!("\"key\": \"{}\"", hex(&k.to_bytes().unwrap())),
-            Err(e) => alloc::format!("\"error\": \"{}\"", error_name(e)),
+    let _ = write!(
+        json,
+        " {},\n \"cases\": [\n",
+        crate::vector_rules::field(&["L0-SIG-60", "L2-SIG-1"])
+    );
+    let mut all = scenarios();
+    let mut c = Case::new();
+    let mut b = c.metadata.binding.pop_first().unwrap().1;
+    b.kid = [0; 32];
+    c.metadata.binding.insert(b.kid, b);
+    c.signer_kid = [0; 32];
+    all.push(("binding-kid-not-thumbprint", c));
+    let mut lines = Vec::new();
+    for (id, c) in &all {
+        let metadata = c.metadata.to_bytes().unwrap();
+        let domain = dcbor::encode(&c.domain.to_value(), Limits::CEILING).unwrap();
+        let got = crate::binding::operational_key(
+            &metadata,
+            &domain,
+            &c.excerpt_bytes(),
+            &usage(c.usage),
+            c.iat,
+        );
+        let expect = match got {
+            Ok(k) => alloc::format!("\"key\": \"{}\"", hex(&k)),
+            Err(e) => alloc::format!("\"error\": \"{}\"", e.name()),
         };
-        let sep = if i + 1 == all.len() { "" } else { "," };
-        let _ = writeln!(
-            json,
-            "  {{\"id\": \"{id}\", \"metadata\": \"{}\", \"domain\": \"{}\", \"excerpt\": \"{}\", \"usage\": \"{}\", \"iat\": {}, {expect}}}{sep}",
-            hex(&c.metadata.to_bytes().unwrap()),
-            hex(&dcbor::encode(&c.domain.to_value(), Limits::CEILING).unwrap()),
+        if *id != "binding-kid-not-thumbprint" {
+            let direct = c.run().map(|k| k.to_bytes().unwrap()).map_err(error_name);
+            assert_eq!(
+                direct,
+                crate::binding::operational_key(
+                    &metadata,
+                    &domain,
+                    &c.excerpt_bytes(),
+                    &usage(c.usage),
+                    c.iat
+                )
+                .map_err(|e| e.name()),
+                "{id}"
+            );
+        }
+        lines.push(alloc::format!(
+            "  {{\"id\": \"{id}\", {}, \"metadata\": \"{}\", \"domain\": \"{}\", \"excerpt\": \"{}\", \"usage\": \"{}\", \"iat\": {}, {expect}}}",
+            crate::vector_rules::field(key_scope_rules(id)),
+            hex(&metadata),
+            hex(&domain),
             hex(&c.excerpt_bytes()),
             usage(c.usage),
             c.iat,
-        );
+        ));
     }
-    json.push_str(" ]\n}\n");
+    json.push_str(&lines.join(",\n"));
+    json.push_str("\n ]\n}\n");
     #[cfg(not(target_os = "wasi"))]
     if std::env::var_os("ACCESS_UPDATE_VECTORS").is_some() {
         std::fs::write(

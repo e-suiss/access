@@ -140,3 +140,5 @@ fn understanding_comes_before_adoption() {
     );
     assert_eq!(CORE, 1);
 }
+
+mod vectors;

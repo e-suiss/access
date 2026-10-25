@@ -59,9 +59,9 @@ Vectors: [`core/1/ed25519-strict.json`](../../conformance/vectors/core/1/ed25519
 
 <a id="L0-SIG-17"></a>**L0-SIG-17. Payload and signature input.** The payload is embedded; a detached payload is not used. `external_aad` is empty. The signed bytes are `dCBOR(["Signature1", protected, h'', payload])`, where `protected` is the protected header byte string as received. Ed25519 follows [L0-SIG-3](#L0-SIG-3); P-256 follows [L0-SIG-4](#L0-SIG-4) to [L0-SIG-6](#L0-SIG-6) (reasons `signature`, `high-s`).
 
-<a id="L0-SIG-18"></a>**L0-SIG-18. Hybrid signatures.** A hybrid classical and post-quantum signature is two separate `COSE_Sign1` structures. The ML-DSA context string is empty.
+<a id="L0-SIG-18"></a><!-- no-vector: no-operation: ML-DSA is not enabled in core v1 -->**L0-SIG-18. Hybrid signatures.** A hybrid classical and post-quantum signature is two separate `COSE_Sign1` structures. The ML-DSA context string is empty.
 
-<a id="L0-SIG-19"></a>**L0-SIG-19. WebAuthn.** In a WebAuthn assertion, COSE algorithm -8 is accepted only when the COSE key's `crv` is Ed25519.
+<a id="L0-SIG-19"></a><!-- no-vector: no-operation: WebAuthn assertions are not a core v1 vector operation -->**L0-SIG-19. WebAuthn.** In a WebAuthn assertion, COSE algorithm -8 is accepted only when the COSE key's `crv` is Ed25519.
 
 <a id="L0-SIG-20"></a>**L0-SIG-20. Reason codes.** The COSE vectors use these reason codes:
 
@@ -100,9 +100,9 @@ Within the `cbor` step, the decoder reads the bytes in order and reports the fir
 
 | # | Step | Result in the vectors |
 |---|---|---|
-| 1 | Format: size limits ([L0-ENC-15a](encoding.md#L0-ENC-15a)) and exactly three parts | `not a compact JWS` |
+| 1 | Format: the compact token size limit ([L0-ENC-15a](encoding.md#L0-ENC-15a)) and exactly three parts | `not a compact JWS` |
 | 2 | Base64url of the header | `bad base64url` |
-| 3 | Header JSON and its members: duplicate, unknown or non-text member | `header: duplicate member`, `header not in profile` |
+| 3 | Header JSON: the decoded header size limit, then the strict JSON profile; then its members: unknown or non-text member | `header: input too large`, `header: <JSON reason>` (for example `header: invalid UTF-8`, `header: duplicate member`), `header not in profile` |
 | 4 | `alg` value | `algorithm not allowed` |
 | 5 | `kid` decodes to 32 bytes, and `typ` is present | `header not in profile` |
 | 6 | Base64url of the payload and the signature | `bad base64url` |
@@ -138,12 +138,14 @@ Within the `cbor` step, the decoder reads the bytes in order and reports the fir
 | `accept` | `valid-ed25519`, `valid-es256` |
 | `reject: algorithm not allowed` | `alg-none`, `alg-none-upper`, `alg-hs256`, `alg-eddsa` |
 | `reject: key type does not match algorithm` | `key-type-mismatch` |
-| `reject: not a compact JWS` | `five-parts` |
+| `reject: not a compact JWS` | `five-parts`, `token-too-large` |
 | `reject: header not in profile` | `embedded-jwk`, `jku`, `x5u`, `x5c`, `kid-path`, `kid-sql`, `crit`, `b64-false`, `cty-jwt`, `typ-missing`, `alg-not-string`, `header-not-object` |
 | `reject: unknown kid` | `kid-unknown` |
 | `reject: unexpected typ` | `typ-other` |
 | `reject: header: duplicate member` | `duplicate-alg` |
-| `reject: bad base64url` | `padded-signature` |
+| `reject: header: input too large` | `header-too-large` |
+| `reject: header: invalid UTF-8` | `header-bad-utf8` |
+| `reject: bad base64url` | `padded-signature`, `signature-nonzero-trailing-bits` |
 | `reject: signature: invalid signature` | `signature-bit-flip` |
 | `reject: signature: ECDSA scalar out of range` | `psychic-signature` |
 | `reject: signature: wrong length` | `der-signature` |
@@ -167,6 +169,7 @@ Vectors: [`core/1/jose-attack-classes.json`](../../conformance/vectors/core/1/jo
 | `reject: audience` | `aud-other`, `aud-empty-array`, `aud-missing` |
 | `reject: payload: nesting too deep` | `json-depth-33` |
 | `reject: payload: duplicate member` | `json-duplicate-member` |
+| `reject: payload: input too large` | `payload-too-large` |
 
 Vectors: [`core/1/jwt-claims.json`](../../conformance/vectors/core/1/jwt-claims.json), operation `verify.jws_compact`. The file gives `claims` (expected issuer, audience, `now` and `skew_ms`); a case that gives its own `claims` uses those instead.
 
@@ -191,7 +194,7 @@ Vectors: [`core/1/jwt-claims.json`](../../conformance/vectors/core/1/jwt-claims.
 
 | Result | Meaning | Cases |
 |---|---|---|
-| `claims` | The disclosed claims, as JSON | `valid-all-disclosed`, `valid-partial`, `valid-holder-bound`, `kb-iat-oldest-edge`, `kb-iat-future-edge`, `issuer-exp-edge`, `issuer-aud-not-required` |
+| `claims` | The disclosed claims, as JSON | `valid-all-disclosed`, `valid-sd-alg-absent`, `valid-partial`, `valid-holder-bound`, `kb-iat-oldest-edge`, `kb-iat-future-edge`, `issuer-exp-edge`, `issuer-aud-not-required` |
 | `not an SD-JWT presentation` | Not `<jwt>~<disclosure>~…~[<kb-jwt>]`, or too large | `not-a-presentation` |
 | `jws: <reason>` | Issuer JWT or Key Binding JWT rejected by [§3](#3-jws-compact) | |
 | `json: <JSON reason>` | Payload or a disclosure breaks the strict JSON profile | `disclosure-json-depth-33` |
@@ -225,11 +228,13 @@ A domain has one or more binding keys. Binding keys sign the Domain Metadata and
 
 <a id="L0-SIG-61"></a>**L0-SIG-61. Signers.** Only a binding key signs Domain Metadata and key excerpts. The excerpt's content type is `application/access-key-excerpt+cbor`; Domain Metadata uses `application/access-domain-metadata+cbor`.
 
-<a id="L0-SIG-62"></a>**L0-SIG-62. Freshness is input.** The freshness of the Domain Metadata is established outside this operation and given as a prepared fact. The metadata's own `issued_at` alone is never proof of freshness.
+<a id="L0-SIG-62"></a><!-- no-vector: outside-operation: metadata freshness is a prepared fact given to the operation -->**L0-SIG-62. Freshness is input.** The freshness of the Domain Metadata is established outside this operation and given as a prepared fact. The metadata's own `issued_at` alone is never proof of freshness.
 
 The checks run in this order. Each failure is a local DENY that names its step.
 
-<a id="L0-SIG-62a"></a>**L0-SIG-62a. Binding key identifiers.** Every binding key's `kid` MUST be the thumbprint of its own key ([L0-SIG-67](#L0-SIG-67)). Domain Metadata in which a binding key's `kid` does not match is not decoded, and the operation fails.
+<a id="L0-SIG-62a"></a>**L0-SIG-62a. Binding key identifiers.** Every binding key's `kid` MUST be the thumbprint of its own key ([L0-SIG-67](#L0-SIG-67)). Domain Metadata in which a binding key's `kid` does not match is not decoded, and the operation fails. A metadata payload that does not decode as `domain-metadata`, for this or any other reason, fails with reason `payload`.
+
+Vector: `binding-kid-not-thumbprint`.
 
 <a id="L0-SIG-63"></a>**L0-SIG-63. Step 1: excerpt signature.** The excerpt is verified as a `COSE_Sign1` ([§2](#2-cose_sign1)) with expected content type `application/access-key-excerpt+cbor`, the metadata `algorithms` as the allowlist, and the metadata binding keys as the key set. Reasons: `unknown-binding` (no binding key has the `kid`), `content-type`, `signature`, or the COSE reason.
 
@@ -297,4 +302,4 @@ While ML-DSA is not enabled, `both` and `pq` cannot be satisfied. Resolving an o
 
 Vectors: `key-scope.json`: `hybrid-classic`, `hybrid-classic-esp256`, `hybrid-both-ml-dsa-disabled`, `hybrid-pq-ml-dsa-disabled`, `hybrid-both-esp256`.
 
-<a id="L0-SIG-76"></a>**L0-SIG-76. Identity-plane keys.** Keys that sign identity tokens (OpenID Connect ID tokens, for example) are not operational keys and never sign an authority artifact. Matching their issuer, realm and `kid` is outside L0.
+<a id="L0-SIG-76"></a><!-- no-vector: outside-operation: identity-plane keys are outside L0 -->**L0-SIG-76. Identity-plane keys.** Keys that sign identity tokens (OpenID Connect ID tokens, for example) are not operational keys and never sign an authority artifact. Matching their issuer, realm and `kid` is outside L0.

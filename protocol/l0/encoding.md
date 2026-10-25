@@ -96,11 +96,15 @@ Vectors: `cbor-decode.json`: `depth-16-containers`, `depth-16-with-scalar-leaf`,
 
 Vectors: `cbor-decode.json`: `string-65536-bytes`, `string-65537-bytes`, `array-256-items`, `array-257-items`.
 
-<a id="L0-ENC-11"></a>**L0-ENC-11. Lower limits only.** The ceilings in [L0-ENC-10](#L0-ENC-10) are fixed by the protocol. A caller MAY configure a lower limit for any of them. A caller MUST NOT configure a higher one.
+A basis with more than 16 hops is an `input` rejection, in every mode and for every candidate: `decision.json`: `allow-basis-16-hops`, `reject-basis-17-hops`, `reject-check-17-hops-later-candidate`.
+
+<a id="L0-ENC-11"></a><!-- no-vector: outside-operation: a caller's own lower limits; vectors run at the protocol ceilings -->**L0-ENC-11. Lower limits only.** The ceilings in [L0-ENC-10](#L0-ENC-10) are fixed by the protocol. A caller MAY configure a lower limit for any of them. A caller MUST NOT configure a higher one.
 
 <a id="L0-ENC-12"></a>**L0-ENC-12. Exceeding a limit.** Input that exceeds a limit is rejected. A rejection is not a decision ([L0-EVAL-60](evaluation.md#L0-EVAL-60)). A decoder MUST check depth before it descends into a nested item, and MUST check a length before it reads the item.
 
 <a id="L0-ENC-13"></a>**L0-ENC-13. Selector conditions.** The conditions of a selector are the conjuncts of a `pred` subject selector and the entries of a structural resource selector's `where` map. A selector with more than 32 conditions is rejected.
+
+Vectors: `decision.json`: `deny-selector-32-conditions`, `reject-selector-33-conditions`, `reject-where-33-conditions`.
 
 ## 3. Strict JSON and base64url
 
@@ -155,9 +159,11 @@ where `context(K)` is the UTF-8 bytes of the context string, followed by one zer
 | Intent envelope | `access/intent/v1` |
 | Genesis record (DomainID) | `access/genesis/v1` |
 
-<a id="L0-ENC-22a"></a>**L0-ENC-22a. New digest kinds.** The context table is published with the CDDL. Each new digest kind receives a context string of the form `access/<kind>/v1` when the feature that produces it is adopted.
+<a id="L0-ENC-22a"></a><!-- no-vector: editorial: how later digest kinds get context strings -->**L0-ENC-22a. New digest kinds.** The context table is published with the CDDL. Each new digest kind receives a context string of the form `access/<kind>/v1` when the feature that produces it is adopted.
 
 <a id="L0-ENC-23"></a>**L0-ENC-23. Intent digest.** The intent digest is the digest of the `intent-envelope` under the context `access/intent/v1`. It is computed from the envelope by the party that prepares the evaluation input, never taken from the requester. The request nonce is not part of the intent envelope; a signed actor statement binds the nonce and the intent digest separately.
+
+Vectors: [`core/1/digest.json`](../../conformance/vectors/core/1/digest.json), operation `digest.intent`: each case gives the canonical `intent` and its tagged `digest`.
 
 <a id="L0-ENC-24"></a>**L0-ENC-24. Hash prefixes.** Hashes that are not value digests use a one-byte prefix instead of a context string:
 
@@ -198,6 +204,8 @@ body_commit = SHA-256( 0x03 ‖ salt ‖ dCBOR(body) )
 
 Each body has its own 32-byte salt and exactly one commitment.
 
+Vectors: `digest.json`, operation `digest.body_commit`: each case gives the canonical `body`, the `salt` and the raw 32-byte `commit`.
+
 <a id="L0-ENC-29b"></a>**L0-ENC-29b. Envelope consistency.** `kind` is `genesis` exactly when `pos` is 0. `field_salt` has exactly the names of `fields`, and `fields` is not empty. Field names are `ident`s. A decoder MUST reject an envelope that breaks [L0-ENC-27](#L0-ENC-27) or this rule.
 
 <a id="L0-ENC-29c"></a>**L0-ENC-29c. Selective disclosure.** A `record-disclosure` carries the header of a record, the opened fields with their values and salts, and for every withheld field only its commitment `FC(name)` as a tagged digest under `withheld`. A name appears in at most one of `fields` and `withheld`, and at least one field is present. A verifier recomputes the commitment of every opened field, merges the withheld commitments, and recomputes `field_root` and the leaf hash ([L0-ENC-29](#L0-ENC-29)). It never takes a commitment of an opened field from the input. A withheld name only places its commitment in the order of [L0-ENC-29](#L0-ENC-29); it is not authenticated. Withholding or redacting a field never changes the leaf hash. A `record-envelope` is a disclosure that withholds nothing.
@@ -230,9 +238,9 @@ The checkpoint format that signs a tree head is part of the record exchange (L2)
 
 <a id="L0-ENC-35"></a>**L0-ENC-35. TrustedTime.** A TrustedTime is the number of milliseconds since the Unix epoch, as an unsigned 64-bit integer, untagged.
 
-<a id="L0-ENC-36"></a>**L0-ENC-36. Identifiers.** Identifiers (`id`, `party-ref`, `instance-ref`, `grant-id`, `policy-ref`) are opaque 16-byte strings. An implementation MUST NOT derive meaning from their content. Identifiers derived from content are tagged digests.
+<a id="L0-ENC-36"></a><!-- no-vector: definition: identifiers are opaque; their form is in the CDDL -->**L0-ENC-36. Identifiers.** Identifiers (`id`, `party-ref`, `instance-ref`, `grant-id`, `policy-ref`) are opaque 16-byte strings. An implementation MUST NOT derive meaning from their content. Identifiers derived from content are tagged digests.
 
-<a id="L0-ENC-37"></a>**L0-ENC-37. Version vectors.** `spec-versions` names the core semantics, meta-schema, profile and schema versions a value was produced under. It is distinct from the versions of the authority state read for one decision, which are not part of L0 input.
+<a id="L0-ENC-37"></a><!-- no-vector: definition: spec-versions is read by no core v1 operation -->**L0-ENC-37. Version vectors.** `spec-versions` names the core semantics, meta-schema, profile and schema versions a value was produced under. It is distinct from the versions of the authority state read for one decision, which are not part of L0 input.
 
 <a id="L0-ENC-38"></a>**L0-ENC-38. Version tracks.** The core semantics, the core meta-schema and each interop profile (by name) are separate version tracks. Action schemas are pinned by Acceptance and are not ordered. Connectivity profiles are named by the ValidityContract. For the versions a value cites:
 
@@ -241,4 +249,6 @@ The checkpoint format that signs a tree head is part of the record exchange (L2)
 3. A version below the domain minimum (`min_versions` in Domain Metadata) is not accepted.
 4. Profiles are compared by name only, so a new version of a standard moves only its own profile track.
 
-The checks run in this order and the first failing one is reported.
+The checks run in this order and the first failing one is reported. Within each check the tracks are compared in the order core, meta-schema, profiles. The reasons are `not-understood` (1), `not-adopted` (2) and `below-minimum` (3), each with the failing `track`: `core`, `meta-schema` or `profile`.
+
+Vectors: [`core/1/version.json`](../../conformance/vectors/core/1/version.json), operation `version.check`. Each case gives the canonical `spec-versions` the value cites (`cited`), the verifier implements (`supported`), and the domain has adopted (`adopted`) and requires (`minimum`), and either `valid: true` or the expected `error` and `track`.

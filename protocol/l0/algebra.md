@@ -25,7 +25,7 @@ All comparisons are syntactic. No rule here calls out to a policy engine, a data
 
 <a id="L0-ALG-4a"></a>**L0-ALG-4a. Stored authority in an evaluation input.** When the layer that reads a stored Grant does not understand one of its elements, the hop is written in the evaluation input as exactly `{not_understood: true}`, with no other field. Such a hop covers nothing ([L0-EVAL-12a](evaluation.md#L0-EVAL-12a)). The hop is never dropped from the basis.
 
-<a id="L0-ALG-5"></a>**L0-ALG-5. Required properties.** For every type in this part an implementation MUST satisfy:
+<a id="L0-ALG-5"></a><!-- no-vector: property: laws over all values; proved in the Lean model and property-tested in the Kernel -->**L0-ALG-5. Required properties.** For every type in this part an implementation MUST satisfy:
 
 - `⊑` is sound: if `c ⊑ p`, then every concrete value allowed by `c` is allowed by `p`;
 - `⊑` is reflexive on every well-formed value (unique parameter keys, valid time windows) and transitive;
@@ -146,6 +146,8 @@ An `authority-set` has five dimensions: `actions`, `resource`, `params`, `recipi
 - if `p` has a `purpose`, `c` has one and it is `⊑` `p`'s.
 
 <a id="L0-ALG-51"></a>**L0-ALG-51. Authority `∩`.** The intersection is taken dimension by dimension. A parameter, recipient or purpose bounded on one side only keeps that side's bound. If any dimension intersects to `⊥`, or no action is covered by both sides, the whole result is `⊥`. The result is normalized.
+
+Vectors for [L0-ALG-42](#L0-ALG-42), [L0-ALG-46](#L0-ALG-46) and this rule: [`core/1/algebra.json`](../../conformance/vectors/core/1/algebra.json), operation `algebra.meet`. Each case gives a `kind` (`resource`, `subject` or `authority`), the canonical bytes of `a` and `b` (a `resource-selector`, a `subject-selector` or an `authority-set`), and either `meet`, the canonical bytes of `a ∩ b`, or `bottom: true` when the intersection is `⊥`. The catalog is given at file level.
 
 <a id="L0-ALG-52"></a>**L0-ALG-52. Authority `normalize`.** Sets are sorted and unique; each bound is normalized; a `⊥` in any dimension makes the whole value `⊥`; unbounded dimensions are not written. A `public` recipient and a `public` subject bound are unbounded ([L0-EVAL-10](evaluation.md#L0-EVAL-10)) and are not written. Only an action set with neither `exact` nor `prefix` is written as `⊥`; an action set whose prefixes resolve to no action covers nothing but keeps its form.
 

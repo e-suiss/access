@@ -202,3 +202,5 @@ fn sha256_acvp_known_answers() {
     }
     assert_eq!(v.tests.len(), 512);
 }
+
+mod vectors;

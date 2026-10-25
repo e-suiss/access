@@ -151,14 +151,14 @@ beforeAll(async () => {
 describe("Kernel vectors through the Wasm binding", () => {
   it("decision.json", async () => {
     const v = await vectors("decision.json");
-    const fuel = BigInt(v.fuel ?? 0);
     for (const c of v.cases) {
+      const fuel = BigInt((c["fuel"] as number | undefined) ?? v.fuel ?? 0);
       const got = outcome(() => toHex(k.evaluate(hex(field(c, "input")), fuel)));
       const want =
         "decision" in c ? { ok: field(c, "decision") } : { error: field(c, "rejection") };
       expect(got, c.id).toEqual(want);
     }
-    expect(v.cases).toHaveLength(72);
+    expect(v.cases).toHaveLength(149);
   });
 
   it("cve-regressions.json", async () => {
@@ -177,7 +177,7 @@ describe("Kernel vectors through the Wasm binding", () => {
         expect(within, c.id).toBe(c["within"]);
       }
     }
-    expect(v.cases).toHaveLength(20);
+    expect(v.cases).toHaveLength(38);
   });
 
   it("cose.json", async () => {
@@ -223,7 +223,7 @@ describe("Kernel vectors through the Wasm binding", () => {
       const want = "error" in c ? { error: field(c, "error") } : { ok: field(c, "key") };
       expect(got, c.id).toEqual(want);
     }
-    expect(v.cases).toHaveLength(28);
+    expect(v.cases).toHaveLength(29);
   });
 
   it("jose-attack-classes.json", async () => {
@@ -250,7 +250,7 @@ describe("Kernel vectors through the Wasm binding", () => {
       );
       expect("ok" in got ? "accept" : `reject: ${got.error}`, c.id).toBe(field(c, "expect"));
     }
-    expect(v.cases).toHaveLength(34);
+    expect(v.cases).toHaveLength(38);
   });
 
   // OP-122 m.7
@@ -273,7 +273,7 @@ describe("Kernel vectors through the Wasm binding", () => {
       );
       expect("ok" in got ? "accept" : `reject: ${got.error}`, c.id).toBe(field(c, "expect"));
     }
-    expect(v.cases).toHaveLength(23);
+    expect(v.cases).toHaveLength(24);
   });
 
   // OP-122 m.7
@@ -296,7 +296,7 @@ describe("Kernel vectors through the Wasm binding", () => {
       const want = "claims" in c ? { ok: c["claims"] } : { error: field(c, "error") };
       expect("ok" in got ? { ok: JSON.parse(got.ok) as unknown } : got, c.id).toEqual(want);
     }
-    expect(v.cases).toHaveLength(26);
+    expect(v.cases).toHaveLength(27);
   });
 
   // OP-118 m.4, OP-122 m.6
@@ -332,7 +332,7 @@ describe("Kernel vectors through the Wasm binding", () => {
       const want = "error" in c ? { error: field(c, "error") } : { ok: true };
       expect(got, c.id).toEqual(want);
     }
-    expect(v.cases).toHaveLength(20);
+    expect(v.cases).toHaveLength(25);
   });
 
   it("merkle.json", async () => {

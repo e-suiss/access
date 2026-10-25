@@ -25,7 +25,7 @@ pub fn api_version() -> String {
 /// `evaluation-input` and fuel to `decision` (OP-111, OP-116 m.5).
 ///
 /// # Errors
-/// `input`, `fuel` or `limit`.
+/// `input` or `fuel`.
 #[wasm_bindgen]
 pub fn evaluate(input: &[u8], fuel: u64) -> Result<Vec<u8>, JsError> {
     binding::evaluate(input, fuel).map_err(js)

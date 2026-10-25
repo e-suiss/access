@@ -104,7 +104,7 @@ def main():
         out.append({"id": f"speccheck-{i}", "public_key": c["pub_key"], "message": c["message"],
                     "signature": c["signature"], "result": result, "reason": reason})
     json.dump({"rule": "CR-53", "track": "core", "version": 1, "operation": "verify.ed25519",
-               "source": "novifinancial/ed25519-speccheck cases.json; labels from this reference", "cases": out},
+               "rules": ["L0-SIG-3"], "source": "novifinancial/ed25519-speccheck cases.json; labels from this reference", "cases": out},
               sys.stdout, indent=1)
     sys.stdout.write("\n")
 

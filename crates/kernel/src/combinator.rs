@@ -37,12 +37,10 @@ pub enum Rejection {
     /// Step budget exhausted.
     #[error("step budget exhausted")]
     Fuel,
-    /// Input outside the contract (e.g. `commit` without a basis).
+    /// Input outside the contract (e.g. `commit` without a basis, or a lineage deeper than
+    /// [`MAX_LINEAGE`], OP-108 m.10, OP-126 m.6).
     #[error("malformed input")]
     Input,
-    /// Lineage deeper than [`MAX_LINEAGE`] (OP-108 m.10, SI-20).
-    #[error("lineage too deep")]
-    Limit,
 }
 
 /// Maximum lineage depth on the Kernel and commit paths (OP-108 m.10).
@@ -451,9 +449,6 @@ fn evaluate_basis(
     if basis.hops.is_empty() {
         return Err(Rejection::Input);
     }
-    if basis.hops.len() > MAX_LINEAGE {
-        return Err(Rejection::Limit);
-    }
     let mut blockers = Vec::new();
     let mut terms: Vec<(RequirementTerm, Position)> = Vec::new();
     for (k, hop) in basis.hops.iter().enumerate() {
@@ -600,6 +595,20 @@ pub fn evaluate(input: &EvaluationInput<'_>, fuel: &mut Fuel) -> Result<Decision
     }
     // OP-118 m.3
     if !assurance_known(input) {
+        return Err(Rejection::Input);
+    }
+    // OP-108 m.10, OP-126 m.6
+    if input.bases.iter().any(|b| b.hops.len() > MAX_LINEAGE) {
+        return Err(Rejection::Input);
+    }
+    // OP-107 m.15, L0-EVAL-3
+    if input.catalog.check().is_err() {
+        return Err(Rejection::Input);
+    }
+    // L0-EVAL-18
+    if input.restrictions.iter().any(|r| {
+        matches!(&r.outcome, RestrictionOutcome::Deny(d) if d.policy != r.policy || d.version != r.version)
+    }) {
         return Err(Rejection::Input);
     }
     // OP-114 m.11

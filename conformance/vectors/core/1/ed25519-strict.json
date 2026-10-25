@@ -3,6 +3,9 @@
  "track": "core",
  "version": 1,
  "operation": "verify.ed25519",
+ "rules": [
+  "L0-SIG-3"
+ ],
  "source": "novifinancial/ed25519-speccheck cases.json; labels from this reference",
  "cases": [
   {

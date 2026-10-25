@@ -215,7 +215,8 @@ fun outcome(f: () -> String): Outcome = try {
 fun testDecision() {
     val v = load("decision.json")
     for (c in v.cases()) {
-        val got = outcome { hex(evaluate(hex(c.str("input")), v.u64("fuel"))) }
+        val fuel = if ("fuel" in c) c.u64("fuel") else v.u64("fuel")
+        val got = outcome { hex(evaluate(hex(c.str("input")), fuel)) }
         val want = if ("decision" in c) Outcome.Ok(c.str("decision")) else Outcome.Err(c.str("rejection"))
         expect(got, want, c["id"])
     }

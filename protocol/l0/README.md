@@ -18,13 +18,13 @@ A third party can build a conformant evaluator and verifier from this text and t
 
 ## Conventions
 
-<a id="L0-GEN-1"></a>**L0-GEN-1.** The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT", "SHOULD", "SHOULD NOT", "RECOMMENDED", "NOT RECOMMENDED", "MAY" and "OPTIONAL" are to be interpreted as described in BCP 14 ([RFC 2119](https://www.rfc-editor.org/rfc/rfc2119), [RFC 8174](https://www.rfc-editor.org/rfc/rfc8174)) when, and only when, they appear in all capitals.
+<a id="L0-GEN-1"></a><!-- no-vector: editorial: BCP 14 key words -->**L0-GEN-1.** The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT", "SHOULD", "SHOULD NOT", "RECOMMENDED", "NOT RECOMMENDED", "MAY" and "OPTIONAL" are to be interpreted as described in BCP 14 ([RFC 2119](https://www.rfc-editor.org/rfc/rfc2119), [RFC 8174](https://www.rfc-editor.org/rfc/rfc8174)) when, and only when, they appear in all capitals.
 
-<a id="L0-GEN-2"></a>**L0-GEN-2.** Every normative rule has a stable anchor of the form `L0-<PART>-<n>`, where `<PART>` is `GEN`, `ENC`, `ALG`, `EVAL`, `VAL` or `SIG`. Anchors are never reused or renumbered. A withdrawn rule keeps its anchor and is marked as withdrawn.
+<a id="L0-GEN-2"></a><!-- no-vector: editorial: the anchor scheme of this text -->**L0-GEN-2.** Every normative rule has a stable anchor of the form `L0-<PART>-<n>`, where `<PART>` is `GEN`, `ENC`, `ALG`, `EVAL`, `VAL` or `SIG`. Anchors are never reused or renumbered. A withdrawn rule keeps its anchor and is marked as withdrawn.
 
-<a id="L0-GEN-3"></a>**L0-GEN-3.** Field names, type names and choice names in `code` refer to the CDDL. Where this text and the CDDL describe the same structure, both MUST hold. A conflict between them is a defect in this text and is fixed before adoption.
+<a id="L0-GEN-3"></a><!-- no-vector: editorial: how this text relates to the CDDL -->**L0-GEN-3.** Field names, type names and choice names in `code` refer to the CDDL. Where this text and the CDDL describe the same structure, both MUST hold. A conflict between them is a defect in this text and is fixed before adoption.
 
-<a id="L0-GEN-4"></a>**L0-GEN-4.** An item marked **OPEN** is not a rule. It records a question this version does not answer. An implementation MUST NOT rely on any particular answer to an OPEN item. Conformance vectors do not test OPEN items.
+<a id="L0-GEN-4"></a><!-- no-vector: editorial: OPEN items are not rules and have no vectors -->**L0-GEN-4.** An item marked **OPEN** is not a rule. It records a question this version does not answer. An implementation MUST NOT rely on any particular answer to an OPEN item. Conformance vectors do not test OPEN items.
 
 Notation: `‖` is byte concatenation. `SHA-256(x)` is the 32-byte digest of the bytes `x`. `dCBOR(v)` is the deterministic CBOR encoding of `v` defined in [`encoding.md`](encoding.md). `⊥` is the bottom value, which covers nothing. Times are TrustedTime values: milliseconds since the Unix epoch.
 
@@ -65,11 +65,17 @@ Conformance vectors live in [`conformance/vectors/`](../../conformance/vectors).
 | [`core/1/key-scope.json`](../../conformance/vectors/core/1/key-scope.json) | `key_scope.operational_key` | [L0-SIG-60](signatures.md#L0-SIG-60) to [L0-SIG-72](signatures.md#L0-SIG-72), [L0-SIG-75a](signatures.md#L0-SIG-75a) |
 | [`core/1/jwt-claims.json`](../../conformance/vectors/core/1/jwt-claims.json) | `verify.jws_compact` | [L0-SIG-41](signatures.md#L0-SIG-41) to [L0-SIG-41b](signatures.md#L0-SIG-41b), [L0-ENC-15](encoding.md#L0-ENC-15) |
 | [`core/1/sd-jwt.json`](../../conformance/vectors/core/1/sd-jwt.json) | `verify.sd_jwt` | [L0-SIG-50](signatures.md#L0-SIG-50) to [L0-SIG-53](signatures.md#L0-SIG-53) |
+| [`core/1/algebra.json`](../../conformance/vectors/core/1/algebra.json) | `algebra.meet` | [L0-ALG-42](algebra.md#L0-ALG-42), [L0-ALG-46](algebra.md#L0-ALG-46), [L0-ALG-51](algebra.md#L0-ALG-51) |
+| [`core/1/digest.json`](../../conformance/vectors/core/1/digest.json) | `digest.intent`, `digest.body_commit` | [L0-ENC-23](encoding.md#L0-ENC-23), [L0-ENC-29a](encoding.md#L0-ENC-29a) |
+| [`core/1/version.json`](../../conformance/vectors/core/1/version.json) | `version.check` | [L0-ENC-38](encoding.md#L0-ENC-38), [L0-GEN-7](#L0-GEN-7) |
+| [`core/1/horizon.json`](../../conformance/vectors/core/1/horizon.json) | `validity.horizon` | [L0-VAL-5](validity.md#L0-VAL-5) |
 | [`core/1/validity.json`](../../conformance/vectors/core/1/validity.json) | `validity.check` | [L0-VAL-10](validity.md#L0-VAL-10) to [L0-VAL-11](validity.md#L0-VAL-11), [L0-VAL-14b](validity.md#L0-VAL-14b), [L0-VAL-16a](validity.md#L0-VAL-16a), [L0-VAL-16b](validity.md#L0-VAL-16b) |
 
-<a id="L0-GEN-5"></a>**L0-GEN-5.** An implementation conforms to core version 1 only if it produces the expected result for every vector of every operation it implements. For `combinator.evaluate` the expected result is the exact bytes of the canonical `decision`, or the named rejection kind. For verification operations it is acceptance with the expected output, or rejection with the named reason.
+Every case names the rules it exercises in a `rules` array of anchors; a file may also name, in a top-level `rules`, rules that all of its cases exercise. A rule that no vector exercises carries a `<!-- no-vector: <kind>: <reason> -->` comment right after its anchor. The kinds are `editorial`, `definition`, `property`, `no-operation` (no core operation exposes the rule yet), `outside-operation`, `unreachable` and `undecided`. CI rejects a rule that is neither cited nor marked, a marked rule that a vector cites, and a citation of an anchor that does not exist. Runners ignore `rules`.
 
-<a id="L0-GEN-6"></a>**L0-GEN-6.** The normative definition of core semantics is this text together with the vectors. Where an implementation disagrees with them, the implementation is wrong.
+<a id="L0-GEN-5"></a><!-- no-vector: editorial: defines conformance to the vectors themselves -->**L0-GEN-5.** An implementation conforms to core version 1 only if it produces the expected result for every vector of every operation it implements. For `combinator.evaluate` the expected result is the exact bytes of the canonical `decision`, or the named rejection kind. For verification operations it is acceptance with the expected output, or rejection with the named reason.
+
+<a id="L0-GEN-6"></a><!-- no-vector: editorial: names the normative sources -->**L0-GEN-6.** The normative definition of core semantics is this text together with the vectors. Where an implementation disagrees with them, the implementation is wrong.
 
 Vectors are also checked against third-party sources where these exist: [`conformance/vectors/external/`](../../conformance/vectors/external) holds the Ed25519 edge cases from "Taming the many EdDSAs", Wycheproof Ed25519 and ECDSA P-256 sets, NIST ACVP SHA-256, EdDSA and ECDSA SigVer sets, and the RFC 9901 disclosure examples.
 

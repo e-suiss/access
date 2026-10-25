@@ -14,6 +14,8 @@ use crate::model::{
 use crate::requirement::ProofBinding;
 use crate::restriction::PolicyDeny;
 
+mod coverage;
+
 fn d(n: u8) -> Digest {
     Digest([n; 32])
 }
@@ -143,6 +145,7 @@ struct World {
     mode: Mode,
     capacity: Capacity,
     agent: bool,
+    fuel: u64,
 }
 
 impl World {
@@ -157,6 +160,7 @@ impl World {
             mode: Mode::Commit,
             capacity: Capacity::Own,
             agent: false,
+            fuel: 10_000,
         }
     }
 
@@ -175,7 +179,7 @@ impl World {
             proofs: &self.proofs,
             catalog: &self.catalog,
         };
-        evaluate(&input, &mut Fuel(10_000))
+        evaluate(&input, &mut Fuel(self.fuel))
     }
 
     fn hop(&mut self, k: usize) -> &mut Hop {
@@ -496,7 +500,7 @@ fn lineage_deeper_than_sixteen_is_rejected() {
     w.bases = vec![basis(vec![hop(); MAX_LINEAGE])];
     assert_eq!(w.run().map(|dec| dec.outcome), Ok(Outcome::Allow));
     w.bases = vec![basis(vec![hop(); MAX_LINEAGE + 1])];
-    assert_eq!(w.run(), Err(Rejection::Limit));
+    assert_eq!(w.run(), Err(Rejection::Input));
 }
 
 // OP-111 m.7
@@ -606,6 +610,7 @@ fn scenarios() -> Vec<(&'static str, World)> {
     w.capacity = Capacity::For(Id([5; 16]));
     out.push(("deny-capacity-mismatch", w));
     out.extend(requirement_scenarios());
+    out.extend(coverage::scenarios());
     out
 }
 
@@ -1113,24 +1118,34 @@ fn decision_vectors_match() {
             h
         })
     };
-    let mut json = String::from(
-        "{\n \"rule\": \"OP-111\",\n \"track\": \"core\",\n \"version\": 1,\n \"operation\": \"combinator.evaluate\",\n \"fuel\": 10000,\n \"cases\": [\n",
+    let mut json = alloc::format!(
+        "{{\n \"rule\": \"OP-111\",\n \"track\": \"core\",\n \"version\": 1,\n \"operation\": \"combinator.evaluate\",\n \"fuel\": 10000,\n {},\n \"cases\": [\n",
+        crate::vector_rules::field(&["L0-EVAL-1", "L0-EVAL-2", "L0-EVAL-42", "L0-EVAL-43"])
     );
     let all = scenarios();
-    for (i, (id, w)) in all.iter().enumerate() {
+    let mut lines = Vec::new();
+    for (id, w) in &all {
         let owned = w.owned();
         let input = owned.to_bytes().unwrap();
+        let rules = crate::vector_rules::field(coverage::decision_rules(id));
+        assert!(
+            !coverage::decision_rules(id).is_empty(),
+            "{id} cites no rule"
+        );
+        let fuel = if w.fuel == 10_000 {
+            String::new()
+        } else {
+            alloc::format!(", \"fuel\": {}", w.fuel)
+        };
         let Ok(back) = codec::OwnedInput::from_bytes(&input) else {
-            let sep = if i + 1 == all.len() { "" } else { "," };
-            let _ = writeln!(
-                json,
-                "  {{\"id\": \"{id}\", \"input\": \"{}\", \"rejection\": \"input\"}}{sep}",
+            lines.push(alloc::format!(
+                "  {{\"id\": \"{id}\", {rules}{fuel}, \"input\": \"{}\", \"rejection\": \"input\"}}",
                 hex(&input)
-            );
+            ));
             continue;
         };
         assert_eq!(back.to_bytes().unwrap(), input, "{id}");
-        let expect = match evaluate(&back.input(), &mut Fuel(10_000)) {
+        let expect = match evaluate(&back.input(), &mut Fuel(w.fuel)) {
             Ok(dec) => {
                 assert_eq!(Ok(dec.clone()), w.run(), "{id}");
                 format!(
@@ -1140,16 +1155,22 @@ fn decision_vectors_match() {
             }
             Err(Rejection::Input) => "\"rejection\": \"input\"".to_string(),
             Err(Rejection::Fuel) => "\"rejection\": \"fuel\"".to_string(),
-            Err(Rejection::Limit) => "\"rejection\": \"limit\"".to_string(),
         };
-        let sep = if i + 1 == all.len() { "" } else { "," };
-        let _ = writeln!(
-            json,
-            "  {{\"id\": \"{id}\", \"input\": \"{}\", {expect}}}{sep}",
+        lines.push(alloc::format!(
+            "  {{\"id\": \"{id}\", {rules}{fuel}, \"input\": \"{}\", {expect}}}",
             hex(&input)
-        );
+        ));
     }
-    json.push_str(" ]\n}\n");
+    for (id, input) in coverage::raw_inputs() {
+        assert!(codec::OwnedInput::from_bytes(&input).is_err(), "{id}");
+        lines.push(alloc::format!(
+            "  {{\"id\": \"{id}\", {}, \"input\": \"{}\", \"rejection\": \"input\"}}",
+            crate::vector_rules::field(coverage::decision_rules(id)),
+            hex(&input)
+        ));
+    }
+    json.push_str(&lines.join(",\n"));
+    json.push_str("\n ]\n}\n");
     #[cfg(not(target_os = "wasi"))]
     if std::env::var_os("ACCESS_UPDATE_VECTORS").is_some() {
         std::fs::write(
@@ -1440,6 +1461,11 @@ fn cve_capacity_cases() -> Vec<(&'static str, &'static [&'static str], Cve)> {
         IMPERSONATION,
         delegate(wider, SubjectSelector::Party(party(2)), false),
     ));
+    out.extend(
+        coverage::delegate_cases()
+            .into_iter()
+            .map(|(id, c)| (id, &[][..], c)),
+    );
     out
 }
 
@@ -1501,9 +1527,11 @@ fn cve_regression_vectors_match() {
             }
         };
         let sep = if i + 1 == all.len() { "" } else { "," };
+        assert!(!coverage::cve_rules(id).is_empty(), "{id} cites no rule");
         let _ = writeln!(
             json,
-            "  {{\"id\": \"{id}\", \"cve\": [{refs}], {body}}}{sep}"
+            "  {{\"id\": \"{id}\", {}, \"cve\": [{refs}], {body}}}{sep}",
+            crate::vector_rules::field(coverage::cve_rules(id))
         );
     }
     json.push_str(" ]\n}\n");
@@ -1698,7 +1726,6 @@ fn random_inputs_for_f0() {
             ),
             Err(Rejection::Input) => "\"rejection\": \"input\"".to_string(),
             Err(Rejection::Fuel) => "\"rejection\": \"fuel\"".to_string(),
-            Err(Rejection::Limit) => "\"rejection\": \"limit\"".to_string(),
         };
         let sep = if i + 1 == count { "" } else { "," };
         let _ = writeln!(

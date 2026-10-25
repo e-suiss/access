@@ -379,6 +379,46 @@ fn signature_cases() -> Vec<Case> {
         PAYLOAD,
         &es_sign,
     );
+    let mut trailing = sig.to_string();
+    let last = trailing.pop().unwrap();
+    trailing.push(char::from(
+        u8::try_from(last).unwrap().checked_add(1).unwrap(),
+    ));
+    add(
+        "signature-nonzero-trailing-bits",
+        18,
+        format!("{input}.{trailing}"),
+        Err(JwsError::Base64),
+    );
+    add(
+        "header-too-large",
+        18,
+        ed(&format!(
+            r#"{{"alg":"Ed25519","kid":"KID1","typ":"TYP","pad":"{}"}}"#,
+            "a".repeat(MAX_HEADER)
+        )),
+        Err(JwsError::Json(JsonError::Size)),
+    );
+    let bad_utf8 = format!(
+        "{}.{}",
+        b64url_encode(&[0x7b, 0x22, 0xff, 0x22, 0x3a, 0x31, 0x7d]),
+        b64url_encode(PAYLOAD.as_bytes())
+    );
+    add(
+        "header-bad-utf8",
+        18,
+        format!(
+            "{bad_utf8}.{}",
+            b64url_encode(&ed_sign(bad_utf8.as_bytes()))
+        ),
+        Err(JwsError::Json(JsonError::Utf8)),
+    );
+    add(
+        "token-too-large",
+        15,
+        format!("{input}.{sig}{}", "A".repeat(MAX_TOKEN)),
+        Err(JwsError::Format),
+    );
     let (es_input, _) = es.rsplit_once('.').unwrap();
     add(
         "psychic-signature",
@@ -406,6 +446,58 @@ fn attack_class_vectors() {
     }
 }
 
+// TI-RT12
+fn jose_rules(id: &str) -> &'static [&'static str] {
+    match id {
+        "valid-ed25519" => &[
+            "L0-ENC-15",
+            "L0-ENC-16",
+            "L0-ENC-17",
+            "L0-SIG-1",
+            "L0-SIG-3",
+            "L0-SIG-30",
+            "L0-SIG-31",
+            "L0-SIG-32",
+            "L0-SIG-35",
+            "L0-SIG-36",
+            "L0-SIG-37",
+        ],
+        "valid-es256" => &["L0-SIG-1", "L0-SIG-4", "L0-SIG-5", "L0-SIG-6", "L0-SIG-37"],
+        "key-type-mismatch" | "p256-key-alg-ed25519" => &["L0-SIG-7", "L0-SIG-34"],
+        "five-parts" => &["L0-SIG-30"],
+        "embedded-jwk" | "jku" | "x5u" | "x5c" | "crit" | "b64-false" | "cty-jwt" => &["L0-SIG-33"],
+        "kid-path" | "kid-sql" | "kid-unknown" => &["L0-SIG-35"],
+        "typ-missing" | "alg-not-string" => &["L0-SIG-32"],
+        "typ-other" => &["L0-SIG-36"],
+        "duplicate-alg" | "header-bad-utf8" => &["L0-ENC-15", "L0-SIG-21a", "L0-SIG-31"],
+        "header-too-large" => &["L0-ENC-15", "L0-ENC-15a", "L0-SIG-21a"],
+        "header-not-object" => &["L0-SIG-31"],
+        "padded-signature" => &["L0-ENC-16", "L0-SIG-31"],
+        "signature-nonzero-trailing-bits" => &["L0-ENC-16"],
+        "token-too-large" => &["L0-ENC-15a", "L0-SIG-21a", "L0-SIG-30"],
+        "signature-bit-flip" => &["L0-ENC-17", "L0-SIG-37"],
+        "psychic-signature" | "der-signature" => &["L0-SIG-5"],
+        "metadata-es256-alg-ed25519" | "metadata-ed25519-alg-es256" => &["L0-SIG-2", "L0-SIG-34"],
+        _ => &["L0-SIG-1", "L0-SIG-34"],
+    }
+}
+
+fn claim_rules_of(id: &str) -> &'static [&'static str] {
+    match id {
+        "exp-edge-inclusive" | "exp-past" | "exp-negative" | "nbf-negative" | "iat-negative" => {
+            &["L0-ENC-35", "L0-SIG-41a"]
+        }
+        "nbf-edge" | "nbf-future" | "iat-edge" | "iat-future" => &["L0-SIG-41", "L0-SIG-41a"],
+        "exp-overflow" => &["L0-ENC-7", "L0-SIG-41a"],
+        "exp-fraction" => &["L0-ENC-8", "L0-ENC-15"],
+        "exp-not-integer" => &["L0-SIG-41b"],
+        "json-depth-32" | "json-depth-33" => &["L0-ENC-10", "L0-ENC-15"],
+        "json-duplicate-member" => &["L0-ENC-15"],
+        "payload-too-large" => &["L0-ENC-15", "L0-ENC-15a"],
+        _ => &["L0-SIG-41"],
+    }
+}
+
 #[test]
 fn golden_vectors_match() {
     use core::fmt::Write as _;
@@ -426,8 +518,9 @@ fn golden_vectors_match() {
     );
     let _ = write!(
         json,
-        " }},\n \"allowed\": [{}],\n \"cases\": [\n",
-        cose_ids(METADATA)
+        " }},\n \"allowed\": [{}],\n {},\n \"cases\": [\n",
+        cose_ids(METADATA),
+        crate::vector_rules::field(&["L0-SIG-21a", "L0-SIG-40", "L0-SIG-42"])
     );
     let all = cases();
     for (i, (c, allowed)) in all.iter().enumerate() {
@@ -443,8 +536,11 @@ fn golden_vectors_match() {
         };
         let _ = writeln!(
             json,
-            "  {{\"id\": \"{}\", \"row\": {}{own}, \"token\": \"{}\", \"expect\": \"{expect}\"}}{sep}",
-            c.id, c.row, c.token
+            "  {{\"id\": \"{}\", {}, \"row\": {}{own}, \"token\": \"{}\", \"expect\": \"{expect}\"}}{sep}",
+            c.id,
+            crate::vector_rules::field(jose_rules(c.id)),
+            c.row,
+            c.token
         );
     }
     json.push_str(" ]\n}\n");
@@ -656,6 +752,14 @@ fn claim_cases() -> Vec<(&'static str, String, u64)> {
             r#"{"iss":"https://access.example","exp":2000}"#.to_string(),
             1_500_000,
         ),
+        (
+            "payload-too-large",
+            base(&format!(
+                r#","exp":2000,"pad":"{}""#,
+                "a".repeat(MAX_PAYLOAD)
+            )),
+            1_500_000,
+        ),
         ("json-depth-32", nested(31), 1_500_000),
         ("json-depth-33", nested(32), 1_500_000),
         (
@@ -714,10 +818,11 @@ fn jwt_claim_vectors_match() {
         Err("payload: nesting too deep".to_string())
     );
     let mut json = format!(
-        "{{\n \"rule\": \"OP-122\",\n \"track\": \"core\",\n \"version\": 1,\n \"operation\": \"verify.jws_compact\",\n \"typ\": \"{TYP}\",\n \"keys\": {{\n  \"{}\": \"{}\"\n }},\n \"allowed\": [{}],\n \"claims\": {{\"issuer\": \"https://access.example\", \"audience\": \"pep:shop\", \"now\": 1500000, \"skew_ms\": 60000}},\n \"cases\": [\n",
+        "{{\n \"rule\": \"OP-122\",\n \"track\": \"core\",\n \"version\": 1,\n \"operation\": \"verify.jws_compact\",\n \"typ\": \"{TYP}\",\n \"keys\": {{\n  \"{}\": \"{}\"\n }},\n \"allowed\": [{}],\n \"claims\": {{\"issuer\": \"https://access.example\", \"audience\": \"pep:shop\", \"now\": 1500000, \"skew_ms\": 60000}},\n {},\n \"cases\": [\n",
         kid(1),
         b64url_encode(&ed_key().verifying_key().to_bytes()),
         cose_ids(&[Algorithm::Ed25519]),
+        crate::vector_rules::field(&["L0-SIG-41", "L0-SIG-41b"]),
     );
     let mut lines = Vec::new();
     for (id, payload, now) in &all {
@@ -733,7 +838,8 @@ fn jwt_claim_vectors_match() {
             )
         };
         lines.push(format!(
-            "  {{\"id\": \"{id}\"{claims}, \"token\": \"{}\", \"expect\": \"{expect}\"}}",
+            "  {{\"id\": \"{id}\", {}{claims}, \"token\": \"{}\", \"expect\": \"{expect}\"}}",
+            crate::vector_rules::field(claim_rules_of(id)),
             token_with(&ed_header(), payload, &ed_sign)
         ));
     }

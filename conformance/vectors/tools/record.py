@@ -105,6 +105,37 @@ def disclosure(rec, fields, commitments, opened):
     return out
 
 
+# TI-RT12
+RULES = {
+    "genesis": ["L0-ENC-22", "L0-ENC-25", "L0-ENC-26", "L0-ENC-27", "L0-ENC-28", "L0-ENC-29", "L2-DIG-1"],
+    "opening-name-order": ["L0-ENC-21", "L0-ENC-26", "L0-ENC-27", "L0-ENC-28", "L0-ENC-29"],
+    "decision": ["L0-ENC-26", "L0-ENC-28", "L0-ENC-29", "L0-ENC-29d"],
+    "claim": ["L0-ENC-26", "L0-ENC-29", "L0-ENC-29d"],
+    "decision-artifacts-only": ["L0-ENC-29c", "L0-ENC-29d", "L0-ENC-31"],
+    "decision-all-withheld": ["L0-ENC-29c", "L0-ENC-29d", "L0-ENC-31"],
+    "decision-all-opened": ["L0-ENC-29c", "L0-ENC-29d", "L0-ENC-31"],
+    "salt-missing": ["L0-ENC-28", "L0-ENC-29b"],
+    "salt-extra": ["L0-ENC-28", "L0-ENC-29b"],
+    "salt-short": ["L0-ENC-28", "L0-ENC-29b"],
+    "genesis-with-domain": ["L0-ENC-27", "L0-ENC-29b"],
+    "genesis-with-prev": ["L0-ENC-27", "L0-ENC-29b"],
+    "genesis-not-first": ["L0-ENC-29b"],
+    "record-without-domain": ["L0-ENC-27", "L0-ENC-29b"],
+    "record-without-prev": ["L0-ENC-27", "L0-ENC-29b"],
+    "position-0-not-genesis": ["L0-ENC-29b"],
+    "kind-unknown": ["L0-ENC-9", "L0-ENC-26"],
+    "field-unknown": ["L0-ENC-9"],
+    "withheld-in-envelope": ["L0-ENC-9", "L0-ENC-29c"],
+    "field-name-not-ident": ["L0-ENC-29b"],
+    "fields-empty": ["L0-ENC-29b"],
+    "fields-missing": ["L0-ENC-29b"],
+    "prev-not-sha256": ["L0-ENC-20"],
+    "not-canonical": ["L0-ENC-1"],
+    "disclosure-opened-and-withheld": ["L0-ENC-29c"],
+    "disclosure-empty": ["L0-ENC-29c"],
+    "disclosure-withheld-untagged": ["L0-ENC-21", "L0-ENC-29c"],
+}
+
 SCHEMA = tagged(bytes([9]) * 32)
 VERSIONS = {"core": 1, "meta_schema": 1}
 
@@ -232,6 +263,7 @@ def main():
     cases += [{"id": i, "cbor": b.hex(), "error": e} for i, b, e in errors]
     cases.append({"id": "not-canonical", "data": "a263706f73006161f5", "error": "cbor"})
     cases += [{"id": i, "record_disclosure": b.hex(), "error": e} for i, b, e in disclosure_errors]
+    cases = [{"id": c["id"], "rules": RULES[c["id"]], **c} for c in cases]
     return {
         "rule": "OP-106 m.10-m.15, §17.6.1",
         "track": "core",

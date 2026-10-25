@@ -81,7 +81,7 @@ class Vectors(unittest.TestCase):
     def test_decision(self):
         v = load("decision.json")
         for c in v["cases"]:
-            got = outcome(lambda: k.evaluate(bytes.fromhex(c["input"]), v["fuel"]).hex())
+            got = outcome(lambda: k.evaluate(bytes.fromhex(c["input"]), c.get("fuel", v["fuel"])).hex())
             want = ("ok", c["decision"]) if "decision" in c else ("error", c["rejection"])
             self.assertEqual(got, want, c["id"])
         self.count("decision.json", len(v["cases"]))

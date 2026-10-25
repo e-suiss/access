@@ -18,6 +18,8 @@ mod ids;
 mod scan;
 #[path = "catalog_spec.rs"]
 mod spec;
+#[path = "catalog_vectors.rs"]
+mod vectors;
 #[path = "catalog_watchlist.rs"]
 mod watchlist;
 
@@ -563,6 +565,10 @@ pub(crate) fn checks() -> Vec<Check> {
         Check {
             name: "rule-coverage",
             run: check_coverage,
+        },
+        Check {
+            name: "l0-vector-coverage",
+            run: vectors::check,
         },
         Check {
             name: "threat-model",

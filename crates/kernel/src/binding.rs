@@ -38,8 +38,6 @@ pub enum Error {
     Input,
     /// Step budget exhausted.
     Fuel,
-    /// Lineage too deep.
-    Limit,
     /// `COSE_Sign1` rejected.
     Cose(CoseError),
     /// Domain Metadata or operational key rejected.
@@ -62,8 +60,6 @@ pub enum Kind {
     Input,
     /// `fuel`.
     Fuel,
-    /// `limit`.
-    Limit,
     /// COSE `cbor`.
     Cbor,
     /// COSE `shape`.
@@ -281,7 +277,6 @@ impl Error {
         match *self {
             Self::Input => Kind::Input,
             Self::Fuel => Kind::Fuel,
-            Self::Limit => Kind::Limit,
             Self::Cose(e) => cose_kind(e),
             Self::KeyScope(e) => key_scope_kind(e),
             Self::Jws(e) => jws_kind(e),
@@ -305,7 +300,6 @@ impl fmt::Display for Error {
         match self {
             Self::Input => f.write_str("input"),
             Self::Fuel => f.write_str("fuel"),
-            Self::Limit => f.write_str("limit"),
             Self::Cose(e) => f.write_str(cose_name(*e)),
             Self::KeyScope(e) => f.write_str(key_scope_name(*e)),
             Self::Jws(e) => write!(f, "{e}"),
@@ -322,7 +316,6 @@ const fn rejection(r: Rejection) -> Error {
     match r {
         Rejection::Input => Error::Input,
         Rejection::Fuel => Error::Fuel,
-        Rejection::Limit => Error::Limit,
     }
 }
 
@@ -440,7 +433,9 @@ pub fn operational_key(
     usage: &str,
     iat: TrustedTime,
 ) -> Result<Vec<u8>, Error> {
-    let metadata: DomainMetadata = decode(metadata)?;
+    // L0-SIG-62a, OP-126 m.5
+    let metadata = DomainMetadata::from_bytes(metadata)
+        .map_err(|e| Error::KeyScope(KeyScopeError::Payload(e)))?;
     let domain: Digest = decode(domain)?;
     let usage = word(&Value::text(usage), &USAGES).map_err(|_| Error::Input)?;
     let key = key_scope::operational_key(&PureBackend, &metadata, &domain, excerpt, usage, iat)

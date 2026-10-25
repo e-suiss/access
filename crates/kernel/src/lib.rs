@@ -22,6 +22,9 @@ pub mod version;
 
 #[cfg(test)]
 mod invariants;
+#[cfg(test)]
+#[path = "tests/vector_rules.rs"]
+mod vector_rules;
 
 /// Version of the Kernel public API (OP-1 rule 4: every semantic version's Kernel is kept).
 pub const API_VERSION: ApiVersion = ApiVersion { major: 0, minor: 0 };

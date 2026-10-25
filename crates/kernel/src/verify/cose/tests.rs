@@ -416,6 +416,44 @@ fn cose_error(e: CoseError) -> &'static str {
     }
 }
 
+// TI-RT12
+fn cose_rules(id: &str) -> &'static [&'static str] {
+    match id {
+        "valid-ed25519" => &[
+            "L0-ENC-3",
+            "L0-ENC-4",
+            "L0-SIG-1",
+            "L0-SIG-3",
+            "L0-SIG-10",
+            "L0-SIG-11",
+            "L0-SIG-14",
+            "L0-SIG-17",
+        ],
+        "valid-esp256" => &[
+            "L0-SIG-1",
+            "L0-SIG-4",
+            "L0-SIG-5",
+            "L0-SIG-6",
+            "L0-SIG-10",
+            "L0-SIG-17",
+        ],
+        "untagged" => &["L0-ENC-3", "L0-SIG-10", "L0-SIG-21"],
+        "payload-tampered" => &["L0-SIG-17"],
+        "esp256-high-s" => &["L0-SIG-6", "L0-SIG-17"],
+        "kid-in-unprotected" => &["L0-SIG-12"],
+        "key-type-mismatch" => &["L0-SIG-7", "L0-SIG-15"],
+        "kid-unknown" => &["L0-SIG-14"],
+        "alg-eddsa" | "alg-es256-not-allowed" => &["L0-SIG-1", "L0-SIG-2", "L0-SIG-15"],
+        "alg-ml-dsa-65-off" => &["L0-SIG-1", "L0-SIG-15"],
+        "crit" => &["L0-SIG-13"],
+        "header-unknown" | "content-type-missing" => &["L0-SIG-11"],
+        "content-type-other" => &["L0-SIG-16"],
+        "two-faults-unprotected-and-unknown-label" => &["L0-SIG-12", "L0-SIG-21"],
+        "two-faults-content-type-and-unknown-kid" => &["L0-SIG-16", "L0-SIG-21"],
+        _ => &[],
+    }
+}
+
 // CR-55 m.6, OP-106 m.24, §17.6.1: COSE golden vectors, byte for byte
 #[test]
 fn cose_vectors_match() {
@@ -447,7 +485,11 @@ fn cose_vectors_match() {
         .map(|(kid, k)| alloc::format!("  \"{}\": \"{}\"", hex(kid), hex(&k.to_bytes().unwrap())))
         .collect::<Vec<_>>()
         .join(",\n");
-    let _ = write!(json, " \"keys\": {{\n{keys}\n }},\n \"cases\": [\n");
+    let _ = write!(
+        json,
+        " \"keys\": {{\n{keys}\n }},\n {},\n \"cases\": [\n",
+        crate::vector_rules::field(&["L0-SIG-20"])
+    );
     let all = cose_cases();
     for (i, (id, msg)) in all.iter().enumerate() {
         let expect = match verify_sign1(&PureBackend, msg, &ks, CT) {
@@ -461,7 +503,8 @@ fn cose_vectors_match() {
         let sep = if i + 1 == all.len() { "" } else { "," };
         let _ = writeln!(
             json,
-            "  {{\"id\": \"{id}\", \"sign1\": \"{}\", {expect}}}{sep}",
+            "  {{\"id\": \"{id}\", {}, \"sign1\": \"{}\", {expect}}}{sep}",
+            crate::vector_rules::field(cose_rules(id)),
             hex(msg)
         );
     }

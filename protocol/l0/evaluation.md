@@ -32,7 +32,7 @@ Each hop carries the Grant's `canonical-authority`, its `status` if it is revoke
 
 <a id="L0-EVAL-3"></a>**L0-EVAL-3. Decoding.** The input MUST be canonical ([L0-ENC-1](encoding.md#L0-ENC-1) to [L0-ENC-9](encoding.md#L0-ENC-9)), MUST match the CDDL `evaluation-input`, and MUST respect the limits of [L0-ENC-10](encoding.md#L0-ENC-10). A purpose order with a cycle is rejected ([L0-ALG-47](algebra.md#L0-ALG-47)). An input with two catalog entries for the same `catalog` digest, two purpose entries for the same purpose, or two proofs with the same `id` is rejected. An assurance dimension or level outside the closed list ([L0-ALG-60a](algebra.md#L0-ALG-60a)) is rejected. Any failure is an `input` rejection.
 
-Vector: `decision.json`: `reject-duplicate-proof-id`.
+Vectors: `decision.json`: `reject-duplicate-proof-id`, `reject-purpose-cycle`, `reject-unknown-field`, `reject-unknown-mode`.
 
 <a id="L0-EVAL-4"></a>**L0-EVAL-4. Prepared facts.** The input is prepared outside the evaluator. In particular, the preparer computes the intent digest, each hop's revocation and lapse status, whether its while-conditions hold, each budget's remaining amount and the demand of this intent in the budget's unit, and each restriction policy's result. The evaluator takes these facts as given. It does not recompute `intent_digest`.
 
@@ -96,7 +96,7 @@ Vectors: `decision.json`: `deny-capacity-mismatch`; `cve-regressions.json`: `imp
 
 A `deny` outcome whose `policy` or `policy_version` differs from the enclosing result's `policy` or `version` is an `input` rejection. Restrictions can only deny or require; they never cover an intent.
 
-Vectors: `decision.json`: `deny-restricted`, `deny-overrides-require`, `require-from-restriction`; `cve-regressions.json`: `exclusion-over-covering-grant`, `two-exclusions`, `two-exclusions-reordered`.
+Vectors: `decision.json`: `deny-restricted`, `deny-overrides-require`, `require-from-restriction`, `allow-restriction-no-objection`, `reject-restriction-deny-other-policy`; `cve-regressions.json`: `exclusion-over-covering-grant`, `two-exclusions`, `two-exclusions-reordered`.
 
 <a id="L0-EVAL-19"></a>**L0-EVAL-19. Requirements from hops.** The requirement terms of hop `k` are added to the requirements at position `hop(k)`.
 
@@ -234,7 +234,7 @@ Vector: `decision.json`: `deny-four-blocker-classes`.
 
 <a id="L0-EVAL-43"></a>**L0-EVAL-43. Versions.** The evaluator never writes `versions` into a decision. The layer that records or signs the decision adds the spec versions.
 
-<a id="L0-EVAL-44"></a>**L0-EVAL-44. Classes not produced here.** The classes `schema-not-accepted`, `nonce-closed` and `foreign-status-unavailable`, the positions `anchor` and `foreign`, and the resolvers `root` and `domain-admin` are part of the data model but are not produced by the rules of this version.
+<a id="L0-EVAL-44"></a><!-- no-vector: definition: names data-model values that no rule of this version produces -->**L0-EVAL-44. Classes not produced here.** The classes `schema-not-accepted`, `nonce-closed` and `foreign-status-unavailable`, the positions `anchor` and `foreign`, and the resolvers `root` and `domain-admin` are part of the data model but are not produced by the rules of this version.
 
 ## 7. Fuel
 
@@ -244,9 +244,9 @@ Vector: `decision.json`: `deny-four-blocker-classes`.
 
 ## 8. Rejections and decisions
 
-<a id="L0-EVAL-50"></a>**L0-EVAL-50. Overflow.** An arithmetic overflow while computing a decision makes the outcome `deny`. It never produces a partial `allow`.
+<a id="L0-EVAL-50"></a><!-- no-vector: unreachable: no rule of this version has arithmetic that can overflow (L0-EVAL-50a) -->**L0-EVAL-50. Overflow.** An arithmetic overflow while computing a decision makes the outcome `deny`. It never produces a partial `allow`.
 
-<a id="L0-EVAL-50a"></a>**L0-EVAL-50a. No overflow in this version.** No rule of this version has arithmetic that can overflow. Budgets are compared, never subtracted. `now − time` ([L0-EVAL-24](#L0-EVAL-24)) is computed only when `time ≤ now`, and `count − s` ([L0-EVAL-29](#L0-EVAL-29)) only when `s ≤ count`. The only conversion that can fail gives an `input` rejection. A later rule that adds arithmetic MUST name the blocker its overflow produces; a rule that does not name one cannot enter L0.
+<a id="L0-EVAL-50a"></a><!-- no-vector: unreachable: states that no rule of this version can overflow -->**L0-EVAL-50a. No overflow in this version.** No rule of this version has arithmetic that can overflow. Budgets are compared, never subtracted. `now − time` ([L0-EVAL-24](#L0-EVAL-24)) is computed only when `time ≤ now`, and `count − s` ([L0-EVAL-29](#L0-EVAL-29)) only when `s ≤ count`. The only conversion that can fail gives an `input` rejection. A later rule that adds arithmetic MUST name the blocker its overflow produces; a rule that does not name one cannot enter L0.
 
 <a id="L0-EVAL-60"></a>**L0-EVAL-60. Rejection kinds.** A rejection is a reasoned refusal to evaluate. It has one of two kinds:
 
@@ -257,6 +257,6 @@ Vector: `decision.json`: `deny-four-blocker-classes`.
 
 <a id="L0-EVAL-61"></a>**L0-EVAL-61. A rejection is not an outcome.** A rejection produces no decision and no record, and does not consume the request nonce or any proof. To a party enforcing decisions, a rejection means only that there is no ALLOW.
 
-<a id="L0-EVAL-62"></a>**L0-EVAL-62. Fail closed.** Only an `allow` decision permits an effect. A party that maps a decision onto a boolean MUST map `deny` and `require_action` to `false`.
+<a id="L0-EVAL-62"></a><!-- no-vector: outside-operation: how an enforcing party maps a decision to a boolean -->**L0-EVAL-62. Fail closed.** Only an `allow` decision permits an effect. A party that maps a decision onto a boolean MUST map `deny` and `require_action` to `false`.
 
-Vectors for this part: [`core/1/decision.json`](../../conformance/vectors/core/1/decision.json) and the `combinator.evaluate` cases of [`core/1/cve-regressions.json`](../../conformance/vectors/core/1/cve-regressions.json). Each case gives the canonical `evaluation-input` bytes and either the expected canonical `decision` bytes or the expected rejection kind. The fuel budget is given at file level.
+Vectors for this part: [`core/1/decision.json`](../../conformance/vectors/core/1/decision.json) and the `combinator.evaluate` cases of [`core/1/cve-regressions.json`](../../conformance/vectors/core/1/cve-regressions.json). Each case gives the canonical `evaluation-input` bytes and either the expected canonical `decision` bytes or the expected rejection kind. The fuel budget is given at file level; a case that gives its own `fuel` uses that instead. `allow-fuel-exact`, `reject-fuel-short`, `check-fuel-exact-recharges-restrictions` and `reject-check-fuel-short` sit on both sides of the cost of [L0-EVAL-45](#L0-EVAL-45).

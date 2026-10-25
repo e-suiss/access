@@ -3,6 +3,14 @@
  "track": "core",
  "version": 1,
  "operation": "digest.merkle",
+ "rules": [
+  "L0-ENC-21",
+  "L0-ENC-24",
+  "L0-ENC-30",
+  "L0-ENC-31",
+  "L0-ENC-32",
+  "L0-ENC-33"
+ ],
  "leaves": [
   "",
   "00",

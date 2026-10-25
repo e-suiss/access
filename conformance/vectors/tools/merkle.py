@@ -52,6 +52,7 @@ def main():
         "track": "core",
         "version": 1,
         "operation": "digest.merkle",
+        "rules": ["L0-ENC-21", "L0-ENC-24", "L0-ENC-30", "L0-ENC-31", "L0-ENC-32", "L0-ENC-33"],
         "leaves": LEAVES,
         "roots": [{"size": n, "root": mth(data[:n]).hex()} for n in range(0, len(data) + 1)],
         "inclusion": [

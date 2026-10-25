@@ -22,9 +22,6 @@ pub enum KernelError {
     /// `Fuel` family.
     #[error("{0}")]
     Fuel(String),
-    /// `Limit` family.
-    #[error("{0}")]
-    Limit(String),
     /// `Cbor` family.
     #[error("{0}")]
     Cbor(String),
@@ -150,7 +147,6 @@ impl From<binding::Error> for KernelError {
         match e.kind() {
             Kind::Input => Self::Input(name),
             Kind::Fuel => Self::Fuel(name),
-            Kind::Limit => Self::Limit(name),
             Kind::Cbor => Self::Cbor(name),
             Kind::Shape => Self::Shape(name),
             Kind::Header => Self::Header(name),
@@ -204,7 +200,7 @@ pub fn api_version() -> String {
 /// `evaluation-input` and fuel to `decision` (OP-111, OP-116 m.5).
 ///
 /// # Errors
-/// `input`, `fuel` or `limit`.
+/// `input` or `fuel`.
 #[uniffi::export]
 pub fn evaluate(input: Vec<u8>, fuel: u64) -> Result<Vec<u8>, KernelError> {
     Ok(binding::evaluate(&input, fuel)?)
