@@ -58,10 +58,8 @@ def resolve_prefix(prefix, catalog):
 def resolve_actions(action_set, catalog):
     resolved = list(action_set.get("exact", []))
     for prefix in action_set.get("prefix", []):
-        actions = resolve_prefix(prefix, catalog)
-        if actions is None:
-            return None
-        resolved.extend(actions)
+        # L0-ALG-32: an unknown catalog covers nothing on either side
+        resolved.extend(resolve_prefix(prefix, catalog) or [])
     return unique_sorted(resolved)
 
 
@@ -81,8 +79,6 @@ def action_covered(action, action_set, catalog):
 def actions_within(child, parent, catalog):
     # OP-109 m.10
     child_actions = resolve_actions(child, catalog)
-    if child_actions is None:
-        return False
     return all(action_covered(action, parent, catalog) for action in child_actions)
 
 
@@ -248,6 +244,11 @@ def purposes_intersect(left, right, catalog):
 # ---------------------------------------------------------------- parameter bounds
 
 
+def is_public_bound(bound):
+    # L0-ALG-52, L0-EVAL-10
+    return kind_of(bound) == "subject" and bound["subject"] == "public"
+
+
 def range_is_empty(bound):
     return "min" in bound and "max" in bound and bound["min"] > bound["max"]
 
@@ -351,9 +352,13 @@ def authority_within(child, parent, catalog):
         return False
     child_params = child.get("params", {})
     for name, bound in parent.get("params", {}).items():
+        # L0-ALG-52: a `public` subject bound is unbounded
+        if is_public_bound(bound):
+            continue
         if name not in child_params or not bound_within(child_params[name], bound, catalog):
             return False
-    if "recipient" in parent:
+    # L0-ALG-52: a `public` recipient is unbounded
+    if "recipient" in parent and parent["recipient"] != "public":
         if "recipient" not in child or not subject_within(child["recipient"], parent["recipient"]):
             return False
     if "purpose" in parent:
@@ -425,13 +430,16 @@ def normalize_authority(authority, catalog):
     result = {"actions": actions, "resource": authority["resource"]}
     params = {}
     for name, bound in authority.get("params", {}).items():
+        # L0-ALG-52
+        if is_public_bound(bound):
+            continue
         normal = normalize_bound(bound, catalog)
         if normal is BOTTOM:
             return BOTTOM
         params[name] = normal
     if params:
         result["params"] = params
-    if "recipient" in authority:
+    if "recipient" in authority and authority["recipient"] != "public":
         recipient = authority["recipient"]
         if kind_of(recipient) == "pred":
             recipient = {"pred": unique_sorted(recipient["pred"])}

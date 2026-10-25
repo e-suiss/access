@@ -407,6 +407,36 @@ def check_independence(value):
     check_map(value, {"distinct": check_text_in("party", "instance", "issuer")})
 
 
+# OP-118 m.3
+ASSURANCE_LEVELS = {
+    "aal": (1, 3),
+    "loa_eidas": (1, 3),
+    "phishing_resistant": (0, 1),
+    "hardware_bound": (0, 1),
+    "non_custodial": (0, 1),
+    "uv": (0, 1),
+    "human_presence": (0, 1),
+    "app_controlled_factor": (0, 1),
+    "synced": (0, 1),
+}
+
+
+def check_assurance_level(dimension, level):
+    check_uint(level)
+    # OP-118 m.3
+    if dimension not in ASSURANCE_LEVELS:
+        fail(f"unknown assurance dimension {dimension!r}")
+    low, high = ASSURANCE_LEVELS[dimension]
+    if not low <= level <= high:
+        fail(f"assurance {dimension} out of range")
+
+
+def check_assurance(value):
+    check_ident_map(check_uint)(value)
+    for dimension, level in value.items():
+        check_assurance_level(dimension, level)
+
+
 def check_requirement_term(value):
     # OP-109 m.3
     check_map(value, {
@@ -419,7 +449,7 @@ def check_requirement_term(value):
         "independence": check_independence,
         "consumption": check_text_in("single_use"),
         "source": check_subject_selector,
-        "assurance": check_ident_map(check_uint),
+        "assurance": check_assurance,
     })
 
 
@@ -495,6 +525,10 @@ def check_budget_state(value):
 
 
 def check_hop(value):
+    # OP-118 m.2
+    if isinstance(value, dict) and "not_understood" in value:
+        check_map(value, {"not_understood": check_true})
+        return
     check_map(value, {"authority": check_canonical_authority}, {
         "status": check_text_in("revoked", "lapsed"),
         "conditions_fail": check_true,
@@ -530,7 +564,7 @@ def check_proof(value):
         "bound_instance": check_id,
         "bound_intent": check_digest,
         "bound_resource": check_resource_ref,
-        "assurance": check_ident_map(check_uint),
+        "assurance": check_assurance,
         "consumed": check_true,
     })
 

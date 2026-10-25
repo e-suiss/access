@@ -101,9 +101,23 @@ def check_window_max(value):
         fail("operational window above 24 h")
 
 
+CT_KEYS = ("ct0", "ct1", "ct2", "ct3")
+
+
+def check_horizon_caps(value):
+    # OP-118 m.4
+    if not isinstance(value, dict) or not value:
+        fail("expected a non-empty map")
+    for ct, ceiling in value.items():
+        # L0-VAL-10a
+        if ct not in CT_KEYS:
+            fail("horizon key is not a CT")
+        check_uint(ceiling)
+
+
 def check_caps(value):
     check_map(value, {}, {
-        "horizon_max_ms": check_uint,
+        "horizon": check_horizon_caps,
         "slice_max": check_ident_map(check_amount),
     })
     for unit in value.get("slice_max", {}):
@@ -121,6 +135,8 @@ def check_domain_metadata(value):
         "operational_window_max_ms": check_window_max,
         "operational_keys": check_list(check_operational_key, is_set=True),
         "min_versions": check_spec_versions,
+        # OP-120 m.7
+        "adopted": check_spec_versions,
     }, {
         "caps": check_caps,
         "hybrid": check_text_in("classic", "both", "pq"),
@@ -164,6 +180,11 @@ def jwk_members(public_key):
     if alg not in ML_DSA_NAMES:
         return None
     return {"alg": ML_DSA_NAMES[alg], "kty": "AKP", "pub": base64url(raw)}
+
+
+def horizon_cap(metadata, ct):
+    # OP-118 m.4, L0-VAL-10a
+    return metadata.get("caps", {}).get("horizon", {}).get(f"ct{ct}")
 
 
 def thumbprint(public_key):
@@ -231,6 +252,9 @@ def operational_key(metadata_bytes, domain_bytes, excerpt_bytes, usage, iat):
     # CR-58 m.1
     if thumbprint(key["key"]) != key["kid"]:
         raise KeyScopeError("thumbprint")
+    # OP-118 m.5, CR-55 m.1
+    if metadata.get("hybrid", "classic") != "classic":
+        raise KeyScopeError("algorithm")
     # SAI-40, CR-58 m.5
     if key["alg"] not in metadata["algorithms"] or not alg_matches_key(key["alg"], key["key"]):
         raise KeyScopeError("algorithm")

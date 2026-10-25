@@ -41,7 +41,13 @@ def assurance_holds(term, proof):
     # OP-111 m.4, OP-107 m.21
     offered = proof.get("assurance", {})
     for dimension, floor in term.get("assurance", {}).items():
-        if dimension not in offered or offered[dimension] < floor:
+        if dimension not in offered:
+            return False
+        # OP-118 m.3
+        if dimension == "synced":
+            if offered[dimension] > floor:
+                return False
+        elif offered[dimension] < floor:
             return False
     return True
 

@@ -51,9 +51,13 @@ def intent_covered(authority, intent, catalog):
     # OP-107 m.10
     intent_params = intent.get("params", {})
     for name, bound in authority.get("params", {}).items():
+        # L0-EVAL-10: a `subject: public` bound is no restriction
+        if kind_of(bound) == "subject" and bound["subject"] == "public":
+            continue
         if name not in intent_params or not value_within(intent_params[name], bound, catalog):
             return False
-    if "recipient" in authority:
+    # L0-EVAL-10: a `public` recipient is no restriction
+    if "recipient" in authority and authority["recipient"] != "public":
         if "recipient" not in intent or not party_within(intent["recipient"], authority["recipient"]):
             return False
     if "purpose" in authority:

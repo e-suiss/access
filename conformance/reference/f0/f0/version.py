@@ -1,0 +1,3 @@
+# OP-119 m.6, m.7
+VERSION = "0.1.0"
+CORE_VERSION = 1

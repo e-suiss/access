@@ -92,6 +92,9 @@ def capacity_mismatch():
 
 
 def hop_blockers(k, hop, evaluation):
+    # OP-118 m.2
+    if "not_understood" in hop:
+        return [no_covering_authority(k)]
     blockers = []
     authority = hop["authority"]
     # OP-111 m.2
@@ -155,7 +158,8 @@ def evaluate_candidate(basis, evaluation, global_blockers, global_requirements, 
         # OP-111 m.7
         fuel.spend()
         blockers.extend(hop_blockers(k, hop, evaluation))
-        requirements.extend((term, hop_position(k)) for term in hop["authority"]["requirements"])
+        if "authority" in hop:
+            requirements.extend((term, hop_position(k)) for term in hop["authority"]["requirements"])
     # OP-111 m.8
     if not any(same(capacity, evaluation["capacity"]) for capacity in basis["capacities"]):
         blockers.append(capacity_mismatch())
