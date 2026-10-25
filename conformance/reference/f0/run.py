@@ -6,7 +6,7 @@ import tempfile
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
-from f0 import codec, dcbor, ed25519, jose, merkle, record, sdjwt, validity
+from f0 import algebra, codec, dcbor, digest, ed25519, jose, merkle, record, sdjwt, validity, version_check
 from f0.algebra import child_within_parent
 from f0.version import CORE_VERSION, VERSION
 from f0.codec import Rejection, decode_canonical, decode_canonical_authority, decode_subject_selector, encode
@@ -175,6 +175,65 @@ def record_expected(case):
     return {field: case[field] for field in fields if field in case}
 
 
+def run_version_check(case, document):
+    try:
+        cited, supported, adopted, minimum = (
+            version_check.decode_spec_versions(bytes.fromhex(case[name]))
+            for name in ("cited", "supported", "adopted", "minimum")
+        )
+        version_check.check(cited, supported, adopted, minimum)
+    except Rejection as rejection:
+        return {"error": rejection.kind}, rejection.reason
+    except version_check.VersionError as error:
+        return {"error": error.name, "track": error.track}, None
+    return {"valid": True}, None
+
+
+MEET_KINDS = {
+    "resource": (codec.check_resource_selector, lambda a, b, catalog: algebra.resource_intersect(a, b)),
+    "subject": (codec.check_subject_selector, lambda a, b, catalog: algebra.subject_intersect(a, b)),
+    "authority": (codec.check_authority_set, algebra.authority_intersect),
+}
+
+
+def run_algebra_meet(case, document):
+    check, meet = MEET_KINDS[case["kind"]]
+    try:
+        catalog = decode_canonical(bytes.fromhex(case.get("catalog", document["catalog"])))
+        codec.check_catalog(catalog)
+        a, b = (decode_canonical(bytes.fromhex(case[name])) for name in ("a", "b"))
+        check(a)
+        check(b)
+    except Rejection as rejection:
+        return {"rejection": rejection.kind}, rejection.reason
+    result = meet(a, b, catalog)
+    if result is algebra.BOTTOM:
+        return {"bottom": True}, None
+    return {"meet": encode(result).hex()}, None
+
+
+def run_digest_intent(case, document):
+    try:
+        return {"digest": encode(digest.intent_digest(bytes.fromhex(case["intent"]))).hex()}, None
+    except Rejection as rejection:
+        return {"rejection": rejection.kind}, rejection.reason
+
+
+def run_body_commit(case, document):
+    try:
+        return {"commit": digest.body_commit(bytes.fromhex(case["salt"]), bytes.fromhex(case["body"])).hex()}, None
+    except Rejection as rejection:
+        return {"rejection": rejection.kind}, rejection.reason
+
+
+def run_validity_horizon(case, document):
+    try:
+        horizon = validity.issue_horizon(case["issued_at"], case["dependency_bounds"], case["profile_max_ms"])
+    except validity.ValidityError as error:
+        return {"error": error.name}, None
+    return {"horizon": horizon}, None
+
+
 CODEC_SHAPES = {
     "canonical_authority": codec.check_canonical_authority,
     "bound": codec.check_param_bound,
@@ -235,20 +294,32 @@ OPERATIONS = {
     "validity.check": (run_validity, ("valid", "error")),
     "codec.encode": (run_codec_encode, ("cbor",)),
     "record.envelope": (run_record, record_expected),
+    "version.check": (run_version_check, ("valid", "error", "track")),
+    "algebra.meet": (run_algebra_meet, ("meet", "bottom", "rejection")),
+    "digest.intent": (run_digest_intent, ("digest", "rejection")),
+    "digest.body_commit": (run_body_commit, ("commit", "rejection")),
+    "validity.horizon": (run_validity_horizon, ("horizon", "error")),
 }
+
+# Operations in the vectors that F0 does not implement, each with its reason. Any other
+# operation F0 does not know fails the run.
+NOT_IMPLEMENTED = {}
+
+# Third-party raw data sets without an `operation`; the Kernel's own tests read them.
+RAW_DATA_DIRECTORY = "external"
 
 
 def load_cases(path):
     try:
         document = json.loads(path.read_text())
     except (json.JSONDecodeError, UnicodeDecodeError):
-        return None, []
+        return None, None
     if not isinstance(document, dict):
-        return None, []
+        return None, None
     if document.get("operation") in DOCUMENT_OPERATIONS:
         return document, []
     if not isinstance(document.get("cases"), list):
-        return None, []
+        return document, None
     return document, [case for case in document["cases"] if isinstance(case, dict)]
 
 
@@ -279,9 +350,29 @@ def core_version_of(path, root):
     return None
 
 
-def run_file(path, passed, failures):
+def parses_as_json(path):
+    try:
+        json.loads(path.read_text())
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return False
+    return True
+
+
+def run_file(path, passed, failures, skipped, root):
     document, cases = load_cases(path)
-    if document is not None and document.get("operation") in DOCUMENT_OPERATIONS:
+    has_operation = document is not None and (
+        "operation" in document or any("operation" in case for case in cases or [])
+    )
+    if not has_operation:
+        if path.relative_to(root).parts[0] == RAW_DATA_DIRECTORY and parses_as_json(path):
+            skipped.append((path, "third-party raw data, no operation"))
+        else:
+            failures.append((path, None, {"vector file": "with an operation"}, {"vector file": "none"}, None))
+        return
+    if cases is None and document["operation"] not in DOCUMENT_OPERATIONS:
+        failures.append((path, None, {"operation": document["operation"]}, {"operation": "not implemented by F0"}, None))
+        return
+    if document.get("operation") in DOCUMENT_OPERATIONS:
         for case_id, expected, got in DOCUMENT_OPERATIONS[document["operation"]](document):
             if got == expected:
                 passed[path] = passed.get(path, 0) + 1
@@ -289,7 +380,11 @@ def run_file(path, passed, failures):
                 failures.append((path, case_id, expected, got, None))
     for case in cases:
         operation = case.get("operation", document.get("operation"))
+        if operation in NOT_IMPLEMENTED:
+            skipped.append((path, f"{operation}: {NOT_IMPLEMENTED[operation]}"))
+            continue
         if operation not in OPERATIONS:
+            failures.append((path, case.get("id"), {"operation": operation}, {"operation": "not implemented by F0"}, None))
             continue
         runner, fields = OPERATIONS[operation]
         if callable(fields):
@@ -313,13 +408,14 @@ def main(argv):
     root = pathlib.Path(argv[1])
     passed = {}
     failures = []
+    skipped = []
     frozen = set()
     for path in sorted(root.rglob("*.json")):
         version = core_version_of(path, root)
         if version is not None and version != CORE_VERSION:
             frozen.add(version)
             continue
-        run_file(path, passed, failures)
+        run_file(path, passed, failures, skipped, root)
     with tempfile.TemporaryDirectory() as scratch:
         for version in sorted(frozen):
             directory = root / "core" / str(version)
@@ -335,6 +431,8 @@ def main(argv):
     for path in sorted(set(passed) | {failure[0] for failure in failures}):
         failed_here = sum(1 for failure in failures if failure[0] == path)
         print(f"  {path}: {passed.get(path, 0)} passed, {failed_here} failed")
+    for path, reason in sorted(set(skipped)):
+        print(f"  {path}: skipped ({reason})")
     total = sum(passed.values())
     print(f"{total} passed, {len(failures)} failed")
     if summary_path is not None:

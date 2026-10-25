@@ -152,14 +152,12 @@ def check_domain_metadata(value):
 
 
 def decode_payload(data, check):
+    # L0-SIG-62a: a payload that does not decode as its type fails with `payload`
     try:
         value = decode_canonical(data)
-    except Rejection:
-        raise KeyScopeError("payload:cbor")
-    try:
         check(value)
     except Rejection:
-        raise KeyScopeError("payload:shape")
+        raise KeyScopeError("payload")
     return value
 
 

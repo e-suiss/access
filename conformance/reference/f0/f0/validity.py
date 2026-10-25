@@ -106,6 +106,11 @@ def effective_cap(metadata_cap, profile_cap, policy_default):
     return min(cap for cap in (metadata_cap, profile_cap, policy_default) if cap is not None)
 
 
+def issue_horizon(issued_at, dependency_bounds, profile_max_ms):
+    # L0-VAL-5, L0-VAL-20
+    return min([checked_add(issued_at, profile_max_ms)] + list(dependency_bounds))
+
+
 def accept_until(contract, iat, cap):
     # L0-VAL-10, OP-118 m.4
     if iat is None or cap is None:

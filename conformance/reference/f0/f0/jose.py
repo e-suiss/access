@@ -65,10 +65,6 @@ def b64url_encode(data):
     return "".join(out)
 
 
-def decoded_length(text):
-    return len(text) * 3 // 4
-
-
 def reject_float(text):
     raise JsonError("number not allowed")
 
@@ -164,8 +160,6 @@ def verify_jws(token, keys, allowed, typ, require_kid=True):
     if len(parts) != 3:
         raise JoseError("not a compact JWS")
     header_text, payload_text, signature_text = parts
-    if decoded_length(header_text) > MAX_HEADER or decoded_length(payload_text) > MAX_PAYLOAD:
-        raise JoseError("not a compact JWS")
     # step 2
     try:
         header_bytes = b64url_decode(header_text)
@@ -173,9 +167,9 @@ def verify_jws(token, keys, allowed, typ, require_kid=True):
         raise JoseError("bad base64url")
     # step 3, OP-117 m.16
     try:
-        header = parse_json(header_bytes)
+        header = parse_json(header_bytes, MAX_HEADER)
     except JsonError as error:
-        raise JoseError("header: duplicate member" if error.duplicate else "header not in profile")
+        raise JoseError(f"header: {error.reason}")
     if not isinstance(header, dict):
         raise JoseError("header not in profile")
     for name, value in header.items():
