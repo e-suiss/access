@@ -394,3 +394,42 @@ async fn malformed_effects_are_refused_before_planning() {
     ));
     assert_eq!(l.head().pos, 0);
 }
+
+// CR-57, CVE-2022-23555 (authentik: an invitation token reused across flows), INV-21: a
+// single-use flag consumed by one decision cannot be consumed by another, whatever the flow
+#[tokio::test]
+async fn cve_2022_23555_single_use_is_at_most_once() {
+    let db = fresh().await.unwrap();
+    let d = domain(&db, "g").await;
+    let mut l = lead(&db, d, "a").await.unwrap();
+    let mut enroll = item("enroll", Some((1, 1)));
+    enroll.single_use = vec![b"invite@inv_1".to_vec()];
+    l.commit(2_000, &[enroll]).await.unwrap();
+    let mut recover = item("recover", Some((2, 2)));
+    recover.single_use = vec![b"invite@inv_1".to_vec()];
+    let err = l.commit(2_001, &[recover]).await.unwrap_err();
+    assert!(
+        matches!(err, SequencerError::Store(StoreError::Consumed)),
+        "{err}"
+    );
+    assert_eq!(l.head().pos, 1);
+}
+
+// CR-57, GHSA-5278-rrxc-mgf7 (OpenFGA: a `but not` exclusion failed open), INV-7, INV-26: an
+// ALLOW that relied on the absence of a revocation is not committed once the revocation exists
+#[tokio::test]
+async fn ghsa_5278_rrxc_mgf7_an_exclusion_cannot_fail_open() {
+    let db = fresh().await.unwrap();
+    let d = domain(&db, "g").await;
+    let mut l = lead(&db, d, "a").await.unwrap();
+    // the evaluation read `revoked@g1` as absent (version 0) and allowed
+    let mut allow = item("allow", Some((3, 3)));
+    allow.reads = vec![(b"revoked@g1".to_vec(), 0)];
+    // before it commits, the revocation lands
+    let mut revoke = item("revoke", Some((4, 4)));
+    revoke.writes = vec![b"revoked@g1".to_vec()];
+    l.commit(2_000, &[revoke]).await.unwrap();
+    let err = l.commit(2_001, &[allow]).await.unwrap_err();
+    assert!(err.is_retry(), "{err}");
+    assert_eq!(l.head().pos, 1);
+}
