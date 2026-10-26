@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT h.tenant_id, h.realm_id FROM access.realm_hostnames h\n             JOIN access.realms r ON r.tenant_id = h.tenant_id AND r.realm_id = h.realm_id\n            WHERE h.hostname = lower($1) AND h.status = 'active' AND r.status = 'active'",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "tenant_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.realm_hostnames",
+            "name": "tenant_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "realm_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.realm_hostnames",
+            "name": "realm_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "487ff4de249337af9b42c3b99842822f0d21b64ff3df115a3e7d7fcd54e3ac63"
+}

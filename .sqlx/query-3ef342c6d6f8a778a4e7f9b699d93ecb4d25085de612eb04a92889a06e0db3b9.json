@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.tenants (tenant_id, placement_id, status) VALUES ($1, $2, 'active')",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "3ef342c6d6f8a778a4e7f9b699d93ecb4d25085de612eb04a92889a06e0db3b9"
+}

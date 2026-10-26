@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.realms SET status = 'deleted', deleted_at = now()\n          WHERE tenant_id = $1 AND realm_id = $2 AND status <> 'deleted'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "97f3d20e4cdbbffca97e5f059793e7a9f52e111457764b45d780ef326ca205d1"
+}

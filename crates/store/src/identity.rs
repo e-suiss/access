@@ -23,6 +23,12 @@ impl TenantId {
     pub const fn from_bytes(b: [u8; 16]) -> Self {
         Self(Uuid::from_bytes(b))
     }
+
+    /// The UUID bytes.
+    #[must_use]
+    pub const fn as_bytes(&self) -> &[u8; 16] {
+        self.0.as_bytes()
+    }
 }
 
 impl RealmId {
@@ -31,13 +37,19 @@ impl RealmId {
     pub const fn from_bytes(b: [u8; 16]) -> Self {
         Self(Uuid::from_bytes(b))
     }
+
+    /// The UUID bytes.
+    #[must_use]
+    pub const fn as_bytes(&self) -> &[u8; 16] {
+        self.0.as_bytes()
+    }
 }
 
 /// A transaction scoped to one tenant and realm (OP-18).
 pub struct TenantTx {
-    tx: Transaction<'static, Postgres>,
-    tenant: TenantId,
-    realm: RealmId,
+    pub(crate) tx: Transaction<'static, Postgres>,
+    pub(crate) tenant: TenantId,
+    realm: Option<RealmId>,
 }
 
 impl TenantTx {
@@ -58,7 +70,42 @@ impl TenantTx {
         )
         .fetch_one(&mut *tx)
         .await?;
-        Ok(Self { tx, tenant, realm })
+        Ok(Self {
+            tx,
+            tenant,
+            realm: Some(realm),
+        })
+    }
+
+    /// A transaction scoped to a tenant only: realm-scoped rows stay invisible.
+    ///
+    /// # Errors
+    /// [`StoreError::Db`].
+    pub async fn begin_tenant(pool: &PgPool, tenant: TenantId) -> Result<Self, StoreError> {
+        let mut tx = pool.begin().await?;
+        sqlx::query!(
+            "SELECT set_config('app.tenant_id', $1, true) AS tenant",
+            tenant.0.to_string()
+        )
+        .fetch_one(&mut *tx)
+        .await?;
+        Ok(Self {
+            tx,
+            tenant,
+            realm: None,
+        })
+    }
+
+    /// The tenant.
+    #[must_use]
+    pub const fn tenant(&self) -> TenantId {
+        self.tenant
+    }
+
+    /// The realm, when the scope has one.
+    #[must_use]
+    pub const fn realm(&self) -> Option<RealmId> {
+        self.realm
     }
 
     /// Adds an event to the outbox in this transaction (OP-10).
@@ -66,16 +113,30 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError::Db`].
     pub async fn outbox(&mut self, kind: &str, payload: &[u8]) -> Result<(), StoreError> {
+        let realm = self.realm.ok_or(StoreError::Range)?;
         sqlx::query!(
             "INSERT INTO access.identity_outbox (tenant_id, realm_id, kind, payload) VALUES ($1, $2, $3, $4)",
             self.tenant.0,
-            self.realm.0,
+            realm.0,
             kind,
             payload,
         )
         .execute(&mut *self.tx)
         .await?;
         Ok(())
+    }
+
+    /// Runs a query in this scope; for the isolation tests only.
+    ///
+    /// # Errors
+    /// [`StoreError::Db`].
+    #[cfg(feature = "testing")]
+    pub async fn raw_rows(mut self, sql: &str) -> Result<Vec<sqlx::postgres::PgRow>, StoreError> {
+        let rows = sqlx::query(sqlx::AssertSqlSafe(sql.to_owned()))
+            .fetch_all(&mut *self.tx)
+            .await?;
+        self.tx.commit().await?;
+        Ok(rows)
     }
 
     /// Commits.

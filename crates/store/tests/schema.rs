@@ -147,3 +147,36 @@ async fn append_only_tables_grant_no_change_and_carry_both_triggers() {
         assert_eq!(triggers, 2, "{table}");
     }
 }
+
+// TN-20: a unique index that does not start with a scope column is on one of the four global
+// identifiers, so uniqueness never becomes a cross-tenant channel
+#[tokio::test]
+async fn only_the_four_global_identifiers_are_unique_across_tenants() {
+    let mut c = admin().await;
+    let rows = sqlx::query(
+        "SELECT i.relname::text, coalesce(a.attname::text, pg_get_indexdef(x.indexrelid, 1, true))
+           FROM pg_index x
+           JOIN pg_class i ON i.oid = x.indexrelid
+           JOIN pg_class t ON t.oid = x.indrelid
+           JOIN pg_namespace n ON n.oid = t.relnamespace
+           LEFT JOIN pg_attribute a ON a.attrelid = x.indrelid AND a.attnum = x.indkey[0]
+          WHERE n.nspname = 'access' AND x.indisunique",
+    )
+    .fetch_all(&mut c)
+    .await
+    .unwrap();
+    let allowed = [
+        "domain_id",
+        "tenant_id",
+        "slug",
+        "hostname",
+        "client_id",
+        "kid",
+    ];
+    let bad: Vec<String> = rows
+        .iter()
+        .filter(|r| !allowed.contains(&r.get::<String, _>(1).as_str()))
+        .map(|r| format!("{} on {}", r.get::<String, _>(0), r.get::<String, _>(1)))
+        .collect();
+    assert!(bad.is_empty(), "{bad:?}");
+}

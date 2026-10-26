@@ -9,6 +9,7 @@ pub use sqlx::PgPool as Pool;
 pub mod identity;
 pub mod jobs;
 pub mod scope;
+pub mod tenancy;
 
 #[cfg(feature = "testing")]
 pub mod testing;
