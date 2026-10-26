@@ -79,7 +79,7 @@ jobs:
           python3 -I .github/scripts/f0-drt.py check "$RUNNER_TEMP/drt/f0-drt-summary.json"
           commit="$(jq -r .commit "$RUNNER_TEMP/drt/f0-drt-summary.json")"
           # the DRT counts only for the semantics it ran on
-          if ! git diff --quiet "$commit" "$GITHUB_SHA" -- crates/kernel conformance/reference/f0 conformance/vectors conformance/cddl; then
+          if ! git diff --quiet "$commit" "$GITHUB_SHA" -- crates/kernel ':!crates/kernel/benches' conformance/reference/f0 conformance/vectors conformance/cddl; then
             echo "::error::Kernel, F0 or vectors changed since the nightly DRT at $commit"
             exit 1
           fi
