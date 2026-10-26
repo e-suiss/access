@@ -1,0 +1,24 @@
+[package]
+name = "access-store"
+description = "PostgreSQL access for Access: migrations, row-level security and typed scope (OP-66, OP-130)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[features]
+# OP-66: test databases cloned from a migrated template
+testing = []
+
+[dependencies]
+sqlx = { workspace = true, features = ["postgres", "runtime-tokio", "tls-rustls-aws-lc-rs", "macros", "migrate", "uuid"] }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+access-store = { path = ".", features = ["testing"] }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+
+[lints]
+workspace = true

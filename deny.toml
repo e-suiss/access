@@ -11,7 +11,12 @@ feature-depth = 1
 unmaintained = "all"
 unsound = "all"
 yanked = "deny"
-ignore = []
+ignore = [
+    # F-2, F-15: 0.7.6 carries the RUSTSEC-2026-0387 fix; it was yanked on 2026-10-25 for an API
+    # break, not a vulnerability, and the replacements (0.7.9, 0.7.10) are inside the 7-day
+    # cooldown until 2026-11-01. Drop this entry with that update.
+    { crate = "crypto-bigint@0.7.6", reason = "yanked for an API break; replacement in cooldown until 2026-11-01" },
+]
 
 # F-1
 [licenses]
@@ -28,6 +33,12 @@ allow = [
 ]
 confidence-threshold = 0.93
 unused-allowed-license = "allow"
+
+# F-1, OP-130: Mozilla's CA bundle, pulled in by sqlx's aws-lc-rs TLS; data under a permissive
+# licence. Store connections never use it: they verify against an explicit root (verify-full)
+[[licenses.exceptions]]
+crate = "webpki-roots"
+allow = ["CDLA-Permissive-2.0"]
 
 # F-1, OP-116: uniffi is MPL-2.0 (file-level copyleft, not GPL)
 [[licenses.exceptions]]
@@ -125,7 +136,7 @@ deny = [
     { crate = "ed25519-compact", reason = "CR-54: one Ed25519 acceptance set (CR-53)" },
     { crate = "ed25519-zebra", reason = "CR-54, CR-11: ZIP-215 acceptance and batch verification" },
     # CR-3: HMAC only for keyed derivation; RFC 6979 nonces are one
-    { crate = "hmac", wrappers = ["rfc6979"], reason = "CR-3, CR-13: HMAC comes from aws-lc-rs" },
+    { crate = "hmac", wrappers = ["rfc6979", "hkdf", "sqlx-postgres"], reason = "CR-3, CR-13: HMAC comes from aws-lc-rs; OP-130 m.10: the driver's SCRAM-SHA-256 client" },
     # §9.7A.7: no external authorization engine
     { crate = "openfga-rs", reason = "§9.7A.7" },
     { crate = "openfga-client", reason = "§9.7A.7" },

@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.authority_log (domain_id, pos, kind, recorded_at, leaf_hash, envelope)\n         SELECT $1, * FROM UNNEST($2::bigint[], $3::text[], $4::bigint[], $5::bytea[], $6::bytea[])",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Int8Array",
+        "TextArray",
+        "Int8Array",
+        "ByteaArray",
+        "ByteaArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "5f8e0cc84e1deb26a865ae177c4da0eafed0a133c46c5aedcbd5c4d448df8ce1"
+}

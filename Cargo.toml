@@ -19,6 +19,8 @@ access-telemetry = { path = "crates/telemetry", default-features = false }
 access-http = { path = "crates/http", default-features = false }
 access-sandbox = { path = "crates/sandbox", default-features = false }
 suiss-restriction = { package = "esuiss-restriction", path = "crates/suiss-restriction", default-features = false }
+suiss-ledger = { package = "esuiss-ledger", path = "crates/suiss-ledger", default-features = false }
+access-store = { path = "crates/store", default-features = false }
 
 # F-2
 secrecy = { version = "0.10.3", default-features = false }
@@ -43,6 +45,8 @@ toml = { version = "1.1.6", default-features = false }
 tracing = { version = "0.1.44", default-features = false }
 tracing-subscriber = { version = "0.3.23", default-features = false }
 tokio = { version = "1.53.1", default-features = false }
+# OP-66, OP-130
+sqlx = { version = "0.9.0", default-features = false }
 axum = { version = "0.8.9", default-features = false }
 tower = { version = "0.5.3", default-features = false }
 tower-http = { version = "0.7.1", default-features = false }

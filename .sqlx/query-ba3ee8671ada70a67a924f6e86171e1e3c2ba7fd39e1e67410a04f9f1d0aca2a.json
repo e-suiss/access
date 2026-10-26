@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.domain_head SET pos = $3, leaf_hash = $4, recorded_at = $5, frontier = $6\n          WHERE domain_id = $1 AND pos = $2 AND epoch = $7",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Int8",
+        "Int8",
+        "Bytea",
+        "Int8",
+        "ByteaArray",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "ba3ee8671ada70a67a924f6e86171e1e3c2ba7fd39e1e67410a04f9f1d0aca2a"
+}

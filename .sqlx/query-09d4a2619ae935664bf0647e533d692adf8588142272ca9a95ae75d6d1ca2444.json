@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.sequencer_lease (domain_id, holder, epoch, acquired_at, expires_at)\n         SELECT domain_id, $2, epoch + 1, now(), now() + $3::bigint * interval '1 millisecond'\n           FROM access.domain_head WHERE domain_id = $1\n         ON CONFLICT (domain_id) DO UPDATE\n           SET holder = EXCLUDED.holder, epoch = GREATEST(sequencer_lease.epoch, EXCLUDED.epoch - 1) + 1,\n               acquired_at = EXCLUDED.acquired_at, expires_at = EXCLUDED.expires_at, released_at = NULL\n           WHERE sequencer_lease.expires_at < now() OR sequencer_lease.released_at IS NOT NULL\n              OR sequencer_lease.holder = EXCLUDED.holder\n         RETURNING epoch",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "epoch",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.sequencer_lease",
+            "name": "epoch"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "09d4a2619ae935664bf0647e533d692adf8588142272ca9a95ae75d6d1ca2444"
+}

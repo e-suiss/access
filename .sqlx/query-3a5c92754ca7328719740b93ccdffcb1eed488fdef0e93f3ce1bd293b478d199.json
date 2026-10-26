@@ -1,0 +1,65 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT nonce, actor, intent_digest, decision_pos FROM access.authority_nonce\n          WHERE domain_id = $1 AND nonce = $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "nonce",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.authority_nonce",
+            "name": "nonce"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "actor",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.authority_nonce",
+            "name": "actor"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "intent_digest",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.authority_nonce",
+            "name": "intent_digest"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "decision_pos",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.authority_nonce",
+            "name": "decision_pos"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "3a5c92754ca7328719740b93ccdffcb1eed488fdef0e93f3ce1bd293b478d199"
+}

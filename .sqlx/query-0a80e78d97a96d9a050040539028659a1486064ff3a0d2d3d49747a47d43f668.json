@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.domain_head SET epoch = $2 WHERE domain_id = $1 AND epoch < $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "0a80e78d97a96d9a050040539028659a1486064ff3a0d2d3d49747a47d43f668"
+}

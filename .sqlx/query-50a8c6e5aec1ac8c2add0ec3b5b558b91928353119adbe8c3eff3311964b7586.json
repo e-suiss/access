@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.authority_log (domain_id, pos, kind, recorded_at, leaf_hash, envelope)\n         VALUES ($1, 0, 'genesis', $2, $3, $4)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Int8",
+        "Bytea",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "50a8c6e5aec1ac8c2add0ec3b5b558b91928353119adbe8c3eff3311964b7586"
+}

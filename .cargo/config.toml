@@ -1,2 +1,6 @@
 [alias]
 xtask = "run --locked --quiet --package xtask --"
+
+# OP-66: queries are checked against the committed .sqlx metadata; `just sqlx-prepare` refreshes it
+[env]
+SQLX_OFFLINE = "true"

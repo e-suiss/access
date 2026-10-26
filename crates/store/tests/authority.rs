@@ -1,0 +1,299 @@
+//! OP-130, OP-17, TI-2, TI-8: the authority log tables against a real PostgreSQL.
+
+#![allow(
+    clippy::unwrap_used,
+    clippy::panic,
+    clippy::arithmetic_side_effects,
+    clippy::many_single_char_names,
+    reason = "test code; the request-path lints (OP-3) do not apply"
+)]
+
+use std::time::Duration;
+
+use access_store::StoreError;
+use access_store::authority::{
+    CommitBatch, HeadRow, LogRecord, NonceRow, OutboxRow, ProofRow, acquire_lease, commit_batch,
+    create_domain, find_nonce, read_head, read_log, release_lease, renew_lease,
+};
+use access_store::scope::DomainId;
+use access_store::testing::{TestDb, fresh};
+use sqlx::{Executor, Row};
+
+const TENANT: [u8; 16] = [0x01, 0x9a, 0, 0, 0, 0, 0x70, 0, 0x80, 0, 0, 0, 0, 0, 0, 1];
+const TTL: Duration = Duration::from_secs(10);
+
+fn genesis(seed: u8) -> (DomainId, LogRecord) {
+    let leaf = [seed; 32];
+    (
+        DomainId::from_bytes([seed.wrapping_add(1); 32]),
+        LogRecord {
+            pos: 0,
+            kind: "genesis",
+            recorded_at: 1_000,
+            leaf_hash: leaf,
+            envelope: vec![0xa0],
+        },
+    )
+}
+
+fn record(pos: u64, seed: u8) -> LogRecord {
+    LogRecord {
+        pos,
+        kind: "decision",
+        recorded_at: 2_000,
+        leaf_hash: [seed; 32],
+        envelope: vec![0xa1, seed],
+    }
+}
+
+fn batch(epoch: u64, after: &HeadRow, seed: u8) -> CommitBatch {
+    let pos = after.pos + 1;
+    CommitBatch {
+        epoch,
+        after: after.pos,
+        records: vec![record(pos, seed)],
+        head: HeadRow {
+            pos,
+            epoch,
+            leaf_hash: [seed; 32],
+            recorded_at: 2_000,
+            frontier: vec![[seed; 32]],
+        },
+        nonces: vec![NonceRow {
+            nonce: vec![seed; 16],
+            actor: vec![1],
+            intent_digest: [9; 32],
+            decision_pos: pos,
+        }],
+        outbox: vec![OutboxRow {
+            pos,
+            idx: 0,
+            event_id: [seed; 32],
+            event: vec![0xa0],
+        }],
+        proofs: vec![ProofRow {
+            digest: [seed; 32],
+            bytes: vec![1, 2, 3],
+        }],
+    }
+}
+
+async fn domain(db: &TestDb, seed: u8) -> DomainId {
+    let (d, g) = genesis(seed);
+    create_domain(&db.sequencer, &d, TENANT, &g).await.unwrap();
+    d
+}
+
+#[tokio::test]
+async fn genesis_lease_and_commit() {
+    let db = fresh().await.unwrap();
+    let d = domain(&db, 1).await;
+    let (lease, head) = acquire_lease(&db.sequencer, &d, "a", TTL).await.unwrap();
+    assert_eq!((lease.epoch, head.pos, head.epoch), (1, 0, 1));
+    commit_batch(&db.sequencer, &d, TENANT, &batch(lease.epoch, &head, 2))
+        .await
+        .unwrap();
+    let head = read_head(&db.app, &d).await.unwrap();
+    assert_eq!(head.pos, 1);
+    let log = read_log(&db.app, &d, 0, 10).await.unwrap();
+    assert_eq!(log.iter().map(|r| r.pos).collect::<Vec<_>>(), [0, 1]);
+    let n = find_nonce(&db.app, &d, &[2; 16]).await.unwrap().unwrap();
+    assert_eq!(n.decision_pos, 1);
+    renew_lease(&db.sequencer, &d, "a", lease, TTL)
+        .await
+        .unwrap();
+    release_lease(&db.sequencer, &d, "a", lease).await.unwrap();
+}
+
+#[tokio::test]
+async fn new_leader_fences_the_old_one() {
+    let db = fresh().await.unwrap();
+    let d = domain(&db, 3).await;
+    let (old, head) = acquire_lease(&db.sequencer, &d, "a", TTL).await.unwrap();
+    assert!(matches!(
+        acquire_lease(&db.sequencer, &d, "b", TTL).await,
+        Err(StoreError::LeaseHeld)
+    ));
+    release_lease(&db.sequencer, &d, "a", old).await.unwrap();
+    let (new, _) = acquire_lease(&db.sequencer, &d, "b", TTL).await.unwrap();
+    assert!(new.epoch > old.epoch);
+    // TI-2: the old leader's write fails even though its in-memory head is current
+    let stale = commit_batch(&db.sequencer, &d, TENANT, &batch(old.epoch, &head, 4)).await;
+    assert!(matches!(stale, Err(StoreError::HeadMoved)));
+    assert!(matches!(
+        renew_lease(&db.sequencer, &d, "a", old, TTL).await,
+        Err(StoreError::LeaseLost)
+    ));
+    assert_eq!(read_head(&db.app, &d).await.unwrap().pos, 0);
+    commit_batch(&db.sequencer, &d, TENANT, &batch(new.epoch, &head, 5))
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn racing_batches_commit_once() {
+    let db = fresh().await.unwrap();
+    let d = domain(&db, 6).await;
+    let (lease, head) = acquire_lease(&db.sequencer, &d, "a", TTL).await.unwrap();
+    let (x, y) = (batch(lease.epoch, &head, 7), batch(lease.epoch, &head, 8));
+    let (a, b) = tokio::join!(
+        commit_batch(&db.sequencer, &d, TENANT, &x),
+        commit_batch(&db.sequencer, &d, TENANT, &y),
+    );
+    assert_eq!([a.is_ok(), b.is_ok()].iter().filter(|ok| **ok).count(), 1);
+    assert_eq!(read_log(&db.app, &d, 0, 10).await.unwrap().len(), 2);
+}
+
+#[tokio::test]
+async fn failed_batch_leaves_nothing_behind() {
+    let db = fresh().await.unwrap();
+    let d = domain(&db, 9).await;
+    let (lease, head) = acquire_lease(&db.sequencer, &d, "a", TTL).await.unwrap();
+    let mut bad = batch(lease.epoch, &head, 10);
+    bad.nonces[0].decision_pos = 99;
+    assert!(commit_batch(&db.sequencer, &d, TENANT, &bad).await.is_err());
+    assert_eq!(read_head(&db.app, &d).await.unwrap().pos, 0);
+    assert!(find_nonce(&db.app, &d, &[10; 16]).await.unwrap().is_none());
+    commit_batch(&db.sequencer, &d, TENANT, &batch(lease.epoch, &head, 10))
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn a_nonce_is_consumed_once() {
+    let db = fresh().await.unwrap();
+    let d = domain(&db, 11).await;
+    let (lease, head) = acquire_lease(&db.sequencer, &d, "a", TTL).await.unwrap();
+    commit_batch(&db.sequencer, &d, TENANT, &batch(lease.epoch, &head, 12))
+        .await
+        .unwrap();
+    let head = read_head(&db.app, &d).await.unwrap();
+    let mut again = batch(lease.epoch, &head, 13);
+    again.nonces[0].nonce = vec![12; 16];
+    assert!(
+        commit_batch(&db.sequencer, &d, TENANT, &again)
+            .await
+            .is_err()
+    );
+}
+
+#[tokio::test]
+async fn append_only_tables_reject_change_at_every_layer() {
+    let db = fresh().await.unwrap();
+    let d = domain(&db, 14).await;
+    let (lease, head) = acquire_lease(&db.sequencer, &d, "a", TTL).await.unwrap();
+    commit_batch(&db.sequencer, &d, TENANT, &batch(lease.epoch, &head, 15))
+        .await
+        .unwrap();
+    let scope = format!(
+        "SELECT set_config('app.domain_id', '{}', true)",
+        hex(d.as_bytes())
+    );
+    for table in [
+        "authority_log",
+        "authority_nonce",
+        "authority_outbox",
+        "proof_store",
+    ] {
+        // OP-17 layer 1: the roles hold no UPDATE, DELETE or TRUNCATE
+        for pool in [&db.app, &db.sequencer] {
+            for stmt in [
+                format!("UPDATE access.{table} SET domain_id = domain_id"),
+                format!("DELETE FROM access.{table}"),
+                format!("TRUNCATE access.{table}"),
+            ] {
+                let mut tx = pool.begin().await.unwrap();
+                tx.execute(sqlx::AssertSqlSafe(scope.clone()))
+                    .await
+                    .unwrap();
+                let err = tx
+                    .execute(sqlx::AssertSqlSafe(stmt.clone()))
+                    .await
+                    .unwrap_err();
+                assert!(
+                    err.to_string().contains("permission denied"),
+                    "{table}: {stmt}: {err}"
+                );
+            }
+        }
+        // OP-17 layers 2 and 3: even the owner is stopped by the triggers
+        for stmt in [
+            format!("UPDATE access.{table} SET domain_id = domain_id"),
+            format!("DELETE FROM access.{table}"),
+            format!("TRUNCATE access.{table} CASCADE"),
+        ] {
+            let mut tx = db.owner.begin().await.unwrap();
+            tx.execute("SET LOCAL ROLE access_migrator").await.unwrap();
+            tx.execute(sqlx::AssertSqlSafe(scope.clone()))
+                .await
+                .unwrap();
+            let err = tx
+                .execute(sqlx::AssertSqlSafe(stmt.clone()))
+                .await
+                .unwrap_err();
+            assert!(
+                err.to_string().contains("append-only"),
+                "{table}: {stmt}: {err}"
+            );
+        }
+    }
+}
+
+#[tokio::test]
+async fn only_the_sequencer_writes_the_log() {
+    let db = fresh().await.unwrap();
+    let d = domain(&db, 16).await;
+    let (lease, head) = acquire_lease(&db.sequencer, &d, "a", TTL).await.unwrap();
+    let err = commit_batch(&db.app, &d, TENANT, &batch(lease.epoch, &head, 17))
+        .await
+        .unwrap_err();
+    assert!(err.to_string().contains("permission denied"), "{err}");
+}
+
+#[tokio::test]
+async fn unscoped_and_cross_domain_reads_see_nothing() {
+    let db = fresh().await.unwrap();
+    let a = domain(&db, 18).await;
+    let b = domain(&db, 20).await;
+    // §12.1.3 test 6: no scope, no rows
+    for table in [
+        "authority_domain",
+        "authority_log",
+        "domain_head",
+        "authority_nonce",
+        "authority_outbox",
+        "proof_store",
+    ] {
+        let n: i64 = sqlx::query(sqlx::AssertSqlSafe(format!(
+            "SELECT count(*) FROM access.{table}"
+        )))
+        .fetch_one(&db.app)
+        .await
+        .unwrap()
+        .get(0);
+        assert_eq!(n, 0, "{table}");
+    }
+    assert_eq!(read_log(&db.app, &a, 0, 10).await.unwrap().len(), 1);
+    let mut tx = db.app.begin().await.unwrap();
+    tx.execute(sqlx::AssertSqlSafe(format!(
+        "SELECT set_config('app.domain_id', '{}', true)",
+        hex(a.as_bytes())
+    )))
+    .await
+    .unwrap();
+    let rows: i64 = sqlx::query("SELECT count(*) FROM access.authority_log WHERE domain_id = $1")
+        .bind(b.as_bytes().as_slice())
+        .fetch_one(&mut *tx)
+        .await
+        .unwrap()
+        .get(0);
+    assert_eq!(rows, 0);
+}
+
+fn hex(b: &[u8]) -> String {
+    use std::fmt::Write as _;
+    b.iter().fold(String::new(), |mut s, x| {
+        let _ = write!(s, "{x:02x}");
+        s
+    })
+}

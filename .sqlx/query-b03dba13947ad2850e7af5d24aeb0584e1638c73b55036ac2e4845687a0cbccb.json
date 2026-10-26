@@ -1,0 +1,78 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT pos, kind, recorded_at, leaf_hash, envelope FROM access.authority_log\n          WHERE domain_id = $1 AND pos BETWEEN $2 AND $3 ORDER BY pos",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "pos",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.authority_log",
+            "name": "pos"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "kind",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.authority_log",
+            "name": "kind"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "recorded_at",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.authority_log",
+            "name": "recorded_at"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "leaf_hash",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.authority_log",
+            "name": "leaf_hash"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "envelope",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.authority_log",
+            "name": "envelope"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "b03dba13947ad2850e7af5d24aeb0584e1638c73b55036ac2e4845687a0cbccb"
+}
