@@ -101,8 +101,12 @@ pub(crate) const PROVIDER_SCOPE: &[(&str, &[&str], &str)] = &[
     ),
     (
         "sha2",
-        &["crates/kernel", "crates/restriction-analysis"],
-        "the Kernel digest path; the cvc5 pin check (OP-105)",
+        &[
+            "crates/kernel",
+            "crates/restriction-analysis",
+            "crates/suiss-ledger",
+        ],
+        "the Kernel digest path; the cvc5 pin check (OP-105); the no_std ledger Merkle tree (OP-130 m.1)",
     ),
     (
         "subtle",
@@ -148,17 +152,26 @@ pub(crate) fn provider_scope_violations(root: &Path, md: &Metadata) -> Vec<Viola
 }
 
 pub(crate) fn check_provider(root: &Path) -> Result<Vec<Violation>, String> {
-    let mut out = banned_in_lock(
-        &read(&root.join("Cargo.lock"))?,
-        OTHER_PROVIDERS,
-        PROVIDER,
-        "aws-lc-rs is the only server provider and the Kernel verifies with ed25519-dalek and p256 (CR-13, CR-14, CR-54)",
-    )?;
-    out.extend(provider_scope_violations(
-        root,
-        &*crate::supply_chain::metadata::load(root)?,
-    ));
+    let md = crate::supply_chain::metadata::load(root)?;
+    let mut out = banned_providers(&md);
+    out.extend(provider_scope_violations(root, &md));
     Ok(out)
+}
+
+/// Other crypto providers anywhere in the resolved graph, any platform (CR-13, CR-14, CR-54).
+pub(crate) fn banned_providers(md: &Metadata) -> Vec<Violation> {
+    md.packages
+        .iter()
+        .filter(|p| OTHER_PROVIDERS.contains(&p.name.as_str()))
+        .map(|p| Violation {
+            rule: PROVIDER,
+            path: PathBuf::from("Cargo.lock"),
+            message: format!(
+                "`{}` {} is banned: aws-lc-rs is the only server provider and the Kernel verifies with ed25519-dalek and p256 (CR-13, CR-14, CR-54)",
+                p.name, p.version
+            ),
+        })
+        .collect()
 }
 
 const BATCH: &str = "no-batch-verify";
@@ -375,7 +388,7 @@ pub(crate) fn check_rsa(root: &Path) -> Result<Vec<Violation>, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::supply_chain::metadata::{fixture, parse};
+    use crate::supply_chain::metadata::{fixture, parse, retain_built};
 
     fn member_with(dir: &str, dep: &str, kind: Option<&str>) -> serde_json::Value {
         let mut m = fixture::member(dir, &[]);
@@ -411,12 +424,20 @@ mod tests {
         );
     }
 
-    // CR-14
+    // CR-14, F-2
     #[test]
-    fn other_providers_in_the_lockfile_are_rejected() {
-        let lock = "[[package]]\nname = \"ring\"\nversion = \"0.17.8\"\n\n[[package]]\nname = \"aws-lc-rs\"\nversion = \"1.15.0\"\n";
-        let v = banned_in_lock(lock, OTHER_PROVIDERS, PROVIDER, "x").unwrap();
-        assert_eq!(v.len(), 1);
+    fn other_providers_in_the_built_graph_are_rejected() {
+        let packages = [
+            fixture::external("ring", "0.17.8", true),
+            fixture::external("aws-lc-rs", "1.15.0", true),
+        ];
+        let mut md = parse(&fixture::metadata(&packages, &[])).unwrap();
+        retain_built(&mut md, "ring v0.17.8\naws-lc-rs v1.15.0\n");
+        assert_eq!(banned_providers(&md).len(), 1);
+        // only named by a weak feature: listed, never built
+        let mut md = parse(&fixture::metadata(&packages, &[])).unwrap();
+        retain_built(&mut md, "aws-lc-rs v1.15.0\n");
+        assert!(banned_providers(&md).is_empty());
     }
 
     // CR-11

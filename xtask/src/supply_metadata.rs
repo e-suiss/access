@@ -161,27 +161,69 @@ pub(crate) fn parse(json: &str) -> Result<Metadata, String> {
     Ok(md)
 }
 
+/// Keeps only the packages `cargo tree` builds for some target (`name version` lines). Optional
+/// dependencies named only by weak features (`dep?/feature`) are listed by `cargo metadata` and
+/// `Cargo.lock` but never built, because metadata does not apply resolver 2 (F-2).
+pub(crate) fn retain_built(md: &mut Metadata, tree: &str) {
+    let built: std::collections::BTreeSet<(&str, &str)> = tree
+        .lines()
+        .filter_map(|l| {
+            let (name, version) = l.split_once(' ')?;
+            Some((name, version.split(' ').next()?.strip_prefix('v')?))
+        })
+        .collect();
+    md.packages
+        .retain(|p| built.contains(&(p.name.as_str(), p.version.as_str())));
+}
+
+fn run(root: &Path, args: &[&str]) -> Result<String, String> {
+    let what = args.first().copied().unwrap_or_default();
+    let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".to_owned());
+    let output = Command::new(cargo)
+        .args(args)
+        .current_dir(root)
+        .output()
+        .map_err(|e| format!("cargo {what}: {e}"))?;
+    if !output.status.success() {
+        return Err(format!(
+            "cargo {what} failed: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        ));
+    }
+    String::from_utf8(output.stdout).map_err(|e| format!("cargo {what}: {e}"))
+}
+
 static CACHE: OnceLock<Result<Arc<Metadata>, String>> = OnceLock::new();
 
-/// Runs `cargo metadata` once per process (offline, locked) and caches it.
+/// Runs `cargo metadata` and `cargo tree` once per process (offline, locked) and caches the
+/// graph of packages that are built.
 pub(crate) fn load(root: &Path) -> Result<Arc<Metadata>, String> {
     CACHE
         .get_or_init(|| {
-            let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".to_owned());
-            let output = Command::new(cargo)
-                .args(["metadata", "--format-version", "1", "--locked", "--offline"])
-                .current_dir(root)
-                .output()
-                .map_err(|e| format!("cargo metadata: {e}"))?;
-            if !output.status.success() {
-                return Err(format!(
-                    "cargo metadata failed: {}",
-                    String::from_utf8_lossy(&output.stderr).trim()
-                ));
-            }
-            let json =
-                String::from_utf8(output.stdout).map_err(|e| format!("cargo metadata: {e}"))?;
-            parse(&json).map(Arc::new)
+            let json = run(
+                root,
+                &["metadata", "--format-version", "1", "--locked", "--offline"],
+            )?;
+            let mut md = parse(&json)?;
+            let tree = run(
+                root,
+                &[
+                    "tree",
+                    "--workspace",
+                    "--locked",
+                    "--offline",
+                    "--target",
+                    "all",
+                    "--edges",
+                    "normal,build,dev",
+                    "--prefix",
+                    "none",
+                    "--format",
+                    "{p}",
+                ],
+            )?;
+            retain_built(&mut md, &tree);
+            Ok(Arc::new(md))
         })
         .clone()
 }
@@ -250,5 +292,29 @@ pub(crate) mod fixture {
             "resolve": {"nodes": nodes},
         })
         .to_string()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{fixture, parse, retain_built};
+
+    // F-2
+    #[test]
+    fn only_built_packages_are_judged() {
+        let mut md = parse(&fixture::metadata(
+            &[
+                fixture::external("rustls", "0.23.46", true),
+                fixture::external("ring", "0.17.14", true),
+            ],
+            &[],
+        ))
+        .unwrap();
+        retain_built(
+            &mut md,
+            "rustls v0.23.46\nrustls v0.23.46 (*)\nsqlx v0.9.0 (proc-macro)\n",
+        );
+        let names: Vec<&str> = md.packages.iter().map(|p| p.name.as_str()).collect();
+        assert_eq!(names, ["rustls"]);
     }
 }

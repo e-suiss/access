@@ -352,6 +352,11 @@ pub(crate) fn delete_findings(sql: &str, allow: &[String]) -> Vec<(usize, String
                     ));
                 }
             }
+            // a trigger event (`BEFORE TRUNCATE`, `UPDATE OR TRUNCATE`) is not a statement
+            ("TRUNCATE", _)
+                if k.checked_sub(1)
+                    .and_then(|p| words.get(p))
+                    .is_some_and(|&(_, p)| matches!(p, "BEFORE" | "AFTER" | "OR")) => {}
             ("TRUNCATE", _) => out.push((at, "`TRUNCATE` is forbidden (OP-73)".to_owned())),
             ("DROP", Some("TABLE")) => out.push((
                 at,
@@ -750,6 +755,16 @@ mod tests {
             vec![]
         );
         assert_eq!(delete_findings("DELETE FROM accounts", &allow).len(), 1);
+    }
+
+    // OP-17, OP-73
+    #[test]
+    fn truncate_trigger_events_are_not_statements() {
+        let sql = "CREATE TRIGGER t BEFORE TRUNCATE ON a FOR EACH STATEMENT EXECUTE FUNCTION f();\n\
+                   CREATE TRIGGER u AFTER UPDATE OR TRUNCATE ON a EXECUTE FUNCTION f();";
+        assert_eq!(delete_findings(sql, &[]), vec![]);
+        assert_eq!(delete_findings("TRUNCATE a;", &[]).len(), 1);
+        assert_eq!(delete_findings("BEGIN; TRUNCATE TABLE a;", &[]).len(), 1);
     }
 
     #[test]
