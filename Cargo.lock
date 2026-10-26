@@ -26,6 +26,7 @@ dependencies = [
  "serde_json",
  "static_assertions",
  "subtle",
+ "thiserror",
  "zeroize",
 ]
 

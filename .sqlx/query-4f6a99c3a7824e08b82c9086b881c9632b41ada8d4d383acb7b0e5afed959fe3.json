@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT body_commit FROM access.body_store\n          WHERE domain_id = $1 AND kek_id = $2 AND shredded_at IS NULL ORDER BY body_commit LIMIT $3",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "body_commit",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.body_store",
+            "name": "body_commit"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "4f6a99c3a7824e08b82c9086b881c9632b41ada8d4d383acb7b0e5afed959fe3"
+}

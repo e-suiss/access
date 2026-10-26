@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.body_store SET kek_id = $3, wrapped_dek = $4\n          WHERE domain_id = $1 AND body_commit = $2 AND shredded_at IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Bytea",
+        "Text",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "7edcefcac21e18bb2c0419fedacad24cd9f7c49b001081dcd0a0e0c7e514ab5c"
+}

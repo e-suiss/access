@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.body_store (domain_id, body_commit, kek_id, wrapped_dek, nonce, ciphertext)\n         VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (domain_id, body_commit) DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Bytea",
+        "Text",
+        "Bytea",
+        "Bytea",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "a23239d0bcb037ac63eb342c9e4f1f849175d6263506c2318e4bc047ad10d26c"
+}

@@ -397,3 +397,57 @@ async fn single_use_flags_are_set_once() {
         Err(StoreError::Consumed)
     ));
 }
+
+// OP-73, OP-135: even the owner can only rewrap or shred a body, and shred it once
+#[tokio::test]
+async fn body_rows_allow_only_rewrap_and_one_shred() {
+    use access_store::bodies::{put, shred};
+    let db = fresh().await.unwrap();
+    let d = domain(&db, 50).await;
+    put(
+        &db.sequencer,
+        &d,
+        &[1; 32],
+        "k1",
+        &[0; 40],
+        &[0; 12],
+        &[0; 16],
+    )
+    .await
+    .unwrap();
+    let scope = format!(
+        "SELECT set_config('app.domain_id', '{}', true)",
+        hex(d.as_bytes())
+    );
+    let attempt = |stmt: &'static str| {
+        let scope = scope.clone();
+        let owner = db.owner.clone();
+        async move {
+            let mut tx = owner.begin().await.unwrap();
+            tx.execute("SET LOCAL ROLE access_migrator").await.unwrap();
+            tx.execute(sqlx::AssertSqlSafe(scope)).await.unwrap();
+            tx.execute(stmt).await.map(|_| ())
+        }
+    };
+    for stmt in [
+        "UPDATE access.body_store SET ciphertext = '\\x01'",
+        "UPDATE access.body_store SET body_commit = '\\x0202020202020202020202020202020202020202020202020202020202020202'",
+        "UPDATE access.body_store SET shredded_at = now()",
+        "DELETE FROM access.body_store",
+        "TRUNCATE access.body_store",
+    ] {
+        assert!(attempt(stmt).await.is_err(), "{stmt}");
+    }
+    assert!(
+        attempt("UPDATE access.body_store SET kek_id = 'k2', wrapped_dek = '\\x01'")
+            .await
+            .is_ok()
+    );
+    shred(&db.sequencer, &d, &[1; 32]).await.unwrap();
+    assert!(
+        attempt("UPDATE access.body_store SET kek_id = 'k3'")
+            .await
+            .is_err(),
+        "a shredded row never changes"
+    );
+}

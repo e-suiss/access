@@ -3,6 +3,7 @@
 
 use aws_lc_rs::hmac;
 
+use crate::dit::DitGuard;
 use crate::secret::Secret;
 
 const CONTEXT: &[u8] = b"access/event/v1\0";
@@ -20,6 +21,8 @@ impl EventKey {
     /// `HMAC-SHA-256(K_D, "access/event/v1" ‖ 0x00 ‖ domain ‖ pos ‖ idx)`, big-endian integers.
     #[must_use]
     pub fn event_id(&self, domain: &[u8; 32], pos: u64, idx: u32) -> [u8; 32] {
+        // CR-39 m.6
+        let _dit = DitGuard::new();
         let key = hmac::Key::new(hmac::HMAC_SHA256, self.0.expose());
         let mut ctx = hmac::Context::with_key(&key);
         ctx.update(CONTEXT);

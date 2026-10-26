@@ -8,12 +8,17 @@ license.workspace = true
 repository.workspace = true
 publish = false
 
+[features]
+# OP-135 m.4: the in-process KEK, for tests of other crates
+testing = []
+
 [dependencies]
 access-kernel = { workspace = true }
+thiserror = { workspace = true }
 aws-lc-rs = { workspace = true }
 secrecy = { workspace = true }
 subtle = { workspace = true }
-zeroize = { workspace = true, features = ["alloc"] }
+zeroize = { workspace = true, features = ["alloc", "std"] }
 
 [dev-dependencies]
 serde_json = { workspace = true, features = ["std"] }

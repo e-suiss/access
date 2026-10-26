@@ -17,6 +17,7 @@ suiss-crypto = { workspace = true }
 thiserror = { workspace = true }
 
 [dev-dependencies]
+access-crypto = { workspace = true, features = ["testing"] }
 access-store = { workspace = true, features = ["testing"] }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 
