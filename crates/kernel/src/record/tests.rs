@@ -352,3 +352,28 @@ fn hex(b: &[u8]) -> String {
         h
     })
 }
+
+// L0-ENC-28: an envelope without fields would not decode, so it is never sealed
+#[test]
+fn an_envelope_without_fields_is_not_sealed() {
+    let header = |domain: Option<Digest>, pos: u64, kind: RecordKind| Header {
+        domain,
+        pos,
+        kind,
+        recorded_at: 5,
+        prev: (pos > 0).then_some(Digest([2; 32])),
+    };
+    let missing = RecordError::Model(ModelError::Missing);
+    let genesis = RecordEnvelope {
+        header: header(None, 0, RecordKind::Genesis),
+        fields: BTreeMap::new(),
+    };
+    assert_eq!(genesis.domain(), Err(missing));
+    assert_eq!(genesis.leaf_hash(), Err(missing));
+    let later = RecordEnvelope {
+        header: header(Some(Digest([1; 32])), 3, RecordKind::Decision),
+        fields: BTreeMap::new(),
+    };
+    assert_eq!(later.leaf_hash(), Err(missing));
+    assert!(RecordEnvelope::from_bytes(&later.to_bytes().unwrap()).is_err());
+}
