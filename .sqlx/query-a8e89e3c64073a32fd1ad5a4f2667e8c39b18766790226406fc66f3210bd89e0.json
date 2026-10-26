@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access_ops.outbox_cursor (consumer, xid, id) VALUES ($1, $2::bigint::text::xid8, $3)\n         ON CONFLICT (consumer) DO UPDATE SET xid = EXCLUDED.xid, id = EXCLUDED.id, updated_at = now()\n          WHERE (outbox_cursor.xid, outbox_cursor.id) < (EXCLUDED.xid, EXCLUDED.id)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "a8e89e3c64073a32fd1ad5a4f2667e8c39b18766790226406fc66f3210bd89e0"
+}

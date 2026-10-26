@@ -13,11 +13,12 @@ use access_store::testing::fresh;
 use sqlx::{Connection, PgConnection, Row};
 
 const SCOPE_COLUMNS: [&str; 2] = ["domain_id", "tenant_id"];
-const APPEND_ONLY: [&str; 4] = [
+const APPEND_ONLY: [&str; 5] = [
     "authority_log",
     "authority_nonce",
     "authority_outbox",
     "proof_store",
+    "identity_outbox",
 ];
 
 async fn admin() -> PgConnection {
@@ -41,7 +42,7 @@ async fn every_table_has_forced_row_level_security_and_a_restrictive_scope_polic
     let bad = strings(
         &mut c,
         "SELECT c.relname::text FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-          WHERE n.nspname = 'access' AND c.relkind IN ('r', 'p')
+          WHERE n.nspname IN ('access', 'access_ops') AND c.relkind IN ('r', 'p')
             AND (NOT c.relrowsecurity OR NOT c.relforcerowsecurity
                  OR NOT EXISTS (SELECT FROM pg_policy p WHERE p.polrelid = c.oid AND NOT p.polpermissive))",
     )
@@ -55,10 +56,10 @@ async fn the_migrator_owns_everything_and_no_role_bypasses_rls() {
     let owners = strings(
         &mut c,
         "SELECT c.relname::text FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-          WHERE n.nspname = 'access' AND pg_get_userbyid(c.relowner) <> 'access_migrator'
+          WHERE n.nspname IN ('access', 'access_ops') AND pg_get_userbyid(c.relowner) <> 'access_migrator'
          UNION ALL
          SELECT p.proname::text FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
-          WHERE n.nspname = 'access' AND pg_get_userbyid(p.proowner) <> 'access_migrator'",
+          WHERE n.nspname IN ('access', 'access_ops') AND pg_get_userbyid(p.proowner) <> 'access_migrator'",
     )
     .await;
     assert!(owners.is_empty(), "{owners:?}");
@@ -80,7 +81,7 @@ async fn primary_keys_and_foreign_keys_start_with_the_scope_column() {
            JOIN pg_class c ON c.oid = con.conrelid
            JOIN pg_namespace n ON n.oid = c.relnamespace
            JOIN pg_attribute a ON a.attrelid = con.conrelid AND a.attnum = con.conkey[1]
-          WHERE n.nspname = 'access' AND con.contype IN ('p', 'f', 'u')",
+          WHERE n.nspname = 'access' AND con.contype IN ('p', 'f', 'u')  -- scope columns: tenant and domain tables only",
     )
     .fetch_all(&mut c)
     .await
@@ -99,14 +100,14 @@ async fn no_unlogged_tables_and_no_unpinned_security_definer() {
     let unlogged = strings(
         &mut c,
         "SELECT c.relname::text FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-          WHERE n.nspname = 'access' AND c.relpersistence = 'u'",
+          WHERE n.nspname IN ('access', 'access_ops') AND c.relpersistence = 'u'",
     )
     .await;
     assert!(unlogged.is_empty(), "{unlogged:?}");
     let definer = strings(
         &mut c,
         "SELECT p.proname::text FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
-          WHERE n.nspname = 'access'
+          WHERE n.nspname IN ('access', 'access_ops')
             AND NOT EXISTS (SELECT FROM unnest(coalesce(p.proconfig, '{}')) s WHERE s LIKE 'search\\_path=%')",
     )
     .await;
@@ -122,14 +123,14 @@ async fn append_only_tables_grant_no_change_and_carry_both_triggers() {
            FROM information_schema.role_table_grants
           WHERE table_schema = 'access' AND grantee <> 'access_migrator'
             AND privilege_type IN ('UPDATE', 'DELETE', 'TRUNCATE')
-            AND table_name = ANY (ARRAY['authority_log', 'authority_nonce', 'authority_outbox', 'proof_store'])",
+            AND table_name = ANY (ARRAY['authority_log', 'authority_nonce', 'authority_outbox', 'proof_store', 'identity_outbox'])",
     )
     .await;
     assert!(grants.is_empty(), "{grants:?}");
     let deletes = strings(
         &mut c,
         "SELECT table_name::text || ' ' || grantee::text FROM information_schema.role_table_grants
-          WHERE table_schema = 'access' AND grantee <> 'access_migrator' AND privilege_type IN ('DELETE', 'TRUNCATE')",
+          WHERE table_schema IN ('access', 'access_ops') AND grantee <> 'access_migrator' AND privilege_type IN ('DELETE', 'TRUNCATE')",
     )
     .await;
     assert!(deletes.is_empty(), "OP-73: {deletes:?}");

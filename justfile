@@ -24,6 +24,10 @@ pg-up:
 pg-down:
     scripts/pg-local.sh down
 
+# OQ-MD3, OP-131: failover and logical-decoding scenarios on a local primary and standby
+oq-md3:
+    scripts/oq-md3.sh
+
 # OP-66: refresh the committed .sqlx query metadata against a freshly migrated database
 sqlx-prepare:
     #!/usr/bin/env bash

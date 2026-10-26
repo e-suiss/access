@@ -36,6 +36,8 @@ pub struct TestDb {
     pub sequencer: PgPool,
     /// Logged in as a member of `access_migrator`, the table owner.
     pub owner: PgPool,
+    /// Logged in as a member of `access_outbox_reader`.
+    pub reader: PgPool,
     /// The administrator connection options, for schema checks only.
     pub admin: PgConnectOptions,
 }
@@ -88,11 +90,8 @@ fn unique_name() -> String {
     )
 }
 
-async fn build_template(
-    c: &mut PgConnection,
-    admin: &PgConnectOptions,
-    template: &str,
-) -> Result<(), TestDbError> {
+/// Cluster roles and the test logins, every run: logins are not part of the template.
+async fn ensure_roles(c: &mut PgConnection) -> Result<(), TestDbError> {
     c.execute(super::BOOTSTRAP_ROLES)
         .await
         .at("bootstrap roles")?;
@@ -100,6 +99,7 @@ async fn build_template(
         ("access_test_app", "access_app"),
         ("access_test_sequencer", "access_sequencer"),
         ("access_test_migrator", "access_migrator"),
+        ("access_test_reader", "access_outbox_reader"),
     ] {
         let sql = format!(
             "DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '{login}') THEN \
@@ -107,6 +107,14 @@ async fn build_template(
         );
         exec(c, sql, "test login role").await?;
     }
+    Ok(())
+}
+
+async fn build_template(
+    c: &mut PgConnection,
+    admin: &PgConnectOptions,
+    template: &str,
+) -> Result<(), TestDbError> {
     let building = format!("{template}_building");
     exec(
         c,
@@ -144,7 +152,10 @@ async fn ensure_template(admin: &PgConnectOptions, template: &str) -> Result<(),
             .fetch_one(&mut c)
             .await
             .at("template lookup")?;
-    let built = if exists {
+    let roles = ensure_roles(&mut c).await;
+    let built = if roles.is_err() {
+        roles
+    } else if exists {
         Ok(())
     } else {
         build_template(&mut c, admin, template).await
@@ -192,6 +203,7 @@ pub async fn fresh() -> Result<TestDb, TestDbError> {
         app: pool(&admin, &name, "access_test_app").await?,
         sequencer: pool(&admin, &name, "access_test_sequencer").await?,
         owner: pool(&admin, &name, "access_test_migrator").await?,
+        reader: pool(&admin, &name, "access_test_reader").await?,
         admin: admin.database(&name),
         name,
     })
