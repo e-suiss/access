@@ -3,6 +3,19 @@
 version = 4
 
 [[package]]
+name = "access-authority-sequencer"
+version = "0.0.0"
+dependencies = [
+ "access-crypto",
+ "access-store",
+ "esuiss-access-kernel",
+ "esuiss-crypto",
+ "esuiss-ledger",
+ "thiserror",
+ "tokio",
+]
+
+[[package]]
 name = "access-crypto"
 version = "0.0.0"
 dependencies = [

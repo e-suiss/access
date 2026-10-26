@@ -1,0 +1,67 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT pos, idx, event_id, event FROM access.authority_outbox\n          WHERE domain_id = $1 AND (pos, idx) > ($2, $3) ORDER BY pos, idx LIMIT $4",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "pos",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.authority_outbox",
+            "name": "pos"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "idx",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "access.authority_outbox",
+            "name": "idx"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "event_id",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.authority_outbox",
+            "name": "event_id"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "event",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.authority_outbox",
+            "name": "event"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Int8",
+        "Int4",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "587460e3887a56de3d5b457f282e74b3635bbcf2cd327c8f8c4b516b82bec9e1"
+}

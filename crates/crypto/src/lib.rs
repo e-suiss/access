@@ -2,6 +2,7 @@
 
 pub mod backend;
 pub mod dit;
+pub mod event_id;
 pub mod secret;
 
 pub use backend::AwsLcBackend;

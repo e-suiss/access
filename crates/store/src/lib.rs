@@ -2,6 +2,10 @@
 //! All SQL of the workspace lives in this crate.
 
 pub mod authority;
+
+/// The connection pool type, so other crates need no driver dependency (OP-66 m.2).
+pub use sqlx::PgPool as Pool;
+
 pub mod identity;
 pub mod scope;
 

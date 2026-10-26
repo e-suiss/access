@@ -85,7 +85,7 @@ fn allowed_targets(from: Class) -> Option<&'static [Class]> {
         // OP-93
         Proto | Telemetry => &[Kernel],
         Parse | Crypto | Store | Bindings | InternalApi => &[Kernel, Proto],
-        // INV-12, SEC19
+        // INV-12, SEC19; OP-130 m.1: the shared Suiss crates
         Authority => &[
             Kernel,
             Proto,
@@ -94,6 +94,8 @@ fn allowed_targets(from: Class) -> Option<&'static [Class]> {
             Store,
             InternalApi,
             Telemetry,
+            Suiss,
+            SuissLedger,
             Authority,
         ],
         Identity => &[
@@ -104,6 +106,8 @@ fn allowed_targets(from: Class) -> Option<&'static [Class]> {
             Store,
             InternalApi,
             Telemetry,
+            Suiss,
+            SuissLedger,
             Identity,
         ],
         // B21, B22, E24

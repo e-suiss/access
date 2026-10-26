@@ -472,3 +472,38 @@ pub async fn find_nonce(
     })
     .transpose()
 }
+
+/// Outbox events after `(pos, idx)`, in order, up to `limit`. The authority cursor is
+/// `(domain_id, pos, idx)`: positions are gapless and in commit order (OP-20, T26).
+///
+/// # Errors
+/// [`StoreError`].
+pub async fn read_outbox(
+    pool: &PgPool,
+    domain: &DomainId,
+    after: (u64, u32),
+    limit: u32,
+) -> Result<Vec<OutboxRow>, StoreError> {
+    let mut t = DomainTx::begin(pool, domain).await?;
+    let rows = sqlx::query!(
+        "SELECT pos, idx, event_id, event FROM access.authority_outbox
+          WHERE domain_id = $1 AND (pos, idx) > ($2, $3) ORDER BY pos, idx LIMIT $4",
+        domain.as_bytes().as_slice(),
+        signed(after.0)?,
+        i32::try_from(after.1).map_err(|_| StoreError::Range)?,
+        i64::from(limit),
+    )
+    .fetch_all(&mut *t.tx)
+    .await?;
+    t.commit().await?;
+    rows.into_iter()
+        .map(|r| {
+            Ok(OutboxRow {
+                pos: unsigned(r.pos)?,
+                idx: u32::try_from(r.idx).map_err(|_| StoreError::Corrupt)?,
+                event_id: hash(r.event_id)?,
+                event: r.event,
+            })
+        })
+        .collect()
+}
