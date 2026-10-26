@@ -53,6 +53,16 @@ pub enum ConnectError {
     /// The connection is not encrypted.
     #[error("the connection does not use TLS")]
     NoTls,
+    /// A commit may be acknowledged before it is durable (U51, OP-24).
+    #[error(
+        "synchronous_commit is {commit} with standbys {standbys:?}; commits must wait for durability"
+    )]
+    Durability {
+        /// `synchronous_commit`.
+        commit: String,
+        /// `synchronous_standby_names`.
+        standbys: String,
+    },
     /// The pools would take more than their share of `max_connections`.
     #[error(
         "pools need {need} connections, more than {POOL_SHARE_PERCENT}% of max_connections ({max})"
@@ -113,17 +123,33 @@ pub const fn fits(pools: u32, max_connections: u32) -> bool {
         <= (max_connections as u64).saturating_mul(POOL_SHARE_PERCENT as u64)
 }
 
+/// How the deployment declares its durability (OP-24, OP-48).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Durability {
+    /// Synchronous standbys required (`synchronous_standby_names` set).
+    Replicated,
+    /// The small-provider `durability: single-node` declaration (HL-40).
+    SingleNode,
+}
+
 /// Checks the server before the process serves anything (OP-52): version, SCRAM, TLS on this
-/// connection, and room for `pools` connections.
+/// connection, durable commits as declared, and room for `pools` connections.
 ///
 /// # Errors
 /// [`ConnectError`].
-pub async fn check_server(pool: &PgPool, pools: u32, require_tls: bool) -> Result<(), StoreError> {
+pub async fn check_server(
+    pool: &PgPool,
+    pools: u32,
+    require_tls: bool,
+    durability: Durability,
+) -> Result<(), StoreError> {
     let row = sqlx::query!(
         r#"SELECT current_setting('server_version_num')::int AS "version!",
                   current_setting('password_encryption') AS "scram!",
                   current_setting('max_connections')::int AS "max!",
-                  coalesce((SELECT ssl FROM pg_stat_ssl WHERE pid = pg_backend_pid()), false) AS "tls!""#
+                  coalesce((SELECT ssl FROM pg_stat_ssl WHERE pid = pg_backend_pid()), false) AS "tls!",
+                  current_setting('synchronous_commit') AS "commit!",
+                  current_setting('synchronous_standby_names') AS "standbys!""#
     )
     .fetch_one(pool)
     .await?;
@@ -136,6 +162,14 @@ pub async fn check_server(pool: &PgPool, pools: u32, require_tls: bool) -> Resul
     }
     if require_tls && !row.tls {
         return Err(fail(ConnectError::NoTls));
+    }
+    // U51, OP-24: `on` waits for the standbys named; `local` or `off` acknowledge early
+    let standbys_ok = durability == Durability::SingleNode || !row.standbys.trim().is_empty();
+    if !matches!(row.commit.as_str(), "on" | "remote_apply") || !standbys_ok {
+        return Err(fail(ConnectError::Durability {
+            commit: row.commit,
+            standbys: row.standbys,
+        }));
     }
     let max = u32::try_from(row.max).map_err(|_| StoreError::Corrupt)?;
     if !fits(pools, max) {

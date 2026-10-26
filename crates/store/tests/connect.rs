@@ -9,7 +9,7 @@
 use std::path::Path;
 
 use access_store::StoreError;
-use access_store::connect::{Target, check_server, fits, options, supported};
+use access_store::connect::{Durability, Target, check_server, fits, options, supported};
 use access_store::testing::fresh;
 use sqlx::postgres::PgSslMode;
 
@@ -39,11 +39,13 @@ fn version_and_pool_limits() {
 #[tokio::test]
 async fn the_server_check_refuses_an_unencrypted_connection() {
     let db = fresh().await.unwrap();
-    check_server(&db.app, 8, false).await.unwrap();
-    assert!(
-        matches!(check_server(&db.app, 8, true).await, Err(StoreError::Unsafe(m)) if m.contains("TLS"))
-    );
-    assert!(
-        matches!(check_server(&db.app, 100_000, false).await, Err(StoreError::Unsafe(m)) if m.contains("max_connections"))
-    );
+    let single = Durability::SingleNode;
+    check_server(&db.app, 8, false, single).await.unwrap();
+    let tls = check_server(&db.app, 8, true, single).await;
+    assert!(matches!(tls, Err(StoreError::Unsafe(m)) if m.contains("TLS")));
+    let pools = check_server(&db.app, 100_000, false, single).await;
+    assert!(matches!(pools, Err(StoreError::Unsafe(m)) if m.contains("max_connections")));
+    // U51: the test servers have no synchronous standby, so a replicated deployment is refused
+    let replicated = check_server(&db.app, 8, false, Durability::Replicated).await;
+    assert!(matches!(replicated, Err(StoreError::Unsafe(m)) if m.contains("synchronous_commit")));
 }

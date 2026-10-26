@@ -435,6 +435,103 @@ pub(crate) fn check_delete(root: &Path) -> Result<Vec<Violation>, String> {
     Ok(out)
 }
 
+const MIGRATION: &str = "migration-hygiene";
+
+/// Words a migration never contains (OP-11, OP-16, OP-19, OP-55, §12.1.3 rules 9, 14).
+const MIGRATION_BANS: &[(&str, &str)] = &[
+    (
+        "GEN_RANDOM_UUID",
+        "internal ids are uuidv7() (§12.1.3 rule 14)",
+    ),
+    (
+        "UNLOGGED",
+        "canonical and SYNC-DERIVED data is never UNLOGGED (OP-16)",
+    ),
+    ("LISTEN", "LISTEN/NOTIFY is not a carrier (OP-19)"),
+    ("NOTIFY", "LISTEN/NOTIFY is not a carrier (OP-19)"),
+];
+
+/// Findings in one migration: banned words, and any role switch other than the migration's
+/// own `SET LOCAL ROLE access_migrator` / `RESET ROLE`.
+pub(crate) fn migration_findings(sql: &str) -> Vec<(usize, String)> {
+    let upper = sql.to_ascii_uppercase();
+    let words: Vec<(usize, &str)> = upper
+        .match_indices(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
+        .scan(0, |start, (at, sep)| {
+            let w = (*start, upper.get(*start..at).unwrap_or_default());
+            *start = at.saturating_add(sep.len());
+            Some(w)
+        })
+        .filter(|(_, w)| !w.is_empty())
+        .collect();
+    let mut out = Vec::new();
+    for (k, &(at, w)) in words.iter().enumerate() {
+        if let Some((_, why)) = MIGRATION_BANS.iter().find(|(b, _)| *b == w) {
+            out.push((at, format!("`{w}`: {why}")));
+        }
+        let next = |n: usize| words.get(k.saturating_add(n)).map(|&(_, x)| x);
+        if w == "SET" {
+            let role_at = match next(1) {
+                Some("ROLE") => Some(2),
+                Some("LOCAL" | "SESSION") if next(2) == Some("ROLE") => Some(3),
+                _ => None,
+            };
+            if let Some(r) = role_at {
+                let allowed = next(1) == Some("LOCAL") && next(r) == Some("ACCESS_MIGRATOR");
+                if !allowed {
+                    out.push((
+                        at,
+                        "role switch: only `SET LOCAL ROLE access_migrator` (§12.1.3 rule 9)"
+                            .to_owned(),
+                    ));
+                }
+            }
+        }
+    }
+    out
+}
+
+pub(crate) fn check_migrations(root: &Path) -> Result<Vec<Violation>, String> {
+    let mut out = Vec::new();
+    for path in walk(root)? {
+        let rel_path = rel(root, &path);
+        if rel_path.starts_with("crates/store/migrations/") {
+            if rel_path.ends_with(".down.sql") {
+                out.push(violation(
+                    MIGRATION,
+                    &rel_path,
+                    1,
+                    "no down migrations; rollback is PITR (OP-55)".to_owned(),
+                ));
+            }
+            if path.extension().and_then(|e| e.to_str()) == Some("sql") {
+                let sql = strip_sql_comments(&read(&path)?);
+                for (at, msg) in migration_findings(&sql) {
+                    out.push(violation(MIGRATION, &rel_path, line_at(&sql, at), msg));
+                }
+            }
+        } else if rel_path.starts_with("crates/store/src/")
+            && rel_path != "crates/store/src/testing.rs"
+            && path.extension().and_then(|e| e.to_str()) == Some("rs")
+        {
+            let lexed = lex(&read(&path)?);
+            for lit in &lexed.strings {
+                if lit.text.to_ascii_uppercase().contains("SET ROLE")
+                    || lit.text.to_ascii_uppercase().contains("LOCAL ROLE")
+                {
+                    out.push(violation(
+                        MIGRATION,
+                        &rel_path,
+                        lit.line,
+                        "tenants are never switched with SET ROLE (§12.1.3 rule 9)".to_owned(),
+                    ));
+                }
+            }
+        }
+    }
+    Ok(out)
+}
+
 const TODO: &str = "todo-has-issue";
 
 /// True if a to-do comment names its issue: `#123` or an issue URL.
@@ -755,6 +852,23 @@ mod tests {
             vec![]
         );
         assert_eq!(delete_findings("DELETE FROM accounts", &allow).len(), 1);
+    }
+
+    // OP-11, OP-16, OP-19, §12.1.3 rules 9, 14
+    #[test]
+    fn migrations_keep_their_hygiene() {
+        let ok = "SET LOCAL ROLE access_migrator;\nCREATE TABLE a (id uuid DEFAULT uuidv7());\nRESET ROLE;";
+        assert_eq!(migration_findings(ok), vec![]);
+        for bad in [
+            "CREATE TABLE a (id uuid DEFAULT gen_random_uuid());",
+            "CREATE UNLOGGED TABLE a (x int);",
+            "NOTIFY changes;",
+            "SET ROLE access_app;",
+            "SET LOCAL ROLE access_app;",
+            "SET SESSION ROLE postgres;",
+        ] {
+            assert_eq!(migration_findings(bad).len(), 1, "{bad}");
+        }
     }
 
     // OP-17, OP-73

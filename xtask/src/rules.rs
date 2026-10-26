@@ -41,6 +41,10 @@ pub(crate) fn checks() -> Vec<Check> {
             run: source::check_delete,
         },
         Check {
+            name: "migration-hygiene",
+            run: source::check_migrations,
+        },
+        Check {
             name: "no-dev-mode",
             run: switches::check,
         },

@@ -118,6 +118,10 @@ deny = [
     { crate = "diesel@<2.3.8", reason = "OP-5: RUSTSEC-2026-0136" },
     # OP-4, SA-22
     { crate = "io-uring", reason = "SA-22" },
+    { crate = "rusqlite", reason = "OP-48: no SQLite for authority, none in HA" },
+    { crate = "libsqlite3-sys", reason = "OP-48: no SQLite for authority, none in HA" },
+    { crate = "sqlx-sqlite", reason = "OP-48: no SQLite for authority, none in HA" },
+    { crate = "sqlx-mysql", reason = "OP-7: PostgreSQL only" },
     { crate = "tokio-uring", reason = "SA-22" },
     { crate = "rio", reason = "SA-22" },
     { crate = "glommio", reason = "SA-22" },

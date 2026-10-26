@@ -1,0 +1,56 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT current_setting('server_version_num')::int AS \"version!\",\n                  current_setting('password_encryption') AS \"scram!\",\n                  current_setting('max_connections')::int AS \"max!\",\n                  coalesce((SELECT ssl FROM pg_stat_ssl WHERE pid = pg_backend_pid()), false) AS \"tls!\",\n                  current_setting('synchronous_commit') AS \"commit!\",\n                  current_setting('synchronous_standby_names') AS \"standbys!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "version!",
+        "type_info": "Int4",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "scram!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "max!",
+        "type_info": "Int4",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 3,
+        "name": "tls!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 4,
+        "name": "commit!",
+        "type_info": "Text",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 5,
+        "name": "standbys!",
+        "type_info": "Text",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "3c7229be8c99138f469913c4c04637c7ee86aa11515f4a0a836dc365780fcb81"
+}
