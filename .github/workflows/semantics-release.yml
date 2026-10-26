@@ -107,8 +107,8 @@ jobs:
           mkdir -p dist
           core="$(python3 -I -c 'import runpy, sys; print(runpy.run_path(sys.argv[1])["CORE_VERSION"])' conformance/reference/f0/f0/version.py)"
           # git archive is deterministic for a commit; gzip -n drops the timestamp
-          git archive --format=tar --prefix="access-f0-$TAG/" "$GITHUB_SHA" \
-            conformance/reference/f0 LICENSE | gzip -n -9 > "dist/access-f0-$TAG.tar.gz"
+          git archive --format=tar --prefix="access-$TAG/" "$GITHUB_SHA" \
+            conformance/reference/f0 LICENSE | gzip -n -9 > "dist/access-$TAG.tar.gz"
           git archive --format=tar --prefix="access-vectors-$TAG/" "$GITHUB_SHA" \
             conformance/vectors conformance/cddl conformance/README.md LICENSE | gzip -n -9 > "dist/access-vectors-core-$core-$TAG.tar.gz"
           (cd dist && sha256sum -- *.tar.gz > SHA256SUMS)
