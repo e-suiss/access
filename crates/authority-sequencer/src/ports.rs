@@ -31,3 +31,9 @@ pub trait DomainLog {
         batch: &CommitBatch,
     ) -> impl Future<Output = Result<(), SequencerError>> + Send;
 }
+
+/// Trusted time (OP-63, OP-129 m.1): never read from the system clock directly.
+pub trait Clock {
+    /// Trusted time in Unix milliseconds; an error means no commit.
+    fn now(&mut self) -> impl Future<Output = Result<u64, SequencerError>> + Send;
+}

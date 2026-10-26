@@ -507,3 +507,17 @@ pub async fn read_outbox(
         })
         .collect()
 }
+
+/// The canonical server's clock in Unix milliseconds, one of the trusted time sources
+/// (OP-129 m.1 (b)).
+///
+/// # Errors
+/// [`StoreError`].
+pub async fn server_time(pool: &PgPool) -> Result<u64, StoreError> {
+    let ms = sqlx::query_scalar!(
+        r#"SELECT (extract(epoch FROM clock_timestamp()) * 1000)::bigint AS "ms!""#
+    )
+    .fetch_one(pool)
+    .await?;
+    unsigned(ms)
+}

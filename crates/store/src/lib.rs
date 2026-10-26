@@ -7,6 +7,7 @@ pub mod authority;
 pub use sqlx::PgPool as Pool;
 
 pub mod identity;
+pub mod jobs;
 pub mod scope;
 
 #[cfg(feature = "testing")]

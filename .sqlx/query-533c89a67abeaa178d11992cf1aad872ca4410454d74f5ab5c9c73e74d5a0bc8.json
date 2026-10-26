@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access_ops.jobs SET done_at = now()\n          WHERE id = $1 AND claimed_by = $2 AND done_at IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "533c89a67abeaa178d11992cf1aad872ca4410454d74f5ab5c9c73e74d5a0bc8"
+}

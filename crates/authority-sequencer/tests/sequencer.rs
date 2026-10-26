@@ -216,3 +216,16 @@ async fn outbox_ids_are_keyed_per_domain_position_and_index() {
         assert_eq!(r.event_id, key().event_id(id.as_bytes(), r.pos, r.idx));
     }
 }
+
+// OP-129 m.1: the process and server clocks of a local cluster agree within U
+#[tokio::test]
+async fn trusted_time_from_two_sources() {
+    use access_authority_sequencer::adapters::SourcesClock;
+    use access_authority_sequencer::ports::Clock;
+    let db = fresh().await.unwrap();
+    let mut clock = SourcesClock::new(db.app.clone());
+    let a = clock.now().await.unwrap();
+    let b = clock.now().await.unwrap();
+    assert!(a > 1_700_000_000_000);
+    assert!(b + 250 >= a);
+}

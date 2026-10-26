@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access_ops.jobs (kind, subject, dedup_key, run_at)\n         VALUES ($1, $2, $3, now() + $4::bigint * interval '1 millisecond')\n         ON CONFLICT (dedup_key) DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "6b73064004a9ae772b06e19c06e79e203ea6468f9740019ac989e46055bbd39d"
+}

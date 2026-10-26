@@ -1,0 +1,66 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access_ops.jobs j\n            SET claimed_by = $1, claimed_until = now() + $3::bigint * interval '1 millisecond',\n                attempts = j.attempts + 1\n          WHERE j.id IN (\n                SELECT id FROM access_ops.jobs\n                 WHERE done_at IS NULL AND run_at <= now()\n                   AND (claimed_until IS NULL OR claimed_until < now())\n                 ORDER BY run_at, id\n                 LIMIT $2\n                 FOR UPDATE SKIP LOCKED)\n          RETURNING j.id, j.kind, j.subject, j.attempts",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access_ops.jobs",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "kind",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access_ops.jobs",
+            "name": "kind"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "subject",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access_ops.jobs",
+            "name": "subject"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "attempts",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "access_ops.jobs",
+            "name": "attempts"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "47ade28823c09d6ae04dd33fa61874c8c0922975f591428ab59bdd663c543782"
+}

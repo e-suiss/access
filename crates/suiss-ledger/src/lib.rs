@@ -10,6 +10,7 @@ extern crate alloc;
 
 pub mod merkle;
 pub mod sequencer;
+pub mod time;
 
 /// A SHA-256 output.
 pub type Hash = [u8; 32];

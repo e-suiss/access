@@ -10,6 +10,7 @@ use access_kernel::record::{LinkError, RecordError};
 use access_store::StoreError;
 use suiss_ledger::merkle::FrontierError;
 use suiss_ledger::sequencer::{OutcomeError, PlanError};
+use suiss_ledger::time::TimeError;
 
 /// Why a sequencer operation failed.
 #[derive(Debug, thiserror::Error)]
@@ -47,4 +48,7 @@ pub enum SequencerError {
     /// A Genesis record was offered to the log after position 0.
     #[error("genesis only at position 0")]
     Genesis,
+    /// No trusted time (TI-RT2): commit stops.
+    #[error("time: {0}")]
+    Time(#[from] TimeError),
 }

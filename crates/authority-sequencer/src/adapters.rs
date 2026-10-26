@@ -1,7 +1,8 @@
-//! PostgreSQL adapter of the [`DomainLog`] port, domain creation and chain verification.
+//! PostgreSQL adapters of the [`DomainLog`] and [`Clock`] ports, domain creation and chain
+//! verification.
 
 use std::collections::BTreeMap;
-use std::time::Duration;
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use access_kernel::codec::Canonical;
 use access_kernel::digest::Digest;
@@ -10,12 +11,13 @@ use access_kernel::record::{Header, Opened, RecordEnvelope, RecordKind, check_li
 use access_store::Pool;
 use access_store::authority::{
     CommitBatch, HeadRow, Lease, LogRecord, NonceRow, acquire_lease, commit_batch, create_domain,
-    find_nonce, read_log, release_lease, renew_lease,
+    find_nonce, read_log, release_lease, renew_lease, server_time,
 };
 use access_store::scope::DomainId;
+use suiss_ledger::time::{TimeError, TrustedClock};
 
 use crate::SequencerError;
-use crate::ports::DomainLog;
+use crate::ports::{Clock, DomainLog};
 
 /// One domain's log in PostgreSQL, used as `holder`.
 pub struct PgLog {
@@ -136,4 +138,38 @@ pub async fn verify_chain(
         previous = Some(core);
     }
     Ok(())
+}
+
+/// Trusted time from the process clock and the canonical server's clock (OP-129 m.1 (a), (b)),
+/// bounded by a monotonic clock.
+pub struct SourcesClock {
+    pool: Pool,
+    started: Instant,
+    combiner: TrustedClock,
+}
+
+impl SourcesClock {
+    /// Reads the system clock and `pool`'s server.
+    #[must_use]
+    pub fn new(pool: Pool) -> Self {
+        Self {
+            pool,
+            started: Instant::now(),
+            combiner: TrustedClock::default(),
+        }
+    }
+}
+
+impl Clock for SourcesClock {
+    async fn now(&mut self) -> Result<u64, SequencerError> {
+        let server = server_time(&self.pool).await?;
+        let system = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .ok()
+            .and_then(|d| u64::try_from(d.as_millis()).ok())
+            .ok_or(TimeError::TooFewSources)?;
+        let mono =
+            u64::try_from(self.started.elapsed().as_millis()).map_err(|_| TimeError::Monotonic)?;
+        Ok(self.combiner.read(&[system, server], mono)?)
+    }
 }
