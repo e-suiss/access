@@ -30,9 +30,26 @@ fn op_90_server_refuses_to_start_without_lockdown() {
             command.env_remove(key);
         }
     }
+    // CR-12: the server needs its TLS files before it reaches the lockdown
+    let dir = std::env::temp_dir().join(format!("access-server-lockdown-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("temp dir");
+    let cert =
+        rcgen::generate_simple_self_signed(vec!["localhost".to_owned()]).expect("certificate");
+    std::fs::write(dir.join("tls.crt"), cert.cert.pem()).expect("write cert");
+    std::fs::write(dir.join("tls.key"), cert.signing_key.serialize_pem()).expect("write key");
+    let config = dir.join("access.toml");
+    std::fs::write(
+        &config,
+        format!(
+            "[tls]\ncert_file = {:?}\nkey_file = {:?}\n",
+            dir.join("tls.crt"),
+            dir.join("tls.key")
+        ),
+    )
+    .expect("write config");
     let mut child = command
         .env("ACCESS_LISTEN", "127.0.0.1:0")
-        .env("ACCESS_CONFIG", "/nonexistent/access.toml")
+        .env("ACCESS_CONFIG", &config)
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .spawn()
@@ -53,7 +70,7 @@ fn op_90_server_refuses_to_start_without_lockdown() {
     let errors = String::from_utf8_lossy(&output.stderr);
     assert!(!status.success(), "exit status: {status}");
     assert!(
-        logs.contains("refusing to start"),
+        logs.contains("runtime lockdown failed; refusing to start"),
         "logs: {logs}\nstderr: {errors}"
     );
 }

@@ -4,6 +4,7 @@
 pub mod audit;
 pub mod authority;
 pub mod bodies;
+pub mod connect;
 
 /// The connection pool type, so other crates need no driver dependency (OP-66 m.2).
 pub use sqlx::PgPool as Pool;
@@ -55,4 +56,7 @@ pub enum StoreError {
     /// A stored row does not match the model.
     #[error("stored row is malformed")]
     Corrupt,
+    /// The database is not safe to use (OP-52); the process must not start.
+    #[error("unsafe database: {0}")]
+    Unsafe(String),
 }

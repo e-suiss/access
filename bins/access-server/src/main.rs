@@ -29,6 +29,15 @@ fn main() -> ExitCode {
         return ExitCode::FAILURE;
     }
 
+    // CR-12, OP-52: the TLS files are read before the lockdown closes the file system
+    let tls = match tls_config(&config) {
+        Ok(tls) => tls,
+        Err(error) => {
+            tracing::error!(%error, "TLS configuration unusable; refusing to start (OP-52)");
+            return ExitCode::FAILURE;
+        }
+    };
+
     // §14.5
     let listener = match std::net::TcpListener::bind(config.listen) {
         Ok(listener) => listener,
@@ -73,7 +82,7 @@ fn main() -> ExitCode {
         "runtime lockdown in force"
     );
 
-    match runtime.block_on(serve(&config, listener, &report)) {
+    match runtime.block_on(serve(&config, listener, tls, &report)) {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
             tracing::error!(%error, "server stopped with an error");
@@ -82,9 +91,20 @@ fn main() -> ExitCode {
     }
 }
 
+fn tls_config(config: &Config) -> Result<std::sync::Arc<access_http::tls::ServerConfig>, String> {
+    let tls = config.tls.as_ref().ok_or("no tls section")?;
+    let chain =
+        std::fs::read(&tls.cert_file).map_err(|e| format!("{}: {e}", tls.cert_file.display()))?;
+    let key = access_crypto::secret::Secret::new(
+        std::fs::read(&tls.key_file).map_err(|e| format!("{}: {e}", tls.key_file.display()))?,
+    );
+    access_http::tls::server_config(&chain, key.expose()).map_err(|e| e.to_string())
+}
+
 async fn serve(
     config: &Config,
     listener: std::net::TcpListener,
+    tls: std::sync::Arc<access_http::tls::ServerConfig>,
     report: &LockdownReport,
 ) -> std::io::Result<()> {
     let health = Health {
@@ -99,10 +119,8 @@ async fn serve(
     let app = router(config.security_txt(), health, Limits::default());
     listener.set_nonblocking(true)?;
     let listener = tokio::net::TcpListener::from_std(listener)?;
-    tracing::info!(listen = %config.listen, "access-server listening");
-    axum::serve(listener, app)
-        .with_graceful_shutdown(shutdown_signal())
-        .await
+    tracing::info!(listen = %config.listen, "access-server listening (TLS 1.3)");
+    access_http::tls::serve(listener, tls, app, shutdown_signal()).await
 }
 
 /// Resolves on SIGTERM (orchestrators, OP-50) or SIGINT. In-flight requests finish.

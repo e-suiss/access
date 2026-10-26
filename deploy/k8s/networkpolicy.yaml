@@ -21,7 +21,7 @@ spec:
             matchLabels:
               kubernetes.io/metadata.name: ingress
       ports:
-        - port: http
+        - port: https
           protocol: TCP
   egress:
     - to:

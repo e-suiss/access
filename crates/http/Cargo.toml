@@ -10,6 +10,12 @@ publish = false
 
 [dependencies]
 axum = { workspace = true, features = ["http1", "http2", "tokio", "json"] }
+hyper-util = { workspace = true, features = ["server-auto", "server-graceful", "service", "tokio"] }
+rustls = { workspace = true, features = ["aws_lc_rs", "prefer-post-quantum", "std"] }
+rustls-pki-types = { workspace = true, features = ["std"] }
+thiserror = { workspace = true, features = ["std"] }
+tokio = { workspace = true, features = ["net", "macros", "rt", "sync", "time"] }
+tokio-rustls = { workspace = true, features = ["aws_lc_rs"] }
 serde = { workspace = true, features = ["derive", "std"] }
 serde_json = { workspace = true, features = ["std"] }
 time = { workspace = true, features = ["std", "formatting", "macros"] }
@@ -19,7 +25,9 @@ tracing = { workspace = true, features = ["std"] }
 
 [dev-dependencies]
 http-body-util = { workspace = true }
-tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+rcgen = { workspace = true, features = ["aws_lc_rs", "pem"] }
+rustls = { workspace = true, features = ["aws_lc_rs", "std", "tls12"] }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "io-util"] }
 
 [lints]
 workspace = true

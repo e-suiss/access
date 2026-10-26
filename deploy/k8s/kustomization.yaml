@@ -5,6 +5,7 @@ namespace: access
 resources:
   - namespace.yaml
   - serviceaccount.yaml
+  - configmap.yaml
   - deployment.yaml
   - service.yaml
   - poddisruptionbudget.yaml

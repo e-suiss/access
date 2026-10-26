@@ -59,24 +59,31 @@ spec:
           image: ghcr.io/e-suiss/access@sha256:0000000000000000000000000000000000000000000000000000000000000000
           imagePullPolicy: IfNotPresent
           env:
-            # RAUTHY-008, §14.3
-            - name: ACCESS_LISTEN
-              value: "0.0.0.0:8080"
+            - name: ACCESS_CONFIG
+              value: /etc/access/access.toml
           ports:
-            - name: http
-              containerPort: 8080
+            - name: https
+              containerPort: 8443
               protocol: TCP
           # OP-50, OP-67
           startupProbe:
-            httpGet: { path: /healthz, port: http }
+            httpGet: { path: /healthz, port: https, scheme: HTTPS }
             periodSeconds: 2
             failureThreshold: 30
           livenessProbe:
-            httpGet: { path: /healthz, port: http }
+            httpGet: { path: /healthz, port: https, scheme: HTTPS }
             periodSeconds: 10
           readinessProbe:
-            httpGet: { path: /healthz, port: http }
+            httpGet: { path: /healthz, port: https, scheme: HTTPS }
             periodSeconds: 5
+          volumeMounts:
+            - name: config
+              mountPath: /etc/access
+              readOnly: true
+            # CR-12, OP-129 m.3: issued into tmpfs by the cert-manager CSI driver, no Secret object
+            - name: tls
+              mountPath: /run/tls
+              readOnly: true
           lifecycle:
             preStop:
               sleep:
@@ -98,3 +105,19 @@ spec:
               drop: [ALL]
             seccompProfile:
               type: RuntimeDefault
+      volumes:
+        - name: config
+          configMap:
+            name: access-server
+        - name: tls
+          csi:
+            driver: csi.cert-manager.io
+            readOnly: true
+            volumeAttributes:
+              csi.cert-manager.io/issuer-name: access-cell-ca
+              csi.cert-manager.io/issuer-kind: ClusterIssuer
+              csi.cert-manager.io/dns-names: access-server.access.svc,access-server.access.svc.cluster.local
+              csi.cert-manager.io/key-algorithm: ECDSA
+              csi.cert-manager.io/fs-group: "65532"
+              csi.cert-manager.io/certificate-file: tls.crt
+              csi.cert-manager.io/privatekey-file: tls.key

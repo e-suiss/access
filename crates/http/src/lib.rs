@@ -2,6 +2,7 @@
 
 mod problem;
 mod security_txt;
+pub mod tls;
 
 use std::time::Duration;
 

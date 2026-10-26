@@ -66,6 +66,18 @@ criteria = "safe-to-deploy"
 version = "0.16.1"
 criteria = "safe-to-deploy"
 
+[[exemptions.asn1-rs]]
+version = "0.7.2"
+criteria = "safe-to-run"
+
+[[exemptions.asn1-rs-derive]]
+version = "0.6.0"
+criteria = "safe-to-run"
+
+[[exemptions.asn1-rs-impl]]
+version = "0.2.0"
+criteria = "safe-to-run"
+
 [[exemptions.async-recursion]]
 version = "1.2.0"
 criteria = "safe-to-deploy"
@@ -258,6 +270,10 @@ criteria = "safe-to-deploy"
 version = "0.24.1"
 criteria = "safe-to-deploy"
 
+[[exemptions.data-encoding]]
+version = "2.11.1"
+criteria = "safe-to-run"
+
 [[exemptions.defmt]]
 version = "1.2.0"
 criteria = "safe-to-deploy"
@@ -273,6 +289,10 @@ criteria = "safe-to-deploy"
 [[exemptions.der]]
 version = "0.8.2"
 criteria = "safe-to-deploy"
+
+[[exemptions.der-parser]]
+version = "10.0.0"
+criteria = "safe-to-run"
 
 [[exemptions.derive_more]]
 version = "2.1.1"
@@ -434,10 +454,6 @@ criteria = "safe-to-deploy"
 version = "0.2.2"
 criteria = "safe-to-deploy"
 
-[[exemptions.getrandom]]
-version = "0.4.3"
-criteria = "safe-to-deploy"
-
 [[exemptions.glob]]
 version = "0.3.4"
 criteria = "safe-to-deploy"
@@ -472,10 +488,6 @@ criteria = "safe-to-deploy"
 
 [[exemptions.hashbrown]]
 version = "0.14.2"
-criteria = "safe-to-deploy"
-
-[[exemptions.hashbrown]]
-version = "0.17.1"
 criteria = "safe-to-deploy"
 
 [[exemptions.hashlink]]
@@ -699,6 +711,10 @@ version = "0.12.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.num-bigint]]
+version = "0.4.8"
+criteria = "safe-to-run"
+
+[[exemptions.num-bigint]]
 version = "0.5.1"
 criteria = "safe-to-deploy"
 
@@ -709,6 +725,10 @@ criteria = "safe-to-deploy"
 [[exemptions.object]]
 version = "0.39.1"
 criteria = "safe-to-deploy"
+
+[[exemptions.oid-registry]]
+version = "0.8.1"
+criteria = "safe-to-run"
 
 [[exemptions.once_cell]]
 version = "1.21.4"
@@ -733,6 +753,10 @@ criteria = "safe-to-deploy"
 [[exemptions.pear_codegen]]
 version = "0.2.9"
 criteria = "safe-to-deploy"
+
+[[exemptions.pem]]
+version = "4.0.0"
+criteria = "safe-to-run"
 
 [[exemptions.petgraph]]
 version = "0.7.1"
@@ -814,6 +838,10 @@ criteria = "safe-to-run"
 version = "4.5.1"
 criteria = "safe-to-run"
 
+[[exemptions.rcgen]]
+version = "0.14.10"
+criteria = "safe-to-run"
+
 [[exemptions.redox_syscall]]
 version = "0.5.18"
 criteria = "safe-to-deploy"
@@ -857,6 +885,10 @@ criteria = "safe-to-deploy"
 [[exemptions.rustc-literal-escaper]]
 version = "0.0.8"
 criteria = "safe-to-deploy"
+
+[[exemptions.rusticata-macros]]
+version = "4.1.0"
+criteria = "safe-to-run"
 
 [[exemptions.rustix]]
 version = "1.1.5"
@@ -1090,6 +1122,10 @@ criteria = "safe-to-deploy"
 version = "2.7.2"
 criteria = "safe-to-deploy"
 
+[[exemptions.tokio-rustls]]
+version = "0.26.6"
+criteria = "safe-to-deploy"
+
 [[exemptions.tokio-stream]]
 version = "0.1.19"
 criteria = "safe-to-deploy"
@@ -1318,9 +1354,17 @@ criteria = "safe-to-deploy"
 version = "0.6.4"
 criteria = "safe-to-deploy"
 
+[[exemptions.x509-parser]]
+version = "0.18.1"
+criteria = "safe-to-run"
+
 [[exemptions.yansi]]
 version = "1.0.1"
 criteria = "safe-to-deploy"
+
+[[exemptions.yasna]]
+version = "0.6.0"
+criteria = "safe-to-run"
 
 [[exemptions.yoke]]
 version = "0.8.4"

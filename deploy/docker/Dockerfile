@@ -27,5 +27,5 @@ LABEL org.opencontainers.image.title="access-server" \
 COPY --from=builder /src/target/release/access-server /usr/local/bin/access-server
 # §14.5, RAUTHY-008
 USER 65532:65532
-EXPOSE 8080
+EXPOSE 8443
 ENTRYPOINT ["/usr/local/bin/access-server"]

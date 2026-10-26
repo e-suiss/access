@@ -1,0 +1,14 @@
+# OP-63 rule 4, CR-12, OP-129 m.3: process settings only; no secret lives here
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: access-server
+  labels:
+    app.kubernetes.io/name: access-server
+data:
+  access.toml: |
+    listen = "0.0.0.0:8443"
+
+    [tls]
+    cert_file = "/run/tls/tls.crt"
+    key_file = "/run/tls/tls.key"
