@@ -1,0 +1,69 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT size, root, frontier, xid::text::bigint AS \"xid!\", id\n             FROM access_ops.audit_checkpoint ORDER BY size DESC LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "size",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access_ops.audit_checkpoint",
+            "name": "size"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "root",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access_ops.audit_checkpoint",
+            "name": "root"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "frontier",
+        "type_info": "ByteaArray",
+        "origin": {
+          "Table": {
+            "table": "access_ops.audit_checkpoint",
+            "name": "frontier"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "xid!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 4,
+        "name": "id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access_ops.audit_checkpoint",
+            "name": "id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      null,
+      false
+    ]
+  },
+  "hash": "e3579a7dbd1e0835f70cb7d64d2dcb8dc7f4d44f08ed23930bb8868baf4291c0"
+}

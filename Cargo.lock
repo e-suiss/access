@@ -45,6 +45,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "access-identity-audit"
+version = "0.0.0"
+dependencies = [
+ "access-store",
+ "esuiss-access-kernel",
+ "esuiss-crypto",
+ "esuiss-ledger",
+ "thiserror",
+ "tokio",
+]
+
+[[package]]
 name = "access-kernel-uniffi"
 version = "0.0.0"
 dependencies = [

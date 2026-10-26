@@ -1,0 +1,116 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT tenant_id, realm_id, (extract(epoch FROM at) * 1000)::bigint AS \"at_ms!\", id,\n                  xid::text::bigint AS \"xid!\", event_type, actor, target, correlation\n             FROM access.identity_audit\n            WHERE xid < pg_snapshot_xmin(pg_current_snapshot())\n              AND (xid, id) > ($1::bigint::text::xid8, $2)\n            ORDER BY xid, id\n            LIMIT $3",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "tenant_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.identity_audit",
+            "name": "tenant_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "realm_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.identity_audit",
+            "name": "realm_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "at_ms!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 3,
+        "name": "id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.identity_audit",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "xid!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 5,
+        "name": "event_type",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.identity_audit",
+            "name": "event_type"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "actor",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.identity_audit",
+            "name": "actor"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "target",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.identity_audit",
+            "name": "target"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "correlation",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.identity_audit",
+            "name": "correlation"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      null,
+      false,
+      null,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "196f8d1ae63349703e28468fbc3a8184faa11602fc5828c51cd72afca938b21c"
+}

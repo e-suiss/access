@@ -40,6 +40,10 @@ pub struct TestDb {
     pub reader: PgPool,
     /// Logged in as a member of `access_router`.
     pub router: PgPool,
+    /// Logged in as a member of `access_checkpointer`.
+    pub checkpointer: PgPool,
+    /// Logged in as a member of `access_archive`.
+    pub archive: PgPool,
     /// The administrator connection options, for schema checks only.
     pub admin: PgConnectOptions,
 }
@@ -103,6 +107,8 @@ async fn ensure_roles(c: &mut PgConnection) -> Result<(), TestDbError> {
         ("access_test_migrator", "access_migrator"),
         ("access_test_reader", "access_outbox_reader"),
         ("access_test_router", "access_router"),
+        ("access_test_checkpointer", "access_checkpointer"),
+        ("access_test_archive", "access_archive"),
     ] {
         let sql = format!(
             "DO $$ BEGIN IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '{login}') THEN \
@@ -208,6 +214,8 @@ pub async fn fresh() -> Result<TestDb, TestDbError> {
         owner: pool(&admin, &name, "access_test_migrator").await?,
         reader: pool(&admin, &name, "access_test_reader").await?,
         router: pool(&admin, &name, "access_test_router").await?,
+        checkpointer: pool(&admin, &name, "access_test_checkpointer").await?,
+        archive: pool(&admin, &name, "access_test_archive").await?,
         admin: admin.database(&name),
         name,
     })

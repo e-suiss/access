@@ -1,6 +1,7 @@
 //! PostgreSQL access for Access (OP-66, OP-130): migrations, row-level security and typed scope.
 //! All SQL of the workspace lives in this crate.
 
+pub mod audit;
 pub mod authority;
 
 /// The connection pool type, so other crates need no driver dependency (OP-66 m.2).

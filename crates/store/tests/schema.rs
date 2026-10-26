@@ -13,13 +13,15 @@ use access_store::testing::fresh;
 use sqlx::{Connection, PgConnection, Row};
 
 const SCOPE_COLUMNS: [&str; 2] = ["domain_id", "tenant_id"];
-const APPEND_ONLY: [&str; 6] = [
+const APPEND_ONLY: [&str; 8] = [
     "authority_log",
     "authority_nonce",
     "authority_outbox",
     "proof_store",
     "identity_outbox",
     "authority_single_use",
+    "identity_audit",
+    "audit_checkpoint",
 ];
 
 async fn admin() -> PgConnection {
@@ -122,9 +124,9 @@ async fn append_only_tables_grant_no_change_and_carry_both_triggers() {
         &mut c,
         "SELECT table_name::text || ' ' || grantee::text || ' ' || privilege_type::text
            FROM information_schema.role_table_grants
-          WHERE table_schema = 'access' AND grantee <> 'access_migrator'
+          WHERE table_schema IN ('access', 'access_ops') AND grantee <> 'access_migrator'
             AND privilege_type IN ('UPDATE', 'DELETE', 'TRUNCATE')
-            AND table_name = ANY (ARRAY['authority_log', 'authority_nonce', 'authority_outbox', 'proof_store', 'identity_outbox', 'authority_single_use'])",
+            AND table_name = ANY (ARRAY['authority_log', 'authority_nonce', 'authority_outbox', 'proof_store', 'identity_outbox', 'authority_single_use', 'identity_audit', 'audit_checkpoint'])",
     )
     .await;
     assert!(grants.is_empty(), "{grants:?}");

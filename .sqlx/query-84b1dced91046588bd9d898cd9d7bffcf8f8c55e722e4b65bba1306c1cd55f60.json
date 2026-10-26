@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access_ops.audit_checkpoint (size, root, frontier, xid, id)\n         VALUES ($1, $2, $3, $4::bigint::text::xid8, $5)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Bytea",
+        "ByteaArray",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "84b1dced91046588bd9d898cd9d7bffcf8f8c55e722e4b65bba1306c1cd55f60"
+}

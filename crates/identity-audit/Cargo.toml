@@ -1,0 +1,23 @@
+[package]
+name = "access-identity-audit"
+description = "Identity plane audit checkpoints: the audit log's Merkle tree, integrated off the request path (OP-37, OP-134)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+access-kernel = { workspace = true }
+access-store = { workspace = true }
+suiss-crypto = { workspace = true }
+suiss-ledger = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+access-store = { workspace = true, features = ["testing"] }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "time"] }
+
+[lints]
+workspace = true
