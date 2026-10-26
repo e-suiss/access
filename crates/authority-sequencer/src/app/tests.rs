@@ -126,13 +126,22 @@ impl DomainLog for MemLog {
 }
 
 fn item(tag: &str) -> Item {
-    let fields = BTreeMap::from([(
-        "note".to_owned(),
-        Opened {
-            value: Value::text(tag),
-            salt: [1; 32],
-        },
-    )]);
+    let fields = BTreeMap::from([
+        (
+            "note".to_owned(),
+            Opened {
+                value: Value::text(tag),
+                salt: [1; 32],
+            },
+        ),
+        (
+            "outcome".to_owned(),
+            Opened {
+                value: Value::Map(vec![(Value::text("outcome"), Value::text("deny"))]),
+                salt: [3; 32],
+            },
+        ),
+    ]);
     Item {
         draft: Draft {
             kind: RecordKind::Decision,

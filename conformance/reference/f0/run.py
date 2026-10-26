@@ -6,7 +6,7 @@ import tempfile
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
-from f0 import algebra, codec, dcbor, digest, ed25519, jose, merkle, record, sdjwt, validity, version_check
+from f0 import algebra, codec, dcbor, digest, ed25519, fold, jose, merkle, record, sdjwt, validity, version_check
 from f0.algebra import child_within_parent
 from f0.version import CORE_VERSION, VERSION
 from f0.codec import Rejection, decode_canonical, decode_canonical_authority, decode_subject_selector, encode
@@ -168,6 +168,15 @@ def run_record(case, document):
     }, None
 
 
+def run_record_fold(case, document):
+    try:
+        records = [record.decode_disclosure(bytes.fromhex(item), envelope=True) for item in case["records"]]
+        state = fold.fold(records)
+    except (record.RecordError, fold.FoldError) as error:
+        return {"rejection": error.args[0] if isinstance(error, fold.FoldError) else error.name}, None
+    return {"state": [[key.hex(), None if value is None else value.hex(), version] for key, (value, version) in sorted(state.items())]}, None
+
+
 def record_expected(case):
     if "record_disclosure" in case and "error" not in case:
         return {"leaf_hash": case["leaf_hash"], "included": True}
@@ -294,6 +303,7 @@ OPERATIONS = {
     "validity.check": (run_validity, ("valid", "error")),
     "codec.encode": (run_codec_encode, ("cbor",)),
     "record.envelope": (run_record, record_expected),
+    "record.fold": (run_record_fold, ("state", "rejection")),
     "version.check": (run_version_check, ("valid", "error", "track")),
     "algebra.meet": (run_algebra_meet, ("meet", "bottom", "rejection")),
     "digest.intent": (run_digest_intent, ("digest", "rejection")),

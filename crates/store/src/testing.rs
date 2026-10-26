@@ -212,3 +212,37 @@ pub async fn fresh() -> Result<TestDb, TestDbError> {
         name,
     })
 }
+
+impl TestDb {
+    /// Overwrites a stored state value as the table owner, to simulate a corruption no
+    /// application path can cause (§17.6.12 tests).
+    ///
+    /// # Errors
+    /// [`TestDbError::Db`].
+    pub async fn corrupt_state(
+        &self,
+        domain: &crate::scope::DomainId,
+        key: &[u8],
+        value: &[u8],
+    ) -> Result<(), TestDbError> {
+        let mut tx = self.owner.begin().await.at("begin")?;
+        tx.execute("SET LOCAL ROLE access_migrator")
+            .await
+            .at("role")?;
+        sqlx::query("SELECT set_config('app.domain_id', $1, true)")
+            .bind(domain.hex())
+            .execute(&mut *tx)
+            .await
+            .at("scope")?;
+        sqlx::query(
+            "UPDATE access.authority_state SET value = $1 WHERE domain_id = $2 AND key = $3",
+        )
+        .bind(value)
+        .bind(domain.as_bytes().as_slice())
+        .bind(key)
+        .execute(&mut *tx)
+        .await
+        .at("corrupt")?;
+        tx.commit().await.at("commit")
+    }
+}

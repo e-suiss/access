@@ -441,3 +441,36 @@ cose-verified = {
   kid: key-id,
   payload: bstr,
 }
+
+; ---------------------------------------------------------------- decision record fields (L2-REC-1)
+
+; The fields of a record of kind "decision". `effects` only with outcome "allow" (L2-REC-2); a
+; key appears in at most one effect of a record. State fold: L2-REC-3.
+decision-fields = {
+  outcome: decision,
+  state_basis: state-basis,
+  ? consumption: consumption,
+  ? effects: [+ state-effect],
+  versions: spec-versions,
+  nonce: bstr .size (1..64),
+  intent: digest,
+  ? proof_commit: [+ digest],
+  ? artifacts: [+ digest],
+  ? validity: validity-contract,
+}
+
+state-key = bstr .size (1..512)
+
+state-basis = {
+  at: uint,
+  reads: [* [key: state-key, version: uint]],
+}
+
+consumption = {
+  ? draws: [+ [key: state-key, amount: uint]],
+  ? single_use: [+ state-key],
+}
+
+; [key] removes the key; the encoding has no null (L0-ENC-2)
+state-effect = [key: state-key, ? value: any]
+

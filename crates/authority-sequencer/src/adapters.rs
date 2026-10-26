@@ -113,6 +113,41 @@ pub async fn create_genesis(
     Ok(domain)
 }
 
+/// The arbiter (§16.5, TI-16, L2-REC-3): folds the log from Genesis up to the head and
+/// compares the result with the stored state, key by key.
+///
+/// # Errors
+/// [`SequencerError::FoldDiverged`] when they differ; [`SequencerError`] otherwise.
+pub async fn fold_check(pool: &Pool, domain: Digest) -> Result<(), SequencerError> {
+    let id = DomainId::from_bytes(domain.0);
+    let head = access_store::authority::read_head(pool, &id).await?;
+    let mut records = Vec::new();
+    if head.pos > 0 {
+        for r in read_log(pool, &id, 1, head.pos).await? {
+            records.push(
+                RecordEnvelope::from_bytes(&r.envelope).map_err(|_| SequencerError::Diverged)?,
+            );
+        }
+    }
+    let folded = access_kernel::fold::fold(&records)?;
+    let stored = access_store::authority::state(pool, &id).await?;
+    let mut same = folded.len() == stored.len();
+    for ((key, entry), row) in folded.iter().zip(&stored) {
+        let value = entry
+            .value
+            .as_ref()
+            .map(|v| suiss_crypto::dcbor::encode(v, suiss_crypto::dcbor::Limits::CEILING))
+            .transpose()
+            .map_err(access_kernel::record::RecordError::from)?;
+        same &= *key == row.key && entry.version == row.version && value == row.value;
+    }
+    if same {
+        Ok(())
+    } else {
+        Err(SequencerError::FoldDiverged)
+    }
+}
+
 /// Checks that stored records `from..=to` chain to each other (TI-19, L0-ENC-27).
 ///
 /// # Errors

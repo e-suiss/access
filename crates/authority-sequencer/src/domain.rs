@@ -6,10 +6,12 @@ use std::collections::{BTreeMap, BTreeSet};
 use access_crypto::event_id::EventKey;
 use access_kernel::codec::Canonical;
 use access_kernel::digest::Digest;
+use access_kernel::fold;
 use access_kernel::record::{Header, Opened, RecordEnvelope, RecordError, RecordKind};
 use access_store::authority::{
     CommitBatch, Draw, HeadRow, LogRecord, NonceRow, OutboxRow, ProofRow,
 };
+use suiss_crypto::dcbor::{self, Limits};
 use suiss_ledger::Hash;
 use suiss_ledger::merkle::Frontier;
 use suiss_ledger::sequencer::{Batch, Entry, Head, Slot};
@@ -231,6 +233,7 @@ pub fn rows(
         writes: Vec::new(),
         draws: Vec::new(),
         single_use: Vec::new(),
+        effects: Vec::new(),
     };
     for (item, sealed) in items.iter().zip(&batch.records) {
         let pos = sealed.slot.pos;
@@ -270,6 +273,37 @@ pub fn rows(
         out.draws.extend(item.draws.iter().cloned());
         out.single_use
             .extend(item.single_use.iter().map(|k| (k.clone(), pos)));
+        // L2-REC-3: the effects come from the sealed record itself
+        let sealed_envelope = RecordEnvelope::from_bytes(&sealed.record.envelope)
+            .map_err(|_| SequencerError::Diverged)?;
+        for (state_key, value) in fold::effects(&sealed_envelope)? {
+            let value = value
+                .map(|v| dcbor::encode(&v, Limits::CEILING))
+                .transpose()
+                .map_err(RecordError::from)?;
+            out.effects.push((state_key, pos, value));
+        }
     }
     Ok(out)
+}
+
+/// Checks every draft's effects before planning (L2-REC-2).
+///
+/// # Errors
+/// [`SequencerError::Fold`].
+pub fn check_effects(items: &[Item]) -> Result<(), SequencerError> {
+    for item in items {
+        let probe = RecordEnvelope {
+            header: Header {
+                domain: Some(Digest([0; 32])),
+                pos: 1,
+                kind: item.draft.kind,
+                recorded_at: 0,
+                prev: Some(Digest([0; 32])),
+            },
+            fields: item.draft.fields.clone(),
+        };
+        fold::effects(&probe)?;
+    }
+    Ok(())
 }

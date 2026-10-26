@@ -8,7 +8,9 @@ use access_store::authority::Lease;
 use suiss_ledger::sequencer::{Head, Sequencer};
 
 use crate::SequencerError;
-use crate::domain::{Bound, Item, Outcome, check_last, head_of, independent, nonces, replay, rows};
+use crate::domain::{
+    Bound, Item, Outcome, check_effects, check_last, head_of, independent, nonces, replay, rows,
+};
 use crate::ports::DomainLog;
 
 /// The leader of one domain over a [`DomainLog`].
@@ -85,6 +87,7 @@ impl<L: DomainLog> Leader<L> {
             return Err(SequencerError::Genesis);
         }
         independent(items)?;
+        check_effects(items)?;
         for n in nonces(items)? {
             if let Some(stored) = self.log.nonce(&n.nonce).await? {
                 return replay(n, &stored, items.len() == 1).map(Outcome::Replayed);

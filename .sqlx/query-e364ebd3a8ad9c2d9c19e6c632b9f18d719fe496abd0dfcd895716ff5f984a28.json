@@ -1,0 +1,52 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT key, value, version FROM access.authority_state WHERE domain_id = $1 ORDER BY key",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "key",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.authority_state",
+            "name": "key"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "value",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.authority_state",
+            "name": "value"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "version",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.authority_state",
+            "name": "version"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      false
+    ]
+  },
+  "hash": "e364ebd3a8ad9c2d9c19e6c632b9f18d719fe496abd0dfcd895716ff5f984a28"
+}

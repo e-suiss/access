@@ -39,11 +39,24 @@ fn fields(tag: &str) -> BTreeMap<String, Opened> {
     )])
 }
 
+/// A deny decision: valid under L2-REC-1 and without effects.
+fn decision_fields(tag: &str) -> BTreeMap<String, Opened> {
+    let mut f = fields(tag);
+    f.insert(
+        "outcome".to_owned(),
+        Opened {
+            value: Value::Map(vec![(Value::text("outcome"), Value::text("deny"))]),
+            salt: [6; 32],
+        },
+    );
+    f
+}
+
 fn item(tag: &str, nonce: Option<(u8, u8)>) -> Item {
     Item {
         draft: Draft {
             kind: RecordKind::Decision,
-            fields: fields(tag),
+            fields: decision_fields(tag),
         },
         nonce: nonce.map(|(n, d)| NonceUse {
             nonce: vec![n; 16],
@@ -280,4 +293,104 @@ async fn a_record_depending_on_its_batch_is_refused() {
         l.commit(2_000, &[w]).await.unwrap(),
         Outcome::Appended(_)
     ));
+}
+
+fn effect_item(tag: &str, effects: Vec<Value>) -> Item {
+    let mut it = item(tag, None);
+    it.draft.fields.insert(
+        "outcome".to_owned(),
+        Opened {
+            value: Value::Map(vec![(Value::text("outcome"), Value::text("allow"))]),
+            salt: [4; 32],
+        },
+    );
+    it.draft.fields.insert(
+        "effects".to_owned(),
+        Opened {
+            value: Value::Array(effects),
+            salt: [5; 32],
+        },
+    );
+    it
+}
+
+fn set(key: &[u8], v: u64) -> Value {
+    Value::Array(vec![Value::Bytes(key.to_vec()), Value::Unsigned(v)])
+}
+
+// L2-REC-3, TI-RT1: the stored state is the fold of the log, and the arbiter sees a change
+#[tokio::test]
+async fn the_state_is_the_fold_of_the_log() {
+    use access_authority_sequencer::adapters::fold_check;
+    use access_store::authority::{state_of, versions};
+    let db = fresh().await.unwrap();
+    let d = domain(&db, "g").await;
+    let mut l = lead(&db, d, "a").await.unwrap();
+    l.commit(
+        2_000,
+        &[effect_item("a", vec![set(b"k1", 1), set(b"k2", 2)])],
+    )
+    .await
+    .unwrap();
+    l.commit(2_001, &[item("plain", None)]).await.unwrap();
+    l.commit(
+        2_002,
+        &[effect_item(
+            "b",
+            vec![
+                set(b"k1", 3),
+                Value::Array(vec![Value::Bytes(b"k2".to_vec())]),
+            ],
+        )],
+    )
+    .await
+    .unwrap();
+    fold_check(&db.app, d).await.unwrap();
+    let id = DomainId::from_bytes(d.0);
+    let rows = state_of(&db.app, &id, &[b"k1".to_vec(), b"k2".to_vec()])
+        .await
+        .unwrap();
+    assert_eq!(
+        rows.iter()
+            .map(|r| (r.version, r.value.is_some()))
+            .collect::<Vec<_>>(),
+        [(3, true), (3, false)]
+    );
+    // an effect bumps the key's version, so a read of it is validated like any other
+    assert_eq!(
+        versions(&db.app, &id, &[b"k1".to_vec()]).await.unwrap(),
+        [3]
+    );
+    // §17.6.12: a stored state that no record explains is caught by the fold from Genesis
+    db.corrupt_state(&id, b"k1", &[0x05]).await.unwrap();
+    assert!(matches!(
+        fold_check(&db.app, d).await,
+        Err(SequencerError::FoldDiverged)
+    ));
+}
+
+// L2-REC-2: malformed effects never reach the log
+#[tokio::test]
+async fn malformed_effects_are_refused_before_planning() {
+    let db = fresh().await.unwrap();
+    let d = domain(&db, "g").await;
+    let mut l = lead(&db, d, "a").await.unwrap();
+    let dup = effect_item("dup", vec![set(b"k", 1), set(b"k", 2)]);
+    assert!(matches!(
+        l.commit(2_000, &[dup]).await,
+        Err(SequencerError::Fold(_))
+    ));
+    let mut deny = effect_item("deny", vec![set(b"k", 1)]);
+    deny.draft.fields.insert(
+        "outcome".to_owned(),
+        Opened {
+            value: Value::Map(vec![(Value::text("outcome"), Value::text("deny"))]),
+            salt: [4; 32],
+        },
+    );
+    assert!(matches!(
+        l.commit(2_000, &[deny]).await,
+        Err(SequencerError::Fold(_))
+    ));
+    assert_eq!(l.head().pos, 0);
 }

@@ -6,6 +6,7 @@ pub mod app;
 pub mod domain;
 pub mod ports;
 
+use access_kernel::fold::FoldError;
 use access_kernel::record::{LinkError, RecordError};
 use access_store::StoreError;
 use suiss_ledger::merkle::FrontierError;
@@ -64,6 +65,12 @@ pub enum SequencerError {
     /// A record of the batch depends on an earlier one of the same batch; re-evaluate it.
     #[error("record {0} depends on an earlier record of its batch")]
     BatchConflict(usize),
+    /// A record's effects are malformed (L2-REC-2).
+    #[error("effects: {0}")]
+    Fold(#[from] FoldError),
+    /// The stored state differs from the fold of the log (§16.5, TI-16): commit stops.
+    #[error("state differs from the fold of the log")]
+    FoldDiverged,
     /// No trusted time (TI-RT2): commit stops.
     #[error("time: {0}")]
     Time(#[from] TimeError),

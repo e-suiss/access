@@ -108,6 +108,20 @@ pub struct CommitBatch {
     pub draws: Vec<Draw>,
     /// Single-use flags set, with the position that sets them.
     pub single_use: Vec<(Vec<u8>, u64)>,
+    /// State effects (L2-REC-3): key, the position that sets it and its canonical value,
+    /// `None` to remove it. Each also bumps the key's version.
+    pub effects: Vec<(Vec<u8>, u64, Option<Vec<u8>>)>,
+}
+
+/// A key of the current state (L2-REC-3).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct StateRow {
+    /// Key.
+    pub key: Vec<u8>,
+    /// Canonical value; `None` once removed.
+    pub value: Option<Vec<u8>>,
+    /// Position of the record that last set it.
+    pub version: u64,
 }
 
 /// A held sequencer lease.
@@ -464,6 +478,30 @@ async fn sync_derived(
         .execute(&mut *t.tx)
         .await?;
     }
+    for (key, at, value) in &batch.effects {
+        let at = signed(*at)?;
+        sqlx::query!(
+            "INSERT INTO access.authority_state (domain_id, tenant_id, key, value, version) VALUES ($1, $2, $3, $4, $5)
+             ON CONFLICT (domain_id, key) DO UPDATE SET value = EXCLUDED.value, version = EXCLUDED.version",
+            id,
+            tenant_id,
+            key.as_slice(),
+            value.as_deref(),
+            at,
+        )
+        .execute(&mut *t.tx)
+        .await?;
+        sqlx::query!(
+            "INSERT INTO access.authority_version (domain_id, tenant_id, key, version) VALUES ($1, $2, $3, $4)
+             ON CONFLICT (domain_id, key) DO UPDATE SET version = EXCLUDED.version",
+            id,
+            tenant_id,
+            key.as_slice(),
+            at,
+        )
+        .execute(&mut *t.tx)
+        .await?;
+    }
     for d in &batch.draws {
         if d.draw > d.limit {
             return Err(StoreError::Exhausted);
@@ -553,6 +591,59 @@ pub async fn versions(
             rows.iter()
                 .find(|r| &r.key == k)
                 .map_or(Ok(0), |r| unsigned(r.version))
+        })
+        .collect()
+}
+
+/// The whole current state of a domain, in key order (the fold check reads it).
+///
+/// # Errors
+/// [`StoreError`].
+pub async fn state(pool: &PgPool, domain: &DomainId) -> Result<Vec<StateRow>, StoreError> {
+    let mut t = DomainTx::begin(pool, domain).await?;
+    let rows = sqlx::query!(
+        "SELECT key, value, version FROM access.authority_state WHERE domain_id = $1 ORDER BY key",
+        domain.as_bytes().as_slice(),
+    )
+    .fetch_all(&mut *t.tx)
+    .await?;
+    t.commit().await?;
+    rows.into_iter()
+        .map(|r| {
+            Ok(StateRow {
+                key: r.key,
+                value: r.value,
+                version: unsigned(r.version)?,
+            })
+        })
+        .collect()
+}
+
+/// State rows for `keys` (the `StateView` read side); absent keys are left out.
+///
+/// # Errors
+/// [`StoreError`].
+pub async fn state_of(
+    pool: &PgPool,
+    domain: &DomainId,
+    keys: &[Vec<u8>],
+) -> Result<Vec<StateRow>, StoreError> {
+    let mut t = DomainTx::begin(pool, domain).await?;
+    let rows = sqlx::query!(
+        "SELECT key, value, version FROM access.authority_state WHERE domain_id = $1 AND key = ANY($2) ORDER BY key",
+        domain.as_bytes().as_slice(),
+        keys,
+    )
+    .fetch_all(&mut *t.tx)
+    .await?;
+    t.commit().await?;
+    rows.into_iter()
+        .map(|r| {
+            Ok(StateRow {
+                key: r.key,
+                value: r.value,
+                version: unsigned(r.version)?,
+            })
         })
         .collect()
 }

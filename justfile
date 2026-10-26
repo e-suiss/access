@@ -336,6 +336,7 @@ vectors-crosscheck:
     target/vectors-venv/bin/python -I -c 'import cbor2' 2>/dev/null || (rm -rf target/vectors-venv && python3 -m venv target/vectors-venv && target/vectors-venv/bin/pip install --quiet cbor2==5.7.1)
     target/vectors-venv/bin/python -I conformance/vectors/tools/cbor_crosscheck.py conformance/vectors
     target/vectors-venv/bin/python -I conformance/vectors/tools/record.py --check conformance/vectors/core/1/record.json
+    target/vectors-venv/bin/python -I conformance/vectors/tools/fold.py --check conformance/vectors/core/1/record-fold.json
 
 # OP-112, CR-49 m.2
 f0:

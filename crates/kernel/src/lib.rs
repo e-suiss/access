@@ -10,6 +10,7 @@ pub mod binding;
 pub mod codec;
 pub mod combinator;
 pub mod digest;
+pub mod fold;
 pub mod intent;
 pub mod json;
 pub mod model;

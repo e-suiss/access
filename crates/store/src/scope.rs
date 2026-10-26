@@ -22,7 +22,7 @@ impl DomainId {
         &self.0
     }
 
-    fn hex(&self) -> String {
+    pub(crate) fn hex(&self) -> String {
         let mut s = String::with_capacity(64);
         for b in self.0 {
             s.extend([b >> 4, b & 0x0f].map(|n| char::from_digit(u32::from(n), 16).unwrap_or('0')));
