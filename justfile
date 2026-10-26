@@ -393,20 +393,22 @@ bench-instructions *args:
 mutants *args:
     cargo mutants --package esuiss-access-kernel --test-tool nextest {{args}}
 
-# SA-23, §14.5
+# SA-23, §14.5, OP-127 m.1
 sanitize kind:
     RUSTFLAGS="-Zsanitizer={{kind}}" RUSTDOCFLAGS="-Zsanitizer={{kind}}" \
-      cargo +{{sanitizer_nightly}} test --locked -Zbuild-std --target x86_64-unknown-linux-gnu --workspace --lib --tests
+      cargo +{{sanitizer_nightly}} test --locked -Zbuild-std --target x86_64-unknown-linux-gnu --workspace --exclude access-sandbox --lib --tests
+    RUSTFLAGS="-Zsanitizer={{kind}}" RUSTDOCFLAGS="-Zsanitizer={{kind}}" \
+      cargo +{{sanitizer_nightly}} test --locked -Zbuild-std --target x86_64-unknown-linux-gnu -p access-sandbox --lib
 
 # SA-23, §14.5
 checksec +binaries:
     scripts/checksec.sh {{binaries}}
 
-# F-4, F-5, OP-79, F-2, SA-34
+# F-4, F-5, OP-79, F-2, SA-34, OP-127 m.2
 release-build target:
     rm -rf target/vendor && mkdir -p target
     cargo vendor --locked --versioned-dirs target/vendor > target/vendor-config.toml
-    if find target/vendor -type d \( -name .vscode -o -name .devcontainer -o -name .githooks -o -name .idea \) | grep .; then echo "vendored IDE/hook directories found (F-2)" >&2; exit 1; fi
+    scripts/vendor-ide-check.sh target/vendor supply-chain/vendored-ide-allowlist.txt
     RUSTFLAGS="--remap-path-prefix={{justfile_directory()}}=/access --remap-path-prefix=${CARGO_HOME:-$HOME/.cargo}=/cargo" \
       cargo auditable build --locked --offline --config "{{justfile_directory()}}/target/vendor-config.toml" --release -p access-server --target {{target}}
 
