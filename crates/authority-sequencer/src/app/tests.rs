@@ -141,6 +141,10 @@ fn item(tag: &str) -> Item {
         nonce: None,
         events: Vec::new(),
         proofs: Vec::new(),
+        reads: Vec::new(),
+        writes: Vec::new(),
+        draws: Vec::new(),
+        single_use: Vec::new(),
     }
 }
 

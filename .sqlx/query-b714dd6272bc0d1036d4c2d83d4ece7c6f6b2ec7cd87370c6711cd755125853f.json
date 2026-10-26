@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.authority_version (domain_id, tenant_id, key, version) VALUES ($1, $2, $3, $4)\n             ON CONFLICT (domain_id, key) DO UPDATE SET version = EXCLUDED.version",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Uuid",
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "b714dd6272bc0d1036d4c2d83d4ece7c6f6b2ec7cd87370c6711cd755125853f"
+}

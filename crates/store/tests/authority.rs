@@ -12,8 +12,9 @@ use std::time::Duration;
 
 use access_store::StoreError;
 use access_store::authority::{
-    CommitBatch, HeadRow, LogRecord, NonceRow, OutboxRow, ProofRow, acquire_lease, commit_batch,
-    create_domain, find_nonce, read_head, read_log, release_lease, renew_lease,
+    CommitBatch, Draw, HeadRow, LogRecord, NonceRow, OutboxRow, ProofRow, acquire_lease,
+    commit_batch, counter, create_domain, find_nonce, read_head, read_log, release_lease,
+    renew_lease, versions,
 };
 use access_store::scope::DomainId;
 use access_store::testing::{TestDb, fresh};
@@ -75,6 +76,10 @@ fn batch(epoch: u64, after: &HeadRow, seed: u8) -> CommitBatch {
             digest: [seed; 32],
             bytes: vec![1, 2, 3],
         }],
+        reads: vec![],
+        writes: vec![],
+        draws: vec![],
+        single_use: vec![],
     }
 }
 
@@ -296,4 +301,98 @@ fn hex(b: &[u8]) -> String {
         let _ = write!(s, "{x:02x}");
         s
     })
+}
+
+// TI-4, §17.1.1 step 9: a key read before the batch must still have that version
+#[tokio::test]
+async fn a_changed_read_refuses_the_batch_and_writes_nothing() {
+    let db = fresh().await.unwrap();
+    let d = domain(&db, 30).await;
+    let (lease, head) = acquire_lease(&db.sequencer, &d, "a", TTL).await.unwrap();
+    let mut first = batch(lease.epoch, &head, 31);
+    first.writes = vec![(b"grants@p1".to_vec(), 1)];
+    commit_batch(&db.sequencer, &d, TENANT, &first)
+        .await
+        .unwrap();
+    assert_eq!(
+        versions(&db.app, &d, &[b"grants@p1".to_vec(), b"absent".to_vec()])
+            .await
+            .unwrap(),
+        [1, 0]
+    );
+    let head = read_head(&db.app, &d).await.unwrap();
+    let mut stale = batch(lease.epoch, &head, 32);
+    stale.reads = vec![(b"grants@p1".to_vec(), 0)];
+    assert!(matches!(
+        commit_batch(&db.sequencer, &d, TENANT, &stale).await,
+        Err(StoreError::Stale)
+    ));
+    // a negative read of a collection key is caught the same way
+    let mut negative = batch(lease.epoch, &head, 33);
+    negative.reads = vec![(b"absent".to_vec(), 0), (b"grants@p1".to_vec(), 1)];
+    negative.writes = vec![(b"absent".to_vec(), 2)];
+    commit_batch(&db.sequencer, &d, TENANT, &negative)
+        .await
+        .unwrap();
+    let head = read_head(&db.app, &d).await.unwrap();
+    let mut late = batch(lease.epoch, &head, 34);
+    late.reads = vec![(b"absent".to_vec(), 0)];
+    assert!(matches!(
+        commit_batch(&db.sequencer, &d, TENANT, &late).await,
+        Err(StoreError::Stale)
+    ));
+    assert_eq!(read_head(&db.app, &d).await.unwrap().pos, 2);
+    assert!(find_nonce(&db.app, &d, &[34; 16]).await.unwrap().is_none());
+}
+
+// §17.1.1 step 9: a draw never takes a counter past the limit the evaluation saw
+#[tokio::test]
+async fn draws_stop_at_the_limit() {
+    let db = fresh().await.unwrap();
+    let d = domain(&db, 35).await;
+    let (lease, _) = acquire_lease(&db.sequencer, &d, "a", TTL).await.unwrap();
+    for (seed, draw, ok) in [(36, 6, true), (37, 4, true), (38, 1, false)] {
+        let head = read_head(&db.app, &d).await.unwrap();
+        let mut b = batch(lease.epoch, &head, seed);
+        b.draws = vec![Draw {
+            key: b"budget@n1".to_vec(),
+            limit: 10,
+            draw,
+        }];
+        let r = commit_batch(&db.sequencer, &d, TENANT, &b).await;
+        assert_eq!(r.is_ok(), ok, "{seed}: {r:?}");
+        if !ok {
+            assert!(matches!(r, Err(StoreError::Exhausted)));
+        }
+    }
+    assert_eq!(counter(&db.app, &d, b"budget@n1").await.unwrap(), 10);
+    let head = read_head(&db.app, &d).await.unwrap();
+    let mut over = batch(lease.epoch, &head, 39);
+    over.draws = vec![Draw {
+        key: b"budget@n2".to_vec(),
+        limit: 3,
+        draw: 4,
+    }];
+    assert!(matches!(
+        commit_batch(&db.sequencer, &d, TENANT, &over).await,
+        Err(StoreError::Exhausted)
+    ));
+}
+
+// INV-20: a single-use flag is set once
+#[tokio::test]
+async fn single_use_flags_are_set_once() {
+    let db = fresh().await.unwrap();
+    let d = domain(&db, 40).await;
+    let (lease, head) = acquire_lease(&db.sequencer, &d, "a", TTL).await.unwrap();
+    let mut b = batch(lease.epoch, &head, 41);
+    b.single_use = vec![(b"contrib@x".to_vec(), 1)];
+    commit_batch(&db.sequencer, &d, TENANT, &b).await.unwrap();
+    let head = read_head(&db.app, &d).await.unwrap();
+    let mut again = batch(lease.epoch, &head, 42);
+    again.single_use = vec![(b"contrib@x".to_vec(), 2)];
+    assert!(matches!(
+        commit_batch(&db.sequencer, &d, TENANT, &again).await,
+        Err(StoreError::Consumed)
+    ));
 }

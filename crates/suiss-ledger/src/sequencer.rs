@@ -65,6 +65,8 @@ pub struct Sealed<S> {
 /// `after` under `epoch` (head CAS, OP-130 m.6).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Batch<S> {
+    /// Which planned batch this is; a commit outcome names it (never reused by a sequencer).
+    pub ticket: u64,
     /// Leader epoch.
     pub epoch: u64,
     /// Head position the batch extends.
@@ -106,6 +108,7 @@ pub struct Sequencer {
     epoch: u64,
     head: Head,
     in_flight: Option<u64>,
+    tickets: u64,
     down: bool,
 }
 
@@ -117,6 +120,7 @@ impl Sequencer {
             epoch,
             head,
             in_flight: None,
+            tickets: 0,
             down: false,
         }
     }
@@ -177,8 +181,11 @@ impl Sequencer {
             records.push(Sealed { slot, leaf, record });
             prev = leaf;
         }
-        self.in_flight = Some(pos);
+        let ticket = self.tickets;
+        self.tickets = ticket.checked_add(1).ok_or(PlanError::Overflow)?;
+        self.in_flight = Some(ticket);
         Ok(Batch {
+            ticket,
             epoch: self.epoch,
             after: self.head.pos,
             records,
@@ -196,11 +203,7 @@ impl Sequencer {
     /// # Errors
     /// [`OutcomeError`] when `batch` is not the batch in flight; the sequencer steps down.
     pub fn committed<S>(&mut self, batch: Batch<S>) -> Result<(), OutcomeError> {
-        if self.down
-            || self.in_flight != Some(batch.head.pos)
-            || batch.after != self.head.pos
-            || batch.epoch != self.epoch
-        {
+        if !self.owns(&batch) {
             self.step_down();
             return Err(OutcomeError);
         }
@@ -209,10 +212,32 @@ impl Sequencer {
         Ok(())
     }
 
+    /// The batch was refused before anything was written, for a reason that is not about
+    /// leadership (a read-set or consumption check, §17.1.1 step 9): the sequencer stays the
+    /// leader and the next batch extends the same head.
+    ///
+    /// # Errors
+    /// [`OutcomeError`] when `batch` is not the batch in flight; the sequencer steps down.
+    pub fn abandoned<S>(&mut self, batch: &Batch<S>) -> Result<(), OutcomeError> {
+        if !self.owns(batch) {
+            self.step_down();
+            return Err(OutcomeError);
+        }
+        self.in_flight = None;
+        Ok(())
+    }
+
     /// The commit or its head CAS failed: the sequencer steps down and sends no ack
     /// (§17.1.1 step 12).
     pub fn failed(&mut self) {
         self.step_down();
+    }
+
+    fn owns<S>(&self, batch: &Batch<S>) -> bool {
+        !self.down
+            && self.in_flight == Some(batch.ticket)
+            && batch.after == self.head.pos
+            && batch.epoch == self.epoch
     }
 
     fn step_down(&mut self) {

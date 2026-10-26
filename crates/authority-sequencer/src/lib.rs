@@ -12,6 +12,19 @@ use suiss_ledger::merkle::FrontierError;
 use suiss_ledger::sequencer::{OutcomeError, PlanError};
 use suiss_ledger::time::TimeError;
 
+impl SequencerError {
+    /// Whether the batch was refused by the step 9 checks: the leader stays, the caller
+    /// evaluates again (§17.1.1 step 9).
+    #[must_use]
+    pub const fn is_retry(&self) -> bool {
+        matches!(
+            self,
+            Self::BatchConflict(_)
+                | Self::Store(StoreError::Stale | StoreError::Exhausted | StoreError::Consumed)
+        )
+    }
+}
+
 /// Why a sequencer operation failed.
 #[derive(Debug, thiserror::Error)]
 pub enum SequencerError {
@@ -48,6 +61,9 @@ pub enum SequencerError {
     /// A Genesis record was offered to the log after position 0.
     #[error("genesis only at position 0")]
     Genesis,
+    /// A record of the batch depends on an earlier one of the same batch; re-evaluate it.
+    #[error("record {0} depends on an earlier record of its batch")]
+    BatchConflict(usize),
     /// No trusted time (TI-RT2): commit stops.
     #[error("time: {0}")]
     Time(#[from] TimeError),

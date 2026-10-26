@@ -114,3 +114,19 @@ fn position_overflow_is_an_error() {
     );
     assert_eq!(s.plan(0, &[Rec(1)]).unwrap_err(), PlanError::Overflow);
 }
+
+// §17.1.1 step 9: a refused batch leaves the leader in place
+#[test]
+fn an_abandoned_batch_keeps_the_leader() {
+    let mut s = Sequencer::lead(1, genesis());
+    let b = s.plan(100, &[Rec(1)]).unwrap();
+    s.abandoned(&b).unwrap();
+    assert!(!s.stepped_down());
+    let again = s.plan(100, &[Rec(2)]).unwrap();
+    assert_eq!(again.after, 0);
+    assert!(
+        s.abandoned(&b).is_err(),
+        "a stale batch steps the sequencer down"
+    );
+    assert!(s.stepped_down());
+}

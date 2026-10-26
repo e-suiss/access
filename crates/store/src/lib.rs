@@ -41,6 +41,15 @@ pub enum StoreError {
     /// A value does not fit its column.
     #[error("value out of range")]
     Range,
+    /// A key the batch read changed since it was read (TI-4); re-evaluate.
+    #[error("read set changed")]
+    Stale,
+    /// A counter would go past its limit (§17.1.1 step 9); re-evaluate.
+    #[error("counter exhausted")]
+    Exhausted,
+    /// A single-use flag is already set.
+    #[error("already consumed")]
+    Consumed,
     /// A stored row does not match the model.
     #[error("stored row is malformed")]
     Corrupt,

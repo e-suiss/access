@@ -7,7 +7,9 @@ use access_crypto::event_id::EventKey;
 use access_kernel::codec::Canonical;
 use access_kernel::digest::Digest;
 use access_kernel::record::{Header, Opened, RecordEnvelope, RecordError, RecordKind};
-use access_store::authority::{CommitBatch, HeadRow, LogRecord, NonceRow, OutboxRow, ProofRow};
+use access_store::authority::{
+    CommitBatch, Draw, HeadRow, LogRecord, NonceRow, OutboxRow, ProofRow,
+};
 use suiss_ledger::Hash;
 use suiss_ledger::merkle::Frontier;
 use suiss_ledger::sequencer::{Batch, Entry, Head, Slot};
@@ -45,6 +47,14 @@ pub struct Item {
     pub events: Vec<Vec<u8>>,
     /// Signed bytes it cites, as (digest, bytes) (§17.6.1 rule 2).
     pub proofs: Vec<([u8; 32], Vec<u8>)>,
+    /// Keys its evaluation read, with the version each had; 0 when absent (TI-4).
+    pub reads: Vec<(Vec<u8>, u64)>,
+    /// Keys it changes; their version becomes its position.
+    pub writes: Vec<Vec<u8>>,
+    /// Counter draws of its consumption plan.
+    pub draws: Vec<Draw>,
+    /// Single-use flags it sets.
+    pub single_use: Vec<Vec<u8>>,
 }
 
 /// What a commit produced.
@@ -157,6 +167,30 @@ pub fn nonces(items: &[Item]) -> Result<Vec<&NonceUse>, SequencerError> {
     Ok(out)
 }
 
+/// Refuses a batch in which a record depends on an earlier record of the same batch: it read
+/// a key the earlier one writes, or sets the same single-use flag. Its evaluation did not see
+/// that write, so it must be evaluated again in a later batch (§17.1.1 step 9).
+///
+/// # Errors
+/// [`SequencerError::BatchConflict`] with the index of the first such record.
+pub fn independent(items: &[Item]) -> Result<(), SequencerError> {
+    let mut written: BTreeSet<&[u8]> = BTreeSet::new();
+    let mut flags: BTreeSet<&[u8]> = BTreeSet::new();
+    for (i, item) in items.iter().enumerate() {
+        let conflict = item
+            .reads
+            .iter()
+            .any(|(k, _)| written.contains(k.as_slice()))
+            || item.single_use.iter().any(|k| flags.contains(k.as_slice()));
+        if conflict {
+            return Err(SequencerError::BatchConflict(i));
+        }
+        written.extend(item.writes.iter().map(Vec::as_slice));
+        flags.extend(item.single_use.iter().map(Vec::as_slice));
+    }
+    Ok(())
+}
+
 /// The replay rule for a nonce already committed (§9.5 k.5, TI-8): a lone retry with the same
 /// intent and actor gets the committed record back; anything else is a conflict.
 ///
@@ -193,6 +227,10 @@ pub fn rows(
         nonces: Vec::new(),
         outbox: Vec::new(),
         proofs: Vec::new(),
+        reads: Vec::new(),
+        writes: Vec::new(),
+        draws: Vec::new(),
+        single_use: Vec::new(),
     };
     for (item, sealed) in items.iter().zip(&batch.records) {
         let pos = sealed.slot.pos;
@@ -226,6 +264,12 @@ pub fn rows(
                 bytes: bytes.clone(),
             });
         }
+        out.reads.extend(item.reads.iter().cloned());
+        out.writes
+            .extend(item.writes.iter().map(|k| (k.clone(), pos)));
+        out.draws.extend(item.draws.iter().cloned());
+        out.single_use
+            .extend(item.single_use.iter().map(|k| (k.clone(), pos)));
     }
     Ok(out)
 }

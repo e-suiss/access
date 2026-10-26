@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.authority_single_use (domain_id, tenant_id, key, pos) VALUES ($1, $2, $3, $4)\n             ON CONFLICT (domain_id, key) DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Uuid",
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "b3b9948b258104df95da722b805ac5de10aeef1cc924bfc25c2037870a81a4c0"
+}

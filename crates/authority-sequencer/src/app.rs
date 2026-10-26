@@ -8,7 +8,7 @@ use access_store::authority::Lease;
 use suiss_ledger::sequencer::{Head, Sequencer};
 
 use crate::SequencerError;
-use crate::domain::{Bound, Item, Outcome, check_last, head_of, nonces, replay, rows};
+use crate::domain::{Bound, Item, Outcome, check_last, head_of, independent, nonces, replay, rows};
 use crate::ports::DomainLog;
 
 /// The leader of one domain over a [`DomainLog`].
@@ -84,6 +84,7 @@ impl<L: DomainLog> Leader<L> {
         if items.iter().any(|i| i.draft.kind == RecordKind::Genesis) {
             return Err(SequencerError::Genesis);
         }
+        independent(items)?;
         for n in nonces(items)? {
             if let Some(stored) = self.log.nonce(&n.nonce).await? {
                 return replay(n, &stored, items.len() == 1).map(Outcome::Replayed);
@@ -104,6 +105,11 @@ impl<L: DomainLog> Leader<L> {
                 Ok(Outcome::Appended(
                     stored.records.iter().map(|r| r.pos).collect(),
                 ))
+            }
+            Err(e) if e.is_retry() => {
+                // §17.1.1 step 9: nothing was written; the leader stays
+                self.seq.abandoned(&batch)?;
+                Err(e)
             }
             Err(e) => {
                 // §17.1.1 step 12

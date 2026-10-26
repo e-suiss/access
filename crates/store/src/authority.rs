@@ -72,6 +72,17 @@ pub struct ProofRow {
     pub bytes: Vec<u8>,
 }
 
+/// A draw on a counter: allowed while `used + draw <= limit` (§17.1.1 step 9).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Draw {
+    /// Counter key.
+    pub key: Vec<u8>,
+    /// The limit the evaluation saw.
+    pub limit: u64,
+    /// Amount drawn.
+    pub draw: u64,
+}
+
 /// Everything one batch writes, in one transaction.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CommitBatch {
@@ -89,6 +100,14 @@ pub struct CommitBatch {
     pub outbox: Vec<OutboxRow>,
     /// Proof bytes.
     pub proofs: Vec<ProofRow>,
+    /// Keys the evaluations read, with the version each saw; 0 means absent (TI-4).
+    pub reads: Vec<(Vec<u8>, u64)>,
+    /// Keys the records change, with the position that changes them.
+    pub writes: Vec<(Vec<u8>, u64)>,
+    /// Counter draws.
+    pub draws: Vec<Draw>,
+    /// Single-use flags set, with the position that sets them.
+    pub single_use: Vec<(Vec<u8>, u64)>,
 }
 
 /// A held sequencer lease.
@@ -342,6 +361,7 @@ pub async fn commit_batch(
     if moved != 1 {
         return Err(StoreError::HeadMoved);
     }
+    validate(&mut t, batch).await?;
     let mut pos = Vec::with_capacity(batch.records.len());
     let mut kinds = Vec::with_capacity(batch.records.len());
     let mut times = Vec::with_capacity(batch.records.len());
@@ -367,6 +387,19 @@ pub async fn commit_batch(
     .execute(&mut *t.tx)
     .await?;
     let tenant = sqlx::types::Uuid::from_bytes(tenant);
+    side_rows(&mut t, tenant, batch).await?;
+    sync_derived(&mut t, tenant, batch).await?;
+    t.commit().await
+}
+
+/// Nonces, outbox events and proof bytes of a batch.
+async fn side_rows(
+    t: &mut DomainTx,
+    tenant: sqlx::types::Uuid,
+    batch: &CommitBatch,
+) -> Result<(), StoreError> {
+    let id = t.domain.as_bytes().to_vec();
+    let id = id.as_slice();
     for n in &batch.nonces {
         sqlx::query!(
             "INSERT INTO access.authority_nonce (domain_id, tenant_id, nonce, actor, intent_digest, decision_pos)
@@ -406,7 +439,139 @@ pub async fn commit_batch(
         .execute(&mut *t.tx)
         .await?;
     }
-    t.commit().await
+    Ok(())
+}
+
+/// SYNC-DERIVED state of a batch (T9): versions of the keys it writes, counter draws within
+/// their limits and single-use flags.
+async fn sync_derived(
+    t: &mut DomainTx,
+    tenant: sqlx::types::Uuid,
+    batch: &CommitBatch,
+) -> Result<(), StoreError> {
+    let id = t.domain.as_bytes().to_vec();
+    let id = id.as_slice();
+    let tenant_id = tenant;
+    for (key, at) in &batch.writes {
+        sqlx::query!(
+            "INSERT INTO access.authority_version (domain_id, tenant_id, key, version) VALUES ($1, $2, $3, $4)
+             ON CONFLICT (domain_id, key) DO UPDATE SET version = EXCLUDED.version",
+            id,
+            tenant_id,
+            key.as_slice(),
+            signed(*at)?,
+        )
+        .execute(&mut *t.tx)
+        .await?;
+    }
+    for d in &batch.draws {
+        if d.draw > d.limit {
+            return Err(StoreError::Exhausted);
+        }
+        let used = sqlx::query_scalar!(
+            "INSERT INTO access.authority_counter AS c (domain_id, tenant_id, key, used) VALUES ($1, $2, $3, $4)
+             ON CONFLICT (domain_id, key) DO UPDATE SET used = c.used + EXCLUDED.used
+              WHERE c.used + EXCLUDED.used <= $5
+             RETURNING used",
+            id,
+            tenant_id,
+            d.key.as_slice(),
+            signed(d.draw)?,
+            signed(d.limit)?,
+        )
+        .fetch_optional(&mut *t.tx)
+        .await?;
+        if used.is_none() {
+            return Err(StoreError::Exhausted);
+        }
+    }
+    for (key, at) in &batch.single_use {
+        let set = sqlx::query!(
+            "INSERT INTO access.authority_single_use (domain_id, tenant_id, key, pos) VALUES ($1, $2, $3, $4)
+             ON CONFLICT (domain_id, key) DO NOTHING",
+            id,
+            tenant_id,
+            key.as_slice(),
+            signed(*at)?,
+        )
+        .execute(&mut *t.tx)
+        .await?
+        .rows_affected();
+        if set != 1 {
+            return Err(StoreError::Consumed);
+        }
+    }
+    Ok(())
+}
+
+/// TI-4: every key read still has the version the evaluation saw. The head compare-and-set
+/// already holds the head row, so no other commit runs in between.
+async fn validate(t: &mut DomainTx, batch: &CommitBatch) -> Result<(), StoreError> {
+    if batch.reads.is_empty() {
+        return Ok(());
+    }
+    let keys: Vec<Vec<u8>> = batch.reads.iter().map(|(k, _)| k.clone()).collect();
+    let rows = sqlx::query!(
+        "SELECT key, version FROM access.authority_version WHERE domain_id = $1 AND key = ANY($2)",
+        t.domain.as_bytes().as_slice(),
+        &keys,
+    )
+    .fetch_all(&mut *t.tx)
+    .await?;
+    for (key, seen) in &batch.reads {
+        let now = rows
+            .iter()
+            .find(|r| &r.key == key)
+            .map_or(Ok(0), |r| unsigned(r.version))?;
+        if now != *seen {
+            return Err(StoreError::Stale);
+        }
+    }
+    Ok(())
+}
+
+/// Current versions of `keys`; an absent key has version 0 (the `StateView` read side).
+///
+/// # Errors
+/// [`StoreError`].
+pub async fn versions(
+    pool: &PgPool,
+    domain: &DomainId,
+    keys: &[Vec<u8>],
+) -> Result<Vec<u64>, StoreError> {
+    let mut t = DomainTx::begin(pool, domain).await?;
+    let rows = sqlx::query!(
+        "SELECT key, version FROM access.authority_version WHERE domain_id = $1 AND key = ANY($2)",
+        domain.as_bytes().as_slice(),
+        keys,
+    )
+    .fetch_all(&mut *t.tx)
+    .await?;
+    t.commit().await?;
+    keys.iter()
+        .map(|k| {
+            rows.iter()
+                .find(|r| &r.key == k)
+                .map_or(Ok(0), |r| unsigned(r.version))
+        })
+        .collect()
+}
+
+/// A counter's used amount; 0 when never drawn.
+///
+/// # Errors
+/// [`StoreError`].
+pub async fn counter(pool: &PgPool, domain: &DomainId, key: &[u8]) -> Result<u64, StoreError> {
+    let mut t = DomainTx::begin(pool, domain).await?;
+    let used = sqlx::query_scalar!(
+        "SELECT used FROM access.authority_counter WHERE domain_id = $1 AND key = $2",
+        domain.as_bytes().as_slice(),
+        key,
+    )
+    .fetch_optional(&mut *t.tx)
+    .await?;
+    t.commit().await?;
+    used.map_or(Ok(0), unsigned)
 }
 
 /// Reads records `from..=to`.

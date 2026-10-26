@@ -4,6 +4,7 @@
     clippy::unwrap_used,
     clippy::panic,
     clippy::arithmetic_side_effects,
+    clippy::many_single_char_names,
     reason = "test code; the request-path lints (OP-3) do not apply"
 )]
 
@@ -51,6 +52,10 @@ fn item(tag: &str, nonce: Option<(u8, u8)>) -> Item {
         }),
         events: vec![vec![0xa0]],
         proofs: vec![([9; 32], vec![1, 2, 3])],
+        reads: vec![],
+        writes: vec![],
+        draws: vec![],
+        single_use: vec![],
     }
 }
 
@@ -228,4 +233,51 @@ async fn trusted_time_from_two_sources() {
     let b = clock.now().await.unwrap();
     assert!(a > 1_700_000_000_000);
     assert!(b + 250 >= a);
+}
+
+// §17.1.1 step 9, TI-4: a stale read refuses the batch, the leader stays and goes on
+#[tokio::test]
+async fn a_stale_read_keeps_the_leader() {
+    let db = fresh().await.unwrap();
+    let d = domain(&db, "g").await;
+    let mut l = lead(&db, d, "a").await.unwrap();
+    let mut w = item("w", None);
+    w.writes = vec![b"grants@p".to_vec()];
+    l.commit(2_000, &[w]).await.unwrap();
+    let mut r = item("r", None);
+    r.reads = vec![(b"grants@p".to_vec(), 0)];
+    let err = l.commit(2_001, &[r]).await.unwrap_err();
+    assert!(err.is_retry(), "{err}");
+    let mut r = item("r", None);
+    r.reads = vec![(b"grants@p".to_vec(), 1)];
+    assert!(matches!(l.commit(2_002, &[r]).await.unwrap(), Outcome::Appended(p) if p == [2]));
+    verify_chain(&db.app, d, 0, 2).await.unwrap();
+}
+
+// §17.1.1 step 9: a record that read what an earlier record of its batch writes waits
+#[tokio::test]
+async fn a_record_depending_on_its_batch_is_refused() {
+    let db = fresh().await.unwrap();
+    let d = domain(&db, "g").await;
+    let mut l = lead(&db, d, "a").await.unwrap();
+    let mut w = item("w", None);
+    w.writes = vec![b"k".to_vec()];
+    let mut r = item("r", None);
+    r.reads = vec![(b"k".to_vec(), 0)];
+    assert!(matches!(
+        l.commit(2_000, &[w.clone(), r]).await,
+        Err(SequencerError::BatchConflict(1))
+    ));
+    let mut a = item("a", None);
+    a.single_use = vec![b"once".to_vec()];
+    let mut b = item("b", None);
+    b.single_use = vec![b"once".to_vec()];
+    assert!(matches!(
+        l.commit(2_000, &[a, b]).await,
+        Err(SequencerError::BatchConflict(1))
+    ));
+    assert!(matches!(
+        l.commit(2_000, &[w]).await.unwrap(),
+        Outcome::Appended(_)
+    ));
 }
