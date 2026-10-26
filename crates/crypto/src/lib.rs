@@ -4,6 +4,7 @@ pub mod backend;
 pub mod dit;
 pub mod envelope;
 pub mod event_id;
+pub mod opaque_id;
 pub mod secret;
 pub mod secret_file;
 
