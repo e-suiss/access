@@ -441,11 +441,14 @@ sanitize kind:
 checksec +binaries:
     scripts/checksec.sh {{binaries}}
 
-# F-4, F-5, OP-79, F-2, SA-34, OP-127 m.2
-release-build target:
+# F-2, OP-127 m.2
+vendor:
     rm -rf target/vendor && mkdir -p target
     cargo vendor --locked --versioned-dirs target/vendor > target/vendor-config.toml
     scripts/vendor-ide-check.sh target/vendor supply-chain/vendored-ide-allowlist.txt
+
+# F-4, F-5, OP-79, F-2, SA-34, OP-127 m.2
+release-build target: vendor
     RUSTFLAGS="--remap-path-prefix={{justfile_directory()}}=/access --remap-path-prefix=${CARGO_HOME:-$HOME/.cargo}=/cargo" \
       cargo auditable build --locked --offline --config "{{justfile_directory()}}/target/vendor-config.toml" --release -p access-server --target {{target}}
 

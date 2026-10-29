@@ -188,6 +188,8 @@ jobs:
         run: just no-rsa
       - name: cargo-vet (F-1)
         run: just vet
+      - name: Vendored IDE and hook files are reviewed (F-2, OP-127 m.2)
+        run: just vendor
       - name: Published crates package and build alone (OP-76, OP-139)
         run: just crates-package
 

@@ -1,2 +1,3 @@
 # F-2, OP-127 m.2: reviewed files under vendored IDE/hook directories, as "<sha256>  <path>"
 4eab174d0cc18c70c10405a9849d8776bd40439ab59a68c6e33a9ab2a806cbef  bit-vec-0.8.0/.vscode/settings.json
+b24a7385c2e1d455a965d4e0932da2912424cd0d657a2431e4cedea3d90e5bff  bit-vec-0.9.1/.vscode/settings.json
