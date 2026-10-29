@@ -75,7 +75,7 @@ fn fold_matches_vectors() {
     }
 }
 
-// L2-REC-3: applying records one by one gives the fold of every prefix
+// L2-REC-3, TI-16: applying records one by one gives the fold of every prefix
 #[test]
 fn apply_is_the_incremental_fold() {
     for c in vectors().cases.iter().filter(|c| c.state.is_some()) {

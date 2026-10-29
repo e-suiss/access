@@ -1,6 +1,6 @@
 # OP-81, SAI-1, SA-59, INV-2
 
-current_stage = 0
+current_stage = 2
 
 enforced_families = [
   "CI", "INV", "EI", "XI", "PI", "SI", "TI", "TI-RT", "SAI", "IDI", "AGI", "TNI", "OPI",

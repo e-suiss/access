@@ -39,6 +39,7 @@ async fn strings(c: &mut PgConnection, sql: &'static str) -> Vec<String> {
         .collect()
 }
 
+// TNI-3
 #[tokio::test]
 async fn every_table_has_forced_row_level_security_and_a_restrictive_scope_policy() {
     let mut c = admin().await;
@@ -53,6 +54,7 @@ async fn every_table_has_forced_row_level_security_and_a_restrictive_scope_polic
     assert!(bad.is_empty(), "{bad:?}");
 }
 
+// HL-33
 #[tokio::test]
 async fn the_migrator_owns_everything_and_no_role_bypasses_rls() {
     let mut c = admin().await;
@@ -75,6 +77,7 @@ async fn the_migrator_owns_everything_and_no_role_bypasses_rls() {
     assert!(bypass.is_empty(), "{bypass:?}");
 }
 
+// TNI-3
 #[tokio::test]
 async fn primary_keys_and_foreign_keys_start_with_the_scope_column() {
     let mut c = admin().await;

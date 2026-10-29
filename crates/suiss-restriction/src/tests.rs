@@ -80,7 +80,7 @@ fn require(refs: &[&str]) -> Outcome {
     Outcome::Require(refs.iter().map(|s| (*s).to_owned()).collect())
 }
 
-// OP-103 criterion 1
+// OP-103 criterion 1, MUST-NEVER-2
 #[test]
 fn permit_and_out_of_profile_policies_are_rejected() {
     let c = |src: &str| Engine::compile(SCHEMA, src, Limits::default()).err();
@@ -287,7 +287,7 @@ fn input_outside_schema_or_limits_is_rejected() {
     assert_eq!(unknown_action, Err(InputRejected));
 }
 
-// OP-103 criterion 4, OP-104 m.2, m.3
+// OP-103 criterion 4, OP-104 m.2, m.3, TI-14
 #[test]
 fn static_limits() {
     let c = |src: &str, limits: Limits| Engine::compile(SCHEMA, src, limits).err();
@@ -353,6 +353,7 @@ fn static_limits() {
     assert!(c(in_string, Limits::default()).is_none());
 }
 
+// TI-14
 #[test]
 fn deterministic() {
     let e = engine(MAIN);

@@ -10,7 +10,7 @@ fn needs_two_sources_that_agree() {
     assert_eq!(c.read(&[3_000, 2_900, 2_950], 2_000), Ok(2_950));
 }
 
-// TI-RT2: Δrecorded_at ≤ Δmonotonic + U
+// TI-RT2, U29: Δrecorded_at ≤ Δmonotonic + U
 #[test]
 fn bounds_advance_by_the_monotonic_clock() {
     let mut c = TrustedClock::default();

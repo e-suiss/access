@@ -143,7 +143,7 @@ async fn a_running_transaction_is_not_skipped() {
     assert_eq!(rows[0].target, "usr_0");
 }
 
-// OP-17, OP-38: checkpoints are append-only and one size is written once
+// OP-17, OP-38, U70: checkpoints are append-only and one size is written once
 #[tokio::test]
 async fn checkpoints_cannot_fork_or_change() {
     let db = fresh().await.unwrap();

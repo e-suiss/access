@@ -93,7 +93,7 @@ fn candidate(fill: u8, first: u8, len: usize) -> Vec<u8> {
     c
 }
 
-// CR-39 m.2, m.5, SAI-42
+// CR-39 m.2, m.5, SAI-42, U45
 #[test]
 fn secret_comparisons_do_not_branch_on_secret_bytes() {
     let a = secret(0x5a);

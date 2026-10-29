@@ -572,7 +572,7 @@ fn key_scope_rules(id: &str) -> &'static [&'static str] {
     }
 }
 
-// CR-58, OP-106 m.24
+// CR-58, OP-106 m.24, G35, G47
 #[test]
 fn key_scope_vectors_match() {
     extern crate std;

@@ -317,7 +317,7 @@ id = "INV-22"
 family = "INV"
 section = "6.2"
 status = "canonical"
-stage = 2
+stage = 3
 title = "Decisions declare their basis; relied-upon ALLOW is recorded"
 tests = []
 
@@ -415,7 +415,7 @@ id = "INV-33"
 family = "INV"
 section = "6.9"
 status = "candidate"
-stage = 2
+stage = 5
 title = "IdP concepts reduce to primitives; derived index never writes or decides"
 tests = []
 
@@ -1086,7 +1086,7 @@ id = "PI-15"
 family = "PI"
 section = "6.5"
 status = "canonical"
-stage = 2
+stage = 3
 title = "Provider binding changes only via domain.handover or domain.recover Exercise"
 tests = []
 
@@ -1174,7 +1174,7 @@ id = "SI-1"
 family = "SI"
 section = "6.6"
 status = "canonical"
-stage = 2
+stage = 3
 title = "No attribution of an Exercise without the actor's key"
 tests = []
 
@@ -1354,7 +1354,7 @@ id = "SI-21"
 family = "SI"
 section = "6.6"
 status = "canonical"
-stage = 2
+stage = 8
 title = "Expansion about you is visible to you"
 tests = []
 
@@ -1571,7 +1571,7 @@ id = "TI-RT3"
 family = "TI-RT"
 section = "6.8"
 status = "canonical"
-stage = 2
+stage = 3
 title = "Commit time bounded by intent validity and nonce retention horizon"
 tests = []
 

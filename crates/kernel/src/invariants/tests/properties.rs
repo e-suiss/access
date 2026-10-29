@@ -383,7 +383,7 @@ fn allowed(r: &Result<Decision, Rejection>) -> bool {
 proptest! {
     #![proptest_config(ProptestConfig { cases: 1000, ..ProptestConfig::default() })]
 
-    // INV-27, CR-49 m.3 determinism
+    // INV-27, CR-49 m.3 determinism, G17
     #[test]
     fn evaluation_is_deterministic(w in world()) {
         let first = w.run();
@@ -399,7 +399,7 @@ proptest! {
         prop_assert_eq!(&shuffled.run(), &first);
     }
 
-    // CR-49 m.3 monotonicity (−): a restriction DENY always denies (INV-6)
+    // CR-49 m.3 monotonicity (−), MUST-NEVER-2: a restriction DENY always denies (INV-6)
     #[test]
     fn a_restriction_deny_never_allows(w in world(), undisclosed in any::<bool>()) {
         let before = w.run();
@@ -503,7 +503,7 @@ proptest! {
         }
     }
 
-    // CR-49 m.3 termination, OP-108 m.11: bounded fuel; too little is a rejection, never a decision
+    // CR-49 m.3 termination, OP-108 m.11, SI-20: bounded fuel; too little is a rejection, never a decision
     #[test]
     fn evaluation_terminates_within_fuel(w in world(), cut in any::<prop::sample::Index>()) {
         let (full, used) = w.run_with(FUEL);

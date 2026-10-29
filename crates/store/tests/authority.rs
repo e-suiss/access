@@ -150,6 +150,7 @@ async fn racing_batches_commit_once() {
     assert_eq!(read_log(&db.app, &d, 0, 10).await.unwrap().len(), 2);
 }
 
+// TI-7
 #[tokio::test]
 async fn failed_batch_leaves_nothing_behind() {
     let db = fresh().await.unwrap();
@@ -183,6 +184,7 @@ async fn a_nonce_is_consumed_once() {
     );
 }
 
+// INV-30, G23
 #[tokio::test]
 async fn append_only_tables_reject_change_at_every_layer() {
     let db = fresh().await.unwrap();
@@ -245,6 +247,7 @@ async fn append_only_tables_reject_change_at_every_layer() {
     }
 }
 
+// INV-2
 #[tokio::test]
 async fn only_the_sequencer_writes_the_log() {
     let db = fresh().await.unwrap();
@@ -256,6 +259,7 @@ async fn only_the_sequencer_writes_the_log() {
     assert!(err.to_string().contains("permission denied"), "{err}");
 }
 
+// U59
 #[tokio::test]
 async fn unscoped_and_cross_domain_reads_see_nothing() {
     let db = fresh().await.unwrap();
@@ -378,6 +382,40 @@ async fn draws_stop_at_the_limit() {
         commit_batch(&db.sequencer, &d, TENANT, &over).await,
         Err(StoreError::Exhausted)
     ));
+}
+
+// G56: a draw that would overflow the counter or does not fit the column commits nothing
+#[tokio::test]
+async fn an_overflowing_draw_commits_nothing() {
+    let db = fresh().await.unwrap();
+    let d = domain(&db, 44).await;
+    let (lease, head) = acquire_lease(&db.sequencer, &d, "a", TTL).await.unwrap();
+    let mut b = batch(lease.epoch, &head, 45);
+    b.draws = vec![Draw {
+        key: b"budget@big".to_vec(),
+        limit: i64::MAX.unsigned_abs(),
+        draw: 10,
+    }];
+    commit_batch(&db.sequencer, &d, TENANT, &b).await.unwrap();
+    for (seed, draw, limit) in [
+        (46, i64::MAX.unsigned_abs() - 5, i64::MAX.unsigned_abs()),
+        (47, u64::MAX, u64::MAX),
+    ] {
+        let head = read_head(&db.app, &d).await.unwrap();
+        let mut over = batch(lease.epoch, &head, seed);
+        over.draws = vec![Draw {
+            key: b"budget@big".to_vec(),
+            limit,
+            draw,
+        }];
+        assert!(
+            commit_batch(&db.sequencer, &d, TENANT, &over)
+                .await
+                .is_err()
+        );
+        assert_eq!(read_head(&db.app, &d).await.unwrap().pos, head.pos);
+    }
+    assert_eq!(counter(&db.app, &d, b"budget@big").await.unwrap(), 10);
 }
 
 // INV-20: a single-use flag is set once

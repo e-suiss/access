@@ -78,7 +78,7 @@ async fn bodies_round_trip_encrypted() {
     );
 }
 
-// OP-73, OP-74: shredding removes the key and the ciphertext; the row and commitment stay
+// OP-73, OP-74, INV-30: shredding removes the key and the ciphertext; the row and commitment stay
 #[tokio::test]
 async fn a_shredded_body_cannot_be_read_or_revived() {
     let db = fresh().await.unwrap();

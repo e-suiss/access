@@ -503,7 +503,7 @@ fn lineage_deeper_than_sixteen_is_rejected() {
     assert_eq!(w.run(), Err(Rejection::Input));
 }
 
-// OP-111 m.7
+// OP-111 m.7, SI-20
 #[test]
 fn fuel_exhaustion_is_a_rejection() {
     let w = World::new();
@@ -974,7 +974,7 @@ fn assurance_scenarios() -> Vec<(&'static str, World)> {
     out
 }
 
-// OP-118 m.2, m.3
+// OP-118 m.2, m.3, G20
 #[test]
 fn not_understood_hops_and_closed_assurance() {
     let all: BTreeMap<&str, World> = not_understood_scenarios()
@@ -1105,7 +1105,7 @@ fn ordering_and_merging_rules() {
     }
 }
 
-// CR-49, OP-111 m.1: the CBOR bridge for the F0 reference evaluator
+// CR-49, OP-111 m.1, U13: the CBOR bridge for the F0 reference evaluator
 #[test]
 fn decision_vectors_match() {
     extern crate std;
@@ -1469,7 +1469,7 @@ fn cve_capacity_cases() -> Vec<(&'static str, &'static [&'static str], Cve)> {
     out
 }
 
-// CR-57, §6.2, CR-49 m.4
+// CR-57, §6.2, CR-49 m.4, INV-9, SI-6
 #[test]
 fn cve_regression_vectors_match() {
     extern crate std;

@@ -255,7 +255,7 @@ fn key_scope_vectors() {
     assert_eq!(cases(&v).len(), 29);
 }
 
-// CR-58 m.3, m.5: signed metadata, then the excerpt, then the artefact
+// CR-58 m.3, m.5, TI-17: signed metadata, then the excerpt, then the artefact
 #[test]
 fn artefact_chain_from_trusted_binding_keys() {
     let v = vectors("key-scope");

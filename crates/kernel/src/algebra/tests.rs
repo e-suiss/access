@@ -315,7 +315,7 @@ fn purpose_rules() {
     assert_eq!(cyclic.check(), Err(InputError::PurposeCycle));
 }
 
-// OP-107 m.2, m.3: prefixes resolve in the pinned catalog and never cover reserved actions
+// OP-107 m.2, m.3, INV-9: prefixes resolve in the pinned catalog and never cover reserved actions
 #[test]
 fn action_prefix_rules() {
     let cat = catalog();
@@ -335,7 +335,7 @@ fn action_prefix_rules() {
     assert_eq!(normalize(&set(&[]), &cat), Ok(None));
 }
 
-// OP-109 m.10: parameters, recipient, purpose
+// OP-109 m.10, INV-8: parameters, recipient, purpose
 #[test]
 fn authority_set_rules() {
     let cat = catalog();

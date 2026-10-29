@@ -153,6 +153,7 @@ async fn records_chain_and_the_frontier_root_is_the_tree_head() {
     assert_eq!(back[0].recorded_at, 2_003);
 }
 
+// CI-15
 #[tokio::test]
 async fn a_fenced_leader_steps_down_and_writes_nothing() {
     let db = fresh().await.unwrap();
@@ -189,6 +190,7 @@ async fn a_fenced_leader_steps_down_and_writes_nothing() {
     assert_eq!(new.head().pos, 2);
 }
 
+// G40, U23
 #[tokio::test]
 async fn a_nonce_retry_replays_and_a_reuse_conflicts() {
     let db = fresh().await.unwrap();
@@ -318,7 +320,7 @@ fn set(key: &[u8], v: u64) -> Value {
     Value::Array(vec![Value::Bytes(key.to_vec()), Value::Unsigned(v)])
 }
 
-// L2-REC-3, TI-RT1: the stored state is the fold of the log, and the arbiter sees a change
+// L2-REC-3, TI-RT1, TI-1, TI-16, TI-RT4: the stored state is the fold of the log, and the arbiter sees a change
 #[tokio::test]
 async fn the_state_is_the_fold_of_the_log() {
     use access_authority_sequencer::adapters::fold_check;
@@ -416,7 +418,7 @@ async fn cve_2022_23555_single_use_is_at_most_once() {
 }
 
 // CR-57, GHSA-5278-rrxc-mgf7 (OpenFGA: a `but not` exclusion failed open), INV-7, INV-26: an
-// ALLOW that relied on the absence of a revocation is not committed once the revocation exists
+// SI-6: ALLOW that relied on the absence of a revocation is not committed once the revocation exists
 #[tokio::test]
 async fn ghsa_5278_rrxc_mgf7_an_exclusion_cannot_fail_open() {
     let db = fresh().await.unwrap();

@@ -215,6 +215,7 @@ async fn a_new_epoch_fences_the_previous_leader() {
     );
 }
 
+// G34, U30
 #[tokio::test]
 async fn a_head_that_disagrees_with_the_log_is_refused() {
     let (log, d) = MemLog::with_genesis();

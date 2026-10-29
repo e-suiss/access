@@ -184,6 +184,7 @@ fn use_rules() {
     );
 }
 
+// G56
 #[test]
 fn horizon_is_the_earliest_bound() {
     assert_eq!(horizon(100, &[500, 300], 1_000), Ok(300));

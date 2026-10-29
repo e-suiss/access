@@ -80,7 +80,7 @@ async fn twin_tenants_see_only_themselves() {
     }
 }
 
-// §12.1.3 test 6: without a scope, no rows
+// §12.1.3 test 6, U59: without a scope, no rows
 #[tokio::test]
 async fn no_scope_no_rows() {
     let db = fresh().await.unwrap();
@@ -106,7 +106,7 @@ async fn hostnames_need_the_realm_in_scope() {
     assert_eq!(visible(&db, t, None, "realms").await.len(), 1);
 }
 
-// §12.1.3 test 5: a taken slug or hostname fails without telling whose it is
+// §12.1.3 test 5, TNI-10: a taken slug or hostname fails without telling whose it is
 #[tokio::test]
 async fn global_identifiers_leak_nothing_and_are_never_reused() {
     let db = fresh().await.unwrap();

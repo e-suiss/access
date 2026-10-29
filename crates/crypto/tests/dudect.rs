@@ -73,7 +73,7 @@ mod dudect {
         start.elapsed().as_nanos()
     }
 
-    // CR-39 m.5, SAI-42
+    // CR-39 m.5, SAI-42, U45
     #[test]
     #[ignore = "nightly: just dudect"]
     fn secret_comparisons_do_not_leak() {

@@ -435,7 +435,7 @@ fn signature_cases() -> Vec<Case> {
     out
 }
 
-// CR-56
+// CR-56, G55, IDI-6
 #[test]
 fn attack_class_vectors() {
     for (c, allowed) in cases() {

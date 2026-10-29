@@ -72,7 +72,7 @@ fn integer_conversions() {
     assert_eq!(Value::Negative(u64::MAX).as_i64(), None);
 }
 
-// CR-10, OP-106 m.1–m.3
+// CR-10, OP-106 m.1–m.3, G60, SAI-41
 #[test]
 fn non_canonical_and_out_of_profile_input_is_rejected() {
     bad("1817", DecodeError::NonShortest);
@@ -222,6 +222,7 @@ mod properties {
             prop_assert_eq!(encode(&back, Limits::CEILING).unwrap(), bytes);
         }
 
+        // SI-6
         #[test]
         fn decoder_never_panics(bytes in proptest::collection::vec(any::<u8>(), 0..64)) {
             if let Ok(v) = decode(&bytes, Limits::CEILING) {
