@@ -171,7 +171,7 @@ jobs:
   supply-chain:
     name: supply-chain
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 20
     permissions:
       contents: read
     steps:
@@ -188,6 +188,8 @@ jobs:
         run: just no-rsa
       - name: cargo-vet (F-1)
         run: just vet
+      - name: Published crates package and build alone (OP-76, OP-139)
+        run: just crates-package
 
   secrets:
     name: secrets

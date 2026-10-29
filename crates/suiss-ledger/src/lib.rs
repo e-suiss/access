@@ -1,5 +1,4 @@
-//! Suiss shared ledger platform (OP-76): domain log, sequencer, outbox, durability
-//! boundary, checkpoint, witness client and replica.
+//! Suiss shared ledger engine (OP-76): Merkle frontier, single-writer sequencer and trusted time.
 //!
 //! The engine is pure (OP-8, OP-130 m.1): no I/O, clock or randomness. A driver feeds it the
 //! trusted time and the outcome of each storage commit.

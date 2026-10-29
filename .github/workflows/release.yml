@@ -410,10 +410,12 @@ jobs:
           cache: "false"
       - uses: rust-lang/crates-io-auth-action@c6f97d42243bad5fab37ca0427f495c86d5b1a18 # v1.0.5
         id: auth
-      - name: Publish the Kernel
+      # OP-76, OP-139: the shared crates, the Kernel and the Reference Verifier, in dependency order
+      - name: Publish the crates
         env:
           CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
-        run: cargo publish --locked -p esuiss-access-kernel
+          TAG: ${{ github.ref_name }}
+        run: just crates-publish "$TAG"
 
   # OP-68, OP-85, F-10
   publish-npm:

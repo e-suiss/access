@@ -1,5 +1,4 @@
-//! Suiss shared cryptography (OP-76): deterministic CBOR and digests, COSE, proof
-//! verification, signer and HSM/KMS abstraction.
+//! Suiss shared cryptography (OP-76): deterministic CBOR with the Access profile (OP-106).
 
 #![cfg_attr(not(feature = "std"), no_std)]
 

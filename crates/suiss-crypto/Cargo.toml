@@ -1,12 +1,11 @@
 [package]
 name = "esuiss-crypto"
-description = "Suiss shared cryptography: deterministic CBOR, digests, COSE, proof verification, signer and HSM/KMS (OP-76)."
+description = "Suiss shared cryptography: deterministic CBOR with the Access profile (OP-76, OP-106)."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-publish = false
 
 [features]
 default = ["std"]

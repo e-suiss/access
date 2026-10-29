@@ -1,6 +1,6 @@
 [package]
 name = "access-crypto"
-description = "Cryptography for Access: secret hygiene today; the aws-lc-rs wrapper lands with the Kernel."
+description = "Cryptography for Access servers: secrets, envelope encryption, event and opaque identifiers on aws-lc-rs."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

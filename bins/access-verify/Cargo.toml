@@ -1,12 +1,15 @@
 [package]
-name = "access-verify"
+name = "esuiss-access-verify"
 description = "Reference Verifier (CMP-17, TI-17): offline verification of Access artefacts with the open Kernel."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-publish = false
+
+[[bin]]
+name = "access-verify"
+path = "src/main.rs"
 
 [dependencies]
 access-kernel = { workspace = true }

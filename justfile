@@ -401,6 +401,19 @@ semgrep:
 vet:
     cargo vet --locked
 
+# OP-76, OP-102, OP-139
+published := "-p esuiss-crypto -p esuiss-ledger -p esuiss-restriction -p esuiss-access-kernel -p esuiss-access-verify"
+
+crates-package:
+    cargo package --locked {{published}}
+
+crates-publish tag:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    version="$(cargo metadata --locked --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "esuiss-access-kernel") | .version')"
+    if [[ "{{tag}}" != "v$version" ]]; then echo "tag {{tag}} does not match workspace version $version" >&2; exit 1; fi
+    cargo publish --locked {{published}}
+
 # F-1
 audit:
     cargo audit

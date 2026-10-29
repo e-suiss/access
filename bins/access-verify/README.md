@@ -16,7 +16,7 @@ cargo install --locked --path bins/access-verify
 Or run it from a checkout:
 
 ```sh
-cargo run --locked -p access-verify -- <command> [--option value]...
+cargo run --locked -p esuiss-access-verify -- <command> [--option value]...
 ```
 
 ## Output
@@ -71,7 +71,7 @@ reject: outside-binding-scope
 The tests run this binary over every case of the core track 1 vectors in [`conformance/vectors/core/1`](../../conformance/vectors/core/1) and compare the printed result with the expected one:
 
 ```sh
-cargo nextest run -p access-verify
+cargo nextest run -p esuiss-access-verify
 ```
 
 ## License

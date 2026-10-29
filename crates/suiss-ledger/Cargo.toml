@@ -1,12 +1,11 @@
 [package]
 name = "esuiss-ledger"
-description = "Suiss shared ledger platform: domain log, sequencer, outbox, checkpoint, witness, replica (OP-76)."
+description = "Suiss shared ledger engine: Merkle frontier, single-writer sequencer and trusted time (OP-76)."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-publish = false
 
 [dependencies]
 sha2 = { workspace = true }
