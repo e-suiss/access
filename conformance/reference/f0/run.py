@@ -7,7 +7,7 @@ import tempfile
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
-from f0 import algebra, codec, dcbor, digest, ed25519, fold, jose, merkle, note, record, sdjwt, validity, version_check
+from f0 import ais, algebra, codec, dcbor, digest, ed25519, fold, jose, merkle, note, record, sdjwt, validity, version_check
 from f0.algebra import child_within_parent
 from f0.version import CORE_VERSION, VERSION
 from f0.codec import Rejection, decode_canonical, decode_canonical_authority, decode_subject_selector, encode
@@ -262,6 +262,20 @@ def run_codec_encode(case, document):
     return {"cbor": encode(value).hex()}, None
 
 
+def run_ais(case, document):
+    # L2-AIS-1 to L2-AIS-4
+    key = decode_canonical(bytes.fromhex(document["key"]))
+    request = decode_canonical(bytes.fromhex(case["request"]))
+    try:
+        ais.verify(bytes.fromhex(case["sign1"]), key, request, case["now"])
+    except ais.AisError as error:
+        out = {"error": error.code}
+        if error.field:
+            out["field"] = error.field
+        return out, None
+    return {"valid": True}, None
+
+
 def run_checkpoint(case, document):
     # L2-CKP-1 to L2-CKP-4
     log = note.parse_vkey(document["log"])
@@ -326,6 +340,7 @@ OPERATIONS = {
     "digest.intent": (run_digest_intent, ("digest", "rejection")),
     "digest.body_commit": (run_body_commit, ("commit", "rejection")),
     "validity.horizon": (run_validity_horizon, ("horizon", "error")),
+    "ais.verify": (run_ais, ("valid", "error", "field")),
     "note.checkpoint": (run_checkpoint, ("size", "root", "extensions", "cosigned", "error")),
 }
 

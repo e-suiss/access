@@ -14,6 +14,8 @@ L2 defines the artefacts that only Access produces: their data model, how they a
 | Record disclosure | `record-disclosure` | carried inside other artefacts | not signed by itself | [L0-ENC-29c](../l0/encoding.md#L0-ENC-29c) |
 | Decision record fields | `decision-fields` | inside a `decision` record envelope | not signed by itself | [L2-REC-1](#L2-REC-1) to [L2-REC-3](#L2-REC-3) |
 | Intent envelope | `intent-envelope` | carried inside other artefacts | not signed by itself | [L0-EVAL-5](../l0/evaluation.md#L0-EVAL-5) |
+| Actor Intent Statement | `actor-intent-statement` | `application/access-ais+cbor` | The actor Instance's current key | [L2-AIS-1](#L2-AIS-1) to [L2-AIS-4](#L2-AIS-4) |
+| Opening record fields | `opening-fields` | inside an `opening` record envelope | not signed by itself | [L2-REC-4](#L2-REC-4), [L2-REC-5](#L2-REC-5) |
 
 The data model is [`conformance/cddl/kernel.cddl`](../../conformance/cddl/kernel.cddl).
 
@@ -40,6 +42,26 @@ A disclosure for an artefact opens `artifacts` and withholds `state_basis` and `
 <a id="L2-REC-3"></a>**L2-REC-3. State fold.** The state of a domain at position `p` is the fold of the `effects` of records `1..p` in position order: a key's value is the value of the last effect for it, and its version is that record's position. An effect without a value leaves the key absent with that version. No other input changes the state; a replica, index or cache that disagrees with the fold is wrong.
 
 Vectors: [`core/1/record-fold.json`](../../conformance/vectors/core/1/record-fold.json), operation `record.fold`: each case gives the records in position order as canonical envelopes and the resulting state as `[key, value, version]` triples sorted by key bytes (`value` is `null` in the JSON for an absent key), or the rejection.
+
+## Actor Intent Statement
+
+The Actor Intent Statement (AIS) is how an actor makes an Exercise its own. A PEP forwards it and cannot produce it. Without one, the actor is anonymous and holds only what `Public` holds.
+
+<a id="L2-AIS-1"></a>**L2-AIS-1. Content.** An AIS is a COSE_Sign1 with content type `application/access-ais+cbor` whose payload is an `actor-intent-statement`: the DomainID, the nonce (16 to 64 bytes), the intent digest ([L0-ENC-23](../l0/encoding.md#L0-ENC-23)), the mode, the PEP's identity as the actor addressed it, the capacity, the basis, the signing time `iat` and, for `continue`, the ExerciseID. A payload of another shape is rejected (reason `ais-payload`).
+
+<a id="L2-AIS-2"></a>**L2-AIS-2. Key.** The AIS verifies under the actor Instance's current key, with `kid` its RFC 7638 thumbprint, under the profile of [L0-SIG-10](../l0/signatures.md#L0-SIG-10). An Access actor is a native signer: a high-S ECDSA signature is rejected. Any other key, including a key the Instance has rotated away from, is rejected (reason `ais-signature`).
+
+<a id="L2-AIS-3"></a>**L2-AIS-3. Binding.** Every signed field equals the request: the domain addressed, the nonce, the intent digest the receiver computes itself, the mode, the PEP's transport-authenticated identity, the capacity, the basis and, for `continue`, the ExerciseID. A difference is a protocol error, not a decision, and names the first differing field in that order (reason `ais-mismatch`).
+
+<a id="L2-AIS-4"></a>**L2-AIS-4. Time.** An AIS whose `iat` is more than 60 seconds after the receiver's trusted time is rejected (reason `ais-future`). How old an AIS may be is decided by the nonce rule of [L2-REC-5](#L2-REC-5).
+
+Vectors: [`core/1/ais.json`](../../conformance/vectors/core/1/ais.json), operation `ais.verify`: each case gives the COSE_Sign1, the request as an `actor-intent-statement` whose `iat` is ignored, and the trusted time; the file gives the Instance's key.
+
+## Exercise records
+
+<a id="L2-REC-4"></a><!-- no-vector: definition: the field set of the opening record; its use is in L2-REC-5 -->**L2-REC-4. Opening record.** Each evaluation in `commit` or `continue` writes a record of kind `opening` with the fields of `opening-fields` (nonce, actor Instance or `"anonymous"`, basis, capacity, intent digest, AIS digest, proof commitments and, for `continue`, the ExerciseID), followed in the same batch by its `decision` record. A re-evaluation of an open nonce writes only a new `decision` record.
+
+<a id="L2-REC-5"></a><!-- no-vector: outside-operation: the nonce table is the commit path's, not an evaluator operation -->**L2-REC-5. Nonce.** A nonce belongs to one intent digest and one actor in its domain. Its outcomes form an append-only sequence: `allow` and `deny` are terminal and nothing follows them; `require_action` leaves it open until the intent's validity ends. The same nonce, intent and actor after a terminal outcome returns that outcome's records again. The same nonce with another intent or actor is a protocol error. An AIS whose nonce is new is accepted only while its age is within the intent validity ceiling.
 
 ## Signing profile
 

@@ -22,6 +22,7 @@ F0 is written from the protocol specification and the CDDL in `conformance/cddl/
 | `f0/sdjwt.py` | SD-JWT presentations (RFC 9901): disclosures, digest processing, decoys, `_sd_alg`, Key Binding JWT |
 | `f0/validity.py` | Validity contracts: decoding, profile class and variant, must-understand, audience, skew, acceptance end, staleness and revalidation |
 | `f0/merkle.py` | RFC 9162 tree hash, inclusion and consistency proofs |
+| `f0/ais.py` | The Actor Intent Statement: signature under the actor's key, payload shape and binding to the request (L2-AIS-1 to L2-AIS-4) |
 | `f0/note.py` | C2SP signed notes, checkpoints and Ed25519 cosignatures (L2-CKP-1 to L2-CKP-4) |
 | `f0/record.py` | Log record envelopes and selective disclosures: header rules, field commitments, field root, leaf hash, DomainID |
 | `f0/version_check.py` | Version tracks: not understood, not adopted, below the domain minimum |
@@ -41,7 +42,7 @@ python -m venv .venv
 
 The runner walks every vector file, runs the cases whose operation F0 supports, prints per-file counts and `N passed, M failed` with each failure, and exits non-zero if anything failed. `--summary <file>` also writes the counts as JSON.
 
-Supported operations: `combinator.evaluate`, `algebra.child_within_parent`, `algebra.meet`, `codec.encode`, `dcbor.decode`, `digest.intent`, `digest.body_commit`, `digest.merkle`, `verify.cose_sign1`, `verify.ed25519`, `verify.jws_compact`, `verify.sd_jwt`, `verify.sd_jwt.disclosure`, `key_scope.operational_key`, `record.envelope`, `validity.check`, `validity.horizon`, `version.check` and `note.checkpoint`. A vector file whose operation F0 does not implement fails the run unless the operation is listed, with a reason, in `NOT_IMPLEMENTED` in `run.py` (today only `meta.apply`, whose independent implementation is still to be written). Third-party data sets in `vectors/external/` that carry no `operation` are reported as skipped.
+Supported operations: `combinator.evaluate`, `algebra.child_within_parent`, `algebra.meet`, `codec.encode`, `dcbor.decode`, `digest.intent`, `digest.body_commit`, `digest.merkle`, `verify.cose_sign1`, `verify.ed25519`, `verify.jws_compact`, `verify.sd_jwt`, `verify.sd_jwt.disclosure`, `key_scope.operational_key`, `record.envelope`, `validity.check`, `validity.horizon`, `version.check`, `ais.verify` and `note.checkpoint`. A vector file whose operation F0 does not implement fails the run unless the operation is listed, with a reason, in `NOT_IMPLEMENTED` in `run.py` (today only `meta.apply`, whose independent implementation is still to be written). Third-party data sets in `vectors/external/` that carry no `operation` are reported as skipped.
 
 ## Differential testing
 

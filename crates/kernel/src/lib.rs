@@ -5,6 +5,7 @@
 
 extern crate alloc;
 
+pub mod ais;
 pub mod algebra;
 pub mod binding;
 pub mod codec;
