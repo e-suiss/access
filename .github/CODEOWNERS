@@ -4,7 +4,7 @@
 /crates/kernel/                 @ademceper
 /crates/crypto/                 @ademceper
 /crates/store/                  @ademceper
-/crates/sandbox/                @ademceper
+/crates/suiss-sandbox/                @ademceper
 /crates/identity-oauth/         @ademceper
 # OP-98
 /crates/identity-ui/src/login/   @ademceper

@@ -606,8 +606,11 @@ const UNSAFE: &str = "unsafe-allowlist";
 
 /// Crates that may contain `unsafe` (R-2): the aws-lc and HSM/PKCS#11 wrapper,
 /// the sandbox and the Kerberos gateway.
-pub(crate) const UNSAFE_ALLOWED: &[&str] =
-    &["crates/crypto", "crates/sandbox", "bins/access-gw-kerberos"];
+pub(crate) const UNSAFE_ALLOWED: &[&str] = &[
+    "crates/crypto",
+    "crates/suiss-sandbox",
+    "bins/access-gw-kerberos",
+];
 
 /// R-2: total `unsafe` lines in the allowlisted crates.
 pub(crate) const UNSAFE_LINE_BUDGET: usize = 500;

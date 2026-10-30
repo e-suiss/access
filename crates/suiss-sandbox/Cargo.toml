@@ -1,12 +1,14 @@
 [package]
-name = "access-sandbox"
-description = "Runtime lockdown for Access processes: prctl, capabilities, Landlock, two-phase seccomp, memfd_secret (SA-22)."
+name = "esuiss-sandbox"
+description = "Suiss shared process lockdown: prctl, capabilities, Landlock, two-phase seccomp, no io_uring, memfd_secret (SA-22, OP-140)."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-publish = false
+
+[lib]
+name = "suiss_sandbox"
 
 [dependencies]
 thiserror = { workspace = true }

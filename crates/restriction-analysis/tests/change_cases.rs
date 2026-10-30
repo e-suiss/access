@@ -12,12 +12,12 @@ use std::path::Path;
 #[cfg(target_os = "linux")]
 use std::time::Duration;
 
-use access_sandbox::{LandlockAbi, Lockdown, Profile};
 #[cfg(target_os = "linux")]
 use esuiss_restriction_analysis::Side;
 use esuiss_restriction_analysis::{
     AnalysisError, Cvc5, Limits, Timeouts, Verdict, Widening, WideningReason, analyze,
 };
+use suiss_sandbox::{LandlockAbi, Lockdown, Profile};
 
 #[cfg(target_os = "linux")]
 const NEEDS: &str = "needs the pinned cvc5 in ACCESS_CVC5; run `just smt-test`";

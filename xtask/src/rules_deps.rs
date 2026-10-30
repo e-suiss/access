@@ -48,7 +48,7 @@ pub(crate) fn classify(dir: &str) -> Option<Class> {
         ("crates", "internal-api") => Class::InternalApi,
         ("crates", "http") => Class::Http,
         ("crates", "telemetry") => Class::Telemetry,
-        ("crates", "sandbox") => Class::Sandbox,
+        ("crates", "suiss-sandbox") => Class::Sandbox,
         ("crates", "restriction-analysis") => Class::RestrictionAnalysis,
         ("crates", "testkit") => Class::Testkit,
         ("crates", "suiss-ledger") => Class::SuissLedger,

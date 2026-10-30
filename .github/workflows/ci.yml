@@ -231,12 +231,12 @@ jobs:
           cache-key: test
       - name: Linux sandbox tests
         run: |
-          if [[ ! -f crates/sandbox/Cargo.toml ]]; then
-            echo "::notice::crates/sandbox does not exist yet; nothing to test"
+          if [[ ! -f crates/suiss-sandbox/Cargo.toml ]]; then
+            echo "::notice::crates/suiss-sandbox does not exist yet; nothing to test"
             exit 0
           fi
-          cargo test --locked -p access-sandbox --lib
-          cargo test --locked -p access-sandbox --doc
+          cargo test --locked -p esuiss-sandbox --lib
+          cargo test --locked -p esuiss-sandbox --doc
           just test-sandbox
         env:
           ACCESS_SANDBOX_REQUIRE_MEMFD_SECRET: "1"

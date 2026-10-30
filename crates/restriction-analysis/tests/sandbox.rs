@@ -11,7 +11,7 @@ use std::io::Write as _;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
 
-use access_sandbox::{LandlockAbi, Lockdown, Profile};
+use suiss_sandbox::{LandlockAbi, Lockdown, Profile};
 
 const NEEDS: &str = "needs the pinned cvc5 in ACCESS_CVC5; run `just smt-test`";
 

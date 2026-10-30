@@ -81,26 +81,14 @@ dependencies = [
 ]
 
 [[package]]
-name = "access-sandbox"
-version = "0.2.0"
-dependencies = [
- "landlock",
- "libc",
- "rustix",
- "seccompiler",
- "thiserror",
- "zeroize",
-]
-
-[[package]]
 name = "access-server"
 version = "0.2.0"
 dependencies = [
  "access-crypto",
  "access-http",
- "access-sandbox",
  "access-telemetry",
  "axum",
+ "esuiss-sandbox",
  "figment",
  "rcgen",
  "serde",
@@ -1318,14 +1306,26 @@ dependencies = [
 name = "esuiss-restriction-analysis"
 version = "0.2.0"
 dependencies = [
- "access-sandbox",
  "cedar-policy",
  "cedar-policy-symcc",
  "esuiss-restriction",
+ "esuiss-sandbox",
  "sha2 0.11.1",
  "thiserror",
  "tokio",
  "toml 1.1.6+spec-1.1.0",
+]
+
+[[package]]
+name = "esuiss-sandbox"
+version = "0.2.0"
+dependencies = [
+ "landlock",
+ "libc",
+ "rustix",
+ "seccompiler",
+ "thiserror",
+ "zeroize",
 ]
 
 [[package]]

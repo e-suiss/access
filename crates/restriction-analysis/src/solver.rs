@@ -26,7 +26,7 @@ impl Default for Timeouts {
 }
 
 /// Puts the solver child into its sandbox between fork and exec (OP-115 m.6). The binary that
-/// runs the analysis passes the `access-sandbox` solver profile for the solver at the given path;
+/// runs the analysis passes the `suiss-sandbox` solver profile for the solver at the given path;
 /// an error stops the solver from starting ([`AnalysisError::Sandbox`]).
 pub type Confine = fn(&mut std::process::Command, &Path) -> std::io::Result<()>;
 

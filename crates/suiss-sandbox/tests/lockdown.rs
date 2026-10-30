@@ -78,7 +78,7 @@ fn main() -> ExitCode {
 fn main() -> ExitCode {
     use std::io::Write as _;
 
-    use access_sandbox::{Error, LandlockAbi, Lockdown, Profile, SecretMemory};
+    use suiss_sandbox::{Error, LandlockAbi, Lockdown, Profile, SecretMemory};
 
     const NAME: &str = "lockdown_fails_closed_on_unsupported_os";
     let cli = Cli::parse();
@@ -114,8 +114,8 @@ mod linux {
     use std::path::{Path, PathBuf};
     use std::process::{Command, ExitCode};
 
-    use access_sandbox::{Error, LandlockAbi, Lockdown, Locked, Profile, RunAs, SecretMemory};
     use rustix::process::DumpableBehavior;
+    use suiss_sandbox::{Error, LandlockAbi, Lockdown, Locked, Profile, RunAs, SecretMemory};
 
     pub(super) const SCENARIO_ENV: &str = "ACCESS_SANDBOX_SCENARIO";
     pub(super) const PROBE_ENV: &str = "ACCESS_SANDBOX_PROBE";
@@ -385,7 +385,7 @@ mod linux {
     /// with a `file`.
     fn scratch_tree() -> Result<PathBuf, String> {
         use std::os::unix::fs::PermissionsExt as _;
-        let root = std::env::temp_dir().join(format!("access-sandbox-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("suiss-sandbox-{}", std::process::id()));
         for dir in ["allowed", "denied"] {
             let d = root.join(dir);
             fs::create_dir_all(&d).map_err(|e| e.to_string())?;
@@ -727,8 +727,7 @@ mod linux {
     fn probe_tree() -> Result<PathBuf, String> {
         use std::os::unix::fs::PermissionsExt as _;
         let exe = std::env::current_exe().map_err(|e| e.to_string())?;
-        let root =
-            std::env::temp_dir().join(format!("access-sandbox-probe-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("suiss-sandbox-probe-{}", std::process::id()));
         fs::create_dir_all(root.join("out")).map_err(|e| e.to_string())?;
         fs::copy(&exe, root.join("probe")).map_err(|e| e.to_string())?;
         for (path, mode) in [

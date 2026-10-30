@@ -1,4 +1,4 @@
-//! Runtime lockdown for Access processes (SA-22, §14.5, OP-2).
+//! Runtime lockdown for Suiss processes (SA-22, §14.5, OP-2, OP-140 m.6).
 
 #![cfg_attr(not(target_os = "linux"), forbid(unsafe_code))]
 
@@ -60,7 +60,7 @@ pub enum LandlockAbi {
     V2 = 2,
     /// Linux 6.2: adds `TRUNCATE`.
     V3 = 3,
-    /// Linux 6.7: adds TCP bind/connect rights (not used by this crate yet).
+    /// Linux 6.7: adds TCP bind/connect rights.
     V4 = 4,
     /// Linux 6.10: adds `IOCTL_DEV`.
     V5 = 5,
@@ -69,7 +69,7 @@ pub enum LandlockAbi {
 }
 
 impl LandlockAbi {
-    /// The minimum every Access process requires (OP-92): V4 adds TCP bind/connect control,
+    /// The minimum every Suiss process requires (OP-92): V4 adds TCP bind/connect control,
     /// a second wall behind seccomp for the signer's and parser workers' network ban.
     pub const REQUIRED: Self = Self::V4;
 

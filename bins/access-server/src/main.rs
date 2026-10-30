@@ -6,8 +6,8 @@ mod config;
 use std::process::ExitCode;
 
 use access_http::{Health, Limits, SandboxHealth, router};
-use access_sandbox::{LandlockAbi, Lockdown, LockdownReport, Profile};
 use config::Config;
+use suiss_sandbox::{LandlockAbi, Lockdown, LockdownReport, Profile};
 
 fn main() -> ExitCode {
     let config = match Config::load() {

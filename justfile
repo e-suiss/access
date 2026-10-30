@@ -3,7 +3,7 @@
 set shell := ["bash", "-euo", "pipefail", "-c"]
 
 # CMP-24, MD-1, T41
-not_lockdown := "not (package(access-sandbox) and binary(lockdown))"
+not_lockdown := "not (package(esuiss-sandbox) and binary(lockdown))"
 kernel_targets := "wasm32-unknown-unknown wasm32-wasip1 aarch64-apple-ios aarch64-apple-ios-sim aarch64-linux-android x86_64-linux-android"
 mobile_targets := "aarch64-apple-ios aarch64-apple-ios-sim aarch64-linux-android x86_64-linux-android"
 
@@ -317,7 +317,7 @@ smt-test:
 test-sandbox:
     #!/usr/bin/env bash
     set -euo pipefail
-    bin="$(cargo test --locked -p access-sandbox --test lockdown --no-run --message-format=json | jq -r 'select(.executable != null and .target.name == "lockdown") | .executable')"
+    bin="$(cargo test --locked -p esuiss-sandbox --test lockdown --no-run --message-format=json | jq -r 'select(.executable != null and .target.name == "lockdown") | .executable')"
     if [[ "$(uname -s)" == Linux && "$(id -u)" != 0 ]]; then
         sudo --preserve-env=ACCESS_SANDBOX_REQUIRE_MEMFD_SECRET "$bin"
     else
@@ -413,8 +413,9 @@ shared-vectors:
     for f in $(find . -type f ! -name MANIFEST | sed 's|^\./||' | LC_ALL=C sort); do cp "../../../conformance/vectors/$f" "$f"; done
     find . -type f ! -name MANIFEST | sed 's|^\./||' | LC_ALL=C sort | xargs shasum -a 256 > MANIFEST
 
+# OP-140 m.6: esuiss-sandbox joins `published` once its name is reserved on crates.io
 crates-package:
-    cargo package --locked {{published}}
+    cargo package --locked {{published}} -p esuiss-sandbox
 
 crates-publish tag:
     #!/usr/bin/env bash
@@ -442,9 +443,9 @@ mutants *args:
 # SA-23, §14.5, OP-127 m.1
 sanitize kind:
     RUSTFLAGS="-Zsanitizer={{kind}}" RUSTDOCFLAGS="-Zsanitizer={{kind}}" \
-      cargo +{{sanitizer_nightly}} test --locked -Zbuild-std --target x86_64-unknown-linux-gnu --workspace --exclude access-sandbox --lib --tests
+      cargo +{{sanitizer_nightly}} test --locked -Zbuild-std --target x86_64-unknown-linux-gnu --workspace --exclude esuiss-sandbox --lib --tests
     RUSTFLAGS="-Zsanitizer={{kind}}" RUSTDOCFLAGS="-Zsanitizer={{kind}}" \
-      cargo +{{sanitizer_nightly}} test --locked -Zbuild-std --target x86_64-unknown-linux-gnu -p access-sandbox --lib
+      cargo +{{sanitizer_nightly}} test --locked -Zbuild-std --target x86_64-unknown-linux-gnu -p esuiss-sandbox --lib
 
 # SA-23, §14.5
 checksec +binaries:

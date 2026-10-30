@@ -135,17 +135,17 @@ const CONFINE: &str = "solver-confinement";
 /// Squeezed forms of a `Confine` that confines nothing.
 const NO_OP_CONFINE: &[&str] = &["|_,_|Ok(())", "|_,_|{Ok(())}", "Result<()>{Ok(())}"];
 
-/// What a file that builds a `Cvc5` must also contain: the `access-sandbox` solver lockdown.
+/// What a file that builds a `Cvc5` must also contain: the `suiss-sandbox` solver lockdown.
 const SANDBOX_CONFINE: &[&str] = &[
-    "access_sandbox",
+    "suiss_sandbox",
     "Profile::Solver",
     "allow_execute",
     ".confine(",
 ];
 
-/// OP-123 m.2: in non-test code the solver `Confine` comes from `access-sandbox`. A file that
+/// OP-123 m.2: in non-test code the solver `Confine` comes from `suiss-sandbox`. A file that
 /// mentions `Cvc5` has no no-op `Confine`, and one that calls `Cvc5::pinned` builds the
-/// `access_sandbox` solver lockdown.
+/// `suiss_sandbox` solver lockdown.
 pub(crate) fn confine_violations(rel_path: &str, src: &str) -> Vec<Violation> {
     if is_test_file(rel_path) || rel_path.starts_with("xtask/") {
         return Vec::new();
@@ -178,7 +178,7 @@ pub(crate) fn confine_violations(rel_path: &str, src: &str) -> Vec<Violation> {
                 out.push(v(
                     CONFINE,
                     &format!("{rel_path}:{line}"),
-                    "a solver Confine that confines nothing; outside tests it is the access-sandbox solver lockdown (OP-123 m.2, OP-115 m.6)".to_owned(),
+                    "a solver Confine that confines nothing; outside tests it is the suiss-sandbox solver lockdown (OP-123 m.2, OP-115 m.6)".to_owned(),
                 ));
             }
         }
@@ -195,7 +195,7 @@ pub(crate) fn confine_violations(rel_path: &str, src: &str) -> Vec<Violation> {
                     CONFINE,
                     &format!("{rel_path}:{line}"),
                     format!(
-                        "`Cvc5::pinned` without the access-sandbox solver lockdown (missing {}) (OP-123 m.2)",
+                        "`Cvc5::pinned` without the suiss-sandbox solver lockdown (missing {}) (OP-123 m.2)",
                         missing.join(", ")
                     ),
                 ));
@@ -427,7 +427,7 @@ mod tests {
     // OP-123 m.2
     #[test]
     fn sandbox_confine_and_test_code_are_accepted() {
-        let wired = "use access_sandbox::{LandlockAbi, Lockdown, Profile};\n\
+        let wired = "use suiss_sandbox::{LandlockAbi, Lockdown, Profile};\n\
             fn confine(c: &mut Command, s: &Path) -> std::io::Result<()> {\n\
                 Lockdown::new(Profile::Solver, LandlockAbi::REQUIRED).allow_execute(s).confine(c).map_err(std::io::Error::other)\n\
             }\n\

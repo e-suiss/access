@@ -40,11 +40,11 @@ title = "Landlock, seccomp, capability drop sandboxing; io_uring banned"
 tests = [
   "bins/access-server/tests/lockdown.rs",
   "crates/http/tests/router.rs::healthz_reports_landlock_abi",
-  "crates/sandbox/src/linux/seccomp.rs::narrowed_phase_is_a_subset_of_startup",
-  "crates/sandbox/src/linux/seccomp.rs::no_allowlist_contains_io_uring",
-  "crates/sandbox/src/linux/seccomp.rs::no_profile_allows_exec_or_fork",
-  "crates/sandbox/tests/lockdown.rs",
-  "crates/sandbox/tests/lockdown.rs::main",
+  "crates/suiss-sandbox/src/linux/seccomp.rs::narrowed_phase_is_a_subset_of_startup",
+  "crates/suiss-sandbox/src/linux/seccomp.rs::no_allowlist_contains_io_uring",
+  "crates/suiss-sandbox/src/linux/seccomp.rs::no_profile_allows_exec_or_fork",
+  "crates/suiss-sandbox/tests/lockdown.rs",
+  "crates/suiss-sandbox/tests/lockdown.rs::main",
 ]
 
 [[rule]]
@@ -102,7 +102,7 @@ family = "R"
 section = "14.5"
 status = "decision"
 title = "No unsafe or FFI outside the allowlist"
-tests = ["crates/sandbox/tests/lockdown.rs"]
+tests = ["crates/suiss-sandbox/tests/lockdown.rs"]
 
 [[rule]]
 id = "R-3"
@@ -130,9 +130,9 @@ status = "decision"
 stage = 4
 title = "Process topology"
 tests = [
-  "crates/sandbox/src/linux/seccomp.rs::parser_worker_has_no_socket_syscalls",
-  "crates/sandbox/src/linux/seccomp.rs::signer_has_no_network_syscalls",
-  "crates/sandbox/tests/lockdown.rs",
+  "crates/suiss-sandbox/src/linux/seccomp.rs::parser_worker_has_no_socket_syscalls",
+  "crates/suiss-sandbox/src/linux/seccomp.rs::signer_has_no_network_syscalls",
+  "crates/suiss-sandbox/tests/lockdown.rs",
 ]
 
 [[rule]]
@@ -143,8 +143,8 @@ status = "decision"
 stage = 1
 title = "Build and panic profile"
 tests = [
-  "crates/sandbox/src/linux/seccomp.rs::no_allowlist_contains_io_uring",
-  "crates/sandbox/tests/lockdown.rs",
+  "crates/suiss-sandbox/src/linux/seccomp.rs::no_allowlist_contains_io_uring",
+  "crates/suiss-sandbox/tests/lockdown.rs",
 ]
 
 [[rule]]
@@ -217,7 +217,7 @@ status = "decision"
 title = "Minimum Landlock ABI V4 with TCP bind/connect restriction"
 tests = [
   "crates/http/tests/router.rs::healthz_reports_landlock_abi",
-  "crates/sandbox/tests/lockdown.rs",
+  "crates/suiss-sandbox/tests/lockdown.rs",
 ]
 
 [[rule]]
