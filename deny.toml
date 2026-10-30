@@ -114,7 +114,7 @@ deny = [
     { crate = "unshare", reason = "OP-5: unmaintained" },
     { crate = "cap", reason = "OP-5: aborts when the limit is exceeded" },
     # OP-5, P-256
-    { crate = "p256", wrappers = ["esuiss-access-kernel"], reason = "OP-5: aws-lc-rs is 7.6x/4.9x faster; CR-55 m.1: verify-only in the no_std Kernel" },
+    { crate = "p256", wrappers = ["esuiss-access-kernel", "esuiss-crypto"], reason = "OP-5: aws-lc-rs is 7.6x/4.9x faster; CR-55 m.1, OP-140 m.2: verify-only in the no_std Kernel and the shared verify feature" },
     { crate = "diesel@<2.3.8", reason = "OP-5: RUSTSEC-2026-0136" },
     # OP-4, SA-22
     { crate = "io-uring", reason = "SA-22" },
