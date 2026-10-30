@@ -131,8 +131,11 @@ fn payload_shape() {
     );
 }
 
+type Case = (&'static str, &'static [&'static str], Vec<u8>, Statement, u64);
+
 // L2-AIS-*: statement vectors, byte for byte
 #[test]
+#[allow(clippy::too_many_lines, reason = "the vector cases are listed in full")]
 fn ais_vectors_match() {
     use crate::vector_rules::{field, golden, hex};
     use alloc::format;
@@ -142,7 +145,7 @@ fn ais_vectors_match() {
     future.iat = 100_000;
     let mut short = statement();
     short.nonce = vec![1; 8];
-    let cases: Vec<(&str, &[&str], Vec<u8>, Statement, u64)> = vec![
+    let cases: Vec<Case> = vec![
         (
             "valid",
             &["L2-AIS-1", "L2-AIS-2", "L2-AIS-3"],
