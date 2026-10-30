@@ -32,6 +32,8 @@ sha2 = { version = "0.11.1", default-features = false }
 ed25519-dalek = { version = "3.0.0", default-features = false }
 curve25519-dalek = { version = "5.0.0", default-features = false }
 p256 = { version = "0.14.0", default-features = false, features = ["ecdsa"] }
+# OP-94, OP-140 m.4: PKCS#11 key store
+cryptoki = { version = "=0.12.1", default-features = false }
 # CR-13, CR-54
 aws-lc-rs = { version = "1.18.2", default-features = false, features = ["aws-lc-sys"] }
 # OP-104

@@ -33,6 +33,7 @@ These need `std` and aws-lc-rs and are never part of `verify`.
 | `aws-lc` | `secret`, `dit`, `aws` | `Secret<T>`: never printed, zeroized on drop, compared in constant time; the ARM64 data-independent-timing guard; an aws-lc-rs verification backend |
 | `aead` | `envelope` | Envelope encryption: a fresh DEK per body under AES-256-GCM, long-lived DEKs under AES-256-GCM-SIV with a message limit, DEKs wrapped by a KEK behind a port (AES-256 Key Wrap), rewrapping for KEK rotation, a bounded DEK cache. Deleting a DEK is crypto-shredding |
 | `signer` | `signer` | The `Signer` port, a software signer (Ed25519, ECDSA P-256 with low S), `COSE_Sign1` signing, note signatures and checkpoint cosignatures |
+| `pkcs11` | `pkcs11` | A PKCS#11 key store: signing keys and KEKs generated and kept inside the token, used through `Signer` and the envelope `Kek` port. Tested against SoftHSM |
 
 ```rust
 use suiss_crypto::note::{verify_checkpoint, Verifier};

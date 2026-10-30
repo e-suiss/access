@@ -22,6 +22,24 @@ url = "https://raw.githubusercontent.com/mozilla/supply-chain/main/audits.toml"
 [imports.zcash]
 url = "https://raw.githubusercontent.com/zcash/rust-ecosystem/main/supply-chain/audits.toml"
 
+[policy.esuiss-access-kernel]
+audit-as-crates-io = false
+
+[policy.esuiss-access-verify]
+audit-as-crates-io = false
+
+[policy.esuiss-crypto]
+audit-as-crates-io = false
+
+[policy.esuiss-ledger]
+audit-as-crates-io = false
+
+[policy.esuiss-restriction]
+audit-as-crates-io = false
+
+[policy.esuiss-sandbox]
+audit-as-crates-io = false
+
 [[exemptions.aho-corasick]]
 version = "1.1.5"
 criteria = "safe-to-deploy"
@@ -244,6 +262,14 @@ criteria = "safe-to-deploy"
 
 [[exemptions.crypto-common]]
 version = "0.2.2"
+criteria = "safe-to-deploy"
+
+[[exemptions.cryptoki]]
+version = "0.12.1"
+criteria = "safe-to-deploy"
+
+[[exemptions.cryptoki-sys]]
+version = "0.5.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.ctutils]]
@@ -632,6 +658,10 @@ criteria = "safe-to-deploy"
 
 [[exemptions.libc]]
 version = "0.2.190"
+criteria = "safe-to-deploy"
+
+[[exemptions.libloading]]
+version = "0.8.9"
 criteria = "safe-to-deploy"
 
 [[exemptions.libsqlite3-sys]]

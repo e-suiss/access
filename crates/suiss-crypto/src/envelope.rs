@@ -73,6 +73,18 @@ impl Dek {
         Ok(dek)
     }
 
+    /// A key from its bytes, for a KEK adapter that unwrapped it.
+    #[must_use]
+    pub fn from_secret(key: Secret<[u8; 32]>) -> Self {
+        Self(key)
+    }
+
+    /// The key bytes, for a KEK adapter that wraps it.
+    #[must_use]
+    pub fn secret(&self) -> &Secret<[u8; 32]> {
+        &self.0
+    }
+
     fn key(&self, alg: &'static aws_lc_rs::aead::Algorithm) -> Result<LessSafeKey, EnvelopeError> {
         Ok(LessSafeKey::new(
             UnboundKey::new(alg, self.0.expose()).map_err(|_| EnvelopeError::Seal)?,

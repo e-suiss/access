@@ -14,7 +14,7 @@ check: fmt-check lint rules deny
 
 # SA-59; store tests use DATABASE_URL, or a local cluster (`just pg-up`)
 test:
-    DATABASE_URL="${DATABASE_URL:-$(scripts/pg-local.sh up)}" cargo nextest run --workspace --locked --no-tests=pass -E '{{not_lockdown}}'
+    DATABASE_URL="${DATABASE_URL:-$(scripts/pg-local.sh up)}" SOFTHSM2_CONF="$(scripts/softhsm-local.sh)" cargo nextest run --workspace --locked --no-tests=pass -E '{{not_lockdown}}'
     cargo test --workspace --locked --doc
 
 # OP-66, OP-69: throwaway PostgreSQL 18 under target/pg; prints its superuser URL

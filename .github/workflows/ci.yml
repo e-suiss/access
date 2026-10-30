@@ -72,6 +72,9 @@ jobs:
         with:
           cache-key: test
           tools: nextest
+      # OP-69, OP-140 m.4: the PKCS#11 key store is tested against SoftHSM
+      - name: SoftHSM
+        run: sudo apt-get install --yes --no-install-recommends softhsm2
       - name: Tests (SA-59 phase 0 layers)
         run: just test
       # OP-116 m.6

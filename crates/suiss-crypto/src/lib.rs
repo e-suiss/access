@@ -21,6 +21,8 @@ pub mod dit;
 pub mod envelope;
 #[cfg(feature = "verify")]
 pub mod note;
+#[cfg(feature = "pkcs11")]
+pub mod pkcs11;
 #[cfg(feature = "aws-lc")]
 pub mod secret;
 #[cfg(feature = "verify")]

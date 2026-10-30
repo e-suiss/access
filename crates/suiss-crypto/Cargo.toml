@@ -16,6 +16,7 @@ std = ["verify"]
 aws-lc = ["std", "dep:aws-lc-rs", "dep:secrecy", "dep:subtle", "dep:zeroize"]
 aead = ["aws-lc"]
 signer = ["aws-lc"]
+pkcs11 = ["signer", "dep:cryptoki"]
 # OP-135 m.4: the in-process KEK, for tests of other crates
 testing = []
 
@@ -29,6 +30,7 @@ aws-lc-rs = { workspace = true, optional = true }
 secrecy = { workspace = true, optional = true }
 subtle = { workspace = true, optional = true }
 zeroize = { workspace = true, optional = true, features = ["alloc", "std"] }
+cryptoki = { workspace = true, optional = true }
 
 [dev-dependencies]
 static_assertions = { workspace = true }
