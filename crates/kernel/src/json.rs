@@ -312,15 +312,13 @@ impl Parser<'_> {
 #[error("not canonical unpadded base64url")]
 pub struct Base64Error;
 
+const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+
 fn sextet(c: u8) -> Option<u8> {
-    match c {
-        b'A'..=b'Z' => c.checked_sub(b'A'),
-        b'a'..=b'z' => c.checked_sub(b'a').and_then(|x| x.checked_add(26)),
-        b'0'..=b'9' => c.checked_sub(b'0').and_then(|x| x.checked_add(52)),
-        b'-' => Some(62),
-        b'_' => Some(63),
-        _ => None,
-    }
+    ALPHABET
+        .iter()
+        .position(|&a| a == c)
+        .and_then(|i| u8::try_from(i).ok())
 }
 
 /// Decodes unpadded base64url; padding, other alphabets and non-zero trailing bits are rejected.
@@ -352,7 +350,6 @@ pub fn b64url_decode(s: &str) -> Result<Vec<u8>, Base64Error> {
 /// Encodes unpadded base64url.
 #[must_use]
 pub fn b64url_encode(data: &[u8]) -> String {
-    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
     let mut out = String::new();
     for chunk in data.chunks(3) {
         let mut buf = [0_u8; 4];
