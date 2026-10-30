@@ -89,8 +89,10 @@ impl<L: DomainLog> Leader<L> {
         independent(items)?;
         check_effects(items)?;
         for n in nonces(items)? {
-            if let Some(stored) = self.log.nonce(&n.nonce).await? {
-                return replay(n, &stored, items.len() == 1).map(Outcome::Replayed);
+            if let Some(stored) = self.log.nonce(&n.nonce).await?
+                && let Some(pos) = replay(n, &stored, items.len() == 1)?
+            {
+                return Ok(Outcome::Replayed(pos));
             }
         }
         let entries: Vec<Bound<'_>> = items

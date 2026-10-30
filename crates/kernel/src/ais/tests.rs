@@ -131,7 +131,13 @@ fn payload_shape() {
     );
 }
 
-type Case = (&'static str, &'static [&'static str], Vec<u8>, Statement, u64);
+type Case = (
+    &'static str,
+    &'static [&'static str],
+    Vec<u8>,
+    Statement,
+    u64,
+);
 
 // L2-AIS-*: statement vectors, byte for byte
 #[test]

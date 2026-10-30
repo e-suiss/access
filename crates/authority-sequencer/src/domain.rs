@@ -36,6 +36,8 @@ pub struct NonceUse {
     pub actor: Vec<u8>,
     /// Intent digest, computed by Access (§17.1.1 step 4).
     pub intent_digest: [u8; 32],
+    /// Outcome of the decision that uses it: `allow`, `deny` or `require_action`.
+    pub outcome: String,
 }
 
 /// One record to append with what it writes alongside.
@@ -193,16 +195,28 @@ pub fn independent(items: &[Item]) -> Result<(), SequencerError> {
     Ok(())
 }
 
-/// The replay rule for a nonce already committed (§9.5 k.5, TI-8): a lone retry with the same
-/// intent and actor gets the committed record back; anything else is a conflict.
+/// The rule for a nonce that already has an outcome (§9.5 k.5, TI-8, OP-141 m.9). With another
+/// intent or actor it is a conflict. After `allow` or `deny`, a lone retry gets the committed
+/// record back (`Some`). After `require_action` the nonce is open and is evaluated again (`None`).
 ///
 /// # Errors
 /// [`SequencerError::NonceConflict`].
-pub fn replay(wanted: &NonceUse, stored: &NonceRow, lone: bool) -> Result<u64, SequencerError> {
-    if lone && stored.intent_digest == wanted.intent_digest && stored.actor == wanted.actor {
-        return Ok(stored.decision_pos);
+pub fn replay(
+    wanted: &NonceUse,
+    stored: &NonceRow,
+    lone: bool,
+) -> Result<Option<u64>, SequencerError> {
+    if stored.intent_digest != wanted.intent_digest || stored.actor != wanted.actor {
+        return Err(SequencerError::NonceConflict);
     }
-    Err(SequencerError::NonceConflict)
+    if stored.outcome == "require_action" {
+        return Ok(None);
+    }
+    if lone {
+        Ok(Some(stored.decision_pos))
+    } else {
+        Err(SequencerError::NonceConflict)
+    }
 }
 
 /// The rows a planned batch writes in its single transaction (T7, OP-130 m.6).
@@ -250,6 +264,7 @@ pub fn rows(
                 actor: n.actor.clone(),
                 intent_digest: n.intent_digest,
                 decision_pos: pos,
+                outcome: n.outcome.clone(),
             });
         }
         for (idx, event) in item.events.iter().enumerate() {

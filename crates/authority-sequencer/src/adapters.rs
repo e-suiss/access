@@ -100,6 +100,16 @@ pub async fn create_genesis(
         fields,
     };
     let domain = envelope.domain()?;
+    // L0-META-7
+    let state = access_kernel::fold::genesis(&envelope)?
+        .into_iter()
+        .filter_map(|(k, e)| e.value.map(|v| (k, v)))
+        .map(|(k, v)| {
+            suiss_crypto::dcbor::encode(&v, suiss_crypto::dcbor::Limits::CEILING)
+                .map(|v| (k, v))
+                .map_err(access_kernel::record::RecordError::from)
+        })
+        .collect::<Result<Vec<_>, _>>()?;
     let record = LogRecord {
         pos: 0,
         kind: "genesis",
@@ -109,7 +119,14 @@ pub async fn create_genesis(
             .to_bytes()
             .map_err(access_kernel::record::RecordError::from)?,
     };
-    create_domain(sequencer, &DomainId::from_bytes(domain.0), tenant, &record).await?;
+    create_domain(
+        sequencer,
+        &DomainId::from_bytes(domain.0),
+        tenant,
+        &record,
+        &state,
+    )
+    .await?;
     Ok(domain)
 }
 
@@ -121,15 +138,16 @@ pub async fn create_genesis(
 pub async fn fold_check(pool: &Pool, domain: Digest) -> Result<(), SequencerError> {
     let id = DomainId::from_bytes(domain.0);
     let head = access_store::authority::read_head(pool, &id).await?;
-    let mut records = Vec::new();
-    if head.pos > 0 {
-        for r in read_log(pool, &id, 1, head.pos).await? {
-            records.push(
-                RecordEnvelope::from_bytes(&r.envelope).map_err(|_| SequencerError::Diverged)?,
-            );
+    let mut folded = None;
+    for r in read_log(pool, &id, 0, head.pos).await? {
+        let record =
+            RecordEnvelope::from_bytes(&r.envelope).map_err(|_| SequencerError::Diverged)?;
+        match folded.as_mut() {
+            None => folded = Some(access_kernel::fold::genesis(&record)?),
+            Some(state) => access_kernel::fold::apply(state, &record)?,
         }
     }
-    let folded = access_kernel::fold::fold(&records)?;
+    let folded = folded.ok_or(SequencerError::Diverged)?;
     let stored = access_store::authority::state(pool, &id).await?;
     let mut same = folded.len() == stored.len();
     for ((key, entry), row) in folded.iter().zip(&stored) {

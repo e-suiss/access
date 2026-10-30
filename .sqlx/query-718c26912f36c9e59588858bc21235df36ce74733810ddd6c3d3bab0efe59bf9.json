@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.authority_version (domain_id, tenant_id, key, version) VALUES ($1, $2, $3, 0)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Uuid",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "718c26912f36c9e59588858bc21235df36ce74733810ddd6c3d3bab0efe59bf9"
+}

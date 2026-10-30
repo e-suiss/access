@@ -22,7 +22,9 @@ async fn domain(db: &TestDb, seed: u8) -> DomainId {
         leaf_hash: [seed; 32],
         envelope: vec![0xa0],
     };
-    create_domain(&db.sequencer, &d, [1; 16], &g).await.unwrap();
+    create_domain(&db.sequencer, &d, [1; 16], &g, &[])
+        .await
+        .unwrap();
     d
 }
 

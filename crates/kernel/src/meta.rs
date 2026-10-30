@@ -1066,8 +1066,36 @@ pub fn key(kind: &str, id: &Id) -> Vec<u8> {
     .unwrap_or_default()
 }
 
+/// The index key from a key's RFC 7638 thumbprint to the Instance that holds it:
+/// `dCBOR(["key", kid])` (L0-META-5).
+#[must_use]
+pub fn key_index(kid: &[u8; 32]) -> Vec<u8> {
+    dcbor::encode(
+        &Value::Array(alloc::vec![
+            Value::text(kind::KEY),
+            Value::Bytes(kid.to_vec())
+        ]),
+        Limits::CEILING,
+    )
+    .unwrap_or_default()
+}
+
+fn index_key(out: &mut Outcome, key: &PublicKey, instance: &Id) {
+    out.effects.push((
+        key_index(&crate::verify::key_scope::thumbprint(key)),
+        Some(instance.to_value()),
+    ));
+}
+
+fn unindex_key(out: &mut Outcome, key: &PublicKey) {
+    out.effects
+        .push((key_index(&crate::verify::key_scope::thumbprint(key)), None));
+}
+
 /// Kinds of state keys.
 pub mod kind {
+    /// The Instance holding a key, by thumbprint.
+    pub const KEY: &str = "key";
     /// An Anchor.
     pub const ANCHOR: &str = "anchor";
     /// A Grant.
@@ -1963,6 +1991,7 @@ pub fn apply(ctx: &Context<'_>, payload: &Payload, view: &dyn View) -> Result<Ou
             let mut list = ids(view, kind::INSTANCES, party)?;
             list.insert(i);
             set(&mut out, kind::INSTANCES, party, ids_value(&list));
+            index_key(&mut out, k, &i);
             if let Some(m) = mandate {
                 bind_mandate(view, ctx, &mut out, i, m.clone(), 0)?;
             }
@@ -1973,6 +2002,8 @@ pub fn apply(ctx: &Context<'_>, payload: &Payload, view: &dyn View) -> Result<Ou
                 return Err(MetaError::NotAuthorized);
             }
             let mut i = own_instance(view, instance, &actor)?;
+            unindex_key(&mut out, &i.key);
+            index_key(&mut out, k, instance);
             i.key = k.clone();
             set(&mut out, kind::INSTANCE, instance, i.to_value());
         }
@@ -2008,6 +2039,8 @@ pub fn apply(ctx: &Context<'_>, payload: &Payload, view: &dyn View) -> Result<Ou
             let mut list = ids(view, kind::INSTANCES, &old.party)?;
             list.insert(succ);
             set(&mut out, kind::INSTANCES, &old.party, ids_value(&list));
+            unindex_key(&mut out, &old.key);
+            index_key(&mut out, k, &succ);
             out.expansion = true;
         }
         Payload::MandateBind { instance, envelope } => {

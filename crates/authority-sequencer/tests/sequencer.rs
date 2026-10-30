@@ -62,6 +62,7 @@ fn item(tag: &str, nonce: Option<(u8, u8)>) -> Item {
             nonce: vec![n; 16],
             actor: vec![1],
             intent_digest: [d; 32],
+            outcome: String::from("deny"),
         }),
         events: vec![vec![0xa0]],
         proofs: vec![([9; 32], vec![1, 2, 3])],
@@ -76,8 +77,40 @@ fn key() -> EventKey {
     EventKey::new(Secret::new([5; 32]))
 }
 
+/// Genesis fields (L0-META-7): a meta-anchor whose sole root depends on `tag`.
+fn genesis_fields(tag: &str) -> BTreeMap<String, Opened> {
+    let mut party = [0_u8; 16];
+    for (p, b) in party.iter_mut().zip(tag.bytes()) {
+        *p = b;
+    }
+    let root = Value::Map(vec![(
+        Value::text("root"),
+        Value::Map(vec![(Value::text("sole"), Value::Bytes(party.to_vec()))]),
+    )]);
+    let versions = Value::Map(vec![
+        (Value::text("core"), Value::Unsigned(1)),
+        (Value::text("meta_schema"), Value::Unsigned(1)),
+    ]);
+    BTreeMap::from([
+        (
+            "meta_anchor".to_owned(),
+            Opened {
+                value: root,
+                salt: [3; 32],
+            },
+        ),
+        (
+            "versions".to_owned(),
+            Opened {
+                value: versions,
+                salt: [4; 32],
+            },
+        ),
+    ])
+}
+
 async fn domain(db: &TestDb, tag: &str) -> Digest {
-    create_genesis(&db.sequencer, TENANT, fields(tag), 1_000)
+    create_genesis(&db.sequencer, TENANT, genesis_fields(tag), 1_000)
         .await
         .unwrap()
 }
@@ -105,7 +138,7 @@ async fn domain_id_is_the_genesis_digest() {
     );
     // a second Genesis for the same content is the same domain and is refused
     assert!(
-        create_genesis(&db.sequencer, TENANT, fields("g"), 1_000)
+        create_genesis(&db.sequencer, TENANT, genesis_fields("g"), 1_000)
             .await
             .is_err()
     );

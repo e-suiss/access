@@ -48,6 +48,8 @@ pub struct NonceRow {
     pub intent_digest: [u8; 32],
     /// Position of the `DecisionRecord` it maps to.
     pub decision_pos: u64,
+    /// That decision's outcome: `allow`, `deny` or `require_action` (OP-141 m.9).
+    pub outcome: String,
 }
 
 /// One outbox event, written with the record it derives from (OP-130 m.9).
@@ -163,6 +165,7 @@ pub async fn create_domain(
     domain: &DomainId,
     tenant: [u8; 16],
     genesis: &LogRecord,
+    state: &[(Vec<u8>, Vec<u8>)],
 ) -> Result<HeadRow, StoreError> {
     if genesis.pos != 0 || genesis.kind != "genesis" {
         return Err(StoreError::Range);
@@ -187,6 +190,26 @@ pub async fn create_domain(
     )
     .execute(&mut *t.tx)
     .await?;
+    // L0-META-7
+    for (key, value) in state {
+        sqlx::query!(
+            "INSERT INTO access.authority_state (domain_id, tenant_id, key, value, version) VALUES ($1, $2, $3, $4, 0)",
+            id,
+            sqlx::types::Uuid::from_bytes(tenant),
+            key.as_slice(),
+            value.as_slice(),
+        )
+        .execute(&mut *t.tx)
+        .await?;
+        sqlx::query!(
+            "INSERT INTO access.authority_version (domain_id, tenant_id, key, version) VALUES ($1, $2, $3, 0)",
+            id,
+            sqlx::types::Uuid::from_bytes(tenant),
+            key.as_slice(),
+        )
+        .execute(&mut *t.tx)
+        .await?;
+    }
     let frontier = vec![genesis.leaf_hash.to_vec()];
     sqlx::query!(
         "INSERT INTO access.domain_head (domain_id, pos, epoch, leaf_hash, recorded_at, frontier)
@@ -416,14 +439,15 @@ async fn side_rows(
     let id = id.as_slice();
     for n in &batch.nonces {
         sqlx::query!(
-            "INSERT INTO access.authority_nonce (domain_id, tenant_id, nonce, actor, intent_digest, decision_pos)
-             VALUES ($1, $2, $3, $4, $5, $6)",
+            "INSERT INTO access.authority_nonce (domain_id, tenant_id, nonce, actor, intent_digest, decision_pos, outcome)
+             VALUES ($1, $2, $3, $4, $5, $6, $7)",
             id,
             tenant,
             n.nonce.as_slice(),
             n.actor.as_slice(),
             n.intent_digest.as_slice(),
             signed(n.decision_pos)?,
+            n.outcome.as_str(),
         )
         .execute(&mut *t.tx)
         .await?;
@@ -699,7 +723,7 @@ pub async fn read_log(
         .collect()
 }
 
-/// Looks a nonce up (TI-8).
+/// The latest outcome recorded for a nonce (TI-8, OP-141 m.9).
 ///
 /// # Errors
 /// [`StoreError`].
@@ -710,8 +734,8 @@ pub async fn find_nonce(
 ) -> Result<Option<NonceRow>, StoreError> {
     let mut t = DomainTx::begin(pool, domain).await?;
     let row = sqlx::query!(
-        "SELECT nonce, actor, intent_digest, decision_pos FROM access.authority_nonce
-          WHERE domain_id = $1 AND nonce = $2",
+        "SELECT nonce, actor, intent_digest, decision_pos, outcome FROM access.authority_nonce
+          WHERE domain_id = $1 AND nonce = $2 ORDER BY decision_pos DESC LIMIT 1",
         domain.as_bytes().as_slice(),
         nonce,
     )
@@ -724,6 +748,7 @@ pub async fn find_nonce(
             actor: r.actor,
             intent_digest: hash(r.intent_digest)?,
             decision_pos: unsigned(r.decision_pos)?,
+            outcome: r.outcome,
         })
     })
     .transpose()

@@ -61,6 +61,7 @@ fn batch(epoch: u64, after: &HeadRow, seed: u8) -> CommitBatch {
             frontier: vec![[seed; 32]],
         },
         nonces: vec![NonceRow {
+            outcome: String::from("allow"),
             nonce: vec![seed; 16],
             actor: vec![1],
             intent_digest: [9; 32],
@@ -86,7 +87,9 @@ fn batch(epoch: u64, after: &HeadRow, seed: u8) -> CommitBatch {
 
 async fn domain(db: &TestDb, seed: u8) -> DomainId {
     let (d, g) = genesis(seed);
-    create_domain(&db.sequencer, &d, TENANT, &g).await.unwrap();
+    create_domain(&db.sequencer, &d, TENANT, &g, &[])
+        .await
+        .unwrap();
     d
 }
 
@@ -179,6 +182,53 @@ async fn a_nonce_is_consumed_once() {
     again.nonces[0].nonce = vec![12; 16];
     assert!(
         commit_batch(&db.sequencer, &d, TENANT, &again)
+            .await
+            .is_err()
+    );
+}
+
+// OP-141 m.9, L2-REC-5: require_action leaves a nonce open for the same intent and actor;
+// allow and deny close it
+#[tokio::test]
+async fn a_nonce_stays_open_only_after_require_action() {
+    let db = fresh().await.unwrap();
+    let d = domain(&db, 16).await;
+    let (lease, head) = acquire_lease(&db.sequencer, &d, "a", TTL).await.unwrap();
+    let mut first = batch(lease.epoch, &head, 17);
+    first.nonces[0].outcome = String::from("require_action");
+    commit_batch(&db.sequencer, &d, TENANT, &first)
+        .await
+        .unwrap();
+    let nonce = first.nonces[0].nonce.clone();
+    let head = read_head(&db.app, &d).await.unwrap();
+    let mut other_intent = batch(lease.epoch, &head, 18);
+    other_intent.nonces[0].nonce.clone_from(&nonce);
+    other_intent.nonces[0].intent_digest = [8; 32];
+    assert!(
+        commit_batch(&db.sequencer, &d, TENANT, &other_intent)
+            .await
+            .is_err()
+    );
+    let mut allow = batch(lease.epoch, &head, 18);
+    allow.nonces[0] = NonceRow {
+        decision_pos: allow.records[0].pos,
+        outcome: String::from("allow"),
+        ..first.nonces[0].clone()
+    };
+    commit_batch(&db.sequencer, &d, TENANT, &allow)
+        .await
+        .unwrap();
+    let latest = find_nonce(&db.app, &d, &nonce).await.unwrap().unwrap();
+    assert_eq!(latest.outcome, "allow");
+    let head = read_head(&db.app, &d).await.unwrap();
+    let mut after = batch(lease.epoch, &head, 19);
+    after.nonces[0] = NonceRow {
+        decision_pos: after.records[0].pos,
+        outcome: String::from("require_action"),
+        ..first.nonces[0].clone()
+    };
+    assert!(
+        commit_batch(&db.sequencer, &d, TENANT, &after)
             .await
             .is_err()
     );

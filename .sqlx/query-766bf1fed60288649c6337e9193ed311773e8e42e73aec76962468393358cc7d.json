@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT nonce, actor, intent_digest, decision_pos FROM access.authority_nonce\n          WHERE domain_id = $1 AND nonce = $2",
+  "query": "SELECT nonce, actor, intent_digest, decision_pos, outcome FROM access.authority_nonce\n          WHERE domain_id = $1 AND nonce = $2 ORDER BY decision_pos DESC LIMIT 1",
   "describe": {
     "columns": [
       {
@@ -46,6 +46,17 @@
             "name": "decision_pos"
           }
         }
+      },
+      {
+        "ordinal": 4,
+        "name": "outcome",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.authority_nonce",
+            "name": "outcome"
+          }
+        }
       }
     ],
     "parameters": {
@@ -58,8 +69,9 @@
       false,
       false,
       false,
+      false,
       false
     ]
   },
-  "hash": "3a5c92754ca7328719740b93ccdffcb1eed488fdef0e93f3ce1bd293b478d199"
+  "hash": "766bf1fed60288649c6337e9193ed311773e8e42e73aec76962468393358cc7d"
 }

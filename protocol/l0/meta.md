@@ -16,7 +16,7 @@ A meta-action is an Exercise that changes authority state. Apart from Genesis, i
 
 ## 2. State
 
-<a id="L0-META-5"></a>**L0-META-5. State keys.** The state key of an object is `dCBOR([k, id])`, where `k` is the kind text and `id` its identifier. The kinds are `anchor`, `grant`, `party`, `instance`, `mandate`, `acceptance`, `policy` and `claim`. Three index kinds hold sets of ids: `children` (the Grants whose basis is an Anchor or a Grant, keyed by that id), `instances` (the Instances of a Party, keyed by the Party) and `mandates` (the Mandates of an Instance, keyed by the Instance).
+<a id="L0-META-5"></a>**L0-META-5. State keys.** The state key of an object is `dCBOR([k, id])`, where `k` is the kind text and `id` its identifier. The kinds are `anchor`, `grant`, `party`, `instance`, `mandate`, `acceptance`, `policy` and `claim`. Three index kinds hold sets of ids: `children` (the Grants whose basis is an Anchor or a Grant, keyed by that id), `instances` (the Instances of a Party, keyed by the Party) and `mandates` (the Mandates of an Instance, keyed by the Instance). The index `dCBOR(["key", kid])`, with `kid` the RFC 7638 thumbprint of an Instance's current key, holds that Instance's id; creating, rekeying and recovering an Instance write it, and rekeying and recovering remove the old key's entry.
 
 <a id="L0-META-6"></a>**L0-META-6. Stored status.** A stored object carries its content, the position that created or last changed it (`since`) and, once it has ended, `ended` with the position and the way it ended. Ending is terminal: no meta-action changes an object with `ended` (reason `meta-ended`). Status that depends on time or on other objects, such as expiry or a revoked ancestor, is derived when it is read and never stored.
 
