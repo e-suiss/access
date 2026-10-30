@@ -143,7 +143,6 @@ pub enum Kind {
 const fn cose_name(e: CoseError) -> &'static str {
     match e {
         CoseError::Cbor(_) => "cbor",
-        CoseError::Shape => "shape",
         CoseError::Header => "header",
         CoseError::Crit => "crit",
         CoseError::Unprotected => "unprotected",
@@ -153,13 +152,13 @@ const fn cose_name(e: CoseError) -> &'static str {
         CoseError::ContentType => "content-type",
         CoseError::Signature(SignatureError::HighS) => "high-s",
         CoseError::Signature(_) => "signature",
+        _ => "shape",
     }
 }
 
 const fn cose_kind(e: CoseError) -> Kind {
     match e {
         CoseError::Cbor(_) => Kind::Cbor,
-        CoseError::Shape => Kind::Shape,
         CoseError::Header => Kind::Header,
         CoseError::Crit => Kind::Crit,
         CoseError::Unprotected => Kind::Unprotected,
@@ -169,6 +168,7 @@ const fn cose_kind(e: CoseError) -> Kind {
         CoseError::ContentType => Kind::ContentType,
         CoseError::Signature(SignatureError::HighS) => Kind::HighS,
         CoseError::Signature(_) => Kind::Signature,
+        _ => Kind::Shape,
     }
 }
 

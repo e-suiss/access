@@ -1,21 +1,54 @@
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use super::{COSE_SIGN1_TAG, DecodeError, Limits, Value};
+use alloc::boxed::Box;
+
+use super::{COSE_SIGN1_TAG, DecodeError, Limits, TagAllowlist, Value};
+
+const NO_TAGS: TagAllowlist = TagAllowlist::none();
 
 /// Decodes exactly one canonical item and rejects everything outside the profile (CR-10).
 ///
 /// # Errors
 /// Any non-canonical or out-of-profile input.
 pub fn decode(input: &[u8], limits: Limits) -> Result<Value, DecodeError> {
+    decode_with(input, limits, &NO_TAGS)
+}
+
+/// [`decode`] that also accepts the tags in `tags`, anywhere in the item.
+///
+/// # Errors
+/// Any non-canonical or out-of-profile input, or a tag outside `tags`.
+pub fn decode_with(
+    input: &[u8],
+    limits: Limits,
+    tags: &TagAllowlist,
+) -> Result<Value, DecodeError> {
+    let (value, used) = decode_prefix(input, limits, tags)?;
+    if used == input.len() {
+        Ok(value)
+    } else {
+        Err(DecodeError::TrailingBytes)
+    }
+}
+
+/// Decodes the first canonical item of `input` and returns it with the number of bytes it took.
+///
+/// # Errors
+/// Any non-canonical or out-of-profile input, or a tag outside `tags`.
+pub fn decode_prefix(
+    input: &[u8],
+    limits: Limits,
+    tags: &TagAllowlist,
+) -> Result<(Value, usize), DecodeError> {
     let mut r = Reader {
         input,
         pos: 0,
         limits,
+        tags,
     };
     let value = r.item(0)?;
-    r.finish()?;
-    Ok(value)
+    Ok((value, r.pos))
 }
 
 /// Decodes one item wrapped in the given tag (OP-106 m.3: only tag 18).
@@ -30,6 +63,7 @@ pub fn decode_tagged(input: &[u8], tag: u64, limits: Limits) -> Result<Value, De
         input,
         pos: 0,
         limits,
+        tags: &NO_TAGS,
     };
     let (major, arg) = r.head()?;
     if major != 6 || arg != Arg::Value(tag) {
@@ -46,13 +80,14 @@ enum Arg {
     Simple(u8),
 }
 
-struct Reader<'a> {
+struct Reader<'a, 't> {
     input: &'a [u8],
     pos: usize,
     limits: Limits,
+    tags: &'t TagAllowlist,
 }
 
-impl<'a> Reader<'a> {
+impl<'a> Reader<'a, '_> {
     fn finish(&self) -> Result<(), DecodeError> {
         if self.pos == self.input.len() {
             Ok(())
@@ -172,6 +207,10 @@ impl<'a> Reader<'a> {
                     entries.push((key, val));
                 }
                 Ok(Value::Map(entries))
+            }
+            6 if self.tags.allows(value) => {
+                let inner = self.enter(depth)?;
+                Ok(Value::Tag(value, Box::new(self.item(inner)?)))
             }
             6 => Err(DecodeError::Tag),
             _ => Err(DecodeError::Simple),

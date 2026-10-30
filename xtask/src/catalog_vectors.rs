@@ -9,7 +9,7 @@ use serde_json::Value;
 use crate::Violation;
 
 const TEXT_DIRS: &[&str] = &["protocol/l0", "protocol/l2"];
-const VECTOR_DIR: &str = "conformance/vectors/core";
+const VECTOR_DIRS: &[&str] = &["conformance/vectors/core", "conformance/vectors/exchange"];
 const RULE: &str = "TI-RT12";
 const MARKER: &str = "<!-- no-vector:";
 
@@ -225,7 +225,9 @@ pub(crate) fn check(root: &Path) -> Result<Vec<Violation>, String> {
         all.extend(found);
     }
     let mut vectors = Vec::new();
-    json_files(&root.join(VECTOR_DIR), &mut vectors)?;
+    for dir in VECTOR_DIRS {
+        json_files(&root.join(dir), &mut vectors)?;
+    }
     vectors.sort();
     let mut cited: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
     for p in &vectors {

@@ -78,13 +78,14 @@ no-rsa:
 
 cross:
     for t in {{kernel_targets}}; do cargo build --locked -p esuiss-access-kernel --target "$t"; done
-    # OP-76
-    for t in {{kernel_targets}}; do cargo build --locked -p esuiss-crypto --no-default-features --features verify --target "$t"; done
+    # OP-76, OP-140 m.2: the verify feature is no_std and builds for a microcontroller too
+    for t in {{kernel_targets}} thumbv7em-none-eabihf; do cargo build --locked -p esuiss-crypto --no-default-features --features verify --target "$t"; done
     # OP-104 m.7
     for t in {{kernel_targets}}; do just _ndk "$t" cargo build --locked -p esuiss-restriction --target "$t"; done
     # OP-116 m.3
     for t in {{mobile_targets}}; do just _ndk "$t" cargo build --locked -p access-kernel-uniffi --target "$t"; done
     CARGO_TARGET_WASM32_WASIP1_RUNNER=wasmtime cargo test --locked -p esuiss-access-kernel --target wasm32-wasip1
+    CARGO_TARGET_WASM32_WASIP1_RUNNER=wasmtime cargo test --locked -p esuiss-crypto --target wasm32-wasip1
     # E43
     CARGO_TARGET_WASM32_WASIP1_RUNNER=wasmtime cargo test --locked -p esuiss-restriction --target wasm32-wasip1
 
@@ -403,6 +404,14 @@ vet:
 
 # OP-76, OP-102, OP-139
 published := "-p esuiss-crypto -p esuiss-ledger -p esuiss-restriction -p esuiss-access-kernel -p esuiss-access-verify"
+
+# OP-140 m.3: copy the shared vectors into the suiss-crypto package and list their SHA-256
+shared-vectors:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cd crates/suiss-crypto/vectors
+    for f in $(find . -type f ! -name MANIFEST | sed 's|^\./||' | LC_ALL=C sort); do cp "../../../conformance/vectors/$f" "$f"; done
+    find . -type f ! -name MANIFEST | sed 's|^\./||' | LC_ALL=C sort | xargs shasum -a 256 > MANIFEST
 
 crates-package:
     cargo package --locked {{published}}

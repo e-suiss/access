@@ -1,0 +1,25 @@
+{
+ "rule": "OP-86",
+ "track": "exchange",
+ "version": 1,
+ "operation": "note.checkpoint",
+ "rules": ["L2-CKP-1", "L2-CKP-2", "L2-CKP-3", "L2-CKP-4"],
+ "origin": "example.com/log",
+ "log": "example.com/log+9be5d3c6+AYqI4910CfGV/VLbLTy6XXLKZwm/HZQSG/N0iAG0D29c",
+ "cosigners": ["witness.example/w1+df1c0a35+BIE5dw6ofRdfVqNUZsNMfszLjYqRtO43ol32D1uPybOU"],
+ "cases": [
+  {"id": "log-signed", "rules": ["L2-CKP-1", "L2-CKP-3"], "note": "example.com/log\n20852163\nBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc=\n\n— example.com/log m+XTxkIIlOr8y1RwTZpfsoAdHizb+yp3b/oNnqzkhzgbElYcyiQ0NQrj7nZOI659Xss2znOawW6DN1ItMWXhu0wjuA0=\n", "size": 20852163, "root": "BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc=", "extensions": 0, "cosigned": []},
+  {"id": "log-and-witness", "rules": ["L2-CKP-3", "L2-CKP-4"], "note": "example.com/log\n20852163\nBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc=\next-line\n\n— example.com/log m+XTxi6cYUI0xDT/kx0vpyDD2v5A599qZ+iGn9ns6XZ4IdBt3VlGAPohHim/UzNhXlW16pk53QSBbCxejKdQcK3h6AI=\n— witness.example/w1 3xwKNQAAAABlU/EAF+rKjGw5GFNRR4P+oUgZdZErGgYHcDgcIYOlgnqHnOtlGZdbjAvK2IsPdal3RMCpZ8cLs95F6hPGMztfEH8XBQ==\n", "size": 20852163, "root": "BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc=", "extensions": 1, "cosigned": [1700000000]},
+  {"id": "unknown-key-ignored", "rules": ["L2-CKP-3"], "note": "example.com/log\n20852163\nBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc=\next-line\n\n— stranger.example 3P/EPBee3zecc1CYEmARkHFmhw7l8J/uTEWft2ToaPekZyfeuTbi+wGjSDdiYy870VbJGkmx2OIJ+IngvZe/vOkQXgI=\n— example.com/log m+XTxi6cYUI0xDT/kx0vpyDD2v5A599qZ+iGn9ns6XZ4IdBt3VlGAPohHim/UzNhXlW16pk53QSBbCxejKdQcK3h6AI=\n", "size": 20852163, "root": "BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc=", "extensions": 1, "cosigned": []},
+  {"id": "witness-only", "rules": ["L2-CKP-3"], "note": "example.com/log\n20852163\nBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc=\next-line\n\n— witness.example/w1 3xwKNQAAAABlU/EAF+rKjGw5GFNRR4P+oUgZdZErGgYHcDgcIYOlgnqHnOtlGZdbjAvK2IsPdal3RMCpZ8cLs95F6hPGMztfEH8XBQ==\n", "error": "note-unverified"},
+  {"id": "body-tampered", "rules": ["L2-CKP-3"], "note": "example.com/log\n20852164\nBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc=\next-line\n\n— example.com/log m+XTxi6cYUI0xDT/kx0vpyDD2v5A599qZ+iGn9ns6XZ4IdBt3VlGAPohHim/UzNhXlW16pk53QSBbCxejKdQcK3h6AI=\n", "error": "signature-invalid"},
+  {"id": "extension-dropped", "rules": ["L2-CKP-3", "L2-CKP-4"], "note": "example.com/log\n20852163\nBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc=\n\n— example.com/log m+XTxi6cYUI0xDT/kx0vpyDD2v5A599qZ+iGn9ns6XZ4IdBt3VlGAPohHim/UzNhXlW16pk53QSBbCxejKdQcK3h6AI=\n", "error": "signature-invalid"},
+  {"id": "cosignature-time-moved", "rules": ["L2-CKP-3", "L2-CKP-4"], "note": "example.com/log\n20852163\nBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc=\next-line\n\n— example.com/log m+XTxi6cYUI0xDT/kx0vpyDD2v5A599qZ+iGn9ns6XZ4IdBt3VlGAPohHim/UzNhXlW16pk53QSBbCxejKdQcK3h6AI=\n— witness.example/w1 3xwKNQAAAABlU/EBF+rKjGw5GFNRR4P+oUgZdZErGgYHcDgcIYOlgnqHnOtlGZdbjAvK2IsPdal3RMCpZ8cLs95F6hPGMztfEH8XBQ==\n", "error": "signature-invalid"},
+  {"id": "duplicate-signature", "rules": ["L2-CKP-2"], "note": "example.com/log\n20852163\nBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc=\next-line\n\n— example.com/log m+XTxi6cYUI0xDT/kx0vpyDD2v5A599qZ+iGn9ns6XZ4IdBt3VlGAPohHim/UzNhXlW16pk53QSBbCxejKdQcK3h6AI=\n— example.com/log m+XTxi6cYUI0xDT/kx0vpyDD2v5A599qZ+iGn9ns6XZ4IdBt3VlGAPohHim/UzNhXlW16pk53QSBbCxejKdQcK3h6AI=\n", "error": "note-duplicate"},
+  {"id": "no-separator", "rules": ["L2-CKP-2"], "note": "example.com/log\n20852163\nBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc=\next-line\n— example.com/log m+XTxi6cYUI0xDT/kx0vpyDD2v5A599qZ+iGn9ns6XZ4IdBt3VlGAPohHim/UzNhXlW16pk53QSBbCxejKdQcK3h6AI=\n", "error": "note-malformed"},
+  {"id": "hyphen-not-em-dash", "rules": ["L2-CKP-2"], "note": "example.com/log\n20852163\nBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc=\next-line\n\n- example.com/log m+XTxi6cYUI0xDT/kx0vpyDD2v5A599qZ+iGn9ns6XZ4IdBt3VlGAPohHim/UzNhXlW16pk53QSBbCxejKdQcK3h6AI=\n", "error": "note-malformed"},
+  {"id": "size-leading-zero", "rules": ["L2-CKP-1", "L2-CKP-3"], "note": "example.com/log\n020852163\nBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc=\next-line\n\n— example.com/log m+XTxn090F+TqVkOBvaspFW43TaXwje6W5TszM8PWkCOxB6SK1+gsaZPpLhS9ZZ65HCNTnnPQE1ZTyy1tKe5jf8Xrws=\n", "error": "checkpoint-malformed"},
+  {"id": "base64-non-canonical", "rules": ["L2-CKP-1", "L2-CKP-3"], "note": "example.com/log\n20852163\nBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwd=\next-line\n\n— example.com/log m+XTxlJ5NBOuaUJvxo5L1fLpop2jyHQOHmkdUQyrxSSsDsExxxqbMLED9YK7E83fxeF05itLSHyy9chAAbKA7eWIQA0=\n", "error": "checkpoint-malformed"},
+  {"id": "control-character", "rules": ["L2-CKP-2"], "note": "example.com/log\n20852163\nBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc=\next\tline\n\n— example.com/log m+XTxu1fmZj6e5Z3Zgr9Wayn3ePKT/uKnW3WaGnp3RAEZ+/n+xZztgObX/wRQWdp1gaoXBiFQzFEAYE3qiESSdJA/ws=\n", "error": "note-control"}
+ ]
+}

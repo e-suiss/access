@@ -28,10 +28,8 @@ struct StrictCase {
 // CR-53, CR-56 row 14
 #[test]
 fn ed25519_speccheck_cases_follow_cr53() {
-    let v: Strict = serde_json::from_str(include_str!(
-        "../../../../conformance/vectors/core/1/ed25519-strict.json"
-    ))
-    .unwrap();
+    let v: Strict =
+        serde_json::from_str(include_str!("../../vectors/core/1/ed25519-strict.json")).unwrap();
     assert_eq!(v.cases.len(), 12);
     for c in &v.cases {
         let got = ed25519(
@@ -95,7 +93,7 @@ struct Test {
 #[test]
 fn ed25519_wycheproof() {
     let w: Wycheproof = serde_json::from_str(include_str!(
-        "../../../../conformance/vectors/external/wycheproof-ed25519_test.json"
+        "../../vectors/external/wycheproof-ed25519_test.json"
     ))
     .unwrap();
     let mut n = 0;
@@ -119,7 +117,7 @@ fn ed25519_wycheproof() {
 #[test]
 fn p256_wycheproof_and_high_s() {
     let w: Wycheproof = serde_json::from_str(include_str!(
-        "../../../../conformance/vectors/external/wycheproof-ecdsa_secp256r1_sha256_p1363_test.json"
+        "../../vectors/external/wycheproof-ecdsa_secp256r1_sha256_p1363_test.json"
     ))
     .unwrap();
     let (mut n, mut high_s) = (0, 0);
@@ -207,7 +205,7 @@ fn padded(hex: &str) -> Vec<u8> {
 #[test]
 fn acvp_sigver() {
     let e: Acvp<EcdsaCase> = serde_json::from_str(include_str!(
-        "../../../../conformance/vectors/external/acvp-ecdsa-sigver-fips186-5.json"
+        "../../vectors/external/acvp-ecdsa-sigver-fips186-5.json"
     ))
     .unwrap();
     for t in &e.tests {
@@ -217,7 +215,7 @@ fn acvp_sigver() {
         assert_eq!(ok, t.passed, "ECDSA tcId {}", t.id);
     }
     let d: Acvp<EddsaCase> = serde_json::from_str(include_str!(
-        "../../../../conformance/vectors/external/acvp-eddsa-sigver-1.0.json"
+        "../../vectors/external/acvp-eddsa-sigver-1.0.json"
     ))
     .unwrap();
     for t in &d.tests {

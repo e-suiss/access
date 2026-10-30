@@ -1,0 +1,4 @@
+C2SP/wycheproof 7a325932231bd7a724c791c8b0d65ea4d6d2f435 testvectors_v1 (Apache-2.0)
+novifinancial/ed25519-speccheck 65519336fda78a3d016e947df6d82848aca0c9da cases.json (Apache-2.0)
+RFC 9901 (www.rfc-editor.org/rfc/rfc9901.txt) disclosure examples, extracted by tools/rfc9901_disclosures.py
+usnistgov/ACVP-Server 975de31eb83d87039ec88934fdc47d8c312b892d gen-val/json-files/{ECDSA-SigVer-FIPS186-5,EDDSA-SigVer-1.0,SHA2-256-1.0}/internalProjection.json (public domain, NIST); P-256/SHA2-256, Ed25519 pure and SHA2-256 AFT groups extracted by tools/acvp_extract.py, private keys dropped; upstream sha256 45f9e942…0b63, 8556b9c4…97b0, a7e0bf4f…0a6c

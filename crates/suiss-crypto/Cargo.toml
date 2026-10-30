@@ -15,9 +15,15 @@ std = ["verify"]
 
 [dependencies]
 thiserror = { workspace = true }
+sha2 = { workspace = true }
+ed25519-dalek = { workspace = true }
+curve25519-dalek = { workspace = true }
+p256 = { workspace = true }
 
 [dev-dependencies]
 proptest = { workspace = true, features = ["std"] }
+serde = { workspace = true, features = ["derive", "std"] }
+serde_json = { workspace = true, features = ["std"] }
 
 [lints]
 workspace = true

@@ -529,17 +529,15 @@ impl Canonical for BindingScope {
             Value::Text(t) if t == "domain" => Ok(Self::Domain),
             Value::Text(_) => Err(ModelError::Unknown),
             _ => match single(v)? {
-                ("provider", d) => Ok(Self::Provider(set_of(d, true, Digest::from_value_model)?)),
+                ("provider", d) => Ok(Self::Provider(set_of(d, true, digest_model)?)),
                 _ => Err(ModelError::Unknown),
             },
         }
     }
 }
 
-impl Digest {
-    fn from_value_model(v: &Value) -> Result<Self, ModelError> {
-        Self::from_value(v).ok_or(ModelError::Shape)
-    }
+fn digest_model(v: &Value) -> Result<Digest, ModelError> {
+    Digest::from_value(v).ok_or(ModelError::Shape)
 }
 
 impl Canonical for BindingKey {
@@ -568,8 +566,8 @@ impl Canonical for BindingKey {
             .map(|s| {
                 let mut g = Fields::of(s)?;
                 let out = Superseded {
-                    at: Digest::from_value_model(g.req("at")?)?,
-                    cited: Digest::from_value_model(g.req("cited")?)?,
+                    at: digest_model(g.req("at")?)?,
+                    cited: digest_model(g.req("cited")?)?,
                 };
                 g.done()?;
                 Ok::<_, ModelError>(out)
@@ -615,7 +613,7 @@ impl Canonical for SpecVersions {
             profiles: opt_param_map(f.opt("profiles"), uint)?,
             schemas: f
                 .opt("schemas")
-                .map(|s| set_of(s, true, Digest::from_value_model))
+                .map(|s| set_of(s, true, digest_model))
                 .transpose()?
                 .unwrap_or_default(),
         };
@@ -698,8 +696,8 @@ impl Canonical for DomainMetadata {
             }
         }
         let out = Self {
-            domain: Digest::from_value_model(f.req("domain")?)?,
-            genesis: Digest::from_value_model(f.req("genesis")?)?,
+            domain: digest_model(f.req("domain")?)?,
+            genesis: digest_model(f.req("genesis")?)?,
             issued_at: uint(f.req("issued_at")?)?,
             binding,
             algorithms: set_of(f.req("algorithms")?, true, alg_of)?,

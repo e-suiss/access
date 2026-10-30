@@ -89,6 +89,10 @@ fn write(
                 out.extend_from_slice(&vb);
             }
         }
+        Value::Tag(tag, item) => {
+            head(out, 6, *tag);
+            write(out, item, inner(depth, limits)?, limits)?;
+        }
         Value::Bool(false) => out.push(0xf4),
         Value::Bool(true) => out.push(0xf5),
     }

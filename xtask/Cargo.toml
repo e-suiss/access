@@ -9,6 +9,7 @@ repository.workspace = true
 publish = false
 
 [dependencies]
+sha2 = { workspace = true }
 serde = { workspace = true, features = ["std", "derive"] }
 serde_json = { workspace = true, features = ["std"] }
 toml = { workspace = true, features = ["std", "parse", "serde"] }

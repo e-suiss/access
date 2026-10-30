@@ -250,6 +250,7 @@ const fn proof_name(e: ProofError) -> &'static str {
         ProofError::Range => "range",
         ProofError::Length => "length",
         ProofError::Mismatch => "mismatch",
+        _ => "proof",
     }
 }
 

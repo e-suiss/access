@@ -19,6 +19,8 @@ mod restriction;
 pub(crate) mod source;
 #[path = "rules_switches.rs"]
 mod switches;
+#[path = "rules_vectors.rs"]
+mod vectors;
 
 use crate::Check;
 
@@ -111,6 +113,10 @@ pub(crate) fn checks() -> Vec<Check> {
         Check {
             name: "solver-confinement",
             run: restriction::check_confine,
+        },
+        Check {
+            name: "shared-vectors",
+            run: vectors::check,
         },
     ]
 }

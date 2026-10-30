@@ -3,13 +3,15 @@
 mod decode;
 mod encode;
 
+use alloc::boxed::Box;
 use alloc::string::String;
 use alloc::vec::Vec;
 
-pub use decode::{decode, decode_tagged};
+pub use decode::{decode, decode_prefix, decode_tagged, decode_with};
 pub use encode::encode;
 
-/// A CBOR data item allowed by the profile: no floats, no tags inside, no null or undefined.
+/// A CBOR data item allowed by the profile: no floats, no null or undefined, tags only from the
+/// caller's [`TagAllowlist`].
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Value {
     /// Major type 0.
@@ -26,6 +28,8 @@ pub enum Value {
     Map(Vec<(Value, Value)>),
     /// Simple values 20 and 21.
     Bool(bool),
+    /// Major type 6, only for a tag the caller allows.
+    Tag(u64, Box<Value>),
 }
 
 impl Value {
@@ -67,8 +71,39 @@ impl Value {
     }
 }
 
-/// The only tag allowed, and only on the outside of a COSE structure (OP-106 m.3).
+/// The only tag the Access profile allows, and only on the outside of a COSE structure
+/// (OP-106 m.3).
 pub const COSE_SIGN1_TAG: u64 = 18;
+
+/// Tags a decoder accepts anywhere in an item, built from the consumer's CDDL. There is no
+/// "allow all" (OP-140 m.2).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct TagAllowlist {
+    tags: Vec<u64>,
+}
+
+impl TagAllowlist {
+    /// No tags: the Access profile.
+    #[must_use]
+    pub const fn none() -> Self {
+        Self { tags: Vec::new() }
+    }
+
+    /// Exactly these tags.
+    #[must_use]
+    pub fn only(tags: &[u64]) -> Self {
+        let mut tags = tags.to_vec();
+        tags.sort_unstable();
+        tags.dedup();
+        Self { tags }
+    }
+
+    /// Whether `tag` is allowed.
+    #[must_use]
+    pub fn allows(&self, tag: u64) -> bool {
+        self.tags.binary_search(&tag).is_ok()
+    }
+}
 
 /// Structural limits (§14.6). Ceilings are fixed; callers may only lower them (OP-106 m.5).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -113,6 +148,7 @@ impl Default for Limits {
 
 /// Why an input is not accepted (CR-10).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
+#[non_exhaustive]
 pub enum DecodeError {
     /// The input ended inside an item.
     #[error("truncated input")]
@@ -158,8 +194,32 @@ pub enum DecodeError {
     StringLength,
 }
 
+impl DecodeError {
+    /// Stable reason code for problem details (RFC 9457).
+    #[must_use]
+    pub const fn code(self) -> &'static str {
+        match self {
+            Self::Truncated => "cbor-truncated",
+            Self::TrailingBytes => "cbor-trailing-bytes",
+            Self::NonShortest => "cbor-non-shortest",
+            Self::Indefinite => "cbor-indefinite",
+            Self::Reserved => "cbor-reserved",
+            Self::Float => "cbor-float",
+            Self::Tag => "cbor-tag",
+            Self::Simple => "cbor-simple",
+            Self::Utf8 => "cbor-utf8",
+            Self::DuplicateKey => "cbor-duplicate-key",
+            Self::KeyOrder => "cbor-key-order",
+            Self::Depth => "cbor-depth",
+            Self::Items => "cbor-items",
+            Self::StringLength => "cbor-string-length",
+        }
+    }
+}
+
 /// Why a value cannot be encoded.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
+#[non_exhaustive]
 pub enum EncodeError {
     /// Two map entries have the same key.
     #[error("duplicate map key")]
@@ -167,6 +227,17 @@ pub enum EncodeError {
     /// The value is outside the structural limits.
     #[error("value outside limits")]
     Limits,
+}
+
+impl EncodeError {
+    /// Stable reason code for problem details (RFC 9457).
+    #[must_use]
+    pub const fn code(self) -> &'static str {
+        match self {
+            Self::DuplicateKey => "cbor-duplicate-key",
+            Self::Limits => "cbor-limits",
+        }
+    }
 }
 
 #[cfg(test)]

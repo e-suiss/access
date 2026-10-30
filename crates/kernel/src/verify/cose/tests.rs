@@ -3,6 +3,8 @@ use alloc::vec::Vec;
 
 use super::*;
 use crate::verify::{P256_N, PureBackend};
+use crate::verify::{SignatureError, p256};
+use suiss_crypto::dcbor::{self, Limits, Value};
 
 fn header(entries: Vec<(Value, Value)>) -> Vec<u8> {
     dcbor::encode(&Value::Map(entries), Limits::CEILING).unwrap()
@@ -223,7 +225,7 @@ fn high_s_is_rejected_for_native_artefacts() {
     assert!(
         p256(
             &PureBackend,
-            &keys().keys[&[2; 32]].p256_bytes(),
+            &p256_bytes(&keys().keys[&[2; 32]]),
             &to_be_signed(&prot, b"p"),
             &high,
             false
@@ -237,12 +239,10 @@ fn high_s_is_rejected_for_native_artefacts() {
     );
 }
 
-impl PublicKey {
-    fn p256_bytes(&self) -> Vec<u8> {
-        match self {
-            Self::P256(b) => b.clone(),
-            Self::Ed25519(_) | Self::MlDsa(..) => Vec::new(),
-        }
+fn p256_bytes(key: &PublicKey) -> Vec<u8> {
+    match key {
+        PublicKey::P256(b) => b.clone(),
+        PublicKey::Ed25519(_) | PublicKey::MlDsa(..) => Vec::new(),
     }
 }
 
@@ -403,7 +403,6 @@ fn two_fault_cases() -> Vec<(&'static str, Vec<u8>)> {
 fn cose_error(e: CoseError) -> &'static str {
     match e {
         CoseError::Cbor(_) => "cbor",
-        CoseError::Shape => "shape",
         CoseError::Header => "header",
         CoseError::Crit => "crit",
         CoseError::Unprotected => "unprotected",
@@ -413,6 +412,7 @@ fn cose_error(e: CoseError) -> &'static str {
         CoseError::ContentType => "content-type",
         CoseError::Signature(SignatureError::HighS) => "high-s",
         CoseError::Signature(_) => "signature",
+        _ => "shape",
     }
 }
 

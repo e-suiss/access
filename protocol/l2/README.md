@@ -53,6 +53,20 @@ Vectors: [`core/1/record-fold.json`](../../conformance/vectors/core/1/record-fol
 
 <a id="L2-DIG-1"></a>**L2-DIG-1.** Every digest an L2 artefact carries is computed by the producer from canonical CBOR under a context string from the table in [L0-ENC-22](../l0/encoding.md#L0-ENC-22). A verifier recomputes it and never takes a digest from the input.
 
+## Checkpoints
+
+A checkpoint is the signed tree head of a log. Access uses the C2SP formats as published in their v1.1.0 family: [`signed-note`](https://c2sp.org/signed-note), [`tlog-checkpoint`](https://c2sp.org/tlog-checkpoint) and [`tlog-cosignature`](https://c2sp.org/tlog-cosignature). The rules below restate the parts a verifier needs; where they differ from C2SP, C2SP wins.
+
+<a id="L2-CKP-1"></a>**L2-CKP-1. Checkpoint body.** The body has at least three lines, each ending in a newline: the log origin; the tree size as ASCII decimal without leading zeros (`0` for an empty tree); the RFC 9162 root hash in standard base64 with padding. Any further lines are extension lines and are non-empty. The origin is non-empty UTF-8 of at most 255 bytes without whitespace, `+` or control characters. A body that breaks these rules is rejected (reason `checkpoint-malformed`).
+
+<a id="L2-CKP-2"></a>**L2-CKP-2. Note syntax.** A note is the body, one empty line, then one or more signature lines `— <name> <base64>` (the dash is U+2014), each ending in a newline. The body is UTF-8 without control characters other than newline (reason `note-control`). Base64 is standard with padding and only its canonical spelling is accepted. The decoded signature starts with a four-byte big-endian key ID. Two lines with the same name and key ID are rejected (reason `note-duplicate`). A verifier accepts at least 16 and at most 64 signature lines. Anything else is `note-malformed`.
+
+<a id="L2-CKP-3"></a>**L2-CKP-3. Known keys.** A verifier knows each key by name, key ID and public key. The key ID of an Ed25519 key is the first four bytes of `SHA-256(name ‖ 0x0A ‖ type ‖ key)`, with type `0x01` for a log key and `0x04` for a cosigner. Signature lines from unknown keys are ignored. A line from a known key that does not verify rejects the note. A checkpoint is accepted only when the log's own Ed25519 signature over the body verifies (reason `note-unverified` otherwise) and the origin is the one the verifier expects.
+
+<a id="L2-CKP-4"></a>**L2-CKP-4. Cosignatures.** A witness cosignature is `timestamp ‖ signature`: an eight-byte big-endian POSIX timestamp in seconds, then an Ed25519 signature over the lines `cosignature/v1`, `time <timestamp>` and the whole checkpoint body, extension lines included. The timestamp a verifier reports is the one that was signed.
+
+Vectors: [`exchange/1/checkpoint.json`](../../conformance/vectors/exchange/1/checkpoint.json), operation `note.checkpoint`: each case gives a note and either the checkpoint it carries (size, root, number of extension lines, cosignature timestamps) or the rejection reason.
+
 ## Later parts
 
 These parts arrive with the features that produce them, each in its own version of this track:
@@ -64,7 +78,7 @@ These parts arrive with the features that produce them, each in its own version 
 | Portable Authority Proof (PAP) | An offline-checkable proof of authority with its embedded ValidityContract |
 | Receipt | The signed record of a commit |
 | Schema Publication Package | Action schemas and their catalog digests |
-| Authority Record Exchange | Record transfer with checkpoints, handover and recovery |
+| Authority Record Exchange | Record transfer, handover and recovery |
 
 ## License
 

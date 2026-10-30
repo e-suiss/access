@@ -1,3 +1,4 @@
+import base64
 import json
 import pathlib
 import subprocess
@@ -6,7 +7,7 @@ import tempfile
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
-from f0 import algebra, codec, dcbor, digest, ed25519, fold, jose, merkle, record, sdjwt, validity, version_check
+from f0 import algebra, codec, dcbor, digest, ed25519, fold, jose, merkle, note, record, sdjwt, validity, version_check
 from f0.algebra import child_within_parent
 from f0.version import CORE_VERSION, VERSION
 from f0.codec import Rejection, decode_canonical, decode_canonical_authority, decode_subject_selector, encode
@@ -261,6 +262,22 @@ def run_codec_encode(case, document):
     return {"cbor": encode(value).hex()}, None
 
 
+def run_checkpoint(case, document):
+    # L2-CKP-1 to L2-CKP-4
+    log = note.parse_vkey(document["log"])
+    cosigners = [note.parse_vkey(v) for v in document["cosigners"]]
+    try:
+        (_, size, root, extensions), accepted = note.verify_checkpoint(case["note"], document["origin"], log, cosigners)
+    except note.NoteError as error:
+        return {"error": error.code}, None
+    return {
+        "size": size,
+        "root": base64.b64encode(root).decode(),
+        "extensions": len(extensions),
+        "cosigned": [t for _, _, t in accepted if t is not None],
+    }, None
+
+
 def merkle_cases(document):
     leaves = [bytes.fromhex(leaf) for leaf in document["leaves"]]
     roots = {entry["size"]: entry["root"] for entry in document["roots"]}
@@ -309,6 +326,7 @@ OPERATIONS = {
     "digest.intent": (run_digest_intent, ("digest", "rejection")),
     "digest.body_commit": (run_body_commit, ("commit", "rejection")),
     "validity.horizon": (run_validity_horizon, ("horizon", "error")),
+    "note.checkpoint": (run_checkpoint, ("size", "root", "extensions", "cosigned", "error")),
 }
 
 # Operations in the vectors that F0 does not implement, each with its reason. Any other
