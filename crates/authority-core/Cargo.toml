@@ -1,0 +1,25 @@
+[package]
+name = "access-authority-core"
+description = "CMP-4 authority core: the Exercise commit path from request to committed records (§17.1.1, OP-141)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+access-kernel = { workspace = true }
+access-store = { workspace = true }
+access-authority-sequencer = { path = "../authority-sequencer" }
+suiss-crypto = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+access-crypto = { workspace = true, features = ["testing"] }
+access-store = { workspace = true, features = ["testing"] }
+ed25519-dalek = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+
+[lints]
+workspace = true

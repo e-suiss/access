@@ -11,7 +11,7 @@ use access_kernel::record::{Header, Opened, RecordEnvelope, RecordError, RecordK
 use access_store::authority::{
     CommitBatch, Draw, HeadRow, LogRecord, NonceRow, OutboxRow, ProofRow,
 };
-use suiss_crypto::dcbor::{self, Limits};
+use suiss_crypto::dcbor::{self, Limits, Value};
 use suiss_ledger::Hash;
 use suiss_ledger::merkle::Frontier;
 use suiss_ledger::sequencer::{Batch, Entry, Head, Slot};
@@ -94,6 +94,19 @@ impl Entry for Bound<'_> {
 
     fn seal(&self, slot: &Slot) -> Result<(Hash, SealedRecord), RecordError> {
         // L0-ENC-27: every record after Genesis carries `domain` and `prev`
+        let mut fields = self.draft.fields.clone();
+        // OP-141 m.10: the state basis is the position before this record
+        if let Some(Opened {
+            value: Value::Map(entries),
+            ..
+        }) = fields.get_mut("state_basis")
+        {
+            for (k, v) in entries.iter_mut() {
+                if matches!(k, Value::Text(t) if t == "at") {
+                    *v = Value::Unsigned(slot.pos.saturating_sub(1));
+                }
+            }
+        }
         let envelope = RecordEnvelope {
             header: Header {
                 domain: Some(self.domain),
@@ -102,7 +115,7 @@ impl Entry for Bound<'_> {
                 recorded_at: slot.recorded_at,
                 prev: Some(Digest(slot.prev)),
             },
-            fields: self.draft.fields.clone(),
+            fields,
         };
         let leaf = envelope.leaf_hash()?;
         let bytes = envelope.to_bytes()?;

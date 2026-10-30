@@ -1479,15 +1479,25 @@ pub fn genesis_effects(
             ),
         ));
     }
+    let anchor_count = u64::try_from(out.len()).map_err(|_| MetaError::Depth)?;
     let mut children: BTreeMap<Id, BTreeSet<Id>> = BTreeMap::new();
     if let Some(list) = take("grants") {
         for (seq, g) in (0_u64..).zip(crate::codec::set_items(list, true)?) {
-            let content = GrantContent::from_value(g)?;
-            let gid = object_id(domain, kind::GRANT, seq);
-            let parent = match content.basis {
-                GrantBasis::Anchor(a) => a,
-                GrantBasis::Holding(h) => h.grant,
+            let mut f = Fields::of(g)?;
+            let index = uint(f.req("anchor")?)?;
+            if index >= anchor_count {
+                return Err(MetaError::Malformed(ModelError::Range));
+            }
+            let parent = object_id(domain, kind::ANCHOR, index);
+            let content = GrantContent {
+                basis: GrantBasis::Anchor(parent),
+                holder: SubjectSelector::from_value(f.req("holder")?)?,
+                authority: CanonicalAuthority::from_value(f.req("authority")?)?,
+                agency: agency(f.opt("agency"))?,
+                named: None,
             };
+            f.done()?;
+            let gid = object_id(domain, kind::GRANT, seq);
             children.entry(parent).or_default().insert(gid);
             out.push((
                 key(kind::GRANT, &gid),
@@ -1578,15 +1588,12 @@ pub struct Outcome {
 
 const CO_ROOT: &str = "co_root";
 
-fn root_power(
-    view: &dyn View,
-    anchor: &Id,
-    actor: &Actor,
-) -> Result<(AnchorState, BTreeSet<RequirementTerm>), MetaError> {
-    let a: AnchorState = read(view, kind::ANCHOR, anchor)?;
-    let a = live(a.ended, a.clone())?;
-    let mut req = a.root_terms.clone();
-    match &a.root {
+/// The requirements of acting as `anchor`'s root: its root terms and, for a joint root of `k`,
+/// `k − 1` further `co_root` contributions (L0-META-10); `None` when the actor is not a root.
+#[must_use]
+pub fn root_requirements(anchor: &AnchorState, actor: &Actor) -> Option<BTreeSet<RequirementTerm>> {
+    let mut req = anchor.root_terms.clone();
+    match &anchor.root {
         Root::Sole(p) if *p == actor.party => {}
         Root::Joint { parties, k } if parties.contains(&actor.party) => {
             if *k > 1 {
@@ -1603,8 +1610,19 @@ fn root_power(
                 });
             }
         }
-        _ => return Err(MetaError::NotAuthorized),
+        _ => return None,
     }
+    Some(req)
+}
+
+fn root_power(
+    view: &dyn View,
+    anchor: &Id,
+    actor: &Actor,
+) -> Result<(AnchorState, BTreeSet<RequirementTerm>), MetaError> {
+    let a: AnchorState = read(view, kind::ANCHOR, anchor)?;
+    let a = live(a.ended, a)?;
+    let req = root_requirements(&a, actor).ok_or(MetaError::NotAuthorized)?;
     Ok((a, req))
 }
 

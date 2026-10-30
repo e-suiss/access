@@ -12,6 +12,10 @@ hash-alg = -16
 ; Each new digest kind adds a row "access/<kind>/v1" when the feature that produces it is adopted.
 ;   intent-envelope                          "access/intent/v1"
 ;   record-envelope of Genesis (domain-id)   "access/genesis/v1"
+;   meta-payload                             "access/meta/v1"
+;   [domain-id, nonce] (ExerciseID)          "access/exercise/v1"
+;   [origin, kind, seq] (object id)          "access/object/v1"
+;   COSE_Sign1 AIS bytes as received         "access/ais/v1"
 ; Hash prefixes (OP-106 m.12), raw SHA-256 without a context:
 ;   0x00 Merkle leaf   0x01 Merkle interior node   0x02 field commitment   0x03 body commitment
 
@@ -579,11 +583,20 @@ meta-payload =
 ; ---------------------------------------------------------------- genesis (C4, §5.2, OP-141)
 
 ; The fields of the record at pos 0. Objects it creates take their ids from the DomainID
-; (OP-141 m.6). `bootstrap` holds Public Grants on the meta-anchor, e.g. for party.register.
+; (OP-141 m.6), which is the digest of this record, so a Genesis Grant names its Anchor by
+; position: 0 is the meta-anchor, n is entry n − 1 of `anchors`. Public Grants on the
+; meta-anchor are the bootstrap path, e.g. for party_register.
+genesis-grant = {
+  anchor: uint,
+  holder: subject-selector,
+  authority: canonical-authority,
+  ? agency: [+ capacity],
+}
+
 genesis-fields = {
-  meta_anchor: { root: root-value, root_terms: requirement-set },
+  meta_anchor: { root: root-value, ? root_terms: requirement-set },
   ? anchors: [+ { scope: anchor-scope, root: root-value, ? root_terms: requirement-set }],
-  ? grants: [+ grant-content],
+  ? grants: [+ genesis-grant],
   ? acceptances: [+ acceptance-content],
   ? reserved: [+ action-ref],
   versions: spec-versions,

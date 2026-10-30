@@ -20,7 +20,7 @@ A meta-action is an Exercise that changes authority state. Apart from Genesis, i
 
 <a id="L0-META-6"></a>**L0-META-6. Stored status.** A stored object carries its content, the position that created or last changed it (`since`) and, once it has ended, `ended` with the position and the way it ended. Ending is terminal: no meta-action changes an object with `ended` (reason `meta-ended`). Status that depends on time or on other objects, such as expiry or a revoked ancestor, is derived when it is read and never stored.
 
-<a id="L0-META-7"></a>**L0-META-7. Genesis.** The state at position 0 holds the objects that Genesis creates from its `genesis-fields`: the meta-anchor with scope `"domain"` as Anchor 0, then each entry of `anchors`, each Grant of `grants` with its `children` index, and each Acceptance of `acceptances`, with ids by [L0-META-4](#L0-META-4) and `since` 0. A Genesis record with a field that `genesis-fields` does not define is rejected.
+<a id="L0-META-7"></a>**L0-META-7. Genesis.** The state at position 0 holds the objects that Genesis creates from its `genesis-fields`: the meta-anchor with scope `"domain"` as Anchor 0, then each entry of `anchors`, each Grant of `grants` with its `children` index (a Genesis Grant names its Anchor by position, 0 being the meta-anchor, because the ids derive from the DomainID, which is this record's own digest), and each Acceptance of `acceptances`, with ids by [L0-META-4](#L0-META-4) and `since` 0. A Genesis record with a field that `genesis-fields` does not define is rejected.
 
 ## 3. Powers
 
