@@ -1,0 +1,500 @@
+use alloc::string::ToString;
+
+use super::*;
+use crate::model::{ActionRef, ActionSet, DelegationTerms, Structural};
+
+struct Mem(BTreeMap<Vec<u8>, Value>);
+
+impl View for Mem {
+    fn get(&self, key: &[u8]) -> Option<Value> {
+        self.0.get(key).cloned()
+    }
+}
+
+impl Mem {
+    fn apply(&mut self, effects: &[Effect]) {
+        for (k, v) in effects {
+            match v {
+                Some(v) => self.0.insert(k.clone(), v.clone()),
+                None => self.0.remove(k),
+            };
+        }
+    }
+}
+
+const DOMAIN: Digest = Digest([7; 32]);
+const ROOT: Id = Id([1; 16]);
+const ALICE: Id = Id([2; 16]);
+const BOB: Id = Id([3; 16]);
+const CAROL: Id = Id([4; 16]);
+
+fn shop(prefix: &[&str]) -> ResourceSelector {
+    ResourceSelector::Structural(Structural {
+        namespace: "shop".to_string(),
+        prefix: prefix.iter().map(ToString::to_string).collect(),
+        kind: None,
+        attrs: BTreeMap::new(),
+    })
+}
+
+fn authority(prefix: &[&str], depth: u64, until: u64) -> CanonicalAuthority {
+    CanonicalAuthority {
+        authority: AuthoritySet {
+            actions: ActionSet {
+                exact: [ActionRef {
+                    namespace: "shop".to_string(),
+                    name: "refund".to_string(),
+                    major: 1,
+                    schema: Digest([9; 32]),
+                }]
+                .into_iter()
+                .collect(),
+                prefix: BTreeSet::new(),
+            },
+            resource: shop(prefix),
+            params: BTreeMap::new(),
+            recipient: None,
+            purpose: None,
+        },
+        constraints: ConstraintSet {
+            validity: Window { from: 0, until },
+            conditions: BTreeSet::new(),
+            budget: BTreeSet::new(),
+        },
+        delegation: DelegationTerms {
+            depth,
+            downstream_holder_class: None,
+        },
+        requirements: BTreeSet::new(),
+    }
+}
+
+fn genesis() -> Mem {
+    let mut fields = BTreeMap::new();
+    fields.insert(
+        "meta_anchor".to_string(),
+        map([("root", Some(root_value(&Root::Sole(ROOT))))]),
+    );
+    fields.insert(
+        "anchors".to_string(),
+        set_value([map([
+            (
+                "scope",
+                Some(scope_value(&AnchorScope::Resource(shop(&[])))),
+            ),
+            ("root", Some(root_value(&Root::Sole(ROOT)))),
+        ])]),
+    );
+    fields.insert(
+        "versions".to_string(),
+        map([
+            ("core", Some(Value::Unsigned(1))),
+            ("meta_schema", Some(Value::Unsigned(1))),
+        ]),
+    );
+    let mut m = Mem(BTreeMap::new());
+    m.apply(&genesis_effects(&DOMAIN, &fields).unwrap());
+    m
+}
+
+fn shop_anchor() -> Id {
+    object_id(&DOMAIN, kind::ANCHOR, 1)
+}
+
+struct Run {
+    state: Mem,
+    pos: u64,
+    catalog: Catalog,
+}
+
+impl Run {
+    fn new() -> Self {
+        Self {
+            state: genesis(),
+            pos: 1,
+            catalog: Catalog::default(),
+        }
+    }
+
+    fn act(
+        &mut self,
+        party: Id,
+        instance: Id,
+        basis: ExerciseBasis,
+        payload: &Payload,
+    ) -> Result<(Digest, Outcome), MetaError> {
+        let exercise = exercise_id(&DOMAIN, &self.pos.to_be_bytes().repeat(2)).unwrap();
+        let ctx = Context {
+            domain: DOMAIN,
+            exercise,
+            pos: self.pos,
+            actor: Actor { party, instance },
+            basis,
+            capacity: Capacity::Own,
+            catalog: &self.catalog,
+        };
+        let out = apply(&ctx, payload, &self.state)?;
+        self.state.apply(&out.effects);
+        self.pos = self.pos.checked_add(1).unwrap();
+        Ok((exercise, out))
+    }
+
+    fn grant(&self, id: &Id) -> GrantState {
+        read(&self.state, kind::GRANT, id).unwrap()
+    }
+}
+
+fn issue(holder: Id, basis: GrantBasis, prefix: &[&str], depth: u64) -> Payload {
+    Payload::GrantIssue(GrantContent {
+        basis,
+        holder: SubjectSelector::Party(holder),
+        authority: authority(prefix, depth, 1_000),
+        agency: BTreeSet::from([Capacity::Own]),
+        named: None,
+    })
+}
+
+// C11, C15, INV-3, OP-141 m.3: the root grants, a holder delegates only within its holding
+#[test]
+fn root_grants_and_holders_delegate_within() {
+    let mut r = Run::new();
+    let a = shop_anchor();
+    let (ex, out) = r
+        .act(
+            ROOT,
+            ROOT,
+            ExerciseBasis::Anchor(a),
+            &issue(ALICE, GrantBasis::Anchor(a), &["eu"], 2),
+        )
+        .unwrap();
+    assert!(out.expansion);
+    let g1 = object_id(&ex, kind::GRANT, 0);
+    let since = r.grant(&g1).since;
+    let h = HoldingRef {
+        grant: g1,
+        holder: ALICE,
+        since,
+    };
+    let (ex2, _) = r
+        .act(
+            ALICE,
+            ALICE,
+            ExerciseBasis::Holding(h),
+            &issue(BOB, GrantBasis::Holding(h), &["eu", "de"], 1),
+        )
+        .unwrap();
+    let g2 = object_id(&ex2, kind::GRANT, 0);
+    assert_eq!(r.grant(&g2).content.holder, SubjectSelector::Party(BOB));
+    // wider than the parent, or not further delegable
+    assert_eq!(
+        r.act(
+            ALICE,
+            ALICE,
+            ExerciseBasis::Holding(h),
+            &issue(BOB, GrantBasis::Holding(h), &[], 1)
+        ),
+        Err(MetaError::NotWithin)
+    );
+    let h2 = HoldingRef {
+        grant: g2,
+        holder: BOB,
+        since: r.grant(&g2).since,
+    };
+    assert_eq!(
+        r.act(
+            BOB,
+            BOB,
+            ExerciseBasis::Holding(h2),
+            &issue(CAROL, GrantBasis::Holding(h2), &["eu", "de"], 1)
+        ),
+        Err(MetaError::NotWithin)
+    );
+    // someone else's holding, or a root that is not the actor
+    assert_eq!(
+        r.act(
+            BOB,
+            BOB,
+            ExerciseBasis::Holding(h),
+            &issue(CAROL, GrantBasis::Holding(h), &["eu"], 0)
+        ),
+        Err(MetaError::Basis)
+    );
+    assert_eq!(
+        r.act(
+            ALICE,
+            ALICE,
+            ExerciseBasis::Anchor(a),
+            &issue(CAROL, GrantBasis::Anchor(a), &["eu"], 0)
+        ),
+        Err(MetaError::NotAuthorized)
+    );
+}
+
+// C17, CI-4, OP-141 m.3: upstream holders and the root revoke; the holder renounces; nobody else
+#[test]
+fn revoke_and_renounce_powers() {
+    let mut r = Run::new();
+    let a = shop_anchor();
+    let (ex, _) = r
+        .act(
+            ROOT,
+            ROOT,
+            ExerciseBasis::Anchor(a),
+            &issue(ALICE, GrantBasis::Anchor(a), &["eu"], 2),
+        )
+        .unwrap();
+    let g1 = object_id(&ex, kind::GRANT, 0);
+    let h = HoldingRef {
+        grant: g1,
+        holder: ALICE,
+        since: r.grant(&g1).since,
+    };
+    let (ex2, _) = r
+        .act(
+            ALICE,
+            ALICE,
+            ExerciseBasis::Holding(h),
+            &issue(BOB, GrantBasis::Holding(h), &["eu"], 1),
+        )
+        .unwrap();
+    let g2 = object_id(&ex2, kind::GRANT, 0);
+    let basis = ExerciseBasis::Anchor(a);
+    assert_eq!(
+        r.act(CAROL, CAROL, basis, &Payload::GrantRevoke { grant: g2 }),
+        Err(MetaError::NotAuthorized)
+    );
+    assert_eq!(
+        r.act(BOB, BOB, basis, &Payload::GrantRevoke { grant: g1 }),
+        Err(MetaError::NotAuthorized)
+    );
+    // Alice holds the Grant above g2
+    r.act(ALICE, ALICE, basis, &Payload::GrantRevoke { grant: g2 })
+        .unwrap();
+    assert_eq!(r.grant(&g2).ended.map(|e| e.how), Some(EndedHow::Revoked));
+    // terminal: no second revoke, no renounce (INV-5)
+    assert_eq!(
+        r.act(ROOT, ROOT, basis, &Payload::GrantRevoke { grant: g2 }),
+        Err(MetaError::Ended)
+    );
+    r.act(ALICE, ALICE, basis, &Payload::GrantRenounce { grant: g1 })
+        .unwrap();
+    assert_eq!(r.grant(&g1).ended.map(|e| e.how), Some(EndedHow::Renounced));
+}
+
+// C16: an amend keeps the GrantID, counts revisions and says whether it widens
+#[test]
+fn amend_narrows_or_widens_within_the_parent() {
+    let mut r = Run::new();
+    let a = shop_anchor();
+    let (ex, _) = r
+        .act(
+            ROOT,
+            ROOT,
+            ExerciseBasis::Anchor(a),
+            &issue(ALICE, GrantBasis::Anchor(a), &["eu"], 2),
+        )
+        .unwrap();
+    let g1 = object_id(&ex, kind::GRANT, 0);
+    let amend = |prefix: &[&str]| Payload::GrantAmend {
+        grant: g1,
+        authority: authority(prefix, 2, 1_000),
+        agency: BTreeSet::from([Capacity::Own]),
+    };
+    let (_, out) = r
+        .act(ROOT, ROOT, ExerciseBasis::Anchor(a), &amend(&["eu", "de"]))
+        .unwrap();
+    assert!(!out.expansion);
+    let (_, out) = r
+        .act(ROOT, ROOT, ExerciseBasis::Anchor(a), &amend(&["eu"]))
+        .unwrap();
+    assert!(out.expansion);
+    assert_eq!(r.grant(&g1).revision, 2);
+}
+
+// INV-4: a Grant can carry only OWN and FOR(principal)
+#[test]
+fn agency_is_continuous() {
+    let mut r = Run::new();
+    let a = shop_anchor();
+    let mut p = issue(ALICE, GrantBasis::Anchor(a), &["eu"], 0);
+    if let Payload::GrantIssue(c) = &mut p {
+        c.agency.insert(Capacity::For(BOB));
+    }
+    assert_eq!(
+        r.act(ROOT, ROOT, ExerciseBasis::Anchor(a), &p),
+        Err(MetaError::Agency)
+    );
+}
+
+// E6, §7.9.2.3, OP-141 m.2, m.4: a Party registers itself with its self-anchor, then creates its
+// own Instance; neither can be done for someone else
+#[test]
+fn register_then_create_own_instance() {
+    let mut r = Run::new();
+    let public = ExerciseBasis::Public(Id([9; 16]));
+    let register = Payload::PartyRegister {
+        party: ALICE,
+        root: Root::Sole(ALICE),
+    };
+    assert_eq!(
+        r.act(BOB, BOB, public, &register),
+        Err(MetaError::NotAuthorized)
+    );
+    r.act(ALICE, ALICE, public, &register).unwrap();
+    assert_eq!(
+        r.act(ALICE, ALICE, public, &register),
+        Err(MetaError::Ended)
+    );
+    let p: PartyState = read(&r.state, kind::PARTY, &ALICE).unwrap();
+    let anchor: AnchorState = read(&r.state, kind::ANCHOR, &p.anchor).unwrap();
+    assert_eq!(anchor.scope, AnchorScope::Party(ALICE));
+
+    let key = PublicKey::Ed25519(
+        ed25519_dalek::SigningKey::from_bytes(&[5; 32])
+            .verifying_key()
+            .to_bytes(),
+    );
+    let create = Payload::InstanceCreate {
+        party: ALICE,
+        key: key.clone(),
+        mandate: None,
+    };
+    assert_eq!(
+        r.act(ALICE, Id([0; 16]), public, &create),
+        Err(MetaError::NotAuthorized)
+    );
+    let instance_now = object_id(
+        &exercise_id(&DOMAIN, &r.pos.to_be_bytes().repeat(2)).unwrap(),
+        kind::INSTANCE,
+        0,
+    );
+    r.act(ALICE, instance_now, public, &create).unwrap();
+    let i: InstanceState = read(&r.state, kind::INSTANCE, &instance_now).unwrap();
+    assert_eq!((i.party, i.key), (ALICE, key));
+
+    // only the Party's own Instance terminates it without a further power
+    let term = Payload::InstanceTerminate {
+        instance: instance_now,
+    };
+    assert_eq!(
+        r.act(BOB, BOB, public, &term),
+        Err(MetaError::NotAuthorized)
+    );
+    r.act(ALICE, instance_now, public, &term).unwrap();
+    let i: InstanceState = read(&r.state, kind::INSTANCE, &instance_now).unwrap();
+    assert_eq!(i.ended.map(|e| e.how), Some(EndedHow::Terminated));
+}
+
+// C10: transfer and retire must dispose of exactly the live dependent Grants
+#[test]
+fn anchor_changes_need_a_complete_disposition() {
+    let mut r = Run::new();
+    let a = shop_anchor();
+    let (ex, _) = r
+        .act(
+            ROOT,
+            ROOT,
+            ExerciseBasis::Anchor(a),
+            &issue(ALICE, GrantBasis::Anchor(a), &["eu"], 0),
+        )
+        .unwrap();
+    let g1 = object_id(&ex, kind::GRANT, 0);
+    let retire = |d: BTreeMap<Id, Disposition>| Payload::AnchorRetire {
+        anchor: a,
+        disposition: d,
+    };
+    let basis = ExerciseBasis::Anchor(a);
+    assert_eq!(
+        r.act(ROOT, ROOT, basis, &retire(BTreeMap::new())),
+        Err(MetaError::Disposition)
+    );
+    assert_eq!(
+        r.act(
+            ROOT,
+            ROOT,
+            basis,
+            &retire(BTreeMap::from([(g1, Disposition::Keep)]))
+        ),
+        Err(MetaError::Disposition)
+    );
+    r.act(
+        ROOT,
+        ROOT,
+        basis,
+        &retire(BTreeMap::from([(g1, Disposition::Revoke)])),
+    )
+    .unwrap();
+    assert!(r.grant(&g1).ended.is_some());
+    let anchor: AnchorState = read(&r.state, kind::ANCHOR, &a).unwrap();
+    assert_eq!(anchor.ended.map(|e| e.how), Some(EndedHow::Retired));
+    assert_eq!(
+        r.act(
+            ROOT,
+            ROOT,
+            ExerciseBasis::Anchor(meta_anchor(&DOMAIN)),
+            &Payload::AnchorRetire {
+                anchor: meta_anchor(&DOMAIN),
+                disposition: BTreeMap::new(),
+            }
+        ),
+        Err(MetaError::Basis)
+    );
+}
+
+// C9, C26: a joint root acts with k−1 further contributions; root terms are added
+#[test]
+fn joint_roots_require_contributions() {
+    let mut r = Run::new();
+    let a = shop_anchor();
+    let create = Payload::AnchorCreate {
+        scope: AnchorScope::Resource(shop(&["eu"])),
+        root: Root::Joint {
+            parties: BTreeSet::from([ALICE, BOB, CAROL]),
+            k: 2,
+        },
+        root_terms: BTreeSet::new(),
+    };
+    let (ex, _) = r
+        .act(ROOT, ROOT, ExerciseBasis::Anchor(a), &create)
+        .unwrap();
+    let eu = object_id(&ex, kind::ANCHOR, 0);
+    let (_, out) = r
+        .act(
+            BOB,
+            BOB,
+            ExerciseBasis::Anchor(eu),
+            &issue(CAROL, GrantBasis::Anchor(eu), &["eu", "fr"], 0),
+        )
+        .unwrap();
+    let term = out.requirements.iter().next().unwrap();
+    assert_eq!((term.class.as_str(), term.count), ("co_root", 1));
+    // a nested Anchor stays inside its covering scope
+    let outside = Payload::AnchorCreate {
+        scope: AnchorScope::Resource(shop(&[])),
+        root: Root::Sole(ALICE),
+        root_terms: BTreeSet::new(),
+    };
+    assert_eq!(
+        r.act(ALICE, ALICE, ExerciseBasis::Anchor(eu), &outside),
+        Err(MetaError::NotWithin)
+    );
+}
+
+// OP-141 m.6, m.13: identifiers and the payload digest are deterministic and payloads round-trip
+#[test]
+fn identifiers_and_payload_round_trip() {
+    let p = issue(ALICE, GrantBasis::Anchor(shop_anchor()), &["eu"], 1);
+    assert_eq!(Payload::from_value(&p.to_value()).unwrap(), p);
+    assert_eq!(p.action(), "grant_issue");
+    assert_eq!(p.digest().unwrap(), p.digest().unwrap());
+    assert_ne!(
+        object_id(&DOMAIN, kind::GRANT, 0),
+        object_id(&DOMAIN, kind::GRANT, 1)
+    );
+    assert_ne!(
+        exercise_id(&DOMAIN, b"0123456789abcdef").unwrap(),
+        exercise_id(&DOMAIN, b"0123456789abcdeg").unwrap()
+    );
+    assert!(is_meta("access", "grant_issue") && !is_meta("shop", "grant_issue"));
+    assert!(Payload::from_value(&tagged("grant_explode", map([]))).is_err());
+}

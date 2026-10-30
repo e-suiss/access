@@ -13,6 +13,7 @@ pub mod digest;
 pub mod fold;
 pub mod intent;
 pub mod json;
+pub mod meta;
 pub mod model;
 pub mod record;
 pub mod requirement;

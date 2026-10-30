@@ -474,3 +474,132 @@ consumption = {
 ; [key] removes the key; the encoding has no null (L0-ENC-2)
 state-effect = [key: state-key, ? value: any]
 
+
+; ---------------------------------------------------------------- exercise and actor (OP-141)
+
+; INV-4: every Exercise names one basis. A Grant's own basis is never "public".
+exercise-basis = { anchor: id } / { holding: [grant: id, holder: party-ref, since: uint] } / { public: id }
+
+; Payload of a COSE_Sign1 signed by the actor Instance's current key, content type
+; "application/access-ais+cbor" (CR-55 m.10, OP-141 m.7).
+actor-intent-statement = {
+  domain: domain-id,
+  nonce: bstr .size (16..64),
+  intent: digest,
+  mode: "commit" / "continue" / "check",
+  pep: tstr .size (1..255),
+  capacity: capacity,
+  basis: exercise-basis,
+  iat: trusted-time,
+  ? exercise: digest,
+}
+
+; The fields of a record of kind "opening" (OP-141 m.8).
+opening-fields = {
+  nonce: bstr .size (16..64),
+  actor: instance-ref / "anonymous",
+  basis: exercise-basis,
+  capacity: capacity,
+  intent: digest,
+  ? ais: digest,
+  ? proof_commit: [+ digest],
+  ? exercise: digest,
+}
+
+; ---------------------------------------------------------------- authority objects (OP-141)
+
+root-value = { sole: party-ref } / { joint: { parties: [2* party-ref], k: uint .ge 1 } }
+
+anchor-scope = { resource: resource-selector } / { party: party-ref } / "domain"
+
+grant-content = {
+  basis: { anchor: id } / { holding: [grant: id, holder: party-ref, since: uint] },
+  holder: subject-selector,
+  authority: canonical-authority,
+  ? agency: [+ capacity],
+  ? named: { name: ident, version: uint, digest: digest },
+}
+
+mandate-envelope = {
+  authority: authority-set,
+  constraints: constraint-set,
+  ? requirements: requirement-set,
+  ? pin: [grant: id, holder: party-ref, since: uint],
+}
+
+acceptance-content = {
+  issuer: party-ref / { keys: key-set },
+  use: "actor-binding" / "predicate-input" / "subject-selection" / "foreign-authority" / "schema-definition",
+  classes: [+ ident],
+  subject: subject-selector,
+  ? anchor: id,
+  ? assurance_floor: assurance,
+  validity: time-window,
+  ? ingest_until: trusted-time,
+}
+
+policy-content = {
+  schema: tstr,
+  source: tstr,
+  target: "domain" / { anchor: id } / { party: party-ref } / { instance: instance-ref },
+}
+
+; Disposition of the Grants that depend on an Anchor or a Party at transfer, retire or departure.
+; There is no default (C10, E6).
+disposition = [* [grant: id, "keep" / "revoke"]]
+
+; ---------------------------------------------------------------- meta-action payloads (OP-141 m.13)
+
+; The body of a core meta-action; its digest under "access/meta/v1" is `intent.opaque.payload`.
+meta-payload =
+    { anchor_create: { scope: anchor-scope, root: root-value, ? root_terms: requirement-set } }
+  / { anchor_transfer: { anchor: id, root: root-value, disposition: disposition } }
+  / { anchor_amend: { anchor: id, ? root: root-value, ? root_terms: requirement-set } }
+  / { anchor_retire: { anchor: id, disposition: disposition } }
+  / { party_register: { party: party-ref, root: root-value } }
+  / { party_depart: { party: party-ref, disposition: disposition } }
+  / { instance_create: { party: party-ref, key: public-key, ? mandate: mandate-envelope } }
+  / { instance_rekey: { instance: instance-ref, key: public-key } }
+  / { instance_terminate: { instance: instance-ref } }
+  / { instance_recover: { instance: instance-ref, key: public-key } }
+  / { mandate_bind: { instance: instance-ref, envelope: mandate-envelope } }
+  / { mandate_rebind: { mandate: id, envelope: mandate-envelope } }
+  / { mandate_revoke: { mandate: id } }
+  / { grant_issue: grant-content }
+  / { grant_amend: { grant: id, authority: canonical-authority, ? agency: [+ capacity] } }
+  / { grant_revoke: { grant: id } }
+  / { grant_renounce: { grant: id } }
+  / { acceptance_establish: acceptance-content }
+  / { acceptance_amend: { acceptance: id, content: acceptance-content } }
+  / { acceptance_revoke: { acceptance: id } }
+  / { policy_set: { ? policy: id, content: policy-content } }
+  / { policy_retire: { policy: id } }
+  / { claim_issue: { subject: party-ref, class: ident, value: equality-value, ? validity: time-window } }
+
+; ---------------------------------------------------------------- genesis (C4, §5.2, OP-141)
+
+; The fields of the record at pos 0. Objects it creates take their ids from the DomainID
+; (OP-141 m.6). `bootstrap` holds Public Grants on the meta-anchor, e.g. for party.register.
+genesis-fields = {
+  meta_anchor: { root: root-value, root_terms: requirement-set },
+  ? anchors: [+ { scope: anchor-scope, root: root-value, ? root_terms: requirement-set }],
+  ? grants: [+ grant-content],
+  ? acceptances: [+ acceptance-content],
+  ? reserved: [+ action-ref],
+  versions: spec-versions,
+}
+
+; ---------------------------------------------------------------- state values (OP-141 m.12)
+
+; A state key is dCBOR([kind, id ...]); its value is the object's content and terminal status.
+; Status that depends on time or on other objects is derived, never stored (C2).
+ended = { at: uint, how: "revoked" / "renounced" / "retired" / "terminated" / "recovered" / "departed" }
+
+anchor-state = { scope: anchor-scope, root: root-value, ? root_terms: requirement-set, since: uint, ? ended: ended }
+grant-state = { content: grant-content, since: uint, revision: uint, ? ended: ended }
+party-state = { anchor: id, since: uint, ? ended: ended }
+instance-state = { party: party-ref, key: public-key, since: uint, ? successor: instance-ref, ? ended: ended }
+mandate-state = { instance: instance-ref, envelope: mandate-envelope, since: uint, ? ended: ended }
+acceptance-state = { content: acceptance-content, since: uint, ? ended: ended }
+policy-state = { content: policy-content, version: digest, since: uint, ? ended: ended }
+claim-state = { issuer: party-ref, class: ident, value: equality-value, since: uint, ? validity: time-window }
