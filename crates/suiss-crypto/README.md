@@ -11,7 +11,7 @@ Shared cryptography for Suiss products: deterministic CBOR, digests and Merkle p
 
 ```toml
 [dependencies]
-esuiss-crypto = { version = "=0.2.0", default-features = false, features = ["verify"] }
+esuiss-crypto = { version = "=0.2.1", default-features = false, features = ["verify"] }
 ```
 
 The library is imported as `suiss_crypto`.

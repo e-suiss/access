@@ -147,6 +147,9 @@ jobs:
         with:
           cache: "false"
           tools: nextest
+      # OP-69, OP-140 m.4
+      - name: SoftHSM
+        run: sudo apt-get install --yes --no-install-recommends softhsm2
       - name: Tests
         run: just test
       - name: Test-result predicate
