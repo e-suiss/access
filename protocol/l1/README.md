@@ -1,6 +1,6 @@
 # L1 Interoperability Profiles
 
-Status: no profile is published yet.
+Status: first drafts. Published: [Access Decision Profile](adp.md).
 
 L1 says how Access meets existing standards. Each profile maps one standard onto the L0 model: which of its fields become which L0 values, which of its flows produce which Access artefacts, and what a peer that only speaks that standard can rely on. A profile never changes L0 semantics; where a standard cannot express an L0 limit, the profile narrows what it projects.
 

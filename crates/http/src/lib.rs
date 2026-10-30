@@ -1,5 +1,6 @@
 //! HTTP layer shared by both Access planes (OP-62).
 
+pub mod adp;
 mod problem;
 mod security_txt;
 pub mod tls;

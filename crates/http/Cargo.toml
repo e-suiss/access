@@ -9,6 +9,10 @@ repository.workspace = true
 publish = false
 
 [dependencies]
+access-authority-core = { path = "../authority-core" }
+access-authority-sequencer = { path = "../authority-sequencer" }
+access-kernel = { workspace = true }
+suiss-crypto = { workspace = true }
 axum = { workspace = true, features = ["http1", "http2", "tokio", "json"] }
 hyper-util = { workspace = true, features = ["server-auto", "server-graceful", "service", "tokio"] }
 rustls = { workspace = true, features = ["aws_lc_rs", "prefer-post-quantum", "std"] }
@@ -24,6 +28,7 @@ tower-http = { workspace = true, features = ["catch-panic", "limit", "timeout", 
 tracing = { workspace = true, features = ["std"] }
 
 [dev-dependencies]
+tower = { workspace = true, features = ["util"] }
 http-body-util = { workspace = true }
 rcgen = { workspace = true, features = ["aws_lc_rs", "pem"] }
 rustls = { workspace = true, features = ["aws_lc_rs", "std", "tls12"] }

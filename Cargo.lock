@@ -49,7 +49,11 @@ dependencies = [
 name = "access-http"
 version = "0.2.2"
 dependencies = [
+ "access-authority-core",
+ "access-authority-sequencer",
  "axum",
+ "esuiss-access-kernel",
+ "esuiss-crypto",
  "http-body-util",
  "hyper-util",
  "rcgen",
