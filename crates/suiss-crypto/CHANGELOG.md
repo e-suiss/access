@@ -11,6 +11,7 @@
 - `dcbor`: `TagAllowlist`, `decode_with`, `decode_prefix` and `Value::Tag`.
 - Stable `code()` on every error type.
 - Golden vectors and `vectors/MANIFEST` in the package.
+- Server features `aws-lc`, `aead` and `signer`: `Secret`, the DIT guard, `AwsLcBackend`, envelope encryption, and the `Signer` port with `SoftSigner`, `sign_sign1`, `sign_note` and `cosign`.
 
 ### Changed
 

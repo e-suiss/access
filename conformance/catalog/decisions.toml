@@ -75,7 +75,7 @@ section = "14.5"
 status = "decision"
 stage = 4
 title = "Secret<T> discipline and hashed token storage in DB"
-tests = ["crates/crypto/src/secret.rs"]
+tests = ["crates/suiss-crypto/src/secret.rs"]
 
 [[rule]]
 id = "SA-59"

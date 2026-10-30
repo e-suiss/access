@@ -24,6 +24,16 @@ The library is imported as `suiss_crypto`.
 | `cose` | `COSE_Sign1` parsing that keeps the received bytes, attached and detached payloads, algorithms allowed by your policy only (Ed25519, ESP256, ES256; ML-DSA modelled and off) |
 | `note` | C2SP `signed-note`, `tlog-checkpoint` and Ed25519 `tlog-cosignature/v1`: parsing, verifier keys, checkpoint construction and verification |
 
+### Server features
+
+These need `std` and aws-lc-rs and are never part of `verify`.
+
+| Feature | Module | Contents |
+|---|---|---|
+| `aws-lc` | `secret`, `dit`, `aws` | `Secret<T>`: never printed, zeroized on drop, compared in constant time; the ARM64 data-independent-timing guard; an aws-lc-rs verification backend |
+| `aead` | `envelope` | Envelope encryption: a fresh DEK per body under AES-256-GCM, long-lived DEKs under AES-256-GCM-SIV with a message limit, DEKs wrapped by a KEK behind a port (AES-256 Key Wrap), rewrapping for KEK rotation, a bounded DEK cache. Deleting a DEK is crypto-shredding |
+| `signer` | `signer` | The `Signer` port, a software signer (Ed25519, ECDSA P-256 with low S), `COSE_Sign1` signing, note signatures and checkpoint cosignatures |
+
 ```rust
 use suiss_crypto::note::{verify_checkpoint, Verifier};
 use suiss_crypto::sig::PureBackend;

@@ -21,6 +21,7 @@ version = "0.2.0"
 dependencies = [
  "aws-lc-rs",
  "esuiss-access-kernel",
+ "esuiss-crypto",
  "secrecy",
  "serde",
  "serde_json",
@@ -1273,14 +1274,19 @@ dependencies = [
 name = "esuiss-crypto"
 version = "0.2.0"
 dependencies = [
+ "aws-lc-rs",
  "curve25519-dalek",
  "ed25519-dalek",
  "p256",
  "proptest",
+ "secrecy",
  "serde",
  "serde_json",
  "sha2 0.11.1",
+ "static_assertions",
+ "subtle",
  "thiserror",
+ "zeroize",
 ]
 
 [[package]]

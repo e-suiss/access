@@ -61,8 +61,8 @@ pub(crate) const OTHER_PROVIDERS: &[&str] = &[
 pub(crate) const PROVIDER_SCOPE: &[(&str, &[&str], &str)] = &[
     (
         "aws-lc-rs",
-        &["crates/crypto"],
-        "server and signer adapters only (CR-13, CR-54)",
+        &["crates/crypto", "crates/suiss-crypto"],
+        "server and signer adapters only, outside the shared verify feature (CR-13, CR-54, OP-140 m.4)",
     ),
     (
         "aws-lc-sys",
@@ -112,7 +112,7 @@ pub(crate) const PROVIDER_SCOPE: &[(&str, &[&str], &str)] = &[
     ),
     (
         "subtle",
-        &["crates/crypto"],
+        &["crates/crypto", "crates/suiss-crypto"],
         "comparisons aws-lc-rs does not offer (CR-39, §15 provider table)",
     ),
     ("hmac", &[], "HMAC comes from aws-lc-rs (CR-13, CR-3)"),

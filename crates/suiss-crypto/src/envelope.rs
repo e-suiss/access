@@ -13,14 +13,16 @@ use zeroize::Zeroizing;
 use crate::dit::DitGuard;
 use crate::secret::Secret;
 
-/// Prefix of every additional-data input, so ciphertexts cannot move between uses.
-const AAD_CONTEXT: &[u8] = b"access/aead/v1\0";
+/// Prefix of every additional-data input, so ciphertexts cannot move between uses (OP-135).
+/// The caller's context follows it.
+pub const AAD_CONTEXT: &[u8] = b"access/aead/v1\0";
 
 /// Most messages one long-lived DEK encrypts (OP-135 m.3).
 pub const MESSAGE_LIMIT: u64 = 1 << 32;
 
 /// Why an envelope operation failed.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
+#[non_exhaustive]
 pub enum EnvelopeError {
     /// The random source failed.
     #[error("random source")]
@@ -37,6 +39,20 @@ pub enum EnvelopeError {
     /// The DEK reached its message limit or its counter would overflow (V4): rotate it.
     #[error("data key exhausted")]
     Exhausted,
+}
+
+impl EnvelopeError {
+    /// Stable reason code for problem details (RFC 9457).
+    #[must_use]
+    pub const fn code(self) -> &'static str {
+        match self {
+            Self::Random => "envelope-random",
+            Self::Wrap => "envelope-wrap",
+            Self::Open => "envelope-open",
+            Self::Seal => "envelope-seal",
+            Self::Exhausted => "envelope-exhausted",
+        }
+    }
 }
 
 /// A data encryption key.
@@ -81,7 +97,7 @@ pub trait Kek {
     fn unwrap(&self, wrapped: &[u8]) -> Result<Dek, EnvelopeError>;
 }
 
-/// An in-process KEK under AES-256 Key Wrap (RFC 3394); tests only, the HSM keeps real ones.
+/// An in-process KEK under AES-256 Key Wrap (RFC 3394); tests only, an HSM keeps real ones.
 #[cfg(any(test, feature = "testing"))]
 pub struct SoftKek {
     id: String,

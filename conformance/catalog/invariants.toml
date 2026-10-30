@@ -1726,7 +1726,7 @@ family = "SAI"
 section = "14.11"
 status = "candidate"
 title = "Secret types never printed or serialized; compared in constant time"
-tests = ["crates/crypto/src/secret.rs"]
+tests = ["crates/suiss-crypto/src/secret.rs"]
 
 [[rule]]
 id = "SAI-9"

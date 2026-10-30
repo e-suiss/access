@@ -12,6 +12,12 @@ default = ["std"]
 # OP-76
 verify = []
 std = ["verify"]
+# OP-140 m.4: the server features; none of them is part of `verify`
+aws-lc = ["std", "dep:aws-lc-rs", "dep:secrecy", "dep:subtle", "dep:zeroize"]
+aead = ["aws-lc"]
+signer = ["aws-lc"]
+# OP-135 m.4: the in-process KEK, for tests of other crates
+testing = []
 
 [dependencies]
 thiserror = { workspace = true }
@@ -19,11 +25,41 @@ sha2 = { workspace = true }
 ed25519-dalek = { workspace = true }
 curve25519-dalek = { workspace = true }
 p256 = { workspace = true }
+aws-lc-rs = { workspace = true, optional = true }
+secrecy = { workspace = true, optional = true }
+subtle = { workspace = true, optional = true }
+zeroize = { workspace = true, optional = true, features = ["alloc", "std"] }
 
 [dev-dependencies]
+static_assertions = { workspace = true }
 proptest = { workspace = true, features = ["std"] }
 serde = { workspace = true, features = ["derive", "std"] }
 serde_json = { workspace = true, features = ["std"] }
 
-[lints]
-workspace = true
+# R-2, CR-39 m.6: the workspace lints with unsafe_code = "deny" for the DIT guard of the
+# server features; `verify` alone stays `forbid(unsafe_code)` in lib.rs
+[lints.rust]
+unsafe_code = "deny"
+missing_docs = "deny"
+unreachable_pub = "deny"
+unused_must_use = "deny"
+rust_2024_compatibility = { level = "deny", priority = -1 }
+
+[lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+unwrap_used = "deny"
+expect_used = "deny"
+indexing_slicing = "deny"
+panic = "deny"
+unimplemented = "deny"
+todo = "deny"
+unreachable = "deny"
+arithmetic_side_effects = "deny"
+cast_possible_truncation = "deny"
+cast_possible_wrap = "deny"
+cast_sign_loss = "deny"
+dbg_macro = "deny"
+print_stdout = "deny"
+print_stderr = "deny"
+mem_forget = "deny"
+undocumented_unsafe_blocks = "deny"

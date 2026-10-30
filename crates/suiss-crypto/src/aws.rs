@@ -1,12 +1,12 @@
-//! aws-lc-rs verification backend for the server (CR-13, CR-54). The Kernel runs its CR-53
+//! aws-lc-rs verification backend for servers (CR-13, CR-54). [`crate::sig`] runs its CR-53
 //! pre-checks before calling it.
 
-use access_kernel::verify::Backend;
+use crate::sig::Backend;
 use aws_lc_rs::signature::{ECDSA_P256_SHA256_FIXED, ED25519, UnparsedPublicKey};
 
 use crate::dit::DitGuard;
 
-/// Server backend; differential-tested against the Kernel's pure-Rust backend.
+/// Server backend; differential-tested against the pure-Rust [`crate::sig::PureBackend`].
 #[derive(Clone, Copy, Debug, Default)]
 pub struct AwsLcBackend;
 

@@ -608,6 +608,7 @@ const UNSAFE: &str = "unsafe-allowlist";
 /// the sandbox and the Kerberos gateway.
 pub(crate) const UNSAFE_ALLOWED: &[&str] = &[
     "crates/crypto",
+    "crates/suiss-crypto",
     "crates/suiss-sandbox",
     "bins/access-gw-kerberos",
 ];

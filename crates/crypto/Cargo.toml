@@ -10,10 +10,11 @@ publish = false
 
 [features]
 # OP-135 m.4: the in-process KEK, for tests of other crates
-testing = []
+testing = ["suiss-crypto/testing"]
 
 [dependencies]
 access-kernel = { workspace = true }
+suiss-crypto = { workspace = true, features = ["aead", "signer"] }
 thiserror = { workspace = true }
 aws-lc-rs = { workspace = true }
 secrecy = { workspace = true }
