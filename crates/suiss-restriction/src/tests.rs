@@ -388,3 +388,15 @@ mod properties {
         }
     }
 }
+
+// OP-140 m.2, CR-10: limits only narrow
+#[test]
+fn limits_only_narrow() {
+    let narrow = Limits::default().narrowed(Narrow::Policies(4)).unwrap();
+    assert_eq!(narrow.policies, 4);
+    assert_eq!(narrow.narrowed(Narrow::Policies(5)), Err(WiderLimit));
+    assert_eq!(
+        Limits::default().narrowed(Narrow::SetCost(u64::MAX)),
+        Err(WiderLimit)
+    );
+}

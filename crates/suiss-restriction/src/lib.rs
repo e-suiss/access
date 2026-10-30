@@ -14,34 +14,35 @@ use cedar_policy::{
 };
 
 /// Structural limits (OP-104 m.3). POLICY DEFAULT; final values come from the slowest-device bench.
+/// A caller starts from [`Limits::default`] and can only narrow them ([`Limits::narrowed`]).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Limits {
     /// Policy source size in bytes.
-    pub source: usize,
+    pub(crate) source: usize,
     /// Lexical nesting of `( [ {`.
-    pub nesting: usize,
+    pub(crate) nesting: usize,
     /// Tokens per policy.
-    pub tokens: usize,
+    pub(crate) tokens: usize,
     /// Depth of the policy's JSON AST.
-    pub ast_depth: usize,
+    pub(crate) ast_depth: usize,
     /// Entity dereference level for strict validation.
-    pub deref: u32,
+    pub(crate) deref: u32,
     /// Weighted cost per policy.
-    pub policy_cost: u64,
+    pub(crate) policy_cost: u64,
     /// Weighted cost of the whole set.
-    pub set_cost: u64,
+    pub(crate) set_cost: u64,
     /// Number of policies.
-    pub policies: usize,
+    pub(crate) policies: usize,
     /// Request JSON size in bytes.
-    pub input_bytes: usize,
+    pub(crate) input_bytes: usize,
     /// Elements per input collection.
-    pub input_collection: usize,
+    pub(crate) input_collection: usize,
     /// Bytes per input string.
-    pub input_string: usize,
+    pub(crate) input_string: usize,
     /// Entities per request.
-    pub input_entities: usize,
+    pub(crate) input_entities: usize,
     /// Nesting of input JSON.
-    pub input_nesting: usize,
+    pub(crate) input_nesting: usize,
 }
 
 impl Default for Limits {
@@ -64,8 +65,79 @@ impl Default for Limits {
     }
 }
 
+/// One limit to lower (OP-140 m.2).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum Narrow {
+    /// Policy source size in bytes.
+    Source(usize),
+    /// Lexical nesting of `( [ {`.
+    Nesting(usize),
+    /// Tokens per policy.
+    Tokens(usize),
+    /// Depth of the policy's JSON AST.
+    AstDepth(usize),
+    /// Entity dereference level for strict validation.
+    Deref(u32),
+    /// Weighted cost per policy.
+    PolicyCost(u64),
+    /// Weighted cost of the whole set.
+    SetCost(u64),
+    /// Number of policies.
+    Policies(usize),
+    /// Request JSON size in bytes.
+    InputBytes(usize),
+    /// Elements per input collection.
+    InputCollection(usize),
+    /// Bytes per input string.
+    InputString(usize),
+    /// Entities per request.
+    InputEntities(usize),
+    /// Nesting of input JSON.
+    InputNesting(usize),
+}
+
+/// A limit was asked to grow.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
+#[error("limits can only be narrowed")]
+pub struct WiderLimit;
+
+fn lower<T: PartialOrd>(slot: &mut T, value: T) -> Result<(), WiderLimit> {
+    if value > *slot {
+        return Err(WiderLimit);
+    }
+    *slot = value;
+    Ok(())
+}
+
+impl Limits {
+    /// These limits with one of them lowered.
+    ///
+    /// # Errors
+    /// [`WiderLimit`] when the new value is above the current one.
+    pub fn narrowed(mut self, change: Narrow) -> Result<Self, WiderLimit> {
+        match change {
+            Narrow::Source(v) => lower(&mut self.source, v)?,
+            Narrow::Nesting(v) => lower(&mut self.nesting, v)?,
+            Narrow::Tokens(v) => lower(&mut self.tokens, v)?,
+            Narrow::AstDepth(v) => lower(&mut self.ast_depth, v)?,
+            Narrow::Deref(v) => lower(&mut self.deref, v)?,
+            Narrow::PolicyCost(v) => lower(&mut self.policy_cost, v)?,
+            Narrow::SetCost(v) => lower(&mut self.set_cost, v)?,
+            Narrow::Policies(v) => lower(&mut self.policies, v)?,
+            Narrow::InputBytes(v) => lower(&mut self.input_bytes, v)?,
+            Narrow::InputCollection(v) => lower(&mut self.input_collection, v)?,
+            Narrow::InputString(v) => lower(&mut self.input_string, v)?,
+            Narrow::InputEntities(v) => lower(&mut self.input_entities, v)?,
+            Narrow::InputNesting(v) => lower(&mut self.input_nesting, v)?,
+        }
+        Ok(self)
+    }
+}
+
 /// Why a policy set is not accepted.
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
+#[non_exhaustive]
 pub enum CompileError {
     /// Source larger than the limit.
     #[error("policy source too large")]
@@ -106,6 +178,28 @@ pub enum CompileError {
     /// The schema is not accepted.
     #[error("bad schema")]
     Schema,
+}
+
+impl CompileError {
+    /// Stable reason code for problem details (RFC 9457).
+    #[must_use]
+    pub const fn code(&self) -> &'static str {
+        match self {
+            Self::SourceTooLarge => "policy-source-too-large",
+            Self::NestingTooDeep => "policy-nesting-too-deep",
+            Self::TooManyTokens => "policy-too-many-tokens",
+            Self::TooManyPolicies => "policy-too-many-policies",
+            Self::Parse => "policy-parse",
+            Self::Template => "policy-template",
+            Self::PermitNotAllowed => "policy-permit",
+            Self::BadId => "policy-bad-id",
+            Self::BadAnnotation => "policy-bad-annotation",
+            Self::AstTooDeep => "policy-ast-too-deep",
+            Self::CostTooHigh => "policy-cost-too-high",
+            Self::Validation => "policy-validation",
+            Self::Schema => "policy-schema",
+        }
+    }
 }
 
 /// Why a request is not evaluated: a protocol rejection, not a decision (OP-104 m.5, OP-108 m.6).
