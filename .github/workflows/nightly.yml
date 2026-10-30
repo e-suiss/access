@@ -89,6 +89,9 @@ jobs:
         with:
           cache-key: test
           tools: nextest
+      # OP-69, OP-140 m.4
+      - name: SoftHSM
+        run: sudo apt-get install --yes --no-install-recommends softhsm2
       - name: Full suite, including long-running tests
         run: just test-full
 

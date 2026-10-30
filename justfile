@@ -299,6 +299,8 @@ test-full:
     set -euo pipefail
     ACCESS_CVC5="$(scripts/cvc5-fetch.sh target/cvc5)"
     export ACCESS_CVC5
+    SOFTHSM2_CONF="$(scripts/softhsm-local.sh)"
+    export SOFTHSM2_CONF
     cargo nextest run --workspace --locked --no-tests=pass --run-ignored all -E '{{not_lockdown}}'
     cargo test --workspace --locked --doc
     just test-sandbox
