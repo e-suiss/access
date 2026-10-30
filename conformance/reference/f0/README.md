@@ -41,7 +41,7 @@ python -m venv .venv
 
 The runner walks every vector file, runs the cases whose operation F0 supports, prints per-file counts and `N passed, M failed` with each failure, and exits non-zero if anything failed. `--summary <file>` also writes the counts as JSON.
 
-Supported operations: `combinator.evaluate`, `algebra.child_within_parent`, `algebra.meet`, `codec.encode`, `dcbor.decode`, `digest.intent`, `digest.body_commit`, `digest.merkle`, `verify.cose_sign1`, `verify.ed25519`, `verify.jws_compact`, `verify.sd_jwt`, `verify.sd_jwt.disclosure`, `key_scope.operational_key`, `record.envelope`, `validity.check`, `validity.horizon`, `version.check` and `note.checkpoint`. A vector file whose operation F0 does not implement fails the run unless the operation is listed, with a reason, in `NOT_IMPLEMENTED` in `run.py` (empty today). Third-party data sets in `vectors/external/` that carry no `operation` are reported as skipped.
+Supported operations: `combinator.evaluate`, `algebra.child_within_parent`, `algebra.meet`, `codec.encode`, `dcbor.decode`, `digest.intent`, `digest.body_commit`, `digest.merkle`, `verify.cose_sign1`, `verify.ed25519`, `verify.jws_compact`, `verify.sd_jwt`, `verify.sd_jwt.disclosure`, `key_scope.operational_key`, `record.envelope`, `validity.check`, `validity.horizon`, `version.check` and `note.checkpoint`. A vector file whose operation F0 does not implement fails the run unless the operation is listed, with a reason, in `NOT_IMPLEMENTED` in `run.py` (today only `meta.apply`, whose independent implementation is still to be written). Third-party data sets in `vectors/external/` that carry no `operation` are reported as skipped.
 
 ## Differential testing
 

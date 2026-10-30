@@ -104,3 +104,45 @@ fn a_rejected_record_changes_nothing() {
     assert_eq!(apply(&mut state, &bad[0]), Err(FoldError::Duplicate));
     assert_eq!(state, before);
 }
+
+// C4, OP-141 m.6: Genesis creates the meta-anchor and the objects it lists, at version 0
+#[test]
+fn genesis_creates_its_objects() {
+    use crate::record::{Header, Opened, RecordKind};
+    let opened = |value| Opened {
+        value,
+        salt: [1; 32],
+    };
+    let root = Value::Map(alloc::vec![(
+        Value::text("root"),
+        Value::Map(alloc::vec![(
+            Value::text("sole"),
+            Value::Bytes(alloc::vec![1; 16])
+        )]),
+    )]);
+    let versions = Value::Map(alloc::vec![
+        (Value::text("core"), Value::Unsigned(1)),
+        (Value::text("meta_schema"), Value::Unsigned(1)),
+    ]);
+    let env = RecordEnvelope {
+        header: Header {
+            domain: None,
+            pos: 0,
+            kind: RecordKind::Genesis,
+            recorded_at: 1,
+            prev: None,
+        },
+        fields: BTreeMap::from([
+            (String::from("meta_anchor"), opened(root)),
+            (String::from("versions"), opened(versions)),
+        ]),
+    };
+    let state = genesis(&env).unwrap();
+    let anchor = crate::meta::meta_anchor(&env.domain().unwrap());
+    let entry = &state[&crate::meta::key(crate::meta::kind::ANCHOR, &anchor)];
+    assert_eq!(entry.version, 0);
+    let mut odd = env.clone();
+    odd.fields
+        .insert(String::from("roots"), opened(Value::text("r")));
+    assert_eq!(genesis(&odd), Err(FoldError::Genesis));
+}

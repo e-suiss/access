@@ -48,6 +48,9 @@ pub enum FoldError {
     /// A record names one key in two effects.
     #[error("duplicate-effect")]
     Duplicate,
+    /// The record at position 0 is not a Genesis with `genesis-fields` (OP-141).
+    #[error("genesis")]
+    Genesis,
 }
 
 fn outcome(record: &RecordEnvelope) -> Result<&str, FoldError> {
@@ -121,6 +124,37 @@ pub fn apply(state: &mut State, record: &RecordEnvelope) -> Result<(), FoldError
         state.insert(key, Entry { value, version });
     }
     Ok(())
+}
+
+/// The state Genesis creates, at version 0 (C4, OP-141 m.6).
+///
+/// # Errors
+/// [`FoldError::Genesis`].
+pub fn genesis(record: &RecordEnvelope) -> Result<State, FoldError> {
+    if record.header.kind != RecordKind::Genesis || record.header.pos != 0 {
+        return Err(FoldError::Genesis);
+    }
+    let domain = record.domain().map_err(|_| FoldError::Genesis)?;
+    let fields = record
+        .fields
+        .iter()
+        .map(|(k, f)| (k.clone(), f.value.clone()))
+        .collect();
+    let effects = crate::meta::genesis_effects(&domain, &fields).map_err(|_| FoldError::Genesis)?;
+    Ok(effects
+        .into_iter()
+        .filter_map(|(k, v)| {
+            v.map(|v| {
+                (
+                    k,
+                    Entry {
+                        value: Some(v),
+                        version: 0,
+                    },
+                )
+            })
+        })
+        .collect())
 }
 
 /// The state after records `1..=n`, given in position order (L2-REC-3).

@@ -15,12 +15,13 @@ A third party can build a conformant evaluator and verifier from this text and t
 | [`evaluation.md`](evaluation.md) | The evaluation input, intent coverage, requirement resolution, the decision combinator, blockers, fuel, rejections versus decisions |
 | [`validity.md`](validity.md) | The validity contract and the checks a verifier applies to it |
 | [`signatures.md`](signatures.md) | COSE_Sign1, JWS and SD-JWT verification profiles, Ed25519 and ECDSA strictness, operational key scope and Domain Metadata |
+| [`meta.md`](meta.md) | Meta-actions: payloads, identifiers, authority state, Genesis, and the power each change needs |
 
 ## Conventions
 
 <a id="L0-GEN-1"></a><!-- no-vector: editorial: BCP 14 key words -->**L0-GEN-1.** The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHALL NOT", "SHOULD", "SHOULD NOT", "RECOMMENDED", "NOT RECOMMENDED", "MAY" and "OPTIONAL" are to be interpreted as described in BCP 14 ([RFC 2119](https://www.rfc-editor.org/rfc/rfc2119), [RFC 8174](https://www.rfc-editor.org/rfc/rfc8174)) when, and only when, they appear in all capitals.
 
-<a id="L0-GEN-2"></a><!-- no-vector: editorial: the anchor scheme of this text -->**L0-GEN-2.** Every normative rule has a stable anchor of the form `L0-<PART>-<n>`, where `<PART>` is `GEN`, `ENC`, `ALG`, `EVAL`, `VAL` or `SIG`. Anchors are never reused or renumbered. A withdrawn rule keeps its anchor and is marked as withdrawn.
+<a id="L0-GEN-2"></a><!-- no-vector: editorial: the anchor scheme of this text -->**L0-GEN-2.** Every normative rule has a stable anchor of the form `L0-<PART>-<n>`, where `<PART>` is `GEN`, `ENC`, `ALG`, `EVAL`, `VAL`, `SIG` or `META`. Anchors are never reused or renumbered. A withdrawn rule keeps its anchor and is marked as withdrawn.
 
 <a id="L0-GEN-3"></a><!-- no-vector: editorial: how this text relates to the CDDL -->**L0-GEN-3.** Field names, type names and choice names in `code` refer to the CDDL. Where this text and the CDDL describe the same structure, both MUST hold. A conflict between them is a defect in this text and is fixed before adoption.
 

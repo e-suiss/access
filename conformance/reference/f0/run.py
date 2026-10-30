@@ -331,7 +331,9 @@ OPERATIONS = {
 
 # Operations in the vectors that F0 does not implement, each with its reason. Any other
 # operation F0 does not know fails the run.
-NOT_IMPLEMENTED = {}
+NOT_IMPLEMENTED = {
+    "meta.apply": "Stage 3 slice D7 writes the independent implementation of L0-META (OP-141 m.1)",
+}
 
 # Third-party raw data sets without an `operation`; the Kernel's own tests read them.
 RAW_DATA_DIRECTORY = "external"

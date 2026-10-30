@@ -498,3 +498,429 @@ fn identifiers_and_payload_round_trip() {
     assert!(is_meta("access", "grant_issue") && !is_meta("shop", "grant_issue"));
     assert!(Payload::from_value(&tagged("grant_explode", map([]))).is_err());
 }
+
+struct Recorder {
+    run: Run,
+    cases: Vec<String>,
+}
+
+fn cbor(v: &Value) -> String {
+    crate::vector_rules::hex(&dcbor::encode(v, Limits::CEILING).unwrap())
+}
+
+impl Recorder {
+    fn step(
+        &mut self,
+        id: &str,
+        rules: &[&str],
+        actor: (Id, Id),
+        basis: ExerciseBasis,
+        payload: &Payload,
+    ) -> Option<Digest> {
+        use crate::vector_rules::{field, hex};
+        use alloc::format;
+        let state: Vec<String> = self
+            .run
+            .state
+            .0
+            .iter()
+            .map(|(k, v)| format!("[\"{}\", \"{}\"]", hex(k), cbor(v)))
+            .collect();
+        let exercise = exercise_id(&DOMAIN, &self.run.pos.to_be_bytes().repeat(2)).unwrap();
+        let head = format!(
+            "{{\"id\": \"{id}\", {}, \"state\": [{}], \"domain\": \"{}\", \"exercise\": \"{}\", \"pos\": {}, \"party\": \"{}\", \"instance\": \"{}\", \"basis\": \"{}\", \"capacity\": \"{}\", \"payload\": \"{}\"",
+            field(rules),
+            state.join(", "),
+            hex(&DOMAIN.0),
+            hex(&exercise.0),
+            self.run.pos,
+            hex(&actor.0.0),
+            hex(&actor.1.0),
+            cbor(&basis_value(&basis)),
+            cbor(&capacity_value(Capacity::Own)),
+            cbor(&payload.to_value()),
+        );
+        let (tail, ok) = match self.run.act(actor.0, actor.1, basis, payload) {
+            Ok((_, out)) => {
+                let effects: Vec<String> = out
+                    .effects
+                    .iter()
+                    .map(|(k, v)| match v {
+                        Some(v) => format!("[\"{}\", \"{}\"]", hex(k), cbor(v)),
+                        None => format!("[\"{}\"]", hex(k)),
+                    })
+                    .collect();
+                let req = set_value(out.requirements.iter().map(Canonical::to_value));
+                (
+                    format!(
+                        "\"effects\": [{}], \"requirements\": \"{}\", \"expansion\": {}",
+                        effects.join(", "),
+                        cbor(&req),
+                        out.expansion
+                    ),
+                    Some(exercise),
+                )
+            }
+            Err(e) => (format!("\"error\": \"{}\"", e.code()), None),
+        };
+        self.cases.push(format!("  {head}, {tail}}}"));
+        ok
+    }
+}
+
+// L0-META-*: the scripted run, byte for byte
+#[test]
+#[allow(
+    clippy::too_many_lines,
+    reason = "one scripted run of the meta-actions"
+)]
+fn meta_vectors_match() {
+    use crate::vector_rules::{field, golden};
+    use alloc::format;
+    let mut r = Recorder {
+        run: Run::new(),
+        cases: Vec::new(),
+    };
+    let a = shop_anchor();
+    let anchor = ExerciseBasis::Anchor(a);
+    let ex = r
+        .step(
+            "root-issues",
+            &[
+                "L0-META-3",
+                "L0-META-4",
+                "L0-META-5",
+                "L0-META-7",
+                "L0-META-10",
+                "L0-META-25",
+                "L0-META-28",
+                "L0-META-29",
+            ],
+            (ROOT, ROOT),
+            anchor,
+            &issue(ALICE, GrantBasis::Anchor(a), &["eu"], 2),
+        )
+        .unwrap();
+    let g1 = object_id(&ex, kind::GRANT, 0);
+    r.step(
+        "non-root-issues",
+        &["L0-META-10"],
+        (CAROL, CAROL),
+        anchor,
+        &issue(CAROL, GrantBasis::Anchor(a), &["eu"], 0),
+    );
+    r.step(
+        "outside-anchor-scope",
+        &["L0-META-25"],
+        (ROOT, ROOT),
+        anchor,
+        &Payload::GrantIssue(GrantContent {
+            basis: GrantBasis::Anchor(a),
+            holder: SubjectSelector::Party(ALICE),
+            authority: CanonicalAuthority {
+                authority: AuthoritySet {
+                    resource: ResourceSelector::Structural(Structural {
+                        namespace: "bank".to_string(),
+                        prefix: Vec::new(),
+                        kind: None,
+                        attrs: BTreeMap::new(),
+                    }),
+                    ..authority(&["eu"], 0, 10).authority
+                },
+                ..authority(&["eu"], 0, 10)
+            },
+            agency: BTreeSet::from([Capacity::Own]),
+            named: None,
+        }),
+    );
+    let h = HoldingRef {
+        grant: g1,
+        holder: ALICE,
+        since: r.run.grant(&g1).since,
+    };
+    let ex2 = r
+        .step(
+            "holder-delegates",
+            &["L0-META-13", "L0-META-25"],
+            (ALICE, ALICE),
+            ExerciseBasis::Holding(h),
+            &issue(BOB, GrantBasis::Holding(h), &["eu", "de"], 1),
+        )
+        .unwrap();
+    let g2 = object_id(&ex2, kind::GRANT, 0);
+    r.step(
+        "delegation-wider-than-parent",
+        &["L0-META-25"],
+        (ALICE, ALICE),
+        ExerciseBasis::Holding(h),
+        &issue(BOB, GrantBasis::Holding(h), &[], 1),
+    );
+    r.step(
+        "someone-elses-holding",
+        &["L0-META-13", "L0-META-25"],
+        (BOB, BOB),
+        ExerciseBasis::Holding(h),
+        &issue(CAROL, GrantBasis::Holding(h), &["eu"], 0),
+    );
+    let mut agency = issue(CAROL, GrantBasis::Anchor(a), &["eu"], 0);
+    if let Payload::GrantIssue(c) = &mut agency {
+        c.agency.insert(Capacity::For(BOB));
+    }
+    r.step(
+        "agency-not-continuous",
+        &["L0-META-25"],
+        (ROOT, ROOT),
+        anchor,
+        &agency,
+    );
+    r.step(
+        "amend-narrows",
+        &["L0-META-26", "L0-META-28"],
+        (ROOT, ROOT),
+        anchor,
+        &Payload::GrantAmend {
+            grant: g1,
+            authority: authority(&["eu", "de"], 2, 1_000),
+            agency: BTreeSet::from([Capacity::Own]),
+        },
+    );
+    r.step(
+        "stranger-revokes",
+        &["L0-META-11", "L0-META-26"],
+        (CAROL, CAROL),
+        anchor,
+        &Payload::GrantRevoke { grant: g2 },
+    );
+    r.step(
+        "upstream-holder-revokes",
+        &["L0-META-11", "L0-META-26"],
+        (ALICE, ALICE),
+        anchor,
+        &Payload::GrantRevoke { grant: g2 },
+    );
+    r.step(
+        "revoke-ended",
+        &["L0-META-6"],
+        (ROOT, ROOT),
+        anchor,
+        &Payload::GrantRevoke { grant: g2 },
+    );
+    r.step(
+        "holder-renounces",
+        &["L0-META-26"],
+        (ALICE, ALICE),
+        anchor,
+        &Payload::GrantRenounce { grant: g1 },
+    );
+    let public = ExerciseBasis::Public(Id([9; 16]));
+    let register = Payload::PartyRegister {
+        party: BOB,
+        root: Root::Sole(BOB),
+    };
+    r.step(
+        "register-someone-else",
+        &["L0-META-22"],
+        (CAROL, CAROL),
+        public,
+        &register,
+    );
+    r.step(
+        "register-self",
+        &["L0-META-22", "L0-META-13"],
+        (BOB, BOB),
+        public,
+        &register,
+    );
+    r.step(
+        "register-twice",
+        &["L0-META-22"],
+        (BOB, BOB),
+        public,
+        &register,
+    );
+    let key = PublicKey::Ed25519(
+        ed25519_dalek::SigningKey::from_bytes(&[5; 32])
+            .verifying_key()
+            .to_bytes(),
+    );
+    let create = Payload::InstanceCreate {
+        party: BOB,
+        key,
+        mandate: None,
+    };
+    r.step(
+        "instance-other-id",
+        &["L0-META-23"],
+        (BOB, BOB),
+        public,
+        &create,
+    );
+    let new_instance = object_id(
+        &exercise_id(&DOMAIN, &r.run.pos.to_be_bytes().repeat(2)).unwrap(),
+        kind::INSTANCE,
+        0,
+    );
+    r.step(
+        "instance-create",
+        &["L0-META-23"],
+        (BOB, new_instance),
+        public,
+        &create,
+    );
+    let envelope = MandateEnvelope {
+        authority: authority(&["eu"], 0, 10).authority,
+        constraints: authority(&["eu"], 0, 10).constraints,
+        requirements: BTreeSet::new(),
+        pin: None,
+    };
+    r.step(
+        "mandate-bind-other-party",
+        &["L0-META-24"],
+        (CAROL, CAROL),
+        public,
+        &Payload::MandateBind {
+            instance: new_instance,
+            envelope: envelope.clone(),
+        },
+    );
+    r.step(
+        "mandate-bind-own",
+        &["L0-META-24"],
+        (BOB, new_instance),
+        public,
+        &Payload::MandateBind {
+            instance: new_instance,
+            envelope,
+        },
+    );
+    r.step(
+        "terminate-not-own",
+        &["L0-META-12", "L0-META-23"],
+        (CAROL, CAROL),
+        public,
+        &Payload::InstanceTerminate {
+            instance: new_instance,
+        },
+    );
+    r.step(
+        "terminate-own",
+        &["L0-META-12", "L0-META-23"],
+        (BOB, new_instance),
+        public,
+        &Payload::InstanceTerminate {
+            instance: new_instance,
+        },
+    );
+    let ex3 = r
+        .step(
+            "issue-for-retire",
+            &["L0-META-25"],
+            (ROOT, ROOT),
+            anchor,
+            &issue(CAROL, GrantBasis::Anchor(a), &["eu"], 0),
+        )
+        .unwrap();
+    let g3 = object_id(&ex3, kind::GRANT, 0);
+    r.step(
+        "retire-no-disposition",
+        &["L0-META-21"],
+        (ROOT, ROOT),
+        anchor,
+        &Payload::AnchorRetire {
+            anchor: a,
+            disposition: BTreeMap::new(),
+        },
+    );
+    r.step(
+        "retire-keep",
+        &["L0-META-21"],
+        (ROOT, ROOT),
+        anchor,
+        &Payload::AnchorRetire {
+            anchor: a,
+            disposition: BTreeMap::from([(g3, Disposition::Keep)]),
+        },
+    );
+    r.step(
+        "retire-meta-anchor",
+        &["L0-META-20"],
+        (ROOT, ROOT),
+        ExerciseBasis::Anchor(meta_anchor(&DOMAIN)),
+        &Payload::AnchorRetire {
+            anchor: meta_anchor(&DOMAIN),
+            disposition: BTreeMap::new(),
+        },
+    );
+    let joint = Payload::AnchorCreate {
+        scope: AnchorScope::Resource(shop(&["eu"])),
+        root: Root::Joint {
+            parties: BTreeSet::from([ALICE, BOB, CAROL]),
+            k: 2,
+        },
+        root_terms: BTreeSet::new(),
+    };
+    let ex4 = r
+        .step(
+            "nested-anchor",
+            &["L0-META-20", "L0-META-28"],
+            (ROOT, ROOT),
+            anchor,
+            &joint,
+        )
+        .unwrap();
+    let eu = object_id(&ex4, kind::ANCHOR, 0);
+    r.step(
+        "joint-root-requires",
+        &["L0-META-10", "L0-META-25"],
+        (BOB, BOB),
+        ExerciseBasis::Anchor(eu),
+        &issue(CAROL, GrantBasis::Anchor(eu), &["eu", "fr"], 0),
+    );
+    r.step(
+        "nested-outside",
+        &["L0-META-20"],
+        (ALICE, ALICE),
+        ExerciseBasis::Anchor(eu),
+        &Payload::AnchorCreate {
+            scope: AnchorScope::Resource(shop(&[])),
+            root: Root::Sole(ALICE),
+            root_terms: BTreeSet::new(),
+        },
+    );
+    r.step(
+        "retire-revoke",
+        &["L0-META-20", "L0-META-21"],
+        (ROOT, ROOT),
+        anchor,
+        &Payload::AnchorRetire {
+            anchor: a,
+            disposition: BTreeMap::from([(g3, Disposition::Revoke)]),
+        },
+    );
+    r.step(
+        "anchor-ended",
+        &["L0-META-6", "L0-META-10"],
+        (ROOT, ROOT),
+        anchor,
+        &issue(CAROL, GrantBasis::Anchor(a), &["eu"], 0),
+    );
+    r.step(
+        "domain-object-needs-meta-root",
+        &["L0-META-27"],
+        (ALICE, ALICE),
+        ExerciseBasis::Anchor(meta_anchor(&DOMAIN)),
+        &Payload::PolicyRetire {
+            policy: Id([8; 16]),
+        },
+    );
+    let json = format!(
+        "{{\n \"rule\": \"OP-141\",\n \"track\": \"core\",\n \"version\": 1,\n \"operation\": \"meta.apply\",\n {},\n \"cases\": [\n{}\n ]\n}}\n",
+        field(&["L0-META-1", "L0-META-2"]),
+        r.cases.join(",\n")
+    );
+    golden(
+        "meta.json",
+        include_str!("../../../../conformance/vectors/core/1/meta.json"),
+        &json,
+    );
+}
