@@ -1,8 +1,8 @@
 """Assembly snapshot of the constant-time comparisons (CR-39 m.5, SA-T13).
 
-Compiles crates/crypto/asm/snapshot.rs for each server target with the pinned toolchain,
+Compiles crates/suiss-crypto/asm/snapshot.rs for each server target with the pinned toolchain,
 extracts the comparison functions, normalises labels and symbol hashes and compares the
-result with crates/crypto/asm/<target>.s. A difference fails and is reviewed; `--bless`
+result with crates/suiss-crypto/asm/<target>.s. A difference fails and is reviewed; `--bless`
 rewrites the snapshots after the review. A call to memcmp or bcmp always fails.
 
 Usage: python3 -I scripts/ct_asm.py [--bless]
@@ -15,7 +15,7 @@ import subprocess
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-SNAPSHOT_DIR = ROOT / "crates" / "crypto" / "asm"
+SNAPSHOT_DIR = ROOT / "crates" / "suiss-crypto" / "asm"
 TARGETS = ["x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu"]
 FUNCTIONS = ["ct_eq_32", "ct_eq_bytes_32"]
 DEPS = ["secrecy", "subtle", "zeroize"]
