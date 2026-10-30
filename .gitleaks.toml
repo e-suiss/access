@@ -28,3 +28,10 @@ targetRules = ["generic-api-key"]
 paths = [
     '''^conformance/vectors/core/1/key-scope\.json$''',
 ]
+
+[[allowlists]]
+description = "AIS vectors: the hex COSE public key of a test signer, no private material (OP-141 m.7); other rules still apply here"
+targetRules = ["generic-api-key"]
+paths = [
+    '''^conformance/vectors/core/1/ais\.json$''',
+]

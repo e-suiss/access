@@ -528,7 +528,7 @@ impl Recorder {
             .collect();
         let exercise = exercise_id(&DOMAIN, &self.run.pos.to_be_bytes().repeat(2)).unwrap();
         let head = format!(
-            "{{\"id\": \"{id}\", {}, \"state\": [{}], \"domain\": \"{}\", \"exercise\": \"{}\", \"pos\": {}, \"party\": \"{}\", \"instance\": \"{}\", \"basis\": \"{}\", \"capacity\": \"{}\", \"payload\": \"{}\"",
+            "{{\"id\": \"{id}\", {}, \"state\": [{}], \"domain_id\": \"{}\", \"exercise\": \"{}\", \"pos\": {}, \"party\": \"{}\", \"instance\": \"{}\", \"basis\": \"{}\", \"capacity\": \"{}\", \"payload\": \"{}\"",
             field(rules),
             state.join(", "),
             hex(&DOMAIN.0),
