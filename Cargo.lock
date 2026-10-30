@@ -4,7 +4,7 @@ version = 4
 
 [[package]]
 name = "access-authority-sequencer"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "access-crypto",
  "access-store",
@@ -17,7 +17,7 @@ dependencies = [
 
 [[package]]
 name = "access-crypto"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "aws-lc-rs",
  "esuiss-access-kernel",
@@ -33,7 +33,7 @@ dependencies = [
 
 [[package]]
 name = "access-http"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "axum",
  "http-body-util",
@@ -54,7 +54,7 @@ dependencies = [
 
 [[package]]
 name = "access-identity-audit"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "access-store",
  "esuiss-access-kernel",
@@ -66,7 +66,7 @@ dependencies = [
 
 [[package]]
 name = "access-kernel-uniffi"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "esuiss-access-kernel",
  "thiserror",
@@ -75,7 +75,7 @@ dependencies = [
 
 [[package]]
 name = "access-kernel-wasm"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "esuiss-access-kernel",
  "wasm-bindgen",
@@ -83,7 +83,7 @@ dependencies = [
 
 [[package]]
 name = "access-server"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "access-crypto",
  "access-http",
@@ -101,7 +101,7 @@ dependencies = [
 
 [[package]]
 name = "access-store"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "access-store",
  "sqlx",
@@ -111,7 +111,7 @@ dependencies = [
 
 [[package]]
 name = "access-telemetry"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "access-crypto",
  "tracing",
@@ -1267,7 +1267,7 @@ dependencies = [
 
 [[package]]
 name = "esuiss-access-kernel"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "curve25519-dalek",
  "divan",
@@ -1284,7 +1284,7 @@ dependencies = [
 
 [[package]]
 name = "esuiss-access-verify"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "ed25519-dalek",
  "esuiss-access-kernel",
@@ -1294,7 +1294,7 @@ dependencies = [
 
 [[package]]
 name = "esuiss-crypto"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "aws-lc-rs",
  "cryptoki",
@@ -1314,7 +1314,7 @@ dependencies = [
 
 [[package]]
 name = "esuiss-ledger"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "esuiss-crypto",
  "proptest",
@@ -1324,7 +1324,7 @@ dependencies = [
 
 [[package]]
 name = "esuiss-restriction"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "cedar-policy",
  "proptest",
@@ -1334,7 +1334,7 @@ dependencies = [
 
 [[package]]
 name = "esuiss-restriction-analysis"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "cedar-policy",
  "cedar-policy-symcc",
@@ -1348,7 +1348,7 @@ dependencies = [
 
 [[package]]
 name = "esuiss-sandbox"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "landlock",
  "libc",
@@ -4487,7 +4487,7 @@ dependencies = [
 
 [[package]]
 name = "xtask"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "serde",
  "serde_json",

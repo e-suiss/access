@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.2
+
+No changes; released with `esuiss-sandbox`.
+
 ## 0.2.1
 
 ### Changed

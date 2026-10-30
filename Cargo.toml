@@ -3,7 +3,7 @@ resolver = "3"
 members = ["crates/*", "bins/*", "sdks/bindings/wasm", "sdks/bindings/uniffi", "xtask"]
 
 [workspace.package]
-version = "0.2.1"
+version = "0.2.2"
 edition = "2024"
 rust-version = "1.99"
 license = "Apache-2.0"
@@ -12,14 +12,14 @@ publish = false
 
 # F-3, SA-35
 [workspace.dependencies]
-access-kernel = { package = "esuiss-access-kernel", path = "crates/kernel", version = "=0.2.1", default-features = false }
-suiss-crypto = { package = "esuiss-crypto", path = "crates/suiss-crypto", version = "=0.2.1", default-features = false }
+access-kernel = { package = "esuiss-access-kernel", path = "crates/kernel", version = "=0.2.2", default-features = false }
+suiss-crypto = { package = "esuiss-crypto", path = "crates/suiss-crypto", version = "=0.2.2", default-features = false }
 access-crypto = { path = "crates/crypto", default-features = false }
 access-telemetry = { path = "crates/telemetry", default-features = false }
 access-http = { path = "crates/http", default-features = false }
-suiss-sandbox = { package = "esuiss-sandbox", path = "crates/suiss-sandbox", version = "=0.2.1", default-features = false }
-suiss-restriction = { package = "esuiss-restriction", path = "crates/suiss-restriction", version = "=0.2.1", default-features = false }
-suiss-ledger = { package = "esuiss-ledger", path = "crates/suiss-ledger", version = "=0.2.1", default-features = false }
+suiss-sandbox = { package = "esuiss-sandbox", path = "crates/suiss-sandbox", version = "=0.2.2", default-features = false }
+suiss-restriction = { package = "esuiss-restriction", path = "crates/suiss-restriction", version = "=0.2.2", default-features = false }
+suiss-ledger = { package = "esuiss-ledger", path = "crates/suiss-ledger", version = "=0.2.2", default-features = false }
 access-store = { path = "crates/store", default-features = false }
 
 # F-2

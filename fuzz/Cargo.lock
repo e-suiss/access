@@ -588,7 +588,7 @@ checksum = "00d174d5400e5e8fd687ad1049e2f578285fa914201b1af7e8b112a4546bd826"
 
 [[package]]
 name = "esuiss-access-kernel"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "curve25519-dalek",
  "ed25519-dalek",
@@ -600,7 +600,7 @@ dependencies = [
 
 [[package]]
 name = "esuiss-crypto"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "curve25519-dalek",
  "ed25519-dalek",
@@ -611,7 +611,7 @@ dependencies = [
 
 [[package]]
 name = "esuiss-restriction"
-version = "0.2.1"
+version = "0.2.2"
 dependencies = [
  "cedar-policy",
  "serde_json",

@@ -405,7 +405,7 @@ vet:
     cargo vet --locked
 
 # OP-76, OP-102, OP-139
-published := "-p esuiss-crypto -p esuiss-ledger -p esuiss-restriction -p esuiss-access-kernel -p esuiss-access-verify"
+published := "-p esuiss-crypto -p esuiss-ledger -p esuiss-restriction -p esuiss-sandbox -p esuiss-access-kernel -p esuiss-access-verify"
 
 # OP-140 m.3: copy the shared vectors into the suiss-crypto package and list their SHA-256
 shared-vectors:
@@ -415,9 +415,8 @@ shared-vectors:
     for f in $(find . -type f ! -name MANIFEST | sed 's|^\./||' | LC_ALL=C sort); do cp "../../../conformance/vectors/$f" "$f"; done
     find . -type f ! -name MANIFEST | sed 's|^\./||' | LC_ALL=C sort | xargs shasum -a 256 > MANIFEST
 
-# OP-140 m.6: esuiss-sandbox joins `published` once its name is reserved on crates.io
 crates-package:
-    cargo package --locked {{published}} -p esuiss-sandbox
+    cargo package --locked {{published}}
 
 crates-publish tag:
     #!/usr/bin/env bash
