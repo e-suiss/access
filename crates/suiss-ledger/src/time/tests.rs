@@ -1,4 +1,4 @@
-use super::{TimeError, TrustedClock};
+use super::{TimeError, TrustedClock, UNCERTAINTY_MS, check_against_witness};
 
 // TI-RT2
 #[test]
@@ -35,4 +35,20 @@ fn rejected_readings_leave_the_last_one() {
     c.read(&[10_000, 10_000], 0).unwrap();
     assert_eq!(c.read(&[10_000, 20_000], 100), Err(TimeError::Disagree));
     assert_eq!(c.read(&[10_300, 10_300], 100), Ok(10_300));
+}
+
+// TI-RT2, OP-140 m.5: the log clock may not run ahead of a witness by more than U
+#[test]
+fn witness_time_bounds_the_log_clock() {
+    assert_eq!(check_against_witness(10_999, 10, 0), Ok(()));
+    assert_eq!(
+        check_against_witness(11_000, 10, 0),
+        Err(TimeError::AheadOfWitness)
+    );
+    assert_eq!(check_against_witness(11_249, 10, UNCERTAINTY_MS), Ok(()));
+    assert_eq!(
+        check_against_witness(11_250, 10, UNCERTAINTY_MS),
+        Err(TimeError::AheadOfWitness)
+    );
+    assert_eq!(check_against_witness(5, 100, UNCERTAINTY_MS), Ok(()));
 }

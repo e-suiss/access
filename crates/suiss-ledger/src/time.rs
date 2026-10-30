@@ -11,6 +11,7 @@ pub const MIN_SOURCES: usize = 2;
 
 /// Why no trusted time is available; commit stops (TI-RT2).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
+#[non_exhaustive]
 pub enum TimeError {
     /// Fewer than [`MIN_SOURCES`] sources answered.
     #[error("too few time sources")]
@@ -24,6 +25,29 @@ pub enum TimeError {
     /// The monotonic clock went back.
     #[error("monotonic clock went back")]
     Monotonic,
+    /// The log's time is ahead of a witness's cosignature time by more than U.
+    #[error("log time ahead of the witness")]
+    AheadOfWitness,
+}
+
+/// Cross-check of the log clock against a witness (TI-RT2, OP-140 m.5): a checkpoint whose
+/// newest record has `recorded_at` (Unix milliseconds) cannot have been cosigned before that
+/// time. The witness reports whole seconds, so its time is read as the end of its second.
+///
+/// # Errors
+/// [`TimeError::AheadOfWitness`] when `recorded_at` is later than the cosignature time plus
+/// `uncertainty` milliseconds.
+pub const fn check_against_witness(
+    recorded_at: u64,
+    cosigned_seconds: u64,
+    uncertainty: u64,
+) -> Result<(), TimeError> {
+    let witness_end = cosigned_seconds.saturating_mul(1000).saturating_add(999);
+    if recorded_at > witness_end.saturating_add(uncertainty) {
+        Err(TimeError::AheadOfWitness)
+    } else {
+        Ok(())
+    }
 }
 
 /// Combines source readings into trusted time and remembers the last one.

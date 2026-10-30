@@ -9,8 +9,47 @@ use alloc::vec::Vec;
 use crate::Hash;
 use crate::merkle::{Frontier, FrontierError};
 
-/// Most records in one batch (OP-130 m.6, PD).
+/// Most records in one batch (OP-130 m.6, PD); the ceiling [`Params`] can only lower.
 pub const MAX_BATCH: usize = 256;
+
+/// Engine parameters. They start at the ceilings and can only be lowered (OP-140 m.5).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Params {
+    max_batch: usize,
+}
+
+impl Default for Params {
+    fn default() -> Self {
+        Self {
+            max_batch: MAX_BATCH,
+        }
+    }
+}
+
+/// A parameter was asked to grow.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
+#[error("parameters can only be narrowed")]
+pub struct WiderParam;
+
+impl Params {
+    /// These parameters with at most `max_batch` records per batch.
+    ///
+    /// # Errors
+    /// [`WiderParam`] when `max_batch` is 0 or above the current value.
+    pub const fn with_max_batch(mut self, max_batch: usize) -> Result<Self, WiderParam> {
+        if max_batch == 0 || max_batch > self.max_batch {
+            return Err(WiderParam);
+        }
+        self.max_batch = max_batch;
+        Ok(self)
+    }
+
+    /// Most records in one batch.
+    #[must_use]
+    pub const fn max_batch(&self) -> usize {
+        self.max_batch
+    }
+}
 
 /// The last committed record of a log.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -79,6 +118,7 @@ pub struct Batch<S> {
 
 /// Why a batch could not be planned.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
+#[non_exhaustive]
 pub enum PlanError<E> {
     /// The sequencer stepped down.
     #[error("sequencer stepped down")]
@@ -86,7 +126,7 @@ pub enum PlanError<E> {
     /// A batch is already waiting for its commit outcome.
     #[error("a batch is in flight")]
     InFlight,
-    /// No entries, or more than [`MAX_BATCH`].
+    /// No entries, or more than the batch limit.
     #[error("batch size out of range")]
     Size,
     /// Positions or the tree would overflow.
@@ -110,18 +150,26 @@ pub struct Sequencer {
     in_flight: Option<u64>,
     tickets: u64,
     down: bool,
+    params: Params,
 }
 
 impl Sequencer {
     /// Leads a log from its stored head under a freshly acquired epoch.
     #[must_use]
-    pub const fn lead(epoch: u64, head: Head) -> Self {
+    pub fn lead(epoch: u64, head: Head) -> Self {
+        Self::lead_with(epoch, head, Params::default())
+    }
+
+    /// [`Sequencer::lead`] with narrowed parameters.
+    #[must_use]
+    pub const fn lead_with(epoch: u64, head: Head, params: Params) -> Self {
         Self {
             epoch,
             head,
             in_flight: None,
             tickets: 0,
             down: false,
+            params,
         }
     }
 
@@ -158,7 +206,7 @@ impl Sequencer {
         if self.in_flight.is_some() {
             return Err(PlanError::InFlight);
         }
-        if entries.is_empty() || entries.len() > MAX_BATCH {
+        if entries.is_empty() || entries.len() > self.params.max_batch {
             return Err(PlanError::Size);
         }
         // TI-19
