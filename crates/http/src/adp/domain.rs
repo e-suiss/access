@@ -137,7 +137,9 @@ fn resource(v: &Json) -> R<ResourceRef> {
         path: path.iter().map(|p| text(p, "resource")).collect::<R<_>>()?,
         incarnation: o
             .opt("incarnation")
-            .map_or(Ok(0), |v| uint(v, "resource"))?,
+            .map(|v| uint(v, "resource"))
+            .transpose()?
+            .unwrap_or_default(),
     };
     o.done()?;
     Ok(r)

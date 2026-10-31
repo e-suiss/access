@@ -200,6 +200,9 @@ struct Led<B: Binding, S: Salts, C> {
 type Slot<B, S, C> = Arc<tokio::sync::Mutex<Option<Led<B, S, C>>>>;
 type Guard<B, S, C> = tokio::sync::OwnedMutexGuard<Option<Led<B, S, C>>>;
 
+/// Hard deadline of one search page (§9.7.1, EA).
+pub const SEARCH_DEADLINE: Duration = Duration::from_secs(1);
+
 /// Kind of the page token (OP-141 m.22 (b)).
 const PAGE_TOKEN: &str = "page";
 
@@ -367,7 +370,10 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
                     .ok_or(CoreError::Protocol("page"))
             })
             .transpose()?;
-        let found = led.core.search(inc, query, after, now).await?;
+        // §9.7.1: past the deadline there is no answer, never a partial list
+        let found = tokio::time::timeout(SEARCH_DEADLINE, led.core.search(inc, query, after, now))
+            .await
+            .map_err(|_| CoreError::Unavailable("deadline"))??;
         let next = found
             .next
             .map(|n| led.tokens.seal(&domain.0, PAGE_TOKEN, &page_body(&n)))
