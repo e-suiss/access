@@ -945,3 +945,134 @@ async fn a_continuation_names_its_exercise() {
     ));
     fold_check(&db.sequencer, d).await.unwrap();
 }
+
+// ---------------------------------------------------------------- D5b (OP-141 m.20)
+
+/// Genesis where ALICE is the membership issuer of `staff` and members of `staff` hold a Grant
+/// to read the shop.
+fn grouped() -> BTreeMap<String, Opened> {
+    let mut g = genesis();
+    let opened = |value| Opened {
+        value,
+        salt: [3; 32],
+    };
+    let Some(Value::Array(mut grants)) = g.get("grants").map(|o| o.value.clone()) else {
+        panic!("genesis has grants");
+    };
+    let staff = SubjectSelector::Pred(BTreeSet::from([access_kernel::model::Conjunct {
+        claim_class: "staff".to_owned(),
+        value: None,
+    }]));
+    grants.push(Value::Map(vec![
+        (Value::text("anchor"), Value::Unsigned(1)),
+        (Value::text("holder"), staff.to_value()),
+        (
+            Value::text("authority"),
+            authority(vec![action("shop", "read")], selector("shop")).to_value(),
+        ),
+        (
+            Value::text("agency"),
+            Value::Array(vec![meta::capacity_value(Capacity::Own)]),
+        ),
+    ]));
+    g.insert("grants".to_owned(), opened(Value::Array(grants)));
+    let acceptance = Value::Map(vec![
+        (Value::text("issuer"), ALICE.to_value()),
+        (Value::text("use"), Value::text("subject-selection")),
+        (
+            Value::text("classes"),
+            Value::Array(vec![Value::text("staff")]),
+        ),
+        (Value::text("subject"), SubjectSelector::Public.to_value()),
+        (
+            Value::text("validity"),
+            Value::Array(vec![Value::Unsigned(0), Value::Unsigned(1_000_000)]),
+        ),
+    ]);
+    g.insert(
+        "acceptances".to_owned(),
+        opened(Value::Array(vec![acceptance])),
+    );
+    g
+}
+
+// OP-141 m.20 (a)–(d): a member of a group holds the group's Grant from its episode start
+#[tokio::test]
+async fn a_member_holds_the_groups_grant_from_its_episode() {
+    let db = fresh().await.unwrap();
+    let (mut core, d) = setup_with(&db, grouped()).await;
+    onboard(&mut core, d, ROOT, ROOT_KEY, (1, 2)).await;
+    onboard(&mut core, d, ALICE, ALICE_KEY, (3, 4)).await;
+    let grant = meta::object_id(&d, kind::GRANT, 1);
+    let holding = |since| {
+        ExerciseBasis::Holding(HoldingRef {
+            grant,
+            holder: ROOT,
+            since,
+        })
+    };
+
+    // L0-EVAL-60: a holding the actor does not hold is no basis at all
+    assert!(matches!(
+        send(
+            &mut core,
+            shop_request(d, 8, Mode::Commit, holding(0)),
+            ROOT_KEY
+        )
+        .await,
+        Err(CoreError::Rejected(_))
+    ));
+    let shop = ExerciseBasis::Anchor(meta::object_id(&d, kind::ANCHOR, 1));
+    let membership = claim(d, ALICE, ALICE_KEY, "staff");
+    let ingested = send(
+        &mut core,
+        with_proofs(
+            shop_request(d, 9, Mode::Commit, shop),
+            vec![ProofRef::Claim(membership)],
+        ),
+        ROOT_KEY,
+    )
+    .await
+    .unwrap();
+    allowed(&ingested);
+    let episode = ingested.record.unwrap() - 2;
+
+    let member = send(
+        &mut core,
+        shop_request(d, 10, Mode::Commit, holding(episode)),
+        ROOT_KEY,
+    )
+    .await
+    .unwrap();
+    allowed(&member);
+
+    assert!(matches!(
+        send(
+            &mut core,
+            shop_request(d, 11, Mode::Commit, holding(episode - 1)),
+            ROOT_KEY
+        )
+        .await,
+        Err(CoreError::Rejected(_))
+    ));
+
+    // a Claim from an issuer that is not the group's makes no member
+    let outsider = claim(d, ROOT, ROOT_KEY, "staff");
+    let id = access_kernel::claim::claim_id(&outsider);
+    send(
+        &mut core,
+        with_proofs(
+            shop_request(d, 12, Mode::Commit, shop),
+            vec![ProofRef::Claim(outsider)],
+        ),
+        ROOT_KEY,
+    )
+    .await
+    .unwrap();
+    assert!(
+        state_of(&db, d, &meta::key(kind::CLAIM, &id))
+            .await
+            .is_none()
+    );
+    fold_check(&db.sequencer, d).await.unwrap();
+}

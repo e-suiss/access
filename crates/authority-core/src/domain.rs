@@ -320,6 +320,8 @@ pub struct Frame<'a> {
     pub catalog: &'a Catalog,
     /// The usable proofs (OP-141 m.19 (f)).
     pub proofs: &'a [access_kernel::requirement::Proof],
+    /// For a holding basis on a Grant held by a predicate, the actor's episode start.
+    pub held: Option<u64>,
 }
 
 /// One pass of the evaluation over `snapshot` (§17.1.1 steps 7–8). Implicit powers of a
@@ -339,6 +341,7 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
         now,
         catalog,
         proofs,
+        held,
     } = *frame;
     snapshot.restart();
     let mut effects = Vec::new();
@@ -460,9 +463,15 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
                 }),
             ExerciseBasis::Holding(h) => read::<GrantState>(snapshot, kind::GRANT, &h.grant)
                 .filter(|g| {
-                    actor.is_some_and(|a| a.party == h.holder)
-                        && g.since == h.since
-                        && matches!(g.content.holder, access_kernel::model::SubjectSelector::Party(p) if p == h.holder)
+                    // OP-141 m.20 (c), (d): a predicate holder holds from its episode start
+                    let holds = match &g.content.holder {
+                        access_kernel::model::SubjectSelector::Party(p) => {
+                            *p == h.holder && g.since == h.since
+                        }
+                        access_kernel::model::SubjectSelector::Pred(_) => held == Some(h.since),
+                        _ => false,
+                    };
+                    actor.is_some_and(|a| a.party == h.holder) && holds
                 })
                 .and_then(|_| lineage_hops(snapshot, &h.grant)),
             ExerciseBasis::Public(g) => read::<GrantState>(snapshot, kind::GRANT, &g)

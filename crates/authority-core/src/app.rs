@@ -356,7 +356,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         };
         for _ in 0..MAX_RETRIES {
             let head = self.leader.head().pos;
-            let resolved = self.resolve(&req.proofs, now, head).await?;
+            let resolved = self.resolve(req, actor.map(|a| a.party), now, head).await?;
             let records = u64::try_from(resolved.claims.len())
                 .map_err(|_| CoreError::Protocol("proofs"))?
                 .saturating_add(u64::from(!open))
@@ -369,6 +369,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                 now,
                 catalog: &self.catalog,
                 proofs: &resolved.proofs,
+                held: resolved.held,
             };
             let mut snapshot = Snapshot::default();
             let mut evaluation = None;
@@ -433,19 +434,26 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         for c in &resolved.claims {
             let ckey = meta::key(kind::CLAIM, &c.id);
             let admit = c.disposition == Disposition::Admit;
+            // L2-CLM-4, OP-141 m.20 (b)
             let effects: Vec<Effect> = if admit {
-                vec![(
-                    ckey.clone(),
-                    Some(
-                        ClaimState {
-                            statement: c.statement.clone(),
-                            instance: Some(c.instance),
-                            since: c.pos,
-                            ended: None,
-                        }
-                        .to_value(),
+                vec![
+                    (
+                        ckey.clone(),
+                        Some(
+                            ClaimState {
+                                statement: c.statement.clone(),
+                                instance: Some(c.instance),
+                                since: c.pos,
+                                ended: None,
+                            }
+                            .to_value(),
+                        ),
                     ),
-                )]
+                    (
+                        claim::member_key(&c.statement.class, &c.statement.subject, &c.id),
+                        Some(c.id.to_value()),
+                    ),
+                ]
             } else {
                 Vec::new()
             };
@@ -470,7 +478,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                 events: Vec::new(),
                 proofs: vec![(digest.0, c.bytes.clone())],
                 reads: vec![(ckey.clone(), 0)],
-                writes: if admit { vec![ckey] } else { Vec::new() },
+                writes: effects.iter().map(|(k, _)| k.clone()).collect(),
                 draws: Vec::new(),
                 single_use: Vec::new(),
             });

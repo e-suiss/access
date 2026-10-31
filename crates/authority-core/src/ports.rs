@@ -18,6 +18,8 @@ pub type Row = (Vec<u8>, Option<Value>, u64);
 pub trait Reader {
     /// Current values and versions of `keys`; an absent key comes back as `(key, None, 0)`.
     fn fetch(&self, keys: &[Vec<u8>]) -> impl Future<Output = Result<Vec<Row>, CoreError>> + Send;
+    /// The live rows whose key starts with `prefix` (OP-141 m.20 (b)).
+    fn scan(&self, prefix: &[u8]) -> impl Future<Output = Result<Vec<Row>, CoreError>> + Send;
     /// The latest outcome of a nonce.
     fn nonce(
         &self,

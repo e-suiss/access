@@ -12,7 +12,9 @@ use access_crypto::event_id::{EventKey, label};
 use access_kernel::digest::Digest;
 use access_kernel::model::Id;
 use access_kernel::verify::cose::PublicKey;
-use access_store::authority::{NonceRow, domain_tenant, find_nonce, state_of};
+use access_store::authority::{
+    NonceRow, StateRow, domain_tenant, find_nonce, state_of, state_prefix,
+};
 use access_store::scope::DomainId;
 use access_store::{Pool, StoreError};
 use suiss_crypto::dcbor::{self, Limits};
@@ -37,6 +39,16 @@ impl PgReader {
     }
 }
 
+fn row(r: StateRow) -> Result<Row, CoreError> {
+    let value = r
+        .value
+        .as_deref()
+        .map(|b| dcbor::decode(b, Limits::CEILING))
+        .transpose()
+        .map_err(|_| CoreError::Store(access_store::StoreError::Corrupt))?;
+    Ok((r.key, value, r.version))
+}
+
 impl Reader for PgReader {
     async fn fetch(&self, keys: &[Vec<u8>]) -> Result<Vec<Row>, CoreError> {
         let rows = state_of(&self.pool, &self.domain, keys).await?;
@@ -53,6 +65,14 @@ impl Reader for PgReader {
                     Ok((k.clone(), value, r.version))
                 }
             })
+            .collect()
+    }
+
+    async fn scan(&self, prefix: &[u8]) -> Result<Vec<Row>, CoreError> {
+        state_prefix(&self.pool, &self.domain, prefix)
+            .await?
+            .into_iter()
+            .map(row)
             .collect()
     }
 

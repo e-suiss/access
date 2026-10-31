@@ -7,15 +7,19 @@ use access_authority_sequencer::ports::DomainLog;
 use access_kernel::claim::{self, ClaimState, Disposition, Gate, Statement};
 use access_kernel::codec::Canonical;
 use access_kernel::digest::Digest;
-use access_kernel::meta::{self, ContentState, ContributionState, InstanceState, kind};
-use access_kernel::model::{Id, ProofKind};
+use std::collections::BTreeSet;
+
+use access_kernel::meta::{
+    self, ContentState, ContributionState, ExerciseBasis, GrantState, InstanceState, kind,
+};
+use access_kernel::model::{Conjunct, Id, ProofKind, SubjectSelector};
 use access_kernel::requirement::{Proof, ProofBinding};
 use access_kernel::verify::cose::PublicKey;
 use suiss_crypto::dcbor::Value;
 
 use crate::CoreError;
 use crate::app::Authority;
-use crate::domain::{ProofRef, Snapshot};
+use crate::domain::{ProofRef, Request, Snapshot};
 use crate::ports::{Binding, Reader, Salts};
 
 /// Most proofs one request carries (OP-141 m.19 (a), PD).
@@ -49,6 +53,9 @@ pub struct Resolved {
     pub reads: Vec<(Vec<u8>, u64)>,
     /// Contributions offered, by proof id: their key and state.
     pub contributions: BTreeMap<Id, (Vec<u8>, ContributionState)>,
+    /// For a holding of a Grant held by a predicate: when the actor's episode began
+    /// (OP-141 m.20 (d)).
+    pub held: Option<u64>,
 }
 
 fn first16(d: &Digest) -> Id {
@@ -148,15 +155,20 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
     /// [`CoreError::Protocol`] for a Claim that does not verify or a reference to nothing.
     pub(crate) async fn resolve(
         &self,
-        proofs: &[ProofRef],
+        req: &Request,
+        party: Option<Id>,
         now: u64,
         head: u64,
     ) -> Result<Resolved, CoreError> {
+        let proofs = &req.proofs;
         if proofs.len() > MAX_PROOFS {
             return Err(CoreError::Protocol("proofs"));
         }
         let mut snap = Snapshot::default();
-        let mut out = Resolved::default();
+        let mut out = Resolved {
+            held: None,
+            ..Resolved::default()
+        };
         let mut next = head;
         for p in proofs {
             match p {
@@ -170,28 +182,8 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                         self.recorded(&mut snap, &mut out, &id, now).await?;
                         continue;
                     }
-                    let kid = claim::kid(bytes).map_err(|e| CoreError::Protocol(e.code()))?;
-                    let (instance, party, key) = self
-                        .instance_of(&mut snap, &kid)
-                        .await?
-                        .ok_or(CoreError::Protocol("claim-signature"))?;
-                    let statement = claim::verify(bytes, &key, &party, &self.domain)
-                        .map_err(|e| CoreError::Protocol(e.code()))?;
-                    let gates = self.gates(&mut snap, &statement.issuer).await?;
-                    let disposition = claim::disposition(&statement, &gates, now);
                     next = next.checked_add(1).ok_or(CoreError::Protocol("position"))?;
-                    if disposition == Disposition::Admit && current(&statement, now) {
-                        out.proofs
-                            .push(claim_proof(id, &statement, Some(instance), next));
-                    }
-                    out.claims.push(NewClaim {
-                        bytes: bytes.clone(),
-                        id,
-                        statement,
-                        instance,
-                        disposition,
-                        pos: next,
-                    });
+                    self.inline(&mut snap, &mut out, bytes, next, now).await?;
                 }
                 ProofRef::ClaimRef(id) => {
                     let ckey = meta::key(kind::CLAIM, id);
@@ -233,6 +225,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                 }
             }
         }
+        out.held = self.held(&mut snap, &req.basis, party, now).await?;
         // TI-4: every key read, except those the new Claim records write
         let new: Vec<Vec<u8>> = out
             .claims
@@ -245,6 +238,112 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             .filter(|(k, _)| !new.contains(k))
             .collect();
         Ok(out)
+    }
+
+    /// When `party`'s episode of holding a Grant held by `conjuncts` began, if it holds it now:
+    /// the latest of, per conjunct, the earliest record of a Claim that meets it under a
+    /// `subject-selection` Acceptance (OP-141 m.20 (c), (d)).
+    async fn episode(
+        &self,
+        snap: &mut Snapshot,
+        conjuncts: &BTreeSet<Conjunct>,
+        party: &Id,
+        now: u64,
+    ) -> Result<Option<u64>, CoreError> {
+        let mut since = None;
+        for c in conjuncts {
+            let mut first: Option<u64> = None;
+            for (_, value, _) in self
+                .reader
+                .scan(&claim::member_prefix(&c.claim_class, party))
+                .await?
+            {
+                let Some(id) = value.and_then(|v| Id::from_value(&v).ok()) else {
+                    continue;
+                };
+                let Some(state) = self
+                    .get(snap, &meta::key(kind::CLAIM, &id))
+                    .await?
+                    .and_then(|v| ClaimState::from_value(&v).ok())
+                    .filter(|s| s.statement.subject == *party && claim::satisfies(c, s, now))
+                else {
+                    continue;
+                };
+                let gates = self.gates(snap, &state.statement.issuer).await?;
+                if gates
+                    .iter()
+                    .any(|g| g.admits_for(claim::SUBJECT_SELECTION, &state.statement, now))
+                {
+                    first = Some(first.map_or(state.since, |f| f.min(state.since)));
+                }
+            }
+            let Some(first) = first else {
+                return Ok(None);
+            };
+            since = Some(since.map_or(first, |s: u64| s.max(first)));
+        }
+        Ok(since)
+    }
+
+    /// The episode behind a holding basis whose Grant is held by a predicate.
+    pub(crate) async fn held(
+        &self,
+        snap: &mut Snapshot,
+        basis: &ExerciseBasis,
+        party: Option<Id>,
+        now: u64,
+    ) -> Result<Option<u64>, CoreError> {
+        let (ExerciseBasis::Holding(h), Some(party)) = (basis, party) else {
+            return Ok(None);
+        };
+        let Some(SubjectSelector::Pred(conjuncts)) = self
+            .get(snap, &meta::key(kind::GRANT, &h.grant))
+            .await?
+            .and_then(|v| GrantState::from_value(&v).ok())
+            .map(|g| g.content.holder)
+        else {
+            return Ok(None);
+        };
+        self.episode(snap, &conjuncts, &party, now).await
+    }
+
+    /// A Claim the request carries: verified, given its disposition, and a proof when a
+    /// `predicate-input` Acceptance admits it; its record takes position `pos` (L2-CLM-2 to
+    /// L2-CLM-4).
+    async fn inline(
+        &self,
+        snap: &mut Snapshot,
+        out: &mut Resolved,
+        bytes: &[u8],
+        pos: u64,
+        now: u64,
+    ) -> Result<(), CoreError> {
+        let id = claim::claim_id(bytes);
+        let kid = claim::kid(bytes).map_err(|e| CoreError::Protocol(e.code()))?;
+        let (instance, party, key) = self
+            .instance_of(snap, &kid)
+            .await?
+            .ok_or(CoreError::Protocol("claim-signature"))?;
+        let statement = claim::verify(bytes, &key, &party, &self.domain)
+            .map_err(|e| CoreError::Protocol(e.code()))?;
+        let gates = self.gates(snap, &statement.issuer).await?;
+        let disposition = claim::disposition(&statement, &gates, now);
+        let proof = gates
+            .iter()
+            .any(|g| g.admits_for(claim::PREDICATE_INPUT, &statement, now));
+        if disposition == Disposition::Admit && proof && current(&statement, now) {
+            out.proofs
+                .push(claim_proof(id, &statement, Some(instance), pos));
+        }
+        out.claims.push(NewClaim {
+            bytes: bytes.to_vec(),
+            id,
+            statement,
+            instance,
+            disposition,
+            pos,
+        });
+        Ok(())
     }
 
     /// A recorded Claim as a proof, while an Acceptance still covers it (L2-CLM-3).
