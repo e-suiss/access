@@ -10,21 +10,39 @@ class FoldError(Exception):
     pass
 
 
+def _claim_key(key):
+    # L2-REC-2: a claim record writes only claim keys
+    from .codec import decode_canonical
+
+    try:
+        k = decode_canonical(key)
+    except Exception:
+        return False
+    return isinstance(k, list) and len(k) > 0 and k[0] == "claim"
+
+
 def effects(record):
     fields = record["fields"]
     listed = fields.get("effects")
-    if record["kind"] != "decision":
-        # L2-REC-2: effects belong to decisions
+    claim = record["kind"] == "claim"
+    if record["kind"] != "decision" and not claim:
+        # L2-REC-2: effects belong to decisions and admitted claims
         if listed is not None:
             raise FoldError("effects-outside-decision")
         return []
-    outcome = fields.get("outcome")
-    if not isinstance(outcome, dict) or outcome.get("outcome") not in OUTCOMES:
-        raise FoldError("outcome")
-    if listed is None:
-        return []
-    if outcome["outcome"] != "allow":
-        raise FoldError("effects-without-allow")
+    if claim:
+        if listed is None:
+            return []
+        if fields.get("disposition") != "admit":
+            raise FoldError("effects-without-allow")
+    else:
+        outcome = fields.get("outcome")
+        if not isinstance(outcome, dict) or outcome.get("outcome") not in OUTCOMES:
+            raise FoldError("outcome")
+        if listed is None:
+            return []
+        if outcome["outcome"] != "allow":
+            raise FoldError("effects-without-allow")
     if not isinstance(listed, list) or len(listed) == 0:
         raise FoldError("effect")
     out = []
@@ -35,6 +53,8 @@ def effects(record):
         key = effect[0]
         if not isinstance(key, bytes) or not 1 <= len(key) <= MAX_KEY:
             raise FoldError("effect")
+        if claim and not _claim_key(key):
+            raise FoldError("effects-outside-decision")
         if key in keys:
             raise FoldError("duplicate-effect")
         keys.add(key)

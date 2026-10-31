@@ -8,6 +8,7 @@ extern crate alloc;
 pub mod ais;
 pub mod algebra;
 pub mod binding;
+pub mod claim;
 pub mod codec;
 pub mod combinator;
 pub mod digest;

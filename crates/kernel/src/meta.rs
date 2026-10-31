@@ -278,9 +278,16 @@ pub enum Payload {
         /// Validity.
         validity: Option<Window>,
     },
+    /// `contribute` (L0-META-30).
+    Contribute {
+        /// Digest of the intent contributed to.
+        target: Digest,
+        /// Contribution class.
+        class: String,
+    },
 }
 
-const NAMES: [&str; 23] = [
+const NAMES: [&str; 24] = [
     "anchor_create",
     "anchor_transfer",
     "anchor_amend",
@@ -304,6 +311,7 @@ const NAMES: [&str; 23] = [
     "policy_set",
     "policy_retire",
     "claim_issue",
+    "contribute",
 ];
 
 /// Whether `name` is a core meta-action.
@@ -830,6 +838,13 @@ impl Canonical for Payload {
                     ("validity", validity.as_ref().map(Canonical::to_value)),
                 ]),
             ),
+            Self::Contribute { target, class } => (
+                "contribute",
+                map([
+                    ("target", Some(target.to_value())),
+                    ("class", Some(Value::text(class))),
+                ]),
+            ),
         };
         tagged(name, body)
     }
@@ -938,6 +953,10 @@ impl Canonical for Payload {
                 class: crate::codec::ident(f.req("class")?)?,
                 value: EqValue::from_value(f.req("value")?)?,
                 validity: f.opt("validity").map(Window::from_value).transpose()?,
+            },
+            "contribute" => Self::Contribute {
+                target: Digest::from_value(f.req("target")?).ok_or(ModelError::Shape)?,
+                class: crate::codec::ident(f.req("class")?)?,
             },
             _ => return Err(ModelError::Unknown),
         };
@@ -1056,6 +1075,16 @@ pub fn object_id(origin: &Digest, kind: &str, seq: u64) -> Id {
     Id(out)
 }
 
+/// The state key of an object named by an `ExerciseID`: `dCBOR([kind, digest])` (L0-META-5).
+#[must_use]
+pub fn exercise_key(kind: &str, exercise: &Digest) -> Vec<u8> {
+    dcbor::encode(
+        &Value::Array(alloc::vec![Value::text(kind), exercise.to_value()]),
+        Limits::CEILING,
+    )
+    .unwrap_or_default()
+}
+
 /// The state key of an object: `dCBOR([kind, id])` (OP-141 m.12).
 #[must_use]
 pub fn key(kind: &str, id: &Id) -> Vec<u8> {
@@ -1110,8 +1139,14 @@ pub mod kind {
     pub const ACCEPTANCE: &str = "acceptance";
     /// A `RestrictionPolicy`.
     pub const POLICY: &str = "policy";
-    /// A domain-issued Claim.
+    /// A Claim, issued by the domain or ingested.
     pub const CLAIM: &str = "claim";
+    /// A contribution, keyed by the `ExerciseID` that made it.
+    pub const CONTRIBUTION: &str = "contribution";
+    /// An allowed Exercise, keyed by its `ExerciseID`.
+    pub const EXERCISE: &str = "exercise";
+    /// The Acceptances of an issuer Party.
+    pub const ACCEPTANCES: &str = "acceptances";
     /// The Grants whose basis is an Anchor or a Grant.
     pub const CHILDREN: &str = "children";
     /// The Instances of a Party.
@@ -1164,14 +1199,14 @@ pub struct Ended {
     pub how: EndedHow,
 }
 
-fn ended_value(e: &Ended) -> Value {
+pub(crate) fn ended_value(e: &Ended) -> Value {
     map([
         ("at", Some(Value::Unsigned(e.at))),
         ("how", Some(crate::codec::word_of(e.how, &ENDED))),
     ])
 }
 
-fn ended(v: Option<&Value>) -> Result<Option<Ended>, ModelError> {
+pub(crate) fn ended(v: Option<&Value>) -> Result<Option<Ended>, ModelError> {
     v.map(|v| {
         let mut f = Fields::of(v)?;
         let e = Ended {
@@ -1371,6 +1406,82 @@ impl Canonical for MandateState {
     }
 }
 
+/// A recorded contribution (`contribution-state`, L0-META-30).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ContributionState {
+    /// Digest of the intent contributed to.
+    pub target: Digest,
+    /// Class.
+    pub class: String,
+    /// The contributor's Party.
+    pub party: Id,
+    /// The contributor's Instance.
+    pub instance: Id,
+    /// Position of the contribution.
+    pub since: u64,
+    /// Position of the decision that consumed it.
+    pub consumed: Option<u64>,
+}
+
+impl Canonical for ContributionState {
+    fn to_value(&self) -> Value {
+        map([
+            ("target", Some(self.target.to_value())),
+            ("class", Some(Value::text(&self.class))),
+            ("party", Some(self.party.to_value())),
+            ("instance", Some(self.instance.to_value())),
+            ("since", Some(Value::Unsigned(self.since))),
+            ("consumed", self.consumed.map(Value::Unsigned)),
+        ])
+    }
+
+    fn from_value(v: &Value) -> Result<Self, ModelError> {
+        let mut f = Fields::of(v)?;
+        let s = Self {
+            target: Digest::from_value(f.req("target")?).ok_or(ModelError::Shape)?,
+            class: crate::codec::ident(f.req("class")?)?,
+            party: id(f.req("party")?)?,
+            instance: id(f.req("instance")?)?,
+            since: uint(f.req("since")?)?,
+            consumed: f.opt("consumed").map(uint).transpose()?,
+        };
+        f.done()?;
+        Ok(s)
+    }
+}
+
+/// An allowed Exercise (`exercise-state`): what a continuation is checked against (L1-ADP-13).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ExerciseState {
+    /// Intent digest.
+    pub intent: Digest,
+    /// Actor Instance.
+    pub actor: Id,
+    /// Position of the allowing decision.
+    pub since: u64,
+}
+
+impl Canonical for ExerciseState {
+    fn to_value(&self) -> Value {
+        map([
+            ("intent", Some(self.intent.to_value())),
+            ("actor", Some(self.actor.to_value())),
+            ("since", Some(Value::Unsigned(self.since))),
+        ])
+    }
+
+    fn from_value(v: &Value) -> Result<Self, ModelError> {
+        let mut f = Fields::of(v)?;
+        let s = Self {
+            intent: Digest::from_value(f.req("intent")?).ok_or(ModelError::Shape)?,
+            actor: id(f.req("actor")?)?,
+            since: uint(f.req("since")?)?,
+        };
+        f.done()?;
+        Ok(s)
+    }
+}
+
 /// A stored Acceptance, `RestrictionPolicy` or domain Claim: content as given.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ContentState {
@@ -1517,24 +1628,42 @@ pub fn genesis_effects(
         out.push((key(kind::CHILDREN, &parent), Some(ids_value(&kids))));
     }
     if let Some(list) = take("acceptances") {
-        for (seq, a) in (0_u64..).zip(crate::codec::set_items(list, true)?) {
-            out.push((
-                key(kind::ACCEPTANCE, &object_id(domain, kind::ACCEPTANCE, seq)),
-                Some(
-                    ContentState {
-                        content: acceptance_content(a)?,
-                        since: 0,
-                        ended: None,
-                    }
-                    .to_value(),
-                ),
-            ));
-        }
+        out.extend(genesis_acceptances(domain, list)?);
     }
     let _ = take("reserved");
     let _ = take("versions");
     if known != fields.len() {
         return Err(MetaError::Malformed(ModelError::Unknown));
+    }
+    Ok(out)
+}
+
+/// Genesis Acceptances with their per-issuer index (L0-META-5, L0-META-7).
+fn genesis_acceptances(domain: &Digest, list: &Value) -> Result<Vec<Effect>, MetaError> {
+    let mut out = Vec::new();
+    let mut by_issuer: BTreeMap<Id, BTreeSet<Id>> = BTreeMap::new();
+    for (seq, a) in (0_u64..).zip(crate::codec::set_items(list, true)?) {
+        let aid = object_id(domain, kind::ACCEPTANCE, seq);
+        if let Some(Value::Bytes(_)) = a.get("issuer") {
+            by_issuer
+                .entry(id(a.get("issuer").ok_or(ModelError::Shape)?)?)
+                .or_default()
+                .insert(aid);
+        }
+        out.push((
+            key(kind::ACCEPTANCE, &aid),
+            Some(
+                ContentState {
+                    content: acceptance_content(a)?,
+                    since: 0,
+                    ended: None,
+                }
+                .to_value(),
+            ),
+        ));
+    }
+    for (issuer, set) in by_issuer {
+        out.push((key(kind::ACCEPTANCES, &issuer), Some(ids_value(&set))));
     }
     Ok(out)
 }
@@ -2185,10 +2314,17 @@ pub fn apply(ctx: &Context<'_>, payload: &Payload, view: &dyn View) -> Result<Ou
         }
         Payload::AcceptanceEstablish(content) => {
             out.requirements = domain_root(ctx, view)?;
+            let aid = new_id(ctx, kind::ACCEPTANCE, 0);
+            if let Some(issuer @ Value::Bytes(_)) = content.get("issuer") {
+                let issuer = id(issuer).map_err(|_| MetaError::Corrupt)?;
+                let mut set_of = ids(view, kind::ACCEPTANCES, &issuer)?;
+                set_of.insert(aid);
+                set(&mut out, kind::ACCEPTANCES, &issuer, ids_value(&set_of));
+            }
             set(
                 &mut out,
                 kind::ACCEPTANCE,
-                &new_id(ctx, kind::ACCEPTANCE, 0),
+                &aid,
                 ContentState {
                     content: content.clone(),
                     since: ctx.pos,
@@ -2263,18 +2399,47 @@ pub fn apply(ctx: &Context<'_>, payload: &Payload, view: &dyn View) -> Result<Ou
                 &mut out,
                 kind::CLAIM,
                 &new_id(ctx, kind::CLAIM, 0),
-                ContentState {
-                    content: map([
-                        ("subject", Some(subject.to_value())),
-                        ("class", Some(Value::text(class))),
-                        ("value", Some(value.to_value())),
-                        ("validity", validity.as_ref().map(Canonical::to_value)),
-                    ]),
+                crate::claim::ClaimState {
+                    statement: crate::claim::Statement {
+                        domain: ctx.domain,
+                        issuer: actor.party,
+                        subject: *subject,
+                        class: class.clone(),
+                        value: Some(value.clone()),
+                        issued_at: 0,
+                        validity: validity.unwrap_or(Window {
+                            from: 0,
+                            until: u64::MAX,
+                        }),
+                        assurance: BTreeMap::new(),
+                        bound_intent: None,
+                        bound_instance: None,
+                        bound_resource: None,
+                        supersedes: None,
+                    },
+                    instance: None,
                     since: ctx.pos,
                     ended: None,
                 }
                 .to_value(),
             );
+            out.expansion = true;
+        }
+        Payload::Contribute { target, class } => {
+            out.effects.push((
+                exercise_key(kind::CONTRIBUTION, &ctx.exercise),
+                Some(
+                    ContributionState {
+                        target: *target,
+                        class: class.clone(),
+                        party: actor.party,
+                        instance: actor.instance,
+                        since: ctx.pos,
+                        consumed: None,
+                    }
+                    .to_value(),
+                ),
+            ));
             out.expansion = true;
         }
     }

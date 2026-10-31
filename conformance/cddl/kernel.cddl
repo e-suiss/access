@@ -16,6 +16,7 @@ hash-alg = -16
 ;   [domain-id, nonce] (ExerciseID)          "access/exercise/v1"
 ;   [origin, kind, seq] (object id)          "access/object/v1"
 ;   COSE_Sign1 AIS bytes as received         "access/ais/v1"
+;   COSE_Sign1 Claim bytes as received       "access/claim/v1"
 ; Hash prefixes (OP-106 m.12), raw SHA-256 without a context:
 ;   0x00 Merkle leaf   0x01 Merkle interior node   0x02 field commitment   0x03 body commitment
 
@@ -498,6 +499,36 @@ actor-intent-statement = {
   ? exercise: digest,
 }
 
+; Payload of a COSE_Sign1 signed by an Instance of the issuer, content type
+; "application/access-claim+cbor" (OP-141 m.19 (b)). ClaimID: the first 16 bytes of the digest
+; of the COSE_Sign1 bytes under "access/claim/v1".
+claim-statement = {
+  domain: domain-id,
+  issuer: party-ref,
+  subject: party-ref,
+  class: ident,
+  ? value: equality-value,
+  issued_at: trusted-time,
+  validity: time-window,
+  ? assurance: assurance,
+  ? bound_intent: digest,
+  ? bound_instance: instance-ref,
+  ? bound_resource: resource-ref,
+  ? supersedes: id,
+}
+
+; The fields of a record of kind "claim" (OP-141 m.19 (d)). Effects only on "claim" keys, and
+; only when admitted (L2-REC-2).
+claim-fields = {
+  claim: digest,
+  id: id,
+  issuer: party-ref,
+  subject: party-ref,
+  class: ident,
+  disposition: "admit" / "quarantine:source-not-accepted" / "quarantine:future",
+  ? effects: [+ state-effect],
+}
+
 ; The fields of a record of kind "opening" (OP-141 m.8).
 opening-fields = {
   nonce: bstr .size (16..64),
@@ -579,6 +610,7 @@ meta-payload =
   / { policy_set: { ? policy: id, content: policy-content } }
   / { policy_retire: { policy: id } }
   / { claim_issue: { subject: party-ref, class: ident, value: equality-value, ? validity: time-window } }
+  / { contribute: { target: digest, class: ident } }
 
 ; ---------------------------------------------------------------- genesis (C4, §5.2, OP-141)
 
@@ -615,4 +647,27 @@ instance-state = { party: party-ref, key: public-key, since: uint, ? successor: 
 mandate-state = { instance: instance-ref, envelope: mandate-envelope, since: uint, ? ended: ended }
 acceptance-state = { content: acceptance-content, since: uint, ? ended: ended }
 policy-state = { content: policy-content, version: digest, since: uint, ? ended: ended }
-claim-state = { issuer: party-ref, class: ident, value: equality-value, since: uint, ? validity: time-window }
+claim-state = {
+  issuer: party-ref,
+  subject: party-ref,
+  class: ident,
+  ? value: equality-value,
+  ? validity: time-window,
+  ? assurance: assurance,
+  ? bound_intent: digest,
+  ? bound_instance: instance-ref,
+  ? bound_resource: resource-ref,
+  ? issued_at: trusted-time,
+  ? instance: instance-ref,
+  since: uint,
+  ? ended: ended,
+}
+exercise-state = { intent: digest, actor: instance-ref, since: uint }
+contribution-state = {
+  target: digest,
+  class: ident,
+  party: party-ref,
+  instance: instance-ref,
+  since: uint,
+  ? consumed: uint,
+}

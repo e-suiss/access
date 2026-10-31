@@ -499,6 +499,81 @@ fn identifiers_and_payload_round_trip() {
     assert!(Payload::from_value(&tagged("grant_explode", map([]))).is_err());
 }
 
+// L0-META-30: a contribution records who contributed to which intent, under its ExerciseID
+#[test]
+fn a_contribution_is_recorded_under_its_exercise() {
+    let mut r = Run::new();
+    let payload = Payload::Contribute {
+        target: Digest([9; 32]),
+        class: String::from("approve"),
+    };
+    assert_eq!(Payload::from_value(&payload.to_value()).unwrap(), payload);
+    assert!(is_meta("access", "contribute"));
+    let (exercise, out) = r
+        .act(ALICE, BOB, ExerciseBasis::Public(Id([0; 16])), &payload)
+        .unwrap();
+    assert!(out.requirements.is_empty());
+    let stored = r
+        .state
+        .get(&exercise_key(kind::CONTRIBUTION, &exercise))
+        .unwrap();
+    let c = ContributionState::from_value(&stored).unwrap();
+    assert_eq!(
+        (c.target, c.party, c.instance, c.consumed),
+        (Digest([9; 32]), ALICE, BOB, None)
+    );
+}
+
+// L0-META-5, L0-META-27: Acceptances are indexed by issuer; a domain Claim names its issuer
+#[test]
+fn acceptances_are_indexed_by_issuer() {
+    let mut r = Run::new();
+    let meta = ExerciseBasis::Anchor(meta_anchor(&DOMAIN));
+    let content = map([
+        ("issuer", Some(CAROL.to_value())),
+        ("use", Some(Value::text("predicate-input"))),
+        (
+            "classes",
+            Some(Value::Array(alloc::vec![Value::text("kyc")])),
+        ),
+        ("subject", Some(SubjectSelector::Public.to_value())),
+        (
+            "validity",
+            Some(Value::Array(alloc::vec![
+                Value::Unsigned(0),
+                Value::Unsigned(10)
+            ])),
+        ),
+    ]);
+    let (exercise, _) = r
+        .act(ROOT, ROOT, meta, &Payload::AcceptanceEstablish(content))
+        .unwrap();
+    let index = r.state.get(&key(kind::ACCEPTANCES, &CAROL)).unwrap();
+    assert_eq!(
+        crate::codec::set_items(&index, true).unwrap(),
+        [object_id(&exercise, kind::ACCEPTANCE, 0).to_value()]
+    );
+    let (exercise, _) = r
+        .act(
+            ROOT,
+            ROOT,
+            meta,
+            &Payload::ClaimIssue {
+                subject: ALICE,
+                class: String::from("member"),
+                value: crate::model::EqValue::Bool(true),
+                validity: None,
+            },
+        )
+        .unwrap();
+    let claim = r
+        .state
+        .get(&key(kind::CLAIM, &object_id(&exercise, kind::CLAIM, 0)))
+        .unwrap();
+    let c = crate::claim::ClaimState::from_value(&claim).unwrap();
+    assert_eq!((c.statement.issuer, c.statement.subject), (ROOT, ALICE));
+}
+
 struct Recorder {
     run: Run,
     cases: Vec<String>,
@@ -911,6 +986,16 @@ fn meta_vectors_match() {
         ExerciseBasis::Anchor(meta_anchor(&DOMAIN)),
         &Payload::PolicyRetire {
             policy: Id([8; 16]),
+        },
+    );
+    r.step(
+        "contribution-recorded",
+        &["L0-META-30"],
+        (ALICE, ALICE),
+        ExerciseBasis::Public(Id([0; 16])),
+        &Payload::Contribute {
+            target: Digest([9; 32]),
+            class: String::from("approve"),
         },
     );
     let json = format!(

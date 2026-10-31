@@ -50,7 +50,7 @@ pub fn check_assurance(levels: &BTreeMap<alloc::string::String, u64>) -> Result<
 }
 
 // OP-118 m.3
-fn meets_floor(dim: &str, floor: u64, level: u64) -> bool {
+pub(crate) fn meets_floor(dim: &str, floor: u64, level: u64) -> bool {
     if dim == SYNCED {
         level <= floor
     } else {

@@ -62,6 +62,8 @@ The CBOR form of a body is the dCBOR of the same members with media type `applic
 | `capacity` | `"own"` or `{"for": id}` | always |
 | `intent` | intent object (L1-ADP-8) | always |
 | `payload` | bytes: dCBOR of the `meta-payload`, for a meta-action ([L0-META-2](../l0/meta.md#L0-META-2)) | meta-actions |
+| `proofs` | array of 1 to 16 proof objects (L1-ADP-12) | no |
+| `exercise` | digest: the ExerciseID continued | `continue` |
 
 A request without `ais` has an anonymous actor and can only use Public Grants.
 
@@ -81,6 +83,10 @@ A request without `ais` has an anonymous actor and can only use Public Grants.
 Access computes the intent digest from the decoded envelope ([L0-ENC-23](../l0/encoding.md#L0-ENC-23)); a caller never supplies it.
 
 <a id="L1-ADP-9"></a>**L1-ADP-9. Unknown members.** Unknown members of the AuthZEN carriers (`subject`, `action`, `resource` and their `properties`) are ignored. Every member of `context` and of the objects in it is must-understand: an unknown one is the protocol error `unknown-member`.
+
+<a id="L1-ADP-12"></a>**L1-ADP-12. Proofs.** A proof object is one of `{"claim": bytes}`, a Claim's COSE_Sign1 ([L2-CLM-1](../l2/README.md#L2-CLM-1)); `{"claim_ref": id}`, a Claim already recorded; `{"contribution": digest}`, the ExerciseID of an allowed `contribute` ([L0-META-30](../l0/meta.md#L0-META-30)). A reference to nothing recorded is the protocol error `proof`. After `require_action`, the PEP sends the same nonce, intent and actor again with the proofs that were missing.
+
+<a id="L1-ADP-13"></a>**L1-ADP-13. Continuation.** A `continue` request carries a new nonce and `exercise`, the ExerciseID of an allowed Exercise of the same intent digest and the same actor Instance; otherwise it is the protocol error `exercise`.
 
 ## 3. Response
 

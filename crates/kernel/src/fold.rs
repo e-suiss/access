@@ -67,19 +67,37 @@ fn outcome(record: &RecordEnvelope) -> Result<&str, FoldError> {
     }
 }
 
+/// Whether a `claim` record admitted its Claim (L2-CLM-3).
+fn admitted(record: &RecordEnvelope) -> bool {
+    matches!(record.fields.get("disposition").map(|f| &f.value), Some(Value::Text(d)) if d == "admit")
+}
+
+/// Whether `key` is a `claim` key, the only kind a `claim` record writes (L2-REC-2).
+fn is_claim_key(key: &[u8]) -> bool {
+    matches!(
+        suiss_crypto::dcbor::decode(key, suiss_crypto::dcbor::Limits::CEILING),
+        Ok(Value::Array(k)) if matches!(k.first(), Some(Value::Text(t)) if t == "claim")
+    )
+}
+
 /// The effects of one record, checked (L2-REC-2): `(key, None)` removes the key.
 ///
 /// # Errors
 /// [`FoldError`].
 pub fn effects(record: &RecordEnvelope) -> Result<Vec<Effect>, FoldError> {
     let list = record.fields.get("effects").map(|f| &f.value);
-    if record.header.kind != RecordKind::Decision {
+    let claim = record.header.kind == RecordKind::Claim;
+    if record.header.kind != RecordKind::Decision && !claim {
         return match list {
             Some(_) => Err(FoldError::OutsideDecision),
             None => Ok(Vec::new()),
         };
     }
-    let allow = outcome(record)? == "allow";
+    let allow = if claim {
+        list.is_none() || admitted(record)
+    } else {
+        outcome(record)? == "allow"
+    };
     let Some(list) = list else {
         return Ok(Vec::new());
     };
@@ -105,6 +123,9 @@ pub fn effects(record: &RecordEnvelope) -> Result<Vec<Effect>, FoldError> {
         };
         if key.is_empty() || key.len() > MAX_KEY {
             return Err(FoldError::Effect);
+        }
+        if claim && !is_claim_key(key) {
+            return Err(FoldError::OutsideDecision);
         }
         if !seen.insert(key.as_slice()) {
             return Err(FoldError::Duplicate);

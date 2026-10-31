@@ -36,6 +36,17 @@ class Reject(Exception):
     pass
 
 
+def is_claim_key(key):
+    try:
+        k = cbor2.loads(key)
+    except Exception:
+        return False
+    return isinstance(k, list) and len(k) > 0 and k[0] == "claim"
+
+
+CLAIM_KEY = enc(["claim", bytes([4]) * 16])
+
+
 def fold(records):
     state = {}
     for i, raw in enumerate(records):
@@ -44,23 +55,32 @@ def fold(records):
             raise Reject("order")
         fields = rec["fields"]
         effects = fields.get("effects")
-        if rec["kind"] != "decision":
+        claim = rec["kind"] == "claim"
+        if rec["kind"] != "decision" and not claim:
             if effects is not None:
                 raise Reject("effects-outside-decision")
             continue
-        outcome = fields.get("outcome")
-        if not isinstance(outcome, dict) or outcome.get("outcome") not in ("allow", "deny", "require_action"):
-            raise Reject("outcome")
-        if effects is None:
-            continue
-        if outcome["outcome"] != "allow":
-            raise Reject("effects-without-allow")
+        if claim:
+            if effects is None:
+                continue
+            if fields.get("disposition") != "admit":
+                raise Reject("effects-without-allow")
+        else:
+            outcome = fields.get("outcome")
+            if not isinstance(outcome, dict) or outcome.get("outcome") not in ("allow", "deny", "require_action"):
+                raise Reject("outcome")
+            if effects is None:
+                continue
+            if outcome["outcome"] != "allow":
+                raise Reject("effects-without-allow")
         if not isinstance(effects, list) or not effects:
             raise Reject("effect")
         seen = set()
         for e in effects:
             if not isinstance(e, list) or len(e) not in (1, 2) or not isinstance(e[0], bytes) or not 1 <= len(e[0]) <= 512:
                 raise Reject("effect")
+            if claim and not is_claim_key(e[0]):
+                raise Reject("effects-outside-decision")
             if e[0] in seen:
                 raise Reject("duplicate-effect")
             seen.add(e[0])
@@ -82,7 +102,11 @@ CASES = [
     ("allow-without-effects", [decision(1, "allow")]),
     ("effects-on-deny", [decision(1, "deny", [[b"k", 1]])]),
     ("effects-on-require-action", [decision(1, "require_action", [[b"k", 1]])]),
-    ("effects-on-claim", [record(1, "claim", {"effects": [[b"k", 1]]})]),
+    ("effects-on-opening", [record(1, "opening", {"effects": [[b"k", 1]]})]),
+    ("effects-on-claim-not-admitted", [record(1, "claim", {"disposition": "quarantine:future", "effects": [[CLAIM_KEY, 1]]})]),
+    ("effects-on-claim-without-disposition", [record(1, "claim", {"effects": [[CLAIM_KEY, 1]]})]),
+    ("claim-effect-on-other-kind", [record(1, "claim", {"disposition": "admit", "effects": [[b"k", 1]]})]),
+    ("claim-admitted", [record(1, "claim", {"disposition": "admit", "effects": [[CLAIM_KEY, {"class": "kyc"}]]})]),
     ("duplicate-key", [decision(1, "allow", [[b"k", 1], [b"k", 2]])]),
     ("key-empty", [decision(1, "allow", [[b"", 1]])]),
     ("key-too-long", [decision(1, "allow", [[b"k" * 513, 1]])]),
@@ -102,7 +126,8 @@ CASES = [
 def build():
     cases = []
     for case_id, records in CASES:
-        case = {"id": case_id, "rules": ["L2-REC-2", "L2-REC-3"], "records": [r.hex() for r in records]}
+        rules = ["L2-REC-2", "L2-REC-3"] + (["L2-CLM-4"] if "claim" in case_id else [])
+        case = {"id": case_id, "rules": rules, "records": [r.hex() for r in records]}
         try:
             case["state"] = fold(records)
         except Reject as e:

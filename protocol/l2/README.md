@@ -16,6 +16,8 @@ L2 defines the artefacts that only Access produces: their data model, how they a
 | Intent envelope | `intent-envelope` | carried inside other artefacts | not signed by itself | [L0-EVAL-5](../l0/evaluation.md#L0-EVAL-5) |
 | Actor Intent Statement | `actor-intent-statement` | `application/access-ais+cbor` | The actor Instance's current key | [L2-AIS-1](#L2-AIS-1) to [L2-AIS-4](#L2-AIS-4) |
 | Opening record fields | `opening-fields` | inside an `opening` record envelope | not signed by itself | [L2-REC-4](#L2-REC-4), [L2-REC-5](#L2-REC-5) |
+| Claim | `claim-statement` | `application/access-claim+cbor` | An Instance of the issuer | [L2-CLM-1](#L2-CLM-1) to [L2-CLM-3](#L2-CLM-3) |
+| Claim record fields | `claim-fields` | inside a `claim` record envelope | not signed by itself | [L2-CLM-4](#L2-CLM-4) |
 
 The data model is [`conformance/cddl/kernel.cddl`](../../conformance/cddl/kernel.cddl).
 
@@ -37,7 +39,7 @@ The data model is [`conformance/cddl/kernel.cddl`](../../conformance/cddl/kernel
 
 A disclosure for an artefact opens `artifacts` and withholds `state_basis` and `consumption`.
 
-<a id="L2-REC-2"></a>**L2-REC-2.** Only a `decision` record whose outcome is `allow` carries `effects`. A record of another kind, or a decision with another outcome, that carries `effects` is malformed. Within one record a key appears in at most one effect. A key is 1 to 512 bytes.
+<a id="L2-REC-2"></a>**L2-REC-2.** Only a `decision` record whose outcome is `allow`, and a `claim` record whose disposition is `admit`, carry `effects`; a `claim` record's effects touch only `claim` keys. Any other record that carries `effects` is malformed. Within one record a key appears in at most one effect. A key is 1 to 512 bytes.
 
 <a id="L2-REC-3"></a>**L2-REC-3. State fold.** The state of a domain at position `p` is the fold of the `effects` of records `1..p` in position order: a key's value is the value of the last effect for it, and its version is that record's position. An effect without a value leaves the key absent with that version. No other input changes the state; a replica, index or cache that disagrees with the fold is wrong.
 
@@ -56,6 +58,18 @@ The Actor Intent Statement (AIS) is how an actor makes an Exercise its own. A PE
 <a id="L2-AIS-4"></a>**L2-AIS-4. Time.** An AIS whose `iat` is more than 60 seconds after the receiver's trusted time is rejected (reason `ais-future`). How old an AIS may be is decided by the nonce rule of [L2-REC-5](#L2-REC-5).
 
 Vectors: [`core/1/ais.json`](../../conformance/vectors/core/1/ais.json), operation `ais.verify`: each case gives the COSE_Sign1, the request as an `actor-intent-statement` whose `iat` is ignored, and the trusted time; the file gives the Instance's key.
+
+## Claims
+
+A Claim is a signed statement by an issuer Party about a subject Party. It enters a decision only as a proof, and only when an Acceptance of the domain admits it; ingest alone never makes it count.
+
+<a id="L2-CLM-1"></a>**L2-CLM-1. Content.** A Claim is a COSE_Sign1 with content type `application/access-claim+cbor` whose payload is a `claim-statement`. Its ClaimID is the first 16 bytes of `SHA-256("access/claim/v1" ‖ 0x00 ‖ the COSE_Sign1 bytes as received)`. A payload of another shape, or a Claim for another domain, is rejected (reason `claim-payload`).
+
+<a id="L2-CLM-2"></a>**L2-CLM-2. Key.** The Claim verifies under the current key of an Instance of its issuer, with `kid` the key's RFC 7638 thumbprint, under the profile of [L0-SIG-10](../l0/signatures.md#L0-SIG-10); a high-S ECDSA signature is rejected. Any other key is rejected (reason `claim-signature`). A rejected Claim is a protocol error and is not recorded.
+
+<a id="L2-CLM-3"></a>**L2-CLM-3. Disposition.** A verified Claim whose `issued_at` is more than 60 seconds after trusted time is `quarantine:future`. Otherwise it is `admit` when an Acceptance that has not ended covers it at the record's time: use `predicate-input`, the same issuer, its class among `classes`, its subject within `subject` (a Party or `Public`), the record time within `validity` and not after `ingest_until`, and its assurance meeting `assurance_floor`; else it is `quarantine:source-not-accepted`. Only an admitted Claim is a proof, and a recorded Claim is a proof only while an Acceptance still covers it.
+
+<a id="L2-CLM-4"></a>**L2-CLM-4. Claim record.** Each Claim carried by a request is written as a record of kind `claim` with the fields of `claim-fields`, before the opening and decision records of the same batch, and its bytes go to the proof store. An admitted Claim's record sets its `claim-state`. An admitted ClaimID is not written again; a Claim held in quarantine may be sent again and gets a new record with a new disposition.
 
 ## Exercise records
 
