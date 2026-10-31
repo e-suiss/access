@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access_derived.cursor SET pos = $3 WHERE domain_id = $1 AND pos = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "50916b55a5816afe819b76170e8e8bfac3b4b0eff3d71d0a0a2c877849ae2928"
+}

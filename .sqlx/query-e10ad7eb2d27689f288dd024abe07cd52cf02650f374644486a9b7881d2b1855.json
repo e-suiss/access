@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access_derived.cursor (domain_id, pos) VALUES ($1, $2)\n             ON CONFLICT (domain_id) DO UPDATE SET pos = EXCLUDED.pos\n              WHERE access_derived.cursor.pos = 0",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e10ad7eb2d27689f288dd024abe07cd52cf02650f374644486a9b7881d2b1855"
+}

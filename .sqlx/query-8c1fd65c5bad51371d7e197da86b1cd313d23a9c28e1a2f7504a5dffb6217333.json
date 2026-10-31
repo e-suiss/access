@@ -1,0 +1,31 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT grant_id FROM access_derived.grant_index\n          WHERE domain_id = $1 AND namespace = $2 AND NOT ended AND grant_id > $3\n          ORDER BY grant_id LIMIT $4",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "grant_id",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access_derived.grant_index",
+            "name": "grant_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Text",
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "8c1fd65c5bad51371d7e197da86b1cd313d23a9c28e1a2f7504a5dffb6217333"
+}

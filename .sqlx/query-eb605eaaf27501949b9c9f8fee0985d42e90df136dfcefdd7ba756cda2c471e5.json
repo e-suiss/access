@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access_derived.grant_index (domain_id, grant_id, holder_kind, holder, namespace, ended, pos)\n             VALUES ($1, $2, $3, $4, $5, $6, $7)\n             ON CONFLICT (domain_id, grant_id) DO UPDATE\n               SET holder_kind = EXCLUDED.holder_kind, holder = EXCLUDED.holder,\n                   namespace = EXCLUDED.namespace, ended = EXCLUDED.ended, pos = EXCLUDED.pos",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Bytea",
+        "Text",
+        "Bytea",
+        "Text",
+        "Bool",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "eb605eaaf27501949b9c9f8fee0985d42e90df136dfcefdd7ba756cda2c471e5"
+}
