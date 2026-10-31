@@ -138,6 +138,13 @@ fn respond(reply: Reply, headers: &HeaderMap) -> Response {
             "Service Unavailable",
         )
         .into_response(),
+        // OP-35, OP-141 m.23
+        Reply::Limited => Problem::new(
+            StatusCode::TOO_MANY_REQUESTS,
+            "rate-limited",
+            "Too Many Requests",
+        )
+        .into_response(),
     };
     // L1-ADP-4
     if let Some(id) = headers.get(&REQUEST_ID) {

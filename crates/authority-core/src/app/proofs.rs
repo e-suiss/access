@@ -22,8 +22,8 @@ use crate::app::Authority;
 use crate::domain::{ProofRef, Request, Snapshot};
 use crate::ports::{Binding, Reader, Salts};
 
-/// Most proofs one request carries (OP-141 m.19 (a), PD).
-pub const MAX_PROOFS: usize = 16;
+/// Most proofs one request carries (§13.7.4, OP-141 m.23 (e)).
+pub const MAX_PROOFS: usize = 64;
 
 /// A Claim the request records (L2-CLM-4).
 #[derive(Clone, Debug)]

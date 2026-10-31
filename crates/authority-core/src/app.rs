@@ -26,6 +26,7 @@ use suiss_crypto::dcbor::{self, Limits, Value};
 use crate::CoreError;
 use crate::domain::{Evaluation, Frame, Pass, Request, Snapshot, pass};
 use crate::ports::{Binding, Reader, Salts};
+use crate::rate::{Class, Limiter, Who};
 use proofs::Resolved as Proofs;
 
 /// Most snapshot passes before a request is refused (SI-20, PD).
@@ -60,6 +61,8 @@ pub struct Incoming {
     pub ais: Option<Vec<u8>>,
     /// The PEP's transport-authenticated identity.
     pub pep: String,
+    /// Whether the request is an explanation, counted apart from `check` (OP-141 m.23).
+    pub explain: bool,
 }
 
 const BOOTSTRAP: [&str; 2] = ["party_register", "instance_create"];
@@ -133,6 +136,7 @@ fn digest_value(d: &Digest) -> Value {
 pub struct Authority<L: DomainLog, R: Reader, B: Binding, S: Salts> {
     leader: Leader<L>,
     pub(crate) reader: R,
+    pub(crate) limiter: Limiter,
     binding: B,
     salts: S,
     domain: Digest,
@@ -145,6 +149,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         Self {
             leader,
             reader,
+            limiter: Limiter::default(),
             binding,
             salts,
             domain,
@@ -352,6 +357,15 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         Self::check_payload(req)?;
         let digest = intent_digest(&req.intent).map_err(|_| CoreError::Protocol("intent"))?;
         let actor = self.actor(inc, &digest, now).await?;
+        // §13.7.4, OP-141 m.23
+        let class = match (req.mode, inc.explain) {
+            (Mode::Check, true) => Class::Explain,
+            (Mode::Check, false) => Class::Check,
+            _ => Class::Commit,
+        };
+        if !self.limiter.admit(class, who(inc, actor), now) {
+            return Err(CoreError::Limited);
+        }
         self.continued(req, &digest, actor).await?;
         let exercise =
             meta::exercise_id(&req.domain, &req.nonce).map_err(|_| CoreError::Protocol("nonce"))?;
@@ -445,7 +459,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             let admit = c.disposition == Disposition::Admit;
             // L2-CLM-4, OP-141 m.20 (b)
             let effects: Vec<Effect> = if admit {
-                vec![
+                meta::sorted(vec![
                     (
                         ckey.clone(),
                         Some(
@@ -462,7 +476,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                         claim::member_key(&c.statement.class, &c.statement.subject, &c.id),
                         Some(c.id.to_value()),
                     ),
-                ]
+                ])
             } else {
                 Vec::new()
             };
@@ -589,6 +603,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                 ));
             }
         }
+        let effects = meta::sorted(effects);
         let mut reads: Vec<(Vec<u8>, u64)> = snapshot.read_set();
         for r in &resolved.reads {
             if !reads.iter().any(|(k, _)| *k == r.0) {
@@ -632,6 +647,11 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         });
         Ok(items)
     }
+}
+
+/// Whom the rate limits count: the actor Instance, else the PEP (OP-141 m.23 (a)).
+pub(crate) fn who(inc: &Incoming, actor: Option<Actor>) -> Who {
+    actor.map_or_else(|| Who::Pep(inc.pep.clone()), |a| Who::Instance(a.instance))
 }
 
 const fn answer(

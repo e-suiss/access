@@ -15,6 +15,7 @@ use crate::CoreError;
 use crate::app::{Authority, Incoming};
 use crate::domain::{Snapshot, lineage_hops, read};
 use crate::ports::{Binding, Reader, Salts};
+use crate::rate::Class;
 
 /// Results per page: the policy default and ceiling below the EA ceiling of 1000 (§13.7.4).
 pub const PAGE: u32 = 100;
@@ -165,13 +166,21 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
     /// # Errors
     /// [`CoreError::Protocol`] for a request that is not a search; [`CoreError::Ais`].
     pub async fn search(
-        &self,
+        &mut self,
         inc: &Incoming,
         query: &Query,
         after: Option<Id>,
         now: u64,
     ) -> Result<Found, CoreError> {
-        let Some(actor) = self.searcher(inc, query, now).await? else {
+        let actor = self.searcher(inc, query, now).await?;
+        // §13.7.4, OP-141 m.23
+        if !self
+            .limiter
+            .admit(Class::Search, crate::app::who(inc, actor), now)
+        {
+            return Err(CoreError::Limited);
+        }
+        let Some(actor) = actor else {
             return Ok(Found::default());
         };
         let candidates = match query {

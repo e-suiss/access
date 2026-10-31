@@ -477,3 +477,16 @@ async fn search_pages_through_results() {
     assert_eq!(status, StatusCode::BAD_REQUEST);
     assert_eq!(body["code"], "search");
 }
+
+// §13.7.4, OP-35, OP-141 m.23: over a rate limit is 429 with no decision
+#[tokio::test]
+async fn a_rate_limit_is_429() {
+    let (status, _, body) = post(
+        app(Err(|| CoreError::Limited), Some("pep-1")),
+        evaluation("commit", ""),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::TOO_MANY_REQUESTS);
+    assert_eq!(body["code"], "rate-limited");
+}

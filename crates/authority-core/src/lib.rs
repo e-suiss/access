@@ -5,6 +5,7 @@ pub mod app;
 pub mod domain;
 pub mod ports;
 pub mod query;
+pub mod rate;
 
 use access_authority_sequencer::SequencerError;
 use access_kernel::ais::AisError;
@@ -39,6 +40,9 @@ pub enum CoreError {
     /// The domain cannot decide now; the PEP retries with the same nonce (OP-141 m.18).
     #[error("unavailable: {0}")]
     Unavailable(&'static str),
+    /// Over a rate limit (§13.7.4): no record, the nonce is not consumed (OP-141 m.23).
+    #[error("rate limited")]
+    Limited,
 }
 
 impl CoreError {
@@ -52,6 +56,7 @@ impl CoreError {
             Self::Nonce => "nonce-conflict",
             Self::Passes => "too-many-passes",
             Self::Sequencer(_) | Self::Store(_) | Self::Unavailable(_) => "unavailable",
+            Self::Limited => "rate-limited",
         }
     }
 }

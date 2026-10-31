@@ -301,6 +301,7 @@ fn incoming(request: Request, seed: u8) -> Incoming {
         ais: Some(sign(&statement, seed)),
         request,
         pep: PEP.to_owned(),
+        explain: false,
     }
 }
 
@@ -1273,6 +1274,25 @@ async fn search_shows_what_the_reader_may_see() {
     let mut anonymous = incoming(search_request(d, 54, "resource"), ALICE_KEY);
     anonymous.ais = None;
     assert_eq!(a.search(&anonymous, &mine, None).await.unwrap().0, []);
+    // §13.7.4, OP-141 m.23: ten searches a minute per reader
+    for n in 0..7 {
+        a.search(
+            &incoming(search_request(d, 60 + n, "resource"), ALICE_KEY),
+            &mine,
+            None,
+        )
+        .await
+        .unwrap();
+    }
+    assert!(matches!(
+        a.search(
+            &incoming(search_request(d, 70, "resource"), ALICE_KEY),
+            &mine,
+            None
+        )
+        .await,
+        Err(CoreError::Limited)
+    ));
     // the search intent must name the search kind
     assert!(matches!(
         a.search(

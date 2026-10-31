@@ -22,7 +22,7 @@ The CBOR form of a body is the dCBOR of the same members with media type `applic
 
 <a id="L1-ADP-2"></a>**L1-ADP-2. PEP authentication.** The PEP authenticates the transport (mutual TLS or OAuth client authentication). Its authenticated identity is the request's `pep`. A request without an authenticated PEP is refused with 401 and is not evaluated. The PEP's identity never becomes the actor.
 
-<a id="L1-ADP-3"></a>**L1-ADP-3. Status codes.** A decision, whatever its outcome, is 200. `decision` is `true` only for `allow`; `deny` and `require_action` are `false`. A protocol error (§2) is 400 with an RFC 9457 body whose `code` member names the error, and produces no record. A nonce bound to another intent or actor is 422. A refused or unavailable domain is 503. A PEP treats every response other than 200 as no `allow`.
+<a id="L1-ADP-3"></a>**L1-ADP-3. Status codes.** A decision, whatever its outcome, is 200. `decision` is `true` only for `allow`; `deny` and `require_action` are `false`. A protocol error (§2) is 400 with an RFC 9457 body whose `code` member names the error, and produces no record. A nonce bound to another intent or actor is 422. A refused or unavailable domain is 503. A request over a rate limit of the actor Instance, or of the PEP for an anonymous request, is 429 with the code `rate-limited`; it is not recorded and does not consume its nonce (§13.7.4). A PEP treats every response other than 200 as no `allow`.
 
 <a id="L1-ADP-4"></a>**L1-ADP-4. Request id.** A request's `X-Request-ID` header is echoed in the response. It is not an authority input.
 
@@ -65,7 +65,7 @@ The CBOR form of a body is the dCBOR of the same members with media type `applic
 | `capacity` | `"own"` or `{"for": id}` | always |
 | `intent` | intent object (L1-ADP-8) | always |
 | `payload` | bytes: dCBOR of the `meta-payload`, for a meta-action ([L0-META-2](../l0/meta.md#L0-META-2)) | meta-actions |
-| `proofs` | array of 1 to 16 proof objects (L1-ADP-12) | no |
+| `proofs` | array of 1 to 64 proof objects (L1-ADP-12) | no |
 | `exercise` | digest: the ExerciseID continued | `continue` |
 | `consistency_token` | text: a token from an earlier response; the answer is given at or after the position it names, else the domain answers 503 | no; ignored by `commit` and `continue` |
 

@@ -93,7 +93,7 @@ fn proofs_and_the_continued_exercise_decode() {
         r#", "proofs": [{"pin": "AA"}]"#.to_owned(),
         format!(
             r#", "proofs": [{}]"#,
-            vec![r#"{"claim": "AA"}"#; 17].join(",")
+            vec![r#"{"claim": "AA"}"#; 65].join(",")
         ),
     ] {
         assert!(

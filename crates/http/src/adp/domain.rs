@@ -303,7 +303,7 @@ fn carriers(root: &Json, intent: &IntentEnvelope) -> R<()> {
     Ok(())
 }
 
-/// The proof objects of L1-ADP-12: 1 to 16 of them.
+/// The proof objects of L1-ADP-12: 1 to 64 of them.
 fn proofs(v: &Json) -> R<Vec<ProofRef>> {
     let Json::Array(items) = v else {
         return Err(AdpError("proofs"));

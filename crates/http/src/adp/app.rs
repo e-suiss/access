@@ -23,6 +23,8 @@ pub enum Reply {
     Conflict,
     /// 503: the domain cannot decide now.
     Unavailable,
+    /// 429: over a rate limit (§13.7.4, OP-35).
+    Limited,
 }
 
 /// The ADP service of one deployment.
@@ -43,7 +45,7 @@ impl<P: Pdp> Service<P> {
             return Reply::Unauthenticated;
         };
         match decode(body, self.max_body) {
-            Ok(d) => self.decide(d, pep).await,
+            Ok(d) => self.decide(d, pep, false).await,
             Err(e) => Reply::Protocol(e.0),
         }
     }
@@ -66,7 +68,7 @@ impl<P: Pdp> Service<P> {
                 continue;
             }
             let reply = match item {
-                Ok(d) => self.decide(d, pep.clone()).await,
+                Ok(d) => self.decide(d, pep.clone(), false).await,
                 Err(e) => Reply::Protocol(e.0),
             };
             let value = match reply {
@@ -74,6 +76,7 @@ impl<P: Pdp> Service<P> {
                 Reply::Protocol(code) => serde_json::json!({ "error": code }),
                 Reply::Conflict => serde_json::json!({ "error": "nonce-conflict" }),
                 Reply::Unavailable => serde_json::json!({ "error": "unavailable" }),
+                Reply::Limited => serde_json::json!({ "error": "rate-limited" }),
                 Reply::Unauthenticated => serde_json::json!({ "error": "pep-unauthenticated" }),
             };
             let decision = value.get("decision").and_then(serde_json::Value::as_bool);
@@ -101,7 +104,7 @@ impl<P: Pdp> Service<P> {
         if decoded.request.mode != Mode::Check {
             return Reply::Protocol("explain-mode");
         }
-        match self.decide(decoded, pep).await {
+        match self.decide(decoded, pep, true).await {
             Reply::Decision(mut v) => {
                 if let Some(ctx) = v.get_mut("context").and_then(Value::as_object_mut) {
                     ctx.insert(String::from("kind"), Value::from("hypothetical"));
@@ -126,30 +129,36 @@ impl<P: Pdp> Service<P> {
             request: decoded.request,
             ais: decoded.ais,
             pep,
+            explain: false,
         };
         match self.pdp.search(inc, query, page).await {
             Ok((hits, next)) => Reply::Decision(encode_search(&hits, next.as_deref())),
-            Err(CoreError::Sequencer(_) | CoreError::Store(_) | CoreError::Unavailable(_)) => {
-                Reply::Unavailable
-            }
-            Err(e) => Reply::Protocol(e.code()),
+            Err(e) => failed(e),
         }
     }
 
-    async fn decide(&self, decoded: Decoded, pep: String) -> Reply {
+    async fn decide(&self, decoded: Decoded, pep: String, explain: bool) -> Reply {
         let mode = decoded.request.mode;
         let inc = Incoming {
             request: decoded.request,
             ais: decoded.ais,
             pep,
+            explain,
         };
         match self.pdp.evaluate(inc).await {
             Ok(r) => Reply::Decision(encode(&r, mode)),
-            Err(CoreError::Nonce) => Reply::Conflict,
-            Err(CoreError::Sequencer(_) | CoreError::Store(_) | CoreError::Unavailable(_)) => {
-                Reply::Unavailable
-            }
-            Err(e) => Reply::Protocol(e.code()),
+            Err(e) => failed(e),
         }
+    }
+}
+
+fn failed(e: CoreError) -> Reply {
+    match e {
+        CoreError::Nonce => Reply::Conflict,
+        CoreError::Limited => Reply::Limited,
+        CoreError::Sequencer(_) | CoreError::Store(_) | CoreError::Unavailable(_) => {
+            Reply::Unavailable
+        }
+        e => Reply::Protocol(e.code()),
     }
 }
