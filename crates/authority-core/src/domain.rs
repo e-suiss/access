@@ -50,6 +50,27 @@ impl Snapshot {
         self.values.get(key).and_then(|(v, _)| v.clone())
     }
 
+    /// Whether `key` was fetched.
+    #[must_use]
+    pub fn has(&self, key: &[u8]) -> bool {
+        self.values.contains_key(key)
+    }
+
+    /// Every fetched key with its version.
+    #[must_use]
+    pub fn fetched(&self) -> Vec<(Vec<u8>, u64)> {
+        self.values
+            .iter()
+            .map(|(k, (_, v))| (k.clone(), *v))
+            .collect()
+    }
+
+    /// The version of a fetched key, 0 when absent or not fetched.
+    #[must_use]
+    pub fn version_of(&self, key: &[u8]) -> u64 {
+        self.values.get(key).map_or(0, |(_, v)| *v)
+    }
+
     /// Keys asked for and not fetched yet.
     #[must_use]
     pub fn missing(&self) -> Vec<Vec<u8>> {
@@ -101,6 +122,21 @@ pub struct Request {
     pub basis: ExerciseBasis,
     /// Declared capacity.
     pub capacity: Capacity,
+    /// Proofs sent with the request (L1-ADP-12).
+    pub proofs: Vec<ProofRef>,
+    /// The Exercise continued, for `continue` (L1-ADP-13).
+    pub exercise: Option<Digest>,
+}
+
+/// A proof as the request carries it (L1-ADP-12).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ProofRef {
+    /// A Claim's `COSE_Sign1`.
+    Claim(Vec<u8>),
+    /// A recorded Claim.
+    ClaimRef(access_kernel::model::Id),
+    /// The `ExerciseID` of an allowed `contribute`.
+    Contribution(Digest),
 }
 
 /// What an evaluation produced.
@@ -282,6 +318,8 @@ pub struct Frame<'a> {
     pub now: u64,
     /// The pinned catalog.
     pub catalog: &'a Catalog,
+    /// The usable proofs (OP-141 m.19 (f)).
+    pub proofs: &'a [access_kernel::requirement::Proof],
 }
 
 /// One pass of the evaluation over `snapshot` (§17.1.1 steps 7–8). Implicit powers of a
@@ -300,10 +338,43 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
         actor,
         now,
         catalog,
+        proofs,
     } = *frame;
     snapshot.restart();
     let mut effects = Vec::new();
-    let (bases, mandate) = if let Some(payload) = &req.payload {
+    // L0-META-30: a contribution is authorized like a domain action and records itself
+    let contribute = matches!(req.payload, Some(Payload::Contribute { .. }));
+    if let Some(payload) = req.payload.as_ref().filter(|_| contribute) {
+        let Some(actor) = actor else {
+            return Pass::Done(Evaluation {
+                decision: deny(
+                    BlockerClass::NoCoveringAuthority,
+                    "anonymous-meta",
+                    Resolver::Actor,
+                ),
+                effects,
+            });
+        };
+        let ctx = meta::Context {
+            domain: req.domain,
+            exercise,
+            pos,
+            actor,
+            basis: req.basis,
+            capacity: req.capacity,
+            catalog,
+        };
+        match meta::apply(&ctx, payload, snapshot) {
+            Ok(out) => effects = out.effects,
+            Err(e) => {
+                return Pass::Done(Evaluation {
+                    decision: meta_denial(e),
+                    effects: Vec::new(),
+                });
+            }
+        }
+    }
+    let (bases, mandate) = if let Some(payload) = req.payload.as_ref().filter(|_| !contribute) {
         let Some(actor) = actor else {
             return Pass::Done(Evaluation {
                 decision: deny(
@@ -423,7 +494,7 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
         capacity: req.capacity,
         bases: &bases,
         restrictions: &[],
-        proofs: &[],
+        proofs,
         catalog,
     };
     match evaluate(&input, &mut Fuel(FUEL)) {

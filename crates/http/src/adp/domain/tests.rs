@@ -69,6 +69,40 @@ fn a_request_decodes_into_the_core_terms() {
     assert!(d.ais.is_none() && r.payload.is_none());
 }
 
+// L1-ADP-12, L1-ADP-13
+#[test]
+fn proofs_and_the_continued_exercise_decode() {
+    let extra = format!(
+        r#", "proofs": [{{"claim": "{c}"}}, {{"claim_ref": "{r}"}}, {{"contribution": "{e}"}}], "exercise": "{e}""#,
+        c = b64(&[9, 9]),
+        r = b64(&[8; 16]),
+        e = b64(&[7; 32]),
+    );
+    let d = decode(body(&extra, CARRIERS).as_bytes(), MAX).unwrap();
+    assert_eq!(
+        d.request.proofs,
+        [
+            ProofRef::Claim(vec![9, 9]),
+            ProofRef::ClaimRef(Id([8; 16])),
+            ProofRef::Contribution(Digest([7; 32])),
+        ]
+    );
+    assert_eq!(d.request.exercise, Some(Digest([7; 32])));
+    for bad in [
+        r#", "proofs": []"#.to_owned(),
+        r#", "proofs": [{"pin": "AA"}]"#.to_owned(),
+        format!(
+            r#", "proofs": [{}]"#,
+            vec![r#"{"claim": "AA"}"#; 17].join(",")
+        ),
+    ] {
+        assert!(
+            decode(body(&bad, CARRIERS).as_bytes(), MAX).is_err(),
+            "{bad}"
+        );
+    }
+}
+
 #[test]
 fn an_unknown_context_member_is_a_protocol_error() {
     let e = decode(body(r#", "hint": 1"#, CARRIERS).as_bytes(), MAX).unwrap_err();

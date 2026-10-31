@@ -12,7 +12,7 @@ use std::time::Duration;
 use access_authority_core::CoreError;
 use access_authority_core::adapters::{Domains, PgReader, Setup};
 use access_authority_core::app::{Authority, Incoming, Response};
-use access_authority_core::domain::Request;
+use access_authority_core::domain::{ProofRef, Request};
 use access_authority_core::ports::{Binding, Keys, Salts};
 use access_authority_sequencer::SequencerError;
 use access_authority_sequencer::adapters::{PgLog, create_genesis, fold_check};
@@ -29,7 +29,8 @@ use access_kernel::meta::{
     self, ExerciseBasis, GrantBasis, GrantContent, HoldingRef, Payload, Root, kind,
 };
 use access_kernel::model::{
-    ActionRef, ActionSet, AuthoritySet, CanonicalAuthority, ConstraintSet, DelegationTerms, Id,
+    ActionRef, ActionSet, AuthoritySet, Binding as ProofBinding, CanonicalAuthority, ConstraintSet,
+    Consumption, DelegationTerms, EqValue, Id, Independence, ProofKind, RequirementTerm,
     ResourceRef, ResourceSelector, Structural, SubjectSelector, Window,
 };
 use access_kernel::record::Opened;
@@ -262,6 +263,8 @@ fn meta_request(d: Digest, nonce: u8, basis: ExerciseBasis, payload: Payload) ->
         payload: Some(payload),
         basis,
         capacity: Capacity::Own,
+        proofs: Vec::new(),
+        exercise: None,
     }
 }
 
@@ -274,6 +277,8 @@ fn shop_request(d: Digest, nonce: u8, mode: Mode, basis: ExerciseBasis) -> Reque
         payload: None,
         basis,
         capacity: Capacity::Own,
+        proofs: Vec::new(),
+        exercise: None,
     }
 }
 
@@ -288,7 +293,7 @@ fn incoming(request: Request, seed: u8) -> Incoming {
         capacity: request.capacity,
         basis: request.basis,
         iat: NOW,
-        exercise: None,
+        exercise: request.exercise,
     };
     Incoming {
         ais: Some(sign(&statement, seed)),
@@ -593,4 +598,350 @@ async fn a_process_leads_a_domain_from_its_first_request() {
     let mut keyless = read(6);
     keyless.request.domain = e;
     assert_eq!(unavailable(a.exercise(&keyless).await), "event-key");
+}
+
+// ---------------------------------------------------------------- D5a (OP-141 m.19)
+
+fn term(kind: ProofKind, class: &str, binding: ProofBinding) -> RequirementTerm {
+    RequirementTerm {
+        proof_kind: kind,
+        class: class.to_owned(),
+        count: 1,
+        binding,
+        freshness_ms: None,
+        independence: Independence::None,
+        consumption: Consumption::Reusable,
+        source: None,
+        assurance: BTreeMap::new(),
+    }
+}
+
+/// Genesis where acting on `shop` needs `terms`, ALICE issues `kyc` Claims under a
+/// predicate-input Acceptance and holds a Grant to contribute `approve`.
+fn gated(terms: &[RequirementTerm]) -> BTreeMap<String, Opened> {
+    let mut g = genesis();
+    let opened = |value| Opened {
+        value,
+        salt: [3; 32],
+    };
+    let set = |v: Vec<Value>| Value::Array(v);
+    let shop = Value::Map(vec![
+        (
+            Value::text("scope"),
+            Value::Map(vec![(Value::text("resource"), selector("shop").to_value())]),
+        ),
+        (Value::text("root"), sole(ROOT)),
+        (
+            Value::text("root_terms"),
+            set(terms.iter().map(Canonical::to_value).collect()),
+        ),
+    ]);
+    g.insert("anchors".to_owned(), opened(set(vec![shop])));
+    let Some(Value::Array(mut grants)) = g.get("grants").map(|o| o.value.clone()) else {
+        panic!("genesis has grants");
+    };
+    grants.push(Value::Map(vec![
+        (Value::text("anchor"), Value::Unsigned(0)),
+        (
+            Value::text("holder"),
+            SubjectSelector::Party(ALICE).to_value(),
+        ),
+        (
+            Value::text("authority"),
+            authority(
+                vec![action("access", "contribute")],
+                selector("access.contribution"),
+            )
+            .to_value(),
+        ),
+        (
+            Value::text("agency"),
+            Value::Array(vec![meta::capacity_value(Capacity::Own)]),
+        ),
+    ]));
+    g.insert("grants".to_owned(), opened(set(grants)));
+    let acceptance = Value::Map(vec![
+        (Value::text("issuer"), ALICE.to_value()),
+        (Value::text("use"), Value::text("predicate-input")),
+        (Value::text("classes"), set(vec![Value::text("kyc")])),
+        (Value::text("subject"), SubjectSelector::Public.to_value()),
+        (
+            Value::text("validity"),
+            set(vec![Value::Unsigned(0), Value::Unsigned(1_000_000)]),
+        ),
+    ]);
+    g.insert("acceptances".to_owned(), opened(set(vec![acceptance])));
+    g
+}
+
+async fn setup_with(db: &TestDb, g: BTreeMap<String, Opened>) -> (Core, Digest) {
+    let d = create_genesis(&db.sequencer, TENANT, g, 1_000)
+        .await
+        .unwrap();
+    let log = PgLog::new(db.sequencer.clone(), d, TENANT, "t".to_owned(), TTL);
+    let leader = Leader::acquire(log, d, EventKey::new(Secret::new([5; 32])))
+        .await
+        .unwrap();
+    let reader = PgReader::new(db.app.clone(), DomainId::from_bytes(d.0));
+    (Authority::new(leader, reader, binding(), Counter(0), d), d)
+}
+
+fn claim(d: Digest, issuer: Id, seed: u8, class: &str) -> Vec<u8> {
+    let st = access_kernel::claim::Statement {
+        domain: d,
+        issuer,
+        subject: ROOT,
+        class: class.to_owned(),
+        value: Some(EqValue::Bool(true)),
+        issued_at: NOW,
+        validity: Window {
+            from: 0,
+            until: 1_000_000,
+        },
+        assurance: BTreeMap::new(),
+        bound_intent: None,
+        bound_instance: None,
+        bound_resource: None,
+        supersedes: None,
+    };
+    let with = signing(seed);
+    let prot = dcbor::encode(
+        &Value::Map(vec![
+            (Value::Unsigned(ALG), Value::int(-19)),
+            (
+                Value::Unsigned(CT),
+                Value::text(access_kernel::claim::CONTENT_TYPE),
+            ),
+            (
+                Value::Unsigned(KID),
+                Value::Bytes(thumbprint(&public(seed)).to_vec()),
+            ),
+        ]),
+        Limits::CEILING,
+    )
+    .unwrap();
+    let payload = st.to_bytes().unwrap();
+    let sig = with.sign(&to_be_signed(&prot, &payload)).to_bytes();
+    let body = dcbor::encode(
+        &Value::Array(vec![
+            Value::Bytes(prot),
+            Value::Map(Vec::new()),
+            Value::Bytes(payload),
+            Value::Bytes(sig.to_vec()),
+        ]),
+        Limits::CEILING,
+    )
+    .unwrap();
+    [vec![0xd2], body].concat()
+}
+
+fn with_proofs(mut r: Request, proofs: Vec<ProofRef>) -> Request {
+    r.proofs = proofs;
+    r
+}
+
+// OP-141 m.19 (a)–(d), (h), L2-CLM-3, L2-CLM-4: an accepted Claim meets the requirement on the
+// same nonce; a Claim no Acceptance covers is recorded in quarantine and meets nothing
+#[tokio::test]
+async fn an_accepted_claim_meets_a_requirement() {
+    let db = fresh().await.unwrap();
+    let kyc = term(ProofKind::Claim, "kyc", ProofBinding::None);
+    let (mut core, d) = setup_with(&db, gated(&[kyc])).await;
+    onboard(&mut core, d, ROOT, ROOT_KEY, (1, 2)).await;
+    onboard(&mut core, d, ALICE, ALICE_KEY, (3, 4)).await;
+    let shop = ExerciseBasis::Anchor(meta::object_id(&d, kind::ANCHOR, 1));
+
+    let asked = send(&mut core, shop_request(d, 9, Mode::Commit, shop), ROOT_KEY)
+        .await
+        .unwrap();
+    assert_eq!(asked.decision.outcome, Outcome::RequireAction);
+
+    let untrusted = claim(d, ROOT, ROOT_KEY, "kyc");
+    let again = send(
+        &mut core,
+        with_proofs(
+            shop_request(d, 9, Mode::Commit, shop),
+            vec![ProofRef::Claim(untrusted.clone())],
+        ),
+        ROOT_KEY,
+    )
+    .await
+    .unwrap();
+    assert_eq!(again.decision.outcome, Outcome::RequireAction);
+    let id = access_kernel::claim::claim_id(&untrusted);
+    assert!(
+        state_of(&db, d, &meta::key(kind::CLAIM, &id))
+            .await
+            .is_none()
+    );
+
+    let good = claim(d, ALICE, ALICE_KEY, "kyc");
+    let allowed_now = send(
+        &mut core,
+        with_proofs(
+            shop_request(d, 9, Mode::Commit, shop),
+            vec![ProofRef::Claim(good.clone())],
+        ),
+        ROOT_KEY,
+    )
+    .await
+    .unwrap();
+    allowed(&allowed_now);
+    let id = access_kernel::claim::claim_id(&good);
+    assert!(
+        state_of(&db, d, &meta::key(kind::CLAIM, &id))
+            .await
+            .is_some()
+    );
+
+    // the recorded Claim is referenced by its id on a new nonce
+    let by_ref = send(
+        &mut core,
+        with_proofs(
+            shop_request(d, 10, Mode::Commit, shop),
+            vec![ProofRef::ClaimRef(id)],
+        ),
+        ROOT_KEY,
+    )
+    .await
+    .unwrap();
+    allowed(&by_ref);
+
+    // L2-CLM-2: a Claim signed by a key the domain does not know is a protocol error
+    let forged = claim(d, ALICE, 77, "kyc");
+    let refused = send(
+        &mut core,
+        with_proofs(
+            shop_request(d, 11, Mode::Commit, shop),
+            vec![ProofRef::Claim(forged)],
+        ),
+        ROOT_KEY,
+    )
+    .await;
+    assert_eq!(refused.unwrap_err().code(), "protocol");
+    fold_check(&db.sequencer, d).await.unwrap();
+}
+
+async fn state_of(db: &TestDb, d: Digest, key: &[u8]) -> Option<Vec<u8>> {
+    access_store::authority::state_of(&db.app, &DomainId::from_bytes(d.0), &[key.to_vec()])
+        .await
+        .unwrap()
+        .into_iter()
+        .next()
+        .and_then(|r| r.value)
+}
+
+fn contribute(d: Digest, nonce: u8, target: Digest) -> Request {
+    let payload = Payload::Contribute {
+        target,
+        class: "approve".to_owned(),
+    };
+    let mut r = meta_request(
+        d,
+        nonce,
+        ExerciseBasis::Holding(HoldingRef {
+            grant: meta::object_id(&d, kind::GRANT, 1),
+            holder: ALICE,
+            since: 0,
+        }),
+        payload,
+    );
+    r.intent.resources = vec![ResourceRef {
+        namespace: "access.contribution".to_owned(),
+        path: vec!["approve".to_owned()],
+        incarnation: 0,
+    }];
+    let p = r.payload.clone().unwrap();
+    r.intent.opaque = BTreeMap::from([("payload".to_owned(), p.digest().unwrap())]);
+    r
+}
+
+// OP-141 m.19 (e)–(h), L0-META-30: an approval is a contribution bound to the intent; it meets
+// the requirement once and is consumed
+#[tokio::test]
+async fn a_contribution_approves_once() {
+    let db = fresh().await.unwrap();
+    let approve = term(
+        ProofKind::Contribution,
+        "approve",
+        ProofBinding::IntentDigest,
+    );
+    let (mut core, d) = setup_with(&db, gated(&[approve])).await;
+    onboard(&mut core, d, ROOT, ROOT_KEY, (1, 2)).await;
+    onboard(&mut core, d, ALICE, ALICE_KEY, (3, 4)).await;
+    let shop = ExerciseBasis::Anchor(meta::object_id(&d, kind::ANCHOR, 1));
+    let target = shop_request(d, 9, Mode::Commit, shop);
+    let digest = access_kernel::intent::intent_digest(&target.intent).unwrap();
+
+    let asked = send(&mut core, target.clone(), ROOT_KEY).await.unwrap();
+    assert_eq!(asked.decision.outcome, Outcome::RequireAction);
+
+    let given = send(&mut core, contribute(d, 20, digest), ALICE_KEY)
+        .await
+        .unwrap();
+    allowed(&given);
+    let approval = given.exercise.unwrap();
+
+    let done = send(
+        &mut core,
+        with_proofs(target, vec![ProofRef::Contribution(approval)]),
+        ROOT_KEY,
+    )
+    .await
+    .unwrap();
+    allowed(&done);
+
+    // consumed: the same contribution does not approve the same intent on a new nonce
+    let reused = send(
+        &mut core,
+        with_proofs(
+            shop_request(d, 10, Mode::Commit, shop),
+            vec![ProofRef::Contribution(approval)],
+        ),
+        ROOT_KEY,
+    )
+    .await
+    .unwrap();
+    assert_eq!(reused.decision.outcome, Outcome::RequireAction);
+
+    // L0-META-30: without a Grant over the class, a contribution is denied
+    let mut other = contribute(d, 21, digest);
+    other.basis = ExerciseBasis::Anchor(meta::object_id(&d, kind::ANCHOR, 1));
+    let denied = send(&mut core, other, ROOT_KEY).await.unwrap();
+    assert_ne!(denied.decision.outcome, Outcome::Allow);
+    fold_check(&db.sequencer, d).await.unwrap();
+}
+
+// OP-141 m.19 (i), L1-ADP-13: a continuation names the Exercise it continues
+#[tokio::test]
+async fn a_continuation_names_its_exercise() {
+    let db = fresh().await.unwrap();
+    let (mut core, d) = setup(&db).await;
+    onboard(&mut core, d, ROOT, ROOT_KEY, (1, 2)).await;
+    let shop = ExerciseBasis::Anchor(meta::object_id(&d, kind::ANCHOR, 1));
+    let first = send(&mut core, shop_request(d, 9, Mode::Commit, shop), ROOT_KEY)
+        .await
+        .unwrap();
+    allowed(&first);
+    let exercise = first.exercise.unwrap();
+
+    let mut cont = shop_request(d, 30, Mode::Continue, shop);
+    cont.exercise = Some(exercise);
+    let next = send(&mut core, cont.clone(), ROOT_KEY).await.unwrap();
+    allowed(&next);
+    assert_eq!(next.exercise, Some(exercise));
+
+    let mut wrong = shop_request(d, 31, Mode::Continue, shop);
+    wrong.exercise = Some(Digest([4; 32]));
+    assert!(matches!(
+        send(&mut core, wrong, ROOT_KEY).await,
+        Err(CoreError::Protocol("exercise"))
+    ));
+    let mut missing = shop_request(d, 32, Mode::Continue, shop);
+    missing.exercise = None;
+    assert!(matches!(
+        send(&mut core, missing, ROOT_KEY).await,
+        Err(CoreError::Protocol("exercise"))
+    ));
+    fold_check(&db.sequencer, d).await.unwrap();
 }

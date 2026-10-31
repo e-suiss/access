@@ -2,8 +2,9 @@
 
 use std::collections::BTreeMap;
 
+use access_authority_core::app::MAX_PROOFS;
 use access_authority_core::app::Response;
-use access_authority_core::domain::Request;
+use access_authority_core::domain::{ProofRef, Request};
 use access_kernel::codec::Canonical;
 use access_kernel::combinator::codec::decision_value;
 use access_kernel::combinator::{Capacity, Mode, Outcome};
@@ -299,7 +300,26 @@ fn carriers(root: &Json, intent: &IntentEnvelope) -> R<()> {
     Ok(())
 }
 
-/// Decodes an evaluation request body (L1-ADP-5…9).
+/// The proof objects of L1-ADP-12: 1 to 16 of them.
+fn proofs(v: &Json) -> R<Vec<ProofRef>> {
+    let Json::Array(items) = v else {
+        return Err(AdpError("proofs"));
+    };
+    if items.is_empty() || items.len() > MAX_PROOFS {
+        return Err(AdpError("proofs"));
+    }
+    items
+        .iter()
+        .map(|p| match single(p, "proofs")? {
+            ("claim", c) => Ok(ProofRef::Claim(bytes(c, "proofs")?)),
+            ("claim_ref", c) => Ok(ProofRef::ClaimRef(id(c)?)),
+            ("contribution", c) => Ok(ProofRef::Contribution(digest(c)?)),
+            _ => Err(AdpError("unknown-member")),
+        })
+        .collect()
+}
+
+/// Decodes an evaluation request body (L1-ADP-5…9, L1-ADP-12, L1-ADP-13).
 ///
 /// # Errors
 /// [`AdpError`] names the protocol error.
@@ -324,6 +344,12 @@ pub fn decode(body: &[u8], max_len: usize) -> R<Decoded> {
         payload,
         basis: basis(ctx.req("basis", "basis")?)?,
         capacity: capacity(ctx.req("capacity", "capacity")?)?,
+        proofs: ctx
+            .opt("proofs")
+            .map(proofs)
+            .transpose()?
+            .unwrap_or_default(),
+        exercise: ctx.opt("exercise").map(digest).transpose()?,
     };
     let ais = ctx.opt("ais").map(|a| bytes(a, "ais")).transpose()?;
     ctx.done()?;

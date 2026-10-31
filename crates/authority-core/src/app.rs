@@ -9,14 +9,15 @@ use access_authority_sequencer::domain::{Draft, Item, NonceUse, Outcome as Commi
 use access_authority_sequencer::ports::DomainLog;
 use access_kernel::ais::{self, AisError, Expected};
 use access_kernel::algebra::Catalog;
+use access_kernel::claim::{self, ClaimState, Disposition};
 use access_kernel::codec::Canonical;
 use access_kernel::combinator::codec::decision_value;
 use access_kernel::combinator::{Decision, Mode, Outcome, Rejection};
 use access_kernel::digest::Digest;
 use access_kernel::fold::Effect;
 use access_kernel::intent::intent_digest;
-use access_kernel::meta::{self, Actor, InstanceState, Payload, kind};
-use access_kernel::model::Id;
+use access_kernel::meta::{self, Actor, ExerciseState, InstanceState, Payload, kind};
+use access_kernel::model::{Id, ResourceRef};
 use access_kernel::record::{Opened, RecordKind};
 use access_kernel::verify::cose;
 use suiss_crypto::dcbor::{self, Limits, Value};
@@ -24,6 +25,7 @@ use suiss_crypto::dcbor::{self, Limits, Value};
 use crate::CoreError;
 use crate::domain::{Evaluation, Frame, Pass, Request, Snapshot, pass};
 use crate::ports::{Binding, Reader, Salts};
+use proofs::Resolved as Proofs;
 
 /// Most snapshot passes before a request is refused (SI-20, PD).
 pub const MAX_PASSES: usize = 32;
@@ -220,9 +222,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             }
             (state.party, id, state.key)
         };
-        let exercise = (req.mode == Mode::Continue)
-            .then(|| meta::exercise_id(&req.domain, &req.nonce).ok())
-            .flatten();
+        let exercise = req.exercise;
         let expected = Expected {
             domain: &req.domain,
             nonce: &req.nonce,
@@ -237,17 +237,16 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         Ok(Some(Actor { party, instance }))
     }
 
-    /// L2-REC-5: a terminal outcome is returned again, never evaluated again; `None` when the
-    /// nonce is new or still open.
+    /// L2-REC-5: a terminal outcome is returned again, never evaluated again.
     async fn replay(
         &self,
         nonce: &[u8],
         digest: &Digest,
         actor_ref: &[u8],
         exercise: Digest,
-    ) -> Result<Option<Response>, CoreError> {
+    ) -> Result<Replay, CoreError> {
         let Some(stored) = self.reader.nonce(nonce).await? else {
-            return Ok(None);
+            return Ok(Replay::New);
         };
         if stored.intent_digest != digest.0 || stored.actor != actor_ref {
             return Err(CoreError::Nonce);
@@ -255,9 +254,9 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         let outcome = match stored.outcome.as_str() {
             "allow" => Outcome::Allow,
             "deny" => Outcome::Deny,
-            _ => return Ok(None),
+            _ => return Ok(Replay::Open),
         };
-        Ok(Some(Response {
+        Ok(Replay::Done(Response {
             decision: Decision {
                 outcome,
                 blockers: Vec::new(),
@@ -270,15 +269,32 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         }))
     }
 
-    /// Runs one request through the commit path (§17.1.1).
-    ///
-    /// # Errors
-    /// [`CoreError`] for a request that gets no decision.
-    pub async fn exercise(&mut self, inc: &Incoming, now: u64) -> Result<Response, CoreError> {
-        let req = &inc.request;
-        if req.domain != self.domain {
-            return Err(CoreError::Protocol("domain"));
+    /// L1-ADP-13: a continuation names an allowed Exercise of the same intent and actor.
+    async fn continued(
+        &self,
+        req: &Request,
+        digest: &Digest,
+        actor: Option<Actor>,
+    ) -> Result<(), CoreError> {
+        let Some(e) = req.exercise else {
+            return Ok(());
+        };
+        let k = meta::exercise_key(kind::EXERCISE, &e);
+        let mut snap = Snapshot::default();
+        self.snapshot_get(&mut snap, std::slice::from_ref(&k))
+            .await?;
+        let same = snap
+            .values_of(&k)
+            .and_then(|v| ExerciseState::from_value(&v).ok())
+            .is_some_and(|s| s.intent == *digest && actor.is_some_and(|a| a.instance == s.actor));
+        if same {
+            Ok(())
+        } else {
+            Err(CoreError::Protocol("exercise"))
         }
+    }
+
+    fn check_payload(req: &Request) -> Result<(), CoreError> {
         let is_meta = meta::is_meta(&req.intent.action.namespace, &req.intent.action.name);
         match &req.payload {
             Some(p) => {
@@ -289,31 +305,70 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                 {
                     return Err(CoreError::Protocol("payload"));
                 }
+                // L0-META-30
+                if let Payload::Contribute { class, .. } = p {
+                    let target = ResourceRef {
+                        namespace: String::from(CONTRIBUTION_NAMESPACE),
+                        path: vec![class.clone()],
+                        incarnation: 0,
+                    };
+                    if req.intent.resources != [target] {
+                        return Err(CoreError::Protocol("payload"));
+                    }
+                }
             }
             None if is_meta => return Err(CoreError::Protocol("payload")),
             None => {}
         }
+        match (req.mode, req.exercise) {
+            (Mode::Continue, Some(_)) | (Mode::Commit | Mode::Check, None) => Ok(()),
+            _ => Err(CoreError::Protocol("exercise")),
+        }
+    }
+
+    /// Runs one request through the commit path (§17.1.1).
+    ///
+    /// # Errors
+    /// [`CoreError`] for a request that gets no decision.
+    pub async fn exercise(&mut self, inc: &Incoming, now: u64) -> Result<Response, CoreError> {
+        let req = &inc.request;
+        if req.domain != self.domain {
+            return Err(CoreError::Protocol("domain"));
+        }
+        Self::check_payload(req)?;
         let digest = intent_digest(&req.intent).map_err(|_| CoreError::Protocol("intent"))?;
         let actor = self.actor(inc, &digest, now).await?;
+        self.continued(req, &digest, actor).await?;
         let exercise =
             meta::exercise_id(&req.domain, &req.nonce).map_err(|_| CoreError::Protocol("nonce"))?;
         let actor_ref = actor.map_or_else(|| b"anonymous".to_vec(), |a| a.instance.0.to_vec());
-        if req.mode != Mode::Check
-            && let Some(done) = self
+        let open = if req.mode == Mode::Check {
+            false
+        } else {
+            match self
                 .replay(&req.nonce, &digest, &actor_ref, exercise)
                 .await?
-        {
-            return Ok(done);
-        }
+            {
+                Replay::Done(done) => return Ok(done),
+                Replay::Open => true,
+                Replay::New => false,
+            }
+        };
         for _ in 0..MAX_RETRIES {
-            let pos = self.leader.head().pos.saturating_add(2);
+            let head = self.leader.head().pos;
+            let resolved = self.resolve(&req.proofs, now, head).await?;
+            let records = u64::try_from(resolved.claims.len())
+                .map_err(|_| CoreError::Protocol("proofs"))?
+                .saturating_add(u64::from(!open))
+                .saturating_add(1);
             let frame = Frame {
                 intent_digest: digest,
                 exercise,
-                pos,
+                pos: head.saturating_add(records),
                 actor,
                 now,
                 catalog: &self.catalog,
+                proofs: &resolved.proofs,
             };
             let mut snapshot = Snapshot::default();
             let mut evaluation = None;
@@ -336,13 +391,22 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                     replayed: false,
                 });
             }
-            let items = self.items(inc, &digest, actor, &actor_ref, &evaluation, &snapshot)?;
+            let shape = Shape {
+                digest: &digest,
+                actor,
+                actor_ref: &actor_ref,
+                open,
+                pos: frame.pos,
+                exercise,
+            };
+            let items = self.items(inc, &shape, &evaluation, &snapshot, &resolved)?;
+            let allowed = evaluation.decision.outcome == Outcome::Allow;
+            let continued = req.exercise.unwrap_or(exercise);
             match self.leader.commit(now, &items).await {
                 Ok(Committed::Appended(positions)) => {
-                    let allowed = evaluation.decision.outcome == Outcome::Allow;
                     return Ok(Response {
                         decision: evaluation.decision,
-                        exercise: allowed.then_some(exercise),
+                        exercise: allowed.then_some(continued),
                         record: positions.last().copied(),
                         replayed: false,
                     });
@@ -350,7 +414,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                 Ok(Committed::Replayed(pos)) => {
                     return Ok(Response {
                         decision: evaluation.decision,
-                        exercise: Some(exercise),
+                        exercise: Some(continued),
                         record: Some(pos),
                         replayed: true,
                     });
@@ -363,22 +427,64 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         Err(CoreError::Rejected(Rejection::Fuel))
     }
 
-    fn items(
-        &mut self,
-        inc: &Incoming,
-        digest: &Digest,
-        actor: Option<Actor>,
-        actor_ref: &[u8],
-        evaluation: &Evaluation,
-        snapshot: &Snapshot,
-    ) -> Result<Vec<Item>, CoreError> {
+    /// The Claim records of a request (L2-CLM-4).
+    fn claim_items(&mut self, resolved: &Proofs) -> Result<Vec<Item>, CoreError> {
+        let mut out = Vec::with_capacity(resolved.claims.len());
+        for c in &resolved.claims {
+            let ckey = meta::key(kind::CLAIM, &c.id);
+            let admit = c.disposition == Disposition::Admit;
+            let effects: Vec<Effect> = if admit {
+                vec![(
+                    ckey.clone(),
+                    Some(
+                        ClaimState {
+                            statement: c.statement.clone(),
+                            instance: Some(c.instance),
+                            since: c.pos,
+                            ended: None,
+                        }
+                        .to_value(),
+                    ),
+                )]
+            } else {
+                Vec::new()
+            };
+            let digest = claim::claim_digest(&c.bytes);
+            let mut f = vec![
+                ("claim", digest.to_value()),
+                ("id", c.id.to_value()),
+                ("issuer", c.statement.issuer.to_value()),
+                ("subject", c.statement.subject.to_value()),
+                ("class", Value::text(&c.statement.class)),
+                ("disposition", Value::text(c.disposition.word())),
+            ];
+            if admit {
+                f.push(("effects", effects_value(&effects)));
+            }
+            out.push(Item {
+                draft: Draft {
+                    kind: RecordKind::Claim,
+                    fields: fields(&mut self.salts, f)?,
+                },
+                nonce: None,
+                events: Vec::new(),
+                proofs: vec![(digest.0, c.bytes.clone())],
+                reads: vec![(ckey.clone(), 0)],
+                writes: if admit { vec![ckey] } else { Vec::new() },
+                draws: Vec::new(),
+                single_use: Vec::new(),
+            });
+        }
+        Ok(out)
+    }
+
+    /// The opening record of a new nonce (L2-REC-4).
+    fn opening_item(&mut self, inc: &Incoming, shape: &Shape<'_>) -> Result<Item, CoreError> {
         let req = &inc.request;
-        let outcome = match evaluation.decision.outcome {
-            Outcome::Allow => "allow",
-            Outcome::Deny => "deny",
-            Outcome::RequireAction => "require_action",
-        };
-        let actor_value = actor.map_or_else(|| Value::text("anonymous"), |a| a.instance.to_value());
+        let digest = shape.digest;
+        let actor_value = shape
+            .actor
+            .map_or_else(|| Value::text("anonymous"), |a| a.instance.to_value());
         let proof = inc.ais.as_ref().map(|b| {
             let d = suiss_crypto::digest::context_digest("access/ais/v1", b);
             (d, b.clone())
@@ -393,8 +499,78 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         if let Some((d, _)) = &proof {
             opening.push(("ais", d.to_value()));
         }
-        let opening = fields(&mut self.salts, opening)?;
-        let reads: Vec<(Vec<u8>, u64)> = snapshot.read_set();
+        if let Some(e) = &req.exercise {
+            opening.push(("exercise", e.to_value()));
+        }
+        Ok(Item {
+            draft: Draft {
+                kind: RecordKind::Opening,
+                fields: fields(&mut self.salts, opening)?,
+            },
+            nonce: None,
+            events: Vec::new(),
+            proofs: proof.map(|(d, b)| vec![(d.0, b)]).unwrap_or_default(),
+            reads: Vec::new(),
+            writes: Vec::new(),
+            draws: Vec::new(),
+            single_use: Vec::new(),
+        })
+    }
+
+    fn items(
+        &mut self,
+        inc: &Incoming,
+        shape: &Shape<'_>,
+        evaluation: &Evaluation,
+        snapshot: &Snapshot,
+        resolved: &Proofs,
+    ) -> Result<Vec<Item>, CoreError> {
+        let req = &inc.request;
+        let digest = shape.digest;
+        let mut items = self.claim_items(resolved)?;
+        let allowed = evaluation.decision.outcome == Outcome::Allow;
+        let outcome = match evaluation.decision.outcome {
+            Outcome::Allow => "allow",
+            Outcome::Deny => "deny",
+            Outcome::RequireAction => "require_action",
+        };
+        if !shape.open {
+            items.push(self.opening_item(inc, shape)?);
+        }
+        let mut effects = evaluation.effects.clone();
+        let mut single_use = Vec::new();
+        if allowed {
+            // OP-141 m.19 (g): the contributions relied on are consumed
+            for id in &evaluation.decision.relied_on {
+                if let Some((k, c)) = resolved.contributions.get(id) {
+                    let mut c = c.clone();
+                    c.consumed = Some(shape.pos);
+                    effects.push((k.clone(), Some(c.to_value())));
+                    single_use.push(k.clone());
+                }
+            }
+            // L1-ADP-13
+            if let Some(a) = shape.actor {
+                effects.push((
+                    meta::exercise_key(kind::EXERCISE, &shape.exercise),
+                    Some(
+                        ExerciseState {
+                            intent: *digest,
+                            actor: a.instance,
+                            since: shape.pos,
+                        }
+                        .to_value(),
+                    ),
+                ));
+            }
+        }
+        let mut reads: Vec<(Vec<u8>, u64)> = snapshot.read_set();
+        for r in &resolved.reads {
+            if !reads.iter().any(|(k, _)| *k == r.0) {
+                reads.push(r.clone());
+            }
+        }
+        reads.sort();
         let mut decision = vec![
             ("outcome", decision_value(&evaluation.decision)),
             ("state_basis", state_basis_value(&reads)),
@@ -408,41 +584,54 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             ("nonce", Value::Bytes(req.nonce.clone())),
             ("intent", digest_value(digest)),
         ];
-        if !evaluation.effects.is_empty() {
-            decision.push(("effects", effects_value(&evaluation.effects)));
+        if !effects.is_empty() {
+            decision.push(("effects", effects_value(&effects)));
         }
-        let decision = fields(&mut self.salts, decision)?;
-        let opening_item = Item {
-            draft: Draft {
-                kind: RecordKind::Opening,
-                fields: opening,
-            },
-            nonce: None,
-            events: Vec::new(),
-            proofs: proof.map(|(d, b)| vec![(d.0, b)]).unwrap_or_default(),
-            reads: Vec::new(),
-            writes: Vec::new(),
-            draws: Vec::new(),
-            single_use: Vec::new(),
-        };
-        let decision_item = Item {
+        items.push(Item {
             draft: Draft {
                 kind: RecordKind::Decision,
-                fields: decision,
+                fields: fields(&mut self.salts, decision)?,
             },
             nonce: Some(NonceUse {
                 nonce: req.nonce.clone(),
-                actor: actor_ref.to_vec(),
+                actor: shape.actor_ref.to_vec(),
                 intent_digest: digest.0,
                 outcome: String::from(outcome),
             }),
             events: Vec::new(),
             proofs: Vec::new(),
             reads,
-            writes: evaluation.effects.iter().map(|(k, _)| k.clone()).collect(),
+            writes: effects.iter().map(|(k, _)| k.clone()).collect(),
             draws: Vec::new(),
-            single_use: Vec::new(),
-        };
-        Ok(vec![opening_item, decision_item])
+            single_use,
+        });
+        Ok(items)
     }
 }
+
+/// Where a nonce stands (L2-REC-5).
+enum Replay {
+    /// Never seen.
+    New,
+    /// After `require_action`: evaluated again, only a decision is written.
+    Open,
+    /// Terminal: the recorded outcome.
+    Done(Response),
+}
+
+/// What the records of one evaluation are built from.
+struct Shape<'a> {
+    digest: &'a Digest,
+    actor: Option<Actor>,
+    actor_ref: &'a [u8],
+    open: bool,
+    pos: u64,
+    exercise: Digest,
+}
+
+/// Namespace of a contribution's resource (L0-META-30).
+pub const CONTRIBUTION_NAMESPACE: &str = "access.contribution";
+
+mod proofs;
+
+pub use proofs::{MAX_PROOFS, NewClaim, Resolved};
