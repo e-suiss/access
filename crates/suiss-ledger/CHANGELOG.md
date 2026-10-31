@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.3
+
+No changes; released with `esuiss-crypto`.
+
 ## 0.2.2
 
 No changes; released with `esuiss-sandbox`.

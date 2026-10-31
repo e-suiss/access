@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.3
+
+### Added
+
+- `digest::sha256`: plain SHA-256, for example the RFC 8705 `x5t#S256` thumbprint of a certificate.
+- `pkcs11`: HMAC-SHA-256 keys inside the token (`KeyStore::generate_mac`, `mac`, `import_mac`, `HsmMac`) and AES-256-GCM keys (`KeyStore::generate_aead`, `aead`, `HsmAead::seal`, `HsmAead::open` with a random 96-bit nonce and a 128-bit tag).
+- `HsmError::Poisoned` for a shared session whose lock was poisoned.
+
 ## 0.2.2
 
 No changes; released with `esuiss-sandbox`.

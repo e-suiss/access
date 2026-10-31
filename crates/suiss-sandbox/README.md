@@ -23,7 +23,7 @@ What it applies, in order:
 
 ```toml
 [dependencies]
-esuiss-sandbox = "=0.2.2"
+esuiss-sandbox = "=0.2.3"
 ```
 
 ```rust
