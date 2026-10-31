@@ -7,7 +7,7 @@ import tempfile
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
-from f0 import ais, algebra, claim, codec, dcbor, digest, ed25519, fold, jose, merkle, note, record, sdjwt, validity, version_check
+from f0 import ais, algebra, claim, codec, dcbor, digest, ed25519, fold, jose, merkle, meta, note, record, sdjwt, validity, version_check
 from f0.algebra import child_within_parent
 from f0.version import CORE_VERSION, VERSION
 from f0.codec import Rejection, decode_canonical, decode_canonical_authority, decode_subject_selector, encode
@@ -33,6 +33,28 @@ def run_child_within_parent(case, document):
     except Rejection as rejection:
         return {"rejection": rejection.kind}, rejection.reason
     return {"within": child_within_parent(child, parent, holder, {})}, None
+
+
+def run_meta_apply(case, document):
+    try:
+        effects, requirements, expansion = meta.apply(
+            [(bytes.fromhex(key), bytes.fromhex(value)) for key, value in case["state"]],
+            bytes.fromhex(case["domain_id"]),
+            bytes.fromhex(case["exercise"]),
+            case["pos"],
+            bytes.fromhex(case["party"]),
+            bytes.fromhex(case["instance"]),
+            bytes.fromhex(case["basis"]),
+            bytes.fromhex(case["capacity"]),
+            bytes.fromhex(case["payload"]),
+        )
+    except meta.MetaError as error:
+        return {"error": error.code}, None
+    return {
+        "effects": [[key.hex()] if value is None else [key.hex(), encode(value).hex()] for key, value in effects],
+        "requirements": encode(requirements).hex(),
+        "expansion": expansion,
+    }, None
 
 
 def load_keys(table):
@@ -359,13 +381,12 @@ OPERATIONS = {
     "ais.verify": (run_ais, ("valid", "error", "field")),
     "claim.verify": (run_claim, ("disposition", "claim_id", "error")),
     "note.checkpoint": (run_checkpoint, ("size", "root", "extensions", "cosigned", "error")),
+    "meta.apply": (run_meta_apply, ("effects", "requirements", "expansion", "error")),
 }
 
 # Operations in the vectors that F0 does not implement, each with its reason. Any other
 # operation F0 does not know fails the run.
-NOT_IMPLEMENTED = {
-    "meta.apply": "Stage 3 slice D7 writes the independent implementation of L0-META (OP-141 m.1)",
-}
+NOT_IMPLEMENTED = {}
 
 # Third-party raw data sets without an `operation`; the Kernel's own tests read them.
 RAW_DATA_DIRECTORY = "external"

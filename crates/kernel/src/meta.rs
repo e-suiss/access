@@ -1697,6 +1697,16 @@ fn genesis_acceptances(domain: &Digest, list: &Value) -> Result<Vec<Effect>, Met
     Ok(out)
 }
 
+/// Effects sorted by key bytes, the last write of a key winning (L0-META-29).
+#[must_use]
+pub fn sorted(effects: Vec<Effect>) -> Vec<Effect> {
+    effects
+        .into_iter()
+        .collect::<BTreeMap<_, _>>()
+        .into_iter()
+        .collect()
+}
+
 /// The meta-anchor of a domain.
 #[must_use]
 pub fn meta_anchor(domain: &Digest) -> Id {
@@ -2481,6 +2491,7 @@ pub fn apply(ctx: &Context<'_>, payload: &Payload, view: &dyn View) -> Result<Ou
             out.expansion = true;
         }
     }
+    out.effects = sorted(out.effects);
     Ok(out)
 }
 
@@ -2524,7 +2535,20 @@ fn select(
     }
     let issuer = content.get("issuer").cloned();
     let known = before.map(classes_of).unwrap_or_default();
-    for class in classes_of(content).difference(&known) {
+    let now = classes_of(content);
+    for class in known.difference(&now) {
+        let k = selection_key(class);
+        let mut set_of = match view.get(&k) {
+            Some(v) => {
+                crate::codec::set_of(&v, false, Id::from_value).map_err(|_| MetaError::Corrupt)?
+            }
+            None => BTreeSet::new(),
+        };
+        set_of.remove(&aid);
+        out.effects
+            .push((k, (!set_of.is_empty()).then(|| ids_value(&set_of))));
+    }
+    for class in now.difference(&known) {
         let k = selection_key(class);
         let mut set_of = match view.get(&k) {
             Some(v) => {

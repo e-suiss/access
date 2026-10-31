@@ -162,6 +162,8 @@ where `context(K)` is the UTF-8 bytes of the context string, followed by one zer
 | ExerciseID ([L0-META-3](meta.md#L0-META-3)) | `access/exercise/v1` |
 | Object id ([L0-META-4](meta.md#L0-META-4)) | `access/object/v1` |
 | Actor Intent Statement, as received | `access/ais/v1` |
+| Claim, as received | `access/claim/v1` |
+| RestrictionPolicy content (its version) | `access/policy/v1` |
 
 The AIS digest is taken over the COSE_Sign1 bytes the actor sent, unchanged, because the signature covers them; it names the statement in the opening record and in its proof row.
 

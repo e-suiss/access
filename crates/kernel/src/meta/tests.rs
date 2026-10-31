@@ -1031,6 +1031,102 @@ fn meta_vectors_match() {
             class: String::from("approve"),
         },
     );
+    // L0-META-27, L0-META-28, L0-META-29, L0-META-31: the domain objects, their indexes and
+    // reasons, so that F0 cross-checks them
+    let meta = ExerciseBasis::Anchor(meta_anchor(&DOMAIN));
+    let acceptance = |issuer: Id, use_: &str, classes: &[&str], until: u64| {
+        map([
+            ("issuer", Some(issuer.to_value())),
+            ("use", Some(Value::text(use_))),
+            (
+                "classes",
+                Some(Value::Array(
+                    classes.iter().map(|c| Value::text(c)).collect(),
+                )),
+            ),
+            ("subject", Some(SubjectSelector::Public.to_value())),
+            (
+                "validity",
+                Some(Value::Array(alloc::vec![
+                    Value::Unsigned(0),
+                    Value::Unsigned(until)
+                ])),
+            ),
+        ])
+    };
+    let established = r
+        .step(
+            "acceptance-established",
+            &["L0-META-27", "L0-META-28", "L0-META-29"],
+            (ROOT, ROOT),
+            meta,
+            &Payload::AcceptanceEstablish(acceptance(
+                CAROL,
+                "subject-selection",
+                &["staff", "guests"],
+                100,
+            )),
+        )
+        .unwrap();
+    let accepted = object_id(&established, kind::ACCEPTANCE, 0);
+    r.step(
+        "acceptance-amend-narrows",
+        &["L0-META-28"],
+        (ROOT, ROOT),
+        meta,
+        &Payload::AcceptanceAmend {
+            acceptance: accepted,
+            content: acceptance(CAROL, "subject-selection", &["staff"], 50),
+        },
+    );
+    r.step(
+        "acceptance-amend-widens",
+        &["L0-META-28"],
+        (ROOT, ROOT),
+        meta,
+        &Payload::AcceptanceAmend {
+            acceptance: accepted,
+            content: acceptance(CAROL, "subject-selection", &["staff"], 500),
+        },
+    );
+    r.step(
+        "acceptance-amend-changes-use",
+        &["L0-META-27", "L0-META-31"],
+        (ROOT, ROOT),
+        meta,
+        &Payload::AcceptanceAmend {
+            acceptance: accepted,
+            content: acceptance(CAROL, "predicate-input", &["staff"], 50),
+        },
+    );
+    r.step(
+        "second-membership-issuer",
+        &["L0-META-27", "L0-META-31"],
+        (ROOT, ROOT),
+        meta,
+        &Payload::AcceptanceEstablish(acceptance(BOB, "subject-selection", &["staff"], 100)),
+    );
+    r.step(
+        "claim-issued",
+        &["L0-META-27"],
+        (ROOT, ROOT),
+        meta,
+        &Payload::ClaimIssue {
+            subject: ALICE,
+            class: String::from("staff"),
+            value: crate::model::EqValue::Bool(true),
+            validity: None,
+        },
+    );
+    r.step(
+        "unknown-acceptance",
+        &["L0-META-31"],
+        (ROOT, ROOT),
+        meta,
+        &Payload::AcceptanceRevoke {
+            acceptance: Id([9; 16]),
+        },
+    );
     let json = format!(
         "{{\n \"rule\": \"OP-141\",\n \"track\": \"core\",\n \"version\": 1,\n \"operation\": \"meta.apply\",\n {},\n \"cases\": [\n{}\n ]\n}}\n",
         field(&["L0-META-1", "L0-META-2"]),
