@@ -266,7 +266,10 @@ async fn outbox_ids_are_keyed_per_domain_position_and_index() {
         [(1, 0), (1, 1)]
     );
     for r in rows {
-        assert_eq!(r.event_id, key().event_id(id.as_bytes(), r.pos, r.idx));
+        assert_eq!(
+            r.event_id,
+            key().event_id(id.as_bytes(), r.pos, r.idx).unwrap()
+        );
     }
 }
 

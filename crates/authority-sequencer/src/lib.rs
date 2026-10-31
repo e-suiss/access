@@ -6,12 +6,18 @@ pub mod app;
 pub mod domain;
 pub mod ports;
 
+use std::time::Duration;
+
 use access_kernel::fold::FoldError;
 use access_kernel::record::{LinkError, RecordError};
 use access_store::StoreError;
+use suiss_crypto::pkcs11::HsmError;
 use suiss_ledger::merkle::FrontierError;
 use suiss_ledger::sequencer::{OutcomeError, PlanError};
 use suiss_ledger::time::TimeError;
+
+/// Lease length (OP-130 m.6, PD).
+pub const LEASE_TTL: Duration = Duration::from_secs(10);
 
 impl SequencerError {
     /// Whether the batch was refused by the step 9 checks: the leader stays, the caller
@@ -74,4 +80,7 @@ pub enum SequencerError {
     /// No trusted time (TI-RT2): commit stops.
     #[error("time: {0}")]
     Time(#[from] TimeError),
+    /// The event-id key failed (OP-141 m.18 (d)): the leader steps down.
+    #[error("event-id key: {0}")]
+    Key(#[from] HsmError),
 }

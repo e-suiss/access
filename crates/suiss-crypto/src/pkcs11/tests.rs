@@ -107,6 +107,27 @@ fn token_kek_matches_rfc_3394() {
     assert!(hsm.unwrap(&w).is_err());
 }
 
+// OP-141 m.18
+#[test]
+fn token_mac_matches_hmac_sha256() {
+    let s = store();
+    let value = [0x24_u8; 32];
+    let hsm = s.import_mac("mac-known", &Secret::new(value)).unwrap();
+    let key = aws_lc_rs::hmac::Key::new(aws_lc_rs::hmac::HMAC_SHA256, &value);
+    let message = b"access/event/v1\0message";
+    assert_eq!(
+        hsm.mac(message).unwrap().as_slice(),
+        aws_lc_rs::hmac::sign(&key, message).as_ref()
+    );
+    let generated = s.generate_mac("mac-new").unwrap();
+    assert_ne!(generated.mac(message).unwrap(), hsm.mac(message).unwrap());
+    assert_eq!(
+        s.mac("mac-new").unwrap().mac(message).unwrap(),
+        generated.mac(message).unwrap()
+    );
+    assert!(matches!(s.generate_mac("mac-new"), Err(HsmError::Key(_))));
+}
+
 // OP-94: a wrong PIN or token is refused
 #[test]
 fn wrong_token_or_pin_is_refused() {

@@ -6,8 +6,6 @@
     reason = "test code; the request-path lints (OP-3) do not apply"
 )]
 
-use std::path::Path;
-
 use access_store::StoreError;
 use access_store::connect::{Durability, Target, check_server, fits, options, supported};
 use access_store::testing::fresh;
@@ -22,7 +20,7 @@ fn options_verify_the_server_fully() {
         database: "access",
         user: "access_app_login",
         password: "x",
-        root_cert: Path::new("/run/secrets/db-root.pem"),
+        root_cert: b"-----BEGIN CERTIFICATE-----\n",
     };
     assert!(matches!(options(&t).get_ssl_mode(), PgSslMode::VerifyFull));
 }

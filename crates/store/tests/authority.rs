@@ -13,8 +13,8 @@ use std::time::Duration;
 use access_store::StoreError;
 use access_store::authority::{
     CommitBatch, Draw, HeadRow, LogRecord, NonceRow, OutboxRow, ProofRow, acquire_lease,
-    commit_batch, counter, create_domain, find_nonce, read_head, read_log, release_lease,
-    renew_lease, versions,
+    commit_batch, counter, create_domain, domain_tenant, find_nonce, read_head, read_log,
+    release_lease, renew_lease, versions,
 };
 use access_store::scope::DomainId;
 use access_store::testing::{TestDb, fresh};
@@ -112,6 +112,19 @@ async fn genesis_lease_and_commit() {
         .await
         .unwrap();
     release_lease(&db.sequencer, &d, "a", lease).await.unwrap();
+}
+
+// OP-12 m.1, OP-141 m.18 (a)
+#[tokio::test]
+async fn a_domain_names_its_tenant() {
+    let db = fresh().await.unwrap();
+    let d = domain(&db, 9).await;
+    assert_eq!(
+        domain_tenant(&db.sequencer, &d).await.unwrap(),
+        Some(TENANT)
+    );
+    let (unknown, _) = genesis(10);
+    assert_eq!(domain_tenant(&db.sequencer, &unknown).await.unwrap(), None);
 }
 
 #[tokio::test]

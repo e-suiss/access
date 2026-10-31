@@ -24,6 +24,12 @@ pub const BODY: u8 = 0x03;
 /// Longest Merkle proof accepted: a tree of `u64` size is at most 64 levels deep.
 pub const MAX_PROOF: usize = 64;
 
+/// Plain SHA-256, e.g. the RFC 8705 `x5t#S256` thumbprint of a DER certificate.
+#[must_use]
+pub fn sha256(data: &[u8]) -> Hash {
+    Sha256::digest(data).into()
+}
+
 /// `SHA-256(label ‖ 0x00 ‖ canonical bytes)`: a digest under a product's context label
 /// (OP-106 m.22). The labels belong to the product.
 #[must_use]

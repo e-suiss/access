@@ -231,6 +231,25 @@ pub async fn create_domain(
     })
 }
 
+/// The tenant a domain belongs to, or `None` for an unknown domain (OP-12 m.1).
+///
+/// # Errors
+/// [`StoreError::Db`].
+pub async fn domain_tenant(
+    sequencer: &PgPool,
+    domain: &DomainId,
+) -> Result<Option<[u8; 16]>, StoreError> {
+    let mut t = DomainTx::begin(sequencer, domain).await?;
+    let tenant = sqlx::query_scalar!(
+        "SELECT tenant_id FROM access.authority_domain WHERE domain_id = $1",
+        domain.as_bytes().as_slice(),
+    )
+    .fetch_optional(&mut *t.tx)
+    .await?;
+    t.commit().await?;
+    Ok(tenant.map(sqlx::types::Uuid::into_bytes))
+}
+
 /// Acquires the domain's sequencer lease under a new epoch and fences the head with it, so a
 /// previous leader's next head compare-and-set fails (TI-2, OP-31).
 ///

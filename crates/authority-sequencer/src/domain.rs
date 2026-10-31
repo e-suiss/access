@@ -235,7 +235,8 @@ pub fn replay(
 /// The rows a planned batch writes in its single transaction (T7, OP-130 m.6).
 ///
 /// # Errors
-/// [`SequencerError::Diverged`] when an index does not fit.
+/// [`SequencerError::Diverged`] when an index does not fit; [`SequencerError::Key`] when the
+/// event-id key fails.
 pub fn rows(
     domain: &[u8; 32],
     key: &EventKey,
@@ -285,7 +286,7 @@ pub fn rows(
             out.outbox.push(OutboxRow {
                 pos,
                 idx,
-                event_id: key.event_id(domain, pos, idx),
+                event_id: key.event_id(domain, pos, idx)?,
                 event: event.clone(),
             });
         }

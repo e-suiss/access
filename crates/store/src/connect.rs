@@ -2,7 +2,6 @@
 //! verification against an explicit root, SCRAM only, PostgreSQL 18 or later, bounded
 //! transactions, and one pool per role whose sizes fit the server.
 
-use std::path::Path;
 use std::time::Duration;
 
 use sqlx::PgPool;
@@ -34,8 +33,8 @@ pub struct Target<'a> {
     pub user: &'a str,
     /// Its password, read from a credential file by the caller.
     pub password: &'a str,
-    /// PEM file of the root the server certificate must chain to.
-    pub root_cert: &'a Path,
+    /// PEM of the root the server certificate must chain to, read before the lockdown.
+    pub root_cert: &'a [u8],
 }
 
 /// Why the database is not safe to use; the process does not start (OP-52).
@@ -85,7 +84,7 @@ pub fn options(t: &Target<'_>) -> PgConnectOptions {
         .username(t.user)
         .password(t.password)
         .ssl_mode(PgSslMode::VerifyFull)
-        .ssl_root_cert(t.root_cert)
+        .ssl_root_cert_from_pem(t.root_cert.to_vec())
         .application_name("access")
         .options([
             ("transaction_timeout", TRANSACTION_TIMEOUT),

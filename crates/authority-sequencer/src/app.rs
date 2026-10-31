@@ -103,7 +103,13 @@ impl<L: DomainLog> Leader<L> {
             })
             .collect();
         let batch = self.seq.plan(now, &entries)?;
-        let stored = rows(&self.domain.0, &self.key, items, &batch)?;
+        let stored = match rows(&self.domain.0, &self.key, items, &batch) {
+            Ok(stored) => stored,
+            Err(e) => {
+                self.seq.failed();
+                return Err(e);
+            }
+        };
         match self.log.commit(&stored).await {
             Ok(()) => {
                 self.seq.committed(batch)?;

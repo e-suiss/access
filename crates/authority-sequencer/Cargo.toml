@@ -13,7 +13,7 @@ access-kernel = { workspace = true }
 access-crypto = { workspace = true }
 access-store = { workspace = true }
 suiss-ledger = { workspace = true }
-suiss-crypto = { workspace = true }
+suiss-crypto = { workspace = true, features = ["pkcs11"] }
 thiserror = { workspace = true }
 
 [dev-dependencies]

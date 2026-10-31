@@ -209,6 +209,7 @@ fn sha256_acvp_known_answers() {
         let msg = &bytes(&t.msg)[..t.len / 8];
         let md: [u8; 32] = Sha256::digest(msg).into();
         assert_eq!(md.to_vec(), bytes(&t.md), "tcId {}", t.id);
+        assert_eq!(sha256(msg), md);
     }
     assert_eq!(v.tests.len(), 512);
 }

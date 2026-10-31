@@ -194,7 +194,8 @@ pub async fn verify_chain(
 }
 
 /// Trusted time from the process clock and the canonical server's clock (OP-129 m.1 (a), (b)),
-/// bounded by a monotonic clock.
+/// bounded by a monotonic clock. A clone keeps its own last reading.
+#[derive(Clone)]
 pub struct SourcesClock {
     pool: Pool,
     started: Instant,

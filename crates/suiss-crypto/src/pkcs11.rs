@@ -1,8 +1,8 @@
-//! PKCS#11 key store (OP-94, OP-135 m.4, OP-140 m.4): signing keys and KEKs stay inside the
-//! token. Locally and in CI the token is `SoftHSM` (OP-69).
+//! PKCS#11 key store (OP-94, OP-135 m.4, OP-140 m.4, OP-141 m.18): signing keys, KEKs and MAC
+//! keys stay inside the token. Locally and in CI the token is `SoftHSM` (OP-69).
 
 use std::path::Path;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use cryptoki::context::{CInitializeArgs, CInitializeFlags, Pkcs11};
 use cryptoki::error::{Error as CkError, RvError};
@@ -45,6 +45,9 @@ pub enum HsmError {
     /// The token returned a public key in an unexpected form.
     #[error("unexpected public key encoding")]
     Encoding,
+    /// A shared session's lock was poisoned.
+    #[error("session lock poisoned")]
+    Poisoned,
 }
 
 impl HsmError {
@@ -54,7 +57,7 @@ impl HsmError {
         match self {
             Self::Module(_) => "hsm-module",
             Self::Token(_) => "hsm-token",
-            Self::Session(_) => "hsm-session",
+            Self::Session(_) | Self::Poisoned => "hsm-session",
             Self::Key(_) => "hsm-key",
             Self::Operation(_) => "hsm-operation",
             Self::Encoding => "hsm-encoding",
@@ -252,6 +255,71 @@ impl KeyStore {
         drop(session);
         self.kek(label)
     }
+
+    /// Generates a 32-byte HMAC-SHA-256 key inside the token; it never leaves it.
+    ///
+    /// # Errors
+    /// [`HsmError`], also when a key with this label exists.
+    pub fn generate_mac(&self, label: &str) -> Result<HsmMac, HsmError> {
+        let session = self.session()?;
+        if Self::one(&session, ObjectClass::SECRET_KEY, label).is_ok() {
+            return Err(HsmError::Key(label.to_owned()));
+        }
+        session
+            .generate_key(&Mechanism::GenericSecretKeyGen, &mac_template(label, None))
+            .map_err(HsmError::Operation)?;
+        drop(session);
+        self.mac(label)
+    }
+
+    /// The HMAC key labelled `label`.
+    ///
+    /// # Errors
+    /// [`HsmError`].
+    pub fn mac(&self, label: &str) -> Result<HsmMac, HsmError> {
+        let session = self.session()?;
+        let key = Self::one(&session, ObjectClass::SECRET_KEY, label)?;
+        Ok(HsmMac {
+            session: Mutex::new(session),
+            key,
+        })
+    }
+
+    /// Imports a known HMAC key, for migration and tests; it cannot be read back.
+    ///
+    /// # Errors
+    /// [`HsmError`], also when a key with this label exists.
+    pub fn import_mac(&self, label: &str, value: &Secret<[u8; 32]>) -> Result<HsmMac, HsmError> {
+        let session = self.session()?;
+        if Self::one(&session, ObjectClass::SECRET_KEY, label).is_ok() {
+            return Err(HsmError::Key(label.to_owned()));
+        }
+        session
+            .create_object(&mac_template(label, Some(value.expose().to_vec())))
+            .map_err(HsmError::Operation)?;
+        drop(session);
+        self.mac(label)
+    }
+}
+
+fn mac_template(label: &str, value: Option<Vec<u8>>) -> Vec<Attribute> {
+    let mut t = vec![
+        Attribute::Token(true),
+        Attribute::Private(true),
+        Attribute::Sensitive(true),
+        Attribute::Extractable(false),
+        Attribute::Sign(true),
+        Attribute::Label(label.as_bytes().to_vec()),
+    ];
+    match value {
+        Some(v) => {
+            t.push(Attribute::Class(ObjectClass::SECRET_KEY));
+            t.push(Attribute::KeyType(KeyType::GENERIC_SECRET));
+            t.push(Attribute::Value(v));
+        }
+        None => t.push(Attribute::ValueLen(32.into())),
+    }
+    t
 }
 
 fn kek_template(label: &str, value: Option<Vec<u8>>) -> Vec<Attribute> {
@@ -325,6 +393,29 @@ impl Signer for HsmSigner {
         } else {
             Err(SignError::Sign)
         }
+    }
+}
+
+/// An HMAC-SHA-256 key inside the token; its session is shared behind a lock.
+pub struct HsmMac {
+    session: Mutex<Session>,
+    key: ObjectHandle,
+}
+
+impl HsmMac {
+    /// `HMAC-SHA-256(key, message)`.
+    ///
+    /// # Errors
+    /// [`HsmError::Operation`]; [`HsmError::Encoding`] when the token returns another length.
+    pub fn mac(&self, message: &[u8]) -> Result<[u8; 32], HsmError> {
+        self.session
+            .lock()
+            .map_err(|_| HsmError::Poisoned)?
+            .sign(&Mechanism::Sha256Hmac, self.key, message)
+            .map_err(HsmError::Operation)?
+            .as_slice()
+            .try_into()
+            .map_err(|_| HsmError::Encoding)
     }
 }
 
