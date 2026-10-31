@@ -115,7 +115,7 @@ Access computes the intent digest from the decoded envelope ([L0-ENC-23](../l0/e
 | `exercise` | `allow` in `commit` and `continue` |
 | `basis_ref` | recorded decisions: an opaque reference to the decision record, meaningful only to the domain; the position itself is never shown (TI-RT10) |
 | `replayed` | a retry answered with the decision already recorded |
-| `blockers`, `unmet`, `relied_on` | as in `decision-value`, binaries as in L1-ADP-6 |
+| `blockers`, `unmet`, `relied_on` | as in `decision-value`, binaries as in L1-ADP-6, through the requester's disclosure filter: a blocker carries no `subcode`, and its `position` only when it is a lineage hop (TI-20) |
 | `consistency_token` | always: an opaque token of the head the answer was given at (OP-141 m.22 (f)) |
 | `versions` | always |
 

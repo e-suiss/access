@@ -200,3 +200,34 @@ fn check_is_advisory() {
             .is_none()
     );
 }
+
+// TI-20, OP-141 m.22 (h): the requester sees a blocker's class, resolver and remediation, a hop
+// position, and never a subcode
+#[test]
+fn the_requester_sees_no_subcode_and_hop_positions_only() {
+    use access_kernel::combinator::{Blocker, BlockerClass, Position, Remediation, Resolver};
+    let mut r = response(Outcome::Deny);
+    r.decision.blockers = vec![
+        Blocker {
+            class: BlockerClass::Restricted,
+            subcode: Some(String::from("secret-policy")),
+            position: Position::DomainPolicy,
+            resolver: Resolver::RestrictionOwner,
+            remediation: Remediation::RouteToCoordinator,
+        },
+        Blocker {
+            class: BlockerClass::Ended,
+            subcode: None,
+            position: Position::Hop(1),
+            resolver: Resolver::GrantorOfHop(1),
+            remediation: Remediation::RouteToCoordinator,
+        },
+    ];
+    let out = encode(&r, Mode::Commit);
+    let blockers = out["context"]["blockers"].as_array().unwrap();
+    assert!(blockers[0].get("subcode").is_none());
+    assert!(blockers[0].get("position").is_none());
+    assert_eq!(blockers[0]["class"], "restricted");
+    assert_eq!(blockers[1]["position"]["hop"], 1);
+    assert!(!out.to_string().contains("secret-policy"));
+}

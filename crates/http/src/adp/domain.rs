@@ -464,13 +464,28 @@ fn json_of(v: &Value) -> Out {
     }
 }
 
-/// Encodes a decision (L1-ADP-10).
+/// The requester's view of a blocker (§9.6, TI-20, OP-141 m.22 (h)): its class, resolver and
+/// remediation, and its position only when it is a lineage hop; never the subcode, which may
+/// name an undisclosed restriction.
+fn requester_view(blocker: &mut Out) {
+    if let Out::Object(b) = blocker {
+        b.remove("subcode");
+        if b.get("position").is_none_or(|p| p.get("hop").is_none()) {
+            b.remove("position");
+        }
+    }
+}
+
+/// Encodes a decision (L1-ADP-10); the disclosure filter is its last stage (TI-20).
 #[must_use]
 pub fn encode(response: &Response, mode: Mode) -> Out {
     let mut context = match json_of(&decision_value(&response.decision)) {
         Out::Object(m) => m,
         _ => Map::new(),
     };
+    if let Some(Out::Array(blockers)) = context.get_mut("blockers") {
+        blockers.iter_mut().for_each(requester_view);
+    }
     if mode == Mode::Check {
         context.insert(String::from("advisory"), Out::Bool(true));
     }
