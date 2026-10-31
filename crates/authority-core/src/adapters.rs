@@ -1,12 +1,26 @@
-//! PostgreSQL adapters of the core's ports (OP-63).
+//! Adapters of the core's ports (OP-63) and the domains one process leads (OP-141 m.18).
 
-use access_store::Pool;
-use access_store::authority::{NonceRow, find_nonce, state_of};
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
+
+use access_authority_sequencer::SequencerError;
+use access_authority_sequencer::adapters::PgLog;
+use access_authority_sequencer::app::Leader;
+use access_authority_sequencer::ports::Clock;
+use access_crypto::event_id::{EventKey, label};
+use access_kernel::digest::Digest;
+use access_kernel::model::Id;
+use access_kernel::verify::cose::PublicKey;
+use access_store::authority::{NonceRow, domain_tenant, find_nonce, state_of};
 use access_store::scope::DomainId;
+use access_store::{Pool, StoreError};
 use suiss_crypto::dcbor::{self, Limits};
+use suiss_crypto::pkcs11::KeyStore;
 
 use crate::CoreError;
-use crate::ports::{Reader, Row};
+use crate::app::{Authority, Incoming, Response};
+use crate::ports::{Binding, Keys, Reader, Row, Salts};
 
 /// Reads one domain's state and nonces through the application role.
 #[derive(Clone)]
@@ -44,5 +58,179 @@ impl Reader for PgReader {
 
     async fn nonce(&self, nonce: &[u8]) -> Result<Option<NonceRow>, CoreError> {
         Ok(find_nonce(&self.pool, &self.domain, nonce).await?)
+    }
+}
+
+/// Salts from the operating system's random source (OP-106 m.15, OP-141 m.18 (e)).
+#[derive(Clone, Copy, Debug, Default)]
+pub struct OsSalts;
+
+impl Salts for OsSalts {
+    fn salt(&mut self) -> Result<[u8; 32], CoreError> {
+        access_crypto::random::bytes().map_err(|_| CoreError::Unavailable("random"))
+    }
+}
+
+/// No key is bound until the identity plane binds actors (OP-141 m.18 (f)).
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Unbound;
+
+impl Binding for Unbound {
+    fn bound(&self, _kid: &[u8; 32]) -> Option<(Id, PublicKey)> {
+        None
+    }
+}
+
+impl Keys for KeyStore {
+    fn event_key(&self, domain: &Digest) -> Result<EventKey, CoreError> {
+        self.mac(&label(&domain.0))
+            .map(EventKey::token)
+            .map_err(|_| CoreError::Unavailable("event-key"))
+    }
+}
+
+/// What the domains share: the two pools, the keys, the lease holder and the ports. Each
+/// domain gets its own copy of `clock`, `binding` and `salts`.
+pub struct Setup<K, B, S, C> {
+    /// The `access_sequencer` pool.
+    pub sequencer: Pool,
+    /// The `access_app` pool.
+    pub app: Pool,
+    /// The event-id keys.
+    pub keys: K,
+    /// This process as a lease holder.
+    pub holder: String,
+    /// Lease length (OP-130 m.6).
+    pub ttl: Duration,
+    /// Actor-binding.
+    pub binding: B,
+    /// Field salts.
+    pub salts: S,
+    /// Trusted time (OP-129 m.1).
+    pub clock: C,
+}
+
+struct Led<B: Binding, S: Salts, C> {
+    core: Authority<PgLog, PgReader, B, S>,
+    clock: C,
+}
+
+type Slot<B, S, C> = Arc<tokio::sync::Mutex<Option<Led<B, S, C>>>>;
+
+/// The domains this process leads, each taken on its first request (OP-141 m.18 (a)).
+pub struct Domains<K, B: Binding, S: Salts, C> {
+    setup: Setup<K, B, S, C>,
+    led: Mutex<HashMap<Digest, Slot<B, S, C>>>,
+}
+
+impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K, B, S, C> {
+    /// No domain led yet.
+    #[must_use]
+    pub fn new(setup: Setup<K, B, S, C>) -> Self {
+        Self {
+            setup,
+            led: Mutex::new(HashMap::new()),
+        }
+    }
+
+    fn slots(&self) -> Vec<Slot<B, S, C>> {
+        self.led
+            .lock()
+            .map(|m| m.values().cloned().collect())
+            .unwrap_or_default()
+    }
+
+    fn slot(&self, domain: Digest) -> Result<Slot<B, S, C>, CoreError> {
+        let mut led = self
+            .led
+            .lock()
+            .map_err(|_| CoreError::Unavailable("domains"))?;
+        Ok(led.entry(domain).or_default().clone())
+    }
+
+    fn forget(&self, domain: &Digest, slot: &Slot<B, S, C>) {
+        if let Ok(mut led) = self.led.lock()
+            && led.get(domain).is_some_and(|s| Arc::ptr_eq(s, slot))
+        {
+            led.remove(domain);
+        }
+    }
+
+    async fn lead(&self, domain: Digest) -> Result<Led<B, S, C>, CoreError> {
+        let s = &self.setup;
+        let id = DomainId::from_bytes(domain.0);
+        let tenant = domain_tenant(&s.sequencer, &id)
+            .await?
+            .ok_or(CoreError::Unavailable("unknown-domain"))?;
+        let key = s.keys.event_key(&domain)?;
+        let log = PgLog::new(s.sequencer.clone(), domain, tenant, s.holder.clone(), s.ttl);
+        let leader = match Leader::acquire(log, domain, key).await {
+            Ok(leader) => leader,
+            Err(SequencerError::Store(StoreError::LeaseHeld)) => {
+                return Err(CoreError::Unavailable("lease-held"));
+            }
+            Err(e) => return Err(e.into()),
+        };
+        let reader = PgReader::new(s.app.clone(), id);
+        Ok(Led {
+            core: Authority::new(leader, reader, s.binding.clone(), s.salts.clone(), domain),
+            clock: s.clock.clone(),
+        })
+    }
+
+    /// Decides `inc` on its domain's leader, taking the lease first if needed. A failed
+    /// commit or store read drops the leader; the next request takes the lease again.
+    ///
+    /// # Errors
+    /// [`CoreError`]; [`CoreError::Unavailable`] when the domain cannot be led here.
+    pub async fn exercise(&self, inc: &Incoming) -> Result<Response, CoreError> {
+        let domain = inc.request.domain;
+        let slot = self.slot(domain)?;
+        let mut guard = slot.lock().await;
+        if guard.is_none() {
+            match self.lead(domain).await {
+                Ok(led) => *guard = Some(led),
+                Err(e) => {
+                    drop(guard);
+                    self.forget(&domain, &slot);
+                    return Err(e);
+                }
+            }
+        }
+        let Some(led) = guard.as_mut() else {
+            return Err(CoreError::Unavailable("leader"));
+        };
+        // OP-129 m.1
+        let now = led
+            .clock
+            .now()
+            .await
+            .map_err(|_| CoreError::Unavailable("time"))?;
+        let result = led.core.exercise(inc, now).await;
+        if matches!(result, Err(CoreError::Sequencer(_) | CoreError::Store(_))) {
+            *guard = None;
+        }
+        result
+    }
+
+    /// Extends every held lease; a domain whose lease is lost is dropped (OP-130 m.6).
+    pub async fn renew(&self) {
+        for slot in self.slots() {
+            let mut guard = slot.lock().await;
+            if let Some(led) = guard.as_ref()
+                && led.core.renew().await.is_err()
+            {
+                *guard = None;
+            }
+        }
+    }
+
+    /// Releases every held lease, for a planned shutdown (OP-31).
+    pub async fn release(&self) {
+        for slot in self.slots() {
+            if let Some(led) = slot.lock().await.take() {
+                let _ = led.core.release().await;
+            }
+        }
     }
 }

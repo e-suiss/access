@@ -1,7 +1,46 @@
 //! OP-90: the server refuses to start when the runtime lockdown (SA-22) cannot be applied.
 
+#![allow(
+    clippy::expect_used,
+    reason = "test code; the request-path lints (OP-3) do not apply"
+)]
+
+use std::path::PathBuf;
 use std::process::Command;
 use std::time::{Duration, Instant};
+
+const PIN: &str = "1234-test-only";
+
+/// `SoftHSM` (OP-69): `SUISS_PKCS11_MODULE`, or the usual install paths.
+fn module() -> PathBuf {
+    [
+        std::env::var("SUISS_PKCS11_MODULE").unwrap_or_default(),
+        String::from("/opt/homebrew/lib/softhsm/libsofthsm2.so"),
+        String::from("/usr/lib/softhsm/libsofthsm2.so"),
+        String::from("/usr/lib/x86_64-linux-gnu/softhsm/libsofthsm2.so"),
+        String::from("/usr/lib/aarch64-linux-gnu/softhsm/libsofthsm2.so"),
+    ]
+    .iter()
+    .map(PathBuf::from)
+    .find(|p| p.is_file())
+    .expect("SoftHSM is required (OP-69); set SUISS_PKCS11_MODULE")
+}
+
+/// A fresh token in the `SoftHSM` store `just test` prepares (`SOFTHSM2_CONF`).
+fn token() -> String {
+    assert!(
+        std::env::var_os("SOFTHSM2_CONF").is_some(),
+        "run through `just test`, which sets SOFTHSM2_CONF (OP-69)"
+    );
+    let label = format!("server-lockdown-{}", std::process::id());
+    let out = Command::new("softhsm2-util")
+        .args(["--init-token", "--free", "--label", &label, "--pin", PIN])
+        .args(["--so-pin", "5678-test-only"])
+        .output()
+        .expect("softhsm2-util");
+    assert!(out.status.success(), "{out:?}");
+    label
+}
 
 /// True when this host could apply the lockdown (Linux with an empty capability bounding
 /// set, e.g. a container with `--cap-drop ALL`); the refusal path is then not reachable.
@@ -30,20 +69,41 @@ fn op_90_server_refuses_to_start_without_lockdown() {
             command.env_remove(key);
         }
     }
-    // CR-12: the server needs its TLS files before it reaches the lockdown
+    // CR-12, OP-141 m.18: the server reads its TLS files, credentials and token before it
+    // reaches the lockdown
     let dir = std::env::temp_dir().join(format!("access-server-lockdown-{}", std::process::id()));
     std::fs::create_dir_all(&dir).expect("temp dir");
     let cert =
         rcgen::generate_simple_self_signed(vec!["localhost".to_owned()]).expect("certificate");
     std::fs::write(dir.join("tls.crt"), cert.cert.pem()).expect("write cert");
     std::fs::write(dir.join("tls.key"), cert.signing_key.serialize_pem()).expect("write key");
+    for secret in ["db-password", "pin"] {
+        let value = if secret == "pin" { PIN } else { "x" };
+        std::fs::write(dir.join(secret), value).expect("write secret");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt as _;
+            std::fs::set_permissions(dir.join(secret), std::fs::Permissions::from_mode(0o600))
+                .expect("chmod");
+        }
+    }
+    let token = token();
     let config = dir.join("access.toml");
     std::fs::write(
         &config,
         format!(
-            "[tls]\ncert_file = {:?}\nkey_file = {:?}\n",
-            dir.join("tls.crt"),
-            dir.join("tls.key")
+            "issuer = \"https://access.example\"\n\
+             [tls]\ncert_file = {crt:?}\nkey_file = {key:?}\n\
+             [database]\nhost = \"localhost\"\nport = 5432\nname = \"access\"\n\
+             root_cert_file = {crt:?}\ndurability = \"single-node\"\n\
+             sequencer = {{ user = \"s\", password_file = {pw:?}, pool = 1 }}\n\
+             app = {{ user = \"a\", password_file = {pw:?}, pool = 1 }}\n\
+             [hsm]\nmodule = {module:?}\ntoken = {token:?}\npin_file = {pin:?}\n",
+            crt = dir.join("tls.crt"),
+            key = dir.join("tls.key"),
+            pw = dir.join("db-password"),
+            module = module(),
+            pin = dir.join("pin"),
         ),
     )
     .expect("write config");

@@ -59,9 +59,9 @@ pub struct SandboxHealth {
     pub landlock_kernel_abi: u32,
 }
 
-/// Builds the public router.
-pub fn router(security_txt: SecurityTxt, health: Health, limits: Limits) -> Router {
-    let routes = Router::new()
+/// Builds the public router around `api`, the plane routes (e.g. ADP).
+pub fn router(security_txt: SecurityTxt, health: Health, limits: Limits, api: Router) -> Router {
+    let routes = api
         .route(
             "/healthz",
             get(move || std::future::ready(Json(health.clone()))),

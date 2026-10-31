@@ -14,7 +14,7 @@ use access_authority_core::CoreError;
 use access_authority_core::app::{Incoming, Response};
 use access_http::adp::adapters::{Discovery, Pep, router};
 use access_http::adp::app::Service;
-use access_http::adp::ports::{Clock, Pdp};
+use access_http::adp::ports::Pdp;
 use access_http::{Limits, harden};
 use access_kernel::combinator::{Decision, Outcome};
 use access_kernel::digest::Digest;
@@ -33,11 +33,7 @@ struct Scripted {
 }
 
 impl Pdp for Scripted {
-    fn evaluate(
-        &self,
-        inc: Incoming,
-        _now: u64,
-    ) -> impl Future<Output = Result<Response, CoreError>> + Send {
+    fn evaluate(&self, inc: Incoming) -> impl Future<Output = Result<Response, CoreError>> + Send {
         self.seen.lock().unwrap().push(inc);
         std::future::ready(self.outcome.map_err(|f| f()).map(|outcome| Response {
             decision: Decision {
@@ -53,14 +49,6 @@ impl Pdp for Scripted {
     }
 }
 
-struct Fixed;
-
-impl Clock for Fixed {
-    fn now(&self) -> u64 {
-        10_000
-    }
-}
-
 const ISSUER: &str = "https://pdp.example";
 
 fn app(outcome: Result<Outcome, fn() -> CoreError>, pep: Option<&str>) -> Router {
@@ -70,7 +58,7 @@ fn app(outcome: Result<Outcome, fn() -> CoreError>, pep: Option<&str>) -> Router
     };
     let limits = Limits::default();
     let routes = router(
-        Service::new(pdp, Fixed, limits.max_body_bytes),
+        Service::new(pdp, limits.max_body_bytes),
         Discovery {
             issuer: ISSUER.to_owned(),
         },

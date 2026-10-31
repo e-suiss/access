@@ -10,12 +10,14 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::time::Duration;
 
 use access_authority_core::CoreError;
-use access_authority_core::adapters::PgReader;
+use access_authority_core::adapters::{Domains, PgReader, Setup};
 use access_authority_core::app::{Authority, Incoming, Response};
 use access_authority_core::domain::Request;
-use access_authority_core::ports::{Binding, Salts};
+use access_authority_core::ports::{Binding, Keys, Salts};
+use access_authority_sequencer::SequencerError;
 use access_authority_sequencer::adapters::{PgLog, create_genesis, fold_check};
 use access_authority_sequencer::app::Leader;
+use access_authority_sequencer::ports::Clock;
 use access_crypto::event_id::EventKey;
 use access_crypto::secret::Secret;
 use access_kernel::ais::{CONTENT_TYPE, Statement};
@@ -156,6 +158,7 @@ fn genesis() -> BTreeMap<String, Opened> {
 }
 
 /// The identity plane's actor-binding, fixed for the test.
+#[derive(Clone)]
 struct Bound(BTreeMap<[u8; 32], (Id, PublicKey)>);
 
 impl Binding for Bound {
@@ -164,16 +167,24 @@ impl Binding for Bound {
     }
 }
 
+#[derive(Clone)]
 struct Counter(u8);
 
 impl Salts for Counter {
-    fn salt(&mut self) -> [u8; 32] {
+    fn salt(&mut self) -> Result<[u8; 32], CoreError> {
         self.0 = self.0.wrapping_add(1);
-        [self.0; 32]
+        Ok([self.0; 32])
     }
 }
 
 type Core = Authority<PgLog, PgReader, Bound, Counter>;
+
+fn binding() -> Bound {
+    Bound(BTreeMap::from([
+        (thumbprint(&public(ROOT_KEY)), (ROOT, public(ROOT_KEY))),
+        (thumbprint(&public(ALICE_KEY)), (ALICE, public(ALICE_KEY))),
+    ]))
+}
 
 async fn setup(db: &TestDb) -> (Core, Digest) {
     let d = create_genesis(&db.sequencer, TENANT, genesis(), 1_000)
@@ -184,11 +195,7 @@ async fn setup(db: &TestDb) -> (Core, Digest) {
         .await
         .unwrap();
     let reader = PgReader::new(db.app.clone(), DomainId::from_bytes(d.0));
-    let binding = Bound(BTreeMap::from([
-        (thumbprint(&public(ROOT_KEY)), (ROOT, public(ROOT_KEY))),
-        (thumbprint(&public(ALICE_KEY)), (ALICE, public(ALICE_KEY))),
-    ]));
-    (Authority::new(leader, reader, binding, Counter(0), d), d)
+    (Authority::new(leader, reader, binding(), Counter(0), d), d)
 }
 
 fn sign(s: &Statement, seed: u8) -> Vec<u8> {
@@ -480,4 +487,110 @@ async fn an_anonymous_meta_action_is_denied() {
     let r = core.exercise(&inc, NOW).await.unwrap();
     assert_eq!(r.decision.outcome, Outcome::Deny);
     fold_check(&db.sequencer, d).await.unwrap();
+}
+
+/// Event-id keys of the listed domains only.
+struct Listed(Vec<Digest>);
+
+impl Keys for Listed {
+    fn event_key(&self, domain: &Digest) -> Result<EventKey, CoreError> {
+        if self.0.contains(domain) {
+            Ok(EventKey::new(Secret::new([5; 32])))
+        } else {
+            Err(CoreError::Unavailable("event-key"))
+        }
+    }
+}
+
+#[derive(Clone)]
+struct Fixed;
+
+impl Clock for Fixed {
+    fn now(&mut self) -> impl Future<Output = Result<u64, SequencerError>> + Send {
+        std::future::ready(Ok(NOW))
+    }
+}
+
+fn process(db: &TestDb, holder: &str, keys: Vec<Digest>) -> Domains<Listed, Bound, Counter, Fixed> {
+    Domains::new(Setup {
+        sequencer: db.sequencer.clone(),
+        app: db.app.clone(),
+        keys: Listed(keys),
+        holder: holder.to_owned(),
+        ttl: TTL,
+        binding: binding(),
+        salts: Counter(0),
+        clock: Fixed,
+    })
+}
+
+fn unavailable(r: Result<Response, CoreError>) -> &'static str {
+    match r {
+        Err(CoreError::Unavailable(why)) => why,
+        other => panic!("{other:?}"),
+    }
+}
+
+// OP-141 m.18 (a), (d), OP-31: a process leads a domain from its first request until it
+// releases it; an unknown domain, a domain led elsewhere and a domain without its key are
+// unavailable
+#[tokio::test]
+async fn a_process_leads_a_domain_from_its_first_request() {
+    let db = fresh().await.unwrap();
+    let d = create_genesis(&db.sequencer, TENANT, genesis(), 1_000)
+        .await
+        .unwrap();
+    let a = process(&db, "a", vec![d]);
+    let b = process(&db, "b", vec![d]);
+    let shop = meta::object_id(&d, kind::ANCHOR, 1);
+    let read = |nonce| {
+        incoming(
+            shop_request(d, nonce, Mode::Commit, ExerciseBasis::Anchor(shop)),
+            ROOT_KEY,
+        )
+    };
+
+    let mut unknown = read(1);
+    unknown.request.domain = Digest([0x77; 32]);
+    assert_eq!(unavailable(a.exercise(&unknown).await), "unknown-domain");
+
+    let public_basis = ExerciseBasis::Public(meta::object_id(&d, kind::GRANT, 0));
+    for (nonce, payload) in [
+        (
+            2,
+            Payload::PartyRegister {
+                party: ROOT,
+                root: Root::Sole(ROOT),
+            },
+        ),
+        (
+            3,
+            Payload::InstanceCreate {
+                party: ROOT,
+                key: public(ROOT_KEY),
+                mandate: None,
+            },
+        ),
+    ] {
+        let inc = incoming(meta_request(d, nonce, public_basis, payload), ROOT_KEY);
+        allowed(&a.exercise(&inc).await.unwrap());
+    }
+    let first = a.exercise(&read(4)).await.unwrap();
+    allowed(&first);
+    assert_eq!(unavailable(b.exercise(&read(5)).await), "lease-held");
+
+    a.renew().await;
+    a.release().await;
+    let again = b.exercise(&read(4)).await.unwrap();
+    assert!(again.replayed);
+    assert_eq!(again.record, first.record);
+    allowed(&b.exercise(&read(5)).await.unwrap());
+    fold_check(&db.sequencer, d).await.unwrap();
+
+    let e = create_genesis(&db.sequencer, TENANT, genesis(), 1_001)
+        .await
+        .unwrap();
+    let mut keyless = read(6);
+    keyless.request.domain = e;
+    assert_eq!(unavailable(a.exercise(&keyless).await), "event-key");
 }

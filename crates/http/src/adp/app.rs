@@ -5,7 +5,7 @@ use access_authority_core::app::Incoming;
 use serde_json::Value;
 
 use crate::adp::domain::{decode, encode};
-use crate::adp::ports::{Clock, Pdp};
+use crate::adp::ports::Pdp;
 
 /// What the transport sends back.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -23,20 +23,15 @@ pub enum Reply {
 }
 
 /// The ADP service of one deployment.
-pub struct Service<P: Pdp, C: Clock> {
+pub struct Service<P: Pdp> {
     pdp: P,
-    clock: C,
     max_body: usize,
 }
 
-impl<P: Pdp, C: Clock> Service<P, C> {
+impl<P: Pdp> Service<P> {
     /// A service over `pdp` that accepts bodies up to `max_body` bytes.
-    pub const fn new(pdp: P, clock: C, max_body: usize) -> Self {
-        Self {
-            pdp,
-            clock,
-            max_body,
-        }
+    pub const fn new(pdp: P, max_body: usize) -> Self {
+        Self { pdp, max_body }
     }
 
     /// `POST /access/v1/evaluation`.
@@ -54,10 +49,12 @@ impl<P: Pdp, C: Clock> Service<P, C> {
             ais: decoded.ais,
             pep,
         };
-        match self.pdp.evaluate(inc, self.clock.now()).await {
+        match self.pdp.evaluate(inc).await {
             Ok(r) => Reply::Decision(encode(&r, mode)),
             Err(CoreError::Nonce) => Reply::Conflict,
-            Err(CoreError::Sequencer(_) | CoreError::Store(_)) => Reply::Unavailable,
+            Err(CoreError::Sequencer(_) | CoreError::Store(_) | CoreError::Unavailable(_)) => {
+                Reply::Unavailable
+            }
             Err(e) => Reply::Protocol(e.code()),
         }
     }

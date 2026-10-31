@@ -36,3 +36,11 @@ spec:
           protocol: UDP
         - port: 53
           protocol: TCP
+    # OP-141 m.18 (g)
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: access-db
+      ports:
+        - port: 5432
+          protocol: TCP

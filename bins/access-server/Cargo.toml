@@ -9,8 +9,12 @@ repository.workspace = true
 publish = false
 
 [dependencies]
+access-authority-core = { path = "../../crates/authority-core" }
+access-authority-sequencer = { path = "../../crates/authority-sequencer" }
 access-crypto = { workspace = true }
 access-http = { workspace = true }
+access-store = { workspace = true }
+suiss-crypto = { workspace = true, features = ["pkcs11"] }
 suiss-sandbox = { workspace = true }
 access-telemetry = { workspace = true }
 axum = { workspace = true, features = ["http1", "http2", "tokio"] }
@@ -18,7 +22,7 @@ figment = { workspace = true, features = ["env", "toml"] }
 serde = { workspace = true, features = ["derive", "std"] }
 thiserror = { workspace = true, features = ["std"] }
 time = { workspace = true, features = ["std"] }
-tokio = { workspace = true, features = ["macros", "net", "rt-multi-thread", "signal"] }
+tokio = { workspace = true, features = ["macros", "net", "rt-multi-thread", "signal", "time"] }
 tracing = { workspace = true, features = ["std"] }
 
 [dev-dependencies]

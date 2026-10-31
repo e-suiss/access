@@ -6,6 +6,7 @@
     reason = "test code; the request-path lints (OP-3) do not apply"
 )]
 
+use axum::Router;
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use axum::routing::get;
@@ -48,7 +49,7 @@ async fn body_string(response: axum::response::Response) -> String {
 // SA-14
 #[tokio::test]
 async fn security_txt_has_required_fields() {
-    let app = router(security_txt(), health(), Limits::default());
+    let app = router(security_txt(), health(), Limits::default(), Router::new());
     let response = app
         .oneshot(
             Request::get("/.well-known/security.txt")
@@ -123,7 +124,7 @@ async fn oversized_body_is_rejected() {
 // SA-22, OP-92
 #[tokio::test]
 async fn healthz_reports_landlock_abi() {
-    let app = router(security_txt(), health(), Limits::default());
+    let app = router(security_txt(), health(), Limits::default(), Router::new());
     let response = app
         .oneshot(Request::get("/healthz").body(Body::empty()).unwrap())
         .await
@@ -136,7 +137,7 @@ async fn healthz_reports_landlock_abi() {
 
 #[tokio::test]
 async fn unknown_path_is_404_problem() {
-    let app = router(security_txt(), health(), Limits::default());
+    let app = router(security_txt(), health(), Limits::default(), Router::new());
     let response = app
         .oneshot(Request::get("/nope").body(Body::empty()).unwrap())
         .await

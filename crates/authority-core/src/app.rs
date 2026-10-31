@@ -72,17 +72,20 @@ fn kid_of(sign1: &[u8]) -> Result<[u8; 32], CoreError> {
         .ok_or(CoreError::Protocol("ais-kid"))
 }
 
-fn opened(salts: &mut impl Salts, value: Value) -> Opened {
-    Opened {
+fn opened(salts: &mut impl Salts, value: Value) -> Result<Opened, CoreError> {
+    Ok(Opened {
         value,
-        salt: salts.salt(),
-    }
+        salt: salts.salt()?,
+    })
 }
 
-fn fields(salts: &mut impl Salts, entries: Vec<(&str, Value)>) -> BTreeMap<String, Opened> {
+fn fields(
+    salts: &mut impl Salts,
+    entries: Vec<(&str, Value)>,
+) -> Result<BTreeMap<String, Opened>, CoreError> {
     entries
         .into_iter()
-        .map(|(k, v)| (String::from(k), opened(salts, v)))
+        .map(|(k, v)| Ok((String::from(k), opened(salts, v)?)))
         .collect()
 }
 
@@ -139,6 +142,22 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             domain,
             catalog: Catalog::default(),
         }
+    }
+
+    /// Extends the leader's lease.
+    ///
+    /// # Errors
+    /// [`CoreError::Sequencer`]; the core must then be dropped.
+    pub async fn renew(&self) -> Result<(), CoreError> {
+        Ok(self.leader.renew().await?)
+    }
+
+    /// Gives the lease up (OP-31).
+    ///
+    /// # Errors
+    /// [`CoreError::Sequencer`].
+    pub async fn release(self) -> Result<(), CoreError> {
+        Ok(self.leader.release().await?)
     }
 
     async fn snapshot_get(
@@ -317,7 +336,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                     replayed: false,
                 });
             }
-            let items = self.items(inc, &digest, actor, &actor_ref, &evaluation, &snapshot);
+            let items = self.items(inc, &digest, actor, &actor_ref, &evaluation, &snapshot)?;
             match self.leader.commit(now, &items).await {
                 Ok(Committed::Appended(positions)) => {
                     let allowed = evaluation.decision.outcome == Outcome::Allow;
@@ -352,7 +371,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         actor_ref: &[u8],
         evaluation: &Evaluation,
         snapshot: &Snapshot,
-    ) -> Vec<Item> {
+    ) -> Result<Vec<Item>, CoreError> {
         let req = &inc.request;
         let outcome = match evaluation.decision.outcome {
             Outcome::Allow => "allow",
@@ -374,7 +393,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         if let Some((d, _)) = &proof {
             opening.push(("ais", d.to_value()));
         }
-        let opening = fields(&mut self.salts, opening);
+        let opening = fields(&mut self.salts, opening)?;
         let reads: Vec<(Vec<u8>, u64)> = snapshot.read_set();
         let mut decision = vec![
             ("outcome", decision_value(&evaluation.decision)),
@@ -392,7 +411,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         if !evaluation.effects.is_empty() {
             decision.push(("effects", effects_value(&evaluation.effects)));
         }
-        let decision = fields(&mut self.salts, decision);
+        let decision = fields(&mut self.salts, decision)?;
         let opening_item = Item {
             draft: Draft {
                 kind: RecordKind::Opening,
@@ -424,6 +443,6 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             draws: Vec::new(),
             single_use: Vec::new(),
         };
-        vec![opening_item, decision_item]
+        Ok(vec![opening_item, decision_item])
     }
 }

@@ -26,16 +26,85 @@ pub(crate) struct Config {
     pub(crate) security_txt_valid_days: u16,
     /// TLS certificate chain and key (CR-12); there is no plain-text listener.
     pub(crate) tls: Option<Tls>,
+    /// The issuer the ADP discovery document names (L1-ADP-11), without a trailing slash.
+    pub(crate) issuer: Option<String>,
+    /// The database (OP-141 m.18 (g)).
+    pub(crate) database: Option<Database>,
+    /// The PKCS#11 token (OP-94, OP-141 m.18 (h)).
+    pub(crate) hsm: Option<Hsm>,
 }
 
 /// TLS files, read once before the lockdown.
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
+#[expect(
+    clippy::struct_field_names,
+    reason = "the _file suffix marks a path setting (OP-129 m.3)"
+)]
 pub(crate) struct Tls {
     /// PEM certificate chain, leaf first.
     pub(crate) cert_file: PathBuf,
     /// PEM private key; readable by the server's user only (CR-35).
     pub(crate) key_file: PathBuf,
+    /// PEM bundle of the CAs that issue PEP client certificates (OP-141 m.18 (b)).
+    pub(crate) client_ca_file: Option<PathBuf>,
+}
+
+/// How the deployment declares its durability (OP-24, HL-40).
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub(crate) enum Durability {
+    /// Synchronous standbys.
+    Replicated,
+    /// The small-provider single-node declaration.
+    SingleNode,
+}
+
+/// One login role and its pool.
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct Role {
+    /// Login role, a member of the plane role.
+    pub(crate) user: String,
+    /// Credential file (OP-129 m.3).
+    pub(crate) password_file: PathBuf,
+    /// Pool size (OP-53).
+    pub(crate) pool: u32,
+}
+
+/// The database and the two authority roles (OP-130 m.2).
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct Database {
+    /// Server host name, checked against its certificate.
+    pub(crate) host: String,
+    /// Port.
+    pub(crate) port: u16,
+    /// Database name.
+    pub(crate) name: String,
+    /// PEM root the server certificate chains to.
+    pub(crate) root_cert_file: PathBuf,
+    /// Declared durability.
+    pub(crate) durability: Durability,
+    /// `access_sequencer` login.
+    pub(crate) sequencer: Role,
+    /// `access_app` login.
+    pub(crate) app: Role,
+}
+
+/// The PKCS#11 token holding the domains' keys.
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct Hsm {
+    /// The PKCS#11 module, loaded before the lockdown.
+    pub(crate) module: PathBuf,
+    /// Token label.
+    pub(crate) token: String,
+    /// User PIN file (OP-129 m.3).
+    pub(crate) pin_file: PathBuf,
+    /// Directories a file-backed token keeps its objects in, opened read-write.
+    #[serde(default)]
+    pub(crate) paths: Vec<PathBuf>,
 }
 
 impl Default for Config {
@@ -49,6 +118,9 @@ impl Default for Config {
             security_policy: Some("https://github.com/e-suiss/access/security/policy".to_owned()),
             security_txt_valid_days: 180,
             tls: None,
+            issuer: None,
+            database: None,
+            hsm: None,
         }
     }
 }
@@ -64,6 +136,14 @@ pub(crate) enum ConfigError {
     SecurityTxtValidity,
     #[error("tls.cert_file and tls.key_file are required: the server speaks TLS 1.3 only (CR-12)")]
     NoTls,
+    #[error("issuer is required and must be an https URL without a trailing slash (L1-ADP-11)")]
+    Issuer,
+    #[error("the database section is required (OP-141 m.18)")]
+    NoDatabase,
+    #[error("the hsm section is required (OP-94)")]
+    NoHsm,
+    #[error("database pools must have at least one connection each")]
+    PoolSize,
     #[error(transparent)]
     SecretEnvironment(#[from] access_crypto::secret_file::SecretFileError),
 }
@@ -94,6 +174,17 @@ impl Config {
         if self.tls.is_none() {
             return Err(ConfigError::NoTls);
         }
+        match &self.issuer {
+            Some(i) if i.starts_with("https://") && !i.ends_with('/') => {}
+            _ => return Err(ConfigError::Issuer),
+        }
+        let db = self.database.as_ref().ok_or(ConfigError::NoDatabase)?;
+        if db.sequencer.pool == 0 || db.app.pool == 0 {
+            return Err(ConfigError::PoolSize);
+        }
+        if self.hsm.is_none() {
+            return Err(ConfigError::NoHsm);
+        }
         Ok(())
     }
 
@@ -118,11 +209,36 @@ mod tests {
         assert!(Config::default().listen.ip().is_loopback());
     }
 
+    fn role(user: &str) -> Role {
+        Role {
+            user: user.to_owned(),
+            password_file: "/run/secrets/db".into(),
+            pool: 4,
+        }
+    }
+
     fn with_tls() -> Config {
         Config {
             tls: Some(Tls {
                 cert_file: "/run/tls/tls.crt".into(),
                 key_file: "/run/tls/tls.key".into(),
+                client_ca_file: None,
+            }),
+            issuer: Some("https://access.example".to_owned()),
+            database: Some(Database {
+                host: "db.internal".to_owned(),
+                port: 5432,
+                name: "access".to_owned(),
+                root_cert_file: "/run/tls/db-root.pem".into(),
+                durability: Durability::Replicated,
+                sequencer: role("access_sequencer_login"),
+                app: role("access_app_login"),
+            }),
+            hsm: Some(Hsm {
+                module: "/usr/lib/softhsm/libsofthsm2.so".into(),
+                token: "access".to_owned(),
+                pin_file: "/run/secrets/pin".into(),
+                paths: Vec::new(),
             }),
             ..Config::default()
         }
@@ -152,6 +268,28 @@ mod tests {
             config.validate(),
             Err(ConfigError::NoSecurityContact)
         ));
+    }
+
+    // OP-141 m.18 (g), (h), (i)
+    #[test]
+    fn the_authority_plane_is_not_optional() {
+        let no_db = Config {
+            database: None,
+            ..with_tls()
+        };
+        assert!(matches!(no_db.validate(), Err(ConfigError::NoDatabase)));
+        let no_hsm = Config {
+            hsm: None,
+            ..with_tls()
+        };
+        assert!(matches!(no_hsm.validate(), Err(ConfigError::NoHsm)));
+        for issuer in [None, Some("http://a.example"), Some("https://a.example/")] {
+            let config = Config {
+                issuer: issuer.map(str::to_owned),
+                ..with_tls()
+            };
+            assert!(matches!(config.validate(), Err(ConfigError::Issuer)));
+        }
     }
 
     // OP-63, TI-9

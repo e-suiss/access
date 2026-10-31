@@ -1,7 +1,9 @@
-//! What the core needs from the outside (OP-63): state reads, actor-binding, salts.
+//! What the core needs from the outside (OP-63): state reads, actor-binding, salts, keys.
 
 use std::future::Future;
 
+use access_crypto::event_id::EventKey;
+use access_kernel::digest::Digest;
 use access_kernel::model::Id;
 use access_kernel::verify::cose::PublicKey;
 use access_store::authority::NonceRow;
@@ -34,5 +36,17 @@ pub trait Binding {
 /// Fresh field salts (OP-106 m.15).
 pub trait Salts {
     /// A fresh salt.
-    fn salt(&mut self) -> [u8; 32];
+    ///
+    /// # Errors
+    /// [`CoreError::Unavailable`] when no randomness is available.
+    fn salt(&mut self) -> Result<[u8; 32], CoreError>;
+}
+
+/// The domains' event-id keys `K_D` (OP-141 m.18 (d)).
+pub trait Keys: Send + Sync {
+    /// The key of `domain`.
+    ///
+    /// # Errors
+    /// [`CoreError::Unavailable`] when the key is missing or the token fails.
+    fn event_key(&self, domain: &Digest) -> Result<EventKey, CoreError>;
 }

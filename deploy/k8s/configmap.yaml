@@ -8,7 +8,25 @@ metadata:
 data:
   access.toml: |
     listen = "0.0.0.0:8443"
+    issuer = "https://access-server.access.svc"
 
     [tls]
     cert_file = "/run/tls/tls.crt"
     key_file = "/run/tls/tls.key"
+    client_ca_file = "/run/tls/ca.crt"
+
+    # OP-141 m.18 (g)
+    [database]
+    host = "access-db.access-db.svc"
+    port = 5432
+    name = "access"
+    root_cert_file = "/run/tls/ca.crt"
+    durability = "replicated"
+    sequencer = { user = "access_sequencer_login", password_file = "/run/secrets/db-sequencer", pool = 8 }
+    app = { user = "access_app_login", password_file = "/run/secrets/db-app", pool = 16 }
+
+    # OP-94, OP-141 m.18 (h)
+    [hsm]
+    module = "/opt/pkcs11/module.so"
+    token = "access"
+    pin_file = "/run/secrets/hsm-pin"

@@ -4,19 +4,19 @@ use std::sync::Arc;
 
 use crate::Problem;
 use access_authority_core::CoreError;
-use access_authority_core::app::{Authority, Incoming, Response as Decided};
-use access_authority_core::ports::{Binding, Reader, Salts};
-use access_authority_sequencer::ports::DomainLog;
+use access_authority_core::adapters::Domains;
+use access_authority_core::app::{Incoming, Response as Decided};
+use access_authority_core::ports::{Binding, Keys, Salts};
+use access_authority_sequencer::ports::Clock;
 use axum::Router;
 use axum::body::Bytes;
 use axum::extract::State;
 use axum::http::{HeaderMap, HeaderName, HeaderValue, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
-use tokio::sync::Mutex;
 
 use crate::adp::app::{Reply, Service};
-use crate::adp::ports::{Clock, Pdp};
+use crate::adp::ports::Pdp;
 
 /// The PEP's transport-authenticated identity, set by the TLS or client-auth layer
 /// (L1-ADP-2). The surface never derives it from the body.
@@ -32,29 +32,25 @@ pub struct Discovery {
     pub issuer: String,
 }
 
-struct Shared<P: Pdp, C: Clock> {
-    service: Service<P, C>,
+struct Shared<P: Pdp> {
+    service: Service<P>,
     discovery: Discovery,
 }
 
 /// The ADP routes.
-pub fn router<P, C>(service: Service<P, C>, discovery: Discovery) -> Router
-where
-    P: Pdp + 'static,
-    C: Clock + 'static,
-{
+pub fn router<P: Pdp + 'static>(service: Service<P>, discovery: Discovery) -> Router {
     let shared = Arc::new(Shared { service, discovery });
     Router::new()
-        .route("/access/v1/evaluation", post(evaluation::<P, C>))
+        .route("/access/v1/evaluation", post(evaluation::<P>))
         .route(
             "/.well-known/authzen-configuration",
-            get(configuration::<P, C>),
+            get(configuration::<P>),
         )
         .with_state(shared)
 }
 
-async fn evaluation<P: Pdp, C: Clock>(
-    State(shared): State<Arc<Shared<P, C>>>,
+async fn evaluation<P: Pdp>(
+    State(shared): State<Arc<Shared<P>>>,
     pep: Option<axum::Extension<Pep>>,
     headers: HeaderMap,
     body: Bytes,
@@ -102,7 +98,7 @@ async fn evaluation<P: Pdp, C: Clock>(
     response
 }
 
-async fn configuration<P: Pdp, C: Clock>(State(shared): State<Arc<Shared<P, C>>>) -> Response {
+async fn configuration<P: Pdp>(State(shared): State<Arc<Shared<P>>>) -> Response {
     let issuer = &shared.discovery.issuer;
     let body = serde_json::json!({
         "policy_decision_point": issuer,
@@ -119,14 +115,14 @@ async fn configuration<P: Pdp, C: Clock>(State(shared): State<Arc<Shared<P, C>>>
         .into_response()
 }
 
-impl<L, R, B, S> Pdp for Mutex<Authority<L, R, B, S>>
+impl<K, B, S, C> Pdp for Domains<K, B, S, C>
 where
-    L: DomainLog + Send + Sync,
-    R: Reader + Send + Sync,
-    B: Binding + Send + Sync,
-    S: Salts + Send + Sync,
+    K: Keys,
+    B: Binding + Clone + Send + Sync,
+    S: Salts + Clone + Send + Sync,
+    C: Clock + Clone + Send + Sync,
 {
-    async fn evaluate(&self, inc: Incoming, now: u64) -> Result<Decided, CoreError> {
-        self.lock().await.exercise(&inc, now).await
+    async fn evaluate(&self, inc: Incoming) -> Result<Decided, CoreError> {
+        self.exercise(&inc).await
     }
 }

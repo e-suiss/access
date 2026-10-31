@@ -84,6 +84,10 @@ spec:
             - name: tls
               mountPath: /run/tls
               readOnly: true
+            # OP-129 m.3, OP-141 m.18 (g), (h): database passwords and the token PIN
+            - name: secrets
+              mountPath: /run/secrets
+              readOnly: true
           lifecycle:
             preStop:
               sleep:
@@ -121,3 +125,10 @@ spec:
               csi.cert-manager.io/fs-group: "65532"
               csi.cert-manager.io/certificate-file: tls.crt
               csi.cert-manager.io/privatekey-file: tls.key
+              csi.cert-manager.io/ca-file: ca.crt
+        - name: secrets
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: access-server

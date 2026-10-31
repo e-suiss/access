@@ -103,10 +103,14 @@ dependencies = [
 name = "access-server"
 version = "0.2.2"
 dependencies = [
+ "access-authority-core",
+ "access-authority-sequencer",
  "access-crypto",
  "access-http",
+ "access-store",
  "access-telemetry",
  "axum",
+ "esuiss-crypto",
  "esuiss-sandbox",
  "figment",
  "rcgen",

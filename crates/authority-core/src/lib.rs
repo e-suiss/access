@@ -35,6 +35,9 @@ pub enum CoreError {
     /// Storage failed.
     #[error("store: {0}")]
     Store(#[from] StoreError),
+    /// The domain cannot decide now; the PEP retries with the same nonce (OP-141 m.18).
+    #[error("unavailable: {0}")]
+    Unavailable(&'static str),
 }
 
 impl CoreError {
@@ -47,7 +50,7 @@ impl CoreError {
             Self::Rejected(_) => "rejected",
             Self::Nonce => "nonce-conflict",
             Self::Passes => "too-many-passes",
-            Self::Sequencer(_) | Self::Store(_) => "unavailable",
+            Self::Sequencer(_) | Self::Store(_) | Self::Unavailable(_) => "unavailable",
         }
     }
 }
