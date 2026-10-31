@@ -26,20 +26,29 @@ fn module() -> PathBuf {
     .expect("SoftHSM is required (OP-69); set SUISS_PKCS11_MODULE")
 }
 
-/// A fresh token in the `SoftHSM` store `just test` prepares (`SOFTHSM2_CONF`).
-fn token() -> String {
-    assert!(
-        std::env::var_os("SOFTHSM2_CONF").is_some(),
-        "run through `just test`, which sets SOFTHSM2_CONF (OP-69)"
-    );
+/// A fresh token in a `SoftHSM` store of its own under `dir`, so that it never races the other
+/// PKCS#11 tests' store; returns the token label and the configuration path (OP-69).
+fn token(dir: &std::path::Path) -> (String, PathBuf) {
+    let tokens = dir.join("tokens");
+    std::fs::create_dir_all(&tokens).expect("token dir");
+    let conf = dir.join("softhsm2.conf");
+    std::fs::write(
+        &conf,
+        format!(
+            "directories.tokendir = {}\nobjectstore.backend = file\nlog.level = ERROR\n",
+            tokens.display()
+        ),
+    )
+    .expect("softhsm config");
     let label = format!("server-lockdown-{}", std::process::id());
     let out = Command::new("softhsm2-util")
+        .env("SOFTHSM2_CONF", &conf)
         .args(["--init-token", "--free", "--label", &label, "--pin", PIN])
         .args(["--so-pin", "5678-test-only"])
         .output()
         .expect("softhsm2-util");
     assert!(out.status.success(), "{out:?}");
-    label
+    (label, conf)
 }
 
 /// True when this host could apply the lockdown (Linux with an empty capability bounding
@@ -87,7 +96,7 @@ fn op_90_server_refuses_to_start_without_lockdown() {
                 .expect("chmod");
         }
     }
-    let token = token();
+    let (token, softhsm) = token(&dir);
     let config = dir.join("access.toml");
     std::fs::write(
         &config,
@@ -110,6 +119,7 @@ fn op_90_server_refuses_to_start_without_lockdown() {
     let mut child = command
         .env("ACCESS_LISTEN", "127.0.0.1:0")
         .env("ACCESS_CONFIG", &config)
+        .env("SOFTHSM2_CONF", &softhsm)
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .spawn()
