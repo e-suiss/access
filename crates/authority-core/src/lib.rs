@@ -4,6 +4,7 @@ pub mod adapters;
 pub mod app;
 pub mod domain;
 pub mod ports;
+pub mod query;
 
 use access_authority_sequencer::SequencerError;
 use access_kernel::ais::AisError;

@@ -107,6 +107,7 @@ fn op_90_server_refuses_to_start_without_lockdown() {
              root_cert_file = {crt:?}\ndurability = \"single-node\"\n\
              sequencer = {{ user = \"s\", password_file = {pw:?}, pool = 1 }}\n\
              app = {{ user = \"a\", password_file = {pw:?}, pool = 1 }}\n\
+             deriver = {{ user = \"d\", password_file = {pw:?}, pool = 1 }}\n\
              [hsm]\nmodule = {module:?}\ntoken = {token:?}\npin_file = {pin:?}\n",
             crt = dir.join("tls.crt"),
             key = dir.join("tls.key"),

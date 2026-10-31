@@ -90,6 +90,8 @@ pub(crate) struct Database {
     pub(crate) sequencer: Role,
     /// `access_app` login.
     pub(crate) app: Role,
+    /// `access_deriver` login (OP-141 m.22 (k)).
+    pub(crate) deriver: Role,
 }
 
 /// The PKCS#11 token holding the domains' keys.
@@ -179,7 +181,7 @@ impl Config {
             _ => return Err(ConfigError::Issuer),
         }
         let db = self.database.as_ref().ok_or(ConfigError::NoDatabase)?;
-        if db.sequencer.pool == 0 || db.app.pool == 0 {
+        if db.sequencer.pool == 0 || db.app.pool == 0 || db.deriver.pool == 0 {
             return Err(ConfigError::PoolSize);
         }
         if self.hsm.is_none() {
@@ -233,6 +235,7 @@ mod tests {
                 durability: Durability::Replicated,
                 sequencer: role("access_sequencer_login"),
                 app: role("access_app_login"),
+                deriver: role("access_deriver_login"),
             }),
             hsm: Some(Hsm {
                 module: "/usr/lib/softhsm/libsofthsm2.so".into(),

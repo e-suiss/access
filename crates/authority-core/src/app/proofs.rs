@@ -245,7 +245,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
     /// When `party`'s episode of holding a Grant held by `conjuncts` began, if it holds it now:
     /// the latest of, per conjunct, the earliest record of a Claim that meets it under a
     /// `subject-selection` Acceptance (OP-141 m.20 (c), (d)).
-    async fn episode(
+    pub(crate) async fn episode(
         &self,
         snap: &mut Snapshot,
         conjuncts: &BTreeSet<Conjunct>,

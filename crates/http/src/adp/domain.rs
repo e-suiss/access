@@ -5,6 +5,7 @@ use std::collections::BTreeMap;
 use access_authority_core::app::MAX_PROOFS;
 use access_authority_core::app::Response;
 use access_authority_core::domain::{ProofRef, Request};
+use access_authority_core::query::{Hit, Query};
 use access_kernel::codec::Canonical;
 use access_kernel::combinator::codec::decision_value;
 use access_kernel::combinator::{Capacity, Mode, Outcome};
@@ -400,6 +401,75 @@ fn decode_value(root: &Json) -> R<Decoded> {
     let mut ctx = Obj::of(root.get("context").ok_or(AdpError("context"))?, "context")?;
     let intent = intent(ctx.req("intent", "intent")?)?;
     carriers(root, &intent)?;
+    let decoded = context(&mut ctx, intent)?;
+    ctx.done()?;
+    Ok(decoded)
+}
+
+/// Decodes a search body of `kind` (L1-ADP-16): the reader's context, `context.query` and the
+/// page token. The `AuthZEN` carriers are the caller's own and are not read.
+///
+/// # Errors
+/// [`AdpError`] names the protocol error.
+pub fn decode_search(
+    body: &[u8],
+    max_len: usize,
+    kind: &str,
+) -> R<(Decoded, Query, Option<String>)> {
+    let root = access_kernel::json::parse(body, max_len).map_err(|_| AdpError("json"))?;
+    let mut ctx = Obj::of(root.get("context").ok_or(AdpError("context"))?, "context")?;
+    let intent = intent(ctx.req("intent", "intent")?)?;
+    let mut q = Obj::of(ctx.req("query", "query")?, "query")?;
+    let query = match kind {
+        "subject" => Query::Subject {
+            action: action(q.req("action", "query")?)?,
+            resource: resource(q.req("resource", "query")?)?,
+        },
+        "resource" => Query::Resource {
+            party: id(q.req("party", "query")?)?,
+            action: action(q.req("action", "query")?)?,
+        },
+        "action" => Query::Action {
+            party: id(q.req("party", "query")?)?,
+            resource: resource(q.req("resource", "query")?)?,
+        },
+        _ => return Err(AdpError("search")),
+    };
+    q.done()?;
+    let decoded = context(&mut ctx, intent)?;
+    ctx.done()?;
+    let page = root
+        .get("page")
+        .and_then(|p| p.get("token"))
+        .map(|t| text(t, "page"))
+        .transpose()?
+        .filter(|t| !t.is_empty());
+    Ok((decoded, query, page))
+}
+
+/// One search page as `AuthZEN` results (L1-ADP-16).
+#[must_use]
+pub fn encode_search(hits: &[Hit], next: Option<&str>) -> Out {
+    let results: Vec<Out> = hits
+        .iter()
+        .map(|h| match h {
+            Hit::Party(p) => {
+                serde_json::json!({ "type": "access_party", "id": b64url_encode(&p.0) })
+            }
+            Hit::Public => serde_json::json!({ "type": "public" }),
+            Hit::Group(classes) => serde_json::json!({ "type": "group", "id": classes.join(",") }),
+            Hit::Resource(sel) => json_of(&sel.to_value()),
+            Hit::Action(a) => json_of(&a.to_value()),
+        })
+        .collect();
+    serde_json::json!({
+        "results": results,
+        "page": { "next_token": next.unwrap_or("") },
+        "context": { "advisory": true },
+    })
+}
+
+fn context(ctx: &mut Obj<'_>, intent: IntentEnvelope) -> R<Decoded> {
     let nonce = bytes(ctx.req("nonce", "nonce")?, "nonce")?;
     if !(16..=64).contains(&nonce.len()) {
         return Err(AdpError("nonce"));
@@ -428,7 +498,6 @@ fn decode_value(root: &Json) -> R<Decoded> {
             .transpose()?,
     };
     let ais = ctx.opt("ais").map(|a| bytes(a, "ais")).transpose()?;
-    ctx.done()?;
     Ok(Decoded { request, ais })
 }
 

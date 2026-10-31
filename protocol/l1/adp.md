@@ -15,6 +15,7 @@ The key words MUST, MUST NOT, SHOULD and MAY are used as in RFC 2119 and RFC 817
 | `POST /access/v1/evaluation` | One request in `commit`, `continue` or `check` mode |
 | `POST /access/v1/evaluations` | Up to 64 independent requests (L1-ADP-14) |
 | `POST /access/v1/explain` | A hypothetical explanation (L1-ADP-15) |
+| `POST /access/v1/search/{subject,resource,action}` | Advisory search (L1-ADP-16) |
 | `GET /.well-known/authzen-configuration` | Discovery |
 
 The CBOR form of a body is the dCBOR of the same members with media type `application/access-adp+cbor`.
@@ -94,6 +95,8 @@ Access computes the intent digest from the decoded envelope ([L0-ENC-23](../l0/e
 <a id="L1-ADP-14"></a>**L1-ADP-14. Batch.** A batch body has `evaluations`, an array of 1 to 64 requests, optional top-level `subject`, `action` and `resource` that an item without its own inherits, and optional `options.evaluations_semantic`. `context` is never inherited: every item carries its own nonce, AIS and intent. The items are independent; a batch is not atomic. `execute_all` (the default) answers every item. `deny_on_first_deny` and `permit_on_first_permit` stop at the first `false` or `true` decision and answer the rest `{"evaluated": false}`; they are allowed only when every item is in `check` mode, otherwise the whole batch is the protocol error `evaluations_semantic`. The response is 200 with `evaluations`, one entry per item in order: the item's decision as in §3, or `{"error": code}` for an item that got no decision.
 
 <a id="L1-ADP-15"></a>**L1-ADP-15. Explain.** `POST /access/v1/explain` takes an evaluation request in `check` mode and answers it like a `check`, with `kind: "hypothetical"` in `context`; it is never recorded. Explaining a recorded decision is not part of this version; a request in another mode is the protocol error `explain-mode`.
+
+<a id="L1-ADP-16"></a>**L1-ADP-16. Search.** A search body carries the reader's `context` as an evaluation in `check` mode whose intent's action is `access`/`search` and whose first resource is `access.search` with the path `[kind]`; the AIS makes the reader known. `context.query` is the search: `{"action", "resource"}` for `subject` (who can take the action on the resource), `{"party", "action"}` for `resource` and `{"party", "resource"}` for `action` (what that Party reaches). The `AuthZEN` carriers are not read. A next page is asked with `page.token`. The answer is `results`, `page.next_token` (empty at the end, opaque otherwise) and `context.advisory: true`; a search is never recorded and never a credential. The reader sees only what it may see: `subject` within an Anchor whose root it holds, `resource` and `action` for its own Party; anything else is an empty page, indistinguishable from nothing (OP-141 m.22 (j)). Pages hold at most 100 results.
 
 ## 3. Response
 

@@ -21,6 +21,21 @@ pub trait Reader {
     fn fetch(&self, keys: &[Vec<u8>]) -> impl Future<Output = Result<Vec<Row>, CoreError>> + Send;
     /// The live rows whose key starts with `prefix` (OP-141 m.20 (b)).
     fn scan(&self, prefix: &[u8]) -> impl Future<Output = Result<Vec<Row>, CoreError>> + Send;
+    /// Live Grants on resources in `namespace` from the derived index, in id order after
+    /// `after` (OP-141 m.22 (g)); candidates only, never a decision input.
+    fn grants_in(
+        &self,
+        namespace: &str,
+        after: Option<Id>,
+        limit: u32,
+    ) -> impl Future<Output = Result<Vec<Id>, CoreError>> + Send;
+    /// Live Grants `party` may hold, from the derived index, in id order after `after`.
+    fn grants_for(
+        &self,
+        party: &Id,
+        after: Option<Id>,
+        limit: u32,
+    ) -> impl Future<Output = Result<Vec<Id>, CoreError>> + Send;
     /// A SYNC-DERIVED counter's used amount; 0 when never drawn.
     fn counter(&self, key: &[u8]) -> impl Future<Output = Result<u64, CoreError>> + Send;
     /// The latest outcome of a nonce.

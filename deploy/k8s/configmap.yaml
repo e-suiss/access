@@ -24,6 +24,7 @@ data:
     durability = "replicated"
     sequencer = { user = "access_sequencer_login", password_file = "/run/secrets/db-sequencer", pool = 8 }
     app = { user = "access_app_login", password_file = "/run/secrets/db-app", pool = 16 }
+    deriver = { user = "access_deriver_login", password_file = "/run/secrets/db-deriver", pool = 2 }
 
     # OP-94, OP-141 m.18 (h)
     [hsm]

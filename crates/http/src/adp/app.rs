@@ -5,7 +5,9 @@ use access_authority_core::app::Incoming;
 use access_kernel::combinator::Mode;
 use serde_json::Value;
 
-use crate::adp::domain::{Decoded, Semantic, decode, decode_batch, encode};
+use crate::adp::domain::{
+    Decoded, Semantic, decode, decode_batch, decode_search, encode, encode_search,
+};
 use crate::adp::ports::Pdp;
 
 /// What the transport sends back.
@@ -107,6 +109,30 @@ impl<P: Pdp> Service<P> {
                 Reply::Decision(v)
             }
             other => other,
+        }
+    }
+
+    /// `POST /access/v1/search/{kind}`: one page, advisory, as far as the reader may see
+    /// (L1-ADP-16, OP-141 m.22 (j)).
+    pub async fn search(&self, kind: &str, body: &[u8], pep: Option<String>) -> Reply {
+        let Some(pep) = pep else {
+            return Reply::Unauthenticated;
+        };
+        let (decoded, query, page) = match decode_search(body, self.max_body, kind) {
+            Ok(d) => d,
+            Err(e) => return Reply::Protocol(e.0),
+        };
+        let inc = Incoming {
+            request: decoded.request,
+            ais: decoded.ais,
+            pep,
+        };
+        match self.pdp.search(inc, query, page).await {
+            Ok((hits, next)) => Reply::Decision(encode_search(&hits, next.as_deref())),
+            Err(CoreError::Sequencer(_) | CoreError::Store(_) | CoreError::Unavailable(_)) => {
+                Reply::Unavailable
+            }
+            Err(e) => Reply::Protocol(e.code()),
         }
     }
 

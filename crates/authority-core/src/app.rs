@@ -132,7 +132,7 @@ fn digest_value(d: &Digest) -> Value {
 /// The authority core of one domain: its leader and its ports.
 pub struct Authority<L: DomainLog, R: Reader, B: Binding, S: Salts> {
     leader: Leader<L>,
-    reader: R,
+    pub(crate) reader: R,
     binding: B,
     salts: S,
     domain: Digest,
@@ -184,7 +184,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
     }
 
     /// §17.1.1 step 3: the actor of the request, `None` when it is anonymous.
-    async fn actor(
+    pub(crate) async fn actor(
         &self,
         inc: &Incoming,
         digest: &Digest,

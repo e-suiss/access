@@ -239,14 +239,18 @@ fn exact_hop(
     }
 }
 
-fn read<T: Canonical>(view: &dyn View, kind: &str, id: &access_kernel::model::Id) -> Option<T> {
+pub(crate) fn read<T: Canonical>(
+    view: &dyn View,
+    kind: &str,
+    id: &access_kernel::model::Id,
+) -> Option<T> {
     view.get(&meta::key(kind, id))
         .and_then(|v| T::from_value(&v).ok())
 }
 
 /// The lineage of a basis as Kernel hops, from the Anchor down to the basis Grant; an ended
 /// Grant anywhere above makes the hops below it `Revoked` (INV-5).
-fn lineage_hops(
+pub(crate) fn lineage_hops(
     view: &dyn View,
     grant: &access_kernel::model::Id,
 ) -> Option<(Vec<Hop>, BTreeSet<Capacity>)> {

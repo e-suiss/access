@@ -13,9 +13,10 @@ use std::sync::Mutex;
 
 use access_authority_core::CoreError;
 use access_authority_core::app::{Incoming, Response};
+use access_authority_core::query::{Hit, Query};
 use access_http::adp::adapters::{Discovery, Pep, router};
 use access_http::adp::app::Service;
-use access_http::adp::ports::Pdp;
+use access_http::adp::ports::{Page, Pdp};
 use access_http::{Limits, harden};
 use access_kernel::combinator::{Decision, Outcome};
 use access_kernel::digest::Digest;
@@ -49,6 +50,22 @@ impl Pdp for Scripted {
             basis_ref: Some(String::from("ref")),
             consistency: Some(String::from("seen")),
         }))
+    }
+
+    fn search(
+        &self,
+        _inc: Incoming,
+        query: Query,
+        page: Option<String>,
+    ) -> impl Future<Output = Result<Page, CoreError>> + Send {
+        let hit = match query {
+            Query::Subject { .. } => Hit::Party(access_kernel::model::Id([7; 16])),
+            _ => Hit::Public,
+        };
+        std::future::ready(Ok((
+            vec![hit],
+            page.is_none().then(|| String::from("next")),
+        )))
     }
 }
 
@@ -400,4 +417,63 @@ async fn explain_is_hypothetical_check() {
     .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
     assert_eq!(body["code"], "explain-mode");
+}
+
+fn search_body(query: &str, page: &str) -> String {
+    let b = |bytes: &[u8]| b64url_encode(bytes);
+    format!(
+        r#"{{"subject": {{"type": "access_party"}}, "action": {{"name": "read"}},
+            "context": {{
+                "domain": "{d}", "mode": "check", "nonce": "{n}",
+                "basis": {{"public": "{a}"}}, "capacity": "own",
+                "intent": {{
+                    "action": {{"namespace": "access", "name": "search", "major": 1, "schema": "{s}"}},
+                    "resources": [{{"namespace": "access.search", "path": ["subject"]}}],
+                    "validity": {{"from": 0, "until": 100000}}
+                }},
+                "query": {query}
+            }}{page}}}"#,
+        d = b(&[1; 32]),
+        n = b(&[2; 16]),
+        a = b(&[3; 16]),
+        s = b(&[5; 32]),
+    )
+}
+
+// #3–5 (search), L1-ADP-16, OP-141 m.22 (b): results with an opaque next page, advisory
+#[tokio::test]
+async fn search_pages_through_results() {
+    let q = format!(
+        r#"{{"action": {{"namespace": "shop", "name": "read", "major": 1, "schema": "{}"}},
+            "resource": {{"namespace": "shop", "path": ["item-1"]}}}}"#,
+        b64url_encode(&[5; 32])
+    );
+    let (status, _, body) = post_to(
+        app(Ok(Outcome::Allow), Some("pep-1")),
+        "/access/v1/search/subject",
+        search_body(&q, ""),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["results"][0]["type"], "access_party");
+    assert_eq!(body["page"]["next_token"], "next");
+    assert_eq!(body["context"]["advisory"], true);
+    let (_, _, body) = post_to(
+        app(Ok(Outcome::Allow), Some("pep-1")),
+        "/access/v1/search/subject",
+        search_body(&q, r#", "page": {"token": "next"}"#),
+        None,
+    )
+    .await;
+    assert_eq!(body["page"]["next_token"], "");
+    let (status, _, body) = post_to(
+        app(Ok(Outcome::Allow), Some("pep-1")),
+        "/access/v1/search/everything",
+        search_body(&q, ""),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["code"], "search");
 }

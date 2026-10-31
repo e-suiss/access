@@ -7,16 +7,17 @@ use access_authority_core::CoreError;
 use access_authority_core::adapters::Domains;
 use access_authority_core::app::{Incoming, Response as Decided};
 use access_authority_core::ports::{Binding, Keys, Salts};
+use access_authority_core::query::Query;
 use access_authority_sequencer::ports::Clock;
 use axum::Router;
 use axum::body::Bytes;
-use axum::extract::State;
+use axum::extract::{Path, State};
 use axum::http::{HeaderMap, HeaderName, HeaderValue, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 
 use crate::adp::app::{Reply, Service};
-use crate::adp::ports::Pdp;
+use crate::adp::ports::{Page, Pdp};
 
 /// The PEP's transport-authenticated identity, set by the TLS or client-auth layer
 /// (L1-ADP-2). The surface never derives it from the body.
@@ -44,6 +45,7 @@ pub fn router<P: Pdp + 'static>(service: Service<P>, discovery: Discovery) -> Ro
         .route("/access/v1/evaluation", post(evaluation::<P>))
         .route("/access/v1/evaluations", post(evaluations::<P>))
         .route("/access/v1/explain", post(explain::<P>))
+        .route("/access/v1/search/{kind}", post(search::<P>))
         .route(
             "/.well-known/authzen-configuration",
             get(configuration::<P>),
@@ -86,6 +88,20 @@ async fn explain<P: Pdp>(
     let reply = shared
         .service
         .explain(&body, pep.map(|axum::Extension(Pep(p))| p))
+        .await;
+    respond(reply, &headers)
+}
+
+async fn search<P: Pdp>(
+    State(shared): State<Arc<Shared<P>>>,
+    Path(kind): Path<String>,
+    pep: Option<axum::Extension<Pep>>,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Response {
+    let reply = shared
+        .service
+        .search(&kind, &body, pep.map(|axum::Extension(Pep(p))| p))
         .await;
     respond(reply, &headers)
 }
@@ -161,5 +177,14 @@ where
 {
     async fn evaluate(&self, inc: Incoming) -> Result<Decided, CoreError> {
         self.exercise(&inc).await
+    }
+
+    async fn search(
+        &self,
+        inc: Incoming,
+        query: Query,
+        page: Option<String>,
+    ) -> Result<Page, CoreError> {
+        Domains::search(self, &inc, &query, page.as_deref()).await
     }
 }

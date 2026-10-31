@@ -532,6 +532,7 @@ fn process(db: &TestDb, holder: &str, keys: Vec<Digest>) -> Domains<Listed, Boun
         binding: binding(),
         salts: Counter(0),
         clock: Fixed,
+        deriver: db.deriver.clone(),
     })
 }
 
@@ -1139,4 +1140,147 @@ async fn an_issuer_quota_quarantines_the_excess() {
     assert!(state_of(&db, d, &stored(1)).await.is_some());
     assert!(state_of(&db, d, &stored(2)).await.is_none());
     fold_check(&db.sequencer, d).await.unwrap();
+}
+
+// ---------------------------------------------------------------- D6 (OP-141 m.22)
+
+fn search_request(d: Digest, nonce: u8, kind: &str) -> Request {
+    Request {
+        domain: d,
+        mode: Mode::Check,
+        nonce: vec![nonce; 16],
+        intent: intent(action("access", "search"), ("access.search", kind), None),
+        payload: None,
+        basis: ExerciseBasis::Public(Id([0; 16])),
+        capacity: Capacity::Own,
+        proofs: Vec::new(),
+        exercise: None,
+        consistency: None,
+    }
+}
+
+// OP-141 m.22 (g), (j), E26: the index names candidates; a root sees who can act within its
+// Anchor, a Party sees what it reaches itself, and nobody sees more
+#[tokio::test]
+#[allow(
+    clippy::too_many_lines,
+    reason = "one scenario from onboarding to every search kind"
+)]
+async fn search_shows_what_the_reader_may_see() {
+    use access_authority_core::query::{Hit, Query};
+    let db = fresh().await.unwrap();
+    let d = create_genesis(&db.sequencer, TENANT, genesis(), 1_000)
+        .await
+        .unwrap();
+    let a = process(&db, "a", vec![d]);
+    let public_basis = ExerciseBasis::Public(meta::object_id(&d, kind::GRANT, 0));
+    for (party, seed, n) in [(ROOT, ROOT_KEY, 1), (ALICE, ALICE_KEY, 3)] {
+        for (nonce, payload) in [
+            (
+                n,
+                Payload::PartyRegister {
+                    party,
+                    root: Root::Sole(party),
+                },
+            ),
+            (
+                n + 1,
+                Payload::InstanceCreate {
+                    party,
+                    key: public(seed),
+                    mandate: None,
+                },
+            ),
+        ] {
+            let inc = incoming(meta_request(d, nonce, public_basis, payload), seed);
+            allowed(&a.exercise(&inc).await.unwrap());
+        }
+    }
+    let shop = meta::object_id(&d, kind::ANCHOR, 1);
+    let grant = Payload::GrantIssue(GrantContent {
+        basis: GrantBasis::Anchor(shop),
+        holder: SubjectSelector::Party(ALICE),
+        authority: authority(vec![action("shop", "read")], selector("shop")),
+        agency: BTreeSet::from([Capacity::Own]),
+        named: None,
+    });
+    let mut issue = meta_request(d, 5, ExerciseBasis::Anchor(shop), grant);
+    issue.intent.resources = vec![ResourceRef {
+        namespace: "shop".to_owned(),
+        path: vec![],
+        incarnation: 0,
+    }];
+    let p = issue.payload.clone().unwrap();
+    issue.intent.opaque = BTreeMap::from([("payload".to_owned(), p.digest().unwrap())]);
+    allowed(&a.exercise(&incoming(issue, ROOT_KEY)).await.unwrap());
+    assert!(a.derive().await.is_empty());
+
+    let item = ResourceRef {
+        namespace: "shop".to_owned(),
+        path: vec!["item-1".to_owned()],
+        incarnation: 0,
+    };
+    let who = Query::Subject {
+        action: action("shop", "read"),
+        resource: item.clone(),
+    };
+    let (hits, next) = a
+        .search(
+            &incoming(search_request(d, 50, "subject"), ROOT_KEY),
+            &who,
+            None,
+        )
+        .await
+        .unwrap();
+    assert_eq!(hits, [Hit::Party(ALICE)]);
+    assert!(next.is_none());
+    let (hits, _) = a
+        .search(
+            &incoming(search_request(d, 51, "subject"), ALICE_KEY),
+            &who,
+            None,
+        )
+        .await
+        .unwrap();
+    assert_eq!(hits, []);
+
+    let mine = Query::Resource {
+        party: ALICE,
+        action: action("shop", "read"),
+    };
+    let (hits, _) = a
+        .search(
+            &incoming(search_request(d, 52, "resource"), ALICE_KEY),
+            &mine,
+            None,
+        )
+        .await
+        .unwrap();
+    assert_eq!(hits, [Hit::Resource(selector("shop"))]);
+    let theirs = Query::Action {
+        party: ROOT,
+        resource: item,
+    };
+    let (hits, _) = a
+        .search(
+            &incoming(search_request(d, 53, "action"), ALICE_KEY),
+            &theirs,
+            None,
+        )
+        .await
+        .unwrap();
+    assert_eq!(hits, []);
+    let mut anonymous = incoming(search_request(d, 54, "resource"), ALICE_KEY);
+    anonymous.ais = None;
+    assert_eq!(a.search(&anonymous, &mine, None).await.unwrap().0, []);
+    // the search intent must name the search kind
+    assert!(matches!(
+        a.search(
+            &incoming(search_request(d, 55, "action"), ALICE_KEY),
+            &mine,
+            None
+        )
+        .await,
+        Err(CoreError::Protocol("search"))
+    ));
 }

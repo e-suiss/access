@@ -36,6 +36,7 @@ struct Prepared {
     root_cert: Vec<u8>,
     sequencer_password: SecretFile,
     app_password: SecretFile,
+    deriver_password: SecretFile,
     keys: KeyStore,
 }
 
@@ -142,6 +143,7 @@ fn prepare(config: &Config, tls: Arc<access_http::tls::ServerConfig>) -> Result<
         root_cert,
         sequencer_password: password(&db.sequencer)?,
         app_password: password(&db.app)?,
+        deriver_password: password(&db.deriver)?,
         keys,
     })
 }
@@ -173,7 +175,7 @@ fn holder() -> Result<String, String> {
     Ok(out)
 }
 
-async fn pools(config: &Config, prepared: &Prepared) -> Result<(Pool, Pool), String> {
+async fn pools(config: &Config, prepared: &Prepared) -> Result<(Pool, Pool, Pool), String> {
     let db = config.database.as_ref().ok_or("no database section")?;
     let open = async |role: &Role, password: &SecretFile| {
         let target = Target {
@@ -190,18 +192,23 @@ async fn pools(config: &Config, prepared: &Prepared) -> Result<(Pool, Pool), Str
     };
     let sequencer = open(&db.sequencer, &prepared.sequencer_password).await?;
     let app = open(&db.app, &prepared.app_password).await?;
+    let deriver = open(&db.deriver, &prepared.deriver_password).await?;
     let durability = match db.durability {
         Durability::Replicated => access_store::connect::Durability::Replicated,
         Durability::SingleNode => access_store::connect::Durability::SingleNode,
     };
-    let total = db.sequencer.pool.saturating_add(db.app.pool);
+    let total = db
+        .sequencer
+        .pool
+        .saturating_add(db.app.pool)
+        .saturating_add(db.deriver.pool);
     // OP-52
-    for p in [&sequencer, &app] {
+    for p in [&sequencer, &app, &deriver] {
         check_server(p, total, true, durability)
             .await
             .map_err(|e| e.to_string())?;
     }
-    Ok((sequencer, app))
+    Ok((sequencer, app, deriver))
 }
 
 fn tls_config(config: &Config) -> Result<std::sync::Arc<access_http::tls::ServerConfig>, String> {
@@ -226,7 +233,7 @@ async fn serve(
     prepared: Prepared,
     report: &LockdownReport,
 ) -> Result<(), String> {
-    let (sequencer, app) = pools(config, &prepared).await?;
+    let (sequencer, app, deriver) = pools(config, &prepared).await?;
     let sequencer_for_time = sequencer.clone();
     let issuer = config.issuer.clone().ok_or("no issuer")?;
     let limits = Limits::default();
@@ -240,6 +247,7 @@ async fn serve(
         binding: Unbound,
         salts: OsSalts,
         clock: SourcesClock::new(sequencer_for_time),
+        deriver,
     }));
     let renewing = tokio::spawn({
         let domains = domains.clone();
@@ -248,6 +256,10 @@ async fn serve(
             loop {
                 tick.tick().await;
                 domains.renew().await;
+                // OP-141 m.22 (g)
+                for error in domains.derive().await {
+                    tracing::warn!(%error, "derived index not brought up to the head");
+                }
             }
         }
     });
