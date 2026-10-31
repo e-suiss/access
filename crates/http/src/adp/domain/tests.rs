@@ -172,6 +172,7 @@ fn response(outcome: Outcome) -> Response {
         record: Some(12),
         replayed: false,
         basis_ref: Some(String::from("ref")),
+        consistency: Some(String::from("seen")),
     }
 }
 

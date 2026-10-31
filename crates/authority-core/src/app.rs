@@ -47,6 +47,8 @@ pub struct Response {
     /// The opaque reference to the decision record, set by the decision point (OP-141 m.22
     /// (e)); the raw position stays inside.
     pub basis_ref: Option<String>,
+    /// The head the answer was given at, as an opaque token (OP-141 m.22 (f)).
+    pub consistency: Option<String>,
 }
 
 /// One request with what came with it on the wire.
@@ -148,6 +150,12 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             domain,
             catalog: Catalog::default(),
         }
+    }
+
+    /// The last committed position.
+    #[must_use]
+    pub const fn head(&self) -> u64 {
+        self.leader.head().pos
     }
 
     /// Extends the leader's lease.
@@ -271,6 +279,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             record: Some(stored.decision_pos),
             replayed: true,
             basis_ref: None,
+            consistency: None,
         }))
     }
 
@@ -390,13 +399,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             }
             let evaluation = evaluation.ok_or(CoreError::Passes)?;
             if req.mode == Mode::Check {
-                return Ok(Response {
-                    decision: evaluation.decision,
-                    exercise: None,
-                    record: None,
-                    replayed: false,
-                    basis_ref: None,
-                });
+                return Ok(answer(evaluation.decision, None, None, false));
             }
             let shape = Shape {
                 digest: &digest,
@@ -411,22 +414,20 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             let continued = req.exercise.unwrap_or(exercise);
             match self.leader.commit(now, &items).await {
                 Ok(Committed::Appended(positions)) => {
-                    return Ok(Response {
-                        decision: evaluation.decision,
-                        exercise: allowed.then_some(continued),
-                        record: positions.last().copied(),
-                        replayed: false,
-                        basis_ref: None,
-                    });
+                    return Ok(answer(
+                        evaluation.decision,
+                        allowed.then_some(continued),
+                        positions.last().copied(),
+                        false,
+                    ));
                 }
                 Ok(Committed::Replayed(pos)) => {
-                    return Ok(Response {
-                        decision: evaluation.decision,
-                        exercise: Some(continued),
-                        record: Some(pos),
-                        replayed: true,
-                        basis_ref: None,
-                    });
+                    return Ok(answer(
+                        evaluation.decision,
+                        Some(continued),
+                        Some(pos),
+                        true,
+                    ));
                 }
                 Err(e) if e.is_retry() => {}
                 Err(SequencerError::NonceConflict) => return Err(CoreError::Nonce),
@@ -630,6 +631,22 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             single_use,
         });
         Ok(items)
+    }
+}
+
+const fn answer(
+    decision: Decision,
+    exercise: Option<Digest>,
+    record: Option<u64>,
+    replayed: bool,
+) -> Response {
+    Response {
+        decision,
+        exercise,
+        record,
+        replayed,
+        basis_ref: None,
+        consistency: None,
     }
 }
 

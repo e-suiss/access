@@ -265,6 +265,7 @@ fn meta_request(d: Digest, nonce: u8, basis: ExerciseBasis, payload: Payload) ->
         capacity: Capacity::Own,
         proofs: Vec::new(),
         exercise: None,
+        consistency: None,
     }
 }
 
@@ -279,6 +280,7 @@ fn shop_request(d: Digest, nonce: u8, mode: Mode, basis: ExerciseBasis) -> Reque
         capacity: Capacity::Own,
         proofs: Vec::new(),
         exercise: None,
+        consistency: None,
     }
 }
 
@@ -588,7 +590,20 @@ async fn a_process_leads_a_domain_from_its_first_request() {
     allowed(&first);
     // OP-141 m.22 (e): the record is named by an opaque reference
     let reference = first.basis_ref.clone().unwrap();
-    assert!(!reference.contains(&first.record.unwrap().to_string()) || reference.len() > 20);
+    assert!(reference.len() >= 48);
+
+    // OP-141 m.22 (f): a reader is answered at or after what it has seen, never before
+    let mut seen = read(40);
+    seen.request.mode = Mode::Check;
+    seen.request.consistency = first.consistency.clone();
+    let ais = incoming(seen.request.clone(), ROOT_KEY);
+    allowed(&a.exercise(&ais).await.unwrap());
+    let ahead = access_crypto::token::TokenKey::new(Secret::new([6; 32]))
+        .seal(&d.0, "consistency", &9_999_u64.to_be_bytes())
+        .unwrap();
+    let mut early = ais;
+    early.request.consistency = Some(ahead);
+    assert_eq!(unavailable(a.exercise(&early).await), "consistency");
     assert_eq!(unavailable(b.exercise(&read(5)).await), "lease-held");
 
     a.renew().await;

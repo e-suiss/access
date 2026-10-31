@@ -47,6 +47,7 @@ impl Pdp for Scripted {
             record: Some(3),
             replayed: false,
             basis_ref: Some(String::from("ref")),
+            consistency: Some(String::from("seen")),
         }))
     }
 }

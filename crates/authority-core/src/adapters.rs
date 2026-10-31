@@ -120,6 +120,9 @@ impl Keys for KeyStore {
     }
 }
 
+/// Kind of the consistency token (OP-141 m.22 (f)).
+const CONSISTENCY: &str = "consistency";
+
 /// What the domains share: the two pools, the keys, the lease holder and the ports. Each
 /// domain gets its own copy of `clock`, `binding` and `salts`.
 pub struct Setup<K, B, S, C> {
@@ -234,6 +237,19 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
         let Some(led) = guard.as_mut() else {
             return Err(CoreError::Unavailable("leader"));
         };
+        // OP-141 m.22 (f): a reader ahead of this head gets no answer
+        if let Some(t) = &inc.request.consistency {
+            let seen = led
+                .tokens
+                .open(&domain.0, CONSISTENCY, t)
+                .ok()
+                .and_then(|b| <[u8; 8]>::try_from(b.as_slice()).ok())
+                .map(u64::from_be_bytes)
+                .ok_or(CoreError::Protocol("consistency_token"))?;
+            if seen > led.core.head() {
+                return Err(CoreError::Unavailable("consistency"));
+            }
+        }
         // OP-129 m.1
         let now = led
             .clock
@@ -241,7 +257,14 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
             .await
             .map_err(|_| CoreError::Unavailable("time"))?;
         let mut result = led.core.exercise(inc, now).await;
-        // OP-141 m.22 (e)
+        // OP-141 m.22 (e), (f)
+        if let Ok(r) = &mut result {
+            r.consistency = Some(
+                led.tokens
+                    .seal(&domain.0, CONSISTENCY, &led.core.head().to_be_bytes())
+                    .map_err(|_| CoreError::Unavailable("token-key"))?,
+            );
+        }
         if let Ok(r) = &mut result
             && let Some(pos) = r.record
         {

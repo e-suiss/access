@@ -65,6 +65,7 @@ The CBOR form of a body is the dCBOR of the same members with media type `applic
 | `payload` | bytes: dCBOR of the `meta-payload`, for a meta-action ([L0-META-2](../l0/meta.md#L0-META-2)) | meta-actions |
 | `proofs` | array of 1 to 16 proof objects (L1-ADP-12) | no |
 | `exercise` | digest: the ExerciseID continued | `continue` |
+| `consistency_token` | text: a token from an earlier response; the answer is given at or after the position it names, else the domain answers 503 | no; ignored by `commit` and `continue` |
 
 A request without `ais` has an anonymous actor and can only use Public Grants.
 
@@ -115,6 +116,7 @@ Access computes the intent digest from the decoded envelope ([L0-ENC-23](../l0/e
 | `basis_ref` | recorded decisions: an opaque reference to the decision record, meaningful only to the domain; the position itself is never shown (TI-RT10) |
 | `replayed` | a retry answered with the decision already recorded |
 | `blockers`, `unmet`, `relied_on` | as in `decision-value`, binaries as in L1-ADP-6 |
+| `consistency_token` | always: an opaque token of the head the answer was given at (OP-141 m.22 (f)) |
 | `versions` | always |
 
 ## 4. Discovery

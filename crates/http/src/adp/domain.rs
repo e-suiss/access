@@ -422,6 +422,10 @@ fn decode_value(root: &Json) -> R<Decoded> {
             .transpose()?
             .unwrap_or_default(),
         exercise: ctx.opt("exercise").map(digest).transpose()?,
+        consistency: ctx
+            .opt("consistency_token")
+            .map(|t| text(t, "consistency_token"))
+            .transpose()?,
     };
     let ais = ctx.opt("ais").map(|a| bytes(a, "ais")).transpose()?;
     ctx.done()?;
@@ -472,6 +476,9 @@ pub fn encode(response: &Response, mode: Mode) -> Out {
     }
     if let Some(e) = &response.exercise {
         context.insert(String::from("exercise"), Out::from(b64url_encode(&e.0)));
+    }
+    if let Some(t) = &response.consistency {
+        context.insert(String::from("consistency_token"), Out::from(t.as_str()));
     }
     // OP-141 m.22 (e): the record is named by an opaque reference, never its position
     if let Some(r) = &response.basis_ref {

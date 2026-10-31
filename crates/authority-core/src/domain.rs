@@ -126,6 +126,8 @@ pub struct Request {
     pub proofs: Vec<ProofRef>,
     /// The Exercise continued, for `continue` (L1-ADP-13).
     pub exercise: Option<Digest>,
+    /// The position the reader has seen, as an opaque token (OP-141 m.22 (f)).
+    pub consistency: Option<String>,
 }
 
 /// A proof as the request carries it (L1-ADP-12).
