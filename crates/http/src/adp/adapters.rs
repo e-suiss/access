@@ -42,6 +42,7 @@ pub fn router<P: Pdp + 'static>(service: Service<P>, discovery: Discovery) -> Ro
     let shared = Arc::new(Shared { service, discovery });
     Router::new()
         .route("/access/v1/evaluation", post(evaluation::<P>))
+        .route("/access/v1/evaluations", post(evaluations::<P>))
         .route(
             "/.well-known/authzen-configuration",
             get(configuration::<P>),
@@ -59,6 +60,23 @@ async fn evaluation<P: Pdp>(
         .service
         .evaluation(&body, pep.map(|axum::Extension(Pep(p))| p))
         .await;
+    respond(reply, &headers)
+}
+
+async fn evaluations<P: Pdp>(
+    State(shared): State<Arc<Shared<P>>>,
+    pep: Option<axum::Extension<Pep>>,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Response {
+    let reply = shared
+        .service
+        .evaluations(&body, pep.map(|axum::Extension(Pep(p))| p))
+        .await;
+    respond(reply, &headers)
+}
+
+fn respond(reply: Reply, headers: &HeaderMap) -> Response {
     let mut response = match reply {
         Reply::Decision(v) => (
             StatusCode::OK,

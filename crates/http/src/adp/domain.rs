@@ -325,9 +325,81 @@ fn proofs(v: &Json) -> R<Vec<ProofRef>> {
 /// [`AdpError`] names the protocol error.
 pub fn decode(body: &[u8], max_len: usize) -> R<Decoded> {
     let root = access_kernel::json::parse(body, max_len).map_err(|_| AdpError("json"))?;
+    decode_value(&root)
+}
+
+/// Most items of one batch (OP-141 m.22 (a), PD).
+pub const MAX_BATCH: usize = 64;
+
+/// How a batch is evaluated (`AuthZEN` `evaluations_semantic`, OP-141 m.22 (a)).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Semantic {
+    /// Every item.
+    ExecuteAll,
+    /// Stop at the first deny; check only.
+    DenyOnFirstDeny,
+    /// Stop at the first permit; check only.
+    PermitOnFirstPermit,
+}
+
+/// One batch item: decoded, or the protocol error it got.
+pub type Item = R<Decoded>;
+
+/// Decodes a batch body: the items with the top-level carriers they inherit, and the
+/// semantic. `context` is never inherited (OP-141 m.22 (a)).
+///
+/// # Errors
+/// [`AdpError`] for a body that is not a batch; an item's own error stays with the item.
+pub fn decode_batch(body: &[u8], max_len: usize) -> R<(Vec<Item>, Semantic)> {
+    let root = access_kernel::json::parse(body, max_len).map_err(|_| AdpError("json"))?;
+    let Some(Json::Array(items)) = root.get("evaluations") else {
+        return Err(AdpError("evaluations"));
+    };
+    if items.is_empty() || items.len() > MAX_BATCH {
+        return Err(AdpError("evaluations"));
+    }
+    let semantic = match root
+        .get("options")
+        .and_then(|o| o.get("evaluations_semantic"))
+        .map(|s| s.as_str())
+    {
+        None | Some(Some("execute_all")) => Semantic::ExecuteAll,
+        Some(Some("deny_on_first_deny")) => Semantic::DenyOnFirstDeny,
+        Some(Some("permit_on_first_permit")) => Semantic::PermitOnFirstPermit,
+        Some(_) => return Err(AdpError("evaluations_semantic")),
+    };
+    let decoded: Vec<Item> = items
+        .iter()
+        .map(|item| {
+            let Json::Object(own) = item else {
+                return Err(AdpError("evaluations"));
+            };
+            let mut merged = own.clone();
+            for carrier in ["subject", "action", "resource"] {
+                if item.get(carrier).is_none()
+                    && let Some(v) = root.get(carrier)
+                {
+                    merged.push((String::from(carrier), v.clone()));
+                }
+            }
+            decode_value(&Json::Object(merged))
+        })
+        .collect();
+    // OP-141 m.22 (a): short-circuiting would leave it open which commit happened
+    if semantic != Semantic::ExecuteAll
+        && decoded
+            .iter()
+            .any(|d| d.as_ref().is_ok_and(|d| d.request.mode != Mode::Check))
+    {
+        return Err(AdpError("evaluations_semantic"));
+    }
+    Ok((decoded, semantic))
+}
+
+fn decode_value(root: &Json) -> R<Decoded> {
     let mut ctx = Obj::of(root.get("context").ok_or(AdpError("context"))?, "context")?;
     let intent = intent(ctx.req("intent", "intent")?)?;
-    carriers(&root, &intent)?;
+    carriers(root, &intent)?;
     let nonce = bytes(ctx.req("nonce", "nonce")?, "nonce")?;
     if !(16..=64).contains(&nonce.len()) {
         return Err(AdpError("nonce"));

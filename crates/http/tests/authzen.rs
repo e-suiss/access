@@ -1,10 +1,11 @@
-//! §9.5.1, L1-ADP-1…11: the `AuthZEN` 1.0 PDP checklist against the ADP surface over HTTP.
+//! §9.5.1, L1-ADP-1…14: the `AuthZEN` 1.0 PDP checklist against the ADP surface over HTTP.
 //!
 //! The decision point is scripted, so each item checks the carrier, not the evaluation.
 
 #![allow(
     clippy::unwrap_used,
     clippy::panic,
+    clippy::indexing_slicing,
     reason = "test code; the request-path lints (OP-3) do not apply"
 )]
 
@@ -97,8 +98,16 @@ async fn post(
     body: String,
     request_id: Option<&str>,
 ) -> (StatusCode, Option<String>, Value) {
-    let mut req =
-        Request::post("/access/v1/evaluation").header(header::CONTENT_TYPE, "application/json");
+    post_to(app, "/access/v1/evaluation", body, request_id).await
+}
+
+async fn post_to(
+    app: Router,
+    path: &str,
+    body: String,
+    request_id: Option<&str>,
+) -> (StatusCode, Option<String>, Value) {
+    let mut req = Request::post(path).header(header::CONTENT_TYPE, "application/json");
     if let Some(id) = request_id {
         req = req.header("x-request-id", id);
     }
@@ -287,4 +296,81 @@ async fn check_is_marked_advisory() {
     )
     .await;
     assert_eq!(body["context"]["advisory"], true);
+}
+
+/// A batch whose items carry their own context and inherit the top-level carriers.
+fn batch(modes: &[&str], semantic: &str) -> String {
+    let items: Vec<String> = modes
+        .iter()
+        .map(|m| {
+            let one: Value = serde_json::from_str(&evaluation(m, "")).unwrap();
+            serde_json::json!({ "context": one["context"] }).to_string()
+        })
+        .collect();
+    format!(
+        r#"{{"subject": {{"type": "user", "id": "alice"}}, "action": {{"name": "read"}},
+            "resource": {{"type": "shop", "id": "item-1"}},
+            "options": {{"evaluations_semantic": "{semantic}"}},
+            "evaluations": [{}]}}"#,
+        items.join(",")
+    )
+}
+
+// #3 (batch), OP-141 m.22 (a): each item is answered like a single evaluation
+#[tokio::test]
+async fn a_batch_answers_each_item() {
+    let (status, _, body) = post_to(
+        app(Ok(Outcome::Allow), Some("pep-1")),
+        "/access/v1/evaluations",
+        batch(&["commit", "check"], "execute_all"),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let items = body["evaluations"].as_array().unwrap();
+    assert_eq!(items.len(), 2);
+    assert_eq!(items[0]["decision"], true);
+    assert_eq!(items[1]["context"]["advisory"], true);
+}
+
+// OP-141 m.22 (a): a short-circuit is check-only; skipped items are not denials
+#[tokio::test]
+async fn a_short_circuit_is_for_check_only() {
+    let (status, _, body) = post_to(
+        app(Ok(Outcome::Deny), Some("pep-1")),
+        "/access/v1/evaluations",
+        batch(&["check", "check"], "deny_on_first_deny"),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["evaluations"][0]["decision"], false);
+    assert_eq!(body["evaluations"][1]["evaluated"], false);
+    let (status, _, body) = post_to(
+        app(Ok(Outcome::Allow), Some("pep-1")),
+        "/access/v1/evaluations",
+        batch(&["check", "commit"], "permit_on_first_permit"),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["code"], "evaluations_semantic");
+}
+
+// OP-141 m.22 (a): an item's protocol error stays with the item
+#[tokio::test]
+async fn an_item_error_stays_with_its_item() {
+    let mut body: Value =
+        serde_json::from_str(&batch(&["commit", "commit"], "execute_all")).unwrap();
+    body["evaluations"][1]["context"]["hint"] = Value::from(1);
+    let (status, _, out) = post_to(
+        app(Ok(Outcome::Allow), Some("pep-1")),
+        "/access/v1/evaluations",
+        body.to_string(),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(out["evaluations"][0]["decision"], true);
+    assert_eq!(out["evaluations"][1]["error"], "unknown-member");
 }

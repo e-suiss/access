@@ -13,6 +13,7 @@ The key words MUST, MUST NOT, SHOULD and MAY are used as in RFC 2119 and RFC 817
 | Endpoint | Purpose |
 |---|---|
 | `POST /access/v1/evaluation` | One request in `commit`, `continue` or `check` mode |
+| `POST /access/v1/evaluations` | Up to 64 independent requests (L1-ADP-14) |
 | `GET /.well-known/authzen-configuration` | Discovery |
 
 The CBOR form of a body is the dCBOR of the same members with media type `application/access-adp+cbor`.
@@ -87,6 +88,8 @@ Access computes the intent digest from the decoded envelope ([L0-ENC-23](../l0/e
 <a id="L1-ADP-12"></a>**L1-ADP-12. Proofs.** A proof object is one of `{"claim": bytes}`, a Claim's COSE_Sign1 ([L2-CLM-1](../l2/README.md#L2-CLM-1)); `{"claim_ref": id}`, a Claim already recorded; `{"contribution": digest}`, the ExerciseID of an allowed `contribute` ([L0-META-30](../l0/meta.md#L0-META-30)). A reference to nothing recorded is the protocol error `proof`. After `require_action`, the PEP sends the same nonce, intent and actor again with the proofs that were missing.
 
 <a id="L1-ADP-13"></a>**L1-ADP-13. Continuation.** A `continue` request carries a new nonce and `exercise`, the ExerciseID of an allowed Exercise of the same intent digest and the same actor Instance; otherwise it is the protocol error `exercise`.
+
+<a id="L1-ADP-14"></a>**L1-ADP-14. Batch.** A batch body has `evaluations`, an array of 1 to 64 requests, optional top-level `subject`, `action` and `resource` that an item without its own inherits, and optional `options.evaluations_semantic`. `context` is never inherited: every item carries its own nonce, AIS and intent. The items are independent; a batch is not atomic. `execute_all` (the default) answers every item. `deny_on_first_deny` and `permit_on_first_permit` stop at the first `false` or `true` decision and answer the rest `{"evaluated": false}`; they are allowed only when every item is in `check` mode, otherwise the whole batch is the protocol error `evaluations_semantic`. The response is 200 with `evaluations`, one entry per item in order: the item's decision as in §3, or `{"error": code}` for an item that got no decision.
 
 ## 3. Response
 

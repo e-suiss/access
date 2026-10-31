@@ -4,7 +4,7 @@ use access_authority_core::CoreError;
 use access_authority_core::app::Incoming;
 use serde_json::Value;
 
-use crate::adp::domain::{decode, encode};
+use crate::adp::domain::{Decoded, Semantic, decode, decode_batch, encode};
 use crate::adp::ports::Pdp;
 
 /// What the transport sends back.
@@ -39,10 +39,52 @@ impl<P: Pdp> Service<P> {
         let Some(pep) = pep else {
             return Reply::Unauthenticated;
         };
-        let decoded = match decode(body, self.max_body) {
-            Ok(d) => d,
+        match decode(body, self.max_body) {
+            Ok(d) => self.decide(d, pep).await,
+            Err(e) => Reply::Protocol(e.0),
+        }
+    }
+
+    /// `POST /access/v1/evaluations`: independent items, each answered like a single
+    /// evaluation; a short-circuit leaves the rest `{"evaluated": false}` (OP-141 m.22 (a)).
+    pub async fn evaluations(&self, body: &[u8], pep: Option<String>) -> Reply {
+        let Some(pep) = pep else {
+            return Reply::Unauthenticated;
+        };
+        let (items, semantic) = match decode_batch(body, self.max_body) {
+            Ok(b) => b,
             Err(e) => return Reply::Protocol(e.0),
         };
+        let mut out = Vec::with_capacity(items.len());
+        let mut stopped = false;
+        for item in items {
+            if stopped {
+                out.push(serde_json::json!({ "evaluated": false }));
+                continue;
+            }
+            let reply = match item {
+                Ok(d) => self.decide(d, pep.clone()).await,
+                Err(e) => Reply::Protocol(e.0),
+            };
+            let value = match reply {
+                Reply::Decision(v) => v,
+                Reply::Protocol(code) => serde_json::json!({ "error": code }),
+                Reply::Conflict => serde_json::json!({ "error": "nonce-conflict" }),
+                Reply::Unavailable => serde_json::json!({ "error": "unavailable" }),
+                Reply::Unauthenticated => serde_json::json!({ "error": "pep-unauthenticated" }),
+            };
+            let decision = value.get("decision").and_then(serde_json::Value::as_bool);
+            stopped = match semantic {
+                Semantic::ExecuteAll => false,
+                Semantic::DenyOnFirstDeny => decision == Some(false),
+                Semantic::PermitOnFirstPermit => decision == Some(true),
+            };
+            out.push(value);
+        }
+        Reply::Decision(serde_json::json!({ "evaluations": out }))
+    }
+
+    async fn decide(&self, decoded: Decoded, pep: String) -> Reply {
         let mode = decoded.request.mode;
         let inc = Incoming {
             request: decoded.request,
