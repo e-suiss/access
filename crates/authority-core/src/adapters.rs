@@ -9,6 +9,7 @@ use access_authority_sequencer::adapters::PgLog;
 use access_authority_sequencer::app::Leader;
 use access_authority_sequencer::ports::Clock;
 use access_crypto::event_id::{EventKey, label};
+use access_crypto::token::TokenKey;
 use access_kernel::digest::Digest;
 use access_kernel::model::Id;
 use access_kernel::verify::cose::PublicKey;
@@ -111,6 +112,12 @@ impl Keys for KeyStore {
             .map(EventKey::token)
             .map_err(|_| CoreError::Unavailable("event-key"))
     }
+
+    fn token_key(&self, domain: &Digest) -> Result<TokenKey, CoreError> {
+        self.aead(&access_crypto::token::label(&domain.0))
+            .map(TokenKey::token)
+            .map_err(|_| CoreError::Unavailable("token-key"))
+    }
 }
 
 /// What the domains share: the two pools, the keys, the lease holder and the ports. Each
@@ -137,6 +144,7 @@ pub struct Setup<K, B, S, C> {
 struct Led<B: Binding, S: Salts, C> {
     core: Authority<PgLog, PgReader, B, S>,
     clock: C,
+    tokens: TokenKey,
 }
 
 type Slot<B, S, C> = Arc<tokio::sync::Mutex<Option<Led<B, S, C>>>>;
@@ -187,6 +195,7 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
             .await?
             .ok_or(CoreError::Unavailable("unknown-domain"))?;
         let key = s.keys.event_key(&domain)?;
+        let tokens = s.keys.token_key(&domain)?;
         let log = PgLog::new(s.sequencer.clone(), domain, tenant, s.holder.clone(), s.ttl);
         let leader = match Leader::acquire(log, domain, key).await {
             Ok(leader) => leader,
@@ -199,6 +208,7 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
         Ok(Led {
             core: Authority::new(leader, reader, s.binding.clone(), s.salts.clone(), domain),
             clock: s.clock.clone(),
+            tokens,
         })
     }
 
@@ -230,7 +240,17 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
             .now()
             .await
             .map_err(|_| CoreError::Unavailable("time"))?;
-        let result = led.core.exercise(inc, now).await;
+        let mut result = led.core.exercise(inc, now).await;
+        // OP-141 m.22 (e)
+        if let Ok(r) = &mut result
+            && let Some(pos) = r.record
+        {
+            r.basis_ref = Some(
+                led.tokens
+                    .seal(&domain.0, "basis_ref", &pos.to_be_bytes())
+                    .map_err(|_| CoreError::Unavailable("token-key"))?,
+            );
+        }
         if matches!(result, Err(CoreError::Sequencer(_) | CoreError::Store(_))) {
             *guard = None;
         }

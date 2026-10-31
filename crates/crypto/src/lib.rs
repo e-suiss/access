@@ -5,6 +5,7 @@ pub mod event_id;
 pub mod opaque_id;
 pub mod random;
 pub mod secret_file;
+pub mod token;
 
 pub use suiss_crypto::{dit, envelope, secret};
 

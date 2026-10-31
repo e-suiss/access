@@ -473,8 +473,9 @@ pub fn encode(response: &Response, mode: Mode) -> Out {
     if let Some(e) = &response.exercise {
         context.insert(String::from("exercise"), Out::from(b64url_encode(&e.0)));
     }
-    if let Some(pos) = response.record {
-        context.insert(String::from("record"), Out::from(pos));
+    // OP-141 m.22 (e): the record is named by an opaque reference, never its position
+    if let Some(r) = &response.basis_ref {
+        context.insert(String::from("basis_ref"), Out::from(r.as_str()));
     }
     if response.replayed {
         context.insert(String::from("replayed"), Out::Bool(true));

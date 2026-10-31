@@ -44,6 +44,9 @@ pub struct Response {
     pub record: Option<u64>,
     /// Whether this is a retry of a decision already recorded.
     pub replayed: bool,
+    /// The opaque reference to the decision record, set by the decision point (OP-141 m.22
+    /// (e)); the raw position stays inside.
+    pub basis_ref: Option<String>,
 }
 
 /// One request with what came with it on the wire.
@@ -267,6 +270,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             exercise: (outcome == Outcome::Allow).then_some(exercise),
             record: Some(stored.decision_pos),
             replayed: true,
+            basis_ref: None,
         }))
     }
 
@@ -391,6 +395,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                     exercise: None,
                     record: None,
                     replayed: false,
+                    basis_ref: None,
                 });
             }
             let shape = Shape {
@@ -411,6 +416,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                         exercise: allowed.then_some(continued),
                         record: positions.last().copied(),
                         replayed: false,
+                        basis_ref: None,
                     });
                 }
                 Ok(Committed::Replayed(pos)) => {
@@ -419,6 +425,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                         exercise: Some(continued),
                         record: Some(pos),
                         replayed: true,
+                        basis_ref: None,
                     });
                 }
                 Err(e) if e.is_retry() => {}

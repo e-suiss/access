@@ -101,7 +101,7 @@ Access computes the intent digest from the decoded envelope ([L0-ENC-23](../l0/e
   "context": {
     "outcome": "allow",
     "exercise": "<digest>",
-    "record": 17,
+    "basis_ref": "<opaque>",
     "versions": { "core": 1, "meta_schema": 1 }
   }
 }
@@ -112,7 +112,7 @@ Access computes the intent digest from the decoded envelope ([L0-ENC-23](../l0/e
 | `outcome` | always: `"allow"`, `"deny"` or `"require_action"` |
 | `advisory` | `check`: `true`, the decision is not recorded and is no promise |
 | `exercise` | `allow` in `commit` and `continue` |
-| `record` | recorded decisions: position of the decision record |
+| `basis_ref` | recorded decisions: an opaque reference to the decision record, meaningful only to the domain; the position itself is never shown (TI-RT10) |
 | `replayed` | a retry answered with the decision already recorded |
 | `blockers`, `unmet`, `relied_on` | as in `decision-value`, binaries as in L1-ADP-6 |
 | `versions` | always |

@@ -285,6 +285,47 @@ impl KeyStore {
         })
     }
 
+    /// Generates an AES-256 key for AES-GCM inside the token; it never leaves it.
+    ///
+    /// # Errors
+    /// [`HsmError`], also when a key with this label exists.
+    pub fn generate_aead(&self, label: &str) -> Result<HsmAead, HsmError> {
+        let session = self.session()?;
+        if Self::one(&session, ObjectClass::SECRET_KEY, label).is_ok() {
+            return Err(HsmError::Key(label.to_owned()));
+        }
+        session
+            .generate_key(
+                &Mechanism::AesKeyGen,
+                &[
+                    Attribute::Token(true),
+                    Attribute::Private(true),
+                    Attribute::Sensitive(true),
+                    Attribute::Extractable(false),
+                    Attribute::Encrypt(true),
+                    Attribute::Decrypt(true),
+                    Attribute::Label(label.as_bytes().to_vec()),
+                    Attribute::ValueLen(32.into()),
+                ],
+            )
+            .map_err(HsmError::Operation)?;
+        drop(session);
+        self.aead(label)
+    }
+
+    /// The AES-GCM key labelled `label`.
+    ///
+    /// # Errors
+    /// [`HsmError`].
+    pub fn aead(&self, label: &str) -> Result<HsmAead, HsmError> {
+        let session = self.session()?;
+        let key = Self::one(&session, ObjectClass::SECRET_KEY, label)?;
+        Ok(HsmAead {
+            session: Mutex::new(session),
+            key,
+        })
+    }
+
     /// Imports a known HMAC key, for migration and tests; it cannot be read back.
     ///
     /// # Errors
@@ -416,6 +457,60 @@ impl HsmMac {
             .as_slice()
             .try_into()
             .map_err(|_| HsmError::Encoding)
+    }
+}
+
+/// An AES-256-GCM key inside the token; its session is shared behind a lock.
+pub struct HsmAead {
+    session: Mutex<Session>,
+    key: ObjectHandle,
+}
+
+/// Length of the random AES-GCM nonce.
+pub const GCM_NONCE: usize = 12;
+
+impl HsmAead {
+    /// `nonce ‖ AES-256-GCM(plaintext, aad)` with a fresh random 96-bit nonce and a 128-bit tag.
+    ///
+    /// # Errors
+    /// [`HsmError::Operation`]; [`HsmError::Encoding`] when no randomness is available.
+    pub fn seal(&self, aad: &[u8], plaintext: &[u8]) -> Result<Vec<u8>, HsmError> {
+        use aws_lc_rs::rand::SecureRandom as _;
+        let mut nonce = [0_u8; GCM_NONCE];
+        aws_lc_rs::rand::SystemRandom::new()
+            .fill(&mut nonce)
+            .map_err(|_| HsmError::Encoding)?;
+        let mut iv = nonce;
+        let params = cryptoki::mechanism::aead::GcmParams::new(&mut iv, aad, 128.into())
+            .map_err(HsmError::Operation)?;
+        let sealed = self
+            .session
+            .lock()
+            .map_err(|_| HsmError::Poisoned)?
+            .encrypt(&Mechanism::AesGcm(params), self.key, plaintext)
+            .map_err(HsmError::Operation)?;
+        Ok([nonce.as_slice(), &sealed].concat())
+    }
+
+    /// Opens what [`HsmAead::seal`] produced under the same `aad`.
+    ///
+    /// # Errors
+    /// [`HsmError::Operation`] when the tag does not verify; [`HsmError::Encoding`] when the
+    /// input is too short.
+    pub fn open(&self, aad: &[u8], sealed: &[u8]) -> Result<Vec<u8>, HsmError> {
+        if sealed.len() < GCM_NONCE.saturating_add(16) {
+            return Err(HsmError::Encoding);
+        }
+        let (nonce, body) = sealed.split_at(GCM_NONCE);
+        let mut iv = [0_u8; GCM_NONCE];
+        iv.copy_from_slice(nonce);
+        let params = cryptoki::mechanism::aead::GcmParams::new(&mut iv, aad, 128.into())
+            .map_err(HsmError::Operation)?;
+        self.session
+            .lock()
+            .map_err(|_| HsmError::Poisoned)?
+            .decrypt(&Mechanism::AesGcm(params), self.key, body)
+            .map_err(HsmError::Operation)
     }
 }
 

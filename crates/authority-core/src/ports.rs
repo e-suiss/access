@@ -3,6 +3,7 @@
 use std::future::Future;
 
 use access_crypto::event_id::EventKey;
+use access_crypto::token::TokenKey;
 use access_kernel::digest::Digest;
 use access_kernel::model::Id;
 use access_kernel::verify::cose::PublicKey;
@@ -53,4 +54,9 @@ pub trait Keys: Send + Sync {
     /// # Errors
     /// [`CoreError::Unavailable`] when the key is missing or the token fails.
     fn event_key(&self, domain: &Digest) -> Result<EventKey, CoreError>;
+    /// The token key of `domain` (OP-141 m.22 (d)).
+    ///
+    /// # Errors
+    /// [`CoreError::Unavailable`] when the key is missing or the token fails.
+    fn token_key(&self, domain: &Digest) -> Result<TokenKey, CoreError>;
 }

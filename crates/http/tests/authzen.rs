@@ -46,6 +46,7 @@ impl Pdp for Scripted {
             exercise: (outcome == Outcome::Allow).then_some(Digest([8; 32])),
             record: Some(3),
             replayed: false,
+            basis_ref: Some(String::from("ref")),
         }))
     }
 }

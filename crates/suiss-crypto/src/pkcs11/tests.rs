@@ -128,6 +128,25 @@ fn token_mac_matches_hmac_sha256() {
     assert!(matches!(s.generate_mac("mac-new"), Err(HsmError::Key(_))));
 }
 
+// OP-141 m.22 (d)
+#[test]
+fn token_aead_seals_and_opens() {
+    let s = store();
+    let k = s.generate_aead("tokens").unwrap();
+    let sealed = k.seal(b"aad", b"position 17").unwrap();
+    assert_eq!(k.open(b"aad", &sealed).unwrap(), b"position 17");
+    assert_ne!(k.seal(b"aad", b"position 17").unwrap(), sealed);
+    assert!(k.open(b"other", &sealed).is_err());
+    let mut flipped = sealed.clone();
+    if let Some(last) = flipped.last_mut() {
+        *last ^= 1;
+    }
+    assert!(k.open(b"aad", &flipped).is_err());
+    assert!(k.open(b"aad", &sealed[..20]).is_err());
+    let again = s.aead("tokens").unwrap();
+    assert_eq!(again.open(b"aad", &sealed).unwrap(), b"position 17");
+}
+
 // OP-94: a wrong PIN or token is refused
 #[test]
 fn wrong_token_or_pin_is_refused() {

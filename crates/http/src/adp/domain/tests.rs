@@ -171,6 +171,7 @@ fn response(outcome: Outcome) -> Response {
         exercise: (outcome == Outcome::Allow).then_some(Digest([8; 32])),
         record: Some(12),
         replayed: false,
+        basis_ref: Some(String::from("ref")),
     }
 }
 
@@ -180,7 +181,8 @@ fn only_allow_is_true() {
     assert_eq!(allow["decision"], true);
     assert_eq!(allow["context"]["outcome"], "allow");
     assert_eq!(allow["context"]["exercise"], b64(&[8; 32]));
-    assert_eq!(allow["context"]["record"], 12);
+    assert_eq!(allow["context"]["basis_ref"], "ref");
+    assert!(allow["context"].get("record").is_none());
     assert_eq!(allow["context"]["relied_on"][0], b64(&[7; 16]));
     for o in [Outcome::Deny, Outcome::RequireAction] {
         assert_eq!(encode(&response(o), Mode::Commit)["decision"], false);

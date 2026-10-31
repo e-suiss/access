@@ -505,6 +505,10 @@ impl Keys for Listed {
             Err(CoreError::Unavailable("event-key"))
         }
     }
+
+    fn token_key(&self, _domain: &Digest) -> Result<access_crypto::token::TokenKey, CoreError> {
+        Ok(access_crypto::token::TokenKey::new(Secret::new([6; 32])))
+    }
 }
 
 #[derive(Clone)]
@@ -582,6 +586,9 @@ async fn a_process_leads_a_domain_from_its_first_request() {
     }
     let first = a.exercise(&read(4)).await.unwrap();
     allowed(&first);
+    // OP-141 m.22 (e): the record is named by an opaque reference
+    let reference = first.basis_ref.clone().unwrap();
+    assert!(!reference.contains(&first.record.unwrap().to_string()) || reference.len() > 20);
     assert_eq!(unavailable(b.exercise(&read(5)).await), "lease-held");
 
     a.renew().await;
