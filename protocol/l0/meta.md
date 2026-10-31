@@ -52,7 +52,7 @@ A meta-action is an Exercise that changes authority state. Apart from Genesis, i
 
 <a id="L0-META-30"></a>**L0-META-30. Contributions.** `contribute` is authorized like any domain action: its intent's resource is `access.contribution` with the path `[class]`, and the actor needs a Grant covering it. An anonymous actor never contributes. The payload's `target` is the digest of the intent the contribution is for. An allowed `contribute` writes a `contribution-state` under the key of its ExerciseID with the actor's Party and Instance.
 
-<a id="L0-META-28"></a>**L0-META-28. Expansion.** Each allowed meta-action is either expansion class or not. Creating anything, widening a Grant or a Mandate, changing a root, lowering root terms, retiring a policy and every Acceptance change except revoke are expansion. Revoke, renounce, terminate and narrowing amends are not.
+<a id="L0-META-28"></a>**L0-META-28. Expansion.** Each allowed meta-action is either expansion class or not. Creating anything, widening a Grant or a Mandate, changing a root, lowering root terms, retiring a policy and every Acceptance change except revoke are expansion. Revoke, renounce, terminate and narrowing amends are not. An Acceptance amend narrows when its classes are a subset, its subject is within the old one, its assurance floor is at least the old one in every dimension, its validity lies within the old one, `ingest_until` and `issued_until` are added or earlier, and its quota is not removed or raised.
 
 <a id="L0-META-29"></a>**L0-META-29. Effects.** An allowed meta-action writes its state changes as the `effects` of its decision record ([L2-REC-2](../l2/README.md#L2-REC-2)), and the `children`, `instances` and `mandates` indexes with them.
 

@@ -20,6 +20,7 @@ use access_kernel::meta::{self, Actor, ExerciseState, InstanceState, Payload, ki
 use access_kernel::model::{Id, ResourceRef};
 use access_kernel::record::{Opened, RecordKind};
 use access_kernel::verify::cose;
+use access_store::authority::Draw;
 use suiss_crypto::dcbor::{self, Limits, Value};
 
 use crate::CoreError;
@@ -479,7 +480,15 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                 proofs: vec![(digest.0, c.bytes.clone())],
                 reads: vec![(ckey.clone(), 0)],
                 writes: effects.iter().map(|(k, _)| k.clone()).collect(),
-                draws: Vec::new(),
+                draws: c
+                    .draw
+                    .iter()
+                    .map(|(key, limit)| Draw {
+                        key: key.clone(),
+                        limit: *limit,
+                        draw: 1,
+                    })
+                    .collect(),
                 single_use: Vec::new(),
             });
         }

@@ -73,6 +73,7 @@ def _admits(acceptance, statement, now):
     levels = statement.get("assurance", {})
     lo, hi = acceptance["validity"]
     until = acceptance.get("ingest_until")
+    issued_until = acceptance.get("issued_until")
     return (
         acceptance["use"] in ("predicate-input", "subject-selection")
         and isinstance(issuer, bytes)
@@ -81,6 +82,7 @@ def _admits(acceptance, statement, now):
         and covers_subject
         and lo <= now <= hi
         and (until is None or now <= until)
+        and (issued_until is None or statement["issued_at"] <= issued_until)
         and all(dim in levels and _meets(dim, f, levels[dim]) for dim, f in floor.items())
     )
 

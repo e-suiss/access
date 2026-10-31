@@ -571,6 +571,8 @@ acceptance-content = {
   ? assurance_floor: assurance,
   validity: time-window,
   ? ingest_until: trusted-time,
+  ? issued_until: trusted-time,
+  ? quota: { count: uint .ge 1, window_s: uint .ge 1 },
 }
 
 policy-content = {

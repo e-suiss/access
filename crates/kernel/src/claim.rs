@@ -276,7 +276,17 @@ pub struct Gate {
     pub validity: Window,
     /// Last ingest time.
     pub ingest_until: Option<u64>,
+    /// Last signing time (OP-141 m.21 (c)).
+    pub issued_until: Option<u64>,
+    /// Declared quota: Claims per window of seconds (OP-141 m.21 (a)).
+    pub quota: Option<(u64, u64)>,
 }
+
+/// Domain default quota when an Acceptance declares none: Claims per window (PD).
+pub const DEFAULT_QUOTA: (u64, u64) = (1_000, 3_600);
+
+/// Kind of the issuer quota counter (OP-141 m.21 (a)).
+pub const QUOTA: &str = "quota";
 
 impl Gate {
     /// The gate of an Acceptance's content.
@@ -301,6 +311,8 @@ impl Gate {
             floor: assurance(f.opt("assurance_floor"))?,
             validity: Window::from_value(f.req("validity")?)?,
             ingest_until: f.opt("ingest_until").map(uint).transpose()?,
+            issued_until: f.opt("issued_until").map(uint).transpose()?,
+            quota: f.opt("quota").map(quota).transpose()?,
         };
         let _ = f.opt("anchor");
         f.done()?;
@@ -328,6 +340,7 @@ impl Gate {
             && self.validity.from <= at
             && at <= self.validity.until
             && self.ingest_until.is_none_or(|u| at <= u)
+            && self.issued_until.is_none_or(|u| s.issued_at <= u)
             && self.floor.iter().all(|(dim, floor)| {
                 s.assurance
                     .get(dim)
@@ -345,6 +358,8 @@ pub enum Disposition {
     SourceNotAccepted,
     /// Signed too far ahead of trusted time.
     Future,
+    /// The issuer's quota is used up (OP-141 m.21 (a)).
+    Quota,
 }
 
 impl Disposition {
@@ -355,6 +370,7 @@ impl Disposition {
             Self::Admit => "admit",
             Self::SourceNotAccepted => "quarantine:source-not-accepted",
             Self::Future => "quarantine:future",
+            Self::Quota => "quarantine:quota",
         }
     }
 }
@@ -372,6 +388,75 @@ pub fn disposition(s: &Statement, gates: &[Gate], now: u64) -> Disposition {
     } else {
         Disposition::SourceNotAccepted
     }
+}
+
+fn quota(v: &Value) -> Result<(u64, u64), ModelError> {
+    let mut f = Fields::of(v)?;
+    let q = (uint(f.req("count")?)?, uint(f.req("window_s")?)?);
+    f.done()?;
+    if q.0 == 0 || q.1 == 0 {
+        return Err(ModelError::Range);
+    }
+    Ok(q)
+}
+
+/// The quota a Claim admitted by `gates` draws from: the most generous one among the gates that
+/// admit it, the default when one of them declares none, as `(limit, window_ms)` with the
+/// limit twice the declared count (§13.7.4, OP-141 m.21 (a)).
+#[must_use]
+pub fn quota_of(s: &Statement, gates: &[Gate], now: u64) -> Option<(u64, u64)> {
+    gates
+        .iter()
+        .filter(|g| {
+            g.admits_for(PREDICATE_INPUT, s, now) || g.admits_for(SUBJECT_SELECTION, s, now)
+        })
+        .map(|g| g.quota.unwrap_or(DEFAULT_QUOTA))
+        .max()
+        .map(|(count, window_s)| (count.saturating_mul(2), window_s.saturating_mul(1_000)))
+}
+
+/// `dCBOR(["quota", issuer, window start])`: the issuer's counter for the window holding `now`.
+#[must_use]
+pub fn quota_key(issuer: &Id, window_ms: u64, now: u64) -> Vec<u8> {
+    let start = now.saturating_sub(now.checked_rem(window_ms).unwrap_or(0));
+    dcbor::encode(
+        &Value::Array(alloc::vec![
+            Value::text(QUOTA),
+            issuer.to_value(),
+            Value::Unsigned(start)
+        ]),
+        Limits::CEILING,
+    )
+    .unwrap_or_default()
+}
+
+/// Whether `new` only narrows the Acceptance `old` (OP-141 m.21 (d)): then the amend is not
+/// expansion class.
+#[must_use]
+pub fn narrows(old: &Gate, new: &Gate) -> bool {
+    let earlier = |n: Option<u64>, o: Option<u64>| match (n, o) {
+        (_, None) => true,
+        (Some(n), Some(o)) => n <= o,
+        (None, Some(_)) => false,
+    };
+    let quota = match (new.quota, old.quota) {
+        (None, None) => true,
+        (Some((nc, nw)), Some((oc, ow))) => nc <= oc && nw >= ow,
+        (Some((nc, nw)), None) => nc <= DEFAULT_QUOTA.0 && nw >= DEFAULT_QUOTA.1,
+        (None, Some(_)) => false,
+    };
+    new.classes.iter().all(|c| old.classes.contains(c))
+        && crate::algebra::subject_le(&new.subject, &old.subject)
+        && old.floor.iter().all(|(dim, f)| {
+            new.floor
+                .get(dim)
+                .is_some_and(|nf| meets_floor(dim, *f, *nf))
+        })
+        && new.validity.from >= old.validity.from
+        && new.validity.until <= old.validity.until
+        && earlier(new.ingest_until, old.ingest_until)
+        && earlier(new.issued_until, old.issued_until)
+        && quota
 }
 
 /// A recorded Claim (`claim-state`).

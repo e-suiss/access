@@ -669,6 +669,13 @@ fn gated(terms: &[RequirementTerm]) -> BTreeMap<String, Opened> {
             Value::text("validity"),
             set(vec![Value::Unsigned(0), Value::Unsigned(1_000_000)]),
         ),
+        (
+            Value::text("quota"),
+            Value::Map(vec![
+                (Value::text("count"), Value::Unsigned(1)),
+                (Value::text("window_s"), Value::Unsigned(3_600)),
+            ]),
+        ),
     ]);
     g.insert("acceptances".to_owned(), opened(set(vec![acceptance])));
     g
@@ -687,13 +694,17 @@ async fn setup_with(db: &TestDb, g: BTreeMap<String, Opened>) -> (Core, Digest) 
 }
 
 fn claim(d: Digest, issuer: Id, seed: u8, class: &str) -> Vec<u8> {
+    claim_at(d, issuer, seed, class, NOW)
+}
+
+fn claim_at(d: Digest, issuer: Id, seed: u8, class: &str, issued_at: u64) -> Vec<u8> {
     let st = access_kernel::claim::Statement {
         domain: d,
         issuer,
         subject: ROOT,
         class: class.to_owned(),
         value: Some(EqValue::Bool(true)),
-        issued_at: NOW,
+        issued_at,
         validity: Window {
             from: 0,
             until: 1_000_000,
@@ -1074,5 +1085,36 @@ async fn a_member_holds_the_groups_grant_from_its_episode() {
             .await
             .is_none()
     );
+    fold_check(&db.sequencer, d).await.unwrap();
+}
+
+// OP-141 m.21 (a): an issuer admits twice its declared quota per window; the rest wait in
+// quarantine
+#[tokio::test]
+async fn an_issuer_quota_quarantines_the_excess() {
+    let db = fresh().await.unwrap();
+    let kyc = term(ProofKind::Claim, "kyc", ProofBinding::None);
+    let (mut core, d) = setup_with(&db, gated(&[kyc])).await;
+    onboard(&mut core, d, ROOT, ROOT_KEY, (1, 2)).await;
+    onboard(&mut core, d, ALICE, ALICE_KEY, (3, 4)).await;
+    let shop = ExerciseBasis::Anchor(meta::object_id(&d, kind::ANCHOR, 1));
+    let claims: Vec<Vec<u8>> = (0..3)
+        .map(|i| claim_at(d, ALICE, ALICE_KEY, "kyc", NOW - i))
+        .collect();
+    let r = send(
+        &mut core,
+        with_proofs(
+            shop_request(d, 9, Mode::Commit, shop),
+            claims.iter().cloned().map(ProofRef::Claim).collect(),
+        ),
+        ROOT_KEY,
+    )
+    .await
+    .unwrap();
+    allowed(&r);
+    let stored = |i: usize| meta::key(kind::CLAIM, &access_kernel::claim::claim_id(&claims[i]));
+    assert!(state_of(&db, d, &stored(0)).await.is_some());
+    assert!(state_of(&db, d, &stored(1)).await.is_some());
+    assert!(state_of(&db, d, &stored(2)).await.is_none());
     fold_check(&db.sequencer, d).await.unwrap();
 }

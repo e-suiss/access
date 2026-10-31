@@ -40,6 +40,8 @@ pub struct NewClaim {
     pub disposition: Disposition,
     /// Position of its record.
     pub pos: u64,
+    /// The quota draw of an admitted Claim: counter key and limit (OP-141 m.21 (a)).
+    pub draw: Option<(Vec<u8>, u64)>,
 }
 
 /// The proofs of one request.
@@ -327,7 +329,28 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         let statement = claim::verify(bytes, &key, &party, &self.domain)
             .map_err(|e| CoreError::Protocol(e.code()))?;
         let gates = self.gates(snap, &statement.issuer).await?;
-        let disposition = claim::disposition(&statement, &gates, now);
+        let mut disposition = claim::disposition(&statement, &gates, now);
+        let mut draw = None;
+        if disposition == Disposition::Admit
+            && let Some((limit, window)) = claim::quota_of(&statement, &gates, now)
+        {
+            let key = claim::quota_key(&statement.issuer, window, now);
+            let pending = out
+                .claims
+                .iter()
+                .filter(|c| c.draw.as_ref().is_some_and(|(k, _)| *k == key))
+                .count();
+            let used = self
+                .reader
+                .counter(&key)
+                .await?
+                .saturating_add(u64::try_from(pending).unwrap_or(u64::MAX));
+            if used >= limit {
+                disposition = Disposition::Quota;
+            } else {
+                draw = Some((key, limit));
+            }
+        }
         let proof = gates
             .iter()
             .any(|g| g.admits_for(claim::PREDICATE_INPUT, &statement, now));
@@ -342,6 +365,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             instance,
             disposition,
             pos,
+            draw,
         });
         Ok(())
     }

@@ -78,6 +78,8 @@ fn gate() -> Gate {
             until: 1_000_000,
         },
         ingest_until: None,
+        issued_until: None,
+        quota: None,
     }
 }
 
@@ -246,6 +248,14 @@ fn claim_vectors_match() {
         ("subject", Some(SubjectSelector::Public.to_value())),
         ("validity", Some(gate().validity.to_value())),
     ]);
+    let cutoff = map([
+        ("issuer", Some(ISSUER.to_value())),
+        ("use", Some(Value::text("predicate-input"))),
+        ("classes", Some(Value::Array(vec![Value::text("kyc")]))),
+        ("subject", Some(SubjectSelector::Public.to_value())),
+        ("validity", Some(gate().validity.to_value())),
+        ("issued_until", Some(Value::Unsigned(999))),
+    ]);
     let other_domain = signed(&Statement {
         domain: Digest([2; 32]),
         ..s.clone()
@@ -274,6 +284,14 @@ fn claim_vectors_match() {
             good.clone(),
             ISSUER,
             vec![selection],
+            2_000,
+        ),
+        (
+            "issued-after-cutoff",
+            &["L2-CLM-3"],
+            good.clone(),
+            ISSUER,
+            vec![cutoff],
             2_000,
         ),
         (
@@ -388,4 +406,101 @@ fn membership_entries_share_their_prefix() {
     assert!(satisfies(&conj(Some(EqValue::Bool(true))), &state, 2_000));
     assert!(!satisfies(&conj(Some(EqValue::Bool(false))), &state, 2_000));
     assert!(!satisfies(&conj(None), &state, 2_000_000));
+}
+
+// OP-141 m.21 (a), (c)
+#[test]
+fn quota_and_signing_cutoff() {
+    let s = statement();
+    assert_eq!(quota_of(&s, &[gate()], 2_000), Some((2_000, 3_600_000)));
+    let declared = Gate {
+        quota: Some((5, 60)),
+        ..gate()
+    };
+    assert_eq!(quota_of(&s, &[declared], 2_000), Some((10, 60_000)));
+    assert_eq!(quota_of(&s, &[], 2_000), None);
+    assert_eq!(
+        quota_key(&ISSUER, 60_000, 125_000),
+        quota_key(&ISSUER, 60_000, 179_999)
+    );
+    assert_ne!(
+        quota_key(&ISSUER, 60_000, 125_000),
+        quota_key(&ISSUER, 60_000, 180_000)
+    );
+    let cut = Gate {
+        issued_until: Some(999),
+        ..gate()
+    };
+    assert_eq!(
+        disposition(&s, &[cut], 2_000),
+        Disposition::SourceNotAccepted
+    );
+}
+
+// OP-141 m.21 (d): an amend that only narrows is not expansion
+#[test]
+fn narrowing_an_acceptance() {
+    let old = gate();
+    let narrower = [
+        Gate {
+            ingest_until: Some(5),
+            ..gate()
+        },
+        Gate {
+            issued_until: Some(5),
+            ..gate()
+        },
+        Gate {
+            subject: SubjectSelector::Party(SUBJECT),
+            ..gate()
+        },
+        Gate {
+            floor: BTreeMap::from([(String::from("aal"), 3)]),
+            ..gate()
+        },
+        Gate {
+            validity: Window {
+                from: 10,
+                until: 20,
+            },
+            ..gate()
+        },
+        Gate {
+            quota: Some((5, 3_600)),
+            ..gate()
+        },
+        gate(),
+    ];
+    for n in &narrower {
+        assert!(narrows(&old, n), "{n:?}");
+    }
+    let wider = [
+        Gate {
+            classes: vec![String::from("kyc"), String::from("age")],
+            ..gate()
+        },
+        Gate {
+            floor: BTreeMap::new(),
+            ..gate()
+        },
+        Gate {
+            validity: Window {
+                from: 0,
+                until: 2_000_000,
+            },
+            ..gate()
+        },
+        Gate {
+            quota: Some((5_000, 3_600)),
+            ..gate()
+        },
+    ];
+    for w in &wider {
+        assert!(!narrows(&old, w), "{w:?}");
+    }
+    let capped = Gate {
+        ingest_until: Some(5),
+        ..gate()
+    };
+    assert!(!narrows(&capped, &old));
 }

@@ -13,7 +13,7 @@ use access_kernel::digest::Digest;
 use access_kernel::model::Id;
 use access_kernel::verify::cose::PublicKey;
 use access_store::authority::{
-    NonceRow, StateRow, domain_tenant, find_nonce, state_of, state_prefix,
+    NonceRow, StateRow, counter, domain_tenant, find_nonce, state_of, state_prefix,
 };
 use access_store::scope::DomainId;
 use access_store::{Pool, StoreError};
@@ -74,6 +74,10 @@ impl Reader for PgReader {
             .into_iter()
             .map(row)
             .collect()
+    }
+
+    async fn counter(&self, key: &[u8]) -> Result<u64, CoreError> {
+        Ok(counter(&self.pool, &self.domain, key).await?)
     }
 
     async fn nonce(&self, nonce: &[u8]) -> Result<Option<NonceRow>, CoreError> {

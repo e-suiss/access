@@ -996,6 +996,14 @@ fn acceptance_content(v: &Value) -> Result<Value, ModelError> {
     crate::codec::assurance(f.opt("assurance_floor"))?;
     Window::from_value(f.req("validity")?)?;
     f.opt("ingest_until").map(uint).transpose()?;
+    f.opt("issued_until").map(uint).transpose()?;
+    if let Some(q) = f.opt("quota") {
+        let mut qf = Fields::of(q)?;
+        if uint(qf.req("count")?)? == 0 || uint(qf.req("window_s")?)? == 0 {
+            return Err(ModelError::Range);
+        }
+        qf.done()?;
+    }
     f.done()?;
     Ok(v.clone())
 }
@@ -2368,9 +2376,16 @@ pub fn apply(ctx: &Context<'_>, payload: &Payload, view: &dyn View) -> Result<Ou
                 return Err(MetaError::NotWithin);
             }
             select(view, &mut out, content, *acceptance, Some(&a.content))?;
+            // OP-141 m.21 (d)
+            out.expansion = match (
+                crate::claim::Gate::of(&a.content),
+                crate::claim::Gate::of(content),
+            ) {
+                (Ok(old), Ok(new)) => !crate::claim::narrows(&old, &new),
+                _ => true,
+            };
             a.content = content.clone();
             a.since = ctx.pos;
-            out.expansion = true;
             set(&mut out, kind::ACCEPTANCE, acceptance, a.to_value());
         }
         Payload::AcceptanceRevoke { acceptance } => {
