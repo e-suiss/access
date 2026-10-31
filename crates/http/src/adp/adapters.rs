@@ -43,6 +43,7 @@ pub fn router<P: Pdp + 'static>(service: Service<P>, discovery: Discovery) -> Ro
     Router::new()
         .route("/access/v1/evaluation", post(evaluation::<P>))
         .route("/access/v1/evaluations", post(evaluations::<P>))
+        .route("/access/v1/explain", post(explain::<P>))
         .route(
             "/.well-known/authzen-configuration",
             get(configuration::<P>),
@@ -72,6 +73,19 @@ async fn evaluations<P: Pdp>(
     let reply = shared
         .service
         .evaluations(&body, pep.map(|axum::Extension(Pep(p))| p))
+        .await;
+    respond(reply, &headers)
+}
+
+async fn explain<P: Pdp>(
+    State(shared): State<Arc<Shared<P>>>,
+    pep: Option<axum::Extension<Pep>>,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Response {
+    let reply = shared
+        .service
+        .explain(&body, pep.map(|axum::Extension(Pep(p))| p))
         .await;
     respond(reply, &headers)
 }
@@ -121,7 +135,12 @@ async fn configuration<P: Pdp>(State(shared): State<Arc<Shared<P>>>) -> Response
     let body = serde_json::json!({
         "policy_decision_point": issuer,
         "access_evaluation_endpoint": format!("{issuer}/access/v1/evaluation"),
-        "capabilities": ["urn:esuiss:access:adp:1"],
+        "access_evaluations_endpoint": format!("{issuer}/access/v1/evaluations"),
+        "capabilities": [
+            "urn:esuiss:access:adp:1",
+            "urn:esuiss:access:explain:1",
+            "urn:esuiss:access:consistency-token:1"
+        ],
     });
     (
         [(

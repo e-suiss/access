@@ -1,4 +1,4 @@
-//! §9.5.1, L1-ADP-1…14: the `AuthZEN` 1.0 PDP checklist against the ADP surface over HTTP.
+//! §9.5.1, L1-ADP-1…15: the `AuthZEN` 1.0 PDP checklist against the ADP surface over HTTP.
 //!
 //! The decision point is scripted, so each item checks the carrier, not the evaluation.
 
@@ -375,4 +375,29 @@ async fn an_item_error_stays_with_its_item() {
     assert_eq!(status, StatusCode::OK);
     assert_eq!(out["evaluations"][0]["decision"], true);
     assert_eq!(out["evaluations"][1]["error"], "unknown-member");
+}
+
+// OP-141 m.22 (h): a hypothetical explanation is a check labelled hypothetical; a recorded one
+// is not offered yet
+#[tokio::test]
+async fn explain_is_hypothetical_check() {
+    let (status, _, body) = post_to(
+        app(Ok(Outcome::Deny), Some("pep-1")),
+        "/access/v1/explain",
+        evaluation("check", ""),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["context"]["kind"], "hypothetical");
+    assert_eq!(body["context"]["advisory"], true);
+    let (status, _, body) = post_to(
+        app(Ok(Outcome::Deny), Some("pep-1")),
+        "/access/v1/explain",
+        evaluation("commit", ""),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["code"], "explain-mode");
 }

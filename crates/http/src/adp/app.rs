@@ -2,6 +2,7 @@
 
 use access_authority_core::CoreError;
 use access_authority_core::app::Incoming;
+use access_kernel::combinator::Mode;
 use serde_json::Value;
 
 use crate::adp::domain::{Decoded, Semantic, decode, decode_batch, encode};
@@ -82,6 +83,31 @@ impl<P: Pdp> Service<P> {
             out.push(value);
         }
         Reply::Decision(serde_json::json!({ "evaluations": out }))
+    }
+
+    /// `POST /access/v1/explain` for a hypothetical intent: a `check` evaluation labelled
+    /// `kind: "hypothetical"`, never recorded (OP-141 m.22 (h)). Explaining a recorded decision
+    /// is not offered yet; such a request is the protocol error `explain-mode`.
+    pub async fn explain(&self, body: &[u8], pep: Option<String>) -> Reply {
+        let Some(pep) = pep else {
+            return Reply::Unauthenticated;
+        };
+        let decoded = match decode(body, self.max_body) {
+            Ok(d) => d,
+            Err(e) => return Reply::Protocol(e.0),
+        };
+        if decoded.request.mode != Mode::Check {
+            return Reply::Protocol("explain-mode");
+        }
+        match self.decide(decoded, pep).await {
+            Reply::Decision(mut v) => {
+                if let Some(ctx) = v.get_mut("context").and_then(Value::as_object_mut) {
+                    ctx.insert(String::from("kind"), Value::from("hypothetical"));
+                }
+                Reply::Decision(v)
+            }
+            other => other,
+        }
     }
 
     async fn decide(&self, decoded: Decoded, pep: String) -> Reply {
