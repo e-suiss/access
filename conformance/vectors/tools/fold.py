@@ -41,10 +41,11 @@ def is_claim_key(key):
         k = cbor2.loads(key)
     except Exception:
         return False
-    return isinstance(k, list) and len(k) > 0 and k[0] == "claim"
+    return isinstance(k, list) and len(k) > 0 and k[0] in ("claim", "member")
 
 
 CLAIM_KEY = enc(["claim", bytes([4]) * 16])
+MEMBER_KEY = enc(["member", "kyc", bytes([5]) * 16, bytes([4]) * 16])
 
 
 def fold(records):
@@ -106,7 +107,7 @@ CASES = [
     ("effects-on-claim-not-admitted", [record(1, "claim", {"disposition": "quarantine:future", "effects": [[CLAIM_KEY, 1]]})]),
     ("effects-on-claim-without-disposition", [record(1, "claim", {"effects": [[CLAIM_KEY, 1]]})]),
     ("claim-effect-on-other-kind", [record(1, "claim", {"disposition": "admit", "effects": [[b"k", 1]]})]),
-    ("claim-admitted", [record(1, "claim", {"disposition": "admit", "effects": [[CLAIM_KEY, {"class": "kyc"}]]})]),
+    ("claim-admitted", [record(1, "claim", {"disposition": "admit", "effects": [[CLAIM_KEY, {"class": "kyc"}], [MEMBER_KEY, bytes([4]) * 16]]})]),
     ("duplicate-key", [decision(1, "allow", [[b"k", 1], [b"k", 2]])]),
     ("key-empty", [decision(1, "allow", [[b"", 1]])]),
     ("key-too-long", [decision(1, "allow", [[b"k" * 513, 1]])]),

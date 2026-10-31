@@ -1,0 +1,54 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT key, value, version FROM access.authority_state\n          WHERE domain_id = $1 AND value IS NOT NULL\n            AND substring(key from 1 for length($2::bytea)) = $2::bytea\n          ORDER BY key LIMIT $3",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "key",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.authority_state",
+            "name": "key"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "value",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.authority_state",
+            "name": "value"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "version",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.authority_state",
+            "name": "version"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      false
+    ]
+  },
+  "hash": "864def99a999326d6a44e8ff36010eb8b4ba588373f236062a623a75fab15e04"
+}

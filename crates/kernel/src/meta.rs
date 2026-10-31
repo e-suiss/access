@@ -1147,6 +1147,8 @@ pub mod kind {
     pub const EXERCISE: &str = "exercise";
     /// The Acceptances of an issuer Party.
     pub const ACCEPTANCES: &str = "acceptances";
+    /// The `subject-selection` Acceptances of a class.
+    pub const SELECTION: &str = "selection";
     /// The Grants whose basis is an Anchor or a Grant.
     pub const CHILDREN: &str = "children";
     /// The Instances of a Party.
@@ -1664,6 +1666,25 @@ fn genesis_acceptances(domain: &Digest, list: &Value) -> Result<Vec<Effect>, Met
     }
     for (issuer, set) in by_issuer {
         out.push((key(kind::ACCEPTANCES, &issuer), Some(ids_value(&set))));
+    }
+    // OP-141 m.20 (e)
+    let mut by_class: BTreeMap<String, (Option<Value>, BTreeSet<Id>)> = BTreeMap::new();
+    for (seq, a) in (0_u64..).zip(crate::codec::set_items(list, true)?) {
+        if a.get("use") != Some(&Value::text("subject-selection")) {
+            continue;
+        }
+        for class in classes_of(a) {
+            let entry = by_class
+                .entry(class)
+                .or_insert((a.get("issuer").cloned(), BTreeSet::new()));
+            if entry.0 != a.get("issuer").cloned() {
+                return Err(MetaError::NotWithin);
+            }
+            entry.1.insert(object_id(domain, kind::ACCEPTANCE, seq));
+        }
+    }
+    for (class, (_, set)) in by_class {
+        out.push((selection_key(&class), Some(ids_value(&set))));
     }
     Ok(out)
 }
@@ -2321,6 +2342,7 @@ pub fn apply(ctx: &Context<'_>, payload: &Payload, view: &dyn View) -> Result<Ou
                 set_of.insert(aid);
                 set(&mut out, kind::ACCEPTANCES, &issuer, ids_value(&set_of));
             }
+            select(view, &mut out, content, aid, None)?;
             set(
                 &mut out,
                 kind::ACCEPTANCE,
@@ -2345,6 +2367,7 @@ pub fn apply(ctx: &Context<'_>, payload: &Payload, view: &dyn View) -> Result<Ou
             if fixed(&a.content) != fixed(content) {
                 return Err(MetaError::NotWithin);
             }
+            select(view, &mut out, content, *acceptance, Some(&a.content))?;
             a.content = content.clone();
             a.since = ctx.pos;
             out.expansion = true;
@@ -2444,6 +2467,66 @@ pub fn apply(ctx: &Context<'_>, payload: &Payload, view: &dyn View) -> Result<Ou
         }
     }
     Ok(out)
+}
+
+/// `dCBOR(["selection", class])`: the `subject-selection` Acceptances of a class.
+#[must_use]
+pub fn selection_key(class: &str) -> Vec<u8> {
+    dcbor::encode(
+        &Value::Array(alloc::vec![
+            Value::text(kind::SELECTION),
+            Value::text(class)
+        ]),
+        Limits::CEILING,
+    )
+    .unwrap_or_default()
+}
+
+fn classes_of(content: &Value) -> BTreeSet<String> {
+    match content.get("classes") {
+        Some(Value::Array(c)) => c
+            .iter()
+            .filter_map(|v| match v {
+                Value::Text(t) => Some(t.clone()),
+                _ => None,
+            })
+            .collect(),
+        _ => BTreeSet::new(),
+    }
+}
+
+/// OP-141 m.20 (e): a class has one membership issuer; indexes a `subject-selection`
+/// Acceptance under each of its classes.
+fn select(
+    view: &dyn View,
+    out: &mut Outcome,
+    content: &Value,
+    aid: Id,
+    before: Option<&Value>,
+) -> Result<(), MetaError> {
+    if content.get("use") != Some(&Value::text("subject-selection")) {
+        return Ok(());
+    }
+    let issuer = content.get("issuer").cloned();
+    let known = before.map(classes_of).unwrap_or_default();
+    for class in classes_of(content).difference(&known) {
+        let k = selection_key(class);
+        let mut set_of = match view.get(&k) {
+            Some(v) => {
+                crate::codec::set_of(&v, false, Id::from_value).map_err(|_| MetaError::Corrupt)?
+            }
+            None => BTreeSet::new(),
+        };
+        for other in &set_of {
+            let a: ContentState = read(view, kind::ACCEPTANCE, other)?;
+            if a.ended.is_none() && a.content.get("issuer").cloned() != issuer {
+                return Err(MetaError::NotWithin);
+            }
+        }
+        set_of.insert(aid);
+        out.effects.push((k, Some(ids_value(&set_of))));
+    }
+    Ok(())
 }
 
 fn domain_root(ctx: &Context<'_>, view: &dyn View) -> Result<BTreeSet<RequirementTerm>, MetaError> {

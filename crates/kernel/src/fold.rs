@@ -72,11 +72,11 @@ fn admitted(record: &RecordEnvelope) -> bool {
     matches!(record.fields.get("disposition").map(|f| &f.value), Some(Value::Text(d)) if d == "admit")
 }
 
-/// Whether `key` is a `claim` key, the only kind a `claim` record writes (L2-REC-2).
+/// Whether `key` is a `claim` or `member` key, the kinds a `claim` record writes (L2-REC-2).
 fn is_claim_key(key: &[u8]) -> bool {
     matches!(
         suiss_crypto::dcbor::decode(key, suiss_crypto::dcbor::Limits::CEILING),
-        Ok(Value::Array(k)) if matches!(k.first(), Some(Value::Text(t)) if t == "claim")
+        Ok(Value::Array(k)) if matches!(k.first(), Some(Value::Text(t)) if t == "claim" || t == "member")
     )
 }
 

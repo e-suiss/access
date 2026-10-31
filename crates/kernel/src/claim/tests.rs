@@ -209,6 +209,8 @@ fn claim_state_round_trips() {
     assert_eq!(ClaimState::from_value(&st.to_value()).unwrap(), st);
 }
 
+type VectorCase<'a> = (&'a str, &'a [&'a str], Vec<u8>, Id, Vec<Value>, u64);
+
 // L2-CLM-1 to L2-CLM-3: Claim vectors, byte for byte. A case gives the COSE_Sign1, the issuer
 // the signing Instance belongs to, the Acceptance contents that are live and the trusted time;
 // the result is the disposition or the rejection.
@@ -237,6 +239,13 @@ fn claim_vectors_match() {
         ("subject", Some(SubjectSelector::Public.to_value())),
         ("validity", Some(gate().validity.to_value())),
     ]);
+    let selection = map([
+        ("issuer", Some(ISSUER.to_value())),
+        ("use", Some(Value::text("subject-selection"))),
+        ("classes", Some(Value::Array(vec![Value::text("kyc")]))),
+        ("subject", Some(SubjectSelector::Public.to_value())),
+        ("validity", Some(gate().validity.to_value())),
+    ]);
     let other_domain = signed(&Statement {
         domain: Digest([2; 32]),
         ..s.clone()
@@ -250,14 +259,21 @@ fn claim_vectors_match() {
         &signing(9),
         crate::ais::CONTENT_TYPE,
     );
-    type Case<'a> = (&'a str, &'a [&'a str], Vec<u8>, Id, Vec<Value>, u64);
-    let cases: Vec<Case<'_>> = vec![
+    let cases: Vec<VectorCase<'_>> = vec![
         (
             "admitted",
             &["L2-CLM-1", "L2-CLM-2", "L2-CLM-3"],
             good.clone(),
             ISSUER,
             vec![accept.clone()],
+            2_000,
+        ),
+        (
+            "membership-use",
+            &["L2-CLM-3"],
+            good.clone(),
+            ISSUER,
+            vec![selection],
             2_000,
         ),
         (
@@ -349,4 +365,27 @@ fn claim_vectors_match() {
         include_str!("../../../../conformance/vectors/core/1/claim.json"),
         &json,
     );
+}
+
+// OP-141 m.20 (b), (c)
+#[test]
+fn membership_entries_share_their_prefix() {
+    let key = member_key("kyc", &SUBJECT, &Id([3; 16]));
+    let prefix = member_prefix("kyc", &SUBJECT);
+    assert!(key.starts_with(&prefix) && key.len() == prefix.len() + 17);
+    assert!(!member_key("kyd", &SUBJECT, &Id([3; 16])).starts_with(&prefix));
+    let state = ClaimState {
+        statement: statement(),
+        instance: None,
+        since: 4,
+        ended: None,
+    };
+    let conj = |value| crate::model::Conjunct {
+        claim_class: String::from("kyc"),
+        value,
+    };
+    assert!(satisfies(&conj(None), &state, 2_000));
+    assert!(satisfies(&conj(Some(EqValue::Bool(true))), &state, 2_000));
+    assert!(!satisfies(&conj(Some(EqValue::Bool(false))), &state, 2_000));
+    assert!(!satisfies(&conj(None), &state, 2_000_000));
 }

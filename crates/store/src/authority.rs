@@ -691,6 +691,43 @@ pub async fn state_of(
         .collect()
 }
 
+/// Most rows one prefix scan returns (OP-141 m.20 (b), PD).
+pub const MAX_SCAN: i64 = 256;
+
+/// The current state rows whose key starts with `prefix`, in key order, at most [`MAX_SCAN`]
+/// (OP-141 m.20 (b)); removed keys are not returned.
+///
+/// # Errors
+/// [`StoreError::Db`].
+pub async fn state_prefix(
+    pool: &PgPool,
+    domain: &DomainId,
+    prefix: &[u8],
+) -> Result<Vec<StateRow>, StoreError> {
+    let mut t = DomainTx::begin(pool, domain).await?;
+    let rows = sqlx::query!(
+        "SELECT key, value, version FROM access.authority_state
+          WHERE domain_id = $1 AND value IS NOT NULL
+            AND substring(key from 1 for length($2::bytea)) = $2::bytea
+          ORDER BY key LIMIT $3",
+        domain.as_bytes().as_slice(),
+        prefix,
+        MAX_SCAN,
+    )
+    .fetch_all(&mut *t.tx)
+    .await?;
+    t.commit().await?;
+    rows.into_iter()
+        .map(|r| {
+            Ok(StateRow {
+                key: r.key,
+                value: r.value,
+                version: unsigned(r.version)?,
+            })
+        })
+        .collect()
+}
+
 /// A counter's used amount; 0 when never drawn.
 ///
 /// # Errors

@@ -22,6 +22,54 @@ pub const CONTENT_TYPE: &str = "application/access-claim+cbor";
 /// Digest context of the Claim bytes (L2-CLM-1).
 pub const CONTEXT: &str = "access/claim/v1";
 
+/// The use under which a Claim is a proof.
+pub const PREDICATE_INPUT: &str = "predicate-input";
+
+/// The use under which a Claim is a group membership (OP-141 m.20).
+pub const SUBJECT_SELECTION: &str = "subject-selection";
+
+/// Kind of the membership index (OP-141 m.20 (b)).
+pub const MEMBER: &str = "member";
+
+/// `dCBOR(["member", class, subject, ClaimID])`: one admitted Claim's membership entry.
+#[must_use]
+pub fn member_key(class: &str, subject: &Id, claim: &Id) -> Vec<u8> {
+    dcbor::encode(
+        &Value::Array(alloc::vec![
+            Value::text(MEMBER),
+            Value::text(class),
+            subject.to_value(),
+            claim.to_value()
+        ]),
+        Limits::CEILING,
+    )
+    .unwrap_or_default()
+}
+
+/// The byte prefix shared by the membership entries of `subject` in `class`.
+#[must_use]
+pub fn member_prefix(class: &str, subject: &Id) -> Vec<u8> {
+    let mut key = member_key(class, subject, &Id([0; 16]));
+    // the ClaimID is the last item: a 16-byte string, header 0x50 and 16 bytes
+    key.truncate(key.len().saturating_sub(17));
+    key
+}
+
+/// Whether a recorded Claim makes its subject satisfy `conjunct` now (OP-141 m.20 (c)); the
+/// Acceptance check is the caller's.
+#[must_use]
+pub fn satisfies(conjunct: &crate::model::Conjunct, state: &ClaimState, now: u64) -> bool {
+    let s = &state.statement;
+    state.ended.is_none()
+        && s.class == conjunct.claim_class
+        && conjunct
+            .value
+            .as_ref()
+            .is_none_or(|v| s.value.as_ref() == Some(v))
+        && s.validity.from <= now
+        && now <= s.validity.until
+}
+
 /// How far `issued_at` may lie ahead of trusted time (OP-141 m.19 (c)).
 pub const SKEW_MS: u64 = 60_000;
 
@@ -262,12 +310,18 @@ impl Gate {
     /// Whether this gate admits `s` as a predicate input at time `at` (L2-CLM-3).
     #[must_use]
     pub fn admits(&self, s: &Statement, at: u64) -> bool {
+        self.admits_for(PREDICATE_INPUT, s, at)
+    }
+
+    /// Whether this gate admits `s` for `use_` at time `at` (L2-CLM-3, OP-141 m.20 (a)).
+    #[must_use]
+    pub fn admits_for(&self, use_: &str, s: &Statement, at: u64) -> bool {
         let subject = match &self.subject {
             SubjectSelector::Public => true,
             SubjectSelector::Party(p) => *p == s.subject,
             _ => false,
         };
-        self.use_ == "predicate-input"
+        self.use_ == use_
             && self.issuer == Some(s.issuer)
             && self.classes.contains(&s.class)
             && subject
@@ -310,7 +364,10 @@ impl Disposition {
 pub fn disposition(s: &Statement, gates: &[Gate], now: u64) -> Disposition {
     if s.issued_at > now.saturating_add(SKEW_MS) {
         Disposition::Future
-    } else if gates.iter().any(|g| g.admits(s, now)) {
+    } else if gates
+        .iter()
+        .any(|g| g.admits_for(PREDICATE_INPUT, s, now) || g.admits_for(SUBJECT_SELECTION, s, now))
+    {
         Disposition::Admit
     } else {
         Disposition::SourceNotAccepted

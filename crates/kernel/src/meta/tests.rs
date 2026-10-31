@@ -574,6 +574,39 @@ fn acceptances_are_indexed_by_issuer() {
     assert_eq!((c.statement.issuer, c.statement.subject), (ROOT, ALICE));
 }
 
+// OP-141 m.20 (e): a group has one membership issuer
+#[test]
+fn a_group_has_one_membership_issuer() {
+    let mut r = Run::new();
+    let meta = ExerciseBasis::Anchor(meta_anchor(&DOMAIN));
+    let selection = |issuer: Id, class: &str| {
+        Payload::AcceptanceEstablish(map([
+            ("issuer", Some(issuer.to_value())),
+            ("use", Some(Value::text("subject-selection"))),
+            (
+                "classes",
+                Some(Value::Array(alloc::vec![Value::text(class)])),
+            ),
+            ("subject", Some(SubjectSelector::Public.to_value())),
+            (
+                "validity",
+                Some(Value::Array(alloc::vec![
+                    Value::Unsigned(0),
+                    Value::Unsigned(10)
+                ])),
+            ),
+        ]))
+    };
+    r.act(ROOT, ROOT, meta, &selection(CAROL, "staff")).unwrap();
+    r.act(ROOT, ROOT, meta, &selection(CAROL, "staff")).unwrap();
+    assert_eq!(
+        r.act(ROOT, ROOT, meta, &selection(BOB, "staff"))
+            .unwrap_err(),
+        MetaError::NotWithin
+    );
+    r.act(ROOT, ROOT, meta, &selection(BOB, "guests")).unwrap();
+}
+
 struct Recorder {
     run: Run,
     cases: Vec<String>,

@@ -74,7 +74,7 @@ def _admits(acceptance, statement, now):
     lo, hi = acceptance["validity"]
     until = acceptance.get("ingest_until")
     return (
-        acceptance["use"] == "predicate-input"
+        acceptance["use"] in ("predicate-input", "subject-selection")
         and isinstance(issuer, bytes)
         and issuer == statement["issuer"]
         and statement["class"] in acceptance["classes"]

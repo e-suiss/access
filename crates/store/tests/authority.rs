@@ -14,7 +14,7 @@ use access_store::StoreError;
 use access_store::authority::{
     CommitBatch, Draw, HeadRow, LogRecord, NonceRow, OutboxRow, ProofRow, acquire_lease,
     commit_batch, counter, create_domain, domain_tenant, find_nonce, read_head, read_log,
-    release_lease, renew_lease, versions,
+    release_lease, renew_lease, state_prefix, versions,
 };
 use access_store::scope::DomainId;
 use access_store::testing::{TestDb, fresh};
@@ -112,6 +112,27 @@ async fn genesis_lease_and_commit() {
         .await
         .unwrap();
     release_lease(&db.sequencer, &d, "a", lease).await.unwrap();
+}
+
+// OP-141 m.20 (b): a prefix scan returns the live keys under the prefix only
+#[tokio::test]
+async fn a_prefix_scan_returns_live_keys_under_it() {
+    let db = fresh().await.unwrap();
+    let (d, g) = genesis(11);
+    let state = vec![
+        (vec![0x84, 1, 2, 3], vec![0xf5]),
+        (vec![0x84, 1, 2, 4], vec![0xf4]),
+        (vec![0x84, 1, 3, 3], vec![0xf5]),
+    ];
+    create_domain(&db.sequencer, &d, TENANT, &g, &state)
+        .await
+        .unwrap();
+    let rows = state_prefix(&db.app, &d, &[0x84, 1, 2]).await.unwrap();
+    assert_eq!(
+        rows.iter().map(|r| r.key.clone()).collect::<Vec<_>>(),
+        [vec![0x84, 1, 2, 3], vec![0x84, 1, 2, 4]]
+    );
+    assert_eq!(state_prefix(&db.app, &d, &[0x85]).await.unwrap().len(), 0);
 }
 
 // OP-12 m.1, OP-141 m.18 (a)
