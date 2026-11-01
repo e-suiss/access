@@ -135,14 +135,24 @@ def check_acceptance_content(value):
     })
 
 
+def check_requirement_map(value):
+    # OP-141 m.27 (b): `@require` references to requirement sets
+    if not isinstance(value, dict) or not value:
+        fail("shape")
+    for ref, terms in value.items():
+        check_ident(ref)
+        check_requirement_set(terms)
+
+
 def check_policy_content(value):
+    # L0-META-27: the one schema of this version
     check_map(value, {
-        "schema": check_tstr,
+        "schema": check_text_in("access/restriction/v1"),
         "source": check_tstr,
         "target": lambda target: check_choice(
             target, {"anchor": check_id, "party": check_id, "instance": check_id}, texts=("domain",)
         ),
-    })
+    }, {"requirements": check_requirement_map})
 
 
 PAYLOADS = {
@@ -708,13 +718,23 @@ class Apply:
     def policy_set(self, body):
         # L0-META-27, L0-META-29
         self.meta_root()
+        target = body["content"]["target"]
         if "policy" in body:
-            self.live("policy", body["policy"])
+            old = self.live("policy", body["policy"])
             policy_id = body["policy"]
+            # L0-META-5: an amend that changes the target moves the policy between entries
+            if old["content"]["target"] != target:
+                remaining = [p for p in self.read("policies", old["content"]["target"]) or [] if p != policy_id]
+                if remaining:
+                    self.write("policies", old["content"]["target"], remaining)
+                else:
+                    self.remove("policies", old["content"]["target"])
         else:
             policy_id = self.new_id("policy")
+        self.add_to_index("policies", target, policy_id)
         self.write("policy", policy_id, {"content": body["content"], "since": self.pos})
-        return True
+        # L0-META-28: a new RestrictionPolicy only narrows; changing one is expansion
+        return "policy" in body
 
     def policy_retire(self, body):
         # L0-META-27, L0-META-28

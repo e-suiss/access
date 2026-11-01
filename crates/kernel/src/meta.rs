@@ -1008,10 +1008,24 @@ fn acceptance_content(v: &Value) -> Result<Value, ModelError> {
     Ok(v.clone())
 }
 
+/// The one restriction schema of this version (OP-141 m.27 (a)).
+pub const RESTRICTION_SCHEMA: &str = "access/restriction/v1";
+
 fn policy_content(v: &Value) -> Result<Value, ModelError> {
     let mut f = Fields::of(v)?;
-    crate::codec::text(f.req("schema")?)?;
+    if crate::codec::text(f.req("schema")?)? != RESTRICTION_SCHEMA {
+        return Err(ModelError::Unknown);
+    }
     crate::codec::text(f.req("source")?)?;
+    // OP-141 m.27 (b)
+    if let Some(Value::Map(refs)) = f.opt("requirements") {
+        for (k, terms) in refs {
+            crate::codec::ident(k)?;
+            requirements(Some(terms))?;
+        }
+    } else if f.opt("requirements").is_some() {
+        return Err(ModelError::Shape);
+    }
     let target = f.req("target")?;
     if !matches!(target, Value::Text(t) if t == "domain") {
         match single(target)? {
@@ -1157,6 +1171,8 @@ pub mod kind {
     pub const ACCEPTANCES: &str = "acceptances";
     /// The `subject-selection` Acceptances of a class.
     pub const SELECTION: &str = "selection";
+    /// The restriction policies of a target.
+    pub const POLICIES: &str = "policies";
     /// The Grants whose basis is an Anchor or a Grant.
     pub const CHILDREN: &str = "children";
     /// The Instances of a Party.
@@ -2408,6 +2424,7 @@ pub fn apply(ctx: &Context<'_>, payload: &Payload, view: &dyn View) -> Result<Ou
             set(&mut out, kind::ACCEPTANCE, acceptance, a.to_value());
         }
         Payload::PolicySet { policy, content } => {
+            policy_content(content).map_err(MetaError::Malformed)?;
             out.requirements = domain_root(ctx, view)?;
             let id = match policy {
                 Some(p) => {
@@ -2418,6 +2435,22 @@ pub fn apply(ctx: &Context<'_>, payload: &Payload, view: &dyn View) -> Result<Ou
                 None => new_id(ctx, kind::POLICY, 0),
             };
             out.expansion = policy.is_some();
+            // OP-141 m.27 (c)
+            let target = content.get("target").cloned().ok_or(MetaError::Corrupt)?;
+            if let Some(p) = policy {
+                let s: ContentState = read(view, kind::POLICY, p)?;
+                if let Some(old) = s.content.get("target").filter(|t| **t != target) {
+                    let k = policies_key(old);
+                    let mut set_of = index_of(view, &k)?;
+                    set_of.remove(p);
+                    out.effects
+                        .push((k, (!set_of.is_empty()).then(|| ids_value(&set_of))));
+                }
+            }
+            let k = policies_key(&target);
+            let mut set_of = index_of(view, &k)?;
+            set_of.insert(id);
+            out.effects.push((k, Some(ids_value(&set_of))));
             set(
                 &mut out,
                 kind::POLICY,
@@ -2495,6 +2528,23 @@ pub fn apply(ctx: &Context<'_>, payload: &Payload, view: &dyn View) -> Result<Ou
     }
     out.effects = sorted(out.effects);
     Ok(out)
+}
+
+/// `dCBOR(["policies", target])`: the restriction policies of a target (OP-141 m.27 (c)).
+#[must_use]
+pub fn policies_key(target: &Value) -> Vec<u8> {
+    dcbor::encode(
+        &Value::Array(alloc::vec![Value::text(kind::POLICIES), target.clone()]),
+        Limits::CEILING,
+    )
+    .unwrap_or_default()
+}
+
+fn index_of(view: &dyn View, key: &[u8]) -> Result<BTreeSet<Id>, MetaError> {
+    match view.get(key) {
+        Some(v) => crate::codec::set_of(&v, false, Id::from_value).map_err(|_| MetaError::Corrupt),
+        None => Ok(BTreeSet::new()),
+    }
 }
 
 /// `dCBOR(["selection", class])`: the `subject-selection` Acceptances of a class.

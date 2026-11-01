@@ -576,10 +576,13 @@ acceptance-content = {
   ? quota: { count: uint .ge 1, window_s: uint .ge 1 },
 }
 
+; OP-141 m.27: Cedar source against Access's published schema; `requirements` resolves the
+; `@require` references of its forbid policies.
 policy-content = {
-  schema: tstr,
+  schema: "access/restriction/v1",
   source: tstr,
   target: "domain" / { anchor: id } / { party: party-ref } / { instance: instance-ref },
+  ? requirements: { + ident => requirement-set },
 }
 
 ; Disposition of the Grants that depend on an Anchor or a Party at transfer, retire or departure.

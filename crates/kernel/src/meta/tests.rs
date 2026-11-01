@@ -1127,6 +1127,49 @@ fn meta_vectors_match() {
             acceptance: Id([9; 16]),
         },
     );
+    // L0-META-5, L0-META-27: a policy joins its target's index and moves with it
+    let policy = |target: Value, schema: &str| {
+        map([
+            ("schema", Some(Value::text(schema))),
+            (
+                "source",
+                Some(Value::text("forbid(principal, action, resource);")),
+            ),
+            ("target", Some(target)),
+        ])
+    };
+    let set_policy = r
+        .step(
+            "policy-set",
+            &["L0-META-5", "L0-META-27", "L0-META-29"],
+            (ROOT, ROOT),
+            meta,
+            &Payload::PolicySet {
+                policy: None,
+                content: policy(Value::text("domain"), RESTRICTION_SCHEMA),
+            },
+        )
+        .unwrap();
+    r.step(
+        "policy-moves-target",
+        &["L0-META-5", "L0-META-27"],
+        (ROOT, ROOT),
+        meta,
+        &Payload::PolicySet {
+            policy: Some(object_id(&set_policy, kind::POLICY, 0)),
+            content: policy(tagged("party", ALICE.to_value()), RESTRICTION_SCHEMA),
+        },
+    );
+    r.step(
+        "policy-other-schema",
+        &["L0-META-27", "L0-META-31"],
+        (ROOT, ROOT),
+        meta,
+        &Payload::PolicySet {
+            policy: None,
+            content: policy(Value::text("domain"), "cedar"),
+        },
+    );
     // L0-META-22, L0-META-23: rekey, recover and departure
     let key_of = |seed: u8| {
         PublicKey::Ed25519(
