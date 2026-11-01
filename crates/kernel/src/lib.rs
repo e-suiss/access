@@ -20,6 +20,7 @@ pub mod model;
 pub mod record;
 pub mod requirement;
 pub mod restriction;
+pub mod tier;
 pub mod validity;
 pub mod verify;
 pub mod version;

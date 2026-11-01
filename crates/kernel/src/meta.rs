@@ -1783,6 +1783,17 @@ pub fn genesis_effects(
     if let Some(list) = take("acceptances") {
         out.extend(genesis_acceptances(domain, list)?);
     }
+    // OP-141 m.34 (d)
+    if let Some(policy) = take("policy") {
+        let mut f = Fields::of(policy)?;
+        if let Some(delay) = f.opt("ct3_delay_s") {
+            out.push((
+                policy_default_key(CT3_DELAY),
+                Some(Value::Unsigned(uint(delay)?)),
+            ));
+        }
+        f.done()?;
+    }
     let _ = take("reserved");
     let _ = take("versions");
     if known != fields.len() {
@@ -2766,6 +2777,24 @@ fn pinned(
         return Err(MetaError::NotWithin);
     }
     Ok(())
+}
+
+/// The policy default holding the CT3 time-lock in seconds (OP-141 m.34 (d)).
+pub const CT3_DELAY: &str = "ct3_delay_s";
+/// The CT3 time-lock when Genesis sets none: 24 hours (§13.7.3, SEC26).
+pub const CT3_DELAY_DEFAULT_S: u64 = 86_400;
+
+/// `dCBOR(["policy_default", name])`: a policy default Genesis sets (OP-141 m.34 (d)).
+#[must_use]
+pub fn policy_default_key(name: &str) -> Vec<u8> {
+    dcbor::encode(
+        &Value::Array(alloc::vec![
+            Value::text("policy_default"),
+            Value::text(name)
+        ]),
+        Limits::CEILING,
+    )
+    .unwrap_or_default()
 }
 
 /// Non-execution of the bound intent (OP-141 m.28 (d)).

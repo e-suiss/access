@@ -763,6 +763,27 @@ fn a_grant_pins_a_named_authority_set_version() {
     assert_eq!(r.grant(&g).content.named, Some(v2));
 }
 
+// OP-141 m.34 (d): Genesis may set the CT3 time-lock; any other policy field is malformed
+#[test]
+fn genesis_sets_the_ct3_time_lock() {
+    let mut fields = BTreeMap::new();
+    fields.insert(
+        "meta_anchor".to_string(),
+        map([("root", Some(root_value(&Root::Sole(ROOT))))]),
+    );
+    fields.insert(
+        "policy".to_string(),
+        map([("ct3_delay_s", Some(Value::Unsigned(60)))]),
+    );
+    let effects = genesis_effects(&DOMAIN, &fields).unwrap();
+    assert!(effects.contains(&(policy_default_key(CT3_DELAY), Some(Value::Unsigned(60)))));
+    fields.insert(
+        "policy".to_string(),
+        map([("ct0_delay_s", Some(Value::Unsigned(60)))]),
+    );
+    assert!(genesis_effects(&DOMAIN, &fields).is_err());
+}
+
 // L0-META-5, L0-META-27: Acceptances are indexed by issuer; a domain Claim names its issuer
 #[test]
 fn acceptances_are_indexed_by_issuer() {

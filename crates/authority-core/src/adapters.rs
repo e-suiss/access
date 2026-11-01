@@ -136,6 +136,10 @@ impl Reader for PgReader {
     async fn nonce(&self, nonce: &[u8]) -> Result<Option<NonceRow>, CoreError> {
         Ok(find_nonce(&self.pool, &self.domain, nonce).await?)
     }
+
+    async fn nonce_opened(&self, nonce: &[u8]) -> Result<Option<u64>, CoreError> {
+        Ok(access_store::authority::nonce_opened(&self.pool, &self.domain, nonce).await?)
+    }
 }
 
 /// Salts from the operating system's random source (OP-106 m.15, OP-141 m.18 (e)).

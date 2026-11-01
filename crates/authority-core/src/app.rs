@@ -12,7 +12,9 @@ use access_kernel::algebra::Catalog;
 use access_kernel::claim::{self, ClaimState, Disposition};
 use access_kernel::codec::Canonical;
 use access_kernel::combinator::codec::decision_value;
-use access_kernel::combinator::{Decision, Mode, Outcome, Rejection};
+use access_kernel::combinator::{
+    Blocker, BlockerClass, Decision, Mode, Outcome, Position, Rejection, Remediation, Resolver,
+};
 use access_kernel::digest::Digest;
 use access_kernel::fold::Effect;
 use access_kernel::intent::intent_digest;
@@ -390,6 +392,69 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         Ok((evaluation, snapshot))
     }
 
+    /// The consequence tier's ceilings: the intent validity, and the time-lock of a CT3
+    /// meta-action that widens authority, counted from the nonce's first decision
+    /// (§13.7.3, SEC26, OP-141 m.34 (b), (c)).
+    async fn tiered(
+        &self,
+        req: &Request,
+        evaluation: &mut Evaluation,
+        open: bool,
+        now: u64,
+    ) -> Result<(), CoreError> {
+        let tier = access_kernel::tier::of(&req.intent, req.payload.as_ref(), evaluation.expansion);
+        let validity = &req.intent.validity;
+        if validity.until.saturating_sub(validity.from)
+            > access_kernel::tier::validity_ceiling(tier)
+        {
+            return Err(CoreError::Protocol("intent-validity"));
+        }
+        if tier != access_kernel::tier::Tier::Ct3
+            || evaluation.decision.outcome != Outcome::Allow
+            || req.payload.is_none()
+        {
+            return Ok(());
+        }
+        let key = meta::policy_default_key(meta::CT3_DELAY);
+        let delay = self
+            .reader
+            .fetch(std::slice::from_ref(&key))
+            .await?
+            .into_iter()
+            .find_map(|(_, v, _)| match v {
+                Some(Value::Unsigned(s)) => Some(s),
+                _ => None,
+            })
+            .unwrap_or(meta::CT3_DELAY_DEFAULT_S);
+        let opened = if open {
+            match self.reader.nonce_opened(&req.nonce).await? {
+                Some(pos) => self.reader.recorded_at(pos).await?.unwrap_or(now),
+                None => now,
+            }
+        } else {
+            now
+        };
+        let until = opened.saturating_add(delay.saturating_mul(1_000));
+        if now < until {
+            evaluation.decision = Decision {
+                outcome: Outcome::RequireAction,
+                blockers: vec![Blocker {
+                    class: BlockerClass::Restricted,
+                    subcode: Some(String::from("time-lock")),
+                    position: Position::Anchor,
+                    resolver: Resolver::Root,
+                    remediation: Remediation::WaitUntil(until),
+                }],
+                unmet: Vec::new(),
+                relied_on: Vec::new(),
+            };
+            evaluation.effects.clear();
+            evaluation.draws.clear();
+            evaluation.releases.clear();
+        }
+        Ok(())
+    }
+
     /// Runs one request through the commit path (§17.1.1).
     ///
     /// # Errors
@@ -447,7 +512,8 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                 policies: &self.policies,
                 compromised,
             };
-            let (evaluation, snapshot) = self.passes(req, &frame).await?;
+            let (mut evaluation, snapshot) = self.passes(req, &frame).await?;
+            self.tiered(req, &mut evaluation, open, now).await?;
             if req.mode == Mode::Check {
                 return Ok(answer(evaluation.decision, None, None, false));
             }

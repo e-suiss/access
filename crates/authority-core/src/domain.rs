@@ -212,6 +212,8 @@ pub struct Evaluation {
     pub draws: Vec<DrawSpec>,
     /// Budget counter keys and amounts an allowed release returns (OP-141 m.28 (g)).
     pub releases: Vec<(Vec<u8>, u64)>,
+    /// Whether the meta-action widens authority (L0-META-28).
+    pub expansion: bool,
 }
 
 /// A budget draw: counter key, limit, demand and the unit of an `amount` term.
@@ -692,11 +694,13 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
             effects: Vec::new(),
             draws: Vec::new(),
             releases: Vec::new(),
+            expansion: false,
         });
     }
     let mut effects = Vec::new();
     let mut draws = Vec::new();
     let mut releases = Vec::new();
+    let mut expansion = false;
     // L0-META-30: a contribution is authorized like a domain action and records itself
     let contribute = matches!(req.payload, Some(Payload::Contribute { .. }));
     if let Some(payload) = req.payload.as_ref().filter(|_| contribute) {
@@ -710,6 +714,7 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
                 effects,
                 draws: Vec::new(),
                 releases: Vec::new(),
+                expansion: false,
             });
         };
         let ctx = meta::Context {
@@ -729,6 +734,7 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
                     effects: Vec::new(),
                     draws: Vec::new(),
                     releases: Vec::new(),
+                    expansion: false,
                 });
             }
         }
@@ -744,6 +750,7 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
                 effects,
                 draws: Vec::new(),
                 releases: Vec::new(),
+                expansion: false,
             });
         };
         let ctx = meta::Context {
@@ -767,11 +774,13 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
                     effects,
                     draws: Vec::new(),
                     releases: Vec::new(),
+                    expansion: false,
                 });
             }
             Ok(out) => {
                 effects = out.effects;
                 releases = out.releases;
+                expansion = out.expansion;
                 // L0-META-13: a self-acting meta-action names a live Grant held by Public that
                 // covers it, like any other basis
                 let basis = if let ExerciseBasis::Public(g) = req.basis {
@@ -937,6 +946,7 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
                 effects,
                 draws,
                 releases,
+                expansion,
             })
         }
         Err(r) => Pass::Rejected(r),

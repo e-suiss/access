@@ -148,6 +148,14 @@ fn genesis() -> BTreeMap<String, Opened> {
         ),
         ("anchors".to_owned(), opened(Value::Array(vec![shop]))),
         ("grants".to_owned(), opened(Value::Array(vec![bootstrap]))),
+        // OP-141 m.34 (d): the scenarios below run without the CT3 time-lock
+        (
+            "policy".to_owned(),
+            opened(Value::Map(vec![(
+                Value::text("ct3_delay_s"),
+                Value::Unsigned(0),
+            )])),
+        ),
         (
             "versions".to_owned(),
             opened(Value::Map(vec![
@@ -1114,6 +1122,85 @@ async fn while_conditions_are_prepared_on_the_commit_path() {
     .unwrap();
     assert_eq!(denied.decision.outcome, Outcome::Deny);
     fold_check(&db.sequencer, d).await.unwrap();
+}
+
+// SEC26, OP-141 m.34: a CT3 meta-action waits out the time-lock on its nonce, counted from the
+// nonce's first decision; a narrowing one does not
+#[tokio::test]
+async fn a_ct3_expansion_waits_out_the_time_lock() {
+    use access_kernel::combinator::{BlockerClass, Remediation};
+    let db = fresh().await.unwrap();
+    let mut g = genesis();
+    g.remove("policy");
+    let (mut core, d) = setup_with(&db, g).await;
+    onboard(&mut core, d, ROOT, ROOT_KEY, (1, 2)).await;
+    let set = send(
+        &mut core,
+        policy_set(
+            d,
+            10,
+            None,
+            r#"@id("no-reads") forbid(principal, action, resource) when { context.action == "shop:read" };"#,
+            None,
+        ),
+        ROOT_KEY,
+    )
+    .await
+    .unwrap();
+    allowed(&set);
+    let policy = meta::object_id(&set.exercise.unwrap(), kind::POLICY, 0);
+    let retire = || {
+        let mut r = meta_request(
+            d,
+            11,
+            ExerciseBasis::Anchor(meta::meta_anchor(&d)),
+            Payload::PolicyRetire { policy },
+        );
+        r.intent.validity = Window {
+            from: NOW,
+            until: NOW + 72 * 3_600_000,
+        };
+        r
+    };
+    let waiting = send(&mut core, retire(), ROOT_KEY).await.unwrap();
+    assert_eq!(waiting.decision.outcome, Outcome::RequireAction);
+    let lock = NOW + 86_400_000;
+    assert!(waiting.decision.blockers.iter().any(|b| {
+        b.class == BlockerClass::Restricted
+            && b.subcode.as_deref() == Some("time-lock")
+            && b.remediation == Remediation::WaitUntil(lock)
+    }));
+    let early = core
+        .exercise(&incoming(retire(), ROOT_KEY), lock - 1)
+        .await
+        .unwrap();
+    assert_eq!(early.decision.outcome, Outcome::RequireAction);
+    allowed(
+        &core
+            .exercise(&incoming(retire(), ROOT_KEY), lock)
+            .await
+            .unwrap(),
+    );
+    fold_check(&db.sequencer, d).await.unwrap();
+}
+
+// §13.7.3, OP-141 m.34 (b): an intent valid for longer than its tier allows is refused
+#[tokio::test]
+async fn an_intent_beyond_its_tier_ceiling_is_refused() {
+    let db = fresh().await.unwrap();
+    let (mut core, d) = setup(&db).await;
+    onboard(&mut core, d, ROOT, ROOT_KEY, (1, 2)).await;
+    let mut r = shop_request(
+        d,
+        10,
+        Mode::Check,
+        ExerciseBasis::Anchor(meta::object_id(&d, kind::ANCHOR, 1)),
+    );
+    r.intent.validity.until = r.intent.validity.from + 86_400_001;
+    assert!(matches!(
+        send(&mut core, r, ROOT_KEY).await,
+        Err(CoreError::Protocol("intent-validity"))
+    ));
 }
 
 async fn state_of(db: &TestDb, d: Digest, key: &[u8]) -> Option<Vec<u8>> {

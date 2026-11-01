@@ -642,6 +642,7 @@ genesis-fields = {
   ? grants: [+ genesis-grant],
   ? acceptances: [+ acceptance-content],
   ? reserved: [+ action-ref],
+  ? policy: { ? ct3_delay_s: uint },
   versions: spec-versions,
 }
 

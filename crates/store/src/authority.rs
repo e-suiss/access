@@ -779,6 +779,27 @@ pub async fn read_log(
         .collect()
 }
 
+/// The position of the first decision recorded for a nonce (OP-141 m.34 (c)).
+///
+/// # Errors
+/// [`StoreError`].
+pub async fn nonce_opened(
+    pool: &PgPool,
+    domain: &DomainId,
+    nonce: &[u8],
+) -> Result<Option<u64>, StoreError> {
+    let mut t = DomainTx::begin(pool, domain).await?;
+    let pos = sqlx::query_scalar!(
+        "SELECT min(decision_pos) FROM access.authority_nonce WHERE domain_id = $1 AND nonce = $2",
+        domain.as_bytes().as_slice(),
+        nonce,
+    )
+    .fetch_one(&mut *t.tx)
+    .await?;
+    t.commit().await?;
+    pos.map(unsigned).transpose()
+}
+
 /// The latest outcome recorded for a nonce (TI-8, OP-141 m.9).
 ///
 /// # Errors
