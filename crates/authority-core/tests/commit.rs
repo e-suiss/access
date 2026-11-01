@@ -1419,3 +1419,150 @@ async fn a_budget_is_drawn_until_it_is_exhausted() {
     assert_eq!(checked.decision.outcome, Outcome::Deny);
     fold_check(&db.sequencer, d).await.unwrap();
 }
+
+// ---------------------------------------------------------------- restrictions (OP-141 m.27)
+
+fn policy_set(
+    d: Digest,
+    nonce: u8,
+    policy: Option<Id>,
+    source: &str,
+    requirements: Option<Value>,
+) -> Request {
+    let mut content = vec![
+        (Value::text("schema"), Value::text("access/restriction/v1")),
+        (Value::text("source"), Value::text(source)),
+        (Value::text("target"), Value::text("domain")),
+    ];
+    if let Some(r) = requirements {
+        content.push((Value::text("requirements"), r));
+    }
+    let content = Value::Map(content);
+    let content = dcbor::decode(
+        &dcbor::encode(&content, Limits::CEILING).unwrap(),
+        Limits::CEILING,
+    )
+    .unwrap();
+    meta_request(
+        d,
+        nonce,
+        ExerciseBasis::Anchor(meta::meta_anchor(&d)),
+        Payload::PolicySet { policy, content },
+    )
+}
+
+// L0-EVAL-18, OP-141 m.27: a domain policy denies, a @require policy asks for its requirement,
+// a policy that does not compile is never set, and a retired policy stops applying
+#[tokio::test]
+#[allow(
+    clippy::too_many_lines,
+    reason = "one scenario through a policy's life"
+)]
+async fn restriction_policies_narrow_the_commit_path() {
+    let db = fresh().await.unwrap();
+    let (mut core, d) = setup_with(&db, gated(&[])).await;
+    onboard(&mut core, d, ROOT, ROOT_KEY, (1, 2)).await;
+    onboard(&mut core, d, ALICE, ALICE_KEY, (3, 4)).await;
+    let shop = ExerciseBasis::Anchor(meta::object_id(&d, kind::ANCHOR, 1));
+    allowed(
+        &send(&mut core, shop_request(d, 9, Mode::Commit, shop), ROOT_KEY)
+            .await
+            .unwrap(),
+    );
+
+    assert!(matches!(
+        send(
+            &mut core,
+            policy_set(d, 10, None, "forbid(", None),
+            ROOT_KEY
+        )
+        .await,
+        Err(CoreError::Protocol("policy"))
+    ));
+    let set = send(
+        &mut core,
+        policy_set(
+            d,
+            11,
+            None,
+            r#"@id("no-reads") forbid(principal, action, resource) when { context.action == "shop:read" };"#,
+            None,
+        ),
+        ROOT_KEY,
+    )
+    .await
+    .unwrap();
+    allowed(&set);
+    let denied = send(&mut core, shop_request(d, 12, Mode::Commit, shop), ROOT_KEY)
+        .await
+        .unwrap();
+    assert_eq!(denied.decision.outcome, Outcome::Deny);
+    assert!(
+        denied
+            .decision
+            .blockers
+            .iter()
+            .any(|b| b.class == access_kernel::combinator::BlockerClass::Restricted)
+    );
+
+    // replace it with a policy that asks for a kyc Claim
+    let policy = meta::object_id(&set.exercise.unwrap(), kind::POLICY, 0);
+    let kyc = term(ProofKind::Claim, "kyc", ProofBinding::None);
+    let requirements = Value::Map(vec![(
+        Value::text("rs-kyc"),
+        Value::Array(vec![kyc.to_value()]),
+    )]);
+    allowed(
+        &send(
+            &mut core,
+            policy_set(
+                d,
+                13,
+                Some(policy),
+                r#"@id("kyc") @require("rs-kyc") forbid(principal, action, resource) when { context.action == "shop:read" };"#,
+                Some(requirements),
+            ),
+            ROOT_KEY,
+        )
+        .await
+        .unwrap(),
+    );
+    let asked = send(&mut core, shop_request(d, 14, Mode::Commit, shop), ROOT_KEY)
+        .await
+        .unwrap();
+    assert_eq!(asked.decision.outcome, Outcome::RequireAction);
+    let good = claim(d, ALICE, ALICE_KEY, "kyc");
+    allowed(
+        &send(
+            &mut core,
+            with_proofs(
+                shop_request(d, 14, Mode::Commit, shop),
+                vec![ProofRef::Claim(good)],
+            ),
+            ROOT_KEY,
+        )
+        .await
+        .unwrap(),
+    );
+
+    allowed(
+        &send(
+            &mut core,
+            meta_request(
+                d,
+                15,
+                ExerciseBasis::Anchor(meta::meta_anchor(&d)),
+                Payload::PolicyRetire { policy },
+            ),
+            ROOT_KEY,
+        )
+        .await
+        .unwrap(),
+    );
+    allowed(
+        &send(&mut core, shop_request(d, 16, Mode::Commit, shop), ROOT_KEY)
+            .await
+            .unwrap(),
+    );
+    fold_check(&db.sequencer, d).await.unwrap();
+}

@@ -15,8 +15,8 @@ use access_kernel::digest::Digest;
 use access_kernel::fold::Effect;
 use access_kernel::intent::{IntentEnvelope, ParamValue};
 use access_kernel::meta::{
-    self, Actor, AnchorState, ExerciseBasis, GrantBasis, GrantState, MandateState, MetaError,
-    Payload, View, kind,
+    self, Actor, AnchorState, ContentState, ExerciseBasis, GrantBasis, GrantState, MandateState,
+    MetaError, Payload, View, kind,
 };
 use access_kernel::model::{
     ActionSet, AuthoritySet, BudgetDimension, BudgetWindow, CanonicalAuthority, ConstraintSet,
@@ -327,6 +327,58 @@ pub(crate) fn lineage_hops(
     }
 }
 
+/// The Anchor a basis rests on: the Anchor itself, or the top of the Grant's lineage.
+fn top_anchor(view: &dyn View, basis: &ExerciseBasis) -> Option<access_kernel::model::Id> {
+    let mut at = match basis {
+        ExerciseBasis::Anchor(a) => return Some(*a),
+        ExerciseBasis::Holding(h) => h.grant,
+        ExerciseBasis::Public(g) => *g,
+    };
+    for _ in 0..meta::MAX_LINEAGE {
+        let g: GrantState = read(view, kind::GRANT, &at)?;
+        match g.content.basis {
+            GrantBasis::Anchor(a) => return Some(a),
+            GrantBasis::Holding(h) => at = h.grant,
+        }
+    }
+    None
+}
+
+/// The live restriction policies that apply to a request (OP-141 m.27 (c)).
+fn applicable_policies(
+    view: &dyn View,
+    basis: &ExerciseBasis,
+    actor: Option<&Actor>,
+) -> Vec<(access_kernel::model::Id, ContentState)> {
+    let tagged =
+        |k: &str, id: &access_kernel::model::Id| Value::Map(vec![(Value::text(k), id.to_value())]);
+    let mut targets = vec![Value::text("domain")];
+    if let Some(a) = top_anchor(view, basis) {
+        targets.push(tagged("anchor", &a));
+    }
+    if let Some(a) = actor {
+        targets.push(tagged("party", &a.party));
+        targets.push(tagged("instance", &a.instance));
+    }
+    let mut out = Vec::new();
+    for t in targets {
+        let Some(Value::Array(ids)) = view.get(&meta::policies_key(&t)) else {
+            continue;
+        };
+        for v in ids {
+            let Ok(id) = access_kernel::model::Id::from_value(&v) else {
+                continue;
+            };
+            if let Some(state) = read::<ContentState>(view, kind::POLICY, &id)
+                && state.ended.is_none()
+            {
+                out.push((id, state));
+            }
+        }
+    }
+    out
+}
+
 /// The Grants of a lineage in the order of its hops.
 fn chain_ids(
     view: &dyn View,
@@ -467,6 +519,8 @@ pub struct Frame<'a> {
     pub proofs: &'a [access_kernel::requirement::Proof],
     /// For a holding basis on a Grant held by a predicate, the actor's episode start.
     pub held: Option<u64>,
+    /// Compiled restriction policies (OP-141 m.27 (d)).
+    pub policies: &'a crate::restrict::Cache,
 }
 
 /// One pass of the evaluation over `snapshot` (§17.1.1 steps 7–8). Implicit powers of a
@@ -487,6 +541,7 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
         catalog,
         proofs,
         held,
+        policies,
     } = *frame;
     snapshot.restart();
     let mut effects = Vec::new();
@@ -662,6 +717,23 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
             .collect::<Vec<_>>();
         (bases, mandate)
     };
+    // OP-141 m.27 (c): the live policies of the domain, the Anchor, the Party and the Instance
+    let applicable = applicable_policies(snapshot, &req.basis, actor.as_ref());
+    let missing = snapshot.missing();
+    if !missing.is_empty() {
+        return Pass::Need(missing);
+    }
+    let restrictions = match crate::restrict::results(
+        &applicable,
+        &req.intent,
+        actor.as_ref(),
+        req.capacity,
+        now,
+        policies,
+    ) {
+        Ok(r) => r,
+        Err(r) => return Pass::Rejected(r),
+    };
     let input = EvaluationInput {
         mode: req.mode,
         intent: &req.intent,
@@ -672,7 +744,7 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
         mandate: mandate.as_ref(),
         capacity: req.capacity,
         bases: &bases,
-        restrictions: &[],
+        restrictions: &restrictions,
         proofs,
         catalog,
     };

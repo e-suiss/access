@@ -14,6 +14,8 @@ access-kernel = { workspace = true }
 access-store = { workspace = true }
 access-authority-sequencer = { path = "../authority-sequencer" }
 suiss-crypto = { workspace = true, features = ["pkcs11"] }
+suiss-restriction = { workspace = true }
+serde_json = { workspace = true, features = ["std"] }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["sync", "time"] }
 

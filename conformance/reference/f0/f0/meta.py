@@ -140,7 +140,8 @@ def check_requirement_map(value):
     if not isinstance(value, dict) or not value:
         fail("shape")
     for ref, terms in value.items():
-        check_ident(ref)
+        if not isinstance(ref, str) or not ref:
+            fail("shape")
         check_requirement_set(terms)
 
 

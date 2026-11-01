@@ -137,6 +137,7 @@ pub struct Authority<L: DomainLog, R: Reader, B: Binding, S: Salts> {
     leader: Leader<L>,
     pub(crate) reader: R,
     pub(crate) limiter: Limiter,
+    policies: crate::restrict::Cache,
     binding: B,
     salts: S,
     domain: Digest,
@@ -150,6 +151,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             leader,
             reader,
             limiter: Limiter::default(),
+            policies: crate::restrict::Cache::default(),
             binding,
             salts,
             domain,
@@ -324,6 +326,12 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                 {
                     return Err(CoreError::Protocol("payload"));
                 }
+                // OP-141 m.27 (e): a policy that does not compile is never set
+                if let Payload::PolicySet { content, .. } = p
+                    && crate::restrict::compile(content).is_err()
+                {
+                    return Err(CoreError::Protocol("policy"));
+                }
                 // L0-META-30
                 if let Payload::Contribute { class, .. } = p {
                     let target = ResourceRef {
@@ -429,6 +437,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                 catalog: &self.catalog,
                 proofs: &resolved.proofs,
                 held: resolved.held,
+                policies: &self.policies,
             };
             let (evaluation, snapshot) = self.passes(req, &frame).await?;
             if req.mode == Mode::Check {

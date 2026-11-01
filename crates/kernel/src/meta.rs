@@ -1020,7 +1020,9 @@ fn policy_content(v: &Value) -> Result<Value, ModelError> {
     // OP-141 m.27 (b)
     if let Some(Value::Map(refs)) = f.opt("requirements") {
         for (k, terms) in refs {
-            crate::codec::ident(k)?;
+            if crate::codec::text(k)?.is_empty() {
+                return Err(ModelError::Range);
+            }
             requirements(Some(terms))?;
         }
     } else if f.opt("requirements").is_some() {

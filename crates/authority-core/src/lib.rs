@@ -6,6 +6,7 @@ pub mod domain;
 pub mod ports;
 pub mod query;
 pub mod rate;
+pub mod restrict;
 
 use access_authority_sequencer::SequencerError;
 use access_kernel::ais::AisError;

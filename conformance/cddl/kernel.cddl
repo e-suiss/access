@@ -582,7 +582,7 @@ policy-content = {
   schema: "access/restriction/v1",
   source: tstr,
   target: "domain" / { anchor: id } / { party: party-ref } / { instance: instance-ref },
-  ? requirements: { + ident => requirement-set },
+  ? requirements: { + tstr .size (1..255) => requirement-set },
 }
 
 ; Disposition of the Grants that depend on an Anchor or a Party at transfer, retire or departure.
