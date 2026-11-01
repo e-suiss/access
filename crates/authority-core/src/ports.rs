@@ -36,6 +36,12 @@ pub trait Reader {
         after: Option<Id>,
         limit: u32,
     ) -> impl Future<Output = Result<Vec<Id>, CoreError>> + Send;
+    /// The envelopes of the records `from..=to`, in order (OP-141 m.36 (d)).
+    fn log(
+        &self,
+        from: u64,
+        to: u64,
+    ) -> impl Future<Output = Result<Vec<Vec<u8>>, CoreError>> + Send;
     /// The trusted time of the record at `pos`, if there is one.
     fn recorded_at(&self, pos: u64) -> impl Future<Output = Result<Option<u64>, CoreError>> + Send;
     /// A SYNC-DERIVED counter's used amount; 0 when never drawn.

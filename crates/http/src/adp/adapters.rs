@@ -186,6 +186,10 @@ where
         self.exercise(&inc).await
     }
 
+    async fn explain_recorded(&self, inc: Incoming, record: u64) -> Result<Decided, CoreError> {
+        Domains::explain_recorded(self, &inc, record).await
+    }
+
     async fn search(
         &self,
         inc: Incoming,

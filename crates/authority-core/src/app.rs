@@ -20,14 +20,14 @@ use access_kernel::fold::Effect;
 use access_kernel::intent::intent_digest;
 use access_kernel::meta::{self, Actor, ExerciseState, InstanceState, Payload, kind};
 use access_kernel::model::{Id, ResourceRef};
-use access_kernel::record::{Opened, RecordKind};
+use access_kernel::record::{Opened, RecordEnvelope, RecordKind};
 use access_kernel::verify::cose;
 use access_store::authority::Draw;
 use suiss_crypto::dcbor::{self, Limits, Value};
 
 use crate::CoreError;
 use crate::domain::{Evaluation, Frame, Pass, Request, Snapshot, pass};
-use crate::ports::{Binding, Reader, Salts};
+use crate::ports::{Binding, Reader, Row, Salts};
 use crate::rate::{Class, Limiter, Who};
 use proofs::Resolved as Proofs;
 
@@ -144,6 +144,72 @@ pub struct Authority<L: DomainLog, R: Reader, B: Binding, S: Salts> {
     salts: S,
     domain: Digest,
     catalog: Catalog,
+    past: Option<Past>,
+}
+
+/// The state and counters just before a recorded decision, read instead of the live state while
+/// that decision is explained (OP-141 m.36 (d)).
+#[derive(Debug, Default)]
+struct Past {
+    state: access_kernel::fold::State,
+    counters: BTreeMap<Vec<u8>, u64>,
+}
+
+impl Past {
+    /// Folds the records before `record` and returns them with the outcome of the decision at
+    /// `record`, which must be of `nonce` and `intent` (OP-141 m.36 (c), (d)).
+    fn before(
+        log: &[Vec<u8>],
+        record: u64,
+        nonce: &[u8],
+        intent: &Digest,
+    ) -> Result<(Self, u64, Outcome), CoreError> {
+        let bad = || CoreError::Protocol("explain-record");
+        let mut past = Self::default();
+        let mut folded: Option<access_kernel::fold::State> = None;
+        for bytes in log {
+            let r = RecordEnvelope::from_bytes(bytes).map_err(|_| bad())?;
+            let field = |name: &str| r.fields.get(name).map(|f| &f.value);
+            if r.header.pos == record {
+                if r.header.kind != RecordKind::Decision
+                    || field("nonce") != Some(&Value::Bytes(nonce.to_vec()))
+                    || field("intent") != Some(&intent.to_value())
+                {
+                    return Err(bad());
+                }
+                let outcome = match field("outcome").and_then(|d| d.get("outcome")) {
+                    Some(Value::Text(t)) if t == "allow" => Outcome::Allow,
+                    Some(Value::Text(t)) if t == "deny" => Outcome::Deny,
+                    Some(Value::Text(t)) if t == "require_action" => Outcome::RequireAction,
+                    _ => return Err(bad()),
+                };
+                past.state = folded.ok_or_else(bad)?;
+                return Ok((past, r.header.recorded_at, outcome));
+            }
+            if let Some(Value::Array(draws)) = field("consumption").and_then(|c| c.get("draws")) {
+                for d in draws {
+                    if let Value::Array(pair) = d
+                        && let [Value::Bytes(k), Value::Unsigned(n)] = pair.as_slice()
+                    {
+                        let used = past.counters.entry(k.clone()).or_insert(0);
+                        *used = used.saturating_add(*n);
+                    }
+                }
+            }
+            match folded.as_mut() {
+                None => folded = Some(access_kernel::fold::genesis(&r).map_err(|_| bad())?),
+                Some(state) => access_kernel::fold::apply(state, &r).map_err(|_| bad())?,
+            }
+        }
+        Err(bad())
+    }
+
+    fn row(&self, key: &[u8]) -> Row {
+        self.state.get(key).map_or_else(
+            || (key.to_vec(), None, 0),
+            |e| (key.to_vec(), e.value.clone(), e.version),
+        )
+    }
 }
 
 impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
@@ -158,7 +224,125 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             salts,
             domain,
             catalog: Catalog::default(),
+            past: None,
         }
+    }
+
+    /// Current values and versions of `keys`, or those before the decision being explained.
+    pub(crate) async fn fetch(&self, keys: &[Vec<u8>]) -> Result<Vec<Row>, CoreError> {
+        match &self.past {
+            Some(p) => Ok(keys.iter().map(|k| p.row(k)).collect()),
+            None => self.reader.fetch(keys).await,
+        }
+    }
+
+    /// The live rows under `prefix`, or those before the decision being explained.
+    pub(crate) async fn scan(&self, prefix: &[u8]) -> Result<Vec<Row>, CoreError> {
+        match &self.past {
+            Some(p) => Ok(p
+                .state
+                .range(prefix.to_vec()..)
+                .take_while(|(k, _)| k.starts_with(prefix))
+                .filter(|(_, e)| e.value.is_some())
+                .map(|(k, _)| p.row(k))
+                .collect()),
+            None => self.reader.scan(prefix).await,
+        }
+    }
+
+    /// A counter's used amount, or the amount before the decision being explained.
+    pub(crate) async fn counter(&self, key: &[u8]) -> Result<u64, CoreError> {
+        match &self.past {
+            Some(p) => Ok(p.counters.get(key).copied().unwrap_or(0)),
+            None => self.reader.counter(key).await,
+        }
+    }
+
+    /// Explains the recorded decision at `record` by evaluating its request again on the state
+    /// just before it; the rebuilt outcome must be the recorded one (L1-ADP-15, OP-141 m.36).
+    ///
+    /// # Errors
+    /// [`CoreError::Protocol`] `explain-record` or `explain-mismatch`, and as [`Self::exercise`].
+    pub async fn explain_recorded(
+        &mut self,
+        inc: &Incoming,
+        record: u64,
+        now: u64,
+    ) -> Result<Response, CoreError> {
+        let req = &inc.request;
+        if req.domain != self.domain {
+            return Err(CoreError::Protocol("domain"));
+        }
+        if req.mode == Mode::Check || record == 0 || record > self.head() {
+            return Err(CoreError::Protocol("explain-record"));
+        }
+        Self::check_payload(req)?;
+        let digest = intent_digest(&req.intent).map_err(|_| CoreError::Protocol("intent"))?;
+        let actor = self.actor(inc, &digest, now).await?;
+        if !self.limiter.admit(Class::Explain, who(inc, actor), now) {
+            return Err(CoreError::Limited);
+        }
+        let actor_ref = actor.map_or_else(|| b"anonymous".to_vec(), |a| a.instance.0.to_vec());
+        let nonce = self.reader.nonce(&req.nonce).await?;
+        if nonce.is_none_or(|n| n.actor != actor_ref || n.intent_digest != digest.0) {
+            return Err(CoreError::Protocol("explain-record"));
+        }
+        let log = self.reader.log(0, record).await?;
+        let (past, at, recorded) = Past::before(&log, record, &req.nonce, &digest)?;
+        let opened = self
+            .reader
+            .nonce_opened(&req.nonce)
+            .await?
+            .is_some_and(|p| p < record);
+        self.past = Some(past);
+        let rebuilt = self.rebuild(req, actor, digest, record, at, opened).await;
+        self.past = None;
+        let evaluation = rebuilt?;
+        // X25: a rebuilt outcome that differs is a determinism event, not an explanation
+        if evaluation.decision.outcome != recorded {
+            return Err(CoreError::Protocol("explain-mismatch"));
+        }
+        let exercise =
+            meta::exercise_id(&req.domain, &req.nonce).map_err(|_| CoreError::Protocol("nonce"))?;
+        let allowed = recorded == Outcome::Allow;
+        Ok(answer(
+            evaluation.decision,
+            allowed.then_some(req.exercise.unwrap_or(exercise)),
+            Some(record),
+            false,
+        ))
+    }
+
+    async fn rebuild(
+        &self,
+        req: &Request,
+        actor: Option<Actor>,
+        digest: Digest,
+        record: u64,
+        at: u64,
+        opened: bool,
+    ) -> Result<Evaluation, CoreError> {
+        let exercise =
+            meta::exercise_id(&req.domain, &req.nonce).map_err(|_| CoreError::Protocol("nonce"))?;
+        let resolved = self
+            .resolve(req, actor.map(|a| a.party), at, record.saturating_sub(1))
+            .await?;
+        let compromised = self.compromised(actor, at).await?;
+        let frame = Frame {
+            intent_digest: digest,
+            exercise,
+            pos: record,
+            actor,
+            now: at,
+            catalog: &self.catalog,
+            proofs: &resolved.proofs,
+            held: resolved.held,
+            policies: &self.policies,
+            compromised,
+        };
+        let (mut evaluation, _) = self.passes(req, &frame).await?;
+        self.tiered(req, &mut evaluation, opened, at).await?;
+        Ok(evaluation)
     }
 
     /// The last committed position.
@@ -188,7 +372,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         snapshot: &mut Snapshot,
         keys: &[Vec<u8>],
     ) -> Result<(), CoreError> {
-        snapshot.fill(self.reader.fetch(keys).await?);
+        snapshot.fill(self.fetch(keys).await?);
         Ok(())
     }
 
@@ -370,14 +554,14 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                 Pass::NeedCounters(keys) => {
                     let mut rows = Vec::with_capacity(keys.len());
                     for k in keys {
-                        let used = self.reader.counter(&k).await?;
+                        let used = self.counter(&k).await?;
                         rows.push((k, used));
                     }
                     snapshot.fill_counters(rows);
                 }
                 Pass::NeedScans(prefixes) => {
                     for p in prefixes {
-                        let rows = self.reader.scan(&p).await?;
+                        let rows = self.scan(&p).await?;
                         snapshot.fill_scan(p, rows);
                     }
                 }
@@ -422,7 +606,6 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         }
         let key = meta::policy_default_key(meta::CT3_DELAY);
         let delay = self
-            .reader
             .fetch(std::slice::from_ref(&key))
             .await?
             .into_iter()
@@ -746,6 +929,25 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         if !effects.is_empty() {
             decision.push(("effects", effects_value(&effects)));
         }
+        let draws: Vec<Draw> = evaluation
+            .draws
+            .iter()
+            .map(|(key, limit, draw, _)| Draw {
+                key: key.clone(),
+                limit: *limit,
+                draw: *draw,
+            })
+            // OP-141 m.28 (g)
+            .chain(evaluation.releases.iter().map(|(key, amount)| Draw {
+                key: meta::released_key(key),
+                limit: u64::MAX >> 1,
+                draw: *amount,
+            }))
+            .collect();
+        // OP-141 m.36 (a)
+        if let Some(c) = consumption_value(&draws, &single_use) {
+            decision.push(("consumption", c));
+        }
         items.push(Item {
             draft: Draft {
                 kind: RecordKind::Decision,
@@ -761,25 +963,41 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             proofs: Vec::new(),
             reads,
             writes: effects.iter().map(|(k, _)| k.clone()).collect(),
-            draws: evaluation
-                .draws
-                .iter()
-                .map(|(key, limit, draw, _)| Draw {
-                    key: key.clone(),
-                    limit: *limit,
-                    draw: *draw,
-                })
-                // OP-141 m.28 (g)
-                .chain(evaluation.releases.iter().map(|(key, amount)| Draw {
-                    key: meta::released_key(key),
-                    limit: u64::MAX >> 1,
-                    draw: *amount,
-                }))
-                .collect(),
+            draws,
             single_use,
         });
         Ok(items)
     }
+}
+
+/// The `consumption` field of a decision record: its counter draws and single-use keys, each
+/// sorted by key (OP-141 m.36 (a)); `None` when it consumes nothing.
+fn consumption_value(draws: &[Draw], single_use: &[Vec<u8>]) -> Option<Value> {
+    if draws.is_empty() && single_use.is_empty() {
+        return None;
+    }
+    let mut d: Vec<(&[u8], u64)> = draws.iter().map(|d| (d.key.as_slice(), d.draw)).collect();
+    d.sort_unstable();
+    let mut u: Vec<&[u8]> = single_use.iter().map(Vec::as_slice).collect();
+    u.sort_unstable();
+    let mut fields = Vec::new();
+    if !d.is_empty() {
+        fields.push((
+            Value::text("draws"),
+            Value::Array(
+                d.into_iter()
+                    .map(|(k, n)| Value::Array(vec![Value::Bytes(k.to_vec()), Value::Unsigned(n)]))
+                    .collect(),
+            ),
+        ));
+    }
+    if !u.is_empty() {
+        fields.push((
+            Value::text("single_use"),
+            Value::Array(u.into_iter().map(|k| Value::Bytes(k.to_vec())).collect()),
+        ));
+    }
+    Some(Value::Map(fields))
 }
 
 /// The draws an allowed Exercise records, sorted by key (OP-141 m.28 (a)).

@@ -6,7 +6,7 @@ use access_kernel::combinator::Mode;
 use serde_json::Value;
 
 use crate::adp::domain::{
-    Decoded, Semantic, decode, decode_batch, decode_search, encode, encode_search,
+    Decoded, Semantic, decode, decode_batch, decode_explain, decode_search, encode, encode_search,
 };
 use crate::adp::ports::Pdp;
 
@@ -96,17 +96,37 @@ impl<P: Pdp> Service<P> {
         Reply::Decision(serde_json::json!({ "evaluations": out }))
     }
 
-    /// `POST /access/v1/explain` for a hypothetical intent: a `check` evaluation labelled
-    /// `kind: "hypothetical"`, never recorded (OP-141 m.22 (h)). Explaining a recorded decision
-    /// is not offered yet; such a request is the protocol error `explain-mode`.
+    /// `POST /access/v1/explain`: for a hypothetical intent a `check` evaluation labelled
+    /// `kind: "hypothetical"`, never recorded (OP-141 m.22 (h)); with `context.record` the
+    /// recorded decision at that position, rebuilt and labelled `kind: "recorded"` (OP-141 m.36).
     pub async fn explain(&self, body: &[u8], pep: Option<String>) -> Reply {
         let Some(pep) = pep else {
             return Reply::Unauthenticated;
         };
-        let decoded = match decode(body, self.max_body) {
+        let (decoded, record) = match decode_explain(body, self.max_body) {
             Ok(d) => d,
             Err(e) => return Reply::Protocol(e.0),
         };
+        if let Some(record) = record {
+            let mode = decoded.request.mode;
+            let inc = Incoming {
+                request: decoded.request,
+                ais: decoded.ais,
+                pep,
+                explain: true,
+            };
+            return match self.pdp.explain_recorded(inc, record).await {
+                Ok(r) => {
+                    let mut v = encode(&r, mode);
+                    if let Some(ctx) = v.get_mut("context").and_then(Value::as_object_mut) {
+                        ctx.insert(String::from("kind"), Value::from("recorded"));
+                        ctx.insert(String::from("record"), Value::from(record));
+                    }
+                    Reply::Decision(v)
+                }
+                Err(e) => failed(e),
+            };
+        }
         if decoded.request.mode != Mode::Check {
             return Reply::Protocol("explain-mode");
         }

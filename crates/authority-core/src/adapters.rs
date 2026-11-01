@@ -76,6 +76,14 @@ impl Reader for PgReader {
             .collect()
     }
 
+    async fn log(&self, from: u64, to: u64) -> Result<Vec<Vec<u8>>, CoreError> {
+        Ok(read_log(&self.pool, &self.domain, from, to)
+            .await?
+            .into_iter()
+            .map(|r| r.envelope)
+            .collect())
+    }
+
     async fn recorded_at(&self, pos: u64) -> Result<Option<u64>, CoreError> {
         Ok(read_log(&self.pool, &self.domain, pos, pos)
             .await?
@@ -278,6 +286,31 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
             clock: s.clock.clone(),
             tokens,
         })
+    }
+
+    /// Explains the recorded decision at `record` on its domain's leader (OP-141 m.36).
+    ///
+    /// # Errors
+    /// As [`Authority::explain_recorded`].
+    pub async fn explain_recorded(
+        &self,
+        inc: &Incoming,
+        record: u64,
+    ) -> Result<Response, CoreError> {
+        let mut guard = self.leading(inc.request.domain).await?;
+        let Some(led) = guard.as_mut() else {
+            return Err(CoreError::Unavailable("leader"));
+        };
+        let now = led
+            .clock
+            .now()
+            .await
+            .map_err(|_| CoreError::Unavailable("time"))?;
+        let result = led.core.explain_recorded(inc, record, now).await;
+        if matches!(result, Err(CoreError::Sequencer(_) | CoreError::Store(_))) {
+            *guard = None;
+        }
+        result
     }
 
     /// Decides `inc` on its domain's leader, taking the lease first if needed. A failed

@@ -28,6 +28,23 @@ use http_body_util::BodyExt as _;
 use serde_json::Value;
 use tower::ServiceExt as _;
 
+fn scripted(s: &Scripted, inc: Incoming) -> Result<Response, CoreError> {
+    s.seen.lock().unwrap().push(inc);
+    s.outcome.map_err(|f| f()).map(|outcome| Response {
+        decision: Decision {
+            outcome,
+            blockers: Vec::new(),
+            unmet: Vec::new(),
+            relied_on: Vec::new(),
+        },
+        exercise: (outcome == Outcome::Allow).then_some(Digest([8; 32])),
+        record: Some(3),
+        replayed: false,
+        basis_ref: Some(String::from("ref")),
+        consistency: Some(String::from("seen")),
+    })
+}
+
 /// Answers with a fixed outcome and remembers what it was asked.
 struct Scripted {
     outcome: Result<Outcome, fn() -> CoreError>,
@@ -36,20 +53,19 @@ struct Scripted {
 
 impl Pdp for Scripted {
     fn evaluate(&self, inc: Incoming) -> impl Future<Output = Result<Response, CoreError>> + Send {
-        self.seen.lock().unwrap().push(inc);
-        std::future::ready(self.outcome.map_err(|f| f()).map(|outcome| Response {
-            decision: Decision {
-                outcome,
-                blockers: Vec::new(),
-                unmet: Vec::new(),
-                relied_on: Vec::new(),
-            },
-            exercise: (outcome == Outcome::Allow).then_some(Digest([8; 32])),
-            record: Some(3),
-            replayed: false,
-            basis_ref: Some(String::from("ref")),
-            consistency: Some(String::from("seen")),
-        }))
+        std::future::ready(scripted(self, inc))
+    }
+
+    fn explain_recorded(
+        &self,
+        inc: Incoming,
+        record: u64,
+    ) -> impl Future<Output = Result<Response, CoreError>> + Send {
+        let mut r = scripted(self, inc);
+        if let Ok(resp) = &mut r {
+            resp.record = Some(record);
+        }
+        std::future::ready(r)
     }
 
     fn search(
@@ -394,8 +410,8 @@ async fn an_item_error_stays_with_its_item() {
     assert_eq!(out["evaluations"][1]["error"], "unknown-member");
 }
 
-// OP-141 m.22 (h): a hypothetical explanation is a check labelled hypothetical; a recorded one
-// is not offered yet
+// OP-141 m.22 (h), m.36: a hypothetical explanation is a check labelled hypothetical; with
+// `record` it is the recorded decision, labelled recorded; `record` elsewhere is unknown
 #[tokio::test]
 async fn explain_is_hypothetical_check() {
     let (status, _, body) = post_to(
@@ -417,6 +433,23 @@ async fn explain_is_hypothetical_check() {
     .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
     assert_eq!(body["code"], "explain-mode");
+    let (status, _, body) = post_to(
+        app(Ok(Outcome::Allow), Some("pep-1")),
+        "/access/v1/explain",
+        evaluation("commit", r#", "record": 7"#),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["context"]["kind"], "recorded");
+    assert_eq!(body["context"]["record"], 7);
+    let (status, _, _) = post(
+        app(Ok(Outcome::Allow), Some("pep-1")),
+        evaluation("commit", r#", "record": 7"#),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
 }
 
 fn search_body(query: &str, page: &str) -> String {

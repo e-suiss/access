@@ -408,6 +408,22 @@ fn decode_value(root: &Json) -> R<Decoded> {
     Ok(decoded)
 }
 
+/// Decodes an explain body: the request and, for a recorded decision, `context.record`
+/// (L1-ADP-15, OP-141 m.36 (b)).
+///
+/// # Errors
+/// [`AdpError`] names the protocol error.
+pub fn decode_explain(body: &[u8], max_len: usize) -> R<(Decoded, Option<u64>)> {
+    let root = access_kernel::json::parse(body, max_len).map_err(|_| AdpError("json"))?;
+    let mut ctx = Obj::of(root.get("context").ok_or(AdpError("context"))?, "context")?;
+    let intent = intent(ctx.req("intent", "intent")?)?;
+    carriers(&root, &intent)?;
+    let record = ctx.opt("record").map(|r| uint(r, "record")).transpose()?;
+    let decoded = context(&mut ctx, intent)?;
+    ctx.done()?;
+    Ok((decoded, record))
+}
+
 /// Decodes a search body of `kind` (L1-ADP-16): the reader's context, `context.query` and the
 /// page token. The `AuthZEN` carriers are the caller's own and are not read.
 ///

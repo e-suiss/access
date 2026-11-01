@@ -13,6 +13,16 @@ pub trait Pdp: Send + Sync {
     /// The decision for `inc`.
     fn evaluate(&self, inc: Incoming) -> impl Future<Output = Result<Response, CoreError>> + Send;
 
+    /// The explanation of the recorded decision at `record` (OP-141 m.36); none by default.
+    fn explain_recorded(
+        &self,
+        inc: Incoming,
+        record: u64,
+    ) -> impl Future<Output = Result<Response, CoreError>> + Send {
+        let _ = (inc, record);
+        std::future::ready(Err(CoreError::Protocol("explain-record")))
+    }
+
     /// One page of a search (OP-141 m.22); none by default.
     fn search(
         &self,
@@ -31,6 +41,14 @@ pub type Page = (Vec<Hit>, Option<String>);
 impl<P: Pdp> Pdp for Arc<P> {
     fn evaluate(&self, inc: Incoming) -> impl Future<Output = Result<Response, CoreError>> + Send {
         (**self).evaluate(inc)
+    }
+
+    fn explain_recorded(
+        &self,
+        inc: Incoming,
+        record: u64,
+    ) -> impl Future<Output = Result<Response, CoreError>> + Send {
+        (**self).explain_recorded(inc, record)
     }
 
     fn search(

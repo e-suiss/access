@@ -100,7 +100,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         except: &Id,
     ) -> Result<usize, CoreError> {
         let mut n: usize = 0;
-        for (_, value, _) in self.reader.scan(&claim::successor_prefix(id)).await? {
+        for (_, value, _) in self.scan(&claim::successor_prefix(id)).await? {
             let Some(c) = value.and_then(|v| Id::from_value(&v).ok()) else {
                 continue;
             };
@@ -146,7 +146,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
 
     async fn get(&self, snap: &mut Snapshot, key: &[u8]) -> Result<Option<Value>, CoreError> {
         if !snap.has(key) {
-            snap.fill(self.reader.fetch(&[key.to_vec()]).await?);
+            snap.fill(self.fetch(&[key.to_vec()]).await?);
         }
         Ok(snap.values_of(key))
     }
@@ -315,7 +315,6 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         for c in conjuncts {
             let mut first: Option<u64> = None;
             for (_, value, _) in self
-                .reader
                 .scan(&claim::member_prefix(&c.claim_class, party))
                 .await?
             {
@@ -363,7 +362,6 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         let mut snap = Snapshot::default();
         let mut cutoff: Option<u64> = None;
         for (_, value, _) in self
-            .reader
             .scan(&claim::member_prefix(claim::PARTY_COMPROMISE, &actor.party))
             .await?
         {
@@ -472,7 +470,6 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                 .filter(|c| c.draw.as_ref().is_some_and(|(k, _)| *k == key))
                 .count();
             let used = self
-                .reader
                 .counter(&key)
                 .await?
                 .saturating_add(u64::try_from(pending).unwrap_or(u64::MAX));

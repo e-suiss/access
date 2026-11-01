@@ -1085,7 +1085,10 @@ async fn a_compromise_restricts_instances_set_up_after_it() {
 // L0-EVAL-4, OP-141 m.33: a Grant held while a Claim is held lapses until the Claim is
 // recorded under the named Acceptance, and while-instance-alive needs a live Instance
 #[tokio::test]
-#[allow(clippy::too_many_lines, reason = "one Grant through both while-conditions")]
+#[allow(
+    clippy::too_many_lines,
+    reason = "one Grant through both while-conditions"
+)]
 async fn while_conditions_are_prepared_on_the_commit_path() {
     use access_kernel::model::WhileCondition;
     let db = fresh().await.unwrap();
@@ -1307,6 +1310,102 @@ async fn an_action_without_an_accepted_schema_is_denied() {
     ));
 }
 
+// L1-ADP-15, OP-141 m.36: a recorded decision is explained by evaluating its request again on
+// the state and counters just before it, also after the state has moved on
+#[tokio::test]
+async fn a_recorded_decision_is_explained_as_it_was() {
+    use access_kernel::model::{BudgetDimension, BudgetTerm, BudgetWindow};
+    let db = fresh().await.unwrap();
+    let (mut core, d) = setup(&db).await;
+    onboard(&mut core, d, ROOT, ROOT_KEY, (1, 2)).await;
+    onboard(&mut core, d, ALICE, ALICE_KEY, (3, 4)).await;
+    let meta_anchor = meta::meta_anchor(&d);
+    let mut granted = authority(vec![action("shop", "read")], selector("shop"));
+    granted.constraints.budget = BTreeSet::from([BudgetTerm {
+        dimension: BudgetDimension::Count,
+        capacity: 1,
+        window: BudgetWindow::Total,
+    }]);
+    let issued = send(
+        &mut core,
+        meta_request(
+            d,
+            10,
+            ExerciseBasis::Anchor(meta_anchor),
+            Payload::GrantIssue(GrantContent {
+                basis: GrantBasis::Anchor(meta_anchor),
+                holder: SubjectSelector::Party(ALICE),
+                authority: granted,
+                agency: BTreeSet::from([Capacity::Own]),
+                named: None,
+            }),
+        ),
+        ROOT_KEY,
+    )
+    .await
+    .unwrap();
+    let grant = meta::object_id(&issued.exercise.unwrap(), kind::GRANT, 0);
+    let holding = ExerciseBasis::Holding(HoldingRef {
+        grant,
+        holder: ALICE,
+        since: issued.record.unwrap(),
+    });
+    let first = send(
+        &mut core,
+        shop_request(d, 11, Mode::Commit, holding),
+        ALICE_KEY,
+    )
+    .await
+    .unwrap();
+    allowed(&first);
+    let second = send(
+        &mut core,
+        shop_request(d, 12, Mode::Commit, holding),
+        ALICE_KEY,
+    )
+    .await
+    .unwrap();
+    assert_eq!(second.decision.outcome, Outcome::Deny);
+    // the Grant is revoked afterwards; both decisions still explain as recorded
+    allowed(
+        &send(
+            &mut core,
+            meta_request(
+                d,
+                13,
+                ExerciseBasis::Anchor(meta_anchor),
+                Payload::GrantRevoke { grant },
+            ),
+            ROOT_KEY,
+        )
+        .await
+        .unwrap(),
+    );
+    let explain = |nonce, record| {
+        let inc = incoming(shop_request(d, nonce, Mode::Commit, holding), ALICE_KEY);
+        (inc, record)
+    };
+    let (inc, record) = explain(11, first.record.unwrap());
+    let again = core.explain_recorded(&inc, record, NOW).await.unwrap();
+    assert_eq!(again.decision, first.decision);
+    let (inc, record) = explain(12, second.record.unwrap());
+    let again = core.explain_recorded(&inc, record, NOW).await.unwrap();
+    assert_eq!(again.decision, second.decision);
+    // the request must be the recorded one, from its actor
+    let (inc, _) = explain(11, 0);
+    assert!(matches!(
+        core.explain_recorded(&inc, second.record.unwrap(), NOW)
+            .await,
+        Err(CoreError::Protocol("explain-record"))
+    ));
+    let other = incoming(shop_request(d, 11, Mode::Commit, holding), ROOT_KEY);
+    assert!(matches!(
+        core.explain_recorded(&other, first.record.unwrap(), NOW)
+            .await,
+        Err(CoreError::Protocol("explain-record"))
+    ));
+}
+
 async fn state_of(db: &TestDb, d: Digest, key: &[u8]) -> Option<Vec<u8>> {
     access_store::authority::state_of(&db.app, &DomainId::from_bytes(d.0), &[key.to_vec()])
         .await
@@ -1465,6 +1564,76 @@ async fn a_continuation_names_its_exercise() {
         send(&mut core, missing, ROOT_KEY).await,
         Err(CoreError::Protocol("exercise"))
     ));
+    fold_check(&db.sequencer, d).await.unwrap();
+}
+
+// §13.4 G31, L1-ADP-13: after the Grant is revoked, a continuation of an allowed Exercise is
+// a new decision against the current state and is denied
+#[tokio::test]
+async fn a_continuation_after_revocation_is_denied() {
+    use access_kernel::combinator::BlockerClass;
+    let db = fresh().await.unwrap();
+    let (mut core, d) = setup(&db).await;
+    onboard(&mut core, d, ROOT, ROOT_KEY, (1, 2)).await;
+    onboard(&mut core, d, ALICE, ALICE_KEY, (3, 4)).await;
+    let meta_anchor = meta::meta_anchor(&d);
+    let issued = send(
+        &mut core,
+        meta_request(
+            d,
+            10,
+            ExerciseBasis::Anchor(meta_anchor),
+            Payload::GrantIssue(GrantContent {
+                basis: GrantBasis::Anchor(meta_anchor),
+                holder: SubjectSelector::Party(ALICE),
+                authority: authority(vec![action("shop", "read")], selector("shop")),
+                agency: BTreeSet::from([Capacity::Own]),
+                named: None,
+            }),
+        ),
+        ROOT_KEY,
+    )
+    .await
+    .unwrap();
+    allowed(&issued);
+    let grant = meta::object_id(&issued.exercise.unwrap(), kind::GRANT, 0);
+    let holding = ExerciseBasis::Holding(HoldingRef {
+        grant,
+        holder: ALICE,
+        since: issued.record.unwrap(),
+    });
+    let first = send(
+        &mut core,
+        shop_request(d, 11, Mode::Commit, holding),
+        ALICE_KEY,
+    )
+    .await
+    .unwrap();
+    allowed(&first);
+    allowed(
+        &send(
+            &mut core,
+            meta_request(
+                d,
+                12,
+                ExerciseBasis::Anchor(meta_anchor),
+                Payload::GrantRevoke { grant },
+            ),
+            ROOT_KEY,
+        )
+        .await
+        .unwrap(),
+    );
+    let mut cont = shop_request(d, 13, Mode::Continue, holding);
+    cont.exercise = first.exercise;
+    let next = send(&mut core, cont, ALICE_KEY).await.unwrap();
+    assert_eq!(next.decision.outcome, Outcome::Deny);
+    assert!(
+        next.decision
+            .blockers
+            .iter()
+            .any(|b| b.class == BlockerClass::Ended)
+    );
     fold_check(&db.sequencer, d).await.unwrap();
 }
 
