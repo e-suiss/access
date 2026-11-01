@@ -490,3 +490,17 @@ async fn a_rate_limit_is_429() {
     assert_eq!(status, StatusCode::TOO_MANY_REQUESTS);
     assert_eq!(body["code"], "rate-limited");
 }
+
+// OP-141 m.25: a limit is the batch's answer, never an error inside a 200
+#[tokio::test]
+async fn a_rate_limited_batch_is_429() {
+    let (status, _, body) = post_to(
+        app(Err(|| CoreError::Limited), Some("pep-1")),
+        "/access/v1/evaluations",
+        batch(&["check", "check"], "execute_all"),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::TOO_MANY_REQUESTS);
+    assert_eq!(body["code"], "rate-limited");
+}

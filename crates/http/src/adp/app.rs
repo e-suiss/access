@@ -71,12 +71,18 @@ impl<P: Pdp> Service<P> {
                 Ok(d) => self.decide(d, pep.clone(), false).await,
                 Err(e) => Reply::Protocol(e.0),
             };
+            // OP-141 m.25: a limit is the batch's answer, never an item inside a 200; items
+            // already committed are answered again on retry with the same nonce (L2-REC-5)
+            if reply == Reply::Limited {
+                return Reply::Limited;
+            }
             let value = match reply {
                 Reply::Decision(v) => v,
                 Reply::Protocol(code) => serde_json::json!({ "error": code }),
                 Reply::Conflict => serde_json::json!({ "error": "nonce-conflict" }),
-                Reply::Unavailable => serde_json::json!({ "error": "unavailable" }),
-                Reply::Limited => serde_json::json!({ "error": "rate-limited" }),
+                Reply::Unavailable | Reply::Limited => {
+                    serde_json::json!({ "error": "unavailable" })
+                }
                 Reply::Unauthenticated => serde_json::json!({ "error": "pep-unauthenticated" }),
             };
             let decision = value.get("decision").and_then(serde_json::Value::as_bool);
