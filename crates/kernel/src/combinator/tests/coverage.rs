@@ -516,6 +516,23 @@ fn count_scenarios(reusable: RequirementTerm) -> Vec<(&'static str, World)> {
         "require-count-two-same-party",
         proved(two, vec![proof(3, 1, 1), proof(4, 2, 1)]),
     ));
+    // OP-141 m.29: the actor's own contribution never meets an independent term
+    let mut own = approval(false);
+    own.proof_kind = ProofKind::Contribution;
+    own.independence = Independence::DistinctParty;
+    let contribution = |instance: u8| Proof {
+        kind: ProofKind::Contribution,
+        instance: Id([instance; 16]),
+        ..proof(3, 1, 2)
+    };
+    out.push((
+        "require-independent-own-contribution",
+        proved(own.clone(), vec![contribution(1)]),
+    ));
+    out.push((
+        "allow-independent-other-contribution",
+        proved(own, vec![contribution(2)]),
+    ));
     out.push((
         "allow-chooses-earliest-position",
         proved(approval(false), vec![proof(3, 2, 1), proof(4, 1, 1)]),
@@ -914,7 +931,9 @@ fn coverage_rules(id: &str) -> &'static [&'static str] {
         "require-count-two-one-proof" | "require-count-two-same-party" => {
             &["L0-EVAL-26", "L0-EVAL-29"]
         }
-        "allow-count-two-distinct-parties" => &["L0-EVAL-26"],
+        "allow-count-two-distinct-parties"
+        | "require-independent-own-contribution"
+        | "allow-independent-other-contribution" => &["L0-EVAL-26"],
         "allow-chooses-earliest-position" | "allow-chooses-smaller-id-on-tie" => &["L0-EVAL-27"],
         "allow-reusable-proof-serves-two-terms" => &["L0-EVAL-28"],
         "allow-fuel-exact"

@@ -144,7 +144,7 @@ Vector: `decision.json`: `require-future-dated-proof`.
 
 Vectors: `decision.json`: `allow-assurance-<dimension>-at-floor` and `require-assurance-<dimension>-below-floor` for each dimension other than `synced`, `allow-assurance-loa-eidas-above-floor`, `allow-assurance-synced-unsynced-meets-zero`, `require-assurance-synced-inverted`, `allow-assurance-synced-floor-one-unsynced`, `require-assurance-missing-in-proof`, and the rejections `reject-assurance-unknown-dimension-term`, `reject-assurance-unknown-dimension-proof`, `reject-assurance-auth-time-is-not-a-dimension`, `reject-assurance-aal-zero-term`, `reject-assurance-aal-four-proof`, `reject-assurance-flag-two-term`, `reject-assurance-out-of-range-mandate`.
 
-<a id="L0-EVAL-26"></a>**L0-EVAL-26. Count and independence.** A term needs `count` matching proofs (1 if not written). If the term has `independence`, the chosen proofs MUST all differ in the named field: `party`, `instance` or `issuer`.
+<a id="L0-EVAL-26"></a>**L0-EVAL-26. Count and independence.** A term needs `count` matching proofs (1 if not written). If the term has `independence`, the chosen proofs MUST all differ in the named field: `party`, `instance` or `issuer`, and a `contribution` proof whose `instance` is the actor Instance never matches it: an actor does not approve its own Exercise.
 
 <a id="L0-EVAL-27"></a>**L0-EVAL-27. Choosing proofs.** Among all sets of `count` matching proofs from the current pool that meet the independence rule, the evaluator chooses one set as follows:
 

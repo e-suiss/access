@@ -69,6 +69,9 @@ def matches_without_source(term, proof, evaluation):
         return False
     if term.get("consumption") == "single_use" and proof.get("consumed") is True:
         return False
+    # L0-EVAL-26
+    if "independence" in term and proof["kind"] == "contribution" and evaluation.get("actor_instance") == proof["instance"]:
+        return False
     return True
 
 

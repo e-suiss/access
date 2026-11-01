@@ -79,7 +79,7 @@ fn decision_vectors() {
             ),
         }
     }
-    assert_eq!(cases(&v).len(), 149);
+    assert_eq!(cases(&v).len(), 151);
 }
 
 // OP-122 m.7

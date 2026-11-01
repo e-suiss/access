@@ -151,7 +151,11 @@ pub fn matches(term: &RequirementTerm, proof: &Proof, ctx: &Context<'_>) -> bool
             .is_some_and(|v| meets_floor(dim, *floor, *v))
     });
     let usable = term.consumption == Consumption::Reusable || !proof.consumed;
-    proof.kind == term.proof_kind
+    // L0-EVAL-26, OP-141 m.29: the actor's own contribution never meets an independent term
+    let own = term.independence != Independence::None
+        && proof.kind == ProofKind::Contribution
+        && ctx.actor_instance == Some(proof.instance);
+    !own && proof.kind == term.proof_kind
         && proof.class == term.class
         && bound
         && fresh
