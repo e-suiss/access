@@ -1866,7 +1866,8 @@ async fn search_shows_what_the_reader_may_see() {
     }];
     let p = issue.payload.clone().unwrap();
     issue.intent.opaque = BTreeMap::from([("payload".to_owned(), p.digest().unwrap())]);
-    allowed(&a.exercise(&incoming(issue, ROOT_KEY)).await.unwrap());
+    let issued = a.exercise(&incoming(issue, ROOT_KEY)).await.unwrap();
+    allowed(&issued);
     assert!(a.derive().await.is_empty());
 
     let item = ResourceRef {
@@ -1956,6 +1957,68 @@ async fn search_shows_what_the_reader_may_see() {
         .await,
         Err(CoreError::Protocol("search"))
     ));
+    // §13.4 Check/List: a party the subject search lists is allowed by a check, one it does not
+    // list is not
+    let holding = ExerciseBasis::Holding(HoldingRef {
+        grant: meta::object_id(&issued.exercise.unwrap(), kind::GRANT, 0),
+        holder: ALICE,
+        since: issued.record.unwrap(),
+    });
+    allowed(
+        &a.exercise(&incoming(
+            shop_request(d, 80, Mode::Check, holding),
+            ALICE_KEY,
+        ))
+        .await
+        .unwrap(),
+    );
+    assert_ne!(
+        a.exercise(&incoming(
+            shop_request(d, 81, Mode::Check, holding),
+            ROOT_KEY
+        ))
+        .await
+        .unwrap()
+        .decision
+        .outcome,
+        Outcome::Allow
+    );
+    // OP-141 m.37: the eligible approvers of a class are the subject search for `contribute`
+    let meta_anchor = meta::meta_anchor(&d);
+    let approve = meta_request(
+        d,
+        82,
+        ExerciseBasis::Anchor(meta_anchor),
+        Payload::GrantIssue(GrantContent {
+            basis: GrantBasis::Anchor(meta_anchor),
+            holder: SubjectSelector::Party(ALICE),
+            authority: authority(
+                vec![action("access", "contribute")],
+                selector("access.contribution"),
+            ),
+            agency: BTreeSet::from([Capacity::Own]),
+            named: None,
+        }),
+    );
+    allowed(&a.exercise(&incoming(approve, ROOT_KEY)).await.unwrap());
+    assert!(a.derive().await.is_empty());
+    let eligible = Query::Subject {
+        action: action("access", "contribute"),
+        resource: ResourceRef {
+            namespace: "access.contribution".to_owned(),
+            path: vec!["approve".to_owned()],
+            incarnation: 0,
+        },
+    };
+    let (hits, _) = a
+        .search(
+            &incoming(search_request(d, 83, "subject"), ROOT_KEY),
+            &eligible,
+            None,
+        )
+        .await
+        .unwrap();
+    assert_eq!(hits, [Hit::Party(ALICE)]);
 }
 
 // ---------------------------------------------------------------- budgets (OP-141 m.26)
