@@ -1341,3 +1341,81 @@ async fn search_shows_what_the_reader_may_see() {
         Err(CoreError::Protocol("search"))
     ));
 }
+
+// ---------------------------------------------------------------- budgets (OP-141 m.26)
+
+// L0-EVAL-15, OP-141 m.26: a Grant's budget is drawn by each allow and exhausts
+#[tokio::test]
+async fn a_budget_is_drawn_until_it_is_exhausted() {
+    use access_kernel::combinator::BlockerClass;
+    use access_kernel::model::{BudgetDimension, BudgetTerm, BudgetWindow};
+    let db = fresh().await.unwrap();
+    let (mut core, d) = setup(&db).await;
+    onboard(&mut core, d, ROOT, ROOT_KEY, (1, 2)).await;
+    onboard(&mut core, d, ALICE, ALICE_KEY, (3, 4)).await;
+    let shop = meta::object_id(&d, kind::ANCHOR, 1);
+    let mut granted = authority(vec![action("shop", "read")], selector("shop"));
+    granted.constraints.budget = BTreeSet::from([BudgetTerm {
+        dimension: BudgetDimension::Count,
+        capacity: 2,
+        window: BudgetWindow::Total,
+    }]);
+    let grant = Payload::GrantIssue(GrantContent {
+        basis: GrantBasis::Anchor(shop),
+        holder: SubjectSelector::Party(ALICE),
+        authority: granted,
+        agency: BTreeSet::from([Capacity::Own]),
+        named: None,
+    });
+    let mut issue = meta_request(d, 5, ExerciseBasis::Anchor(shop), grant);
+    issue.intent.resources = vec![ResourceRef {
+        namespace: "shop".to_owned(),
+        path: vec![],
+        incarnation: 0,
+    }];
+    let p = issue.payload.clone().unwrap();
+    issue.intent.opaque = BTreeMap::from([("payload".to_owned(), p.digest().unwrap())]);
+    let issued = send(&mut core, issue, ROOT_KEY).await.unwrap();
+    allowed(&issued);
+    let g = meta::object_id(&issued.exercise.unwrap(), kind::GRANT, 0);
+    let holding = ExerciseBasis::Holding(HoldingRef {
+        grant: g,
+        holder: ALICE,
+        since: issued.record.unwrap(),
+    });
+    for n in [20, 21] {
+        allowed(
+            &send(
+                &mut core,
+                shop_request(d, n, Mode::Commit, holding),
+                ALICE_KEY,
+            )
+            .await
+            .unwrap(),
+        );
+    }
+    let over = send(
+        &mut core,
+        shop_request(d, 22, Mode::Commit, holding),
+        ALICE_KEY,
+    )
+    .await
+    .unwrap();
+    assert_eq!(over.decision.outcome, Outcome::Deny);
+    assert!(
+        over.decision
+            .blockers
+            .iter()
+            .any(|b| b.class == BlockerClass::BudgetExhausted)
+    );
+    // check does not draw
+    let checked = send(
+        &mut core,
+        shop_request(d, 23, Mode::Check, holding),
+        ALICE_KEY,
+    )
+    .await
+    .unwrap();
+    assert_eq!(checked.decision.outcome, Outcome::Deny);
+    fold_check(&db.sequencer, d).await.unwrap();
+}

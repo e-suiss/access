@@ -7,19 +7,20 @@ use std::collections::{BTreeMap, BTreeSet};
 use access_kernel::algebra::Catalog;
 use access_kernel::codec::{Canonical, Stored};
 use access_kernel::combinator::{
-    Basis, Blocker, BlockerClass, Capacity, Decision, EvaluationInput, Fuel, Hop, HopStatus,
-    Mandate, Mode, Outcome as KernelOutcome, Position, Rejection, Remediation, Resolver, evaluate,
+    Basis, Blocker, BlockerClass, BudgetState, Capacity, Decision, EvaluationInput, Fuel, Hop,
+    HopStatus, Mandate, Mode, Outcome as KernelOutcome, Position, Rejection, Remediation, Resolver,
+    evaluate,
 };
 use access_kernel::digest::Digest;
 use access_kernel::fold::Effect;
-use access_kernel::intent::IntentEnvelope;
+use access_kernel::intent::{IntentEnvelope, ParamValue};
 use access_kernel::meta::{
     self, Actor, AnchorState, ExerciseBasis, GrantBasis, GrantState, MandateState, MetaError,
     Payload, View, kind,
 };
 use access_kernel::model::{
-    ActionSet, AuthoritySet, CanonicalAuthority, ConstraintSet, DelegationTerms, ResourceSelector,
-    Structural, Window,
+    ActionSet, AuthoritySet, BudgetDimension, BudgetWindow, CanonicalAuthority, ConstraintSet,
+    DelegationTerms, ResourceSelector, Structural, Window,
 };
 use suiss_crypto::dcbor::Value;
 
@@ -33,6 +34,8 @@ pub struct Snapshot {
     values: BTreeMap<Vec<u8>, (Option<Value>, u64)>,
     reads: RefCell<BTreeSet<Vec<u8>>>,
     missing: RefCell<BTreeSet<Vec<u8>>>,
+    counters: BTreeMap<Vec<u8>, u64>,
+    missing_counters: RefCell<BTreeSet<Vec<u8>>>,
 }
 
 impl Snapshot {
@@ -48,6 +51,30 @@ impl Snapshot {
     #[must_use]
     pub fn values_of(&self, key: &[u8]) -> Option<Value> {
         self.values.get(key).and_then(|(v, _)| v.clone())
+    }
+
+    /// Adds fetched SYNC-DERIVED counters (OP-141 m.26).
+    pub fn fill_counters(&mut self, rows: impl IntoIterator<Item = (Vec<u8>, u64)>) {
+        for (k, used) in rows {
+            self.missing_counters.borrow_mut().remove(&k);
+            self.counters.insert(k, used);
+        }
+    }
+
+    /// A counter's used amount, noting it as missing when not fetched yet.
+    #[must_use]
+    pub fn counter(&self, key: &[u8]) -> u64 {
+        if let Some(used) = self.counters.get(key) {
+            return *used;
+        }
+        self.missing_counters.borrow_mut().insert(key.to_vec());
+        0
+    }
+
+    /// Counters asked for and not fetched yet.
+    #[must_use]
+    pub fn missing_counters(&self) -> Vec<Vec<u8>> {
+        self.missing_counters.borrow().iter().cloned().collect()
     }
 
     /// Whether `key` was fetched.
@@ -81,6 +108,7 @@ impl Snapshot {
     pub fn restart(&self) {
         self.reads.borrow_mut().clear();
         self.missing.borrow_mut().clear();
+        self.missing_counters.borrow_mut().clear();
     }
 
     /// The keys served, with the version each had.
@@ -148,13 +176,20 @@ pub struct Evaluation {
     pub decision: Decision,
     /// State changes of an allowed meta-action.
     pub effects: Vec<Effect>,
+    /// Budget draws of an allow: counter key, capacity, demand (OP-141 m.26).
+    pub draws: Vec<DrawSpec>,
 }
+
+/// A budget draw: counter key, capacity, demand.
+pub type DrawSpec = (Vec<u8>, u64, u64);
 
 /// The step after one pass over the snapshot.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Pass {
     /// Fetch these keys and run again.
     Need(Vec<Vec<u8>>),
+    /// Fetch these counters and run again.
+    NeedCounters(Vec<Vec<u8>>),
     /// The evaluation is complete over the snapshot.
     Done(Evaluation),
     /// A protocol rejection: no decision, no record (L0-EVAL-61).
@@ -292,6 +327,110 @@ pub(crate) fn lineage_hops(
     }
 }
 
+/// The Grants of a lineage in the order of its hops.
+fn chain_ids(
+    view: &dyn View,
+    grant: &access_kernel::model::Id,
+) -> Option<Vec<access_kernel::model::Id>> {
+    let mut ids = Vec::new();
+    let mut at = *grant;
+    loop {
+        if ids.len() >= meta::MAX_LINEAGE {
+            return None;
+        }
+        let g: GrantState = read(view, kind::GRANT, &at)?;
+        ids.push(at);
+        match g.content.basis {
+            GrantBasis::Anchor(_) => {
+                ids.reverse();
+                return Some(ids);
+            }
+            GrantBasis::Holding(h) => at = h.grant,
+        }
+    }
+}
+
+/// The counter of one budget term of a Grant for the window holding `now` (OP-141 m.26 (a)),
+/// with the window's reset time for a rolling window.
+fn budget_key(
+    grant: &access_kernel::model::Id,
+    term: usize,
+    window: BudgetWindow,
+    now: u64,
+) -> (Vec<u8>, Option<u64>) {
+    let (start, resets) = match window {
+        BudgetWindow::Total => (0, None),
+        BudgetWindow::RollingSeconds(r) => {
+            let len = r.saturating_mul(1_000).max(1);
+            let start = now.saturating_sub(now.checked_rem(len).unwrap_or(0));
+            (start, Some(start.saturating_add(len)))
+        }
+    };
+    let key = suiss_crypto::dcbor::encode(
+        &Value::Array(vec![
+            Value::text("budget"),
+            grant.to_value(),
+            Value::Unsigned(u64::try_from(term).unwrap_or(u64::MAX)),
+            Value::Unsigned(start),
+        ]),
+        suiss_crypto::dcbor::Limits::CEILING,
+    )
+    .unwrap_or_default();
+    (key, resets)
+}
+
+/// The intent's demand on a budget term (OP-141 m.26 (b)); `None` for a negative amount.
+fn demand(term: &BudgetDimension, intent: &IntentEnvelope) -> Option<u64> {
+    match term {
+        BudgetDimension::Count => Some(1),
+        BudgetDimension::Amount(unit) => {
+            let mut total: u64 = 0;
+            for v in intent.params.values() {
+                if let ParamValue::Amount { value, unit: u } = v
+                    && u == unit
+                {
+                    total = total.checked_add(u64::try_from(*value).ok()?)?;
+                }
+            }
+            Some(total)
+        }
+    }
+}
+
+/// Fills the budget states of a lineage's hops and returns the draws an allow makes (L0-EVAL-15,
+/// OP-141 m.26); `None` while the lineage is not fetched yet.
+fn budgets(
+    view: &Snapshot,
+    grant: &access_kernel::model::Id,
+    intent: &IntentEnvelope,
+    now: u64,
+    hops: &mut [Hop],
+) -> Option<Result<Vec<DrawSpec>, Rejection>> {
+    let ids = chain_ids(view, grant)?;
+    let mut draws = Vec::new();
+    for (hop, id) in hops.iter_mut().zip(ids) {
+        let g: GrantState = read(view, kind::GRANT, &id)?;
+        for (i, term) in g.content.authority.constraints.budget.iter().enumerate() {
+            let Some(d) = demand(&term.dimension, intent) else {
+                return Some(Err(Rejection::Input));
+            };
+            if d == 0 {
+                continue;
+            }
+            let (key, resets_at) = budget_key(&id, i, term.window, now);
+            let used = view.counter(&key);
+            hop.budgets.push(BudgetState {
+                window: term.window,
+                remaining: term.capacity.saturating_sub(used),
+                demand: d,
+                resets_at,
+            });
+            draws.push((key, term.capacity, d));
+        }
+    }
+    Some(Ok(draws))
+}
+
 /// The Instance's Mandate, if it has a live one; the first by id (C14).
 fn mandate(view: &dyn View, actor: Option<&Actor>) -> Option<Mandate> {
     let actor = actor?;
@@ -351,6 +490,7 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
     } = *frame;
     snapshot.restart();
     let mut effects = Vec::new();
+    let mut draws = Vec::new();
     // L0-META-30: a contribution is authorized like a domain action and records itself
     let contribute = matches!(req.payload, Some(Payload::Contribute { .. }));
     if let Some(payload) = req.payload.as_ref().filter(|_| contribute) {
@@ -362,6 +502,7 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
                     Resolver::Actor,
                 ),
                 effects,
+                draws: Vec::new(),
             });
         };
         let ctx = meta::Context {
@@ -379,6 +520,7 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
                 return Pass::Done(Evaluation {
                     decision: meta_denial(e),
                     effects: Vec::new(),
+                    draws: Vec::new(),
                 });
             }
         }
@@ -392,6 +534,7 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
                     Resolver::Actor,
                 ),
                 effects,
+                draws: Vec::new(),
             });
         };
         let ctx = meta::Context {
@@ -413,6 +556,7 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
                 return Pass::Done(Evaluation {
                     decision: meta_denial(e),
                     effects,
+                    draws: Vec::new(),
                 });
             }
             Ok(out) => {
@@ -466,7 +610,8 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
                         vec![exact_hop(&req.intent, scope, terms)],
                         BTreeSet::from([Capacity::Own]),
                     ))
-                }),
+                })
+                .map(|hops| (hops, None)),
             ExerciseBasis::Holding(h) => read::<GrantState>(snapshot, kind::GRANT, &h.grant)
                 .filter(|g| {
                     // OP-141 m.20 (c), (d): a predicate holder holds from its episode start
@@ -479,11 +624,30 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
                     };
                     actor.is_some_and(|a| a.party == h.holder) && holds
                 })
-                .and_then(|_| lineage_hops(snapshot, &h.grant)),
+                .and_then(|_| lineage_hops(snapshot, &h.grant))
+                .map(|hops| (hops, Some(h.grant))),
             ExerciseBasis::Public(g) => read::<GrantState>(snapshot, kind::GRANT, &g)
                 .filter(|s| s.content.holder == access_kernel::model::SubjectSelector::Public)
-                .and_then(|_| lineage_hops(snapshot, &g)),
+                .and_then(|_| lineage_hops(snapshot, &g))
+                .map(|hops| (hops, Some(g))),
         };
+        // OP-141 m.26: every hop's budget is drawn by this intent's demand
+        let hops = match hops {
+            Some(((mut hops, capacities), Some(g))) => {
+                match budgets(snapshot, &g, &req.intent, now, &mut hops) {
+                    Some(Ok(d)) => draws = d,
+                    Some(Err(r)) => return Pass::Rejected(r),
+                    None => {}
+                }
+                Some((hops, capacities))
+            }
+            Some((h, None)) => Some(h),
+            None => None,
+        };
+        let missing_counters = snapshot.missing_counters();
+        if !missing_counters.is_empty() {
+            return Pass::NeedCounters(missing_counters);
+        }
         let mandate = mandate(snapshot, actor.as_ref());
         let missing = snapshot.missing();
         if !missing.is_empty() {
@@ -516,8 +680,13 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
         Ok(decision) => {
             if decision.outcome != KernelOutcome::Allow {
                 effects.clear();
+                draws.clear();
             }
-            Pass::Done(Evaluation { decision, effects })
+            Pass::Done(Evaluation {
+                decision,
+                effects,
+                draws,
+            })
         }
         Err(r) => Pass::Rejected(r),
     }

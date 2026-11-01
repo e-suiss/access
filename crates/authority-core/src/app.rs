@@ -345,6 +345,37 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         }
     }
 
+    /// Runs the evaluation over a snapshot, fetching state and counters as it asks for them
+    /// (§17.1.1 steps 7–8).
+    async fn passes(
+        &self,
+        req: &Request,
+        frame: &Frame<'_>,
+    ) -> Result<(Evaluation, Snapshot), CoreError> {
+        let mut snapshot = Snapshot::default();
+        let mut evaluation = None;
+        for _ in 0..MAX_PASSES {
+            match pass(req, frame, &snapshot) {
+                Pass::Need(keys) => self.snapshot_get(&mut snapshot, &keys).await?,
+                Pass::NeedCounters(keys) => {
+                    let mut rows = Vec::with_capacity(keys.len());
+                    for k in keys {
+                        let used = self.reader.counter(&k).await?;
+                        rows.push((k, used));
+                    }
+                    snapshot.fill_counters(rows);
+                }
+                Pass::Done(e) => {
+                    evaluation = Some(e);
+                    break;
+                }
+                Pass::Rejected(r) => return Err(CoreError::Rejected(r)),
+            }
+        }
+        let evaluation = evaluation.ok_or(CoreError::Passes)?;
+        Ok((evaluation, snapshot))
+    }
+
     /// Runs one request through the commit path (§17.1.1).
     ///
     /// # Errors
@@ -399,19 +430,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                 proofs: &resolved.proofs,
                 held: resolved.held,
             };
-            let mut snapshot = Snapshot::default();
-            let mut evaluation = None;
-            for _ in 0..MAX_PASSES {
-                match pass(req, &frame, &snapshot) {
-                    Pass::Need(keys) => self.snapshot_get(&mut snapshot, &keys).await?,
-                    Pass::Done(e) => {
-                        evaluation = Some(e);
-                        break;
-                    }
-                    Pass::Rejected(r) => return Err(CoreError::Rejected(r)),
-                }
-            }
-            let evaluation = evaluation.ok_or(CoreError::Passes)?;
+            let (evaluation, snapshot) = self.passes(req, &frame).await?;
             if req.mode == Mode::Check {
                 return Ok(answer(evaluation.decision, None, None, false));
             }
@@ -642,7 +661,15 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             proofs: Vec::new(),
             reads,
             writes: effects.iter().map(|(k, _)| k.clone()).collect(),
-            draws: Vec::new(),
+            draws: evaluation
+                .draws
+                .iter()
+                .map(|(key, limit, draw)| Draw {
+                    key: key.clone(),
+                    limit: *limit,
+                    draw: *draw,
+                })
+                .collect(),
             single_use,
         });
         Ok(items)
