@@ -373,6 +373,12 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                     }
                     snapshot.fill_counters(rows);
                 }
+                Pass::NeedScans(prefixes) => {
+                    for p in prefixes {
+                        let rows = self.reader.scan(&p).await?;
+                        snapshot.fill_scan(p, rows);
+                    }
+                }
                 Pass::Done(e) => {
                     evaluation = Some(e);
                     break;

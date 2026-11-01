@@ -5,6 +5,8 @@ use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 
 use access_kernel::algebra::Catalog;
+use access_kernel::algebra::subject_le;
+use access_kernel::claim::{self, ClaimState, Statement};
 use access_kernel::codec::{Canonical, Stored};
 use access_kernel::combinator::{
     Basis, Blocker, BlockerClass, BudgetState, Capacity, Decision, EvaluationInput, Fuel, Hop,
@@ -15,12 +17,12 @@ use access_kernel::digest::Digest;
 use access_kernel::fold::Effect;
 use access_kernel::intent::{IntentEnvelope, ParamValue};
 use access_kernel::meta::{
-    self, Actor, AnchorState, ContentState, ExerciseBasis, GrantBasis, GrantState, MandateState,
-    MetaError, Payload, View, kind,
+    self, Actor, AnchorState, ContentState, ExerciseBasis, GrantBasis, GrantState, InstanceState,
+    MandateState, MetaError, Payload, View, kind,
 };
 use access_kernel::model::{
     ActionSet, AuthoritySet, BudgetDimension, BudgetWindow, CanonicalAuthority, ConstraintSet,
-    DelegationTerms, ResourceSelector, Structural, Window,
+    DelegationTerms, Id, ResourceSelector, Structural, SubjectSelector, WhileCondition, Window,
 };
 use suiss_crypto::dcbor::Value;
 
@@ -36,6 +38,8 @@ pub struct Snapshot {
     missing: RefCell<BTreeSet<Vec<u8>>>,
     counters: BTreeMap<Vec<u8>, u64>,
     missing_counters: RefCell<BTreeSet<Vec<u8>>>,
+    scans: BTreeMap<Vec<u8>, Vec<Vec<u8>>>,
+    missing_scans: RefCell<BTreeSet<Vec<u8>>>,
 }
 
 impl Snapshot {
@@ -77,6 +81,33 @@ impl Snapshot {
         self.missing_counters.borrow().iter().cloned().collect()
     }
 
+    /// Adds the live rows found under `prefix`; their values are served like fetched keys.
+    pub fn fill_scan(&mut self, prefix: Vec<u8>, rows: Vec<(Vec<u8>, Option<Value>, u64)>) {
+        self.missing_scans.borrow_mut().remove(&prefix);
+        let keys = rows.iter().map(|(k, _, _)| k.clone()).collect();
+        self.fill(rows);
+        self.scans.insert(prefix, keys);
+    }
+
+    /// The keys found under `prefix` with their values, noting the prefix as missing when it was
+    /// not scanned yet.
+    #[must_use]
+    pub fn scan(&self, prefix: &[u8]) -> Vec<(Vec<u8>, Value)> {
+        let Some(keys) = self.scans.get(prefix) else {
+            self.missing_scans.borrow_mut().insert(prefix.to_vec());
+            return Vec::new();
+        };
+        keys.iter()
+            .filter_map(|k| self.values_of(k).map(|v| (k.clone(), v)))
+            .collect()
+    }
+
+    /// Prefixes asked for and not scanned yet.
+    #[must_use]
+    pub fn missing_scans(&self) -> Vec<Vec<u8>> {
+        self.missing_scans.borrow().iter().cloned().collect()
+    }
+
     /// Whether `key` was fetched.
     #[must_use]
     pub fn has(&self, key: &[u8]) -> bool {
@@ -109,6 +140,7 @@ impl Snapshot {
         self.reads.borrow_mut().clear();
         self.missing.borrow_mut().clear();
         self.missing_counters.borrow_mut().clear();
+        self.missing_scans.borrow_mut().clear();
     }
 
     /// The keys served, with the version each had.
@@ -192,6 +224,8 @@ pub enum Pass {
     Need(Vec<Vec<u8>>),
     /// Fetch these counters and run again.
     NeedCounters(Vec<Vec<u8>>),
+    /// Scan these prefixes and run again (OP-141 m.33).
+    NeedScans(Vec<Vec<u8>>),
     /// The evaluation is complete over the snapshot.
     Done(Evaluation),
     /// A protocol rejection: no decision, no record (L0-EVAL-61).
@@ -335,6 +369,92 @@ pub(crate) fn lineage_hops(
             GrantBasis::Holding(h) => at = h.grant,
         }
     }
+}
+
+/// Whether every while-condition of a hop holds now (OP-141 m.33); what is not fetched yet is
+/// noted as missing and reads as not holding.
+fn conditions_hold(
+    view: &Snapshot,
+    conditions: &BTreeSet<WhileCondition>,
+    actor: Option<&Actor>,
+    now: u64,
+) -> bool {
+    conditions.iter().all(|c| match c {
+        WhileCondition::InstanceAlive(i) => {
+            read::<InstanceState>(view, kind::INSTANCE, i).is_some_and(|s| s.ended.is_none())
+        }
+        WhileCondition::ClaimHeld {
+            class,
+            subject,
+            acceptance,
+        } => {
+            let who = match subject {
+                SubjectSelector::Party(p) => Some(*p),
+                sel => actor
+                    .map(|a| a.party)
+                    .filter(|p| subject_le(&SubjectSelector::Party(*p), sel)),
+            };
+            who.is_some_and(|who| claim_held(view, class, &who, acceptance, now))
+        }
+    })
+}
+
+/// Whether `who` holds a current Claim of `class` that the Acceptance with digest `acceptance`
+/// admits (OP-141 m.33 (b)).
+fn claim_held(view: &Snapshot, class: &str, who: &Id, acceptance: &Digest, now: u64) -> bool {
+    view.scan(&claim::member_prefix(class, who))
+        .into_iter()
+        .filter_map(|(_, v)| Id::from_value(&v).ok())
+        .any(|id| {
+            let Some(state) = read::<ClaimState>(view, kind::CLAIM, &id).filter(|s| {
+                s.ended.is_none()
+                    && s.statement.class == class
+                    && s.statement.subject == *who
+                    && s.statement.validity.from <= now
+                    && now <= s.statement.validity.until
+            }) else {
+                return false;
+            };
+            let admitted = view
+                .get(&meta::key(kind::ACCEPTANCES, &state.statement.issuer))
+                .map(|v| match v {
+                    Value::Array(ids) => ids,
+                    _ => Vec::new(),
+                })
+                .unwrap_or_default()
+                .iter()
+                .filter_map(|v| Id::from_value(v).ok())
+                .filter_map(|a| read::<ContentState>(view, kind::ACCEPTANCE, &a))
+                .filter(|a| {
+                    a.ended.is_none() && claim::acceptance_digest(&a.content) == *acceptance
+                })
+                .filter_map(|a| claim::Gate::of(&a.content).ok())
+                .any(|g| g.admits_for(&g.use_.clone(), &state.statement, now));
+            admitted && in_line(view, &id, &state.statement)
+        })
+}
+
+/// Whether a recorded Claim asserts in its issuer line (TI-RT7, OP-141 m.30 (c), (d)).
+fn in_line(view: &Snapshot, id: &Id, s: &Statement) -> bool {
+    let successors = |of: &Id, line: &Statement, except: &Id| {
+        view.scan(&claim::successor_prefix(of))
+            .into_iter()
+            .filter_map(|(_, v)| Id::from_value(&v).ok())
+            .filter(|c| c != except)
+            .filter(|c| {
+                read::<ClaimState>(view, kind::CLAIM, c)
+                    .is_some_and(|c| claim::same_line(line, &c.statement))
+            })
+            .count()
+    };
+    if successors(id, s, id) > 0 {
+        return false;
+    }
+    s.supersedes.is_none_or(|prev| {
+        read::<ClaimState>(view, kind::CLAIM, &prev)
+            .filter(|p| claim::same_line(&p.statement, s))
+            .is_none_or(|p| successors(&prev, &p.statement, id) == 0)
+    })
 }
 
 /// The Anchor a basis rests on: the Anchor itself, or the top of the Grant's lineage.
@@ -613,7 +733,7 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
             }
         }
     }
-    let (bases, mandate) = if let Some(payload) = req.payload.as_ref().filter(|_| !contribute) {
+    let (mut bases, mandate) = if let Some(payload) = req.payload.as_ref().filter(|_| !contribute) {
         let Some(actor) = actor else {
             return Pass::Done(Evaluation {
                 decision: deny(
@@ -753,6 +873,27 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
             .collect::<Vec<_>>();
         (bases, mandate)
     };
+    // L0-EVAL-4, OP-141 m.33
+    for hop in bases.iter_mut().flat_map(|b| b.hops.iter_mut()) {
+        if let Stored::Known(h) = hop
+            && !h.authority.constraints.conditions.is_empty()
+        {
+            h.conditions_hold = conditions_hold(
+                snapshot,
+                &h.authority.constraints.conditions,
+                actor.as_ref(),
+                now,
+            );
+        }
+    }
+    let missing_scans = snapshot.missing_scans();
+    if !missing_scans.is_empty() {
+        return Pass::NeedScans(missing_scans);
+    }
+    let missing = snapshot.missing();
+    if !missing.is_empty() {
+        return Pass::Need(missing);
+    }
     // OP-141 m.27 (c): the live policies of the domain, the Anchor, the Party and the Instance
     let applicable = applicable_policies(snapshot, &req.basis, actor.as_ref());
     let missing = snapshot.missing();

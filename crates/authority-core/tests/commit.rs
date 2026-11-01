@@ -1009,6 +1009,113 @@ async fn a_compromise_restricts_instances_set_up_after_it() {
     fold_check(&db.sequencer, d).await.unwrap();
 }
 
+// L0-EVAL-4, OP-141 m.33: a Grant held while a Claim is held lapses until the Claim is
+// recorded under the named Acceptance, and while-instance-alive needs a live Instance
+#[tokio::test]
+async fn while_conditions_are_prepared_on_the_commit_path() {
+    use access_kernel::model::WhileCondition;
+    let db = fresh().await.unwrap();
+    let kyc = term(ProofKind::Claim, "kyc", ProofBinding::None);
+    let (mut core, d) = setup_with(&db, gated(&[kyc])).await;
+    onboard(&mut core, d, ROOT, ROOT_KEY, (1, 2)).await;
+    onboard(&mut core, d, ALICE, ALICE_KEY, (3, 4)).await;
+    let acceptance = state_of(
+        &db,
+        d,
+        &meta::key(kind::ACCEPTANCE, &meta::object_id(&d, kind::ACCEPTANCE, 0)),
+    )
+    .await
+    .unwrap();
+    let acceptance =
+        meta::ContentState::from_value(&dcbor::decode(&acceptance, Limits::CEILING).unwrap())
+            .unwrap();
+    let held = WhileCondition::ClaimHeld {
+        class: "kyc".to_owned(),
+        subject: SubjectSelector::Party(ROOT),
+        acceptance: access_kernel::claim::acceptance_digest(&acceptance.content),
+    };
+    let meta_anchor = meta::meta_anchor(&d);
+    let grant_to_alice = |nonce, condition: WhileCondition| {
+        let mut granted = authority(vec![action("shop", "read")], selector("shop"));
+        granted.constraints.conditions = BTreeSet::from([condition]);
+        meta_request(
+            d,
+            nonce,
+            ExerciseBasis::Anchor(meta_anchor),
+            Payload::GrantIssue(GrantContent {
+                basis: GrantBasis::Anchor(meta_anchor),
+                holder: SubjectSelector::Party(ALICE),
+                authority: granted,
+                agency: BTreeSet::from([Capacity::Own]),
+                named: None,
+            }),
+        )
+    };
+    let holding = |r: &Response| {
+        ExerciseBasis::Holding(HoldingRef {
+            grant: meta::object_id(&r.exercise.unwrap(), kind::GRANT, 0),
+            holder: ALICE,
+            since: r.record.unwrap(),
+        })
+    };
+    let issued = send(&mut core, grant_to_alice(10, held), ROOT_KEY)
+        .await
+        .unwrap();
+    allowed(&issued);
+    let lapsed = send(
+        &mut core,
+        shop_request(d, 11, Mode::Commit, holding(&issued)),
+        ALICE_KEY,
+    )
+    .await
+    .unwrap();
+    assert_eq!(lapsed.decision.outcome, Outcome::Deny);
+    assert!(
+        lapsed
+            .decision
+            .blockers
+            .iter()
+            .any(|b| b.subcode.as_deref() == Some("ended/lapsed"))
+    );
+    // the Claim arrives with another request and is recorded under the Acceptance
+    send(
+        &mut core,
+        with_proofs(
+            shop_request(d, 12, Mode::Commit, ExerciseBasis::Anchor(meta_anchor)),
+            vec![ProofRef::Claim(claim(d, ALICE, ALICE_KEY, "kyc"))],
+        ),
+        ROOT_KEY,
+    )
+    .await
+    .unwrap();
+    allowed(
+        &send(
+            &mut core,
+            shop_request(d, 13, Mode::Commit, holding(&issued)),
+            ALICE_KEY,
+        )
+        .await
+        .unwrap(),
+    );
+    let gone = send(
+        &mut core,
+        grant_to_alice(14, WhileCondition::InstanceAlive(Id([9; 16]))),
+        ROOT_KEY,
+    )
+    .await
+    .unwrap();
+    allowed(&gone);
+    let denied = send(
+        &mut core,
+        shop_request(d, 15, Mode::Commit, holding(&gone)),
+        ALICE_KEY,
+    )
+    .await
+    .unwrap();
+    assert_eq!(denied.decision.outcome, Outcome::Deny);
+    fold_check(&db.sequencer, d).await.unwrap();
+}
+
 async fn state_of(db: &TestDb, d: Digest, key: &[u8]) -> Option<Vec<u8>> {
     access_store::authority::state_of(&db.app, &DomainId::from_bytes(d.0), &[key.to_vec()])
         .await

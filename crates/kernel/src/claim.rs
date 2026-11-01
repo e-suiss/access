@@ -30,6 +30,14 @@ pub const SUBJECT_SELECTION: &str = "subject-selection";
 
 /// Kind of the membership index (OP-141 m.20 (b)).
 pub const MEMBER: &str = "member";
+/// `SHA-256("access/acceptance/v1" ‖ 0x00 ‖ dCBOR(acceptance-content))`, the digest a
+/// `claim_held` while-condition names (OP-141 m.33 (c)).
+#[must_use]
+pub fn acceptance_digest(content: &Value) -> Digest {
+    let bytes = dcbor::encode(content, Limits::CEILING).unwrap_or_default();
+    Digest(context_digest("access/acceptance/v1", &bytes).0)
+}
+
 /// The class of a Party compromise Claim (SEC12, OP-141 m.31).
 pub const PARTY_COMPROMISE: &str = "party_compromise";
 /// How far before its declaration a compromise is taken to have begun when the Claim does not
