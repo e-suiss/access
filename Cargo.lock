@@ -12,6 +12,8 @@ dependencies = [
  "ed25519-dalek",
  "esuiss-access-kernel",
  "esuiss-crypto",
+ "esuiss-restriction",
+ "serde_json",
  "thiserror",
  "tokio",
 ]
