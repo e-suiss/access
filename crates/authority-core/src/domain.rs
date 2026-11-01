@@ -21,9 +21,11 @@ use access_kernel::meta::{
     MandateState, MetaError, Payload, View, kind,
 };
 use access_kernel::model::{
-    ActionSet, AuthoritySet, BudgetDimension, BudgetWindow, CanonicalAuthority, ConstraintSet,
-    DelegationTerms, Id, ResourceSelector, Structural, SubjectSelector, WhileCondition, Window,
+    ActionRef, ActionSet, AuthoritySet, BudgetDimension, BudgetWindow, CanonicalAuthority,
+    ConstraintSet, DelegationTerms, Id, ResourceSelector, Structural, SubjectSelector,
+    WhileCondition, Window,
 };
+use access_kernel::schema::{ActionSchema, Spp};
 use suiss_crypto::dcbor::Value;
 
 /// Fuel for one evaluation (OP-111 m.7, PD).
@@ -214,6 +216,8 @@ pub struct Evaluation {
     pub releases: Vec<(Vec<u8>, u64)>,
     /// Whether the meta-action widens authority (L0-META-28).
     pub expansion: bool,
+    /// The accepted Action Schema of a domain action (OP-141 m.35 (e)).
+    pub action: Option<Box<ActionSchema>>,
 }
 
 /// A budget draw: counter key, limit, demand and the unit of an `amount` term.
@@ -370,6 +374,68 @@ pub(crate) fn lineage_hops(
             }
             GrantBasis::Holding(h) => at = h.grant,
         }
+    }
+}
+
+/// The catalog an action of a domain namespace is evaluated with, and its Action Schema: the
+/// live `schema-definition` Acceptances of the namespace (OP-141 m.35 (e), (f)).
+///
+/// # Errors
+/// The `schema-not-accepted` subcode.
+fn schema_catalog(
+    view: &Snapshot,
+    action: &ActionRef,
+    now: u64,
+    base: &Catalog,
+) -> Result<(Catalog, ActionSchema), &'static str> {
+    let ids = match view.get(&access_kernel::schema::schemas_key(&action.namespace)) {
+        Some(Value::Array(ids)) => ids,
+        _ => Vec::new(),
+    };
+    let mut catalog = base.clone();
+    let mut found = None;
+    let mut retired = false;
+    for id in ids.iter().filter_map(|v| Id::from_value(v).ok()) {
+        let Some(a) =
+            read::<ContentState>(view, kind::ACCEPTANCE, &id).filter(|a| a.ended.is_none())
+        else {
+            continue;
+        };
+        let live = a
+            .content
+            .get("validity")
+            .and_then(|w| Window::from_value(w).ok())
+            .is_some_and(|w| w.from <= now && now <= w.until);
+        let Some(spp) = a
+            .content
+            .get("spp")
+            .and_then(|v| Spp::from_value(v).ok())
+            .filter(|_| live)
+        else {
+            continue;
+        };
+        let refs = spp.refs();
+        catalog.catalogs.insert(
+            spp.catalog_digest(),
+            refs.iter().map(|(r, _)| r.clone()).collect(),
+        );
+        for (r, s) in refs {
+            if s.reserved {
+                catalog.reserved.insert(r.clone());
+            }
+            if r == *action {
+                if spp.retirements.contains(&r) {
+                    retired = true;
+                } else {
+                    found = Some(s.clone());
+                }
+            }
+        }
+    }
+    match (found, retired) {
+        (Some(s), _) => Ok((catalog, s)),
+        (None, true) => Err("retired"),
+        (None, false) => Err("unknown-action"),
     }
 }
 
@@ -695,8 +761,37 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
             draws: Vec::new(),
             releases: Vec::new(),
             expansion: false,
+            action: None,
         });
     }
+    // OP-141 m.35 (e), (f)
+    let accepted;
+    let mut schema = None;
+    let catalog = if req.payload.is_none() && req.intent.action.namespace != meta::NAMESPACE {
+        match schema_catalog(snapshot, &req.intent.action, now, catalog) {
+            Ok((c, s)) => {
+                accepted = c;
+                schema = Some(Box::new(s));
+                &accepted
+            }
+            Err(subcode) => {
+                let missing = snapshot.missing();
+                if !missing.is_empty() {
+                    return Pass::Need(missing);
+                }
+                return Pass::Done(Evaluation {
+                    decision: deny(BlockerClass::SchemaNotAccepted, subcode, Resolver::Root),
+                    effects: Vec::new(),
+                    draws: Vec::new(),
+                    releases: Vec::new(),
+                    expansion: false,
+                    action: None,
+                });
+            }
+        }
+    } else {
+        catalog
+    };
     let mut effects = Vec::new();
     let mut draws = Vec::new();
     let mut releases = Vec::new();
@@ -715,6 +810,7 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
                 draws: Vec::new(),
                 releases: Vec::new(),
                 expansion: false,
+                action: None,
             });
         };
         let ctx = meta::Context {
@@ -735,6 +831,7 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
                     draws: Vec::new(),
                     releases: Vec::new(),
                     expansion: false,
+                    action: None,
                 });
             }
         }
@@ -751,6 +848,7 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
                 draws: Vec::new(),
                 releases: Vec::new(),
                 expansion: false,
+                action: None,
             });
         };
         let ctx = meta::Context {
@@ -775,6 +873,7 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
                     draws: Vec::new(),
                     releases: Vec::new(),
                     expansion: false,
+                    action: None,
                 });
             }
             Ok(out) => {
@@ -947,6 +1046,7 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
                 draws,
                 releases,
                 expansion,
+                action: schema,
             })
         }
         Err(r) => Pass::Rejected(r),

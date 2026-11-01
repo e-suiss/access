@@ -3,6 +3,7 @@
 
 use crate::intent::{IntentEnvelope, ParamValue};
 use crate::meta::Payload;
+use crate::schema::{ActionSchema, EffectClass};
 
 /// Consequence tier.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -34,9 +35,14 @@ pub const fn validity_ceiling(tier: Tier) -> u64 {
 }
 
 /// The tier of an Exercise: a meta-action by its class and whether it widens authority, a
-/// domain action by its amounts (OP-141 m.34 (a), (b)).
+/// domain action by its amounts and its Action Schema (OP-141 m.34 (a), m.35 (g)).
 #[must_use]
-pub fn of(intent: &IntentEnvelope, payload: Option<&Payload>, expansion: bool) -> Tier {
+pub fn of(
+    intent: &IntentEnvelope,
+    payload: Option<&Payload>,
+    expansion: bool,
+    schema: Option<&ActionSchema>,
+) -> Tier {
     match payload {
         Some(p) if !expansion || matches!(p, Payload::Contribute { .. }) => Tier::Ct1,
         Some(
@@ -53,15 +59,24 @@ pub fn of(intent: &IntentEnvelope, payload: Option<&Payload>, expansion: bool) -
             | Payload::PolicyRetire { .. },
         ) => Tier::Ct3,
         Some(_) => Tier::Ct2,
-        None => intent
-            .params
-            .values()
-            .filter_map(|v| match v {
-                ParamValue::Amount { value, unit } => Some(amount_tier(*value, unit)),
-                _ => None,
-            })
-            .max()
-            .unwrap_or(Tier::Ct1),
+        None => {
+            let amounts = intent
+                .params
+                .values()
+                .filter_map(|v| match v {
+                    ParamValue::Amount { value, unit } => Some(amount_tier(*value, unit)),
+                    _ => None,
+                })
+                .max();
+            match schema {
+                Some(s) if s.reserved => Tier::Ct3,
+                Some(s) if s.effect == EffectClass::Irreversible => {
+                    amounts.unwrap_or(Tier::Ct2).max(Tier::Ct2)
+                }
+                Some(s) if s.effect == EffectClass::None => amounts.unwrap_or(Tier::Ct0),
+                _ => amounts.unwrap_or(Tier::Ct1),
+            }
+        }
     }
 }
 

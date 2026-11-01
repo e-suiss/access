@@ -577,6 +577,29 @@ acceptance-content = {
   ? ingest_until: trusted-time,
   ? issued_until: trusted-time,
   ? quota: { count: uint .ge 1, window_s: uint .ge 1 },
+  ? spp: spp,
+}
+
+; OP-141 m.35: a Schema Publication Package, carried by a schema-definition Acceptance whose
+; issuer is its publisher.
+spp = {
+  publisher: party-ref,
+  namespace: namespace,
+  catalog_version: uint,
+  actions: [+ action-schema],
+  ? retirements: [+ action-ref],
+  ? core_spec_min: uint,
+}
+
+action-schema = {
+  name: ident,
+  major: uint,
+  effect_class: "none" / "reversible" / "irreversible",
+  ? reserved: true,
+  ? consumption_bearing: true,
+  ? params: { + ident => "amount" / "int" / "text" / "bool" / "bytes" / "id" / "opaque" },
+  ? resource_types: [+ ident],
+  ? render: tstr,
 }
 
 ; OP-141 m.27: Cedar source against Access's published schema; `requirements` resolves the

@@ -1362,6 +1362,65 @@ fn meta_vectors_match() {
             content: acceptance(CAROL, "predicate-input", &["staff"], 50),
         },
     );
+    // OP-141 m.35: a schema-definition Acceptance carries its SPP and joins its namespace's index
+    let with_spp = |namespace: &str| {
+        let spp = crate::schema::Spp {
+            publisher: CAROL,
+            namespace: namespace.to_string(),
+            catalog_version: 1,
+            actions: alloc::vec![crate::schema::ActionSchema {
+                name: "refund".to_string(),
+                major: 1,
+                effect: crate::schema::EffectClass::Irreversible,
+                reserved: false,
+                consumption_bearing: true,
+                params: BTreeMap::new(),
+                resource_types: BTreeSet::new(),
+                render: None,
+            }],
+            retirements: BTreeSet::new(),
+            core_spec_min: None,
+        };
+        let mut m = match acceptance(CAROL, "schema-definition", &["action_schema"], 100) {
+            Value::Map(m) => m,
+            _ => Vec::new(),
+        };
+        m.push((Value::text("spp"), spp.to_value()));
+        dcbor::decode(
+            &dcbor::encode(&Value::Map(m), Limits::CEILING).unwrap(),
+            Limits::CEILING,
+        )
+        .unwrap()
+    };
+    assert!(
+        Payload::from_value(&Payload::AcceptanceEstablish(with_spp("shop")).to_value()).is_ok()
+    );
+    assert!(
+        Payload::from_value(
+            &Payload::AcceptanceEstablish(acceptance(CAROL, "schema-definition", &["a"], 1))
+                .to_value()
+        )
+        .is_err()
+    );
+    let schema = r
+        .step(
+            "schema-acceptance-established",
+            &["L0-META-27", "L0-META-34"],
+            (ROOT, ROOT),
+            meta,
+            &Payload::AcceptanceEstablish(with_spp("shop")),
+        )
+        .unwrap();
+    r.step(
+        "schema-acceptance-namespace-change",
+        &["L0-META-27", "L0-META-34"],
+        (ROOT, ROOT),
+        meta,
+        &Payload::AcceptanceAmend {
+            acceptance: object_id(&schema, kind::ACCEPTANCE, 0),
+            content: with_spp("shop.eu"),
+        },
+    );
     r.step(
         "second-membership-issuer",
         &["L0-META-27", "L0-META-31"],

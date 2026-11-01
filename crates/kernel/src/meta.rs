@@ -1028,9 +1028,20 @@ fn acceptance_content(v: &Value) -> Result<Value, ModelError> {
             }
         }
     }
-    match f.req("use")? {
-        Value::Text(u) if USES.contains(&u.as_str()) => {}
+    let schema = match f.req("use")? {
+        Value::Text(u) if USES.contains(&u.as_str()) => u == "schema-definition",
         _ => return Err(ModelError::Unknown),
+    };
+    // OP-141 m.35 (a)
+    match (schema, f.opt("spp")) {
+        (true, Some(spp)) => {
+            let spp = crate::schema::Spp::from_value(spp)?;
+            if v.get("issuer") != Some(&spp.publisher.to_value()) {
+                return Err(ModelError::Shape);
+            }
+        }
+        (false, None) => {}
+        _ => return Err(ModelError::Shape),
     }
     set_of(f.req("classes")?, true, crate::codec::ident)?;
     SubjectSelector::from_value(f.req("subject")?)?;
@@ -1848,6 +1859,19 @@ fn genesis_acceptances(domain: &Digest, list: &Value) -> Result<Vec<Effect>, Met
     for (class, (_, set)) in by_class {
         out.push((selection_key(&class), Some(ids_value(&set))));
     }
+    // OP-141 m.35 (d)
+    let mut by_namespace: BTreeMap<String, BTreeSet<Id>> = BTreeMap::new();
+    for (seq, a) in (0_u64..).zip(crate::codec::set_items(list, true)?) {
+        if let Some(ns) = spp_namespace(a) {
+            by_namespace
+                .entry(ns)
+                .or_default()
+                .insert(object_id(domain, kind::ACCEPTANCE, seq));
+        }
+    }
+    for (ns, set) in by_namespace {
+        out.push((crate::schema::schemas_key(&ns), Some(ids_value(&set))));
+    }
     Ok(out)
 }
 
@@ -2523,6 +2547,13 @@ pub fn apply(ctx: &Context<'_>, payload: &Payload, view: &dyn View) -> Result<Ou
         Payload::AcceptanceEstablish(content) => {
             out.requirements = domain_root(ctx, view)?;
             let aid = new_id(ctx, kind::ACCEPTANCE, 0);
+            // OP-141 m.35 (d)
+            if let Some(ns) = spp_namespace(content) {
+                let k = crate::schema::schemas_key(&ns);
+                let mut set_of = index_of(view, &k)?;
+                set_of.insert(aid);
+                out.effects.push((k, Some(ids_value(&set_of))));
+            }
             if let Some(issuer @ Value::Bytes(_)) = content.get("issuer") {
                 let issuer = id(issuer).map_err(|_| MetaError::Corrupt)?;
                 let mut set_of = ids(view, kind::ACCEPTANCES, &issuer)?;
@@ -2550,7 +2581,13 @@ pub fn apply(ctx: &Context<'_>, payload: &Payload, view: &dyn View) -> Result<Ou
             out.requirements = domain_root(ctx, view)?;
             let mut a: ContentState = read(view, kind::ACCEPTANCE, acceptance)?;
             a = live(a.ended, a.clone())?;
-            let fixed = |c: &Value| (c.get("issuer").cloned(), c.get("use").cloned());
+            let fixed = |c: &Value| {
+                (
+                    c.get("issuer").cloned(),
+                    c.get("use").cloned(),
+                    spp_namespace(c),
+                )
+            };
             if fixed(&a.content) != fixed(content) {
                 return Err(MetaError::NotWithin);
             }
@@ -2902,6 +2939,14 @@ fn release(
     out.effects.push((k, Some(e.to_value())));
     out.expansion = true;
     Ok(())
+}
+
+/// The namespace of a `schema-definition` Acceptance's SPP (OP-141 m.35 (d)).
+fn spp_namespace(content: &Value) -> Option<String> {
+    match content.get("spp")?.get("namespace")? {
+        Value::Text(t) => Some(t.clone()),
+        _ => None,
+    }
 }
 
 /// `dCBOR(["policies", target])`: the restriction policies of a target (OP-141 m.27 (c)).

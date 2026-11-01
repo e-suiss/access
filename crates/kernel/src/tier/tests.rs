@@ -39,17 +39,20 @@ fn intent(amount: Option<(i64, &str)>) -> IntentEnvelope {
 // §13.7.1, OP-141 m.34: amounts by the EUR thresholds, other units CT2, no amount CT1
 #[test]
 fn a_domain_action_is_tiered_by_its_amount() {
-    assert_eq!(of(&intent(None), None, false), Tier::Ct1);
-    assert_eq!(of(&intent(Some((CT1_MAX, "eur"))), None, false), Tier::Ct1);
+    assert_eq!(of(&intent(None), None, false, None), Tier::Ct1);
     assert_eq!(
-        of(&intent(Some((CT1_MAX + 1, "eur"))), None, false),
+        of(&intent(Some((CT1_MAX, "eur"))), None, false, None),
+        Tier::Ct1
+    );
+    assert_eq!(
+        of(&intent(Some((CT1_MAX + 1, "eur"))), None, false, None),
         Tier::Ct2
     );
     assert_eq!(
-        of(&intent(Some((CT2_MAX + 1, "eur"))), None, false),
+        of(&intent(Some((CT2_MAX + 1, "eur"))), None, false, None),
         Tier::Ct3
     );
-    assert_eq!(of(&intent(Some((1, "try"))), None, false), Tier::Ct2);
+    assert_eq!(of(&intent(Some((1, "try"))), None, false, None), Tier::Ct2);
 }
 
 // §13.7.1, SI-4, OP-141 m.34: narrowing meta-actions are CT1, expansion-class ones CT3,
@@ -58,15 +61,31 @@ fn a_domain_action_is_tiered_by_its_amount() {
 fn a_meta_action_is_tiered_by_its_class() {
     let i = intent(None);
     let revoke = Payload::GrantRevoke { grant: Id([1; 16]) };
-    assert_eq!(of(&i, Some(&revoke), false), Tier::Ct1);
+    assert_eq!(of(&i, Some(&revoke), false, None), Tier::Ct1);
     let retire = Payload::PolicyRetire {
         policy: Id([1; 16]),
     };
-    assert_eq!(of(&i, Some(&retire), true), Tier::Ct3);
+    assert_eq!(of(&i, Some(&retire), true, None), Tier::Ct3);
     let rebind = Payload::MandateRevoke {
         mandate: Id([1; 16]),
     };
-    assert_eq!(of(&i, Some(&rebind), true), Tier::Ct2);
+    assert_eq!(of(&i, Some(&rebind), true, None), Tier::Ct2);
     assert_eq!(validity_ceiling(Tier::Ct3), 259_200_000);
     assert_eq!(validity_ceiling(Tier::Ct1), 86_400_000);
+}
+
+// OP-141 m.35 (g): a reserved action is CT3, an irreversible one at least CT2, one without
+// effect CT0
+#[test]
+fn the_action_schema_raises_the_tier() {
+    let mut s = crate::schema::tests::refund();
+    assert_eq!(of(&intent(None), None, false, Some(&s)), Tier::Ct2);
+    assert_eq!(
+        of(&intent(Some((CT2_MAX + 1, "eur"))), None, false, Some(&s)),
+        Tier::Ct3
+    );
+    s.effect = EffectClass::None;
+    assert_eq!(of(&intent(None), None, false, Some(&s)), Tier::Ct0);
+    s.reserved = true;
+    assert_eq!(of(&intent(None), None, false, Some(&s)), Tier::Ct3);
 }

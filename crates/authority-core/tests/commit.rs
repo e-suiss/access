@@ -58,13 +58,77 @@ fn public(seed: u8) -> PublicKey {
     PublicKey::Ed25519(signing(seed).verifying_key().to_bytes())
 }
 
+/// The Action Schema the test catalog publishes for `name` (OP-141 m.35).
+fn schema_of(name: &str) -> access_kernel::schema::ActionSchema {
+    access_kernel::schema::ActionSchema {
+        name: name.to_owned(),
+        major: 1,
+        effect: access_kernel::schema::EffectClass::Reversible,
+        reserved: false,
+        consumption_bearing: false,
+        params: BTreeMap::new(),
+        resource_types: BTreeSet::new(),
+        render: None,
+    }
+}
+
 fn action(namespace: &str, name: &str) -> ActionRef {
     ActionRef {
         namespace: namespace.to_owned(),
         name: name.to_owned(),
         major: 1,
-        schema: Digest([9; 32]),
+        schema: access_kernel::schema::action_digest(&schema_of(name)),
     }
+}
+
+/// The `schema-definition` Acceptance that publishes the `shop` actions (OP-141 m.35).
+fn shop_schemas() -> Value {
+    let spp = access_kernel::schema::Spp {
+        publisher: ROOT,
+        namespace: "shop".to_owned(),
+        catalog_version: 1,
+        actions: vec![schema_of("read")],
+        retirements: BTreeSet::new(),
+        core_spec_min: None,
+    };
+    Value::Map(vec![
+        (Value::text("issuer"), ROOT.to_value()),
+        (Value::text("use"), Value::text("schema-definition")),
+        (
+            Value::text("classes"),
+            Value::Array(vec![Value::text("action_schema")]),
+        ),
+        (Value::text("subject"), SubjectSelector::Public.to_value()),
+        (
+            Value::text("validity"),
+            Value::Array(vec![Value::Unsigned(0), Value::Unsigned(u64::MAX)]),
+        ),
+        (Value::text("spp"), spp.to_value()),
+    ])
+}
+
+/// Adds Acceptances to a Genesis, keeping the set in canonical order.
+fn add_acceptances(g: &mut BTreeMap<String, Opened>, extra: Vec<Value>) {
+    let mut all = match g.get("acceptances").map(|o| o.value.clone()) {
+        Some(Value::Array(a)) => a,
+        _ => Vec::new(),
+    };
+    all.extend(extra);
+    let mut keyed: Vec<(Vec<u8>, Value)> = all
+        .into_iter()
+        .map(|v| {
+            let b = dcbor::encode(&v, Limits::CEILING).unwrap();
+            (b.clone(), dcbor::decode(&b, Limits::CEILING).unwrap())
+        })
+        .collect();
+    keyed.sort_by(|a, b| a.0.cmp(&b.0));
+    g.insert(
+        "acceptances".to_owned(),
+        Opened {
+            value: Value::Array(keyed.into_iter().map(|(_, v)| v).collect()),
+            salt: [3; 32],
+        },
+    );
 }
 
 fn selector(namespace: &str) -> ResourceSelector {
@@ -148,6 +212,10 @@ fn genesis() -> BTreeMap<String, Opened> {
         ),
         ("anchors".to_owned(), opened(Value::Array(vec![shop]))),
         ("grants".to_owned(), opened(Value::Array(vec![bootstrap]))),
+        (
+            "acceptances".to_owned(),
+            opened(Value::Array(vec![shop_schemas()])),
+        ),
         // OP-141 m.34 (d): the scenarios below run without the CT3 time-lock
         (
             "policy".to_owned(),
@@ -713,7 +781,7 @@ fn gated_with(terms: &[RequirementTerm], quota: u64) -> BTreeMap<String, Opened>
             ]),
         ),
     ]);
-    g.insert("acceptances".to_owned(), opened(set(vec![acceptance])));
+    add_acceptances(&mut g, vec![acceptance]);
     g
 }
 
@@ -946,24 +1014,21 @@ async fn a_superseded_claim_no_longer_asserts() {
 async fn a_compromise_restricts_instances_set_up_after_it() {
     let db = fresh().await.unwrap();
     let mut g = genesis();
-    g.insert(
-        "acceptances".to_owned(),
-        Opened {
-            value: Value::Array(vec![Value::Map(vec![
-                (Value::text("issuer"), ROOT.to_value()),
-                (Value::text("use"), Value::text("predicate-input")),
-                (
-                    Value::text("classes"),
-                    Value::Array(vec![Value::text(access_kernel::claim::PARTY_COMPROMISE)]),
-                ),
-                (Value::text("subject"), SubjectSelector::Public.to_value()),
-                (
-                    Value::text("validity"),
-                    Value::Array(vec![Value::Unsigned(0), Value::Unsigned(1_000_000)]),
-                ),
-            ])]),
-            salt: [3; 32],
-        },
+    add_acceptances(
+        &mut g,
+        vec![Value::Map(vec![
+            (Value::text("issuer"), ROOT.to_value()),
+            (Value::text("use"), Value::text("predicate-input")),
+            (
+                Value::text("classes"),
+                Value::Array(vec![Value::text(access_kernel::claim::PARTY_COMPROMISE)]),
+            ),
+            (Value::text("subject"), SubjectSelector::Public.to_value()),
+            (
+                Value::text("validity"),
+                Value::Array(vec![Value::Unsigned(0), Value::Unsigned(1_000_000)]),
+            ),
+        ])],
     );
     let (mut core, d) = setup_with(&db, g).await;
     onboard(&mut core, d, ROOT, ROOT_KEY, (1, 2)).await;
@@ -1020,6 +1085,7 @@ async fn a_compromise_restricts_instances_set_up_after_it() {
 // L0-EVAL-4, OP-141 m.33: a Grant held while a Claim is held lapses until the Claim is
 // recorded under the named Acceptance, and while-instance-alive needs a live Instance
 #[tokio::test]
+#[allow(clippy::too_many_lines, reason = "one Grant through both while-conditions")]
 async fn while_conditions_are_prepared_on_the_commit_path() {
     use access_kernel::model::WhileCondition;
     let db = fresh().await.unwrap();
@@ -1027,16 +1093,21 @@ async fn while_conditions_are_prepared_on_the_commit_path() {
     let (mut core, d) = setup_with(&db, gated(&[kyc])).await;
     onboard(&mut core, d, ROOT, ROOT_KEY, (1, 2)).await;
     onboard(&mut core, d, ALICE, ALICE_KEY, (3, 4)).await;
-    let acceptance = state_of(
-        &db,
-        d,
-        &meta::key(kind::ACCEPTANCE, &meta::object_id(&d, kind::ACCEPTANCE, 0)),
-    )
-    .await
-    .unwrap();
-    let acceptance =
-        meta::ContentState::from_value(&dcbor::decode(&acceptance, Limits::CEILING).unwrap())
-            .unwrap();
+    let mut acceptance = None;
+    for seq in 0..2 {
+        let key = meta::key(
+            kind::ACCEPTANCE,
+            &meta::object_id(&d, kind::ACCEPTANCE, seq),
+        );
+        let state = state_of(&db, d, &key).await.unwrap();
+        let state =
+            meta::ContentState::from_value(&dcbor::decode(&state, Limits::CEILING).unwrap())
+                .unwrap();
+        if state.content.get("use") == Some(&Value::text("predicate-input")) {
+            acceptance = Some(state);
+        }
+    }
+    let acceptance = acceptance.unwrap();
     let held = WhileCondition::ClaimHeld {
         class: "kyc".to_owned(),
         subject: SubjectSelector::Party(ROOT),
@@ -1200,6 +1271,39 @@ async fn an_intent_beyond_its_tier_ceiling_is_refused() {
     assert!(matches!(
         send(&mut core, r, ROOT_KEY).await,
         Err(CoreError::Protocol("intent-validity"))
+    ));
+}
+
+// OP-141 m.35 (e): a domain action is evaluated only when an accepted SPP of its namespace
+// publishes exactly that action and schema
+#[tokio::test]
+async fn an_action_without_an_accepted_schema_is_denied() {
+    use access_kernel::combinator::BlockerClass;
+    let db = fresh().await.unwrap();
+    let (mut core, d) = setup(&db).await;
+    onboard(&mut core, d, ROOT, ROOT_KEY, (1, 2)).await;
+    let shop = ExerciseBasis::Anchor(meta::object_id(&d, kind::ANCHOR, 1));
+    let not_accepted = |r: &Response| {
+        r.decision.outcome == Outcome::Deny
+            && r.decision.blockers.iter().any(|b| {
+                b.class == BlockerClass::SchemaNotAccepted
+                    && b.subcode.as_deref() == Some("unknown-action")
+            })
+    };
+    allowed(
+        &send(&mut core, shop_request(d, 10, Mode::Commit, shop), ROOT_KEY)
+            .await
+            .unwrap(),
+    );
+    let mut other = shop_request(d, 11, Mode::Commit, shop);
+    other.intent.action = action("shop", "refund");
+    assert!(not_accepted(
+        &send(&mut core, other, ROOT_KEY).await.unwrap()
+    ));
+    let mut changed = shop_request(d, 12, Mode::Commit, shop);
+    changed.intent.action.schema = Digest([9; 32]);
+    assert!(not_accepted(
+        &send(&mut core, changed, ROOT_KEY).await.unwrap()
     ));
 }
 
@@ -1407,10 +1511,7 @@ fn grouped() -> BTreeMap<String, Opened> {
             Value::Array(vec![Value::Unsigned(0), Value::Unsigned(1_000_000)]),
         ),
     ]);
-    g.insert(
-        "acceptances".to_owned(),
-        opened(Value::Array(vec![acceptance])),
-    );
+    add_acceptances(&mut g, vec![acceptance]);
     g
 }
 

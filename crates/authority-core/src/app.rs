@@ -402,7 +402,12 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         open: bool,
         now: u64,
     ) -> Result<(), CoreError> {
-        let tier = access_kernel::tier::of(&req.intent, req.payload.as_ref(), evaluation.expansion);
+        let tier = access_kernel::tier::of(
+            &req.intent,
+            req.payload.as_ref(),
+            evaluation.expansion,
+            evaluation.action.as_deref(),
+        );
         let validity = &req.intent.validity;
         if validity.until.saturating_sub(validity.from)
             > access_kernel::tier::validity_ceiling(tier)

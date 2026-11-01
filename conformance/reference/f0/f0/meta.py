@@ -20,6 +20,9 @@ from .codec import (
     check_text_in,
     check_time_window,
     check_tstr,
+    check_true,
+    check_namespace,
+    check_action_ref,
     check_uint,
     check_uint_at_least,
     check_assurance,
@@ -123,8 +126,42 @@ def check_grant_content(value):
     })
 
 
+def check_spp(value):
+    # OP-141 m.35 (a), (b)
+    def action(a):
+        check_map(a, {"name": check_ident, "major": check_uint,
+                      "effect_class": check_text_in("none", "reversible", "irreversible")}, {
+            "reserved": check_true, "consumption_bearing": check_true,
+            "params": check_params, "resource_types": check_list(check_ident, nonempty=True, is_set=True),
+            "render": check_tstr,
+        })
+    check_map(value, {"publisher": check_id, "namespace": check_namespace, "catalog_version": check_uint,
+                      "actions": check_list(action, nonempty=True)}, {
+        "retirements": check_list(check_action_ref, nonempty=True, is_set=True),
+        "core_spec_min": check_uint,
+    })
+    seen = [(a["name"], a["major"]) for a in value["actions"]]
+    if len(set(seen)) != len(seen):
+        refuse("meta-malformed")
+
+
+def check_params(value):
+    if not isinstance(value, dict) or not value:
+        refuse("meta-malformed")
+    for k, t in value.items():
+        check_ident(k)
+        check_text_in("amount", "int", "text", "bool", "bytes", "id", "opaque")(t)
+
+
 def check_acceptance_content(value):
-    check_map(value, {
+    schema = isinstance(value, dict) and value.get("use") == "schema-definition"
+    if schema != ("spp" in value if isinstance(value, dict) else False):
+        refuse("meta-malformed")
+    if schema:
+        check_spp(value["spp"])
+        if not same(value["issuer"], value["spp"]["publisher"]):
+            refuse("meta-malformed")
+    check_map({k: v for k, v in value.items() if k != "spp"}, {
         "issuer": lambda issuer: check_id(issuer) if isinstance(issuer, bytes) else check_map(issuer, {"keys": check_key_set}),
         "use": check_text_in("actor-binding", "predicate-input", "subject-selection", "foreign-authority", "schema-definition"),
         "classes": check_list(check_ident, nonempty=True),
@@ -712,6 +749,12 @@ class Apply:
         self.meta_root()
         acceptance_id = self.new_id("acceptance")
         self.check_selection(acceptance_id, content)
+        # OP-141 m.35 (d)
+        if "spp" in content:
+            key = encode(["schemas", content["spp"]["namespace"]])
+            members = as_set((self.state.get(key) or []) + [acceptance_id])
+            self.state[key] = members
+            self.effects.append((key, members))
         self.write("acceptance", acceptance_id, {"content": content, "since": self.pos})
         self.index_acceptance(acceptance_id, content)
         return True
@@ -723,10 +766,13 @@ class Apply:
         old, new = acceptance["content"], body["content"]
         if not same(old["issuer"], new["issuer"]) or old["use"] != new["use"]:
             refuse("meta-not-within")
+        if old.get("spp", {}).get("namespace") != new.get("spp", {}).get("namespace"):
+            refuse("meta-not-within")
         self.check_selection(body["acceptance"], new)
         self.write("acceptance", body["acceptance"], dict(acceptance, content=new, since=self.pos))
         self.index_acceptance(body["acceptance"], new, old)
-        return not acceptance_narrows(new, old)
+        # OP-141 m.35 (h)
+        return "spp" in new or not acceptance_narrows(new, old)
 
     def acceptance_revoke(self, body):
         # L0-META-27

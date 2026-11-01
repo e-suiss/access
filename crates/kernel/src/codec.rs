@@ -261,7 +261,7 @@ pub(crate) fn ident(v: &Value) -> Result<String, ModelError> {
     }
 }
 
-fn namespace(v: &Value) -> Result<String, ModelError> {
+pub(crate) fn namespace(v: &Value) -> Result<String, ModelError> {
     let s = text(v)?;
     let parts: Vec<&str> = s.split('.').collect();
     if parts.len() <= 8 && parts.iter().all(|p| ident_with(p, 63, &['-'])) {
