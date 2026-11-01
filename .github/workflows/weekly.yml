@@ -60,6 +60,9 @@ jobs:
           cache-key: sanitizer-${{ matrix.sanitizer }}
           toolchain: ${{ steps.nightly.outputs.toolchain }}
           components: rust-src
+      # OP-69, OP-140 m.4
+      - name: SoftHSM
+        run: sudo apt-get install --yes --no-install-recommends softhsm2
       - name: Test suite under the sanitizer
         env:
           SANITIZER: ${{ matrix.sanitizer }}

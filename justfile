@@ -445,7 +445,7 @@ mutants *args:
 
 # SA-23, §14.5, OP-127 m.1
 sanitize kind:
-    RUSTFLAGS="-Zsanitizer={{kind}}" RUSTDOCFLAGS="-Zsanitizer={{kind}}" \
+    SOFTHSM2_CONF="$(scripts/softhsm-local.sh)" RUSTFLAGS="-Zsanitizer={{kind}}" RUSTDOCFLAGS="-Zsanitizer={{kind}}" \
       cargo +{{sanitizer_nightly}} test --locked -Zbuild-std --target x86_64-unknown-linux-gnu --workspace --exclude esuiss-sandbox --lib --tests
     RUSTFLAGS="-Zsanitizer={{kind}}" RUSTDOCFLAGS="-Zsanitizer={{kind}}" \
       cargo +{{sanitizer_nightly}} test --locked -Zbuild-std --target x86_64-unknown-linux-gnu -p esuiss-sandbox --lib
