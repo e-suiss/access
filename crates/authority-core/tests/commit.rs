@@ -1313,7 +1313,10 @@ async fn an_action_without_an_accepted_schema_is_denied() {
 // L1-ADP-15, OP-141 m.36: a recorded decision is explained by evaluating its request again on
 // the state and counters just before it, also after the state has moved on
 #[tokio::test]
-#[allow(clippy::too_many_lines, reason = "two recorded decisions through every scope")]
+#[allow(
+    clippy::too_many_lines,
+    reason = "two recorded decisions through every scope"
+)]
 async fn a_recorded_decision_is_explained_as_it_was() {
     use access_kernel::model::{BudgetDimension, BudgetTerm, BudgetWindow};
     let db = fresh().await.unwrap();
