@@ -201,8 +201,14 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                         .await?
                         .and_then(|v| ContributionState::from_value(&v).ok())
                         .ok_or(CoreError::Protocol("proof"))?;
-                    // OP-141 m.19 (g): a consumed contribution is no proof
-                    if c.consumed.is_some() {
+                    // OP-141 m.19 (g): a consumed contribution is no proof; SEC11: neither is
+                    // one whose Instance has ended since
+                    let live = self
+                        .get(&mut snap, &meta::key(kind::INSTANCE, &c.instance))
+                        .await?
+                        .and_then(|v| InstanceState::from_value(&v).ok())
+                        .is_some_and(|i| i.ended.is_none());
+                    if c.consumed.is_some() || !live {
                         continue;
                     }
                     let id = first16(e);

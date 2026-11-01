@@ -939,6 +939,43 @@ async fn a_contribution_approves_once() {
     .unwrap();
     assert_eq!(reused.decision.outcome, Outcome::RequireAction);
 
+    // SEC11: a contribution from an Instance that has since ended approves nothing
+    let again = send(&mut core, contribute(d, 22, digest), ALICE_KEY)
+        .await
+        .unwrap();
+    allowed(&again);
+    let alice = meta::object_id(&meta::exercise_id(&d, &[4; 16]).unwrap(), kind::INSTANCE, 0);
+    let end = Payload::InstanceTerminate { instance: alice };
+    allowed(
+        &send(
+            &mut core,
+            meta_request(
+                d,
+                23,
+                ExerciseBasis::Anchor(meta::object_id(
+                    &meta::exercise_id(&d, &[3; 16]).unwrap(),
+                    kind::ANCHOR,
+                    0,
+                )),
+                end,
+            ),
+            ALICE_KEY,
+        )
+        .await
+        .unwrap(),
+    );
+    let stale = send(
+        &mut core,
+        with_proofs(
+            shop_request(d, 11, Mode::Commit, shop),
+            vec![ProofRef::Contribution(again.exercise.unwrap())],
+        ),
+        ROOT_KEY,
+    )
+    .await
+    .unwrap();
+    assert_eq!(stale.decision.outcome, Outcome::RequireAction);
+
     // L0-META-30: without a Grant over the class, a contribution is denied
     let mut other = contribute(d, 21, digest);
     other.basis = ExerciseBasis::Anchor(meta::object_id(&d, kind::ANCHOR, 1));

@@ -497,7 +497,8 @@ class Apply:
         self.write("instance", body["instance"], dict(instance, key=body["key"], since=self.pos))
         self.remove("key", thumbprint(instance["key"]))
         self.write("key", thumbprint(body["key"]), body["instance"])
-        return True
+        # L0-META-28: rekeying is not expansion
+        return False
 
     def instance_terminate(self, body):
         # L0-META-23, L0-META-12

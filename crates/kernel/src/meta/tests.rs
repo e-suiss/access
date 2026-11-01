@@ -1127,6 +1127,60 @@ fn meta_vectors_match() {
             acceptance: Id([9; 16]),
         },
     );
+    // L0-META-22, L0-META-23: rekey, recover and departure
+    let key_of = |seed: u8| {
+        PublicKey::Ed25519(
+            ed25519_dalek::SigningKey::from_bytes(&[seed; 32])
+                .verifying_key()
+                .to_bytes(),
+        )
+    };
+    let second = object_id(
+        &exercise_id(&DOMAIN, &r.run.pos.to_be_bytes().repeat(2)).unwrap(),
+        kind::INSTANCE,
+        0,
+    );
+    r.step(
+        "instance-create-again",
+        &["L0-META-23"],
+        (BOB, second),
+        public,
+        &Payload::InstanceCreate {
+            party: BOB,
+            key: key_of(6),
+            mandate: None,
+        },
+    );
+    r.step(
+        "instance-rekey",
+        &["L0-META-5", "L0-META-23"],
+        (BOB, second),
+        public,
+        &Payload::InstanceRekey {
+            instance: second,
+            key: key_of(7),
+        },
+    );
+    r.step(
+        "instance-recover",
+        &["L0-META-5", "L0-META-23"],
+        (BOB, BOB),
+        public,
+        &Payload::InstanceRecover {
+            instance: second,
+            key: key_of(8),
+        },
+    );
+    r.step(
+        "party-depart",
+        &["L0-META-21", "L0-META-22"],
+        (ROOT, ROOT),
+        meta,
+        &Payload::PartyDepart {
+            party: BOB,
+            disposition: BTreeMap::new(),
+        },
+    );
     let json = format!(
         "{{\n \"rule\": \"OP-141\",\n \"track\": \"core\",\n \"version\": 1,\n \"operation\": \"meta.apply\",\n {},\n \"cases\": [\n{}\n ]\n}}\n",
         field(&["L0-META-1", "L0-META-2"]),

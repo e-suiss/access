@@ -2191,6 +2191,8 @@ pub fn apply(ctx: &Context<'_>, payload: &Payload, view: &dyn View) -> Result<Ou
             unindex_key(&mut out, &i.key);
             index_key(&mut out, k, instance);
             i.key = k.clone();
+            // L0-META-6
+            i.since = ctx.pos;
             set(&mut out, kind::INSTANCE, instance, i.to_value());
         }
         Payload::InstanceTerminate { instance } => {
