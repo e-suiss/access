@@ -176,12 +176,14 @@ pub struct Evaluation {
     pub decision: Decision,
     /// State changes of an allowed meta-action.
     pub effects: Vec<Effect>,
-    /// Budget draws of an allow: counter key, capacity, demand (OP-141 m.26).
+    /// Budget draws of an allow (OP-141 m.26).
     pub draws: Vec<DrawSpec>,
+    /// Budget counter keys and amounts an allowed release returns (OP-141 m.28 (g)).
+    pub releases: Vec<(Vec<u8>, u64)>,
 }
 
-/// A budget draw: counter key, capacity, demand.
-pub type DrawSpec = (Vec<u8>, u64, u64);
+/// A budget draw: counter key, limit, demand and the unit of an `amount` term.
+pub type DrawSpec = (Vec<u8>, u64, u64, Option<String>);
 
 /// The step after one pass over the snapshot.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -213,6 +215,14 @@ fn deny(class: BlockerClass, subcode: &str, resolver: Resolver) -> Decision {
 
 /// The blocker a refused meta-action produces.
 fn meta_denial(e: MetaError) -> Decision {
+    // P14, OP-141 m.28 (f)
+    if e == MetaError::ReleaseExceedsDraw {
+        return deny(
+            BlockerClass::BudgetExhausted,
+            "release-exceeds-draw",
+            Resolver::Actor,
+        );
+    }
     let class = match e {
         MetaError::Ended => BlockerClass::Ended,
         _ => BlockerClass::NoCoveringAuthority,
@@ -471,13 +481,21 @@ fn budgets(
             }
             let (key, resets_at) = budget_key(&id, i, term.window, now);
             let used = view.counter(&key);
+            // OP-141 m.28 (g)
+            let limit = term
+                .capacity
+                .saturating_add(view.counter(&meta::released_key(&key)));
             hop.budgets.push(BudgetState {
                 window: term.window,
-                remaining: term.capacity.saturating_sub(used),
+                remaining: limit.saturating_sub(used),
                 demand: d,
                 resets_at,
             });
-            draws.push((key, term.capacity, d));
+            let unit = match &term.dimension {
+                BudgetDimension::Amount(u) => Some(u.clone()),
+                BudgetDimension::Count => None,
+            };
+            draws.push((key, limit, d, unit));
         }
     }
     Some(Ok(draws))
@@ -546,6 +564,7 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
     snapshot.restart();
     let mut effects = Vec::new();
     let mut draws = Vec::new();
+    let mut releases = Vec::new();
     // L0-META-30: a contribution is authorized like a domain action and records itself
     let contribute = matches!(req.payload, Some(Payload::Contribute { .. }));
     if let Some(payload) = req.payload.as_ref().filter(|_| contribute) {
@@ -558,6 +577,7 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
                 ),
                 effects,
                 draws: Vec::new(),
+                releases: Vec::new(),
             });
         };
         let ctx = meta::Context {
@@ -576,6 +596,7 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
                     decision: meta_denial(e),
                     effects: Vec::new(),
                     draws: Vec::new(),
+                    releases: Vec::new(),
                 });
             }
         }
@@ -590,6 +611,7 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
                 ),
                 effects,
                 draws: Vec::new(),
+                releases: Vec::new(),
             });
         };
         let ctx = meta::Context {
@@ -612,10 +634,12 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
                     decision: meta_denial(e),
                     effects,
                     draws: Vec::new(),
+                    releases: Vec::new(),
                 });
             }
             Ok(out) => {
                 effects = out.effects;
+                releases = out.releases;
                 // L0-META-13: a self-acting meta-action names a live Grant held by Public that
                 // covers it, like any other basis
                 let basis = if let ExerciseBasis::Public(g) = req.basis {
@@ -753,11 +777,13 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
             if decision.outcome != KernelOutcome::Allow {
                 effects.clear();
                 draws.clear();
+                releases.clear();
             }
             Pass::Done(Evaluation {
                 decision,
                 effects,
                 draws,
+                releases,
             })
         }
         Err(r) => Pass::Rejected(r),

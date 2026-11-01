@@ -277,6 +277,8 @@ pub enum Payload {
         value: EqValue,
         /// Validity.
         validity: Option<Window>,
+        /// The intent it is bound to (OP-141 m.28 (i)).
+        bound_intent: Option<Digest>,
     },
     /// `contribute` (L0-META-30).
     Contribute {
@@ -285,9 +287,16 @@ pub enum Payload {
         /// Contribution class.
         class: String,
     },
+    /// `consumption_release` (OP-141 m.28).
+    ConsumptionRelease {
+        /// The Exercise whose draws are released.
+        exercise: Digest,
+        /// The grounding Claims.
+        grounds: BTreeSet<Id>,
+    },
 }
 
-const NAMES: [&str; 24] = [
+const NAMES: [&str; 25] = [
     "anchor_create",
     "anchor_transfer",
     "anchor_amend",
@@ -312,6 +321,7 @@ const NAMES: [&str; 24] = [
     "policy_retire",
     "claim_issue",
     "contribute",
+    "consumption_release",
 ];
 
 /// Whether `name` is a core meta-action.
@@ -357,6 +367,9 @@ pub enum MetaError {
     /// Stored state does not decode.
     #[error("corrupt state")]
     Corrupt,
+    /// A release would exceed the draw or reuses a ground (TI-RT8, OP-141 m.28 (f)).
+    #[error("release exceeds draw")]
+    ReleaseExceedsDraw,
 }
 
 impl MetaError {
@@ -375,6 +388,7 @@ impl MetaError {
             Self::Basis => "meta-basis",
             Self::Depth => "meta-depth",
             Self::Corrupt => "meta-corrupt",
+            Self::ReleaseExceedsDraw => "meta-release-exceeds-draw",
         }
     }
 }
@@ -829,6 +843,7 @@ impl Canonical for Payload {
                 class,
                 value,
                 validity,
+                bound_intent,
             } => (
                 "claim_issue",
                 map([
@@ -836,6 +851,10 @@ impl Canonical for Payload {
                     ("class", Some(Value::text(class))),
                     ("value", Some(value.to_value())),
                     ("validity", validity.as_ref().map(Canonical::to_value)),
+                    (
+                        "bound_intent",
+                        bound_intent.as_ref().map(Canonical::to_value),
+                    ),
                 ]),
             ),
             Self::Contribute { target, class } => (
@@ -843,6 +862,13 @@ impl Canonical for Payload {
                 map([
                     ("target", Some(target.to_value())),
                     ("class", Some(Value::text(class))),
+                ]),
+            ),
+            Self::ConsumptionRelease { exercise, grounds } => (
+                "consumption_release",
+                map([
+                    ("exercise", Some(exercise.to_value())),
+                    ("grounds", Some(ids_value(grounds))),
                 ]),
             ),
         };
@@ -953,10 +979,18 @@ impl Canonical for Payload {
                 class: crate::codec::ident(f.req("class")?)?,
                 value: EqValue::from_value(f.req("value")?)?,
                 validity: f.opt("validity").map(Window::from_value).transpose()?,
+                bound_intent: f
+                    .opt("bound_intent")
+                    .map(|v| Digest::from_value(v).ok_or(ModelError::Shape))
+                    .transpose()?,
             },
             "contribute" => Self::Contribute {
                 target: Digest::from_value(f.req("target")?).ok_or(ModelError::Shape)?,
                 class: crate::codec::ident(f.req("class")?)?,
+            },
+            "consumption_release" => Self::ConsumptionRelease {
+                exercise: Digest::from_value(f.req("exercise")?).ok_or(ModelError::Shape)?,
+                grounds: set_of(f.req("grounds")?, true, id)?,
             },
             _ => return Err(ModelError::Unknown),
         };
@@ -1478,7 +1512,51 @@ impl Canonical for ContributionState {
     }
 }
 
-/// An allowed Exercise (`exercise-state`): what a continuation is checked against (L1-ADP-13).
+/// One budget counter an Exercise drew from (OP-141 m.28 (a)).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ExerciseDraw {
+    /// Counter key, `dCBOR(["budget", GrantID, term, window start])`.
+    pub key: Vec<u8>,
+    /// Amount drawn.
+    pub drawn: u64,
+    /// Amount released so far.
+    pub released: u64,
+    /// Unit of an `amount` term; `None` for a count.
+    pub unit: Option<String>,
+}
+
+impl Canonical for ExerciseDraw {
+    fn to_value(&self) -> Value {
+        map([
+            ("key", Some(Value::Bytes(self.key.clone()))),
+            ("drawn", Some(Value::Unsigned(self.drawn))),
+            ("released", Some(Value::Unsigned(self.released))),
+            ("unit", self.unit.as_deref().map(Value::text)),
+        ])
+    }
+
+    fn from_value(v: &Value) -> Result<Self, ModelError> {
+        let mut f = Fields::of(v)?;
+        let key = match f.req("key")? {
+            Value::Bytes(b) => b.clone(),
+            _ => return Err(ModelError::Shape),
+        };
+        let s = Self {
+            key,
+            drawn: uint(f.req("drawn")?)?,
+            released: uint(f.req("released")?)?,
+            unit: f.opt("unit").map(crate::codec::unit).transpose()?,
+        };
+        f.done()?;
+        if s.released > s.drawn {
+            return Err(ModelError::Range);
+        }
+        Ok(s)
+    }
+}
+
+/// An allowed Exercise (`exercise-state`): what a continuation is checked against (L1-ADP-13)
+/// and what a release returns (OP-141 m.28).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ExerciseState {
     /// Intent digest.
@@ -1487,6 +1565,10 @@ pub struct ExerciseState {
     pub actor: Id,
     /// Position of the allowing decision.
     pub since: u64,
+    /// Budget draws, sorted by key.
+    pub draws: Vec<ExerciseDraw>,
+    /// Claims already used to ground a release.
+    pub grounds: BTreeSet<Id>,
 }
 
 impl Canonical for ExerciseState {
@@ -1495,15 +1577,48 @@ impl Canonical for ExerciseState {
             ("intent", Some(self.intent.to_value())),
             ("actor", Some(self.actor.to_value())),
             ("since", Some(Value::Unsigned(self.since))),
+            (
+                "draws",
+                (!self.draws.is_empty())
+                    .then(|| Value::Array(self.draws.iter().map(Canonical::to_value).collect())),
+            ),
+            (
+                "grounds",
+                (!self.grounds.is_empty()).then(|| ids_value(&self.grounds)),
+            ),
         ])
     }
 
     fn from_value(v: &Value) -> Result<Self, ModelError> {
         let mut f = Fields::of(v)?;
+        let draws = match f.opt("draws") {
+            None => Vec::new(),
+            Some(Value::Array(items)) if !items.is_empty() => {
+                let draws = items
+                    .iter()
+                    .map(ExerciseDraw::from_value)
+                    .collect::<Result<Vec<_>, _>>()?;
+                if draws
+                    .iter()
+                    .zip(draws.iter().skip(1))
+                    .any(|(a, b)| a.key >= b.key)
+                {
+                    return Err(ModelError::Shape);
+                }
+                draws
+            }
+            Some(_) => return Err(ModelError::Shape),
+        };
         let s = Self {
             intent: Digest::from_value(f.req("intent")?).ok_or(ModelError::Shape)?,
             actor: id(f.req("actor")?)?,
             since: uint(f.req("since")?)?,
+            draws,
+            grounds: f
+                .opt("grounds")
+                .map(|g| set_of(g, true, id))
+                .transpose()?
+                .unwrap_or_default(),
         };
         f.done()?;
         Ok(s)
@@ -1770,6 +1885,8 @@ pub struct Outcome {
     pub requirements: BTreeSet<RequirementTerm>,
     /// Whether it widens authority (expansion class, XI-4); otherwise it narrows or creates.
     pub expansion: bool,
+    /// Budget counter keys and the amounts released from them (OP-141 m.28 (g)).
+    pub releases: Vec<(Vec<u8>, u64)>,
 }
 
 const CO_ROOT: &str = "co_root";
@@ -2478,6 +2595,7 @@ pub fn apply(ctx: &Context<'_>, payload: &Payload, view: &dyn View) -> Result<Ou
             class,
             value,
             validity,
+            bound_intent,
         } => {
             out.requirements = domain_root(ctx, view)?;
             set(
@@ -2497,7 +2615,7 @@ pub fn apply(ctx: &Context<'_>, payload: &Payload, view: &dyn View) -> Result<Ou
                             until: u64::MAX,
                         }),
                         assurance: BTreeMap::new(),
-                        bound_intent: None,
+                        bound_intent: *bound_intent,
                         bound_instance: None,
                         bound_resource: None,
                         supersedes: None,
@@ -2527,9 +2645,119 @@ pub fn apply(ctx: &Context<'_>, payload: &Payload, view: &dyn View) -> Result<Ou
             ));
             out.expansion = true;
         }
+        Payload::ConsumptionRelease { exercise, grounds } => {
+            release(view, &mut out, &actor, exercise, grounds)?;
+        }
     }
     out.effects = sorted(out.effects);
     Ok(out)
+}
+
+/// Non-execution of the bound intent (OP-141 m.28 (d)).
+pub const NON_EXECUTION: &str = "access_non_execution";
+/// The amount actually used by the bound intent (OP-141 m.28 (d)).
+pub const ACTUAL_AMOUNT: &str = "access_actual_amount";
+
+/// The Grant a budget counter key belongs to.
+#[must_use]
+pub fn budget_grant(key: &[u8]) -> Option<Id> {
+    match dcbor::decode(key, Limits::CEILING).ok()? {
+        Value::Array(items) => match items.as_slice() {
+            [Value::Text(t), g, Value::Unsigned(_), Value::Unsigned(_)] if t == "budget" => {
+                id(g).ok()
+            }
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+/// The `released` counter paired with a budget counter key (OP-141 m.28 (g)).
+#[must_use]
+pub fn released_key(budget: &[u8]) -> Vec<u8> {
+    match dcbor::decode(budget, Limits::CEILING) {
+        Ok(Value::Array(mut items)) => match items.first_mut() {
+            Some(head) => {
+                *head = Value::text("released");
+                dcbor::encode(&Value::Array(items), Limits::CEILING).unwrap_or_default()
+            }
+            None => Vec::new(),
+        },
+        _ => Vec::new(),
+    }
+}
+
+fn release(
+    view: &dyn View,
+    out: &mut Outcome,
+    actor: &Actor,
+    exercise: &Digest,
+    grounds: &BTreeSet<Id>,
+) -> Result<(), MetaError> {
+    let k = exercise_key(kind::EXERCISE, exercise);
+    let mut e = view
+        .get(&k)
+        .ok_or(MetaError::Unknown)
+        .and_then(|v| ExerciseState::from_value(&v).map_err(|_| MetaError::Corrupt))?;
+    // OP-141 m.28 (c)
+    let lineage_holder = || {
+        e.draws.iter().any(|d| {
+            budget_grant(&d.key)
+                .and_then(|g| read::<GrantState>(view, kind::GRANT, &g).ok())
+                .is_some_and(|g| g.ended.is_none() && holds(&g, &actor.party))
+        })
+    };
+    if e.actor != actor.instance && !lineage_holder() {
+        return Err(MetaError::NotAuthorized);
+    }
+    // OP-141 m.28 (d)
+    let mut none = false;
+    let mut actual: Option<u64> = None;
+    for g in grounds {
+        let c: crate::claim::ClaimState = read(view, kind::CLAIM, g)?;
+        live(c.ended, ())?;
+        if c.statement.bound_intent != Some(e.intent) {
+            return Err(MetaError::NotWithin);
+        }
+        match (c.statement.class.as_str(), &c.statement.value) {
+            (NON_EXECUTION, _) => none = true,
+            (ACTUAL_AMOUNT, Some(EqValue::Int(n))) => {
+                let n = u64::try_from(*n).map_err(|_| MetaError::NotWithin)?;
+                if actual.is_some_and(|a| a != n) {
+                    return Err(MetaError::NotWithin);
+                }
+                actual = Some(n);
+            }
+            _ => return Err(MetaError::NotWithin),
+        }
+    }
+    // OP-141 m.28 (f)
+    if grounds.iter().any(|g| e.grounds.contains(g)) {
+        return Err(MetaError::ReleaseExceedsDraw);
+    }
+    // OP-141 m.28 (e)
+    for d in &mut e.draws {
+        let target = if none {
+            d.drawn
+        } else if d.unit.is_some() {
+            d.drawn
+                .saturating_sub(actual.unwrap_or(d.drawn).min(d.drawn))
+        } else {
+            0
+        };
+        let back = target.saturating_sub(d.released);
+        if back > 0 {
+            d.released = target;
+            out.releases.push((d.key.clone(), back));
+        }
+    }
+    if out.releases.is_empty() {
+        return Err(MetaError::ReleaseExceedsDraw);
+    }
+    e.grounds.extend(grounds.iter().copied());
+    out.effects.push((k, Some(e.to_value())));
+    out.expansion = true;
+    Ok(())
 }
 
 /// `dCBOR(["policies", target])`: the restriction policies of a target (OP-141 m.27 (c)).

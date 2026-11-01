@@ -1,7 +1,7 @@
 //! The commit path (§17.1.1, OP-141): actor from the AIS, nonce rule, evaluation over a
 //! snapshot fetched as it is read, and the opening and decision records committed together.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use access_authority_sequencer::SequencerError;
 use access_authority_sequencer::app::Leader;
@@ -625,6 +625,8 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                             intent: *digest,
                             actor: a.instance,
                             since: shape.pos,
+                            draws: exercise_draws(evaluation),
+                            grounds: BTreeSet::new(),
                         }
                         .to_value(),
                     ),
@@ -673,16 +675,38 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             draws: evaluation
                 .draws
                 .iter()
-                .map(|(key, limit, draw)| Draw {
+                .map(|(key, limit, draw, _)| Draw {
                     key: key.clone(),
                     limit: *limit,
                     draw: *draw,
                 })
+                // OP-141 m.28 (g)
+                .chain(evaluation.releases.iter().map(|(key, amount)| Draw {
+                    key: meta::released_key(key),
+                    limit: u64::MAX >> 1,
+                    draw: *amount,
+                }))
                 .collect(),
             single_use,
         });
         Ok(items)
     }
+}
+
+/// The draws an allowed Exercise records, sorted by key (OP-141 m.28 (a)).
+fn exercise_draws(evaluation: &Evaluation) -> Vec<meta::ExerciseDraw> {
+    let mut d: Vec<meta::ExerciseDraw> = evaluation
+        .draws
+        .iter()
+        .map(|(key, _, draw, unit)| meta::ExerciseDraw {
+            key: key.clone(),
+            drawn: *draw,
+            released: 0,
+            unit: unit.clone(),
+        })
+        .collect();
+    d.sort_by(|a, b| a.key.cmp(&b.key));
+    d
 }
 
 /// Whom the rate limits count: the actor Instance, else the PEP (OP-141 m.23 (a)).

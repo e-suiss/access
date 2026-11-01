@@ -181,8 +181,9 @@ PAYLOADS = {
     "policy_set": ({"content": check_policy_content}, {"policy": check_id}),
     "policy_retire": ({"policy": check_id}, {}),
     "claim_issue": ({"subject": check_id, "class": check_ident, "value": check_equality_value},
-                    {"validity": check_time_window}),
+                    {"validity": check_time_window, "bound_intent": check_digest}),
     "contribute": ({"target": check_digest, "class": check_ident}, {}),
+    "consumption_release": ({"exercise": check_digest, "grounds": check_list(check_id, nonempty=True)}, {}),
 }
 
 
@@ -756,6 +757,8 @@ class Apply:
         }
         # L0-META-27: without a validity, [0, 2^64 - 1]
         value["validity"] = body.get("validity", [0, 2**64 - 1])
+        if "bound_intent" in body:
+            value["bound_intent"] = body["bound_intent"]
         self.write("claim", self.new_id("claim"), value)
         return True
 
@@ -769,6 +772,62 @@ class Apply:
             "since": self.pos,
         })
         return True
+
+    def consumption_release(self, body):
+        # L0-META-32
+        key = body["exercise"]
+        exercise = self.state.get(state_key("exercise", key))
+        if exercise is None:
+            refuse("meta-unknown")
+        draws = [dict(d) for d in exercise.get("draws", [])]
+        if exercise["actor"] != self.instance and not any(self.lineage_holder(d["key"]) for d in draws):
+            refuse("meta-not-authorized")
+        none, actual = False, None
+        for ground in body["grounds"]:
+            claim = self.live("claim", ground)
+            if not same(claim.get("bound_intent"), exercise["intent"]):
+                refuse("meta-not-within")
+            value = claim.get("value")
+            if claim["class"] == "access_non_execution":
+                none = True
+            elif claim["class"] == "access_actual_amount" and isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+                if actual is not None and actual != value:
+                    refuse("meta-not-within")
+                actual = value
+            else:
+                refuse("meta-not-within")
+        used = exercise.get("grounds", [])
+        if any(g in used for g in body["grounds"]):
+            refuse("meta-release-exceeds-draw")
+        returned = False
+        for d in draws:
+            if none:
+                target = d["drawn"]
+            elif "unit" in d:
+                a = d["drawn"] if actual is None else actual
+                target = d["drawn"] - min(a, d["drawn"])
+            else:
+                target = 0
+            if target > d["released"]:
+                d["released"] = target
+                returned = True
+        if not returned:
+            refuse("meta-release-exceeds-draw")
+        updated = dict(exercise)
+        if draws:
+            updated["draws"] = draws
+        updated["grounds"] = as_set(used + list(body["grounds"]))
+        self.state[state_key("exercise", key)] = updated
+        self.effects.append((state_key("exercise", key), updated))
+        return True
+
+    def lineage_holder(self, key):
+        # L0-META-32
+        parts = decode_canonical(key)
+        if not (isinstance(parts, list) and len(parts) == 4 and parts[0] == "budget"):
+            return False
+        grant = self.read("grant", parts[1])
+        return grant is not None and "ended" not in grant and self.holds(grant)
 
 
 # ---------------------------------------------------------------- scopes and narrowing

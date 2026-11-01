@@ -524,6 +524,165 @@ fn a_contribution_is_recorded_under_its_exercise() {
     );
 }
 
+const SPENDER: Id = Id([14; 16]);
+const SPENT: Digest = Digest([15; 32]);
+
+fn budget(grant: &Id, term: u64) -> Vec<u8> {
+    dcbor::encode(
+        &Value::Array(alloc::vec![
+            Value::text("budget"),
+            grant.to_value(),
+            Value::Unsigned(term),
+            Value::Unsigned(0),
+        ]),
+        Limits::CEILING,
+    )
+    .unwrap()
+}
+
+/// An Exercise of `SPENDER` that drew 1 from a count term and 100 EUR from an amount term of
+/// `grant`, and two Claims bound to its intent (OP-141 m.28).
+fn spent(state: &mut Mem, grant: &Id, exercise: &Digest) {
+    let claim = |class: &str, value: Option<crate::model::EqValue>, intent: Digest| {
+        crate::claim::ClaimState {
+            statement: crate::claim::Statement {
+                domain: DOMAIN,
+                issuer: ROOT,
+                subject: ALICE,
+                class: String::from(class),
+                value,
+                issued_at: 0,
+                validity: Window {
+                    from: 0,
+                    until: u64::MAX,
+                },
+                assurance: BTreeMap::new(),
+                bound_intent: Some(intent),
+                bound_instance: None,
+                bound_resource: None,
+                supersedes: None,
+            },
+            instance: None,
+            since: 1,
+            ended: None,
+        }
+        .to_value()
+    };
+    let mut draws = alloc::vec![
+        ExerciseDraw {
+            key: budget(grant, 0),
+            drawn: 1,
+            released: 0,
+            unit: None,
+        },
+        ExerciseDraw {
+            key: budget(grant, 1),
+            drawn: 100,
+            released: 0,
+            unit: Some(String::from("eur")),
+        },
+    ];
+    draws.sort_by(|a, b| a.key.cmp(&b.key));
+    state.apply(&[
+        (
+            exercise_key(kind::EXERCISE, exercise),
+            Some(
+                ExerciseState {
+                    intent: SPENT,
+                    actor: SPENDER,
+                    since: 1,
+                    draws,
+                    grounds: BTreeSet::new(),
+                }
+                .to_value(),
+            ),
+        ),
+        (
+            key(kind::CLAIM, &Id([21; 16])),
+            Some(claim(
+                ACTUAL_AMOUNT,
+                Some(crate::model::EqValue::Int(30)),
+                SPENT,
+            )),
+        ),
+        (
+            key(kind::CLAIM, &Id([22; 16])),
+            Some(claim(NON_EXECUTION, None, SPENT)),
+        ),
+        (
+            key(kind::CLAIM, &Id([23; 16])),
+            Some(claim(NON_EXECUTION, None, Digest([16; 32]))),
+        ),
+    ]);
+}
+
+fn release_of(exercise: Digest, grounds: &[u8]) -> Payload {
+    Payload::ConsumptionRelease {
+        exercise,
+        grounds: grounds.iter().map(|g| Id([*g; 16])).collect(),
+    }
+}
+
+// OP-141 m.28: a lower actual amount returns the rest of an amount draw, a non-execution the
+// rest of every draw; a ground is used once and Σrelease never exceeds the draw
+#[test]
+fn a_release_returns_at_most_the_draw() {
+    let mut r = Run::new();
+    let (ex, _) = r
+        .act(
+            ROOT,
+            ROOT,
+            ExerciseBasis::Anchor(shop_anchor()),
+            &issue(ALICE, GrantBasis::Anchor(shop_anchor()), &["eu"], 0),
+        )
+        .unwrap();
+    let g = object_id(&ex, kind::GRANT, 0);
+    let spending = Digest([17; 32]);
+    spent(&mut r.state, &g, &spending);
+    let payload = release_of(spending, &[21]);
+    assert_eq!(Payload::from_value(&payload.to_value()).unwrap(), payload);
+    assert!(is_meta("access", "consumption_release"));
+    let any = ExerciseBasis::Anchor(shop_anchor());
+    assert_eq!(
+        r.act(CAROL, CAROL, any, &payload).unwrap_err(),
+        MetaError::NotAuthorized
+    );
+    let (_, out) = r.act(ALICE, ALICE, any, &payload).unwrap();
+    assert_eq!(out.releases, alloc::vec![(budget(&g, 1), 70)]);
+    assert!(out.expansion);
+    assert_eq!(
+        r.act(ALICE, ALICE, any, &payload).unwrap_err(),
+        MetaError::ReleaseExceedsDraw
+    );
+    assert_eq!(
+        r.act(CAROL, SPENDER, any, &release_of(spending, &[23]))
+            .unwrap_err(),
+        MetaError::NotWithin
+    );
+    let (_, out) = r
+        .act(CAROL, SPENDER, any, &release_of(spending, &[22]))
+        .unwrap();
+    assert_eq!(
+        out.releases,
+        alloc::vec![(budget(&g, 0), 1), (budget(&g, 1), 30)]
+    );
+    let state = ExerciseState::from_value(
+        &r.state
+            .get(&exercise_key(kind::EXERCISE, &spending))
+            .unwrap(),
+    )
+    .unwrap();
+    assert!(state.draws.iter().all(|d| d.released == d.drawn));
+    assert_eq!(state.grounds.len(), 2);
+    assert_eq!(
+        r.act(CAROL, SPENDER, any, &release_of(spending, &[22]))
+            .unwrap_err(),
+        MetaError::ReleaseExceedsDraw
+    );
+    assert_eq!(released_key(&budget(&g, 0)).first(), Some(&0x84));
+    assert_eq!(budget_grant(&budget(&g, 0)), Some(g));
+}
+
 // L0-META-5, L0-META-27: Acceptances are indexed by issuer; a domain Claim names its issuer
 #[test]
 fn acceptances_are_indexed_by_issuer() {
@@ -563,6 +722,7 @@ fn acceptances_are_indexed_by_issuer() {
                 class: String::from("member"),
                 value: crate::model::EqValue::Bool(true),
                 validity: None,
+                bound_intent: None,
             },
         )
         .unwrap();
@@ -1116,6 +1276,20 @@ fn meta_vectors_match() {
             class: String::from("staff"),
             value: crate::model::EqValue::Bool(true),
             validity: None,
+            bound_intent: None,
+        },
+    );
+    r.step(
+        "claim-issued-bound",
+        &["L0-META-27", "L0-META-32"],
+        (ROOT, ROOT),
+        meta,
+        &Payload::ClaimIssue {
+            subject: ALICE,
+            class: String::from(NON_EXECUTION),
+            value: crate::model::EqValue::Bool(true),
+            validity: None,
+            bound_intent: Some(SPENT),
         },
     );
     r.step(
@@ -1213,6 +1387,53 @@ fn meta_vectors_match() {
             instance: second,
             key: key_of(8),
         },
+    );
+    // OP-141 m.28: releases
+    let (ex, _) = r
+        .run
+        .act(
+            ROOT,
+            ROOT,
+            meta,
+            &issue(ALICE, GrantBasis::Anchor(meta_anchor(&DOMAIN)), &["eu"], 0),
+        )
+        .unwrap();
+    let spending = Digest([17; 32]);
+    spent(&mut r.run.state, &object_id(&ex, kind::GRANT, 0), &spending);
+    r.step(
+        "release-not-authorized",
+        &["L0-META-32"],
+        (CAROL, CAROL),
+        meta,
+        &release_of(spending, &[21]),
+    );
+    r.step(
+        "release-actual-amount",
+        &["L0-META-32"],
+        (ALICE, ALICE),
+        meta,
+        &release_of(spending, &[21]),
+    );
+    r.step(
+        "release-ground-reused",
+        &["L0-META-31", "L0-META-32"],
+        (ALICE, ALICE),
+        meta,
+        &release_of(spending, &[21]),
+    );
+    r.step(
+        "release-ground-unbound",
+        &["L0-META-32"],
+        (CAROL, SPENDER),
+        meta,
+        &release_of(spending, &[23]),
+    );
+    r.step(
+        "release-non-execution",
+        &["L0-META-32"],
+        (CAROL, SPENDER),
+        meta,
+        &release_of(spending, &[22]),
     );
     r.step(
         "party-depart",

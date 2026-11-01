@@ -1344,8 +1344,13 @@ async fn search_shows_what_the_reader_may_see() {
 
 // ---------------------------------------------------------------- budgets (OP-141 m.26)
 
-// L0-EVAL-15, OP-141 m.26: a Grant's budget is drawn by each allow and exhausts
+// L0-EVAL-15, OP-141 m.26, m.28: a Grant's budget is drawn by each allow and exhausts, and a
+// grounded release returns a draw once
 #[tokio::test]
+#[allow(
+    clippy::too_many_lines,
+    reason = "one budget through draw, exhaustion and release"
+)]
 async fn a_budget_is_drawn_until_it_is_exhausted() {
     use access_kernel::combinator::BlockerClass;
     use access_kernel::model::{BudgetDimension, BudgetTerm, BudgetWindow};
@@ -1383,16 +1388,13 @@ async fn a_budget_is_drawn_until_it_is_exhausted() {
         holder: ALICE,
         since: issued.record.unwrap(),
     });
+    let mut spent = None;
     for n in [20, 21] {
-        allowed(
-            &send(
-                &mut core,
-                shop_request(d, n, Mode::Commit, holding),
-                ALICE_KEY,
-            )
-            .await
-            .unwrap(),
-        );
+        let request = shop_request(d, n, Mode::Commit, holding);
+        let digest = access_kernel::intent::intent_digest(&request.intent).unwrap();
+        let answer = send(&mut core, request, ALICE_KEY).await.unwrap();
+        allowed(&answer);
+        spent = Some((answer.exercise.unwrap(), digest));
     }
     let over = send(
         &mut core,
@@ -1417,6 +1419,62 @@ async fn a_budget_is_drawn_until_it_is_exhausted() {
     .await
     .unwrap();
     assert_eq!(checked.decision.outcome, Outcome::Deny);
+    // OP-141 m.28: a grounded release returns the draw once
+    let (exercise, intent) = spent.unwrap();
+    let ground = send(
+        &mut core,
+        meta_request(
+            d,
+            24,
+            ExerciseBasis::Anchor(meta::meta_anchor(&d)),
+            Payload::ClaimIssue {
+                subject: ALICE,
+                class: meta::NON_EXECUTION.to_owned(),
+                value: access_kernel::model::EqValue::Bool(true),
+                validity: None,
+                bound_intent: Some(intent),
+            },
+        ),
+        ROOT_KEY,
+    )
+    .await
+    .unwrap();
+    allowed(&ground);
+    let claim = meta::object_id(&ground.exercise.unwrap(), kind::CLAIM, 0);
+    let release = |nonce| {
+        meta_request(
+            d,
+            nonce,
+            holding,
+            Payload::ConsumptionRelease {
+                exercise,
+                grounds: BTreeSet::from([claim]),
+            },
+        )
+    };
+    allowed(&send(&mut core, release(25), ALICE_KEY).await.unwrap());
+    let again = send(&mut core, release(26), ALICE_KEY).await.unwrap();
+    assert!(again.decision.blockers.iter().any(|b| {
+        b.class == BlockerClass::BudgetExhausted
+            && b.subcode.as_deref() == Some("release-exceeds-draw")
+    }));
+    allowed(
+        &send(
+            &mut core,
+            shop_request(d, 27, Mode::Commit, holding),
+            ALICE_KEY,
+        )
+        .await
+        .unwrap(),
+    );
+    let over = send(
+        &mut core,
+        shop_request(d, 28, Mode::Commit, holding),
+        ALICE_KEY,
+    )
+    .await
+    .unwrap();
+    assert_eq!(over.decision.outcome, Outcome::Deny);
     fold_check(&db.sequencer, d).await.unwrap();
 }
 
