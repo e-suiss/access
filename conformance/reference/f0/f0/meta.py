@@ -50,6 +50,10 @@ def refuse(code):
 # ---------------------------------------------------------------- payload shapes (L0-META-1)
 
 
+def check_named_pin(value):
+    check_map(value, {"name": check_ident, "version": check_uint, "digest": check_digest})
+
+
 def check_key_set(value):
     def keys(table):
         if not isinstance(table, dict) or not table:
@@ -172,7 +176,7 @@ PAYLOADS = {
     "mandate_revoke": ({"mandate": check_id}, {}),
     "grant_issue": None,
     "grant_amend": ({"grant": check_id, "authority": check_canonical_authority},
-                    {"agency": check_list(check_capacity, nonempty=True)}),
+                    {"agency": check_list(check_capacity, nonempty=True), "named": check_named_pin}),
     "grant_revoke": ({"grant": check_id}, {}),
     "grant_renounce": ({"grant": check_id}, {}),
     "acceptance_establish": None,
@@ -183,6 +187,7 @@ PAYLOADS = {
     "claim_issue": ({"subject": check_id, "class": check_ident, "value": check_equality_value},
                     {"validity": check_time_window, "bound_intent": check_digest, "supersedes": check_id}),
     "contribute": ({"target": check_digest, "class": check_ident}, {}),
+    "authority_set_define": ({"name": check_ident, "authority": check_authority_set}, {}),
     "consumption_release": ({"exercise": check_digest, "grounds": check_list(check_id, nonempty=True)}, {}),
 }
 
@@ -232,6 +237,12 @@ def state_key(kind, ident):
 def as_set(items):
     unique = {encode(item): item for item in items}
     return [unique[key] for key in sorted(unique)]
+
+
+def authority_set_digest(authority):
+    # L0-META-33
+    preimage = b"access/authority-set/v1\x00" + encode(authority)
+    return [HASH_ALG_SHA256, hashlib.sha256(preimage).digest()]
 
 
 # ---------------------------------------------------------------- the run
@@ -621,6 +632,8 @@ class Apply:
             if not child_within_parent(authority, parent["content"]["authority"], content["holder"], NO_CATALOG):
                 refuse("meta-not-within")
         self.check_agency(content.get("agency", []))
+        if "named" in content:
+            self.pinned(content["named"], authority["authority"])
         grant_id = self.new_id("grant")
         self.write("grant", grant_id, {"content": content, "since": self.pos, "revision": 0})
         self.add_to_index("children", parent_id, grant_id)
@@ -638,6 +651,11 @@ class Apply:
             parent = self.read("grant", basis["holding"][0])
             if not child_within_parent(body["authority"], parent["content"]["authority"], content["holder"], NO_CATALOG):
                 refuse("meta-not-within")
+        # L0-META-33
+        if "named" in body:
+            content["named"] = body["named"]
+        if "named" in content:
+            self.pinned(content["named"], body["authority"]["authority"])
         narrows = authority_narrows(body["authority"], grant["content"]["authority"]) and is_subset(
             content.get("agency", []), grant["content"].get("agency", [])
         )
@@ -782,6 +800,29 @@ class Apply:
             "instance": self.instance,
             "since": self.pos,
         })
+        return True
+
+    def pinned(self, pin, authority):
+        # L0-META-33
+        version = self.state.get(encode(["authority_set", pin["name"], pin["version"]]))
+        if version is None:
+            refuse("meta-unknown")
+        if not same(authority_set_digest(version["authority"]), pin["digest"]):
+            refuse("meta-not-within")
+        if not authority_within(authority, version["authority"], NO_CATALOG):
+            refuse("meta-not-within")
+
+    def authority_set_define(self, body):
+        # L0-META-33
+        self.meta_root()
+        latest_key = encode(["authority_set", body["name"]])
+        version = self.state.get(latest_key, 0) + 1
+        self.state[latest_key] = version
+        self.effects.append((latest_key, version))
+        key = encode(["authority_set", body["name"], version])
+        value = {"authority": body["authority"], "since": self.pos}
+        self.state[key] = value
+        self.effects.append((key, value))
         return True
 
     def consumption_release(self, body):

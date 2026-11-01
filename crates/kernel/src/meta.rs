@@ -97,7 +97,7 @@ pub struct GrantContent {
     /// Capacities the holder may exercise it in; absent is `{own}` (INV-4).
     pub agency: BTreeSet<Capacity>,
     /// The Named `AuthoritySet` version it pins, as `(name, version, digest)`.
-    pub named: Option<(String, u64, Digest)>,
+    pub named: Option<NamedPin>,
 }
 
 /// A Mandate's envelope (C14).
@@ -230,6 +230,8 @@ pub enum Payload {
         authority: CanonicalAuthority,
         /// New agency.
         agency: BTreeSet<Capacity>,
+        /// A new named `AuthoritySet` pin (OP-141 m.32 (d)).
+        named: Option<NamedPin>,
     },
     /// `grant_revoke`.
     GrantRevoke {
@@ -289,6 +291,13 @@ pub enum Payload {
         /// Contribution class.
         class: String,
     },
+    /// `authority_set_define` (OP-141 m.32 (a)).
+    AuthoritySetDefine {
+        /// Name.
+        name: String,
+        /// The authority-set of the new version.
+        authority: AuthoritySet,
+    },
     /// `consumption_release` (OP-141 m.28).
     ConsumptionRelease {
         /// The Exercise whose draws are released.
@@ -298,7 +307,7 @@ pub enum Payload {
     },
 }
 
-const NAMES: [&str; 25] = [
+const NAMES: [&str; 26] = [
     "anchor_create",
     "anchor_transfer",
     "anchor_amend",
@@ -324,6 +333,7 @@ const NAMES: [&str; 25] = [
     "claim_issue",
     "contribute",
     "consumption_release",
+    "authority_set_define",
 ];
 
 /// Whether `name` is a core meta-action.
@@ -573,34 +583,13 @@ impl Canonical for GrantContent {
             ("holder", Some(self.holder.to_value())),
             ("authority", Some(self.authority.to_value())),
             ("agency", agency_value(&self.agency)),
-            (
-                "named",
-                self.named.as_ref().map(|(n, v, d)| {
-                    map([
-                        ("name", Some(Value::text(n))),
-                        ("version", Some(Value::Unsigned(*v))),
-                        ("digest", Some(d.to_value())),
-                    ])
-                }),
-            ),
+            ("named", self.named.as_ref().map(named_value)),
         ])
     }
 
     fn from_value(v: &Value) -> Result<Self, ModelError> {
         let mut f = Fields::of(v)?;
-        let named = match f.opt("named") {
-            None => None,
-            Some(n) => {
-                let mut g = Fields::of(n)?;
-                let out = (
-                    crate::codec::ident(g.req("name")?)?,
-                    uint(g.req("version")?)?,
-                    Digest::from_value(g.req("digest")?).ok_or(ModelError::Shape)?,
-                );
-                g.done()?;
-                Some(out)
-            }
-        };
+        let named = f.opt("named").map(named_pin).transpose()?;
         let c = Self {
             basis: grant_basis(f.req("basis")?)?,
             holder: SubjectSelector::from_value(f.req("holder")?)?,
@@ -801,12 +790,21 @@ impl Canonical for Payload {
                 grant,
                 authority,
                 agency,
+                named,
             } => (
                 "grant_amend",
                 map([
                     ("grant", Some(grant.to_value())),
                     ("authority", Some(authority.to_value())),
                     ("agency", agency_value(agency)),
+                    ("named", named.as_ref().map(named_value)),
+                ]),
+            ),
+            Self::AuthoritySetDefine { name, authority } => (
+                "authority_set_define",
+                map([
+                    ("name", Some(Value::text(name))),
+                    ("authority", Some(authority.to_value())),
                 ]),
             ),
             Self::GrantRevoke { grant } => {
@@ -957,6 +955,11 @@ impl Canonical for Payload {
                 grant: id(f.req("grant")?)?,
                 authority: CanonicalAuthority::from_value(f.req("authority")?)?,
                 agency: agency(f.opt("agency"))?,
+                named: f.opt("named").map(named_pin).transpose()?,
+            },
+            "authority_set_define" => Self::AuthoritySetDefine {
+                name: crate::codec::ident(f.req("name")?)?,
+                authority: AuthoritySet::from_value(f.req("authority")?)?,
             },
             "grant_revoke" => Self::GrantRevoke {
                 grant: id(f.req("grant")?)?,
@@ -1220,6 +1223,8 @@ pub mod kind {
     pub const INSTANCES: &str = "instances";
     /// The Mandates of an Instance.
     pub const MANDATES: &str = "mandates";
+    /// A named `AuthoritySet` (OP-141 m.32).
+    pub const AUTHORITY_SET: &str = "authority_set";
 }
 
 /// Read access to the authority state at the evaluation position; the caller records every key
@@ -2431,6 +2436,9 @@ pub fn apply(ctx: &Context<'_>, payload: &Payload, view: &dyn View) -> Result<Ou
                     h.grant
                 }
             };
+            if let Some(pin) = &content.named {
+                pinned(view, pin, &content.authority.authority, ctx.catalog)?;
+            }
             let g = new_id(ctx, kind::GRANT, 0);
             set(
                 &mut out,
@@ -2451,6 +2459,7 @@ pub fn apply(ctx: &Context<'_>, payload: &Payload, view: &dyn View) -> Result<Ou
             grant,
             authority,
             agency: new_agency,
+            named,
         } => {
             let mut g: GrantState = read(view, kind::GRANT, grant)?;
             g = live(g.ended, g.clone())?;
@@ -2470,6 +2479,13 @@ pub fn apply(ctx: &Context<'_>, payload: &Payload, view: &dyn View) -> Result<Ou
                 ) {
                     return Err(MetaError::NotWithin);
                 }
+            }
+            // OP-141 m.32 (d)
+            if named.is_some() {
+                g.content.named.clone_from(named);
+            }
+            if let Some(pin) = &g.content.named {
+                pinned(view, pin, &authority.authority, ctx.catalog)?;
             }
             out.expansion = !narrows;
             g.content.authority = authority.clone();
@@ -2662,12 +2678,94 @@ pub fn apply(ctx: &Context<'_>, payload: &Payload, view: &dyn View) -> Result<Ou
             ));
             out.expansion = true;
         }
+        Payload::AuthoritySetDefine { name, authority } => {
+            out.requirements = domain_root(ctx, view)?;
+            let latest = authority_set_key(name, None);
+            let version = match view.get(&latest) {
+                None => 1,
+                Some(v) => uint(&v)
+                    .map_err(|_| MetaError::Corrupt)?
+                    .checked_add(1)
+                    .ok_or(MetaError::Depth)?,
+            };
+            out.effects.push((latest, Some(Value::Unsigned(version))));
+            out.effects.push((
+                authority_set_key(name, Some(version)),
+                Some(map([
+                    ("authority", Some(authority.to_value())),
+                    ("since", Some(Value::Unsigned(ctx.pos))),
+                ])),
+            ));
+            out.expansion = true;
+        }
         Payload::ConsumptionRelease { exercise, grounds } => {
             release(view, &mut out, &actor, exercise, grounds)?;
         }
     }
     out.effects = sorted(out.effects);
     Ok(out)
+}
+
+/// A pinned named `AuthoritySet` version: name, version and the digest of its authority-set
+/// (OP-141 m.32).
+pub type NamedPin = (String, u64, Digest);
+
+fn named_value((n, v, d): &NamedPin) -> Value {
+    map([
+        ("name", Some(Value::text(n))),
+        ("version", Some(Value::Unsigned(*v))),
+        ("digest", Some(d.to_value())),
+    ])
+}
+
+fn named_pin(v: &Value) -> Result<NamedPin, ModelError> {
+    let mut g = Fields::of(v)?;
+    let out = (
+        crate::codec::ident(g.req("name")?)?,
+        uint(g.req("version")?)?,
+        Digest::from_value(g.req("digest")?).ok_or(ModelError::Shape)?,
+    );
+    g.done()?;
+    Ok(out)
+}
+
+/// `dCBOR(["authority_set", name])`, the latest version, or with `version` that version's state
+/// (OP-141 m.32 (a)).
+#[must_use]
+pub fn authority_set_key(name: &str, version: Option<u64>) -> Vec<u8> {
+    let mut items = alloc::vec![Value::text(kind::AUTHORITY_SET), Value::text(name)];
+    if let Some(v) = version {
+        items.push(Value::Unsigned(v));
+    }
+    dcbor::encode(&Value::Array(items), Limits::CEILING).unwrap_or_default()
+}
+
+/// `SHA-256("access/authority-set/v1" ‖ 0x00 ‖ dCBOR(authority-set))` (OP-141 m.32 (b)).
+#[must_use]
+pub fn authority_set_digest(authority: &AuthoritySet) -> Digest {
+    let bytes = dcbor::encode(&authority.to_value(), Limits::CEILING).unwrap_or_default();
+    context_label("access/authority-set/v1", &bytes)
+}
+
+/// A pin names an existing version by its digest, and `authority` lies within it
+/// (OP-141 m.32 (c), (d)).
+fn pinned(
+    view: &dyn View,
+    (name, version, digest): &NamedPin,
+    authority: &AuthoritySet,
+    catalog: &Catalog,
+) -> Result<(), MetaError> {
+    let state = view
+        .get(&authority_set_key(name, Some(*version)))
+        .ok_or(MetaError::Unknown)?;
+    let template = state
+        .get("authority")
+        .ok_or(MetaError::Corrupt)
+        .and_then(|a| AuthoritySet::from_value(a).map_err(|_| MetaError::Corrupt))?;
+    if authority_set_digest(&template) != *digest || !subsumes(authority, &template, catalog) {
+        return Err(MetaError::NotWithin);
+    }
+    Ok(())
 }
 
 /// Non-execution of the bound intent (OP-141 m.28 (d)).

@@ -145,12 +145,22 @@ impl Run {
 }
 
 fn issue(holder: Id, basis: GrantBasis, prefix: &[&str], depth: u64) -> Payload {
+    issue_named(holder, basis, prefix, depth, None)
+}
+
+fn issue_named(
+    holder: Id,
+    basis: GrantBasis,
+    prefix: &[&str],
+    depth: u64,
+    named: Option<NamedPin>,
+) -> Payload {
     Payload::GrantIssue(GrantContent {
         basis,
         holder: SubjectSelector::Party(holder),
         authority: authority(prefix, depth, 1_000),
         agency: BTreeSet::from([Capacity::Own]),
-        named: None,
+        named,
     })
 }
 
@@ -299,6 +309,7 @@ fn amend_narrows_or_widens_within_the_parent() {
         grant: g1,
         authority: authority(prefix, 2, 1_000),
         agency: BTreeSet::from([Capacity::Own]),
+        named: None,
     };
     let (_, out) = r
         .act(ROOT, ROOT, ExerciseBasis::Anchor(a), &amend(&["eu", "de"]))
@@ -683,6 +694,75 @@ fn a_release_returns_at_most_the_draw() {
     assert_eq!(budget_grant(&budget(&g, 0)), Some(g));
 }
 
+fn pinned_issue(prefix: &[&str], pin: NamedPin) -> Payload {
+    issue_named(
+        ALICE,
+        GrantBasis::Anchor(shop_anchor()),
+        prefix,
+        0,
+        Some(pin),
+    )
+}
+
+// OP-141 m.32: a named AuthoritySet is versioned; a Grant pins a version by digest and stays
+// within it; a new version changes no Grant until it is re-pinned
+#[test]
+fn a_grant_pins_a_named_authority_set_version() {
+    let mut r = Run::new();
+    let meta = ExerciseBasis::Anchor(meta_anchor(&DOMAIN));
+    let anchor = ExerciseBasis::Anchor(shop_anchor());
+    let eu = authority(&["eu"], 0, 1_000).authority;
+    let define = |a: &AuthoritySet| Payload::AuthoritySetDefine {
+        name: String::from("refunds"),
+        authority: a.clone(),
+    };
+    assert_eq!(
+        Payload::from_value(&define(&eu).to_value()).unwrap(),
+        define(&eu)
+    );
+    assert!(r.act(ALICE, ALICE, meta, &define(&eu)).is_err());
+    r.act(ROOT, ROOT, meta, &define(&eu)).unwrap();
+    let v1 = (String::from("refunds"), 1, authority_set_digest(&eu));
+    let (ex, _) = r
+        .act(ROOT, ROOT, anchor, &pinned_issue(&["eu", "de"], v1.clone()))
+        .unwrap();
+    let g = object_id(&ex, kind::GRANT, 0);
+    assert_eq!(
+        r.act(ROOT, ROOT, anchor, &pinned_issue(&[], v1.clone()))
+            .unwrap_err(),
+        MetaError::NotWithin
+    );
+    let wrong = (String::from("refunds"), 1, Digest([1; 32]));
+    assert_eq!(
+        r.act(ROOT, ROOT, anchor, &pinned_issue(&["eu"], wrong))
+            .unwrap_err(),
+        MetaError::NotWithin
+    );
+    let v2_missing = (String::from("refunds"), 2, authority_set_digest(&eu));
+    assert_eq!(
+        r.act(ROOT, ROOT, anchor, &pinned_issue(&["eu"], v2_missing))
+            .unwrap_err(),
+        MetaError::Unknown
+    );
+    let all = authority(&[], 0, 1_000).authority;
+    r.act(ROOT, ROOT, meta, &define(&all)).unwrap();
+    assert_eq!(r.grant(&g).content.named, Some(v1));
+    let widen = |named| Payload::GrantAmend {
+        grant: g,
+        authority: authority(&[], 0, 1_000),
+        agency: BTreeSet::from([Capacity::Own]),
+        named,
+    };
+    assert_eq!(
+        r.act(ROOT, ROOT, anchor, &widen(None)).unwrap_err(),
+        MetaError::NotWithin
+    );
+    let v2 = (String::from("refunds"), 2, authority_set_digest(&all));
+    let (_, out) = r.act(ROOT, ROOT, anchor, &widen(Some(v2.clone()))).unwrap();
+    assert!(out.expansion);
+    assert_eq!(r.grant(&g).content.named, Some(v2));
+}
+
 // L0-META-5, L0-META-27: Acceptances are indexed by issuer; a domain Claim names its issuer
 #[test]
 fn acceptances_are_indexed_by_issuer() {
@@ -951,6 +1031,7 @@ fn meta_vectors_match() {
             grant: g1,
             authority: authority(&["eu", "de"], 2, 1_000),
             agency: BTreeSet::from([Capacity::Own]),
+            named: None,
         },
     );
     r.step(
@@ -1404,6 +1485,83 @@ fn meta_vectors_match() {
             instance: second,
             key: key_of(8),
         },
+    );
+    // OP-141 m.32: named AuthoritySets
+    let eu = authority(&["eu"], 0, 1_000).authority;
+    r.step(
+        "authority-set-define",
+        &["L0-META-33"],
+        (ROOT, ROOT),
+        meta,
+        &Payload::AuthoritySetDefine {
+            name: String::from("refunds"),
+            authority: eu.clone(),
+        },
+    );
+    let pin = |version, digest| {
+        issue_named(
+            ALICE,
+            GrantBasis::Anchor(meta_anchor(&DOMAIN)),
+            &["eu"],
+            0,
+            Some((String::from("refunds"), version, digest)),
+        )
+    };
+    let pinned_grant = r.step(
+        "grant-pins-authority-set",
+        &["L0-META-33"],
+        (ROOT, ROOT),
+        meta,
+        &pin(1, authority_set_digest(&eu)),
+    );
+    r.step(
+        "grant-pin-wrong-digest",
+        &["L0-META-33"],
+        (ROOT, ROOT),
+        meta,
+        &pin(1, Digest([1; 32])),
+    );
+    r.step(
+        "grant-pin-unknown-version",
+        &["L0-META-33"],
+        (ROOT, ROOT),
+        meta,
+        &pin(2, authority_set_digest(&eu)),
+    );
+    let all = authority(&[], 0, 1_000).authority;
+    r.step(
+        "authority-set-new-version",
+        &["L0-META-33"],
+        (ROOT, ROOT),
+        meta,
+        &Payload::AuthoritySetDefine {
+            name: String::from("refunds"),
+            authority: all.clone(),
+        },
+    );
+    let repin = |named| Payload::GrantAmend {
+        grant: object_id(&pinned_grant.unwrap(), kind::GRANT, 0),
+        authority: authority(&[], 0, 1_000),
+        agency: BTreeSet::from([Capacity::Own]),
+        named,
+    };
+    r.step(
+        "grant-widens-past-pin",
+        &["L0-META-33"],
+        (ROOT, ROOT),
+        meta,
+        &repin(None),
+    );
+    r.step(
+        "grant-repins-authority-set",
+        &["L0-META-33"],
+        (ROOT, ROOT),
+        meta,
+        &repin(Some((
+            String::from("refunds"),
+            2,
+            authority_set_digest(&all),
+        ))),
     );
     // OP-141 m.28: releases
     let (ex, _) = r
