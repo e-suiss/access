@@ -12,7 +12,7 @@ use std::collections::BTreeSet;
 use access_kernel::meta::{
     self, ContentState, ContributionState, ExerciseBasis, GrantState, InstanceState, kind,
 };
-use access_kernel::model::{Conjunct, Id, ProofKind, SubjectSelector};
+use access_kernel::model::{Conjunct, EqValue, Id, ProofKind, SubjectSelector};
 use access_kernel::requirement::{Proof, ProofBinding};
 use access_kernel::verify::cose::PublicKey;
 use suiss_crypto::dcbor::Value;
@@ -347,6 +347,75 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             since = Some(since.map_or(first, |s: u64| s.max(first)));
         }
         Ok(since)
+    }
+
+    /// Whether a `party_compromise` overlay covers the actor Instance: an accepted, current
+    /// Claim about its Party whose occurredAt is not after the Instance's establishment
+    /// (SEC12, OP-141 m.31).
+    pub(crate) async fn compromised(
+        &self,
+        actor: Option<meta::Actor>,
+        now: u64,
+    ) -> Result<bool, CoreError> {
+        let Some(actor) = actor else {
+            return Ok(false);
+        };
+        let mut snap = Snapshot::default();
+        let mut cutoff: Option<u64> = None;
+        for (_, value, _) in self
+            .reader
+            .scan(&claim::member_prefix(claim::PARTY_COMPROMISE, &actor.party))
+            .await?
+        {
+            let Some(id) = value.and_then(|v| Id::from_value(&v).ok()) else {
+                continue;
+            };
+            let Some(state) = self
+                .get(&mut snap, &meta::key(kind::CLAIM, &id))
+                .await?
+                .and_then(|v| ClaimState::from_value(&v).ok())
+                .filter(|s| {
+                    s.ended.is_none()
+                        && s.statement.subject == actor.party
+                        && s.statement.class == claim::PARTY_COMPROMISE
+                        && current(&s.statement, now)
+                })
+            else {
+                continue;
+            };
+            let gates = self.gates(&mut snap, &state.statement.issuer).await?;
+            if !gates
+                .iter()
+                .any(|g| g.admits_for(claim::PREDICATE_INPUT, &state.statement, now))
+                || !self.in_line(&mut snap, &id, &state.statement).await?
+            {
+                continue;
+            }
+            let occurred = match state.statement.value {
+                Some(EqValue::Int(t)) if t >= 0 => u64::try_from(t).unwrap_or(0),
+                _ => state
+                    .statement
+                    .issued_at
+                    .saturating_sub(claim::COMPROMISE_LOOKBACK_MS),
+            };
+            cutoff = Some(cutoff.map_or(occurred, |c| c.min(occurred)));
+        }
+        let Some(cutoff) = cutoff else {
+            return Ok(false);
+        };
+        let since = self
+            .get(&mut snap, &meta::key(kind::INSTANCE, &actor.instance))
+            .await?
+            .and_then(|v| InstanceState::from_value(&v).ok())
+            .map(|i| i.since);
+        let Some(since) = since else {
+            return Ok(false);
+        };
+        Ok(self
+            .reader
+            .recorded_at(since)
+            .await?
+            .is_none_or(|at| at >= cutoff))
     }
 
     /// The episode behind a holding basis whose Grant is held by a predicate.

@@ -539,6 +539,8 @@ pub struct Frame<'a> {
     pub held: Option<u64>,
     /// Compiled restriction policies (OP-141 m.27 (d)).
     pub policies: &'a crate::restrict::Cache,
+    /// Whether a `party_compromise` overlay covers the actor (OP-141 m.31).
+    pub compromised: bool,
 }
 
 /// One pass of the evaluation over `snapshot` (§17.1.1 steps 7–8). Implicit powers of a
@@ -560,8 +562,18 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
         proofs,
         held,
         policies,
+        compromised,
     } = *frame;
     snapshot.restart();
+    // SEC12, OP-141 m.31 (c), (d)
+    if compromised && !matches!(req.payload, Some(Payload::InstanceTerminate { .. })) {
+        return Pass::Done(Evaluation {
+            decision: deny(BlockerClass::Restricted, "party-compromise", Resolver::Root),
+            effects: Vec::new(),
+            draws: Vec::new(),
+            releases: Vec::new(),
+        });
+    }
     let mut effects = Vec::new();
     let mut draws = Vec::new();
     let mut releases = Vec::new();

@@ -932,6 +932,83 @@ async fn a_superseded_claim_no_longer_asserts() {
     fold_check(&db.sequencer, d).await.unwrap();
 }
 
+// SEC12, OP-141 m.31: an accepted party_compromise Claim restricts the Party's Instances set up
+// at or after its occurredAt; a later Claim in the issuer's line moves occurredAt
+#[tokio::test]
+async fn a_compromise_restricts_instances_set_up_after_it() {
+    let db = fresh().await.unwrap();
+    let mut g = genesis();
+    g.insert(
+        "acceptances".to_owned(),
+        Opened {
+            value: Value::Array(vec![Value::Map(vec![
+                (Value::text("issuer"), ROOT.to_value()),
+                (Value::text("use"), Value::text("predicate-input")),
+                (
+                    Value::text("classes"),
+                    Value::Array(vec![Value::text(access_kernel::claim::PARTY_COMPROMISE)]),
+                ),
+                (Value::text("subject"), SubjectSelector::Public.to_value()),
+                (
+                    Value::text("validity"),
+                    Value::Array(vec![Value::Unsigned(0), Value::Unsigned(1_000_000)]),
+                ),
+            ])]),
+            salt: [3; 32],
+        },
+    );
+    let (mut core, d) = setup_with(&db, g).await;
+    onboard(&mut core, d, ROOT, ROOT_KEY, (1, 2)).await;
+    onboard(&mut core, d, ALICE, ALICE_KEY, (3, 4)).await;
+    let meta_anchor = ExerciseBasis::Anchor(meta::meta_anchor(&d));
+    let compromise = |nonce, at: i64, supersedes| {
+        meta_request(
+            d,
+            nonce,
+            meta_anchor,
+            Payload::ClaimIssue {
+                subject: ALICE,
+                class: access_kernel::claim::PARTY_COMPROMISE.to_owned(),
+                value: EqValue::Int(at),
+                validity: None,
+                bound_intent: None,
+                supersedes,
+            },
+        )
+    };
+    let restricted = |r: &Response| {
+        r.decision
+            .blockers
+            .iter()
+            .any(|b| b.subcode.as_deref() == Some("party-compromise"))
+    };
+    let later = send(&mut core, compromise(10, 20_000, None), ROOT_KEY)
+        .await
+        .unwrap();
+    allowed(&later);
+    let shop = ExerciseBasis::Anchor(meta::object_id(&d, kind::ANCHOR, 1));
+    let before = send(&mut core, shop_request(d, 11, Mode::Check, shop), ALICE_KEY)
+        .await
+        .unwrap();
+    assert!(!restricted(&before));
+    let first = meta::object_id(&later.exercise.unwrap(), kind::CLAIM, 0);
+    allowed(
+        &send(&mut core, compromise(12, 5_000, Some(first)), ROOT_KEY)
+            .await
+            .unwrap(),
+    );
+    let after = send(&mut core, shop_request(d, 13, Mode::Check, shop), ALICE_KEY)
+        .await
+        .unwrap();
+    assert_eq!(after.decision.outcome, Outcome::Deny);
+    assert!(restricted(&after));
+    let root = send(&mut core, shop_request(d, 14, Mode::Check, shop), ROOT_KEY)
+        .await
+        .unwrap();
+    assert!(!restricted(&root));
+    fold_check(&db.sequencer, d).await.unwrap();
+}
+
 async fn state_of(db: &TestDb, d: Digest, key: &[u8]) -> Option<Vec<u8>> {
     access_store::authority::state_of(&db.app, &DomainId::from_bytes(d.0), &[key.to_vec()])
         .await

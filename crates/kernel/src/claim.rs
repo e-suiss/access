@@ -30,6 +30,11 @@ pub const SUBJECT_SELECTION: &str = "subject-selection";
 
 /// Kind of the membership index (OP-141 m.20 (b)).
 pub const MEMBER: &str = "member";
+/// The class of a Party compromise Claim (SEC12, OP-141 m.31).
+pub const PARTY_COMPROMISE: &str = "party_compromise";
+/// How far before its declaration a compromise is taken to have begun when the Claim does not
+/// say (§13.7.7).
+pub const COMPROMISE_LOOKBACK_MS: u64 = 72 * 3_600 * 1_000;
 /// The kind of a successor entry (OP-141 m.30 (b)).
 pub const SUCCESSOR: &str = "successor";
 

@@ -424,6 +424,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         for _ in 0..MAX_RETRIES {
             let head = self.leader.head().pos;
             let resolved = self.resolve(req, actor.map(|a| a.party), now, head).await?;
+            let compromised = self.compromised(actor, now).await?;
             let records = u64::try_from(resolved.claims.len())
                 .map_err(|_| CoreError::Protocol("proofs"))?
                 .saturating_add(u64::from(!open))
@@ -438,6 +439,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                 proofs: &resolved.proofs,
                 held: resolved.held,
                 policies: &self.policies,
+                compromised,
             };
             let (evaluation, snapshot) = self.passes(req, &frame).await?;
             if req.mode == Mode::Check {

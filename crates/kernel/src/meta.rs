@@ -2605,6 +2605,11 @@ pub fn apply(ctx: &Context<'_>, payload: &Payload, view: &dyn View) -> Result<Ou
         } => {
             out.requirements = domain_root(ctx, view)?;
             let cid = new_id(ctx, kind::CLAIM, 0);
+            // OP-141 m.31 (f)
+            out.effects.push((
+                crate::claim::member_key(class, subject, &cid),
+                Some(cid.to_value()),
+            ));
             // OP-141 m.30 (b)
             if let Some(s) = supersedes {
                 out.effects

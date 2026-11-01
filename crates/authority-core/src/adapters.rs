@@ -76,6 +76,13 @@ impl Reader for PgReader {
             .collect()
     }
 
+    async fn recorded_at(&self, pos: u64) -> Result<Option<u64>, CoreError> {
+        Ok(read_log(&self.pool, &self.domain, pos, pos)
+            .await?
+            .first()
+            .map(|r| r.recorded_at))
+    }
+
     async fn scan(&self, prefix: &[u8]) -> Result<Vec<Row>, CoreError> {
         state_prefix(&self.pool, &self.domain, prefix)
             .await?

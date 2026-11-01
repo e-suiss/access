@@ -36,6 +36,8 @@ pub trait Reader {
         after: Option<Id>,
         limit: u32,
     ) -> impl Future<Output = Result<Vec<Id>, CoreError>> + Send;
+    /// The trusted time of the record at `pos`, if there is one.
+    fn recorded_at(&self, pos: u64) -> impl Future<Output = Result<Option<u64>, CoreError>> + Send;
     /// A SYNC-DERIVED counter's used amount; 0 when never drawn.
     fn counter(&self, key: &[u8]) -> impl Future<Output = Result<u64, CoreError>> + Send;
     /// The latest outcome of a nonce.

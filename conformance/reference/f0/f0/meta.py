@@ -760,6 +760,10 @@ class Apply:
         if "bound_intent" in body:
             value["bound_intent"] = body["bound_intent"]
         claim_id = self.new_id("claim")
+        # OP-141 m.31 (f)
+        member = encode(["member", body["class"], body["subject"], claim_id])
+        self.state[member] = claim_id
+        self.effects.append((member, claim_id))
         # OP-141 m.30 (b)
         if "supersedes" in body:
             value["supersedes"] = body["supersedes"]
