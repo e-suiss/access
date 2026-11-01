@@ -41,11 +41,12 @@ def is_claim_key(key):
         k = cbor2.loads(key)
     except Exception:
         return False
-    return isinstance(k, list) and len(k) > 0 and k[0] in ("claim", "member")
+    return isinstance(k, list) and len(k) > 0 and k[0] in ("claim", "member", "successor")
 
 
 CLAIM_KEY = enc(["claim", bytes([4]) * 16])
 MEMBER_KEY = enc(["member", "kyc", bytes([5]) * 16, bytes([4]) * 16])
+SUCCESSOR_KEY = enc(["successor", bytes([3]) * 16, bytes([4]) * 16])
 
 
 def fold(records):
@@ -108,6 +109,7 @@ CASES = [
     ("effects-on-claim-without-disposition", [record(1, "claim", {"effects": [[CLAIM_KEY, 1]]})]),
     ("claim-effect-on-other-kind", [record(1, "claim", {"disposition": "admit", "effects": [[b"k", 1]]})]),
     ("claim-admitted", [record(1, "claim", {"disposition": "admit", "effects": [[CLAIM_KEY, {"class": "kyc"}], [MEMBER_KEY, bytes([4]) * 16]]})]),
+    ("claim-admitted-successor", [record(1, "claim", {"disposition": "admit", "effects": [[CLAIM_KEY, {"class": "kyc", "supersedes": bytes([3]) * 16}], [SUCCESSOR_KEY, bytes([4]) * 16]]})]),
     ("duplicate-key", [decision(1, "allow", [[b"k", 1], [b"k", 2]])]),
     ("key-empty", [decision(1, "allow", [[b"", 1]])]),
     ("key-too-long", [decision(1, "allow", [[b"k" * 513, 1]])]),

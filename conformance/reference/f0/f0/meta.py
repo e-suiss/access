@@ -181,7 +181,7 @@ PAYLOADS = {
     "policy_set": ({"content": check_policy_content}, {"policy": check_id}),
     "policy_retire": ({"policy": check_id}, {}),
     "claim_issue": ({"subject": check_id, "class": check_ident, "value": check_equality_value},
-                    {"validity": check_time_window, "bound_intent": check_digest}),
+                    {"validity": check_time_window, "bound_intent": check_digest, "supersedes": check_id}),
     "contribute": ({"target": check_digest, "class": check_ident}, {}),
     "consumption_release": ({"exercise": check_digest, "grounds": check_list(check_id, nonempty=True)}, {}),
 }
@@ -759,7 +759,14 @@ class Apply:
         value["validity"] = body.get("validity", [0, 2**64 - 1])
         if "bound_intent" in body:
             value["bound_intent"] = body["bound_intent"]
-        self.write("claim", self.new_id("claim"), value)
+        claim_id = self.new_id("claim")
+        # OP-141 m.30 (b)
+        if "supersedes" in body:
+            value["supersedes"] = body["supersedes"]
+            key = encode(["successor", body["supersedes"], claim_id])
+            self.state[key] = claim_id
+            self.effects.append((key, claim_id))
+        self.write("claim", claim_id, value)
         return True
 
     def contribute(self, body):

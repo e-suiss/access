@@ -723,6 +723,7 @@ fn acceptances_are_indexed_by_issuer() {
                 value: crate::model::EqValue::Bool(true),
                 validity: None,
                 bound_intent: None,
+                supersedes: None,
             },
         )
         .unwrap();
@@ -1266,7 +1267,7 @@ fn meta_vectors_match() {
         meta,
         &Payload::AcceptanceEstablish(acceptance(BOB, "subject-selection", &["staff"], 100)),
     );
-    r.step(
+    let issued = r.step(
         "claim-issued",
         &["L0-META-27"],
         (ROOT, ROOT),
@@ -1277,6 +1278,21 @@ fn meta_vectors_match() {
             value: crate::model::EqValue::Bool(true),
             validity: None,
             bound_intent: None,
+            supersedes: None,
+        },
+    );
+    r.step(
+        "claim-issued-supersedes",
+        &["L0-META-27"],
+        (ROOT, ROOT),
+        meta,
+        &Payload::ClaimIssue {
+            subject: ALICE,
+            class: String::from("staff"),
+            value: crate::model::EqValue::Bool(false),
+            validity: None,
+            bound_intent: None,
+            supersedes: issued.map(|e| object_id(&e, kind::CLAIM, 0)),
         },
     );
     r.step(
@@ -1290,6 +1306,7 @@ fn meta_vectors_match() {
             value: crate::model::EqValue::Bool(true),
             validity: None,
             bound_intent: Some(SPENT),
+            supersedes: None,
         },
     );
     r.step(

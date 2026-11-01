@@ -279,6 +279,8 @@ pub enum Payload {
         validity: Option<Window>,
         /// The intent it is bound to (OP-141 m.28 (i)).
         bound_intent: Option<Digest>,
+        /// The Claim it replaces (OP-141 m.30 (a)).
+        supersedes: Option<Id>,
     },
     /// `contribute` (L0-META-30).
     Contribute {
@@ -844,6 +846,7 @@ impl Canonical for Payload {
                 value,
                 validity,
                 bound_intent,
+                supersedes,
             } => (
                 "claim_issue",
                 map([
@@ -855,6 +858,7 @@ impl Canonical for Payload {
                         "bound_intent",
                         bound_intent.as_ref().map(Canonical::to_value),
                     ),
+                    ("supersedes", supersedes.as_ref().map(Canonical::to_value)),
                 ]),
             ),
             Self::Contribute { target, class } => (
@@ -983,6 +987,7 @@ impl Canonical for Payload {
                     .opt("bound_intent")
                     .map(|v| Digest::from_value(v).ok_or(ModelError::Shape))
                     .transpose()?,
+                supersedes: f.opt("supersedes").map(id).transpose()?,
             },
             "contribute" => Self::Contribute {
                 target: Digest::from_value(f.req("target")?).ok_or(ModelError::Shape)?,
@@ -2596,12 +2601,19 @@ pub fn apply(ctx: &Context<'_>, payload: &Payload, view: &dyn View) -> Result<Ou
             value,
             validity,
             bound_intent,
+            supersedes,
         } => {
             out.requirements = domain_root(ctx, view)?;
+            let cid = new_id(ctx, kind::CLAIM, 0);
+            // OP-141 m.30 (b)
+            if let Some(s) = supersedes {
+                out.effects
+                    .push((crate::claim::successor_key(s, &cid), Some(cid.to_value())));
+            }
             set(
                 &mut out,
                 kind::CLAIM,
-                &new_id(ctx, kind::CLAIM, 0),
+                &cid,
                 crate::claim::ClaimState {
                     statement: crate::claim::Statement {
                         domain: ctx.domain,
@@ -2618,7 +2630,7 @@ pub fn apply(ctx: &Context<'_>, payload: &Payload, view: &dyn View) -> Result<Ou
                         bound_intent: *bound_intent,
                         bound_instance: None,
                         bound_resource: None,
-                        supersedes: None,
+                        supersedes: *supersedes,
                     },
                     instance: None,
                     since: ctx.pos,

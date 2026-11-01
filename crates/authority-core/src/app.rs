@@ -487,24 +487,34 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             let admit = c.disposition == Disposition::Admit;
             // L2-CLM-4, OP-141 m.20 (b)
             let effects: Vec<Effect> = if admit {
-                meta::sorted(vec![
-                    (
-                        ckey.clone(),
-                        Some(
-                            ClaimState {
-                                statement: c.statement.clone(),
-                                instance: Some(c.instance),
-                                since: c.pos,
-                                ended: None,
-                            }
-                            .to_value(),
+                meta::sorted(
+                    vec![
+                        (
+                            ckey.clone(),
+                            Some(
+                                ClaimState {
+                                    statement: c.statement.clone(),
+                                    instance: Some(c.instance),
+                                    since: c.pos,
+                                    ended: None,
+                                }
+                                .to_value(),
+                            ),
                         ),
-                    ),
-                    (
-                        claim::member_key(&c.statement.class, &c.statement.subject, &c.id),
-                        Some(c.id.to_value()),
-                    ),
-                ])
+                        (
+                            claim::member_key(&c.statement.class, &c.statement.subject, &c.id),
+                            Some(c.id.to_value()),
+                        ),
+                    ]
+                    .into_iter()
+                    // OP-141 m.30 (b)
+                    .chain(
+                        c.statement
+                            .supersedes
+                            .map(|s| (claim::successor_key(&s, &c.id), Some(c.id.to_value()))),
+                    )
+                    .collect(),
+                )
             } else {
                 Vec::new()
             };

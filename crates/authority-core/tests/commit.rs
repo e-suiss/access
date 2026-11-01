@@ -643,6 +643,10 @@ fn term(kind: ProofKind, class: &str, binding: ProofBinding) -> RequirementTerm 
 /// Genesis where acting on `shop` needs `terms`, ALICE issues `kyc` Claims under a
 /// predicate-input Acceptance and holds a Grant to contribute `approve`.
 fn gated(terms: &[RequirementTerm]) -> BTreeMap<String, Opened> {
+    gated_with(terms, 1)
+}
+
+fn gated_with(terms: &[RequirementTerm], quota: u64) -> BTreeMap<String, Opened> {
     let mut g = genesis();
     let opened = |value| Opened {
         value,
@@ -696,7 +700,7 @@ fn gated(terms: &[RequirementTerm]) -> BTreeMap<String, Opened> {
         (
             Value::text("quota"),
             Value::Map(vec![
-                (Value::text("count"), Value::Unsigned(1)),
+                (Value::text("count"), Value::Unsigned(quota)),
                 (Value::text("window_s"), Value::Unsigned(3_600)),
             ]),
         ),
@@ -722,6 +726,17 @@ fn claim(d: Digest, issuer: Id, seed: u8, class: &str) -> Vec<u8> {
 }
 
 fn claim_at(d: Digest, issuer: Id, seed: u8, class: &str, issued_at: u64) -> Vec<u8> {
+    claim_after(d, issuer, seed, class, issued_at, None)
+}
+
+fn claim_after(
+    d: Digest,
+    issuer: Id,
+    seed: u8,
+    class: &str,
+    issued_at: u64,
+    supersedes: Option<Id>,
+) -> Vec<u8> {
     let st = access_kernel::claim::Statement {
         domain: d,
         issuer,
@@ -737,7 +752,7 @@ fn claim_at(d: Digest, issuer: Id, seed: u8, class: &str, issued_at: u64) -> Vec
         bound_intent: None,
         bound_instance: None,
         bound_resource: None,
-        supersedes: None,
+        supersedes,
     };
     let with = signing(seed);
     let prot = dcbor::encode(
@@ -854,6 +869,66 @@ async fn an_accepted_claim_meets_a_requirement() {
     )
     .await;
     assert_eq!(refused.unwrap_err().code(), "protocol");
+    fold_check(&db.sequencer, d).await.unwrap();
+}
+
+// TI-RT7, OP-141 m.30: a Claim with a recorded successor in its issuer line no longer asserts,
+// and a fork leaves neither side asserting
+#[tokio::test]
+async fn a_superseded_claim_no_longer_asserts() {
+    let db = fresh().await.unwrap();
+    let kyc = term(ProofKind::Claim, "kyc", ProofBinding::None);
+    let (mut core, d) = setup_with(&db, gated_with(&[kyc], 2)).await;
+    onboard(&mut core, d, ROOT, ROOT_KEY, (1, 2)).await;
+    onboard(&mut core, d, ALICE, ALICE_KEY, (3, 4)).await;
+    let shop = ExerciseBasis::Anchor(meta::object_id(&d, kind::ANCHOR, 1));
+    let mut nonce = 20;
+    let mut prove = async |core: &mut Core, proof: ProofRef| {
+        nonce += 1;
+        send(
+            core,
+            with_proofs(shop_request(d, nonce, Mode::Commit, shop), vec![proof]),
+            ROOT_KEY,
+        )
+        .await
+        .unwrap()
+        .decision
+        .outcome
+    };
+    let first = claim(d, ALICE, ALICE_KEY, "kyc");
+    let first_id = access_kernel::claim::claim_id(&first);
+    assert_eq!(
+        prove(&mut core, ProofRef::Claim(first)).await,
+        Outcome::Allow
+    );
+    let next = claim_after(d, ALICE, ALICE_KEY, "kyc", NOW, Some(first_id));
+    let next_id = access_kernel::claim::claim_id(&next);
+    assert_eq!(
+        prove(&mut core, ProofRef::Claim(next)).await,
+        Outcome::Allow
+    );
+    assert!(
+        state_of(
+            &db,
+            d,
+            &access_kernel::claim::successor_key(&first_id, &next_id)
+        )
+        .await
+        .is_some()
+    );
+    assert_eq!(
+        prove(&mut core, ProofRef::ClaimRef(first_id)).await,
+        Outcome::RequireAction
+    );
+    let fork = claim_after(d, ALICE, ALICE_KEY, "kyc", NOW - 1, Some(first_id));
+    assert_eq!(
+        prove(&mut core, ProofRef::Claim(fork)).await,
+        Outcome::RequireAction
+    );
+    assert_eq!(
+        prove(&mut core, ProofRef::ClaimRef(next_id)).await,
+        Outcome::RequireAction
+    );
     fold_check(&db.sequencer, d).await.unwrap();
 }
 
@@ -1433,6 +1508,7 @@ async fn a_budget_is_drawn_until_it_is_exhausted() {
                 value: access_kernel::model::EqValue::Bool(true),
                 validity: None,
                 bound_intent: Some(intent),
+                supersedes: None,
             },
         ),
         ROOT_KEY,

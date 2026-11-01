@@ -91,6 +91,59 @@ const fn current(s: &Statement, now: u64) -> bool {
 }
 
 impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
+    /// The recorded successors of Claim `id` in the issuer line of `of`, other than `except`.
+    async fn successors(
+        &self,
+        snap: &mut Snapshot,
+        id: &Id,
+        of: &Statement,
+        except: &Id,
+    ) -> Result<usize, CoreError> {
+        let mut n: usize = 0;
+        for (_, value, _) in self.reader.scan(&claim::successor_prefix(id)).await? {
+            let Some(c) = value.and_then(|v| Id::from_value(&v).ok()) else {
+                continue;
+            };
+            if c == *except {
+                continue;
+            }
+            let same = self
+                .get(snap, &meta::key(kind::CLAIM, &c))
+                .await?
+                .and_then(|v| ClaimState::from_value(&v).ok())
+                .is_some_and(|s| claim::same_line(of, &s.statement));
+            if same {
+                n = n.saturating_add(1);
+            }
+        }
+        Ok(n)
+    }
+
+    /// Whether Claim `id` asserts in its issuer line: it has no recorded successor and is not
+    /// one side of a fork (TI-RT7, OP-141 m.30 (c), (d)).
+    async fn in_line(
+        &self,
+        snap: &mut Snapshot,
+        id: &Id,
+        s: &Statement,
+    ) -> Result<bool, CoreError> {
+        if self.successors(snap, id, s, id).await? > 0 {
+            return Ok(false);
+        }
+        let Some(prev) = s.supersedes else {
+            return Ok(true);
+        };
+        let prior = self
+            .get(snap, &meta::key(kind::CLAIM, &prev))
+            .await?
+            .and_then(|v| ClaimState::from_value(&v).ok())
+            .filter(|p| claim::same_line(&p.statement, s));
+        match prior {
+            Some(p) => Ok(self.successors(snap, &prev, &p.statement, id).await? == 0),
+            None => Ok(true),
+        }
+    }
+
     async fn get(&self, snap: &mut Snapshot, key: &[u8]) -> Result<Option<Value>, CoreError> {
         if !snap.has(key) {
             snap.fill(self.reader.fetch(&[key.to_vec()]).await?);
@@ -277,6 +330,9 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                 else {
                     continue;
                 };
+                if !self.in_line(snap, &id, &state.statement).await? {
+                    continue;
+                }
                 let gates = self.gates(snap, &state.statement.issuer).await?;
                 if gates
                     .iter()
@@ -360,7 +416,11 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         let proof = gates
             .iter()
             .any(|g| g.admits_for(claim::PREDICATE_INPUT, &statement, now));
-        if disposition == Disposition::Admit && proof && current(&statement, now) {
+        if disposition == Disposition::Admit
+            && proof
+            && current(&statement, now)
+            && self.in_line(snap, &id, &statement).await?
+        {
             out.proofs
                 .push(claim_proof(id, &statement, Some(instance), pos));
         }
@@ -392,7 +452,10 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             return Ok(());
         };
         let gates = self.gates(snap, &state.statement.issuer).await?;
-        if current(&state.statement, now) && gates.iter().any(|g| g.admits(&state.statement, now)) {
+        if current(&state.statement, now)
+            && gates.iter().any(|g| g.admits(&state.statement, now))
+            && self.in_line(snap, id, &state.statement).await?
+        {
             out.proofs.push(claim_proof(
                 *id,
                 &state.statement,

@@ -30,6 +30,8 @@ pub const SUBJECT_SELECTION: &str = "subject-selection";
 
 /// Kind of the membership index (OP-141 m.20 (b)).
 pub const MEMBER: &str = "member";
+/// The kind of a successor entry (OP-141 m.30 (b)).
+pub const SUCCESSOR: &str = "successor";
 
 /// `dCBOR(["member", class, subject, ClaimID])`: one admitted Claim's membership entry.
 #[must_use]
@@ -44,6 +46,35 @@ pub fn member_key(class: &str, subject: &Id, claim: &Id) -> Vec<u8> {
         Limits::CEILING,
     )
     .unwrap_or_default()
+}
+
+/// `dCBOR(["successor", S, C])`: Claim `C` names `S` in `supersedes` (OP-141 m.30 (b)).
+#[must_use]
+pub fn successor_key(superseded: &Id, claim: &Id) -> Vec<u8> {
+    dcbor::encode(
+        &Value::Array(alloc::vec![
+            Value::text(SUCCESSOR),
+            superseded.to_value(),
+            claim.to_value()
+        ]),
+        Limits::CEILING,
+    )
+    .unwrap_or_default()
+}
+
+/// The byte prefix shared by the successor entries of `superseded`.
+#[must_use]
+pub fn successor_prefix(superseded: &Id) -> Vec<u8> {
+    let mut key = successor_key(superseded, &Id([0; 16]));
+    key.truncate(key.len().saturating_sub(17));
+    key
+}
+
+/// Whether `successor` is an issuer-order successor of `of`: same issuer, subject and class
+/// (TI-RT7, OP-141 m.30 (c)).
+#[must_use]
+pub fn same_line(of: &Statement, successor: &Statement) -> bool {
+    of.issuer == successor.issuer && of.subject == successor.subject && of.class == successor.class
 }
 
 /// The byte prefix shared by the membership entries of `subject` in `class`.
@@ -501,6 +532,7 @@ impl Canonical for ClaimState {
                 "issued_at",
                 (s.issued_at > 0).then_some(Value::Unsigned(s.issued_at)),
             ),
+            ("supersedes", s.supersedes.as_ref().map(Canonical::to_value)),
             ("instance", self.instance.as_ref().map(Canonical::to_value)),
             ("since", Some(Value::Unsigned(self.since))),
             ("ended", self.ended.as_ref().map(crate::meta::ended_value)),
@@ -524,7 +556,7 @@ impl Canonical for ClaimState {
             })?,
             bound_instance: opt(&mut f, "bound_instance", Id::from_value)?,
             bound_resource: opt(&mut f, "bound_resource", ResourceRef::from_value)?,
-            supersedes: None,
+            supersedes: opt(&mut f, "supersedes", Id::from_value)?,
         };
         let s = Self {
             statement,

@@ -615,7 +615,7 @@ meta-payload =
   / { acceptance_revoke: { acceptance: id } }
   / { policy_set: { ? policy: id, content: policy-content } }
   / { policy_retire: { policy: id } }
-  / { claim_issue: { subject: party-ref, class: ident, value: equality-value, ? validity: time-window, ? bound_intent: digest } }
+  / { claim_issue: { subject: party-ref, class: ident, value: equality-value, ? validity: time-window, ? bound_intent: digest, ? supersedes: id } }
   / { contribute: { target: digest, class: ident } }
   / { consumption_release: { exercise: digest, grounds: [+ id] } }
 
@@ -665,6 +665,7 @@ claim-state = {
   ? bound_instance: instance-ref,
   ? bound_resource: resource-ref,
   ? issued_at: trusted-time,
+  ? supersedes: id,
   ? instance: instance-ref,
   since: uint,
   ? ended: ended,
