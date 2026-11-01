@@ -231,3 +231,35 @@ fn the_requester_sees_no_subcode_and_hop_positions_only() {
     assert_eq!(blockers[1]["position"]["hop"], 1);
     assert!(!out.to_string().contains("secret-policy"));
 }
+
+// OP-141 m.38 (c), (d): the viewer sees positions and subcodes but a restriction's subcode;
+// the auditor sees everything
+#[test]
+fn viewer_and_audit_filters_disclose_more() {
+    use access_authority_core::app::Scope;
+    use access_kernel::combinator::{Blocker, BlockerClass, Position, Remediation, Resolver};
+    let mut r = response(Outcome::Deny);
+    r.decision.blockers = vec![
+        Blocker {
+            class: BlockerClass::Restricted,
+            subcode: Some(String::from("secret-policy")),
+            position: Position::DomainPolicy,
+            resolver: Resolver::RestrictionOwner,
+            remediation: Remediation::RouteToCoordinator,
+        },
+        Blocker {
+            class: BlockerClass::Ended,
+            subcode: Some(String::from("ended/revoked")),
+            position: Position::Anchor,
+            resolver: Resolver::Root,
+            remediation: Remediation::NewRequestRequired,
+        },
+    ];
+    let viewer = encode_for(&r, Mode::Commit, Scope::Viewer);
+    let blockers = viewer["context"]["blockers"].as_array().unwrap();
+    assert!(blockers[0].get("subcode").is_none());
+    assert!(blockers[0].get("position").is_some());
+    assert_eq!(blockers[1]["subcode"], "ended/revoked");
+    let audit = encode_for(&r, Mode::Commit, Scope::Audit);
+    assert!(audit.to_string().contains("secret-policy"));
+}

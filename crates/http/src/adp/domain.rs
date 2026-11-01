@@ -3,7 +3,7 @@
 use std::collections::BTreeMap;
 
 use access_authority_core::app::MAX_PROOFS;
-use access_authority_core::app::Response;
+use access_authority_core::app::{Response, Scope};
 use access_authority_core::domain::{ProofRef, Request};
 use access_authority_core::query::{Hit, Query};
 use access_kernel::codec::Canonical;
@@ -413,15 +413,30 @@ fn decode_value(root: &Json) -> R<Decoded> {
 ///
 /// # Errors
 /// [`AdpError`] names the protocol error.
-pub fn decode_explain(body: &[u8], max_len: usize) -> R<(Decoded, Option<u64>)> {
+pub fn decode_explain(body: &[u8], max_len: usize) -> R<(Decoded, Option<(u64, Scope)>)> {
     let root = access_kernel::json::parse(body, max_len).map_err(|_| AdpError("json"))?;
     let mut ctx = Obj::of(root.get("context").ok_or(AdpError("context"))?, "context")?;
     let intent = intent(ctx.req("intent", "intent")?)?;
     carriers(&root, &intent)?;
     let record = ctx.opt("record").map(|r| uint(r, "record")).transpose()?;
+    // OP-141 m.38 (a)
+    let scope = match ctx
+        .opt("scope")
+        .map(|s| text(s, "scope"))
+        .transpose()?
+        .as_deref()
+    {
+        None | Some("requester") => Scope::Requester,
+        Some("viewer") => Scope::Viewer,
+        Some("audit") => Scope::Audit,
+        Some(_) => return Err(AdpError("scope")),
+    };
     let decoded = context(&mut ctx, intent)?;
     ctx.done()?;
-    Ok((decoded, record))
+    if record.is_none() && scope != Scope::Requester {
+        return Err(AdpError("scope"));
+    }
+    Ok((decoded, record.map(|r| (r, scope))))
 }
 
 /// Decodes a search body of `kind` (L1-ADP-16): the reader's context, `context.query` and the
@@ -563,15 +578,36 @@ fn requester_view(blocker: &mut Out) {
     }
 }
 
-/// Encodes a decision (L1-ADP-10); the disclosure filter is its last stage (TI-20).
+/// The viewer's view of a blocker (OP-141 m.38 (c)): everything but the subcode of a
+/// `restricted` blocker.
+fn viewer_view(blocker: &mut Out) {
+    if let Out::Object(b) = blocker
+        && b.get("class").and_then(Out::as_str) == Some("restricted")
+    {
+        b.remove("subcode");
+    }
+}
+
+/// Encodes a decision for the requester (L1-ADP-10); the disclosure filter is its last stage
+/// (TI-20).
 #[must_use]
 pub fn encode(response: &Response, mode: Mode) -> Out {
+    encode_for(response, mode, Scope::Requester)
+}
+
+/// Encodes a decision with the disclosure filter of `scope` (OP-141 m.38).
+#[must_use]
+pub fn encode_for(response: &Response, mode: Mode, scope: Scope) -> Out {
     let mut context = match json_of(&decision_value(&response.decision)) {
         Out::Object(m) => m,
         _ => Map::new(),
     };
     if let Some(Out::Array(blockers)) = context.get_mut("blockers") {
-        blockers.iter_mut().for_each(requester_view);
+        match scope {
+            Scope::Requester => blockers.iter_mut().for_each(requester_view),
+            Scope::Viewer => blockers.iter_mut().for_each(viewer_view),
+            Scope::Audit => {}
+        }
     }
     if mode == Mode::Check {
         context.insert(String::from("advisory"), Out::Bool(true));

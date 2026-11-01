@@ -60,6 +60,7 @@ impl Pdp for Scripted {
         &self,
         inc: Incoming,
         record: u64,
+        _scope: access_authority_core::app::Scope,
     ) -> impl Future<Output = Result<Response, CoreError>> + Send {
         let mut r = scripted(self, inc);
         if let Ok(resp) = &mut r {
@@ -443,6 +444,15 @@ async fn explain_is_hypothetical_check() {
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body["context"]["kind"], "recorded");
     assert_eq!(body["context"]["record"], 7);
+    let (status, _, body) = post_to(
+        app(Ok(Outcome::Allow), Some("pep-1")),
+        "/access/v1/explain",
+        evaluation("check", r#", "scope": "viewer""#),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["code"], "scope");
     let (status, _, _) = post(
         app(Ok(Outcome::Allow), Some("pep-1")),
         evaluation("commit", r#", "record": 7"#),

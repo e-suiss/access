@@ -296,6 +296,7 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
         &self,
         inc: &Incoming,
         record: u64,
+        scope: crate::app::Scope,
     ) -> Result<Response, CoreError> {
         let mut guard = self.leading(inc.request.domain).await?;
         let Some(led) = guard.as_mut() else {
@@ -306,7 +307,7 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
             .now()
             .await
             .map_err(|_| CoreError::Unavailable("time"))?;
-        let result = led.core.explain_recorded(inc, record, now).await;
+        let result = led.core.explain_recorded(inc, record, scope, now).await;
         if matches!(result, Err(CoreError::Sequencer(_) | CoreError::Store(_))) {
             *guard = None;
         }

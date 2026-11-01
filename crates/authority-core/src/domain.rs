@@ -525,6 +525,53 @@ fn in_line(view: &Snapshot, id: &Id, s: &Statement) -> bool {
     })
 }
 
+/// Whether `party` may view decisions made on `basis`: the root of its Anchor, or the root of
+/// the top Anchor or the extensional holder of a live Grant in its lineage (OP-141 m.38 (c)).
+pub(crate) fn views(view: &Snapshot, basis: &ExerciseBasis, party: &Id) -> bool {
+    let actor = Actor {
+        party: *party,
+        instance: Id([0; 16]),
+    };
+    let root_of = |a: &Id| {
+        read::<AnchorState>(view, kind::ANCHOR, a)
+            .is_some_and(|s| s.ended.is_none() && meta::root_requirements(&s, &actor).is_some())
+    };
+    let grant = match basis {
+        ExerciseBasis::Anchor(a) => return root_of(a),
+        ExerciseBasis::Holding(h) => h.grant,
+        ExerciseBasis::Public(g) => *g,
+    };
+    let Some(ids) = chain_ids(view, &grant) else {
+        return false;
+    };
+    let holds = ids.iter().any(|id| {
+        read::<GrantState>(view, kind::GRANT, id).is_some_and(|g| {
+            g.ended.is_none() && g.content.holder == SubjectSelector::Party(*party)
+        })
+    });
+    holds || top_anchor(view, basis).is_some_and(|a| root_of(&a))
+}
+
+/// Whether Grant `g` is held by `party`, live along its lineage, and covers `access:audit` by
+/// name (OP-141 m.38 (d)).
+pub(crate) fn audit_grant(view: &Snapshot, g: &Id, party: &Id) -> bool {
+    let Some(state) = read::<GrantState>(view, kind::GRANT, g) else {
+        return false;
+    };
+    let named = state
+        .content
+        .authority
+        .authority
+        .actions
+        .exact
+        .iter()
+        .any(|a| a.namespace == meta::NAMESPACE && a.name == "audit");
+    named
+        && state.content.holder == SubjectSelector::Party(*party)
+        && lineage_hops(view, g)
+            .is_some_and(|(hops, _)| hops.iter().all(|h| h.status == HopStatus::Active))
+}
+
 /// The Anchor a basis rests on: the Anchor itself, or the top of the Grant's lineage.
 fn top_anchor(view: &dyn View, basis: &ExerciseBasis) -> Option<access_kernel::model::Id> {
     let mut at = match basis {

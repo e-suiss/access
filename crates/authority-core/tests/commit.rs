@@ -11,7 +11,7 @@ use std::time::Duration;
 
 use access_authority_core::CoreError;
 use access_authority_core::adapters::{Domains, PgReader, Setup};
-use access_authority_core::app::{Authority, Incoming, Response};
+use access_authority_core::app::{Authority, Incoming, Response, Scope};
 use access_authority_core::domain::{ProofRef, Request};
 use access_authority_core::ports::{Binding, Keys, Salts};
 use access_authority_sequencer::SequencerError;
@@ -1313,6 +1313,7 @@ async fn an_action_without_an_accepted_schema_is_denied() {
 // L1-ADP-15, OP-141 m.36: a recorded decision is explained by evaluating its request again on
 // the state and counters just before it, also after the state has moved on
 #[tokio::test]
+#[allow(clippy::too_many_lines, reason = "two recorded decisions through every scope")]
 async fn a_recorded_decision_is_explained_as_it_was() {
     use access_kernel::model::{BudgetDimension, BudgetTerm, BudgetWindow};
     let db = fresh().await.unwrap();
@@ -1386,21 +1387,51 @@ async fn a_recorded_decision_is_explained_as_it_was() {
         (inc, record)
     };
     let (inc, record) = explain(11, first.record.unwrap());
-    let again = core.explain_recorded(&inc, record, NOW).await.unwrap();
+    let again = core
+        .explain_recorded(&inc, record, Scope::Requester, NOW)
+        .await
+        .unwrap();
     assert_eq!(again.decision, first.decision);
     let (inc, record) = explain(12, second.record.unwrap());
-    let again = core.explain_recorded(&inc, record, NOW).await.unwrap();
+    let again = core
+        .explain_recorded(&inc, record, Scope::Requester, NOW)
+        .await
+        .unwrap();
     assert_eq!(again.decision, second.decision);
     // the request must be the recorded one, from its actor
     let (inc, _) = explain(11, 0);
     assert!(matches!(
-        core.explain_recorded(&inc, second.record.unwrap(), NOW)
+        core.explain_recorded(&inc, second.record.unwrap(), Scope::Requester, NOW)
             .await,
         Err(CoreError::Protocol("explain-record"))
     ));
     let other = incoming(shop_request(d, 11, Mode::Commit, holding), ROOT_KEY);
     assert!(matches!(
-        core.explain_recorded(&other, first.record.unwrap(), NOW)
+        core.explain_recorded(&other, first.record.unwrap(), Scope::Requester, NOW)
+            .await,
+        Err(CoreError::Protocol("explain-record"))
+    ));
+    // OP-141 m.38: the root of the lineage views it and, as the meta-anchor's root, audits it;
+    // the holder audits nothing
+    for scope in [Scope::Viewer, Scope::Audit] {
+        let other = incoming(shop_request(d, 12, Mode::Commit, holding), ROOT_KEY);
+        let seen = core
+            .explain_recorded(&other, second.record.unwrap(), scope, NOW)
+            .await
+            .unwrap();
+        assert_eq!(seen.decision, second.decision);
+    }
+    let alice = incoming(shop_request(d, 12, Mode::Commit, holding), ALICE_KEY);
+    assert!(matches!(
+        core.explain_recorded(&alice, second.record.unwrap(), Scope::Audit, NOW)
+            .await,
+        Err(CoreError::Protocol("explain-scope"))
+    ));
+    // the request repeats the recorded basis
+    let shop = ExerciseBasis::Anchor(meta::object_id(&d, kind::ANCHOR, 1));
+    let moved = incoming(shop_request(d, 12, Mode::Commit, shop), ROOT_KEY);
+    assert!(matches!(
+        core.explain_recorded(&moved, second.record.unwrap(), Scope::Audit, NOW)
             .await,
         Err(CoreError::Protocol("explain-record"))
     ));

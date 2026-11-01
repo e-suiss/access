@@ -6,7 +6,8 @@ use access_kernel::combinator::Mode;
 use serde_json::Value;
 
 use crate::adp::domain::{
-    Decoded, Semantic, decode, decode_batch, decode_explain, decode_search, encode, encode_search,
+    Decoded, Semantic, decode, decode_batch, decode_explain, decode_search, encode, encode_for,
+    encode_search,
 };
 use crate::adp::ports::Pdp;
 
@@ -107,7 +108,7 @@ impl<P: Pdp> Service<P> {
             Ok(d) => d,
             Err(e) => return Reply::Protocol(e.0),
         };
-        if let Some(record) = record {
+        if let Some((record, scope)) = record {
             let mode = decoded.request.mode;
             let inc = Incoming {
                 request: decoded.request,
@@ -115,9 +116,9 @@ impl<P: Pdp> Service<P> {
                 pep,
                 explain: true,
             };
-            return match self.pdp.explain_recorded(inc, record).await {
+            return match self.pdp.explain_recorded(inc, record, scope).await {
                 Ok(r) => {
-                    let mut v = encode(&r, mode);
+                    let mut v = encode_for(&r, mode, scope);
                     if let Some(ctx) = v.get_mut("context").and_then(Value::as_object_mut) {
                         ctx.insert(String::from("kind"), Value::from("recorded"));
                         ctx.insert(String::from("record"), Value::from(record));

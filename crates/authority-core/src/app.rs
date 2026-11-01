@@ -147,6 +147,25 @@ pub struct Authority<L: DomainLog, R: Reader, B: Binding, S: Salts> {
     past: Option<Past>,
 }
 
+/// Whose view an explanation of a recorded decision is (OP-141 m.38).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Scope {
+    /// The recorded actor.
+    Requester,
+    /// A root or holder in the lineage of the recorded basis.
+    Viewer,
+    /// An auditor of the domain.
+    Audit,
+}
+
+/// The opening record of a nonce: who acted, on which basis and in which capacity.
+#[derive(Debug)]
+struct Opening {
+    actor: Value,
+    basis: Value,
+    capacity: Value,
+}
+
 /// The state and counters just before a recorded decision, read instead of the live state while
 /// that decision is explained (OP-141 m.36 (d)).
 #[derive(Debug, Default)]
@@ -163,13 +182,23 @@ impl Past {
         record: u64,
         nonce: &[u8],
         intent: &Digest,
-    ) -> Result<(Self, u64, Outcome), CoreError> {
+    ) -> Result<(Self, u64, Outcome, Opening), CoreError> {
         let bad = || CoreError::Protocol("explain-record");
         let mut past = Self::default();
         let mut folded: Option<access_kernel::fold::State> = None;
+        let mut opening = None;
         for bytes in log {
             let r = RecordEnvelope::from_bytes(bytes).map_err(|_| bad())?;
             let field = |name: &str| r.fields.get(name).map(|f| &f.value);
+            if r.header.kind == RecordKind::Opening
+                && field("nonce") == Some(&Value::Bytes(nonce.to_vec()))
+            {
+                opening = Some(Opening {
+                    actor: field("actor").cloned().ok_or_else(bad)?,
+                    basis: field("basis").cloned().ok_or_else(bad)?,
+                    capacity: field("capacity").cloned().ok_or_else(bad)?,
+                });
+            }
             if r.header.pos == record {
                 if r.header.kind != RecordKind::Decision
                     || field("nonce") != Some(&Value::Bytes(nonce.to_vec()))
@@ -184,7 +213,12 @@ impl Past {
                     _ => return Err(bad()),
                 };
                 past.state = folded.ok_or_else(bad)?;
-                return Ok((past, r.header.recorded_at, outcome));
+                return Ok((
+                    past,
+                    r.header.recorded_at,
+                    outcome,
+                    opening.ok_or_else(bad)?,
+                ));
             }
             if let Some(Value::Array(draws)) = field("consumption").and_then(|c| c.get("draws")) {
                 for d in draws {
@@ -267,6 +301,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         &mut self,
         inc: &Incoming,
         record: u64,
+        scope: Scope,
         now: u64,
     ) -> Result<Response, CoreError> {
         let req = &inc.request;
@@ -284,11 +319,49 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         }
         let actor_ref = actor.map_or_else(|| b"anonymous".to_vec(), |a| a.instance.0.to_vec());
         let nonce = self.reader.nonce(&req.nonce).await?;
-        if nonce.is_none_or(|n| n.actor != actor_ref || n.intent_digest != digest.0) {
+        if nonce.as_ref().is_none_or(|n| n.intent_digest != digest.0) {
             return Err(CoreError::Protocol("explain-record"));
         }
+        let allowed_scope = match (scope, actor) {
+            (Scope::Requester, _) => nonce.as_ref().is_some_and(|n| n.actor == actor_ref),
+            (Scope::Viewer, Some(a)) => {
+                self.settled(|snap| crate::domain::views(snap, &req.basis, &a.party))
+                    .await?
+            }
+            (Scope::Audit, Some(a)) => self.audits(&a.party).await?,
+            (_, None) => false,
+        };
+        if !allowed_scope {
+            return Err(CoreError::Protocol(if scope == Scope::Requester {
+                "explain-record"
+            } else {
+                "explain-scope"
+            }));
+        }
         let log = self.reader.log(0, record).await?;
-        let (past, at, recorded) = Past::before(&log, record, &req.nonce, &digest)?;
+        let (past, at, recorded, opening) = Past::before(&log, record, &req.nonce, &digest)?;
+        // OP-141 m.38 (e): the request repeats the recorded basis and capacity
+        if opening.basis != meta::basis_value(&req.basis)
+            || opening.capacity != meta::capacity_value(req.capacity)
+        {
+            return Err(CoreError::Protocol("explain-record"));
+        }
+        let actor = match &opening.actor {
+            Value::Bytes(b) => {
+                let instance = Id::from_value(&Value::Bytes(b.clone()))
+                    .map_err(|_| CoreError::Protocol("explain-record"))?;
+                let state = past
+                    .row(&meta::key(kind::INSTANCE, &instance))
+                    .1
+                    .and_then(|v| meta::InstanceState::from_value(&v).ok())
+                    .ok_or(CoreError::Protocol("explain-record"))?;
+                Some(Actor {
+                    party: state.party,
+                    instance,
+                })
+            }
+            _ => None,
+        };
         let opened = self
             .reader
             .nonce_opened(&req.nonce)
@@ -311,6 +384,39 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             Some(record),
             false,
         ))
+    }
+
+    /// Whether `party` may audit the domain: the meta-anchor's root, or the holder of a live
+    /// Grant covering `access:audit` (OP-141 m.38 (d)).
+    async fn audits(&self, party: &Id) -> Result<bool, CoreError> {
+        let meta_anchor = meta::meta_anchor(&self.domain);
+        let root = self
+            .settled(|snap| {
+                crate::domain::read::<meta::AnchorState>(snap, kind::ANCHOR, &meta_anchor)
+                    .is_some_and(|a| {
+                        meta::root_requirements(
+                            &a,
+                            &Actor {
+                                party: *party,
+                                instance: Id([0; 16]),
+                            },
+                        )
+                        .is_some()
+                    })
+            })
+            .await?;
+        if root {
+            return Ok(true);
+        }
+        for g in self.reader.grants_for(party, None, 1_000).await? {
+            let audit = self
+                .settled(|snap| crate::domain::audit_grant(snap, &g, party))
+                .await?;
+            if audit {
+                return Ok(true);
+            }
+        }
+        Ok(false)
     }
 
     async fn rebuild(

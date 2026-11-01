@@ -121,7 +121,7 @@ fn holder_hit(sel: &SubjectSelector) -> Option<Hit> {
 
 impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
     /// Runs `f` over a snapshot, fetching what it asks for until it asks for nothing more.
-    async fn settled<T>(&self, f: impl Fn(&Snapshot) -> T) -> Result<T, CoreError> {
+    pub(crate) async fn settled<T>(&self, f: impl Fn(&Snapshot) -> T) -> Result<T, CoreError> {
         let mut snap = Snapshot::default();
         for _ in 0..crate::app::MAX_PASSES {
             snap.restart();

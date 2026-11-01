@@ -5,7 +5,7 @@ use std::sync::Arc;
 use crate::Problem;
 use access_authority_core::CoreError;
 use access_authority_core::adapters::Domains;
-use access_authority_core::app::{Incoming, Response as Decided};
+use access_authority_core::app::{Incoming, Response as Decided, Scope};
 use access_authority_core::ports::{Binding, Keys, Salts};
 use access_authority_core::query::Query;
 use access_authority_sequencer::ports::Clock;
@@ -186,8 +186,13 @@ where
         self.exercise(&inc).await
     }
 
-    async fn explain_recorded(&self, inc: Incoming, record: u64) -> Result<Decided, CoreError> {
-        Domains::explain_recorded(self, &inc, record).await
+    async fn explain_recorded(
+        &self,
+        inc: Incoming,
+        record: u64,
+        scope: Scope,
+    ) -> Result<Decided, CoreError> {
+        Domains::explain_recorded(self, &inc, record, scope).await
     }
 
     async fn search(

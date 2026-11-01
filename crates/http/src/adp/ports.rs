@@ -5,7 +5,7 @@ use std::future::Future;
 use std::sync::Arc;
 
 use access_authority_core::CoreError;
-use access_authority_core::app::{Incoming, Response};
+use access_authority_core::app::{Incoming, Response, Scope};
 use access_authority_core::query::{Hit, Query};
 
 /// Evaluates one request (the authority core of the request's domain).
@@ -18,8 +18,9 @@ pub trait Pdp: Send + Sync {
         &self,
         inc: Incoming,
         record: u64,
+        scope: Scope,
     ) -> impl Future<Output = Result<Response, CoreError>> + Send {
-        let _ = (inc, record);
+        let _ = (inc, record, scope);
         std::future::ready(Err(CoreError::Protocol("explain-record")))
     }
 
@@ -47,8 +48,9 @@ impl<P: Pdp> Pdp for Arc<P> {
         &self,
         inc: Incoming,
         record: u64,
+        scope: Scope,
     ) -> impl Future<Output = Result<Response, CoreError>> + Send {
-        (**self).explain_recorded(inc, record)
+        (**self).explain_recorded(inc, record, scope)
     }
 
     fn search(
