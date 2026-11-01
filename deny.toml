@@ -11,12 +11,7 @@ feature-depth = 1
 unmaintained = "all"
 unsound = "all"
 yanked = "deny"
-ignore = [
-    # F-2, F-15: 0.7.6 carries the RUSTSEC-2026-0387 fix; it was yanked on 2026-10-25 for an API
-    # break, not a vulnerability, and the replacements (0.7.9, 0.7.10) are inside the 7-day
-    # cooldown until 2026-11-01. Drop this entry with that update.
-    { crate = "crypto-bigint@0.7.6", reason = "yanked for an API break; replacement in cooldown until 2026-11-01" },
-]
+ignore = []
 
 # F-1
 [licenses]
