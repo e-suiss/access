@@ -4,6 +4,7 @@
 pub mod cose;
 pub mod jws;
 pub mod key_scope;
+pub mod projection;
 pub mod sd_jwt;
 
 pub use suiss_crypto::sig::{
