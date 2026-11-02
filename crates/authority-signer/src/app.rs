@@ -18,7 +18,21 @@ struct Entry {
     record: Key,
     declared: OperationalKey,
     signer: Option<Box<dyn Signer + Send>>,
+    sealed: Option<Vec<u8>>,
     excerpt: Option<Vec<u8>>,
+}
+
+/// One operational key as the vault keeps it (OP-143 m.4).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Saved {
+    /// Rotation record.
+    pub record: Key,
+    /// Declaration.
+    pub declared: OperationalKey,
+    /// Binding-signed excerpt, once published.
+    pub excerpt: Option<Vec<u8>>,
+    /// Sealed private material; gone once the key is dropped (crypto-shredding, OP-73).
+    pub sealed: Option<Vec<u8>>,
 }
 
 /// An artefact signature and the excerpt that declares its key.
@@ -99,10 +113,11 @@ impl Keyring {
                     valid_until,
                     jitter_permille,
                 } => {
-                    let Ok(signer) = factory.generate(self.template.operational_alg) else {
+                    let Ok(generated) = factory.generate(self.template.operational_alg) else {
                         round.outage = true;
                         continue;
                     };
+                    let signer = generated.signer;
                     let key = signer.public_key();
                     let record = Key {
                         kid: thumbprint(&key),
@@ -119,6 +134,7 @@ impl Keyring {
                         record,
                         declared,
                         signer: Some(signer),
+                        sealed: Some(generated.sealed),
                         excerpt: None,
                     });
                 }
@@ -143,6 +159,7 @@ impl Keyring {
                 e.record = r;
                 if e.record.state == State::Dropped {
                     e.signer = None;
+                    e.sealed = None;
                 }
             }
             round.applied.push(step);
@@ -176,6 +193,52 @@ impl Keyring {
         let m = metadata(&self.template, &self.declared_binding, published, now);
         let bytes = m.to_bytes().map_err(|_| SignerError::Encode)?;
         self.binding_sign(METADATA_CONTENT_TYPE, &bytes)
+    }
+
+    /// The keys as the vault keeps them.
+    #[must_use]
+    pub fn saved(&self) -> Vec<Saved> {
+        self.entries
+            .iter()
+            .map(|e| Saved {
+                record: e.record.clone(),
+                declared: e.declared.clone(),
+                excerpt: e.excerpt.clone(),
+                sealed: e.sealed.clone(),
+            })
+            .collect()
+    }
+
+    /// A keyring restored from the vault after a restart: sealed keys are loaded back and the
+    /// metadata is signed again at `now` (CR-23). A key that cannot be loaded no longer signs.
+    ///
+    /// # Errors
+    /// [`SignerError`] when the binding key cannot sign the metadata.
+    pub fn restore(
+        template: Template,
+        binding_signer: Box<dyn Signer + Send>,
+        policy: Policy,
+        saved: Vec<Saved>,
+        factory: &mut dyn KeyFactory,
+        now: u64,
+    ) -> Result<Self, SignerError> {
+        let mut ring = Self::new(template, binding_signer, policy);
+        for s in saved {
+            let signer = s
+                .sealed
+                .as_deref()
+                .and_then(|sealed| factory.load(s.declared.alg, sealed).ok())
+                .filter(|k| thumbprint(&k.public_key()) == s.record.kid);
+            ring.entries.push(Entry {
+                record: s.record,
+                declared: s.declared,
+                signer,
+                sealed: s.sealed,
+                excerpt: s.excerpt,
+            });
+        }
+        ring.metadata = Some(ring.sign_metadata(now)?);
+        Ok(ring)
     }
 
     /// The current binding-signed Domain Metadata.

@@ -2,9 +2,12 @@
 //! the binding-signed Domain Metadata and key excerpts that declare them, and artefact
 //! signatures (T20, CR-18 to CR-27, OP-143).
 
+pub mod adapters;
 pub mod app;
 pub mod domain;
 pub mod ports;
+pub mod protocol;
+pub mod service;
 
 /// Why the signer refused.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]

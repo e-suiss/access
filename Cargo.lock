@@ -38,6 +38,7 @@ dependencies = [
  "esuiss-access-kernel",
  "esuiss-crypto",
  "thiserror",
+ "tokio",
 ]
 
 [[package]]
@@ -128,6 +129,22 @@ dependencies = [
  "serde",
  "thiserror",
  "time",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "access-signer"
+version = "0.2.3"
+dependencies = [
+ "access-authority-signer",
+ "access-crypto",
+ "access-telemetry",
+ "esuiss-crypto",
+ "esuiss-sandbox",
+ "figment",
+ "serde",
+ "thiserror",
  "tokio",
  "tracing",
 ]

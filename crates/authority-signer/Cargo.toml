@@ -10,8 +10,13 @@ publish = false
 
 [dependencies]
 access-kernel = { workspace = true }
-suiss-crypto = { workspace = true, features = ["signer"] }
+suiss-crypto = { workspace = true, features = ["pkcs11", "aead"] }
 thiserror = { workspace = true }
+tokio = { workspace = true, features = ["net", "io-util", "rt"] }
+
+[dev-dependencies]
+suiss-crypto = { workspace = true, features = ["pkcs11", "aead", "testing"] }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 
 [lints]
 workspace = true

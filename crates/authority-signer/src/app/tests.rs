@@ -14,6 +14,7 @@ use suiss_crypto::sig::PureBackend;
 use suiss_crypto::signer::{SignError, SoftSigner};
 
 use super::*;
+use crate::ports::Generated;
 
 const MINUTE: u64 = 60_000;
 const HOUR: u64 = 60 * MINUTE;
@@ -24,12 +25,21 @@ struct Factory {
 }
 
 impl KeyFactory for Factory {
-    fn generate(&mut self, alg: Algorithm) -> Result<Box<dyn Signer + Send>, SignError> {
+    fn generate(&mut self, alg: Algorithm) -> Result<Generated, SignError> {
         if self.down {
             return Err(SignError::Key);
         }
         assert_eq!(alg, Algorithm::Ed25519);
-        Ok(Box::new(SoftSigner::generate_ed25519()?.0))
+        let (signer, doc) = SoftSigner::generate_ed25519()?;
+        Ok(Generated {
+            signer: Box::new(signer),
+            sealed: doc.expose().clone(),
+        })
+    }
+
+    fn load(&mut self, _: Algorithm, sealed: &[u8]) -> Result<Box<dyn Signer + Send>, SignError> {
+        let doc = suiss_crypto::secret::Secret::new(sealed.to_vec());
+        Ok(Box::new(SoftSigner::ed25519_from_pkcs8(&doc)?))
     }
 }
 
@@ -175,5 +185,42 @@ fn an_outage_delays_artefacts_after_the_window() {
     assert_eq!(
         ring.sign(KeyUsage::Receipt, RECEIPT, b"receipt", after),
         Err(SignerError::NoKey)
+    );
+}
+
+// CR-23, OP-143 m.4: a restarted signer loads its sealed keys back and signs on with the same
+// key; a dropped key's sealed material is gone
+#[test]
+fn a_restart_restores_the_keys() {
+    let (binding, binding_doc) = SoftSigner::generate_ed25519().unwrap();
+    let mut ring = Keyring::new(template(), Box::new(binding), Policy::AUTHORITY);
+    let mut factory = Factory { down: false };
+    let now = Policy::AUTHORITY.publish_lead_ms + 2 * MINUTE;
+    advance(&mut ring, &mut factory, 0, now);
+    let before = ring
+        .sign(KeyUsage::Receipt, RECEIPT, b"receipt", now)
+        .unwrap();
+    let saved = ring.saved();
+    let binding = SoftSigner::ed25519_from_pkcs8(&binding_doc).unwrap();
+    let mut restored = Keyring::restore(
+        template(),
+        Box::new(binding),
+        Policy::AUTHORITY,
+        saved,
+        &mut factory,
+        now + MINUTE,
+    )
+    .unwrap();
+    let after = restored
+        .sign(KeyUsage::Receipt, RECEIPT, b"receipt", now + MINUTE)
+        .unwrap();
+    assert_eq!(after.kid, before.kid);
+    verify(&restored, &after, now + MINUTE).unwrap();
+    advance(&mut restored, &mut factory, now + MINUTE, now + 100 * HOUR);
+    assert!(
+        restored
+            .saved()
+            .iter()
+            .any(|s| s.record.state == State::Dropped && s.sealed.is_none())
     );
 }

@@ -1,0 +1,24 @@
+[package]
+name = "access-signer"
+description = "Access authority signer process (CMP-22a): operational keys, Domain Metadata and artefact signatures over a Unix socket."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+access-authority-signer = { path = "../../crates/authority-signer" }
+access-crypto = { workspace = true }
+access-telemetry = { workspace = true }
+suiss-crypto = { workspace = true, features = ["pkcs11"] }
+suiss-sandbox = { workspace = true }
+figment = { workspace = true, features = ["env", "toml"] }
+serde = { workspace = true, features = ["derive", "std"] }
+thiserror = { workspace = true, features = ["std"] }
+tokio = { workspace = true, features = ["macros", "net", "rt-multi-thread", "time"] }
+tracing = { workspace = true, features = ["std"] }
+
+[lints]
+workspace = true
