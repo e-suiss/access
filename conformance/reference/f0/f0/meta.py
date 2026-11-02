@@ -33,10 +33,12 @@ from .codec import (
     same,
 )
 from .keyscope import check_cose_alg, check_public_key, thumbprint
+from .validity import VARIANT_CLASS
 
 
 OBJECT_CONTEXT = "access/object/v1"
 MAX_LINEAGE = 16
+CT1_CEILING_MS = 24 * 3_600 * 1_000
 NO_CATALOG = {}
 
 
@@ -197,6 +199,21 @@ def check_policy_content(value):
     }, {"requirements": check_requirement_map})
 
 
+def check_audience_id(value):
+    if not isinstance(value, str) or not 1 <= len(value.encode("utf-8")) <= 255:
+        refuse("meta-malformed")
+
+
+def check_projection_profile(value):
+    # L0-META-35
+    check_map(value, {
+        "class": check_text_in(*sorted(set(VARIANT_CLASS.values()))),
+        "variant": check_text_in(*sorted(VARIANT_CLASS)),
+    })
+    if VARIANT_CLASS[value["variant"]] != value["class"]:
+        refuse("meta-malformed")
+
+
 PAYLOADS = {
     "anchor_create": ({"scope": check_scope, "root": check_root}, {"root_terms": check_requirement_set}),
     "anchor_transfer": ({"anchor": check_id, "root": check_root, "disposition": check_disposition}, {}),
@@ -226,6 +243,11 @@ PAYLOADS = {
     "contribute": ({"target": check_digest, "class": check_ident}, {}),
     "authority_set_define": ({"name": check_ident, "authority": check_authority_set}, {}),
     "consumption_release": ({"exercise": check_digest, "grounds": check_list(check_id, nonempty=True)}, {}),
+    "projection_issue": ({
+        "bounds": check_canonical_authority,
+        "audience": check_list(check_audience_id, nonempty=True, is_set=True),
+        "profile": check_projection_profile,
+    }, {"max_staleness_ms": check_uint}),
 }
 
 
@@ -276,6 +298,12 @@ def as_set(items):
     return [unique[key] for key in sorted(unique)]
 
 
+def bounds_digest(bounds):
+    # L0-META-35
+    preimage = b"access/bounds/v1\x00" + encode(bounds)
+    return [HASH_ALG_SHA256, hashlib.sha256(preimage).digest()]
+
+
 def authority_set_digest(authority):
     # L0-META-33
     preimage = b"access/authority-set/v1\x00" + encode(authority)
@@ -286,11 +314,12 @@ def authority_set_digest(authority):
 
 
 class Apply:
-    def __init__(self, state, domain_id, exercise, pos, party, instance, basis, capacity):
+    def __init__(self, state, domain_id, exercise, pos, now, party, instance, basis, capacity):
         self.state = state
         self.domain_id = domain_id
         self.exercise = exercise
         self.pos = pos
+        self.now = now
         self.party = party
         self.instance = instance
         self.basis = basis
@@ -924,6 +953,66 @@ class Apply:
         self.effects.append((state_key("exercise", key), updated))
         return True
 
+    def projection_issue(self, body):
+        # L0-META-35
+        bounds = body["bounds"]
+        validity = bounds["constraints"]["validity"]
+        if "holding" in self.basis:
+            grant_id, holder, since = self.basis["holding"]
+            if holder != self.party:
+                refuse("meta-basis")
+            grant = self.live("grant", grant_id)
+            if not self.holds(grant) or grant["since"] != since:
+                refuse("meta-not-authorized")
+            chain, anchor_id = self.lineage(grant_id)
+            anchor = self.read("anchor", anchor_id)
+            if anchor is None:
+                refuse("meta-unknown")
+            basis = grant["content"]
+            parent = basis["authority"]
+            if (
+                "ended" in anchor
+                or any("ended" in above for _, above in chain)
+                or not any(same(c, self.capacity) for c in basis.get("agency", ["own"]))
+                or not authority_within(bounds["authority"], parent["authority"], NO_CATALOG)
+                or not window_within(validity, parent["constraints"]["validity"])
+                or not is_subset(parent["constraints"].get("while", []), bounds["constraints"].get("while", []))
+                or not is_subset(parent["requirements"], bounds["requirements"])
+            ):
+                refuse("meta-not-within")
+        elif "anchor" in self.basis:
+            _, anchor = self.basis_anchor()
+            self.require_root(anchor)
+            if self.capacity != "own" or not resource_in_scope(bounds["authority"]["resource"], anchor["scope"]):
+                refuse("meta-not-within")
+        else:
+            refuse("meta-basis")
+        if bounds["delegation"]:
+            refuse("meta-not-within")
+        for mandate_id in self.read("mandates", self.instance) or []:
+            mandate = self.read("mandate", mandate_id)
+            if "ended" in mandate:
+                continue
+            envelope = mandate["envelope"]
+            if (
+                not authority_within(bounds["authority"], envelope["authority"], NO_CATALOG)
+                or not window_within(validity, envelope["constraints"]["validity"])
+                or not is_subset(envelope.get("requirements", []), bounds["requirements"])
+            ):
+                refuse("meta-not-within")
+            break
+        horizon = validity[1]
+        if horizon < self.now or horizon - self.now > CT1_CEILING_MS:
+            refuse("meta-not-within")
+        self.write("projection", [HASH_ALG_SHA256, self.exercise], {
+            "holder": self.instance,
+            "basis": self.basis,
+            "bounds": bounds_digest(bounds),
+            "horizon": horizon,
+            "audience": body["audience"],
+        })
+        return False
+
     def lineage_holder(self, key):
         # L0-META-32
         parts = decode_canonical(key)
@@ -1015,13 +1104,13 @@ CT3_META = {
 CT3_QUORUM = 2
 
 
-def apply(state, domain_id, exercise, pos, party, instance, basis, capacity, payload):
+def apply(state, domain_id, exercise, pos, now, party, instance, basis, capacity, payload):
     """Returns (effects, requirements, expansion) or raises MetaError."""
     store = {key: decode_canonical(value) for key, value in state}
     name, body = decode_payload(payload)
     exercise_basis = decode_canonical(basis)
     check_exercise_basis(exercise_basis)
-    run = Apply(store, domain_id, exercise, pos, party, instance, exercise_basis, decode_canonical(capacity))
+    run = Apply(store, domain_id, exercise, pos, now, party, instance, exercise_basis, decode_canonical(capacity))
     expansion = getattr(run, name)(body)
     # §13.7.3, SEC26, OP-141 m.43
     if expansion and name in CT3_META and "anchor" in exercise_basis:

@@ -20,6 +20,7 @@ use crate::model::{
     AuthoritySet, CanonicalAuthority, ConstraintSet, EqValue, Id, RequirementTerm,
     ResourceSelector, SubjectSelector, Window,
 };
+use crate::validity::{CLASSES, ProfileClass, ProfileVariant, VARIANTS, word, word_of};
 use crate::verify::cose::PublicKey;
 use suiss_crypto::digest::context_digest as context_label;
 
@@ -305,9 +306,22 @@ pub enum Payload {
         /// The grounding Claims.
         grounds: BTreeSet<Id>,
     },
+    /// `projection_issue` (OP-143 m.7); the holder is the actor Instance.
+    ProjectionIssue {
+        /// What the projection allows; its validity ends at the horizon.
+        bounds: CanonicalAuthority,
+        /// The verifiers it is for.
+        audience: BTreeSet<String>,
+        /// Connectivity profile class.
+        class: ProfileClass,
+        /// Connectivity profile variant.
+        variant: ProfileVariant,
+        /// Δ for `bounded-staleness`.
+        max_staleness_ms: Option<u64>,
+    },
 }
 
-const NAMES: [&str; 26] = [
+const NAMES: [&str; 27] = [
     "anchor_create",
     "anchor_transfer",
     "anchor_amend",
@@ -334,6 +348,7 @@ const NAMES: [&str; 26] = [
     "contribute",
     "consumption_release",
     "authority_set_define",
+    "projection_issue",
 ];
 
 /// The Access-internal read actions: they change no authority state (§9.13.7, OP-141 m.39 (a)).
@@ -882,6 +897,27 @@ impl Canonical for Payload {
                     ("grounds", Some(ids_value(grounds))),
                 ]),
             ),
+            Self::ProjectionIssue {
+                bounds,
+                audience,
+                class,
+                variant,
+                max_staleness_ms,
+            } => (
+                "projection_issue",
+                map([
+                    ("bounds", Some(bounds.to_value())),
+                    ("audience", Some(texts_value(audience))),
+                    (
+                        "profile",
+                        Some(map([
+                            ("class", Some(word_of(*class, &CLASSES))),
+                            ("variant", Some(word_of(*variant, &VARIANTS))),
+                        ])),
+                    ),
+                    ("max_staleness_ms", max_staleness_ms.map(Value::Unsigned)),
+                ]),
+            ),
         };
         tagged(name, body)
     }
@@ -1009,10 +1045,39 @@ impl Canonical for Payload {
                 exercise: Digest::from_value(f.req("exercise")?).ok_or(ModelError::Shape)?,
                 grounds: set_of(f.req("grounds")?, true, id)?,
             },
+            "projection_issue" => {
+                let mut p = Fields::of(f.req("profile")?)?;
+                let class = word(p.req("class")?, &CLASSES)?;
+                let variant = word(p.req("variant")?, &VARIANTS)?;
+                p.done()?;
+                if variant.class() != class {
+                    return Err(ModelError::Range);
+                }
+                Self::ProjectionIssue {
+                    bounds: CanonicalAuthority::from_value(f.req("bounds")?)?,
+                    audience: set_of(f.req("audience")?, true, audience_id)?,
+                    class,
+                    variant,
+                    max_staleness_ms: f.opt("max_staleness_ms").map(uint).transpose()?,
+                }
+            }
             _ => return Err(ModelError::Unknown),
         };
         f.done()?;
         Ok(p)
+    }
+}
+
+fn texts_value(s: &BTreeSet<String>) -> Value {
+    set_value(s.iter().map(|t| Value::text(t)))
+}
+
+fn audience_id(v: &Value) -> Result<String, ModelError> {
+    let t = crate::codec::text(v)?;
+    if (1..=255).contains(&t.len()) {
+        Ok(String::from(t))
+    } else {
+        Err(ModelError::Range)
     }
 }
 
@@ -1245,6 +1310,8 @@ pub mod kind {
     pub const MANDATES: &str = "mandates";
     /// A named `AuthoritySet` (OP-141 m.32).
     pub const AUTHORITY_SET: &str = "authority_set";
+    /// A projection, keyed by the `ExerciseID` that issued it (OP-143 m.7).
+    pub const PROJECTION: &str = "projection";
 }
 
 /// Read access to the authority state at the evaluation position; the caller records every key
@@ -1925,6 +1992,8 @@ pub struct Context<'a> {
     pub exercise: Digest,
     /// Position the decision record will have.
     pub pos: u64,
+    /// Trusted time.
+    pub now: crate::model::TrustedTime,
     /// The actor.
     pub actor: Actor,
     /// The basis the Exercise names.
@@ -2778,6 +2847,24 @@ pub fn apply(ctx: &Context<'_>, payload: &Payload, view: &dyn View) -> Result<Ou
         Payload::ConsumptionRelease { exercise, grounds } => {
             release(view, &mut out, &actor, exercise, grounds)?;
         }
+        Payload::ProjectionIssue {
+            bounds, audience, ..
+        } => {
+            out.requirements = project(ctx, view, payload, bounds)?;
+            out.effects.push((
+                exercise_key(kind::PROJECTION, &ctx.exercise),
+                Some(map([
+                    ("holder", Some(actor.instance.to_value())),
+                    ("basis", Some(basis_value(&ctx.basis))),
+                    ("bounds", Some(bounds_digest(bounds).to_value())),
+                    (
+                        "horizon",
+                        Some(Value::Unsigned(bounds.constraints.validity.until)),
+                    ),
+                    ("audience", Some(texts_value(audience))),
+                ])),
+            ));
+        }
     }
     // §13.7.3, SEC26, OP-141 m.43
     if crate::tier::meta_tier(payload, out.expansion) == crate::tier::Tier::Ct3
@@ -2797,6 +2884,94 @@ pub fn apply(ctx: &Context<'_>, payload: &Payload, view: &dyn View) -> Result<Ou
     }
     out.effects = sorted(out.effects);
     Ok(out)
+}
+
+/// `SHA-256("access/bounds/v1" ‖ 0x00 ‖ dCBOR(canonical-authority))`, the bounds of a
+/// projection (L0-META-35).
+#[must_use]
+pub fn bounds_digest(bounds: &CanonicalAuthority) -> Digest {
+    let bytes = dcbor::encode(&bounds.to_value(), Limits::CEILING).unwrap_or_default();
+    context_label("access/bounds/v1", &bytes)
+}
+
+fn window_in(inner: &Window, outer: &Window) -> bool {
+    outer.from <= inner.from && inner.until <= outer.until
+}
+
+/// The basis and narrowing rules of `projection_issue`; returns the root requirements of an
+/// Anchor basis (OP-143 m.7, L0-META-35).
+fn project(
+    ctx: &Context<'_>,
+    view: &dyn View,
+    payload: &Payload,
+    bounds: &CanonicalAuthority,
+) -> Result<BTreeSet<RequirementTerm>, MetaError> {
+    let actor = ctx.actor;
+    let mut req = BTreeSet::new();
+    match ctx.basis {
+        ExerciseBasis::Holding(h) => {
+            if h.holder != actor.party {
+                return Err(MetaError::Basis);
+            }
+            let g: GrantState = read(view, kind::GRANT, &h.grant)?;
+            let g = live(g.ended, g)?;
+            if !holds(&g, &actor.party) || h.since != g.since {
+                return Err(MetaError::NotAuthorized);
+            }
+            let (anchor, chain) = lineage(view, &h.grant)?;
+            let a: AnchorState = read(view, kind::ANCHOR, &anchor)?;
+            let parent = &g.content.authority;
+            if a.ended.is_some()
+                || chain.iter().any(|(_, x)| x.ended.is_some())
+                || !g.content.agency.contains(&ctx.capacity)
+                || !subsumes(&bounds.authority, &parent.authority, ctx.catalog)
+                || !window_in(&bounds.constraints.validity, &parent.constraints.validity)
+                || !bounds
+                    .constraints
+                    .conditions
+                    .is_superset(&parent.constraints.conditions)
+                || !bounds.requirements.is_superset(&parent.requirements)
+            {
+                return Err(MetaError::NotWithin);
+            }
+        }
+        ExerciseBasis::Anchor(a) => {
+            let (anchor, r) = root_power(view, &a, &actor)?;
+            if ctx.capacity != Capacity::Own
+                || !within_scope(
+                    Some(&bounds.authority.resource),
+                    scope_selector(&anchor.scope).as_ref(),
+                )
+            {
+                return Err(MetaError::NotWithin);
+            }
+            req = r;
+        }
+        ExerciseBasis::Public(_) => return Err(MetaError::Basis),
+    }
+    if bounds.delegation.depth != 0 || bounds.delegation.downstream_holder_class.is_some() {
+        return Err(MetaError::NotWithin);
+    }
+    for m in ids(view, kind::MANDATES, &actor.instance)? {
+        let m: MandateState = read(view, kind::MANDATE, &m)?;
+        if m.ended.is_some() {
+            continue;
+        }
+        let e = &m.envelope;
+        if !subsumes(&bounds.authority, &e.authority, ctx.catalog)
+            || !window_in(&bounds.constraints.validity, &e.constraints.validity)
+            || !bounds.requirements.is_superset(&e.requirements)
+        {
+            return Err(MetaError::NotWithin);
+        }
+        break;
+    }
+    let horizon = bounds.constraints.validity.until;
+    let ceiling = crate::tier::validity_ceiling(crate::tier::meta_tier(payload, false));
+    if horizon < ctx.now || horizon.saturating_sub(ctx.now) > ceiling {
+        return Err(MetaError::NotWithin);
+    }
+    Ok(req)
 }
 
 /// A pinned named `AuthoritySet` version: name, version and the digest of its authority-set

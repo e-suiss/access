@@ -42,6 +42,7 @@ def run_meta_apply(case, document):
             bytes.fromhex(case["domain_id"]),
             bytes.fromhex(case["exercise"]),
             case["pos"],
+            case["now"],
             bytes.fromhex(case["party"]),
             bytes.fromhex(case["instance"]),
             bytes.fromhex(case["basis"]),

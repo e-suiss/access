@@ -38,7 +38,8 @@ pub const fn validity_ceiling(tier: Tier) -> u64 {
 #[must_use]
 pub const fn meta_tier(payload: &Payload, expansion: bool) -> Tier {
     match payload {
-        Payload::Contribute { .. } => Tier::Ct1,
+        // OP-143 m.7
+        Payload::Contribute { .. } | Payload::ProjectionIssue { .. } => Tier::Ct1,
         _ if !expansion => Tier::Ct1,
         Payload::AnchorCreate { .. }
         | Payload::AnchorTransfer { .. }

@@ -104,6 +104,7 @@ fn shop_anchor() -> Id {
 struct Run {
     state: Mem,
     pos: u64,
+    now: u64,
     catalog: Catalog,
 }
 
@@ -112,6 +113,7 @@ impl Run {
         Self {
             state: genesis(),
             pos: 1,
+            now: 0,
             catalog: Catalog::default(),
         }
     }
@@ -128,6 +130,7 @@ impl Run {
             domain: DOMAIN,
             exercise,
             pos: self.pos,
+            now: self.now,
             actor: Actor { party, instance },
             basis,
             capacity: Capacity::Own,
@@ -162,6 +165,16 @@ fn issue_named(
         agency: BTreeSet::from([Capacity::Own]),
         named,
     })
+}
+
+fn projection(prefix: &[&str], depth: u64, until: u64) -> Payload {
+    Payload::ProjectionIssue {
+        bounds: authority(prefix, depth, until),
+        audience: BTreeSet::from(["pep.shop.example".to_string()]),
+        class: crate::validity::ProfileClass::Intermittent,
+        variant: crate::validity::ProfileVariant::BoundedStaleness,
+        max_staleness_ms: Some(60_000),
+    }
 }
 
 // C11, C15, INV-3, OP-141 m.3: the root grants, a holder delegates only within its holding
@@ -880,6 +893,66 @@ fn a_group_has_one_membership_issuer() {
     r.act(ROOT, ROOT, meta, &selection(BOB, "guests")).unwrap();
 }
 
+// OP-143 m.7, L0-META-35: a projection records itself, is CT1 and ends within a day
+#[test]
+fn projection_records_and_caps_the_horizon() {
+    let mut r = Run::new();
+    let a = shop_anchor();
+    let (ex, _) = r
+        .act(
+            ROOT,
+            ROOT,
+            ExerciseBasis::Anchor(a),
+            &Payload::GrantIssue(GrantContent {
+                basis: GrantBasis::Anchor(a),
+                holder: SubjectSelector::Party(ALICE),
+                authority: authority(&["eu"], 0, 100_000_000),
+                agency: BTreeSet::from([Capacity::Own]),
+                named: None,
+            }),
+        )
+        .unwrap();
+    let grant = object_id(&ex, kind::GRANT, 0);
+    let holding = ExerciseBasis::Holding(HoldingRef {
+        grant,
+        holder: ALICE,
+        since: r.grant(&grant).since,
+    });
+    let p = projection(&["eu"], 0, 100_000_000);
+    r.now = 13_599_999;
+    assert_eq!(r.act(ALICE, ALICE, holding, &p), Err(MetaError::NotWithin));
+    r.now = 100_000_001;
+    assert_eq!(r.act(ALICE, ALICE, holding, &p), Err(MetaError::NotWithin));
+    r.now = 13_600_000;
+    let (ex, out) = r.act(ALICE, ALICE, holding, &p).unwrap();
+    assert!(!out.expansion);
+    assert_eq!(
+        crate::tier::meta_tier(&p, out.expansion),
+        crate::tier::Tier::Ct1
+    );
+    assert_eq!(out.effects.len(), 1);
+    let stored = r.state.get(&exercise_key(kind::PROJECTION, &ex)).unwrap();
+    assert_eq!(stored.get("holder"), Some(&ALICE.to_value()));
+    assert_eq!(stored.get("horizon"), Some(&Value::Unsigned(100_000_000)));
+    assert_eq!(
+        stored.get("bounds"),
+        Some(&bounds_digest(&authority(&["eu"], 0, 100_000_000)).to_value())
+    );
+    assert_eq!(Payload::from_value(&p.to_value()), Ok(p.clone()));
+    let mut bad = p.to_value();
+    if let Value::Map(m) = &mut bad
+        && let Some((_, Value::Map(body))) = m.first_mut()
+        && let Some((_, Value::Map(profile))) =
+            body.iter_mut().find(|(k, _)| k == &Value::text("profile"))
+        && let Some((_, v)) = profile
+            .iter_mut()
+            .find(|(k, _)| k == &Value::text("variant"))
+    {
+        *v = Value::text("online-strict");
+    }
+    assert_eq!(Payload::from_value(&bad), Err(ModelError::Range));
+}
+
 struct Recorder {
     run: Run,
     cases: Vec<String>,
@@ -909,12 +982,13 @@ impl Recorder {
             .collect();
         let exercise = exercise_id(&DOMAIN, &self.run.pos.to_be_bytes().repeat(2)).unwrap();
         let head = format!(
-            "{{\"id\": \"{id}\", {}, \"state\": [{}], \"domain_id\": \"{}\", \"exercise\": \"{}\", \"pos\": {}, \"party\": \"{}\", \"instance\": \"{}\", \"basis\": \"{}\", \"capacity\": \"{}\", \"payload\": \"{}\"",
+            "{{\"id\": \"{id}\", {}, \"state\": [{}], \"domain_id\": \"{}\", \"exercise\": \"{}\", \"pos\": {}, \"now\": {}, \"party\": \"{}\", \"instance\": \"{}\", \"basis\": \"{}\", \"capacity\": \"{}\", \"payload\": \"{}\"",
             field(rules),
             state.join(", "),
             hex(&DOMAIN.0),
             hex(&exercise.0),
             self.run.pos,
+            self.run.now,
             hex(&actor.0.0),
             hex(&actor.1.0),
             cbor(&basis_value(&basis)),
@@ -1712,6 +1786,136 @@ fn meta_vectors_match() {
         (CAROL, SPENDER),
         meta,
         &release_of(spending, &[22]),
+    );
+    // OP-143 m.7: projections
+    r.run.now = 1_000;
+    let held = |r: &mut Recorder, holder: Id, depth: u64, until: u64| {
+        let (ex, _) = r
+            .run
+            .act(
+                ROOT,
+                ROOT,
+                meta,
+                &Payload::GrantIssue(GrantContent {
+                    basis: GrantBasis::Anchor(meta_anchor(&DOMAIN)),
+                    holder: SubjectSelector::Party(holder),
+                    authority: authority(&["eu"], depth, until),
+                    agency: BTreeSet::from([Capacity::Own]),
+                    named: None,
+                }),
+            )
+            .unwrap();
+        let g = object_id(&ex, kind::GRANT, 0);
+        HoldingRef {
+            grant: g,
+            holder,
+            since: r.run.grant(&g).since,
+        }
+    };
+    let wide = held(&mut r, CAROL, 2, 200_000_000);
+    let leaf = held(&mut r, CAROL, 0, 2_000_000);
+    let bobs = held(&mut r, BOB, 1, 50_000_000);
+    let bob_instance = object_id(
+        &exercise_id(&DOMAIN, &r.run.pos.to_be_bytes().repeat(2)).unwrap(),
+        kind::INSTANCE,
+        0,
+    );
+    r.run
+        .act(
+            BOB,
+            bob_instance,
+            public,
+            &Payload::InstanceCreate {
+                party: BOB,
+                key: key_of(9),
+                mandate: Some(MandateEnvelope {
+                    authority: authority(&["eu", "fr"], 0, 10_000_000).authority,
+                    constraints: authority(&["eu", "fr"], 0, 10_000_000).constraints,
+                    requirements: BTreeSet::new(),
+                    pin: None,
+                }),
+            },
+        )
+        .unwrap();
+    r.step(
+        "projection-from-holding",
+        &["L0-META-5", "L0-META-35"],
+        (CAROL, CAROL),
+        ExerciseBasis::Holding(wide),
+        &projection(&["eu", "de"], 0, 3_600_000),
+    );
+    r.step(
+        "projection-from-anchor-root",
+        &["L0-META-10", "L0-META-35"],
+        (ROOT, ROOT),
+        meta,
+        &projection(&["eu"], 0, 3_600_000),
+    );
+    r.step(
+        "projection-from-leaf",
+        &["L0-META-35"],
+        (CAROL, CAROL),
+        ExerciseBasis::Holding(leaf),
+        &projection(&["eu"], 0, 1_500_000),
+    );
+    r.step(
+        "projection-outside-basis",
+        &["L0-META-35"],
+        (CAROL, CAROL),
+        ExerciseBasis::Holding(wide),
+        &projection(&[], 0, 3_600_000),
+    );
+    r.step(
+        "projection-window-longer",
+        &["L0-META-35"],
+        (CAROL, CAROL),
+        ExerciseBasis::Holding(leaf),
+        &projection(&["eu"], 0, 2_500_000),
+    );
+    r.step(
+        "projection-horizon-beyond-day",
+        &["L0-META-35"],
+        (CAROL, CAROL),
+        ExerciseBasis::Holding(wide),
+        &projection(&["eu"], 0, 100_000_000),
+    );
+    r.step(
+        "projection-delegable",
+        &["L0-META-35"],
+        (CAROL, CAROL),
+        ExerciseBasis::Holding(wide),
+        &projection(&["eu"], 1, 3_600_000),
+    );
+    r.step(
+        "projection-within-mandate",
+        &["L0-META-35"],
+        (BOB, bob_instance),
+        ExerciseBasis::Holding(bobs),
+        &projection(&["eu", "fr"], 0, 5_000_000),
+    );
+    r.step(
+        "projection-outside-mandate",
+        &["L0-META-35"],
+        (BOB, bob_instance),
+        ExerciseBasis::Holding(bobs),
+        &projection(&["eu", "de"], 0, 5_000_000),
+    );
+    r.step(
+        "projection-grant-not-held",
+        &["L0-META-35"],
+        (CAROL, CAROL),
+        ExerciseBasis::Holding(HoldingRef {
+            holder: CAROL,
+            ..bobs
+        }),
+        &projection(&["eu"], 0, 3_600_000),
+    );
+    r.step(
+        "projection-someone-elses-holding",
+        &["L0-META-13", "L0-META-35"],
+        (CAROL, CAROL),
+        ExerciseBasis::Holding(bobs),
+        &projection(&["eu"], 0, 3_600_000),
     );
     r.step(
         "party-depart",

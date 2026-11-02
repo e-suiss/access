@@ -118,13 +118,13 @@ pub struct ValidityContract {
     pub must_understand: BTreeSet<String>,
 }
 
-const CLASSES: [(&str, ProfileClass); 4] = [
+pub(crate) const CLASSES: [(&str, ProfileClass); 4] = [
     ("online", ProfileClass::Online),
     ("intermittent", ProfileClass::Intermittent),
     ("offline", ProfileClass::Offline),
     ("long-running", ProfileClass::LongRunning),
 ];
-const VARIANTS: [(&str, ProfileVariant); 5] = [
+pub(crate) const VARIANTS: [(&str, ProfileVariant); 5] = [
     ("online-strict", ProfileVariant::OnlineStrict),
     ("bounded-staleness", ProfileVariant::BoundedStaleness),
     (
@@ -138,7 +138,7 @@ const VARIANTS: [(&str, ProfileVariant); 5] = [
     ),
 ];
 
-fn word<T: Copy>(v: &Value, table: &[(&str, T)]) -> Result<T, ModelError> {
+pub(crate) fn word<T: Copy>(v: &Value, table: &[(&str, T)]) -> Result<T, ModelError> {
     let t = text(v)?;
     table
         .iter()
@@ -147,7 +147,7 @@ fn word<T: Copy>(v: &Value, table: &[(&str, T)]) -> Result<T, ModelError> {
         .ok_or(ModelError::Unknown)
 }
 
-fn word_of<T: Copy + PartialEq>(x: T, table: &[(&'static str, T)]) -> Value {
+pub(crate) fn word_of<T: Copy + PartialEq>(x: T, table: &[(&'static str, T)]) -> Value {
     Value::text(table.iter().find(|(_, y)| *y == x).map_or("", |(k, _)| k))
 }
 

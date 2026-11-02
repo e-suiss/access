@@ -648,6 +648,15 @@ meta-payload =
   / { contribute: { target: digest, class: ident } }
   / { consumption_release: { exercise: digest, grounds: [+ id] } }
   / { authority_set_define: { name: ident, authority: authority-set } }
+  / { projection_issue: { bounds: canonical-authority, audience: [+ tstr .size (1..255)], profile: projection-profile, ? max_staleness_ms: uint } }
+
+; The connectivity profile a projection is issued for; the variant belongs to the class as in
+; validity-contract (OP-143 m.7).
+projection-profile = {
+  class: "online" / "intermittent" / "offline" / "long-running",
+  variant: "online-strict" / "bounded-staleness" / "revalidate-on-reconnect"
+         / "checkpointed-offline" / "checkpoint-continuation",
+}
 
 ; ---------------------------------------------------------------- genesis (C4, §5.2, OP-141)
 
@@ -706,6 +715,9 @@ claim-state = {
 ; OP-141 m.32: dCBOR(["authority_set", name]) holds the latest version, and
 ; dCBOR(["authority_set", name, version]) one version.
 authority-set-state = { authority: authority-set, since: uint }
+; OP-143 m.7: dCBOR(["projection", ExerciseID]); `bounds` is the digest of the payload's bounds
+; under "access/bounds/v1" and `horizon` the end of their validity.
+projection-state = { holder: instance-ref, basis: exercise-basis, bounds: digest, horizon: trusted-time, audience: [+ tstr .size (1..255)] }
 
 exercise-draw = { key: bstr, drawn: uint, released: uint, ? unit: unit }
 exercise-state = {
