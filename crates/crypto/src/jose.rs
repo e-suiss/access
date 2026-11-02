@@ -1,6 +1,8 @@
 //! JOSE signature production (CR-5, CR-6 c, OP-5): compact JWS with a protected header of
-//! exactly `alg`, `kid` and `typ`, and public JWKs. Verification is the Kernel's
-//! (`verify::jws`).
+//! exactly `alg`, `kid` and `typ` (`alg` and `typ` for a key binding JWT), and public JWKs.
+//! Verification is the Kernel's (`verify::jws`).
+
+pub mod output;
 
 use access_kernel::json::{self, Json, b64url_encode};
 use access_kernel::verify::jws::MAX_PAYLOAD;
@@ -109,6 +111,28 @@ pub fn sign_compact(
     typ: &str,
     payload: &[u8],
 ) -> Result<String, JoseError> {
+    sign(signer, Some(kid), typ, payload)
+}
+
+/// A compact JWS whose protected header is exactly `{"alg","typ"}`: a key binding JWT, which
+/// is verified with the key the issuer named (RFC 9901 §4.3, L0-SIG-52).
+///
+/// # Errors
+/// [`JoseError`].
+pub fn sign_compact_unkeyed(
+    signer: &dyn Signer,
+    typ: &str,
+    payload: &[u8],
+) -> Result<String, JoseError> {
+    sign(signer, None, typ, payload)
+}
+
+fn sign(
+    signer: &dyn Signer,
+    kid: Option<&[u8; 32]>,
+    typ: &str,
+    payload: &[u8],
+) -> Result<String, JoseError> {
     if !typ_ok(typ) {
         return Err(JoseError::Type);
     }
@@ -124,11 +148,14 @@ pub fn sign_compact(
     if !consistent {
         return Err(JoseError::Key);
     }
-    let header = format!(
-        r#"{{"alg":"{}","kid":"{}","typ":"{typ}"}}"#,
-        alg.name(),
-        b64url_encode(kid)
-    );
+    let header = match kid {
+        Some(kid) => format!(
+            r#"{{"alg":"{}","kid":"{}","typ":"{typ}"}}"#,
+            alg.name(),
+            b64url_encode(kid)
+        ),
+        None => format!(r#"{{"alg":"{}","typ":"{typ}"}}"#, alg.name()),
+    };
     let mut out = b64url_encode(header.as_bytes());
     out.push('.');
     out.push_str(&b64url_encode(payload));
@@ -137,6 +164,28 @@ pub fn sign_compact(
     out.push('.');
     out.push_str(&b64url_encode(&signature));
     Ok(out)
+}
+
+/// The RFC 7638 members of `key`'s public JWK, for `cnf.jwk` (RFC 7800).
+///
+/// # Errors
+/// [`JoseError::Key`].
+pub fn confirmation_jwk(key: &PublicKey) -> Result<Json, JoseError> {
+    let member = |name: &str, value: String| (String::from(name), Json::Str(value));
+    if let PublicKey::Ed25519(x) = key {
+        return Ok(Json::Object(vec![
+            member("crv", String::from("Ed25519")),
+            member("kty", String::from("OKP")),
+            member("x", b64url_encode(x)),
+        ]));
+    }
+    let (x, y) = coordinates(key)?;
+    Ok(Json::Object(vec![
+        member("crv", String::from("P-256")),
+        member("kty", String::from("EC")),
+        member("x", b64url_encode(x)),
+        member("y", b64url_encode(y)),
+    ]))
 }
 
 /// The public JWK of `key` with its `kid`, `alg` and `use: "sig"`: EC P-256 or OKP Ed25519
