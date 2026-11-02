@@ -133,6 +133,7 @@ fn a_claim_that_is_not_the_issuers_is_refused() {
 // L2-CLM-3
 #[test]
 fn an_acceptance_admits_a_claim() {
+    // INV-15
     let s = statement();
     assert_eq!(disposition(&s, &[gate()], 2_000), Disposition::Admit);
     assert_eq!(disposition(&s, &[], 2_000), Disposition::SourceNotAccepted);
@@ -440,6 +441,7 @@ fn quota_and_signing_cutoff() {
 // OP-141 m.21 (d): an amend that only narrows is not expansion
 #[test]
 fn narrowing_an_acceptance() {
+    // SI-18
     let old = gate();
     let narrower = [
         Gate {

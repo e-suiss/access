@@ -160,7 +160,7 @@ scope = "all"
 phrases = ["agent stopped", "stops agents", "stops the agent", "stops your agents", "stop agents instantly", "halts agents", "kill switch"]
 negation = true
 sources = ["§8.10", "§13.8", "§18.2", "B15", "EI-11", "HL-13"]
-rows = ["N-5"]
+rows = ["N-5", "HL-13", "EI-11"]
 honest = "Authority revoked. Agent: running / paused (confirmed) / unknown."
 
 [[claim]]
@@ -169,7 +169,7 @@ scope = "all"
 phrases = ["exactly-once execution", "exactly once execution", "guarantees the action happened", "guarantees the effect", "exactly-once effects"]
 negation = true
 sources = ["§8.10", "§13.8", "must-never #10", "INV-18"]
-rows = ["N-5"]
+rows = ["N-5", "INV-18", "MUST-NEVER-10"]
 honest = "Allowed · Owner: reported done / unknown."
 
 [[claim]]

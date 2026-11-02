@@ -6,7 +6,6 @@ family = "G"
 section = "13.4"
 status = "canonical"
 class = "BS"
-stage = 3
 title = "Positive authority originates only via meta-Exercise in Anchor lineage"
 tests = []
 
@@ -16,7 +15,6 @@ family = "G"
 section = "13.4"
 status = "canonical"
 class = "BS"
-stage = 3
 title = "Non-amplification: child within parent, projection within source"
 tests = []
 
@@ -26,7 +24,6 @@ family = "G"
 section = "13.4"
 status = "canonical"
 class = "BS"
-stage = 3
 title = "Every Exercise draws from all lineage budgets; units consumed at most once"
 tests = []
 
@@ -36,7 +33,6 @@ family = "G"
 section = "13.4"
 status = "canonical"
 class = "BS"
-stage = 3
 title = "Revocation denies every later online commit, continue or projection"
 tests = []
 
@@ -46,7 +42,6 @@ family = "G"
 section = "13.4"
 status = "canonical"
 class = "BS"
-stage = 3
 title = "Invalidity is terminal and cascading; nothing revives"
 tests = []
 
@@ -56,7 +51,6 @@ family = "G"
 section = "13.4"
 status = "canonical"
 class = "BS"
-stage = 3
 title = "Restrictions only narrow; removing or loosening one is widening"
 tests = []
 
@@ -66,7 +60,6 @@ family = "G"
 section = "13.4"
 status = "canonical"
 class = "BS"
-stage = 3
 title = "A Claim is a decision input only within its Acceptance use"
 tests = []
 
@@ -76,7 +69,6 @@ family = "G"
 section = "13.4"
 status = "canonical"
 class = "BS"
-stage = 3
 title = "Issuer compromise yields only the declared effect of its use"
 tests = []
 
@@ -86,7 +78,6 @@ family = "G"
 section = "13.4"
 status = "canonical"
 class = "BS"
-stage = 3
 title = "Ingest-time cutoff narrows and terminally closes dependent episodes"
 tests = []
 
@@ -96,7 +87,7 @@ family = "G"
 section = "13.4"
 status = "canonical"
 class = "BS"
-stage = 3
+stage = 4
 title = "Foreign authority only via foreign Acceptance and bridging ceiling"
 tests = []
 
@@ -106,7 +97,6 @@ family = "G"
 section = "13.4"
 status = "canonical"
 class = "BS"
-stage = 3
 title = "Unaccepted schema versions or mappings never change Grant scope"
 tests = []
 
@@ -116,7 +106,6 @@ family = "G"
 section = "13.4"
 status = "canonical"
 class = "BS"
-stage = 3
 title = "Approval is a single-use contribution Exercise bound to exact digest"
 tests = []
 
@@ -126,7 +115,6 @@ family = "G"
 section = "13.4"
 status = "canonical"
 class = "BS"
-stage = 3
 title = "Approved digest equals the Exercise's surface-independent intent digest"
 tests = []
 
@@ -136,7 +124,6 @@ family = "G"
 section = "13.4"
 status = "canonical"
 class = "BS"
-stage = 3
 title = "Actor attribution only via actor Instance KeyBinding-signed AIS"
 tests = []
 
@@ -146,7 +133,6 @@ family = "G"
 section = "13.4"
 status = "canonical"
 class = "BS"
-stage = 3
 title = "Capacity lies within basis Grant agency; Anonymous holds nothing"
 tests = []
 
@@ -156,7 +142,6 @@ family = "G"
 section = "13.4"
 status = "canonical"
 class = "BS"
-stage = 3
 title = "Access decisions are never UNKNOWN; protocol errors produce no effect"
 tests = []
 
@@ -166,7 +151,6 @@ family = "G"
 section = "13.4"
 status = "canonical"
 class = "BS"
-stage = 1
 title = "Same records and inputs yield same decision and consumption"
 tests = []
 
@@ -186,7 +170,6 @@ family = "G"
 section = "13.4"
 status = "canonical"
 class = "BS"
-stage = 3
 title = "Events, event loss or reordering never widen authority"
 tests = []
 
@@ -196,7 +179,6 @@ family = "G"
 section = "13.4"
 status = "canonical"
 class = "BS"
-stage = 1
 title = "Must-understand fails closed; downgrade counts as widening"
 tests = []
 
@@ -216,7 +198,6 @@ family = "G"
 section = "13.4"
 status = "canonical"
 class = "BS"
-stage = 3
 title = "Authority cannot be backdated"
 tests = []
 
@@ -226,7 +207,6 @@ family = "G"
 section = "13.4"
 status = "canonical"
 class = "BS"
-stage = 2
 title = "Record existence, attribution, lineage, digest and time are undeletable"
 tests = []
 
@@ -236,7 +216,6 @@ family = "G"
 section = "13.4"
 status = "canonical"
 class = "BS"
-stage = 3
 title = "First party, hosting, custody or operator carry no special authority"
 tests = []
 
@@ -255,7 +234,6 @@ family = "G"
 section = "13.4"
 status = "canonical"
 class = "BS"
-stage = 3
 title = "Batches are not atomic; each item is its own Exercise"
 tests = []
 
@@ -265,7 +243,6 @@ family = "G"
 section = "13.4"
 status = "canonical"
 class = "BS"
-stage = 3
 title = "Explanations, search and events never exceed viewer authority"
 tests = []
 
@@ -275,7 +252,7 @@ family = "G"
 section = "13.4"
 status = "canonical"
 class = "BS"
-stage = 3
+stage = 13
 title = "Consequential reads and exports are recorded attributable Exercises"
 tests = []
 
@@ -305,7 +282,6 @@ family = "G"
 section = "13.4"
 status = "canonical"
 class = "BS"
-stage = 3
 title = "Revocation is not stop; continuation DENY is semantic"
 tests = []
 
@@ -335,7 +311,6 @@ family = "G"
 section = "13.4"
 status = "canonical"
 class = "BS"
-stage = 2
 title = "Record corruption never alters log content; identity is commitment"
 tests = []
 
@@ -345,7 +320,6 @@ family = "G"
 section = "13.4"
 status = "canonical"
 class = "BS"
-stage = 1
 title = "Artifacts signed with another domain's operational key are rejected"
 tests = []
 
@@ -355,7 +329,7 @@ family = "G"
 section = "13.4"
 status = "canonical"
 class = "BS"
-stage = 3
+stage = 6
 title = "Ambiguous issuer order disqualifies; stale Claims open no episode"
 tests = []
 
@@ -365,7 +339,6 @@ family = "G"
 section = "13.4"
 status = "canonical"
 class = "BS"
-stage = 3
 title = "No implicit leakage; position identifiers opaque to sub-audit viewers"
 tests = []
 
@@ -375,7 +348,6 @@ family = "G"
 section = "13.4"
 status = "canonical"
 class = "BS"
-stage = 0
 title = "Spec wins over implementation on divergence"
 tests = [
   "xtask/src/catalog.rs::g38_ti_rt12_regeneration_follows_the_spec_and_keeps_curation",
@@ -397,7 +369,6 @@ family = "G"
 section = "13.4"
 status = "canonical"
 class = "BS"
-stage = 2
 title = "Retry with same nonce never creates a duplicate Exercise"
 tests = []
 
@@ -407,7 +378,6 @@ family = "G"
 section = "13.4"
 status = "canonical"
 class = "BS"
-stage = 3
 title = "No ALLOW without commit"
 tests = []
 
@@ -437,7 +407,7 @@ family = "G"
 section = "13.4"
 status = "canonical"
 class = "BS"
-stage = 3
+stage = 6
 title = "Over-quota Claim bursts open no episodes; narrowing prioritized"
 tests = []
 
@@ -447,7 +417,7 @@ family = "G"
 section = "13.4"
 status = "canonical"
 class = "BS"
-stage = 3
+stage = 6
 title = "Identity plane outputs are only Claims; Grant is sole positive source"
 tests = []
 
@@ -457,7 +427,7 @@ family = "G"
 section = "13.4"
 status = "canonical"
 class = "BS"
-stage = 1
+stage = 4
 title = "Authority artifacts valid only with domain-bound operational or binding key"
 tests = []
 
@@ -467,7 +437,6 @@ family = "G"
 section = "13.4"
 status = "canonical"
 class = "BS"
-stage = 1
 title = "DomainID is must-understand; cross-domain signed keys rejected"
 tests = []
 
@@ -477,7 +446,7 @@ family = "G"
 section = "13.4"
 status = "canonical"
 class = "BS"
-stage = 3
+stage = 5
 title = "No error state on decision path yields ALLOW or new token"
 tests = []
 
@@ -507,7 +476,7 @@ family = "G"
 section = "13.4"
 status = "canonical"
 class = "BS"
-stage = 3
+stage = 13
 title = "authz_epoch cache is advisory and never a widening source"
 tests = []
 
@@ -547,7 +516,6 @@ family = "G"
 section = "13.4"
 status = "canonical"
 class = "BS"
-stage = 1
 title = "Algorithm allowlist from metadata; none and JWS EdDSA rejected"
 tests = []
 
@@ -557,7 +525,6 @@ family = "G"
 section = "13.4"
 status = "canonical"
 class = "BS"
-stage = 1
 title = "Arithmetic overflow in authority evaluation yields DENY"
 tests = []
 
@@ -577,7 +544,7 @@ family = "G"
 section = "13.4"
 status = "canonical"
 class = "BS"
-stage = 3
+stage = 4
 title = "No splicing of delegation chains from two valid tokens"
 tests = []
 
@@ -597,7 +564,6 @@ family = "G"
 section = "13.4"
 status = "canonical"
 class = "BS"
-stage = 1
 title = "Non-canonical CBOR, signatures or oversized input rejected"
 tests = []
 
@@ -617,7 +583,6 @@ family = "G"
 section = "13.4"
 status = "canonical"
 class = "BS"
-stage = 3
 title = "Unauthorized requesters get identical responses for existing and nonexistent"
 tests = []
 
@@ -767,7 +732,7 @@ family = "U"
 section = "13.4"
 status = "canonical"
 class = "UDC"
-stage = 1
+stage = 13
 title = "Detection of wrong provider decisions"
 tests = []
 
@@ -807,7 +772,6 @@ family = "U"
 section = "13.4"
 status = "canonical"
 class = "UDC"
-stage = 3
 title = "Approvers are distinct people, devices and surfaces"
 tests = []
 
@@ -866,7 +830,6 @@ family = "U"
 section = "13.4"
 status = "canonical"
 class = "UDC"
-stage = 2
 title = "Central PEP replay yields a single effect"
 tests = []
 
@@ -926,7 +889,6 @@ family = "U"
 section = "13.4"
 status = "canonical"
 class = "UDC"
-stage = 2
 title = "Time-bound terms do not drift with clock jumps"
 tests = []
 
@@ -936,7 +898,6 @@ family = "U"
 section = "13.4"
 status = "canonical"
 class = "UDC"
-stage = 2
 title = "No decisions on corrupted rows after silent corruption is detected"
 tests = []
 
@@ -946,7 +907,6 @@ family = "U"
 section = "13.4"
 status = "canonical"
 class = "UDC"
-stage = 3
 title = "Timed-out result fixed at end of intent validity window"
 tests = []
 
@@ -976,7 +936,6 @@ family = "U"
 section = "13.4"
 status = "canonical"
 class = "UDC"
-stage = 3
 title = "Bulk meta-Exercise does not lock the domain"
 tests = []
 
@@ -1026,7 +985,7 @@ family = "U"
 section = "13.4"
 status = "canonical"
 class = "UDC"
-stage = 3
+stage = 5
 title = "Pre-signed identity tokens remain valid within lifetime during backend outage"
 tests = []
 
@@ -1086,7 +1045,6 @@ family = "U"
 section = "13.4"
 status = "canonical"
 class = "UDC"
-stage = 1
 title = "Secret comparisons are constant-time"
 tests = []
 
@@ -1116,7 +1074,6 @@ family = "U"
 section = "13.4"
 status = "canonical"
 class = "UDC"
-stage = 1
 title = "Parser resource use bounded by input size"
 tests = []
 
@@ -1145,7 +1102,6 @@ family = "U"
 section = "13.4"
 status = "canonical"
 class = "UDC"
-stage = 2
 title = "Acknowledged security events are never lost"
 tests = []
 
@@ -1225,7 +1181,6 @@ family = "U"
 section = "13.4"
 status = "canonical"
 class = "UDC"
-stage = 2
 title = "Database queries without domain or tenant scope cannot compile or run"
 tests = []
 
@@ -1245,7 +1200,7 @@ family = "U"
 section = "13.4"
 status = "canonical"
 class = "UDC"
-stage = 3
+stage = 13
 title = "Advisory cache staleness bounded and never yields ALLOW"
 tests = []
 
@@ -1335,7 +1290,6 @@ family = "U"
 section = "13.4"
 status = "canonical"
 class = "UDC"
-stage = 2
 title = "Detection of identity audit log changes before published checkpoint"
 tests = []
 
@@ -2009,7 +1963,7 @@ family = "HL"
 section = "13.5"
 status = "canonical"
 class = "NG"
-stage = 1
+stage = 14
 title = "Correlated breach via shared HSM partition or cross-domain key acceptance"
 tests = []
 
@@ -2056,7 +2010,6 @@ family = "HL"
 section = "13.5"
 status = "canonical"
 class = "PU"
-stage = 3
 title = "Revocation does not stop an already running effect"
 tests = []
 
@@ -2243,7 +2196,6 @@ family = "HL"
 section = "13.5"
 status = "canonical"
 class = "NG"
-stage = 2
 title = "Postgres superuser and RLS-exempt roles escape DB-level protections"
 tests = []
 
@@ -2380,7 +2332,6 @@ family = "DL"
 section = "13.1"
 status = "canonical"
 class = "NG"
-stage = 3
 title = "Decision surface acts as a policy oracle"
 tests = []
 
@@ -2515,7 +2466,7 @@ id = "RR-13"
 family = "RR"
 section = "13.9"
 status = "reference"
-stage = 3
+stage = 7
 title = "Effects executed during compromise window"
 tests = []
 
@@ -2548,7 +2499,6 @@ id = "RR-17"
 family = "RR"
 section = "13.9"
 status = "reference"
-stage = 1
 title = "No verified RS256 implementation; Marvin flaw unpatched in rsa crate"
 tests = []
 
@@ -2705,7 +2655,7 @@ id = "RR-36"
 family = "RR"
 section = "13.9"
 status = "reference"
-stage = 3
+stage = 10
 title = "Harvest-now-decrypt-later on encrypted identity tokens"
 tests = []
 
@@ -2815,7 +2765,6 @@ id = "SEC4"
 family = "SEC"
 section = "13.10"
 status = "frozen"
-stage = 1
 title = "Cryptographic requirements: tamper-evidence, non-repudiation, transport forward secrecy"
 tests = []
 
@@ -2841,7 +2790,6 @@ id = "SEC7"
 family = "SEC"
 section = "13.10"
 status = "frozen"
-stage = 3
 title = "Consequence Tier is a derived policy classification, not ontology"
 tests = []
 
@@ -2850,7 +2798,7 @@ id = "SEC8"
 family = "SEC"
 section = "13.10"
 status = "frozen"
-stage = 3
+stage = 12
 title = "Policy defaults live in Genesis; tightening narrows, loosening broadens"
 tests = []
 
@@ -2859,7 +2807,7 @@ id = "SEC9"
 family = "SEC"
 section = "13.10"
 status = "frozen"
-stage = 3
+stage = 10
 title = "Issuer compromise procedure: cutoff, quarantine, closure, reconcile"
 tests = []
 
@@ -2868,7 +2816,7 @@ id = "SEC10"
 family = "SEC"
 section = "13.10"
 status = "frozen"
-stage = 3
+stage = 6
 title = "CT2+ requires human contribution or fresh phishing-resistant presence assertion"
 tests = []
 
@@ -2877,7 +2825,6 @@ id = "SEC11"
 family = "SEC"
 section = "13.10"
 status = "frozen"
-stage = 3
 title = "Citing a terminated actor Instance's contribution defaults to REQUIRE_ACTION"
 tests = []
 
@@ -2886,7 +2833,7 @@ id = "SEC12"
 family = "SEC"
 section = "13.10"
 status = "frozen"
-stage = 3
+stage = 6
 title = "party.compromise overlay applies to Instances created after occurredAt"
 tests = []
 
@@ -2913,7 +2860,7 @@ id = "SEC15"
 family = "SEC"
 section = "13.10"
 status = "frozen"
-stage = 3
+stage = 7
 title = "Compromise impact query is derived, not a new object"
 tests = []
 
@@ -2922,7 +2869,7 @@ id = "SEC16"
 family = "SEC"
 section = "13.10"
 status = "frozen"
-stage = 3
+stage = 12
 title = "Fourteen-day probation for CT2+ intents via compatibility mapping"
 tests = []
 
@@ -2949,7 +2896,7 @@ id = "SEC19"
 family = "SEC"
 section = "13.10"
 status = "frozen"
-stage = 3
+stage = 4
 title = "Identity plane custody keys never used in provider role"
 tests = []
 
@@ -2994,7 +2941,7 @@ id = "SEC24"
 family = "SEC"
 section = "13.10"
 status = "frozen"
-stage = 3
+stage = 13
 title = "RestrictionPolicies may be undisclosed, revealing only class to requesters"
 tests = []
 
@@ -3012,7 +2959,7 @@ id = "SEC26"
 family = "SEC"
 section = "13.10"
 status = "frozen"
-stage = 3
+stage = 6
 title = "Assurance table: batching CT1 only, CT3 multi-party with delay"
 tests = []
 
@@ -3030,7 +2977,6 @@ id = "SEC28"
 family = "SEC"
 section = "13.10"
 status = "frozen"
-stage = 3
 title = "Rate limit overruns are protocol rejections; throttling is RestrictionPolicy DENY"
 tests = []
 
@@ -3039,7 +2985,6 @@ id = "SEC29"
 family = "SEC"
 section = "13.10"
 status = "frozen"
-stage = 3
 title = "Pseudonymous deep subtree identities and separate audit-read Grant by default"
 tests = []
 
@@ -3048,7 +2993,6 @@ id = "SEC30"
 family = "SEC"
 section = "13.10"
 status = "frozen"
-stage = 3
 title = "First disclosure to new recipient CT2; declassification CT3"
 tests = []
 
@@ -3057,7 +3001,7 @@ id = "SEC31"
 family = "SEC"
 section = "13.10"
 status = "frozen"
-stage = 3
+stage = 7
 title = "Advisory checks and explains are telemetry, not canonical records"
 tests = []
 
@@ -3066,6 +3010,6 @@ id = "SEC32"
 family = "SEC"
 section = "13.10"
 status = "frozen"
-stage = 2
+stage = 8
 title = "Exercise body redactable after 400 days; digests kept indefinitely"
 tests = []

@@ -208,6 +208,7 @@ async fn a_protocol_error_is_400_problem() {
 // #7: core refusals keep their classes
 #[tokio::test]
 async fn core_refusals_map_to_their_status() {
+    // PI-5, G16
     let cases: [(fn() -> CoreError, StatusCode); 3] = [
         (|| CoreError::Nonce, StatusCode::UNPROCESSABLE_ENTITY),
         (|| CoreError::Protocol("domain"), StatusCode::BAD_REQUEST),
@@ -355,6 +356,7 @@ fn batch(modes: &[&str], semantic: &str) -> String {
 // #3 (batch), OP-141 m.22 (a): each item is answered like a single evaluation
 #[tokio::test]
 async fn a_batch_answers_each_item() {
+    // PI-23, G26
     let (status, _, body) = post_to(
         app(Ok(Outcome::Allow), Some("pep-1")),
         "/access/v1/evaluations",
@@ -372,6 +374,7 @@ async fn a_batch_answers_each_item() {
 // OP-141 m.22 (a): a short-circuit is check-only; skipped items are not denials
 #[tokio::test]
 async fn a_short_circuit_is_for_check_only() {
+    // PI-23
     let (status, _, body) = post_to(
         app(Ok(Outcome::Deny), Some("pep-1")),
         "/access/v1/evaluations",

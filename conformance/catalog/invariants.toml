@@ -102,7 +102,7 @@ id = "CI-13"
 family = "CI"
 section = "6.1"
 status = "canonical"
-stage = 3
+stage = 12
 title = "No implicit super-authority"
 tests = []
 
@@ -119,7 +119,7 @@ id = "CI-15"
 family = "CI"
 section = "6.1"
 status = "canonical"
-stage = 2
+stage = 6
 title = "One authority per domain object; no global provider; no semantic privilege"
 tests = []
 
@@ -128,7 +128,6 @@ id = "INV-1"
 family = "INV"
 section = "6.2"
 status = "canonical"
-stage = 3
 title = "Single positive source"
 tests = []
 
@@ -137,7 +136,7 @@ id = "INV-2"
 family = "INV"
 section = "6.2"
 status = "canonical"
-stage = 2
+stage = 7
 title = "Single write path (authority state)"
 tests = []
 
@@ -146,7 +145,7 @@ id = "INV-3"
 family = "INV"
 section = "6.2"
 status = "canonical"
-stage = 3
+stage = 6
 title = "Non-amplification"
 tests = []
 
@@ -155,7 +154,7 @@ id = "INV-4"
 family = "INV"
 section = "6.2"
 status = "canonical"
-stage = 3
+stage = 12
 title = "Single basis, faithful lineage, explicit capacity"
 tests = []
 
@@ -164,7 +163,7 @@ id = "INV-5"
 family = "INV"
 section = "6.2"
 status = "canonical"
-stage = 3
+stage = 9
 title = "Terminal invalidity, monotone cascade"
 tests = []
 
@@ -173,7 +172,6 @@ id = "INV-6"
 family = "INV"
 section = "6.2"
 status = "canonical"
-stage = 1
 title = "Restriction is an overlay"
 tests = []
 
@@ -182,7 +180,6 @@ id = "INV-7"
 family = "INV"
 section = "6.2"
 status = "canonical"
-stage = 1
 title = "No non-monotonic granting"
 tests = []
 
@@ -191,7 +188,7 @@ id = "INV-8"
 family = "INV"
 section = "6.2"
 status = "canonical"
-stage = 1
+stage = 14
 title = "Decidable canonical algebra"
 tests = []
 
@@ -200,7 +197,6 @@ id = "INV-9"
 family = "INV"
 section = "6.2"
 status = "canonical"
-stage = 1
 title = "Explicit delegability, express-only reserved powers"
 tests = []
 
@@ -209,7 +205,7 @@ id = "INV-10"
 family = "INV"
 section = "6.2"
 status = "canonical"
-stage = 3
+stage = 6
 title = "Meta-authority asymmetry"
 tests = []
 
@@ -218,7 +214,6 @@ id = "INV-11"
 family = "INV"
 section = "6.2"
 status = "canonical"
-stage = 3
 title = "Holding ≠ exercisability; actor is explicit"
 tests = []
 
@@ -227,7 +222,7 @@ id = "INV-12"
 family = "INV"
 section = "6.2"
 status = "canonical"
-stage = 3
+stage = 6
 title = "Identity ≠ Authority, structurally"
 tests = []
 
@@ -236,7 +231,7 @@ id = "INV-13"
 family = "INV"
 section = "6.2"
 status = "canonical"
-stage = 3
+stage = 6
 title = "Instance continuity"
 tests = []
 
@@ -245,7 +240,6 @@ id = "INV-14"
 family = "INV"
 section = "6.2"
 status = "canonical"
-stage = 3
 title = "Claim ≠ Truth"
 tests = []
 
@@ -254,7 +248,7 @@ id = "INV-15"
 family = "INV"
 section = "6.2"
 status = "canonical"
-stage = 3
+stage = 6
 title = "Use-scoped acceptance"
 tests = []
 
@@ -263,7 +257,7 @@ id = "INV-16"
 family = "INV"
 section = "6.2"
 status = "canonical"
-stage = 3
+stage = 10
 title = "Selection ≠ grant"
 tests = []
 
@@ -272,7 +266,7 @@ id = "INV-17"
 family = "INV"
 section = "6.2"
 status = "canonical"
-stage = 3
+stage = 4
 title = "Foreign ≠ local"
 tests = []
 
@@ -281,7 +275,7 @@ id = "INV-18"
 family = "INV"
 section = "6.2"
 status = "canonical"
-stage = 3
+stage = 9
 title = "Decision ≠ Effect"
 tests = []
 
@@ -290,7 +284,7 @@ id = "INV-19"
 family = "INV"
 section = "6.2"
 status = "canonical"
-stage = 3
+stage = 6
 title = "Allow is envelope-bound"
 tests = []
 
@@ -299,7 +293,6 @@ id = "INV-20"
 family = "INV"
 section = "6.2"
 status = "canonical"
-stage = 3
 title = "Approval ≠ execution"
 tests = []
 
@@ -308,7 +301,7 @@ id = "INV-21"
 family = "INV"
 section = "6.2"
 status = "canonical"
-stage = 2
+stage = 6
 title = "At-most-once consumption"
 tests = []
 
@@ -317,7 +310,7 @@ id = "INV-22"
 family = "INV"
 section = "6.2"
 status = "canonical"
-stage = 3
+stage = 6
 title = "Decisions declare their basis; relied-upon ALLOW is recorded"
 tests = []
 
@@ -326,7 +319,7 @@ id = "INV-23"
 family = "INV"
 section = "6.2"
 status = "canonical"
-stage = 3
+stage = 8
 title = "No backdating; normative time is domain time"
 tests = []
 
@@ -352,7 +345,7 @@ id = "INV-26"
 family = "INV"
 section = "6.2"
 status = "canonical"
-stage = 1
+stage = 5
 title = "Fail closed"
 tests = []
 
@@ -361,7 +354,7 @@ id = "INV-27"
 family = "INV"
 section = "6.2"
 status = "canonical"
-stage = 1
+stage = 13
 title = "Semantic determinism"
 tests = []
 
@@ -379,7 +372,7 @@ id = "INV-29"
 family = "INV"
 section = "6.2"
 status = "canonical"
-stage = 3
+stage = 6
 title = "No semantic privilege; custody ≠ root"
 tests = []
 
@@ -388,7 +381,7 @@ id = "INV-30"
 family = "INV"
 section = "6.2"
 status = "canonical"
-stage = 2
+stage = 8
 title = "Immutable history, redactable body"
 tests = []
 
@@ -397,7 +390,7 @@ id = "INV-31"
 family = "INV"
 section = "6.2"
 status = "canonical"
-stage = 3
+stage = 12
 title = "Holding episode continuity"
 tests = []
 
@@ -406,7 +399,7 @@ id = "INV-32"
 family = "INV"
 section = "6.9"
 status = "candidate"
-stage = 2
+stage = 5
 title = "No identifier reuse"
 tests = []
 
@@ -415,7 +408,7 @@ id = "INV-33"
 family = "INV"
 section = "6.9"
 status = "candidate"
-stage = 5
+stage = 6
 title = "IdP concepts reduce to primitives; derived index never writes or decides"
 tests = []
 
@@ -424,7 +417,6 @@ id = "INV-34"
 family = "INV"
 section = "6.9"
 status = "candidate"
-stage = 3
 title = "Derived answers agree"
 tests = []
 
@@ -433,7 +425,7 @@ id = "INV-35"
 family = "INV"
 section = "6.9"
 status = "candidate"
-stage = 3
+stage = 6
 title = "Moves name both ends"
 tests = []
 
@@ -442,7 +434,7 @@ id = "INV-36"
 family = "INV"
 section = "6.9"
 status = "candidate"
-stage = 1
+stage = 12
 title = "Restriction language stays decidable and forbid-only"
 tests = []
 
@@ -451,7 +443,7 @@ id = "INV-37"
 family = "INV"
 section = "6.9"
 status = "candidate"
-stage = 3
+stage = 6
 title = "Tenant, Realm and Cell are not authority inputs"
 tests = []
 
@@ -555,7 +547,6 @@ id = "EI-8"
 family = "EI"
 section = "6.3"
 status = "canonical"
-stage = 3
 title = "Domain admission is an authority act"
 tests = []
 
@@ -581,7 +572,6 @@ id = "EI-11"
 family = "EI"
 section = "6.3"
 status = "canonical"
-stage = 3
 title = "Revocation commit never claims physical stop"
 tests = []
 
@@ -622,7 +612,6 @@ id = "EI-16"
 family = "EI"
 section = "6.3"
 status = "canonical"
-stage = 3
 title = "Schema publication never broadens authority"
 tests = []
 
@@ -640,7 +629,7 @@ id = "EI-18"
 family = "EI"
 section = "6.3"
 status = "canonical"
-stage = 3
+stage = 9
 title = "Approval is an authority act bound to an exact digest"
 tests = []
 
@@ -666,7 +655,6 @@ id = "EI-21"
 family = "EI"
 section = "6.3"
 status = "canonical"
-stage = 3
 title = "Fail closed at authority boundary; truth only from fact owner"
 tests = []
 
@@ -683,7 +671,7 @@ id = "EI-23"
 family = "EI"
 section = "6.3"
 status = "canonical"
-stage = 3
+stage = 11
 title = "No cross-product atomicity as a semantic requirement"
 tests = []
 
@@ -692,7 +680,7 @@ id = "EI-24"
 family = "EI"
 section = "6.3"
 status = "canonical"
-stage = 3
+stage = 6
 title = "Accountability ≠ authority ≠ liability"
 tests = []
 
@@ -719,7 +707,6 @@ id = "EI-27"
 family = "EI"
 section = "7.8"
 status = "candidate"
-stage = 3
 title = "Commercial tenancy never enters authority"
 tests = []
 
@@ -746,7 +733,7 @@ id = "XI-3"
 family = "XI"
 section = "6.4"
 status = "canonical"
-stage = 3
+stage = 7
 title = "Surfaces are projections; no optimistic authority"
 tests = []
 
@@ -773,7 +760,6 @@ id = "XI-6"
 family = "XI"
 section = "6.4"
 status = "canonical"
-stage = 3
 title = "Approve never overrides"
 tests = []
 
@@ -782,7 +768,7 @@ id = "XI-7"
 family = "XI"
 section = "6.4"
 status = "canonical"
-stage = 3
+stage = 6
 title = "Access has no inbox"
 tests = []
 
@@ -791,7 +777,7 @@ id = "XI-8"
 family = "XI"
 section = "6.4"
 status = "canonical"
-stage = 3
+stage = 6
 title = "Exact intent or no approval"
 tests = []
 
@@ -890,7 +876,7 @@ id = "XI-19"
 family = "XI"
 section = "6.4"
 status = "canonical"
-stage = 3
+stage = 8
 title = "Repetition becomes explicit policy, never silent accumulation"
 tests = []
 
@@ -978,7 +964,7 @@ id = "PI-3"
 family = "PI"
 section = "6.5"
 status = "canonical"
-stage = 3
+stage = 6
 title = "No external artifact is authority without Acceptance and Grant"
 tests = []
 
@@ -987,7 +973,7 @@ id = "PI-4"
 family = "PI"
 section = "6.5"
 status = "canonical"
-stage = 3
+stage = 7
 title = "Every authority read or write goes through one Exercise contract"
 tests = []
 
@@ -996,7 +982,6 @@ id = "PI-5"
 family = "PI"
 section = "6.5"
 status = "canonical"
-stage = 3
 title = "Decision has exactly three outcomes; protocol errors produce no effect"
 tests = []
 
@@ -1014,7 +999,7 @@ id = "PI-7"
 family = "PI"
 section = "6.5"
 status = "canonical"
-stage = 3
+stage = 6
 title = "Actor derived only from Instance-signed Actor Intent Statement"
 tests = []
 
@@ -1059,7 +1044,7 @@ id = "PI-12"
 family = "PI"
 section = "6.5"
 status = "canonical"
-stage = 1
+stage = 6
 title = "Must-understand: verifiers reject unknown mandatory features"
 tests = []
 
@@ -1077,7 +1062,7 @@ id = "PI-14"
 family = "PI"
 section = "6.5"
 status = "canonical"
-stage = 3
+stage = 11
 title = "No hidden first-party dependency; remaining dependencies are declared"
 tests = []
 
@@ -1086,7 +1071,7 @@ id = "PI-15"
 family = "PI"
 section = "6.5"
 status = "canonical"
-stage = 3
+stage = 13
 title = "Provider binding changes only via domain.handover or domain.recover Exercise"
 tests = []
 
@@ -1095,7 +1080,6 @@ id = "PI-16"
 family = "PI"
 section = "6.5"
 status = "canonical"
-stage = 3
 title = "Explanations respect disclosure scope and leak no hidden authority"
 tests = []
 
@@ -1121,7 +1105,7 @@ id = "PI-19"
 family = "PI"
 section = "6.5"
 status = "canonical"
-stage = 3
+stage = 12
 title = "Schemas and catalogs used only via exact digest pin"
 tests = []
 
@@ -1139,7 +1123,6 @@ id = "PI-21"
 family = "PI"
 section = "6.5"
 status = "canonical"
-stage = 1
 title = "Version and profile identity are part of signed content"
 tests = []
 
@@ -1156,7 +1139,6 @@ id = "PI-23"
 family = "PI"
 section = "6.5"
 status = "canonical"
-stage = 3
 title = "Batches are not atomic; each item is its own Exercise"
 tests = []
 
@@ -1165,7 +1147,7 @@ id = "PI-24"
 family = "PI"
 section = "6.5"
 status = "canonical"
-stage = 3
+stage = 4
 title = "Each federation mechanism has a distinct protocol counterpart"
 tests = []
 
@@ -1174,7 +1156,6 @@ id = "SI-1"
 family = "SI"
 section = "6.6"
 status = "canonical"
-stage = 3
 title = "No attribution of an Exercise without the actor's key"
 tests = []
 
@@ -1183,7 +1164,6 @@ id = "SI-2"
 family = "SI"
 section = "6.6"
 status = "canonical"
-stage = 3
 title = "Custody, hosting, operation and conformance confer nothing"
 tests = []
 
@@ -1192,7 +1172,6 @@ id = "SI-3"
 family = "SI"
 section = "6.6"
 status = "canonical"
-stage = 3
 title = "Compromise blast radius equals the declared use"
 tests = []
 
@@ -1201,7 +1180,7 @@ id = "SI-4"
 family = "SI"
 section = "6.6"
 status = "canonical"
-stage = 3
+stage = 6
 title = "Containment is one attributable act; un-containment is expansion"
 tests = []
 
@@ -1210,7 +1189,7 @@ id = "SI-5"
 family = "SI"
 section = "6.6"
 status = "canonical"
-stage = 3
+stage = 6
 title = "No approval without the approver's own act on exact digest"
 tests = []
 
@@ -1219,7 +1198,6 @@ id = "SI-6"
 family = "SI"
 section = "6.6"
 status = "canonical"
-stage = 1
 title = "Fail closed under attack"
 tests = []
 
@@ -1228,7 +1206,7 @@ id = "SI-7"
 family = "SI"
 section = "6.6"
 status = "canonical"
-stage = 3
+stage = 4
 title = "Every post-revocation window is pre-declared"
 tests = []
 
@@ -1237,7 +1215,7 @@ id = "SI-8"
 family = "SI"
 section = "6.6"
 status = "canonical"
-stage = 3
+stage = 12
 title = "Security inputs are recorded inputs"
 tests = []
 
@@ -1246,7 +1224,6 @@ id = "SI-9"
 family = "SI"
 section = "6.6"
 status = "canonical"
-stage = 3
 title = "Compromise is handled prospectively"
 tests = []
 
@@ -1255,7 +1232,6 @@ id = "SI-10"
 family = "SI"
 section = "6.6"
 status = "canonical"
-stage = 3
 title = "Ingest-time cutoff is affirmative"
 tests = []
 
@@ -1291,7 +1267,6 @@ id = "SI-14"
 family = "SI"
 section = "6.6"
 status = "canonical"
-stage = 3
 title = "Disclosure is monotone in authority"
 tests = []
 
@@ -1318,7 +1293,6 @@ id = "SI-17"
 family = "SI"
 section = "6.6"
 status = "canonical"
-stage = 3
 title = "Every proof is bound"
 tests = []
 
@@ -1327,7 +1301,7 @@ id = "SI-18"
 family = "SI"
 section = "6.6"
 status = "canonical"
-stage = 3
+stage = 4
 title = "Downgrade is expansion"
 tests = []
 
@@ -1336,7 +1310,6 @@ id = "SI-19"
 family = "SI"
 section = "6.6"
 status = "canonical"
-stage = 3
 title = "Independence is checked, not assumed"
 tests = []
 
@@ -1345,7 +1318,6 @@ id = "SI-20"
 family = "SI"
 section = "6.6"
 status = "canonical"
-stage = 1
 title = "Bounded evaluation"
 tests = []
 
@@ -1354,7 +1326,7 @@ id = "SI-21"
 family = "SI"
 section = "6.6"
 status = "canonical"
-stage = 8
+stage = 7
 title = "Expansion about you is visible to you"
 tests = []
 
@@ -1363,7 +1335,7 @@ id = "SI-22"
 family = "SI"
 section = "6.6"
 status = "canonical"
-stage = 3
+stage = 6
 title = "No emergency path outside the Exercise"
 tests = []
 
@@ -1372,7 +1344,7 @@ id = "TI-1"
 family = "TI"
 section = "6.7"
 status = "canonical"
-stage = 2
+stage = 13
 title = "Only the log is canonical"
 tests = []
 
@@ -1381,7 +1353,7 @@ id = "TI-2"
 family = "TI"
 section = "6.7"
 status = "canonical"
-stage = 2
+stage = 13
 title = "Single writer by storage, not by belief"
 tests = []
 
@@ -1398,7 +1370,6 @@ id = "TI-4"
 family = "TI"
 section = "6.7"
 status = "canonical"
-stage = 2
 title = "Complete read-set"
 tests = []
 
@@ -1407,7 +1378,7 @@ id = "TI-5"
 family = "TI"
 section = "6.7"
 status = "canonical"
-stage = 3
+stage = 4
 title = "No ALLOW from replicas"
 tests = []
 
@@ -1416,7 +1387,7 @@ id = "TI-6"
 family = "TI"
 section = "6.7"
 status = "canonical"
-stage = 2
+stage = 9
 title = "Durability fence"
 tests = []
 
@@ -1425,7 +1396,6 @@ id = "TI-7"
 family = "TI"
 section = "6.7"
 status = "canonical"
-stage = 2
 title = "One commit, all effects"
 tests = []
 
@@ -1434,7 +1404,7 @@ id = "TI-8"
 family = "TI"
 section = "6.7"
 status = "canonical"
-stage = 2
+stage = 8
 title = "Idempotent nonce"
 tests = []
 
@@ -1443,7 +1413,7 @@ id = "TI-9"
 family = "TI"
 section = "6.7"
 status = "canonical"
-stage = 1
+stage = 4
 title = "No fail-open code path"
 tests = [
   "bins/access-server/src/config.rs::unknown_configuration_key_is_rejected",
@@ -1454,7 +1424,6 @@ id = "TI-10"
 family = "TI"
 section = "6.7"
 status = "canonical"
-stage = 1
 title = "No semantic timers"
 tests = []
 
@@ -1463,7 +1432,6 @@ id = "TI-11"
 family = "TI"
 section = "6.7"
 status = "canonical"
-stage = 1
 title = "Verbatim signatures, Access-computed digests"
 tests = []
 
@@ -1490,7 +1458,6 @@ id = "TI-14"
 family = "TI"
 section = "6.7"
 status = "canonical"
-stage = 1
 title = "Bounded, deterministic restriction"
 tests = []
 
@@ -1508,7 +1475,7 @@ id = "TI-16"
 family = "TI"
 section = "6.7"
 status = "canonical"
-stage = 2
+stage = 13
 title = "Rebuildable derivations"
 tests = []
 
@@ -1517,7 +1484,7 @@ id = "TI-17"
 family = "TI"
 section = "6.7"
 status = "canonical"
-stage = 1
+stage = 5
 title = "No Suiss-specific dependency in the protocol path"
 tests = []
 
@@ -1535,7 +1502,6 @@ id = "TI-19"
 family = "TI"
 section = "6.7"
 status = "canonical"
-stage = 2
 title = "Monotone trusted time"
 tests = []
 
@@ -1544,7 +1510,6 @@ id = "TI-20"
 family = "TI"
 section = "6.7"
 status = "canonical"
-stage = 3
 title = "Disclosure filter last and monotone"
 tests = []
 
@@ -1553,7 +1518,7 @@ id = "TI-RT1"
 family = "TI-RT"
 section = "6.8"
 status = "canonical"
-stage = 2
+stage = 13
 title = "Provider state is a record-fold; divergent widening effects quarantined"
 tests = []
 
@@ -1562,7 +1527,7 @@ id = "TI-RT2"
 family = "TI-RT"
 section = "6.8"
 status = "canonical"
-stage = 2
+stage = 13
 title = "Trusted time kept within bound by two independent sources"
 tests = []
 
@@ -1571,7 +1536,7 @@ id = "TI-RT3"
 family = "TI-RT"
 section = "6.8"
 status = "canonical"
-stage = 3
+stage = 13
 title = "Commit time bounded by intent validity and nonce retention horizon"
 tests = []
 
@@ -1580,7 +1545,7 @@ id = "TI-RT4"
 family = "TI-RT"
 section = "6.8"
 status = "canonical"
-stage = 2
+stage = 13
 title = "Derived and leader state built only from Genesis fold or verified snapshot"
 tests = []
 
@@ -1598,7 +1563,7 @@ id = "TI-RT6"
 family = "TI-RT"
 section = "6.8"
 status = "canonical"
-stage = 1
+stage = 6
 title = "Operational keys bound to DomainID and checked by verifiers"
 tests = []
 
@@ -1607,7 +1572,7 @@ id = "TI-RT7"
 family = "TI-RT"
 section = "6.8"
 status = "canonical"
-stage = 3
+stage = 6
 title = "Claim currency determined by issuer order; ties disqualify"
 tests = []
 
@@ -1616,7 +1581,6 @@ id = "TI-RT8"
 family = "TI-RT"
 section = "6.8"
 status = "canonical"
-stage = 3
 title = "Consumption release never exceeds draw per Exercise or projection"
 tests = []
 
@@ -1625,7 +1589,7 @@ id = "TI-RT9"
 family = "TI-RT"
 section = "6.8"
 status = "canonical"
-stage = 3
+stage = 13
 title = "Per-commit work is bounded; bulk episode effects computed lazily"
 tests = []
 
@@ -1634,7 +1598,7 @@ id = "TI-RT10"
 family = "TI-RT"
 section = "6.8"
 status = "canonical"
-stage = 2
+stage = 5
 title = "Position-bearing identifiers to sub-audit viewers are opaque keyed tokens"
 tests = []
 
@@ -1652,7 +1616,7 @@ id = "TI-RT12"
 family = "TI-RT"
 section = "6.8"
 status = "canonical"
-stage = 0
+stage = 14
 title = "Every semantic rule lives in normative text and conformance vectors"
 tests = [
   "xtask/src/catalog.rs::g38_ti_rt12_regeneration_follows_the_spec_and_keeps_curation",
@@ -1681,7 +1645,6 @@ id = "SAI-3"
 family = "SAI"
 section = "14.11"
 status = "candidate"
-stage = 3
 title = "Infrastructure failures never produce ALLOW, active=true or new tokens"
 tests = []
 
@@ -1743,7 +1706,6 @@ family = "SAI"
 section = "15.22.1"
 status = "candidate"
 class = "BS"
-stage = 1
 title = "Signature algorithm allowlist never comes from header"
 tests = []
 
@@ -1753,7 +1715,6 @@ family = "SAI"
 section = "15.22.1"
 status = "candidate"
 class = "BS"
-stage = 1
 title = "Single canonical acceptance"
 tests = []
 
@@ -1763,7 +1724,6 @@ family = "SAI"
 section = "15.22.1"
 status = "candidate"
 class = "UDC"
-stage = 1
 title = "Constant-time secret comparison"
 tests = []
 
@@ -1773,7 +1733,6 @@ family = "SAI"
 section = "15.22.1"
 status = "candidate"
 class = "BS"
-stage = 3
 title = "Unauthorized is indistinguishable from nonexistent"
 tests = []
 
@@ -1862,7 +1821,6 @@ family = "IDI"
 section = "10.11"
 status = "candidate"
 class = "BS"
-stage = 1
 title = "Accepted signature alg comes from allowlist, never artifact header"
 tests = []
 
@@ -2003,7 +1961,6 @@ id = "TNI-1"
 family = "TNI"
 section = "12.9"
 status = "candidate"
-stage = 3
 title = "Tenant, organization and email are never authority inputs"
 tests = []
 
@@ -2021,7 +1978,6 @@ id = "TNI-3"
 family = "TNI"
 section = "12.9"
 status = "candidate"
-stage = 2
 title = "Tenant isolation enforced by keys, composite FKs and forced RLS"
 tests = []
 
@@ -2057,7 +2013,6 @@ id = "TNI-7"
 family = "TNI"
 section = "12.9"
 status = "candidate"
-stage = 3
 title = "No grant above own effective set; moves cannot amplify"
 tests = []
 
@@ -2084,7 +2039,6 @@ id = "TNI-10"
 family = "TNI"
 section = "12.9"
 status = "candidate"
-stage = 2
 title = "Tombstones never decide; user identifiers are never reused"
 tests = []
 
@@ -2120,7 +2074,6 @@ id = "OPI-1"
 family = "OPI"
 section = "17.13"
 status = "candidate"
-stage = 2
 title = "Outbox consumer progress never skips reconstructable state"
 tests = []
 
@@ -2165,6 +2118,5 @@ id = "OPI-6"
 family = "OPI"
 section = "17.13"
 status = "candidate"
-stage = 2
 title = "Identity security change and its audit record share one transaction"
 tests = []

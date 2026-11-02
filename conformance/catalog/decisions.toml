@@ -92,7 +92,7 @@ id = "CR-35"
 family = "CR"
 section = "15.21"
 status = "decision"
-stage = 2
+stage = 13
 title = "Workload identity bootstrap with log redaction and secret-free backups"
 tests = ["crates/telemetry/tests/redaction_canary.rs"]
 
@@ -140,7 +140,6 @@ id = "OP-4"
 family = "OP"
 section = "17.14"
 status = "decision"
-stage = 1
 title = "Build and panic profile"
 tests = [
   "crates/suiss-sandbox/src/linux/seccomp.rs::no_allowlist_contains_io_uring",
@@ -163,7 +162,7 @@ id = "OP-63"
 family = "OP"
 section = "17.14"
 status = "decision"
-stage = 2
+stage = 5
 title = "In-code architecture layers, ports, sans-I/O and outbox"
 tests = [
   "bins/access-server/src/config.rs::unknown_configuration_key_is_rejected",

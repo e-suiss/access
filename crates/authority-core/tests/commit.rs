@@ -427,12 +427,22 @@ async fn onboard(core: &mut Core, d: Digest, party: Id, seed: u8, nonces: (u8, u
 
 #[tokio::test]
 async fn a_grant_allows_until_it_is_revoked() {
+    // INV-1, G1, G4, MUST-NEVER-1
     let db = fresh().await.unwrap();
     let (mut core, d) = setup(&db).await;
     onboard(&mut core, d, ROOT, ROOT_KEY, (1, 2)).await;
     onboard(&mut core, d, ALICE, ALICE_KEY, (3, 4)).await;
 
     let shop = meta::object_id(&d, kind::ANCHOR, 1);
+    // registered and authenticated, Alice holds nothing yet
+    let before = send(
+        &mut core,
+        shop_request(d, 30, Mode::Check, ExerciseBasis::Anchor(shop)),
+        ALICE_KEY,
+    )
+    .await
+    .unwrap();
+    assert_ne!(before.decision.outcome, Outcome::Allow);
     let issue = Payload::GrantIssue(GrantContent {
         basis: GrantBasis::Anchor(shop),
         holder: SubjectSelector::Party(ALICE),
@@ -490,6 +500,7 @@ async fn a_grant_allows_until_it_is_revoked() {
 
 #[tokio::test]
 async fn a_nonce_returns_its_decision_and_binds_its_intent() {
+    // INV-19, MUST-NEVER-12, U31
     let db = fresh().await.unwrap();
     let (mut core, d) = setup(&db).await;
     onboard(&mut core, d, ROOT, ROOT_KEY, (1, 2)).await;
@@ -526,6 +537,7 @@ async fn a_nonce_returns_its_decision_and_binds_its_intent() {
 
 #[tokio::test]
 async fn check_mode_records_nothing() {
+    // INV-22, G28
     let db = fresh().await.unwrap();
     let (mut core, d) = setup(&db).await;
     onboard(&mut core, d, ROOT, ROOT_KEY, (1, 2)).await;
@@ -553,6 +565,7 @@ async fn check_mode_records_nothing() {
 
 #[tokio::test]
 async fn an_unknown_key_is_not_an_actor() {
+    // G14, INV-11
     let db = fresh().await.unwrap();
     let (mut core, d) = setup(&db).await;
     let shop = meta::object_id(&d, kind::ANCHOR, 1);
@@ -567,6 +580,7 @@ async fn an_unknown_key_is_not_an_actor() {
 
 #[tokio::test]
 async fn an_anonymous_meta_action_is_denied() {
+    // G15, INV-11
     let db = fresh().await.unwrap();
     let (mut core, d) = setup(&db).await;
     let public_basis = ExerciseBasis::Public(meta::object_id(&d, kind::GRANT, 0));
@@ -633,6 +647,7 @@ fn unavailable(r: Result<Response, CoreError>) -> &'static str {
 // unavailable
 #[tokio::test]
 async fn a_process_leads_a_domain_from_its_first_request() {
+    // TI-5, SAI-3, G48, MUST-NEVER-11
     let db = fresh().await.unwrap();
     let d = create_genesis(&db.sequencer, TENANT, genesis(), 1_000)
         .await
@@ -878,6 +893,7 @@ fn with_proofs(mut r: Request, proofs: Vec<ProofRef>) -> Request {
 // same nonce; a Claim no Acceptance covers is recorded in quarantine and meets nothing
 #[tokio::test]
 async fn an_accepted_claim_meets_a_requirement() {
+    // INV-14, G7, G8, SI-3, PI-3, EI-21, MUST-NEVER-3, MUST-NEVER-9
     let db = fresh().await.unwrap();
     let kyc = term(ProofKind::Claim, "kyc", ProofBinding::None);
     let (mut core, d) = setup_with(&db, gated(&[kyc])).await;
@@ -960,6 +976,7 @@ async fn an_accepted_claim_meets_a_requirement() {
 // and a fork leaves neither side asserting
 #[tokio::test]
 async fn a_superseded_claim_no_longer_asserts() {
+    // G36
     let db = fresh().await.unwrap();
     let kyc = term(ProofKind::Claim, "kyc", ProofBinding::None);
     let (mut core, d) = setup_with(&db, gated_with(&[kyc], 2)).await;
@@ -1020,6 +1037,7 @@ async fn a_superseded_claim_no_longer_asserts() {
 // at or after its occurredAt; a later Claim in the issuer's line moves occurredAt
 #[tokio::test]
 async fn a_compromise_restricts_instances_set_up_after_it() {
+    // SI-8, SI-9, INV-23, G22
     let db = fresh().await.unwrap();
     let mut g = genesis();
     add_acceptances(
@@ -1269,6 +1287,7 @@ async fn a_ct3_expansion_waits_out_the_time_lock() {
 // §13.7.3, OP-141 m.34 (b): an intent valid for longer than its tier allows is refused
 #[tokio::test]
 async fn an_intent_beyond_its_tier_ceiling_is_refused() {
+    // TI-RT3
     let db = fresh().await.unwrap();
     let (mut core, d) = setup(&db).await;
     onboard(&mut core, d, ROOT, ROOT_KEY, (1, 2)).await;
@@ -1289,6 +1308,7 @@ async fn an_intent_beyond_its_tier_ceiling_is_refused() {
 // publishes exactly that action and schema
 #[tokio::test]
 async fn an_action_without_an_accepted_schema_is_denied() {
+    // G11, EI-16, PI-19
     use access_kernel::combinator::BlockerClass;
     let db = fresh().await.unwrap();
     let (mut core, d) = setup(&db).await;
@@ -1326,6 +1346,7 @@ async fn an_action_without_an_accepted_schema_is_denied() {
     reason = "two recorded decisions through every scope"
 )]
 async fn a_recorded_decision_is_explained_as_it_was() {
+    // INV-22, PI-16, G27, SI-14, EI-24
     use access_kernel::model::{BudgetDimension, BudgetTerm, BudgetWindow};
     let db = fresh().await.unwrap();
     let (mut core, d) = setup(&db).await;
@@ -1486,6 +1507,7 @@ fn contribute(d: Digest, nonce: u8, target: Digest) -> Request {
 // the requirement once and is consumed
 #[tokio::test]
 async fn a_contribution_approves_once() {
+    // G12, G13, SI-5, SI-17, EI-18, XI-19
     let db = fresh().await.unwrap();
     let approve = term(
         ProofKind::Contribution,
@@ -1579,6 +1601,7 @@ async fn a_contribution_approves_once() {
 // next is denied and records no draw, and reopening a nonce is not a new request
 #[tokio::test]
 async fn approval_requests_are_throttled_per_requester() {
+    // SI-8
     let db = fresh().await.unwrap();
     let approve = term(
         ProofKind::Contribution,
@@ -1651,6 +1674,7 @@ async fn a_continuation_names_its_exercise() {
 // a new decision against the current state and is denied
 #[tokio::test]
 async fn a_continuation_after_revocation_is_denied() {
+    // G4
     use access_kernel::combinator::BlockerClass;
     let db = fresh().await.unwrap();
     let (mut core, d) = setup(&db).await;
@@ -1771,6 +1795,7 @@ fn grouped() -> BTreeMap<String, Opened> {
     reason = "one membership from its first episode through a cutoff and its lifting"
 )]
 async fn a_member_holds_the_groups_grant_from_its_episode() {
+    // INV-16, INV-31, G5, G9, SI-10, TI-RT9, U34
     let db = fresh().await.unwrap();
     let (mut core, d) = setup_with(&db, grouped()).await;
     onboard(&mut core, d, ROOT, ROOT_KEY, (1, 2)).await;
@@ -1934,6 +1959,7 @@ async fn a_member_holds_the_groups_grant_from_its_episode() {
 // quarantine
 #[tokio::test]
 async fn an_issuer_quota_quarantines_the_excess() {
+    // G44
     let db = fresh().await.unwrap();
     let kyc = term(ProofKind::Claim, "kyc", ProofBinding::None);
     let (mut core, d) = setup_with(&db, gated(&[kyc])).await;
@@ -1986,6 +2012,7 @@ fn search_request(d: Digest, nonce: u8, kind: &str) -> Request {
     reason = "one scenario from onboarding to every search kind"
 )]
 async fn search_shows_what_the_reader_may_see() {
+    // G27, SI-14, PI-16, SAI-43, G62
     use access_authority_core::query::{Hit, Query};
     let db = fresh().await.unwrap();
     let d = create_genesis(&db.sequencer, TENANT, genesis(), 1_000)
@@ -1993,7 +2020,11 @@ async fn search_shows_what_the_reader_may_see() {
         .unwrap();
     let a = process(&db, "a", vec![d]);
     let public_basis = ExerciseBasis::Public(meta::object_id(&d, kind::GRANT, 0));
-    for (party, seed, n) in [(ROOT, ROOT_KEY, 1), (ALICE, ALICE_KEY, 3)] {
+    for (party, seed, n) in [
+        (ROOT, ROOT_KEY, 1),
+        (ALICE, ALICE_KEY, 3),
+        (BOB, BOB_KEY, 60),
+    ] {
         for (nonce, payload) in [
             (
                 n,
@@ -2071,6 +2102,30 @@ async fn search_shows_what_the_reader_may_see() {
         .unwrap();
     // OP-141 m.41 (c): a holder views the Grants of its own lineage
     assert_eq!(hits, [Hit::Party(ALICE)]);
+    // SAI-43, G62: a reader who views nothing gets the same answer for what exists and what
+    // does not
+    let nowhere = Query::Subject {
+        action: action("shop", "read"),
+        resource: ResourceRef {
+            namespace: "nowhere".to_owned(),
+            path: vec!["item-1".to_owned()],
+            incarnation: 0,
+        },
+    };
+    let mut answers = Vec::new();
+    for (nonce, q) in [(62, &who), (63, &nowhere)] {
+        answers.push(
+            a.search(
+                &incoming(search_request(d, nonce, "subject"), BOB_KEY),
+                q,
+                None,
+            )
+            .await
+            .unwrap(),
+        );
+    }
+    assert_eq!(answers[0], (Vec::new(), None));
+    assert_eq!(answers[0], answers[1]);
 
     let mine = Query::Resource {
         party: ALICE,
@@ -2211,6 +2266,7 @@ async fn search_shows_what_the_reader_may_see() {
     reason = "one budget through draw, exhaustion and release"
 )]
 async fn a_budget_is_drawn_until_it_is_exhausted() {
+    // G3
     use access_kernel::combinator::BlockerClass;
     use access_kernel::model::{BudgetDimension, BudgetTerm, BudgetWindow};
     let db = fresh().await.unwrap();
@@ -2377,6 +2433,7 @@ fn policy_set(
     reason = "one scenario through a policy's life"
 )]
 async fn restriction_policies_narrow_the_commit_path() {
+    // G6, SI-8
     let db = fresh().await.unwrap();
     let (mut core, d) = setup_with(&db, gated(&[])).await;
     onboard(&mut core, d, ROOT, ROOT_KEY, (1, 2)).await;
@@ -2616,4 +2673,41 @@ async fn search_and_check_agree_over_generated_grants() {
         }
     }
     assert_eq!(outcomes, [true, true]);
+}
+
+// INV-37, TNI-1, EI-27: the tenant is no decision input; the same Genesis content under two
+// tenants decides alike
+#[tokio::test]
+async fn the_tenant_is_not_a_decision_input() {
+    let db = fresh().await.unwrap();
+    let mut decisions = Vec::new();
+    for (tenant, salt) in [(TENANT, 3), ([0x02; 16], 4)] {
+        let mut g = genesis();
+        for opened in g.values_mut() {
+            opened.salt = [salt; 32];
+        }
+        let d = create_genesis(&db.sequencer, tenant, g, 1_000)
+            .await
+            .unwrap();
+        let log = PgLog::new(db.sequencer.clone(), d, tenant, "t".to_owned(), TTL);
+        let leader = Leader::acquire(log, d, EventKey::new(Secret::new([5; 32])))
+            .await
+            .unwrap();
+        let reader = PgReader::new(db.app.clone(), DomainId::from_bytes(d.0));
+        let mut core = Authority::new(leader, reader, binding(), Counter(0), d);
+        onboard(&mut core, d, ROOT, ROOT_KEY, (1, 2)).await;
+        onboard(&mut core, d, ALICE, ALICE_KEY, (3, 4)).await;
+        let shop = ExerciseBasis::Anchor(meta::object_id(&d, kind::ANCHOR, 1));
+        let mut both = Vec::new();
+        for seed in [ROOT_KEY, ALICE_KEY] {
+            let r = send(&mut core, shop_request(d, 9, Mode::Check, shop), seed)
+                .await
+                .unwrap();
+            both.push(r.decision);
+        }
+        decisions.push(both);
+    }
+    assert_eq!(decisions[0][0].outcome, Outcome::Allow);
+    assert_ne!(decisions[0][1].outcome, Outcome::Allow);
+    assert_eq!(decisions[0], decisions[1]);
 }

@@ -616,6 +616,7 @@ fn scenarios() -> Vec<(&'static str, World)> {
 }
 
 fn requirement_scenarios() -> Vec<(&'static str, World)> {
+    // XI-6
     let mut out = Vec::new();
     let mut w = World::new();
     w.hop(1).authority.requirements.insert(approval(true));
@@ -1752,6 +1753,7 @@ fn hex_of(b: &[u8]) -> String {
 // OP-128, C14: the R8 adversarial corpus; no attack succeeds and F.6 is marked as relaxed
 #[test]
 fn r8_adversarial_vectors_match() {
+    // G2, MUST-NEVER-4, TNI-7, SI-19, U17
     use crate::codec::Canonical;
     use crate::vector_rules::{field, golden, hex};
     use suiss_crypto::dcbor::{Limits, encode};

@@ -271,6 +271,7 @@ async fn a_nonce_stays_open_only_after_require_action() {
 // INV-30, G23
 #[tokio::test]
 async fn append_only_tables_reject_change_at_every_layer() {
+    // INV-29, SI-2, G24
     let db = fresh().await.unwrap();
     let d = domain(&db, 14).await;
     let (lease, head) = acquire_lease(&db.sequencer, &d, "a", TTL).await.unwrap();
@@ -334,6 +335,7 @@ async fn append_only_tables_reject_change_at_every_layer() {
 // INV-2
 #[tokio::test]
 async fn only_the_sequencer_writes_the_log() {
+    // PI-4, SI-22, CI-13
     let db = fresh().await.unwrap();
     let d = domain(&db, 16).await;
     let (lease, head) = acquire_lease(&db.sequencer, &d, "a", TTL).await.unwrap();

@@ -455,6 +455,7 @@ fn anchor_changes_need_a_complete_disposition() {
 // C9, C26: a joint root acts with k−1 further contributions; root terms are added
 #[test]
 fn joint_roots_require_contributions() {
+    // INV-10
     let mut r = Run::new();
     let a = shop_anchor();
     let create = Payload::AnchorCreate {
@@ -647,6 +648,7 @@ fn release_of(exercise: Digest, grounds: &[u8]) -> Payload {
 // rest of every draw; a ground is used once and Σrelease never exceeds the draw
 #[test]
 fn a_release_returns_at_most_the_draw() {
+    // TI-RT8, G3, MUST-NEVER-5
     let mut r = Run::new();
     let (ex, _) = r
         .act(
@@ -954,6 +956,7 @@ impl Recorder {
     reason = "one scripted run of the meta-actions"
 )]
 fn meta_vectors_match() {
+    // INV-13, EI-8
     use crate::vector_rules::{field, golden};
     use alloc::format;
     let mut r = Recorder {

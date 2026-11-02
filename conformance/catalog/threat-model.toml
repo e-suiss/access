@@ -7,7 +7,10 @@ title = "Malicious user"
 stride = ["E"]
 linddun = []
 rows = ["G1", "G2", "G3"]
-tests = []
+tests = [
+  "crates/kernel/src/combinator/tests.rs::r8_adversarial_vectors_match",
+  "crates/authority-core/tests/commit.rs::a_grant_allows_until_it_is_revoked",
+]
 
 [[threat]]
 id = "TH-2"
@@ -24,7 +27,9 @@ title = "Malicious agent"
 stride = ["S", "E"]
 linddun = []
 rows = ["DL-6", "PI-11"]
-tests = []
+tests = [
+  "crates/kernel/src/combinator/tests.rs::r8_adversarial_vectors_match",
+]
 
 [[threat]]
 id = "TH-4"
@@ -32,7 +37,9 @@ title = "Compromised agent"
 stride = ["S", "E"]
 linddun = []
 rows = ["DL-6", "PI-11"]
-tests = []
+tests = [
+  "crates/authority-core/tests/commit.rs::a_compromise_restricts_instances_set_up_after_it",
+]
 
 [[threat]]
 id = "TH-5"
@@ -64,7 +71,9 @@ title = "Malicious PEP or verifier"
 stride = ["T", "R"]
 linddun = []
 rows = ["U1", "U2", "N-3"]
-tests = []
+tests = [
+  "crates/http/tests/tls.rs::a_client_certificate_names_the_pep",
+]
 
 [[threat]]
 id = "TH-9"
@@ -73,7 +82,10 @@ stride = ["T", "I", "E"]
 linddun = ["Detecting", "Data disclosure"]
 rows = ["DL-1", "DL-4"]
 refs = ["§13.2"]
-tests = []
+tests = [
+  "crates/store/tests/authority.rs::append_only_tables_reject_change_at_every_layer",
+  "crates/store/tests/authority.rs::only_the_sequencer_writes_the_log",
+]
 
 [[threat]]
 id = "TH-10"
@@ -89,7 +101,9 @@ title = "Party key theft"
 stride = ["S"]
 linddun = []
 rows = ["U14", "U25", "U41", "G47"]
-tests = []
+tests = [
+  "crates/authority-core/tests/commit.rs::a_compromise_restricts_instances_set_up_after_it",
+]
 
 [[threat]]
 id = "TH-12"
@@ -97,7 +111,9 @@ title = "Instance key theft"
 stride = ["S"]
 linddun = []
 rows = ["U14", "U25", "U41", "G47"]
-tests = []
+tests = [
+  "crates/authority-core/tests/commit.rs::a_compromise_restricts_instances_set_up_after_it",
+]
 
 [[threat]]
 id = "TH-13"
@@ -113,7 +129,9 @@ title = "Approval fatigue"
 stride = ["S", "E"]
 linddun = ["Unawareness"]
 rows = ["SEC17", "SEC28"]
-tests = []
+tests = [
+  "crates/authority-core/tests/commit.rs::approval_requests_are_throttled_per_requester",
+]
 
 [[threat]]
 id = "TH-15"
@@ -121,7 +139,9 @@ title = "Push bombing"
 stride = ["S", "E"]
 linddun = ["Unawareness"]
 rows = ["SEC17", "SEC28"]
-tests = []
+tests = [
+  "crates/authority-core/tests/commit.rs::approval_requests_are_throttled_per_requester",
+]
 
 [[threat]]
 id = "TH-16"
@@ -137,7 +157,9 @@ title = "Confused deputy"
 stride = ["E"]
 linddun = []
 rows = ["PI-7", "DL-6"]
-tests = []
+tests = [
+  "crates/kernel/src/combinator/tests.rs::r8_adversarial_vectors_match",
+]
 
 [[threat]]
 id = "TH-18"
@@ -145,7 +167,9 @@ title = "Collusion"
 stride = ["E"]
 linddun = []
 rows = ["PI-7", "DL-6"]
-tests = []
+tests = [
+  "crates/kernel/src/meta/tests.rs::joint_roots_require_contributions",
+]
 
 [[threat]]
 id = "TH-19"
@@ -153,7 +177,10 @@ title = "Explanation probing"
 stride = ["I"]
 linddun = ["Identifying", "Data disclosure"]
 rows = ["DL-7", "SEC24", "SEC29"]
-tests = []
+tests = [
+  "crates/authority-core/tests/commit.rs::a_recorded_decision_is_explained_as_it_was",
+  "crates/authority-core/tests/commit.rs::search_shows_what_the_reader_may_see",
+]
 
 [[threat]]
 id = "TH-20"
@@ -161,7 +188,9 @@ title = "Audit export exfiltration"
 stride = ["I"]
 linddun = ["Identifying", "Data disclosure"]
 rows = ["DL-7", "SEC24", "SEC29"]
-tests = []
+tests = [
+  "crates/authority-core/tests/commit.rs::a_recorded_decision_is_explained_as_it_was",
+]
 
 [[threat]]
 id = "TH-21"
@@ -169,7 +198,9 @@ title = "Publisher compromise"
 stride = ["S", "T"]
 linddun = []
 rows = ["SEC9", "SEC16", "G45"]
-tests = []
+tests = [
+  "crates/authority-core/tests/commit.rs::an_action_without_an_accepted_schema_is_denied",
+]
 
 [[threat]]
 id = "TH-22"
@@ -185,7 +216,9 @@ title = "HR issuer compromise"
 stride = ["S", "T"]
 linddun = []
 rows = ["SEC9", "SEC16", "G45"]
-tests = []
+tests = [
+  "crates/authority-core/tests/commit.rs::a_member_holds_the_groups_grant_from_its_episode",
+]
 
 [[threat]]
 id = "TH-24"
@@ -221,7 +254,9 @@ stride = ["T", "S"]
 linddun = []
 rows = ["PI-7"]
 refs = ["§13.7.8", "K-2"]
-tests = []
+tests = [
+  "crates/authority-sequencer/tests/sequencer.rs::trusted_time_from_two_sources",
+]
 
 [[threat]]
 id = "TH-28"
@@ -230,7 +265,9 @@ stride = ["T", "S"]
 linddun = []
 rows = ["PI-7"]
 refs = ["§13.7.8", "K-2"]
-tests = []
+tests = [
+  "crates/authority-core/tests/commit.rs::a_nonce_returns_its_decision_and_binds_its_intent",
+]
 
 [[threat]]
 id = "TH-29"
@@ -239,7 +276,7 @@ stride = ["T", "S"]
 linddun = []
 rows = ["PI-7"]
 refs = ["§13.7.8", "K-2"]
-tests = []
+tests = ["crates/kernel/src/claim/tests.rs::narrowing_an_acceptance"]
 
 [[threat]]
 id = "TH-30"
@@ -248,7 +285,10 @@ stride = ["D"]
 linddun = []
 rows = ["SI-20"]
 refs = ["§14.6"]
-tests = []
+tests = [
+  "crates/http/tests/authzen.rs::an_oversized_body_is_refused",
+  "crates/authority-core/tests/commit.rs::approval_requests_are_throttled_per_requester",
+]
 
 [[threat]]
 id = "TH-31"

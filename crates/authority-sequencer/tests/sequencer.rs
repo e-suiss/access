@@ -253,6 +253,7 @@ async fn a_nonce_retry_replays_and_a_reuse_conflicts() {
 
 #[tokio::test]
 async fn outbox_ids_are_keyed_per_domain_position_and_index() {
+    // G37
     let db = fresh().await.unwrap();
     let d = domain(&db, "g").await;
     let mut l = lead(&db, d, "a").await.unwrap();
@@ -289,6 +290,7 @@ async fn trusted_time_from_two_sources() {
 // §17.1.1 step 9, TI-4: a stale read refuses the batch, the leader stays and goes on
 #[tokio::test]
 async fn a_stale_read_keeps_the_leader() {
+    // G41
     let db = fresh().await.unwrap();
     let d = domain(&db, "g").await;
     let mut l = lead(&db, d, "a").await.unwrap();
@@ -359,6 +361,7 @@ fn set(key: &[u8], v: u64) -> Value {
 // L2-REC-3, TI-RT1, TI-1, TI-16, TI-RT4: the stored state is the fold of the log, and the arbiter sees a change
 #[tokio::test]
 async fn the_state_is_the_fold_of_the_log() {
+    // G19
     use access_authority_sequencer::adapters::fold_check;
     use access_store::authority::{state_of, versions};
     let db = fresh().await.unwrap();

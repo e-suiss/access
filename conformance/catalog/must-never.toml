@@ -5,7 +5,6 @@ id = "MUST-NEVER-1"
 family = "MUST-NEVER"
 section = "2.8"
 status = "frozen"
-stage = 3
 title = "Never infer authority from identity or authentication"
 tests = []
 
@@ -14,7 +13,6 @@ id = "MUST-NEVER-2"
 family = "MUST-NEVER"
 section = "2.8"
 status = "frozen"
-stage = 1
 title = "Never let restriction policy mint authority"
 tests = []
 
@@ -23,7 +21,6 @@ id = "MUST-NEVER-3"
 family = "MUST-NEVER"
 section = "2.8"
 status = "frozen"
-stage = 3
 title = "Never let risk, claims or posture create authority"
 tests = []
 
@@ -32,7 +29,6 @@ id = "MUST-NEVER-4"
 family = "MUST-NEVER"
 section = "2.8"
 status = "frozen"
-stage = 3
 title = "Never amplify authority via delegation, projection, federation or offline"
 tests = []
 
@@ -41,7 +37,6 @@ id = "MUST-NEVER-5"
 family = "MUST-NEVER"
 section = "2.8"
 status = "frozen"
-stage = 3
 title = "Never own domain truth; consume attributed inputs only"
 tests = []
 
@@ -50,7 +45,7 @@ id = "MUST-NEVER-6"
 family = "MUST-NEVER"
 section = "2.8"
 status = "frozen"
-stage = 3
+stage = 9
 title = "Never become a workflow engine or hold step state"
 tests = []
 
@@ -59,7 +54,7 @@ id = "MUST-NEVER-7"
 family = "MUST-NEVER"
 section = "2.8"
 status = "frozen"
-stage = 3
+stage = 11
 title = "Never become an execution engine or transaction coordinator"
 tests = []
 
@@ -68,7 +63,7 @@ id = "MUST-NEVER-8"
 family = "MUST-NEVER"
 section = "2.8"
 status = "frozen"
-stage = 3
+stage = 12
 title = "Never operate a global reputation or trust score"
 tests = []
 
@@ -77,7 +72,6 @@ id = "MUST-NEVER-9"
 family = "MUST-NEVER"
 section = "2.8"
 status = "frozen"
-stage = 3
 title = "Never act on a Claim outside explicit issuer acceptance"
 tests = []
 
@@ -86,7 +80,6 @@ id = "MUST-NEVER-10"
 family = "MUST-NEVER"
 section = "2.8"
 status = "frozen"
-stage = 3
 title = "Never promise that an effect happened, was correct or stopped"
 tests = []
 
@@ -95,7 +88,6 @@ id = "MUST-NEVER-11"
 family = "MUST-NEVER"
 section = "2.8"
 status = "frozen"
-stage = 3
 title = "Never fail open"
 tests = []
 
@@ -104,7 +96,6 @@ id = "MUST-NEVER-12"
 family = "MUST-NEVER"
 section = "2.8"
 status = "frozen"
-stage = 3
 title = "Never reuse an ALLOW beyond its bound intent envelope"
 tests = []
 
@@ -122,7 +113,7 @@ id = "MUST-NEVER-14"
 family = "MUST-NEVER"
 section = "2.8"
 status = "frozen"
-stage = 3
+stage = 9
 title = "Never require private context beyond authority-relevant facts"
 tests = []
 
