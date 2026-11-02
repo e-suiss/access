@@ -13,6 +13,7 @@ pub mod codec;
 pub mod combinator;
 pub mod digest;
 pub mod fold;
+pub mod foreign;
 pub mod intent;
 pub mod json;
 pub mod meta;

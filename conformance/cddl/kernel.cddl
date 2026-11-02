@@ -569,8 +569,11 @@ mandate-envelope = {
   ? pin: [grant: id, holder: party-ref, since: uint],
 }
 
+; OP-143 m.13 (a): a foreign issuer is a foreign domain with its pinned binding keys; it goes
+; with use "foreign-authority" and only with it. Each class of such an Acceptance is an action
+; namespace of that domain.
 acceptance-content = {
-  issuer: party-ref / { keys: key-set },
+  issuer: party-ref / { foreign: foreign-issuer },
   use: "actor-binding" / "predicate-input" / "subject-selection" / "foreign-authority" / "schema-definition",
   classes: [+ ident],
   subject: subject-selector,
@@ -582,6 +585,8 @@ acceptance-content = {
   ? quota: { count: uint .ge 1, window_s: uint .ge 1 },
   ? spp: spp,
 }
+
+foreign-issuer = { domain: domain-id, binding: [+ binding-key] }
 
 ; OP-141 m.35: a Schema Publication Package, carried by a schema-definition Acceptance whose
 ; issuer is its publisher.

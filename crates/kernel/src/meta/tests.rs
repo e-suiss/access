@@ -985,14 +985,37 @@ fn cbor(v: &Value) -> String {
 }
 
 impl Recorder {
-    fn step(
+    /// A case whose payload is given as a value, so that one the Kernel refuses to decode is
+    /// recorded too.
+    fn step_raw(
         &mut self,
         id: &str,
         rules: &[&str],
         actor: (Id, Id),
         basis: ExerciseBasis,
-        payload: &Payload,
+        payload: &Value,
     ) -> Option<Digest> {
+        match Payload::from_value(payload) {
+            Ok(p) => self.step(id, rules, actor, basis, &p),
+            Err(e) => {
+                let head = self.head(id, rules, actor, basis, payload);
+                self.cases.push(alloc::format!(
+                    "  {head}, \"error\": \"{}\"}}",
+                    MetaError::from(e).code()
+                ));
+                None
+            }
+        }
+    }
+
+    fn head(
+        &self,
+        id: &str,
+        rules: &[&str],
+        actor: (Id, Id),
+        basis: ExerciseBasis,
+        payload: &Value,
+    ) -> String {
         use crate::vector_rules::{field, hex};
         use alloc::format;
         let state: Vec<String> = self
@@ -1003,7 +1026,7 @@ impl Recorder {
             .map(|(k, v)| format!("[\"{}\", \"{}\"]", hex(k), cbor(v)))
             .collect();
         let exercise = exercise_id(&DOMAIN, &self.run.pos.to_be_bytes().repeat(2)).unwrap();
-        let head = format!(
+        format!(
             "{{\"id\": \"{id}\", {}, \"state\": [{}], \"domain_id\": \"{}\", \"exercise\": \"{}\", \"pos\": {}, \"now\": {}, \"party\": \"{}\", \"instance\": \"{}\", \"basis\": \"{}\", \"capacity\": \"{}\", \"payload\": \"{}\"",
             field(rules),
             state.join(", "),
@@ -1015,8 +1038,22 @@ impl Recorder {
             hex(&actor.1.0),
             cbor(&basis_value(&basis)),
             cbor(&capacity_value(Capacity::Own)),
-            cbor(&payload.to_value()),
-        );
+            cbor(payload),
+        )
+    }
+
+    fn step(
+        &mut self,
+        id: &str,
+        rules: &[&str],
+        actor: (Id, Id),
+        basis: ExerciseBasis,
+        payload: &Payload,
+    ) -> Option<Digest> {
+        use crate::vector_rules::hex;
+        use alloc::format;
+        let head = self.head(id, rules, actor, basis, &payload.to_value());
+        let exercise = exercise_id(&DOMAIN, &self.run.pos.to_be_bytes().repeat(2)).unwrap();
         let (tail, ok) = match self.run.act(actor.0, actor.1, basis, payload) {
             Ok((_, out)) => {
                 let effects: Vec<String> = out
@@ -1480,6 +1517,112 @@ fn meta_vectors_match() {
             acceptance: accepted,
             content: acceptance(CAROL, "predicate-input", &["staff"], 50),
         },
+    );
+    // OP-143 m.13 (a): a foreign-authority Acceptance names a foreign domain and its pinned
+    // binding keys, joins that domain's index and keeps its pins; no other pairing decodes
+    let pinned = |seed: u8| {
+        let key = crate::verify::cose::PublicKey::Ed25519(
+            ed25519_dalek::SigningKey::from_bytes(&[seed; 32])
+                .verifying_key()
+                .to_bytes(),
+        );
+        crate::verify::key_scope::BindingKey {
+            kid: crate::verify::key_scope::thumbprint(&key),
+            alg: crate::verify::cose::Algorithm::Ed25519,
+            key,
+            scope: crate::verify::key_scope::BindingScope::Domain,
+            superseded: None,
+        }
+    };
+    let foreign_issuer = |seed: u8| {
+        let b = pinned(seed);
+        Value::Map(alloc::vec![(
+            Value::text(crate::foreign::INDEX),
+            crate::foreign::ForeignIssuer {
+                domain: Digest([0x0a; 32]),
+                binding: BTreeMap::from([(b.kid, b)]),
+            }
+            .to_value(),
+        )])
+    };
+    let with_issuer = |issuer: Value, use_: &str| match acceptance(CAROL, use_, &["pay"], 100) {
+        Value::Map(m) => Value::Map(
+            m.into_iter()
+                .map(|(k, v)| {
+                    if k == Value::text("issuer") {
+                        (k, issuer.clone())
+                    } else {
+                        (k, v)
+                    }
+                })
+                .collect(),
+        ),
+        other => other,
+    };
+    let establish =
+        |content: Value| Value::Map(alloc::vec![(Value::text("acceptance_establish"), content)]);
+    let foreign = r
+        .step_raw(
+            "foreign-acceptance-established",
+            &["L0-META-5", "L0-META-27", "L0-META-28", "L0-META-29"],
+            (ROOT, ROOT),
+            meta,
+            &establish(with_issuer(foreign_issuer(3), "foreign-authority")),
+        )
+        .unwrap();
+    r.step_raw(
+        "foreign-acceptance-amend-pins",
+        &["L0-META-27", "L0-META-31"],
+        (ROOT, ROOT),
+        meta,
+        &Value::Map(alloc::vec![(
+            Value::text("acceptance_amend"),
+            map([
+                (
+                    "acceptance",
+                    Some(object_id(&foreign, kind::ACCEPTANCE, 0).to_value()),
+                ),
+                (
+                    "content",
+                    Some(with_issuer(foreign_issuer(4), "foreign-authority")),
+                ),
+            ]),
+        )]),
+    );
+    r.step_raw(
+        "foreign-issuer-other-use",
+        &["L0-META-27", "L0-META-31"],
+        (ROOT, ROOT),
+        meta,
+        &establish(with_issuer(foreign_issuer(3), "predicate-input")),
+    );
+    r.step_raw(
+        "foreign-authority-party-issuer",
+        &["L0-META-27", "L0-META-31"],
+        (ROOT, ROOT),
+        meta,
+        &establish(acceptance(CAROL, "foreign-authority", &["pay"], 100)),
+    );
+    let mut forged = pinned(3);
+    forged.kid = pinned(4).kid;
+    r.step_raw(
+        "foreign-issuer-pin-not-thumbprint",
+        &["L0-META-27", "L0-META-31"],
+        (ROOT, ROOT),
+        meta,
+        &establish(with_issuer(
+            Value::Map(alloc::vec![(
+                Value::text(crate::foreign::INDEX),
+                map([
+                    ("domain", Some(Digest([0x0a; 32]).to_value())),
+                    (
+                        "binding",
+                        Some(Value::Array(alloc::vec![forged.to_value()]))
+                    ),
+                ]),
+            )]),
+            "foreign-authority",
+        )),
     );
     // OP-141 m.35: a schema-definition Acceptance carries its SPP and joins its namespace's index
     let with_spp = |namespace: &str| {

@@ -33,7 +33,7 @@ from .codec import (
     encode,
     same,
 )
-from .keyscope import check_cose_alg, check_public_key, thumbprint
+from .keyscope import check_binding_key, thumbprint
 from .validity import VARIANT_CLASS
 
 
@@ -60,14 +60,15 @@ def check_named_pin(value):
     check_map(value, {"name": check_ident, "version": check_uint, "digest": check_digest})
 
 
-def check_key_set(value):
-    def keys(table):
-        if not isinstance(table, dict) or not table:
+def check_foreign_issuer(value):
+    # OP-143 m.13 (a): a foreign domain with its pinned binding keys
+    check_map(value, {"domain": check_digest, "binding": check_list(check_binding_key, nonempty=True, is_set=True)})
+    kids = [binding["kid"] for binding in value["binding"]]
+    if len(set(kids)) != len(kids):
+        refuse("meta-malformed")
+    for binding in value["binding"]:
+        if thumbprint(binding["key"]) != binding["kid"]:
             refuse("meta-malformed")
-        for kid, key in table.items():
-            check_bytes(32)(kid)
-            check_public_key(key)
-    check_map(value, {"keys": keys, "allowed": check_list(check_cose_alg, nonempty=True)})
 
 
 def check_root(value):
@@ -157,6 +158,9 @@ def check_params(value):
 
 
 def check_acceptance_content(value):
+    # OP-143 m.13 (a): a foreign issuer goes with use foreign-authority and only with it
+    if isinstance(value, dict) and (value.get("use") == "foreign-authority") != isinstance(value.get("issuer"), dict):
+        refuse("meta-malformed")
     schema = isinstance(value, dict) and value.get("use") == "schema-definition"
     if schema != ("spp" in value if isinstance(value, dict) else False):
         refuse("meta-malformed")
@@ -165,7 +169,7 @@ def check_acceptance_content(value):
         if not same(value["issuer"], value["spp"]["publisher"]):
             refuse("meta-malformed")
     check_map({k: v for k, v in value.items() if k != "spp"}, {
-        "issuer": lambda issuer: check_id(issuer) if isinstance(issuer, bytes) else check_map(issuer, {"keys": check_key_set}),
+        "issuer": lambda issuer: check_id(issuer) if isinstance(issuer, bytes) else check_map(issuer, {"foreign": check_foreign_issuer}),
         "use": check_text_in("actor-binding", "predicate-input", "subject-selection", "foreign-authority", "schema-definition"),
         "classes": check_list(check_ident, nonempty=True),
         "subject": check_subject_selector,
@@ -781,6 +785,9 @@ class Apply:
         # L0-META-5
         if old is None and isinstance(content["issuer"], bytes):
             self.add_to_index("acceptances", content["issuer"], acceptance_id)
+        if old is None and isinstance(content["issuer"], dict):
+            # OP-143 m.13 (a)
+            self.add_to_index("foreign", content["issuer"]["foreign"]["domain"], acceptance_id)
         if content["use"] == "subject-selection":
             old_classes = [] if old is None else old["classes"]
             for cls in old_classes:

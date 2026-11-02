@@ -1157,19 +1157,28 @@ const USES: [&str; 5] = [
 
 fn acceptance_content(v: &Value) -> Result<Value, ModelError> {
     let mut f = Fields::of(v)?;
-    match f.req("issuer")? {
+    let foreign = match f.req("issuer")? {
         Value::Bytes(_) => {
-            f.opt("issuer");
+            id(f.req("issuer")?)?;
+            false
         }
         other => {
-            let (k, _) = single(other)?;
-            if k != "keys" {
+            let (k, inner) = single(other)?;
+            if k != crate::foreign::INDEX {
                 return Err(ModelError::Unknown);
             }
+            crate::foreign::ForeignIssuer::from_value(inner)?;
+            true
         }
-    }
+    };
     let schema = match f.req("use")? {
-        Value::Text(u) if USES.contains(&u.as_str()) => u == "schema-definition",
+        Value::Text(u) if USES.contains(&u.as_str()) => {
+            // OP-143 m.13 (a)
+            if (u == crate::foreign::USE) != foreign {
+                return Err(ModelError::Shape);
+            }
+            u == "schema-definition"
+        }
         _ => return Err(ModelError::Unknown),
     };
     // OP-141 m.35 (a)
@@ -1987,6 +1996,19 @@ fn genesis_acceptances(domain: &Digest, list: &Value) -> Result<Vec<Effect>, Met
     for (issuer, set) in by_issuer {
         out.push((key(kind::ACCEPTANCES, &issuer), Some(ids_value(&set))));
     }
+    // OP-143 m.13 (a)
+    let mut by_domain: BTreeMap<Vec<u8>, BTreeSet<Id>> = BTreeMap::new();
+    for (seq, a) in (0_u64..).zip(crate::codec::set_items(list, true)?) {
+        if let Some(foreign) = crate::foreign::ForeignIssuer::of(a)? {
+            by_domain
+                .entry(crate::foreign::index_key(&foreign.domain))
+                .or_default()
+                .insert(object_id(domain, kind::ACCEPTANCE, seq));
+        }
+    }
+    for (k, set) in by_domain {
+        out.push((k, Some(ids_value(&set))));
+    }
     // OP-141 m.20 (e)
     let mut by_class: BTreeMap<String, (Option<Value>, BTreeSet<Id>)> = BTreeMap::new();
     for (seq, a) in (0_u64..).zip(crate::codec::set_items(list, true)?) {
@@ -2717,6 +2739,13 @@ pub fn apply(ctx: &Context<'_>, payload: &Payload, view: &dyn View) -> Result<Ou
                 let mut set_of = ids(view, kind::ACCEPTANCES, &issuer)?;
                 set_of.insert(aid);
                 set(&mut out, kind::ACCEPTANCES, &issuer, ids_value(&set_of));
+            }
+            // OP-143 m.13 (a)
+            if let Ok(Some(foreign)) = crate::foreign::ForeignIssuer::of(content) {
+                let k = crate::foreign::index_key(&foreign.domain);
+                let mut set_of = index_of(view, &k)?;
+                set_of.insert(aid);
+                out.effects.push((k, Some(ids_value(&set_of))));
             }
             select(view, &mut out, content, aid, None)?;
             set(

@@ -306,7 +306,7 @@ pub fn verify(
 /// What decides whether a Claim is admitted: the parts of an `acceptance-content` (§9.13).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Gate {
-    /// Issuer Party; pinned key sets are not used in this version.
+    /// Issuer Party; `None` for a foreign domain (OP-143 m.13 (a)).
     pub issuer: Option<Id>,
     /// The use.
     pub use_: String,
