@@ -448,6 +448,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         };
         let (mut evaluation, _) = self.passes(req, &frame).await?;
         self.tiered(req, &mut evaluation, opened, at).await?;
+        self.throttled(&mut evaluation, actor, opened, at).await?;
         Ok(evaluation)
     }
 
@@ -755,6 +756,53 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         Ok(())
     }
 
+    /// Requester throttling: a `REQUIRE_ACTION` that newly asks for a contribution
+    /// counts against the actor Party's request rate; over it, the request is denied
+    /// (§13.7.4, SEC28, OP-141 m.40).
+    async fn throttled(
+        &self,
+        evaluation: &mut Evaluation,
+        actor: Option<Actor>,
+        open: bool,
+        now: u64,
+    ) -> Result<(), CoreError> {
+        let asks = evaluation.decision.outcome == Outcome::RequireAction
+            && evaluation
+                .decision
+                .unmet
+                .iter()
+                .any(|u| u.term.proof_kind == access_kernel::model::ProofKind::Contribution);
+        let Some(actor) = actor.filter(|_| asks && !open) else {
+            return Ok(());
+        };
+        let mut draws = Vec::new();
+        for (len, limit) in crate::rate::REQUEST_RATE {
+            let key = crate::rate::request_rate_key(&actor.party, len, now);
+            if self.counter(&key).await? >= limit {
+                evaluation.decision = Decision {
+                    outcome: Outcome::Deny,
+                    blockers: vec![Blocker {
+                        class: BlockerClass::Restricted,
+                        subcode: Some(String::from("policy:request-rate")),
+                        position: Position::ActorSide,
+                        resolver: Resolver::Time,
+                        remediation: Remediation::WaitUntil(
+                            now.saturating_sub(now.checked_rem(len).unwrap_or(0))
+                                .saturating_add(len),
+                        ),
+                    }],
+                    unmet: Vec::new(),
+                    relied_on: Vec::new(),
+                };
+                evaluation.draws.clear();
+                return Ok(());
+            }
+            draws.push((key, limit, 1, None));
+        }
+        evaluation.draws.extend(draws);
+        Ok(())
+    }
+
     /// Runs one request through the commit path (§17.1.1).
     ///
     /// # Errors
@@ -814,6 +862,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             };
             let (mut evaluation, snapshot) = self.passes(req, &frame).await?;
             self.tiered(req, &mut evaluation, open, now).await?;
+            self.throttled(&mut evaluation, actor, open, now).await?;
             if req.mode == Mode::Check {
                 return Ok(answer(evaluation.decision, None, None, false));
             }

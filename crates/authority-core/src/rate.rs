@@ -14,6 +14,29 @@ pub const EXPLAIN: (u64, u64) = (30, 500);
 /// Search per minute; no daily limit.
 pub const SEARCH: u64 = 10;
 
+/// Approval requests a requester Party may open per window: window in milliseconds and limit
+/// (§13.7.4, SEC28, OP-141 m.40 (a), PD).
+pub const REQUEST_RATE: [(u64, u64); 2] = [(3_600_000, 20), (86_400_000, 100)];
+
+/// The counter of a requester Party's approval requests in the window of length `len` holding
+/// `now` (OP-141 m.40 (b)).
+#[must_use]
+pub fn request_rate_key(party: &Id, len: u64, now: u64) -> Vec<u8> {
+    use access_kernel::codec::Canonical;
+    use suiss_crypto::dcbor::{self, Limits, Value};
+    let start = now.saturating_sub(now.checked_rem(len).unwrap_or(0));
+    dcbor::encode(
+        &Value::Array(vec![
+            Value::text("request-rate"),
+            party.to_value(),
+            Value::Unsigned(len),
+            Value::Unsigned(start),
+        ]),
+        Limits::CEILING,
+    )
+    .unwrap_or_default()
+}
+
 /// Entries kept before idle ones are dropped.
 const KEEP: usize = 100_000;
 

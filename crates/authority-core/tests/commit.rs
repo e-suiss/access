@@ -1572,6 +1572,44 @@ async fn a_contribution_approves_once() {
     fold_check(&db.sequencer, d).await.unwrap();
 }
 
+// §13.7.4, SEC28, OP-141 m.40: a requester opens at most 20 approval requests an hour; the
+// next is denied and records no draw, and reopening a nonce is not a new request
+#[tokio::test]
+async fn approval_requests_are_throttled_per_requester() {
+    let db = fresh().await.unwrap();
+    let approve = term(
+        ProofKind::Contribution,
+        "approve",
+        ProofBinding::IntentDigest,
+    );
+    let (mut core, d) = setup_with(&db, gated(&[approve])).await;
+    onboard(&mut core, d, ROOT, ROOT_KEY, (1, 2)).await;
+    let shop = ExerciseBasis::Anchor(meta::object_id(&d, kind::ANCHOR, 1));
+    for nonce in 30..50 {
+        let asked = send(
+            &mut core,
+            shop_request(d, nonce, Mode::Commit, shop),
+            ROOT_KEY,
+        )
+        .await
+        .unwrap();
+        assert_eq!(asked.decision.outcome, Outcome::RequireAction);
+    }
+    let again = send(&mut core, shop_request(d, 30, Mode::Commit, shop), ROOT_KEY)
+        .await
+        .unwrap();
+    assert_eq!(again.decision.outcome, Outcome::RequireAction);
+    let over = send(&mut core, shop_request(d, 50, Mode::Commit, shop), ROOT_KEY)
+        .await
+        .unwrap();
+    assert_eq!(over.decision.outcome, Outcome::Deny);
+    assert_eq!(
+        over.decision.blockers[0].subcode.as_deref(),
+        Some("policy:request-rate")
+    );
+    fold_check(&db.sequencer, d).await.unwrap();
+}
+
 // OP-141 m.19 (i), L1-ADP-13: a continuation names the Exercise it continues
 #[tokio::test]
 async fn a_continuation_names_its_exercise() {
