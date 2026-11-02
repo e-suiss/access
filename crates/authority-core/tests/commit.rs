@@ -47,6 +47,8 @@ const ROOT: Id = Id([1; 16]);
 const ALICE: Id = Id([2; 16]);
 const ROOT_KEY: u8 = 11;
 const ALICE_KEY: u8 = 12;
+const BOB: Id = Id([3; 16]);
+const BOB_KEY: u8 = 13;
 const PEP: &str = "pep.example";
 const NOW: u64 = 10_000;
 
@@ -265,6 +267,7 @@ fn binding() -> Bound {
     Bound(BTreeMap::from([
         (thumbprint(&public(ROOT_KEY)), (ROOT, public(ROOT_KEY))),
         (thumbprint(&public(ALICE_KEY)), (ALICE, public(ALICE_KEY))),
+        (thumbprint(&public(BOB_KEY)), (BOB, public(BOB_KEY))),
     ]))
 }
 
@@ -1890,8 +1893,8 @@ fn search_request(d: Digest, nonce: u8, kind: &str) -> Request {
     }
 }
 
-// OP-141 m.22 (g), (j), E26: the index names candidates; a root sees who can act within its
-// Anchor, a Party sees what it reaches itself, and nobody sees more
+// OP-141 m.22 (g), (j), m.41 (c), E26: the index names candidates; a viewer sees who can act
+// on the Grants it views, a Party sees what it reaches itself, and nobody sees more
 #[tokio::test]
 #[allow(
     clippy::too_many_lines,
@@ -1981,7 +1984,8 @@ async fn search_shows_what_the_reader_may_see() {
         )
         .await
         .unwrap();
-    assert_eq!(hits, []);
+    // OP-141 m.41 (c): a holder views the Grants of its own lineage
+    assert_eq!(hits, [Hit::Party(ALICE)]);
 
     let mine = Query::Resource {
         party: ALICE,
@@ -2394,4 +2398,137 @@ async fn restriction_policies_narrow_the_commit_path() {
             .unwrap(),
     );
     fold_check(&db.sequencer, d).await.unwrap();
+}
+
+// §6.9 INV-34, §9.7A.1, OP-141 m.41: index differential; over generated Grants, some revoked,
+// the subject search lists exactly the Parties a check allows on some Grant they hold
+#[tokio::test]
+#[allow(
+    clippy::too_many_lines,
+    reason = "one generated scenario from onboarding to the comparison"
+)]
+async fn search_and_check_agree_over_generated_grants() {
+    use access_authority_core::query::{Hit, Query};
+    let db = fresh().await.unwrap();
+    let (mut core, d) = setup(&db).await;
+    onboard(&mut core, d, ROOT, ROOT_KEY, (1, 2)).await;
+    onboard(&mut core, d, ALICE, ALICE_KEY, (3, 4)).await;
+    onboard(&mut core, d, BOB, BOB_KEY, (5, 6)).await;
+    let shop = meta::object_id(&d, kind::ANCHOR, 1);
+    let parties = [(ALICE, ALICE_KEY), (BOB, BOB_KEY)];
+    let mut seed: u64 = 0x5eed;
+    let mut next = move || {
+        seed = seed
+            .wrapping_mul(6_364_136_223_846_793_005)
+            .wrapping_add(1_442_695_040_888_963_407);
+        seed >> 33
+    };
+    let mut nonce = 10u8;
+    let mut held = Vec::new();
+    for _ in 0..8 {
+        let p = usize::from(next() % 2 == 1);
+        let prefix = match next() % 3 {
+            0 => Vec::new(),
+            1 => vec!["a".to_owned()],
+            _ => vec!["b".to_owned()],
+        };
+        let content = GrantContent {
+            basis: GrantBasis::Anchor(shop),
+            holder: SubjectSelector::Party(parties[p].0),
+            authority: authority(
+                vec![action("shop", "read")],
+                ResourceSelector::Structural(Structural {
+                    namespace: "shop".to_owned(),
+                    prefix,
+                    kind: None,
+                    attrs: BTreeMap::new(),
+                }),
+            ),
+            agency: BTreeSet::from([Capacity::Own]),
+            named: None,
+        };
+        let issued = send(
+            &mut core,
+            meta_request(
+                d,
+                nonce,
+                ExerciseBasis::Anchor(shop),
+                Payload::GrantIssue(content),
+            ),
+            ROOT_KEY,
+        )
+        .await
+        .unwrap();
+        allowed(&issued);
+        nonce += 1;
+        let grant = meta::object_id(&issued.exercise.unwrap(), kind::GRANT, 0);
+        let basis = ExerciseBasis::Holding(HoldingRef {
+            grant,
+            holder: parties[p].0,
+            since: issued.record.unwrap(),
+        });
+        held.push((grant, p, basis));
+    }
+    for (grant, _, _) in &held {
+        if next() % 3 == 0 {
+            let revoke = Payload::GrantRevoke { grant: *grant };
+            allowed(
+                &send(
+                    &mut core,
+                    meta_request(d, nonce, ExerciseBasis::Anchor(shop), revoke),
+                    ROOT_KEY,
+                )
+                .await
+                .unwrap(),
+            );
+            nonce += 1;
+        }
+    }
+    access_authority_core::adapters::derive(&db.deriver, d)
+        .await
+        .unwrap();
+    let mut outcomes = [false; 2];
+    for path in ["a", "b", "c"] {
+        let who = Query::Subject {
+            action: action("shop", "read"),
+            resource: ResourceRef {
+                namespace: "shop".to_owned(),
+                path: vec![path.to_owned()],
+                incarnation: 0,
+            },
+        };
+        let found = core
+            .search(
+                &incoming(search_request(d, nonce, "subject"), ROOT_KEY),
+                &who,
+                None,
+                NOW,
+            )
+            .await
+            .unwrap();
+        nonce += 1;
+        let alice_sees = core
+            .search(
+                &incoming(search_request(d, nonce, "subject"), ALICE_KEY),
+                &who,
+                None,
+                NOW,
+            )
+            .await
+            .unwrap();
+        nonce += 1;
+        assert!(!alice_sees.hits.contains(&Hit::Party(BOB)));
+        for (p, (party, key)) in parties.iter().enumerate() {
+            let mut any = false;
+            for (_, _, basis) in held.iter().filter(|h| h.1 == p) {
+                let mut req = shop_request(d, nonce, Mode::Check, *basis);
+                req.intent = intent(action("shop", "read"), ("shop", path), None);
+                nonce += 1;
+                any |= send(&mut core, req, *key).await.unwrap().decision.outcome == Outcome::Allow;
+            }
+            assert_eq!(found.hits.contains(&Hit::Party(*party)), any, "{path} {p}");
+            outcomes[usize::from(any)] = true;
+        }
+    }
+    assert_eq!(outcomes, [true, true]);
 }

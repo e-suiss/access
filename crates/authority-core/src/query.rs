@@ -8,7 +8,7 @@ use access_authority_sequencer::ports::DomainLog;
 use access_kernel::algebra::{Catalog, resource_le};
 use access_kernel::combinator::HopStatus;
 use access_kernel::intent::intent_digest;
-use access_kernel::meta::{self, Actor, AnchorState, GrantBasis, GrantState, View, kind};
+use access_kernel::meta::{self, Actor, ExerciseBasis, GrantState, View, kind};
 use access_kernel::model::{ActionRef, Id, ResourceRef, ResourceSelector, SubjectSelector};
 
 use crate::CoreError;
@@ -84,19 +84,6 @@ pub struct Found {
     pub hits: Vec<Hit>,
     /// The last candidate looked at, when more may follow.
     pub next: Option<Id>,
-}
-
-/// The Anchor at the top of a Grant's lineage.
-fn top_anchor(view: &dyn View, grant: &Id) -> Option<Id> {
-    let mut at = *grant;
-    for _ in 0..meta::MAX_LINEAGE {
-        let g: GrantState = read(view, kind::GRANT, &at)?;
-        match g.content.basis {
-            GrantBasis::Anchor(a) => return Some(a),
-            GrantBasis::Holding(h) => at = h.grant,
-        }
-    }
-    None
 }
 
 /// Whether every hop of the lineage is live.
@@ -257,9 +244,10 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         let on = |r: &ResourceRef| resource_le(&ResourceSelector::Exact(r.clone()), &set.resource);
         match query {
             Query::Subject { action, resource } => {
-                // OP-141 m.22 (j): only within an Anchor the reader roots
-                let anchor: AnchorState = read(view, kind::ANCHOR, &top_anchor(view, g)?)?;
-                meta::root_requirements(&anchor, actor)?;
+                // OP-141 m.22 (j), m.41 (c): only Grants the reader views
+                if !crate::domain::views(view, &ExerciseBasis::Public(*g), &actor.party) {
+                    return None;
+                }
                 (actions.contains(action) && on(resource))
                     .then(|| holder_hit(&grant.content.holder).into_iter().collect())
             }
