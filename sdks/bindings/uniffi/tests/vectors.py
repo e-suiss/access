@@ -102,6 +102,23 @@ class Vectors(unittest.TestCase):
                 self.assertEqual(got, c["within"], c["id"])
         self.count("cve-regressions.json", len(v["cases"]))
 
+    def test_adversarial(self):
+        v = load("adversarial.json")
+        for c in v["cases"]:
+            if c["operation"] == "combinator.evaluate":
+                got = outcome(lambda: k.evaluate(bytes.fromhex(c["input"]), v["fuel"]).hex())
+                want = ("ok", c["decision"]) if "decision" in c else ("error", c["rejection"])
+                self.assertEqual(got, want, c["id"])
+            else:
+                got = k.child_within_parent(
+                    bytes.fromhex(c["child"]),
+                    bytes.fromhex(c["parent"]),
+                    bytes.fromhex(c["holder"]),
+                    b"\xa0",
+                )
+                self.assertEqual(got, c["within"], c["id"])
+        self.count("adversarial.json", len(v["cases"]))
+
     def test_cose(self):
         v = load("cose.json")
         keys = key_set([(bytes.fromhex(kid), bytes.fromhex(key)) for kid, key in v["keys"].items()], v["allowed"])

@@ -180,6 +180,28 @@ describe("Kernel vectors through the Wasm binding", () => {
     expect(v.cases).toHaveLength(38);
   });
 
+  it("adversarial.json", async () => {
+    const v = await vectors("adversarial.json");
+    const fuel = BigInt(v.fuel ?? 0);
+    for (const c of v.cases) {
+      if (c["operation"] === "combinator.evaluate") {
+        const got = outcome(() => toHex(k.evaluate(hex(field(c, "input")), fuel)));
+        const want =
+          "decision" in c ? { ok: field(c, "decision") } : { error: field(c, "rejection") };
+        expect(got, c.id).toEqual(want);
+      } else {
+        const within = k.childWithinParent(
+          hex(field(c, "child")),
+          hex(field(c, "parent")),
+          hex(field(c, "holder")),
+          Uint8Array.of(0xa0),
+        );
+        expect(within, c.id).toBe(c["within"]);
+      }
+    }
+    expect(v.cases).toHaveLength(23);
+  });
+
   it("cose.json", async () => {
     const v = await vectors("cose.json");
     const keys = keySet(

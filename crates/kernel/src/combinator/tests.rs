@@ -15,6 +15,7 @@ use crate::requirement::ProofBinding;
 use crate::restriction::PolicyDeny;
 
 mod coverage;
+mod r8;
 
 fn d(n: u8) -> Digest {
     Digest([n; 32])
@@ -1746,4 +1747,75 @@ fn hex_of(b: &[u8]) -> String {
         let _ = write!(h, "{x:02x}");
         h
     })
+}
+
+// OP-128, C14: the R8 adversarial corpus; no attack succeeds and F.6 is marked as relaxed
+#[test]
+fn r8_adversarial_vectors_match() {
+    use crate::codec::Canonical;
+    use crate::vector_rules::{field, golden, hex};
+    use suiss_crypto::dcbor::{Limits, encode};
+    let all = r8::scenarios();
+    let mut lines = Vec::new();
+    for s in &all {
+        let body = match (&s.case, &s.expect) {
+            (Cve::Evaluate(w, _, _), r8::Expect::Rejected) => {
+                assert!(w.run().is_err(), "{}", s.id);
+                format!(
+                    "\"operation\": \"combinator.evaluate\", \"input\": \"{}\", \"rejection\": \"input\"",
+                    hex(&w.owned().to_bytes().unwrap())
+                )
+            }
+            (Cve::Evaluate(w, _, _), r8::Expect::Outcome(outcome)) => {
+                let dec = w.run().unwrap();
+                assert_eq!(dec.outcome, *outcome, "{}", s.id);
+                assert!(s.relaxed || dec.outcome != Outcome::Allow, "{}", s.id);
+                format!(
+                    "\"operation\": \"combinator.evaluate\", \"input\": \"{}\", \"decision\": \"{}\"",
+                    hex(&w.owned().to_bytes().unwrap()),
+                    hex(&encode(&codec::decision_value(&dec), Limits::CEILING).unwrap())
+                )
+            }
+            (
+                Cve::Delegate {
+                    child,
+                    parent,
+                    holder,
+                    ..
+                },
+                r8::Expect::Within(within),
+            ) => {
+                let got =
+                    crate::algebra::child_within_parent(child, parent, holder, &Catalog::default());
+                assert_eq!(got, *within, "{}", s.id);
+                format!(
+                    "\"operation\": \"algebra.child_within_parent\", \"child\": \"{}\", \"parent\": \"{}\", \"holder\": \"{}\", \"within\": {within}",
+                    hex(&child.to_bytes().unwrap()),
+                    hex(&parent.to_bytes().unwrap()),
+                    hex(&holder.to_bytes().unwrap()),
+                )
+            }
+            _ => panic!("{}: expectation does not fit the case", s.id),
+        };
+        let relaxed = if s.relaxed {
+            ", \"relaxed\": \"C14\""
+        } else {
+            ""
+        };
+        lines.push(format!(
+            "  {{\"id\": \"{}\", {}, \"attack\": \"{}\"{relaxed}, {body}}}",
+            s.id,
+            field(s.rules),
+            s.attack
+        ));
+    }
+    let json = format!(
+        "{{\n \"rule\": \"OP-128\",\n \"track\": \"core\",\n \"version\": 1,\n \"fuel\": 10000,\n \"cases\": [\n{}\n ]\n}}\n",
+        lines.join(",\n")
+    );
+    golden(
+        "adversarial.json",
+        include_str!("../../../../conformance/vectors/core/1/adversarial.json"),
+        &json,
+    );
 }
