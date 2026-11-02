@@ -2891,6 +2891,7 @@ async fn a_projection_carries_a_signed_pap() {
         class: ProfileClass::Online,
         variant: ProfileVariant::OnlineStrict,
         max_staleness_ms: None,
+        offline_slice: None,
     };
     let r = a
         .exercise(&incoming(meta_request(d, 9, shop, issue), ROOT_KEY))
@@ -3077,4 +3078,101 @@ async fn an_allow_carries_a_signed_receipt() {
             access_kernel::receipt::digest(&receipt).unwrap().to_value()
         ])
     );
+}
+
+// OP-143 m.12, INV-21, G3: an offline slice is drawn from the lineage budget when the
+// projection commits; the PAP names it; a slice the budget cannot cover is denied
+#[tokio::test]
+async fn an_offline_slice_is_drawn_in_advance() {
+    use access_kernel::combinator::BlockerClass;
+    use access_kernel::model::{BudgetDimension, BudgetTerm, BudgetWindow};
+    use access_kernel::validity::{ProfileClass, ProfileVariant};
+    let db = fresh().await.unwrap();
+    let (mut core, d) = setup(&db).await;
+    onboard(&mut core, d, ROOT, ROOT_KEY, (1, 2)).await;
+    onboard(&mut core, d, ALICE, ALICE_KEY, (3, 4)).await;
+    let shop = meta::object_id(&d, kind::ANCHOR, 1);
+    let mut granted = authority(vec![action("shop", "read")], selector("shop"));
+    granted.constraints.budget = BTreeSet::from([BudgetTerm {
+        dimension: BudgetDimension::Count,
+        capacity: 5,
+        window: BudgetWindow::Total,
+    }]);
+    granted.constraints.validity.until = NOW + 86_400_000;
+    let grant = Payload::GrantIssue(GrantContent {
+        basis: GrantBasis::Anchor(shop),
+        holder: SubjectSelector::Party(ALICE),
+        authority: granted,
+        agency: BTreeSet::from([Capacity::Own]),
+        named: None,
+    });
+    let mut issue = meta_request(d, 5, ExerciseBasis::Anchor(shop), grant);
+    issue.intent.resources = vec![ResourceRef {
+        namespace: "shop".to_owned(),
+        path: vec![],
+        incarnation: 0,
+    }];
+    let p = issue.payload.clone().unwrap();
+    issue.intent.opaque = BTreeMap::from([("payload".to_owned(), p.digest().unwrap())]);
+    let issued = send(&mut core, issue, ROOT_KEY).await.unwrap();
+    allowed(&issued);
+    let holding = ExerciseBasis::Holding(HoldingRef {
+        grant: meta::object_id(&issued.exercise.unwrap(), kind::GRANT, 0),
+        holder: ALICE,
+        since: issued.record.unwrap(),
+    });
+    let project = |count| {
+        let mut bounds = authority(vec![action("shop", "read")], selector("shop"));
+        bounds.constraints.validity = Window {
+            from: NOW,
+            until: NOW + 3_600_000,
+        };
+        Payload::ProjectionIssue {
+            bounds,
+            audience: BTreeSet::from(["verifier.example".to_owned()]),
+            class: ProfileClass::Intermittent,
+            variant: ProfileVariant::BoundedStaleness,
+            max_staleness_ms: Some(60_000),
+            offline_slice: Some(meta::SliceRequest {
+                count: Some(count),
+                amounts: BTreeMap::new(),
+            }),
+        }
+    };
+    let first = send(
+        &mut core,
+        meta_request(d, 6, holding, project(3)),
+        ALICE_KEY,
+    )
+    .await
+    .unwrap();
+    allowed(&first);
+    let pap = access_kernel::pap::Pap::from_bytes(&first.pap.unwrap()).unwrap();
+    let entry = pap.validity.offline_slice.iter().next().unwrap();
+    assert_eq!((entry.amount, entry.unit.as_str()), (3, "count"));
+    // 2 of 5 remain: a second slice of 3 is denied, a slice of 2 is allowed
+    let over = send(
+        &mut core,
+        meta_request(d, 7, holding, project(3)),
+        ALICE_KEY,
+    )
+    .await
+    .unwrap();
+    assert_eq!(over.decision.outcome, Outcome::Deny);
+    assert!(
+        over.decision
+            .blockers
+            .iter()
+            .any(|b| b.class == BlockerClass::BudgetExhausted)
+    );
+    allowed(
+        &send(
+            &mut core,
+            meta_request(d, 8, holding, project(2)),
+            ALICE_KEY,
+        )
+        .await
+        .unwrap(),
+    );
+    fold_check(&db.sequencer, d).await.unwrap();
 }

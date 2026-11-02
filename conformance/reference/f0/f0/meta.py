@@ -2,6 +2,7 @@ import hashlib
 
 from .algebra import authority_within, child_within_parent, is_subset, resource_within, subject_within, window_within
 from .codec import (
+    check_unit,
     HASH_ALG_SHA256,
     Rejection,
     check_bytes,
@@ -204,6 +205,27 @@ def check_audience_id(value):
         refuse("meta-malformed")
 
 
+def check_slice_request(value):
+    # OP-143 m.12
+    check_map(value, {}, {"count": check_uint, "amounts": check_dict_any})
+    amounts = value.get("amounts")
+    if amounts is not None:
+        if not isinstance(amounts, dict) or not amounts:
+            refuse("meta-malformed")
+        for unit, amount in amounts.items():
+            check_unit(unit)
+            check_uint(amount)
+            if amount == 0:
+                refuse("meta-malformed")
+    if value.get("count") == 0 or ("count" not in value and amounts is None):
+        refuse("meta-malformed")
+
+
+def check_dict_any(value):
+    if not isinstance(value, dict):
+        refuse("meta-malformed")
+
+
 def check_projection_profile(value):
     # L0-META-35
     check_map(value, {
@@ -247,7 +269,7 @@ PAYLOADS = {
         "bounds": check_canonical_authority,
         "audience": check_list(check_audience_id, nonempty=True, is_set=True),
         "profile": check_projection_profile,
-    }, {"max_staleness_ms": check_uint}),
+    }, {"max_staleness_ms": check_uint, "offline_slice": check_slice_request}),
 }
 
 
@@ -956,6 +978,11 @@ class Apply:
     def projection_issue(self, body):
         # L0-META-35
         bounds = body["bounds"]
+        # OP-143 m.12
+        if "offline_slice" in body and (
+            body["profile"]["class"] not in ("offline", "intermittent") or "holding" not in self.basis
+        ):
+            refuse("meta-not-within")
         validity = bounds["constraints"]["validity"]
         if "holding" in self.basis:
             grant_id, holder, since = self.basis["holding"]

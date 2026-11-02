@@ -774,6 +774,95 @@ fn budgets(
     Some(Ok(draws))
 }
 
+/// The lineage budget terms an offline slice draws from, root first, with their demand:
+/// `(grant, term index, term, demand)` (OP-143 m.12).
+fn slice_terms(
+    view: &Snapshot,
+    grant: &access_kernel::model::Id,
+    slice: &meta::SliceRequest,
+) -> Option<
+    Vec<(
+        access_kernel::model::Id,
+        usize,
+        access_kernel::model::BudgetTerm,
+        u64,
+    )>,
+> {
+    let mut out = Vec::new();
+    for id in chain_ids(view, grant)? {
+        let g: GrantState = read(view, kind::GRANT, &id)?;
+        for (i, term) in g.content.authority.constraints.budget.iter().enumerate() {
+            let demand = match &term.dimension {
+                BudgetDimension::Count => slice.count,
+                BudgetDimension::Amount(unit) => slice.amounts.get(unit).copied(),
+            };
+            if let Some(d) = demand.filter(|d| *d > 0) {
+                out.push((id, i, term.clone(), d));
+            }
+        }
+    }
+    Some(out)
+}
+
+/// The budget states an offline slice puts on the projection's hop and the draws its commit
+/// makes; `None` while the lineage is not fetched (OP-143 m.12).
+fn slice_budgets(
+    view: &Snapshot,
+    grant: &access_kernel::model::Id,
+    slice: &meta::SliceRequest,
+    now: u64,
+    hop: &mut Hop,
+) -> Option<Vec<DrawSpec>> {
+    let mut draws = Vec::new();
+    for (id, i, term, demand) in slice_terms(view, grant, slice)? {
+        let (key, resets_at) = budget_key(&id, i, term.window, now);
+        let used = view.counter(&key);
+        let limit = term
+            .capacity
+            .saturating_add(view.counter(&meta::released_key(&key)));
+        hop.budgets.push(BudgetState {
+            window: term.window,
+            remaining: limit.saturating_sub(used),
+            demand,
+            resets_at,
+        });
+        let unit = match &term.dimension {
+            BudgetDimension::Amount(u) => Some(u.clone()),
+            BudgetDimension::Count => None,
+        };
+        draws.push((key, limit, demand, unit));
+    }
+    Some(draws)
+}
+
+/// The PAP's offline slice entries: one per lineage budget term the slice drew from, named
+/// by `access/budget-term/v1` over `[GrantID, term index]` (OP-143 m.12).
+pub(crate) fn slice_entries(
+    view: &Snapshot,
+    grant: &access_kernel::model::Id,
+    slice: &meta::SliceRequest,
+) -> Option<BTreeSet<access_kernel::validity::OfflineSlice>> {
+    let mut out = BTreeSet::new();
+    for (id, i, term, demand) in slice_terms(view, grant, slice)? {
+        let name = suiss_crypto::dcbor::encode(
+            &Value::Array(vec![id.to_value(), Value::Unsigned(u64::try_from(i).ok()?)]),
+            suiss_crypto::dcbor::Limits::CEILING,
+        )
+        .ok()?;
+        out.insert(access_kernel::validity::OfflineSlice {
+            budget_term: Digest(
+                suiss_crypto::digest::context_digest("access/budget-term/v1", &name).0,
+            ),
+            amount: demand,
+            unit: match term.dimension {
+                BudgetDimension::Amount(u) => u,
+                BudgetDimension::Count => String::from("count"),
+            },
+        });
+    }
+    Some(out)
+}
+
 /// The Instance's Mandate, if it has a live one; the first by id (C14).
 fn mandate(view: &dyn View, actor: Option<&Actor>) -> Option<Mandate> {
     let actor = actor?;
@@ -984,12 +1073,28 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
                         capacities,
                     })
                 } else {
+                    let mut hop = exact_hop(&req.intent, None, out.requirements);
+                    // OP-143 m.12: the offline slice is drawn from every lineage budget now
+                    if let (
+                        Some(Payload::ProjectionIssue {
+                            offline_slice: Some(slice),
+                            ..
+                        }),
+                        ExerciseBasis::Holding(h),
+                    ) = (&req.payload, req.basis)
+                    {
+                        let Some(d) = slice_budgets(snapshot, &h.grant, slice, now, &mut hop)
+                        else {
+                            return Pass::Need(snapshot.missing());
+                        };
+                        draws = d;
+                        let missing_counters = snapshot.missing_counters();
+                        if !missing_counters.is_empty() {
+                            return Pass::NeedCounters(missing_counters);
+                        }
+                    }
                     Some(Basis {
-                        hops: vec![Stored::Known(exact_hop(
-                            &req.intent,
-                            None,
-                            out.requirements,
-                        ))],
+                        hops: vec![Stored::Known(hop)],
                         capacities: BTreeSet::from([req.capacity]),
                     })
                 };

@@ -174,6 +174,28 @@ fn projection(prefix: &[&str], depth: u64, until: u64) -> Payload {
         class: crate::validity::ProfileClass::Intermittent,
         variant: crate::validity::ProfileVariant::BoundedStaleness,
         max_staleness_ms: Some(60_000),
+        offline_slice: None,
+    }
+}
+
+fn sliced(prefix: &[&str], class: crate::validity::ProfileClass) -> Payload {
+    let bounds = authority(prefix, 0, 3_600_000);
+    let audience = BTreeSet::from(["pep.shop.example".to_string()]);
+    let max_staleness_ms = Some(60_000);
+    let variant = match class {
+        crate::validity::ProfileClass::Online => crate::validity::ProfileVariant::OnlineStrict,
+        _ => crate::validity::ProfileVariant::BoundedStaleness,
+    };
+    Payload::ProjectionIssue {
+        bounds,
+        audience,
+        class,
+        variant,
+        max_staleness_ms,
+        offline_slice: Some(SliceRequest {
+            count: Some(3),
+            amounts: BTreeMap::from([("eur".to_string(), 500)]),
+        }),
     }
 }
 
@@ -1916,6 +1938,27 @@ fn meta_vectors_match() {
         (CAROL, CAROL),
         ExerciseBasis::Holding(bobs),
         &projection(&["eu"], 0, 3_600_000),
+    );
+    r.step(
+        "projection-with-slice",
+        &["L0-META-35"],
+        (CAROL, CAROL),
+        ExerciseBasis::Holding(wide),
+        &sliced(&["eu", "de"], crate::validity::ProfileClass::Intermittent),
+    );
+    r.step(
+        "projection-slice-online",
+        &["L0-META-35"],
+        (CAROL, CAROL),
+        ExerciseBasis::Holding(wide),
+        &sliced(&["eu", "de"], crate::validity::ProfileClass::Online),
+    );
+    r.step(
+        "projection-slice-from-anchor",
+        &["L0-META-35"],
+        (ROOT, ROOT),
+        meta,
+        &sliced(&["eu"], crate::validity::ProfileClass::Intermittent),
     );
     r.step(
         "party-depart",

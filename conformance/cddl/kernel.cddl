@@ -648,10 +648,16 @@ meta-payload =
   / { contribute: { target: digest, class: ident } }
   / { consumption_release: { exercise: digest, grounds: [+ id] } }
   / { authority_set_define: { name: ident, authority: authority-set } }
-  / { projection_issue: { bounds: canonical-authority, audience: [+ tstr .size (1..255)], profile: projection-profile, ? max_staleness_ms: uint } }
+  / { projection_issue: { bounds: canonical-authority, audience: [+ tstr .size (1..255)], profile: projection-profile, ? max_staleness_ms: uint, ? offline_slice: slice-request } }
 
 ; The connectivity profile a projection is issued for; the variant belongs to the class as in
 ; validity-contract (OP-143 m.7).
+; OP-143 m.12: drawn in advance from every lineage budget term of the named dimension.
+slice-request = {
+  ? count: uint .ge 1,
+  ? amounts: { + unit => uint .ge 1 },
+}
+
 projection-profile = {
   class: "online" / "intermittent" / "offline" / "long-running",
   variant: "online-strict" / "bounded-staleness" / "revalidate-on-reconnect"

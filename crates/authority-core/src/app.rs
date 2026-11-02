@@ -836,6 +836,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             class,
             variant,
             max_staleness_ms,
+            offline_slice,
         }) = &req.payload
         else {
             return Err(CoreError::Protocol("payload"));
@@ -851,6 +852,14 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             .settled(|snap| crate::domain::lineage_commitment(snap, &req.basis))
             .await?
             .ok_or(CoreError::Protocol("basis"))?;
+        // OP-143 m.12
+        let slice = match (offline_slice, req.basis) {
+            (Some(sl), meta::ExerciseBasis::Holding(h)) => self
+                .settled(|snap| crate::domain::slice_entries(snap, &h.grant, sl))
+                .await?
+                .ok_or(CoreError::Protocol("basis"))?,
+            _ => BTreeSet::new(),
+        };
         let holder = access_kernel::pap::Holder {
             instance: actor.instance,
             key,
@@ -881,7 +890,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             max_staleness_ms: *max_staleness_ms,
             freshness_sources: BTreeSet::new(),
             revalidation: Revalidation::default(),
-            offline_slice: BTreeSet::new(),
+            offline_slice: slice,
             local_requirements: bounds.requirements.clone(),
             verifier_profile_ref: digest_of(
                 "access/verifier-profile/v1",

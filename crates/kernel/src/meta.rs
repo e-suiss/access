@@ -318,7 +318,64 @@ pub enum Payload {
         variant: ProfileVariant,
         /// Δ for `bounded-staleness`.
         max_staleness_ms: Option<u64>,
+        /// The offline slice drawn in advance from the lineage's budgets (OP-143 m.12).
+        offline_slice: Option<SliceRequest>,
     },
+}
+
+/// What an offline slice asks of each lineage budget: a count, and an amount per unit
+/// (OP-143 m.12). At least one is non-zero.
+#[derive(Clone, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct SliceRequest {
+    /// Uses drawn from count budgets.
+    pub count: Option<u64>,
+    /// Amounts drawn from amount budgets, by unit.
+    pub amounts: BTreeMap<String, u64>,
+}
+
+impl SliceRequest {
+    fn to_value(&self) -> Value {
+        map([
+            ("count", self.count.map(Value::Unsigned)),
+            (
+                "amounts",
+                (!self.amounts.is_empty()).then(|| {
+                    Value::Map(
+                        self.amounts
+                            .iter()
+                            .map(|(u, a)| (Value::text(u), Value::Unsigned(*a)))
+                            .collect(),
+                    )
+                }),
+            ),
+        ])
+    }
+
+    fn from_value(v: &Value) -> Result<Self, ModelError> {
+        let mut f = Fields::of(v)?;
+        let count = f.opt("count").map(uint).transpose()?;
+        let mut amounts = BTreeMap::new();
+        if let Some(m) = f.opt("amounts") {
+            let Value::Map(entries) = m else {
+                return Err(ModelError::Shape);
+            };
+            if entries.is_empty() {
+                return Err(ModelError::Shape);
+            }
+            for (k, a) in entries {
+                let a = uint(a)?;
+                if a == 0 {
+                    return Err(ModelError::Range);
+                }
+                amounts.insert(crate::codec::unit(k)?, a);
+            }
+        }
+        f.done()?;
+        if count == Some(0) || (count.is_none() && amounts.is_empty()) {
+            return Err(ModelError::Range);
+        }
+        Ok(Self { count, amounts })
+    }
 }
 
 const NAMES: [&str; 27] = [
@@ -903,6 +960,7 @@ impl Canonical for Payload {
                 class,
                 variant,
                 max_staleness_ms,
+                offline_slice,
             } => (
                 "projection_issue",
                 map([
@@ -916,6 +974,10 @@ impl Canonical for Payload {
                         ])),
                     ),
                     ("max_staleness_ms", max_staleness_ms.map(Value::Unsigned)),
+                    (
+                        "offline_slice",
+                        offline_slice.as_ref().map(SliceRequest::to_value),
+                    ),
                 ]),
             ),
         };
@@ -1059,6 +1121,10 @@ impl Canonical for Payload {
                     class,
                     variant,
                     max_staleness_ms: f.opt("max_staleness_ms").map(uint).transpose()?,
+                    offline_slice: f
+                        .opt("offline_slice")
+                        .map(SliceRequest::from_value)
+                        .transpose()?,
                 }
             }
             _ => return Err(ModelError::Unknown),
@@ -2848,8 +2914,22 @@ pub fn apply(ctx: &Context<'_>, payload: &Payload, view: &dyn View) -> Result<Ou
             release(view, &mut out, &actor, exercise, grounds)?;
         }
         Payload::ProjectionIssue {
-            bounds, audience, ..
+            bounds,
+            audience,
+            class,
+            offline_slice,
+            ..
         } => {
+            // OP-143 m.12: a slice is for offline or intermittent use, from a holding
+            if offline_slice.is_some()
+                && (!matches!(
+                    class,
+                    crate::validity::ProfileClass::Offline
+                        | crate::validity::ProfileClass::Intermittent
+                ) || !matches!(ctx.basis, ExerciseBasis::Holding(_)))
+            {
+                return Err(MetaError::NotWithin);
+            }
             out.requirements = project(ctx, view, payload, bounds)?;
             out.effects.push((
                 exercise_key(kind::PROJECTION, &ctx.exercise),
