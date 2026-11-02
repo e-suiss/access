@@ -24,7 +24,7 @@ tokio = { workspace = true, features = ["sync", "time"] }
 access-crypto = { workspace = true, features = ["testing"] }
 suiss-crypto = { workspace = true, features = ["pkcs11", "aead", "testing"] }
 access-store = { workspace = true, features = ["testing"] }
-ed25519-dalek = { workspace = true, features = ["pkcs8", "alloc"] }
+ed25519-dalek = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "net"] }
 
 [lints]

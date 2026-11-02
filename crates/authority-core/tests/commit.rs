@@ -2721,14 +2721,15 @@ impl access_authority_signer::ports::Bindings for SoftBinding {
         &mut self,
         _: &Digest,
     ) -> Result<Box<dyn suiss_crypto::signer::Signer + Send>, suiss_crypto::signer::SignError> {
-        let doc = suiss_crypto::secret::Secret::new(
-            ed25519_dalek::pkcs8::EncodePrivateKey::to_pkcs8_der(&signing(77))
+        static DOC: std::sync::OnceLock<suiss_crypto::secret::Secret<Vec<u8>>> =
+            std::sync::OnceLock::new();
+        let doc = DOC.get_or_init(|| {
+            suiss_crypto::signer::SoftSigner::generate_ed25519()
                 .unwrap()
-                .as_bytes()
-                .to_vec(),
-        );
+                .1
+        });
         Ok(Box::new(
-            suiss_crypto::signer::SoftSigner::ed25519_from_pkcs8(&doc)?,
+            suiss_crypto::signer::SoftSigner::ed25519_from_pkcs8(doc)?,
         ))
     }
 }
