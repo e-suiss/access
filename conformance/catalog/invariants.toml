@@ -266,7 +266,7 @@ id = "INV-17"
 family = "INV"
 section = "6.2"
 status = "canonical"
-stage = 4
+stage = 10
 title = "Foreign ≠ local"
 tests = []
 
@@ -1147,7 +1147,7 @@ id = "PI-24"
 family = "PI"
 section = "6.5"
 status = "canonical"
-stage = 4
+stage = 6
 title = "Each federation mechanism has a distinct protocol counterpart"
 tests = []
 
@@ -1206,7 +1206,7 @@ id = "SI-7"
 family = "SI"
 section = "6.6"
 status = "canonical"
-stage = 4
+stage = 13
 title = "Every post-revocation window is pre-declared"
 tests = []
 
@@ -1301,7 +1301,7 @@ id = "SI-18"
 family = "SI"
 section = "6.6"
 status = "canonical"
-stage = 4
+stage = 12
 title = "Downgrade is expansion"
 tests = []
 
@@ -1378,7 +1378,7 @@ id = "TI-5"
 family = "TI"
 section = "6.7"
 status = "canonical"
-stage = 4
+stage = 6
 title = "No ALLOW from replicas"
 tests = []
 
@@ -1466,7 +1466,7 @@ id = "TI-15"
 family = "TI"
 section = "6.7"
 status = "canonical"
-stage = 4
+stage = 6
 title = "Identity plane speaks only Claims"
 tests = []
 
@@ -1696,7 +1696,6 @@ id = "SAI-9"
 family = "SAI"
 section = "14.11"
 status = "candidate"
-stage = 4
 title = "Authority artifacts valid only under domain-scoped excerpt-bound keys"
 tests = []
 
@@ -1761,7 +1760,6 @@ family = "SAI"
 section = "15.22.1"
 status = "candidate"
 class = "BS"
-stage = 4
 title = "No signing with unpublished keys"
 tests = []
 
@@ -1969,7 +1967,6 @@ id = "TNI-2"
 family = "TNI"
 section = "12.9"
 status = "candidate"
-stage = 4
 title = "Realm keys and domain operational keys are strictly separated"
 tests = []
 

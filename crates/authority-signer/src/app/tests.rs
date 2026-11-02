@@ -99,6 +99,7 @@ fn verify(ring: &Keyring, signed: &Signed, now: u64) -> Result<(), KeyScopeError
 // operational key and the artefact verifies through them
 #[test]
 fn an_artefact_verifies_through_metadata_and_excerpt() {
+    // G35, HL-8
     let mut ring = keyring();
     let mut factory = Factory { down: false };
     let now = Policy::AUTHORITY.publish_lead_ms + 2 * MINUTE;
@@ -126,6 +127,7 @@ fn an_artefact_verifies_through_metadata_and_excerpt() {
 // CR-25, SAI-46: nothing is signed before a key has been published for the lead
 #[test]
 fn nothing_signs_before_the_lead() {
+    // SAI-46, G61
     let mut ring = keyring();
     let mut factory = Factory { down: false };
     let early = Policy::AUTHORITY.publish_lead_ms - MINUTE;
@@ -164,6 +166,7 @@ fn artefacts_verify_across_rotations() {
 // after that nothing is signed, never an unsigned artefact
 #[test]
 fn an_outage_delays_artefacts_after_the_window() {
+    // G42
     let mut ring = keyring();
     let mut factory = Factory { down: false };
     let start = Policy::AUTHORITY.publish_lead_ms + 2 * MINUTE;

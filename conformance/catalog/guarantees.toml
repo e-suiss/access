@@ -87,7 +87,6 @@ family = "G"
 section = "13.4"
 status = "canonical"
 class = "BS"
-stage = 4
 title = "Foreign authority only via foreign Acceptance and bridging ceiling"
 tests = []
 
@@ -387,7 +386,6 @@ family = "G"
 section = "13.4"
 status = "canonical"
 class = "BS"
-stage = 4
 title = "No unsigned artifact is published"
 tests = []
 
@@ -397,7 +395,7 @@ family = "G"
 section = "13.4"
 status = "canonical"
 class = "BS"
-stage = 4
+stage = 6
 title = "No freshly signed stale status during derived outage"
 tests = []
 
@@ -427,7 +425,6 @@ family = "G"
 section = "13.4"
 status = "canonical"
 class = "BS"
-stage = 4
 title = "Authority artifacts valid only with domain-bound operational or binding key"
 tests = []
 
@@ -544,7 +541,6 @@ family = "G"
 section = "13.4"
 status = "canonical"
 class = "BS"
-stage = 4
 title = "No splicing of delegation chains from two valid tokens"
 tests = []
 
@@ -573,7 +569,6 @@ family = "G"
 section = "13.4"
 status = "canonical"
 class = "BS"
-stage = 4
 title = "No artifacts signed with unpublished keys"
 tests = []
 
@@ -742,7 +737,6 @@ family = "U"
 section = "13.4"
 status = "canonical"
 class = "UDC"
-stage = 4
 title = "Actor key used only by the actor"
 tests = []
 
@@ -752,7 +746,6 @@ family = "U"
 section = "13.4"
 status = "canonical"
 class = "UDC"
-stage = 4
 title = "Custodian cannot impersonate without the user's act"
 tests = []
 
@@ -1005,7 +998,6 @@ family = "U"
 section = "13.4"
 status = "canonical"
 class = "UDC"
-stage = 4
 title = "Stolen operational key impact bounded by key lifetime and verifier ceiling"
 tests = []
 
@@ -1015,7 +1007,7 @@ family = "U"
 section = "13.4"
 status = "canonical"
 class = "UDC"
-stage = 4
+stage = 7
 title = "No key material leaks from the signer process"
 tests = []
 
@@ -2278,7 +2270,6 @@ family = "DL"
 section = "13.1"
 status = "canonical"
 class = "NG"
-stage = 4
 title = "Custodian can impersonate Party unless custody is user-gated"
 tests = []
 
@@ -2878,7 +2869,7 @@ id = "SEC17"
 family = "SEC"
 section = "13.10"
 status = "frozen"
-stage = 4
+stage = 6
 title = "Custodial keys are user-gated; CT3 holders non-custodial by default"
 tests = []
 
@@ -2896,7 +2887,7 @@ id = "SEC19"
 family = "SEC"
 section = "13.10"
 status = "frozen"
-stage = 4
+stage = 6
 title = "Identity plane custody keys never used in provider role"
 tests = []
 
@@ -2905,7 +2896,7 @@ id = "SEC20"
 family = "SEC"
 section = "13.10"
 status = "frozen"
-stage = 4
+stage = 13
 title = "Provider cannot custody root recovery keys"
 tests = []
 

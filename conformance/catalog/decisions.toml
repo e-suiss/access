@@ -35,7 +35,6 @@ id = "SA-22"
 family = "SA"
 section = "14.5"
 status = "decision"
-stage = 4
 title = "Landlock, seccomp, capability drop sandboxing; io_uring banned"
 tests = [
   "bins/access-server/tests/lockdown.rs",
@@ -73,7 +72,6 @@ id = "SA-26"
 family = "SA"
 section = "14.5"
 status = "decision"
-stage = 4
 title = "Secret<T> discipline and hashed token storage in DB"
 tests = ["crates/suiss-crypto/src/secret.rs"]
 
@@ -127,7 +125,7 @@ id = "OP-2"
 family = "OP"
 section = "17.14"
 status = "decision"
-stage = 4
+stage = 6
 title = "Process topology"
 tests = [
   "crates/suiss-sandbox/src/linux/seccomp.rs::parser_worker_has_no_socket_syscalls",

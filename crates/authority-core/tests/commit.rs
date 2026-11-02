@@ -3001,6 +3001,7 @@ async fn a_projection_carries_a_signed_pap() {
     reason = "one signer, one domain and one receipt from commit to offline verification"
 )]
 async fn an_allow_carries_a_signed_receipt() {
+    // TI-12
     let db = fresh().await.unwrap();
     let d = create_genesis(&db.sequencer, TENANT, genesis(), 1_000)
         .await
@@ -3483,6 +3484,7 @@ fn blocked(r: &Response) -> (access_kernel::combinator::BlockerClass, String) {
     reason = "one home domain, one target domain and each way a foreign PAP is refused"
 )]
 async fn a_foreign_pap_holds_a_bridging_grant() {
+    // INV-17, G10, PI-3, PI-24
     use access_authority_signer::ports::Bindings as _;
     use access_kernel::combinator::BlockerClass;
     let db = fresh().await.unwrap();
@@ -3720,6 +3722,7 @@ async fn a_foreign_pap_holds_a_bridging_grant() {
 // P52, MD-10, OP-143 m.15 (d): a PAP names a Party only by its domain-pairwise pseudonym
 #[tokio::test]
 async fn a_pap_names_parties_by_pseudonym() {
+    // P52, MD-10
     use access_kernel::validity::{ProfileClass, ProfileVariant};
     let db = fresh().await.unwrap();
     let (mut core, d) = setup(&db).await;
