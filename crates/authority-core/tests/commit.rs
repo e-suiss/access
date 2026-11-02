@@ -1766,6 +1766,10 @@ fn grouped() -> BTreeMap<String, Opened> {
 
 // OP-141 m.20 (a)–(d): a member of a group holds the group's Grant from its episode start
 #[tokio::test]
+#[allow(
+    clippy::too_many_lines,
+    reason = "one membership from its first episode through a cutoff and its lifting"
+)]
 async fn a_member_holds_the_groups_grant_from_its_episode() {
     let db = fresh().await.unwrap();
     let (mut core, d) = setup_with(&db, grouped()).await;
@@ -1823,6 +1827,87 @@ async fn a_member_holds_the_groups_grant_from_its_episode() {
         .await,
         Err(CoreError::Rejected(_))
     ));
+
+    // OP-141 m.42: a cutoff closes the episode; lifting it widens the Acceptance and the closed
+    // episode does not come back, a new one starts at the widening
+    let index = state_of(&db, d, &meta::key(kind::ACCEPTANCES, &ALICE))
+        .await
+        .unwrap();
+    let Value::Array(ids) = dcbor::decode(&index, Limits::CEILING).unwrap() else {
+        panic!("acceptance index");
+    };
+    let acceptance = Id::from_value(&ids[0]).unwrap();
+    let content = |cutoff: Option<u64>| {
+        let mut fields = vec![
+            (Value::text("issuer"), ALICE.to_value()),
+            (Value::text("use"), Value::text("subject-selection")),
+            (
+                Value::text("classes"),
+                Value::Array(vec![Value::text("staff")]),
+            ),
+            (Value::text("subject"), SubjectSelector::Public.to_value()),
+            (
+                Value::text("validity"),
+                Value::Array(vec![Value::Unsigned(0), Value::Unsigned(1_000_000)]),
+            ),
+        ];
+        if let Some(c) = cutoff {
+            fields.push((Value::text("ingest_until"), Value::Unsigned(c)));
+        }
+        let b = dcbor::encode(&Value::Map(fields), Limits::CEILING).unwrap();
+        dcbor::decode(&b, Limits::CEILING).unwrap()
+    };
+    let meta_anchor = ExerciseBasis::Anchor(meta::meta_anchor(&d));
+    for (nonce, cutoff) in [(13, Some(1)), (14, None)] {
+        let amend = Payload::AcceptanceAmend {
+            acceptance,
+            content: content(cutoff),
+        };
+        let r = send(
+            &mut core,
+            meta_request(d, nonce, meta_anchor, amend),
+            ROOT_KEY,
+        )
+        .await
+        .unwrap();
+        allowed(&r);
+        if cutoff.is_some() {
+            assert_eq!(
+                send(
+                    &mut core,
+                    shop_request(d, 15, Mode::Check, holding(episode)),
+                    ROOT_KEY
+                )
+                .await
+                .unwrap()
+                .decision
+                .outcome,
+                Outcome::Deny
+            );
+        } else {
+            assert_eq!(
+                send(
+                    &mut core,
+                    shop_request(d, 16, Mode::Check, holding(episode)),
+                    ROOT_KEY
+                )
+                .await
+                .unwrap()
+                .decision
+                .outcome,
+                Outcome::Deny
+            );
+            allowed(
+                &send(
+                    &mut core,
+                    shop_request(d, 17, Mode::Check, holding(r.record.unwrap())),
+                    ROOT_KEY,
+                )
+                .await
+                .unwrap(),
+            );
+        }
+    }
 
     // a Claim from an issuer that is not the group's makes no member
     let outsider = claim(d, ROOT, ROOT_KEY, "staff");

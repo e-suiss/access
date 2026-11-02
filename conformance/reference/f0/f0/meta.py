@@ -769,10 +769,15 @@ class Apply:
         if old.get("spp", {}).get("namespace") != new.get("spp", {}).get("namespace"):
             refuse("meta-not-within")
         self.check_selection(body["acceptance"], new)
-        self.write("acceptance", body["acceptance"], dict(acceptance, content=new, since=self.pos))
-        self.index_acceptance(body["acceptance"], new, old)
         # OP-141 m.35 (h)
-        return "spp" in new or not acceptance_narrows(new, old)
+        expansion = "spp" in new or not acceptance_narrows(new, old)
+        state = dict(acceptance, content=new, since=self.pos)
+        if expansion:
+            # OP-141 m.42 (a)
+            state["widened"] = self.pos
+        self.write("acceptance", body["acceptance"], state)
+        self.index_acceptance(body["acceptance"], new, old)
+        return expansion
 
     def acceptance_revoke(self, body):
         # L0-META-27

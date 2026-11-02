@@ -1662,6 +1662,8 @@ pub struct ContentState {
     pub content: Value,
     /// Position of the last change.
     pub since: u64,
+    /// Position of the last amendment that widened an Acceptance (OP-141 m.42 (a)).
+    pub widened: Option<u64>,
     /// End.
     pub ended: Option<Ended>,
 }
@@ -1671,6 +1673,7 @@ impl Canonical for ContentState {
         map([
             ("content", Some(self.content.clone())),
             ("since", Some(Value::Unsigned(self.since))),
+            ("widened", self.widened.map(Value::Unsigned)),
             ("ended", self.ended.as_ref().map(ended_value)),
         ])
     }
@@ -1680,6 +1683,7 @@ impl Canonical for ContentState {
         let s = Self {
             content: f.req("content")?.clone(),
             since: uint(f.req("since")?)?,
+            widened: f.opt("widened").map(uint).transpose()?,
             ended: ended(f.opt("ended"))?,
         };
         f.done()?;
@@ -1840,6 +1844,7 @@ fn genesis_acceptances(domain: &Digest, list: &Value) -> Result<Vec<Effect>, Met
                 ContentState {
                     content: acceptance_content(a)?,
                     since: 0,
+                    widened: None,
                     ended: None,
                 }
                 .to_value(),
@@ -2577,6 +2582,7 @@ pub fn apply(ctx: &Context<'_>, payload: &Payload, view: &dyn View) -> Result<Ou
                 ContentState {
                     content: content.clone(),
                     since: ctx.pos,
+                    widened: None,
                     ended: None,
                 }
                 .to_value(),
@@ -2611,6 +2617,10 @@ pub fn apply(ctx: &Context<'_>, payload: &Payload, view: &dyn View) -> Result<Ou
             };
             a.content = content.clone();
             a.since = ctx.pos;
+            // OP-141 m.42 (a)
+            if out.expansion {
+                a.widened = Some(ctx.pos);
+            }
             set(&mut out, kind::ACCEPTANCE, acceptance, a.to_value());
         }
         Payload::AcceptanceRevoke { acceptance } => {
@@ -2655,6 +2665,7 @@ pub fn apply(ctx: &Context<'_>, payload: &Payload, view: &dyn View) -> Result<Ou
                 ContentState {
                     content: content.clone(),
                     since: ctx.pos,
+                    widened: None,
                     ended: None,
                 }
                 .to_value(),

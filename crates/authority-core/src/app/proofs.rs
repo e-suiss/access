@@ -174,6 +174,21 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
 
     /// The live Acceptances of `issuer` (L0-META-5).
     async fn gates(&self, snap: &mut Snapshot, issuer: &Id) -> Result<Vec<Gate>, CoreError> {
+        Ok(self
+            .widened_gates(snap, issuer)
+            .await?
+            .into_iter()
+            .map(|(g, _)| g)
+            .collect())
+    }
+
+    /// The live Acceptances of `issuer`, each with the position of its last widening
+    /// (OP-141 m.42 (a)).
+    async fn widened_gates(
+        &self,
+        snap: &mut Snapshot,
+        issuer: &Id,
+    ) -> Result<Vec<(Gate, u64)>, CoreError> {
         let Some(index) = self
             .get(snap, &meta::key(kind::ACCEPTANCES, issuer))
             .await?
@@ -197,7 +212,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             if a.ended.is_none()
                 && let Ok(g) = Gate::of(&a.content)
             {
-                gates.push(g);
+                gates.push((g, a.widened.unwrap_or(0)));
             }
         }
         Ok(gates)
@@ -303,7 +318,8 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
 
     /// When `party`'s episode of holding a Grant held by `conjuncts` began, if it holds it now:
     /// the latest of, per conjunct, the earliest record of a Claim that meets it under a
-    /// `subject-selection` Acceptance (OP-141 m.20 (c), (d)).
+    /// `subject-selection` Acceptance, not before that Acceptance last widened (OP-141 m.20 (c),
+    /// (d), m.42 (b)).
     pub(crate) async fn episode(
         &self,
         snap: &mut Snapshot,
@@ -332,12 +348,15 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                 if !self.in_line(snap, &id, &state.statement).await? {
                     continue;
                 }
-                let gates = self.gates(snap, &state.statement.issuer).await?;
-                if gates
+                // OP-141 m.42 (b)
+                let gates = self.widened_gates(snap, &state.statement.issuer).await?;
+                let start = gates
                     .iter()
-                    .any(|g| g.admits_for(claim::SUBJECT_SELECTION, &state.statement, now))
-                {
-                    first = Some(first.map_or(state.since, |f| f.min(state.since)));
+                    .filter(|(g, _)| g.admits_for(claim::SUBJECT_SELECTION, &state.statement, now))
+                    .map(|(_, widened)| state.since.max(*widened))
+                    .min();
+                if let Some(start) = start {
+                    first = Some(first.map_or(start, |f| f.min(start)));
                 }
             }
             let Some(first) = first else {
