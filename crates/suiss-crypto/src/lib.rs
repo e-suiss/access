@@ -23,6 +23,7 @@ pub mod envelope;
 pub mod note;
 #[cfg(feature = "pkcs11")]
 pub mod pkcs11;
+pub mod rotation;
 #[cfg(feature = "aws-lc")]
 pub mod secret;
 #[cfg(feature = "verify")]

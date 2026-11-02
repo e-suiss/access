@@ -1,0 +1,96 @@
+//! The authority fields Domain Metadata carries besides its operational keys, and the
+//! declaration of one operational key (CR-18, CR-58).
+
+use std::collections::{BTreeMap, BTreeSet};
+
+use access_kernel::digest::Digest;
+use access_kernel::verify::key_scope::{
+    BindingKey, BindingScope, DomainMetadata, Hybrid, KeyUsage, OperationalKey, SpecVersions,
+    VerifierCaps, thumbprint,
+};
+use suiss_crypto::cose::{Algorithm, PublicKey};
+use suiss_crypto::rotation::Key;
+
+/// Every usage an operational key signs by default (CR-58 m.2, OP-143 m.3).
+pub const USAGES: [KeyUsage; 6] = [
+    KeyUsage::Receipt,
+    KeyUsage::Pap,
+    KeyUsage::Token,
+    KeyUsage::Checkpoint,
+    KeyUsage::Set,
+    KeyUsage::StatusList,
+];
+
+/// The fixed part of a domain's metadata.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Template {
+    /// Domain.
+    pub domain: Digest,
+    /// Genesis record digest.
+    pub genesis: Digest,
+    /// Algorithm allowlist.
+    pub algorithms: BTreeSet<Algorithm>,
+    /// Algorithm of new operational keys: Ed25519, or ESP256 under the FIPS profile (CR-2).
+    pub operational_alg: Algorithm,
+    /// Window ceiling of operational keys.
+    pub operational_window_max_ms: u64,
+    /// Minimum versions.
+    pub min_versions: SpecVersions,
+    /// Adopted versions.
+    pub adopted: SpecVersions,
+    /// Verifier ceilings.
+    pub caps: Option<VerifierCaps>,
+    /// Hybrid policy.
+    pub hybrid: Option<Hybrid>,
+    /// Discovery fields, opaque to the Kernel.
+    pub discovery: Option<Vec<u8>>,
+}
+
+/// The binding key a domain's metadata names (T20).
+#[must_use]
+pub fn binding(alg: Algorithm, key: PublicKey) -> BindingKey {
+    BindingKey {
+        kid: thumbprint(&key),
+        alg,
+        key,
+        scope: BindingScope::Domain,
+        superseded: None,
+    }
+}
+
+/// The declaration of an operational key from its rotation record (T20, CR-24).
+#[must_use]
+pub fn declaration(record: &Key, alg: Algorithm, key: PublicKey) -> OperationalKey {
+    OperationalKey {
+        kid: record.kid,
+        alg,
+        key,
+        valid_from: record.valid_from,
+        valid_until: record.valid_until,
+        usage: USAGES.into_iter().collect(),
+    }
+}
+
+/// The metadata for `operational_keys`, issued at `issued_at`.
+#[must_use]
+pub fn metadata(
+    template: &Template,
+    binding: &BindingKey,
+    operational_keys: Vec<OperationalKey>,
+    issued_at: u64,
+) -> DomainMetadata {
+    DomainMetadata {
+        domain: template.domain,
+        genesis: template.genesis,
+        issued_at,
+        binding: BTreeMap::from([(binding.kid, binding.clone())]),
+        algorithms: template.algorithms.clone(),
+        operational_window_max_ms: template.operational_window_max_ms,
+        operational_keys,
+        min_versions: template.min_versions.clone(),
+        adopted: template.adopted.clone(),
+        caps: template.caps.clone(),
+        hybrid: template.hybrid,
+        discovery: template.discovery.clone(),
+    }
+}

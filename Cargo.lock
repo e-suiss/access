@@ -32,6 +32,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "access-authority-signer"
+version = "0.2.3"
+dependencies = [
+ "esuiss-access-kernel",
+ "esuiss-crypto",
+ "thiserror",
+]
+
+[[package]]
 name = "access-crypto"
 version = "0.2.3"
 dependencies = [
