@@ -19,7 +19,7 @@ use access_kernel::digest::Digest;
 use access_kernel::fold::Effect;
 use access_kernel::intent::intent_digest;
 use access_kernel::meta::{self, Actor, ExerciseState, InstanceState, Payload, kind};
-use access_kernel::model::{Id, ResourceRef};
+use access_kernel::model::{AuthoritySet, Id, RequirementTerm, ResourceRef, SubjectSelector};
 use access_kernel::record::{Opened, RecordEnvelope, RecordKind};
 use access_kernel::verify::cose;
 use access_store::authority::Draw;
@@ -155,6 +155,7 @@ pub struct Authority<L: DomainLog, R: Reader, B: Binding, S: Salts> {
     domain: Digest,
     catalog: Catalog,
     past: Option<Past>,
+    pseudonyms: Option<access_crypto::pseudonym::PseudonymKey>,
 }
 
 /// Whose view an explanation of a recorded decision is (OP-141 m.38).
@@ -269,7 +270,60 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             domain,
             catalog: Catalog::default(),
             past: None,
+            pseudonyms: None,
         }
+    }
+
+    /// The domain's pseudonym key; without one, a projection that names a Party is refused
+    /// (P52, OP-143 m.15 (d)).
+    #[must_use]
+    pub fn with_pseudonyms(mut self, key: access_crypto::pseudonym::PseudonymKey) -> Self {
+        self.pseudonyms = Some(key);
+        self
+    }
+
+    /// A Party's pseudonym in this domain's projections.
+    fn party_ref(&self, party: &Id) -> Result<Id, CoreError> {
+        self.pseudonyms
+            .as_ref()
+            .ok_or(CoreError::Unavailable("pseudonym-key"))?
+            .party_ref(&party.0)
+            .map(Id)
+            .map_err(|_| CoreError::Unavailable("pseudonym-key"))
+    }
+
+    /// `sel` with its Party replaced by its pseudonym.
+    fn subject_ref(&self, sel: &SubjectSelector) -> Result<SubjectSelector, CoreError> {
+        Ok(match sel {
+            SubjectSelector::Party(p) => SubjectSelector::Party(self.party_ref(p)?),
+            other => other.clone(),
+        })
+    }
+
+    /// An authority set and requirement terms with every Party replaced by its pseudonym.
+    fn pseudonymous(
+        &self,
+        set: &AuthoritySet,
+        terms: &BTreeSet<RequirementTerm>,
+    ) -> Result<(AuthoritySet, BTreeSet<RequirementTerm>), CoreError> {
+        let mut set = set.clone();
+        set.recipient = set
+            .recipient
+            .as_ref()
+            .map(|r| self.subject_ref(r))
+            .transpose()?;
+        for b in set.params.values_mut() {
+            if let access_kernel::model::Bound::Subject(sel) = b {
+                *sel = self.subject_ref(sel)?;
+            }
+        }
+        let mut out = BTreeSet::new();
+        for t in terms {
+            let mut t = t.clone();
+            t.source = t.source.as_ref().map(|s| self.subject_ref(s)).transpose()?;
+            out.insert(t);
+        }
+        Ok((set, out))
     }
 
     /// Current values and versions of `keys`, or those before the decision being explained.
@@ -860,6 +914,14 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                 .ok_or(CoreError::Protocol("basis"))?,
             _ => BTreeSet::new(),
         };
+        // P52, OP-143 m.15 (d)
+        let (bounds_set, local) = self.pseudonymous(&bounds.authority, &bounds.requirements)?;
+        let capacity = match req.capacity {
+            access_kernel::combinator::Capacity::For(p) => {
+                access_kernel::combinator::Capacity::For(self.party_ref(&p)?)
+            }
+            own @ access_kernel::combinator::Capacity::Own => own,
+        };
         let holder = access_kernel::pap::Holder {
             instance: actor.instance,
             key,
@@ -881,7 +943,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             holder: access_kernel::pap::holder_digest(&holder)
                 .map_err(|_| CoreError::Protocol("pap"))?,
             audience: audience.clone(),
-            bounds: bounds.authority.clone(),
+            bounds: bounds_set.clone(),
             class: *class,
             variant: *variant,
             profile_version: 1,
@@ -891,7 +953,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             freshness_sources: BTreeSet::new(),
             revalidation: Revalidation::default(),
             offline_slice: slice,
-            local_requirements: bounds.requirements.clone(),
+            local_requirements: local.clone(),
             verifier_profile_ref: digest_of(
                 "access/verifier-profile/v1",
                 &Value::Array(audience.iter().map(|a| Value::text(a)).collect()),
@@ -904,9 +966,9 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             domain: self.domain,
             projection_exercise: fixed.exercise,
             holder,
-            capacity: req.capacity,
-            bounds: bounds.authority.clone(),
-            local_requirements: bounds.requirements.clone(),
+            capacity,
+            bounds: bounds_set,
+            local_requirements: local,
             validity,
             lineage_commitment: lineage,
             iat: fixed.now,

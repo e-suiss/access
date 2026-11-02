@@ -5,6 +5,7 @@ pub mod event_id;
 pub mod jose;
 pub mod opaque_id;
 pub mod projection;
+pub mod pseudonym;
 pub mod random;
 pub mod sd_jwt;
 pub mod secret_file;

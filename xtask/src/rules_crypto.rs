@@ -247,8 +247,13 @@ const HMAC: &str = "hmac-scope";
 /// (b) one-party tokens one component both issues and verifies. `client_secret_jwt`
 /// is two-party and also allowed. Each entry needs Adem's review. Empty until the
 /// first such feature lands.
-pub(crate) const HMAC_ALLOWED: &[(&str, &str)] =
-    &[("crates/crypto/src/event_id.rs", "CR-3 (a): HMAC event id")];
+pub(crate) const HMAC_ALLOWED: &[(&str, &str)] = &[
+    ("crates/crypto/src/event_id.rs", "CR-3 (a): HMAC event id"),
+    (
+        "crates/crypto/src/pseudonym.rs",
+        "CR-3 (a): pairwise party pseudonyms (MD-10)",
+    ),
+];
 
 const HMAC_TOKENS: &[&str] = &[
     "hmac::",

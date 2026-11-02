@@ -182,6 +182,17 @@ impl Keys for KeyStore {
             .map(TokenKey::token)
             .map_err(|_| CoreError::Unavailable("token-key"))
     }
+
+    fn pseudonym_key(
+        &self,
+        domain: &Digest,
+    ) -> Result<access_crypto::pseudonym::PseudonymKey, CoreError> {
+        let label = access_crypto::pseudonym::label(&domain.0);
+        self.mac(&label)
+            .or_else(|_| self.generate_mac(&label))
+            .map(access_crypto::pseudonym::PseudonymKey::token)
+            .map_err(|_| CoreError::Unavailable("pseudonym-key"))
+    }
 }
 
 /// Kind of the consistency token (OP-141 m.22 (f)).
@@ -278,6 +289,7 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
             .ok_or(CoreError::Unavailable("unknown-domain"))?;
         let key = s.keys.event_key(&domain)?;
         let tokens = s.keys.token_key(&domain)?;
+        let pseudonyms = s.keys.pseudonym_key(&domain)?;
         let log = PgLog::new(s.sequencer.clone(), domain, tenant, s.holder.clone(), s.ttl);
         let leader = match Leader::acquire(log, domain, key).await {
             Ok(leader) => leader,
@@ -288,7 +300,8 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
         };
         let reader = PgReader::new(s.app.clone(), id);
         Ok(Led {
-            core: Authority::new(leader, reader, s.binding.clone(), s.salts.clone(), domain),
+            core: Authority::new(leader, reader, s.binding.clone(), s.salts.clone(), domain)
+                .with_pseudonyms(pseudonyms),
             clock: s.clock.clone(),
             tokens,
             signer_open: false,

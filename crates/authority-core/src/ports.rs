@@ -87,4 +87,12 @@ pub trait Keys: Send + Sync {
     /// # Errors
     /// [`CoreError::Unavailable`] when the key is missing or the token fails.
     fn token_key(&self, domain: &Digest) -> Result<TokenKey, CoreError>;
+    /// The pseudonym key of `domain` (P52, OP-143 m.15 (d)).
+    ///
+    /// # Errors
+    /// [`CoreError::Unavailable`] when the token fails.
+    fn pseudonym_key(
+        &self,
+        domain: &Digest,
+    ) -> Result<access_crypto::pseudonym::PseudonymKey, CoreError>;
 }

@@ -280,7 +280,12 @@ async fn setup(db: &TestDb) -> (Core, Digest) {
         .await
         .unwrap();
     let reader = PgReader::new(db.app.clone(), DomainId::from_bytes(d.0));
-    (Authority::new(leader, reader, binding(), Counter(0), d), d)
+    (
+        Authority::new(leader, reader, binding(), Counter(0), d).with_pseudonyms(
+            access_crypto::pseudonym::PseudonymKey::new(Secret::new([7; 32])),
+        ),
+        d,
+    )
 }
 
 fn sign(s: &Statement, seed: u8) -> Vec<u8> {
@@ -609,6 +614,15 @@ impl Keys for Listed {
 
     fn token_key(&self, _domain: &Digest) -> Result<access_crypto::token::TokenKey, CoreError> {
         Ok(access_crypto::token::TokenKey::new(Secret::new([6; 32])))
+    }
+
+    fn pseudonym_key(
+        &self,
+        _domain: &Digest,
+    ) -> Result<access_crypto::pseudonym::PseudonymKey, CoreError> {
+        Ok(access_crypto::pseudonym::PseudonymKey::new(Secret::new(
+            [7; 32],
+        )))
     }
 }
 
@@ -3701,4 +3715,42 @@ async fn a_foreign_pap_holds_a_bridging_grant() {
         named(BlockerClass::SourceNotAccepted, "foreign-not-accepted"),
     );
     fold_check(&db.sequencer, b).await.unwrap();
+}
+
+// P52, MD-10, OP-143 m.15 (d): a PAP names a Party only by its domain-pairwise pseudonym
+#[tokio::test]
+async fn a_pap_names_parties_by_pseudonym() {
+    use access_kernel::validity::{ProfileClass, ProfileVariant};
+    let db = fresh().await.unwrap();
+    let (mut core, d) = setup(&db).await;
+    onboard(&mut core, d, ROOT, ROOT_KEY, (1, 2)).await;
+    let shop = ExerciseBasis::Anchor(meta::object_id(&d, kind::ANCHOR, 1));
+    let mut bounds = authority(vec![action("shop", "read")], selector("shop"));
+    bounds.authority.recipient = Some(SubjectSelector::Party(ALICE));
+    bounds.constraints.validity = Window {
+        from: NOW,
+        until: NOW + 3_600_000,
+    };
+    let issue = Payload::ProjectionIssue {
+        bounds,
+        audience: BTreeSet::from(["verifier.example".to_owned()]),
+        class: ProfileClass::Online,
+        variant: ProfileVariant::OnlineStrict,
+        max_staleness_ms: None,
+        offline_slice: None,
+    };
+    let r = send(&mut core, meta_request(d, 9, shop, issue), ROOT_KEY)
+        .await
+        .unwrap();
+    allowed(&r);
+    let pap = access_kernel::pap::Pap::from_bytes(&r.pap.unwrap()).unwrap();
+    let pseudonym = access_crypto::pseudonym::PseudonymKey::new(Secret::new([7; 32]))
+        .party_ref(&ALICE.0)
+        .unwrap();
+    assert_eq!(
+        pap.bounds.recipient,
+        Some(SubjectSelector::Party(Id(pseudonym)))
+    );
+    assert_eq!(pap.validity.bounds.recipient, pap.bounds.recipient);
+    assert_ne!(pseudonym, ALICE.0);
 }
