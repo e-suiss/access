@@ -231,6 +231,37 @@ fn verifier_keys_are_checked() {
     assert_eq!(Verifier::ed25519(&long, k), Err(NoteError::Name));
 }
 
+// C2SP signed-note: names hold no '+', so a '+' of the base64 key belongs to the key
+#[test]
+fn verifier_keys_with_plus_in_the_key_parse() {
+    let k: [u8; 32] = [
+        0xfc, 0x51, 0xcd, 0x8e, 0x62, 0x18, 0xa1, 0xa3, 0x8d, 0xa4, 0x7e, 0xd0, 0x02, 0x30, 0xf0,
+        0x58, 0x08, 0x16, 0xed, 0x13, 0xba, 0x33, 0x03, 0xac, 0x5d, 0xeb, 0x91, 0x15, 0x48, 0x90,
+        0x80, 0x25,
+    ];
+    for (v, vkey) in [
+        (
+            Verifier::ed25519("example.com/rfc8032-3", k).unwrap(),
+            "example.com/rfc8032-3+b65d8a46+AfxRzY5iGKGjjaR+0AIw8FgIFu0TujMDrF3rkRVIkIAl",
+        ),
+        (
+            Verifier::cosigner("example.com/rfc8032-3", k).unwrap(),
+            "example.com/rfc8032-3+22400efb+BPxRzY5iGKGjjaR+0AIw8FgIFu0TujMDrF3rkRVIkIAl",
+        ),
+    ] {
+        assert_eq!(v.to_vkey(), vkey);
+        assert_eq!(Verifier::parse(vkey).unwrap(), v);
+    }
+    for bad in [
+        "example.com/rfc8032-3+b65d8a46",
+        "example.com/rfc8032-3+b65d8a46+AfxRzY5iGKGjjaR+0AIw8FgIFu0TujMDrF3rkRVIkIAl+",
+        "example.com/rfc8032-3+b65d8a46+AfxRzY5iGKGjjaR++0AIw8FgIFu0TujMDrF3rkRVIkIAl",
+        "example.com/rfc8032-3+b65d8a46+AfxRzY5iGKGjjaR+0AIw8FgIFu0TujMDrF3rkRVIkIAl+x",
+    ] {
+        assert_eq!(Verifier::parse(bad), Err(NoteError::VerifierKey), "{bad}");
+    }
+}
+
 // C2SP signed-note: a bounded number of signatures
 #[test]
 fn signature_count_is_bounded() {
