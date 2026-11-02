@@ -175,6 +175,8 @@ fn response(outcome: Outcome) -> Response {
         consistency: Some(String::from("seen")),
         receipt: None,
         signed_receipt: None,
+        pap: None,
+        signed_pap: None,
     }
 }
 

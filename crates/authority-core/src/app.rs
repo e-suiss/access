@@ -57,6 +57,11 @@ pub struct Response {
     pub receipt: Option<Vec<u8>>,
     /// The signed receipt and its key excerpt, once the signer has signed it.
     pub signed_receipt: Option<(Vec<u8>, Vec<u8>)>,
+    /// The unsigned PAP payload of an allowed `projection.issue`; its digest is in the decision
+    /// record and it is signed after the commit (L2-PAP-2).
+    pub pap: Option<Vec<u8>>,
+    /// The signed PAP and its key excerpt.
+    pub signed_pap: Option<(Vec<u8>, Vec<u8>)>,
 }
 
 /// One request with what came with it on the wire.
@@ -587,6 +592,8 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             consistency: None,
             receipt: None,
             signed_receipt: None,
+            pap: None,
+            signed_pap: None,
         })))
     }
 
@@ -813,6 +820,115 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         )
     }
 
+    /// The PAP of an allowed `projection.issue` (L2-PAP-1, OP-143 m.11): its digest for the
+    /// record and its payload.
+    async fn pap_of(
+        &self,
+        inc: &Incoming,
+        actor: Actor,
+        fixed: &Fixed,
+    ) -> Result<(Digest, Vec<u8>), CoreError> {
+        use access_kernel::validity::{Revalidation, ValidityContract};
+        let req = &inc.request;
+        let Some(Payload::ProjectionIssue {
+            bounds,
+            audience,
+            class,
+            variant,
+            max_staleness_ms,
+        }) = &req.payload
+        else {
+            return Err(CoreError::Protocol("payload"));
+        };
+        let key = self
+            .settled(|snap| {
+                crate::domain::read::<InstanceState>(snap, kind::INSTANCE, &actor.instance)
+                    .map(|i| i.key)
+            })
+            .await?
+            .ok_or(CoreError::Protocol("instance"))?;
+        let lineage = self
+            .settled(|snap| crate::domain::lineage_commitment(snap, &req.basis))
+            .await?
+            .ok_or(CoreError::Protocol("basis"))?;
+        let holder = access_kernel::pap::Holder {
+            instance: actor.instance,
+            key,
+        };
+        let digest_of = |label: &str, v: &Value| -> Result<Digest, CoreError> {
+            let b = dcbor::encode(v, Limits::CEILING).map_err(|_| CoreError::Protocol("pap"))?;
+            Ok(Digest(suiss_crypto::digest::context_digest(label, &b).0))
+        };
+        let validity = ValidityContract {
+            issuing_exercise: fixed.exercise,
+            basis_ref: dcbor::encode(
+                &Value::Array(vec![
+                    self.domain.to_value(),
+                    Value::Unsigned(fixed.pos.saturating_sub(1)),
+                ]),
+                Limits::CEILING,
+            )
+            .map_err(|_| CoreError::Protocol("pap"))?,
+            holder: access_kernel::pap::holder_digest(&holder)
+                .map_err(|_| CoreError::Protocol("pap"))?,
+            audience: audience.clone(),
+            bounds: bounds.authority.clone(),
+            class: *class,
+            variant: *variant,
+            profile_version: 1,
+            params: BTreeMap::new(),
+            horizon: bounds.constraints.validity.until,
+            max_staleness_ms: *max_staleness_ms,
+            freshness_sources: BTreeSet::new(),
+            revalidation: Revalidation::default(),
+            offline_slice: BTreeSet::new(),
+            local_requirements: bounds.requirements.clone(),
+            verifier_profile_ref: digest_of(
+                "access/verifier-profile/v1",
+                &Value::Array(audience.iter().map(|a| Value::text(a)).collect()),
+            )?,
+            clock_source: String::from("trusted"),
+            clock_skew_ms: access_kernel::ais::SKEW_MS,
+            must_understand: BTreeSet::new(),
+        };
+        let pap = access_kernel::pap::Pap {
+            domain: self.domain,
+            projection_exercise: fixed.exercise,
+            holder,
+            capacity: req.capacity,
+            bounds: bounds.authority.clone(),
+            local_requirements: bounds.requirements.clone(),
+            validity,
+            lineage_commitment: lineage,
+            iat: fixed.now,
+        };
+        let bytes = pap.to_bytes().map_err(|_| CoreError::Protocol("pap"))?;
+        let digest = Digest(suiss_crypto::digest::context_digest("access/pap/v1", &bytes).0);
+        Ok((digest, bytes))
+    }
+
+    /// The receipt of an ALLOW and the PAP of an allowed `projection.issue`, each with the digest
+    /// the decision record carries (L2-RCP-2, L2-PAP-2).
+    async fn artefacts(
+        &self,
+        inc: &Incoming,
+        actor: Option<Actor>,
+        fixed: &Fixed,
+        allowed: bool,
+    ) -> Result<(Option<(Digest, Vec<u8>)>, Option<(Digest, Vec<u8>)>), CoreError> {
+        if !allowed {
+            return Ok((None, None));
+        }
+        let receipt = Self::receipt_of(inc, &self.domain, actor, fixed)?;
+        let pap = match (&inc.request.payload, actor) {
+            (Some(Payload::ProjectionIssue { .. }), Some(a)) => {
+                Some(self.pap_of(inc, a, fixed).await?)
+            }
+            _ => None,
+        };
+        Ok((Some(receipt), pap))
+    }
+
     /// The rate class of a request (§13.7.4, OP-141 m.23).
     const fn class_of(inc: &Incoming) -> Class {
         match (inc.request.mode, inc.explain) {
@@ -931,9 +1047,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                 now,
                 drawn: !evaluation.draws.is_empty(),
             };
-            let receipt = allowed
-                .then(|| Self::receipt_of(inc, &self.domain, actor, &fixed))
-                .transpose()?;
+            let (receipt, pap) = self.artefacts(inc, actor, &fixed, allowed).await?;
             let shape = Shape {
                 digest: &digest,
                 actor,
@@ -941,7 +1055,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                 open,
                 pos: frame.pos,
                 exercise,
-                receipt: receipt.as_ref().map(|r| r.0),
+                artifacts: receipt.iter().chain(pap.iter()).map(|r| r.0).collect(),
             };
             let items = self.items(inc, &shape, &evaluation, &snapshot, &resolved)?;
             match self.leader.commit(now, &items).await {
@@ -953,6 +1067,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                         false,
                     );
                     response.receipt = receipt.map(|r| r.1);
+                    response.pap = pap.map(|p| p.1);
                     return Ok(response);
                 }
                 Ok(Committed::Replayed(pos)) => {
@@ -1132,12 +1247,13 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             ("nonce", Value::Bytes(req.nonce.clone())),
             ("intent", digest_value(digest)),
         ];
-        // TI-12, L2-RCP-2
-        decision.extend(
-            shape
-                .receipt
-                .map(|r| ("artifacts", Value::Array(vec![r.to_value()]))),
-        );
+        // TI-12, L2-RCP-2, L2-PAP-2
+        decision.extend((!shape.artifacts.is_empty()).then(|| {
+            (
+                "artifacts",
+                Value::Array(shape.artifacts.iter().map(Digest::to_value).collect()),
+            )
+        }));
         if !effects.is_empty() {
             decision.push(("effects", effects_value(&effects)));
         }
@@ -1282,6 +1398,8 @@ const fn answer(
         consistency: None,
         receipt: None,
         signed_receipt: None,
+        pap: None,
+        signed_pap: None,
     }
 }
 
@@ -1312,7 +1430,7 @@ struct Shape<'a> {
     open: bool,
     pos: u64,
     exercise: Digest,
-    receipt: Option<Digest>,
+    artifacts: Vec<Digest>,
 }
 
 /// Namespace of a contribution's resource (L0-META-30).

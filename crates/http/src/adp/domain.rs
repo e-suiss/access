@@ -632,6 +632,13 @@ pub fn encode_for(response: &Response, mode: Mode, scope: Scope) -> Out {
             serde_json::json!({ "sign1": b64url_encode(sign1), "excerpt": b64url_encode(excerpt) }),
         );
     }
+    // L2-PAP-2: the PAP of an allowed projection.issue, signed
+    if let Some((sign1, excerpt)) = &response.signed_pap {
+        context.insert(
+            String::from("pap"),
+            serde_json::json!({ "sign1": b64url_encode(sign1), "excerpt": b64url_encode(excerpt) }),
+        );
+    }
     context.insert(
         String::from("versions"),
         serde_json::json!({ "core": 1, "meta_schema": 1 }),

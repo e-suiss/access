@@ -637,6 +637,31 @@ fn applicable_policies(
     out
 }
 
+/// The lineage commitment of a basis: the Anchor and the Grants of its lineage, root first,
+/// under `access/lineage/v1` (L2-PAP-1, OP-143 m.11).
+pub(crate) fn lineage_commitment(view: &Snapshot, basis: &ExerciseBasis) -> Option<Digest> {
+    let ids = match basis {
+        ExerciseBasis::Anchor(a) => vec![*a],
+        ExerciseBasis::Holding(h) => {
+            let chain = chain_ids(view, &h.grant)?;
+            let first: GrantState = read(view, kind::GRANT, chain.first()?)?;
+            let GrantBasis::Anchor(a) = first.content.basis else {
+                return None;
+            };
+            core::iter::once(a).chain(chain).collect()
+        }
+        ExerciseBasis::Public(_) => return None,
+    };
+    let bytes = suiss_crypto::dcbor::encode(
+        &Value::Array(ids.iter().map(Canonical::to_value).collect()),
+        suiss_crypto::dcbor::Limits::CEILING,
+    )
+    .ok()?;
+    Some(Digest(
+        suiss_crypto::digest::context_digest("access/lineage/v1", &bytes).0,
+    ))
+}
+
 /// The Grants of a lineage in the order of its hops.
 fn chain_ids(
     view: &dyn View,

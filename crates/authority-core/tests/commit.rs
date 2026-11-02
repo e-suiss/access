@@ -2713,54 +2713,49 @@ async fn the_tenant_is_not_a_decision_input() {
     assert_eq!(decisions[0], decisions[1]);
 }
 
-// §9.8, L2-RCP-1 to L2-RCP-3, TI-12, OP-143 m.5: an ALLOW commit records its receipt's digest,
-// the signer signs it after the commit and a PEP verifies it offline against the domain's
-// metadata
-#[tokio::test]
-#[allow(
-    clippy::too_many_lines,
-    reason = "one signer, one domain and one receipt from commit to offline verification"
-)]
-async fn an_allow_carries_a_signed_receipt() {
-    use access_authority_signer::adapters::{DirVault, SealedFactory, call, serve};
-    use access_authority_signer::ports::Bindings;
-    use access_authority_signer::protocol::{Request as SignerRequest, Response as SignerResponse};
-    use access_authority_signer::service::Service;
-    use std::sync::{Arc, Mutex};
+/// The binding key of every domain in the in-process signer of the signing tests.
+struct SoftBinding;
 
-    struct Soft;
-    impl Bindings for Soft {
-        fn binding(
-            &mut self,
-            _: &Digest,
-        ) -> Result<Box<dyn suiss_crypto::signer::Signer + Send>, suiss_crypto::signer::SignError>
-        {
-            let doc = suiss_crypto::secret::Secret::new(
-                ed25519_dalek::pkcs8::EncodePrivateKey::to_pkcs8_der(&signing(77))
-                    .unwrap()
-                    .as_bytes()
-                    .to_vec(),
-            );
-            Ok(Box::new(
-                suiss_crypto::signer::SoftSigner::ed25519_from_pkcs8(&doc)?,
-            ))
-        }
+impl access_authority_signer::ports::Bindings for SoftBinding {
+    fn binding(
+        &mut self,
+        _: &Digest,
+    ) -> Result<Box<dyn suiss_crypto::signer::Signer + Send>, suiss_crypto::signer::SignError> {
+        let doc = suiss_crypto::secret::Secret::new(
+            ed25519_dalek::pkcs8::EncodePrivateKey::to_pkcs8_der(&signing(77))
+                .unwrap()
+                .as_bytes()
+                .to_vec(),
+        );
+        Ok(Box::new(
+            suiss_crypto::signer::SoftSigner::ed25519_from_pkcs8(&doc)?,
+        ))
     }
+}
 
-    let db = fresh().await.unwrap();
-    let d = create_genesis(&db.sequencer, TENANT, genesis(), 1_000)
-        .await
-        .unwrap();
-    let dir = std::env::temp_dir().join(format!("access-receipt-{}", std::process::id()));
+type SignerService = std::sync::Arc<
+    std::sync::Mutex<
+        access_authority_signer::service::Service<
+            access_authority_signer::adapters::SealedFactory<suiss_crypto::envelope::SoftKek>,
+            SoftBinding,
+            access_authority_signer::adapters::DirVault,
+        >,
+    >,
+>;
+
+/// An in-process signer on a socket of its own, at the tests' fixed time, with no lead.
+fn start_signer(name: &str) -> (std::path::PathBuf, SignerService) {
+    use access_authority_signer::adapters::{DirVault, SealedFactory, serve};
+    let dir = std::env::temp_dir().join(format!("access-{name}-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let policy = suiss_crypto::rotation::Policy {
         publish_lead_ms: 0,
         ..suiss_crypto::rotation::Policy::AUTHORITY
     };
-    let service = Arc::new(Mutex::new(
-        Service::start(
+    let service = std::sync::Arc::new(std::sync::Mutex::new(
+        access_authority_signer::service::Service::start(
             SealedFactory::new(suiss_crypto::envelope::SoftKek::new("kek", [4; 32])),
-            Soft,
+            SoftBinding,
             DirVault::new(&dir),
             policy,
             NOW,
@@ -2772,10 +2767,229 @@ async fn an_allow_carries_a_signed_receipt() {
     let uid = std::os::unix::fs::MetadataExt::uid(&std::fs::metadata(&dir).unwrap());
     tokio::spawn(serve(
         tokio::net::UnixListener::bind(&socket).unwrap(),
-        Arc::clone(&service),
+        std::sync::Arc::clone(&service),
         vec![uid],
         || NOW,
     ));
+    (socket, service)
+}
+
+/// The domain's Domain Metadata from the signer, verified under the binding key.
+async fn signer_metadata(
+    socket: &std::path::Path,
+    d: Digest,
+) -> access_kernel::verify::key_scope::DomainMetadata {
+    use access_authority_signer::ports::Bindings as _;
+    use access_authority_signer::protocol::{Request, Response};
+    let Response::Metadata(bytes) =
+        access_authority_signer::adapters::call(socket, &Request::Metadata(d))
+            .await
+            .unwrap()
+    else {
+        panic!("metadata");
+    };
+    let binding_key = SoftBinding.binding(&d).unwrap().public_key();
+    let mut trusted = access_kernel::verify::cose::KeySet::default();
+    trusted
+        .insert(
+            access_kernel::verify::key_scope::thumbprint(&binding_key),
+            binding_key,
+        )
+        .unwrap();
+    trusted
+        .allowed
+        .insert(access_kernel::verify::cose::Algorithm::Ed25519);
+    access_kernel::verify::key_scope::verify_metadata(
+        &access_kernel::verify::PureBackend,
+        &bytes,
+        &trusted,
+    )
+    .unwrap()
+}
+
+/// A process leading `d` that signs through the signer at `socket`.
+fn signing_process(
+    db: &TestDb,
+    d: Digest,
+    socket: &std::path::Path,
+) -> Domains<Listed, Bound, Counter, Fixed> {
+    Domains::new(Setup {
+        sequencer: db.sequencer.clone(),
+        app: db.app.clone(),
+        keys: Listed(vec![d]),
+        holder: "a".to_owned(),
+        ttl: TTL,
+        binding: binding(),
+        salts: Counter(0),
+        clock: Fixed,
+        deriver: db.deriver.clone(),
+        signer: Some(socket.to_path_buf()),
+    })
+}
+
+/// Registers ROOT through `a`, letting the signer's schedule run after each ALLOW so that its
+/// first key may sign.
+async fn onboard_signed(
+    a: &Domains<Listed, Bound, Counter, Fixed>,
+    d: Digest,
+    service: &SignerService,
+) {
+    let public_basis = ExerciseBasis::Public(meta::object_id(&d, kind::GRANT, 0));
+    let steps = [
+        Payload::PartyRegister {
+            party: ROOT,
+            root: Root::Sole(ROOT),
+        },
+        Payload::InstanceCreate {
+            party: ROOT,
+            key: public(ROOT_KEY),
+            mandate: None,
+        },
+    ];
+    for (nonce, payload) in (1..).zip(steps) {
+        allowed(
+            &a.exercise(&incoming(
+                meta_request(d, nonce, public_basis, payload),
+                ROOT_KEY,
+            ))
+            .await
+            .unwrap(),
+        );
+        for _ in 0..2 {
+            service.lock().unwrap().tick(NOW, 1);
+        }
+    }
+}
+
+// L2-PAP-1 to L2-PAP-3, OP-143 m.7, m.11: an allowed projection.issue records its PAP's digest,
+// the signer signs it after the commit, and a verifier accepts the holder's presentation for an
+// intent within the bounds and refuses one outside them
+#[tokio::test]
+#[allow(
+    clippy::too_many_lines,
+    reason = "one projection from commit to an offline verifier's two decisions"
+)]
+async fn a_projection_carries_a_signed_pap() {
+    use access_kernel::validity::{ProfileClass, ProfileVariant};
+    let db = fresh().await.unwrap();
+    let d = create_genesis(&db.sequencer, TENANT, genesis(), 1_000)
+        .await
+        .unwrap();
+    let (socket, service) = start_signer("pap");
+    let a = signing_process(&db, d, &socket);
+    onboard_signed(&a, d, &service).await;
+    let shop = ExerciseBasis::Anchor(meta::object_id(&d, kind::ANCHOR, 1));
+    let mut bounds = authority(vec![action("shop", "read")], selector("shop"));
+    bounds.constraints.validity = Window {
+        from: NOW,
+        until: NOW + 3_600_000,
+    };
+    let issue = Payload::ProjectionIssue {
+        bounds: bounds.clone(),
+        audience: BTreeSet::from(["verifier.example".to_owned()]),
+        class: ProfileClass::Online,
+        variant: ProfileVariant::OnlineStrict,
+        max_staleness_ms: None,
+    };
+    let r = a
+        .exercise(&incoming(meta_request(d, 9, shop, issue), ROOT_KEY))
+        .await
+        .unwrap();
+    allowed(&r);
+    let (pap_sign1, excerpt) = r.signed_pap.clone().expect("signed PAP");
+    let metadata = signer_metadata(&socket, d).await;
+
+    let present = |intent: &IntentEnvelope| {
+        let p = access_kernel::pap::Presentation {
+            pap: access_kernel::pap::pap_digest(&pap_sign1),
+            intent: access_kernel::intent::intent_digest(intent).unwrap(),
+            audience: "verifier.example".to_owned(),
+            nonce: vec![5; 16],
+            iat: NOW,
+        };
+        let prot = dcbor::encode(
+            &Value::Map(vec![
+                (Value::Unsigned(ALG), Value::int(-19)),
+                (
+                    Value::Unsigned(CT),
+                    Value::text(access_kernel::pap::PRESENTATION_CONTENT_TYPE),
+                ),
+                (
+                    Value::Unsigned(KID),
+                    Value::Bytes(thumbprint(&public(ROOT_KEY)).to_vec()),
+                ),
+            ]),
+            Limits::CEILING,
+        )
+        .unwrap();
+        let payload = p.to_bytes().unwrap();
+        let sig = signing(ROOT_KEY)
+            .sign(&to_be_signed(&prot, &payload))
+            .to_bytes()
+            .to_vec();
+        let body = dcbor::encode(
+            &Value::Array(vec![
+                Value::Bytes(prot),
+                Value::Map(vec![]),
+                Value::Bytes(payload),
+                Value::Bytes(sig),
+            ]),
+            Limits::CEILING,
+        )
+        .unwrap();
+        [vec![0xd2], body].concat()
+    };
+    let verify = |intent: &IntentEnvelope| {
+        access_kernel::pap::verify(
+            &access_kernel::verify::PureBackend,
+            &metadata,
+            &pap_sign1,
+            &excerpt,
+            &present(intent),
+            &access_kernel::pap::Expected {
+                domain: &d,
+                intent,
+                audience: "verifier.example",
+                nonce: &[5; 16],
+                now: NOW,
+                catalog: &access_kernel::algebra::Catalog::default(),
+                satisfied: &BTreeSet::new(),
+                remaining: &BTreeMap::new(),
+                metadata_fresh: true,
+                understood: &BTreeSet::new(),
+                last_refresh: None,
+                online: true,
+                skew_ms: access_kernel::ais::SKEW_MS,
+                horizon_cap_ms: 86_400_000,
+            },
+        )
+    };
+    let read = shop_request(d, 10, Mode::Commit, shop).intent;
+    let pap = verify(&read).unwrap();
+    assert_eq!(pap.projection_exercise, r.exercise.unwrap());
+    assert_eq!(pap.bounds, bounds.authority);
+    let mut write = read.clone();
+    write.action = action("shop", "write");
+    assert_eq!(
+        verify(&write).map_err(access_kernel::pap::PapError::code),
+        Err("pap-bounds")
+    );
+}
+
+// §9.8, L2-RCP-1 to L2-RCP-3, TI-12, OP-143 m.5: an ALLOW commit records its receipt's digest,
+// the signer signs it after the commit and a PEP verifies it offline against the domain's
+// metadata
+#[tokio::test]
+#[allow(
+    clippy::too_many_lines,
+    reason = "one signer, one domain and one receipt from commit to offline verification"
+)]
+async fn an_allow_carries_a_signed_receipt() {
+    let db = fresh().await.unwrap();
+    let d = create_genesis(&db.sequencer, TENANT, genesis(), 1_000)
+        .await
+        .unwrap();
+    let (socket, service) = start_signer("receipt");
     let a = Domains::new(Setup {
         sequencer: db.sequencer.clone(),
         app: db.app.clone(),
@@ -2826,27 +3040,7 @@ async fn an_allow_carries_a_signed_receipt() {
         .unwrap();
     allowed(&r);
     let (sign1, excerpt) = r.signed_receipt.clone().expect("signed receipt");
-    let SignerResponse::Metadata(bytes) = call(&socket, &SignerRequest::Metadata(d)).await.unwrap()
-    else {
-        panic!("metadata");
-    };
-    let binding_key = Soft.binding(&d).unwrap().public_key();
-    let mut trusted = access_kernel::verify::cose::KeySet::default();
-    trusted
-        .insert(
-            access_kernel::verify::key_scope::thumbprint(&binding_key),
-            binding_key,
-        )
-        .unwrap();
-    trusted
-        .allowed
-        .insert(access_kernel::verify::cose::Algorithm::Ed25519);
-    let metadata = access_kernel::verify::key_scope::verify_metadata(
-        &access_kernel::verify::PureBackend,
-        &bytes,
-        &trusted,
-    )
-    .unwrap();
+    let metadata = signer_metadata(&socket, d).await;
     let intent =
         access_kernel::intent::intent_digest(&shop_request(d, 9, Mode::Commit, shop).intent)
             .unwrap();

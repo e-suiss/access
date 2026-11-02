@@ -361,7 +361,13 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
         if let (Ok(r), Some(path)) = (&mut result, &self.setup.signer)
             && let Some(payload) = r.receipt.clone()
         {
-            r.signed_receipt = sign_receipt(path, led, domain, payload, now).await;
+            r.signed_receipt =
+                sign_artefact(path, led, domain, Artefact::Receipt, payload, now).await;
+        }
+        if let (Ok(r), Some(path)) = (&mut result, &self.setup.signer)
+            && let Some(payload) = r.pap.clone()
+        {
+            r.signed_pap = sign_artefact(path, led, domain, Artefact::Pap, payload, now).await;
         }
         if let Ok(r) = &mut result
             && let Some(pos) = r.record
@@ -500,26 +506,40 @@ fn grant_row(id: [u8; 16], g: &GrantState, pos: u64) -> GrantRow {
     }
 }
 
-/// Asks the signer at `path` to sign a receipt payload, opening the domain's keyring first.
-async fn sign_receipt<B: Binding, S: Salts, C>(
+/// What a decision point asks the signer to sign after a commit.
+#[derive(Clone, Copy)]
+enum Artefact {
+    Receipt,
+    Pap,
+}
+
+/// Asks the signer at `path` to sign an artefact payload, opening the domain's keyring first
+/// (L2-RCP-2, L2-PAP-2).
+async fn sign_artefact<B: Binding, S: Salts, C>(
     path: &std::path::Path,
     led: &mut Led<B, S, C>,
     domain: Digest,
+    artefact: Artefact,
     payload: Vec<u8>,
     at: u64,
 ) -> Option<(Vec<u8>, Vec<u8>)> {
     use access_authority_signer::adapters::call;
     use access_authority_signer::protocol::{Request as SignRequest, Response as SignResponse};
+    use access_kernel::verify::key_scope::KeyUsage;
     if !led.signer_open {
         let open = SignRequest::Open(Box::new(access_authority_signer::domain::default_template(
             domain,
         )));
         led.signer_open = matches!(call(path, &open).await, Ok(SignResponse::Opened));
     }
+    let (usage, content_type) = match artefact {
+        Artefact::Receipt => (KeyUsage::Receipt, access_kernel::receipt::CONTENT_TYPE),
+        Artefact::Pap => (KeyUsage::Pap, access_kernel::pap::CONTENT_TYPE),
+    };
     let sign = SignRequest::Sign {
         domain,
-        usage: access_kernel::verify::key_scope::KeyUsage::Receipt,
-        content_type: String::from(access_kernel::receipt::CONTENT_TYPE),
+        usage,
+        content_type: String::from(content_type),
         payload,
         at,
     };
