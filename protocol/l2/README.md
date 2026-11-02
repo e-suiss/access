@@ -19,6 +19,8 @@ L2 defines the artefacts that only Access produces: their data model, how they a
 | Claim | `claim-statement` | `application/access-claim+cbor` | An Instance of the issuer | [L2-CLM-1](#L2-CLM-1) to [L2-CLM-3](#L2-CLM-3) |
 | Claim record fields | `claim-fields` | inside a `claim` record envelope | not signed by itself | [L2-CLM-4](#L2-CLM-4) |
 | Decision receipt | `receipt` | `application/access-receipt+cbor` | An operational key of the domain with usage `receipt` | [L2-RCP-1](#L2-RCP-1) to [L2-RCP-3](#L2-RCP-3) |
+| Portable Authority Proof | `pap` | `application/access-pap+cbor` | An operational key of the domain with usage `pap` | [L2-PAP-1](#L2-PAP-1) to [L2-PAP-3](#L2-PAP-3) |
+| PAP presentation | `pap-presentation` | `application/access-pap-presentation+cbor` | The holder's key | [L2-PAP-3](#L2-PAP-3) |
 
 The data model is [`conformance/cddl/kernel.cddl`](../../conformance/cddl/kernel.cddl).
 
@@ -88,6 +90,16 @@ A Claim is a signed statement by an issuer Party about a subject Party. It enter
 
 Vectors: [`core/1/receipt.json`](../../conformance/vectors/core/1/receipt.json), operation `receipt.verify`.
 
+## Portable Authority Proofs
+
+<a id="L2-PAP-1"></a><!-- no-vector: definition: the field set; L2-PAP-3 checks it -->**L2-PAP-1.** A PAP carries the fields of the CDDL rule `pap`: the domain, the ExerciseID of the `projection.issue` that produced it, the holder (Instance and its public key), the capacity, the bounds (an authority set within the holder's exercisable authority, catalog prefixes pinned), the requirements a verifier must check locally, the ValidityContract, the digest of the basis lineage and `iat`. The contract's `holder` is the digest of the `holder` value under `access/holder/v1`; its `audience`, `offline_slice` and `must_understand` are the PAP's. An action whose requirements a verifier cannot check locally is not in the bounds.
+
+<a id="L2-PAP-2"></a><!-- no-vector: outside-operation: a producer rule checked by the core tests of projection.issue -->**L2-PAP-2.** The producer records the PAP's digest (`access/pap/v1` over the PAP payload) in the `projection.issue` decision record's `artifacts` before the commit and signs only after it, with an operational key whose excerpt names usage `pap` and whose window contains `iat`. A presentation's `pap` digest is taken over the signed COSE_Sign1 bytes under the same context.
+
+<a id="L2-PAP-3"></a>**L2-PAP-3.** A verifier accepts the use of a PAP for an intent only when all of these hold, in this order: (1) the payload decodes as `pap`; the excerpt resolves an operational key of the PAP's domain for usage `pap` at its `iat`; the COSE_Sign1 verifies under it; the domain is the verifier's (`pap-malformed`, `pap-key`, `pap-signature`, `pap-domain`); (2) the contract allows use now for this verifier ([L0-VAL](../l0/validity.md)) and its `holder` is the digest of the PAP's holder (`pap-validity`, `pap-holder`); (3) the presentation decodes, verifies under the holder key, names this PAP's digest, the intent, the verifier as audience and the verifier's nonce, and its `iat` is within the AIS skew of the verifier's time (`pap-presentation`); (4) the intent is within the bounds and every local requirement is one the verifier reports satisfied (`pap-bounds`, `pap-requirements`); (5) the intent's demand fits what remains of the offline slice the verifier keeps (`pap-slice`); (6) the verifier's Domain Metadata is fresh (`pap-stale`). Must-understand items are part of step 2.
+
+Vectors: [`core/1/pap.json`](../../conformance/vectors/core/1/pap.json), operation `pap.verify`.
+
 ## Signing profile
 
 <a id="L2-SIG-1"></a>**L2-SIG-1.** Every L2 artefact is a COSE_Sign1 whose protected header carries exactly `alg`, the content type and `kid`, as [L0-SIG-10](../l0/signatures.md#L0-SIG-10) requires. The payload is the deterministic CBOR encoding of the artefact.
@@ -122,7 +134,6 @@ These parts arrive with the features that produce them, each in its own version 
 |---|---|
 | Actor Intent Statement (AIS) | The signed statement of an actor's exact intent |
 | Approval Act Statement (AAS) | A human approval bound to an intent digest |
-| Portable Authority Proof (PAP) | An offline-checkable proof of authority with its embedded ValidityContract |
 | Schema Publication Package | Action schemas and their catalog digests |
 | Authority Record Exchange | Record transfer, handover and recovery |
 

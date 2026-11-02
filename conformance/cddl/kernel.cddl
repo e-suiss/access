@@ -738,3 +738,37 @@ receipt = {
   iat: trusted-time,
   drawn: bool,
 }
+
+; ---------------------------------------------------------------- Portable Authority Proof (L2-PAP-1)
+
+; Payload of a COSE_Sign1 signed by an operational key with usage "pap", content type
+; "application/access-pap+cbor". Audience, offline slice and must-understand items are the
+; contract's (validity).
+pap = {
+  domain: domain-id,
+  projection_exercise: digest,
+  holder: pap-holder,
+  capacity: capacity,
+  bounds: authority-set,
+  ? local_requirements: requirement-set,
+  validity: validity-contract,
+  lineage_commitment: digest,
+  iat: trusted-time,
+}
+
+; The holder Instance and its key; validity.holder is the digest of this value under
+; "access/holder/v1".
+pap-holder = {
+  instance: id,
+  key: public-key,
+}
+
+; Payload of a COSE_Sign1 signed by the holder key, content type
+; "application/access-pap-presentation+cbor" (proof of possession, §9.10 step 3).
+pap-presentation = {
+  pap: digest,
+  intent: digest,
+  audience: tstr .size (1..255),
+  nonce: bstr .size (16..64),
+  iat: trusted-time,
+}

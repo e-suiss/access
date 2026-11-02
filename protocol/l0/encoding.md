@@ -165,6 +165,8 @@ where `context(K)` is the UTF-8 bytes of the context string, followed by one zer
 | Claim, as received | `access/claim/v1` |
 | RestrictionPolicy content (its version) | `access/policy/v1` |
 | Decision receipt payload ([L2-RCP-2](../l2/README.md#L2-RCP-2)) | `access/receipt/v1` |
+| Portable Authority Proof, as signed ([L2-PAP-2](../l2/README.md#L2-PAP-2)) | `access/pap/v1` |
+| PAP holder ([L2-PAP-1](../l2/README.md#L2-PAP-1)) | `access/holder/v1` |
 
 The AIS digest is taken over the COSE_Sign1 bytes the actor sent, unchanged, because the signature covers them; it names the statement in the opening record and in its proof row.
 
