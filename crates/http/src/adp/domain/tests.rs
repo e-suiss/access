@@ -69,11 +69,11 @@ fn a_request_decodes_into_the_core_terms() {
     assert!(d.ais.is_none() && r.payload.is_none());
 }
 
-// L1-ADP-12, L1-ADP-13
+// L1-ADP-12, L1-ADP-13, OP-143 m.13 (c)
 #[test]
 fn proofs_and_the_continued_exercise_decode() {
     let extra = format!(
-        r#", "proofs": [{{"claim": "{c}"}}, {{"claim_ref": "{r}"}}, {{"contribution": "{e}"}}], "exercise": "{e}""#,
+        r#", "proofs": [{{"claim": "{c}"}}, {{"claim_ref": "{r}"}}, {{"contribution": "{e}"}}, {{"foreign_pap": {{"metadata": "{c}", "pap": "{r}", "excerpt": "{e}", "presentation": "{c}"}}}}], "exercise": "{e}""#,
         c = b64(&[9, 9]),
         r = b64(&[8; 16]),
         e = b64(&[7; 32]),
@@ -85,12 +85,22 @@ fn proofs_and_the_continued_exercise_decode() {
             ProofRef::Claim(vec![9, 9]),
             ProofRef::ClaimRef(Id([8; 16])),
             ProofRef::Contribution(Digest([7; 32])),
+            ProofRef::ForeignPap {
+                metadata: vec![9, 9],
+                pap: vec![8; 16],
+                excerpt: vec![7; 32],
+                presentation: vec![9, 9],
+            },
         ]
     );
     assert_eq!(d.request.exercise, Some(Digest([7; 32])));
     for bad in [
         r#", "proofs": []"#.to_owned(),
         r#", "proofs": [{"pin": "AA"}]"#.to_owned(),
+        r#", "proofs": [{"foreign_pap": {"metadata": "AA", "pap": "AA", "excerpt": "AA"}}]"#
+            .to_owned(),
+        r#", "proofs": [{"foreign_pap": {"metadata": "AA", "pap": "AA", "excerpt": "AA", "presentation": "AA", "x": "AA"}}]"#
+            .to_owned(),
         format!(
             r#", "proofs": [{}]"#,
             vec![r#"{"claim": "AA"}"#; 65].join(",")

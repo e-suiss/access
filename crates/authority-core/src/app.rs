@@ -1263,6 +1263,14 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                 Value::Array(shape.artifacts.iter().map(Digest::to_value).collect()),
             )
         }));
+        // OP-143 m.13 (g)
+        let foreign = evaluation
+            .foreign
+            .as_ref()
+            .map(|pap| (access_kernel::pap::pap_digest(pap), pap.clone()));
+        if let Some((d, _)) = &foreign {
+            decision.push(("proof_commit", Value::Array(vec![d.to_value()])));
+        }
         if !effects.is_empty() {
             decision.push(("effects", effects_value(&effects)));
         }
@@ -1297,7 +1305,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                 outcome: String::from(outcome),
             }),
             events: Vec::new(),
-            proofs: Vec::new(),
+            proofs: foreign.map(|(d, b)| vec![(d.0, b)]).unwrap_or_default(),
             reads,
             writes: effects.iter().map(|(k, _)| k.clone()).collect(),
             draws,

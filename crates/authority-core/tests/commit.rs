@@ -3205,3 +3205,500 @@ async fn domain_metadata_comes_only_from_the_signer() {
     assert_eq!(served, current);
     assert_eq!(a.metadata(Digest([9; 32])).await, None);
 }
+
+/// A `COSE_Sign1` by the key `seed`.
+fn sign1(seed: u8, content_type: &str, payload: &[u8]) -> Vec<u8> {
+    let prot = dcbor::encode(
+        &Value::Map(vec![
+            (Value::Unsigned(ALG), Value::int(-19)),
+            (Value::Unsigned(CT), Value::text(content_type)),
+            (
+                Value::Unsigned(KID),
+                Value::Bytes(thumbprint(&public(seed)).to_vec()),
+            ),
+        ]),
+        Limits::CEILING,
+    )
+    .unwrap();
+    let sig = signing(seed).sign(&to_be_signed(&prot, payload)).to_bytes();
+    let body = dcbor::encode(
+        &Value::Array(vec![
+            Value::Bytes(prot),
+            Value::Map(Vec::new()),
+            Value::Bytes(payload.to_vec()),
+            Value::Bytes(sig.to_vec()),
+        ]),
+        Limits::CEILING,
+    )
+    .unwrap();
+    [vec![0xd2], body].concat()
+}
+
+/// The schema of a consumption-bearing `shop` action.
+fn buy_schema() -> access_kernel::schema::ActionSchema {
+    access_kernel::schema::ActionSchema {
+        consumption_bearing: true,
+        ..schema_of("buy")
+    }
+}
+
+fn buy() -> ActionRef {
+    ActionRef {
+        schema: access_kernel::schema::action_digest(&buy_schema()),
+        ..action("shop", "buy")
+    }
+}
+
+/// A Genesis whose `shop` SPP also publishes the consumption-bearing `buy`.
+fn genesis_with_buy() -> BTreeMap<String, Opened> {
+    let mut g = genesis();
+    let mut spp = shop_spp();
+    spp.actions.push(buy_schema());
+    let mut schemas = shop_schemas();
+    if let Value::Map(m) = &mut schemas {
+        for (k, v) in m.iter_mut() {
+            if *k == Value::text("spp") {
+                *v = spp.to_value();
+            }
+        }
+    }
+    g.remove("acceptances");
+    add_acceptances(&mut g, vec![schemas]);
+    g
+}
+
+/// A `foreign-authority` Acceptance of `domain` for `classes`, pinning `binding`.
+fn foreign_acceptance(domain: Digest, binding: &PublicKey, classes: &[&str]) -> Payload {
+    use access_kernel::verify::key_scope::{BindingKey, BindingScope};
+    let pin = BindingKey {
+        kid: thumbprint(binding),
+        alg: access_kernel::verify::cose::Algorithm::Ed25519,
+        key: binding.clone(),
+        scope: BindingScope::Domain,
+        superseded: None,
+    };
+    let issuer = access_kernel::foreign::ForeignIssuer {
+        domain,
+        binding: BTreeMap::from([(pin.kid, pin)]),
+    };
+    let content = Value::Map(vec![
+        (
+            Value::text("issuer"),
+            Value::Map(vec![(Value::text("foreign"), issuer.to_value())]),
+        ),
+        (Value::text("use"), Value::text("foreign-authority")),
+        (
+            Value::text("classes"),
+            Value::Array(classes.iter().map(|c| Value::text(c)).collect()),
+        ),
+        (Value::text("subject"), SubjectSelector::Public.to_value()),
+        (
+            Value::text("validity"),
+            Value::Array(vec![Value::Unsigned(0), Value::Unsigned(u64::MAX)]),
+        ),
+    ]);
+    let payload = Value::Map(vec![(Value::text("acceptance_establish"), content)]);
+    let canonical = dcbor::decode(
+        &dcbor::encode(&payload, Limits::CEILING).unwrap(),
+        Limits::CEILING,
+    )
+    .unwrap();
+    Payload::from_value(&canonical).unwrap()
+}
+
+/// An `Incoming` whose AIS is signed at `iat`.
+fn incoming_at(request: Request, seed: u8, iat: u64) -> Incoming {
+    let digest = access_kernel::intent::intent_digest(&request.intent).unwrap();
+    let statement = Statement {
+        domain: request.domain,
+        nonce: request.nonce.clone(),
+        intent: digest,
+        mode: request.mode,
+        pep: PEP.to_owned(),
+        capacity: request.capacity,
+        basis: request.basis,
+        iat,
+        exercise: request.exercise,
+    };
+    Incoming {
+        ais: Some(sign(&statement, seed)),
+        request,
+        pep: PEP.to_owned(),
+        explain: false,
+    }
+}
+
+/// What a holder brings from its home domain: the signed PAP, its excerpt and the home
+/// domain's metadata.
+struct Home {
+    pap: Vec<u8>,
+    excerpt: Vec<u8>,
+    metadata: Vec<u8>,
+}
+
+impl Home {
+    /// `request` with this PAP presented by the holder key `seed` at `iat`.
+    fn present(&self, mut request: Request, seed: u8, iat: u64) -> Request {
+        let p = access_kernel::pap::Presentation {
+            pap: access_kernel::pap::pap_digest(&self.pap),
+            intent: access_kernel::intent::intent_digest(&request.intent).unwrap(),
+            audience: access_kernel::foreign::domain_text(&request.domain),
+            nonce: request.nonce.clone(),
+            iat,
+        };
+        request.proofs.push(ProofRef::ForeignPap {
+            metadata: self.metadata.clone(),
+            pap: self.pap.clone(),
+            excerpt: self.excerpt.clone(),
+            presentation: sign1(
+                seed,
+                access_kernel::pap::PRESENTATION_CONTENT_TYPE,
+                &p.to_bytes().unwrap(),
+            ),
+        });
+        request
+    }
+}
+
+/// In the home domain `d`, ROOT grants Alice `shop.read` and `shop.buy` and Alice projects them
+/// to the domain `to` without a slice.
+async fn home_pap(
+    a: &Domains<Listed, Bound, Counter, Fixed>,
+    d: Digest,
+    to: Digest,
+    socket: &std::path::Path,
+    service: &SignerService,
+) -> Home {
+    use access_kernel::validity::{ProfileClass, ProfileVariant};
+    let public_basis = ExerciseBasis::Public(meta::object_id(&d, kind::GRANT, 0));
+    let steps = [
+        Payload::PartyRegister {
+            party: ALICE,
+            root: Root::Sole(ALICE),
+        },
+        Payload::InstanceCreate {
+            party: ALICE,
+            key: public(ALICE_KEY),
+            mandate: None,
+        },
+    ];
+    for (nonce, payload) in (3..).zip(steps) {
+        allowed(
+            &a.exercise(&incoming(
+                meta_request(d, nonce, public_basis, payload),
+                ALICE_KEY,
+            ))
+            .await
+            .unwrap(),
+        );
+    }
+    let shop = meta::object_id(&d, kind::ANCHOR, 1);
+    let mut granted = authority(vec![action("shop", "read"), buy()], selector("shop"));
+    granted.constraints.validity.until = NOW + 86_400_000;
+    let issue = Payload::GrantIssue(GrantContent {
+        basis: GrantBasis::Anchor(shop),
+        holder: SubjectSelector::Party(ALICE),
+        authority: granted,
+        agency: BTreeSet::from([Capacity::Own]),
+        named: None,
+    });
+    let issued = a
+        .exercise(&incoming(
+            meta_request(d, 5, ExerciseBasis::Anchor(shop), issue),
+            ROOT_KEY,
+        ))
+        .await
+        .unwrap();
+    allowed(&issued);
+    let holding = ExerciseBasis::Holding(HoldingRef {
+        grant: meta::object_id(&issued.exercise.unwrap(), kind::GRANT, 0),
+        holder: ALICE,
+        since: issued.record.unwrap(),
+    });
+    let mut bounds = authority(vec![action("shop", "read"), buy()], selector("shop"));
+    bounds.constraints.validity = Window {
+        from: NOW,
+        until: NOW + 7_200_000,
+    };
+    let project = Payload::ProjectionIssue {
+        bounds,
+        audience: BTreeSet::from([access_kernel::foreign::domain_text(&to)]),
+        class: ProfileClass::Offline,
+        variant: ProfileVariant::CheckpointedOffline,
+        max_staleness_ms: None,
+        offline_slice: None,
+    };
+    let projected = a
+        .exercise(&incoming(meta_request(d, 6, holding, project), ALICE_KEY))
+        .await
+        .unwrap();
+    allowed(&projected);
+    let (pap, excerpt) = projected.signed_pap.unwrap();
+    service.lock().unwrap().tick(NOW, 1);
+    let access_authority_signer::protocol::Response::Metadata(metadata) =
+        access_authority_signer::adapters::call(
+            socket,
+            &access_authority_signer::protocol::Request::Metadata(d),
+        )
+        .await
+        .unwrap()
+    else {
+        panic!("metadata");
+    };
+    Home {
+        pap,
+        excerpt,
+        metadata,
+    }
+}
+
+fn blocked(r: &Response) -> (access_kernel::combinator::BlockerClass, String) {
+    assert_eq!(r.decision.outcome, Outcome::Deny, "{r:?}");
+    let b = r.decision.blockers.first().unwrap();
+    (b.class, b.subcode.clone().unwrap_or_default())
+}
+
+// OP-143 m.13, §9.15A.2–4, PI-3, INV-17: a PAP of the home domain lets its holder hold a
+// bridging Grant in another domain while a foreign-authority Acceptance pins the home domain's
+// binding key; under unpinned binding keys, without the PAP, outside the ceiling, under
+// another holder key, for a consumption-bearing action, outside the class, with stale metadata
+// and after the Acceptance is revoked, it is denied
+#[tokio::test]
+#[allow(
+    clippy::too_many_lines,
+    reason = "one home domain, one target domain and each way a foreign PAP is refused"
+)]
+async fn a_foreign_pap_holds_a_bridging_grant() {
+    use access_authority_signer::ports::Bindings as _;
+    use access_kernel::combinator::BlockerClass;
+    let db = fresh().await.unwrap();
+    let a = create_genesis(&db.sequencer, TENANT, genesis(), 1_000)
+        .await
+        .unwrap();
+    let b = create_genesis(&db.sequencer, TENANT, genesis_with_buy(), 2_000)
+        .await
+        .unwrap();
+    assert_ne!(a, b);
+    let (socket, service) = start_signer("foreign");
+    let home_process = signing_process(&db, a, &socket);
+    onboard_signed(&home_process, a, &service).await;
+    let home = home_pap(&home_process, a, b, &socket, &service).await;
+
+    let log = PgLog::new(db.sequencer.clone(), b, TENANT, "t".to_owned(), TTL);
+    let leader = Leader::acquire(log, b, EventKey::new(Secret::new([5; 32])))
+        .await
+        .unwrap();
+    let reader = PgReader::new(db.app.clone(), DomainId::from_bytes(b.0));
+    let mut core: Core = Authority::new(leader, reader, binding(), Counter(0), b);
+    onboard(&mut core, b, ROOT, ROOT_KEY, (1, 2)).await;
+    onboard(&mut core, b, ALICE, ALICE_KEY, (3, 4)).await;
+    onboard(&mut core, b, BOB, BOB_KEY, (5, 6)).await;
+    let meta_basis = ExerciseBasis::Anchor(meta::meta_anchor(&b));
+    let shop = meta::object_id(&b, kind::ANCHOR, 1);
+    let bridge = |class: &str, nonce: u8| {
+        let mut ceiling = authority(
+            vec![action("shop", "read"), buy()],
+            ResourceSelector::Structural(Structural {
+                namespace: "shop".to_owned(),
+                prefix: vec!["item-1".to_owned()],
+                kind: None,
+                attrs: BTreeMap::new(),
+            }),
+        );
+        ceiling.constraints.validity.until = NOW + 86_400_000;
+        meta_request(
+            b,
+            nonce,
+            ExerciseBasis::Anchor(shop),
+            Payload::GrantIssue(GrantContent {
+                basis: GrantBasis::Anchor(shop),
+                holder: SubjectSelector::Foreign {
+                    domain: a,
+                    class: class.to_owned(),
+                },
+                authority: ceiling,
+                agency: BTreeSet::from([Capacity::Own]),
+                named: None,
+            }),
+        )
+    };
+    let issued = send(&mut core, bridge("shop", 7), ROOT_KEY).await.unwrap();
+    allowed(&issued);
+    let holding = |holder| {
+        ExerciseBasis::Holding(HoldingRef {
+            grant: meta::object_id(&issued.exercise.unwrap(), kind::GRANT, 0),
+            holder,
+            since: issued.record.unwrap(),
+        })
+    };
+    let read = |nonce: u8, holder| shop_request(b, nonce, Mode::Commit, holding(holder));
+    let refusal = async |core: &mut Core, request: Request, seed: u8| {
+        blocked(&send(core, request, seed).await.unwrap())
+    };
+    let named = |class: BlockerClass, subcode: &str| (class, subcode.to_owned());
+
+    assert_eq!(
+        refusal(
+            &mut core,
+            home.present(read(20, ALICE), ALICE_KEY, NOW),
+            ALICE_KEY
+        )
+        .await,
+        named(BlockerClass::SourceNotAccepted, "foreign-not-accepted"),
+    );
+    let unpinned = send(
+        &mut core,
+        meta_request(
+            b,
+            8,
+            meta_basis,
+            foreign_acceptance(a, &public(99), &["shop"]),
+        ),
+        ROOT_KEY,
+    )
+    .await
+    .unwrap();
+    allowed(&unpinned);
+    assert_eq!(
+        refusal(
+            &mut core,
+            home.present(read(21, ALICE), ALICE_KEY, NOW),
+            ALICE_KEY
+        )
+        .await,
+        named(BlockerClass::NoCoveringAuthority, "foreign-metadata"),
+    );
+    allowed(
+        &send(
+            &mut core,
+            meta_request(
+                b,
+                9,
+                meta_basis,
+                Payload::AcceptanceRevoke {
+                    acceptance: meta::object_id(&unpinned.exercise.unwrap(), kind::ACCEPTANCE, 0),
+                },
+            ),
+            ROOT_KEY,
+        )
+        .await
+        .unwrap(),
+    );
+
+    let binding_key = SoftBinding.binding(&a).unwrap().public_key();
+    let accepted = send(
+        &mut core,
+        meta_request(
+            b,
+            10,
+            meta_basis,
+            foreign_acceptance(a, &binding_key, &["shop", "billing"]),
+        ),
+        ROOT_KEY,
+    )
+    .await
+    .unwrap();
+    allowed(&accepted);
+    allowed(
+        &send(
+            &mut core,
+            home.present(read(22, ALICE), ALICE_KEY, NOW),
+            ALICE_KEY,
+        )
+        .await
+        .unwrap(),
+    );
+
+    assert_eq!(
+        refusal(&mut core, read(23, ALICE), ALICE_KEY).await,
+        named(BlockerClass::SourceNotAccepted, "foreign-pap-missing"),
+    );
+    let mut outside = read(24, ALICE);
+    outside.intent.resources = vec![ResourceRef {
+        namespace: "shop".to_owned(),
+        path: vec!["item-2".to_owned()],
+        incarnation: 0,
+    }];
+    let r = send(&mut core, home.present(outside, ALICE_KEY, NOW), ALICE_KEY)
+        .await
+        .unwrap();
+    assert_eq!(r.decision.outcome, Outcome::Deny);
+    assert_eq!(
+        refusal(
+            &mut core,
+            home.present(read(25, BOB), ALICE_KEY, NOW),
+            BOB_KEY
+        )
+        .await,
+        named(BlockerClass::NoCoveringAuthority, "foreign-holder-key"),
+    );
+    let mut purchase = read(26, ALICE);
+    purchase.intent.action = buy();
+    assert_eq!(
+        refusal(&mut core, home.present(purchase, ALICE_KEY, NOW), ALICE_KEY).await,
+        named(BlockerClass::BudgetExhausted, "foreign-consumption"),
+    );
+
+    let billing = send(&mut core, bridge("billing", 11), ROOT_KEY)
+        .await
+        .unwrap();
+    allowed(&billing);
+    let request = shop_request(
+        b,
+        27,
+        Mode::Commit,
+        ExerciseBasis::Holding(HoldingRef {
+            grant: meta::object_id(&billing.exercise.unwrap(), kind::GRANT, 0),
+            holder: ALICE,
+            since: billing.record.unwrap(),
+        }),
+    );
+    assert_eq!(
+        refusal(&mut core, home.present(request, ALICE_KEY, NOW), ALICE_KEY).await,
+        named(BlockerClass::NoCoveringAuthority, "foreign-class"),
+    );
+
+    let later = NOW + 3_600_001;
+    let stale = core
+        .exercise(
+            &incoming_at(
+                home.present(read(28, ALICE), ALICE_KEY, later),
+                ALICE_KEY,
+                later,
+            ),
+            later,
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        blocked(&stale),
+        named(BlockerClass::ForeignStatusUnavailable, "foreign-stale"),
+    );
+
+    allowed(
+        &send(
+            &mut core,
+            meta_request(
+                b,
+                12,
+                meta_basis,
+                Payload::AcceptanceRevoke {
+                    acceptance: meta::object_id(&accepted.exercise.unwrap(), kind::ACCEPTANCE, 0),
+                },
+            ),
+            ROOT_KEY,
+        )
+        .await
+        .unwrap(),
+    );
+    assert_eq!(
+        refusal(
+            &mut core,
+            home.present(read(29, ALICE), ALICE_KEY, NOW),
+            ALICE_KEY
+        )
+        .await,
+        named(BlockerClass::SourceNotAccepted, "foreign-not-accepted"),
+    );
+    fold_check(&db.sequencer, b).await.unwrap();
+}

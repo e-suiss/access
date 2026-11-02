@@ -317,9 +317,24 @@ fn proofs(v: &Json) -> R<Vec<ProofRef>> {
             ("claim", c) => Ok(ProofRef::Claim(bytes(c, "proofs")?)),
             ("claim_ref", c) => Ok(ProofRef::ClaimRef(id(c)?)),
             ("contribution", c) => Ok(ProofRef::Contribution(digest(c)?)),
+            ("foreign_pap", c) => foreign_pap(c),
             _ => Err(AdpError("unknown-member")),
         })
         .collect()
+}
+
+/// A foreign PAP with its domain's metadata, its key excerpt and the holder's presentation
+/// (OP-143 m.13 (c)).
+fn foreign_pap(v: &Json) -> R<ProofRef> {
+    let mut o = Obj::of(v, "proofs")?;
+    let p = ProofRef::ForeignPap {
+        metadata: bytes(o.req("metadata", "proofs")?, "proofs")?,
+        pap: bytes(o.req("pap", "proofs")?, "proofs")?,
+        excerpt: bytes(o.req("excerpt", "proofs")?, "proofs")?,
+        presentation: bytes(o.req("presentation", "proofs")?, "proofs")?,
+    };
+    o.done()?;
+    Ok(p)
 }
 
 /// Decodes an evaluation request body (L1-ADP-5…9, L1-ADP-12, L1-ADP-13).

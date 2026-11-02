@@ -299,6 +299,8 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                     });
                     out.contributions.insert(id, (k, c));
                 }
+                // OP-143 m.13 (d)
+                ProofRef::ForeignPap { .. } => {}
             }
         }
         out.held = self.held(&mut snap, &req.basis, party, now).await?;

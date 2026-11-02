@@ -201,6 +201,17 @@ pub enum ProofRef {
     ClaimRef(access_kernel::model::Id),
     /// The `ExerciseID` of an allowed `contribute`.
     Contribution(Digest),
+    /// A foreign domain's PAP with what verifies it (OP-143 m.13 (c)).
+    ForeignPap {
+        /// The foreign domain's binding-signed Domain Metadata.
+        metadata: Vec<u8>,
+        /// The PAP's `COSE_Sign1`.
+        pap: Vec<u8>,
+        /// The key excerpt of the operational key that signed the PAP.
+        excerpt: Vec<u8>,
+        /// The holder's presentation for this request.
+        presentation: Vec<u8>,
+    },
 }
 
 /// What an evaluation produced.
@@ -218,6 +229,8 @@ pub struct Evaluation {
     pub expansion: bool,
     /// The accepted Action Schema of a domain action (OP-141 m.35 (e)).
     pub action: Option<Box<ActionSchema>>,
+    /// The foreign PAP a bridging holding relied on (OP-143 m.13 (g)).
+    pub foreign: Option<Vec<u8>>,
 }
 
 /// A budget draw: counter key, limit, demand and the unit of an `amount` term.
@@ -880,6 +893,118 @@ fn mandate(view: &dyn View, actor: Option<&Actor>) -> Option<Mandate> {
     })
 }
 
+fn foreign_deny(class: BlockerClass, subcode: &str, resolver: Resolver) -> Decision {
+    let mut d = deny(class, subcode, resolver);
+    for b in &mut d.blockers {
+        b.position = Position::Foreign;
+    }
+    d
+}
+
+/// Whether the actor holds a bridging Grant whose holder is `ForeignAuthority(domain, class)`:
+/// a live `foreign-authority` Acceptance covers the class, and a foreign PAP of the request
+/// verifies under it for this intent (OP-143 m.13 (d)–(f), (h)). `Ok(None)` while a key is still
+/// to be fetched; the PAP bytes on success; the DENY otherwise.
+fn bridge(
+    req: &Request,
+    view: &Snapshot,
+    actor: Option<&Actor>,
+    now: u64,
+    catalog: &Catalog,
+    schema: Option<&ActionSchema>,
+    (domain, class): (&Digest, &str),
+) -> Result<Option<Vec<u8>>, Decision> {
+    use access_kernel::foreign::{self, ForeignGate, Presented, Use};
+    let Some(actor) = actor else {
+        return Err(foreign_deny(
+            BlockerClass::NoCoveringAuthority,
+            "foreign-anonymous",
+            Resolver::Actor,
+        ));
+    };
+    // OP-143 m.13 (f)
+    if schema.is_some_and(|s| s.consumption_bearing) {
+        return Err(foreign_deny(
+            BlockerClass::BudgetExhausted,
+            "foreign-consumption",
+            Resolver::Actor,
+        ));
+    }
+    let key = read::<InstanceState>(view, kind::INSTANCE, &actor.instance)
+        .filter(|i| i.ended.is_none())
+        .map(|i| i.key);
+    let gates: Vec<ForeignGate> = match view.get(&foreign::index_key(domain)) {
+        Some(Value::Array(ids)) => ids
+            .iter()
+            .filter_map(|id| Id::from_value(id).ok())
+            .filter_map(|id| read::<ContentState>(view, kind::ACCEPTANCE, &id))
+            .filter(|a| a.ended.is_none())
+            .filter_map(|a| ForeignGate::of(&a.content).ok().flatten())
+            .filter(|g| g.opens(domain, class, now))
+            .collect(),
+        _ => Vec::new(),
+    };
+    if !view.missing().is_empty() {
+        return Ok(None);
+    }
+    if gates.is_empty() {
+        return Err(foreign_deny(
+            BlockerClass::SourceNotAccepted,
+            "foreign-not-accepted",
+            Resolver::Root,
+        ));
+    }
+    let Some(actor_key) = key else {
+        return Err(foreign_deny(
+            BlockerClass::NoCoveringAuthority,
+            "foreign-actor",
+            Resolver::Actor,
+        ));
+    };
+    let used = Use {
+        domain: &req.domain,
+        intent: &req.intent,
+        nonce: &req.nonce,
+        now,
+        catalog,
+        actor_key: &actor_key,
+        class,
+    };
+    let mut refusal = "foreign-pap-missing";
+    for p in &req.proofs {
+        let ProofRef::ForeignPap {
+            metadata,
+            pap,
+            excerpt,
+            presentation,
+        } = p
+        else {
+            continue;
+        };
+        if foreign::claimed_domain(pap).as_ref() != Some(domain) {
+            continue;
+        }
+        let presented = Presented {
+            metadata,
+            pap,
+            excerpt,
+            presentation,
+        };
+        for g in &gates {
+            match foreign::verify(&access_kernel::verify::PureBackend, g, &presented, &used) {
+                Ok(_) => return Ok(Some(pap.clone())),
+                Err(e) => refusal = e.code(),
+            }
+        }
+    }
+    let class = match refusal {
+        "foreign-stale" => BlockerClass::ForeignStatusUnavailable,
+        "foreign-pap-missing" => BlockerClass::SourceNotAccepted,
+        _ => BlockerClass::NoCoveringAuthority,
+    };
+    Err(foreign_deny(class, refusal, Resolver::Actor))
+}
+
 /// What one evaluation is made against besides the request and the state.
 #[derive(Clone, Copy, Debug)]
 pub struct Frame<'a> {
@@ -936,6 +1061,7 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
             releases: Vec::new(),
             expansion: false,
             action: None,
+            foreign: None,
         });
     }
     // OP-141 m.35 (e), (f)
@@ -960,6 +1086,7 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
                     releases: Vec::new(),
                     expansion: false,
                     action: None,
+                    foreign: None,
                 });
             }
         }
@@ -985,6 +1112,7 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
                 releases: Vec::new(),
                 expansion: false,
                 action: None,
+                foreign: None,
             });
         };
         let ctx = meta::Context {
@@ -1007,6 +1135,38 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
                     releases: Vec::new(),
                     expansion: false,
                     action: None,
+                    foreign: None,
+                });
+            }
+        }
+    }
+    // OP-143 m.13 (e)
+    let mut foreign_pap = None;
+    if (req.payload.is_none() || contribute)
+        && let ExerciseBasis::Holding(h) = req.basis
+        && let Some(g) = read::<GrantState>(snapshot, kind::GRANT, &h.grant)
+        && let SubjectSelector::Foreign { domain, class } = &g.content.holder
+    {
+        match bridge(
+            req,
+            snapshot,
+            actor.as_ref(),
+            now,
+            catalog,
+            schema.as_deref(),
+            (domain, class),
+        ) {
+            Ok(None) => return Pass::Need(snapshot.missing()),
+            Ok(Some(pap)) => foreign_pap = Some(pap),
+            Err(decision) => {
+                return Pass::Done(Evaluation {
+                    decision,
+                    effects: Vec::new(),
+                    draws: Vec::new(),
+                    releases: Vec::new(),
+                    expansion: false,
+                    action: None,
+                    foreign: None,
                 });
             }
         }
@@ -1024,6 +1184,7 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
                 releases: Vec::new(),
                 expansion: false,
                 action: None,
+                foreign: None,
             });
         };
         let ctx = meta::Context {
@@ -1050,6 +1211,7 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
                     releases: Vec::new(),
                     expansion: false,
                     action: None,
+                    foreign: None,
                 });
             }
             Ok(out) => {
@@ -1131,7 +1293,11 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
                             *p == h.holder && g.since == h.since
                         }
                         access_kernel::model::SubjectSelector::Pred(_) => held == Some(h.since),
-                        _ => false,
+                        // OP-143 m.13 (e)
+                        access_kernel::model::SubjectSelector::Foreign { .. } => {
+                            foreign_pap.is_some() && g.since == h.since
+                        }
+                        access_kernel::model::SubjectSelector::Public => false,
                     };
                     actor.is_some_and(|a| a.party == h.holder) && holds
                 })
@@ -1239,6 +1405,7 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
                 releases,
                 expansion,
                 action: schema,
+                foreign: foreign_pap,
             })
         }
         Err(r) => Pass::Rejected(r),
