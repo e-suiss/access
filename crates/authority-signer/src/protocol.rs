@@ -32,6 +32,17 @@ pub enum Request {
     },
     /// The current Domain Metadata of a domain.
     Metadata(Digest),
+    /// Signs a checkpoint body of a domain's log as a C2SP note at `at` (usage `checkpoint`).
+    SignNote {
+        /// Domain.
+        domain: Digest,
+        /// Checkpoint body whose origin is the domain's.
+        body: String,
+        /// The signing time; within the signer's clock skew of its own clock.
+        at: u64,
+    },
+    /// The binding-signed Genesis statement of a domain.
+    Genesis(Digest),
 }
 
 /// The signer's answer.
@@ -48,6 +59,15 @@ pub enum Response {
     },
     /// Binding-signed Domain Metadata.
     Metadata(Vec<u8>),
+    /// A note signature.
+    Noted {
+        /// The signature line, newline included.
+        line: String,
+        /// Binding-signed excerpt.
+        excerpt: Vec<u8>,
+    },
+    /// Binding-signed Genesis statement.
+    Genesis(Vec<u8>),
     /// A refusal, by stable code.
     Error(String),
 }
@@ -98,6 +118,13 @@ fn text(v: Option<&Value>) -> Result<String, FrameError> {
 fn bytes(v: Option<&Value>) -> Result<Vec<u8>, FrameError> {
     match v {
         Some(Value::Bytes(b)) => Ok(b.clone()),
+        _ => Err(FrameError::Malformed),
+    }
+}
+
+fn uint(v: Option<&Value>) -> Result<u64, FrameError> {
+    match v {
+        Some(Value::Unsigned(n)) => Ok(*n),
         _ => Err(FrameError::Malformed),
     }
 }
@@ -206,6 +233,15 @@ impl Request {
                 ]),
             )]),
             Self::Metadata(d) => map(vec![("metadata", d.to_value())]),
+            Self::SignNote { domain, body, at } => map(vec![(
+                "sign_note",
+                map(vec![
+                    ("domain", domain.to_value()),
+                    ("body", Value::text(body)),
+                    ("at", Value::Unsigned(*at)),
+                ]),
+            )]),
+            Self::Genesis(d) => map(vec![("genesis", d.to_value())]),
         }
     }
 
@@ -215,6 +251,16 @@ impl Request {
         }
         if let Some(d) = v.get("metadata") {
             return Ok(Self::Metadata(digest(Some(d))?));
+        }
+        if let Some(d) = v.get("genesis") {
+            return Ok(Self::Genesis(digest(Some(d))?));
+        }
+        if let Some(s) = v.get("sign_note") {
+            return Ok(Self::SignNote {
+                domain: digest(s.get("domain"))?,
+                body: text(s.get("body"))?,
+                at: uint(s.get("at"))?,
+            });
         }
         let s = v.get("sign").ok_or(FrameError::Malformed)?;
         let usage = text(s.get("usage"))?;
@@ -227,10 +273,7 @@ impl Request {
                 .ok_or(FrameError::Malformed)?,
             content_type: text(s.get("content_type"))?,
             payload: bytes(s.get("payload"))?,
-            at: match s.get("at") {
-                Some(Value::Unsigned(n)) => *n,
-                _ => return Err(FrameError::Malformed),
-            },
+            at: uint(s.get("at"))?,
         })
     }
 }
@@ -247,6 +290,14 @@ impl Response {
                 ]),
             )]),
             Self::Metadata(b) => map(vec![("metadata", Value::Bytes(b.clone()))]),
+            Self::Noted { line, excerpt } => map(vec![(
+                "noted",
+                map(vec![
+                    ("line", Value::text(line)),
+                    ("excerpt", Value::Bytes(excerpt.clone())),
+                ]),
+            )]),
+            Self::Genesis(b) => map(vec![("genesis", Value::Bytes(b.clone()))]),
             Self::Error(code) => map(vec![("error", Value::text(code))]),
         }
     }
@@ -263,6 +314,15 @@ impl Response {
         }
         if let Some(m) = v.get("metadata") {
             return Ok(Self::Metadata(bytes(Some(m))?));
+        }
+        if let Some(n) = v.get("noted") {
+            return Ok(Self::Noted {
+                line: text(n.get("line"))?,
+                excerpt: bytes(n.get("excerpt"))?,
+            });
+        }
+        if let Some(g) = v.get("genesis") {
+            return Ok(Self::Genesis(bytes(Some(g))?));
         }
         Ok(Self::Error(text(v.get("error"))?))
     }

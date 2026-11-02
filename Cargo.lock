@@ -23,6 +23,7 @@ dependencies = [
 name = "access-authority-sequencer"
 version = "0.2.3"
 dependencies = [
+ "access-authority-signer",
  "access-crypto",
  "access-store",
  "esuiss-access-kernel",

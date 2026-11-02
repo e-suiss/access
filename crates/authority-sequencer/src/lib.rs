@@ -3,6 +3,7 @@
 
 pub mod adapters;
 pub mod app;
+pub mod checkpoint;
 pub mod domain;
 pub mod ports;
 

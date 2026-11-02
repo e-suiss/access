@@ -5,6 +5,7 @@
 pub mod adapters;
 pub mod app;
 pub mod domain;
+pub mod genesis;
 pub mod ports;
 pub mod protocol;
 pub mod service;
@@ -25,6 +26,9 @@ pub enum SignerError {
     /// Metadata or an excerpt could not be encoded.
     #[error("encode")]
     Encode,
+    /// A note body that is not a checkpoint of the domain's log.
+    #[error("note")]
+    Note,
 }
 
 impl SignerError {
@@ -36,6 +40,7 @@ impl SignerError {
             Self::Usage => "signer-usage",
             Self::Sign(e) => e.code(),
             Self::Encode => "signer-encode",
+            Self::Note => "signer-note",
         }
     }
 }

@@ -1,9 +1,13 @@
-//! PostgreSQL adapters of the [`DomainLog`] and [`Clock`] ports, domain creation and chain
-//! verification.
+//! PostgreSQL adapters of the [`DomainLog`], [`Clock`] and [`Heads`] ports, the signer socket
+//! as the [`NoteSigner`] port, domain creation and chain verification.
 
 use std::collections::BTreeMap;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
+use access_authority_signer::adapters::call;
+use access_authority_signer::app::Noted;
+use access_authority_signer::domain::default_template;
+use access_authority_signer::protocol::{Request, Response};
 use access_kernel::codec::Canonical;
 use access_kernel::digest::Digest;
 use access_kernel::model::TrustedTime;
@@ -11,13 +15,13 @@ use access_kernel::record::{Header, Opened, RecordEnvelope, RecordKind, check_li
 use access_store::Pool;
 use access_store::authority::{
     CommitBatch, HeadRow, Lease, LogRecord, NonceRow, acquire_lease, commit_batch, create_domain,
-    find_nonce, read_log, release_lease, renew_lease, server_time,
+    find_nonce, read_head, read_log, release_lease, renew_lease, server_time,
 };
 use access_store::scope::DomainId;
 use suiss_ledger::time::{TimeError, TrustedClock};
 
 use crate::SequencerError;
-use crate::ports::{Clock, DomainLog};
+use crate::ports::{Clock, DomainLog, Heads, NoteSigner};
 
 /// One domain's log in PostgreSQL, used as `holder`.
 pub struct PgLog {
@@ -74,6 +78,49 @@ impl DomainLog for PgLog {
 
     async fn commit(&self, batch: &CommitBatch) -> Result<(), SequencerError> {
         Ok(commit_batch(&self.pool, &self.domain, self.tenant, batch).await?)
+    }
+}
+
+/// Committed heads read from PostgreSQL.
+pub struct PgHeads(pub Pool);
+
+impl Heads for PgHeads {
+    async fn committed(&self, domain: &Digest) -> Result<HeadRow, SequencerError> {
+        Ok(read_head(&self.0, &DomainId::from_bytes(domain.0)).await?)
+    }
+}
+
+/// The authority signer behind its Unix domain socket; a domain it does not know yet is
+/// opened with the default template first (OP-143 m.5).
+pub struct SocketSigner {
+    path: std::path::PathBuf,
+}
+
+impl SocketSigner {
+    /// The signer listening at `path`.
+    #[must_use]
+    pub const fn new(path: std::path::PathBuf) -> Self {
+        Self { path }
+    }
+}
+
+impl NoteSigner for SocketSigner {
+    async fn sign_note(&self, domain: Digest, body: String, at: u64) -> Result<Noted, String> {
+        let request = Request::SignNote { domain, body, at };
+        let mut answer = call(&self.path, &request).await;
+        if matches!(&answer, Ok(Response::Error(code)) if code == "signer-unknown-domain") {
+            let open = Request::Open(Box::new(default_template(domain)));
+            if !matches!(call(&self.path, &open).await, Ok(Response::Opened)) {
+                return Err(String::from("signer-unknown-domain"));
+            }
+            answer = call(&self.path, &request).await;
+        }
+        match answer {
+            Ok(Response::Noted { line, excerpt }) => Ok(Noted { line, excerpt }),
+            Ok(Response::Error(code)) => Err(code),
+            Ok(_) => Err(String::from("signer-frame")),
+            Err(_) => Err(String::from("signer-unreachable")),
+        }
     }
 }
 

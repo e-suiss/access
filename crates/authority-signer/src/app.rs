@@ -7,8 +7,9 @@ use access_kernel::verify::key_scope::{
     BindingKey, EXCERPT_CONTENT_TYPE, KeyExcerpt, KeyUsage, METADATA_CONTENT_TYPE, OperationalKey,
     thumbprint,
 };
+use suiss_crypto::note::Checkpoint;
 use suiss_crypto::rotation::{self, Key, Policy, State, Step};
-use suiss_crypto::signer::{Signer, sign_sign1};
+use suiss_crypto::signer::{SignError, Signer, sign_note, sign_sign1};
 
 use crate::SignerError;
 use crate::domain::{Template, binding, declaration, metadata};
@@ -63,6 +64,7 @@ pub struct Keyring {
     policy: Policy,
     entries: Vec<Entry>,
     metadata: Option<Vec<u8>>,
+    genesis: Option<Vec<u8>>,
 }
 
 impl Keyring {
@@ -77,6 +79,7 @@ impl Keyring {
             policy,
             entries: Vec::new(),
             metadata: None,
+            genesis: None,
         }
     }
 
@@ -265,6 +268,42 @@ impl Keyring {
         payload: &[u8],
         now: u64,
     ) -> Result<Signed, SignerError> {
+        let (sign1, excerpt, kid) = self.with_key(usage, now, |signer, kid| {
+            sign_sign1(signer, kid, content_type, payload)
+        })?;
+        Ok(Signed {
+            sign1,
+            excerpt,
+            kid,
+        })
+    }
+
+    /// Signs a checkpoint body of the domain's log as a C2SP note with the key that may sign
+    /// `checkpoint` now; the key name is the log's origin (T20, L2-CKP-3). Without a key,
+    /// nothing is signed (CR-23, G42).
+    ///
+    /// # Errors
+    /// [`SignerError::Note`] for a body that is not a checkpoint of this domain,
+    /// [`SignerError::NoKey`], [`SignerError::Usage`] or the signer's failure (an operational
+    /// key that is not Ed25519 cannot sign a note).
+    pub fn sign_note(&mut self, body: &str, now: u64) -> Result<Noted, SignerError> {
+        let origin = crate::domain::origin(&self.template.domain);
+        let cp = Checkpoint::parse(body).map_err(|_| SignerError::Note)?;
+        if cp.origin != origin || cp.to_body().ok().as_deref() != Some(body) {
+            return Err(SignerError::Note);
+        }
+        let (line, excerpt, _) = self.with_key(KeyUsage::Checkpoint, now, |signer, _| {
+            sign_note(signer, &origin, body).map(|(_, line)| line)
+        })?;
+        Ok(Noted { line, excerpt })
+    }
+
+    fn with_key<T>(
+        &mut self,
+        usage: KeyUsage,
+        now: u64,
+        sign: impl FnOnce(&dyn Signer, [u8; 32]) -> Result<T, SignError>,
+    ) -> Result<(T, Vec<u8>, [u8; 32]), SignerError> {
         let records = self.records();
         let kid = rotation::signing_key(&records, &self.policy, now)
             .map(|k| k.kid)
@@ -280,14 +319,47 @@ impl Keyring {
         let (Some(signer), Some(excerpt)) = (entry.signer.as_deref(), entry.excerpt.clone()) else {
             return Err(SignerError::NoKey);
         };
-        let sign1 = sign_sign1(signer, kid, content_type, payload)?;
+        let out = sign(signer, kid)?;
         entry.record.signatures = entry.record.signatures.saturating_add(1);
-        Ok(Signed {
-            sign1,
-            excerpt,
-            kid,
-        })
+        Ok((out, excerpt, kid))
     }
+
+    /// The binding-signed Genesis statement, signed once at `now` and kept from then on.
+    ///
+    /// # Errors
+    /// [`SignerError`] when the binding key cannot sign.
+    pub fn genesis(&mut self, now: u64) -> Result<&[u8], SignerError> {
+        if self.genesis.is_none() {
+            let statement = crate::genesis::Statement {
+                domain: self.template.domain,
+                genesis: self.template.genesis,
+                issued_at: now,
+            };
+            let bytes = statement.to_bytes().map_err(|_| SignerError::Encode)?;
+            self.genesis = Some(self.binding_sign(crate::genesis::CONTENT_TYPE, &bytes)?);
+        }
+        self.genesis.as_deref().ok_or(SignerError::Encode)
+    }
+
+    /// The Genesis statement already signed, if any.
+    #[must_use]
+    pub fn genesis_signed(&self) -> Option<&[u8]> {
+        self.genesis.as_deref()
+    }
+
+    /// Keeps a Genesis statement signed before a restart.
+    pub fn keep_genesis(&mut self, signed: Vec<u8>) {
+        self.genesis = Some(signed);
+    }
+}
+
+/// A note signature line and the excerpt that declares its key.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Noted {
+    /// `— <origin> <base64>` with its newline (L2-CKP-2).
+    pub line: String,
+    /// Binding-signed excerpt of the operational key (CR-58 m.1).
+    pub excerpt: Vec<u8>,
 }
 
 #[cfg(test)]

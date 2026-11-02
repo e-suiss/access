@@ -95,6 +95,13 @@ pub fn metadata(
     }
 }
 
+/// The origin of a domain's log checkpoints: its `DomainID` in text form (§16.4.4 m.18,
+/// L0-ENC-20).
+#[must_use]
+pub fn origin(domain: &Digest) -> String {
+    format!("sha-256:{}", access_kernel::json::b64url_encode(&domain.0))
+}
+
 /// The template a decision point opens a domain's keyring with: Ed25519 operational keys, a
 /// 24-hour window ceiling and version 1 of the core and meta-schema (OP-143 m.5, PD).
 #[must_use]

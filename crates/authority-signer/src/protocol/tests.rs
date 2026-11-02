@@ -32,6 +32,12 @@ fn messages_round_trip() {
             payload: vec![9; 40],
             at: 1234,
         },
+        Request::SignNote {
+            domain: Digest([7; 32]),
+            body: String::from("origin\n0\nAA==\n"),
+            at: 5,
+        },
+        Request::Genesis(Digest([7; 32])),
     ];
     for r in requests {
         let f = encode_request(&r).unwrap();
@@ -45,6 +51,11 @@ fn messages_round_trip() {
             sign1: vec![2],
             excerpt: vec![3],
         },
+        Response::Noted {
+            line: String::from("\u{2014} origin AAAA\n"),
+            excerpt: vec![4],
+        },
+        Response::Genesis(vec![5]),
         Response::Error(String::from("signer-no-key")),
     ];
     for r in responses {

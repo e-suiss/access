@@ -9,6 +9,7 @@ repository.workspace = true
 publish = false
 
 [dependencies]
+access-authority-signer = { path = "../authority-signer" }
 access-kernel = { workspace = true }
 access-crypto = { workspace = true }
 access-store = { workspace = true }

@@ -32,6 +32,27 @@ pub trait DomainLog {
     ) -> impl Future<Output = Result<(), SequencerError>> + Send;
 }
 
+/// The committed head of a domain's log (CMP-6): a checkpoint never names anything else.
+pub trait Heads {
+    /// The head as stored by the last committed batch.
+    fn committed(
+        &self,
+        domain: &access_kernel::digest::Digest,
+    ) -> impl Future<Output = Result<HeadRow, SequencerError>> + Send;
+}
+
+/// The authority signer as the checkpointer uses it (CMP-22a, OP-143 m.4).
+pub trait NoteSigner {
+    /// Signs a checkpoint body of `domain` at `at` with usage `checkpoint`; a refusal or an
+    /// unreachable signer is the stable code (G42).
+    fn sign_note(
+        &self,
+        domain: access_kernel::digest::Digest,
+        body: String,
+        at: u64,
+    ) -> impl Future<Output = Result<access_authority_signer::app::Noted, String>> + Send;
+}
+
 /// Trusted time (OP-63, OP-129 m.1): never read from the system clock directly.
 pub trait Clock {
     /// Trusted time in Unix milliseconds; an error means no commit.

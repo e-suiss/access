@@ -1,10 +1,12 @@
-//! OP-130, TI-2, TI-6, TI-8, TI-19, L0-ENC-25: the sequencer against a real PostgreSQL.
+//! OP-130, TI-2, TI-6, TI-8, TI-19, L0-ENC-25, CMP-6: the sequencer and its checkpoints against
+//! a real PostgreSQL.
 
 #![allow(
     clippy::unwrap_used,
     clippy::panic,
     clippy::arithmetic_side_effects,
     clippy::many_single_char_names,
+    clippy::unused_async_trait_impl,
     reason = "test code; the request-path lints (OP-3) do not apply"
 )]
 
@@ -12,14 +14,18 @@ use std::collections::BTreeMap;
 use std::time::Duration;
 
 use access_authority_sequencer::SequencerError;
-use access_authority_sequencer::adapters::{PgLog, create_genesis, verify_chain};
+use access_authority_sequencer::adapters::{PgHeads, PgLog, create_genesis, verify_chain};
 use access_authority_sequencer::app::Leader;
+use access_authority_sequencer::checkpoint::{checkpoint, extensions, origin};
 use access_authority_sequencer::domain::{Draft, Item, NonceUse, Outcome};
+use access_authority_sequencer::ports::NoteSigner;
+use access_authority_signer::app::Noted;
 use access_crypto::event_id::EventKey;
 use access_crypto::secret::Secret;
 use access_kernel::codec::Canonical;
 use access_kernel::digest::{self, Digest};
 use access_kernel::record::{Opened, RecordEnvelope, RecordKind};
+use access_kernel::verify::key_scope::SpecVersions;
 use access_store::StoreError;
 use access_store::authority::{read_log, read_outbox};
 use access_store::scope::DomainId;
@@ -473,4 +479,70 @@ async fn ghsa_5278_rrxc_mgf7_an_exclusion_cannot_fail_open() {
     let err = l.commit(2_001, &[allow]).await.unwrap_err();
     assert!(err.is_retry(), "{err}");
     assert_eq!(l.head().pos, 1);
+}
+
+/// Signs notes in process with one Ed25519 key, standing in for the signer process.
+struct NoteKey(suiss_crypto::signer::SoftSigner);
+
+impl NoteSigner for NoteKey {
+    async fn sign_note(&self, domain: Digest, body: String, _: u64) -> Result<Noted, String> {
+        let (_, line) = suiss_crypto::signer::sign_note(&self.0, &origin(&domain), &body)
+            .map_err(|e| String::from(e.code()))?;
+        Ok(Noted {
+            line,
+            excerpt: vec![],
+        })
+    }
+}
+
+// CMP-6, L2-CKP-1, T20: the checkpoint names the committed size and the RFC 9162 root of the log
+#[tokio::test]
+async fn a_checkpoint_names_the_committed_log() {
+    let db = fresh().await.unwrap();
+    let d = domain(&db, "g").await;
+    let mut l = lead(&db, d, "a").await.unwrap();
+    l.commit(2_000, &[item("a", None), item("b", None)])
+        .await
+        .unwrap();
+    let (key, _) = suiss_crypto::signer::SoftSigner::generate_ed25519().unwrap();
+    let suiss_crypto::cose::PublicKey::Ed25519(public) =
+        suiss_crypto::signer::Signer::public_key(&key)
+    else {
+        panic!("ed25519");
+    };
+    let signed = checkpoint(
+        &PgHeads(db.app.clone()),
+        &NoteKey(key),
+        d,
+        &SpecVersions::default(),
+        3_000,
+    )
+    .await
+    .unwrap();
+    let log = read_log(&db.app, &DomainId::from_bytes(d.0), 0, 2)
+        .await
+        .unwrap();
+    let cores: Vec<Vec<u8>> = log
+        .iter()
+        .map(|r| {
+            RecordEnvelope::from_bytes(&r.envelope)
+                .unwrap()
+                .leaf_core()
+                .unwrap()
+                .to_bytes()
+                .unwrap()
+        })
+        .collect();
+    let refs: Vec<&[u8]> = cores.iter().map(Vec::as_slice).collect();
+    let verifier = suiss_crypto::note::Verifier::ed25519(&origin(&d), public).unwrap();
+    let (cp, _) = suiss_crypto::note::verify_checkpoint(
+        &suiss_crypto::sig::PureBackend,
+        &signed.note,
+        &origin(&d),
+        &verifier,
+        &[],
+    )
+    .unwrap();
+    assert_eq!((cp.size, cp.root), (3, digest::root(&refs)));
+    assert_eq!(extensions(&cp).unwrap().recorded_at, log[2].recorded_at);
 }

@@ -102,8 +102,9 @@ fn saved_of(v: &Value) -> Option<Saved> {
     })
 }
 
-/// A domain's vault entry: its template (as an `open` request) and its keys.
-fn stored(template: &Template, saved: &[Saved]) -> Option<Vec<u8>> {
+/// A domain's vault entry: its template (as an `open` request), its keys and its signed
+/// Genesis statement.
+fn stored(template: &Template, saved: &[Saved], genesis: Option<&[u8]>) -> Option<Vec<u8>> {
     let open = crate::protocol::encode_request(&Request::Open(Box::new(template.clone()))).ok()?;
     let v = map(vec![
         ("open", Some(Value::Bytes(open.get(4..)?.to_vec()))),
@@ -111,11 +112,14 @@ fn stored(template: &Template, saved: &[Saved]) -> Option<Vec<u8>> {
             "keys",
             Some(Value::Array(saved.iter().map(saved_value).collect())),
         ),
+        ("genesis", genesis.map(|g| Value::Bytes(g.to_vec()))),
     ]);
     dcbor::encode(&v, Limits::CEILING).ok()
 }
 
-fn restored(b: &[u8]) -> Option<(Template, Vec<Saved>)> {
+type Restored = (Template, Vec<Saved>, Option<Vec<u8>>);
+
+fn restored(b: &[u8]) -> Option<Restored> {
     let v = dcbor::decode(b, Limits::CEILING).ok()?;
     let Request::Open(t) = crate::protocol::decode_request(&bytes(v.get("open"))?).ok()? else {
         return None;
@@ -123,7 +127,11 @@ fn restored(b: &[u8]) -> Option<(Template, Vec<Saved>)> {
     let Some(Value::Array(keys)) = v.get("keys") else {
         return None;
     };
-    Some((*t, keys.iter().filter_map(saved_of).collect()))
+    Some((
+        *t,
+        keys.iter().filter_map(saved_of).collect(),
+        bytes(v.get("genesis")),
+    ))
 }
 
 impl<F: KeyFactory, B: Bindings, V: Vault> Service<F, B, V> {
@@ -146,11 +154,11 @@ impl<F: KeyFactory, B: Bindings, V: Vault> Service<F, B, V> {
             vault,
             policy,
         };
-        for (template, saved) in all.iter().filter_map(|b| restored(b)) {
+        for (template, saved, genesis) in all.iter().filter_map(|b| restored(b)) {
             let Ok(binding) = s.bindings.binding(&template.domain) else {
                 continue;
             };
-            if let Ok(ring) = Keyring::restore(
+            if let Ok(mut ring) = Keyring::restore(
                 template.clone(),
                 binding,
                 s.policy,
@@ -158,6 +166,12 @@ impl<F: KeyFactory, B: Bindings, V: Vault> Service<F, B, V> {
                 &mut s.factory,
                 now,
             ) {
+                match genesis {
+                    Some(g) => ring.keep_genesis(g),
+                    None => {
+                        let _ = ring.genesis(now);
+                    }
+                }
                 s.rings.insert(template.domain, (template, ring));
             }
         }
@@ -168,7 +182,8 @@ impl<F: KeyFactory, B: Bindings, V: Vault> Service<F, B, V> {
         let Some((t, ring)) = self.rings.get(domain) else {
             return false;
         };
-        stored(t, &ring.saved()).is_some_and(|b| self.vault.put(domain, &b).is_ok())
+        stored(t, &ring.saved(), ring.genesis_signed())
+            .is_some_and(|b| self.vault.put(domain, &b).is_ok())
     }
 
     /// Runs the schedule of every domain at `now` and keeps the vault current; returns the
@@ -199,11 +214,37 @@ impl<F: KeyFactory, B: Bindings, V: Vault> Service<F, B, V> {
                     let Ok(binding) = self.bindings.binding(&domain) else {
                         return Response::Error(String::from("signer-binding"));
                     };
-                    let ring = Keyring::new(template.clone(), binding, self.policy);
+                    let mut ring = Keyring::new(template.clone(), binding, self.policy);
+                    if ring.genesis(now).is_err() {
+                        return Response::Error(String::from("signer-binding"));
+                    }
                     self.rings.insert(domain, (template, ring));
                     let _ = self.tick_one(&domain, now);
                 }
                 Response::Opened
+            }
+            Request::Genesis(domain) => self
+                .rings
+                .get(&domain)
+                .and_then(|(_, r)| r.genesis_signed())
+                .map_or_else(
+                    || Response::Error(String::from("signer-unknown-domain")),
+                    |g| Response::Genesis(g.to_vec()),
+                ),
+            Request::SignNote { domain, body, at } => {
+                if at.abs_diff(now) > MAX_SKEW_MS {
+                    return Response::Error(String::from("signer-time"));
+                }
+                let Some((_, ring)) = self.rings.get_mut(&domain) else {
+                    return Response::Error(String::from("signer-unknown-domain"));
+                };
+                match ring.sign_note(&body, at) {
+                    Ok(n) => Response::Noted {
+                        line: n.line,
+                        excerpt: n.excerpt,
+                    },
+                    Err(e) => Response::Error(String::from(e.code())),
+                }
             }
             Request::Metadata(domain) => self
                 .rings

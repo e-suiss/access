@@ -154,3 +154,146 @@ fn the_service_signs_and_survives_a_restart() {
         Response::Error(String::from("signer-unknown-domain"))
     );
 }
+
+fn ready() -> (Service<Soft, Binding, Mem>, SoftSigner, u64) {
+    let (binding, doc) = SoftSigner::generate_ed25519().unwrap();
+    let mut s = Service::start(Soft, Binding(doc), Mem::default(), Policy::AUTHORITY, 0).unwrap();
+    assert_eq!(
+        s.handle(Request::Open(Box::new(template())), 0),
+        Response::Opened
+    );
+    let mut now = 0;
+    while now <= Policy::AUTHORITY.publish_lead_ms + 2 * MINUTE {
+        s.tick(now, now);
+        now += MINUTE;
+    }
+    (s, binding, now)
+}
+
+fn trusted(binding: &SoftSigner) -> KeySet {
+    let key = binding.public_key();
+    let mut trusted = KeySet::default();
+    trusted
+        .insert(access_kernel::verify::key_scope::thumbprint(&key), key)
+        .unwrap();
+    trusted.allowed.insert(Algorithm::Ed25519);
+    trusted
+}
+
+// T20, L2-CKP-3, OP-143 m.1 E4: the operational key signs a checkpoint of its own domain's log as
+// a note the published key verifies; a body for another origin is refused
+#[test]
+fn the_service_signs_checkpoints_of_its_domain() {
+    let (mut s, binding, now) = ready();
+    let origin = crate::domain::origin(&Digest([7; 32]));
+    let body = format!(
+        "{origin}\n3\n{}\nrecorded_at 5\n",
+        suiss_crypto::note::base64_encode(&[1; 32])
+    );
+    let note = |s: &mut Service<_, _, _>, body: &str, at| {
+        s.handle(
+            Request::SignNote {
+                domain: Digest([7; 32]),
+                body: String::from(body),
+                at,
+            },
+            now,
+        )
+    };
+    let Response::Noted { line, excerpt } = note(&mut s, &body, now) else {
+        panic!("noted");
+    };
+    let Response::Metadata(m) = s.handle(Request::Metadata(Digest([7; 32])), now) else {
+        panic!("metadata");
+    };
+    let metadata = verify_metadata(&PureBackend, &m, &trusted(&binding)).unwrap();
+    let key = operational_key(
+        &PureBackend,
+        &metadata,
+        &Digest([7; 32]),
+        &excerpt,
+        KeyUsage::Checkpoint,
+        now,
+    )
+    .unwrap();
+    let suiss_crypto::cose::PublicKey::Ed25519(k) = key.key else {
+        panic!("ed25519");
+    };
+    let log = suiss_crypto::note::Verifier::ed25519(&origin, k).unwrap();
+    let text = format!("{body}\n{line}");
+    let (cp, _) =
+        suiss_crypto::note::verify_checkpoint(&PureBackend, &text, &origin, &log, &[]).unwrap();
+    assert_eq!((cp.size, cp.root), (3, [1; 32]));
+
+    let other = body.replace(&origin, "example.com/log");
+    assert_eq!(
+        note(&mut s, &other, now),
+        Response::Error(String::from("signer-note"))
+    );
+    assert_eq!(
+        note(&mut s, "not a checkpoint", now),
+        Response::Error(String::from("signer-note"))
+    );
+    assert_eq!(
+        note(&mut s, &body, now + 2 * MINUTE),
+        Response::Error(String::from("signer-time"))
+    );
+}
+
+// CR-23, G42: before an operational key may sign, no checkpoint is signed
+#[test]
+fn no_key_no_checkpoint() {
+    let (_, doc) = SoftSigner::generate_ed25519().unwrap();
+    let mut s = Service::start(Soft, Binding(doc), Mem::default(), Policy::AUTHORITY, 0).unwrap();
+    s.handle(Request::Open(Box::new(template())), 0);
+    let origin = crate::domain::origin(&Digest([7; 32]));
+    let body = format!(
+        "{origin}\n1\n{}\n",
+        suiss_crypto::note::base64_encode(&[1; 32])
+    );
+    assert_eq!(
+        s.handle(
+            Request::SignNote {
+                domain: Digest([7; 32]),
+                body,
+                at: 0,
+            },
+            0,
+        ),
+        Response::Error(String::from("signer-no-key"))
+    );
+}
+
+// T20, OP-143 m.1 E4: `open` has the binding key sign the Genesis statement once; a restart
+// keeps it
+#[test]
+fn the_genesis_statement_is_signed_on_open_and_kept() {
+    let (binding, doc) = SoftSigner::generate_ed25519().unwrap();
+    let vault = Mem::default();
+    let mut s = Service::start(
+        Soft,
+        Binding(doc.clone()),
+        vault.clone(),
+        Policy::AUTHORITY,
+        0,
+    )
+    .unwrap();
+    s.handle(Request::Open(Box::new(template())), 5);
+    let Response::Genesis(g) = s.handle(Request::Genesis(Digest([7; 32])), 9) else {
+        panic!("genesis");
+    };
+    let statement =
+        crate::genesis::verify(&PureBackend, &g, &trusted(&binding), &Digest([7; 32])).unwrap();
+    assert_eq!(
+        (statement.genesis, statement.issued_at),
+        (Digest([8; 32]), 5)
+    );
+    assert!(
+        crate::genesis::verify(&PureBackend, &g, &trusted(&binding), &Digest([9; 32])).is_err()
+    );
+    s.handle(Request::Open(Box::new(template())), 7);
+    let again = Service::start(Soft, Binding(doc), vault, Policy::AUTHORITY, MINUTE)
+        .unwrap()
+        .handle(Request::Genesis(Digest([7; 32])), MINUTE);
+    assert_eq!(again, Response::Genesis(g));
+}
