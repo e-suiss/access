@@ -48,6 +48,20 @@ impl Policy {
         max_signatures: 5_000_000,
         jitter_permille: 200,
     };
+
+    /// The identity plane's realm JOSE key defaults (PD): 90 day lifetime; 180 day window, so a
+    /// backup outlives the longest jittered lifetime and signing survives a long key-generation
+    /// outage; 90 minute lead (JWKS `max-age` 5 min + `stale-while-revalidate` 10 min + an
+    /// estimated 1 hour relying-party cache + 15 min safety); 24 hours kept after the window,
+    /// above the 60 minute token ceiling; 10 billion signatures; ±20 % jitter.
+    pub const REALM: Self = Self {
+        lifetime_ms: 7_776_000_000,
+        window_ms: 15_552_000_000,
+        publish_lead_ms: 5_400_000,
+        retain_ms: 86_400_000,
+        max_signatures: 10_000_000_000,
+        jitter_permille: 200,
+    };
 }
 
 /// One key's rotation record.

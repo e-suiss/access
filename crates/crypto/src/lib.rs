@@ -2,6 +2,7 @@
 //! identifiers and secret files.
 
 pub mod event_id;
+pub mod jose;
 pub mod opaque_id;
 pub mod random;
 pub mod secret_file;

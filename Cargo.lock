@@ -96,6 +96,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "access-identity-signer"
+version = "0.2.3"
+dependencies = [
+ "access-crypto",
+ "esuiss-access-kernel",
+ "esuiss-crypto",
+ "thiserror",
+]
+
+[[package]]
 name = "access-kernel-uniffi"
 version = "0.2.3"
 dependencies = [

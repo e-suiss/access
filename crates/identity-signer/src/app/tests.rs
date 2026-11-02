@@ -1,0 +1,302 @@
+//! The realm key set over simulated time, its tokens checked by the Kernel's JWS verifier
+//! against the JWKS as a relying party reads it.
+
+#![allow(
+    clippy::arithmetic_side_effects,
+    reason = "simulated clocks and counters in test code"
+)]
+
+use std::collections::{BTreeMap, BTreeSet};
+
+use access_kernel::json::{self, Json, b64url_decode, b64url_encode};
+use access_kernel::verify::cose::KeySet;
+use access_kernel::verify::jws::{JwsError, Origin, verify_compact};
+use suiss_crypto::sig::PureBackend;
+use suiss_crypto::signer::{SignError, SoftSigner};
+
+use super::*;
+use crate::domain::TOKEN_MAX_MS;
+use crate::ports::Generated;
+
+const MINUTE: u64 = 60_000;
+const HOUR: u64 = 60 * MINUTE;
+const DAY: u64 = 24 * HOUR;
+const TYP: &str = "at+jwt";
+const LEAD: u64 = Policy::REALM.publish_lead_ms;
+
+struct Factory {
+    down: bool,
+}
+
+impl KeyFactory for Factory {
+    fn generate(&mut self, alg: JwsAlg) -> Result<Generated, SignError> {
+        if self.down {
+            return Err(SignError::Key);
+        }
+        let (signer, doc) = match alg {
+            JwsAlg::Es256 => SoftSigner::generate_p256()?,
+            JwsAlg::Ed25519 => SoftSigner::generate_ed25519()?,
+        };
+        Ok(Generated {
+            signer: Box::new(signer),
+            sealed: doc.expose().clone(),
+        })
+    }
+
+    fn load(&mut self, alg: JwsAlg, sealed: &[u8]) -> Result<Box<dyn Signer + Send>, SignError> {
+        let doc = suiss_crypto::secret::Secret::new(sealed.to_vec());
+        Ok(match alg {
+            JwsAlg::Es256 => Box::new(SoftSigner::p256_from_pkcs8(&doc)?),
+            JwsAlg::Ed25519 => Box::new(SoftSigner::ed25519_from_pkcs8(&doc)?),
+        })
+    }
+}
+
+fn member<'a>(members: &'a [(String, Json)], name: &str) -> &'a str {
+    members
+        .iter()
+        .find(|(k, _)| k == name)
+        .and_then(|(_, v)| v.as_str())
+        .unwrap()
+}
+
+/// The JWKS as a relying party reads it: kid, alg and key of every entry.
+fn read_jwks(doc: &str) -> Vec<(String, String, PublicKey)> {
+    let Json::Object(top) = json::parse(doc.as_bytes(), 64 * 1024).unwrap() else {
+        panic!("not an object");
+    };
+    assert_eq!(top.len(), 1);
+    let Some((_, Json::Array(keys))) = top.iter().find(|(k, _)| k == "keys") else {
+        panic!("no keys");
+    };
+    keys.iter()
+        .map(|k| {
+            let Json::Object(m) = k else {
+                panic!("not an object")
+            };
+            assert_eq!(member(m, "use"), "sig");
+            let x = b64url_decode(member(m, "x")).unwrap();
+            let key = match member(m, "kty") {
+                "EC" => {
+                    assert_eq!(member(m, "crv"), "P-256");
+                    let mut sec1 = vec![4];
+                    sec1.extend(x);
+                    sec1.extend(b64url_decode(member(m, "y")).unwrap());
+                    PublicKey::P256(sec1)
+                }
+                "OKP" => {
+                    assert_eq!(member(m, "crv"), "Ed25519");
+                    PublicKey::Ed25519(x.try_into().unwrap())
+                }
+                other => panic!("unexpected kty {other}"),
+            };
+            (
+                member(m, "kid").to_owned(),
+                member(m, "alg").to_owned(),
+                key,
+            )
+        })
+        .collect()
+}
+
+fn key_set(doc: &str) -> KeySet {
+    let mut set = KeySet::default();
+    for (kid, alg, key) in read_jwks(doc) {
+        let kid: [u8; 32] = b64url_decode(&kid).unwrap().try_into().unwrap();
+        // CR-24
+        assert_eq!(thumbprint(&key), kid);
+        set.allowed.insert(match alg.as_str() {
+            "ES256" => suiss_crypto::cose::Algorithm::Es256,
+            "Ed25519" => suiss_crypto::cose::Algorithm::Ed25519,
+            other => panic!("unexpected alg {other}"),
+        });
+        set.insert(kid, key).unwrap();
+    }
+    set
+}
+
+fn verify(doc: &str, token: &str) -> Result<Vec<u8>, JwsError> {
+    verify_compact(&PureBackend, token, &key_set(doc), TYP, Origin::Native).map(|v| v.payload)
+}
+
+fn kids(doc: &str) -> BTreeSet<String> {
+    read_jwks(doc).into_iter().map(|(kid, _, _)| kid).collect()
+}
+
+fn advance(ring: &mut Keyring, factory: &mut Factory, from: u64, to: u64, step: u64) {
+    let mut now = from;
+    while now <= to {
+        let _ = ring.tick(factory, now, now / MINUTE);
+        now += step;
+    }
+}
+
+// MD-3, CR-2, CR-24: ES256 by default and Ed25519 when selected; the token verifies against
+// the JWKS, whose kid is the key's RFC 7638 thumbprint
+#[test]
+fn tokens_verify_against_the_jwks() {
+    for (alg, kty) in [(JwsAlg::Es256, "EC"), (JwsAlg::Ed25519, "OKP")] {
+        let mut ring = Keyring::new(alg, Policy::REALM).unwrap();
+        let mut factory = Factory { down: false };
+        advance(&mut ring, &mut factory, 0, LEAD, MINUTE);
+        let signed = ring.sign(TYP, br#"{"sub":"u1"}"#, LEAD).unwrap();
+        assert_eq!(signed.alg, alg);
+        assert_eq!(
+            verify(ring.jwks(), &signed.token).unwrap(),
+            br#"{"sub":"u1"}"#
+        );
+        let doc = ring.jwks();
+        assert!(doc.contains(&format!(r#""kty":"{kty}""#)));
+        assert!(doc.contains(&format!(r#""alg":"{}""#, alg.name())));
+        assert!(!doc.contains("EdDSA"));
+        assert!(!doc.contains("AKP"));
+        assert!(!doc.contains(r#""d":"#));
+        // CR-27, MD-6: the active key first, then a published backup
+        let listed = read_jwks(doc);
+        assert_eq!(listed.len(), 2);
+        assert_eq!(listed[0].0, b64url_encode(&signed.kid));
+    }
+}
+
+// CR-25, SAI-46: nothing is signed before a key has been published for the lead
+#[test]
+fn nothing_signs_before_the_lead() {
+    let mut ring = Keyring::new(JwsAlg::Es256, Policy::REALM).unwrap();
+    let mut factory = Factory { down: false };
+    advance(&mut ring, &mut factory, 0, LEAD - MINUTE, MINUTE);
+    assert_eq!(kids(ring.jwks()).len(), 1);
+    assert_eq!(
+        ring.sign(TYP, b"{}", LEAD - MINUTE),
+        Err(SignerError::NoKey)
+    );
+}
+
+// CR-25, CR-27, SAI-46, MD-6: over 400 days the realm always signs once its first key is
+// ready; every signing key was in the JWKS for at least the lead; the JWKS always holds the
+// active key and a published backup
+#[test]
+fn rotation_runs_without_gaps() {
+    let mut ring = Keyring::new(JwsAlg::Es256, Policy::REALM).unwrap();
+    let mut factory = Factory { down: false };
+    let mut first_seen: BTreeMap<String, u64> = BTreeMap::new();
+    let mut signing_kids = BTreeSet::new();
+    let mut now = 0;
+    while now <= 400 * DAY {
+        let _ = ring.tick(&mut factory, now, now / HOUR);
+        let listed = kids(ring.jwks());
+        for kid in &listed {
+            first_seen.entry(kid.clone()).or_insert(now);
+        }
+        if now >= LEAD {
+            let signed = ring.sign(TYP, br#"{"n":1}"#, now).unwrap();
+            let kid = b64url_encode(&signed.kid);
+            assert!(listed.contains(&kid));
+            assert!(first_seen[&kid] + LEAD <= now, "{kid} used early at {now}");
+            signing_kids.insert(kid);
+            if now % (10 * DAY) == 0 {
+                verify(ring.jwks(), &signed.token).unwrap();
+            }
+            let records = ring.keys();
+            let count = |s: State| records.iter().filter(|k| k.state == s).count();
+            assert_eq!(count(State::Active), 1, "at {now}");
+            assert!(count(State::Published) >= 1, "at {now}");
+            assert_eq!(count(State::Pending), 0, "at {now}");
+            assert!(listed.len() <= 4, "{} keys at {now}", listed.len());
+        }
+        now += HOUR;
+    }
+    // CR-19: 90 days ±20 % per key
+    assert!(
+        (4..=6).contains(&signing_kids.len()),
+        "{}",
+        signing_kids.len()
+    );
+}
+
+// CR-26, CR-27: a token signed with key N verifies while N is retiring and until at least
+// T_token_max after N's last signature; once N is dropped it no longer verifies
+#[test]
+fn a_retiring_key_still_verifies() {
+    let mut ring = Keyring::new(JwsAlg::Es256, Policy::REALM).unwrap();
+    let mut factory = Factory { down: false };
+    advance(&mut ring, &mut factory, 0, LEAD, MINUTE);
+    let first = ring.sign(TYP, b"{}", LEAD).unwrap().kid;
+    let mut now = LEAD;
+    let mut last = None;
+    loop {
+        now += HOUR;
+        let _ = ring.tick(&mut factory, now, 1);
+        let signed = ring.sign(TYP, b"{}", now).unwrap();
+        if signed.kid != first {
+            break;
+        }
+        last = Some((signed.token, now));
+    }
+    let (token, last_at) = last.unwrap();
+    let retiring = ring.keys().into_iter().find(|k| k.kid == first).unwrap();
+    assert_eq!(retiring.state, State::Retiring);
+    verify(ring.jwks(), &token).unwrap();
+    let name = b64url_encode(&first);
+    let mut dropped_at = None;
+    let mut hours = 0;
+    while dropped_at.is_none() {
+        now += HOUR;
+        hours += 1;
+        let _ = ring.tick(&mut factory, now, 1);
+        if !kids(ring.jwks()).contains(&name) {
+            assert_eq!(verify(ring.jwks(), &token), Err(JwsError::UnknownKid));
+            dropped_at = Some(now);
+        } else if hours % 24 == 0 {
+            verify(ring.jwks(), &token).unwrap();
+        }
+    }
+    assert!(dropped_at.unwrap() >= last_at + TOKEN_MAX_MS);
+    let dropped = ring.keys().into_iter().find(|k| k.kid == first).unwrap();
+    assert_eq!(dropped.state, State::Dropped);
+    // CR-27, OP-73: the dropped key's private material is gone
+    let saved = ring.saved();
+    let s = saved.iter().find(|s| s.record.kid == first).unwrap();
+    assert!(s.sealed.is_none());
+}
+
+// CR-23, G42: through a key-generation outage the realm signs to the end of the last key's
+// window; after that nothing is signed, never an unsigned token
+#[test]
+fn an_outage_signs_to_the_window_end_then_refuses() {
+    let mut ring = Keyring::new(JwsAlg::Es256, Policy::REALM).unwrap();
+    let mut factory = Factory { down: false };
+    advance(&mut ring, &mut factory, 0, LEAD, MINUTE);
+    factory.down = true;
+    let end = ring.keys().iter().map(|k| k.valid_until).max().unwrap();
+    let mut now = LEAD;
+    let mut outage = false;
+    let mut last_ok = 0;
+    while now <= end + 2 * DAY {
+        outage |= ring.tick(&mut factory, now, 1).outage;
+        match ring.sign(TYP, b"{}", now) {
+            Ok(signed) => {
+                assert!(now <= end);
+                last_ok = now;
+                if now % (10 * DAY) < HOUR {
+                    verify(ring.jwks(), &signed.token).unwrap();
+                }
+            }
+            Err(e) => {
+                assert_eq!(e, SignerError::NoKey);
+                assert!(now > end, "refused at {now}, window ends {end}");
+            }
+        }
+        now += HOUR;
+    }
+    assert!(outage);
+    assert!(end - last_ok < HOUR);
+}
+
+// CR-25, CR-26, CR-27: policies that break the rules are refused when the key set is made
+#[test]
+fn incoherent_policies_are_refused() {
+    assert!(matches!(
+        Keyring::new(JwsAlg::Es256, Policy::AUTHORITY),
+        Err(PolicyError::Lifetime)
+    ));
+}
