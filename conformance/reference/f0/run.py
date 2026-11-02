@@ -7,7 +7,7 @@ import tempfile
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
-from f0 import ais, algebra, claim, codec, dcbor, digest, ed25519, fold, jose, merkle, meta, note, receipt, record, sdjwt, validity, version_check
+from f0 import ais, algebra, claim, codec, dcbor, digest, ed25519, fold, jose, merkle, meta, note, pap, receipt, record, sdjwt, validity, version_check
 from f0.algebra import child_within_parent
 from f0.version import CORE_VERSION, VERSION
 from f0.codec import Rejection, decode_canonical, decode_canonical_authority, decode_subject_selector, encode
@@ -106,6 +106,36 @@ def run_receipt(case, document):
     except receipt.ReceiptError as error:
         return {"error": error.name}, None
     return {"receipt": payload.hex()}, None
+
+
+def run_pap(case, document):
+    # L2-PAP-3
+    catalog = decode_canonical(bytes.fromhex(document["catalog"]))
+    codec.check_catalog(catalog)
+    try:
+        payload = pap.verify(
+            bytes.fromhex(document["metadata"]),
+            bytes.fromhex(case["sign1"]),
+            bytes.fromhex(case["excerpt"]),
+            bytes.fromhex(case["presentation"]),
+            decode_canonical(bytes.fromhex(case["domain"])),
+            bytes.fromhex(case["intent"]),
+            case["audience"],
+            bytes.fromhex(case["nonce"]),
+            case["now"],
+            catalog,
+            decode_canonical(bytes.fromhex(case["satisfied"])),
+            decode_canonical(bytes.fromhex(case["remaining"])),
+            case["fresh"],
+            case["understood"],
+            case.get("last_refresh"),
+            case["online"],
+            case["skew_ms"],
+            case["horizon_cap_ms"],
+        )
+    except pap.PapError as error:
+        return {"error": error.name}, None
+    return {"pap": payload.hex()}, None
 
 
 def run_ed25519(case, document):
@@ -400,6 +430,7 @@ OPERATIONS = {
     "note.checkpoint": (run_checkpoint, ("size", "root", "extensions", "cosigned", "error")),
     "meta.apply": (run_meta_apply, ("effects", "requirements", "expansion", "error")),
     "receipt.verify": (run_receipt, ("receipt", "error")),
+    "pap.verify": (run_pap, ("pap", "error")),
 }
 
 # Operations in the vectors that F0 does not implement, each with its reason. Any other
