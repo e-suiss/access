@@ -336,6 +336,15 @@ const NAMES: [&str; 26] = [
     "authority_set_define",
 ];
 
+/// The Access-internal read actions: they change no authority state (§9.13.7, OP-141 m.39 (a)).
+pub const READS: [&str; 2] = ["read", "audit.export"];
+
+/// Whether `name` is an Access-internal read action.
+#[must_use]
+pub fn is_read(namespace: &str, name: &str) -> bool {
+    namespace == NAMESPACE && READS.contains(&name)
+}
+
 /// Whether `name` is a core meta-action.
 #[must_use]
 pub fn is_meta(namespace: &str, name: &str) -> bool {

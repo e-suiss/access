@@ -89,3 +89,16 @@ fn the_action_schema_raises_the_tier() {
     s.reserved = true;
     assert_eq!(of(&intent(None), None, false, Some(&s)), Tier::Ct3);
 }
+
+// §9.13.7, OP-141 m.39 (a): reading is CT0, an audit export CT1
+#[test]
+fn read_actions_are_tiered_by_name() {
+    let mut i = intent(Some((CT2_MAX + 1, "eur")));
+    i.action.namespace = "access".to_string();
+    i.action.name = "read".to_string();
+    assert_eq!(of(&i, None, false, None), Tier::Ct0);
+    i.action.name = "audit.export".to_string();
+    assert_eq!(of(&i, None, false, None), Tier::Ct1);
+    assert!(crate::meta::is_read("access", "read") && !crate::meta::is_read("shop", "read"));
+    assert!(!crate::meta::is_read("access", "audit"));
+}

@@ -81,16 +81,21 @@ fn action(namespace: &str, name: &str) -> ActionRef {
     }
 }
 
-/// The `schema-definition` Acceptance that publishes the `shop` actions (OP-141 m.35).
-fn shop_schemas() -> Value {
-    let spp = access_kernel::schema::Spp {
+/// The SPP of the `shop` actions.
+fn shop_spp() -> access_kernel::schema::Spp {
+    access_kernel::schema::Spp {
         publisher: ROOT,
         namespace: "shop".to_owned(),
         catalog_version: 1,
         actions: vec![schema_of("read")],
         retirements: BTreeSet::new(),
         core_spec_min: None,
-    };
+    }
+}
+
+/// The `schema-definition` Acceptance that publishes the `shop` actions (OP-141 m.35).
+fn shop_schemas() -> Value {
+    let spp = shop_spp();
     Value::Map(vec![
         (Value::text("issuer"), ROOT.to_value()),
         (Value::text("use"), Value::text("schema-definition")),
@@ -1837,7 +1842,7 @@ fn search_request(d: Digest, nonce: u8, kind: &str) -> Request {
         domain: d,
         mode: Mode::Check,
         nonce: vec![nonce; 16],
-        intent: intent(action("access", "search"), ("access.search", kind), None),
+        intent: intent(action("access", "read"), ("access.search", kind), None),
         payload: None,
         basis: ExerciseBasis::Public(Id([0; 16])),
         capacity: Capacity::Own,
@@ -1885,10 +1890,17 @@ async fn search_shows_what_the_reader_may_see() {
         }
     }
     let shop = meta::object_id(&d, kind::ANCHOR, 1);
+    // OP-141 m.39 (c): a prefix Grant resolves against the accepted catalog
+    let mut prefixed = authority(Vec::new(), selector("shop"));
+    prefixed
+        .authority
+        .actions
+        .prefix
+        .insert(("shop".to_owned(), shop_spp().catalog_digest()));
     let grant = Payload::GrantIssue(GrantContent {
         basis: GrantBasis::Anchor(shop),
         holder: SubjectSelector::Party(ALICE),
-        authority: authority(vec![action("shop", "read")], selector("shop")),
+        authority: prefixed,
         agency: BTreeSet::from([Capacity::Own]),
         named: None,
     });
@@ -2017,6 +2029,13 @@ async fn search_shows_what_the_reader_may_see() {
         .outcome,
         Outcome::Allow
     );
+    // OP-141 m.39 (a): the core namespace holds meta-actions and read actions only
+    let mut other = search_request(d, 83, "subject");
+    other.intent.action = action("access", "audit");
+    assert!(matches!(
+        a.exercise(&incoming(other, ALICE_KEY)).await,
+        Err(CoreError::Protocol("action"))
+    ));
     // OP-141 m.37: the eligible approvers of a class are the subject search for `contribute`
     let meta_anchor = meta::meta_anchor(&d);
     let approve = meta_request(

@@ -470,7 +470,7 @@ fn search_body(query: &str, page: &str) -> String {
                 "domain": "{d}", "mode": "check", "nonce": "{n}",
                 "basis": {{"public": "{a}"}}, "capacity": "own",
                 "intent": {{
-                    "action": {{"namespace": "access", "name": "search", "major": 1, "schema": "{s}"}},
+                    "action": {{"namespace": "access", "name": "read", "major": 1, "schema": "{s}"}},
                     "resources": [{{"namespace": "access.search", "path": ["subject"]}}],
                     "validity": {{"from": 0, "until": 100000}}
                 }},

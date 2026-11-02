@@ -377,6 +377,50 @@ pub(crate) fn lineage_hops(
     }
 }
 
+/// The live `schema-definition` Acceptances of `namespace`: their SPPs (OP-141 m.35 (e)).
+fn live_spps(view: &Snapshot, namespace: &str, now: u64) -> Vec<Spp> {
+    let ids = match view.get(&access_kernel::schema::schemas_key(namespace)) {
+        Some(Value::Array(ids)) => ids,
+        _ => Vec::new(),
+    };
+    ids.iter()
+        .filter_map(|v| Id::from_value(v).ok())
+        .filter_map(|id| {
+            let a =
+                read::<ContentState>(view, kind::ACCEPTANCE, &id).filter(|a| a.ended.is_none())?;
+            a.content
+                .get("validity")
+                .and_then(|w| Window::from_value(w).ok())
+                .filter(|w| w.from <= now && now <= w.until)?;
+            a.content.get("spp").and_then(|v| Spp::from_value(v).ok())
+        })
+        .collect()
+}
+
+/// `base` with the catalogs and reserved actions of the live SPPs of `namespace` (OP-141
+/// m.35 (e), m.39 (c)).
+pub(crate) fn accepted_catalog(
+    view: &Snapshot,
+    namespace: &str,
+    now: u64,
+    base: &Catalog,
+) -> Catalog {
+    let mut catalog = base.clone();
+    for spp in live_spps(view, namespace, now) {
+        let refs = spp.refs();
+        catalog.catalogs.insert(
+            spp.catalog_digest(),
+            refs.iter().map(|(r, _)| r.clone()).collect(),
+        );
+        for (r, s) in refs {
+            if s.reserved {
+                catalog.reserved.insert(r);
+            }
+        }
+    }
+    catalog
+}
+
 /// The catalog an action of a domain namespace is evaluated with, and its Action Schema: the
 /// live `schema-definition` Acceptances of the namespace (OP-141 m.35 (e), (f)).
 ///
@@ -388,41 +432,10 @@ fn schema_catalog(
     now: u64,
     base: &Catalog,
 ) -> Result<(Catalog, ActionSchema), &'static str> {
-    let ids = match view.get(&access_kernel::schema::schemas_key(&action.namespace)) {
-        Some(Value::Array(ids)) => ids,
-        _ => Vec::new(),
-    };
-    let mut catalog = base.clone();
     let mut found = None;
     let mut retired = false;
-    for id in ids.iter().filter_map(|v| Id::from_value(v).ok()) {
-        let Some(a) =
-            read::<ContentState>(view, kind::ACCEPTANCE, &id).filter(|a| a.ended.is_none())
-        else {
-            continue;
-        };
-        let live = a
-            .content
-            .get("validity")
-            .and_then(|w| Window::from_value(w).ok())
-            .is_some_and(|w| w.from <= now && now <= w.until);
-        let Some(spp) = a
-            .content
-            .get("spp")
-            .and_then(|v| Spp::from_value(v).ok())
-            .filter(|_| live)
-        else {
-            continue;
-        };
-        let refs = spp.refs();
-        catalog.catalogs.insert(
-            spp.catalog_digest(),
-            refs.iter().map(|(r, _)| r.clone()).collect(),
-        );
-        for (r, s) in refs {
-            if s.reserved {
-                catalog.reserved.insert(r.clone());
-            }
+    for spp in live_spps(view, &action.namespace, now) {
+        for (r, s) in spp.refs() {
             if r == *action {
                 if spp.retirements.contains(&r) {
                     retired = true;
@@ -433,7 +446,7 @@ fn schema_catalog(
         }
     }
     match (found, retired) {
-        (Some(s), _) => Ok((catalog, s)),
+        (Some(s), _) => Ok((accepted_catalog(view, &action.namespace, now, base), s)),
         (None, true) => Err("retired"),
         (None, false) => Err("unknown-action"),
     }
@@ -552,8 +565,8 @@ pub(crate) fn views(view: &Snapshot, basis: &ExerciseBasis, party: &Id) -> bool 
     holds || top_anchor(view, basis).is_some_and(|a| root_of(&a))
 }
 
-/// Whether Grant `g` is held by `party`, live along its lineage, and covers `access:audit` by
-/// name (OP-141 m.38 (d)).
+/// Whether Grant `g` is held by `party`, live along its lineage, and covers
+/// `access:audit.export` by name (OP-141 m.38 (d), m.39 (b)).
 pub(crate) fn audit_grant(view: &Snapshot, g: &Id, party: &Id) -> bool {
     let Some(state) = read::<GrantState>(view, kind::GRANT, g) else {
         return false;
@@ -565,7 +578,7 @@ pub(crate) fn audit_grant(view: &Snapshot, g: &Id, party: &Id) -> bool {
         .actions
         .exact
         .iter()
-        .any(|a| a.namespace == meta::NAMESPACE && a.name == "audit");
+        .any(|a| a.namespace == meta::NAMESPACE && a.name == "audit.export");
     named
         && state.content.holder == SubjectSelector::Party(*party)
         && lineage_hops(view, g)

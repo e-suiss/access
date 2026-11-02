@@ -387,7 +387,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
     }
 
     /// Whether `party` may audit the domain: the meta-anchor's root, or the holder of a live
-    /// Grant covering `access:audit` (OP-141 m.38 (d)).
+    /// Grant covering `access:audit.export` (OP-141 m.38 (d), m.39 (b)).
     async fn audits(&self, party: &Id) -> Result<bool, CoreError> {
         let meta_anchor = meta::meta_anchor(&self.domain);
         let root = self
@@ -637,6 +637,12 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                 }
             }
             None if is_meta => return Err(CoreError::Protocol("payload")),
+            // OP-141 m.39 (a)
+            None if req.intent.action.namespace == meta::NAMESPACE
+                && !meta::is_read(&req.intent.action.namespace, &req.intent.action.name) =>
+            {
+                return Err(CoreError::Protocol("action"));
+            }
             None => {}
         }
         match (req.mode, req.exercise) {

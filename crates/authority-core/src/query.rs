@@ -13,14 +13,15 @@ use access_kernel::model::{ActionRef, Id, ResourceRef, ResourceSelector, Subject
 
 use crate::CoreError;
 use crate::app::{Authority, Incoming};
-use crate::domain::{Snapshot, lineage_hops, read};
+use crate::domain::{Snapshot, accepted_catalog, lineage_hops, read};
 use crate::ports::{Binding, Reader, Salts};
 use crate::rate::Class;
 
 /// Results per page: the policy default and ceiling below the EA ceiling of 1000 (§13.7.4).
 pub const PAGE: u32 = 100;
 
-/// Namespace of the search intent's resource (OP-141 m.22 (j)).
+/// Namespace of the search intent's resource; its action is `access:read` (OP-141 m.22 (j),
+/// m.39 (b)).
 pub const SEARCH_NAMESPACE: &str = "access.search";
 
 /// What is searched.
@@ -150,7 +151,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             .first()
             .ok_or(CoreError::Protocol("intent"))?;
         if req.intent.action.namespace != meta::NAMESPACE
-            || req.intent.action.name != "search"
+            || req.intent.action.name != "read"
             || resource.namespace != SEARCH_NAMESPACE
             || resource.path != [query.kind()]
             || req.mode != access_kernel::combinator::Mode::Check
@@ -199,7 +200,14 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         let next = (candidates.len() == PAGE as usize)
             .then(|| candidates.last().copied())
             .flatten();
-        let catalog = Catalog::default();
+        // OP-141 m.39 (c)
+        let namespace = match query {
+            Query::Subject { action, .. } | Query::Resource { action, .. } => &action.namespace,
+            Query::Action { resource, .. } => &resource.namespace,
+        };
+        let catalog = self
+            .settled(|snap| accepted_catalog(snap, namespace, now, &Catalog::default()))
+            .await?;
         let mut hits = BTreeSet::new();
         for g in &candidates {
             let hit = self

@@ -59,6 +59,14 @@ pub fn of(
             | Payload::PolicyRetire { .. },
         ) => Tier::Ct3,
         Some(_) => Tier::Ct2,
+        // OP-141 m.39 (a)
+        None if crate::meta::is_read(&intent.action.namespace, &intent.action.name) => {
+            if intent.action.name == "read" {
+                Tier::Ct0
+            } else {
+                Tier::Ct1
+            }
+        }
         None => {
             let amounts = intent
                 .params
