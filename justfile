@@ -420,6 +420,17 @@ shared-vectors:
 crates-package:
     cargo package --locked {{published}}
 
+# OP-140 m.4: every esuiss-crypto feature builds on its own, warnings are errors
+crates-features:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    export RUSTFLAGS="-D warnings"
+    cargo check --locked -p esuiss-crypto --no-default-features
+    for f in $(cargo metadata --locked --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "esuiss-crypto") | .features | keys[]'); do
+      echo "esuiss-crypto: --features $f"
+      cargo check --locked -p esuiss-crypto --no-default-features --features "$f"
+    done
+
 crates-publish tag:
     #!/usr/bin/env bash
     set -euo pipefail

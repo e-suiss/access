@@ -195,6 +195,8 @@ jobs:
         run: just vendor
       - name: Published crates package and build alone (OP-76, OP-139)
         run: just crates-package
+      - name: Each esuiss-crypto feature builds alone (OP-140 m.4)
+        run: just crates-features
 
   secrets:
     name: secrets
