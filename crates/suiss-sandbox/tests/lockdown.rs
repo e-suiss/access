@@ -145,6 +145,8 @@ mod linux {
     const SCENARIOS: &[(&str, Expect)] = &[
         // SA-22
         ("dumpable_flag_is_cleared_after_lockdown", Expect::Pass),
+        // CR-34
+        ("core_limit_is_zero_after_lockdown", Expect::Pass),
         // SA-22
         ("no_new_privs_is_set_after_lockdown", Expect::Pass),
         // SA-22
@@ -408,6 +410,15 @@ mod linux {
                 ensure(
                     dumpable == DumpableBehavior::NotDumpable,
                     format!("dumpable = {dumpable:?}"),
+                )?;
+                pass()
+            }
+            "core_limit_is_zero_after_lockdown" => {
+                let _locked = apply(lockdown(Profile::Signer))?;
+                let core = rustix::process::getrlimit(rustix::process::Resource::Core);
+                ensure(
+                    core.current == Some(0) && core.maximum == Some(0),
+                    format!("core limit {core:?}"),
                 )?;
                 pass()
             }

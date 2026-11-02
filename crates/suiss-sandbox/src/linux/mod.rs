@@ -39,7 +39,15 @@ pub(crate) fn apply(lockdown: &Lockdown) -> Result<Locked, Error> {
     // SA-22
     set_not_dumpable()?;
 
-    // SA-22
+    // CR-34 m.4
+    rustix::process::setrlimit(
+        rustix::process::Resource::Core,
+        rustix::process::Rlimit {
+            current: Some(0),
+            maximum: Some(0),
+        },
+    )
+    .map_err(|e| os(Step::CoreLimit, e))?;
 
     // SA-22
     rustix::thread::set_no_new_privs(true).map_err(|e| os(Step::NoNewPrivs, e))?;

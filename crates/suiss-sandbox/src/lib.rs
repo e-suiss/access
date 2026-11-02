@@ -276,6 +276,8 @@ pub enum Step {
     Preflight,
     /// `PR_SET_DUMPABLE=0`.
     Dumpable,
+    /// `RLIMIT_CORE` 0 (CR-34 m.4).
+    CoreLimit,
     /// `PR_SET_NO_NEW_PRIVS=1`.
     NoNewPrivs,
     /// Bounding, ambient or process capability sets.
