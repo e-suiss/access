@@ -104,3 +104,53 @@ async fn the_socket_serves_declared_callers() {
     assert!(matches!(signed, Response::Signed { .. }), "{signed:?}");
     assert_eq!(DirVault::new(&dir).all().unwrap().len(), 1);
 }
+
+type Started = Arc<Mutex<Service<SealedFactory<SoftKek>, Soft, DirVault>>>;
+
+fn started(dir: &Path) -> Started {
+    let (_, doc) = SoftSigner::generate_ed25519().unwrap();
+    let service = Service::start(
+        SealedFactory::new(SoftKek::new("kek-1", [1; 32])),
+        Soft(doc),
+        DirVault::new(dir),
+        Policy::AUTHORITY,
+        now_ms(),
+    )
+    .unwrap();
+    Arc::new(Mutex::new(service))
+}
+
+// CMP-22, OP-143 m.4 (c): a caller whose user id is not declared is closed unanswered
+#[tokio::test]
+async fn undeclared_callers_get_no_answer() {
+    let dir = temp("undeclared");
+    let path = dir.join("signer.sock");
+    let _ = std::fs::remove_file(&path);
+    let listener = UnixListener::bind(&path).unwrap();
+    let uid = std::os::unix::fs::MetadataExt::uid(&std::fs::metadata(&dir).unwrap());
+    tokio::spawn(serve(
+        listener,
+        started(&dir),
+        vec![uid.wrapping_add(1)],
+        now_ms,
+    ));
+    let answer = call(&path, &Request::Open(Box::new(template()))).await;
+    assert!(answer.is_err(), "{answer:?}");
+    assert_eq!(DirVault::new(&dir).all().unwrap(), Vec::<Vec<u8>>::new());
+}
+
+// CR-21, CMP-22: the caller's identity comes from the kernel (`SO_PEERCRED` on Linux,
+// `getpeereid` on macOS), not from anything the caller sends
+#[tokio::test]
+async fn peer_credentials_name_the_connecting_process() {
+    let dir = temp("peer");
+    let path = dir.join("peer.sock");
+    let _ = std::fs::remove_file(&path);
+    let listener = UnixListener::bind(&path).unwrap();
+    let uid = std::os::unix::fs::MetadataExt::uid(&std::fs::metadata(&path).unwrap());
+    let _client = UnixStream::connect(&path).await.unwrap();
+    let (server, _) = listener.accept().await.unwrap();
+    let cred = server.peer_cred().unwrap();
+    assert_eq!(cred.uid(), uid);
+    assert_eq!(cred.pid(), Some(i32::try_from(std::process::id()).unwrap()));
+}
