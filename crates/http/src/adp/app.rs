@@ -40,6 +40,11 @@ impl<P: Pdp> Service<P> {
         Self { pdp, max_body }
     }
 
+    /// The binding-signed Domain Metadata of `domain`, if the signer has it (§9.15.1).
+    pub async fn metadata(&self, domain: access_kernel::digest::Digest) -> Option<Vec<u8>> {
+        self.pdp.metadata(domain).await
+    }
+
     /// `POST /access/v1/evaluation`.
     pub async fn evaluation(&self, body: &[u8], pep: Option<String>) -> Reply {
         let Some(pep) = pep else {

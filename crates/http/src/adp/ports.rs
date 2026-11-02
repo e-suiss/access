@@ -7,6 +7,7 @@ use std::sync::Arc;
 use access_authority_core::CoreError;
 use access_authority_core::app::{Incoming, Response, Scope};
 use access_authority_core::query::{Hit, Query};
+use access_kernel::digest::Digest;
 
 /// Evaluates one request (the authority core of the request's domain).
 pub trait Pdp: Send + Sync {
@@ -34,6 +35,13 @@ pub trait Pdp: Send + Sync {
         let _ = (inc, query, page);
         std::future::ready(Err(CoreError::Protocol("search")))
     }
+
+    /// The current binding-signed Domain Metadata of `domain` (§9.15.1, OP-143 m.4); none by
+    /// default, and never an unsigned document.
+    fn metadata(&self, domain: Digest) -> impl Future<Output = Option<Vec<u8>>> + Send {
+        let _ = domain;
+        std::future::ready(None)
+    }
 }
 
 /// Results and the next page token.
@@ -60,5 +68,9 @@ impl<P: Pdp> Pdp for Arc<P> {
         page: Option<String>,
     ) -> impl Future<Output = Result<Page, CoreError>> + Send {
         (**self).search(inc, query, page)
+    }
+
+    fn metadata(&self, domain: Digest) -> impl Future<Output = Option<Vec<u8>>> + Send {
+        (**self).metadata(domain)
     }
 }

@@ -3176,3 +3176,32 @@ async fn an_offline_slice_is_drawn_in_advance() {
     );
     fold_check(&db.sequencer, d).await.unwrap();
 }
+
+// §9.15.1, OP-143 m.4: a process serves a domain's Domain Metadata only as the signer signed it;
+// without a signer, or before the signer opened the domain, there is none
+#[tokio::test]
+async fn domain_metadata_comes_only_from_the_signer() {
+    let db = fresh().await.unwrap();
+    let d = create_genesis(&db.sequencer, TENANT, genesis(), 1_000)
+        .await
+        .unwrap();
+    assert_eq!(process(&db, "a", vec![d]).metadata(d).await, None);
+    let (socket, service) = start_signer("metadata");
+    let a = signing_process(&db, d, &socket);
+    assert_eq!(a.metadata(d).await, None);
+    onboard_signed(&a, d, &service).await;
+    let served = a.metadata(d).await.expect("signed metadata");
+    let verified = signer_metadata(&socket, d).await;
+    assert_eq!(verified.domain, d);
+    let Ok(access_authority_signer::protocol::Response::Metadata(current)) =
+        access_authority_signer::adapters::call(
+            &socket,
+            &access_authority_signer::protocol::Request::Metadata(d),
+        )
+        .await
+    else {
+        panic!("metadata");
+    };
+    assert_eq!(served, current);
+    assert_eq!(a.metadata(Digest([9; 32])).await, None);
+}

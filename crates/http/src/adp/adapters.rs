@@ -9,6 +9,8 @@ use access_authority_core::app::{Incoming, Response as Decided, Scope};
 use access_authority_core::ports::{Binding, Keys, Salts};
 use access_authority_core::query::Query;
 use access_authority_sequencer::ports::Clock;
+use access_kernel::digest::Digest;
+use access_kernel::verify::key_scope::METADATA_CONTENT_TYPE;
 use axum::Router;
 use axum::body::Bytes;
 use axum::extract::{Path, State};
@@ -25,6 +27,10 @@ use crate::adp::ports::{Page, Pdp};
 pub struct Pep(pub String);
 
 const REQUEST_ID: HeaderName = HeaderName::from_static("x-request-id");
+
+/// Domain Metadata caching (§9.15.1): re-signed at each rotation, revalidated within minutes,
+/// a stale copy served while the signer is unreachable.
+const METADATA_CACHE: &str = "max-age=300, stale-while-revalidate=600, stale-if-error=86400";
 
 /// Discovery document fields (L1-ADP-11).
 #[derive(Clone, Debug)]
@@ -49,6 +55,14 @@ pub fn router<P: Pdp + 'static>(service: Service<P>, discovery: Discovery) -> Ro
         .route(
             "/.well-known/authzen-configuration",
             get(configuration::<P>),
+        )
+        .route(
+            "/.well-known/authzen-configuration/{domain}",
+            get(domain_configuration::<P>),
+        )
+        .route(
+            "/.well-known/access-domain-metadata/{domain}",
+            get(domain_metadata::<P>),
         )
         .with_state(shared)
 }
@@ -153,26 +167,109 @@ fn respond(reply: Reply, headers: &HeaderMap) -> Response {
     response
 }
 
-async fn configuration<P: Pdp>(State(shared): State<Arc<Shared<P>>>) -> Response {
-    let issuer = &shared.discovery.issuer;
-    let body = serde_json::json!({
-        "policy_decision_point": issuer,
-        "access_evaluation_endpoint": format!("{issuer}/access/v1/evaluation"),
-        "access_evaluations_endpoint": format!("{issuer}/access/v1/evaluations"),
-        "capabilities": [
+/// What the discovery documents declare (L1-ADP-11).
+fn discovery(issuer: &str, pdp: &str) -> serde_json::Map<String, serde_json::Value> {
+    let mut body = serde_json::Map::new();
+    body.insert(String::from("policy_decision_point"), pdp.into());
+    body.insert(
+        String::from("access_evaluation_endpoint"),
+        format!("{issuer}/access/v1/evaluation").into(),
+    );
+    body.insert(
+        String::from("access_evaluations_endpoint"),
+        format!("{issuer}/access/v1/evaluations").into(),
+    );
+    body.insert(
+        String::from("capabilities"),
+        serde_json::json!([
             "urn:esuiss:access:adp:1",
             "urn:esuiss:access:explain:1",
             "urn:esuiss:access:consistency-token:1"
-        ],
-    });
+        ]),
+    );
+    body
+}
+
+fn json(body: serde_json::Map<String, serde_json::Value>) -> Response {
     (
         [(
             header::CONTENT_TYPE,
             HeaderValue::from_static("application/json"),
         )],
-        body.to_string(),
+        serde_json::Value::Object(body).to_string(),
     )
         .into_response()
+}
+
+async fn configuration<P: Pdp>(State(shared): State<Arc<Shared<P>>>) -> Response {
+    let issuer = &shared.discovery.issuer;
+    json(discovery(issuer, issuer))
+}
+
+/// A `DomainID` in its text form: `sha-256:` and the unpadded base64url of 32 bytes
+/// (L0-ENC-20).
+fn domain_id(text: &str) -> Option<Digest> {
+    let b64 = text.strip_prefix("sha-256:")?;
+    let bytes = access_kernel::json::b64url_decode(b64).ok()?;
+    let id = <[u8; 32]>::try_from(bytes).ok().map(Digest)?;
+    (access_kernel::json::b64url_encode(&id.0) == b64).then_some(id)
+}
+
+/// The domain's binding-signed Domain Metadata from the signer (§9.15.1, OP-143 m.4).
+async fn signed_metadata<P: Pdp>(shared: &Shared<P>, text: &str) -> Option<Vec<u8>> {
+    shared.service.metadata(domain_id(text)?).await
+}
+
+/// No signed document for the domain: never an unsigned one instead.
+fn no_metadata() -> Response {
+    Problem::new(
+        StatusCode::NOT_FOUND,
+        "domain-metadata-unavailable",
+        "Not Found",
+    )
+    .into_response()
+}
+
+async fn domain_metadata<P: Pdp>(
+    State(shared): State<Arc<Shared<P>>>,
+    Path(domain): Path<String>,
+) -> Response {
+    let Some(cose) = signed_metadata(&shared, &domain).await else {
+        return no_metadata();
+    };
+    (
+        [
+            (
+                header::CONTENT_TYPE,
+                HeaderValue::from_static(METADATA_CONTENT_TYPE),
+            ),
+            (
+                header::CACHE_CONTROL,
+                HeaderValue::from_static(METADATA_CACHE),
+            ),
+        ],
+        cose,
+    )
+        .into_response()
+}
+
+/// §9.5.1 #6: the discovery document of one domain. Its PDP identifier is the issuer followed
+/// by the `DomainID`, from which this address is built; `signed_metadata` is the base64url of
+/// the domain's `COSE_Sign1` Domain Metadata (MD-3).
+async fn domain_configuration<P: Pdp>(
+    State(shared): State<Arc<Shared<P>>>,
+    Path(domain): Path<String>,
+) -> Response {
+    let Some(cose) = signed_metadata(&shared, &domain).await else {
+        return no_metadata();
+    };
+    let issuer = &shared.discovery.issuer;
+    let mut body = discovery(issuer, &format!("{issuer}/{domain}"));
+    body.insert(
+        String::from("signed_metadata"),
+        access_kernel::json::b64url_encode(&cose).into(),
+    );
+    json(body)
 }
 
 impl<K, B, S, C> Pdp for Domains<K, B, S, C>
@@ -202,5 +299,9 @@ where
         page: Option<String>,
     ) -> Result<Page, CoreError> {
         Domains::search(self, &inc, &query, page.as_deref()).await
+    }
+
+    async fn metadata(&self, domain: Digest) -> Option<Vec<u8>> {
+        Domains::metadata(self, domain).await
     }
 }

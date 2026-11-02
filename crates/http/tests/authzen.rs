@@ -88,6 +88,35 @@ impl Pdp for Scripted {
             page.is_none().then(|| String::from("next")),
         )))
     }
+
+    fn metadata(&self, domain: Digest) -> impl Future<Output = Option<Vec<u8>>> + Send {
+        std::future::ready((domain == SIGNED).then(|| METADATA.to_vec()))
+    }
+}
+
+/// The one domain whose signer has Domain Metadata, and its (opaque) `COSE_Sign1` bytes.
+const SIGNED: Digest = Digest([1; 32]);
+const METADATA: [u8; 4] = [0xd2, 0x84, 0x40, 0xa0];
+
+fn domain_text(d: Digest) -> String {
+    format!("sha-256:{}", b64url_encode(&d.0))
+}
+
+async fn get(path: &str) -> (StatusCode, axum::http::HeaderMap, Vec<u8>) {
+    let resp = app(Ok(Outcome::Allow), None)
+        .oneshot(Request::get(path).body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    let status = resp.status();
+    let headers = resp.headers().clone();
+    let body = resp
+        .into_body()
+        .collect()
+        .await
+        .unwrap()
+        .to_bytes()
+        .to_vec();
+    (status, headers, body)
 }
 
 const ISSUER: &str = "https://pdp.example";
@@ -245,6 +274,75 @@ async fn discovery_names_the_pdp_and_the_profile() {
         body["access_evaluation_endpoint"],
         format!("{ISSUER}/access/v1/evaluation")
     );
+    assert!(
+        body["capabilities"]
+            .as_array()
+            .unwrap()
+            .contains(&Value::from("urn:esuiss:access:adp:1"))
+    );
+    assert!(body.get("signed_metadata").is_none());
+}
+
+// §9.15.1, OP-143 m.4: the signer's Domain Metadata is served as signed, with its media type
+// and cache lifetime
+#[tokio::test]
+async fn domain_metadata_is_served_as_signed() {
+    let (status, headers, body) = get(&format!(
+        "/.well-known/access-domain-metadata/{}",
+        domain_text(SIGNED)
+    ))
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        headers[header::CONTENT_TYPE],
+        "application/access-domain-metadata+cbor"
+    );
+    assert_eq!(
+        headers[header::CACHE_CONTROL],
+        "max-age=300, stale-while-revalidate=600, stale-if-error=86400"
+    );
+    assert_eq!(body, METADATA);
+}
+
+// §9.15.1, OP-143 m.4: no signed document, or no DomainID in its text form, is a 404, never an
+// unsigned document
+#[tokio::test]
+async fn domain_metadata_without_a_signature_is_not_found() {
+    let b = b64url_encode(&SIGNED.0);
+    for domain in [
+        domain_text(Digest([2; 32])),
+        b.clone(),
+        format!("sha-256:{b}="),
+        format!("sha-256:{}", b64url_encode(&[1; 31])),
+        format!("sha-512:{b}"),
+    ] {
+        for path in [
+            format!("/.well-known/access-domain-metadata/{domain}"),
+            format!("/.well-known/authzen-configuration/{domain}"),
+        ] {
+            let (status, headers, body) = get(&path).await;
+            assert_eq!(status, StatusCode::NOT_FOUND, "{path}");
+            assert_eq!(headers[header::CONTENT_TYPE], "application/problem+json");
+            let problem: Value = serde_json::from_slice(&body).unwrap();
+            assert_eq!(problem["code"], "domain-metadata-unavailable");
+        }
+    }
+}
+
+// §9.5.1 #6, MD-3: a domain's discovery document names the domain's PDP identifier and carries
+// its signed Domain Metadata
+#[tokio::test]
+async fn domain_discovery_carries_signed_metadata() {
+    let domain = domain_text(SIGNED);
+    let (status, _, body) = get(&format!("/.well-known/authzen-configuration/{domain}")).await;
+    assert_eq!(status, StatusCode::OK);
+    let body: Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(body["policy_decision_point"], format!("{ISSUER}/{domain}"));
+    assert_eq!(
+        body["access_evaluation_endpoint"],
+        format!("{ISSUER}/access/v1/evaluation")
+    );
+    assert_eq!(body["signed_metadata"], b64url_encode(&METADATA));
     assert!(
         body["capabilities"]
             .as_array()

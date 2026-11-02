@@ -225,6 +225,9 @@ type Guard<B, S, C> = tokio::sync::OwnedMutexGuard<Option<Led<B, S, C>>>;
 /// Hard deadline of one search page (§9.7.1, EA).
 pub const SEARCH_DEADLINE: Duration = Duration::from_secs(1);
 
+/// How long a metadata request waits for the signer (PD).
+pub const SIGNER_DEADLINE: Duration = Duration::from_secs(2);
+
 /// Kind of the page token (OP-141 m.22 (b)).
 const PAGE_TOKEN: &str = "page";
 
@@ -441,6 +444,20 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
             .transpose()
             .map_err(|_| CoreError::Unavailable("token-key"))?;
         Ok((found.hits, next))
+    }
+
+    /// The current binding-signed Domain Metadata of `domain` from the signer (§9.15.1,
+    /// OP-143 m.4). The keyring is not opened here: a domain the signer has not opened, an
+    /// unreachable signer or no signer at all gives none.
+    pub async fn metadata(&self, domain: Digest) -> Option<Vec<u8>> {
+        use access_authority_signer::adapters::call;
+        use access_authority_signer::protocol::{Request as SignRequest, Response as SignResponse};
+        let path = self.setup.signer.as_deref()?;
+        let request = SignRequest::Metadata(domain);
+        match tokio::time::timeout(SIGNER_DEADLINE, call(path, &request)).await {
+            Ok(Ok(SignResponse::Metadata(cose))) => Some(cose),
+            _ => None,
+        }
     }
 
     /// Brings the derived index of every domain led here up to its head (OP-141 m.22 (g)); the
