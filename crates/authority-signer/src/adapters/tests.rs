@@ -72,7 +72,7 @@ async fn the_socket_serves_declared_callers() {
     let _ = std::fs::remove_file(&path);
     let listener = UnixListener::bind(&path).unwrap();
     let uid = std::os::unix::fs::MetadataExt::uid(&std::fs::metadata(&dir).unwrap());
-    tokio::spawn(serve(listener, Arc::clone(&service), vec![uid]));
+    tokio::spawn(serve(listener, Arc::clone(&service), vec![uid], now_ms));
     assert_eq!(
         call(&path, &Request::Open(Box::new(template())))
             .await

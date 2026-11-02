@@ -42,6 +42,8 @@ fn scripted(s: &Scripted, inc: Incoming) -> Result<Response, CoreError> {
         replayed: false,
         basis_ref: Some(String::from("ref")),
         consistency: Some(String::from("seen")),
+        receipt: None,
+        signed_receipt: None,
     })
 }
 

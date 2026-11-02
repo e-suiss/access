@@ -18,6 +18,7 @@ L2 defines the artefacts that only Access produces: their data model, how they a
 | Opening record fields | `opening-fields` | inside an `opening` record envelope | not signed by itself | [L2-REC-4](#L2-REC-4), [L2-REC-5](#L2-REC-5) |
 | Claim | `claim-statement` | `application/access-claim+cbor` | An Instance of the issuer | [L2-CLM-1](#L2-CLM-1) to [L2-CLM-3](#L2-CLM-3) |
 | Claim record fields | `claim-fields` | inside a `claim` record envelope | not signed by itself | [L2-CLM-4](#L2-CLM-4) |
+| Decision receipt | `receipt` | `application/access-receipt+cbor` | An operational key of the domain with usage `receipt` | [L2-RCP-1](#L2-RCP-1) to [L2-RCP-3](#L2-RCP-3) |
 
 The data model is [`conformance/cddl/kernel.cddl`](../../conformance/cddl/kernel.cddl).
 
@@ -77,6 +78,16 @@ A Claim is a signed statement by an issuer Party about a subject Party. It enter
 
 <a id="L2-REC-5"></a><!-- no-vector: outside-operation: the nonce table is the commit path's, not an evaluator operation -->**L2-REC-5. Nonce.** A nonce belongs to one intent digest and one actor in its domain. Its outcomes form an append-only sequence: `allow` and `deny` are terminal and nothing follows them; `require_action` leaves it open until the intent's validity ends. The same nonce, intent and actor after a terminal outcome returns that outcome's records again. The same nonce with another intent or actor is a protocol error. An AIS whose nonce is new is accepted only while its age is within the intent validity ceiling.
 
+## Decision receipts
+
+<a id="L2-RCP-1"></a><!-- no-vector: definition: the field set; L2-RCP-3 checks it -->**L2-RCP-1.** A receipt carries the fields of the CDDL rule `receipt`: the domain, the ExerciseID and the position of its decision record, the intent digest, the actor Instance and the digest of its AIS (both absent for an anonymous actor), the capacity, the basis, the audience (the PEP that applies the decision), `iat` (the trusted evaluation time, which is also the signing time) and `drawn` (whether the ALLOW drew from a budget). A receipt names one Exercise, one intent and one audience; it is never a credential for another effect.
+
+<a id="L2-RCP-2"></a><!-- no-vector: outside-operation: a producer rule; the core test an_allow_carries_a_signed_receipt checks it -->**L2-RCP-2.** The producer computes the receipt digest under the context `access/receipt/v1` and writes it into the decision record's `artifacts` before the commit. It signs the receipt only after the record is committed, with an operational key whose excerpt names usage `receipt` and whose window contains `iat` ([L2-SIG-3](#L2-SIG-3)). If no key may sign, the receipt is delayed; an unsigned receipt is never released.
+
+<a id="L2-RCP-3"></a>**L2-RCP-3.** A verifier accepts a receipt only when all of these hold, checked in this order: the payload decodes as `receipt`; the excerpt resolves an operational key of the receipt's domain for usage `receipt` at its `iat` ([L0-SIG-60](../l0/signatures.md#L0-SIG-60) to [L0-SIG-72](../l0/signatures.md#L0-SIG-72)); the COSE_Sign1 verifies under that key; the domain is the verifier's domain; the audience is the verifier itself; the intent digest is the intent it is about to apply; and `iat` is no later than the verifier's time plus the AIS skew. Rejection reasons: `receipt-malformed`, `receipt-key`, `receipt-signature`, `receipt-domain`, `receipt-audience`, `receipt-intent`, `receipt-future`.
+
+Vectors: [`core/1/receipt.json`](../../conformance/vectors/core/1/receipt.json), operation `receipt.verify`.
+
 ## Signing profile
 
 <a id="L2-SIG-1"></a>**L2-SIG-1.** Every L2 artefact is a COSE_Sign1 whose protected header carries exactly `alg`, the content type and `kid`, as [L0-SIG-10](../l0/signatures.md#L0-SIG-10) requires. The payload is the deterministic CBOR encoding of the artefact.
@@ -112,7 +123,6 @@ These parts arrive with the features that produce them, each in its own version 
 | Actor Intent Statement (AIS) | The signed statement of an actor's exact intent |
 | Approval Act Statement (AAS) | A human approval bound to an intent digest |
 | Portable Authority Proof (PAP) | An offline-checkable proof of authority with its embedded ValidityContract |
-| Receipt | The signed record of a commit |
 | Schema Publication Package | Action schemas and their catalog digests |
 | Authority Record Exchange | Record transfer, handover and recovery |
 

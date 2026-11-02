@@ -52,6 +52,11 @@ pub struct Response {
     pub basis_ref: Option<String>,
     /// The head the answer was given at, as an opaque token (OP-141 m.22 (f)).
     pub consistency: Option<String>,
+    /// The unsigned receipt payload of a new ALLOW; its digest is in the decision record and it
+    /// is signed after the commit (§9.8, L2-RCP-2).
+    pub receipt: Option<Vec<u8>>,
+    /// The signed receipt and its key excerpt, once the signer has signed it.
+    pub signed_receipt: Option<(Vec<u8>, Vec<u8>)>,
 }
 
 /// One request with what came with it on the wire.
@@ -568,7 +573,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             "deny" => Outcome::Deny,
             _ => return Ok(Replay::Open),
         };
-        Ok(Replay::Done(Response {
+        Ok(Replay::Done(Box::new(Response {
             decision: Decision {
                 outcome,
                 blockers: Vec::new(),
@@ -580,7 +585,9 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             replayed: true,
             basis_ref: None,
             consistency: None,
-        }))
+            receipt: None,
+            signed_receipt: None,
+        })))
     }
 
     /// L1-ADP-13: a continuation names an allowed Exercise of the same intent and actor.
@@ -756,6 +763,65 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         Ok(())
     }
 
+    /// The receipt of an ALLOW (§9.8, L2-RCP-1): its digest for the record and its payload.
+    fn receipt_of(
+        inc: &Incoming,
+        domain: &Digest,
+        actor: Option<Actor>,
+        fixed: &Fixed,
+    ) -> Result<(Digest, Vec<u8>), CoreError> {
+        let r = access_kernel::receipt::Receipt {
+            domain: *domain,
+            exercise: fixed.exercise,
+            record: fixed.pos,
+            intent: fixed.intent,
+            instance: actor.map(|a| a.instance),
+            ais: inc
+                .ais
+                .as_ref()
+                .map(|b| Digest(suiss_crypto::digest::context_digest("access/ais/v1", b).0)),
+            capacity: inc.request.capacity,
+            basis: inc.request.basis,
+            audience: inc.pep.clone(),
+            iat: fixed.now,
+            drawn: fixed.drawn,
+        };
+        let digest =
+            access_kernel::receipt::digest(&r).map_err(|_| CoreError::Protocol("receipt"))?;
+        let bytes = r.to_bytes().map_err(|_| CoreError::Protocol("receipt"))?;
+        Ok((digest, bytes))
+    }
+
+    /// Whether the nonce is open after `require_action`; a terminal nonce returns its recorded
+    /// response (L2-REC-5). `check` never opens one.
+    async fn opened(
+        &self,
+        req: &Request,
+        digest: &Digest,
+        actor_ref: &[u8],
+        exercise: Digest,
+    ) -> Result<Result<bool, Box<Response>>, CoreError> {
+        if req.mode == Mode::Check {
+            return Ok(Ok(false));
+        }
+        Ok(
+            match self.replay(&req.nonce, digest, actor_ref, exercise).await? {
+                Replay::Done(done) => Err(done),
+                Replay::Open => Ok(true),
+                Replay::New => Ok(false),
+            },
+        )
+    }
+
+    /// The rate class of a request (§13.7.4, OP-141 m.23).
+    const fn class_of(inc: &Incoming) -> Class {
+        match (inc.request.mode, inc.explain) {
+            (Mode::Check, true) => Class::Explain,
+            (Mode::Check, false) => Class::Check,
+            _ => Class::Commit,
+        }
+    }
+
     /// Requester throttling: a `REQUIRE_ACTION` that newly asks for a contribution
     /// counts against the actor Party's request rate; over it, the request is denied
     /// (§13.7.4, SEC28, OP-141 m.40).
@@ -815,30 +881,19 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         Self::check_payload(req)?;
         let digest = intent_digest(&req.intent).map_err(|_| CoreError::Protocol("intent"))?;
         let actor = self.actor(inc, &digest, now).await?;
-        // §13.7.4, OP-141 m.23
-        let class = match (req.mode, inc.explain) {
-            (Mode::Check, true) => Class::Explain,
-            (Mode::Check, false) => Class::Check,
-            _ => Class::Commit,
-        };
-        if !self.limiter.admit(class, who(inc, actor), now) {
+        if !self
+            .limiter
+            .admit(Self::class_of(inc), who(inc, actor), now)
+        {
             return Err(CoreError::Limited);
         }
         self.continued(req, &digest, actor).await?;
         let exercise =
             meta::exercise_id(&req.domain, &req.nonce).map_err(|_| CoreError::Protocol("nonce"))?;
         let actor_ref = actor.map_or_else(|| b"anonymous".to_vec(), |a| a.instance.0.to_vec());
-        let open = if req.mode == Mode::Check {
-            false
-        } else {
-            match self
-                .replay(&req.nonce, &digest, &actor_ref, exercise)
-                .await?
-            {
-                Replay::Done(done) => return Ok(done),
-                Replay::Open => true,
-                Replay::New => false,
-            }
+        let open = match self.opened(req, &digest, &actor_ref, exercise).await? {
+            Ok(open) => open,
+            Err(done) => return Ok(*done),
         };
         for _ in 0..MAX_RETRIES {
             let head = self.leader.head().pos;
@@ -866,6 +921,19 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             if req.mode == Mode::Check {
                 return Ok(answer(evaluation.decision, None, None, false));
             }
+            let allowed = evaluation.decision.outcome == Outcome::Allow;
+            let continued = req.exercise.unwrap_or(exercise);
+            // §9.8, L2-RCP-1, L2-RCP-2
+            let fixed = Fixed {
+                exercise: continued,
+                pos: frame.pos,
+                intent: digest,
+                now,
+                drawn: !evaluation.draws.is_empty(),
+            };
+            let receipt = allowed
+                .then(|| Self::receipt_of(inc, &self.domain, actor, &fixed))
+                .transpose()?;
             let shape = Shape {
                 digest: &digest,
                 actor,
@@ -873,18 +941,19 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                 open,
                 pos: frame.pos,
                 exercise,
+                receipt: receipt.as_ref().map(|r| r.0),
             };
             let items = self.items(inc, &shape, &evaluation, &snapshot, &resolved)?;
-            let allowed = evaluation.decision.outcome == Outcome::Allow;
-            let continued = req.exercise.unwrap_or(exercise);
             match self.leader.commit(now, &items).await {
                 Ok(Committed::Appended(positions)) => {
-                    return Ok(answer(
+                    let mut response = answer(
                         evaluation.decision,
                         allowed.then_some(continued),
                         positions.last().copied(),
                         false,
-                    ));
+                    );
+                    response.receipt = receipt.map(|r| r.1);
+                    return Ok(response);
                 }
                 Ok(Committed::Replayed(pos)) => {
                     return Ok(answer(
@@ -1040,31 +1109,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         let mut effects = evaluation.effects.clone();
         let mut single_use = Vec::new();
         if allowed {
-            // OP-141 m.19 (g): the contributions relied on are consumed
-            for id in &evaluation.decision.relied_on {
-                if let Some((k, c)) = resolved.contributions.get(id) {
-                    let mut c = c.clone();
-                    c.consumed = Some(shape.pos);
-                    effects.push((k.clone(), Some(c.to_value())));
-                    single_use.push(k.clone());
-                }
-            }
-            // L1-ADP-13
-            if let Some(a) = shape.actor {
-                effects.push((
-                    meta::exercise_key(kind::EXERCISE, &shape.exercise),
-                    Some(
-                        ExerciseState {
-                            intent: *digest,
-                            actor: a.instance,
-                            since: shape.pos,
-                            draws: exercise_draws(evaluation),
-                            grounds: BTreeSet::new(),
-                        }
-                        .to_value(),
-                    ),
-                ));
-            }
+            allow_effects(shape, evaluation, resolved, &mut effects, &mut single_use);
         }
         let effects = meta::sorted(effects);
         let mut reads: Vec<(Vec<u8>, u64)> = snapshot.read_set();
@@ -1087,6 +1132,12 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             ("nonce", Value::Bytes(req.nonce.clone())),
             ("intent", digest_value(digest)),
         ];
+        // TI-12, L2-RCP-2
+        decision.extend(
+            shape
+                .receipt
+                .map(|r| ("artifacts", Value::Array(vec![r.to_value()]))),
+        );
         if !effects.is_empty() {
             decision.push(("effects", effects_value(&effects)));
         }
@@ -1128,6 +1179,40 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             single_use,
         });
         Ok(items)
+    }
+}
+
+/// The effects every ALLOW adds: the contributions it relied on are consumed (OP-141 m.19
+/// (g)) and the Exercise is recorded for its continuations (L1-ADP-13).
+fn allow_effects(
+    shape: &Shape<'_>,
+    evaluation: &Evaluation,
+    resolved: &Proofs,
+    effects: &mut Vec<Effect>,
+    single_use: &mut Vec<Vec<u8>>,
+) {
+    for id in &evaluation.decision.relied_on {
+        if let Some((k, c)) = resolved.contributions.get(id) {
+            let mut c = c.clone();
+            c.consumed = Some(shape.pos);
+            effects.push((k.clone(), Some(c.to_value())));
+            single_use.push(k.clone());
+        }
+    }
+    if let Some(a) = shape.actor {
+        effects.push((
+            meta::exercise_key(kind::EXERCISE, &shape.exercise),
+            Some(
+                ExerciseState {
+                    intent: *shape.digest,
+                    actor: a.instance,
+                    since: shape.pos,
+                    draws: exercise_draws(evaluation),
+                    grounds: BTreeSet::new(),
+                }
+                .to_value(),
+            ),
+        ));
     }
 }
 
@@ -1195,6 +1280,8 @@ const fn answer(
         replayed,
         basis_ref: None,
         consistency: None,
+        receipt: None,
+        signed_receipt: None,
     }
 }
 
@@ -1205,10 +1292,19 @@ enum Replay {
     /// After `require_action`: evaluated again, only a decision is written.
     Open,
     /// Terminal: the recorded outcome.
-    Done(Response),
+    Done(Box<Response>),
 }
 
 /// What the records of one evaluation are built from.
+/// What a receipt takes from the decision being committed.
+struct Fixed {
+    exercise: Digest,
+    pos: u64,
+    intent: Digest,
+    now: u64,
+    drawn: bool,
+}
+
 struct Shape<'a> {
     digest: &'a Digest,
     actor: Option<Actor>,
@@ -1216,6 +1312,7 @@ struct Shape<'a> {
     open: bool,
     pos: u64,
     exercise: Digest,
+    receipt: Option<Digest>,
 }
 
 /// Namespace of a contribution's resource (L0-META-30).

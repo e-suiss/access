@@ -32,6 +32,8 @@ pub(crate) struct Config {
     pub(crate) database: Option<Database>,
     /// The PKCS#11 token (OP-94, OP-141 m.18 (h)).
     pub(crate) hsm: Option<Hsm>,
+    /// The authority signer's Unix socket; without it receipts are not signed (OP-143 m.5).
+    pub(crate) signer: Option<PathBuf>,
 }
 
 /// TLS files, read once before the lockdown.
@@ -123,6 +125,7 @@ impl Default for Config {
             issuer: None,
             database: None,
             hsm: None,
+            signer: None,
         }
     }
 }

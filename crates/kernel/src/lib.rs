@@ -17,6 +17,7 @@ pub mod intent;
 pub mod json;
 pub mod meta;
 pub mod model;
+pub mod receipt;
 pub mod record;
 pub mod requirement;
 pub mod restriction;

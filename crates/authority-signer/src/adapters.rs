@@ -166,7 +166,8 @@ impl Vault for DirVault {
 }
 
 /// Milliseconds since the Unix epoch.
-fn now_ms() -> u64 {
+#[must_use]
+pub fn now_ms() -> u64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_or(0, |d| u64::try_from(d.as_millis()).unwrap_or(u64::MAX))
@@ -175,6 +176,7 @@ fn now_ms() -> u64 {
 async fn answer<F, B, V>(
     stream: &mut UnixStream,
     service: &Mutex<Service<F, B, V>>,
+    now: u64,
 ) -> Result<(), std::io::Error>
 where
     F: KeyFactory,
@@ -191,7 +193,7 @@ where
                 Ok(request) => service
                     .lock()
                     .map_or(Response::Error(String::from("signer-poisoned")), |mut s| {
-                        s.handle(request, now_ms())
+                        s.handle(request, now)
                     }),
                 Err(_) => Response::Error(String::from("signer-frame")),
             }
@@ -204,7 +206,8 @@ where
 }
 
 /// Serves requests on `listener`, one per connection, from callers whose user id is in
-/// `allowed` (CMP-22: UDS and peer credentials); others are closed unanswered.
+/// `allowed` (CMP-22: UDS and peer credentials); others are closed unanswered. `clock` gives
+/// the signer's time in milliseconds.
 ///
 /// # Errors
 /// The listener fails.
@@ -212,6 +215,7 @@ pub async fn serve<F, B, V>(
     listener: UnixListener,
     service: Arc<Mutex<Service<F, B, V>>>,
     allowed: Vec<u32>,
+    clock: fn() -> u64,
 ) -> Result<(), std::io::Error>
 where
     F: KeyFactory + Send + 'static,
@@ -226,7 +230,7 @@ where
         }
         let service = Arc::clone(&service);
         tokio::spawn(async move {
-            let _ = answer(&mut stream, &service).await;
+            let _ = answer(&mut stream, &service, clock()).await;
         });
     }
 }

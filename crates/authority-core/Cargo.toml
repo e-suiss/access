@@ -9,6 +9,7 @@ repository.workspace = true
 publish = false
 
 [dependencies]
+access-authority-signer = { path = "../authority-signer" }
 access-crypto = { workspace = true }
 access-kernel = { workspace = true }
 access-store = { workspace = true }
@@ -21,9 +22,10 @@ tokio = { workspace = true, features = ["sync", "time"] }
 
 [dev-dependencies]
 access-crypto = { workspace = true, features = ["testing"] }
+suiss-crypto = { workspace = true, features = ["pkcs11", "aead", "testing"] }
 access-store = { workspace = true, features = ["testing"] }
-ed25519-dalek = { workspace = true }
-tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+ed25519-dalek = { workspace = true, features = ["pkcs8", "alloc"] }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "net"] }
 
 [lints]
 workspace = true

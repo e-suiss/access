@@ -94,3 +94,26 @@ pub fn metadata(
         discovery: template.discovery.clone(),
     }
 }
+
+/// The template a decision point opens a domain's keyring with: Ed25519 operational keys, a
+/// 24-hour window ceiling and version 1 of the core and meta-schema (OP-143 m.5, PD).
+#[must_use]
+pub fn default_template(domain: Digest) -> Template {
+    let v1 = SpecVersions {
+        core: 1,
+        meta_schema: 1,
+        ..SpecVersions::default()
+    };
+    Template {
+        domain,
+        genesis: domain,
+        algorithms: BTreeSet::from([Algorithm::Ed25519]),
+        operational_alg: Algorithm::Ed25519,
+        operational_window_max_ms: access_kernel::verify::key_scope::MAX_WINDOW_MS,
+        min_versions: v1.clone(),
+        adopted: v1,
+        caps: None,
+        hybrid: None,
+        discovery: None,
+    }
+}

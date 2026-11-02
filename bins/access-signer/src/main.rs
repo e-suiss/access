@@ -134,7 +134,7 @@ fn main() -> ExitCode {
             }
         });
         let listener = tokio::net::UnixListener::from_std(listener)?;
-        serve(listener, service, config.callers.clone()).await
+        serve(listener, service, config.callers.clone(), now_ms).await
     });
     match result {
         Ok(()) => ExitCode::SUCCESS,

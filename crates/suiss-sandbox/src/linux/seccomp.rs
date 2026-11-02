@@ -452,6 +452,11 @@ fn profile_rules(rules: &mut Rules, profile: Profile, phase: Phase) -> Result<()
             #[cfg(target_arch = "x86_64")]
             allow(rules, read_fs_x86);
             allow(rules, socket_io);
+            // OP-143 m.4 (d): the sealed-key vault; Landlock keeps writes inside it
+            allow(rules, write_fs);
+            allow(rules, &[libc::SYS_renameat]);
+            #[cfg(target_arch = "x86_64")]
+            allow(rules, &[libc::SYS_rename]);
             if phase == Phase::Startup {
                 rules.insert(libc::SYS_socket, any_of(0, &dword, &[af_unix])?);
                 rules.insert(libc::SYS_socketpair, any_of(0, &dword, &[af_unix])?);
@@ -552,6 +557,9 @@ mod tests {
         }
         let narrowed = allowlist(Profile::Signer, Phase::Narrowed, 1).unwrap();
         assert!(!narrowed.contains_key(&libc::SYS_socket));
+        // OP-143 m.4 (d)
+        assert!(narrowed.contains_key(&libc::SYS_renameat2));
+        assert!(narrowed.contains_key(&libc::SYS_renameat));
     }
 
     #[test]

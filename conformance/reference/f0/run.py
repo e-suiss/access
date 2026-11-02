@@ -7,7 +7,7 @@ import tempfile
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
-from f0 import ais, algebra, claim, codec, dcbor, digest, ed25519, fold, jose, merkle, meta, note, record, sdjwt, validity, version_check
+from f0 import ais, algebra, claim, codec, dcbor, digest, ed25519, fold, jose, merkle, meta, note, receipt, record, sdjwt, validity, version_check
 from f0.algebra import child_within_parent
 from f0.version import CORE_VERSION, VERSION
 from f0.codec import Rejection, decode_canonical, decode_canonical_authority, decode_subject_selector, encode
@@ -89,6 +89,23 @@ def run_operational_key(case, document):
     except KeyScopeError as error:
         return {"error": error.name}, None
     return {"key": encode(key).hex()}, None
+
+
+def run_receipt(case, document):
+    # L2-RCP-3
+    try:
+        payload = receipt.verify(
+            bytes.fromhex(document["metadata"]),
+            bytes.fromhex(case["sign1"]),
+            bytes.fromhex(case["excerpt"]),
+            decode_canonical(bytes.fromhex(case["domain"])),
+            case["audience"],
+            decode_canonical(bytes.fromhex(case["intent"])),
+            case["now"],
+        )
+    except receipt.ReceiptError as error:
+        return {"error": error.name}, None
+    return {"receipt": payload.hex()}, None
 
 
 def run_ed25519(case, document):
@@ -382,6 +399,7 @@ OPERATIONS = {
     "claim.verify": (run_claim, ("disposition", "claim_id", "error")),
     "note.checkpoint": (run_checkpoint, ("size", "root", "extensions", "cosigned", "error")),
     "meta.apply": (run_meta_apply, ("effects", "requirements", "expansion", "error")),
+    "receipt.verify": (run_receipt, ("receipt", "error")),
 }
 
 # Operations in the vectors that F0 does not implement, each with its reason. Any other

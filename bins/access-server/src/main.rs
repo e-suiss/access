@@ -248,6 +248,7 @@ async fn serve(
         salts: OsSalts,
         clock: SourcesClock::new(sequencer_for_time),
         deriver,
+        signer: config.signer.clone(),
     }));
     let renewing = tokio::spawn({
         let domains = domains.clone();

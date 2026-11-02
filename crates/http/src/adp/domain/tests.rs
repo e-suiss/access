@@ -173,6 +173,8 @@ fn response(outcome: Outcome) -> Response {
         replayed: false,
         basis_ref: Some(String::from("ref")),
         consistency: Some(String::from("seen")),
+        receipt: None,
+        signed_receipt: None,
     }
 }
 

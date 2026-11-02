@@ -625,6 +625,13 @@ pub fn encode_for(response: &Response, mode: Mode, scope: Scope) -> Out {
     if response.replayed {
         context.insert(String::from("replayed"), Out::Bool(true));
     }
+    // §9.8, L2-RCP-2: only a signed receipt leaves the decision point
+    if let Some((sign1, excerpt)) = &response.signed_receipt {
+        context.insert(
+            String::from("receipt"),
+            serde_json::json!({ "sign1": b64url_encode(sign1), "excerpt": b64url_encode(excerpt) }),
+        );
+    }
     context.insert(
         String::from("versions"),
         serde_json::json!({ "core": 1, "meta_schema": 1 }),

@@ -632,6 +632,7 @@ fn process(db: &TestDb, holder: &str, keys: Vec<Digest>) -> Domains<Listed, Boun
         salts: Counter(0),
         clock: Fixed,
         deriver: db.deriver.clone(),
+        signer: None,
     })
 }
 
@@ -2710,4 +2711,175 @@ async fn the_tenant_is_not_a_decision_input() {
     assert_eq!(decisions[0][0].outcome, Outcome::Allow);
     assert_ne!(decisions[0][1].outcome, Outcome::Allow);
     assert_eq!(decisions[0], decisions[1]);
+}
+
+// §9.8, L2-RCP-1 to L2-RCP-3, TI-12, OP-143 m.5: an ALLOW commit records its receipt's digest,
+// the signer signs it after the commit and a PEP verifies it offline against the domain's
+// metadata
+#[tokio::test]
+#[allow(
+    clippy::too_many_lines,
+    reason = "one signer, one domain and one receipt from commit to offline verification"
+)]
+async fn an_allow_carries_a_signed_receipt() {
+    use access_authority_signer::adapters::{DirVault, SealedFactory, call, serve};
+    use access_authority_signer::ports::Bindings;
+    use access_authority_signer::protocol::{Request as SignerRequest, Response as SignerResponse};
+    use access_authority_signer::service::Service;
+    use std::sync::{Arc, Mutex};
+
+    struct Soft;
+    impl Bindings for Soft {
+        fn binding(
+            &mut self,
+            _: &Digest,
+        ) -> Result<Box<dyn suiss_crypto::signer::Signer + Send>, suiss_crypto::signer::SignError>
+        {
+            let doc = suiss_crypto::secret::Secret::new(
+                ed25519_dalek::pkcs8::EncodePrivateKey::to_pkcs8_der(&signing(77))
+                    .unwrap()
+                    .as_bytes()
+                    .to_vec(),
+            );
+            Ok(Box::new(
+                suiss_crypto::signer::SoftSigner::ed25519_from_pkcs8(&doc)?,
+            ))
+        }
+    }
+
+    let db = fresh().await.unwrap();
+    let d = create_genesis(&db.sequencer, TENANT, genesis(), 1_000)
+        .await
+        .unwrap();
+    let dir = std::env::temp_dir().join(format!("access-receipt-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let policy = suiss_crypto::rotation::Policy {
+        publish_lead_ms: 0,
+        ..suiss_crypto::rotation::Policy::AUTHORITY
+    };
+    let service = Arc::new(Mutex::new(
+        Service::start(
+            SealedFactory::new(suiss_crypto::envelope::SoftKek::new("kek", [4; 32])),
+            Soft,
+            DirVault::new(&dir),
+            policy,
+            NOW,
+        )
+        .unwrap(),
+    ));
+    let socket = dir.join("signer.sock");
+    let _ = std::fs::remove_file(&socket);
+    let uid = std::os::unix::fs::MetadataExt::uid(&std::fs::metadata(&dir).unwrap());
+    tokio::spawn(serve(
+        tokio::net::UnixListener::bind(&socket).unwrap(),
+        Arc::clone(&service),
+        vec![uid],
+        || NOW,
+    ));
+    let a = Domains::new(Setup {
+        sequencer: db.sequencer.clone(),
+        app: db.app.clone(),
+        keys: Listed(vec![d]),
+        holder: "a".to_owned(),
+        ttl: TTL,
+        binding: binding(),
+        salts: Counter(0),
+        clock: Fixed,
+        deriver: db.deriver.clone(),
+        signer: Some(socket.clone()),
+    });
+    let public_basis = ExerciseBasis::Public(meta::object_id(&d, kind::GRANT, 0));
+    for (nonce, payload) in [
+        (
+            1,
+            Payload::PartyRegister {
+                party: ROOT,
+                root: Root::Sole(ROOT),
+            },
+        ),
+        (
+            2,
+            Payload::InstanceCreate {
+                party: ROOT,
+                key: public(ROOT_KEY),
+                mandate: None,
+            },
+        ),
+    ] {
+        let first = a
+            .exercise(&incoming(
+                meta_request(d, nonce, public_basis, payload),
+                ROOT_KEY,
+            ))
+            .await
+            .unwrap();
+        allowed(&first);
+        // the first ALLOW opens the keyring; its key may sign once the schedule has run
+        for _ in 0..2 {
+            service.lock().unwrap().tick(NOW, 1);
+        }
+    }
+    let shop = ExerciseBasis::Anchor(meta::object_id(&d, kind::ANCHOR, 1));
+    let r = a
+        .exercise(&incoming(shop_request(d, 9, Mode::Commit, shop), ROOT_KEY))
+        .await
+        .unwrap();
+    allowed(&r);
+    let (sign1, excerpt) = r.signed_receipt.clone().expect("signed receipt");
+    let SignerResponse::Metadata(bytes) = call(&socket, &SignerRequest::Metadata(d)).await.unwrap()
+    else {
+        panic!("metadata");
+    };
+    let binding_key = Soft.binding(&d).unwrap().public_key();
+    let mut trusted = access_kernel::verify::cose::KeySet::default();
+    trusted
+        .insert(
+            access_kernel::verify::key_scope::thumbprint(&binding_key),
+            binding_key,
+        )
+        .unwrap();
+    trusted
+        .allowed
+        .insert(access_kernel::verify::cose::Algorithm::Ed25519);
+    let metadata = access_kernel::verify::key_scope::verify_metadata(
+        &access_kernel::verify::PureBackend,
+        &bytes,
+        &trusted,
+    )
+    .unwrap();
+    let intent =
+        access_kernel::intent::intent_digest(&shop_request(d, 9, Mode::Commit, shop).intent)
+            .unwrap();
+    let receipt = access_kernel::receipt::verify(
+        &access_kernel::verify::PureBackend,
+        &metadata,
+        &sign1,
+        &excerpt,
+        &access_kernel::receipt::Expected {
+            domain: &d,
+            audience: PEP,
+            intent: &intent,
+            now: NOW,
+        },
+    )
+    .unwrap();
+    assert_eq!(receipt.exercise, r.exercise.unwrap());
+    assert_eq!(Some(receipt.record), r.record);
+    // TI-12: the decision record named the receipt before it was signed
+    let log = access_store::authority::read_log(
+        &db.app,
+        &DomainId::from_bytes(d.0),
+        receipt.record,
+        receipt.record,
+    )
+    .await
+    .unwrap();
+    let envelope = access_kernel::record::RecordEnvelope::from_bytes(&log[0].envelope).unwrap();
+    let artifacts = envelope.fields.get("artifacts").unwrap().value.clone();
+    assert_eq!(
+        artifacts,
+        Value::Array(vec![
+            access_kernel::receipt::digest(&receipt).unwrap().to_value()
+        ])
+    );
 }

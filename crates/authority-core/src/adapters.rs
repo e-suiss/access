@@ -208,12 +208,15 @@ pub struct Setup<K, B, S, C> {
     pub clock: C,
     /// The `access_deriver` pool (OP-141 m.22 (k)).
     pub deriver: Pool,
+    /// The authority signer's socket; without one, receipts are not signed (OP-143 m.5).
+    pub signer: Option<std::path::PathBuf>,
 }
 
 struct Led<B: Binding, S: Salts, C> {
     core: Authority<PgLog, PgReader, B, S>,
     clock: C,
     tokens: TokenKey,
+    signer_open: bool,
 }
 
 type Slot<B, S, C> = Arc<tokio::sync::Mutex<Option<Led<B, S, C>>>>;
@@ -285,6 +288,7 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
             core: Authority::new(leader, reader, s.binding.clone(), s.salts.clone(), domain),
             clock: s.clock.clone(),
             tokens,
+            signer_open: false,
         })
     }
 
@@ -352,6 +356,12 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
                     .seal(&domain.0, CONSISTENCY, &led.core.head().to_be_bytes())
                     .map_err(|_| CoreError::Unavailable("token-key"))?,
             );
+        }
+        // §9.8, L2-RCP-2: signed after the commit; without a signer the receipt waits
+        if let (Ok(r), Some(path)) = (&mut result, &self.setup.signer)
+            && let Some(payload) = r.receipt.clone()
+        {
+            r.signed_receipt = sign_receipt(path, led, domain, payload, now).await;
         }
         if let Ok(r) = &mut result
             && let Some(pos) = r.record
@@ -487,6 +497,35 @@ fn grant_row(id: [u8; 16], g: &GrantState, pos: u64) -> GrantRow {
         namespace,
         ended: g.ended.is_some(),
         pos,
+    }
+}
+
+/// Asks the signer at `path` to sign a receipt payload, opening the domain's keyring first.
+async fn sign_receipt<B: Binding, S: Salts, C>(
+    path: &std::path::Path,
+    led: &mut Led<B, S, C>,
+    domain: Digest,
+    payload: Vec<u8>,
+    at: u64,
+) -> Option<(Vec<u8>, Vec<u8>)> {
+    use access_authority_signer::adapters::call;
+    use access_authority_signer::protocol::{Request as SignRequest, Response as SignResponse};
+    if !led.signer_open {
+        let open = SignRequest::Open(Box::new(access_authority_signer::domain::default_template(
+            domain,
+        )));
+        led.signer_open = matches!(call(path, &open).await, Ok(SignResponse::Opened));
+    }
+    let sign = SignRequest::Sign {
+        domain,
+        usage: access_kernel::verify::key_scope::KeyUsage::Receipt,
+        content_type: String::from(access_kernel::receipt::CONTENT_TYPE),
+        payload,
+        at,
+    };
+    match call(path, &sign).await {
+        Ok(SignResponse::Signed { sign1, excerpt }) => Some((sign1, excerpt)),
+        _ => None,
     }
 }
 

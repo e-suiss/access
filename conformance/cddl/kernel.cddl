@@ -720,3 +720,21 @@ contribution-state = {
   since: uint,
   ? consumed: uint,
 }
+
+; ---------------------------------------------------------------- decision receipt (L2-RCP-1)
+
+; Payload of a COSE_Sign1 signed by an operational key with usage "receipt", content type
+; "application/access-receipt+cbor".
+receipt = {
+  domain: domain-id,
+  exercise: digest,
+  record: uint,
+  intent: digest,
+  ? instance: id,
+  ? ais: digest,
+  capacity: capacity,
+  basis: exercise-basis,
+  audience: tstr .size (1..255),
+  iat: trusted-time,
+  drawn: bool,
+}
