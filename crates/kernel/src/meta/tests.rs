@@ -479,6 +479,15 @@ fn joint_roots_require_contributions() {
         .unwrap();
     let term = out.requirements.iter().next().unwrap();
     assert_eq!((term.class.as_str(), term.count), ("co_root", 1));
+    // §13.7.3, OP-141 m.43: a CT3 meta-action asks two of the other principals
+    let nested = Payload::AnchorCreate {
+        scope: AnchorScope::Resource(shop(&["eu", "fr"])),
+        root: Root::Sole(BOB),
+        root_terms: BTreeSet::new(),
+    };
+    let (_, out) = r.act(BOB, BOB, ExerciseBasis::Anchor(eu), &nested).unwrap();
+    let term = out.requirements.iter().next().unwrap();
+    assert_eq!((term.class.as_str(), term.count), ("co_root", 2));
     // a nested Anchor stays inside its covering scope
     let outside = Payload::AnchorCreate {
         scope: AnchorScope::Resource(shop(&[])),
@@ -1246,6 +1255,17 @@ fn meta_vectors_match() {
         (BOB, BOB),
         ExerciseBasis::Anchor(eu),
         &issue(CAROL, GrantBasis::Anchor(eu), &["eu", "fr"], 0),
+    );
+    r.step(
+        "joint-root-ct3-quorum",
+        &["L0-META-10", "L0-META-28"],
+        (BOB, BOB),
+        ExerciseBasis::Anchor(eu),
+        &Payload::AnchorCreate {
+            scope: AnchorScope::Resource(shop(&["eu", "fr"])),
+            root: Root::Sole(BOB),
+            root_terms: BTreeSet::new(),
+        },
     );
     r.step(
         "nested-outside",

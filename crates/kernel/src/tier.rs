@@ -34,6 +34,27 @@ pub const fn validity_ceiling(tier: Tier) -> u64 {
     }
 }
 
+/// The tier of a meta-action by its class and whether it widens authority (OP-141 m.34 (a)).
+#[must_use]
+pub const fn meta_tier(payload: &Payload, expansion: bool) -> Tier {
+    match payload {
+        Payload::Contribute { .. } => Tier::Ct1,
+        _ if !expansion => Tier::Ct1,
+        Payload::AnchorCreate { .. }
+        | Payload::AnchorTransfer { .. }
+        | Payload::AnchorAmend { .. }
+        | Payload::AnchorRetire { .. }
+        | Payload::PartyDepart { .. }
+        | Payload::InstanceRecover { .. }
+        | Payload::GrantAmend { .. }
+        | Payload::AcceptanceEstablish(_)
+        | Payload::AcceptanceAmend { .. }
+        | Payload::PolicySet { .. }
+        | Payload::PolicyRetire { .. } => Tier::Ct3,
+        _ => Tier::Ct2,
+    }
+}
+
 /// The tier of an Exercise: a meta-action by its class and whether it widens authority, a
 /// domain action by its amounts and its Action Schema (OP-141 m.34 (a), m.35 (g)).
 #[must_use]
@@ -44,21 +65,7 @@ pub fn of(
     schema: Option<&ActionSchema>,
 ) -> Tier {
     match payload {
-        Some(p) if !expansion || matches!(p, Payload::Contribute { .. }) => Tier::Ct1,
-        Some(
-            Payload::AnchorCreate { .. }
-            | Payload::AnchorTransfer { .. }
-            | Payload::AnchorAmend { .. }
-            | Payload::AnchorRetire { .. }
-            | Payload::PartyDepart { .. }
-            | Payload::InstanceRecover { .. }
-            | Payload::GrantAmend { .. }
-            | Payload::AcceptanceEstablish(_)
-            | Payload::AcceptanceAmend { .. }
-            | Payload::PolicySet { .. }
-            | Payload::PolicyRetire { .. },
-        ) => Tier::Ct3,
-        Some(_) => Tier::Ct2,
+        Some(p) => meta_tier(p, expansion),
         // OP-141 m.39 (a)
         None if crate::meta::is_read(&intent.action.namespace, &intent.action.name) => {
             if intent.action.name == "read" {

@@ -1950,6 +1950,25 @@ pub struct Outcome {
 
 const CO_ROOT: &str = "co_root";
 
+/// Contributions a CT3 meta-action needs from the other principals of a joint root
+/// (§13.7.3, SEC26, OP-141 m.43, PD).
+pub const CT3_QUORUM: u64 = 2;
+
+/// `count` `co_root` contributions from distinct Parties, bound to the intent.
+fn co_root(count: u64) -> RequirementTerm {
+    RequirementTerm {
+        proof_kind: crate::model::ProofKind::Contribution,
+        class: String::from(CO_ROOT),
+        count,
+        binding: crate::model::Binding::IntentDigest,
+        freshness_ms: None,
+        independence: crate::model::Independence::DistinctParty,
+        consumption: crate::model::Consumption::SingleUse,
+        source: None,
+        assurance: BTreeMap::new(),
+    }
+}
+
 /// The requirements of acting as `anchor`'s root: its root terms and, for a joint root of `k`,
 /// `k − 1` further `co_root` contributions (L0-META-10); `None` when the actor is not a root.
 #[must_use]
@@ -1959,17 +1978,7 @@ pub fn root_requirements(anchor: &AnchorState, actor: &Actor) -> Option<BTreeSet
         Root::Sole(p) if *p == actor.party => {}
         Root::Joint { parties, k } if parties.contains(&actor.party) => {
             if *k > 1 {
-                req.insert(RequirementTerm {
-                    proof_kind: crate::model::ProofKind::Contribution,
-                    class: String::from(CO_ROOT),
-                    count: k.saturating_sub(1),
-                    binding: crate::model::Binding::IntentDigest,
-                    freshness_ms: None,
-                    independence: crate::model::Independence::DistinctParty,
-                    consumption: crate::model::Consumption::SingleUse,
-                    source: None,
-                    assurance: BTreeMap::new(),
-                });
+                req.insert(co_root(k.saturating_sub(1)));
             }
         }
         _ => return None,
@@ -2768,6 +2777,22 @@ pub fn apply(ctx: &Context<'_>, payload: &Payload, view: &dyn View) -> Result<Ou
         }
         Payload::ConsumptionRelease { exercise, grounds } => {
             release(view, &mut out, &actor, exercise, grounds)?;
+        }
+    }
+    // §13.7.3, SEC26, OP-141 m.43
+    if crate::tier::meta_tier(payload, out.expansion) == crate::tier::Tier::Ct3
+        && let ExerciseBasis::Anchor(a) = ctx.basis
+        && let Ok(anchor) = read::<AnchorState>(view, kind::ANCHOR, &a)
+        && let Root::Joint { parties, k } = &anchor.root
+        && parties.contains(&actor.party)
+    {
+        let others = u64::try_from(parties.len())
+            .unwrap_or(u64::MAX)
+            .saturating_sub(1);
+        let need = others.min(CT3_QUORUM).max(k.saturating_sub(1));
+        if need > 0 {
+            out.requirements.retain(|t| t.class != CO_ROOT);
+            out.requirements.insert(co_root(need));
         }
     }
     out.effects = sorted(out.effects);

@@ -1007,6 +1007,14 @@ def acceptance_narrows(new, old):
 # ---------------------------------------------------------------- entry point
 
 
+CT3_META = {
+    "anchor_create", "anchor_transfer", "anchor_amend", "anchor_retire", "party_depart",
+    "instance_recover", "grant_amend", "acceptance_establish", "acceptance_amend", "policy_set",
+    "policy_retire",
+}
+CT3_QUORUM = 2
+
+
 def apply(state, domain_id, exercise, pos, party, instance, basis, capacity, payload):
     """Returns (effects, requirements, expansion) or raises MetaError."""
     store = {key: decode_canonical(value) for key, value in state}
@@ -1015,6 +1023,25 @@ def apply(state, domain_id, exercise, pos, party, instance, basis, capacity, pay
     check_exercise_basis(exercise_basis)
     run = Apply(store, domain_id, exercise, pos, party, instance, exercise_basis, decode_canonical(capacity))
     expansion = getattr(run, name)(body)
+    # §13.7.3, SEC26, OP-141 m.43
+    if expansion and name in CT3_META and "anchor" in exercise_basis:
+        anchor = run.read("anchor", exercise_basis["anchor"]) or {}
+        root = anchor.get("root", {})
+        if "joint" in root and run.party in root["joint"]["parties"]:
+            others = len(root["joint"]["parties"]) - 1
+            need = max(min(others, CT3_QUORUM), root["joint"]["k"] - 1)
+            if need > 0:
+                run.requirements = [t for t in run.requirements if t.get("class") != "co_root"]
+                term = {
+                    "proof_kind": "contribution",
+                    "class": "co_root",
+                    "binding": "intent_digest",
+                    "independence": {"distinct": "party"},
+                    "consumption": "single_use",
+                }
+                if need >= 2:
+                    term["count"] = need
+                run.requirements.append(term)
     # L0-META-29
     effects = dict(run.effects)
     return sorted(effects.items()), as_set(run.requirements), expansion
