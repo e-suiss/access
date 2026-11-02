@@ -133,7 +133,10 @@ fn a_destroyed_kek_unwraps_nothing() {
     assert!(matches!(s.kek("kek-shred"), Err(HsmError::Key(_))));
     assert!(matches!(s.destroy_kek("kek-shred"), Err(HsmError::Key(_))));
     s.generate_mac("mac-not-kek").unwrap();
-    assert!(matches!(s.destroy_kek("mac-not-kek"), Err(HsmError::Key(_))));
+    assert!(matches!(
+        s.destroy_kek("mac-not-kek"),
+        Err(HsmError::Key(_))
+    ));
     assert!(s.mac("mac-not-kek").is_ok());
 }
 

@@ -136,7 +136,10 @@ fn a_dek_wraps_like_rfc_3394() {
     assert_eq!(k.id(), "class-1");
     assert_eq!(k.wrap(&dek(data)).unwrap(), wrapped);
     assert_eq!(*k.unwrap(&wrapped).unwrap().secret().expose(), data);
-    assert_eq!(SoftKek::new("v1", kek_bytes).wrap(&dek(data)).unwrap(), wrapped);
+    assert_eq!(
+        SoftKek::new("v1", kek_bytes).wrap(&dek(data)).unwrap(),
+        wrapped
+    );
     let short = hex::<24>("64e8c3f9ce0f5ba263e9777905818a2a93c8191e7d6e8ae7");
     assert_eq!(k.unwrap(&short).err(), Some(EnvelopeError::Wrap));
     for bad in [&wrapped[..39], &wrapped[..0], &[0_u8; 48][..]] {
