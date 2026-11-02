@@ -6,6 +6,7 @@ pub mod adapters;
 pub mod app;
 pub mod domain;
 pub mod genesis;
+pub mod kat;
 pub mod ports;
 pub mod protocol;
 pub mod service;

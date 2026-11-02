@@ -43,7 +43,8 @@ fn lockdown(config: &Config, hsm: &config::Hsm) -> Lockdown {
     lockdown
 }
 
-fn main() -> ExitCode {
+/// The configuration with telemetry installed, once the known-answer tests passed.
+fn configured() -> Option<Config> {
     let config = match Config::load() {
         Ok(config) => config,
         Err(error) => {
@@ -51,7 +52,7 @@ fn main() -> ExitCode {
             {
                 eprintln!("access-signer: invalid configuration: {error}");
             }
-            return ExitCode::FAILURE;
+            return None;
         }
     };
     if let Err(error) = access_telemetry::init(&config.log) {
@@ -59,8 +60,23 @@ fn main() -> ExitCode {
         {
             eprintln!("access-signer: {error}");
         }
-        return ExitCode::FAILURE;
+        return None;
     }
+    // CR-51 m.3
+    if let Err(error) = access_authority_signer::kat::run() {
+        tracing::error!(
+            code = error.code(),
+            "known-answer test failed; refusing to start"
+        );
+        return None;
+    }
+    Some(config)
+}
+
+fn main() -> ExitCode {
+    let Some(config) = configured() else {
+        return ExitCode::FAILURE;
+    };
     let Some(hsm) = &config.hsm else {
         return ExitCode::FAILURE;
     };
