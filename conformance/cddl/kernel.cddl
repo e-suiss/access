@@ -18,6 +18,9 @@ hash-alg = -16
 ;   COSE_Sign1 AIS bytes as received         "access/ais/v1"
 ;   COSE_Sign1 Claim bytes as received       "access/claim/v1"
 ;   policy-content (RestrictionPolicy version) "access/policy/v1"
+;   receipt (decision receipt payload)       "access/receipt/v1"
+;   COSE_Sign1 PAP bytes as signed           "access/pap/v1"
+;   pap-holder                               "access/holder/v1"
 ; Hash prefixes (OP-106 m.12), raw SHA-256 without a context:
 ;   0x00 Merkle leaf   0x01 Merkle interior node   0x02 field commitment   0x03 body commitment
 

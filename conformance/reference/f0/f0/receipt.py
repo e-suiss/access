@@ -30,12 +30,12 @@ class ReceiptError(Exception):
 
 def check_audience(value):
     if not isinstance(value, str) or not 1 <= len(value.encode()) <= 255:
-        raise Rejection("shape")
+        raise Rejection("shape", "receipt")
 
 
 def check_holding(value):
     if not isinstance(value, list) or len(value) != 3:
-        raise Rejection("shape")
+        raise Rejection("shape", "receipt")
     check_id(value[0])
     check_id(value[1])
     check_uint(value[2])
