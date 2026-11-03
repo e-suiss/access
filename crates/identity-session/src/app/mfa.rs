@@ -113,8 +113,7 @@ where
             let code = recovery_code(&raw);
             let typed = Password::presented(&canonical_recovery_code(&code))
                 .ok_or(SessionError::Corrupt)?;
-            let mut salt = [0; 16];
-            self.random.fill(&mut salt)?;
+            let salt = self.random.salt()?;
             let phc = self.hasher.hash(&typed, salt).await?;
             let sealed = seal(
                 &self.realm,

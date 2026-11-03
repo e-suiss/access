@@ -21,4 +21,8 @@ impl Random for OsRandom {
         }
         Ok(())
     }
+
+    fn salt(&self) -> Result<[u8; 16], SessionError> {
+        access_crypto::random::bytes::<16>().map_err(|_| SessionError::Random)
+    }
 }

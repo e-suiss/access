@@ -23,6 +23,12 @@ pub trait Random: Send + Sync {
     /// # Errors
     /// [`SessionError::Random`].
     fn fill(&self, out: &mut [u8]) -> Result<(), SessionError>;
+
+    /// A fresh 16-byte salt.
+    ///
+    /// # Errors
+    /// [`SessionError::Random`].
+    fn salt(&self) -> Result<[u8; 16], SessionError>;
 }
 
 /// The account transaction plus the flow and session tables.

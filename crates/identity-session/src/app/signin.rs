@@ -153,9 +153,7 @@ struct Salts<'a, R>(&'a R);
 
 impl<R: Random> Entropy for Salts<'_, R> {
     fn salt(&self) -> Result<[u8; 16], AccountError> {
-        let mut out = [0; 16];
-        self.0.fill(&mut out).map_err(|_| AccountError::Random)?;
-        Ok(out)
+        self.0.salt().map_err(|_| AccountError::Random)
     }
 }
 

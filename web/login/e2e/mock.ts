@@ -132,6 +132,9 @@ export class LoginMock {
         return { status: 200, ui: withoutNodes(example("complete")) };
       case "recovery_code":
         return { status: 200, ui: example("second-factor-failed") };
+      case "email_code":
+      case "magic_link":
+        return { status: 400, ui: example("identifier") };
     }
   }
 
