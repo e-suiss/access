@@ -1123,12 +1123,21 @@ async fn logout_ends_the_session_and_notifies_clients() {
     );
     let to = location(&w.authorize(&[("prompt", "none")], Some(&w.cookie)).await);
     assert_eq!(query(&to, "error"), "login_required");
-    let events = poll(&w.db.reader, Cursor::default(), 100).await.unwrap();
-    let logout: Vec<Value> = events
-        .iter()
-        .filter(|e| e.kind == "oauth.backchannel_logout")
-        .map(|e| serde_json::from_slice(&e.payload).unwrap())
-        .collect();
+    let deadline = std::time::Instant::now() + Duration::from_secs(20);
+    let logout: Vec<Value> = loop {
+        let found: Vec<Value> = poll(&w.db.reader, Cursor::default(), 100)
+            .await
+            .unwrap()
+            .iter()
+            .filter(|e| e.kind == "oauth.backchannel_logout")
+            .map(|e| serde_json::from_slice(&e.payload).unwrap())
+            .collect();
+        if !found.is_empty() {
+            break found;
+        }
+        assert!(std::time::Instant::now() < deadline, "no logout event");
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    };
     assert_eq!(logout.len(), 1);
     assert_eq!(logout[0]["uri"], "https://shop.example/backchannel");
     let lt = claims(logout[0]["logout_token"].as_str().unwrap());

@@ -25,7 +25,7 @@ access-store = { workspace = true, features = ["testing"] }
 aws-lc-rs = { workspace = true }
 ed25519-dalek = { workspace = true }
 suiss-crypto = { workspace = true, features = ["signer", "aead", "testing"] }
-tokio = { workspace = true, features = ["macros", "net", "rt-multi-thread"] }
+tokio = { workspace = true, features = ["macros", "net", "rt-multi-thread", "time"] }
 
 [lints]
 workspace = true
