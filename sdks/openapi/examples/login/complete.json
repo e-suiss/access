@@ -23,7 +23,7 @@
       "signal": {
         "kind": "all_accepted_credentials",
         "rp_id": "acme.localhost",
-        "user_id": "dXNlci1oYW5kbGUtZXhhbXBsZS0wMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMA",
+        "user_id": "dXNlci1oYW5kbGUtZXhhbXBsZS0wMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMA",
         "all_accepted_credential_ids": [
           "Y3JlZC1hZGEtMDE"
         ]
@@ -34,7 +34,7 @@
       "signal": {
         "kind": "current_user_details",
         "rp_id": "acme.localhost",
-        "user_id": "dXNlci1oYW5kbGUtZXhhbXBsZS0wMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMA",
+        "user_id": "dXNlci1oYW5kbGUtZXhhbXBsZS0wMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMA",
         "name": "ada@example.org",
         "display_name": "Ada"
       }
@@ -75,7 +75,7 @@
         "timeout": 300000,
         "user": {
           "displayName": "Ada",
-          "id": "dXNlci1oYW5kbGUtZXhhbXBsZS0wMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMA",
+          "id": "dXNlci1oYW5kbGUtZXhhbXBsZS0wMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMA",
           "name": "ada@example.org"
         }
       }

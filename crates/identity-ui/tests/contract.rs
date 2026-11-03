@@ -21,7 +21,7 @@ use serde_json::{Value, json};
 const RP_ID: &str = "acme.localhost";
 const CHALLENGE: &str = "c2lnbi1pbi1jaGFsbGVuZ2UtZXhhbXBsZS0wMDAwMDA";
 const USER_ID: &str =
-    "dXNlci1oYW5kbGUtZXhhbXBsZS0wMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMA";
+    "dXNlci1oYW5kbGUtZXhhbXBsZS0wMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMA";
 const POLICY: [Requirement; 1] = [Requirement::SecondFactor];
 
 fn root() -> PathBuf {
