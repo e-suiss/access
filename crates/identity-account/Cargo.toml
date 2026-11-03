@@ -9,6 +9,19 @@ repository.workspace = true
 publish = false
 
 [dependencies]
+access-crypto = { workspace = true }
+access-store = { workspace = true }
+suiss-crypto = { workspace = true, features = ["aead"] }
+argon2 = { workspace = true, features = ["alloc", "password-hash"] }
+unicode-normalization = { workspace = true, features = ["std"] }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["rt", "sync", "time", "fs"] }
+tracing = { workspace = true, features = ["std"] }
+
+[dev-dependencies]
+access-crypto = { workspace = true, features = ["testing"] }
+access-store = { workspace = true, features = ["testing"] }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "time"] }
 
 [lints]
 workspace = true

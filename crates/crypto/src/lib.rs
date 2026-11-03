@@ -1,6 +1,7 @@
 //! Cryptography for Access: the shared server primitives (OP-140 m.4) and Access's own
 //! identifiers and secret files.
 
+pub mod breach;
 pub mod dpop;
 pub mod event_id;
 pub mod jose;
