@@ -42,3 +42,13 @@ targetRules = ["generic-api-key"]
 paths = [
     '''^conformance/vectors/core/1/claim\.json$''',
 ]
+
+[[allowlists]]
+description = "DPoP conformance test: a fixed placeholder access token whose only use is its ath hash, no signature or secret (TN-28)"
+targetRules = ["generic-api-key"]
+paths = [
+    '''^crates/identity-oauth/tests/dpop_conformance\.rs$''',
+]
+regexes = [
+    '''eyJ0eXAiOiJhdCtqd3QifQ\.e30\.c2ln''',
+]
