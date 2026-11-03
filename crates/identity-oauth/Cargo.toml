@@ -9,9 +9,11 @@ repository.workspace = true
 publish = false
 
 [dependencies]
-access-kernel = { workspace = true }
 access-crypto = { workspace = true }
+access-identity-signer = { path = "../identity-signer" }
+access-kernel = { workspace = true }
 access-store = { workspace = true }
+serde_json = { workspace = true, features = ["std"] }
 thiserror = { workspace = true }
 
 [dev-dependencies]
@@ -19,7 +21,8 @@ access-crypto = { workspace = true, features = ["testing"] }
 access-store = { workspace = true, features = ["testing"] }
 aws-lc-rs = { workspace = true }
 ed25519-dalek = { workspace = true }
-tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+suiss-crypto = { workspace = true, features = ["signer", "aead", "testing"] }
+tokio = { workspace = true, features = ["macros", "net", "rt-multi-thread"] }
 
 [lints]
 workspace = true
