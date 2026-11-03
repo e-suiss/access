@@ -253,6 +253,10 @@ pub(crate) const HMAC_ALLOWED: &[(&str, &str)] = &[
         "crates/crypto/src/pseudonym.rs",
         "CR-3 (a): pairwise party pseudonyms (MD-10)",
     ),
+    (
+        "crates/crypto/src/dpop.rs",
+        "CR-3 (b): DPoP server nonce, issued and checked by the same AS or RS (TN-29)",
+    ),
 ];
 
 const HMAC_TOKENS: &[&str] = &[
