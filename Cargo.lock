@@ -66,8 +66,14 @@ version = "0.2.4"
 dependencies = [
  "access-authority-core",
  "access-authority-sequencer",
+ "access-crypto",
+ "access-identity-account",
  "access-identity-oauth",
+ "access-identity-session",
+ "access-identity-ui",
+ "access-identity-webauthn",
  "access-store",
+ "aws-lc-rs",
  "axum",
  "esuiss-access-kernel",
  "esuiss-crypto",
@@ -199,9 +205,19 @@ dependencies = [
 name = "access-identity-ui"
 version = "0.2.4"
 dependencies = [
+ "access-crypto",
+ "access-identity-account",
+ "access-identity-oauth",
+ "access-identity-session",
+ "access-identity-webauthn",
+ "access-store",
+ "esuiss-access-kernel",
+ "esuiss-crypto",
  "serde",
  "serde_json",
  "thiserror",
+ "time",
+ "tracing",
  "zeroize",
 ]
 
@@ -267,6 +283,9 @@ dependencies = [
  "access-identity-account",
  "access-identity-admin",
  "access-identity-oauth",
+ "access-identity-session",
+ "access-identity-ui",
+ "access-identity-webauthn",
  "access-internal-api",
  "access-store",
  "access-telemetry",

@@ -136,6 +136,7 @@ pub async fn serve(
                 }
             };
             drop(permit);
+            let app = app.layer(Extension(crate::login::Peer(peer.ip())));
             let service = TowerToHyperService::new(match pep(tls.get_ref().1) {
                 Some(pep) => app.layer(Extension(pep)),
                 None => app,

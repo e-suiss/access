@@ -1,6 +1,7 @@
 //! HTTP layer shared by both Access planes (OP-62).
 
 pub mod adp;
+pub mod login;
 mod problem;
 pub mod realm;
 mod security_txt;

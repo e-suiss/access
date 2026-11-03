@@ -12,6 +12,7 @@ publish = false
 access-authority-core = { path = "../authority-core" }
 access-authority-sequencer = { path = "../authority-sequencer" }
 access-identity-oauth = { workspace = true }
+access-identity-ui = { workspace = true }
 access-kernel = { workspace = true }
 suiss-crypto = { workspace = true }
 axum = { workspace = true, features = ["http1", "http2", "tokio", "json"] }
@@ -29,7 +30,13 @@ tower-http = { workspace = true, features = ["catch-panic", "limit", "timeout", 
 tracing = { workspace = true, features = ["std"] }
 
 [dev-dependencies]
-access-store = { workspace = true }
+access-crypto = { workspace = true, features = ["testing"] }
+access-identity-account = { workspace = true }
+access-identity-session = { workspace = true }
+access-identity-webauthn = { workspace = true }
+access-store = { workspace = true, features = ["testing"] }
+aws-lc-rs = { workspace = true }
+serde_json = { workspace = true, features = ["std"] }
 tower = { workspace = true, features = ["util"] }
 http-body-util = { workspace = true }
 rcgen = { workspace = true, features = ["aws_lc_rs", "pem"] }
