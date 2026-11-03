@@ -509,3 +509,33 @@ async fn a_full_semaphore_sheds_with_503() {
     assert!(busy > 0);
     assert_eq!(hasher.metrics().shed(), busy);
 }
+
+// §10.2.1, CR-36, IDP-3, MD-18, OP-33, SA-31, TN-83: no dummy Argon2; a missing, suspended or
+// deactivated account takes a semaphore permit but computes no hash; only an account with a
+// stored hash costs one
+#[tokio::test]
+async fn no_dummy_argon2_for_absent_or_inactive_accounts() {
+    let e = env(4, "ia-d").await;
+    e.active("dora@example.com", "correct horse battery").await;
+    let sus = e.active("sus4@example.com", "correct horse battery").await;
+    change_status(&e.pg(), &e.realm(), sus, AccountStatus::Suspended, &ADMIN)
+        .await
+        .unwrap();
+    let off = e.active("off4@example.com", "correct horse battery").await;
+    deactivate(&e.pg(), &e.realm(), off, &ADMIN).await.unwrap();
+    let hasher = Hasher::new(HasherConfig::sized(Argon2Params::CANONICAL, 4, None));
+    for (i, who) in ["nobody@example.com", "sus4@example.com", "off4@example.com"]
+        .iter()
+        .enumerate()
+    {
+        let ip = u8::try_from(40 + i).unwrap();
+        let r = e.login(&hasher, who, "correct horse battery", ip).await;
+        assert_eq!(r.problem(), Some(REJECTED), "{who}");
+    }
+    assert_eq!(hasher.metrics().hashes(), 0);
+    let r = e
+        .login(&hasher, "dora@example.com", "wrong horse battery", 50)
+        .await;
+    assert_eq!(r.problem(), Some(REJECTED));
+    assert_eq!(hasher.metrics().hashes(), 1);
+}
