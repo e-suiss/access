@@ -2,6 +2,7 @@
 //! OP-140 m.2).
 
 pub mod cose;
+pub mod dpop;
 pub mod jws;
 pub mod key_scope;
 pub mod projection;
