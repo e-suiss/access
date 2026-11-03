@@ -15,6 +15,8 @@ fn client(uris: &[&str]) -> Client {
             .iter()
             .map(|u| RedirectUri::parse(u).unwrap())
             .collect(),
+        post_logout_redirect_uris: Vec::new(),
+        backchannel_logout_uri: None,
     }
 }
 

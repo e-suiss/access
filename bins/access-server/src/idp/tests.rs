@@ -312,6 +312,8 @@ async fn new_client(w: &World) -> Client {
             RedirectUri::parse("https://shop.example/cb").unwrap(),
             RedirectUri::parse("http://127.0.0.1/cb").unwrap(),
         ],
+        post_logout_redirect_uris: Vec::new(),
+        backchannel_logout_uri: None,
     }
 }
 

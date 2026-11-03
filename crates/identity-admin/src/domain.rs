@@ -290,6 +290,10 @@ pub struct Client {
     pub auth: AuthMethod,
     /// Redirect URIs, compared as exact strings.
     pub redirect_uris: Vec<RedirectUri>,
+    /// Post-logout redirect URIs, compared as exact strings (§10.4.6).
+    pub post_logout_redirect_uris: Vec<RedirectUri>,
+    /// The back-channel logout endpoint, `https` (§10.4.6).
+    pub backchannel_logout_uri: Option<String>,
 }
 
 impl Client {
@@ -302,11 +306,18 @@ impl Client {
         if n == 0 || n > 128 || self.display_name.chars().any(char::is_control) {
             return Err(Invalid::DisplayName);
         }
-        let distinct: BTreeSet<&RedirectUri> = self.redirect_uris.iter().collect();
-        if self.redirect_uris.len() > MAX_REDIRECT_URIS
-            || distinct.len() != self.redirect_uris.len()
+        for list in [&self.redirect_uris, &self.post_logout_redirect_uris] {
+            let distinct: BTreeSet<&RedirectUri> = list.iter().collect();
+            if list.len() > MAX_REDIRECT_URIS || distinct.len() != list.len() {
+                return Err(Invalid::RedirectUris);
+            }
+        }
+        if self
+            .backchannel_logout_uri
+            .as_deref()
+            .is_some_and(|u| !https(u))
         {
-            return Err(Invalid::RedirectUris);
+            return Err(Invalid::RedirectUri);
         }
         if let AuthMethod::PrivateKeyJwt { jwks_uri } = &self.auth
             && !https(jwks_uri)
@@ -333,6 +344,20 @@ impl Client {
         ];
         if let Some(u) = self.auth.jwks_uri() {
             m.push((Value::text("jwks_uri"), Value::text(u)));
+        }
+        if !self.post_logout_redirect_uris.is_empty() {
+            m.push((
+                Value::text("post_logout_redirect_uris"),
+                Value::Array(
+                    self.post_logout_redirect_uris
+                        .iter()
+                        .map(|u| Value::text(u.as_str()))
+                        .collect(),
+                ),
+            ));
+        }
+        if let Some(u) = &self.backchannel_logout_uri {
+            m.push((Value::text("backchannel_logout_uri"), Value::text(u)));
         }
         Value::Map(m)
     }

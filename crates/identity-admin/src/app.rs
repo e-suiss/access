@@ -17,7 +17,9 @@ use access_store::scope::DomainId;
 use access_store::tenancy::{self, HostKind};
 
 use crate::AdminError;
-use crate::domain::{Attribute, CLIENT_PREFIX, Change, Client, ClientId, Invalid, JoseAlg, raises};
+use crate::domain::{
+    Attribute, AuthMethod, CLIENT_PREFIX, Change, Client, ClientId, Invalid, JoseAlg, raises,
+};
 use crate::ports::{Decider, Governance};
 
 /// A realm to create (TN-111, TN-16, TN-10).
@@ -83,6 +85,9 @@ pub enum Applied {
         exercise: Digest,
         /// Position of the decision record.
         position: u64,
+        /// A `client_secret_basic` client's new secret, shown once and never stored
+        /// (CR-38).
+        secret: Option<ClientSecret>,
     },
     /// A retry of a decision already written; nothing changed.
     AlreadyWritten {
@@ -98,6 +103,25 @@ pub enum Applied {
         /// Position of its record, when recorded.
         position: Option<u64>,
     },
+}
+
+/// A server-generated client secret: 256 random bits as base64url (CR-38). Shown to the
+/// caller once; only its digest is stored. It never appears in `Debug`.
+#[derive(PartialEq, Eq)]
+pub struct ClientSecret(String);
+
+impl ClientSecret {
+    /// The secret's text, to hand to the client's operator once.
+    #[must_use]
+    pub fn expose(&self) -> &str {
+        &self.0
+    }
+}
+
+impl core::fmt::Debug for ClientSecret {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str("ClientSecret(<redacted>)")
+    }
 }
 
 /// The identity plane's configuration service.
@@ -307,12 +331,58 @@ impl<D: Decider, G: Governance> Admin<'_, D, G> {
                 position: committed.position,
             });
         };
-        self.write(&mut t, &bound, &p.change).await?;
+        let secret = self.write(&mut t, &bound, &p.change).await?;
         t.commit().await?;
         Ok(Applied::Written {
             exercise: committed.exercise,
             position: committed.position,
+            secret,
         })
+    }
+
+    /// CR-38: a `client_secret_basic` client gets a fresh server-generated secret when it is
+    /// registered or switched to the method; an update that keeps the method keeps the secret.
+    async fn client_row(
+        &self,
+        t: &mut TenantTx,
+        c: &Client,
+    ) -> Result<(ClientRow, Option<ClientSecret>), AdminError> {
+        let (secret_hash, secret) = if c.auth == AuthMethod::ClientSecretBasic {
+            let kept = idp::client(t, c.id.as_str())
+                .await?
+                .filter(|r| r.active)
+                .and_then(|r| r.secret_hash);
+            if let Some(h) = kept {
+                (Some(h), None)
+            } else {
+                let raw = access_crypto::random::bytes::<32>().map_err(|_| AdminError::Encode)?;
+                let text = access_kernel::json::b64url_encode(&raw);
+                (
+                    Some(access_crypto::oauth::secret_digest(text.as_bytes())),
+                    Some(ClientSecret(text)),
+                )
+            }
+        } else {
+            (None, None)
+        };
+        let uris = |list: &[crate::domain::RedirectUri]| -> Vec<String> {
+            list.iter().map(|u| String::from(u.as_str())).collect()
+        };
+        Ok((
+            ClientRow {
+                client_uuid: self.ids.decode(CLIENT_PREFIX, c.id.as_str())?,
+                client_id: String::from(c.id.as_str()),
+                display_name: c.display_name.clone(),
+                auth_method: String::from(c.auth.name()),
+                jwks_uri: c.auth.jwks_uri().map(String::from),
+                redirect_uris: uris(&c.redirect_uris),
+                active: true,
+                secret_hash,
+                post_logout_redirect_uris: uris(&c.post_logout_redirect_uris),
+                backchannel_logout_uri: c.backchannel_logout_uri.clone(),
+            },
+            secret,
+        ))
     }
 
     async fn write(
@@ -320,28 +390,20 @@ impl<D: Decider, G: Governance> Admin<'_, D, G> {
         t: &mut TenantTx,
         bound: &idp::Bound,
         change: &Change,
-    ) -> Result<(), AdminError> {
-        let row = |c: &Client| -> Result<ClientRow, AdminError> {
-            Ok(ClientRow {
-                client_uuid: self.ids.decode(CLIENT_PREFIX, c.id.as_str())?,
-                client_id: String::from(c.id.as_str()),
-                display_name: c.display_name.clone(),
-                auth_method: String::from(c.auth.name()),
-                jwks_uri: c.auth.jwks_uri().map(String::from),
-                redirect_uris: c
-                    .redirect_uris
-                    .iter()
-                    .map(|u| String::from(u.as_str()))
-                    .collect(),
-                active: true,
-            })
-        };
+    ) -> Result<Option<ClientSecret>, AdminError> {
+        let mut secret = None;
         let done = match change {
             Change::ClientRegister(c) => {
-                idp::insert_client(t, bound, &row(c)?).await?;
+                let (row, s) = self.client_row(t, c).await?;
+                idp::insert_client(t, bound, &row).await?;
+                secret = s;
                 true
             }
-            Change::ClientUpdate(c) => idp::update_client(t, bound, &row(c)?).await?,
+            Change::ClientUpdate(c) => {
+                let (row, s) = self.client_row(t, c).await?;
+                secret = s;
+                idp::update_client(t, bound, &row).await?
+            }
             Change::ClientRetire(id) => idp::retire_client(t, bound, id.as_str()).await?,
             Change::MapperSet { claim, source } => {
                 idp::set_mapper(
@@ -359,7 +421,7 @@ impl<D: Decider, G: Governance> Admin<'_, D, G> {
             }
         };
         if done {
-            Ok(())
+            Ok(secret)
         } else {
             Err(AdminError::Conflict)
         }
