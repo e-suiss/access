@@ -257,6 +257,10 @@ pub(crate) const HMAC_ALLOWED: &[(&str, &str)] = &[
         "crates/crypto/src/dpop.rs",
         "CR-3 (b): DPoP server nonce, issued and checked by the same AS or RS (TN-29)",
     ),
+    (
+        "crates/crypto/src/webauthn.rs",
+        "CR-3 (a): deterministic decoy WebAuthn credential IDs (TN-97)",
+    ),
 ];
 
 const HMAC_TOKENS: &[&str] = &[

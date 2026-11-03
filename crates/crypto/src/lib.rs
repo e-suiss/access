@@ -11,6 +11,7 @@ pub mod random;
 pub mod sd_jwt;
 pub mod secret_file;
 pub mod token;
+pub mod webauthn;
 
 pub use suiss_crypto::{dit, envelope, secret};
 
