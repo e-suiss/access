@@ -145,12 +145,15 @@ name = "access-identity-oauth"
 version = "0.2.4"
 dependencies = [
  "access-crypto",
+ "access-identity-account",
+ "access-identity-session",
  "access-identity-signer",
  "access-store",
  "aws-lc-rs",
  "ed25519-dalek",
  "esuiss-access-kernel",
  "esuiss-crypto",
+ "serde",
  "serde_json",
  "thiserror",
  "tokio",

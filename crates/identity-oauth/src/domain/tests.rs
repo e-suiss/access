@@ -94,7 +94,7 @@ fn the_iss_parameter_carries_the_issuer() {
     );
 }
 
-// §10.4.6, §11.4.5: today only the issuer and the JWKS are declared; nothing unserved is
+// §10.4.6, §11.4.5: only the issuer and the JWKS are declared until endpoints are served
 const NONE: Served = Served {
     endpoints: &[],
     features: &[],
@@ -103,11 +103,29 @@ const NONE: Served = Served {
 #[test]
 fn only_served_endpoints_are_declared() {
     let i = Issuer::parse("https://acme.id.example").unwrap();
-    assert_eq!(SERVED, NONE);
-    let m = json(&authorization_server(&i, &SERVED));
+    let m = json(&authorization_server(&i, &NONE));
     let keys: Vec<&str> = m.keys().map(String::as_str).collect();
     assert_eq!(keys, ["issuer", "jwks_uri"]);
     assert_eq!(m["jwks_uri"], "https://acme.id.example/jwks.json");
+}
+
+// OP-146 I7, m.8 (d), §10.4.6: the served core declares its endpoints, DPoP and back-channel
+// logout, and no client ID metadata documents
+#[test]
+fn the_served_core_is_declared() {
+    let i = Issuer::parse("https://acme.id.example").unwrap();
+    let m = json(&authorization_server(&i, &SERVED));
+    assert_eq!(
+        m["end_session_endpoint"],
+        "https://acme.id.example/end-session"
+    );
+    assert_eq!(m["backchannel_logout_supported"], true);
+    assert_eq!(m["scopes_supported"], serde_json::json!(["openid"]));
+    assert_eq!(
+        m["grant_types_supported"],
+        serde_json::json!(["authorization_code", "refresh_token"])
+    );
+    assert!(!m.contains_key("client_id_metadata_document_supported"));
 }
 
 // §11.4.5 Access corrections, MD-3, RFC 9207, TN-11: once served, the corrected fields appear
@@ -167,7 +185,7 @@ fn served_endpoints_carry_the_access_corrections() {
 #[test]
 fn protected_resource_metadata_names_the_realm() {
     let i = Issuer::parse("https://acme.id.example").unwrap();
-    let m = json(&protected_resource(&i, &SERVED));
+    let m = json(&protected_resource(&i, &NONE));
     assert_eq!(m["resource"], "https://acme.id.example");
     assert_eq!(
         m["authorization_servers"],

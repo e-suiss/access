@@ -24,6 +24,8 @@ pub enum Endpoint {
     Revoke,
     /// `POST /introspect` (RFC 7662).
     Introspect,
+    /// `GET`/`POST /end-session` (OIDC RP-Initiated Logout 1.0).
+    EndSession,
 }
 
 impl Endpoint {
@@ -37,6 +39,7 @@ impl Endpoint {
             Self::Userinfo => "/userinfo",
             Self::Revoke => "/revoke",
             Self::Introspect => "/introspect",
+            Self::EndSession => "/end-session",
         }
     }
 }
@@ -49,6 +52,8 @@ pub enum Feature {
     Dpop,
     /// Client ID Metadata Documents.
     ClientIdMetadataDocument,
+    /// OIDC Back-Channel Logout 1.0 with `sid`.
+    BackchannelLogout,
 }
 
 /// What the realm's authorization server serves; the metadata declares nothing else (§10.4.6).
@@ -77,9 +82,20 @@ impl Served {
 /// The single list of what is in service. A slice that brings an endpoint or feature into
 /// service adds it here, and the metadata declares it from then on.
 pub const SERVED: Served = Served {
-    endpoints: &[],
-    features: &[],
+    endpoints: &[
+        Endpoint::Authorize,
+        Endpoint::Token,
+        Endpoint::Par,
+        Endpoint::Userinfo,
+        Endpoint::Revoke,
+        Endpoint::Introspect,
+        Endpoint::EndSession,
+    ],
+    features: &[Feature::Dpop, Feature::BackchannelLogout],
 };
+
+/// The protocol scopes the metadata declares (OP-146 m.5 (c)).
+const SCOPES: [&str; 1] = ["openid"];
 
 /// The JWKS path under the issuer (§11.4.5).
 pub const JWKS_PATH: &str = "/jwks.json";
@@ -123,6 +139,11 @@ pub fn authorization_server(issuer: &Issuer, served: &Served) -> String {
         );
         // MD-10, IDP-24
         m.insert("subject_types_supported".into(), json!(["pairwise"]));
+        m.insert("scopes_supported".into(), json!(SCOPES));
+        m.insert(
+            "prompt_values_supported".into(),
+            json!(["none", "login", "create"]),
+        );
         m.insert(
             "id_token_signing_alg_values_supported".into(),
             json!(SIGNING_ALGS),
@@ -160,6 +181,7 @@ pub fn authorization_server(issuer: &Issuer, served: &Served) -> String {
         (Endpoint::Userinfo, "userinfo_endpoint"),
         (Endpoint::Revoke, "revocation_endpoint"),
         (Endpoint::Introspect, "introspection_endpoint"),
+        (Endpoint::EndSession, "end_session_endpoint"),
     ] {
         if served.has(e) {
             m.insert(key.into(), issuer.endpoint(e.path()).into());
@@ -174,6 +196,13 @@ pub fn authorization_server(issuer: &Issuer, served: &Served) -> String {
     if served.feature(Feature::ClientIdMetadataDocument) {
         m.insert(
             "client_id_metadata_document_supported".into(),
+            Value::Bool(true),
+        );
+    }
+    if served.feature(Feature::BackchannelLogout) {
+        m.insert("backchannel_logout_supported".into(), Value::Bool(true));
+        m.insert(
+            "backchannel_logout_session_supported".into(),
             Value::Bool(true),
         );
     }

@@ -2,7 +2,7 @@
 
 use std::sync::Mutex;
 
-use access_store::identity::RealmId;
+use access_store::identity::{RealmId, TenantId};
 
 use super::*;
 use crate::domain::issuer::Issuer;
@@ -69,6 +69,7 @@ impl Keys for FakeKeys {
 
 fn realm(n: u8, slug: &str, issuer: &str) -> RealmEntry {
     RealmEntry {
+        tenant: TenantId::from_bytes([n; 16]),
         realm: RealmId::from_bytes([n; 16]),
         slug: slug.to_owned(),
         issuer: Issuer::parse(issuer).unwrap(),

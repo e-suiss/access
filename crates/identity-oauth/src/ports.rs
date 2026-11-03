@@ -2,16 +2,19 @@
 //! reads (OP-132 m.3), and the realm keys the identity signer publishes (CMP-22b).
 
 pub mod dpop;
+pub mod oauth;
 
 use std::future::Future;
 
-use access_store::identity::RealmId;
+use access_store::identity::{RealmId, TenantId};
 
 use crate::domain::issuer::Issuer;
 
 /// A live realm as the router sees it.
 #[derive(Clone)]
 pub struct RealmEntry {
+    /// The tenant that owns it (routing context only, TN-1).
+    pub tenant: TenantId,
     /// The realm.
     pub realm: RealmId,
     /// Its immutable slug (TN-16).

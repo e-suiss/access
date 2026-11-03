@@ -12,7 +12,7 @@ use access_http::realm::router;
 use access_identity_oauth::app::Discovery;
 use access_identity_oauth::domain::issuer::Issuer;
 use access_identity_oauth::ports::{Directory, Keys, RealmEntry, Unavailable};
-use access_store::identity::RealmId;
+use access_store::identity::{RealmId, TenantId};
 use axum::Router;
 use axum::body::Body;
 use axum::http::{Request, StatusCode, header};
@@ -23,6 +23,7 @@ struct Rows;
 
 fn entry(n: u8, slug: &str, issuer: &str) -> RealmEntry {
     RealmEntry {
+        tenant: TenantId::from_bytes([n; 16]),
         realm: RealmId::from_bytes([n; 16]),
         slug: slug.to_owned(),
         issuer: Issuer::parse(issuer).unwrap(),

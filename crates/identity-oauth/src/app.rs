@@ -3,6 +3,7 @@
 //! (§17.9.6, TN-10), and the start-up checks of the identity plane (OP-138).
 
 pub mod dpop;
+pub mod oauth;
 
 use crate::domain::issuer::{IssuerStyle, PATH_PREFIX, RealmBase, check_slug};
 use crate::domain::metadata::{self, Document, SERVED, Served};
@@ -65,6 +66,34 @@ fn host_of(authority: &str) -> Option<String> {
     ok.then(|| host.to_ascii_lowercase())
 }
 
+/// The realm a request reached: `Host` selects it, through its hostname or, for a path
+/// issuer, its slug; the realm's stored issuer must name the origin and path the request
+/// used, or there is no realm here (§17.9.6).
+///
+/// # Errors
+/// [`Unavailable`].
+pub async fn resolve<D: Directory>(
+    directory: &D,
+    authority: &str,
+    slug: Option<&str>,
+) -> Result<Option<RealmEntry>, Unavailable> {
+    let Some(host) = host_of(authority) else {
+        return Ok(None);
+    };
+    let entry = match slug {
+        None => directory.by_host(&host).await?,
+        Some(s) if check_slug(s).is_ok() => directory.by_slug(s).await?,
+        Some(_) => None,
+    };
+    Ok(entry.filter(|e| {
+        let path = e.issuer.path();
+        e.issuer.serves(authority)
+            && slug.map_or(path.is_empty(), |s| {
+                path.strip_prefix(PATH_PREFIX).is_some_and(|p| p == s)
+            })
+    }))
+}
+
 impl<D: Directory, K: Keys> Discovery<D, K> {
     /// A service declaring what [`SERVED`] lists.
     pub const fn new(directory: D, keys: K) -> Self {
@@ -86,21 +115,7 @@ impl<D: Directory, K: Keys> Discovery<D, K> {
         authority: &str,
         slug: Option<&str>,
     ) -> Result<Option<RealmEntry>, Unavailable> {
-        let Some(host) = host_of(authority) else {
-            return Ok(None);
-        };
-        let entry = match slug {
-            None => self.directory.by_host(&host).await?,
-            Some(s) if check_slug(s).is_ok() => self.directory.by_slug(s).await?,
-            Some(_) => None,
-        };
-        Ok(entry.filter(|e| {
-            let path = e.issuer.path();
-            e.issuer.serves(authority)
-                && slug.map_or(path.is_empty(), |s| {
-                    path.strip_prefix(PATH_PREFIX).is_some_and(|p| p == s)
-                })
-        }))
+        resolve(&self.directory, authority, slug).await
     }
 
     /// Serves `doc` for a request to `authority`, with `slug` from a path-issuer route.

@@ -2,6 +2,7 @@
 //! identity signer over its Unix socket (CMP-22b).
 
 pub mod dpop;
+pub mod oauth;
 
 use std::path::PathBuf;
 
@@ -33,6 +34,7 @@ impl PgDirectory {
 fn entry(r: RealmRoute) -> Option<RealmEntry> {
     Some(RealmEntry {
         issuer: Issuer::parse(&r.issuer).ok()?,
+        tenant: r.tenant,
         realm: r.realm,
         slug: r.slug,
     })
