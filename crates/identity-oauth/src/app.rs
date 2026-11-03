@@ -2,6 +2,7 @@
 //! documents carry the issuer stored on the realm's row, never one built from the request
 //! (§17.9.6, TN-10), and the start-up checks of the identity plane (OP-138).
 
+pub mod backchannel;
 pub mod dpop;
 pub mod oauth;
 

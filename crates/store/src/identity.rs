@@ -178,8 +178,12 @@ impl TenantTx {
 }
 
 /// One delivered outbox event.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct OutboxEvent {
+    /// The tenant that wrote it.
+    pub tenant: TenantId,
+    /// The realm that wrote it.
+    pub realm: RealmId,
     /// Writing transaction id (xid8).
     pub xid: u64,
     /// Row id, the order within one transaction.
@@ -197,6 +201,16 @@ pub struct Cursor {
     pub xid: u64,
     /// Its row id.
     pub id: i64,
+}
+
+impl core::fmt::Debug for OutboxEvent {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("OutboxEvent")
+            .field("xid", &self.xid)
+            .field("id", &self.id)
+            .field("kind", &self.kind)
+            .finish_non_exhaustive()
+    }
 }
 
 impl OutboxEvent {
@@ -243,7 +257,7 @@ pub async fn poll(
 ) -> Result<Vec<OutboxEvent>, StoreError> {
     let after_xid = i64::try_from(after.xid).map_err(|_| StoreError::Range)?;
     let rows = sqlx::query!(
-        r#"SELECT xid::text::bigint AS "xid!", id, kind, payload FROM access.identity_outbox
+        r#"SELECT tenant_id, realm_id, xid::text::bigint AS "xid!", id, kind, payload FROM access.identity_outbox
             WHERE xid < pg_snapshot_xmin(pg_current_snapshot())
               AND (xid, id) > ($1::bigint::text::xid8, $2)
             ORDER BY xid, id
@@ -257,6 +271,8 @@ pub async fn poll(
     rows.into_iter()
         .map(|r| {
             Ok(OutboxEvent {
+                tenant: TenantId(r.tenant_id),
+                realm: RealmId(r.realm_id),
                 xid: xid(Some(r.xid))?,
                 id: r.id,
                 kind: r.kind,

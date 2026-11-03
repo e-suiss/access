@@ -454,7 +454,9 @@ impl TenantTx {
         Ok(())
     }
 
-    /// Ends a session; false when it was already ended.
+    /// Ends a session; false when it was already ended. Its live grants are revoked in the
+    /// same transaction (G57) and those of clients with a back-channel endpoint are queued for
+    /// a logout notice (§10.4.6).
     ///
     /// # Errors
     /// [`StoreError`].
@@ -477,7 +479,30 @@ impl TenantTx {
         .execute(&mut *self.tx)
         .await?
         .rows_affected();
-        Ok(n == 1)
+        if n != 1 {
+            return Ok(false);
+        }
+        let grant_reason = if reason == "epoch" { "epoch" } else { "logout" };
+        let notify = sqlx::query_scalar!(
+            "WITH revoked AS (
+               UPDATE access.oauth_grants SET revoked_ms = $4, revoke_reason = $5
+                WHERE tenant_id = $1 AND realm_id = $2 AND session_id = $3 AND revoked_ms IS NULL
+               RETURNING grant_id, client_uuid)
+             SELECT r.grant_id FROM revoked r
+               JOIN access.idp_clients c
+                 ON c.tenant_id = $1 AND c.realm_id = $2 AND c.client_uuid = r.client_uuid
+              WHERE c.backchannel_logout_uri IS NOT NULL
+              ORDER BY r.grant_id",
+            tenant,
+            realm,
+            uuid(id),
+            at_ms,
+            grant_reason,
+        )
+        .fetch_all(&mut *self.tx)
+        .await?;
+        self.queue_backchannel_logout(&notify).await?;
+        Ok(true)
     }
 
     /// Carries a live session from epoch `from` to epoch `to` with a new authentication

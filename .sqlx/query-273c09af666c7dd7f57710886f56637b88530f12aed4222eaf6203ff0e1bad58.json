@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT c.relname::text AS \"name!\" FROM pg_inherits i\n             JOIN pg_class c ON c.oid = i.inhrelid\n             JOIN pg_class p ON p.oid = i.inhparent\n             JOIN pg_namespace n ON n.oid = p.relnamespace\n            WHERE n.nspname = 'access' AND p.relname = $1\n            ORDER BY 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "name!",
+        "type_info": "Text",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Name"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "273c09af666c7dd7f57710886f56637b88530f12aed4222eaf6203ff0e1bad58"
+}

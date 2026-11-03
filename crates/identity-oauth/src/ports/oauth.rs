@@ -6,7 +6,8 @@
 use std::future::Future;
 
 use access_crypto::jose::JwsAlg;
-use access_store::identity::{RealmId, TenantId};
+use access_store::backchannel::LogoutUndelivered;
+use access_store::identity::{Cursor, OutboxEvent, RealmId, TenantId};
 use access_store::idp::ClientRow;
 use access_store::oauth::{
     CodeRow, GrantRow, NewCode, NewGrant, NewRequest, RefreshRow, RequestRow,
@@ -31,6 +32,8 @@ pub trait OAuthTx: Send {
     ) -> impl Future<Output = Result<Option<ClientRow>, Unavailable>> + Send;
     /// The realm's JOSE algorithm (OP-146 m.8 (e)).
     fn jose_alg(&mut self) -> impl Future<Output = Result<JwsAlg, Unavailable>> + Send;
+    /// The issuer stored on the realm's row (§17.9.6); `None` for a realm without one.
+    fn issuer(&mut self) -> impl Future<Output = Result<Option<Issuer>, Unavailable>> + Send;
     /// Stores a pending request.
     fn insert_request(
         &mut self,
@@ -212,4 +215,53 @@ pub trait Random: Send + Sync {
     /// # Errors
     /// [`Unavailable`].
     fn fill(&self, out: &mut [u8]) -> Result<(), Unavailable>;
+}
+
+/// Why a logout notice did not reach a client (OIDC Back-Channel Logout 1.0 §2.8).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PostFailure {
+    /// Worth trying again: no answer, `408`, `429` or a `5xx` other than `501`.
+    Transient {
+        /// The client's `Retry-After`, ms.
+        retry_after_ms: Option<u64>,
+    },
+    /// The client answered with a status that will not change.
+    Rejected {
+        /// The status.
+        status: u16,
+    },
+    /// Not sent: the endpoint is not one Access posts to (scheme, address, SSRF guard).
+    Refused,
+}
+
+/// A client's back-channel logout endpoint (§10.4.6).
+pub trait LogoutDelivery: Send + Sync {
+    /// Posts `logout_token` to `uri` as `application/x-www-form-urlencoded`.
+    fn post(
+        &self,
+        uri: &str,
+        logout_token: &str,
+    ) -> impl Future<Output = Result<(), PostFailure>> + Send;
+}
+
+/// The outbox as the back-channel courier reads it (OP-131): its own cursor, and the record of
+/// what it passed without delivering (OP-73).
+pub trait LogoutQueue: Send + Sync {
+    /// The courier's cursor.
+    fn cursor(&self) -> impl Future<Output = Result<Cursor, Unavailable>> + Send;
+    /// Outbox events after `after`, in `(xid, id)` order.
+    fn poll(
+        &self,
+        after: Cursor,
+        limit: u32,
+    ) -> impl Future<Output = Result<Vec<OutboxEvent>, Unavailable>> + Send;
+    /// Moves the cursor forward to `at`.
+    fn ack(&self, at: Cursor) -> impl Future<Output = Result<(), Unavailable>> + Send;
+    /// Records a grant whose notice was not delivered, once.
+    fn undelivered(
+        &self,
+        tenant: TenantId,
+        realm: RealmId,
+        record: &LogoutUndelivered,
+    ) -> impl Future<Output = Result<(), Unavailable>> + Send;
 }

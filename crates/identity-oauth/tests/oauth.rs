@@ -24,16 +24,18 @@ use access_crypto::Secret;
 use access_crypto::dpop::{MAX_STALE_MS, NonceKey, NoncePolicy, NonceRing, Role};
 use access_crypto::jose::JwsAlg;
 use access_crypto::oauth::secret_digest;
+use access_identity_account::notify::delivery::Backoff;
 use access_identity_oauth::adapters::dpop::PgReplayCache;
-use access_identity_oauth::adapters::oauth::{HostedPages, OsRandom, PgOAuth};
+use access_identity_oauth::adapters::oauth::{HostedPages, OsRandom, PgLogoutQueue, PgOAuth};
 use access_identity_oauth::adapters::{PgDirectory, SignerKeys};
+use access_identity_oauth::app::backchannel::Courier;
 use access_identity_oauth::app::oauth::{Env, OAuth, Realm, Reply, TokenHttp};
 use access_identity_oauth::domain::dpop::DpopProfile;
 use access_identity_oauth::domain::issuer::{IssuerStyle, RealmBase};
 use access_identity_oauth::domain::request::Params;
 use access_identity_oauth::ports::Unavailable;
 use access_identity_oauth::ports::dpop::{Clock, ClockUnavailable};
-use access_identity_oauth::ports::oauth::ClientKeys;
+use access_identity_oauth::ports::oauth::{ClientKeys, LogoutDelivery, PostFailure};
 use access_identity_session::domain::assurance::{Factor, vector};
 use access_identity_session::domain::session::cookie_digest;
 use access_identity_signer::adapters::{DirVault, SealedFactory, now_ms, serve};
@@ -48,7 +50,7 @@ use access_store::authority::{
     CommitBatch, HeadRow, LogRecord, NonceRow, acquire_lease, commit_batch, create_domain,
 };
 use access_store::dpop::open_dpop_replay_day;
-use access_store::identity::{Cursor, RealmId, TenantId, TenantTx, poll};
+use access_store::identity::{RealmId, TenantId, TenantTx};
 use access_store::idp::{ClientRow, Decision, bind, create_settings, insert_client};
 use access_store::scope::DomainId;
 use access_store::sessions::NewSession;
@@ -278,6 +280,7 @@ struct World {
     dpop_key: EcdsaKeyPair,
     client_key: EcdsaKeyPair,
     keys: StaticKeys,
+    socket: PathBuf,
 }
 
 fn client(n: u8, id: &str, method: &str) -> ClientRow {
@@ -377,7 +380,7 @@ async fn world() -> World {
     );
     let env = TestEnv {
         db: PgOAuth::new(db.app.clone()),
-        signer: SignerKeys::new(socket),
+        signer: SignerKeys::new(socket.clone()),
         keys: keys.clone(),
         directory: PgDirectory::new(db.router.clone()),
         pool: db.app.clone(),
@@ -396,6 +399,7 @@ async fn world() -> World {
         dpop_key: EcdsaKeyPair::generate(&ECDSA_P256_SHA256_FIXED_SIGNING).unwrap(),
         client_key,
         keys,
+        socket,
     };
     w.cookie = w.sign_in(now() - 60_000).await;
     w
@@ -1123,26 +1127,152 @@ async fn logout_ends_the_session_and_notifies_clients() {
     );
     let to = location(&w.authorize(&[("prompt", "none")], Some(&w.cookie)).await);
     assert_eq!(query(&to, "error"), "login_required");
-    let deadline = std::time::Instant::now() + Duration::from_secs(20);
-    let logout: Vec<Value> = loop {
-        let found: Vec<Value> = poll(&w.db.reader, Cursor::default(), 100)
-            .await
-            .unwrap()
-            .iter()
-            .filter(|e| e.kind == "oauth.backchannel_logout")
-            .map(|e| serde_json::from_slice(&e.payload).unwrap())
-            .collect();
-        if !found.is_empty() {
-            break found;
-        }
-        assert!(std::time::Instant::now() < deadline, "no logout event");
-        tokio::time::sleep(Duration::from_millis(20)).await;
-    };
-    assert_eq!(logout.len(), 1);
-    assert_eq!(logout[0]["uri"], "https://shop.example/backchannel");
-    let lt = claims(logout[0]["logout_token"].as_str().unwrap());
+    let courier = w.courier(Posted::default());
+    let delivered = deliver(&courier, 1).await;
+    assert_eq!(delivered.len(), 1);
+    assert_eq!(delivered[0].0, "https://shop.example/backchannel");
+    let lt = claims(&delivered[0].1);
     assert_eq!(lt["aud"], PUBLIC);
+    assert_eq!(lt["iss"], ISSUER);
     assert_eq!(lt["sid"], claims(id_token)["sid"]);
+    assert_eq!(lt["sub"], claims(id_token)["sub"]);
     assert!(lt.get("nonce").is_none());
     assert!(lt["events"]["http://schemas.openid.net/event/backchannel-logout"].is_object());
+    let again = courier.step().await.unwrap();
+    assert_eq!((again.delivered, again.undelivered), (0, 0));
+}
+
+/// Posts made and answers left.
+type Script = (Vec<(String, String)>, Vec<Result<(), PostFailure>>);
+
+/// A client endpoint that answers from a script, then 200.
+#[derive(Clone, Default)]
+struct Posted(Arc<Mutex<Script>>);
+
+impl Posted {
+    fn scripted(answers: Vec<Result<(), PostFailure>>) -> Self {
+        Self(Arc::new(Mutex::new((Vec::new(), answers))))
+    }
+
+    fn sent(&self) -> Vec<(String, String)> {
+        self.0.lock().unwrap().0.clone()
+    }
+}
+
+impl LogoutDelivery for Posted {
+    fn post(&self, uri: &str, token: &str) -> impl Future<Output = Result<(), PostFailure>> {
+        let mut g = self.0.lock().unwrap();
+        g.0.push((String::from(uri), String::from(token)));
+        let answer = if g.1.is_empty() {
+            Ok(())
+        } else {
+            g.1.remove(0)
+        };
+        std::future::ready(answer)
+    }
+}
+
+type TestCourier = Courier<PgOAuth, SignerKeys, OsRandom, SysClock, PgLogoutQueue, Posted>;
+
+impl World {
+    fn courier(&self, posted: Posted) -> TestCourier {
+        Courier::new(
+            PgOAuth::new(self.db.app.clone()),
+            SignerKeys::new(self.socket.clone()),
+            OsRandom,
+            SysClock,
+            PgLogoutQueue {
+                reader: self.db.reader.clone(),
+                app: self.db.app.clone(),
+            },
+            posted,
+            Backoff {
+                base_ms: 1,
+                max_ms: 2,
+            },
+        )
+    }
+}
+
+/// Steps the courier until `n` posts were made; the outbox shows a commit once every older
+/// transaction ended.
+async fn deliver(courier: &TestCourier, n: usize) -> Vec<(String, String)> {
+    let deadline = std::time::Instant::now() + Duration::from_secs(20);
+    loop {
+        courier.step().await.unwrap();
+        let sent = courier.delivery().sent();
+        if sent.len() >= n {
+            return sent;
+        }
+        assert!(std::time::Instant::now() < deadline, "no logout delivered");
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+}
+
+// TN-50, MD-7, §10.4.6, OP-73, Back-Channel Logout 1.0 §2.8: a session_epoch step (sign out
+// everywhere, disablement) revokes the grants and notifies their clients; a transient failure
+// is retried, a final refusal is recorded once and passed
+#[tokio::test]
+async fn an_epoch_step_notifies_clients_and_records_refusals() {
+    let w = world().await;
+    let code = w.code(PUBLIC).await;
+    body(&w.exchange(&code).await, 200);
+    let mut tx = TenantTx::begin(&w.db.app, w.realm.tenant, w.realm.realm)
+        .await
+        .unwrap();
+    tx.end_sessions(w.subject).await.unwrap();
+    tx.commit().await.unwrap();
+    let courier = w.courier(Posted::scripted(vec![
+        Err(PostFailure::Transient {
+            retry_after_ms: None,
+        }),
+        Err(PostFailure::Rejected { status: 400 }),
+    ]));
+    let sent = deliver(&courier, 1).await;
+    assert_eq!(sent.len(), 1);
+    let retried = courier.step().await.unwrap();
+    assert_eq!((retried.delivered, retried.undelivered), (0, 1));
+    let mut tx = TenantTx::begin(&w.db.app, w.realm.tenant, w.realm.realm)
+        .await
+        .unwrap();
+    let recorded = tx.list_backchannel_undelivered(10).await.unwrap();
+    tx.commit().await.unwrap();
+    assert_eq!(recorded.len(), 1);
+    assert_eq!(
+        (recorded[0].reason.as_str(), recorded[0].client_status),
+        ("rejected", Some(400))
+    );
+    let after = courier.step().await.unwrap();
+    assert_eq!((after.delivered, after.undelivered), (0, 0));
+    assert_eq!(courier.delivery().sent().len(), 2);
+}
+
+// G57, §10.4.6: the hosted login's sign-out ends the session in the store, which revokes its
+// grants and queues their notices in the same transaction
+#[tokio::test]
+async fn a_session_end_notifies_clients() {
+    let w = world().await;
+    let code = w.code(PUBLIC).await;
+    let t = body(&w.exchange(&code).await, 200);
+    let mut tx = TenantTx::begin(&w.db.app, w.realm.tenant, w.realm.realm)
+        .await
+        .unwrap();
+    let value: [u8; 32] = b64url_decode(&w.cookie).unwrap().try_into().unwrap();
+    let session = tx
+        .session_by_cookie(&cookie_digest(&value))
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(tx.end_session(session.id, 1, "logout").await.unwrap());
+    tx.commit().await.unwrap();
+    assert_eq!(
+        error(&w.refresh(t["refresh_token"].as_str().unwrap()).await),
+        "invalid_grant"
+    );
+    let courier = w.courier(Posted::default());
+    let sent = deliver(&courier, 1).await;
+    assert_eq!(
+        claims(&sent[0].1)["sid"],
+        claims(t["id_token"].as_str().unwrap())["sid"]
+    );
 }

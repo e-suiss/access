@@ -153,10 +153,14 @@ dependencies = [
  "ed25519-dalek",
  "esuiss-access-kernel",
  "esuiss-crypto",
+ "httparse",
+ "rustls",
  "serde",
  "serde_json",
  "thiserror",
  "tokio",
+ "tokio-rustls",
+ "tracing",
 ]
 
 [[package]]

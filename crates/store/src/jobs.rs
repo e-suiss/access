@@ -94,6 +94,50 @@ pub async fn claim(
     Ok(jobs)
 }
 
+/// Claims up to `limit` due jobs of `kind` only, as [`claim`] does; a runner that knows one
+/// kind leaves the others to theirs.
+///
+/// # Errors
+/// [`StoreError`].
+pub async fn claim_kind(
+    app: &PgPool,
+    worker: &str,
+    kind: &str,
+    limit: u32,
+    lease: Duration,
+) -> Result<Vec<Job>, StoreError> {
+    let rows = sqlx::query!(
+        "UPDATE access_ops.jobs j
+            SET claimed_by = $1, claimed_until = now() + $3::bigint * interval '1 millisecond',
+                attempts = j.attempts + 1
+          WHERE j.id IN (
+                SELECT id FROM access_ops.jobs
+                 WHERE done_at IS NULL AND run_at <= now() AND kind = $4
+                   AND (claimed_until IS NULL OR claimed_until < now())
+                 ORDER BY run_at, id
+                 LIMIT $2
+                 FOR UPDATE SKIP LOCKED)
+          RETURNING j.id, j.kind, j.subject, j.attempts",
+        worker,
+        i64::from(limit),
+        millis(lease)?,
+        kind,
+    )
+    .fetch_all(app)
+    .await?;
+    let mut jobs: Vec<Job> = rows
+        .into_iter()
+        .map(|r| Job {
+            id: r.id,
+            kind: r.kind,
+            subject: r.subject,
+            attempts: r.attempts,
+        })
+        .collect();
+    jobs.sort_by_key(|j| j.id);
+    Ok(jobs)
+}
+
 /// Marks a job done once its result is in a durable record. Only the current claimant can;
 /// returns whether this call finished it.
 ///

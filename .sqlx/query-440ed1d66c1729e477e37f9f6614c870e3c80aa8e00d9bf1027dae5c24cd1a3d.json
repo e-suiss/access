@@ -1,0 +1,32 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "WITH revoked AS (\n               UPDATE access.oauth_grants SET revoked_ms = $4, revoke_reason = $5\n                WHERE tenant_id = $1 AND realm_id = $2 AND session_id = $3 AND revoked_ms IS NULL\n               RETURNING grant_id, client_uuid)\n             SELECT r.grant_id FROM revoked r\n               JOIN access.idp_clients c\n                 ON c.tenant_id = $1 AND c.realm_id = $2 AND c.client_uuid = r.client_uuid\n              WHERE c.backchannel_logout_uri IS NOT NULL\n              ORDER BY r.grant_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "grant_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_grants",
+            "name": "grant_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Int8",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "440ed1d66c1729e477e37f9f6614c870e3c80aa8e00d9bf1027dae5c24cd1a3d"
+}

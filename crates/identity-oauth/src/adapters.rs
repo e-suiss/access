@@ -1,8 +1,10 @@
 //! Adapters of the realm ports: the router role's view of the realm rows (OP-132 m.3) and the
 //! identity signer over its Unix socket (CMP-22b).
 
+pub mod clients;
 pub mod dpop;
 pub mod oauth;
+pub mod outbound;
 
 use std::path::PathBuf;
 
@@ -81,6 +83,22 @@ impl SignerKeys {
 
     async fn ask(&self, request: &Request) -> Result<Response, Unavailable> {
         call(&self.socket, request).await.map_err(|_| Unavailable)
+    }
+
+    /// Opens the key set of `realm` with `alg`, or makes its next keys use `alg` (OP-146
+    /// m.16 (m), m.8 (e)).
+    ///
+    /// # Errors
+    /// [`Unavailable`].
+    pub async fn open(&self, realm: RealmId, alg: JwsAlg) -> Result<(), Unavailable> {
+        let open = Request::Open {
+            realm: Realm(*realm.as_bytes()),
+            alg,
+        };
+        match self.ask(&open).await? {
+            Response::Opened => Ok(()),
+            _ => Err(Unavailable),
+        }
     }
 }
 

@@ -1,11 +1,13 @@
-//! Adapters of the authorization server ports: the realm's PostgreSQL rows, the identity
-//! signer, the hosted login's paths and the operating system's randomness.
+//! Adapters of the authorization server ports: the realm's PostgreSQL rows, the back-channel
+//! courier's outbox, the identity signer, the hosted login's paths and the operating system's
+//! randomness.
 
 use access_crypto::jose::JwsAlg;
 use access_identity_signer::protocol::{Realm, Request, Response};
 use access_identity_signer::service::UNKNOWN_REALM;
 use access_store::Pool;
-use access_store::identity::{RealmId, TenantId, TenantTx};
+use access_store::backchannel::LogoutUndelivered;
+use access_store::identity::{self, Cursor, OutboxEvent, RealmId, TenantId, TenantTx};
 use access_store::idp::{self, ClientRow};
 use access_store::oauth::{
     CodeRow, GrantRow, NewCode, NewGrant, NewRequest, RefreshRow, RequestRow,
@@ -13,9 +15,10 @@ use access_store::oauth::{
 use access_store::sessions::SessionRow;
 
 use crate::adapters::SignerKeys;
+use crate::app::backchannel::CONSUMER;
 use crate::domain::issuer::{Issuer, form_encode};
 use crate::domain::tokens::LoginReason;
-use crate::ports::oauth::{LoginPages, OAuthDb, OAuthTx, Random, TokenSigner};
+use crate::ports::oauth::{LoginPages, LogoutQueue, OAuthDb, OAuthTx, Random, TokenSigner};
 use crate::ports::{Keys, Unavailable};
 
 /// The realm rows over the application pool.
@@ -65,6 +68,12 @@ impl OAuthTx for PgOAuthTx {
             Some("Ed25519") => JwsAlg::Ed25519,
             _ => JwsAlg::Es256,
         })
+    }
+
+    async fn issuer(&mut self) -> Result<Option<Issuer>, Unavailable> {
+        let g = idp::governance(&mut self.0).await.map_err(down)?;
+        Ok(g.and_then(|g| g.issuer)
+            .and_then(|i| Issuer::parse(&i).ok()))
     }
 
     async fn insert_request(&mut self, r: &NewRequest<'_>) -> Result<(), Unavailable> {
@@ -242,6 +251,47 @@ impl TokenSigner for SignerKeys {
 
     async fn jwks(&self, realm: RealmId) -> Result<String, Unavailable> {
         Keys::jwks(self, realm).await
+    }
+}
+
+/// The back-channel courier's outbox and cursor as `access_outbox_reader` (OP-131 m.3), its
+/// records as `access_app` under the realm's scope (OP-12).
+#[derive(Clone)]
+pub struct PgLogoutQueue {
+    /// Logged in as a member of `access_outbox_reader`.
+    pub reader: Pool,
+    /// Logged in as a member of `access_app`.
+    pub app: Pool,
+}
+
+impl LogoutQueue for PgLogoutQueue {
+    async fn cursor(&self) -> Result<Cursor, Unavailable> {
+        identity::cursor(&self.reader, CONSUMER).await.map_err(down)
+    }
+
+    async fn poll(&self, after: Cursor, limit: u32) -> Result<Vec<OutboxEvent>, Unavailable> {
+        identity::poll(&self.reader, after, limit)
+            .await
+            .map_err(down)
+    }
+
+    async fn ack(&self, at: Cursor) -> Result<(), Unavailable> {
+        identity::ack(&self.reader, CONSUMER, at)
+            .await
+            .map_err(down)
+    }
+
+    async fn undelivered(
+        &self,
+        tenant: TenantId,
+        realm: RealmId,
+        record: &LogoutUndelivered,
+    ) -> Result<(), Unavailable> {
+        let mut tx = TenantTx::begin(&self.app, tenant, realm)
+            .await
+            .map_err(down)?;
+        tx.backchannel_undelivered(record).await.map_err(down)?;
+        tx.commit().await.map_err(down)
     }
 }
 

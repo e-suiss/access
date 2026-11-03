@@ -1,20 +1,20 @@
 //! OIDC RP-Initiated Logout 1.0 and Back-Channel Logout 1.0 (§10.4.6): a sign-out tied to the
 //! browser's session by a valid `id_token_hint` ends the session and revokes its grants in one
-//! transaction (G57); a logout token for every client with a back-channel endpoint is queued
-//! in the same transaction. Delivery is best effort; revocation does not rest on it (MD-7).
+//! transaction (G57); a logout notice for every client with a back-channel endpoint is queued
+//! in the same transaction and delivered by [`crate::app::backchannel`]. Delivery is best
+//! effort; revocation does not rest on it (MD-7).
 
 use access_crypto::AwsLcBackend;
 use access_identity_session::domain::session::cookie_digest;
-use access_kernel::json::{self, Json, b64url_decode, b64url_encode};
+use access_kernel::json::{self, Json, b64url_decode};
 use access_kernel::verify::jws::{MAX_PAYLOAD, Origin, verify_compact};
-use serde_json::json;
 
 use super::{Env, OAuth, Realm, Reply, decode32, session_live, signed};
 use crate::domain::client::Client;
 use crate::domain::issuer::form_encode;
 use crate::domain::jwt::realm_key_set;
 use crate::domain::request::Params;
-use crate::domain::tokens::{ID_TYP, LOGOUT_OUTBOX, LOGOUT_TYP, logout_token_claims};
+use crate::domain::tokens::ID_TYP;
 use crate::ports::Unavailable;
 use crate::ports::oauth::{LoginPages, OAuthTx, TokenSigner};
 
@@ -130,53 +130,9 @@ impl<E: Env> OAuth<E> {
                 self.env.pages().confirm_sign_out(&realm.issuer),
             ));
         }
+        // G57, §10.4.6
         tx.end_session(session.id, signed(now), "logout").await?;
-        self.revoke_session_grants(&mut tx, realm, session.id, now)
-            .await?;
         tx.commit().await?;
         Ok(Reply::Redirect(target))
-    }
-
-    /// Revokes the live grants of a session that ended and queues a logout token for every
-    /// client with a back-channel endpoint, in the caller's transaction (G57, §10.4.6).
-    pub(crate) async fn revoke_session_grants(
-        &self,
-        tx: &mut <E::Db as crate::ports::oauth::OAuthDb>::Tx,
-        realm: &Realm,
-        session: [u8; 16],
-        now: u64,
-    ) -> Result<(), Unavailable> {
-        let alg = tx.jose_alg().await?;
-        for g in tx.session_grants(session).await? {
-            tx.revoke_grant(g.id, signed(now), "logout").await?;
-            let Some(client) = tx
-                .client_by_uuid(g.client)
-                .await?
-                .and_then(Client::from_row)
-            else {
-                continue;
-            };
-            let Some(uri) = client.backchannel_logout_uri.clone() else {
-                continue;
-            };
-            let sub = self.pairwise(tx, g.subject, client.uuid).await?;
-            let jti = b64url_encode(&self.random::<16>()?);
-            let claims = logout_token_claims(
-                &realm.issuer,
-                &client.id,
-                &sub,
-                &b64url_encode(&g.sid),
-                &jti,
-                now,
-            );
-            let token = self
-                .env
-                .signer()
-                .sign(realm.realm, alg, LOGOUT_TYP, &claims, now)
-                .await?;
-            let payload = json!({ "uri": uri, "logout_token": token }).to_string();
-            tx.outbox(LOGOUT_OUTBOX, payload.as_bytes()).await?;
-        }
-        Ok(())
     }
 }

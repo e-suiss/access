@@ -1,0 +1,54 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT grant_id, reason, client_status FROM access.backchannel_undelivered\n              WHERE tenant_id = $1 AND realm_id = $2\n              ORDER BY outbox_xid, outbox_id, grant_id LIMIT $3",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "grant_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.backchannel_undelivered",
+            "name": "grant_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "reason",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.backchannel_undelivered",
+            "name": "reason"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "client_status",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "access.backchannel_undelivered",
+            "name": "client_status"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "252a272cd8d3511fff71e625ead36e4121b3848d5db8a5604ffb9120c959d1f0"
+}

@@ -1,11 +1,13 @@
-//! The realm's replay cache in the cell's PostgreSQL (TN-30, OP-129 m.5, OP-146 m.5 (f)).
+//! The realm's replay cache in the cell's PostgreSQL (TN-30, OP-129 m.5, OP-146 m.5 (f)), and
+//! the host's clock.
 
 use std::future::Future;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use access_store::Pool;
 use access_store::identity::{RealmId, TenantId, TenantTx};
 
-use crate::ports::dpop::{CacheUnavailable, ReplayCache};
+use crate::ports::dpop::{CacheUnavailable, Clock, ClockUnavailable, ReplayCache};
 
 /// The replay cache of one realm; each key is committed before the request goes on, so a
 /// later failure of the request does not free the proof for reuse.
@@ -25,6 +27,20 @@ impl PgReplayCache {
             tenant,
             realm,
         }
+    }
+}
+
+/// The host's clock; a clock before the Unix epoch is unavailable, never zero.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct SystemClock;
+
+impl Clock for SystemClock {
+    fn now(&self) -> Result<u64, ClockUnavailable> {
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .ok()
+            .and_then(|d| u64::try_from(d.as_millis()).ok())
+            .ok_or(ClockUnavailable)
     }
 }
 

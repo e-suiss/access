@@ -39,8 +39,9 @@ pub const LOGOUT_TYP: &str = "logout+jwt";
 /// The back-channel logout event (OIDC Back-Channel Logout §2.4).
 pub const LOGOUT_EVENT: &str = "http://schemas.openid.net/event/backchannel-logout";
 
-/// The outbox kind that carries a logout token to a client's back-channel endpoint.
-pub const LOGOUT_OUTBOX: &str = "oauth.backchannel_logout";
+/// The outbox kind of a logout notice: the grants whose clients' back-channel endpoints get a
+/// logout token.
+pub const LOGOUT_OUTBOX: &str = access_store::backchannel::LOGOUT_KIND;
 
 /// The `acr` of an AAL (NIST SP 800-63-4 identifiers).
 #[must_use]

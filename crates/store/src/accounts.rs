@@ -197,7 +197,8 @@ impl TenantTx {
     /// Ends the subject's identity sessions and refresh families in this transaction
     /// (TN-50, OP-146 m.10 (a)): they carry the epoch they were issued under, so raising it
     /// ends them all; the login sessions behind it are marked ended in the same transaction.
-    /// Returns the new epoch.
+    /// Grants of clients with a back-channel endpoint are queued for a logout notice
+    /// (§10.4.6). Returns the new epoch.
     ///
     /// # Errors
     /// [`StoreError`].
@@ -218,18 +219,26 @@ impl TenantTx {
         )
         .execute(&mut *self.tx)
         .await?;
-        sqlx::query!(
-            "UPDATE access.oauth_grants
-                SET revoked_ms = (extract(epoch FROM clock_timestamp()) * 1000)::bigint, revoke_reason = 'epoch'
-              WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND revoked_ms IS NULL
-                AND session_epoch < $4",
+        let notify = sqlx::query_scalar!(
+            "WITH revoked AS (
+               UPDATE access.oauth_grants
+                  SET revoked_ms = (extract(epoch FROM clock_timestamp()) * 1000)::bigint, revoke_reason = 'epoch'
+                WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND revoked_ms IS NULL
+                  AND session_epoch < $4
+               RETURNING grant_id, client_uuid)
+             SELECT r.grant_id FROM revoked r
+               JOIN access.idp_clients c
+                 ON c.tenant_id = $1 AND c.realm_id = $2 AND c.client_uuid = r.client_uuid
+              WHERE c.backchannel_logout_uri IS NOT NULL
+              ORDER BY r.grant_id",
             tenant,
             realm,
             uuid(id),
             epoch,
         )
-        .execute(&mut *self.tx)
+        .fetch_all(&mut *self.tx)
         .await?;
+        self.queue_backchannel_logout(&notify).await?;
         Ok(Some(epoch))
     }
 

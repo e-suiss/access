@@ -1,0 +1,31 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "WITH revoked AS (\n               UPDATE access.oauth_grants\n                  SET revoked_ms = (extract(epoch FROM clock_timestamp()) * 1000)::bigint, revoke_reason = 'epoch'\n                WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND revoked_ms IS NULL\n                  AND session_epoch < $4\n               RETURNING grant_id, client_uuid)\n             SELECT r.grant_id FROM revoked r\n               JOIN access.idp_clients c\n                 ON c.tenant_id = $1 AND c.realm_id = $2 AND c.client_uuid = r.client_uuid\n              WHERE c.backchannel_logout_uri IS NOT NULL\n              ORDER BY r.grant_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "grant_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_grants",
+            "name": "grant_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "0fb249ee2c455b6afa2861825d4f04fe93b39ce62df4d19a69a4fad1cca1193f"
+}
