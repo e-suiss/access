@@ -33,9 +33,12 @@ tracing = { workspace = true, features = ["std"] }
 access-crypto = { workspace = true, features = ["testing"] }
 access-identity-account = { workspace = true }
 access-identity-session = { workspace = true }
+access-identity-signer = { path = "../identity-signer" }
 access-identity-webauthn = { workspace = true }
 access-store = { workspace = true, features = ["testing"] }
 aws-lc-rs = { workspace = true }
+proptest = { workspace = true, features = ["std"] }
+suiss-crypto = { workspace = true, features = ["signer", "aead", "testing"] }
 serde_json = { workspace = true, features = ["std"] }
 tower = { workspace = true, features = ["util"] }
 http-body-util = { workspace = true }
