@@ -1,0 +1,127 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT credential_id, subject_id, kind, algorithm, kek_id, wrapped_dek, nonce, ciphertext, pepper_version\n               FROM access.identity_credentials\n              WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND kind = $4 AND status = 'active'\n              ORDER BY credential_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "credential_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.identity_credentials",
+            "name": "credential_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "subject_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.identity_credentials",
+            "name": "subject_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "kind",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.identity_credentials",
+            "name": "kind"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "algorithm",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.identity_credentials",
+            "name": "algorithm"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "kek_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.identity_credentials",
+            "name": "kek_id"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "wrapped_dek",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.identity_credentials",
+            "name": "wrapped_dek"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "nonce",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.identity_credentials",
+            "name": "nonce"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "ciphertext",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.identity_credentials",
+            "name": "ciphertext"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "pepper_version",
+        "type_info": "Int2",
+        "origin": {
+          "Table": {
+            "table": "access.identity_credentials",
+            "name": "pepper_version"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "1bd2724c3f35046c06c20897da3da3bc16ad00bf7e23a3658ba42cc8084cee76"
+}

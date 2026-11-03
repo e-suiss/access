@@ -1,0 +1,32 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.identity_subjects (tenant_id, realm_id, status, kek_id, wrapped_dek)\n               VALUES ($1, $2, $3, $4, $5) RETURNING subject_id AS \"id!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.identity_subjects",
+            "name": "subject_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Text",
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "872a01614d305fda03686410dd5cd7fb839c2d96dfd8315a7890e075ce11c20f"
+}

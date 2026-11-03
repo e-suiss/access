@@ -1,6 +1,7 @@
 //! PostgreSQL access for Access (OP-66, OP-130): migrations, row-level security and typed scope.
 //! All SQL of the workspace lives in this crate.
 
+pub mod accounts;
 pub mod audit;
 pub mod authority;
 pub mod bodies;
@@ -15,6 +16,7 @@ pub mod identity;
 pub mod jobs;
 pub mod scope;
 pub mod tenancy;
+pub mod throttle;
 
 #[cfg(feature = "testing")]
 pub mod testing;

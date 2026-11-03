@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT EXISTS (SELECT 1 FROM access.identity_credentials\n                    WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3\n                      AND credential_id = $4 AND status = 'active') AS \"e!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "e!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "e9c641e30ab0853aea5ede40a32072dd7ebaaf51733c9101ad185dfa5b835a6b"
+}

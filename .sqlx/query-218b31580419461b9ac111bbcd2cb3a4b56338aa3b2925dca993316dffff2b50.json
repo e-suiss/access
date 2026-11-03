@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.identity_subjects SET session_epoch = session_epoch + 1\n              WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 RETURNING session_epoch",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "session_epoch",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.identity_subjects",
+            "name": "session_epoch"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "218b31580419461b9ac111bbcd2cb3a4b56338aa3b2925dca993316dffff2b50"
+}

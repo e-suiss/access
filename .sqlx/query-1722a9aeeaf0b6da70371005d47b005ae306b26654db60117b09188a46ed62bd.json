@@ -1,0 +1,79 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT tat_ms, failures, last_failure_ms, blocked_until_ms, locked FROM access.login_throttle\n              WHERE day = date '1970-01-01' + $3::int AND tenant_id = $1 AND realm_id = $2 AND key = $4\n              FOR UPDATE",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "tat_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.login_throttle",
+            "name": "tat_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "failures",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "access.login_throttle",
+            "name": "failures"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "last_failure_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.login_throttle",
+            "name": "last_failure_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "blocked_until_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.login_throttle",
+            "name": "blocked_until_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "locked",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "access.login_throttle",
+            "name": "locked"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Int4",
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "1722a9aeeaf0b6da70371005d47b005ae306b26654db60117b09188a46ed62bd"
+}

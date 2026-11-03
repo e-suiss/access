@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.identity_credentials\n                SET algorithm = $4, kek_id = $5, wrapped_dek = $6, nonce = $7, ciphertext = $8, pepper_version = $9\n              WHERE tenant_id = $1 AND realm_id = $2 AND credential_id = $3 AND status = 'active'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Text",
+        "Bytea",
+        "Bytea",
+        "Bytea",
+        "Int2"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "81bcf2789bdc60c9f5b253db81a335628a140c218125cc4beb34e8da7b7c64d4"
+}

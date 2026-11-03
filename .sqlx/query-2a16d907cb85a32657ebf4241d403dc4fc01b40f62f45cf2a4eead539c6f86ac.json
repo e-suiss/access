@@ -1,0 +1,78 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT subject_id, status, session_epoch, kek_id, wrapped_dek\n                   FROM access.identity_subjects\n                  WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "subject_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.identity_subjects",
+            "name": "subject_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "status",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.identity_subjects",
+            "name": "status"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "session_epoch",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.identity_subjects",
+            "name": "session_epoch"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "kek_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.identity_subjects",
+            "name": "kek_id"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "wrapped_dek",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.identity_subjects",
+            "name": "wrapped_dek"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "2a16d907cb85a32657ebf4241d403dc4fc01b40f62f45cf2a4eead539c6f86ac"
+}
