@@ -14,6 +14,7 @@ pub use sqlx::PgPool as Pool;
 
 pub mod identity;
 pub mod jobs;
+pub mod relay;
 pub mod scope;
 pub mod tenancy;
 pub mod throttle;

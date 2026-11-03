@@ -1,0 +1,66 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT event_id, kind, reason, relay_status FROM access.relay_undelivered\n              WHERE tenant_id = $1 AND realm_id = $2\n              ORDER BY outbox_xid, outbox_id LIMIT $3",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "event_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.relay_undelivered",
+            "name": "event_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "kind",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.relay_undelivered",
+            "name": "kind"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "reason",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.relay_undelivered",
+            "name": "reason"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "relay_status",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "access.relay_undelivered",
+            "name": "relay_status"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "f5a69cc2342454c9b3d9c27a3c2bf09fbe5ae86f48484ec214d6782afb7d8589"
+}
