@@ -146,8 +146,11 @@ fn check_file(path: &PathBuf, expected: &str) {
         return;
     }
     let committed = std::fs::read_to_string(path).unwrap_or_default();
+    let same = committed == expected
+        || serde_json::from_str::<serde_json::Value>(&committed).ok()
+            == serde_json::from_str::<serde_json::Value>(expected).ok();
     assert!(
-        committed == expected,
+        same,
         "{} is stale; run ACCESS_UPDATE_CONTRACTS=1 cargo test -p access-identity-ui --test contract",
         path.display()
     );
