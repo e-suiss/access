@@ -220,7 +220,7 @@ uniffi-test-swift:
     "$out/vectors" conformance/vectors/core/1
 
 # OP-97
-npm_packages :="sdks/typescript web/console"
+npm_packages :="sdks/typescript web/console web/login"
 
 # OP-83, §14.5
 web-install:
@@ -232,8 +232,16 @@ web-check: wasm
 web-test: wasm
     cd sdks/typescript && npm test
 
-web-e2e: wasm
+web-e2e: wasm login-e2e
     cd web/console && npm run e2e
+
+# OP-146 m.4 (g): hosted login against the mocked node endpoints, passkeys on a CDP virtual authenticator
+login-e2e:
+    cd web/login && npm run e2e
+
+# OP-65: rewrite sdks/openapi/login.json and its examples from crates/identity-ui
+login-contract:
+    ACCESS_UPDATE_CONTRACTS=1 cargo test --locked -p access-identity-ui --test contract
 
 web-e2e-update-snapshots: wasm
     docker run --rm --ipc=host -v "{{justfile_directory()}}:/work" \
