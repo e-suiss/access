@@ -261,6 +261,7 @@ async fn env_with(seed: u8, slug: &str, auth: AuthPolicy, live: bool) -> Env {
     };
     let outbox = Outbox::default();
     let entry = RealmEntry {
+        tenant,
         realm,
         slug: slug.to_owned(),
         issuer: Issuer::parse(&format!("https://{HOST}")).unwrap(),
