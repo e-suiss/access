@@ -65,6 +65,8 @@ version = "0.2.4"
 dependencies = [
  "access-authority-core",
  "access-authority-sequencer",
+ "access-identity-oauth",
+ "access-store",
  "axum",
  "esuiss-access-kernel",
  "esuiss-crypto",
@@ -109,10 +111,13 @@ name = "access-identity-oauth"
 version = "0.2.4"
 dependencies = [
  "access-crypto",
+ "access-identity-signer",
  "access-store",
  "aws-lc-rs",
  "ed25519-dalek",
  "esuiss-access-kernel",
+ "esuiss-crypto",
+ "serde_json",
  "thiserror",
  "tokio",
 ]
@@ -129,6 +134,23 @@ dependencies = [
  "esuiss-access-kernel",
  "esuiss-crypto",
  "thiserror",
+ "tokio",
+]
+
+[[package]]
+name = "access-identity-signer-bin"
+version = "0.2.4"
+dependencies = [
+ "access-crypto",
+ "access-identity-signer",
+ "access-telemetry",
+ "esuiss-crypto",
+ "esuiss-sandbox",
+ "figment",
+ "serde",
+ "thiserror",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]
@@ -172,6 +194,7 @@ dependencies = [
  "access-authority-sequencer",
  "access-crypto",
  "access-http",
+ "access-identity-oauth",
  "access-store",
  "access-telemetry",
  "axum",

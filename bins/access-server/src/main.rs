@@ -14,7 +14,11 @@ use access_authority_sequencer::adapters::SourcesClock;
 use access_crypto::secret_file::SecretFile;
 use access_http::adp::adapters::{Discovery, router as adp_router};
 use access_http::adp::app::Service;
+use access_http::realm::router as realm_router;
 use access_http::{Health, Limits, SandboxHealth, router};
+use access_identity_oauth::adapters::{PgDirectory, SignerKeys};
+use access_identity_oauth::app::Discovery as RealmDiscovery;
+use access_identity_oauth::domain::issuer::RealmBase;
 use access_store::Pool;
 use access_store::connect::{Target, check_server, options, pool};
 use config::{Config, Durability, Role};
@@ -37,7 +41,16 @@ struct Prepared {
     sequencer_password: SecretFile,
     app_password: SecretFile,
     deriver_password: SecretFile,
+    router_password: SecretFile,
     keys: KeyStore,
+}
+
+/// The database pools of the server's roles.
+struct Pools {
+    sequencer: Pool,
+    app: Pool,
+    deriver: Pool,
+    router: Pool,
 }
 
 fn main() -> ExitCode {
@@ -144,6 +157,7 @@ fn prepare(config: &Config, tls: Arc<access_http::tls::ServerConfig>) -> Result<
         sequencer_password: password(&db.sequencer)?,
         app_password: password(&db.app)?,
         deriver_password: password(&db.deriver)?,
+        router_password: password(&db.router)?,
         keys,
     })
 }
@@ -175,7 +189,7 @@ fn holder() -> Result<String, String> {
     Ok(out)
 }
 
-async fn pools(config: &Config, prepared: &Prepared) -> Result<(Pool, Pool, Pool), String> {
+async fn pools(config: &Config, prepared: &Prepared) -> Result<Pools, String> {
     let db = config.database.as_ref().ok_or("no database section")?;
     let open = async |role: &Role, password: &SecretFile| {
         let target = Target {
@@ -193,6 +207,7 @@ async fn pools(config: &Config, prepared: &Prepared) -> Result<(Pool, Pool, Pool
     let sequencer = open(&db.sequencer, &prepared.sequencer_password).await?;
     let app = open(&db.app, &prepared.app_password).await?;
     let deriver = open(&db.deriver, &prepared.deriver_password).await?;
+    let router = open(&db.router, &prepared.router_password).await?;
     let durability = match db.durability {
         Durability::Replicated => access_store::connect::Durability::Replicated,
         Durability::SingleNode => access_store::connect::Durability::SingleNode,
@@ -201,14 +216,35 @@ async fn pools(config: &Config, prepared: &Prepared) -> Result<(Pool, Pool, Pool
         .sequencer
         .pool
         .saturating_add(db.app.pool)
-        .saturating_add(db.deriver.pool);
+        .saturating_add(db.deriver.pool)
+        .saturating_add(db.router.pool);
     // OP-52
-    for p in [&sequencer, &app, &deriver] {
+    for p in [&sequencer, &app, &deriver, &router] {
         check_server(p, total, true, durability)
             .await
             .map_err(|e| e.to_string())?;
     }
-    Ok((sequencer, app, deriver))
+    Ok(Pools {
+        sequencer,
+        app,
+        deriver,
+        router,
+    })
+}
+
+/// The realm surface, once the identity plane's start-up checks pass: the signer answers,
+/// every realm's issuer is the one the configuration forms and its JWKS loads (OP-138,
+/// §17.9.6, §17.9.7, CMP-22b).
+async fn identity(config: &Config, router: Pool) -> Result<axum::Router, String> {
+    let identity = config.identity.as_ref().ok_or("no identity section")?;
+    let base = RealmBase::parse(&identity.realm_base).map_err(|e| e.to_string())?;
+    let discovery = RealmDiscovery::new(
+        PgDirectory::new(router),
+        SignerKeys::new(identity.signer.clone()),
+    );
+    let realms = discovery.check(&base).await.map_err(|e| e.to_string())?;
+    tracing::info!(realms, "identity plane checks passed");
+    Ok(realm_router(discovery))
 }
 
 fn tls_config(config: &Config) -> Result<std::sync::Arc<access_http::tls::ServerConfig>, String> {
@@ -233,7 +269,13 @@ async fn serve(
     prepared: Prepared,
     report: &LockdownReport,
 ) -> Result<(), String> {
-    let (sequencer, app, deriver) = pools(config, &prepared).await?;
+    let Pools {
+        sequencer,
+        app,
+        deriver,
+        router: router_pool,
+    } = pools(config, &prepared).await?;
+    let realms = identity(config, router_pool).await?;
     let sequencer_for_time = sequencer.clone();
     let issuer = config.issuer.clone().ok_or("no issuer")?;
     let limits = Limits::default();
@@ -277,7 +319,7 @@ async fn serve(
             landlock_kernel_abi: report.landlock_kernel_abi,
         },
     };
-    let app = router(config.security_txt(), health, limits, adp);
+    let app = router(config.security_txt(), health, limits, adp.merge(realms));
     listener.set_nonblocking(true).map_err(|e| e.to_string())?;
     let listener = tokio::net::TcpListener::from_std(listener).map_err(|e| e.to_string())?;
     tracing::info!(listen = %config.listen, "access-server listening (TLS 1.3)");

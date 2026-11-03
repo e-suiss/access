@@ -25,6 +25,12 @@ data:
     sequencer = { user = "access_sequencer_login", password_file = "/run/secrets/db-sequencer", pool = 8 }
     app = { user = "access_app_login", password_file = "/run/secrets/db-app", pool = 16 }
     deriver = { user = "access_deriver_login", password_file = "/run/secrets/db-deriver", pool = 2 }
+    router = { user = "access_router_login", password_file = "/run/secrets/db-router", pool = 4 }
+
+    # TN-10, CMP-22b, OP-138
+    [identity]
+    realm_base = "https://id.access.example"
+    signer = "/run/access/identity-signer.sock"
 
     # OP-94, OP-141 m.18 (h)
     [hsm]

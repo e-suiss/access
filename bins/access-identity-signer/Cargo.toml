@@ -1,0 +1,28 @@
+[package]
+name = "access-identity-signer-bin"
+description = "Access identity signer process (CMP-22b): realm JOSE key sets, their JWKS and identity token signatures over a Unix socket."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[[bin]]
+name = "access-identity-signer"
+path = "src/main.rs"
+
+[dependencies]
+access-identity-signer = { path = "../../crates/identity-signer" }
+access-crypto = { workspace = true }
+access-telemetry = { workspace = true }
+suiss-crypto = { workspace = true, features = ["pkcs11"] }
+suiss-sandbox = { workspace = true }
+figment = { workspace = true, features = ["env", "toml"] }
+serde = { workspace = true, features = ["derive", "std"] }
+thiserror = { workspace = true, features = ["std"] }
+tokio = { workspace = true, features = ["macros", "net", "rt-multi-thread", "time"] }
+tracing = { workspace = true, features = ["std"] }
+
+[lints]
+workspace = true

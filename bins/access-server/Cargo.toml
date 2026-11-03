@@ -13,6 +13,7 @@ access-authority-core = { path = "../../crates/authority-core" }
 access-authority-sequencer = { path = "../../crates/authority-sequencer" }
 access-crypto = { workspace = true }
 access-http = { workspace = true }
+access-identity-oauth = { workspace = true }
 access-store = { workspace = true }
 suiss-crypto = { workspace = true, features = ["pkcs11"] }
 suiss-sandbox = { workspace = true }

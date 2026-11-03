@@ -4,6 +4,7 @@ use std::net::{Ipv4Addr, SocketAddr};
 use std::path::PathBuf;
 
 use access_http::SecurityTxt;
+use access_identity_oauth::domain::issuer::{Issuer, RealmBase};
 use figment::Figment;
 use figment::providers::{Env, Format, Serialized, Toml};
 use serde::{Deserialize, Serialize};
@@ -34,6 +35,20 @@ pub(crate) struct Config {
     pub(crate) hsm: Option<Hsm>,
     /// The authority signer's Unix socket; without it receipts are not signed (OP-143 m.5).
     pub(crate) signer: Option<PathBuf>,
+    /// The identity plane (TN-10, CMP-22b, OP-138).
+    pub(crate) identity: Option<Identity>,
+}
+
+/// The identity plane's realm runtime.
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct Identity {
+    /// The origin realm issuers are formed under, `https://<host>[:port]` without a path:
+    /// `https://<slug>.<host>` by default (TN-10). Issuers are stored on the realm rows and
+    /// never built from a request (§17.9.6).
+    pub(crate) realm_base: String,
+    /// The identity signer's Unix socket (CMP-22b).
+    pub(crate) signer: PathBuf,
 }
 
 /// TLS files, read once before the lockdown.
@@ -94,6 +109,8 @@ pub(crate) struct Database {
     pub(crate) app: Role,
     /// `access_deriver` login (OP-141 m.22 (k)).
     pub(crate) deriver: Role,
+    /// `access_router` login: Host → realm resolution (OP-132 m.3).
+    pub(crate) router: Role,
 }
 
 /// The PKCS#11 token holding the domains' keys.
@@ -126,6 +143,7 @@ impl Default for Config {
             database: None,
             hsm: None,
             signer: None,
+            identity: None,
         }
     }
 }
@@ -149,6 +167,10 @@ pub(crate) enum ConfigError {
     NoHsm,
     #[error("database pools must have at least one connection each")]
     PoolSize,
+    #[error("the identity section is required (TN-10, CMP-22b)")]
+    NoIdentity,
+    #[error("identity.realm_base must be an https origin without a path or trailing slash (TN-10)")]
+    RealmBase,
     #[error(transparent)]
     SecretEnvironment(#[from] access_crypto::secret_file::SecretFileError),
 }
@@ -180,16 +202,22 @@ impl Config {
             return Err(ConfigError::NoTls);
         }
         match &self.issuer {
-            Some(i) if i.starts_with("https://") && !i.ends_with('/') => {}
+            Some(i) if Issuer::parse(i).is_ok() => {}
             _ => return Err(ConfigError::Issuer),
         }
         let db = self.database.as_ref().ok_or(ConfigError::NoDatabase)?;
-        if db.sequencer.pool == 0 || db.app.pool == 0 || db.deriver.pool == 0 {
+        if [&db.sequencer, &db.app, &db.deriver, &db.router]
+            .iter()
+            .any(|r| r.pool == 0)
+        {
             return Err(ConfigError::PoolSize);
         }
         if self.hsm.is_none() {
             return Err(ConfigError::NoHsm);
         }
+        let identity = self.identity.as_ref().ok_or(ConfigError::NoIdentity)?;
+        // OP-138, §17.9.6
+        RealmBase::parse(&identity.realm_base).map_err(|_| ConfigError::RealmBase)?;
         Ok(())
     }
 
@@ -239,12 +267,17 @@ mod tests {
                 sequencer: role("access_sequencer_login"),
                 app: role("access_app_login"),
                 deriver: role("access_deriver_login"),
+                router: role("access_router_login"),
             }),
             hsm: Some(Hsm {
                 module: "/usr/lib/softhsm/libsofthsm2.so".into(),
                 token: "access".to_owned(),
                 pin_file: "/run/secrets/pin".into(),
                 paths: Vec::new(),
+            }),
+            identity: Some(Identity {
+                realm_base: "https://id.access.example".to_owned(),
+                signer: "/run/access/identity-signer.sock".into(),
             }),
             ..Config::default()
         }
@@ -295,6 +328,36 @@ mod tests {
                 ..with_tls()
             };
             assert!(matches!(config.validate(), Err(ConfigError::Issuer)));
+        }
+    }
+
+    // OP-138, TN-10, §17.9.6, CMP-22b: the identity plane is not optional and its realm base
+    // is a bare https origin
+    #[test]
+    fn the_identity_plane_is_not_optional() {
+        let none = Config {
+            identity: None,
+            ..with_tls()
+        };
+        assert!(matches!(none.validate(), Err(ConfigError::NoIdentity)));
+        for base in [
+            "http://id.example",
+            "https://id.example/",
+            "https://id.example/realms",
+            "https://ID.example",
+            "https://id.example?x",
+        ] {
+            let config = Config {
+                identity: Some(Identity {
+                    realm_base: base.to_owned(),
+                    signer: "/run/s.sock".into(),
+                }),
+                ..with_tls()
+            };
+            assert!(
+                matches!(config.validate(), Err(ConfigError::RealmBase)),
+                "{base}"
+            );
         }
     }
 
