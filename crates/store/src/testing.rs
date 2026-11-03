@@ -98,6 +98,34 @@ fn unique_name() -> String {
     )
 }
 
+/// Clones older than an hour belong to finished test processes; clones are never dropped by
+/// their own test, so the cluster would otherwise grow with every run.
+async fn sweep_stale(c: &mut PgConnection) -> Result<(), TestDbError> {
+    const STALE_NANOS: u128 = 3_600_000_000_000;
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |d| d.as_nanos());
+    let names: Vec<String> =
+        sqlx::query_scalar("SELECT datname FROM pg_database WHERE datname LIKE 'access\\_t\\_%'")
+            .fetch_all(&mut *c)
+            .await
+            .at("list clones")?;
+    for name in names {
+        let created = name.split('_').nth(3).and_then(|n| n.parse::<u128>().ok());
+        let stale = created.is_some_and(|t| now.saturating_sub(t) > STALE_NANOS);
+        let generated = name.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_');
+        if stale && generated {
+            exec(
+                c,
+                format!("DROP DATABASE IF EXISTS {name} WITH (FORCE)"),
+                "drop stale clone",
+            )
+            .await?;
+        }
+    }
+    Ok(())
+}
+
 /// Cluster roles and the test logins, every run: logins are not part of the template.
 async fn ensure_roles(c: &mut PgConnection) -> Result<(), TestDbError> {
     c.execute(super::BOOTSTRAP_ROLES)
@@ -164,7 +192,11 @@ async fn ensure_template(admin: &PgConnectOptions, template: &str) -> Result<(),
             .fetch_one(&mut c)
             .await
             .at("template lookup")?;
-    let roles = ensure_roles(&mut c).await;
+    let swept = sweep_stale(&mut c).await;
+    let roles = match swept {
+        Ok(()) => ensure_roles(&mut c).await,
+        Err(e) => Err(e),
+    };
     let built = if roles.is_err() {
         roles
     } else if exists {
