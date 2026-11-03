@@ -1,0 +1,312 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:suiss:access:relay-message:v1",
+  "title": "Access to Relay message, version 1",
+  "description": "A CloudEvents 1.0 event in structured JSON mode (application/cloudevents+json) that Access posts to Relay for delivery to a person (E42, OP-146 m.4 (b)). `id` is a random UUID and the Idempotency-Key; Relay deduplicates by it. `data` is selected by `type`. `recipient` and the secret fields (`code`, `link`) are never logged by either side.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "specversion",
+    "id",
+    "source",
+    "type",
+    "subject",
+    "time",
+    "datacontenttype",
+    "accesstenant",
+    "accessrealm",
+    "data"
+  ],
+  "properties": {
+    "specversion": {
+      "const": "1.0"
+    },
+    "id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "source": {
+      "type": "string",
+      "pattern": "^urn:suiss:access:realm:[0-9a-f-]{36}$"
+    },
+    "type": {
+      "enum": [
+        "relay.message.otp.v1",
+        "relay.message.magic_link.v1",
+        "relay.message.password_changed.v1",
+        "relay.message.new_sign_in.v1",
+        "relay.message.account_status.v1"
+      ]
+    },
+    "subject": {
+      "type": "string",
+      "description": "The subject's external id (OP-137), prefix usr_."
+    },
+    "time": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "datacontenttype": {
+      "const": "application/json"
+    },
+    "accesstenant": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "accessrealm": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "data": {
+      "type": "object"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "relay.message.otp.v1"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/relay.message.otp.v1"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "relay.message.magic_link.v1"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/relay.message.magic_link.v1"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "relay.message.password_changed.v1"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/relay.message.password_changed.v1"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "relay.message.new_sign_in.v1"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/relay.message.new_sign_in.v1"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "relay.message.account_status.v1"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/relay.message.account_status.v1"
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "recipient": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "maxProperties": 1,
+      "properties": {
+        "email": {
+          "type": "string",
+          "maxLength": 320
+        },
+        "phone": {
+          "type": "string",
+          "pattern": "^\\+[1-9][0-9]{6,14}$"
+        }
+      }
+    },
+    "locale": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9-]{0,33}[A-Za-z0-9]$"
+    },
+    "relay.message.otp.v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "recipient",
+        "code",
+        "purpose",
+        "expires_at"
+      ],
+      "properties": {
+        "recipient": {
+          "$ref": "#/$defs/recipient"
+        },
+        "locale": {
+          "$ref": "#/$defs/locale"
+        },
+        "code": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9]{4,12}$",
+          "description": "Secret: the one-time code. Never logged."
+        },
+        "purpose": {
+          "enum": [
+            "sign_in",
+            "verify_address",
+            "recovery"
+          ]
+        },
+        "expires_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "relay.message.magic_link.v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "recipient",
+        "link",
+        "expires_at"
+      ],
+      "properties": {
+        "recipient": {
+          "$ref": "#/$defs/recipient"
+        },
+        "locale": {
+          "$ref": "#/$defs/locale"
+        },
+        "link": {
+          "type": "string",
+          "maxLength": 2048,
+          "pattern": "^https://",
+          "description": "Secret: the sign-in link. Never logged."
+        },
+        "expires_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "relay.message.password_changed.v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "recipient",
+        "at"
+      ],
+      "properties": {
+        "recipient": {
+          "$ref": "#/$defs/recipient"
+        },
+        "locale": {
+          "$ref": "#/$defs/locale"
+        },
+        "at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "relay.message.new_sign_in.v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "recipient",
+        "at",
+        "method"
+      ],
+      "properties": {
+        "recipient": {
+          "$ref": "#/$defs/recipient"
+        },
+        "locale": {
+          "$ref": "#/$defs/locale"
+        },
+        "at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "method": {
+          "enum": [
+            "password",
+            "passkey",
+            "otp",
+            "magic_link",
+            "federated"
+          ]
+        }
+      }
+    },
+    "relay.message.account_status.v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "recipient",
+        "status",
+        "at"
+      ],
+      "properties": {
+        "recipient": {
+          "$ref": "#/$defs/recipient"
+        },
+        "locale": {
+          "$ref": "#/$defs/locale"
+        },
+        "status": {
+          "enum": [
+            "staged",
+            "pending_user_action",
+            "active",
+            "locked",
+            "suspended",
+            "deactivated",
+            "tombstone",
+            "purging"
+          ]
+        },
+        "at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    }
+  }
+}

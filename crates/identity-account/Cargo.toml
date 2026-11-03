@@ -15,13 +15,20 @@ suiss-crypto = { workspace = true, features = ["aead"] }
 argon2 = { workspace = true, features = ["alloc", "password-hash"] }
 unicode-normalization = { workspace = true, features = ["std"] }
 thiserror = { workspace = true }
-tokio = { workspace = true, features = ["rt", "sync", "time", "fs"] }
+tokio = { workspace = true, features = ["rt", "sync", "time", "fs", "net", "io-util"] }
 tracing = { workspace = true, features = ["std"] }
+serde_json = { workspace = true, features = ["std"] }
+time = { workspace = true, features = ["std", "formatting", "macros"] }
+zeroize = { workspace = true, features = ["alloc"] }
+rustls = { workspace = true, features = ["aws_lc_rs", "std"] }
+tokio-rustls = { workspace = true, features = ["aws_lc_rs"] }
+httparse = { workspace = true, features = ["std"] }
 
 [dev-dependencies]
 access-crypto = { workspace = true, features = ["testing"] }
 access-store = { workspace = true, features = ["testing"] }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "time"] }
+rcgen = { workspace = true, features = ["aws_lc_rs", "pem"] }
 
 [lints]
 workspace = true

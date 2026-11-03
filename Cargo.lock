@@ -94,10 +94,17 @@ dependencies = [
  "access-store",
  "argon2",
  "esuiss-crypto",
+ "httparse",
+ "rcgen",
+ "rustls",
+ "serde_json",
  "thiserror",
+ "time",
  "tokio",
+ "tokio-rustls",
  "tracing",
  "unicode-normalization",
+ "zeroize",
 ]
 
 [[package]]

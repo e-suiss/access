@@ -1,11 +1,12 @@
 //! Identity subjects, identifiers, credentials and the account life cycle (CMP-15.3): the
 //! TN-49 state machine, the credential store under per-subject DEKs (OP-42, OP-145), Argon2id
 //! passwords (CR-36, CR-37), the breached-password check (IDP-3) and login throttling
-//! (OP-35, SA-30).
+//! (OP-35, SA-30), and the Access side of the Relay seam (E42, OP-146 m.2).
 
 pub mod adapters;
 pub mod app;
 pub mod domain;
+pub mod notify;
 pub mod ports;
 
 use access_crypto::opaque_id::OpaqueIdError;
