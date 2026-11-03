@@ -261,6 +261,10 @@ pub(crate) const HMAC_ALLOWED: &[(&str, &str)] = &[
         "crates/crypto/src/webauthn.rs",
         "CR-3 (a): deterministic decoy WebAuthn credential IDs (TN-97)",
     ),
+    (
+        "crates/crypto/src/totp.rs",
+        "OP-146 m.3: TOTP codes (RFC 6238), one-party: the server both holds the seed and checks",
+    ),
 ];
 
 const HMAC_TOKENS: &[&str] = &[
