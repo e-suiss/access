@@ -2,6 +2,7 @@
 
 pub mod adp;
 pub mod login;
+pub mod oauth;
 mod problem;
 pub mod realm;
 mod security_txt;
