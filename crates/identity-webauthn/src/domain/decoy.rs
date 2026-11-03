@@ -1,0 +1,57 @@
+//! Passkey enumeration protection (TN-97, §12.4.1): an identifier without passkeys gets a
+//! deterministic, plausible `allowCredentials` list, so the answer is the same whether the
+//! account exists, has no passkey, or is locked.
+
+use super::ids::{CredentialId, RealmId};
+use super::options::CredentialDescriptor;
+
+/// Plausible credential ID lengths, chosen per decoy.
+const LENGTHS: [usize; 4] = [16, 32, 48, 64];
+/// Plausible transport sets, chosen per decoy.
+const TRANSPORTS: [&[&str]; 3] = [&["internal", "hybrid"], &["usb", "nfc"], &["internal"]];
+
+fn input(tag: u8, a: u8, b: u8, realm: RealmId, identifier: &str) -> Vec<u8> {
+    let mut out = vec![tag, a, b];
+    out.extend_from_slice(realm.as_bytes());
+    out.extend_from_slice(identifier.as_bytes());
+    out
+}
+
+fn pick<T: Copy>(table: &[T], byte: u8) -> Option<T> {
+    let len = u8::try_from(table.len()).ok()?;
+    table.get(usize::from(byte.checked_rem(len)?)).copied()
+}
+
+/// One or two decoy descriptors for `identifier` (already normalized by the caller), from a
+/// keyed derivation `derive` (CR-3 (a)). The same identifier always gets the same list.
+///
+/// # Errors
+/// Whatever `derive` returns.
+pub fn decoy_descriptors<E>(
+    realm: RealmId,
+    identifier: &str,
+    derive: impl Fn(&[u8]) -> Result<[u8; 32], E>,
+) -> Result<Vec<CredentialDescriptor>, E> {
+    let seed = derive(&input(b'n', 0, 0, realm, identifier))?;
+    let count = if seed[0] & 1 == 0 { 1_u8 } else { 2 };
+    let mut out = Vec::new();
+    for i in 0..count {
+        let shape = derive(&input(b's', i, 0, realm, identifier))?;
+        let len = pick(&LENGTHS, shape[0]).unwrap_or(32);
+        let transports = pick(&TRANSPORTS, shape[1]).unwrap_or(&["internal"]);
+        let mut id = Vec::new();
+        let mut block = 0_u8;
+        while id.len() < len {
+            id.extend_from_slice(&derive(&input(b'i', i, block, realm, identifier))?);
+            block = block.saturating_add(1);
+        }
+        id.truncate(len);
+        if let Some(id) = CredentialId::new(&id) {
+            out.push(CredentialDescriptor {
+                id,
+                transports: transports.iter().map(|t| (*t).to_owned()).collect(),
+            });
+        }
+    }
+    Ok(out)
+}

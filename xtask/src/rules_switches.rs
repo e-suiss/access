@@ -13,8 +13,12 @@ use crate::rules::lex::{in_regions, lex, test_regions};
 const RULE: &str = "no-dev-mode";
 
 /// Reviewed exceptions: (relative path, matched word, reason). Each entry needs
-/// Adem's review. Empty on purpose.
-const ALLOWLIST: &[(&str, &str, &str)] = &[];
+/// Adem's review.
+const ALLOWLIST: &[(&str, &str, &str)] = &[(
+    "crates/identity-webauthn/src/domain/mds.rs",
+    "bypass",
+    "FIDO MDS3 status name USER_VERIFICATION_BYPASS; it marks a model compromised (OP-146 m.4 (d))",
+)];
 
 /// This file spells out the vocabulary it forbids.
 const SELF_PATH: &str = "xtask/src/rules_switches.rs";

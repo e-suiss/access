@@ -9,6 +9,22 @@ repository.workspace = true
 publish = false
 
 [dependencies]
+access-kernel = { workspace = true }
+access-parse = { workspace = true }
+access-crypto = { workspace = true }
+thiserror = { workspace = true }
+serde = { workspace = true, features = ["derive", "std"] }
+serde_json = { workspace = true, features = ["std"] }
+rustls-webpki = { workspace = true, features = ["aws-lc-rs", "std"] }
+rustls-pki-types = { workspace = true, features = ["std"] }
+
+[dev-dependencies]
+access-crypto = { workspace = true, features = ["testing"] }
+aws-lc-rs = { workspace = true }
+suiss-crypto = { workspace = true }
+rcgen = { workspace = true, features = ["aws_lc_rs"] }
+tokio = { workspace = true, features = ["macros", "rt"] }
+proptest = { workspace = true, features = ["std"] }
 
 [lints]
 workspace = true
