@@ -14,8 +14,9 @@ use crate::ports::{AccountDb, AccountTx};
 /// The account tables in PostgreSQL.
 pub struct PgAccounts(pub Pool);
 
-/// One scoped transaction.
-pub struct PgTx(TenantTx);
+/// One scoped transaction; the inner transaction is open to other identity adapters that
+/// add tables to the same unit of work (OP-63).
+pub struct PgTx(pub TenantTx);
 
 impl AccountDb for PgAccounts {
     type Tx = PgTx;

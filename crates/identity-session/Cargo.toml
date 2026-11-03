@@ -9,6 +9,22 @@ repository.workspace = true
 publish = false
 
 [dependencies]
+access-crypto = { workspace = true }
+access-identity-account = { workspace = true }
+access-identity-webauthn = { workspace = true }
+access-kernel = { workspace = true }
+access-store = { workspace = true }
+suiss-crypto = { workspace = true, features = ["aead"] }
+serde = { workspace = true, features = ["derive", "std"] }
+serde_json = { workspace = true, features = ["std"] }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+access-crypto = { workspace = true, features = ["testing"] }
+access-store = { workspace = true, features = ["testing"] }
+aws-lc-rs = { workspace = true }
+rcgen = { workspace = true, features = ["aws_lc_rs"] }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "time"] }
 
 [lints]
 workspace = true

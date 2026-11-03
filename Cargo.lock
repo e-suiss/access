@@ -153,6 +153,20 @@ dependencies = [
 [[package]]
 name = "access-identity-session"
 version = "0.2.4"
+dependencies = [
+ "access-crypto",
+ "access-identity-account",
+ "access-identity-webauthn",
+ "access-store",
+ "aws-lc-rs",
+ "esuiss-access-kernel",
+ "esuiss-crypto",
+ "rcgen",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+]
 
 [[package]]
 name = "access-identity-signer"
