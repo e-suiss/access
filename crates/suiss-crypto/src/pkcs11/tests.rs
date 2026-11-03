@@ -4,7 +4,7 @@ use std::sync::OnceLock;
 
 use super::*;
 use crate::cose::{KeySet, verify_sign1};
-use crate::envelope::SoftKek;
+use crate::envelope::{DekKek, SoftKek};
 use crate::sig::PureBackend;
 use crate::signer::sign_sign1;
 
@@ -105,6 +105,39 @@ fn token_kek_matches_rfc_3394() {
     let w = generated.wrap(&dek).unwrap();
     assert!(generated.unwrap(&w).unwrap().secret().ct_eq(dek.secret()));
     assert!(hsm.unwrap(&w).is_err());
+}
+
+// CR-32, OP-74: a class DEK under the token KEK wraps part DEKs in process exactly like the
+// token wraps under the same key
+#[test]
+fn token_and_class_dek_wrap_alike() {
+    let s = store();
+    let value = [0x24_u8; 32];
+    let hsm = s.import_kek("kek-class", &Secret::new(value)).unwrap();
+    let class = Dek::from_secret(Secret::new(value));
+    let part = Dek::generate().unwrap();
+    let wrapped = DekKek::new("class", &class).wrap(&part).unwrap();
+    assert_eq!(wrapped, hsm.wrap(&part).unwrap());
+    assert!(hsm.unwrap(&wrapped).unwrap().secret().ct_eq(part.secret()));
+}
+
+// OP-73: destroying a KEK crypto-shreds what it wrapped; only KEKs are destroyed this way
+#[test]
+fn a_destroyed_kek_unwraps_nothing() {
+    let s = store();
+    let kek = s.generate_kek("kek-shred").unwrap();
+    let dek = Dek::generate().unwrap();
+    let wrapped = kek.wrap(&dek).unwrap();
+    s.destroy_kek("kek-shred").unwrap();
+    assert!(kek.unwrap(&wrapped).is_err());
+    assert!(matches!(s.kek("kek-shred"), Err(HsmError::Key(_))));
+    assert!(matches!(s.destroy_kek("kek-shred"), Err(HsmError::Key(_))));
+    s.generate_mac("mac-not-kek").unwrap();
+    assert!(matches!(
+        s.destroy_kek("mac-not-kek"),
+        Err(HsmError::Key(_))
+    ));
+    assert!(s.mac("mac-not-kek").is_ok());
 }
 
 // OP-141 m.18

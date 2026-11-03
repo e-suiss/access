@@ -217,10 +217,8 @@ impl Verifier {
     /// # Errors
     /// [`NoteError::VerifierKey`] or [`NoteError::Name`].
     pub fn parse(vkey: &str) -> Result<Self, NoteError> {
-        let mut parts = vkey.split('+');
-        let (Some(name), Some(id), Some(key), None) =
-            (parts.next(), parts.next(), parts.next(), parts.next())
-        else {
+        let mut parts = vkey.splitn(3, '+');
+        let (Some(name), Some(id), Some(key)) = (parts.next(), parts.next(), parts.next()) else {
             return Err(NoteError::VerifierKey);
         };
         if id.len() != 8 || !id.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f')) {

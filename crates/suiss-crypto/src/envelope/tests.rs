@@ -1,6 +1,8 @@
 use super::{
-    CACHE_TTL_MS, Dek, DekCache, EnvelopeError, Kek, Sealer, SoftKek, open_body, rewrap, seal_body,
+    CACHE_TTL_MS, Dek, DekCache, DekKek, EnvelopeError, Kek, Sealer, SoftKek, open_body, rewrap,
+    seal_body,
 };
+use crate::secret::Secret;
 
 fn kek(id: &str, b: u8) -> SoftKek {
     SoftKek::new(id, [b; 32])
@@ -106,4 +108,73 @@ fn the_cache_expires_bounds_and_forgets() {
         "the expired entry was dropped and the key unwrapped again"
     );
     assert!(c.get(&kek("v2", 2), &wrapped[0], 0).is_err());
+}
+
+fn hex<const N: usize>(text: &str) -> [u8; N] {
+    let mut out = [0_u8; N];
+    for (b, pair) in out.iter_mut().zip(text.as_bytes().chunks(2)) {
+        *b = u8::from_str_radix(core::str::from_utf8(pair).unwrap(), 16).unwrap();
+    }
+    out
+}
+
+fn dek(bytes: [u8; 32]) -> Dek {
+    Dek::from_secret(Secret::new(bytes))
+}
+
+// OP-135 m.1: RFC 3394 §4.6, 256 bits of key data under a 256-bit KEK, through a DEK as KEK,
+// byte-identical to the in-process KEK; §4.3, 128 bits of key data, is not a DEK
+#[test]
+fn a_dek_wraps_like_rfc_3394() {
+    let kek_bytes = hex::<32>("000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f");
+    let data = hex::<32>("00112233445566778899aabbccddeeff000102030405060708090a0b0c0d0e0f");
+    let wrapped = hex::<40>(
+        "28c9f404c4b810f4cbccb35cfb87f8263f5786e2d80ed326cbc7f0e71a99f43bfb988b9b7a02dd21",
+    );
+    let class = dek(kek_bytes);
+    let k = DekKek::new("class-1", &class);
+    assert_eq!(k.id(), "class-1");
+    assert_eq!(k.wrap(&dek(data)).unwrap(), wrapped);
+    assert_eq!(*k.unwrap(&wrapped).unwrap().secret().expose(), data);
+    assert_eq!(
+        SoftKek::new("v1", kek_bytes).wrap(&dek(data)).unwrap(),
+        wrapped
+    );
+    let short = hex::<24>("64e8c3f9ce0f5ba263e9777905818a2a93c8191e7d6e8ae7");
+    assert_eq!(k.unwrap(&short).err(), Some(EnvelopeError::Wrap));
+    for bad in [&wrapped[..39], &wrapped[..0], &[0_u8; 48][..]] {
+        assert_eq!(k.unwrap(bad).err(), Some(EnvelopeError::Wrap));
+    }
+}
+
+// CR-32, OP-74: a part DEK wrapped under a class DEK that a KEK wraps; the class key alone
+// opens it, and rewrapping the class key keeps the parts
+#[test]
+fn a_class_dek_wraps_part_deks() {
+    let (old, new) = (kek("v1", 1), kek("v2", 2));
+    let class = Dek::generate().unwrap();
+    let class_wrapped = old.wrap(&class).unwrap();
+    let part = Dek::generate().unwrap();
+    let part_wrapped = DekKek::new("class", &class).wrap(&part).unwrap();
+    assert_eq!(part_wrapped.len(), 40);
+    let sealed = seal_body(part, b"part", b"body part").unwrap();
+    drop(class);
+    let class_wrapped = rewrap(&old, &new, &class_wrapped).unwrap();
+    let class = new.unwrap(&class_wrapped).unwrap();
+    let part = DekKek::new("class", &class).unwrap(&part_wrapped).unwrap();
+    assert_eq!(
+        open_body(&part, b"part", &sealed).unwrap().as_slice(),
+        b"body part"
+    );
+    let other = Dek::generate().unwrap();
+    assert_eq!(
+        DekKek::new("class", &other).unwrap(&part_wrapped).err(),
+        Some(EnvelopeError::Wrap)
+    );
+    let mut bad = part_wrapped.clone();
+    bad[0] ^= 1;
+    assert_eq!(
+        DekKek::new("class", &class).unwrap(&bad).err(),
+        Some(EnvelopeError::Wrap)
+    );
 }

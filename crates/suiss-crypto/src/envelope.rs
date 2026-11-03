@@ -7,6 +7,7 @@ use std::collections::BTreeMap;
 use aws_lc_rs::aead::{
     AES_256_GCM, AES_256_GCM_SIV, Aad, LessSafeKey, NONCE_LEN, Nonce, UnboundKey,
 };
+use aws_lc_rs::key_wrap::{AES_256, AesKek, KeyWrap};
 use aws_lc_rs::rand::{SecureRandom, SystemRandom};
 use zeroize::Zeroizing;
 
@@ -109,6 +110,64 @@ pub trait Kek {
     fn unwrap(&self, wrapped: &[u8]) -> Result<Dek, EnvelopeError>;
 }
 
+fn kw_wrap(key: &Secret<[u8; 32]>, dek: &Dek) -> Result<Vec<u8>, EnvelopeError> {
+    // CR-39 m.6
+    let _dit = DitGuard::new();
+    let kek = AesKek::new(&AES_256, key.expose()).map_err(|_| EnvelopeError::Wrap)?;
+    let mut out = vec![0; 40];
+    let n = kek
+        .wrap(dek.0.expose(), &mut out)
+        .map_err(|_| EnvelopeError::Wrap)?
+        .len();
+    out.truncate(n);
+    Ok(out)
+}
+
+fn kw_unwrap(key: &Secret<[u8; 32]>, wrapped: &[u8]) -> Result<Dek, EnvelopeError> {
+    // CR-39 m.6
+    let _dit = DitGuard::new();
+    let kek = AesKek::new(&AES_256, key.expose()).map_err(|_| EnvelopeError::Wrap)?;
+    let mut out = Zeroizing::new([0_u8; 40]);
+    let plain = kek
+        .unwrap(wrapped, out.as_mut_slice())
+        .map_err(|_| EnvelopeError::Wrap)?;
+    let key = Zeroizing::new(<[u8; 32]>::try_from(&*plain).map_err(|_| EnvelopeError::Wrap)?);
+    Ok(Dek(Secret::new(*key)))
+}
+
+/// An unwrapped DEK used as a KEK under AES-256 Key Wrap (RFC 3394): a long-lived DEK (per
+/// subject and retention class, OP-74) wraps the DEKs below it in process. The output is
+/// byte-identical to the PKCS#11 KEK's for the same key.
+pub struct DekKek<'a> {
+    id: String,
+    key: &'a Dek,
+}
+
+impl<'a> DekKek<'a> {
+    /// The DEK `key`, named `id` for the keys it wraps.
+    #[must_use]
+    pub fn new(id: &str, key: &'a Dek) -> Self {
+        Self {
+            id: id.to_owned(),
+            key,
+        }
+    }
+}
+
+impl Kek for DekKek<'_> {
+    fn id(&self) -> &str {
+        &self.id
+    }
+
+    fn wrap(&self, dek: &Dek) -> Result<Vec<u8>, EnvelopeError> {
+        kw_wrap(&self.key.0, dek)
+    }
+
+    fn unwrap(&self, wrapped: &[u8]) -> Result<Dek, EnvelopeError> {
+        kw_unwrap(&self.key.0, wrapped)
+    }
+}
+
 /// An in-process KEK under AES-256 Key Wrap (RFC 3394); tests only, an HSM keeps real ones.
 #[cfg(any(test, feature = "testing"))]
 pub struct SoftKek {
@@ -129,43 +188,17 @@ impl SoftKek {
 }
 
 #[cfg(any(test, feature = "testing"))]
-use aws_lc_rs::key_wrap::{AES_256, AesKek, KeyWrap};
-
-#[cfg(any(test, feature = "testing"))]
 impl Kek for SoftKek {
     fn id(&self) -> &str {
         &self.id
     }
 
     fn wrap(&self, dek: &Dek) -> Result<Vec<u8>, EnvelopeError> {
-        // CR-39 m.6
-        let _dit = DitGuard::new();
-        let kek = AesKek::new(&AES_256, self.key.expose()).map_err(|_| EnvelopeError::Wrap)?;
-        let mut out = vec![0; 40];
-        let n = kek
-            .wrap(dek.0.expose(), &mut out)
-            .map_err(|_| EnvelopeError::Wrap)?
-            .len();
-        out.truncate(n);
-        Ok(out)
+        kw_wrap(&self.key, dek)
     }
 
     fn unwrap(&self, wrapped: &[u8]) -> Result<Dek, EnvelopeError> {
-        // CR-39 m.6
-        let _dit = DitGuard::new();
-        let kek = AesKek::new(&AES_256, self.key.expose()).map_err(|_| EnvelopeError::Wrap)?;
-        let mut out = Zeroizing::new([0_u8; 40]);
-        let plain = kek
-            .unwrap(wrapped, out.as_mut_slice())
-            .map_err(|_| EnvelopeError::Wrap)?;
-        let key: [u8; 32] = plain
-            .get(..32)
-            .and_then(|k| k.try_into().ok())
-            .ok_or(EnvelopeError::Wrap)?;
-        if plain.len() != 32 {
-            return Err(EnvelopeError::Wrap);
-        }
-        Ok(Dek(Secret::new(key)))
+        kw_unwrap(&self.key, wrapped)
     }
 }
 

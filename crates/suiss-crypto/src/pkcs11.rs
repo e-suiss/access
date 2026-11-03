@@ -256,6 +256,27 @@ impl KeyStore {
         self.kek(label)
     }
 
+    /// Destroys the KEK labelled `label` inside the token, crypto-shredding every key it wrapped
+    /// (OP-73). Open handles to it fail from then on.
+    ///
+    /// # Errors
+    /// [`HsmError::Key`] when no KEK, or more than one, has this label; [`HsmError`] otherwise.
+    pub fn destroy_kek(&self, label: &str) -> Result<(), HsmError> {
+        let session = self.session()?;
+        let found = session
+            .find_objects(&[
+                Attribute::Class(ObjectClass::SECRET_KEY),
+                Attribute::KeyType(KeyType::AES),
+                Attribute::Wrap(true),
+                Attribute::Label(label.as_bytes().to_vec()),
+            ])
+            .map_err(HsmError::Operation)?;
+        let [key] = found.as_slice() else {
+            return Err(HsmError::Key(label.to_owned()));
+        };
+        session.destroy_object(*key).map_err(HsmError::Operation)
+    }
+
     /// Generates a 32-byte HMAC-SHA-256 key inside the token; it never leaves it.
     ///
     /// # Errors
