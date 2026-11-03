@@ -73,10 +73,10 @@ fn signature_alg(alg: i64) -> Option<&'static dyn SignatureVerificationAlgorithm
 fn subject_has_ou(name: &[u8]) -> Result<bool, DerError> {
     let mut rdns = Reader::new(name)?;
     while !rdns.is_empty() {
-        let mut set = Reader::new(rdns.expect(der::SET)?)?;
+        let mut set = Reader::new(rdns.tagged(der::SET)?)?;
         while !set.is_empty() {
-            let mut atv = Reader::new(set.expect(der::SEQUENCE)?)?;
-            let oid = atv.expect(der::OID)?;
+            let mut atv = Reader::new(set.tagged(der::SEQUENCE)?)?;
+            let oid = atv.tagged(der::OID)?;
             let value = atv.next_tlv()?;
             if oid == OID_OU && value.value == b"Authenticator Attestation" {
                 return Ok(true);
@@ -88,10 +88,10 @@ fn subject_has_ou(name: &[u8]) -> Result<bool, DerError> {
 
 /// The AAGUID extension, if present: `(critical, extnValue)`.
 fn aaguid_extension(extensions: &[u8]) -> Result<Option<(bool, &[u8])>, DerError> {
-    let mut list = Reader::new(Reader::new(extensions)?.expect(der::SEQUENCE)?)?;
+    let mut list = Reader::new(Reader::new(extensions)?.tagged(der::SEQUENCE)?)?;
     while !list.is_empty() {
-        let mut ext = Reader::new(list.expect(der::SEQUENCE)?)?;
-        let oid = ext.expect(der::OID)?;
+        let mut ext = Reader::new(list.tagged(der::SEQUENCE)?)?;
+        let oid = ext.tagged(der::OID)?;
         let mut next = ext.next_tlv()?;
         let critical = if next.tag == der::BOOLEAN {
             let flag = next.value == [0xff];
@@ -115,17 +115,17 @@ fn aaguid_extension(extensions: &[u8]) -> Result<Option<(bool, &[u8])>, DerError
 /// credential's when present. `cA = false` is enforced by path validation.
 fn check_certificate(cert: &[u8], credential: &AttestedCredential<'_>) -> Result<(), DerError> {
     let mut outer = Reader::new(cert)?;
-    let mut tbs = Reader::new(Reader::new(outer.expect(der::SEQUENCE)?)?.expect(der::SEQUENCE)?)?;
-    let version = Reader::new(tbs.expect(TAG_VERSION)?)?.expect(der::INTEGER)?;
+    let mut tbs = Reader::new(Reader::new(outer.tagged(der::SEQUENCE)?)?.tagged(der::SEQUENCE)?)?;
+    let version = Reader::new(tbs.tagged(TAG_VERSION)?)?.tagged(der::INTEGER)?;
     if version != [2] {
         return Err(DerError::Tag);
     }
-    let _serial = tbs.expect(der::INTEGER)?;
-    let _signature = tbs.expect(der::SEQUENCE)?;
-    let _issuer = tbs.expect(der::SEQUENCE)?;
-    let _validity = tbs.expect(der::SEQUENCE)?;
-    let subject = tbs.expect(der::SEQUENCE)?;
-    let _spki = tbs.expect(der::SEQUENCE)?;
+    let _serial = tbs.tagged(der::INTEGER)?;
+    let _signature = tbs.tagged(der::SEQUENCE)?;
+    let _issuer = tbs.tagged(der::SEQUENCE)?;
+    let _validity = tbs.tagged(der::SEQUENCE)?;
+    let subject = tbs.tagged(der::SEQUENCE)?;
+    let _spki = tbs.tagged(der::SEQUENCE)?;
     if !subject_has_ou(subject)? {
         return Err(DerError::Tag);
     }
@@ -141,7 +141,7 @@ fn check_certificate(cert: &[u8], credential: &AttestedCredential<'_>) -> Result
         None => None,
     };
     if let Some((critical, value)) = found {
-        let inner = Reader::new(value)?.expect(der::OCTET_STRING)?;
+        let inner = Reader::new(value)?.tagged(der::OCTET_STRING)?;
         if critical || inner != credential.aaguid.0 {
             return Err(DerError::Tag);
         }

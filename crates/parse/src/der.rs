@@ -110,7 +110,7 @@ impl<'a> Reader<'a> {
     ///
     /// # Errors
     /// [`DerError`].
-    pub fn expect(&mut self, tag: u8) -> Result<&'a [u8], DerError> {
+    pub fn tagged(&mut self, tag: u8) -> Result<&'a [u8], DerError> {
         let tlv = self.next_tlv()?;
         if tlv.tag == tag {
             Ok(tlv.value)
@@ -128,8 +128,8 @@ mod tests {
     #[test]
     fn reads_canonical_lengths_only() {
         let mut r = Reader::new(&[0x30, 0x03, 0x02, 0x01, 0x05, 0x04, 0x00]).unwrap();
-        assert_eq!(r.expect(SEQUENCE).unwrap(), &[0x02, 0x01, 0x05]);
-        assert_eq!(r.expect(OCTET_STRING).unwrap(), &[] as &[u8]);
+        assert_eq!(r.tagged(SEQUENCE).unwrap(), &[0x02, 0x01, 0x05]);
+        assert_eq!(r.tagged(OCTET_STRING).unwrap(), &[] as &[u8]);
         assert!(r.is_empty());
         assert_eq!(
             Reader::new(&[0x04, 0x81, 0x01, 0x00]).unwrap().next_tlv(),
@@ -148,7 +148,7 @@ mod tests {
             Err(DerError::Encoding)
         );
         assert_eq!(
-            Reader::new(&[0x02, 0x00]).unwrap().expect(SEQUENCE),
+            Reader::new(&[0x02, 0x00]).unwrap().tagged(SEQUENCE),
             Err(DerError::Tag)
         );
         let long = [0_u8; MAX_INPUT + 1];
@@ -158,7 +158,7 @@ mod tests {
         assert_eq!(
             Reader::new(&big)
                 .unwrap()
-                .expect(OCTET_STRING)
+                .tagged(OCTET_STRING)
                 .unwrap()
                 .len(),
             256
