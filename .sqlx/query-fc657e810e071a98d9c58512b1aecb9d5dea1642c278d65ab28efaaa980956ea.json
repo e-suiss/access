@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.idp_clients SET status = 'retired', retired_at = now(), domain_id = $4,\n                decision_pos = $5\n          WHERE tenant_id = $1 AND realm_id = $2 AND client_id = $3 AND status = 'active'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "fc657e810e071a98d9c58512b1aecb9d5dea1642c278d65ab28efaaa980956ea"
+}

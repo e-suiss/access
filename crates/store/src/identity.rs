@@ -96,6 +96,25 @@ impl TenantTx {
         })
     }
 
+    /// Narrows a tenant-only transaction to `realm`, for the rows a realm's creation writes
+    /// after its own (TN-111).
+    ///
+    /// # Errors
+    /// [`StoreError::Range`] when the transaction already has a realm; [`StoreError::Db`].
+    pub async fn enter_realm(&mut self, realm: RealmId) -> Result<(), StoreError> {
+        if self.realm.is_some() {
+            return Err(StoreError::Range);
+        }
+        sqlx::query!(
+            "SELECT set_config('app.realm_id', $1, true) AS realm",
+            realm.0.to_string(),
+        )
+        .fetch_one(&mut *self.tx)
+        .await?;
+        self.realm = Some(realm);
+        Ok(())
+    }
+
     /// The tenant.
     #[must_use]
     pub const fn tenant(&self) -> TenantId {

@@ -1,0 +1,415 @@
+//! Identity plane configuration (MD-14, E34, EI-25, OP-146 I10): clients, realm settings and
+//! claim mappers. Every write names a committed ALLOW of an `idp.*` action that was bound in
+//! the same transaction; the database refuses any other write.
+
+use sqlx::types::Uuid;
+
+use crate::StoreError;
+use crate::identity::TenantTx;
+use crate::scope::DomainId;
+
+fn signed(v: u64) -> Result<i64, StoreError> {
+    i64::try_from(v).map_err(|_| StoreError::Range)
+}
+
+fn int(v: u32) -> Result<i32, StoreError> {
+    i32::try_from(v).map_err(|_| StoreError::Range)
+}
+
+fn uint(v: i32) -> Result<u32, StoreError> {
+    u32::try_from(v).map_err(|_| StoreError::Corrupt)
+}
+
+fn scope(t: &TenantTx) -> Result<(Uuid, Uuid), StoreError> {
+    let realm = t.realm().ok_or(StoreError::Range)?;
+    Ok((
+        Uuid::from_bytes(*t.tenant.as_bytes()),
+        Uuid::from_bytes(*realm.as_bytes()),
+    ))
+}
+
+/// A committed ALLOW as the identity plane binds it (EI-25).
+pub struct Decision<'a> {
+    /// The realm's governing domain.
+    pub domain: &'a DomainId,
+    /// Position of the decision record.
+    pub position: u64,
+    /// The Exercise nonce.
+    pub nonce: &'a [u8],
+    /// The intent digest of the decision.
+    pub intent: [u8; 32],
+    /// The digest of the change the intent binds.
+    pub change: [u8; 32],
+    /// The `idp.*` action label.
+    pub action: &'a str,
+}
+
+/// A decision bound in this transaction: the only way to write configuration. Deliberately
+/// neither `Clone` nor constructible outside this module.
+pub struct Bound {
+    domain: DomainId,
+    position: i64,
+}
+
+impl Bound {
+    /// The decision's position.
+    #[must_use]
+    pub fn position(&self) -> u64 {
+        u64::try_from(self.position).unwrap_or(0)
+    }
+}
+
+/// A realm as its configuration is governed (MD-5a).
+pub struct Governing {
+    /// The governing domain.
+    pub domain: DomainId,
+    /// The slug.
+    pub slug: String,
+    /// The issuer, once set.
+    pub issuer: Option<String>,
+}
+
+/// The transaction realm's governing domain, slug and issuer, when the realm is active.
+///
+/// # Errors
+/// [`StoreError`]; [`StoreError::Range`] for a transaction without a realm.
+pub async fn governance(t: &mut TenantTx) -> Result<Option<Governing>, StoreError> {
+    let (tenant, realm) = scope(t)?;
+    let row = sqlx::query!(
+        "SELECT governing_domain_id, slug, issuer FROM access.realms
+          WHERE tenant_id = $1 AND realm_id = $2 AND status = 'active'",
+        tenant,
+        realm,
+    )
+    .fetch_optional(&mut *t.tx)
+    .await?;
+    row.map(|r| {
+        let d = <[u8; 32]>::try_from(r.governing_domain_id.as_slice())
+            .map_err(|_| StoreError::Corrupt)?;
+        Ok(Governing {
+            domain: DomainId::from_bytes(d),
+            slug: r.slug,
+            issuer: r.issuer,
+        })
+    })
+    .transpose()
+}
+
+/// Binds a committed ALLOW to the transaction's realm. `None` when it is already bound: a
+/// retry of a decision already applied.
+///
+/// # Errors
+/// [`StoreError`]; a decision that is not an ALLOW of this intent in the realm's governing
+/// domain fails in the database.
+pub async fn bind(t: &mut TenantTx, d: &Decision<'_>) -> Result<Option<Bound>, StoreError> {
+    let (tenant, realm) = scope(t)?;
+    let position = signed(d.position)?;
+    let bound = sqlx::query_scalar!(
+        r#"INSERT INTO access.idp_config_log
+             (tenant_id, realm_id, domain_id, decision_pos, nonce, intent_digest, change_digest, action)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+           ON CONFLICT (tenant_id, domain_id, decision_pos) DO NOTHING
+           RETURNING decision_pos"#,
+        tenant,
+        realm,
+        d.domain.as_bytes().as_slice(),
+        position,
+        d.nonce,
+        d.intent.as_slice(),
+        d.change.as_slice(),
+        d.action,
+    )
+    .fetch_optional(&mut *t.tx)
+    .await?;
+    Ok(bound.map(|position| Bound {
+        domain: *d.domain,
+        position,
+    }))
+}
+
+/// A fresh `UUIDv7` from the database (MD-18).
+///
+/// # Errors
+/// [`StoreError`].
+pub async fn new_uuid(pool: &sqlx::PgPool) -> Result<[u8; 16], StoreError> {
+    let id = sqlx::query_scalar!(r#"SELECT uuidv7() AS "id!""#)
+        .fetch_one(pool)
+        .await?;
+    Ok(*id.as_bytes())
+}
+
+/// A client as stored (TN-15, IDP-7).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ClientRow {
+    /// Internal id.
+    pub client_uuid: [u8; 16],
+    /// The opaque `client_id` (OP-137).
+    pub client_id: String,
+    /// Display name, apart from the id.
+    pub display_name: String,
+    /// `token_endpoint_auth_method`.
+    pub auth_method: String,
+    /// The client's JWKS for `private_key_jwt`.
+    pub jwks_uri: Option<String>,
+    /// Redirect URIs, exact strings.
+    pub redirect_uris: Vec<String>,
+    /// Whether it is active.
+    pub active: bool,
+}
+
+/// Inserts a client under `bound`.
+///
+/// # Errors
+/// [`StoreError`]; a `client_id` ever used before fails (TN-20, INV-32).
+pub async fn insert_client(
+    t: &mut TenantTx,
+    bound: &Bound,
+    c: &ClientRow,
+) -> Result<(), StoreError> {
+    let (tenant, realm) = scope(t)?;
+    sqlx::query!(
+        "INSERT INTO access.idp_clients (tenant_id, realm_id, client_uuid, client_id, display_name,
+                auth_method, jwks_uri, redirect_uris, domain_id, decision_pos)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
+        tenant,
+        realm,
+        Uuid::from_bytes(c.client_uuid),
+        c.client_id,
+        c.display_name,
+        c.auth_method,
+        c.jwks_uri,
+        &c.redirect_uris,
+        bound.domain.as_bytes().as_slice(),
+        bound.position,
+    )
+    .execute(&mut *t.tx)
+    .await?;
+    Ok(())
+}
+
+/// Replaces an active client's name, method and redirect URIs under `bound`.
+///
+/// # Errors
+/// [`StoreError`].
+pub async fn update_client(
+    t: &mut TenantTx,
+    bound: &Bound,
+    c: &ClientRow,
+) -> Result<bool, StoreError> {
+    let (tenant, realm) = scope(t)?;
+    let done = sqlx::query!(
+        "UPDATE access.idp_clients SET display_name = $4, auth_method = $5, jwks_uri = $6,
+                redirect_uris = $7, domain_id = $8, decision_pos = $9
+          WHERE tenant_id = $1 AND realm_id = $2 AND client_id = $3 AND status = 'active'",
+        tenant,
+        realm,
+        c.client_id,
+        c.display_name,
+        c.auth_method,
+        c.jwks_uri,
+        &c.redirect_uris,
+        bound.domain.as_bytes().as_slice(),
+        bound.position,
+    )
+    .execute(&mut *t.tx)
+    .await?
+    .rows_affected();
+    Ok(done == 1)
+}
+
+/// Retires an active client under `bound`; its id stays taken (OP-73, INV-32).
+///
+/// # Errors
+/// [`StoreError`].
+pub async fn retire_client(
+    t: &mut TenantTx,
+    bound: &Bound,
+    client_id: &str,
+) -> Result<bool, StoreError> {
+    let (tenant, realm) = scope(t)?;
+    let done = sqlx::query!(
+        "UPDATE access.idp_clients SET status = 'retired', retired_at = now(), domain_id = $4,
+                decision_pos = $5
+          WHERE tenant_id = $1 AND realm_id = $2 AND client_id = $3 AND status = 'active'",
+        tenant,
+        realm,
+        client_id,
+        bound.domain.as_bytes().as_slice(),
+        bound.position,
+    )
+    .execute(&mut *t.tx)
+    .await?
+    .rows_affected();
+    Ok(done == 1)
+}
+
+/// The realm's client with `client_id`, active or retired.
+///
+/// # Errors
+/// [`StoreError`].
+pub async fn client(t: &mut TenantTx, client_id: &str) -> Result<Option<ClientRow>, StoreError> {
+    let (tenant, realm) = scope(t)?;
+    let row = sqlx::query!(
+        "SELECT client_uuid, client_id, display_name, auth_method, jwks_uri, redirect_uris, status
+           FROM access.idp_clients WHERE tenant_id = $1 AND realm_id = $2 AND client_id = $3",
+        tenant,
+        realm,
+        client_id,
+    )
+    .fetch_optional(&mut *t.tx)
+    .await?;
+    Ok(row.map(|r| ClientRow {
+        client_uuid: *r.client_uuid.as_bytes(),
+        client_id: r.client_id,
+        display_name: r.display_name,
+        auth_method: r.auth_method,
+        jwks_uri: r.jwks_uri,
+        redirect_uris: r.redirect_uris,
+        active: r.status == "active",
+    }))
+}
+
+/// A realm's settings (OP-146 m.4 (f), m.8 (e), IDP-5, §11.3).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SettingsRow {
+    /// JOSE signing algorithm of the realm's tokens.
+    pub jose_alg: String,
+    /// Argon2id memory in KiB.
+    pub argon2_m_kib: u32,
+    /// Argon2id passes.
+    pub argon2_t: u32,
+    /// Argon2id lanes.
+    pub argon2_p: u32,
+    /// The pinned WebAuthn RP ID.
+    pub rp_id: Option<String>,
+    /// Whether CIMD clients are accepted.
+    pub cimd_enabled: bool,
+    /// Domains whose CIMD clients are accepted.
+    pub cimd_domains: Vec<String>,
+}
+
+/// Writes the Genesis defaults of the transaction's realm.
+///
+/// # Errors
+/// [`StoreError`].
+pub async fn create_settings(t: &mut TenantTx) -> Result<(), StoreError> {
+    let (tenant, realm) = scope(t)?;
+    sqlx::query!(
+        "INSERT INTO access.idp_realm_settings (tenant_id, realm_id) VALUES ($1, $2)",
+        tenant,
+        realm,
+    )
+    .execute(&mut *t.tx)
+    .await?;
+    Ok(())
+}
+
+/// The transaction realm's settings.
+///
+/// # Errors
+/// [`StoreError`].
+pub async fn settings(t: &mut TenantTx) -> Result<Option<SettingsRow>, StoreError> {
+    let (tenant, realm) = scope(t)?;
+    let row = sqlx::query!(
+        "SELECT jose_alg, argon2_m_kib, argon2_t, argon2_p, rp_id, cimd_enabled, cimd_domains
+           FROM access.idp_realm_settings WHERE tenant_id = $1 AND realm_id = $2",
+        tenant,
+        realm,
+    )
+    .fetch_optional(&mut *t.tx)
+    .await?;
+    row.map(|r| {
+        Ok(SettingsRow {
+            jose_alg: r.jose_alg,
+            argon2_m_kib: uint(r.argon2_m_kib)?,
+            argon2_t: uint(r.argon2_t)?,
+            argon2_p: uint(r.argon2_p)?,
+            rp_id: r.rp_id,
+            cimd_enabled: r.cimd_enabled,
+            cimd_domains: r.cimd_domains,
+        })
+    })
+    .transpose()
+}
+
+/// Replaces the transaction realm's settings under `bound`.
+///
+/// # Errors
+/// [`StoreError`]; lower Argon2 parameters fail (OP-33).
+pub async fn update_settings(
+    t: &mut TenantTx,
+    bound: &Bound,
+    s: &SettingsRow,
+) -> Result<bool, StoreError> {
+    let (tenant, realm) = scope(t)?;
+    let done = sqlx::query!(
+        "UPDATE access.idp_realm_settings SET jose_alg = $3, argon2_m_kib = $4, argon2_t = $5,
+                argon2_p = $6, rp_id = $7, cimd_enabled = $8, cimd_domains = $9, domain_id = $10,
+                decision_pos = $11
+          WHERE tenant_id = $1 AND realm_id = $2",
+        tenant,
+        realm,
+        s.jose_alg,
+        int(s.argon2_m_kib)?,
+        int(s.argon2_t)?,
+        int(s.argon2_p)?,
+        s.rp_id,
+        s.cimd_enabled,
+        &s.cimd_domains,
+        bound.domain.as_bytes().as_slice(),
+        bound.position,
+    )
+    .execute(&mut *t.tx)
+    .await?
+    .rows_affected();
+    Ok(done == 1)
+}
+
+/// Sets the mapper of `claim` to `source` under `bound`; `None` removes it.
+///
+/// # Errors
+/// [`StoreError`]; a reserved claim fails (must-never #18).
+pub async fn set_mapper(
+    t: &mut TenantTx,
+    bound: &Bound,
+    claim: &str,
+    source: Option<&str>,
+) -> Result<(), StoreError> {
+    let (tenant, realm) = scope(t)?;
+    sqlx::query!(
+        "INSERT INTO access.idp_claim_mappers (tenant_id, realm_id, claim, source, status,
+                removed_at, domain_id, decision_pos)
+         VALUES ($1, $2, $3, $4, CASE WHEN $4::text IS NULL THEN 'removed' ELSE 'active' END,
+                 CASE WHEN $4::text IS NULL THEN now() END, $5, $6)
+         ON CONFLICT (tenant_id, realm_id, claim) DO UPDATE
+            SET source = EXCLUDED.source, status = EXCLUDED.status,
+                removed_at = EXCLUDED.removed_at, domain_id = EXCLUDED.domain_id,
+                decision_pos = EXCLUDED.decision_pos",
+        tenant,
+        realm,
+        claim,
+        source,
+        bound.domain.as_bytes().as_slice(),
+        bound.position,
+    )
+    .execute(&mut *t.tx)
+    .await?;
+    Ok(())
+}
+
+/// The realm's active mappers as `(claim, source)`, by claim.
+///
+/// # Errors
+/// [`StoreError`].
+pub async fn mappers(t: &mut TenantTx) -> Result<Vec<(String, String)>, StoreError> {
+    let (tenant, realm) = scope(t)?;
+    let rows = sqlx::query!(
+        r#"SELECT claim, source AS "source!" FROM access.idp_claim_mappers
+            WHERE tenant_id = $1 AND realm_id = $2 AND status = 'active' ORDER BY claim"#,
+        tenant,
+        realm,
+    )
+    .fetch_all(&mut *t.tx)
+    .await?;
+    Ok(rows.into_iter().map(|r| (r.claim, r.source)).collect())
+}

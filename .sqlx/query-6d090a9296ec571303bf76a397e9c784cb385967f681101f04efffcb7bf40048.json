@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.idp_claim_mappers (tenant_id, realm_id, claim, source, status,\n                removed_at, domain_id, decision_pos)\n         VALUES ($1, $2, $3, $4, CASE WHEN $4::text IS NULL THEN 'removed' ELSE 'active' END,\n                 CASE WHEN $4::text IS NULL THEN now() END, $5, $6)\n         ON CONFLICT (tenant_id, realm_id, claim) DO UPDATE\n            SET source = EXCLUDED.source, status = EXCLUDED.status,\n                removed_at = EXCLUDED.removed_at, domain_id = EXCLUDED.domain_id,\n                decision_pos = EXCLUDED.decision_pos",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Text",
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "6d090a9296ec571303bf76a397e9c784cb385967f681101f04efffcb7bf40048"
+}

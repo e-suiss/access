@@ -13,6 +13,7 @@ pub mod dpop;
 pub use sqlx::PgPool as Pool;
 
 pub mod identity;
+pub mod idp;
 pub mod jobs;
 pub mod relay;
 pub mod scope;

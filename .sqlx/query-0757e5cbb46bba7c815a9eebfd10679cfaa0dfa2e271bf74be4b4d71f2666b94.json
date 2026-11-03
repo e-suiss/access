@@ -1,0 +1,35 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.idp_config_log\n             (tenant_id, realm_id, domain_id, decision_pos, nonce, intent_digest, change_digest, action)\n           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)\n           ON CONFLICT (tenant_id, domain_id, decision_pos) DO NOTHING\n           RETURNING decision_pos",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "decision_pos",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.idp_config_log",
+            "name": "decision_pos"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Bytea",
+        "Int8",
+        "Bytea",
+        "Bytea",
+        "Bytea",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "0757e5cbb46bba7c815a9eebfd10679cfaa0dfa2e271bf74be4b4d71f2666b94"
+}

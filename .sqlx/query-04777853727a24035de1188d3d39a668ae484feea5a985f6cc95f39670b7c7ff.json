@@ -1,0 +1,101 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT jose_alg, argon2_m_kib, argon2_t, argon2_p, rp_id, cimd_enabled, cimd_domains\n           FROM access.idp_realm_settings WHERE tenant_id = $1 AND realm_id = $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "jose_alg",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.idp_realm_settings",
+            "name": "jose_alg"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "argon2_m_kib",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "access.idp_realm_settings",
+            "name": "argon2_m_kib"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "argon2_t",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "access.idp_realm_settings",
+            "name": "argon2_t"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "argon2_p",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "access.idp_realm_settings",
+            "name": "argon2_p"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "rp_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.idp_realm_settings",
+            "name": "rp_id"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "cimd_enabled",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "access.idp_realm_settings",
+            "name": "cimd_enabled"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "cimd_domains",
+        "type_info": "TextArray",
+        "origin": {
+          "Table": {
+            "table": "access.idp_realm_settings",
+            "name": "cimd_domains"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "04777853727a24035de1188d3d39a668ae484feea5a985f6cc95f39670b7c7ff"
+}

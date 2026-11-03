@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.idp_realm_settings SET jose_alg = $3, argon2_m_kib = $4, argon2_t = $5,\n                argon2_p = $6, rp_id = $7, cimd_enabled = $8, cimd_domains = $9, domain_id = $10,\n                decision_pos = $11\n          WHERE tenant_id = $1 AND realm_id = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Int4",
+        "Int4",
+        "Int4",
+        "Text",
+        "Bool",
+        "TextArray",
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "bd429a21367e20c5d21632c9748a6137179132dd93296d23ffb6fafa4a2256a4"
+}

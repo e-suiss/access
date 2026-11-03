@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.idp_realm_settings (tenant_id, realm_id) VALUES ($1, $2)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "0ad72a1b0b5bacea727ea9aca2a091acf648e6c2011cbb856dbedb545187b313"
+}
