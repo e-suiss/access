@@ -133,11 +133,11 @@ pub trait SessionTx: AccountTx {
         subject: [u8; 16],
     ) -> impl Future<Output = Result<Option<(String, String)>, SessionError>> + Send;
     /// Queues `message` through `notifier` in this transaction.
-    fn notify<N: Notifier>(
+    fn notify<N: Notifier + Sync>(
         &mut self,
         notifier: &N,
         message: &Message,
-    ) -> impl Future<Output = Result<(), SessionError>>;
+    ) -> impl Future<Output = Result<(), SessionError>> + Send;
     /// Subjects whose epoch moved after `since_ms`.
     fn epochs_since(
         &mut self,

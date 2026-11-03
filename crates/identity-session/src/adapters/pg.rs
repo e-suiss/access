@@ -137,7 +137,7 @@ impl SessionTx for PgTx {
         Ok(self.0.contact(subject).await?)
     }
 
-    async fn notify<N: Notifier>(
+    async fn notify<N: Notifier + Sync>(
         &mut self,
         notifier: &N,
         message: &Message,

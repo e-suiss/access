@@ -314,7 +314,7 @@ where
     D: SessionDb,
     C: Clock,
     R: Random,
-    N: Notifier,
+    N: Notifier + Sync,
     P: CredentialRegistry + Sync,
     S: SignalSink + Sync,
 {
