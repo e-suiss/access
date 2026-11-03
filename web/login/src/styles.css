@@ -1,0 +1,100 @@
+:root {
+  color-scheme: light;
+  font-family: system-ui, sans-serif;
+  line-height: 1.5;
+  color: #1a1a1a;
+  background: #f4f4f5;
+}
+
+body {
+  margin: 0;
+}
+
+main {
+  display: grid;
+  place-items: center;
+  min-height: 100vh;
+  padding: 1rem;
+  box-sizing: border-box;
+}
+
+.card {
+  width: 100%;
+  max-width: 24rem;
+  padding: 1.5rem;
+  background: #ffffff;
+  border: 1px solid #d4d4d8;
+  border-radius: 0.5rem;
+  box-sizing: border-box;
+}
+
+h1 {
+  margin: 0 0 1rem;
+  font-size: 1.5rem;
+}
+
+form {
+  display: grid;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.field {
+  display: grid;
+  gap: 0.25rem;
+}
+
+label {
+  font-weight: 600;
+}
+
+input {
+  font: inherit;
+  padding: 0.5rem 0.625rem;
+  border: 1px solid #71717a;
+  border-radius: 0.375rem;
+}
+
+input[readonly] {
+  background: #f4f4f5;
+}
+
+button {
+  font: inherit;
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.375rem;
+  border: 1px solid #1d4ed8;
+  cursor: pointer;
+}
+
+button.primary {
+  background: #1d4ed8;
+  color: #ffffff;
+}
+
+button.passkey {
+  background: #ffffff;
+  color: #1d4ed8;
+  margin-bottom: 1rem;
+}
+
+button.secondary {
+  background: transparent;
+  border-color: transparent;
+  color: #1d4ed8;
+  text-decoration: underline;
+}
+
+button:disabled {
+  cursor: progress;
+  opacity: 0.7;
+}
+
+.messages p {
+  margin: 0 0 1rem;
+  padding: 0.5rem 0.75rem;
+  border-left: 4px solid #b91c1c;
+  background: #fef2f2;
+  color: #7f1d1d;
+}
