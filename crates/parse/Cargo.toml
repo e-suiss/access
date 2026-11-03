@@ -9,6 +9,10 @@ repository.workspace = true
 publish = false
 
 [dependencies]
+thiserror = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true, features = ["std"] }
 
 [lints]
 workspace = true
