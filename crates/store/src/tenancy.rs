@@ -230,6 +230,21 @@ pub async fn routes(router: &PgPool) -> Result<Vec<RealmRoute>, StoreError> {
         .collect())
 }
 
+/// The tenant of the live realm `realm`, read by the router role (OP-132 m.3): the identity
+/// plane loads a realm's keys after the router has resolved it.
+///
+/// # Errors
+/// [`StoreError`].
+pub async fn realm_tenant(router: &PgPool, realm: RealmId) -> Result<Option<TenantId>, StoreError> {
+    let row = sqlx::query_scalar!(
+        "SELECT tenant_id FROM access.realms WHERE realm_id = $1 AND status = 'active'",
+        Uuid::from_bytes(*realm.as_bytes()),
+    )
+    .fetch_optional(router)
+    .await?;
+    Ok(row.map(|t| TenantId::from_bytes(*t.as_bytes())))
+}
+
 /// The live realm a request's `Host` names, read by the router role (OP-132 m.3). The
 /// hostname is compared in lower case.
 ///

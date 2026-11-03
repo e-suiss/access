@@ -11,8 +11,8 @@ use access_store::authority::{LogRecord, create_domain};
 use access_store::identity::{RealmId, TenantId, TenantTx};
 use access_store::scope::DomainId;
 use access_store::tenancy::{
-    HostKind, add_hostname, create_realm, create_tenant, delete_realm, remove_hostname,
-    resolve_host, route_by_host, route_by_slug, routes, set_issuer,
+    HostKind, add_hostname, create_realm, create_tenant, delete_realm, realm_tenant,
+    remove_hostname, resolve_host, route_by_host, route_by_slug, routes, set_issuer,
 };
 use access_store::testing::{TestDb, fresh};
 use sqlx::Row;
@@ -245,8 +245,8 @@ async fn the_issuer_is_set_once_and_never_changes() {
     assert_eq!(got.issuer, "https://acme-i.id.test");
 }
 
-// OP-132 m.3, TN-10: the router reads a live realm's slug and issuer by hostname or slug; a
-// realm without an issuer, or a deleted one, is not routed
+// OP-132 m.3, TN-10: the router reads a live realm's slug and issuer by hostname or slug, and
+// its tenant by realm; a realm without an issuer, or a deleted one, is not routed
 #[tokio::test]
 async fn the_router_routes_live_realms_with_an_issuer() {
     let db = fresh().await.unwrap();
@@ -277,9 +277,12 @@ async fn the_router_routes_live_realms_with_an_issuer() {
         .map(|r| r.slug)
         .collect();
     assert_eq!(all, ["acme-j", "acme-k"]);
+    let owner = realm_tenant(&db.router, r2).await.unwrap().unwrap();
+    assert_eq!(owner.as_bytes(), t2.as_bytes());
     let mut tx = TenantTx::begin_tenant(&db.app, t).await.unwrap();
     delete_realm(&mut tx, r).await.unwrap();
     tx.commit().await.unwrap();
+    assert!(realm_tenant(&db.router, r).await.unwrap().is_none());
     assert!(
         route_by_host(&db.router, "acme-j.id.test")
             .await
