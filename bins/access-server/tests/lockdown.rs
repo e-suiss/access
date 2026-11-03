@@ -96,6 +96,10 @@ fn op_90_server_refuses_to_start_without_lockdown() {
                 .expect("chmod");
         }
     }
+    // OP-146 m.12 (f): the built login app is read before the lockdown too
+    let dist = dir.join("login-dist");
+    std::fs::create_dir_all(&dist).expect("dist dir");
+    std::fs::write(dist.join("index.html"), "<!doctype html>").expect("write index");
     let (token, softhsm) = token(&dir);
     let config = dir.join("access.toml");
     std::fs::write(
@@ -111,7 +115,8 @@ fn op_90_server_refuses_to_start_without_lockdown() {
              router = {{ user = \"r\", password_file = {pw:?}, pool = 1 }}\n\
              [identity]\nrealm_base = \"https://id.access.example\"\n\
              signer = \"/run/access/identity-signer.sock\"\n\
-             [hsm]\nmodule = {module:?}\ntoken = {token:?}\npin_file = {pin:?}\n",
+             [hsm]\nmodule = {module:?}\ntoken = {token:?}\npin_file = {pin:?}\n\
+             [login]\ndist_dir = {dist:?}\n",
             crt = dir.join("tls.crt"),
             key = dir.join("tls.key"),
             pw = dir.join("db-password"),

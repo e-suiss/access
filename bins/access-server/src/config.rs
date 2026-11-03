@@ -37,6 +37,50 @@ pub(crate) struct Config {
     pub(crate) signer: Option<PathBuf>,
     /// The identity plane (TN-10, CMP-22b, OP-138).
     pub(crate) identity: Option<Identity>,
+    pub(crate) login: Login,
+}
+
+/// The hosted login (OP-146 m.12, m.14).
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields, default)]
+pub(crate) struct Login {
+    /// The built `web/login/dist`; read once before the lockdown. Without it only the login
+    /// API is served.
+    pub(crate) dist_dir: Option<PathBuf>,
+    /// Where a completed sign-in goes: a path on the realm's origin.
+    pub(crate) redirect_to: String,
+    /// Session idle lifetime, seconds (TN-36; OP-146 m.14 (c): 7 days).
+    pub(crate) session_idle_s: u64,
+    /// Session absolute lifetime, seconds (TN-36; OP-146 m.14 (c): 30 days).
+    pub(crate) session_absolute_s: u64,
+    /// The calibrated Argon2id time that pads refusals until successes are measured (TN-82,
+    /// OP-146 m.4 (f)).
+    pub(crate) hash_mean_ms: u64,
+}
+
+impl Default for Login {
+    fn default() -> Self {
+        Self {
+            dist_dir: None,
+            redirect_to: "/".to_owned(),
+            session_idle_s: 7 * 86_400,
+            session_absolute_s: 30 * 86_400,
+            hash_mean_ms: 0,
+        }
+    }
+}
+
+impl Login {
+    /// The session lifetimes, if inside the TN-36 ranges.
+    pub(crate) fn lifetimes(
+        &self,
+    ) -> Option<access_identity_session::domain::session::SessionPolicy> {
+        access_identity_session::domain::session::SessionPolicy::new(
+            self.session_idle_s.checked_mul(1000)?,
+            self.session_absolute_s.checked_mul(1000)?,
+        )
+        .ok()
+    }
 }
 
 /// The identity plane's realm runtime.
@@ -144,6 +188,7 @@ impl Default for Config {
             hsm: None,
             signer: None,
             identity: None,
+            login: Login::default(),
         }
     }
 }
@@ -169,6 +214,10 @@ pub(crate) enum ConfigError {
     PoolSize,
     #[error("the identity section is required (TN-10, CMP-22b)")]
     NoIdentity,
+    #[error("login session lifetimes are outside the TN-36 ranges")]
+    SessionLifetimes,
+    #[error("login.redirect_to must be a path on the realm's origin")]
+    RedirectTo,
     #[error("identity.realm_base must be an https origin without a path or trailing slash (TN-10)")]
     RealmBase,
     #[error(transparent)]
@@ -218,6 +267,13 @@ impl Config {
         let identity = self.identity.as_ref().ok_or(ConfigError::NoIdentity)?;
         // OP-138, §17.9.6
         RealmBase::parse(&identity.realm_base).map_err(|_| ConfigError::RealmBase)?;
+        if self.login.lifetimes().is_none() {
+            return Err(ConfigError::SessionLifetimes);
+        }
+        let to = &self.login.redirect_to;
+        if !to.starts_with('/') || to.starts_with("//") || to.contains('\\') {
+            return Err(ConfigError::RedirectTo);
+        }
         Ok(())
     }
 
@@ -286,6 +342,35 @@ mod tests {
     #[test]
     fn defaults_with_tls_are_valid() {
         with_tls().validate().unwrap();
+    }
+
+    // TN-36, OP-146 m.14 (c): lifetimes stay in range; a completed sign-in stays on the origin
+    #[test]
+    fn login_settings_are_checked() {
+        let long = Config {
+            login: Login {
+                session_absolute_s: 10 * 365 * 86_400,
+                ..Login::default()
+            },
+            ..with_tls()
+        };
+        assert!(matches!(
+            long.validate(),
+            Err(ConfigError::SessionLifetimes)
+        ));
+        for to in ["https://evil.example/", "//evil.example", "/\\evil.example"] {
+            let away = Config {
+                login: Login {
+                    redirect_to: to.to_owned(),
+                    ..Login::default()
+                },
+                ..with_tls()
+            };
+            assert!(
+                matches!(away.validate(), Err(ConfigError::RedirectTo)),
+                "{to}"
+            );
+        }
     }
 
     // CR-12, OP-52: no TLS, no start

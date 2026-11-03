@@ -3,6 +3,7 @@
 
 mod config;
 mod idp;
+mod login;
 
 use std::fmt::Write as _;
 use std::path::Path;
@@ -15,11 +16,20 @@ use access_authority_sequencer::adapters::SourcesClock;
 use access_crypto::secret_file::SecretFile;
 use access_http::adp::adapters::{Discovery, router as adp_router};
 use access_http::adp::app::Service;
+use access_http::login::{Assets, router as login_router};
 use access_http::realm::router as realm_router;
 use access_http::{Health, Limits, SandboxHealth, router};
+use access_identity_account::adapters::system::{SystemClock, cgroup_memory_budget, cores};
+use access_identity_account::app::hasher::{Hasher, HasherConfig};
+use access_identity_account::app::local::LocalLimiter;
+use access_identity_account::app::login::LoginGate;
+use access_identity_account::domain::password::Argon2Params;
+use access_identity_account::domain::throttle::ThrottlePolicy;
 use access_identity_oauth::adapters::{PgDirectory, SignerKeys};
 use access_identity_oauth::app::Discovery as RealmDiscovery;
 use access_identity_oauth::domain::issuer::RealmBase;
+use access_identity_ui::adapters::Outbox;
+use access_identity_ui::app::Hosted;
 use access_store::Pool;
 use access_store::connect::{Target, check_server, options, pool};
 use config::{Config, Durability, Role};
@@ -44,6 +54,8 @@ struct Prepared {
     deriver_password: SecretFile,
     router_password: SecretFile,
     keys: KeyStore,
+    login_keys: KeyStore,
+    assets: Option<Assets>,
 }
 
 /// The database pools of the server's roles.
@@ -152,6 +164,16 @@ fn prepare(config: &Config, tls: Arc<access_http::tls::ServerConfig>) -> Result<
     let password = |r: &Role| SecretFile::load(&r.password_file).map_err(|e| e.to_string());
     let pin = SecretFile::load(&hsm.pin_file).map_err(|e| e.to_string())?;
     let keys = KeyStore::open(&hsm.module, &hsm.token, pin.value()).map_err(|e| e.to_string())?;
+    let login_keys =
+        KeyStore::open(&hsm.module, &hsm.token, pin.value()).map_err(|e| e.to_string())?;
+    // OP-146 m.12 (f): the built login app is read before the lockdown closes the file system
+    let assets = config
+        .login
+        .dist_dir
+        .as_deref()
+        .map(Assets::load)
+        .transpose()
+        .map_err(|e| e.to_string())?;
     Ok(Prepared {
         tls,
         root_cert,
@@ -160,6 +182,8 @@ fn prepare(config: &Config, tls: Arc<access_http::tls::ServerConfig>) -> Result<
         deriver_password: password(&db.deriver)?,
         router_password: password(&db.router)?,
         keys,
+        login_keys,
+        assets,
     })
 }
 
@@ -248,6 +272,41 @@ async fn identity(config: &Config, router: Pool) -> Result<axum::Router, String>
     Ok(realm_router(discovery))
 }
 
+/// The hosted login (OP-146 m.12): the request's `Host` selects the realm as for discovery;
+/// realm keys come from the HSM on first use.
+fn login(
+    config: &Config,
+    router: Pool,
+    app: Pool,
+    keys: KeyStore,
+    assets: Option<Assets>,
+) -> Result<axum::Router, String> {
+    let identity = config.identity.as_ref().ok_or("no identity section")?;
+    let lifetimes = config.login.lifetimes().ok_or("login session lifetimes")?;
+    let discovery = RealmDiscovery::new(
+        PgDirectory::new(router.clone()),
+        SignerKeys::new(identity.signer.clone()),
+    );
+    let hosted = Hosted {
+        kits: login::HsmKits::new(keys, router, lifetimes),
+        db: app,
+        clock: SystemClock,
+        messages: Outbox,
+        gate: LoginGate::new(
+            LocalLimiter::default(),
+            ThrottlePolicy::DEFAULT,
+            config.login.hash_mean_ms,
+        ),
+        hasher: Hasher::new(HasherConfig::sized(
+            Argon2Params::CANONICAL,
+            cores(),
+            cgroup_memory_budget(),
+        )),
+        redirect_to: config.login.redirect_to.clone(),
+    };
+    Ok(login_router(discovery, hosted, assets))
+}
+
 fn tls_config(config: &Config) -> Result<std::sync::Arc<access_http::tls::ServerConfig>, String> {
     let tls = config.tls.as_ref().ok_or("no tls section")?;
     let chain =
@@ -276,6 +335,13 @@ async fn serve(
         deriver,
         router: router_pool,
     } = pools(config, &prepared).await?;
+    let sign_in = login(
+        config,
+        router_pool.clone(),
+        app.clone(),
+        prepared.login_keys,
+        prepared.assets,
+    )?;
     let realms = identity(config, router_pool).await?;
     let sequencer_for_time = sequencer.clone();
     let (idp_sequencer, idp_app) = (sequencer.clone(), app.clone());
@@ -328,7 +394,12 @@ async fn serve(
             landlock_kernel_abi: report.landlock_kernel_abi,
         },
     };
-    let app = router(config.security_txt(), health, limits, adp.merge(realms));
+    let app = router(
+        config.security_txt(),
+        health,
+        limits,
+        adp.merge(realms).merge(sign_in),
+    );
     listener.set_nonblocking(true).map_err(|e| e.to_string())?;
     let listener = tokio::net::TcpListener::from_std(listener).map_err(|e| e.to_string())?;
     tracing::info!(listen = %config.listen, "access-server listening (TLS 1.3)");
