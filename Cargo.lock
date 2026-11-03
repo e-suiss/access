@@ -9,6 +9,7 @@ dependencies = [
  "access-authority-sequencer",
  "access-authority-signer",
  "access-crypto",
+ "access-internal-api",
  "access-store",
  "ed25519-dalek",
  "esuiss-access-kernel",
@@ -110,6 +111,16 @@ dependencies = [
 [[package]]
 name = "access-identity-admin"
 version = "0.2.4"
+dependencies = [
+ "access-crypto",
+ "access-identity-account",
+ "access-identity-oauth",
+ "access-internal-api",
+ "access-store",
+ "esuiss-access-kernel",
+ "esuiss-crypto",
+ "thiserror",
+]
 
 [[package]]
 name = "access-identity-audit"
@@ -202,6 +213,9 @@ dependencies = [
 [[package]]
 name = "access-internal-api"
 version = "0.2.4"
+dependencies = [
+ "esuiss-access-kernel",
+]
 
 [[package]]
 name = "access-kernel-uniffi"
@@ -236,10 +250,15 @@ dependencies = [
  "access-authority-sequencer",
  "access-crypto",
  "access-http",
+ "access-identity-account",
+ "access-identity-admin",
  "access-identity-oauth",
+ "access-internal-api",
  "access-store",
  "access-telemetry",
  "axum",
+ "ed25519-dalek",
+ "esuiss-access-kernel",
  "esuiss-crypto",
  "esuiss-sandbox",
  "figment",

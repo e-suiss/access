@@ -1,1 +1,399 @@
-//! Use cases over the domain and its ports (OP-63).
+//! Use cases over the domain and its ports (OP-63): realm creation (TN-111) and the `idp.*`
+//! write path (MD-14, EI-25).
+
+use access_crypto::opaque_id::IdKey;
+use access_identity_account::domain::password::Argon2Params;
+use access_identity_oauth::domain::issuer::{Issuer, IssuerStyle, RealmBase};
+use access_internal_api::idp::{GenesisOrder, Submission, Verdict};
+use access_kernel::combinator::{Capacity, Decision};
+use access_kernel::digest::Digest;
+use access_kernel::intent::{IntentEnvelope, intent_digest};
+use access_kernel::meta::{ExerciseBasis, Root};
+use access_kernel::model::Window;
+use access_store::Pool;
+use access_store::identity::{RealmId, TenantId, TenantTx};
+use access_store::idp::{self, ClientRow, Decision as Bind, Governing, SettingsRow};
+use access_store::scope::DomainId;
+use access_store::tenancy::{self, HostKind};
+
+use crate::AdminError;
+use crate::domain::{Attribute, CLIENT_PREFIX, Change, Client, ClientId, Invalid, JoseAlg, raises};
+use crate::ports::{Decider, Governance};
+
+/// A realm to create (TN-111, TN-16, TN-10).
+pub struct NewRealm<'a> {
+    /// The tenant.
+    pub tenant: TenantId,
+    /// The immutable slug.
+    pub slug: &'a str,
+    /// How its issuer is formed.
+    pub style: IssuerStyle,
+    /// Its placement (OP-40).
+    pub placement: &'a str,
+    /// The founding root of its governing domain (§12.5.1).
+    pub root: Root,
+    /// The CT3 time-lock; `None` keeps the default.
+    pub ct3_delay_s: Option<u64>,
+}
+
+/// A created realm.
+pub struct CreatedRealm {
+    /// The realm.
+    pub realm: RealmId,
+    /// Its governing domain.
+    pub domain: Digest,
+    /// Its fixed issuer.
+    pub issuer: Issuer,
+}
+
+/// An `idp.*` change as an actor proposes it: what the intent is built from (EI-25).
+pub struct Proposal {
+    /// The tenant.
+    pub tenant: TenantId,
+    /// The realm.
+    pub realm: RealmId,
+    /// The change.
+    pub change: Change,
+    /// The Exercise nonce.
+    pub nonce: Vec<u8>,
+    /// The intent's validity.
+    pub validity: Window,
+    /// The actor's declared basis.
+    pub basis: ExerciseBasis,
+    /// The actor's declared capacity.
+    pub capacity: Capacity,
+}
+
+/// What the actor signs: the realm's governing domain and the intent of the change.
+pub struct Prepared {
+    /// The domain the AIS names.
+    pub domain: Digest,
+    /// The intent.
+    pub intent: IntentEnvelope,
+    /// Its digest.
+    pub digest: Digest,
+}
+
+/// The result of an `idp.*` Exercise; a refusal is a decision, not an error.
+#[derive(Debug, PartialEq, Eq)]
+pub enum Applied {
+    /// Committed and written (TN-110: the Exercise reference goes back to the caller).
+    Written {
+        /// The `ExerciseID`.
+        exercise: Digest,
+        /// Position of the decision record.
+        position: u64,
+    },
+    /// A retry of a decision already written; nothing changed.
+    AlreadyWritten {
+        /// The `ExerciseID`.
+        exercise: Digest,
+        /// Position of the decision record.
+        position: u64,
+    },
+    /// Denied or waiting on an action; nothing was written.
+    NotAllowed {
+        /// The decision.
+        decision: Decision,
+        /// Position of its record, when recorded.
+        position: Option<u64>,
+    },
+}
+
+/// The identity plane's configuration service.
+pub struct Admin<'a, D, G> {
+    /// The `access_app` pool.
+    pub app: &'a Pool,
+    /// The cell's opaque id key (OP-137).
+    pub ids: &'a IdKey,
+    /// The authority plane's decisions.
+    pub decider: &'a D,
+    /// The authority plane's Genesis.
+    pub governance: &'a G,
+    /// The identity plane's PEP name.
+    pub pep: &'a str,
+    /// Where realm issuers are formed.
+    pub base: &'a RealmBase,
+}
+
+fn host_of(authority: &str) -> &str {
+    authority
+        .rsplit_once(':')
+        .map_or(authority, |(host, _)| host)
+}
+
+impl<D: Decider, G: Governance> Admin<'_, D, G> {
+    /// Creates a realm: opens its governing domain with a Genesis, then writes the realm with
+    /// its fixed issuer and the Genesis default settings (TN-111, TN-16, OP-146 m.8 (c)). There
+    /// is no master realm; every realm is created this way.
+    ///
+    /// # Errors
+    /// [`AdminError`]; a slug taken by another realm leaves the new domain without a realm.
+    pub async fn create_realm(&self, r: &NewRealm<'_>) -> Result<CreatedRealm, AdminError> {
+        let issuer = self.base.issuer(r.slug, r.style)?;
+        let opened = self
+            .governance
+            .open(GenesisOrder {
+                tenant: *r.tenant.as_bytes(),
+                root: r.root.clone(),
+                ct3_delay_s: r.ct3_delay_s,
+            })
+            .await
+            .map_err(|e| AdminError::Unavailable(e.0))?;
+        let domain = DomainId::from_bytes(opened.domain.0);
+        let mut t = TenantTx::begin_tenant(self.app, r.tenant).await?;
+        let realm = tenancy::create_realm(&mut t, &domain, r.slug, r.placement).await?;
+        t.enter_realm(realm).await?;
+        if r.style == IssuerStyle::Subdomain {
+            tenancy::add_hostname(&mut t, host_of(issuer.authority()), HostKind::Subdomain).await?;
+        }
+        if !tenancy::set_issuer(&mut t, issuer.as_str()).await? {
+            return Err(AdminError::Conflict);
+        }
+        idp::create_settings(&mut t).await?;
+        t.commit().await?;
+        Ok(CreatedRealm {
+            realm,
+            domain: opened.domain,
+            issuer,
+        })
+    }
+
+    /// A fresh `client_id` (OP-137, TN-15): the permuted `UUIDv7` of the new client.
+    ///
+    /// # Errors
+    /// [`AdminError`].
+    pub async fn new_client_id(&self) -> Result<ClientId, AdminError> {
+        let uuid = idp::new_uuid(self.app).await?;
+        Ok(ClientId::parse(&self.ids.encode(CLIENT_PREFIX, uuid)?)?)
+    }
+
+    async fn governing(&self, p: &Proposal, state: bool) -> Result<Governing, AdminError> {
+        let mut t = TenantTx::begin(self.app, p.tenant, p.realm).await?;
+        let g = idp::governance(&mut t).await?.ok_or(AdminError::NoRealm)?;
+        let current = Self::current(&mut t, &p.change, &g, state).await;
+        t.commit().await?;
+        current?;
+        Ok(g)
+    }
+
+    /// Checks the change against the realm; with `state`, also against its current
+    /// configuration, which a retry of an applied change no longer matches.
+    async fn current(
+        t: &mut TenantTx,
+        change: &Change,
+        g: &Governing,
+        state: bool,
+    ) -> Result<(), AdminError> {
+        change.check()?;
+        match change {
+            Change::RpId(rp) => {
+                let issuer = g
+                    .issuer
+                    .as_deref()
+                    .and_then(|i| Issuer::parse(i).ok())
+                    .ok_or(AdminError::NoRealm)?;
+                if !rp.covers(host_of(issuer.authority())) {
+                    return Err(Invalid::RpId.into());
+                }
+            }
+            _ if !state => {}
+            Change::ClientRegister(c) => {
+                if idp::client(t, c.id.as_str()).await?.is_some() {
+                    return Err(Invalid::ClientExists.into());
+                }
+            }
+            Change::ClientUpdate(Client { id, .. }) | Change::ClientRetire(id) => {
+                if !idp::client(t, id.as_str()).await?.is_some_and(|c| c.active) {
+                    return Err(Invalid::NoClient.into());
+                }
+            }
+            Change::Argon2(new) => {
+                let s = idp::settings(t).await?.ok_or(AdminError::NoRealm)?;
+                let current = Argon2Params {
+                    m_kib: s.argon2_m_kib,
+                    t: s.argon2_t,
+                    p: s.argon2_p,
+                };
+                if !raises(new, &current) {
+                    return Err(Invalid::Argon2.into());
+                }
+            }
+            Change::CimdPolicy(_) | Change::MapperSet { .. } | Change::JoseAlg(_) => {}
+        }
+        Ok(())
+    }
+
+    /// The intent the actor signs for `p` (EI-25), once the change fits the realm's current
+    /// configuration.
+    ///
+    /// # Errors
+    /// [`AdminError`].
+    pub async fn prepare(&self, p: &Proposal) -> Result<Prepared, AdminError> {
+        self.prepared(p, true).await
+    }
+
+    async fn prepared(&self, p: &Proposal, state: bool) -> Result<Prepared, AdminError> {
+        let g = self.governing(p, state).await?;
+        let intent = p
+            .change
+            .intent(&g.slug, p.validity)
+            .map_err(|_| AdminError::Encode)?;
+        let digest = intent_digest(&intent).map_err(|_| AdminError::Encode)?;
+        Ok(Prepared {
+            domain: Digest(*g.domain.as_bytes()),
+            intent,
+            digest,
+        })
+    }
+
+    /// Has the realm's governing domain commit `p` with the actor's `ais`, then writes the
+    /// change against the committed ALLOW in one transaction (MD-14, EI-25, TN-110).
+    ///
+    /// # Errors
+    /// [`AdminError`]; a DENY or a pending decision is [`Applied::NotAllowed`].
+    pub async fn apply(&self, p: &Proposal, ais: Vec<u8>) -> Result<Applied, AdminError> {
+        let prepared = self.prepared(p, false).await?;
+        let verdict = self
+            .decider
+            .decide(Submission {
+                domain: prepared.domain,
+                nonce: p.nonce.clone(),
+                intent: prepared.intent,
+                basis: p.basis,
+                capacity: p.capacity,
+                ais,
+                pep: String::from(self.pep),
+            })
+            .await
+            .map_err(|e| AdminError::Unavailable(e.0))?;
+        let committed = match verdict {
+            Verdict::Committed(c) => c,
+            Verdict::NotAllowed { decision, position } => {
+                return Ok(Applied::NotAllowed { decision, position });
+            }
+            Verdict::Refused { code } if code == "unavailable" => {
+                return Err(AdminError::Unavailable(code));
+            }
+            Verdict::Refused { code } => return Err(AdminError::Refused(code)),
+        };
+        // EI-25: the decision is about this very intent, nonce and domain
+        if committed.intent != prepared.digest
+            || committed.domain != prepared.domain
+            || committed.nonce != p.nonce
+        {
+            return Err(AdminError::Unbound);
+        }
+        let change = p.change.digest().map_err(|_| AdminError::Encode)?;
+        let domain = DomainId::from_bytes(committed.domain.0);
+        let label = p.change.action().label();
+        let mut t = TenantTx::begin(self.app, p.tenant, p.realm).await?;
+        let bound = idp::bind(
+            &mut t,
+            &Bind {
+                domain: &domain,
+                position: committed.position,
+                nonce: &committed.nonce,
+                intent: committed.intent.0,
+                change: change.0,
+                action: &label,
+            },
+        )
+        .await?;
+        let Some(bound) = bound else {
+            t.rollback().await?;
+            return Ok(Applied::AlreadyWritten {
+                exercise: committed.exercise,
+                position: committed.position,
+            });
+        };
+        self.write(&mut t, &bound, &p.change).await?;
+        t.commit().await?;
+        Ok(Applied::Written {
+            exercise: committed.exercise,
+            position: committed.position,
+        })
+    }
+
+    async fn write(
+        &self,
+        t: &mut TenantTx,
+        bound: &idp::Bound,
+        change: &Change,
+    ) -> Result<(), AdminError> {
+        let row = |c: &Client| -> Result<ClientRow, AdminError> {
+            Ok(ClientRow {
+                client_uuid: self.ids.decode(CLIENT_PREFIX, c.id.as_str())?,
+                client_id: String::from(c.id.as_str()),
+                display_name: c.display_name.clone(),
+                auth_method: String::from(c.auth.name()),
+                jwks_uri: c.auth.jwks_uri().map(String::from),
+                redirect_uris: c
+                    .redirect_uris
+                    .iter()
+                    .map(|u| String::from(u.as_str()))
+                    .collect(),
+                active: true,
+            })
+        };
+        let done = match change {
+            Change::ClientRegister(c) => {
+                idp::insert_client(t, bound, &row(c)?).await?;
+                true
+            }
+            Change::ClientUpdate(c) => idp::update_client(t, bound, &row(c)?).await?,
+            Change::ClientRetire(id) => idp::retire_client(t, bound, id.as_str()).await?,
+            Change::MapperSet { claim, source } => {
+                idp::set_mapper(
+                    t,
+                    bound,
+                    claim.as_str(),
+                    source.as_ref().map(Attribute::as_str),
+                )
+                .await?;
+                true
+            }
+            Change::CimdPolicy(_) | Change::JoseAlg(_) | Change::Argon2(_) | Change::RpId(_) => {
+                let s = idp::settings(t).await?.ok_or(AdminError::NoRealm)?;
+                idp::update_settings(t, bound, &settings_with(s, change)).await?
+            }
+        };
+        if done {
+            Ok(())
+        } else {
+            Err(AdminError::Conflict)
+        }
+    }
+}
+
+fn settings_with(mut s: SettingsRow, change: &Change) -> SettingsRow {
+    match change {
+        Change::CimdPolicy(p) => {
+            s.cimd_enabled = p.enabled;
+            s.cimd_domains = p.domains.iter().cloned().collect();
+        }
+        Change::JoseAlg(a) => s.jose_alg = String::from(a.name()),
+        Change::Argon2(p) => {
+            s.argon2_m_kib = p.m_kib;
+            s.argon2_t = p.t;
+            s.argon2_p = p.p;
+        }
+        Change::RpId(r) => s.rp_id = Some(String::from(r.as_str())),
+        Change::ClientRegister(_)
+        | Change::ClientUpdate(_)
+        | Change::ClientRetire(_)
+        | Change::MapperSet { .. } => {}
+    }
+    s
+}
+
+/// The realm's JOSE algorithm, ES256 until a decision changes it (OP-146 m.8 (e)).
+///
+/// # Errors
+/// [`AdminError`].
+pub async fn jose_alg(app: &Pool, tenant: TenantId, realm: RealmId) -> Result<JoseAlg, AdminError> {
+    let mut t = TenantTx::begin(app, tenant, realm).await?;
+    let s = idp::settings(&mut t).await?.ok_or(AdminError::NoRealm)?;
+    t.commit().await?;
+    JoseAlg::from_name(&s.jose_alg).ok_or(AdminError::Store(access_store::StoreError::Corrupt))
+}

@@ -9,6 +9,7 @@ repository.workspace = true
 publish = false
 
 [dependencies]
+access-kernel = { workspace = true }
 
 [lints]
 workspace = true

@@ -11,6 +11,7 @@ publish = false
 [dependencies]
 access-authority-signer = { path = "../authority-signer" }
 access-crypto = { workspace = true }
+access-internal-api = { workspace = true }
 access-kernel = { workspace = true }
 access-store = { workspace = true }
 access-authority-sequencer = { path = "../authority-sequencer" }

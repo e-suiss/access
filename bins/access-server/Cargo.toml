@@ -13,7 +13,10 @@ access-authority-core = { path = "../../crates/authority-core" }
 access-authority-sequencer = { path = "../../crates/authority-sequencer" }
 access-crypto = { workspace = true }
 access-http = { workspace = true }
+access-identity-admin = { workspace = true }
 access-identity-oauth = { workspace = true }
+access-internal-api = { workspace = true }
+access-kernel = { workspace = true }
 access-store = { workspace = true }
 suiss-crypto = { workspace = true, features = ["pkcs11"] }
 suiss-sandbox = { workspace = true }
@@ -27,6 +30,10 @@ tokio = { workspace = true, features = ["macros", "net", "rt-multi-thread", "sig
 tracing = { workspace = true, features = ["std"] }
 
 [dev-dependencies]
+access-crypto = { workspace = true, features = ["testing"] }
+access-identity-account = { workspace = true }
+access-store = { workspace = true, features = ["testing"] }
+ed25519-dalek = { workspace = true }
 rcgen = { workspace = true, features = ["aws_lc_rs", "pem"] }
 
 [lints]

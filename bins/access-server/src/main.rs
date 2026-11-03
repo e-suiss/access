@@ -2,6 +2,7 @@
 //! telemetry and composes crates; business logic lives in `crates/` (OP-62).
 
 mod config;
+mod idp;
 
 use std::fmt::Write as _;
 use std::path::Path;
@@ -277,6 +278,7 @@ async fn serve(
     } = pools(config, &prepared).await?;
     let realms = identity(config, router_pool).await?;
     let sequencer_for_time = sequencer.clone();
+    let (idp_sequencer, idp_app) = (sequencer.clone(), app.clone());
     let issuer = config.issuer.clone().ok_or("no issuer")?;
     let limits = Limits::default();
     // OP-141 m.18 (a), (e), (f)
@@ -306,6 +308,13 @@ async fn serve(
             }
         }
     });
+    // OP-62, MD-14, TN-111: the identity plane's idp.* write path and realm Genesis
+    let _idp = idp::Plane::new(
+        domains.clone(),
+        idp_sequencer.clone(),
+        idp_app,
+        SourcesClock::new(idp_sequencer),
+    );
     let adp = adp_router(
         Service::new(domains.clone(), limits.max_body_bytes),
         Discovery { issuer },

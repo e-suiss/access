@@ -1,1 +1,645 @@
-//! Domain types and rules, free of I/O (OP-63).
+//! Domain types and rules, free of I/O (OP-63): the typed `idp.*` changes, their validation and
+//! the intent each one is authorized by (MD-14, EI-25).
+
+use std::collections::{BTreeMap, BTreeSet};
+
+use access_identity_account::domain::password::Argon2Params;
+use access_internal_api::idp::{IdpAction, RESOURCE_NAMESPACE};
+use access_kernel::digest::Digest;
+use access_kernel::intent::{ContextRefs, IntentEnvelope};
+use access_kernel::model::{ResourceRef, Window};
+use suiss_crypto::dcbor::{self, Limits, Value};
+use suiss_crypto::digest::context_digest;
+
+/// Context label of a change digest.
+pub const CHANGE_CONTEXT: &str = "access/idp-change/v1";
+
+/// The intent's opaque parameter that carries the change digest (EI-25).
+pub const CHANGE_PARAM: &str = "change";
+
+/// Type prefix of a `client_id` (OP-137).
+pub const CLIENT_PREFIX: &str = "cli";
+
+/// Most redirect URIs of one client.
+pub const MAX_REDIRECT_URIS: usize = 32;
+
+/// Longest redirect URI, in bytes.
+pub const MAX_URI: usize = 2048;
+
+/// Most CIMD domains of a realm.
+pub const MAX_CIMD_DOMAINS: usize = 64;
+
+/// Claims a tenant cannot define (must-never #18, §9.9.4 k.1, P55) with the OIDC protocol claims
+/// the tokens already carry.
+pub const RESERVED_CLAIMS: [&str; 21] = [
+    "iss",
+    "sub",
+    "aud",
+    "exp",
+    "iat",
+    "jti",
+    "nbf",
+    "act",
+    "may_act",
+    "cnf",
+    "scope",
+    "client_id",
+    "nonce",
+    "auth_time",
+    "acr",
+    "amr",
+    "azp",
+    "sid",
+    "at_hash",
+    "c_hash",
+    "authorization_details",
+];
+
+/// Why a change is not valid; a stable code for RFC 9457 problems.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
+pub enum Invalid {
+    /// A `client_id` that is not `cli_` and 26 base32 characters.
+    #[error("malformed client_id")]
+    ClientId,
+    /// An empty, too long or control-character display name.
+    #[error("bad display name")]
+    DisplayName,
+    /// A redirect URI that is not an exact, absolute, allowed URI (IDP-7, RFC 9700).
+    #[error("bad redirect URI")]
+    RedirectUri,
+    /// Too many or repeated redirect URIs.
+    #[error("bad redirect URI list")]
+    RedirectUris,
+    /// A JWKS URI that is not `https`.
+    #[error("bad jwks_uri")]
+    JwksUri,
+    /// A host name that is not a lower-case DNS name.
+    #[error("bad host name")]
+    Host,
+    /// A claim name outside the grammar or reserved (must-never #18).
+    #[error("reserved or malformed claim")]
+    Claim,
+    /// A profile attribute name outside the grammar.
+    #[error("bad attribute")]
+    Attribute,
+    /// Argon2 parameters below the canonical or current ones (OP-33).
+    #[error("Argon2 parameters may only be raised")]
+    Argon2,
+    /// An RP ID that is not the issuer's host or a parent domain of it (WebAuthn §5.1.4).
+    #[error("RP ID does not cover the issuer")]
+    RpId,
+    /// The client does not exist or is retired.
+    #[error("no such client")]
+    NoClient,
+    /// The client exists already.
+    #[error("client exists")]
+    ClientExists,
+}
+
+impl Invalid {
+    /// Stable reason code.
+    #[must_use]
+    pub const fn code(self) -> &'static str {
+        match self {
+            Self::ClientId => "invalid-client-id",
+            Self::DisplayName => "invalid-display-name",
+            Self::RedirectUri | Self::RedirectUris => "invalid-redirect-uri",
+            Self::JwksUri => "invalid-jwks-uri",
+            Self::Host => "invalid-host",
+            Self::Claim => "reserved-claim",
+            Self::Attribute => "invalid-attribute",
+            Self::Argon2 => "argon2-lowered",
+            Self::RpId => "invalid-rp-id",
+            Self::NoClient => "no-such-client",
+            Self::ClientExists => "client-exists",
+        }
+    }
+}
+
+fn base32(c: u8) -> bool {
+    c.is_ascii_digit() || (c.is_ascii_lowercase() && !matches!(c, b'i' | b'l' | b'o' | b'u'))
+}
+
+/// An opaque, server-generated `client_id` (OP-137, TN-15); global and never reused (TN-20).
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct ClientId(String);
+
+impl ClientId {
+    /// Checks the text form.
+    ///
+    /// # Errors
+    /// [`Invalid::ClientId`].
+    pub fn parse(s: &str) -> Result<Self, Invalid> {
+        let ok = s
+            .strip_prefix("cli_")
+            .is_some_and(|rest| rest.len() == 26 && rest.bytes().all(base32));
+        if ok {
+            Ok(Self(String::from(s)))
+        } else {
+            Err(Invalid::ClientId)
+        }
+    }
+
+    /// The text form.
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+fn host(s: &str) -> bool {
+    let labels: Vec<&str> = s.split('.').collect();
+    s.len() <= 253
+        && labels.len() >= 2
+        && labels.iter().all(|l| {
+            let b = l.as_bytes();
+            (1..=63).contains(&b.len())
+                && b.iter()
+                    .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || *c == b'-')
+                && b.first().is_some_and(|c| *c != b'-')
+                && b.last().is_some_and(|c| *c != b'-')
+        })
+}
+
+/// A redirect URI, kept as the exact string the client registered (IDP-7, RFC 9700 §4.1.3).
+/// `https` URIs, loopback `http` URIs (RFC 8252 §7.3) and private-use schemes in reverse
+/// domain form (RFC 8252 §7.1); no fragment, no wildcard, no user info.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct RedirectUri(String);
+
+impl RedirectUri {
+    /// Checks a redirect URI.
+    ///
+    /// # Errors
+    /// [`Invalid::RedirectUri`].
+    pub fn parse(s: &str) -> Result<Self, Invalid> {
+        let bad = s.is_empty()
+            || s.len() > MAX_URI
+            || s.bytes()
+                .any(|c| c <= b' ' || c == 0x7f || matches!(c, b'#' | b'*' | b'\\'));
+        let (scheme, rest) = s.split_once(':').ok_or(Invalid::RedirectUri)?;
+        if bad {
+            return Err(Invalid::RedirectUri);
+        }
+        let ok = match scheme {
+            "https" => authority(rest)
+                .is_some_and(|a| !a.contains('@') && host(a.split_once(':').map_or(a, |(h, _)| h))),
+            "http" => authority(rest).is_some_and(|a| {
+                matches!(
+                    a.rsplit_once(':').map_or(a, |(h, _)| h),
+                    "127.0.0.1" | "[::1]"
+                ) || a == "[::1]"
+            }),
+            _ => {
+                let b = scheme.as_bytes();
+                scheme.contains('.')
+                    && b.first().is_some_and(u8::is_ascii_lowercase)
+                    && b.iter().all(|c| {
+                        c.is_ascii_lowercase() || c.is_ascii_digit() || matches!(c, b'.' | b'-')
+                    })
+                    && !rest.is_empty()
+            }
+        };
+        if ok {
+            Ok(Self(String::from(s)))
+        } else {
+            Err(Invalid::RedirectUri)
+        }
+    }
+
+    /// The exact string.
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+fn authority(rest: &str) -> Option<&str> {
+    let after = rest.strip_prefix("//")?;
+    let end = after.find(['/', '?']).unwrap_or(after.len());
+    let a = after.get(..end)?;
+    (!a.is_empty()).then_some(a)
+}
+
+fn https(s: &str) -> bool {
+    s.len() <= MAX_URI
+        && !s.bytes().any(|c| c <= b' ' || c == 0x7f || c == b'#')
+        && s.strip_prefix("https://")
+            .and_then(|r| r.split(['/', '?']).next())
+            .is_some_and(|a| !a.contains('@') && host(a.split_once(':').map_or(a, |(h, _)| h)))
+}
+
+/// How the client authenticates at the token endpoint (§11.4.5).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum AuthMethod {
+    /// A public client (PKCE only).
+    None,
+    /// `private_key_jwt` against the client's JWKS (RFC 7523).
+    PrivateKeyJwt {
+        /// The client's JWKS.
+        jwks_uri: String,
+    },
+    /// A shared secret, for pre-registered confidential clients only.
+    ClientSecretBasic,
+}
+
+impl AuthMethod {
+    /// The `token_endpoint_auth_method` name.
+    #[must_use]
+    pub const fn name(&self) -> &'static str {
+        match self {
+            Self::None => "none",
+            Self::PrivateKeyJwt { .. } => "private_key_jwt",
+            Self::ClientSecretBasic => "client_secret_basic",
+        }
+    }
+
+    /// The JWKS URI, for `private_key_jwt`.
+    #[must_use]
+    pub fn jwks_uri(&self) -> Option<&str> {
+        match self {
+            Self::PrivateKeyJwt { jwks_uri } => Some(jwks_uri),
+            _ => None,
+        }
+    }
+
+    /// From the stored name and JWKS URI.
+    ///
+    /// # Errors
+    /// [`Invalid::JwksUri`].
+    pub fn from_parts(name: &str, jwks_uri: Option<&str>) -> Result<Self, Invalid> {
+        match (name, jwks_uri) {
+            ("none", None) => Ok(Self::None),
+            ("client_secret_basic", None) => Ok(Self::ClientSecretBasic),
+            ("private_key_jwt", Some(u)) if https(u) => Ok(Self::PrivateKeyJwt {
+                jwks_uri: String::from(u),
+            }),
+            _ => Err(Invalid::JwksUri),
+        }
+    }
+}
+
+/// A client registration (TN-15, IDP-7).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Client {
+    /// The server-generated id.
+    pub id: ClientId,
+    /// The display name, apart from the id (§17.2.1).
+    pub display_name: String,
+    /// Token endpoint authentication.
+    pub auth: AuthMethod,
+    /// Redirect URIs, compared as exact strings.
+    pub redirect_uris: Vec<RedirectUri>,
+}
+
+impl Client {
+    /// Checks the parts that are not checked by their types.
+    ///
+    /// # Errors
+    /// [`Invalid`].
+    pub fn check(&self) -> Result<(), Invalid> {
+        let n = self.display_name.chars().count();
+        if n == 0 || n > 128 || self.display_name.chars().any(char::is_control) {
+            return Err(Invalid::DisplayName);
+        }
+        let distinct: BTreeSet<&RedirectUri> = self.redirect_uris.iter().collect();
+        if self.redirect_uris.len() > MAX_REDIRECT_URIS
+            || distinct.len() != self.redirect_uris.len()
+        {
+            return Err(Invalid::RedirectUris);
+        }
+        if let AuthMethod::PrivateKeyJwt { jwks_uri } = &self.auth
+            && !https(jwks_uri)
+        {
+            return Err(Invalid::JwksUri);
+        }
+        Ok(())
+    }
+
+    fn to_value(&self) -> Value {
+        let mut m = vec![
+            (Value::text("client_id"), Value::text(self.id.as_str())),
+            (Value::text("display_name"), Value::text(&self.display_name)),
+            (Value::text("auth_method"), Value::text(self.auth.name())),
+            (
+                Value::text("redirect_uris"),
+                Value::Array(
+                    self.redirect_uris
+                        .iter()
+                        .map(|u| Value::text(u.as_str()))
+                        .collect(),
+                ),
+            ),
+        ];
+        if let Some(u) = self.auth.jwks_uri() {
+            m.push((Value::text("jwks_uri"), Value::text(u)));
+        }
+        Value::Map(m)
+    }
+}
+
+/// A claim name a tenant may define: not a reserved protocol claim (must-never #18).
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct ClaimName(String);
+
+fn ident(s: &str) -> bool {
+    let b = s.as_bytes();
+    (1..=64).contains(&b.len())
+        && b.first().is_some_and(u8::is_ascii_lowercase)
+        && b.iter()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || *c == b'_')
+}
+
+impl ClaimName {
+    /// Checks a claim name.
+    ///
+    /// # Errors
+    /// [`Invalid::Claim`].
+    pub fn parse(s: &str) -> Result<Self, Invalid> {
+        if ident(s) && !RESERVED_CLAIMS.contains(&s) {
+            Ok(Self(String::from(s)))
+        } else {
+            Err(Invalid::Claim)
+        }
+    }
+
+    /// The name.
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+/// A profile attribute a claim is taken from.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Attribute(String);
+
+impl Attribute {
+    /// Checks an attribute name.
+    ///
+    /// # Errors
+    /// [`Invalid::Attribute`].
+    pub fn parse(s: &str) -> Result<Self, Invalid> {
+        if ident(s) {
+            Ok(Self(String::from(s)))
+        } else {
+            Err(Invalid::Attribute)
+        }
+    }
+
+    /// The name.
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+/// The realm's JOSE signing algorithm (OP-146 m.8 (d), (e)).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum JoseAlg {
+    /// ECDSA P-256, the default.
+    Es256,
+    /// `EdDSA` over Ed25519.
+    Ed25519,
+}
+
+impl JoseAlg {
+    /// The JOSE name.
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Es256 => "ES256",
+            Self::Ed25519 => "Ed25519",
+        }
+    }
+
+    /// From the JOSE name.
+    #[must_use]
+    pub fn from_name(s: &str) -> Option<Self> {
+        match s {
+            "ES256" => Some(Self::Es256),
+            "Ed25519" => Some(Self::Ed25519),
+            _ => None,
+        }
+    }
+}
+
+/// A WebAuthn RP ID (IDP-5): a lower-case DNS name.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RpId(String);
+
+impl RpId {
+    /// Checks an RP ID.
+    ///
+    /// # Errors
+    /// [`Invalid::Host`].
+    pub fn parse(s: &str) -> Result<Self, Invalid> {
+        if host(s) {
+            Ok(Self(String::from(s)))
+        } else {
+            Err(Invalid::Host)
+        }
+    }
+
+    /// Whether it may serve a realm whose issuer host is `issuer_host`: that host or a parent
+    /// domain of it (WebAuthn §5.1.4).
+    #[must_use]
+    pub fn covers(&self, issuer_host: &str) -> bool {
+        issuer_host == self.0
+            || issuer_host
+                .strip_suffix(self.0.as_str())
+                .is_some_and(|head| head.ends_with('.'))
+    }
+
+    /// The name.
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+/// The realm's client and CIMD acceptance policy (§11.3, AG-4): off by default.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CimdPolicy {
+    /// Whether CIMD clients are accepted.
+    pub enabled: bool,
+    /// The domains whose CIMD clients are accepted.
+    pub domains: BTreeSet<String>,
+}
+
+impl CimdPolicy {
+    /// Checks the domains.
+    ///
+    /// # Errors
+    /// [`Invalid::Host`].
+    pub fn check(&self) -> Result<(), Invalid> {
+        if self.domains.len() > MAX_CIMD_DOMAINS || !self.domains.iter().all(|d| host(d)) {
+            return Err(Invalid::Host);
+        }
+        Ok(())
+    }
+}
+
+/// One `idp.*` configuration change.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Change {
+    /// `idp.client.register`.
+    ClientRegister(Client),
+    /// `idp.client.update`.
+    ClientUpdate(Client),
+    /// `idp.client.retire`.
+    ClientRetire(ClientId),
+    /// `idp.client.cimd_policy`.
+    CimdPolicy(CimdPolicy),
+    /// `idp.mapper.set`; `None` removes the mapper.
+    MapperSet {
+        /// The claim.
+        claim: ClaimName,
+        /// Its source, `None` to remove.
+        source: Option<Attribute>,
+    },
+    /// `idp.realm.jose_alg`.
+    JoseAlg(JoseAlg),
+    /// `idp.realm.argon2`.
+    Argon2(Argon2Params),
+    /// `idp.realm.rp_id`.
+    RpId(RpId),
+}
+
+fn uint(v: u32) -> Value {
+    Value::Unsigned(u64::from(v))
+}
+
+impl Change {
+    /// The action that authorizes it.
+    #[must_use]
+    pub const fn action(&self) -> IdpAction {
+        match self {
+            Self::ClientRegister(_) => IdpAction::ClientRegister,
+            Self::ClientUpdate(_) => IdpAction::ClientUpdate,
+            Self::ClientRetire(_) => IdpAction::ClientRetire,
+            Self::CimdPolicy(_) => IdpAction::CimdPolicy,
+            Self::MapperSet { .. } => IdpAction::MapperSet,
+            Self::JoseAlg(_) => IdpAction::RealmJoseAlg,
+            Self::Argon2(_) => IdpAction::RealmArgon2,
+            Self::RpId(_) => IdpAction::RealmRpId,
+        }
+    }
+
+    /// Checks the change on its own.
+    ///
+    /// # Errors
+    /// [`Invalid`].
+    pub fn check(&self) -> Result<(), Invalid> {
+        match self {
+            Self::ClientRegister(c) | Self::ClientUpdate(c) => c.check(),
+            Self::CimdPolicy(p) => p.check(),
+            Self::Argon2(p) => Argon2Params::for_realm(p.m_kib, p.t, p.p)
+                .map(drop)
+                .map_err(|_| Invalid::Argon2),
+            Self::ClientRetire(_) | Self::MapperSet { .. } | Self::JoseAlg(_) | Self::RpId(_) => {
+                Ok(())
+            }
+        }
+    }
+
+    fn body(&self) -> Value {
+        match self {
+            Self::ClientRegister(c) | Self::ClientUpdate(c) => c.to_value(),
+            Self::ClientRetire(id) => {
+                Value::Map(vec![(Value::text("client_id"), Value::text(id.as_str()))])
+            }
+            Self::CimdPolicy(p) => Value::Map(vec![
+                (Value::text("enabled"), Value::Bool(p.enabled)),
+                (
+                    Value::text("domains"),
+                    Value::Array(p.domains.iter().map(|d| Value::text(d)).collect()),
+                ),
+            ]),
+            Self::MapperSet { claim, source } => {
+                let mut m = vec![(Value::text("claim"), Value::text(claim.as_str()))];
+                if let Some(s) = source {
+                    m.push((Value::text("source"), Value::text(s.as_str())));
+                }
+                Value::Map(m)
+            }
+            Self::JoseAlg(a) => Value::Map(vec![(Value::text("alg"), Value::text(a.name()))]),
+            Self::Argon2(p) => Value::Map(vec![
+                (Value::text("m_kib"), uint(p.m_kib)),
+                (Value::text("t"), uint(p.t)),
+                (Value::text("p"), uint(p.p)),
+            ]),
+            Self::RpId(r) => Value::Map(vec![(Value::text("rp_id"), Value::text(r.as_str()))]),
+        }
+    }
+
+    /// `SHA-256("access/idp-change/v1" ‖ 0x00 ‖ dCBOR({action, body}))`: what the intent binds.
+    ///
+    /// # Errors
+    /// [`dcbor::EncodeError`] past the encoding limits.
+    pub fn digest(&self) -> Result<Digest, dcbor::EncodeError> {
+        let v = Value::Map(vec![
+            (Value::text("action"), Value::text(&self.action().label())),
+            (Value::text("body"), self.body()),
+        ]);
+        let bytes = dcbor::encode(&v, Limits::CEILING)?;
+        Ok(Digest(context_digest(CHANGE_CONTEXT, &bytes).0))
+    }
+
+    /// The resource it changes: `idp:[slug, kind, …]`.
+    #[must_use]
+    pub fn resource(&self, slug: &str) -> ResourceRef {
+        let mut path = vec![String::from(slug)];
+        match self {
+            Self::ClientRegister(c) | Self::ClientUpdate(c) => {
+                path.extend([String::from("client"), String::from(c.id.as_str())]);
+            }
+            Self::ClientRetire(id) => {
+                path.extend([String::from("client"), String::from(id.as_str())]);
+            }
+            Self::MapperSet { claim, .. } => {
+                path.extend([String::from("mapper"), String::from(claim.as_str())]);
+            }
+            Self::CimdPolicy(_) | Self::JoseAlg(_) | Self::Argon2(_) | Self::RpId(_) => {
+                path.push(String::from("realm"));
+            }
+        }
+        ResourceRef {
+            namespace: String::from(RESOURCE_NAMESPACE),
+            path,
+            incarnation: 0,
+        }
+    }
+
+    /// The intent that authorizes it in the realm `slug`, valid over `validity` (EI-25: its
+    /// `opaque["change"]` is [`Change::digest`]).
+    ///
+    /// # Errors
+    /// [`dcbor::EncodeError`].
+    pub fn intent(
+        &self,
+        slug: &str,
+        validity: Window,
+    ) -> Result<IntentEnvelope, dcbor::EncodeError> {
+        Ok(IntentEnvelope {
+            action: self.action().action_ref(),
+            resources: vec![self.resource(slug)],
+            params: BTreeMap::new(),
+            opaque: BTreeMap::from([(String::from(CHANGE_PARAM), self.digest()?)]),
+            recipient: None,
+            purpose: None,
+            context: ContextRefs::default(),
+            validity,
+        })
+    }
+}
+
+/// OP-33: new Argon2 parameters are at least the current ones and differ from them.
+#[must_use]
+pub const fn raises(new: &Argon2Params, current: &Argon2Params) -> bool {
+    !new.weaker_than(current)
+        && (new.m_kib != current.m_kib || new.t != current.t || new.p != current.p)
+}
+
+#[cfg(test)]
+mod tests;
