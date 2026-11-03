@@ -81,6 +81,18 @@ impl Keyring {
         })
     }
 
+    /// The algorithm of the set's new keys.
+    #[must_use]
+    pub const fn alg(&self) -> JwsAlg {
+        self.alg
+    }
+
+    /// Makes the set's next keys use `alg` (OP-146 m.8 (e)); the keys it holds keep theirs and
+    /// rotate out on schedule, so a new key is still published before use (MD-6).
+    pub const fn set_alg(&mut self, alg: JwsAlg) {
+        self.alg = alg;
+    }
+
     fn records(&self) -> Vec<Key> {
         self.entries.iter().map(|e| e.record.clone()).collect()
     }

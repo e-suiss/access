@@ -20,7 +20,7 @@ use crate::AdminError;
 use crate::domain::{
     Attribute, AuthMethod, CLIENT_PREFIX, Change, Client, ClientId, Invalid, JoseAlg, raises,
 };
-use crate::ports::{Decider, Governance};
+use crate::ports::{Decider, Governance, RealmKeys};
 
 /// A realm to create (TN-111, TN-16, TN-10).
 pub struct NewRealm<'a> {
@@ -125,7 +125,7 @@ impl core::fmt::Debug for ClientSecret {
 }
 
 /// The identity plane's configuration service.
-pub struct Admin<'a, D, G> {
+pub struct Admin<'a, D, G, K> {
     /// The `access_app` pool.
     pub app: &'a Pool,
     /// The cell's opaque id key (OP-137).
@@ -138,6 +138,8 @@ pub struct Admin<'a, D, G> {
     pub pep: &'a str,
     /// Where realm issuers are formed.
     pub base: &'a RealmBase,
+    /// The realms' keys outside the database.
+    pub keys: &'a K,
 }
 
 fn host_of(authority: &str) -> &str {
@@ -146,7 +148,7 @@ fn host_of(authority: &str) -> &str {
         .map_or(authority, |(host, _)| host)
 }
 
-impl<D: Decider, G: Governance> Admin<'_, D, G> {
+impl<D: Decider, G: Governance, K: RealmKeys> Admin<'_, D, G, K> {
     /// Creates a realm: opens its governing domain with a Genesis, then writes the realm with
     /// its fixed issuer and the Genesis default settings (TN-111, TN-16, OP-146 m.8 (c)). There
     /// is no master realm; every realm is created this way.
@@ -176,11 +178,28 @@ impl<D: Decider, G: Governance> Admin<'_, D, G> {
         }
         idp::create_settings(&mut t).await?;
         t.commit().await?;
+        // OP-146 m.16 (m)
+        self.open_keys(r.tenant, realm).await?;
         Ok(CreatedRealm {
             realm,
             domain: opened.domain,
             issuer,
         })
+    }
+
+    /// Opens the realm's keys outside the database with its JOSE algorithm (OP-146 m.16 (m),
+    /// m.15 (e), m.7 (b)): realm creation does it, and this repeats it when that step failed
+    /// after the realm was written. The realm's tokens are signed once its first key is past
+    /// its publish lead (SAI-46).
+    ///
+    /// # Errors
+    /// [`AdminError`].
+    pub async fn open_keys(&self, tenant: TenantId, realm: RealmId) -> Result<(), AdminError> {
+        let alg = jose_alg(self.app, tenant, realm).await?;
+        self.keys
+            .open(realm, alg)
+            .await
+            .map_err(|e| AdminError::Unavailable(e.0))
     }
 
     /// A fresh `client_id` (OP-137, TN-15): the permuted `UUIDv7` of the new client.
@@ -326,6 +345,7 @@ impl<D: Decider, G: Governance> Admin<'_, D, G> {
         .await?;
         let Some(bound) = bound else {
             t.rollback().await?;
+            self.after(p).await?;
             return Ok(Applied::AlreadyWritten {
                 exercise: committed.exercise,
                 position: committed.position,
@@ -333,11 +353,25 @@ impl<D: Decider, G: Governance> Admin<'_, D, G> {
         };
         let secret = self.write(&mut t, &bound, &p.change).await?;
         t.commit().await?;
+        self.after(p).await?;
         Ok(Applied::Written {
             exercise: committed.exercise,
             position: committed.position,
             secret,
         })
+    }
+
+    /// What follows a written change outside the database: a new JOSE algorithm reaches the
+    /// identity signer for the realm's next keys (OP-146 m.8 (e), m.16 (m)). A retry of the
+    /// change repeats it.
+    async fn after(&self, p: &Proposal) -> Result<(), AdminError> {
+        if let Change::JoseAlg(alg) = &p.change {
+            self.keys
+                .open(p.realm, *alg)
+                .await
+                .map_err(|e| AdminError::Unavailable(e.0))?;
+        }
+        Ok(())
     }
 
     /// CR-38: a `client_secret_basic` client gets a fresh server-generated secret when it is

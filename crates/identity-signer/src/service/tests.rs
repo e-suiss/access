@@ -61,6 +61,27 @@ fn each_realm_has_its_own_published_keys() {
     assert_eq!(s.realms(), vec![A, B]);
 }
 
+// OP-146 m.8 (e), m.16 (m), MD-6: a realm's new JOSE algorithm reaches its open key set and
+// survives a restart; the next keys use it and are published before use
+#[test]
+fn another_alg_applies_to_the_next_keys() {
+    let vault = MemVault::default();
+    let mut s = Service::start(factory(), vault.clone(), Policy::REALM).unwrap();
+    let open = |alg| Request::Open { realm: A, alg };
+    assert_eq!(s.handle(open(JwsAlg::Es256), 0, 7), Response::Opened);
+    let first = jwks(&mut s, A);
+    assert_eq!(s.handle(open(JwsAlg::Ed25519), 0, 7), Response::Opened);
+    assert_eq!(jwks(&mut s, A), first);
+    let mut again = Service::start(factory(), vault, Policy::REALM).unwrap();
+    assert_eq!(again.rings.get(&A).map(|(a, _)| *a), Some(JwsAlg::Ed25519));
+    let day = 86_400_000;
+    let rotated = (1..=800_u64).any(|d| {
+        assert_eq!(again.tick(d * day, 7), Vec::<Realm>::new());
+        jwks(&mut again, A).contains(r#""kty":"OKP""#)
+    });
+    assert!(rotated);
+}
+
 // SAI-46, CR-25: nothing is signed before the lead has passed, then the active key signs
 #[test]
 fn signing_waits_for_the_publish_lead() {

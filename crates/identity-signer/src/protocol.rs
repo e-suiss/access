@@ -27,7 +27,8 @@ impl core::fmt::Debug for Realm {
 pub enum Request {
     /// Whether the signer answers.
     Ping,
-    /// Opens the key set of a realm whose new keys use `alg`; repeating it changes nothing.
+    /// Opens the key set of a realm whose new keys use `alg`; repeating it changes nothing,
+    /// and on an open set another `alg` applies to its next keys (OP-146 m.8 (e)).
     Open {
         /// Realm.
         realm: Realm,

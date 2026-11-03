@@ -26,6 +26,9 @@ data:
     app = { user = "access_app_login", password_file = "/run/secrets/db-app", pool = 16 }
     deriver = { user = "access_deriver_login", password_file = "/run/secrets/db-deriver", pool = 2 }
     router = { user = "access_router_login", password_file = "/run/secrets/db-router", pool = 4 }
+    # OP-146 m.5 (f), OP-131
+    archive = { user = "access_archive_login", password_file = "/run/secrets/db-archive", pool = 1 }
+    outbox_reader = { user = "access_outbox_reader_login", password_file = "/run/secrets/db-outbox-reader", pool = 2 }
 
     # TN-10, CMP-22b, OP-138
     [identity]

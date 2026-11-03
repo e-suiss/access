@@ -4,6 +4,9 @@
 use std::future::Future;
 
 use access_internal_api::idp::{GenesisOpened, GenesisOrder, Submission, Unavailable, Verdict};
+use access_store::identity::RealmId;
+
+use crate::domain::JoseAlg;
 
 /// Decides `idp.*` Exercises: the identity plane is their PEP (MD-14, E34).
 pub trait Decider: Send + Sync {
@@ -12,6 +15,19 @@ pub trait Decider: Send + Sync {
         &self,
         submission: Submission,
     ) -> impl Future<Output = Result<Verdict, Unavailable>> + Send;
+}
+
+/// The keys of a realm that live outside the database (OP-146 m.16 (m), m.15 (e), m.7 (b)):
+/// its JOSE key set in the identity signer, and its KEK, decoy key and DPoP nonce keys in the
+/// HSM.
+pub trait RealmKeys: Send + Sync {
+    /// Opens what is missing and makes the realm's next JOSE keys use `alg`; repeating it
+    /// changes nothing.
+    fn open(
+        &self,
+        realm: RealmId,
+        alg: JoseAlg,
+    ) -> impl Future<Output = Result<(), Unavailable>> + Send;
 }
 
 /// Opens the governing domain of a new realm (TN-111).

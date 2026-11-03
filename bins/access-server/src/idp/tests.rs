@@ -115,11 +115,27 @@ fn plane(db: &TestDb) -> TestPlane {
     Plane::new(domains, db.sequencer.clone(), db.app.clone(), Fixed)
 }
 
+/// The realm keys opened, in order.
+#[derive(Default)]
+struct Opened(std::sync::Mutex<Vec<([u8; 16], JoseAlg)>>);
+
+impl RealmKeys for Opened {
+    fn open(
+        &self,
+        realm: RealmId,
+        alg: JoseAlg,
+    ) -> impl std::future::Future<Output = Result<(), Unavailable>> + Send {
+        self.0.lock().unwrap().push((*realm.as_bytes(), alg));
+        std::future::ready(Ok(()))
+    }
+}
+
 struct World {
     db: TestDb,
     plane: TestPlane,
     ids: IdKey,
     base: RealmBase,
+    keys: Opened,
 }
 
 impl World {
@@ -131,10 +147,11 @@ impl World {
             plane,
             ids: IdKey::new(Secret::new([8; 32])),
             base: RealmBase::parse("https://id.test").unwrap(),
+            keys: Opened::default(),
         }
     }
 
-    fn admin(&self) -> Admin<'_, TestPlane, TestPlane> {
+    fn admin(&self) -> Admin<'_, TestPlane, TestPlane, Opened> {
         Admin {
             app: &self.db.app,
             ids: &self.ids,
@@ -142,7 +159,12 @@ impl World {
             governance: &self.plane,
             pep: PEP,
             base: &self.base,
+            keys: &self.keys,
         }
+    }
+
+    fn opened(&self) -> Vec<([u8; 16], JoseAlg)> {
+        self.keys.0.lock().unwrap().clone()
     }
 
     async fn realm(&self, slug: &str) -> (TenantId, RealmId, Digest) {
@@ -352,6 +374,8 @@ async fn realm_creation_opens_genesis_and_fixes_the_issuer() {
         (s.jose_alg.as_str(), s.argon2_m_kib, s.rp_id),
         ("ES256", 7 * 1024, None)
     );
+    // OP-146 m.16 (m)
+    assert_eq!(w.opened(), vec![(*realm.as_bytes(), JoseAlg::Es256)]);
     let taken = w
         .admin()
         .create_realm(&NewRealm {
@@ -511,7 +535,6 @@ async fn an_rp_id_change_is_a_ct3_exercise() {
 async fn realm_settings_change_through_commit() {
     // CR-36, §17.5.2, K05
     use access_identity_account::domain::password::Argon2Params;
-    use access_identity_admin::domain::JoseAlg;
     let w = World::new().await;
     let (tenant, realm, d) = w.realm("tune").await;
     onboard(&w.plane, d, ROOT, ROOT_KEY).await;
@@ -557,5 +580,80 @@ async fn realm_settings_change_through_commit() {
             .await
             .unwrap(),
         JoseAlg::Ed25519
+    );
+    // OP-146 m.16 (m), m.8 (e)
+    assert_eq!(
+        w.opened(),
+        vec![
+            (*realm.as_bytes(), JoseAlg::Es256),
+            (*realm.as_bytes(), JoseAlg::Ed25519)
+        ]
+    );
+}
+
+/// A fresh token in the `SoftHSM` store `just test` prepares (`SOFTHSM2_CONF`, OP-69).
+fn hsm(name: &str) -> (std::path::PathBuf, String) {
+    assert!(
+        std::env::var_os("SOFTHSM2_CONF").is_some(),
+        "run the PKCS#11 tests through `just test`, which sets SOFTHSM2_CONF (OP-69)"
+    );
+    let module = [
+        std::env::var("SUISS_PKCS11_MODULE").unwrap_or_default(),
+        String::from("/opt/homebrew/lib/softhsm/libsofthsm2.so"),
+        String::from("/usr/lib/softhsm/libsofthsm2.so"),
+        String::from("/usr/lib/x86_64-linux-gnu/softhsm/libsofthsm2.so"),
+        String::from("/usr/lib/aarch64-linux-gnu/softhsm/libsofthsm2.so"),
+    ]
+    .iter()
+    .map(std::path::PathBuf::from)
+    .find(|p| p.is_file())
+    .unwrap();
+    let label = format!("{name}-{}", std::process::id());
+    let out = std::process::Command::new("softhsm2-util")
+        .args([
+            "--init-token",
+            "--free",
+            "--label",
+            &label,
+            "--pin",
+            "1234-test-only",
+            "--so-pin",
+            "5678-test-only",
+        ])
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "{out:?}");
+    (module, label)
+}
+
+// OP-146 m.16 (m), m.15 (e), m.7 (b), OP-94: a new realm's KEK, decoy key and DPoP nonce keys
+// are made in the HSM once under their labels; the authorization server loads the nonce
+// rings from them, and a realm without keys has none
+#[test]
+fn realm_keys_are_made_once_in_the_hsm() {
+    static STORE: std::sync::OnceLock<Arc<KeyStore>> = std::sync::OnceLock::new();
+    let store = STORE
+        .get_or_init(|| {
+            let (module, label) = hsm("realm-keys");
+            let pin = Secret::new(String::from("1234-test-only"));
+            Arc::new(KeyStore::open(&module, &label, &pin).unwrap())
+        })
+        .clone();
+    let keyring = RealmKeyring::new(SignerKeys::new("/nonexistent.sock".into()), store.clone());
+    let realm = [7; 16];
+    keyring.hsm(&realm).unwrap();
+    keyring.hsm(&realm).unwrap();
+    store.kek(&kek_label(&realm)).unwrap();
+    store.mac(&decoy_label(&realm)).unwrap();
+    let nonces = crate::oauth::HsmNonces::new(store);
+    for role in [NonceRole::AuthorizationServer, NonceRole::ResourceServer] {
+        let ring = nonces.ring(RealmId::from_bytes(realm), role).unwrap();
+        let n = ring.issue(NOW).unwrap();
+        ring.check(Some(&n), NOW).unwrap();
+    }
+    assert!(
+        nonces
+            .ring(RealmId::from_bytes([8; 16]), NonceRole::AuthorizationServer)
+            .is_none()
     );
 }

@@ -97,6 +97,27 @@ pub fn server_config(
     Ok(Arc::new(config))
 }
 
+/// A client configuration for requests to clients' own endpoints (§10.4.6, §11.3.6): the
+/// operator's PEM trust anchors, TLS 1.3 with aws-lc-rs, no client certificate.
+///
+/// # Errors
+/// [`TlsError::ClientCa`] when the bundle holds no usable certificate.
+pub fn client_config(roots_pem: &[u8]) -> Result<Arc<rustls::ClientConfig>, TlsError> {
+    let mut roots = RootCertStore::empty();
+    let (added, _) = roots.add_parsable_certificates(
+        CertificateDer::pem_slice_iter(roots_pem).filter_map(Result::ok),
+    );
+    if added == 0 {
+        return Err(TlsError::ClientCa("no certificate".to_owned()));
+    }
+    let provider = Arc::new(aws_lc_rs::default_provider());
+    let config = rustls::ClientConfig::builder_with_provider(provider)
+        .with_protocol_versions(&[&rustls::version::TLS13])?
+        .with_root_certificates(roots)
+        .with_no_client_auth();
+    Ok(Arc::new(config))
+}
+
 /// Serves `app` over TLS on `listener` until `shutdown` resolves; in-flight requests finish.
 ///
 /// # Errors

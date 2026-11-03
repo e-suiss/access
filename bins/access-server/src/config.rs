@@ -93,6 +93,11 @@ pub(crate) struct Identity {
     pub(crate) realm_base: String,
     /// The identity signer's Unix socket (CMP-22b).
     pub(crate) signer: PathBuf,
+    /// PEM trust anchors for clients' own endpoints: `jwks_uri` and back-channel logout
+    /// (§10.4.6, §11.3.6). Without it the system bundle is read; without either those
+    /// requests fail and the server still starts.
+    #[serde(default)]
+    pub(crate) outbound_ca_file: Option<PathBuf>,
 }
 
 /// TLS files, read once before the lockdown.
@@ -155,6 +160,11 @@ pub(crate) struct Database {
     pub(crate) deriver: Role,
     /// `access_router` login: Host → realm resolution (OP-132 m.3).
     pub(crate) router: Role,
+    /// `access_archive` login: opens the day partitions of the ephemeral protocol tables
+    /// (OP-146 m.5 (f)).
+    pub(crate) archive: Role,
+    /// `access_outbox_reader` login: the back-channel logout courier (OP-131).
+    pub(crate) outbox_reader: Role,
 }
 
 /// The PKCS#11 token holding the domains' keys.
@@ -324,6 +334,8 @@ mod tests {
                 app: role("access_app_login"),
                 deriver: role("access_deriver_login"),
                 router: role("access_router_login"),
+                archive: role("access_archive_login"),
+                outbox_reader: role("access_outbox_reader_login"),
             }),
             hsm: Some(Hsm {
                 module: "/usr/lib/softhsm/libsofthsm2.so".into(),
@@ -334,6 +346,7 @@ mod tests {
             identity: Some(Identity {
                 realm_base: "https://id.access.example".to_owned(),
                 signer: "/run/access/identity-signer.sock".into(),
+                outbound_ca_file: None,
             }),
             ..Config::default()
         }
@@ -436,6 +449,7 @@ mod tests {
                 identity: Some(Identity {
                     realm_base: base.to_owned(),
                     signer: "/run/s.sock".into(),
+                    outbound_ca_file: None,
                 }),
                 ..with_tls()
             };

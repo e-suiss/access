@@ -1,5 +1,6 @@
 //! The in-process seam between the planes for `idp.*` (OP-62, MD-14, TN-111): the identity
-//! plane's ports, served by the authority core of this process.
+//! plane's ports, served by the authority core of this process, and the realm keys a new
+//! realm opens (OP-146 m.16 (m)).
 
 use std::sync::Arc;
 
@@ -11,7 +12,17 @@ use access_authority_core::genesis;
 use access_authority_core::ports::{Binding, Keys, Salts};
 use access_authority_sequencer::adapters::create_genesis;
 use access_authority_sequencer::ports::Clock;
-use access_identity_admin::ports::{Decider, Governance};
+use access_crypto::dpop::{Role as NonceRole, label as nonce_label};
+use access_crypto::jose::JwsAlg;
+use access_crypto::webauthn::decoy_label;
+use access_identity_admin::domain::JoseAlg;
+use access_identity_admin::ports::{Decider, Governance, RealmKeys};
+use access_identity_oauth::adapters::SignerKeys;
+use access_store::identity::RealmId;
+use suiss_crypto::pkcs11::{HsmError, KeyStore};
+
+use crate::login::kek_label;
+use crate::oauth::NONCE_GENERATION;
 use access_internal_api::idp::{
     Committed, GenesisOpened, GenesisOrder, Submission, Unavailable, Verdict,
 };
@@ -130,6 +141,52 @@ where
             .await
             .map_err(|e| Unavailable(e.to_string()))?;
         Ok(GenesisOpened { domain })
+    }
+}
+
+/// A realm's keys outside the database (OP-146 m.16 (m), m.15 (e), m.7 (b)): its JOSE key set
+/// in the identity signer, and in the HSM its KEK, its WebAuthn decoy key and its DPoP nonce
+/// keys for both roles. A key that exists is kept.
+pub(crate) struct RealmKeyring {
+    signer: SignerKeys,
+    keys: Arc<KeyStore>,
+}
+
+impl RealmKeyring {
+    pub(crate) const fn new(signer: SignerKeys, keys: Arc<KeyStore>) -> Self {
+        Self { signer, keys }
+    }
+
+    fn hsm(&self, realm: &[u8; 16]) -> Result<(), HsmError> {
+        let kek = kek_label(realm);
+        if self.keys.kek(&kek).is_err() {
+            self.keys.generate_kek(&kek)?;
+        }
+        let mut macs = vec![decoy_label(realm)];
+        for role in [NonceRole::AuthorizationServer, NonceRole::ResourceServer] {
+            macs.push(nonce_label(realm, role, NONCE_GENERATION));
+        }
+        for label in macs {
+            if self.keys.mac(&label).is_err() {
+                self.keys.generate_mac(&label)?;
+            }
+        }
+        Ok(())
+    }
+}
+
+impl RealmKeys for RealmKeyring {
+    async fn open(&self, realm: RealmId, alg: JoseAlg) -> Result<(), Unavailable> {
+        let alg = match alg {
+            JoseAlg::Es256 => JwsAlg::Es256,
+            JoseAlg::Ed25519 => JwsAlg::Ed25519,
+        };
+        self.signer
+            .open(realm, alg)
+            .await
+            .map_err(|_| Unavailable(String::from("identity-signer")))?;
+        self.hsm(realm.as_bytes())
+            .map_err(|e| Unavailable(String::from(e.code())))
     }
 }
 

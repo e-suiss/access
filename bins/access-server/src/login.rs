@@ -8,7 +8,7 @@ use std::sync::{Arc, Mutex};
 
 use access_crypto::Secret;
 use access_crypto::opaque_id::IdKey;
-use access_crypto::webauthn::DecoyKey;
+use access_crypto::webauthn::{DecoyKey, decoy_label};
 use access_identity_oauth::ports::{RealmEntry, Unavailable};
 use access_identity_session::domain::requirement::AuthPolicy;
 use access_identity_session::domain::session::SessionPolicy;
@@ -26,6 +26,15 @@ use suiss_crypto::pkcs11::{HsmKek, KeyStore};
 const ID_KEY_ROOT: &str = "access/opaque-id";
 /// The derivation context of the working id key.
 const ID_KEY_CONTEXT: &[u8] = b"access/opaque-id/v1";
+
+/// The token label of a realm's KEK: `access/realm-kek/<RealmID hex>` (OP-146 m.15 (e)).
+pub(crate) fn kek_label(realm: &[u8; 16]) -> String {
+    let mut out = String::from("access/realm-kek/");
+    for b in realm {
+        let _ = write!(out, "{b:02x}");
+    }
+    out
+}
 
 /// A token KEK behind a lock: a PKCS#11 session serves one caller at a time.
 struct LockedKek {
@@ -76,15 +85,11 @@ impl HsmKits {
         entry: &RealmEntry,
         tenant: access_store::identity::TenantId,
     ) -> Result<RealmKit, String> {
-        let mut hex = String::with_capacity(32);
-        for b in entry.realm.as_bytes() {
-            let _ = write!(hex, "{b:02x}");
-        }
-        let label = format!("access/realm-kek/{hex}");
+        let label = kek_label(entry.realm.as_bytes());
         let kek = self.keys.kek(&label).map_err(|e| e.to_string())?;
         let decoy = self
             .keys
-            .mac(&format!("access/webauthn-decoy/{hex}"))
+            .mac(&decoy_label(entry.realm.as_bytes()))
             .map_err(|e| e.to_string())?;
         let ids = self
             .keys

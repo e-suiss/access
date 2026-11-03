@@ -201,6 +201,15 @@ impl<F: KeyFactory, V: Vault> Service<F, V> {
         match request {
             Request::Ping => Response::Pong,
             Request::Open { realm, alg } => {
+                if let Some((current, ring)) = self.rings.get_mut(&realm)
+                    && *current != alg
+                {
+                    *current = alg;
+                    ring.set_alg(alg);
+                    if !self.persist(realm) {
+                        return Response::Error(String::from("signer-outage"));
+                    }
+                }
                 if !self.rings.contains_key(&realm) {
                     let Ok(ring) = Keyring::new(alg, self.policy) else {
                         return Response::Error(String::from("signer-policy"));

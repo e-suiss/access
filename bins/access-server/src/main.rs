@@ -3,12 +3,15 @@
 
 mod config;
 mod idp;
+mod jobs;
 mod login;
+mod oauth;
 
 use std::fmt::Write as _;
 use std::path::Path;
 use std::process::ExitCode;
 use std::sync::Arc;
+use std::time::Duration;
 
 use access_authority_core::adapters::{Domains, OsSalts, Setup, Unbound};
 use access_authority_sequencer::LEASE_TTL;
@@ -17,6 +20,7 @@ use access_crypto::secret_file::SecretFile;
 use access_http::adp::adapters::{Discovery, router as adp_router};
 use access_http::adp::app::Service;
 use access_http::login::{Assets, router as login_router};
+use access_http::oauth::router as oauth_router;
 use access_http::realm::router as realm_router;
 use access_http::{Health, Limits, SandboxHealth, router};
 use access_identity_account::adapters::system::{SystemClock, cgroup_memory_budget, cores};
@@ -25,8 +29,16 @@ use access_identity_account::app::local::LocalLimiter;
 use access_identity_account::app::login::LoginGate;
 use access_identity_account::domain::password::Argon2Params;
 use access_identity_account::domain::throttle::ThrottlePolicy;
+use access_identity_account::notify::delivery::Backoff;
+use access_identity_oauth::adapters::clients::{CachePolicy, HttpClientKeys, HttpLogoutDelivery};
+use access_identity_oauth::adapters::dpop::SystemClock as OAuthClock;
+use access_identity_oauth::adapters::oauth::{OsRandom, PgLogoutQueue, PgOAuth};
+use access_identity_oauth::adapters::outbound::Outbound;
 use access_identity_oauth::adapters::{PgDirectory, SignerKeys};
 use access_identity_oauth::app::Discovery as RealmDiscovery;
+use access_identity_oauth::app::backchannel::Courier;
+use access_identity_oauth::app::oauth::OAuth;
+use access_identity_oauth::domain::dpop::DpopProfile;
 use access_identity_oauth::domain::issuer::RealmBase;
 use access_identity_ui::adapters::Outbox;
 use access_identity_ui::app::Hosted;
@@ -45,6 +57,16 @@ const RESOLVER: [&str; 5] = [
     "/etc/gai.conf",
 ];
 
+/// Where the system's trust anchors usually are, for clients' own endpoints.
+const SYSTEM_ROOTS: [&str; 3] = [
+    "/etc/ssl/certs/ca-certificates.crt",
+    "/etc/pki/tls/certs/ca-bundle.crt",
+    "/etc/ssl/cert.pem",
+];
+
+/// The deadline of one request to a client's endpoint (PD).
+const OUTBOUND_TIMEOUT: Duration = Duration::from_secs(5);
+
 /// Everything read from the file system before the lockdown closes it.
 struct Prepared {
     tls: Arc<access_http::tls::ServerConfig>,
@@ -53,9 +75,13 @@ struct Prepared {
     app_password: SecretFile,
     deriver_password: SecretFile,
     router_password: SecretFile,
+    archive_password: SecretFile,
+    outbox_password: SecretFile,
     keys: KeyStore,
     login_keys: KeyStore,
+    identity_keys: Arc<KeyStore>,
     assets: Option<Assets>,
+    outbound: Outbound,
 }
 
 /// The database pools of the server's roles.
@@ -64,6 +90,8 @@ struct Pools {
     app: Pool,
     deriver: Pool,
     router: Pool,
+    archive: Pool,
+    outbox_reader: Pool,
 }
 
 fn main() -> ExitCode {
@@ -166,6 +194,8 @@ fn prepare(config: &Config, tls: Arc<access_http::tls::ServerConfig>) -> Result<
     let keys = KeyStore::open(&hsm.module, &hsm.token, pin.value()).map_err(|e| e.to_string())?;
     let login_keys =
         KeyStore::open(&hsm.module, &hsm.token, pin.value()).map_err(|e| e.to_string())?;
+    let identity_keys =
+        Arc::new(KeyStore::open(&hsm.module, &hsm.token, pin.value()).map_err(|e| e.to_string())?);
     // OP-146 m.12 (f): the built login app is read before the lockdown closes the file system
     let assets = config
         .login
@@ -181,10 +211,35 @@ fn prepare(config: &Config, tls: Arc<access_http::tls::ServerConfig>) -> Result<
         app_password: password(&db.app)?,
         deriver_password: password(&db.deriver)?,
         router_password: password(&db.router)?,
+        archive_password: password(&db.archive)?,
+        outbox_password: password(&db.outbox_reader)?,
         keys,
         login_keys,
+        identity_keys,
         assets,
+        outbound: outbound(config)?,
     })
+}
+
+/// Requests to clients' own endpoints (§10.4.6, §11.3.6): the configured trust anchors, else
+/// the system's; without either they fail and the server still starts.
+fn outbound(config: &Config) -> Result<Outbound, String> {
+    let configured = config
+        .identity
+        .as_ref()
+        .and_then(|i| i.outbound_ca_file.clone());
+    let pem = match configured {
+        Some(f) => Some(std::fs::read(&f).map_err(|e| format!("{}: {e}", f.display()))?),
+        None => SYSTEM_ROOTS.iter().find_map(|f| std::fs::read(f).ok()),
+    };
+    let Some(pem) = pem else {
+        tracing::warn!(
+            "no trust anchors for clients' endpoints; jwks_uri and back-channel logout fail"
+        );
+        return Ok(Outbound::disabled(OUTBOUND_TIMEOUT));
+    };
+    let tls = access_http::tls::client_config(&pem).map_err(|e| e.to_string())?;
+    Ok(Outbound::new(tls, OUTBOUND_TIMEOUT))
 }
 
 /// SA-22 with what the authority plane reaches after it (OP-141 m.18 (g), (h)).
@@ -193,6 +248,8 @@ fn lockdown(config: &Config) -> Lockdown {
     if let Some(db) = &config.database {
         lockdown = lockdown.allow_tcp_connect(db.port);
     }
+    // §10.4.6, §11.3.6
+    lockdown = lockdown.allow_tcp_connect(access_identity_oauth::adapters::outbound::PORT);
     for file in RESOLVER.iter().filter(|f| Path::new(f).exists()) {
         lockdown = lockdown.allow_read(file);
     }
@@ -233,6 +290,8 @@ async fn pools(config: &Config, prepared: &Prepared) -> Result<Pools, String> {
     let app = open(&db.app, &prepared.app_password).await?;
     let deriver = open(&db.deriver, &prepared.deriver_password).await?;
     let router = open(&db.router, &prepared.router_password).await?;
+    let archive = open(&db.archive, &prepared.archive_password).await?;
+    let outbox_reader = open(&db.outbox_reader, &prepared.outbox_password).await?;
     let durability = match db.durability {
         Durability::Replicated => access_store::connect::Durability::Replicated,
         Durability::SingleNode => access_store::connect::Durability::SingleNode,
@@ -242,9 +301,18 @@ async fn pools(config: &Config, prepared: &Prepared) -> Result<Pools, String> {
         .pool
         .saturating_add(db.app.pool)
         .saturating_add(db.deriver.pool)
-        .saturating_add(db.router.pool);
+        .saturating_add(db.router.pool)
+        .saturating_add(db.archive.pool)
+        .saturating_add(db.outbox_reader.pool);
     // OP-52
-    for p in [&sequencer, &app, &deriver, &router] {
+    for p in [
+        &sequencer,
+        &app,
+        &deriver,
+        &router,
+        &archive,
+        &outbox_reader,
+    ] {
         check_server(p, total, true, durability)
             .await
             .map_err(|e| e.to_string())?;
@@ -254,6 +322,8 @@ async fn pools(config: &Config, prepared: &Prepared) -> Result<Pools, String> {
         app,
         deriver,
         router,
+        archive,
+        outbox_reader,
     })
 }
 
@@ -307,6 +377,82 @@ fn login(
     Ok(login_router(discovery, hosted, assets))
 }
 
+/// The realm authorization server (OP-146 I7) over the application pool, the identity signer,
+/// clients' endpoints and the HSM's DPoP nonce keys.
+fn authorization(
+    config: &Config,
+    app: Pool,
+    router: Pool,
+    nonce_keys: Arc<KeyStore>,
+    outbound: Outbound,
+) -> Result<axum::Router, String> {
+    let identity = config.identity.as_ref().ok_or("no identity section")?;
+    let env = oauth::ServerEnv {
+        db: PgOAuth::new(app.clone()),
+        signer: SignerKeys::new(identity.signer.clone()),
+        client_keys: HttpClientKeys::new(outbound, CachePolicy::default()),
+        directory: PgDirectory::new(router),
+        app,
+        nonces: oauth::HsmNonces::new(nonce_keys),
+        dpop: DpopProfile::default(),
+    };
+    Ok(oauth_router(OAuth::new(env)))
+}
+
+/// The back-channel logout courier (§10.4.6, OP-131): its own outbox cursor, at least once.
+type LogoutCourier =
+    Courier<PgOAuth, SignerKeys, OsRandom, OAuthClock, PgLogoutQueue, HttpLogoutDelivery>;
+
+fn courier(config: &Config, pools: &Pools, outbound: Outbound) -> Result<LogoutCourier, String> {
+    let identity = config.identity.as_ref().ok_or("no identity section")?;
+    Ok(Courier::new(
+        PgOAuth::new(pools.app.clone()),
+        SignerKeys::new(identity.signer.clone()),
+        OsRandom,
+        OAuthClock,
+        PgLogoutQueue {
+            reader: pools.outbox_reader.clone(),
+            app: pools.app.clone(),
+        },
+        HttpLogoutDelivery::new(outbound),
+        Backoff::default(),
+    ))
+}
+
+/// The identity plane's background work: the back-channel courier and the day-partition
+/// opener.
+struct Background {
+    stop: tokio::sync::watch::Sender<bool>,
+    delivering: tokio::task::JoinHandle<()>,
+    opening: tokio::task::JoinHandle<()>,
+}
+
+impl Background {
+    fn start(config: &Config, pools: &Pools, outbound: Outbound) -> Result<Self, String> {
+        let logout = courier(config, pools, outbound)?;
+        let (stop, stopped) = tokio::sync::watch::channel(false);
+        let delivering = tokio::spawn(async move { logout.run(&stopped).await });
+        // OP-146 m.5 (f)
+        let opening = tokio::spawn(jobs::run(
+            pools.app.clone(),
+            pools.archive.clone(),
+            holder()?,
+        ));
+        Ok(Self {
+            stop,
+            delivering,
+            opening,
+        })
+    }
+
+    /// The courier finishes its step; the opener is stopped.
+    async fn stop(self) {
+        let _ = self.stop.send(true);
+        let _ = self.delivering.await;
+        self.opening.abort();
+    }
+}
+
 fn tls_config(config: &Config) -> Result<std::sync::Arc<access_http::tls::ServerConfig>, String> {
     let tls = config.tls.as_ref().ok_or("no tls section")?;
     let chain =
@@ -329,12 +475,28 @@ async fn serve(
     prepared: Prepared,
     report: &LockdownReport,
 ) -> Result<(), String> {
+    let all = pools(config, &prepared).await?;
+    let background = Background::start(config, &all, prepared.outbound.clone())?;
+    let authorize = authorization(
+        config,
+        all.app.clone(),
+        all.router.clone(),
+        prepared.identity_keys.clone(),
+        prepared.outbound,
+    )?;
+    let identity_section = config.identity.as_ref().ok_or("no identity section")?;
+    // OP-146 m.16 (m)
+    let _realm_keys = idp::RealmKeyring::new(
+        SignerKeys::new(identity_section.signer.clone()),
+        prepared.identity_keys,
+    );
     let Pools {
         sequencer,
         app,
         deriver,
         router: router_pool,
-    } = pools(config, &prepared).await?;
+        ..
+    } = all;
     let sign_in = login(
         config,
         router_pool.clone(),
@@ -398,13 +560,14 @@ async fn serve(
         config.security_txt(),
         health,
         limits,
-        adp.merge(realms).merge(sign_in),
+        adp.merge(realms).merge(sign_in).merge(authorize),
     );
     listener.set_nonblocking(true).map_err(|e| e.to_string())?;
     let listener = tokio::net::TcpListener::from_std(listener).map_err(|e| e.to_string())?;
     tracing::info!(listen = %config.listen, "access-server listening (TLS 1.3)");
     let served = access_http::tls::serve(listener, prepared.tls, app, shutdown_signal()).await;
     // OP-31
+    background.stop().await;
     renewing.abort();
     domains.release().await;
     served.map_err(|e| e.to_string())
