@@ -1,0 +1,186 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT l.session_id, l.subject_id, l.session_epoch, s.session_epoch AS subject_epoch,\n                    s.status AS subject_status, l.keep_signed_in, l.created_ms, l.auth_time_ms,\n                    l.last_seen_ms, l.idle_ms, l.expires_ms, l.assurance, l.ended_ms, l.end_reason\n               FROM access.login_sessions l\n               JOIN access.identity_subjects s\n                 ON s.tenant_id = l.tenant_id AND s.realm_id = l.realm_id AND s.subject_id = l.subject_id\n              WHERE l.tenant_id = $1 AND l.realm_id = $2 AND l.subject_id = $3 AND l.ended_ms IS NULL\n              ORDER BY l.session_id DESC",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "session_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.login_sessions",
+            "name": "session_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "subject_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.login_sessions",
+            "name": "subject_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "session_epoch",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.login_sessions",
+            "name": "session_epoch"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "subject_epoch",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.identity_subjects",
+            "name": "session_epoch"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "subject_status",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.identity_subjects",
+            "name": "status"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "keep_signed_in",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "access.login_sessions",
+            "name": "keep_signed_in"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "created_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.login_sessions",
+            "name": "created_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "auth_time_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.login_sessions",
+            "name": "auth_time_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "last_seen_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.login_sessions",
+            "name": "last_seen_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "idle_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.login_sessions",
+            "name": "idle_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "expires_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.login_sessions",
+            "name": "expires_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "assurance",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.login_sessions",
+            "name": "assurance"
+          }
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "ended_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.login_sessions",
+            "name": "ended_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 13,
+        "name": "end_reason",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.login_sessions",
+            "name": "end_reason"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "e8c19747d0a1d42733a306f7410b7852c0edac6a6041f933f54cd84eecd3b9d4"
+}

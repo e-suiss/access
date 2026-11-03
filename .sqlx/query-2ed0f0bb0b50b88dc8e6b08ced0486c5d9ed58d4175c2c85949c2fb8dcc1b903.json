@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.webauthn_credentials SET deleted_s = $4\n              WHERE tenant_id = $1 AND realm_id = $2 AND raw_id = $3 AND deleted_s IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "2ed0f0bb0b50b88dc8e6b08ced0486c5d9ed58d4175c2c85949c2fb8dcc1b903"
+}

@@ -1,0 +1,33 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.webauthn_credentials\n               (tenant_id, realm_id, raw_id, credential_id, user_handle, public_key, alg, sign_count,\n                backup_eligible, backup_state, user_verified, aaguid, transports, attestation,\n                cred_protect, discoverable, prf_enabled, prf_first, prf_second, created_s)\n             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18,\n                     $19, $20)\n             ON CONFLICT (tenant_id, realm_id, raw_id) DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Bytea",
+        "Uuid",
+        "Bytea",
+        "Bytea",
+        "Int4",
+        "Int8",
+        "Bool",
+        "Bool",
+        "Bool",
+        "Bytea",
+        "TextArray",
+        "Text",
+        "Int2",
+        "Bool",
+        "Bool",
+        "Bytea",
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "96ed2bd95f86399ce771cfceedf8f784060b70621c2dd21e006c83dd0e35d5c3"
+}

@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT user_handle FROM access.webauthn_users\n              WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "user_handle",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.webauthn_users",
+            "name": "user_handle"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "2fa6a7a47d5915ca9a1003ff67aa2fbf3f78624847f532078b8c8c9d71504906"
+}

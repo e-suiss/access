@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "UPDATE access.identity_subjects SET session_epoch = session_epoch + 1\n              WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 RETURNING session_epoch",
+  "query": "UPDATE access.identity_subjects SET session_epoch = session_epoch + 1, session_epoch_at = clock_timestamp()\n              WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 RETURNING session_epoch",
   "describe": {
     "columns": [
       {
@@ -26,5 +26,5 @@
       false
     ]
   },
-  "hash": "218b31580419461b9ac111bbcd2cb3a4b56338aa3b2925dca993316dffff2b50"
+  "hash": "176c05caff60a31e161c154742eca623c4154fdd349db2933dd46e36554c2f5d"
 }

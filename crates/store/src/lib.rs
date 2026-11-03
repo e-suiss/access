@@ -15,8 +15,10 @@ pub use sqlx::PgPool as Pool;
 pub mod identity;
 pub mod idp;
 pub mod jobs;
+pub mod passkeys;
 pub mod relay;
 pub mod scope;
+pub mod sessions;
 pub mod tenancy;
 pub mod throttle;
 

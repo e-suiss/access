@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.login_sessions SET session_epoch = $5, auth_time_ms = $6, assurance = $7\n              WHERE tenant_id = $1 AND realm_id = $2 AND session_id = $3 AND ended_ms IS NULL\n                AND session_epoch = $4",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Int8",
+        "Int8",
+        "Int8",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "148b7c4c0973427381cf7b4ffefd3a68ad044debcf89f0ac3794574713f0f0f9"
+}

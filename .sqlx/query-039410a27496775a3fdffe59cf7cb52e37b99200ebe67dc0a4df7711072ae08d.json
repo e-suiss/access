@@ -1,0 +1,42 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT kind, value FROM access.identity_identifiers\n              WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND status = 'active'\n                AND kind IN ('email', 'phone')\n              ORDER BY kind = 'email' DESC, identifier_id LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "kind",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.identity_identifiers",
+            "name": "kind"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "value",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.identity_identifiers",
+            "name": "value"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "039410a27496775a3fdffe59cf7cb52e37b99200ebe67dc0a4df7711072ae08d"
+}

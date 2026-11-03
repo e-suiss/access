@@ -1,0 +1,21 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.auth_flows\n               (tenant_id, realm_id, day, flow_hash, device_hash, resume_hash, expires_ms, state)\n             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Int4",
+        "Bytea",
+        "Bytea",
+        "Bytea",
+        "Int8",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "231170954f7b7fde0b0594615ad4eaf8459ab6baa2b3b18c4a97241f41084046"
+}

@@ -1,0 +1,50 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT subject_id, session_epoch,\n                      (extract(epoch FROM session_epoch_at) * 1000)::bigint AS \"at_ms!\"\n                 FROM access.identity_subjects\n                WHERE tenant_id = $1 AND realm_id = $2\n                  AND session_epoch_at > to_timestamp($3::bigint / 1000.0)\n                ORDER BY session_epoch_at LIMIT $4",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "subject_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.identity_subjects",
+            "name": "subject_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "session_epoch",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.identity_subjects",
+            "name": "session_epoch"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "at_ms!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      null
+    ]
+  },
+  "hash": "0cc40dcc1fa4d8583cbce09cb25438535a920e3296654a9a12224b8d2ee7ebfe"
+}

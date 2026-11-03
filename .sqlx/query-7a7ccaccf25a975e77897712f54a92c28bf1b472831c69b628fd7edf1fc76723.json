@@ -1,0 +1,115 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT day, flow_hash, device_hash, resume_hash, version, status, expires_ms, state\n               FROM access.auth_flows\n              WHERE tenant_id = $1 AND realm_id = $2 AND day >= $3 AND resume_hash = $4\n              FOR UPDATE",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "day",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "access.auth_flows",
+            "name": "day"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "flow_hash",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.auth_flows",
+            "name": "flow_hash"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "device_hash",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.auth_flows",
+            "name": "device_hash"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "resume_hash",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.auth_flows",
+            "name": "resume_hash"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "version",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "access.auth_flows",
+            "name": "version"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "status",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.auth_flows",
+            "name": "status"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "expires_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.auth_flows",
+            "name": "expires_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "state",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.auth_flows",
+            "name": "state"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Int4",
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "7a7ccaccf25a975e77897712f54a92c28bf1b472831c69b628fd7edf1fc76723"
+}

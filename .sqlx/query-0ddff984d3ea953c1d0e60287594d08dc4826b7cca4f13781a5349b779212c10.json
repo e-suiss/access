@@ -1,0 +1,258 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT raw_id, credential_id, user_handle, public_key, alg, sign_count, backup_eligible,\n                    backup_state, user_verified, aaguid, transports, attestation, cred_protect,\n                    discoverable, prf_enabled, prf_first, prf_second, created_s, last_used_s, deleted_s\n               FROM access.webauthn_credentials\n              WHERE tenant_id = $1 AND realm_id = $2 AND user_handle = $3 AND deleted_s IS NULL\n              ORDER BY created_s, raw_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "raw_id",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.webauthn_credentials",
+            "name": "raw_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "credential_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.webauthn_credentials",
+            "name": "credential_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "user_handle",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.webauthn_credentials",
+            "name": "user_handle"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "public_key",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.webauthn_credentials",
+            "name": "public_key"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "alg",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "access.webauthn_credentials",
+            "name": "alg"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "sign_count",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.webauthn_credentials",
+            "name": "sign_count"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "backup_eligible",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "access.webauthn_credentials",
+            "name": "backup_eligible"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "backup_state",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "access.webauthn_credentials",
+            "name": "backup_state"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "user_verified",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "access.webauthn_credentials",
+            "name": "user_verified"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "aaguid",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.webauthn_credentials",
+            "name": "aaguid"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "transports",
+        "type_info": "TextArray",
+        "origin": {
+          "Table": {
+            "table": "access.webauthn_credentials",
+            "name": "transports"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "attestation",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.webauthn_credentials",
+            "name": "attestation"
+          }
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "cred_protect",
+        "type_info": "Int2",
+        "origin": {
+          "Table": {
+            "table": "access.webauthn_credentials",
+            "name": "cred_protect"
+          }
+        }
+      },
+      {
+        "ordinal": 13,
+        "name": "discoverable",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "access.webauthn_credentials",
+            "name": "discoverable"
+          }
+        }
+      },
+      {
+        "ordinal": 14,
+        "name": "prf_enabled",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "access.webauthn_credentials",
+            "name": "prf_enabled"
+          }
+        }
+      },
+      {
+        "ordinal": 15,
+        "name": "prf_first",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.webauthn_credentials",
+            "name": "prf_first"
+          }
+        }
+      },
+      {
+        "ordinal": 16,
+        "name": "prf_second",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.webauthn_credentials",
+            "name": "prf_second"
+          }
+        }
+      },
+      {
+        "ordinal": 17,
+        "name": "created_s",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.webauthn_credentials",
+            "name": "created_s"
+          }
+        }
+      },
+      {
+        "ordinal": 18,
+        "name": "last_used_s",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.webauthn_credentials",
+            "name": "last_used_s"
+          }
+        }
+      },
+      {
+        "ordinal": 19,
+        "name": "deleted_s",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.webauthn_credentials",
+            "name": "deleted_s"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "0ddff984d3ea953c1d0e60287594d08dc4826b7cca4f13781a5349b779212c10"
+}

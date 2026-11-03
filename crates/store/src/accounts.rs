@@ -184,7 +184,7 @@ impl TenantTx {
     pub async fn bump_session_epoch(&mut self, id: [u8; 16]) -> Result<Option<i64>, StoreError> {
         let (tenant, realm) = self.scope()?;
         Ok(sqlx::query_scalar!(
-            "UPDATE access.identity_subjects SET session_epoch = session_epoch + 1
+            "UPDATE access.identity_subjects SET session_epoch = session_epoch + 1, session_epoch_at = clock_timestamp()
               WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 RETURNING session_epoch",
             tenant,
             realm,
@@ -195,13 +195,30 @@ impl TenantTx {
     }
 
     /// Ends the subject's identity sessions and refresh families in this transaction
-    /// (TN-50): they carry the epoch they were issued under, so raising it ends them all.
+    /// (TN-50, OP-146 m.10 (a)): they carry the epoch they were issued under, so raising it
+    /// ends them all; the login sessions behind it are marked ended in the same transaction.
     /// Returns the new epoch.
     ///
     /// # Errors
     /// [`StoreError`].
     pub async fn end_sessions(&mut self, id: [u8; 16]) -> Result<Option<i64>, StoreError> {
-        self.bump_session_epoch(id).await
+        let Some(epoch) = self.bump_session_epoch(id).await? else {
+            return Ok(None);
+        };
+        let (tenant, realm) = self.scope()?;
+        sqlx::query!(
+            "UPDATE access.login_sessions
+                SET ended_ms = (extract(epoch FROM clock_timestamp()) * 1000)::bigint, end_reason = 'epoch'
+              WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND ended_ms IS NULL
+                AND session_epoch < $4",
+            tenant,
+            realm,
+            uuid(id),
+            epoch,
+        )
+        .execute(&mut *self.tx)
+        .await?;
+        Ok(Some(epoch))
     }
 
     /// Adds a login identifier; false when the realm already has it in any letter case.

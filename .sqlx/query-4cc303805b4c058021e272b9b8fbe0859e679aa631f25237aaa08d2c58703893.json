@@ -1,0 +1,66 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT subject_id, session_epoch, expires_ms, revoked_ms FROM access.device_markers\n              WHERE tenant_id = $1 AND realm_id = $2 AND marker_hash = $3",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "subject_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.device_markers",
+            "name": "subject_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "session_epoch",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.device_markers",
+            "name": "session_epoch"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "expires_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.device_markers",
+            "name": "expires_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "revoked_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.device_markers",
+            "name": "revoked_ms"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "4cc303805b4c058021e272b9b8fbe0859e679aa631f25237aaa08d2c58703893"
+}
