@@ -74,6 +74,10 @@ impl<E: Env> OAuth<E> {
         let Some(c) = claims else {
             return Ok(None);
         };
+        // AG-8, §9.9.3 k.1
+        if !matches!(c.get("aud"), Some(Json::Str(a)) if a == realm.issuer.as_str()) {
+            return Ok(None);
+        }
         let sid = text(&c, "sid")
             .and_then(|s| b64url_decode(&s).ok())
             .and_then(|s| <[u8; 16]>::try_from(s).ok());
