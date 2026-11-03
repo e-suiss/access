@@ -173,6 +173,12 @@ dependencies = [
 [[package]]
 name = "access-identity-ui"
 version = "0.2.4"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror",
+ "zeroize",
+]
 
 [[package]]
 name = "access-identity-webauthn"

@@ -1,0 +1,65 @@
+{
+  "version": 1,
+  "flow": "lgf_example",
+  "step": "second_factor",
+  "action": "/v1/login/flows/lgf_example",
+  "requirements": [
+    {
+      "requirement": "identifier",
+      "state": "satisfied"
+    },
+    {
+      "requirement": "first_factor",
+      "state": "satisfied"
+    },
+    {
+      "requirement": "second_factor",
+      "state": "missing"
+    }
+  ],
+  "nodes": [
+    {
+      "type": "input",
+      "name": "totp_code",
+      "method": "totp",
+      "kind": "code",
+      "autocomplete": "one-time-code",
+      "required": true,
+      "max_length": 10,
+      "label": {
+        "id": "label.totp_code",
+        "text": "Code from your authenticator app"
+      }
+    },
+    {
+      "type": "submit",
+      "method": "totp",
+      "label": {
+        "id": "action.verify",
+        "text": "Verify"
+      }
+    },
+    {
+      "type": "input",
+      "name": "recovery_code",
+      "method": "recovery_code",
+      "kind": "text",
+      "autocomplete": "off",
+      "required": true,
+      "max_length": 64,
+      "label": {
+        "id": "label.recovery_code",
+        "text": "Recovery code"
+      }
+    },
+    {
+      "type": "submit",
+      "method": "recovery_code",
+      "label": {
+        "id": "action.recovery_code",
+        "text": "Use a recovery code"
+      }
+    }
+  ],
+  "messages": []
+}

@@ -1,0 +1,96 @@
+{
+  "version": 1,
+  "flow": "lgf_example",
+  "step": "authenticate",
+  "action": "/v1/login/flows/lgf_example",
+  "requirements": [
+    {
+      "requirement": "identifier",
+      "state": "satisfied"
+    },
+    {
+      "requirement": "first_factor",
+      "state": "missing"
+    },
+    {
+      "requirement": "second_factor",
+      "state": "missing"
+    }
+  ],
+  "nodes": [
+    {
+      "type": "input",
+      "name": "identifier",
+      "method": "restart",
+      "kind": "text",
+      "autocomplete": "username",
+      "required": false,
+      "max_length": 320,
+      "label": {
+        "id": "label.identifier",
+        "text": "Email or username"
+      },
+      "value": "ada@example.org",
+      "read_only": true
+    },
+    {
+      "type": "input",
+      "name": "password",
+      "method": "password",
+      "kind": "password",
+      "autocomplete": "current-password",
+      "required": true,
+      "max_length": 128,
+      "label": {
+        "id": "label.password",
+        "text": "Password"
+      }
+    },
+    {
+      "type": "submit",
+      "method": "password",
+      "label": {
+        "id": "action.sign_in",
+        "text": "Sign in"
+      }
+    },
+    {
+      "type": "passkey_get",
+      "label": {
+        "id": "action.passkey",
+        "text": "Sign in with a passkey"
+      },
+      "options": {
+        "allowCredentials": [
+          {
+            "id": "Y3JlZC1hZGEtMDE",
+            "transports": [
+              "internal",
+              "hybrid"
+            ],
+            "type": "public-key"
+          }
+        ],
+        "challenge": "c2lnbi1pbi1jaGFsbGVuZ2UtZXhhbXBsZS0wMDAwMDA",
+        "rpId": "acme.localhost",
+        "timeout": 300000,
+        "userVerification": "preferred"
+      }
+    },
+    {
+      "type": "submit",
+      "method": "restart",
+      "label": {
+        "id": "action.restart",
+        "text": "Use a different account"
+      }
+    }
+  ],
+  "messages": [
+    {
+      "id": "login.failed",
+      "text": "We couldn't sign you in with these details.",
+      "severity": "error"
+    }
+  ]
+}

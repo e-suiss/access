@@ -9,6 +9,10 @@ repository.workspace = true
 publish = false
 
 [dependencies]
+serde = { workspace = true, features = ["derive", "std"] }
+serde_json = { workspace = true, features = ["std"] }
+thiserror = { workspace = true }
+zeroize = { workspace = true, features = ["alloc"] }
 
 [lints]
 workspace = true

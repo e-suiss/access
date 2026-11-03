@@ -1,0 +1,75 @@
+{
+  "version": 1,
+  "flow": "lgf_example",
+  "step": "complete",
+  "action": "/v1/login/flows/lgf_example",
+  "requirements": [
+    {
+      "requirement": "identifier",
+      "state": "satisfied"
+    },
+    {
+      "requirement": "first_factor",
+      "state": "satisfied"
+    },
+    {
+      "requirement": "second_factor",
+      "state": "satisfied"
+    }
+  ],
+  "nodes": [
+    {
+      "type": "passkey_create",
+      "mediation": "explicit",
+      "label": {
+        "id": "action.passkey_create",
+        "text": "Create a passkey"
+      },
+      "options": {
+        "attestation": "none",
+        "authenticatorSelection": {
+          "residentKey": "required",
+          "userVerification": "preferred"
+        },
+        "challenge": "c2lnbi1pbi1jaGFsbGVuZ2UtZXhhbXBsZS0wMDAwMDA",
+        "excludeCredentials": [],
+        "extensions": {
+          "credProps": true
+        },
+        "hints": [
+          "client-device"
+        ],
+        "pubKeyCredParams": [
+          {
+            "alg": -7,
+            "type": "public-key"
+          },
+          {
+            "alg": -8,
+            "type": "public-key"
+          }
+        ],
+        "rp": {
+          "id": "acme.localhost",
+          "name": "Acme"
+        },
+        "timeout": 300000,
+        "user": {
+          "displayName": "Ada",
+          "id": "dXNlci1oYW5kbGUtZXhhbXBsZS0wMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMA",
+          "name": "ada@example.org"
+        }
+      }
+    },
+    {
+      "type": "submit",
+      "method": "skip",
+      "label": {
+        "id": "action.skip",
+        "text": "Not now"
+      }
+    }
+  ],
+  "messages": [],
+  "redirect_to": "/callback?state=example"
+}

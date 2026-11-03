@@ -1,0 +1,83 @@
+{
+  "version": 1,
+  "flow": "lgf_example",
+  "step": "identifier",
+  "action": "/v1/login/flows/lgf_example",
+  "requirements": [
+    {
+      "requirement": "identifier",
+      "state": "missing"
+    },
+    {
+      "requirement": "first_factor",
+      "state": "missing"
+    },
+    {
+      "requirement": "second_factor",
+      "state": "missing"
+    }
+  ],
+  "nodes": [
+    {
+      "type": "input",
+      "name": "identifier",
+      "method": "identifier",
+      "kind": "text",
+      "autocomplete": "username webauthn",
+      "required": true,
+      "max_length": 320,
+      "label": {
+        "id": "label.identifier",
+        "text": "Email or username"
+      }
+    },
+    {
+      "type": "submit",
+      "method": "identifier",
+      "label": {
+        "id": "action.continue",
+        "text": "Continue"
+      }
+    },
+    {
+      "type": "passkey_autofill",
+      "field": "identifier",
+      "options": {
+        "allowCredentials": [],
+        "challenge": "c2lnbi1pbi1jaGFsbGVuZ2UtZXhhbXBsZS0wMDAwMDA",
+        "rpId": "acme.localhost",
+        "timeout": 300000,
+        "userVerification": "preferred"
+      }
+    },
+    {
+      "type": "passkey_get",
+      "label": {
+        "id": "action.passkey",
+        "text": "Sign in with a passkey"
+      },
+      "options": {
+        "allowCredentials": [],
+        "challenge": "c2lnbi1pbi1jaGFsbGVuZ2UtZXhhbXBsZS0wMDAwMDA",
+        "rpId": "acme.localhost",
+        "timeout": 300000,
+        "userVerification": "preferred"
+      }
+    },
+    {
+      "type": "passkey_signal",
+      "signal": {
+        "kind": "unknown_credential",
+        "rp_id": "acme.localhost",
+        "credential_id": "dW5rbm93bi1jcmVkZW50aWFs"
+      }
+    }
+  ],
+  "messages": [
+    {
+      "id": "login.failed",
+      "text": "We couldn't sign you in with these details.",
+      "severity": "error"
+    }
+  ]
+}

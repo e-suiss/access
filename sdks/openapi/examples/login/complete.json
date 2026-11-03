@@ -1,0 +1,86 @@
+{
+  "version": 1,
+  "flow": "lgf_example",
+  "step": "complete",
+  "action": "/v1/login/flows/lgf_example",
+  "requirements": [
+    {
+      "requirement": "identifier",
+      "state": "satisfied"
+    },
+    {
+      "requirement": "first_factor",
+      "state": "satisfied"
+    },
+    {
+      "requirement": "second_factor",
+      "state": "satisfied"
+    }
+  ],
+  "nodes": [
+    {
+      "type": "passkey_signal",
+      "signal": {
+        "kind": "all_accepted_credentials",
+        "rp_id": "acme.localhost",
+        "user_id": "dXNlci1oYW5kbGUtZXhhbXBsZS0wMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMA",
+        "all_accepted_credential_ids": [
+          "Y3JlZC1hZGEtMDE"
+        ]
+      }
+    },
+    {
+      "type": "passkey_signal",
+      "signal": {
+        "kind": "current_user_details",
+        "rp_id": "acme.localhost",
+        "user_id": "dXNlci1oYW5kbGUtZXhhbXBsZS0wMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMA",
+        "name": "ada@example.org",
+        "display_name": "Ada"
+      }
+    },
+    {
+      "type": "passkey_create",
+      "mediation": "conditional",
+      "label": {
+        "id": "action.passkey_create",
+        "text": "Create a passkey"
+      },
+      "options": {
+        "attestation": "none",
+        "authenticatorSelection": {
+          "residentKey": "required",
+          "userVerification": "preferred"
+        },
+        "challenge": "c2lnbi1pbi1jaGFsbGVuZ2UtZXhhbXBsZS0wMDAwMDA",
+        "excludeCredentials": [],
+        "extensions": {
+          "credProps": true
+        },
+        "hints": [],
+        "pubKeyCredParams": [
+          {
+            "alg": -7,
+            "type": "public-key"
+          },
+          {
+            "alg": -8,
+            "type": "public-key"
+          }
+        ],
+        "rp": {
+          "id": "acme.localhost",
+          "name": "Acme"
+        },
+        "timeout": 300000,
+        "user": {
+          "displayName": "Ada",
+          "id": "dXNlci1oYW5kbGUtZXhhbXBsZS0wMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMA",
+          "name": "ada@example.org"
+        }
+      }
+    }
+  ],
+  "messages": [],
+  "redirect_to": "/callback?state=example"
+}
