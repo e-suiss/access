@@ -21,6 +21,14 @@ suiss-sandbox = { package = "esuiss-sandbox", path = "crates/suiss-sandbox", ver
 suiss-restriction = { package = "esuiss-restriction", path = "crates/suiss-restriction", version = "=0.2.4", default-features = false }
 suiss-ledger = { package = "esuiss-ledger", path = "crates/suiss-ledger", version = "=0.2.4", default-features = false }
 access-store = { path = "crates/store", default-features = false }
+access-internal-api = { path = "crates/internal-api", default-features = false }
+access-parse = { path = "crates/parse", default-features = false }
+access-identity-oauth = { path = "crates/identity-oauth", default-features = false }
+access-identity-session = { path = "crates/identity-session", default-features = false }
+access-identity-account = { path = "crates/identity-account", default-features = false }
+access-identity-webauthn = { path = "crates/identity-webauthn", default-features = false }
+access-identity-ui = { path = "crates/identity-ui", default-features = false }
+access-identity-admin = { path = "crates/identity-admin", default-features = false }
 
 # F-2
 secrecy = { version = "0.10.3", default-features = false }

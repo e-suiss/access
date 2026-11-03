@@ -1,0 +1,14 @@
+[package]
+name = "access-parse"
+description = "Bounded parsers for untrusted input (CR-10): every reader has size and depth limits."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+
+[lints]
+workspace = true
