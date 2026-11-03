@@ -22,7 +22,7 @@ pub trait Notifier {
         &self,
         tx: &mut TenantTx,
         message: &Message,
-    ) -> impl Future<Output = Result<EventId, NotifyError>>;
+    ) -> impl Future<Output = Result<EventId, NotifyError>> + Send;
 }
 
 /// Relay's event intake (E42, OP-146 m.4 (b)).

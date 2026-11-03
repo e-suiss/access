@@ -20,7 +20,7 @@ pub struct Realm<'a> {
     /// Realm.
     pub realm: RealmId,
     /// The realm KEK that wraps subject DEKs (OP-42, OP-135).
-    pub kek: &'a dyn Kek,
+    pub kek: &'a (dyn Kek + Sync),
     /// The cell's id key for external subject ids (OP-137).
     pub ids: &'a IdKey,
 }

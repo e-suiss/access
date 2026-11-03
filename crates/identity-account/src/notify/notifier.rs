@@ -14,14 +14,18 @@ use crate::ports::{Clock, Entropy};
 /// The production [`Notifier`] for one realm.
 pub struct OutboxNotifier<'a> {
     realm: &'a Realm<'a>,
-    entropy: &'a dyn Entropy,
-    clock: &'a dyn Clock,
+    entropy: &'a (dyn Entropy + Sync),
+    clock: &'a (dyn Clock + Sync),
 }
 
 impl<'a> OutboxNotifier<'a> {
     /// A notifier for `realm`.
     #[must_use]
-    pub const fn new(realm: &'a Realm<'a>, entropy: &'a dyn Entropy, clock: &'a dyn Clock) -> Self {
+    pub const fn new(
+        realm: &'a Realm<'a>,
+        entropy: &'a (dyn Entropy + Sync),
+        clock: &'a (dyn Clock + Sync),
+    ) -> Self {
         Self {
             realm,
             entropy,
