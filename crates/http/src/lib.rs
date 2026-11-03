@@ -2,6 +2,7 @@
 
 pub mod adp;
 mod problem;
+pub mod realm;
 mod security_txt;
 pub mod tls;
 
@@ -88,5 +89,9 @@ pub fn harden(routes: Router, limits: Limits) -> Router {
 }
 
 async fn not_found() -> Problem {
+    not_found_problem()
+}
+
+fn not_found_problem() -> Problem {
     Problem::new(StatusCode::NOT_FOUND, "not_found", "Not Found")
 }
