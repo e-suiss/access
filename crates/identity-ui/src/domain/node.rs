@@ -22,16 +22,19 @@ pub enum FieldName {
     RecoveryCode,
     /// The `PublicKeyCredential` JSON (`toJSON()`) from a passkey ceremony.
     PasskeyCredential,
+    /// A code sent by e-mail (TN-102).
+    EmailCode,
 }
 
 impl FieldName {
     /// All names.
-    pub const ALL: [Self; 5] = [
+    pub const ALL: [Self; 6] = [
         Self::Identifier,
         Self::Password,
         Self::TotpCode,
         Self::RecoveryCode,
         Self::PasskeyCredential,
+        Self::EmailCode,
     ];
 
     /// The wire name.
@@ -43,6 +46,7 @@ impl FieldName {
             Self::TotpCode => "totp_code",
             Self::RecoveryCode => "recovery_code",
             Self::PasskeyCredential => "passkey_credential",
+            Self::EmailCode => "email_code",
         }
     }
 
@@ -63,13 +67,17 @@ impl FieldName {
             Self::RecoveryCode => 64,
             // CR-10
             Self::PasskeyCredential => 16_384,
+            Self::EmailCode => 16,
         }
     }
 
     /// Whether the value is a secret that must never be echoed back.
     #[must_use]
     pub const fn secret(self) -> bool {
-        matches!(self, Self::Password | Self::TotpCode | Self::RecoveryCode)
+        matches!(
+            self,
+            Self::Password | Self::TotpCode | Self::RecoveryCode | Self::EmailCode
+        )
     }
 }
 
@@ -93,11 +101,15 @@ pub enum Method {
     Skip,
     /// Start again with another identifier.
     Restart,
+    /// Send a code by e-mail, or verify it once sent (TN-102).
+    EmailCode,
+    /// Send a sign-in link by e-mail (TN-102).
+    MagicLink,
 }
 
 impl Method {
     /// All methods.
-    pub const ALL: [Self; 8] = [
+    pub const ALL: [Self; 10] = [
         Self::Identifier,
         Self::Password,
         Self::Passkey,
@@ -106,6 +118,8 @@ impl Method {
         Self::PasskeyRegister,
         Self::Skip,
         Self::Restart,
+        Self::EmailCode,
+        Self::MagicLink,
     ];
 
     /// The wire name.
@@ -120,6 +134,8 @@ impl Method {
             Self::PasskeyRegister => "passkey_register",
             Self::Skip => "skip",
             Self::Restart => "restart",
+            Self::EmailCode => "email_code",
+            Self::MagicLink => "magic_link",
         }
     }
 }

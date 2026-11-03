@@ -5,7 +5,12 @@ export const flowsPath = "/v1/login/flows";
 
 export type Step = "identifier" | "authenticate" | "second_factor" | "complete";
 export type FieldName =
-  "identifier" | "password" | "totp_code" | "recovery_code" | "passkey_credential";
+  | "identifier"
+  | "password"
+  | "totp_code"
+  | "recovery_code"
+  | "passkey_credential"
+  | "email_code";
 export type Method =
   | "identifier"
   | "password"
@@ -14,7 +19,9 @@ export type Method =
   | "recovery_code"
   | "passkey_register"
   | "skip"
-  | "restart";
+  | "restart"
+  | "email_code"
+  | "magic_link";
 
 export interface Text {
   readonly id: string;

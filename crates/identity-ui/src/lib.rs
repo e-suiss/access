@@ -6,6 +6,7 @@
 //! any order and layout; the server checks what comes back against the step it issued
 //! (TN-106, TN-132, X40).
 
+pub mod adapters;
 pub mod app;
 pub mod domain;
 pub mod ports;

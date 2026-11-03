@@ -7,7 +7,8 @@
           "password",
           "totp_code",
           "recovery_code",
-          "passkey_credential"
+          "passkey_credential",
+          "email_code"
         ],
         "type": "string"
       },
@@ -127,7 +128,9 @@
           "recovery_code",
           "passkey_register",
           "skip",
-          "restart"
+          "restart",
+          "email_code",
+          "magic_link"
         ],
         "type": "string"
       },
@@ -463,7 +466,11 @@
           "action.verify",
           "action.recovery_code",
           "action.skip",
-          "action.restart"
+          "action.restart",
+          "label.email_code",
+          "action.email_code",
+          "action.magic_link",
+          "email.sent"
         ],
         "type": "string"
       }

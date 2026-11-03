@@ -149,6 +149,24 @@ pub struct SecondFactors {
     pub recovery_code: bool,
 }
 
+/// Which e-mail first steps the realm offers (TN-102). Realm policy, never the account.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct EmailMethods {
+    /// A code by e-mail.
+    pub code: bool,
+    /// A sign-in link by e-mail.
+    pub link: bool,
+}
+
+/// What an e-mail step is waiting for.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum EmailWait {
+    /// The code from the e-mail.
+    Code,
+    /// The link in the e-mail, confirmed elsewhere; the client polls the flow.
+    Link,
+}
+
 /// One login step for a client to draw (TN-106).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -290,6 +308,56 @@ impl Ui {
             },
         ];
         Self::new(flow, Step::Authenticate, policy, nodes)
+    }
+
+    /// Adds the realm's e-mail first steps to the first-factor step (TN-102). They come from
+    /// realm policy, so the step reads the same for every account (OP-146 m.12 (c)); other
+    /// steps are returned unchanged.
+    #[must_use]
+    pub fn with_email(mut self, offered: EmailMethods) -> Self {
+        if self.step != Step::Authenticate {
+            return self;
+        }
+        if offered.code {
+            self.nodes.push(Node::Submit {
+                method: Method::EmailCode,
+                label: TextId::SendEmailCode.into(),
+            });
+        }
+        if offered.link {
+            self.nodes.push(Node::Submit {
+                method: Method::MagicLink,
+                label: TextId::SendMagicLink.into(),
+            });
+        }
+        self
+    }
+
+    /// An e-mail step is waiting (TN-102): the same step and words whether or not anything
+    /// was sent. A code is entered here; a link is confirmed elsewhere while the client polls.
+    #[must_use]
+    pub fn email_sent(flow: FlowId, wait: EmailWait, policy: &[Requirement]) -> Self {
+        let mut nodes = Vec::new();
+        if wait == EmailWait::Code {
+            nodes.push(Node::input(
+                FieldName::EmailCode,
+                Method::EmailCode,
+                InputKind::Code,
+                Autocomplete::OneTimeCode,
+                TextId::EmailCodeLabel.into(),
+            ));
+            nodes.push(Node::Submit {
+                method: Method::EmailCode,
+                label: TextId::Verify.into(),
+            });
+        }
+        nodes.push(Node::Submit {
+            method: Method::Restart,
+            label: TextId::Restart.into(),
+        });
+        let mut ui = Self::new(flow, Step::Authenticate, policy, nodes);
+        ui.messages.push(Message::info(TextId::EmailSent));
+        ui
     }
 
     /// MFA, after the first factor.
@@ -563,6 +631,40 @@ mod tests {
             states(Ui::complete(flow(), "/".into(), &policy))
                 .iter()
                 .all(|(_, s)| *s == Satisfied)
+        );
+    }
+
+    // TN-102, OP-146 m.12 (c)
+    #[test]
+    fn email_steps_come_from_realm_policy_and_read_the_same() {
+        let both = EmailMethods {
+            code: true,
+            link: true,
+        };
+        let ui = Ui::authenticate(flow(), "ada", options(&[]), &[]).with_email(both);
+        let methods: Vec<_> = ui.nodes.iter().filter_map(Node::method).collect();
+        assert!(methods.contains(&Method::EmailCode) && methods.contains(&Method::MagicLink));
+        let first = Ui::identifier(flow(), options(&[]), &[]).with_email(both);
+        assert!(
+            first
+                .nodes
+                .iter()
+                .all(|n| n.method() != Some(Method::EmailCode))
+        );
+        let code = Ui::email_sent(flow(), EmailWait::Code, &[]);
+        assert!(code.nodes.iter().any(|n| matches!(
+            n,
+            Node::Input {
+                name: FieldName::EmailCode,
+                ..
+            }
+        )));
+        assert_eq!(code.messages, [Message::info(TextId::EmailSent)]);
+        let link = Ui::email_sent(flow(), EmailWait::Link, &[]);
+        assert!(
+            link.nodes
+                .iter()
+                .all(|n| n.method() == Some(Method::Restart))
         );
     }
 

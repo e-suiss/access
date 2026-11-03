@@ -60,11 +60,23 @@ pub enum TextId {
     /// Start again with another identifier.
     #[serde(rename = "action.restart")]
     Restart,
+    /// E-mail code field.
+    #[serde(rename = "label.email_code")]
+    EmailCodeLabel,
+    /// Ask for a code by e-mail.
+    #[serde(rename = "action.email_code")]
+    SendEmailCode,
+    /// Ask for a sign-in link by e-mail.
+    #[serde(rename = "action.magic_link")]
+    SendMagicLink,
+    /// An e-mail step is waiting; the same words whether or not anything was sent (TN-102).
+    #[serde(rename = "email.sent")]
+    EmailSent,
 }
 
 impl TextId {
     /// All ids, in declaration order.
-    pub const ALL: [Self; 18] = [
+    pub const ALL: [Self; 22] = [
         Self::LoginFailed,
         Self::TooManyAttempts,
         Self::Unavailable,
@@ -83,6 +95,10 @@ impl TextId {
         Self::UseRecoveryCode,
         Self::Skip,
         Self::Restart,
+        Self::EmailCodeLabel,
+        Self::SendEmailCode,
+        Self::SendMagicLink,
+        Self::EmailSent,
     ];
 
     /// The stable id on the wire.
@@ -107,6 +123,10 @@ impl TextId {
             Self::UseRecoveryCode => "action.recovery_code",
             Self::Skip => "action.skip",
             Self::Restart => "action.restart",
+            Self::EmailCodeLabel => "label.email_code",
+            Self::SendEmailCode => "action.email_code",
+            Self::SendMagicLink => "action.magic_link",
+            Self::EmailSent => "email.sent",
         }
     }
 
@@ -133,6 +153,10 @@ impl TextId {
             Self::UseRecoveryCode => "Use a recovery code",
             Self::Skip => "Not now",
             Self::Restart => "Use a different account",
+            Self::EmailCodeLabel => "Code from your email",
+            Self::SendEmailCode => "Email me a code",
+            Self::SendMagicLink => "Email me a sign-in link",
+            Self::EmailSent => "If these details match an account, we've sent an email.",
         }
     }
 
@@ -197,6 +221,17 @@ impl Message {
             id,
             text: id.default_text().to_owned(),
             severity: Severity::Error,
+            retry_after_s: None,
+        }
+    }
+
+    /// An information message with its default text.
+    #[must_use]
+    pub fn info(id: TextId) -> Self {
+        Self {
+            id,
+            text: id.default_text().to_owned(),
+            severity: Severity::Info,
             retry_after_s: None,
         }
     }

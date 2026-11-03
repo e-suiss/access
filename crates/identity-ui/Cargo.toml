@@ -9,6 +9,16 @@ repository.workspace = true
 publish = false
 
 [dependencies]
+access-crypto = { workspace = true }
+access-identity-account = { workspace = true }
+access-identity-oauth = { workspace = true }
+access-identity-session = { workspace = true }
+access-identity-webauthn = { workspace = true }
+access-kernel = { workspace = true }
+access-store = { workspace = true }
+suiss-crypto = { workspace = true }
+time = { workspace = true, features = ["std", "formatting"] }
+tracing = { workspace = true, features = ["std"] }
 serde = { workspace = true, features = ["derive", "std"] }
 serde_json = { workspace = true, features = ["std"] }
 thiserror = { workspace = true }
