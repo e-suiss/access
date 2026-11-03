@@ -1,7 +1,17 @@
 //! Adapters of the identity signer's ports: a key factory that creates realm keys in the
-//! signer process and seals each one under the realm's KEK (CR-21 m.3, T31).
+//! signer process and seals each one under the realm's KEK (CR-21 m.3, T31), a directory
+//! vault keyed by realm, and the Unix domain socket server and client (CMP-22b).
+
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
 
 use access_crypto::jose::JwsAlg;
+use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
+use tokio::net::{UnixListener, UnixStream};
+
+use crate::ports::{Vault, VaultError};
+use crate::protocol::{self, Realm, Request, Response};
+use crate::service::Service;
 use suiss_crypto::dcbor::{self, Limits, Value};
 use suiss_crypto::envelope::{Dek, Kek, Sealed, open_body, seal_body};
 use suiss_crypto::secret::Secret;
@@ -76,6 +86,144 @@ impl<K: Kek> KeyFactory for SealedFactory<K> {
         let doc = open_body(&dek, SEAL_CONTEXT, &body).map_err(|_| SignError::Key)?;
         from_pkcs8(alg, &Secret::new(doc.to_vec()))
     }
+}
+
+fn hex(realm: &Realm) -> String {
+    realm
+        .0
+        .iter()
+        .fold(String::with_capacity(32), |mut out, b| {
+            let _ = std::fmt::Write::write_fmt(&mut out, format_args!("{b:02x}"));
+            out
+        })
+}
+
+/// One file per realm in a directory only the identity signer reads and writes; a write
+/// replaces the file atomically, so a dropped key's sealed material is gone with the old file
+/// (OP-73).
+pub struct DirVault {
+    dir: PathBuf,
+}
+
+impl DirVault {
+    /// A vault in `dir`.
+    #[must_use]
+    pub fn new(dir: &Path) -> Self {
+        Self {
+            dir: dir.to_path_buf(),
+        }
+    }
+}
+
+impl Vault for DirVault {
+    fn all(&mut self) -> Result<Vec<Vec<u8>>, VaultError> {
+        let mut out = Vec::new();
+        for e in std::fs::read_dir(&self.dir).map_err(|_| VaultError)? {
+            let path = e.map_err(|_| VaultError)?.path();
+            if path.extension().is_some_and(|x| x == "cbor") {
+                out.push(std::fs::read(&path).map_err(|_| VaultError)?);
+            }
+        }
+        Ok(out)
+    }
+
+    fn put(&mut self, realm: &Realm, bytes: &[u8]) -> Result<(), VaultError> {
+        let name = hex(realm);
+        let tmp = self.dir.join(format!("{name}.tmp"));
+        std::fs::write(&tmp, bytes).map_err(|_| VaultError)?;
+        std::fs::rename(&tmp, self.dir.join(format!("{name}.cbor"))).map_err(|_| VaultError)
+    }
+}
+
+/// Milliseconds since the Unix epoch.
+#[must_use]
+pub fn now_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| u64::try_from(d.as_millis()).unwrap_or(u64::MAX))
+}
+
+/// A random draw for a new key's jitter.
+#[must_use]
+pub fn draw() -> u64 {
+    access_crypto::random::bytes::<8>().map_or(0, u64::from_le_bytes)
+}
+
+async fn answer<F, V>(
+    stream: &mut UnixStream,
+    service: &Mutex<Service<F, V>>,
+    clock: fn() -> u64,
+) -> Result<(), std::io::Error>
+where
+    F: KeyFactory,
+    V: Vault,
+{
+    let mut header = [0_u8; 4];
+    stream.read_exact(&mut header).await?;
+    let response = match protocol::frame_len(header) {
+        Ok(len) => {
+            let mut body = vec![0_u8; len];
+            stream.read_exact(&mut body).await?;
+            match protocol::decode_request(&body) {
+                Ok(request) => service
+                    .lock()
+                    .map_or(Response::Error(String::from("signer-poisoned")), |mut s| {
+                        s.handle(request, clock(), draw())
+                    }),
+                Err(_) => Response::Error(String::from("signer-frame")),
+            }
+        }
+        Err(_) => Response::Error(String::from("signer-frame")),
+    };
+    let out =
+        protocol::encode_response(&response).map_err(|_| std::io::Error::other("signer-frame"))?;
+    stream.write_all(&out).await
+}
+
+/// Serves requests on `listener`, one per connection, from callers whose user id is in
+/// `allowed` (CMP-22: UDS and peer credentials); others are closed unanswered. `clock` gives
+/// the signer's time in milliseconds.
+///
+/// # Errors
+/// The listener fails.
+pub async fn serve<F, V>(
+    listener: UnixListener,
+    service: Arc<Mutex<Service<F, V>>>,
+    allowed: Vec<u32>,
+    clock: fn() -> u64,
+) -> Result<(), std::io::Error>
+where
+    F: KeyFactory + Send + 'static,
+    V: Vault + Send + 'static,
+{
+    loop {
+        let (mut stream, _) = listener.accept().await?;
+        let admitted = stream.peer_cred().is_ok_and(|c| allowed.contains(&c.uid()));
+        if !admitted {
+            continue;
+        }
+        let service = Arc::clone(&service);
+        tokio::spawn(async move {
+            let _ = answer(&mut stream, &service, clock).await;
+        });
+    }
+}
+
+/// Sends one request to the identity signer at `path` (CMP-15.x to CMP-22b).
+///
+/// # Errors
+/// The socket fails or the answer is not a frame.
+pub async fn call(path: &Path, request: &Request) -> Result<Response, std::io::Error> {
+    let mut stream = UnixStream::connect(path).await?;
+    let frame =
+        protocol::encode_request(request).map_err(|_| std::io::Error::other("signer-frame"))?;
+    stream.write_all(&frame).await?;
+    let mut header = [0_u8; 4];
+    stream.read_exact(&mut header).await?;
+    let len = protocol::frame_len(header).map_err(|_| std::io::Error::other("signer-frame"))?;
+    let mut body = vec![0_u8; len];
+    stream.read_exact(&mut body).await?;
+    protocol::decode_response(&body).map_err(|_| std::io::Error::other("signer-frame"))
 }
 
 #[cfg(test)]

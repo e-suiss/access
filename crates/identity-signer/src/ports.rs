@@ -27,3 +27,24 @@ pub trait KeyFactory {
     /// [`SignError::Key`] when it cannot be unsealed.
     fn load(&mut self, alg: JwsAlg, sealed: &[u8]) -> Result<Box<dyn Signer + Send>, SignError>;
 }
+
+/// Why the vault failed.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
+#[error("vault")]
+pub struct VaultError;
+
+/// Keeps each realm's key set across restarts, keyed by the realm; never shared with the
+/// authority signer's store (CMP-22b, OP-143 m.9 (e)).
+pub trait Vault {
+    /// Every realm the vault holds, as stored bytes.
+    ///
+    /// # Errors
+    /// [`VaultError`].
+    fn all(&mut self) -> Result<Vec<Vec<u8>>, VaultError>;
+
+    /// Replaces a realm's stored bytes.
+    ///
+    /// # Errors
+    /// [`VaultError`].
+    fn put(&mut self, realm: &crate::protocol::Realm, bytes: &[u8]) -> Result<(), VaultError>;
+}

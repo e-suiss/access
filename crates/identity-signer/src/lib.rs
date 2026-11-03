@@ -6,6 +6,8 @@ pub mod adapters;
 pub mod app;
 pub mod domain;
 pub mod ports;
+pub mod protocol;
+pub mod service;
 
 /// Why the signer refused.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]

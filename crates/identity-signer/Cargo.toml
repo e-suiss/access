@@ -13,9 +13,11 @@ access-kernel = { workspace = true }
 access-crypto = { workspace = true }
 suiss-crypto = { workspace = true, features = ["signer", "aead"] }
 thiserror = { workspace = true }
+tokio = { workspace = true, features = ["net", "io-util", "rt"] }
 
 [dev-dependencies]
 suiss-crypto = { workspace = true, features = ["signer", "aead", "testing"] }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 
 [lints]
 workspace = true
