@@ -133,6 +133,103 @@ pub async fn remove_hostname(t: &mut TenantTx, hostname: &str) -> Result<bool, S
     Ok(done == 1)
 }
 
+/// Sets the issuer of the transaction's realm, once: an issuer already set never changes
+/// (TN-16, §17.9.6). Returns whether this call set it.
+///
+/// # Errors
+/// [`StoreError`]; a malformed issuer, or a different one than already set, fails.
+pub async fn set_issuer(t: &mut TenantTx, issuer: &str) -> Result<bool, StoreError> {
+    let realm = t.realm().ok_or(StoreError::Range)?;
+    let done = sqlx::query!(
+        "UPDATE access.realms SET issuer = $3
+          WHERE tenant_id = $1 AND realm_id = $2 AND issuer IS NULL",
+        Uuid::from_bytes(*t.tenant.as_bytes()),
+        Uuid::from_bytes(*realm.as_bytes()),
+        issuer,
+    )
+    .execute(&mut *t.tx)
+    .await?
+    .rows_affected();
+    Ok(done == 1)
+}
+
+/// A live realm as the router serves it: its slug and the issuer stored on its row.
+#[derive(Clone)]
+pub struct RealmRoute {
+    /// The realm.
+    pub realm: RealmId,
+    /// Its slug.
+    pub slug: String,
+    /// Its issuer.
+    pub issuer: String,
+}
+
+/// The live realm with an issuer whose live hostname is `hostname`, read by the router role
+/// (OP-132 m.3). The hostname is compared in lower case.
+///
+/// # Errors
+/// [`StoreError`].
+pub async fn route_by_host(
+    router: &PgPool,
+    hostname: &str,
+) -> Result<Option<RealmRoute>, StoreError> {
+    let row = sqlx::query!(
+        r#"SELECT r.realm_id, r.slug, r.issuer AS "issuer!" FROM access.realm_hostnames h
+             JOIN access.realms r ON r.tenant_id = h.tenant_id AND r.realm_id = h.realm_id
+            WHERE h.hostname = lower($1) AND h.status = 'active' AND r.status = 'active'
+              AND r.issuer IS NOT NULL"#,
+        hostname,
+    )
+    .fetch_optional(router)
+    .await?;
+    Ok(row.map(|r| RealmRoute {
+        realm: RealmId::from_bytes(*r.realm_id.as_bytes()),
+        slug: r.slug,
+        issuer: r.issuer,
+    }))
+}
+
+/// The live realm with an issuer whose slug is `slug`, read by the router role (path
+/// issuers, TN-10).
+///
+/// # Errors
+/// [`StoreError`].
+pub async fn route_by_slug(router: &PgPool, slug: &str) -> Result<Option<RealmRoute>, StoreError> {
+    let row = sqlx::query!(
+        r#"SELECT realm_id, slug, issuer AS "issuer!" FROM access.realms
+            WHERE slug = $1 AND status = 'active' AND issuer IS NOT NULL"#,
+        slug,
+    )
+    .fetch_optional(router)
+    .await?;
+    Ok(row.map(|r| RealmRoute {
+        realm: RealmId::from_bytes(*r.realm_id.as_bytes()),
+        slug: r.slug,
+        issuer: r.issuer,
+    }))
+}
+
+/// Every live realm with an issuer, read by the router role (start-up checks, §17.9.7).
+///
+/// # Errors
+/// [`StoreError`].
+pub async fn routes(router: &PgPool) -> Result<Vec<RealmRoute>, StoreError> {
+    let rows = sqlx::query!(
+        r#"SELECT realm_id, slug, issuer AS "issuer!" FROM access.realms
+            WHERE status = 'active' AND issuer IS NOT NULL ORDER BY slug"#,
+    )
+    .fetch_all(router)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(|r| RealmRoute {
+            realm: RealmId::from_bytes(*r.realm_id.as_bytes()),
+            slug: r.slug,
+            issuer: r.issuer,
+        })
+        .collect())
+}
+
 /// The live realm a request's `Host` names, read by the router role (OP-132 m.3). The
 /// hostname is compared in lower case.
 ///

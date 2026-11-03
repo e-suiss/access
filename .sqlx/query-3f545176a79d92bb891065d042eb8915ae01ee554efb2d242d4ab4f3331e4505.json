@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.realms SET issuer = $3\n          WHERE tenant_id = $1 AND realm_id = $2 AND issuer IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "3f545176a79d92bb891065d042eb8915ae01ee554efb2d242d4ab4f3331e4505"
+}

@@ -1,0 +1,50 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT realm_id, slug, issuer AS \"issuer!\" FROM access.realms\n            WHERE status = 'active' AND issuer IS NOT NULL ORDER BY slug",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "realm_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.realms",
+            "name": "realm_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "slug",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.realms",
+            "name": "slug"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "issuer!",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.realms",
+            "name": "issuer"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "a7532b4c109606e81e3d64e69b2e87e5edfdbfc1bf6435a8b096e083ffc53325"
+}

@@ -12,7 +12,7 @@ use access_store::identity::{RealmId, TenantId, TenantTx};
 use access_store::scope::DomainId;
 use access_store::tenancy::{
     HostKind, add_hostname, create_realm, create_tenant, delete_realm, remove_hostname,
-    resolve_host,
+    resolve_host, route_by_host, route_by_slug, routes, set_issuer,
 };
 use access_store::testing::{TestDb, fresh};
 use sqlx::Row;
@@ -213,4 +213,78 @@ async fn the_router_sees_the_mapping_only() {
             .unwrap()
             .is_none()
     );
+}
+
+async fn with_issuer(db: &TestDb, t: TenantId, r: RealmId, issuer: &str) -> bool {
+    let mut tx = TenantTx::begin(&db.app, t, r).await.unwrap();
+    let set = set_issuer(&mut tx, issuer).await.unwrap();
+    tx.commit().await.unwrap();
+    set
+}
+
+// TN-10, TN-16, §17.9.6: the issuer is stored on the realm row once; it and the slug never change
+#[tokio::test]
+async fn the_issuer_is_set_once_and_never_changes() {
+    let db = fresh().await.unwrap();
+    let (t, r) = tenant(&db, 9, "acme-i", "acme-i.id.test").await;
+    assert!(with_issuer(&db, t, r, "https://acme-i.id.test").await);
+    assert!(!with_issuer(&db, t, r, "https://other.id.test").await);
+    for stmt in [
+        "UPDATE access.realms SET issuer = 'https://evil.id.test'",
+        "UPDATE access.realms SET issuer = NULL",
+        "UPDATE access.realms SET slug = 'acme-renamed'",
+    ] {
+        let tx = TenantTx::begin(&db.app, t, r).await.unwrap();
+        let err = tx.raw_rows(stmt).await.err().unwrap();
+        assert!(err.to_string().contains("immutable"), "{stmt}: {err}");
+    }
+    let (t2, r2) = tenant(&db, 12, "acme-l", "acme-l.id.test").await;
+    let mut tx = TenantTx::begin(&db.app, t2, r2).await.unwrap();
+    assert!(set_issuer(&mut tx, "http://acme-l.id.test").await.is_err());
+    let got = route_by_slug(&db.router, "acme-i").await.unwrap().unwrap();
+    assert_eq!(got.issuer, "https://acme-i.id.test");
+}
+
+// OP-132 m.3, TN-10: the router reads a live realm's slug and issuer by hostname or slug; a
+// realm without an issuer, or a deleted one, is not routed
+#[tokio::test]
+async fn the_router_routes_live_realms_with_an_issuer() {
+    let db = fresh().await.unwrap();
+    let (t, r) = tenant(&db, 10, "acme-j", "acme-j.id.test").await;
+    assert!(
+        route_by_host(&db.router, "acme-j.id.test")
+            .await
+            .unwrap()
+            .is_none()
+    );
+    assert!(with_issuer(&db, t, r, "https://acme-j.id.test").await);
+    let (t2, r2) = tenant(&db, 11, "acme-k", "acme-k.id.test").await;
+    assert!(with_issuer(&db, t2, r2, "https://id.test/realms/acme-k").await);
+    let got = route_by_host(&db.router, "ACME-J.id.test")
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        (got.realm.as_bytes(), got.slug.as_str(), got.issuer.as_str()),
+        (r.as_bytes(), "acme-j", "https://acme-j.id.test")
+    );
+    let path = route_by_slug(&db.router, "acme-k").await.unwrap().unwrap();
+    assert_eq!(path.issuer, "https://id.test/realms/acme-k");
+    let all: Vec<String> = routes(&db.router)
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|r| r.slug)
+        .collect();
+    assert_eq!(all, ["acme-j", "acme-k"]);
+    let mut tx = TenantTx::begin_tenant(&db.app, t).await.unwrap();
+    delete_realm(&mut tx, r).await.unwrap();
+    tx.commit().await.unwrap();
+    assert!(
+        route_by_host(&db.router, "acme-j.id.test")
+            .await
+            .unwrap()
+            .is_none()
+    );
+    assert!(route_by_slug(&db.router, "acme-j").await.unwrap().is_none());
 }
