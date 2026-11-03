@@ -1,0 +1,14 @@
+{
+  "redirect_uri": "https://localhost.emobix.co.uk:8443/test/a/access/callback",
+  "plans": [
+    {
+      "name": "oidcc-basic-certification-test-plan",
+      "variant": { "server_metadata": "discovery", "client_registration": "static_client" },
+      "config": "access-oidcc.json"
+    },
+    {
+      "name": "oidcc-config-certification-test-plan",
+      "config": "access-oidcc.json"
+    }
+  ]
+}

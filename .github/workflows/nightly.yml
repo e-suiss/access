@@ -1,4 +1,4 @@
-# OP-68, SA-59, F-1, OP-72, OP-84, OP-71
+# OP-68, SA-59, F-1, OP-72, OP-84, OP-71, OP-146
 name: Nightly
 
 on:
@@ -333,3 +333,66 @@ jobs:
           path: bench-results
           retention-days: 90
           if-no-files-found: error
+
+  # OP-146 I11, §14.8 SA-T2, B9: the OIDF Basic OP and Config OP plans against one seeded
+  # realm. Report-only until the plans' expected failures are recorded.
+  oidf-conformance:
+    name: oidf-conformance
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    services:
+      postgres:
+        image: postgres@sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336 # 18.6-trixie
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ci-only-not-a-secret
+          POSTGRES_INITDB_ARGS: --auth=scram-sha-256 --data-checksums
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 30
+    env:
+      DATABASE_URL: postgres://postgres:ci-only-not-a-secret@localhost:5432/postgres
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+        with:
+          cache-key: test
+      - name: Start the conformance suite
+        run: docker compose --file .github/oidf/compose.yml up --detach --quiet-pull
+      - name: Build the conformance target
+        run: cargo build --locked -p access-http --example oidf_target
+      - name: Start the conformance target
+        run: |
+          mkdir -p "$RUNNER_TEMP/oidf"
+          nohup target/debug/examples/oidf_target > "$RUNNER_TEMP/oidf/target.log" 2>&1 &
+          for _ in $(seq 1 90); do
+            if curl -fsk --resolve acme.id.test:9443:127.0.0.1 \
+              https://acme.id.test:9443/.well-known/openid-configuration > /dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          cat "$RUNNER_TEMP/oidf/target.log"
+          exit 1
+      - name: Basic OP and Config OP plans
+        run: >-
+          python3 -I .github/scripts/oidf-conformance.py
+          https://localhost.emobix.co.uk:8443 conformance/oidf "$RUNNER_TEMP/oidf" --report-only
+      - name: Suite logs
+        if: always()
+        run: docker compose --file .github/oidf/compose.yml logs --no-color > "$RUNNER_TEMP/oidf/suite.log" 2>&1 || true
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: oidf-conformance-${{ github.run_id }}
+          path: ${{ runner.temp }}/oidf
+          retention-days: 90
+          if-no-files-found: ignore

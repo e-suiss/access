@@ -1,0 +1,28 @@
+# OP-146 I11, §14.8 SA-T2, B9, OP-49: the OpenID Foundation conformance suite in development
+# mode for the nightly run, images pinned by digest. Tags: release-v5.3.3 of
+# gitlab.com/openid/conformance-suite and mongo 6.0.13, as its docker-compose-prebuilt.yml.
+# The suite reaches the conformance target on the runner as acme.id.test.
+services:
+  mongodb:
+    image: mongo@sha256:b415b12f638e2685d06c58ab7fb5943577c50fadec6d9340ef67d21aeac72070 # 6.0.13
+  nginx:
+    image: registry.gitlab.com/openid/conformance-suite/nginx@sha256:d80183af68cb51c72c86b498780d94d6192cbc6adcc70a7d28ac6a01eff0d0db # release-v5.3.3
+    ports:
+      - "8443:8443"
+    networks:
+      default:
+        aliases:
+          - localhost.emobix.co.uk
+    depends_on:
+      - server
+  server:
+    image: registry.gitlab.com/openid/conformance-suite@sha256:377ab51f011d821c4b6f7729053e85adf062d691e51a3615f40507fd900a2436 # release-v5.3.3
+    environment:
+      BASE_URL: https://localhost.emobix.co.uk:8443
+      BASE_MTLS_URL: https://localhost.emobix.co.uk:8444
+      MONGODB_HOST: mongodb
+      SPRING_PROFILES_ACTIVE: dev
+    extra_hosts:
+      - "acme.id.test:host-gateway"
+    depends_on:
+      - mongodb

@@ -1,0 +1,27 @@
+{
+  "alias": "access",
+  "description": "Access realm acme, nightly OIDF conformance (OP-146 I11)",
+  "server": {
+    "discoveryUrl": "https://acme.id.test:9443/.well-known/openid-configuration"
+  },
+  "client": {
+    "client_id": "cli_c0nfaaaaaaaaaaaaaaaaaaaaaa",
+    "client_secret": "oidf-ci-only-not-a-secret-client-one"
+  },
+  "client2": {
+    "client_id": "cli_c0nfbbbbbbbbbbbbbbbbbbbbbb",
+    "client_secret": "oidf-ci-only-not-a-secret-client-two"
+  },
+  "browser": [
+    {
+      "match": "https://acme.id.test:9443/authorize*",
+      "tasks": [
+        {
+          "task": "Verify Complete",
+          "match": "*/test/a/access/callback*",
+          "commands": [["wait", "id", "submission_complete", 10]]
+        }
+      ]
+    }
+  ]
+}
