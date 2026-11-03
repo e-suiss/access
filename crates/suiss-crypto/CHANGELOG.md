@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.2.4
+
+### Added
+
+- `rotation`: the signing key state machine (pending, published, active, retiring, dropped), publish-before-use, the rotation schedule with jitter, and the `Policy::AUTHORITY` and `Policy::REALM` presets.
+- `envelope::DekKek`: an HSM-unwrapped DEK used as a KEK under AES-256 Key Wrap (RFC 3394) for the DEKs below it; byte-identical to the PKCS#11 KEK for the same key.
+- `pkcs11`: `KeyStore::destroy_kek`, which destroys a KEK inside the token and so crypto-shreds every key it wrapped.
+
+### Fixed
+
+- `note::Verifier::parse` accepts verifier keys whose name contains `+`.
+- The `pkcs11` feature enables `aead`, so it builds on its own.
+
 ## 0.2.3
 
 ### Added

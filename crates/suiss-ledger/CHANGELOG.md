@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.4
+
+No changes; released with `esuiss-crypto`.
+
 ## 0.2.3
 
 No changes; released with `esuiss-crypto`.

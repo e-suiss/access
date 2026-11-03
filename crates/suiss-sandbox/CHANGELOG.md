@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.4
+
+### Changed
+
+- The lockdown sets `RLIMIT_CORE` to zero; a failure reports `Step::CoreLimit`.
+- The signer profile allows filesystem writes and `renameat`, kept inside its key vault by Landlock.
+
 ## 0.2.3
 
 No changes; released with `esuiss-crypto`.
