@@ -60,6 +60,10 @@ criteria = "safe-to-deploy"
 version = "0.5.3"
 criteria = "safe-to-deploy"
 
+[[exemptions.argon2]]
+version = "0.6.0"
+criteria = "safe-to-deploy"
+
 [[exemptions.arrayvec]]
 version = "0.5.2"
 criteria = "safe-to-deploy"
@@ -136,12 +140,20 @@ criteria = "safe-to-deploy"
 version = "0.23.1"
 criteria = "safe-to-deploy"
 
+[[exemptions.base64ct]]
+version = "1.8.3"
+criteria = "safe-to-deploy"
+
 [[exemptions.bincode-next]]
 version = "3.1.1"
 criteria = "safe-to-run"
 
 [[exemptions.bitflags]]
 version = "2.13.2"
+criteria = "safe-to-deploy"
+
+[[exemptions.blake2]]
+version = "0.11.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.block-buffer]]
@@ -776,6 +788,10 @@ criteria = "safe-to-deploy"
 version = "0.9.12"
 criteria = "safe-to-deploy"
 
+[[exemptions.password-hash]]
+version = "0.6.1"
+criteria = "safe-to-deploy"
+
 [[exemptions.pear]]
 version = "0.2.9"
 criteria = "safe-to-deploy"
@@ -790,6 +806,10 @@ criteria = "safe-to-run"
 
 [[exemptions.petgraph]]
 version = "0.7.1"
+criteria = "safe-to-deploy"
+
+[[exemptions.phc]]
+version = "0.6.1"
 criteria = "safe-to-deploy"
 
 [[exemptions.phf_shared]]

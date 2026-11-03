@@ -44,6 +44,10 @@ p256 = { version = "0.14.0", default-features = false, features = ["ecdsa"] }
 cryptoki = { version = "=0.12.1", default-features = false }
 # CR-13, CR-54
 aws-lc-rs = { version = "1.18.2", default-features = false, features = ["aws-lc-sys"] }
+# OP-146 m.3, CR-36
+argon2 = { version = "=0.6.0", default-features = false }
+# OP-146 m.5 (j)
+unicode-normalization = { version = "0.1.26", default-features = false }
 # OP-104
 cedar-policy = { version = "=4.13.0", default-features = false }
 # OP-105
@@ -113,6 +117,13 @@ dbg_macro = "deny"
 print_stdout = "deny"
 print_stderr = "deny"
 mem_forget = "deny"
+
+# CR-36: Argon2id at its real cost in tests too
+[profile.dev.package.argon2]
+opt-level = 3
+
+[profile.dev.package.blake2]
+opt-level = 3
 
 # OP-4, SA-21
 [profile.release]
