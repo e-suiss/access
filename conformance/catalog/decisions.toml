@@ -160,7 +160,7 @@ id = "OP-63"
 family = "OP"
 section = "17.14"
 status = "decision"
-stage = 5
+stage = 6
 title = "In-code architecture layers, ports, sans-I/O and outbox"
 tests = [
   "bins/access-server/src/config.rs::unknown_configuration_key_is_rejected",
@@ -172,7 +172,7 @@ id = "OP-64"
 family = "OP"
 section = "17.14"
 status = "decision"
-stage = 5
+stage = 7
 title = "Code quality rules: English, lints, typed IDs and errors"
 tests = ["crates/telemetry/tests/redaction_canary.rs"]
 

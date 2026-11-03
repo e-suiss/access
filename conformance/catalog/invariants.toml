@@ -345,7 +345,7 @@ id = "INV-26"
 family = "INV"
 section = "6.2"
 status = "canonical"
-stage = 5
+stage = 6
 title = "Fail closed"
 tests = []
 
@@ -399,7 +399,7 @@ id = "INV-32"
 family = "INV"
 section = "6.9"
 status = "candidate"
-stage = 5
+stage = 10
 title = "No identifier reuse"
 tests = []
 
@@ -689,7 +689,6 @@ id = "EI-25"
 family = "EI"
 section = "7.8"
 status = "candidate"
-stage = 5
 title = "Identity plane config changes are Exercises"
 tests = []
 
@@ -813,7 +812,7 @@ id = "XI-12"
 family = "XI"
 section = "6.4"
 status = "canonical"
-stage = 5
+stage = 8
 title = "Wording never exceeds its guarantee class"
 tests = []
 
@@ -921,7 +920,6 @@ id = "XI-24"
 family = "XI"
 section = "8.19"
 status = "candidate"
-stage = 5
 title = "Unauthenticated surfaces assert nothing about an account"
 tests = []
 
@@ -1008,7 +1006,7 @@ id = "PI-8"
 family = "PI"
 section = "6.5"
 status = "canonical"
-stage = 5
+stage = 6
 title = "Decision receipt is not a credential; projections are narrowed subsets"
 tests = []
 
@@ -1026,7 +1024,7 @@ id = "PI-10"
 family = "PI"
 section = "6.5"
 status = "canonical"
-stage = 5
+stage = 6
 title = "Projection refresh is a new decision; token revoke is not grant.revoke"
 tests = []
 
@@ -1035,7 +1033,7 @@ id = "PI-11"
 family = "PI"
 section = "6.5"
 status = "canonical"
-stage = 5
+stage = 6
 title = "Every authority-bearing projection is holder-bound; no bearer authority"
 tests = []
 
@@ -1484,7 +1482,6 @@ id = "TI-17"
 family = "TI"
 section = "6.7"
 status = "canonical"
-stage = 5
 title = "No Suiss-specific dependency in the protocol path"
 tests = []
 
@@ -1598,7 +1595,7 @@ id = "TI-RT10"
 family = "TI-RT"
 section = "6.8"
 status = "canonical"
-stage = 5
+stage = 7
 title = "Position-bearing identifiers to sub-audit viewers are opaque keyed tokens"
 tests = []
 
@@ -1653,7 +1650,6 @@ id = "SAI-4"
 family = "SAI"
 section = "14.11"
 status = "candidate"
-stage = 5
 title = "Responses for never-cached subjects come from canonical source or fail closed"
 tests = []
 
@@ -1662,7 +1658,7 @@ id = "SAI-5"
 family = "SAI"
 section = "14.11"
 status = "candidate"
-stage = 5
+stage = 8
 title = "Login, signup, reset and recovery responses hide account existence"
 tests = []
 
@@ -1671,7 +1667,7 @@ id = "SAI-6"
 family = "SAI"
 section = "14.11"
 status = "candidate"
-stage = 5
+stage = 6
 title = "Mutations in one domain or realm never affect another's decisions"
 tests = []
 
@@ -1769,7 +1765,7 @@ family = "IDI"
 section = "10.11"
 status = "candidate"
 class = "BS"
-stage = 5
+stage = 7
 title = "Identity plane configuration changes only via ADP commit"
 tests = []
 
@@ -1779,7 +1775,6 @@ family = "IDI"
 section = "10.11"
 status = "candidate"
 class = "BS"
-stage = 5
 title = "Credentials and login identifiers are realm-local; email is never a key"
 tests = []
 
@@ -1799,7 +1794,7 @@ family = "IDI"
 section = "10.11"
 status = "candidate"
 class = "BS"
-stage = 5
+stage = 7
 title = "Realm RP ID change with passkeys requires irreversible CT3 action"
 tests = []
 
@@ -1809,7 +1804,6 @@ family = "IDI"
 section = "10.11"
 status = "candidate"
 class = "BS"
-stage = 5
 title = "Reject WebAuthn credentials whose BE flag changes or BE=0 with BS=1"
 tests = []
 
@@ -1828,7 +1822,6 @@ family = "IDI"
 section = "10.11"
 status = "candidate"
 class = "BS"
-stage = 5
 title = "Signed identity outputs only from completed authentication or session events"
 tests = []
 
@@ -2027,7 +2020,6 @@ id = "TNI-9"
 family = "TNI"
 section = "12.9"
 status = "candidate"
-stage = 5
 title = "Resumed suspended authentication cannot raise assurance"
 tests = []
 
@@ -2088,7 +2080,7 @@ id = "OPI-3"
 family = "OPI"
 section = "17.13"
 status = "candidate"
-stage = 5
+stage = 6
 title = "Cache miss never means not revoked; unreachable source means deny"
 tests = []
 

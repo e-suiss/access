@@ -443,7 +443,7 @@ family = "G"
 section = "13.4"
 status = "canonical"
 class = "BS"
-stage = 5
+stage = 6
 title = "No error state on decision path yields ALLOW or new token"
 tests = []
 
@@ -453,7 +453,6 @@ family = "G"
 section = "13.4"
 status = "canonical"
 class = "BS"
-stage = 5
 title = "Never-cached subjects are not valid without canonical lookup"
 tests = []
 
@@ -463,7 +462,6 @@ family = "G"
 section = "13.4"
 status = "canonical"
 class = "BS"
-stage = 5
 title = "Identity login and refresh return 503 when backend unreachable"
 tests = []
 
@@ -503,7 +501,7 @@ family = "G"
 section = "13.4"
 status = "canonical"
 class = "BS"
-stage = 5
+stage = 6
 title = "Identity plane configuration changes go through meta-Exercise"
 tests = []
 
@@ -531,7 +529,6 @@ family = "G"
 section = "13.4"
 status = "canonical"
 class = "BS"
-stage = 5
 title = "No new tokens or assertions after identity session termination"
 tests = []
 
@@ -948,7 +945,7 @@ family = "U"
 section = "13.4"
 status = "canonical"
 class = "UDC"
-stage = 5
+stage = 6
 title = "Revoked session accepted by JWT-only RS at most token lifetime plus skew"
 tests = []
 
@@ -958,7 +955,6 @@ family = "U"
 section = "13.4"
 status = "canonical"
 class = "UDC"
-stage = 5
 title = "Strict introspection returns active=false when freshness unprovable"
 tests = []
 
@@ -978,7 +974,7 @@ family = "U"
 section = "13.4"
 status = "canonical"
 class = "UDC"
-stage = 5
+stage = 6
 title = "Pre-signed identity tokens remain valid within lifetime during backend outage"
 tests = []
 
@@ -988,7 +984,7 @@ family = "U"
 section = "13.4"
 status = "canonical"
 class = "UDC"
-stage = 5
+stage = 7
 title = "Pairwise sub prevents RPs correlating the same user"
 tests = []
 
@@ -1027,7 +1023,7 @@ family = "U"
 section = "13.4"
 status = "canonical"
 class = "UDC"
-stage = 5
+stage = 8
 title = "No account-existence differences in responses; timing below threshold"
 tests = []
 
@@ -1046,7 +1042,6 @@ family = "U"
 section = "13.4"
 status = "canonical"
 class = "UDC"
-stage = 5
 title = "Brute-force ceiling holds even if global rate store fails"
 tests = []
 
@@ -1056,7 +1051,6 @@ family = "U"
 section = "13.4"
 status = "canonical"
 class = "UDC"
-stage = 5
 title = "Argon2 password hashing load does not starve other endpoints"
 tests = []
 
@@ -1133,7 +1127,7 @@ family = "U"
 section = "13.4"
 status = "canonical"
 class = "UDC"
-stage = 5
+stage = 6
 title = "DPoP proofs cannot be replayed"
 tests = []
 
@@ -1272,7 +1266,6 @@ family = "U"
 section = "13.4"
 status = "canonical"
 class = "UDC"
-stage = 5
 title = "Leaked database secrets and opaque tokens not directly reusable"
 tests = []
 
@@ -2097,7 +2090,6 @@ family = "HL"
 section = "13.5"
 status = "canonical"
 class = "NG"
-stage = 5
 title = "Phishing-resistant authentication does not prevent session or token theft"
 tests = []
 
@@ -2498,7 +2490,6 @@ id = "RR-18"
 family = "RR"
 section = "13.9"
 status = "reference"
-stage = 5
 title = "OAuth/OIDC AS written from scratch in Rust"
 tests = []
 

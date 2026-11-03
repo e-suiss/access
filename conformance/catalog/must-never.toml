@@ -122,7 +122,6 @@ id = "MUST-NEVER-15"
 family = "MUST-NEVER"
 section = "2.8"
 status = "frozen"
-stage = 5
 title = "Never execute customer-supplied Turing-complete code server-side"
 tests = []
 
@@ -131,7 +130,6 @@ id = "MUST-NEVER-16"
 family = "MUST-NEVER"
 section = "2.8"
 status = "frozen"
-stage = 5
 title = "Never match redirect_uri except by exact string comparison"
 tests = []
 
@@ -149,7 +147,6 @@ id = "MUST-NEVER-18"
 family = "MUST-NEVER"
 section = "2.8"
 status = "frozen"
-stage = 5
 title = "Never let tenants define or override reserved protocol claims"
 tests = []
 
