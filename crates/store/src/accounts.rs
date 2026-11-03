@@ -218,6 +218,18 @@ impl TenantTx {
         )
         .execute(&mut *self.tx)
         .await?;
+        sqlx::query!(
+            "UPDATE access.oauth_grants
+                SET revoked_ms = (extract(epoch FROM clock_timestamp()) * 1000)::bigint, revoke_reason = 'epoch'
+              WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND revoked_ms IS NULL
+                AND session_epoch < $4",
+            tenant,
+            realm,
+            uuid(id),
+            epoch,
+        )
+        .execute(&mut *self.tx)
+        .await?;
         Ok(Some(epoch))
     }
 

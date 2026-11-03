@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.oauth_refresh_tokens SET rotated_ms = $4\n              WHERE tenant_id = $1 AND realm_id = $2 AND token_hash = $3 AND rotated_ms IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "39b8d4c41c0d99078b406e007c214d0ef88260831bb9272c7b8fca7a291d620e"
+}

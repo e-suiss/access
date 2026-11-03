@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.oauth_codes (tenant_id, realm_id, day, code_hash, client_uuid,\n                    session_id, details, created_ms, expires_ms)\n             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Int4",
+        "Bytea",
+        "Uuid",
+        "Uuid",
+        "Bytea",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "3b62ca288f5b411f4bec40cecbd29f8e96353a245694b7e586c7279c6e98d7c2"
+}

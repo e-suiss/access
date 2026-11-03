@@ -155,6 +155,12 @@ pub struct ClientRow {
     pub redirect_uris: Vec<String>,
     /// Whether it is active.
     pub active: bool,
+    /// SHA-256 of the server-generated secret, for `client_secret_basic` (CR-38).
+    pub secret_hash: Option<[u8; 32]>,
+    /// Post-logout redirect URIs, exact strings (§10.4.6).
+    pub post_logout_redirect_uris: Vec<String>,
+    /// The back-channel logout endpoint (§10.4.6).
+    pub backchannel_logout_uri: Option<String>,
 }
 
 /// Inserts a client under `bound`.
@@ -169,8 +175,9 @@ pub async fn insert_client(
     let (tenant, realm) = scope(t)?;
     sqlx::query!(
         "INSERT INTO access.idp_clients (tenant_id, realm_id, client_uuid, client_id, display_name,
-                auth_method, jwks_uri, redirect_uris, domain_id, decision_pos)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
+                auth_method, jwks_uri, redirect_uris, domain_id, decision_pos, secret_hash,
+                post_logout_redirect_uris, backchannel_logout_uri)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)",
         tenant,
         realm,
         Uuid::from_bytes(c.client_uuid),
@@ -181,6 +188,9 @@ pub async fn insert_client(
         &c.redirect_uris,
         bound.domain.as_bytes().as_slice(),
         bound.position,
+        c.secret_hash.as_ref().map(<[u8; 32]>::as_slice),
+        &c.post_logout_redirect_uris,
+        c.backchannel_logout_uri,
     )
     .execute(&mut *t.tx)
     .await?;
@@ -199,7 +209,8 @@ pub async fn update_client(
     let (tenant, realm) = scope(t)?;
     let done = sqlx::query!(
         "UPDATE access.idp_clients SET display_name = $4, auth_method = $5, jwks_uri = $6,
-                redirect_uris = $7, domain_id = $8, decision_pos = $9
+                redirect_uris = $7, domain_id = $8, decision_pos = $9, secret_hash = $10,
+                post_logout_redirect_uris = $11, backchannel_logout_uri = $12
           WHERE tenant_id = $1 AND realm_id = $2 AND client_id = $3 AND status = 'active'",
         tenant,
         realm,
@@ -210,6 +221,9 @@ pub async fn update_client(
         &c.redirect_uris,
         bound.domain.as_bytes().as_slice(),
         bound.position,
+        c.secret_hash.as_ref().map(<[u8; 32]>::as_slice),
+        &c.post_logout_redirect_uris,
+        c.backchannel_logout_uri,
     )
     .execute(&mut *t.tx)
     .await?
@@ -250,7 +264,8 @@ pub async fn retire_client(
 pub async fn client(t: &mut TenantTx, client_id: &str) -> Result<Option<ClientRow>, StoreError> {
     let (tenant, realm) = scope(t)?;
     let row = sqlx::query!(
-        "SELECT client_uuid, client_id, display_name, auth_method, jwks_uri, redirect_uris, status
+        "SELECT client_uuid, client_id, display_name, auth_method, jwks_uri, redirect_uris, status,
+                secret_hash, post_logout_redirect_uris, backchannel_logout_uri
            FROM access.idp_clients WHERE tenant_id = $1 AND realm_id = $2 AND client_id = $3",
         tenant,
         realm,
@@ -258,15 +273,48 @@ pub async fn client(t: &mut TenantTx, client_id: &str) -> Result<Option<ClientRo
     )
     .fetch_optional(&mut *t.tx)
     .await?;
-    Ok(row.map(|r| ClientRow {
-        client_uuid: *r.client_uuid.as_bytes(),
-        client_id: r.client_id,
-        display_name: r.display_name,
-        auth_method: r.auth_method,
-        jwks_uri: r.jwks_uri,
-        redirect_uris: r.redirect_uris,
-        active: r.status == "active",
-    }))
+    row.map(|r| {
+        Ok(ClientRow {
+            client_uuid: *r.client_uuid.as_bytes(),
+            client_id: r.client_id,
+            display_name: r.display_name,
+            auth_method: r.auth_method,
+            jwks_uri: r.jwks_uri,
+            redirect_uris: r.redirect_uris,
+            active: r.status == "active",
+            secret_hash: r
+                .secret_hash
+                .map(|h| <[u8; 32]>::try_from(h.as_slice()).map_err(|_| StoreError::Corrupt))
+                .transpose()?,
+            post_logout_redirect_uris: r.post_logout_redirect_uris,
+            backchannel_logout_uri: r.backchannel_logout_uri,
+        })
+    })
+    .transpose()
+}
+
+/// The realm's client with internal id `uuid`, active or retired.
+///
+/// # Errors
+/// [`StoreError`].
+pub async fn client_by_uuid(
+    t: &mut TenantTx,
+    uuid: [u8; 16],
+) -> Result<Option<ClientRow>, StoreError> {
+    let (tenant, realm) = scope(t)?;
+    let id = sqlx::query_scalar!(
+        "SELECT client_id FROM access.idp_clients
+          WHERE tenant_id = $1 AND realm_id = $2 AND client_uuid = $3",
+        tenant,
+        realm,
+        Uuid::from_bytes(uuid),
+    )
+    .fetch_optional(&mut *t.tx)
+    .await?;
+    match id {
+        Some(id) => client(t, &id).await,
+        None => Ok(None),
+    }
 }
 
 /// A realm's settings (OP-146 m.4 (f), m.8 (e), IDP-5, §11.3).

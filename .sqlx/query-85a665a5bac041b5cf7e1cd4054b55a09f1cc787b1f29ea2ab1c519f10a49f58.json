@@ -1,10 +1,21 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT r.realm_id, r.slug, r.issuer AS \"issuer!\" FROM access.realm_hostnames h\n             JOIN access.realms r ON r.tenant_id = h.tenant_id AND r.realm_id = h.realm_id\n            WHERE h.hostname = lower($1) AND h.status = 'active' AND r.status = 'active'\n              AND r.issuer IS NOT NULL",
+  "query": "SELECT tenant_id, realm_id, slug, issuer AS \"issuer!\" FROM access.realms\n            WHERE status = 'active' AND issuer IS NOT NULL ORDER BY slug",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
+        "name": "tenant_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.realms",
+            "name": "tenant_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
         "name": "realm_id",
         "type_info": "Uuid",
         "origin": {
@@ -15,7 +26,7 @@
         }
       },
       {
-        "ordinal": 1,
+        "ordinal": 2,
         "name": "slug",
         "type_info": "Text",
         "origin": {
@@ -26,7 +37,7 @@
         }
       },
       {
-        "ordinal": 2,
+        "ordinal": 3,
         "name": "issuer!",
         "type_info": "Text",
         "origin": {
@@ -38,15 +49,14 @@
       }
     ],
     "parameters": {
-      "Left": [
-        "Text"
-      ]
+      "Left": []
     },
     "nullable": [
+      false,
       false,
       false,
       true
     ]
   },
-  "hash": "c835b32f29fb2224c085626b6907090b264d92cfd3bd1d7a0ddbd51ad38f5e22"
+  "hash": "85a665a5bac041b5cf7e1cd4054b55a09f1cc787b1f29ea2ab1c519f10a49f58"
 }

@@ -121,6 +121,9 @@ fn client_row(seed: u8) -> ClientRow {
         jwks_uri: None,
         redirect_uris: vec![String::from("https://shop.example/cb")],
         active: true,
+        secret_hash: None,
+        post_logout_redirect_uris: Vec::new(),
+        backchannel_logout_uri: None,
     }
 }
 

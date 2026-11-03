@@ -1,0 +1,103 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT day, client_uuid, pushed, params, created_ms, expires_ms, used_ms\n               FROM access.oauth_requests\n              WHERE tenant_id = $1 AND realm_id = $2 AND day >= $3 AND request_hash = $4\n              FOR UPDATE",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "day",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_requests",
+            "name": "day"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "client_uuid",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_requests",
+            "name": "client_uuid"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "pushed",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_requests",
+            "name": "pushed"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "params",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_requests",
+            "name": "params"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "created_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_requests",
+            "name": "created_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "expires_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_requests",
+            "name": "expires_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "used_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_requests",
+            "name": "used_ms"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Int4",
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "ff8d5408f7ab14d9e66a007ea1f891b34db93877fff9de5a91c1a0a0eaff51d7"
+}

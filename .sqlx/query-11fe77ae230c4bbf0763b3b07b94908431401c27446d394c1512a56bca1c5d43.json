@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.oauth_requests SET used_ms = $5\n              WHERE tenant_id = $1 AND realm_id = $2 AND day = $3 AND request_hash = $4\n                AND used_ms IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Int4",
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "11fe77ae230c4bbf0763b3b07b94908431401c27446d394c1512a56bca1c5d43"
+}

@@ -156,6 +156,8 @@ pub async fn set_issuer(t: &mut TenantTx, issuer: &str) -> Result<bool, StoreErr
 /// A live realm as the router serves it: its slug and the issuer stored on its row.
 #[derive(Clone)]
 pub struct RealmRoute {
+    /// The tenant that owns it.
+    pub tenant: TenantId,
     /// The realm.
     pub realm: RealmId,
     /// Its slug.
@@ -174,7 +176,7 @@ pub async fn route_by_host(
     hostname: &str,
 ) -> Result<Option<RealmRoute>, StoreError> {
     let row = sqlx::query!(
-        r#"SELECT r.realm_id, r.slug, r.issuer AS "issuer!" FROM access.realm_hostnames h
+        r#"SELECT r.tenant_id, r.realm_id, r.slug, r.issuer AS "issuer!" FROM access.realm_hostnames h
              JOIN access.realms r ON r.tenant_id = h.tenant_id AND r.realm_id = h.realm_id
             WHERE h.hostname = lower($1) AND h.status = 'active' AND r.status = 'active'
               AND r.issuer IS NOT NULL"#,
@@ -183,6 +185,7 @@ pub async fn route_by_host(
     .fetch_optional(router)
     .await?;
     Ok(row.map(|r| RealmRoute {
+        tenant: TenantId::from_bytes(*r.tenant_id.as_bytes()),
         realm: RealmId::from_bytes(*r.realm_id.as_bytes()),
         slug: r.slug,
         issuer: r.issuer,
@@ -196,13 +199,14 @@ pub async fn route_by_host(
 /// [`StoreError`].
 pub async fn route_by_slug(router: &PgPool, slug: &str) -> Result<Option<RealmRoute>, StoreError> {
     let row = sqlx::query!(
-        r#"SELECT realm_id, slug, issuer AS "issuer!" FROM access.realms
+        r#"SELECT tenant_id, realm_id, slug, issuer AS "issuer!" FROM access.realms
             WHERE slug = $1 AND status = 'active' AND issuer IS NOT NULL"#,
         slug,
     )
     .fetch_optional(router)
     .await?;
     Ok(row.map(|r| RealmRoute {
+        tenant: TenantId::from_bytes(*r.tenant_id.as_bytes()),
         realm: RealmId::from_bytes(*r.realm_id.as_bytes()),
         slug: r.slug,
         issuer: r.issuer,
@@ -215,7 +219,7 @@ pub async fn route_by_slug(router: &PgPool, slug: &str) -> Result<Option<RealmRo
 /// [`StoreError`].
 pub async fn routes(router: &PgPool) -> Result<Vec<RealmRoute>, StoreError> {
     let rows = sqlx::query!(
-        r#"SELECT realm_id, slug, issuer AS "issuer!" FROM access.realms
+        r#"SELECT tenant_id, realm_id, slug, issuer AS "issuer!" FROM access.realms
             WHERE status = 'active' AND issuer IS NOT NULL ORDER BY slug"#,
     )
     .fetch_all(router)
@@ -223,6 +227,7 @@ pub async fn routes(router: &PgPool) -> Result<Vec<RealmRoute>, StoreError> {
     Ok(rows
         .into_iter()
         .map(|r| RealmRoute {
+            tenant: TenantId::from_bytes(*r.tenant_id.as_bytes()),
             realm: RealmId::from_bytes(*r.realm_id.as_bytes()),
             slug: r.slug,
             issuer: r.issuer,

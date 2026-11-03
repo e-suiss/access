@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.oauth_codes SET redeemed_ms = $5, grant_id = $6\n              WHERE tenant_id = $1 AND realm_id = $2 AND day = $3 AND code_hash = $4\n                AND redeemed_ms IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Int4",
+        "Bytea",
+        "Int8",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "1ae43894065ccbfa95f3a11522b36615dea6ad2e1d3413c2248056ebe6602ec8"
+}

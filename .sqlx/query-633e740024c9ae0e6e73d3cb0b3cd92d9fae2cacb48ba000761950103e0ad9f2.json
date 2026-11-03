@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT access.open_oauth_day($1)",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "open_oauth_day",
+        "type_info": "Void",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "633e740024c9ae0e6e73d3cb0b3cd92d9fae2cacb48ba000761950103e0ad9f2"
+}

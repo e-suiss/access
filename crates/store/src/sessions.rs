@@ -380,6 +380,31 @@ impl TenantTx {
         .map(SessionRecord::into_row))
     }
 
+    /// The session with `id`, with its subject's current epoch and status, locked.
+    ///
+    /// # Errors
+    /// [`StoreError`].
+    pub async fn session_by_id(&mut self, id: [u8; 16]) -> Result<Option<SessionRow>, StoreError> {
+        let (tenant, realm) = self.realm_scope()?;
+        Ok(sqlx::query_as!(
+            SessionRecord,
+            "SELECT l.session_id, l.subject_id, l.session_epoch, s.session_epoch AS subject_epoch,
+                    s.status AS subject_status, l.keep_signed_in, l.created_ms, l.auth_time_ms,
+                    l.last_seen_ms, l.idle_ms, l.expires_ms, l.assurance, l.ended_ms, l.end_reason
+               FROM access.login_sessions l
+               JOIN access.identity_subjects s
+                 ON s.tenant_id = l.tenant_id AND s.realm_id = l.realm_id AND s.subject_id = l.subject_id
+              WHERE l.tenant_id = $1 AND l.realm_id = $2 AND l.session_id = $3
+              FOR UPDATE OF l",
+            tenant,
+            realm,
+            uuid(id),
+        )
+        .fetch_optional(&mut *self.tx)
+        .await?
+        .map(SessionRecord::into_row))
+    }
+
     /// The subject's sessions that are not ended, newest first.
     ///
     /// # Errors

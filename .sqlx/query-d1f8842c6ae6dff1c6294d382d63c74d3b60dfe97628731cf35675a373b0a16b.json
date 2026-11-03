@@ -1,0 +1,162 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT g.grant_id, g.sid, g.client_uuid, g.subject_id, g.session_id, g.session_epoch,\n                    s.session_epoch AS subject_epoch, s.status AS subject_status, g.dpop_jkt,\n                    g.details, g.expires_ms, g.revoked_ms\n               FROM access.oauth_grants g\n               JOIN access.identity_subjects s\n                 ON s.tenant_id = g.tenant_id AND s.realm_id = g.realm_id AND s.subject_id = g.subject_id\n              WHERE g.tenant_id = $1 AND g.realm_id = $2 AND g.grant_id = $3\n              FOR UPDATE OF g",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "grant_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_grants",
+            "name": "grant_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "sid",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_grants",
+            "name": "sid"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "client_uuid",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_grants",
+            "name": "client_uuid"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "subject_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_grants",
+            "name": "subject_id"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "session_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_grants",
+            "name": "session_id"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "session_epoch",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_grants",
+            "name": "session_epoch"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "subject_epoch",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.identity_subjects",
+            "name": "session_epoch"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "subject_status",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.identity_subjects",
+            "name": "status"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "dpop_jkt",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_grants",
+            "name": "dpop_jkt"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "details",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_grants",
+            "name": "details"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "expires_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_grants",
+            "name": "expires_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "revoked_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_grants",
+            "name": "revoked_ms"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "d1f8842c6ae6dff1c6294d382d63c74d3b60dfe97628731cf35675a373b0a16b"
+}

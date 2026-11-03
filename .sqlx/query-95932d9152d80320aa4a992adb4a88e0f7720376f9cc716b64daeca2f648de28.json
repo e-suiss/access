@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.oauth_grants SET revoked_ms = $4, revoke_reason = $5\n              WHERE tenant_id = $1 AND realm_id = $2 AND grant_id = $3 AND revoked_ms IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Int8",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "95932d9152d80320aa4a992adb4a88e0f7720376f9cc716b64daeca2f648de28"
+}

@@ -5,6 +5,7 @@ pub mod breach;
 pub mod dpop;
 pub mod event_id;
 pub mod jose;
+pub mod oauth;
 pub mod opaque_id;
 pub mod projection;
 pub mod pseudonym;
