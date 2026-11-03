@@ -107,6 +107,15 @@ dependencies = [
 [[package]]
 name = "access-identity-oauth"
 version = "0.2.4"
+dependencies = [
+ "access-crypto",
+ "access-store",
+ "aws-lc-rs",
+ "ed25519-dalek",
+ "esuiss-access-kernel",
+ "thiserror",
+ "tokio",
+]
 
 [[package]]
 name = "access-identity-session"
