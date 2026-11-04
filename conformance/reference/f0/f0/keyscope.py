@@ -24,7 +24,7 @@ from .cose import CoseError, verify_sign1
 EXCERPT_CONTENT_TYPE = "application/access-key-excerpt+cbor"
 OPERATIONAL_WINDOW_CEILING_MS = 86400000
 COSE_ALGS = (-19, -9, -7, -48, -49, -50)
-KEY_USAGES = ("receipt", "pap", "token", "checkpoint", "set", "status-list")
+KEY_USAGES = ("receipt", "pap", "token", "checkpoint", "set", "status-list", "key-lookup")
 ML_DSA_NAMES = {-48: "ML-DSA-44", -49: "ML-DSA-65", -50: "ML-DSA-87"}
 
 

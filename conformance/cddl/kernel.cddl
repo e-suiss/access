@@ -404,7 +404,7 @@ key-set = {
   allowed: [+ cose-alg],
 }
 
-key-usage = "receipt" / "pap" / "token" / "checkpoint" / "set" / "status-list"
+key-usage = "receipt" / "pap" / "token" / "checkpoint" / "set" / "status-list" / "key-lookup"
 
 operational-key = {
   kid: key-id,

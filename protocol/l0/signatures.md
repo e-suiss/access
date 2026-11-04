@@ -274,7 +274,7 @@ Vector: `kid-not-thumbprint`.
 
 Vectors: `alg-not-allowed`, `alg-key-type-mismatch`, `alg-es256-on-ed25519-key`.
 
-<a id="L0-SIG-69"></a>**L0-SIG-69. Step 7: usage.** The requested usage MUST be in the excerpt key's `usage` (reason `usage`). The usage set is closed: `receipt`, `pap`, `token`, `checkpoint`, `set`, `status-list`.
+<a id="L0-SIG-69"></a>**L0-SIG-69. Step 7: usage.** The requested usage MUST be in the excerpt key's `usage` (reason `usage`). The usage set is closed: `receipt`, `pap`, `token`, `checkpoint`, `set`, `status-list`, `key-lookup`.
 
 Vector: `usage-not-declared`.
 

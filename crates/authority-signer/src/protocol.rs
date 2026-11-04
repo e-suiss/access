@@ -83,13 +83,14 @@ pub enum FrameError {
     Malformed,
 }
 
-const USAGES: [(&str, KeyUsage); 6] = [
+const USAGES: [(&str, KeyUsage); 7] = [
     ("receipt", KeyUsage::Receipt),
     ("pap", KeyUsage::Pap),
     ("token", KeyUsage::Token),
     ("checkpoint", KeyUsage::Checkpoint),
     ("set", KeyUsage::Set),
     ("status-list", KeyUsage::StatusList),
+    ("key-lookup", KeyUsage::KeyLookup),
 ];
 
 fn usage_name(u: KeyUsage) -> &'static str {
