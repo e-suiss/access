@@ -122,6 +122,20 @@ fn the_served_core_is_declared() {
     assert_eq!(m["backchannel_logout_supported"], true);
     assert_eq!(m["scopes_supported"], serde_json::json!(["openid"]));
     assert_eq!(
+        m["claims_supported"],
+        serde_json::json!([
+            "sub",
+            "iss",
+            "aud",
+            "exp",
+            "iat",
+            "auth_time",
+            "nonce",
+            "acr",
+            "sid"
+        ])
+    );
+    assert_eq!(
         m["grant_types_supported"],
         serde_json::json!(["authorization_code", "refresh_token"])
     );

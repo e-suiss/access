@@ -96,6 +96,17 @@ pub const SERVED: Served = Served {
 
 /// The protocol scopes the metadata declares (OP-146 m.5 (c)).
 const SCOPES: [&str; 1] = ["openid"];
+const CLAIMS: [&str; 9] = [
+    "sub",
+    "iss",
+    "aud",
+    "exp",
+    "iat",
+    "auth_time",
+    "nonce",
+    "acr",
+    "sid",
+];
 
 /// The JWKS path under the issuer (§11.4.5).
 pub const JWKS_PATH: &str = "/jwks.json";
@@ -140,6 +151,7 @@ pub fn authorization_server(issuer: &Issuer, served: &Served) -> String {
         // MD-10, IDP-24
         m.insert("subject_types_supported".into(), json!(["pairwise"]));
         m.insert("scopes_supported".into(), json!(SCOPES));
+        m.insert("claims_supported".into(), json!(CLAIMS));
         m.insert(
             "prompt_values_supported".into(),
             json!(["none", "login", "create"]),

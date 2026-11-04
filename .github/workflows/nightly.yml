@@ -385,7 +385,7 @@ jobs:
       - name: Basic OP and Config OP plans
         run: >-
           python3 -I .github/scripts/oidf-conformance.py
-          https://localhost.emobix.co.uk:8443 conformance/oidf "$RUNNER_TEMP/oidf" --report-only
+          https://localhost.emobix.co.uk:8443 conformance/oidf "$RUNNER_TEMP/oidf"
       - name: Suite logs
         if: always()
         run: docker compose --file .github/oidf/compose.yml logs --no-color > "$RUNNER_TEMP/oidf/suite.log" 2>&1 || true

@@ -132,14 +132,22 @@ def main(argv):
     wait_ready(base)
     summary = [run_plan(base, directory, p, out) for p in plans]
     (out / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
-    bad = [
-        f"{p['plan']}/{m['module']}: {m['status']} {m['result']}"
-        for p in summary
-        for m in p["modules"]
-        if m["status"] != "FINISHED" or m["result"] not in ("PASSED", "WARNING", "REVIEW", "SKIPPED")
-    ]
+    expected_path = directory / "expected.json"
+    expected = json.loads(expected_path.read_text())["plans"] if expected_path.exists() else {}
+    ok = ("PASSED", "WARNING", "REVIEW", "SKIPPED")
+    bad = []
+    for p in summary:
+        known = expected.get(p["plan"], {})
+        for m in p["modules"]:
+            passed = m["status"] == "FINISHED" and m["result"] in ok
+            if passed and m["module"] in known:
+                print(f"::warning::{p['plan']}/{m['module']} now passes; remove it from expected.json")
+            elif not passed and m["module"] in known:
+                print(f"{p['plan']}/{m['module']}: expected failure ({known[m['module']]})")
+            elif not passed:
+                bad.append(f"{p['plan']}/{m['module']}: {m['status']} {m['result']}")
     total = sum(len(p["modules"]) for p in summary)
-    print(f"{total - len(bad)} of {total} modules passed")
+    print(f"{total - len(bad)} of {total} modules passed or failed as expected")
     if not bad:
         return
     for line in bad:
