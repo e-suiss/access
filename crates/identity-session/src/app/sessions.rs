@@ -35,6 +35,8 @@ pub struct SessionView {
     pub keep_signed_in: bool,
     /// "Signed in until …" (S10).
     pub expires_ms: u64,
+    /// When it last stepped up (OP-149 m.8).
+    pub step_up_ms: Option<u64>,
 }
 
 /// The state of a presented cookie.
@@ -69,6 +71,7 @@ pub(crate) fn view(r: &SessionRow) -> Result<SessionView, SessionError> {
         assurance: serde_json::from_slice(&r.assurance).map_err(|_| SessionError::Corrupt)?,
         keep_signed_in: r.keep_signed_in,
         expires_ms: u64_of(r.expires_ms)?,
+        step_up_ms: r.step_up_ms.map(u64_of).transpose()?,
     })
 }
 

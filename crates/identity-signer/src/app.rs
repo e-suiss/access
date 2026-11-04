@@ -60,6 +60,18 @@ pub struct Keyring {
     jwks: String,
 }
 
+/// An `application/…+cbor` media type of the identity plane: lower case, no parameters.
+fn content_type_ok(t: &str) -> bool {
+    t.len() <= 127
+        && t.strip_prefix("application/")
+            .and_then(|s| s.strip_suffix("+cbor"))
+            .is_some_and(|s| {
+                !s.is_empty()
+                    && s.bytes()
+                        .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || b"-.".contains(&c))
+            })
+}
+
 const EMPTY_JWKS: &str = r#"{"keys":[]}"#;
 
 /// Plan passes per round: rotate and generate, publish what was generated, settle.
@@ -241,6 +253,38 @@ impl Keyring {
             kid,
             alg: entry.alg,
         })
+    }
+
+    /// Signs deterministic CBOR `payload` as a tagged `COSE_Sign1` of `content_type` at `now`
+    /// with the key that may sign tokens now (OP-149 m.8): its `kid` is the key's in the JWKS.
+    ///
+    /// # Errors
+    /// [`SignerError::NoKey`], [`SignerError::Payload`] or [`SignerError::Sign`].
+    pub fn sign_cose(
+        &mut self,
+        content_type: &str,
+        payload: &[u8],
+        now: u64,
+    ) -> Result<(Vec<u8>, [u8; 32]), SignerError> {
+        if !content_type_ok(content_type)
+            || suiss_crypto::dcbor::decode(payload, suiss_crypto::dcbor::Limits::CEILING).is_err()
+        {
+            return Err(SignerError::Payload);
+        }
+        let records = self.records();
+        let kid = rotation::signing_key(&records, &self.policy, now)
+            .map(|k| k.kid)
+            .ok_or(SignerError::NoKey)?;
+        let entry = self
+            .entries
+            .iter_mut()
+            .find(|e| e.record.kid == kid)
+            .ok_or(SignerError::NoKey)?;
+        let signer = entry.signer.as_deref().ok_or(SignerError::NoKey)?;
+        let sign1 = suiss_crypto::signer::sign_sign1(signer, kid, content_type, payload)
+            .map_err(|_| SignerError::Sign)?;
+        entry.record.signatures = entry.record.signatures.saturating_add(1);
+        Ok((sign1, kid))
     }
 
     /// The keys as a vault keeps them.

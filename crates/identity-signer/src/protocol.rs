@@ -48,6 +48,18 @@ pub enum Request {
         /// Signing time; within the signer's clock skew of its own clock.
         at: u64,
     },
+    /// Signs deterministic CBOR as a tagged `COSE_Sign1` of `content_type` at `at` with the key
+    /// that signs the realm's tokens (OP-149 m.8).
+    SignCose {
+        /// Realm.
+        realm: Realm,
+        /// The protected header's content type.
+        content_type: String,
+        /// CBOR payload.
+        payload: Vec<u8>,
+        /// Signing time; within the signer's clock skew of its own clock.
+        at: u64,
+    },
 }
 
 /// The identity signer's answer.
@@ -63,6 +75,13 @@ pub enum Response {
     Signed {
         /// The token.
         token: String,
+        /// Its key's `kid`.
+        kid: [u8; 32],
+    },
+    /// A tagged `COSE_Sign1`.
+    SignedCose {
+        /// The message.
+        sign1: Vec<u8>,
         /// Its key's `kid`.
         kid: [u8; 32],
     },
@@ -152,6 +171,20 @@ impl Request {
                     ("at", Value::Unsigned(*at)),
                 ]),
             )]),
+            Self::SignCose {
+                realm,
+                content_type,
+                payload,
+                at,
+            } => map(vec![(
+                "sign_cose",
+                map(vec![
+                    ("realm", Value::Bytes(realm.0.to_vec())),
+                    ("content_type", Value::text(content_type)),
+                    ("payload", Value::Bytes(payload.clone())),
+                    ("at", Value::Unsigned(*at)),
+                ]),
+            )]),
         }
     }
 
@@ -167,6 +200,14 @@ impl Request {
         }
         if let Some(r) = v.get("jwks") {
             return Ok(Self::Jwks(realm(Some(r))?));
+        }
+        if let Some(s) = v.get("sign_cose") {
+            return Ok(Self::SignCose {
+                realm: realm(s.get("realm"))?,
+                content_type: text(s.get("content_type"))?,
+                payload: bytes(s.get("payload"))?,
+                at: uint(s.get("at"))?,
+            });
         }
         let s = v.get("sign").ok_or(FrameError::Malformed)?;
         Ok(Self::Sign {
@@ -191,6 +232,13 @@ impl Response {
                     ("kid", Value::Bytes(kid.to_vec())),
                 ]),
             )]),
+            Self::SignedCose { sign1, kid } => map(vec![(
+                "signed_cose",
+                map(vec![
+                    ("sign1", Value::Bytes(sign1.clone())),
+                    ("kid", Value::Bytes(kid.to_vec())),
+                ]),
+            )]),
             Self::Error(code) => map(vec![("error", Value::text(code))]),
         }
     }
@@ -208,6 +256,14 @@ impl Response {
         if let Some(s) = v.get("signed") {
             return Ok(Self::Signed {
                 token: text(s.get("token"))?,
+                kid: bytes(s.get("kid"))?
+                    .try_into()
+                    .map_err(|_| FrameError::Malformed)?,
+            });
+        }
+        if let Some(s) = v.get("signed_cose") {
+            return Ok(Self::SignedCose {
+                sign1: bytes(s.get("sign1"))?,
                 kid: bytes(s.get("kid"))?
                     .try_into()
                     .map_err(|_| FrameError::Malformed)?,

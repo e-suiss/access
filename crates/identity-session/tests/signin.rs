@@ -896,7 +896,7 @@ async fn assert_passkey(
     .unwrap()
 }
 
-// §10.2.4, OP-146 m.9, §10.3.1, IDP-8, TN-68, TN-44
+// §10.2.4, OP-146 m.9, §10.3.1, IDP-8, TN-68, TN-44, OP-149 m.6, m.8
 #[tokio::test]
 async fn a_passkey_signs_in_phishing_resistant_and_steps_up() {
     let e = env(8, "is-h").await;
@@ -983,6 +983,125 @@ async fn a_passkey_signs_in_phishing_resistant_and_steps_up() {
     };
     assert_eq!(v.assurance.aal, Aal::Aal3);
     assert_eq!(v.auth_time_ms, e.clock.now_ms());
+    assert_eq!(v.step_up_ms, Some(e.clock.now_ms()));
+    device_instances_need_a_fresh_step_up(&e, &cookie).await;
+}
+
+/// OP-149 m.6, m.8: a stepped-up session registers a device key once per challenge, and its
+/// `auth_context` carries the step-up time.
+async fn device_instances_need_a_fresh_step_up(e: &Env, cookie: &str) {
+    use access_identity_session::app::devices::DeviceRefusal;
+    use access_identity_session::domain::device::{
+        Assurance, KeyRejection, POP_CONTENT_TYPE, cose_key, kid, pop_payload,
+    };
+    use suiss_crypto::signer::{Signer, SoftSigner, sign_sign1};
+
+    const ISSUER: &str = "https://acme.suiss.example";
+    let device = SoftSigner::generate_p256().unwrap().0;
+    let key = cose_key(&device.public_key());
+    let prove = async |challenge: &str, signer: &SoftSigner| {
+        let bytes: [u8; 32] = b64url_decode(challenge).unwrap().try_into().unwrap();
+        let pop = sign_sign1(
+            signer,
+            kid(&signer.public_key()),
+            POP_CONTENT_TYPE,
+            &pop_payload(ISSUER, &bytes),
+        )
+        .unwrap();
+        e.with(async |a| {
+            a.prove_instance_key(cookie, &key, &pop, ISSUER, "req")
+                .await
+        })
+        .await
+        .unwrap()
+    };
+    let c = e
+        .with(async |a| a.instance_challenge(cookie).await)
+        .await
+        .unwrap()
+        .unwrap();
+    let wrong = SoftSigner::generate_p256().unwrap().0;
+    assert_eq!(
+        prove(&c.challenge, &wrong).await,
+        Err(DeviceRefusal::Key(KeyRejection::Pop))
+    );
+    assert_eq!(
+        prove(&c.challenge, &device).await,
+        Err(DeviceRefusal::Challenge),
+        "a challenge is used up by any answer"
+    );
+    let c = e
+        .with(async |a| a.instance_challenge(cookie).await)
+        .await
+        .unwrap()
+        .unwrap();
+    let proven = prove(&c.challenge, &device).await.unwrap();
+    assert_eq!(proven.kid, kid(&device.public_key()));
+    assert_eq!(proven.key, device.public_key());
+    assert_eq!(
+        prove(&c.challenge, &device).await,
+        Err(DeviceRefusal::Challenge)
+    );
+    let context = e
+        .with(async |a| a.auth_context(cookie, ISSUER, None).await)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(context.step_up_time, Some(e.clock.now_ms()));
+    assert_eq!(context.aal, Aal::Aal3);
+
+    e.advance(5 * 60 * 1000 + 1);
+    let c = e
+        .with(async |a| a.instance_challenge(cookie).await)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        prove(&c.challenge, &device).await,
+        Err(DeviceRefusal::Assurance(Assurance::Stale))
+    );
+    assert_eq!(
+        e.with(async |a| a.stepped_up_session(cookie).await)
+            .await
+            .unwrap()
+            .map(|_| ()),
+        Err(DeviceRefusal::Assurance(Assurance::Stale))
+    );
+}
+
+// OP-149 m.6, m.8: a password session is AAL1: no device Instance; its auth_context has no
+// step-up time
+#[tokio::test]
+async fn a_password_session_cannot_register_a_device() {
+    use access_identity_session::app::devices::DeviceRefusal;
+    use access_identity_session::domain::device::Assurance;
+
+    let e = env(31, "is-dev").await;
+    e.account("alice@example.com").await;
+    let cookie = sign_in(&e, "alice@example.com").await;
+    assert_eq!(
+        e.with(async |a| a.stepped_up_session(&cookie).await)
+            .await
+            .unwrap()
+            .map(|_| ()),
+        Err(DeviceRefusal::Assurance(Assurance::TooWeak))
+    );
+    let context = e
+        .with(async |a| {
+            a.auth_context(&cookie, "https://acme.suiss.example", None)
+                .await
+        })
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(context.aal, Aal::Aal1);
+    assert_eq!(context.step_up_time, None);
+    assert!(matches!(
+        e.with(async |a| a.instance_challenge("bm90LWEtY29va2ll").await)
+            .await
+            .unwrap(),
+        Err(SessionStatus::Unknown)
+    ));
 }
 
 // TN-50, OP-146 m.10 (a)

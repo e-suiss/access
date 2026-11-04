@@ -2,10 +2,12 @@
 //! endpoints of the node contract (`sdks/openapi/login.json`), magic link confirmation, the
 //! signed-in user's sessions and methods, `/.well-known/webauthn`, and the built login app.
 //! The request's `Host` selects the realm exactly as for discovery; an unknown host gets the
-//! router's plain 404 (§17.9.6).
+//! router's plain 404 (§17.9.6). [`me_router`] adds the product-facing endpoints of OP-149
+//! (`sdks/openapi/frontend.json`).
 
 pub mod assets;
 mod idempotency;
+mod me;
 mod web;
 
 use std::sync::Arc;
@@ -19,6 +21,7 @@ use axum::routing::{get, post};
 
 pub use assets::{Assets, AssetsError};
 pub use idempotency::{CAPACITY as IDEMPOTENCY_CAPACITY, RETENTION as IDEMPOTENCY_RETENTION};
+pub use me::router as me_router;
 
 /// The client's address, set by the connection layer.
 #[derive(Clone, Copy, Debug)]
@@ -26,14 +29,14 @@ pub struct Peer(pub std::net::IpAddr);
 
 pub(crate) struct Shared<D, K, KI, C, M> {
     discovery: Discovery<D, K>,
-    hosted: Hosted<KI, C, M>,
+    hosted: Arc<Hosted<KI, C, M>>,
     assets: Option<Assets>,
 }
 
 /// The login routes. `assets` is the built login app; without it only the API is served.
 pub fn router<D, K, KI, C, M>(
     discovery: Discovery<D, K>,
-    hosted: Hosted<KI, C, M>,
+    hosted: impl Into<Arc<Hosted<KI, C, M>>>,
     assets: Option<Assets>,
 ) -> Router
 where
@@ -45,7 +48,7 @@ where
 {
     let shared = Arc::new(Shared {
         discovery,
-        hosted,
+        hosted: hosted.into(),
         assets,
     });
     let mut writes = Router::new();

@@ -71,10 +71,11 @@ impl SessionTx for PgTx {
         to: i64,
         auth_time_ms: i64,
         assurance: &[u8],
+        step_up: bool,
     ) -> Result<bool, SessionError> {
         Ok(self
             .0
-            .restamp_session(id, from, to, auth_time_ms, assurance)
+            .restamp_session(id, from, to, auth_time_ms, assurance, step_up)
             .await?)
     }
 

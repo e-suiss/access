@@ -1167,6 +1167,7 @@ where
                         row.session_epoch,
                         i64_of(result.assurance.auth_time_ms.max(1))?,
                         &assurance,
+                        true,
                     )
                     .await?;
                 if !restamped {
@@ -1182,7 +1183,9 @@ where
                     result,
                 }
             }
-            Purpose::EnrollTotp { .. } | Purpose::RegisterPasskey { .. } => {
+            Purpose::EnrollTotp { .. }
+            | Purpose::RegisterPasskey { .. }
+            | Purpose::InstanceKey { .. } => {
                 return Ok(refuse(STEP_NOT_ALLOWED));
             }
         };

@@ -1,0 +1,21 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.login_sessions\n                SET session_epoch = $5, auth_time_ms = $6, assurance = $7,\n                    step_up_ms = CASE WHEN $8 THEN $6 ELSE step_up_ms END\n              WHERE tenant_id = $1 AND realm_id = $2 AND session_id = $3 AND ended_ms IS NULL\n                AND session_epoch = $4",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Int8",
+        "Int8",
+        "Int8",
+        "Bytea",
+        "Bool"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "56e9a0b4e549b8258a8082efe6d2491143aa1814217aab11d43d2387616f349a"
+}

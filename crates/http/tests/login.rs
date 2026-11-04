@@ -25,7 +25,7 @@ use access_crypto::envelope::SoftKek;
 use access_crypto::opaque_id::IdKey;
 use access_crypto::totp::{TotpAlgorithm, hotp, step_of};
 use access_crypto::webauthn::DecoyKey;
-use access_http::login::{Assets, Peer, router};
+use access_http::login::{Assets, Peer, me_router, router};
 use access_identity_account::adapters::pg::PgAccounts;
 use access_identity_account::adapters::system::SystemEntropy;
 use access_identity_account::app::accounts::{
@@ -49,13 +49,16 @@ use access_identity_oauth::domain::issuer::Issuer;
 use access_identity_oauth::ports::{Directory, Keys, RealmEntry, Unavailable};
 use access_identity_session::domain::requirement::AuthPolicy;
 use access_identity_session::domain::session::SessionPolicy;
-use access_identity_ui::app::Hosted;
-use access_identity_ui::ports::{Clock, Kits, Messages, RealmKit};
+use access_identity_ui::app::{Devices, Hosted};
+use access_identity_ui::ports::{ArtifactSigner, Clock, DeviceInstances, Kits, Messages, RealmKit};
 use access_identity_webauthn::adapters::RealmDecoyKeys;
 use access_identity_webauthn::domain::ids::RealmId as WaRealm;
 use access_identity_webauthn::domain::policy::RealmPolicy;
 use access_identity_webauthn::domain::rp::{RelyingParty, RpId};
+use access_internal_api::idp::{Unavailable as PlaneUnavailable, Verdict};
+use access_internal_api::instances::{Registered, Registration, RegistrationVerdict, Termination};
 use access_kernel::json::{b64url_decode, b64url_encode};
+use access_kernel::model::Id;
 use access_store::authority::{LogRecord, create_domain};
 use access_store::identity::{RealmId, TenantId, TenantTx};
 use access_store::scope::DomainId;
@@ -66,6 +69,7 @@ use axum::body::Body as HttpBody;
 use axum::http::{HeaderMap, Request, StatusCode, header};
 use http_body_util::BodyExt;
 use serde_json::{Value, json};
+use suiss_crypto::signer::{Signer, SoftSigner, sign_sign1};
 use support::{Authenticator, Key, ORIGIN, RP_ID};
 use tower::ServiceExt;
 
@@ -165,6 +169,43 @@ impl Keys for NoKeys {
     }
 }
 
+/// The identity signer: one in-process key.
+#[derive(Clone)]
+struct ArtifactKey(Arc<SoftSigner>);
+
+impl ArtifactSigner for ArtifactKey {
+    async fn sign_cose(
+        &self,
+        _: RealmId,
+        content_type: &str,
+        payload: &[u8],
+        _: u64,
+    ) -> Result<Vec<u8>, Unavailable> {
+        let kid = access_kernel::verify::key_scope::thumbprint(&self.0.public_key());
+        sign_sign1(&*self.0, kid, content_type, payload).map_err(|_| Unavailable)
+    }
+}
+
+/// The authority plane: opens every device Instance as `[9; 16]`, ends none.
+struct Plane;
+
+impl DeviceInstances for Plane {
+    async fn register(&self, r: Registration) -> Result<RegistrationVerdict, PlaneUnavailable> {
+        Ok(RegistrationVerdict::Registered(Registered {
+            party: Id([8; 16]),
+            instance: Id([9; 16]),
+            kid: access_kernel::verify::key_scope::thumbprint(&r.key),
+            replayed: false,
+        }))
+    }
+
+    async fn terminate(&self, _: Termination) -> Result<Verdict, PlaneUnavailable> {
+        Ok(Verdict::Refused {
+            code: String::from("protocol"),
+        })
+    }
+}
+
 struct Kit(Arc<RealmKit>);
 
 impl Kits for Kit {
@@ -187,6 +228,7 @@ struct Env {
     app: Router,
     hasher: Arc<Hasher>,
     peers: AtomicU64,
+    signer: ArtifactKey,
 }
 
 fn kit(tenant: TenantId, realm: RealmId, seed: u8, auth: AuthPolicy) -> RealmKit {
@@ -267,7 +309,7 @@ async fn env_with(seed: u8, slug: &str, auth: AuthPolicy, live: bool) -> Env {
         issuer: Issuer::parse(&format!("https://{HOST}")).unwrap(),
     };
     let config = HasherConfig::sized(Argon2Params::CANONICAL, 4, None);
-    let hosted = Hosted {
+    let hosted = Arc::new(Hosted {
         kits: Kit(kit.clone()),
         db: db.app.clone(),
         clock: clock.clone(),
@@ -275,9 +317,23 @@ async fn env_with(seed: u8, slug: &str, auth: AuthPolicy, live: bool) -> Env {
         gate: LoginGate::new(LocalLimiter::default(), ThrottlePolicy::DEFAULT, 0),
         hasher: Hasher::new(config),
         redirect_to: "/".into(),
-    };
+    });
     let assets = Assets::load(&fixture()).unwrap();
-    let app = router(Discovery::new(Dir(entry), NoKeys), hosted, Some(assets));
+    let signer = ArtifactKey(Arc::new(SoftSigner::generate_ed25519().unwrap().0));
+    let app = router(
+        Discovery::new(Dir(entry.clone()), NoKeys),
+        hosted.clone(),
+        Some(assets),
+    )
+    .merge(me_router(
+        Discovery::new(Dir(entry), NoKeys),
+        hosted,
+        Devices {
+            signer: signer.clone(),
+            instances: Plane,
+            pep: String::from("access-identity"),
+        },
+    ));
     Env {
         db,
         tenant,
@@ -288,6 +344,7 @@ async fn env_with(seed: u8, slug: &str, auth: AuthPolicy, live: bool) -> Env {
         app,
         hasher: Arc::new(Hasher::new(config)),
         peers: AtomicU64::new(0),
+        signer,
     }
 }
 
@@ -1158,4 +1215,103 @@ async fn enumeration_timing_parity_nightly() {
             "p95 {q95} vs {p95}"
         );
     }
+}
+
+// OP-149 m.6, m.8, m.9, G57: the product endpoints need a live session; registering a device
+// needs AAL2 and a fresh step-up; auth_context is the session's artifact signed by the realm key;
+// an approval call never redirects to an unregistered URI
+#[tokio::test]
+async fn product_endpoints_follow_the_frontend_contract() {
+    use access_identity_session::domain::auth_context::{CONTENT_TYPE, DIGEST_LABEL};
+    use suiss_crypto::cose::{Algorithm, KeySet, verify_sign1};
+    use suiss_crypto::dcbor::{self, Limits, Value as Cbor};
+    use suiss_crypto::digest::context_digest;
+
+    let e = env(41, "lg-me", AuthPolicy::DEFAULT).await;
+    e.account("alice@example.com").await;
+    let mut anon = e.browser("anon");
+    assert_eq!(
+        anon.post("/v1/me/instances/challenges", None).await.status,
+        StatusCode::UNAUTHORIZED
+    );
+    assert_eq!(
+        anon.post("/v1/me/auth-context", None).await.status,
+        StatusCode::UNAUTHORIZED
+    );
+
+    let mut b = e.browser("b");
+    b.sign_in("alice@example.com").await;
+    let c = b.post("/v1/me/instances/challenges", None).await;
+    assert_eq!(c.status, StatusCode::CREATED);
+    assert_eq!(
+        b64url_decode(c.json()["challenge"].as_str().unwrap())
+            .unwrap()
+            .len(),
+        32
+    );
+    let weak = b
+        .post(
+            "/v1/me/instances",
+            Some(json!({ "key": "pQECIAEhWCA", "pop": "0oRD" })),
+        )
+        .await;
+    assert_eq!(weak.status, StatusCode::FORBIDDEN);
+    assert_eq!(weak.json()["code"], "step-up-required");
+    let extra = b
+        .post(
+            "/v1/me/instances",
+            Some(json!({ "key": "a", "pop": "b", "party": "c" })),
+        )
+        .await;
+    assert_eq!(extra.status, StatusCode::BAD_REQUEST);
+
+    let issued = b.post("/v1/me/auth-context", None).await;
+    assert_eq!(issued.status, StatusCode::OK);
+    let sign1 = b64url_decode(issued.json()["auth_context"].as_str().unwrap()).unwrap();
+    let key = e.signer.0.public_key();
+    let mut keys = KeySet::default();
+    keys.insert(access_kernel::verify::key_scope::thumbprint(&key), key)
+        .unwrap();
+    keys.allowed.insert(Algorithm::Ed25519);
+    let verified =
+        verify_sign1(&suiss_crypto::sig::PureBackend, &sign1, &keys, CONTENT_TYPE).unwrap();
+    assert_eq!(
+        b64url_decode(issued.json()["digest"].as_str().unwrap()).unwrap(),
+        context_digest(DIGEST_LABEL, &verified.payload).0
+    );
+    let Cbor::Map(fields) = dcbor::decode(&verified.payload, Limits::CEILING).unwrap() else {
+        panic!("not a map");
+    };
+    let aal = fields
+        .iter()
+        .find(|(k, _)| *k == Cbor::text("aal"))
+        .map(|(_, v)| v.clone());
+    assert_eq!(aal, Some(Cbor::text("aal1")));
+    let bound = b
+        .post(
+            "/v1/me/auth-context",
+            Some(json!({
+                "content_type": "application/json; charset=utf-8",
+                "content_digest": b64url_encode(&[1; 32]),
+            })),
+        )
+        .await;
+    assert_eq!(bound.status, StatusCode::BAD_REQUEST);
+    assert_eq!(bound.json()["code"], "invalid-content");
+
+    let digest = b64url_encode(&[3; 32]);
+    let unregistered = b
+        .get(&format!(
+            "/v1/approve?request={digest}&redirect_uri=https%3A%2F%2Fnope.example%2Fcb&state=s1"
+        ))
+        .await;
+    assert_eq!(unregistered.status, StatusCode::BAD_REQUEST);
+    assert_eq!(unregistered.json()["code"], "invalid-redirect-uri");
+    assert!(unregistered.headers.get(header::LOCATION).is_none());
+    let no_state = b
+        .get(&format!(
+            "/v1/approve?request={digest}&redirect_uri=https%3A%2F%2Fnope.example%2Fcb"
+        ))
+        .await;
+    assert_eq!(no_state.status, StatusCode::BAD_REQUEST);
 }

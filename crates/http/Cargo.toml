@@ -35,6 +35,7 @@ access-identity-account = { workspace = true }
 access-identity-session = { workspace = true }
 access-identity-signer = { path = "../identity-signer" }
 access-identity-webauthn = { workspace = true }
+access-internal-api = { workspace = true }
 access-store = { workspace = true, features = ["testing"] }
 aws-lc-rs = { workspace = true }
 proptest = { workspace = true, features = ["std"] }

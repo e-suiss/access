@@ -11,7 +11,22 @@ use access_identity_webauthn::domain::ceremony::Signal;
 use access_identity_webauthn::domain::ids::{CredentialId, RealmId};
 use access_identity_webauthn::ports::SignalSink;
 
-use crate::ports::Messages;
+use access_identity_oauth::adapters::SignerKeys;
+use access_identity_oauth::ports::Unavailable;
+
+use crate::ports::{ArtifactSigner, Messages};
+
+impl ArtifactSigner for SignerKeys {
+    fn sign_cose(
+        &self,
+        realm: access_store::identity::RealmId,
+        content_type: &str,
+        payload: &[u8],
+        at_ms: u64,
+    ) -> impl Future<Output = Result<Vec<u8>, Unavailable>> + Send {
+        Self::sign_cose(self, realm, content_type, payload, at_ms)
+    }
+}
 
 /// The production Relay seam: messages sealed into `identity_outbox` (OP-146 m.11).
 #[derive(Clone, Copy, Debug, Default)]

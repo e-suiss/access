@@ -12,6 +12,9 @@
 
 mod account;
 mod credential;
+mod me;
+
+pub use me::Devices;
 
 use std::net::IpAddr;
 use std::sync::Arc;

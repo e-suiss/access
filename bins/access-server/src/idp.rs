@@ -16,8 +16,13 @@ use access_crypto::dpop::{Role as NonceRole, label as nonce_label};
 use access_crypto::jose::JwsAlg;
 use access_crypto::webauthn::decoy_label;
 use access_identity_admin::domain::JoseAlg;
-use access_identity_admin::ports::{Decider, Governance, RealmKeys};
+use access_identity_admin::ports::{Decider, Governance, Instances, RealmKeys};
 use access_identity_oauth::adapters::SignerKeys;
+use access_identity_ui::ports::DeviceInstances;
+use access_internal_api::instances::{
+    Registration, RegistrationVerdict, Termination, terminate_intent, terminate_payload,
+};
+use access_kernel::combinator::Capacity;
 use access_store::identity::RealmId;
 use suiss_crypto::pkcs11::{HsmError, KeyStore};
 
@@ -71,23 +76,43 @@ where
     C: Clock + Clone + Send + Sync + 'static,
 {
     async fn decide(&self, s: Submission) -> Result<Verdict, Unavailable> {
-        let domain = s.domain;
-        let nonce = s.nonce.clone();
+        let request = Request {
+            domain: s.domain,
+            mode: Mode::Commit,
+            nonce: s.nonce,
+            intent: s.intent,
+            payload: None,
+            basis: s.basis,
+            capacity: s.capacity,
+            proofs: Vec::new(),
+            exercise: None,
+            consistency: None,
+        };
+        self.commit(request, s.ais, s.pep).await
+    }
+}
+
+impl<K, B, S, C> Plane<K, B, S, C>
+where
+    K: Keys + Send + Sync + 'static,
+    B: Binding + Clone + Send + Sync + 'static,
+    S: Salts + Clone + Send + Sync + 'static,
+    C: Clock + Clone + Send + Sync + 'static,
+{
+    /// Commits `request` with the actor's `ais` as the identity plane's PEP and reads the
+    /// recorded ALLOW back (EI-25).
+    async fn commit(
+        &self,
+        request: Request,
+        ais: Vec<u8>,
+        pep: String,
+    ) -> Result<Verdict, Unavailable> {
+        let domain = request.domain;
+        let nonce = request.nonce.clone();
         let inc = Incoming {
-            request: Request {
-                domain,
-                mode: Mode::Commit,
-                nonce: s.nonce,
-                intent: s.intent,
-                payload: None,
-                basis: s.basis,
-                capacity: s.capacity,
-                proofs: Vec::new(),
-                exercise: None,
-                consistency: None,
-            },
-            ais: Some(s.ais),
-            pep: s.pep,
+            request,
+            ais: Some(ais),
+            pep,
             explain: false,
         };
         let r = match self.domains.exercise(&inc).await {
@@ -117,6 +142,63 @@ where
             exercise,
             replayed: r.replayed,
         }))
+    }
+}
+
+/// Why the identity plane cannot open an Instance on its own yet: `party_register` and
+/// `instance_create` are signed by the new key itself under an actor-binding (L0-META-7), and
+/// the key's holder alone has its private key (OP-149 m.4, m.6).
+pub(crate) const REGISTRATION_REFUSED: &str = "actor-binding-required";
+
+impl<K, B, S, C> Instances for Plane<K, B, S, C>
+where
+    K: Send + Sync,
+    B: Binding + Send + Sync,
+    S: Salts + Send + Sync,
+    C: Send + Sync,
+{
+    fn register(
+        &self,
+        r: Registration,
+    ) -> impl std::future::Future<Output = Result<RegistrationVerdict, Unavailable>> + Send {
+        let _ = r;
+        std::future::ready(Ok(RegistrationVerdict::Refused {
+            code: String::from(REGISTRATION_REFUSED),
+        }))
+    }
+}
+
+impl<K, B, S, C> DeviceInstances for Plane<K, B, S, C>
+where
+    K: Keys + Send + Sync + 'static,
+    B: Binding + Clone + Send + Sync + 'static,
+    S: Salts + Clone + Send + Sync + 'static,
+    C: Clock + Clone + Send + Sync + 'static,
+{
+    async fn register(&self, r: Registration) -> Result<RegistrationVerdict, Unavailable> {
+        Instances::register(self, r).await
+    }
+
+    async fn terminate(&self, t: Termination) -> Result<Verdict, Unavailable> {
+        // OP-149 m.6, OP-146 m.4 (i)
+        let Some(intent) = terminate_intent(t.instance, t.validity) else {
+            return Ok(Verdict::Refused {
+                code: String::from("protocol"),
+            });
+        };
+        let request = Request {
+            domain: t.domain,
+            mode: Mode::Commit,
+            nonce: t.nonce,
+            intent,
+            payload: Some(terminate_payload(t.instance)),
+            basis: t.basis,
+            capacity: Capacity::Own,
+            proofs: Vec::new(),
+            exercise: None,
+            consistency: None,
+        };
+        self.commit(request, t.ais, t.pep).await
     }
 }
 

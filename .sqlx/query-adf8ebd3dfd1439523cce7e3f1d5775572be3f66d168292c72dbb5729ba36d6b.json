@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT l.session_id, l.subject_id, l.session_epoch, s.session_epoch AS subject_epoch,\n                    s.status AS subject_status, l.keep_signed_in, l.created_ms, l.auth_time_ms,\n                    l.last_seen_ms, l.idle_ms, l.expires_ms, l.assurance, l.ended_ms, l.end_reason\n               FROM access.login_sessions l\n               JOIN access.identity_subjects s\n                 ON s.tenant_id = l.tenant_id AND s.realm_id = l.realm_id AND s.subject_id = l.subject_id\n              WHERE l.tenant_id = $1 AND l.realm_id = $2 AND l.subject_id = $3 AND l.ended_ms IS NULL\n              ORDER BY l.session_id DESC",
+  "query": "SELECT l.session_id, l.subject_id, l.session_epoch, s.session_epoch AS subject_epoch,\n                    s.status AS subject_status, l.keep_signed_in, l.created_ms, l.auth_time_ms,\n                    l.last_seen_ms, l.idle_ms, l.expires_ms, l.assurance, l.ended_ms, l.end_reason,\n                    l.step_up_ms\n               FROM access.login_sessions l\n               JOIN access.identity_subjects s\n                 ON s.tenant_id = l.tenant_id AND s.realm_id = l.realm_id AND s.subject_id = l.subject_id\n              WHERE l.tenant_id = $1 AND l.realm_id = $2 AND l.cookie_hash = $3\n              FOR UPDATE OF l",
   "describe": {
     "columns": [
       {
@@ -156,13 +156,24 @@
             "name": "end_reason"
           }
         }
+      },
+      {
+        "ordinal": 14,
+        "name": "step_up_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.login_sessions",
+            "name": "step_up_ms"
+          }
+        }
       }
     ],
     "parameters": {
       "Left": [
         "Uuid",
         "Uuid",
-        "Uuid"
+        "Bytea"
       ]
     },
     "nullable": [
@@ -179,8 +190,9 @@
       false,
       false,
       true,
+      true,
       true
     ]
   },
-  "hash": "e8c19747d0a1d42733a306f7410b7852c0edac6a6041f933f54cd84eecd3b9d4"
+  "hash": "adf8ebd3dfd1439523cce7e3f1d5775572be3f66d168292c72dbb5729ba36d6b"
 }

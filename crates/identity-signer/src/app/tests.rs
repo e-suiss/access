@@ -300,3 +300,36 @@ fn incoherent_policies_are_refused() {
         Err(PolicyError::Lifetime)
     ));
 }
+
+// OP-149 m.8, CR-24: an artifact's COSE_Sign1 verifies with the realm key the JWKS lists
+#[test]
+fn artifacts_are_cose_signed_with_the_jwks_key() {
+    const CT: &str = "application/access-auth-context+cbor";
+    let payload = suiss_crypto::dcbor::encode(
+        &suiss_crypto::dcbor::Value::Map(vec![(
+            suiss_crypto::dcbor::Value::text("v"),
+            suiss_crypto::dcbor::Value::Unsigned(1),
+        )]),
+        suiss_crypto::dcbor::Limits::CEILING,
+    )
+    .unwrap();
+    for alg in [JwsAlg::Es256, JwsAlg::Ed25519] {
+        let mut ring = Keyring::new(alg, Policy::REALM).unwrap();
+        let mut factory = Factory { down: false };
+        advance(&mut ring, &mut factory, 0, LEAD, MINUTE);
+        let (sign1, kid) = ring.sign_cose(CT, &payload, LEAD).unwrap();
+        let mut keys = key_set(ring.jwks());
+        keys.allowed.insert(suiss_crypto::cose::Algorithm::Esp256);
+        let verified = suiss_crypto::cose::verify_sign1(&PureBackend, &sign1, &keys, CT).unwrap();
+        assert_eq!(verified.kid, kid);
+        assert_eq!(verified.payload, payload);
+        assert_eq!(
+            ring.sign_cose("application/json", &payload, LEAD),
+            Err(SignerError::Payload)
+        );
+        assert_eq!(
+            ring.sign_cose(CT, b"{\"v\":1}", LEAD),
+            Err(SignerError::Payload)
+        );
+    }
+}

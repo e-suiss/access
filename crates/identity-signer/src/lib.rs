@@ -1,6 +1,7 @@
 //! CMP-22b identity signer: the realm JOSE key set, which rotates under publish-before-use and
 //! is published as a JWKS, and the compact JWS signatures of identity tokens (MD-3, MD-6,
-//! CR-18 to CR-27, OP-143 m.1 E7).
+//! CR-18 to CR-27, OP-143 m.1 E7), and the `COSE_Sign1` of identity plane artifacts such as
+//! `auth_context` (OP-149 m.8).
 
 pub mod adapters;
 pub mod app;
@@ -19,6 +20,13 @@ pub enum SignerError {
     /// The token could not be produced.
     #[error("jose: {0}")]
     Jose(#[from] access_crypto::jose::JoseError),
+    /// The `COSE_Sign1` payload is not deterministic CBOR, or its content type is not an
+    /// identity plane `+cbor` type (OP-149 m.8).
+    #[error("payload")]
+    Payload,
+    /// The key could not sign.
+    #[error("sign")]
+    Sign,
 }
 
 impl SignerError {
@@ -28,6 +36,8 @@ impl SignerError {
         match self {
             Self::NoKey => "signer-no-key",
             Self::Jose(e) => e.code(),
+            Self::Payload => "signer-payload",
+            Self::Sign => "signer-sign",
         }
     }
 }

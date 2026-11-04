@@ -17,9 +17,13 @@ use access_authority_sequencer::adapters::fold_check;
 use access_crypto::event_id::EventKey;
 use access_crypto::opaque_id::IdKey;
 use access_crypto::secret::Secret;
+use access_identity_admin::AdminError;
 use access_identity_admin::app::{Admin, Applied, NewRealm, Proposal};
-use access_identity_admin::domain::{AuthMethod, Change, Client, ClientId, RedirectUri, RpId};
+use access_identity_admin::domain::{
+    AuthMethod, Change, Client, ClientId, Invalid, Platform, RedirectUri, RpId,
+};
 use access_identity_oauth::domain::issuer::{IssuerStyle, RealmBase};
+use access_internal_api::instances::{PlatformProduct, Registrant};
 use access_kernel::ais::{CONTENT_TYPE, Statement};
 use access_kernel::codec::Canonical;
 use access_kernel::combinator::Capacity;
@@ -160,6 +164,7 @@ impl World {
             pep: PEP,
             base: &self.base,
             keys: &self.keys,
+            platform_tenant: None,
         }
     }
 
@@ -337,6 +342,7 @@ async fn new_client(w: &World) -> Client {
         ],
         post_logout_redirect_uris: Vec::new(),
         backchannel_logout_uri: None,
+        platform: None,
     }
 }
 
@@ -656,5 +662,206 @@ fn realm_keys_are_made_once_in_the_hsm() {
         nonces
             .ring(RealmId::from_bytes([8; 16]), NonceRole::AuthorizationServer)
             .is_none()
+    );
+}
+
+/// Records the registrations the identity plane asks for and opens each once.
+#[derive(Default)]
+struct Recorder(std::sync::Mutex<Vec<Registration>>);
+
+impl Instances for Recorder {
+    fn register(
+        &self,
+        r: Registration,
+    ) -> impl std::future::Future<Output = Result<RegistrationVerdict, Unavailable>> + Send {
+        let mut seen = self.0.lock().unwrap();
+        let replayed = seen.contains(&r);
+        let kid = thumbprint(&r.key);
+        if !replayed {
+            seen.push(r);
+        }
+        std::future::ready(Ok(RegistrationVerdict::Registered(
+            access_internal_api::instances::Registered {
+                party: Id([7; 16]),
+                instance: Id([8; 16]),
+                kid,
+                replayed,
+            },
+        )))
+    }
+}
+
+fn platform_client(id: ClientId, product: PlatformProduct, seed: u8) -> Client {
+    Client {
+        id,
+        display_name: String::from("Suiss Work"),
+        auth: AuthMethod::PrivateKeyJwtKey { key: public(seed) },
+        redirect_uris: vec![RedirectUri::parse("https://work.suiss.example/cb").unwrap()],
+        post_logout_redirect_uris: Vec::new(),
+        backchannel_logout_uri: None,
+        platform: Some(Platform {
+            product,
+            service_key: public(seed.wrapping_add(1)),
+        }),
+    }
+}
+
+// OP-149 m.4, CT2: only the platform tenant registers a platform product client; it uses
+// private_key_jwt with one registered key, and pairing asks for a system service Party and its
+// Instance in every realm's governing domain, once
+#[tokio::test]
+async fn a_platform_client_pairs_with_every_realm() {
+    // MD-14, EI-25, RFC 7523, OP-62
+    let w = World::new().await;
+    let (pt, pr, pd) = w.realm("platform").await;
+    let (t2, r2, d2) = w.realm("acme").await;
+    onboard(&w.plane, pd, ROOT, ROOT_KEY).await;
+    onboard(&w.plane, d2, ROOT, ROOT_KEY).await;
+    let c = platform_client(
+        w.admin().new_client_id().await.unwrap(),
+        PlatformProduct::Work,
+        40,
+    );
+    let p = proposal(
+        (pt, pr),
+        Change::ClientRegister(c.clone()),
+        3,
+        idp_anchor(pd),
+        1,
+    );
+    assert!(matches!(
+        w.admin().prepare(&p).await,
+        Err(AdminError::Invalid(Invalid::PlatformTenant))
+    ));
+    let elsewhere = Admin {
+        platform_tenant: Some(t2),
+        ..w.admin()
+    };
+    assert!(matches!(
+        elsewhere.prepare(&p).await,
+        Err(AdminError::Invalid(Invalid::PlatformTenant))
+    ));
+    let platform = Admin {
+        platform_tenant: Some(pt),
+        ..w.admin()
+    };
+    let public_client = Client {
+        auth: AuthMethod::None,
+        ..c.clone()
+    };
+    assert_eq!(
+        Change::ClientRegister(public_client).check(),
+        Err(Invalid::PlatformAuth)
+    );
+    let prepared = platform.prepare(&p).await.unwrap();
+    let ais = sign(
+        &statement(prepared.domain, &p.nonce, prepared.digest, p.basis),
+        ROOT_KEY,
+    );
+    written(&platform.apply(&p, ais).await.unwrap());
+    let mut t = TenantTx::begin(&w.db.app, pt, pr).await.unwrap();
+    let row = client(&mut t, c.id.as_str()).await.unwrap().unwrap();
+    t.commit().await.unwrap();
+    assert_eq!(row.auth_method, "private_key_jwt");
+    assert_eq!(row.jwks_uri, None);
+    assert!(row.jwks.unwrap().contains(r#""crv":"Ed25519""#));
+    assert_eq!(row.platform_product.as_deref(), Some("work"));
+    // CR-24
+    assert!(
+        AuthMethod::PrivateKeyJwtKey { key: public(40) }
+            .jwks()
+            .unwrap()
+            .contains(&access_kernel::json::b64url_encode(&thumbprint(&public(
+                40
+            ))))
+    );
+
+    let recorder = Recorder::default();
+    let targets = [(pt, pr), (t2, r2)];
+    let paired = platform.pair(&recorder, pr, &c.id, &targets).await.unwrap();
+    assert_eq!(paired.len(), 2);
+    let again = platform.pair(&recorder, pr, &c.id, &targets).await.unwrap();
+    assert!(again.iter().all(|p| matches!(
+        &p.verdict,
+        RegistrationVerdict::Registered(r) if r.replayed
+    )));
+    let seen = recorder.0.lock().unwrap().clone();
+    assert_eq!(seen.len(), 2);
+    for (r, d) in seen.iter().zip([pd, d2]) {
+        assert_eq!(r.domain, d);
+        assert_eq!(r.key, public(41));
+        assert_eq!(r.registrant.actor_kind(), ActorKind::System);
+        assert_eq!(
+            r.registrant,
+            Registrant::Service {
+                product: PlatformProduct::Work,
+                client: String::from(c.id.as_str()),
+            }
+        );
+    }
+    // L0-META-7
+    let real = platform
+        .pair(&w.plane, pr, &c.id, &targets[..1])
+        .await
+        .unwrap();
+    assert_eq!(
+        real[0].verdict,
+        RegistrationVerdict::Refused {
+            code: String::from(REGISTRATION_REFUSED)
+        }
+    );
+}
+
+// OP-149 m.6, OP-146 m.4 (i): a device Instance is ended by an instance_terminate its own Party
+// signed, forwarded as the identity plane's PEP
+#[tokio::test]
+async fn a_party_terminates_its_own_instance_through_the_identity_plane() {
+    // L0-META-1, TN-50
+    let w = World::new().await;
+    let (_, _, d) = w.realm("acme").await;
+    onboard(&w.plane, d, ALICE, ALICE_KEY).await;
+    let mut register = vec![ALICE_KEY; 16];
+    register[0] = 0xe0;
+    let mut create = vec![ALICE_KEY; 16];
+    create[0] = 0xe1;
+    let anchor = meta::object_id(&meta::exercise_id(&d, &register).unwrap(), kind::ANCHOR, 0);
+    let instance = meta::object_id(&meta::exercise_id(&d, &create).unwrap(), kind::INSTANCE, 0);
+    let validity = Window {
+        from: 0,
+        until: HOUR,
+    };
+    let intent = terminate_intent(instance, validity).unwrap();
+    let nonce = vec![0x5a; 16];
+    let basis = ExerciseBasis::Anchor(anchor);
+    let mut s = statement(d, &nonce, intent_digest(&intent).unwrap(), basis);
+    s.pep = String::from("access-identity");
+    let t = Termination {
+        domain: d,
+        nonce: nonce.clone(),
+        instance,
+        validity,
+        basis,
+        ais: sign(&s, ALICE_KEY),
+        pep: String::from("access-identity"),
+    };
+    let wrong_pep = Termination {
+        pep: String::from("someone-else"),
+        ..t.clone()
+    };
+    assert!(!matches!(
+        w.plane.terminate(wrong_pep).await.unwrap(),
+        Verdict::Committed(_)
+    ));
+    let Verdict::Committed(c) = w.plane.terminate(t.clone()).await.unwrap() else {
+        panic!("not committed");
+    };
+    assert_eq!(c.nonce, nonce);
+    let again = w.plane.terminate(t).await.unwrap();
+    assert_eq!(
+        again,
+        Verdict::Refused {
+            code: String::from("ais-mismatch")
+        },
+        "the ended Instance signs nothing more"
     );
 }

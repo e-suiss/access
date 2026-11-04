@@ -78,7 +78,7 @@ where
     P: CredentialRegistry + Sync,
     S: SignalSink + Sync,
 {
-    async fn session_flow(
+    pub(crate) async fn session_flow(
         &self,
         tx: &mut D::Tx,
         state: &FlowState,
@@ -150,6 +150,7 @@ where
                 next,
                 session.auth_time_ms,
                 &session.assurance,
+                false,
             )
             .await?
         {

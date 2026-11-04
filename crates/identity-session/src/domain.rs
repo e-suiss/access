@@ -1,7 +1,9 @@
 //! Domain types and rules, free of I/O (OP-63).
 
 pub mod assurance;
+pub mod auth_context;
 pub mod codes;
+pub mod device;
 pub mod epoch;
 pub mod flow;
 pub mod requirement;

@@ -114,6 +114,8 @@ pub struct SessionRow {
     pub ended_ms: Option<i64>,
     /// `logout`, `epoch` or `admin`.
     pub end_reason: Option<String>,
+    /// When the session last stepped up, if it did (OP-149 m.8).
+    pub step_up_ms: Option<i64>,
 }
 
 /// A stored device marker.
@@ -163,6 +165,7 @@ struct SessionRecord {
     assurance: Vec<u8>,
     ended_ms: Option<i64>,
     end_reason: Option<String>,
+    step_up_ms: Option<i64>,
 }
 
 impl SessionRecord {
@@ -182,6 +185,7 @@ impl SessionRecord {
             assurance: self.assurance,
             ended_ms: self.ended_ms,
             end_reason: self.end_reason,
+            step_up_ms: self.step_up_ms,
         }
     }
 }
@@ -365,7 +369,8 @@ impl TenantTx {
             SessionRecord,
             "SELECT l.session_id, l.subject_id, l.session_epoch, s.session_epoch AS subject_epoch,
                     s.status AS subject_status, l.keep_signed_in, l.created_ms, l.auth_time_ms,
-                    l.last_seen_ms, l.idle_ms, l.expires_ms, l.assurance, l.ended_ms, l.end_reason
+                    l.last_seen_ms, l.idle_ms, l.expires_ms, l.assurance, l.ended_ms, l.end_reason,
+                    l.step_up_ms
                FROM access.login_sessions l
                JOIN access.identity_subjects s
                  ON s.tenant_id = l.tenant_id AND s.realm_id = l.realm_id AND s.subject_id = l.subject_id
@@ -390,7 +395,8 @@ impl TenantTx {
             SessionRecord,
             "SELECT l.session_id, l.subject_id, l.session_epoch, s.session_epoch AS subject_epoch,
                     s.status AS subject_status, l.keep_signed_in, l.created_ms, l.auth_time_ms,
-                    l.last_seen_ms, l.idle_ms, l.expires_ms, l.assurance, l.ended_ms, l.end_reason
+                    l.last_seen_ms, l.idle_ms, l.expires_ms, l.assurance, l.ended_ms, l.end_reason,
+                    l.step_up_ms
                FROM access.login_sessions l
                JOIN access.identity_subjects s
                  ON s.tenant_id = l.tenant_id AND s.realm_id = l.realm_id AND s.subject_id = l.subject_id
@@ -418,7 +424,8 @@ impl TenantTx {
             SessionRecord,
             "SELECT l.session_id, l.subject_id, l.session_epoch, s.session_epoch AS subject_epoch,
                     s.status AS subject_status, l.keep_signed_in, l.created_ms, l.auth_time_ms,
-                    l.last_seen_ms, l.idle_ms, l.expires_ms, l.assurance, l.ended_ms, l.end_reason
+                    l.last_seen_ms, l.idle_ms, l.expires_ms, l.assurance, l.ended_ms, l.end_reason,
+                    l.step_up_ms
                FROM access.login_sessions l
                JOIN access.identity_subjects s
                  ON s.tenant_id = l.tenant_id AND s.realm_id = l.realm_id AND s.subject_id = l.subject_id
@@ -507,7 +514,7 @@ impl TenantTx {
 
     /// Carries a live session from epoch `from` to epoch `to` with a new authentication
     /// (step-up, MFA enablement); false when it is ended or not at `from`, so a revoked
-    /// session is never carried forward.
+    /// session is never carried forward. A `step_up` also records its time (OP-149 m.8).
     ///
     /// # Errors
     /// [`StoreError`].
@@ -518,10 +525,13 @@ impl TenantTx {
         to: i64,
         auth_time_ms: i64,
         assurance: &[u8],
+        step_up: bool,
     ) -> Result<bool, StoreError> {
         let (tenant, realm) = self.realm_scope()?;
         let n = sqlx::query!(
-            "UPDATE access.login_sessions SET session_epoch = $5, auth_time_ms = $6, assurance = $7
+            "UPDATE access.login_sessions
+                SET session_epoch = $5, auth_time_ms = $6, assurance = $7,
+                    step_up_ms = CASE WHEN $8 THEN $6 ELSE step_up_ms END
               WHERE tenant_id = $1 AND realm_id = $2 AND session_id = $3 AND ended_ms IS NULL
                 AND session_epoch = $4",
             tenant,
@@ -531,6 +541,7 @@ impl TenantTx {
             to,
             auth_time_ms,
             assurance,
+            step_up,
         )
         .execute(&mut *self.tx)
         .await?

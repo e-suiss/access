@@ -100,6 +100,43 @@ impl SignerKeys {
             _ => Err(Unavailable),
         }
     }
+
+    /// Signs deterministic CBOR as a tagged `COSE_Sign1` of `content_type` with the key that
+    /// signs the realm's tokens, opening the realm's key set on first use (OP-149 m.8).
+    ///
+    /// # Errors
+    /// [`Unavailable`].
+    pub async fn sign_cose(
+        &self,
+        realm: RealmId,
+        content_type: &str,
+        payload: &[u8],
+        at_ms: u64,
+    ) -> Result<Vec<u8>, Unavailable> {
+        let r = Realm(*realm.as_bytes());
+        let request = Request::SignCose {
+            realm: r,
+            content_type: String::from(content_type),
+            payload: payload.to_vec(),
+            at: at_ms,
+        };
+        match self.ask(&request).await? {
+            Response::SignedCose { sign1, .. } => return Ok(sign1),
+            Response::Error(code) if code == UNKNOWN_REALM => {}
+            _ => return Err(Unavailable),
+        }
+        let open = Request::Open {
+            realm: r,
+            alg: self.alg,
+        };
+        if self.ask(&open).await? != Response::Opened {
+            return Err(Unavailable);
+        }
+        match self.ask(&request).await? {
+            Response::SignedCose { sign1, .. } => Ok(sign1),
+            _ => Err(Unavailable),
+        }
+    }
 }
 
 impl Keys for SignerKeys {

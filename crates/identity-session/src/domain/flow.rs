@@ -98,6 +98,11 @@ pub enum Purpose {
         /// The session.
         session: [u8; 16],
     },
+    /// A single-use challenge a device Instance key answers (OP-149 m.6).
+    InstanceKey {
+        /// The session.
+        session: [u8; 16],
+    },
 }
 
 /// The WebAuthn authentication state the flow keeps, single use.

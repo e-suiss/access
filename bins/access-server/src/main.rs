@@ -20,7 +20,7 @@ use access_authority_sequencer::adapters::SourcesClock;
 use access_crypto::secret_file::SecretFile;
 use access_http::adp::adapters::{Discovery, router as adp_router};
 use access_http::adp::app::Service;
-use access_http::login::{Assets, router as login_router};
+use access_http::login::{Assets, me_router, router as login_router};
 use access_http::oauth::router as oauth_router;
 use access_http::realm::router as realm_router;
 use access_http::{Health, Limits, SandboxHealth, router};
@@ -42,7 +42,9 @@ use access_identity_oauth::app::oauth::OAuth;
 use access_identity_oauth::domain::dpop::DpopProfile;
 use access_identity_oauth::domain::issuer::RealmBase;
 use access_identity_ui::adapters::Outbox;
-use access_identity_ui::app::Hosted;
+use access_identity_ui::app::{Devices, Hosted};
+use access_identity_ui::domain::frontend::IDENTITY_PEP;
+use access_identity_ui::ports::DeviceInstances;
 use access_store::Pool;
 use access_store::connect::{Target, check_server, options, pool};
 use config::{Config, Durability, Role};
@@ -347,6 +349,32 @@ async fn identity(config: &Config, router: Pool) -> Result<axum::Router, String>
     Ok(realm_router(discovery))
 }
 
+/// The hosted login of this process.
+type HostedLogin = Arc<Hosted<login::HsmKits, SystemClock, Outbox>>;
+
+/// The Frontend API for products (OP-149 m.6, m.8, m.9) beside the hosted login: artifacts
+/// signed by the identity signer, device Instances through the authority plane.
+fn frontend<I: DeviceInstances + 'static>(
+    config: &Config,
+    router: Pool,
+    hosted: HostedLogin,
+    instances: I,
+) -> Result<axum::Router, String> {
+    let identity = config.identity.as_ref().ok_or("no identity section")?;
+    Ok(me_router(
+        RealmDiscovery::new(
+            PgDirectory::new(router),
+            SignerKeys::new(identity.signer.clone()),
+        ),
+        hosted,
+        Devices {
+            signer: SignerKeys::new(identity.signer.clone()),
+            instances,
+            pep: String::from(IDENTITY_PEP),
+        },
+    ))
+}
+
 /// The hosted login (OP-146 m.12): the request's `Host` selects the realm as for discovery;
 /// realm keys come from the HSM on first use.
 fn login(
@@ -355,14 +383,14 @@ fn login(
     app: Pool,
     keys: KeyStore,
     assets: Option<Assets>,
-) -> Result<axum::Router, String> {
+) -> Result<(axum::Router, HostedLogin), String> {
     let identity = config.identity.as_ref().ok_or("no identity section")?;
     let lifetimes = config.login.lifetimes().ok_or("login session lifetimes")?;
     let discovery = RealmDiscovery::new(
         PgDirectory::new(router.clone()),
         SignerKeys::new(identity.signer.clone()),
     );
-    let hosted = Hosted {
+    let hosted = Arc::new(Hosted {
         kits: login::HsmKits::new(keys, router, lifetimes),
         db: app,
         clock: SystemClock,
@@ -378,8 +406,8 @@ fn login(
             cgroup_memory_budget(),
         )),
         redirect_to: config.login.redirect_to.clone(),
-    };
-    Ok(login_router(discovery, hosted, assets))
+    });
+    Ok((login_router(discovery, hosted.clone(), assets), hosted))
 }
 
 /// The realm authorization server (OP-146 I7) over the application pool, the identity signer,
@@ -503,7 +531,7 @@ async fn serve(
         router: router_pool,
         ..
     } = all;
-    let sign_in = login(
+    let (sign_in, hosted) = login(
         config,
         router_pool.clone(),
         app.clone(),
@@ -544,12 +572,14 @@ async fn serve(
         }
     });
     // OP-62, MD-14, TN-111: the identity plane's idp.* write path and realm Genesis
-    let _idp = idp::Plane::new(
+    let idp_plane = idp::Plane::new(
         domains.clone(),
         idp_sequencer.clone(),
         idp_app,
         SourcesClock::new(idp_sequencer),
     );
+    // OP-149 m.6, m.8, m.9
+    let me = frontend(config, tenants_pool.clone(), hosted, idp_plane)?;
     let adp = adp_router(
         Service::new(domains.clone(), limits.max_body_bytes),
         Discovery { issuer },
@@ -570,7 +600,7 @@ async fn serve(
         limits,
         adp.merge(products)
             .merge(realms)
-            .merge(sign_in)
+            .merge(sign_in.merge(me))
             .merge(authorize),
     );
     listener.set_nonblocking(true).map_err(|e| e.to_string())?;

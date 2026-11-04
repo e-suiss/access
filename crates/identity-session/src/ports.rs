@@ -83,7 +83,8 @@ pub trait SessionTx: AccountTx {
         at_ms: i64,
         reason: &str,
     ) -> impl Future<Output = Result<bool, SessionError>> + Send;
-    /// Carries a live session from epoch `from` to `to` with a new authentication.
+    /// Carries a live session from epoch `from` to `to` with a new authentication; a
+    /// `step_up` records its time.
     fn restamp_session(
         &mut self,
         id: [u8; 16],
@@ -91,6 +92,7 @@ pub trait SessionTx: AccountTx {
         to: i64,
         auth_time_ms: i64,
         assurance: &[u8],
+        step_up: bool,
     ) -> impl Future<Output = Result<bool, SessionError>> + Send;
     /// Stores a device marker.
     fn insert_marker(

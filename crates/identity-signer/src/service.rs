@@ -245,6 +245,23 @@ impl<F: KeyFactory, V: Vault> Service<F, V> {
                     Err(e) => Response::Error(String::from(e.code())),
                 }
             }
+            Request::SignCose {
+                realm,
+                content_type,
+                payload,
+                at,
+            } => {
+                if at.abs_diff(now) > MAX_SKEW_MS {
+                    return Response::Error(String::from("signer-time"));
+                }
+                let Some((_, ring)) = self.rings.get_mut(&realm) else {
+                    return Response::Error(String::from(UNKNOWN_REALM));
+                };
+                match ring.sign_cose(&content_type, &payload, at) {
+                    Ok((sign1, kid)) => Response::SignedCose { sign1, kid },
+                    Err(e) => Response::Error(String::from(e.code())),
+                }
+            }
         }
     }
 }

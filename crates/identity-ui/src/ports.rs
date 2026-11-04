@@ -1,5 +1,6 @@
 //! What the hosted login needs from the outside world (OP-63): each realm's keys and sign-in
-//! settings, and the Relay seam that queues its messages.
+//! settings, the Relay seam that queues its messages, the identity signer for artifacts and the
+//! authority plane's device Instances (OP-149 m.6, m.8).
 
 use std::future::Future;
 use std::sync::Arc;
@@ -13,6 +14,8 @@ use access_identity_session::domain::session::SessionPolicy;
 use access_identity_webauthn::adapters::RealmDecoyKeys;
 use access_identity_webauthn::domain::policy::RealmPolicy;
 use access_identity_webauthn::domain::rp::RelyingParty;
+use access_internal_api::idp::{Unavailable as InstancesUnavailable, Verdict};
+use access_internal_api::instances::{Registration, RegistrationVerdict, Termination};
 use access_store::identity::{RealmId, TenantId};
 use suiss_crypto::envelope::Kek;
 
@@ -78,4 +81,34 @@ pub trait Messages: Send + Sync {
 
     /// A notifier for `realm`.
     fn notifier<'a>(&'a self, realm: &'a Realm<'a>) -> Self::For<'a>;
+}
+
+/// Signs identity plane artifacts as `COSE_Sign1` with the realm's identity signer key
+/// (OP-149 m.8).
+pub trait ArtifactSigner: Send + Sync {
+    /// The tagged `COSE_Sign1` of `payload` with content type `content_type` at `at_ms`.
+    fn sign_cose(
+        &self,
+        realm: RealmId,
+        content_type: &str,
+        payload: &[u8],
+        at_ms: u64,
+    ) -> impl Future<Output = Result<Vec<u8>, Unavailable>> + Send;
+}
+
+/// A user's device Instances in the realm's governing domain, reached only through
+/// `internal-api` (OP-62, OP-149 m.6).
+pub trait DeviceInstances: Send + Sync {
+    /// Opens the device Instance of `registration`, or answers with the one an identical
+    /// earlier registration opened.
+    fn register(
+        &self,
+        registration: Registration,
+    ) -> impl Future<Output = Result<RegistrationVerdict, InstancesUnavailable>> + Send;
+
+    /// Forwards a termination the user's own Instance signed, as PEP.
+    fn terminate(
+        &self,
+        termination: Termination,
+    ) -> impl Future<Output = Result<Verdict, InstancesUnavailable>> + Send;
 }

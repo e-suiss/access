@@ -51,7 +51,7 @@ pub(super) fn cookies(headers: &HeaderMap) -> impl Iterator<Item = (&str, &str)>
         })
 }
 
-struct Jar {
+pub(super) struct Jar {
     flow: Option<String>,
     session: Option<String>,
     marker: Option<String>,
@@ -61,7 +61,7 @@ struct Jar {
 }
 
 impl Jar {
-    fn of(headers: &HeaderMap, peer: Option<Extension<Peer>>) -> Self {
+    pub(super) fn of(headers: &HeaderMap, peer: Option<Extension<Peer>>) -> Self {
         let mut jar = Self {
             flow: None,
             session: None,
@@ -90,7 +90,7 @@ impl Jar {
         jar
     }
 
-    fn browser(&self) -> Browser<'_> {
+    pub(super) fn browser(&self) -> Browser<'_> {
         Browser {
             flow: self.flow.as_deref(),
             session: self.session.as_deref(),
@@ -128,7 +128,7 @@ fn json_response(code: StatusCode, body: Vec<u8>) -> Response {
 }
 
 /// The reply on the wire, after its adaptive delay (TN-82).
-async fn send(reply: Reply, headers: &HeaderMap) -> Response {
+pub(super) async fn send(reply: Reply, headers: &HeaderMap) -> Response {
     if reply.pad_ms > 0 {
         tokio::time::sleep(Duration::from_millis(reply.pad_ms)).await;
     }
@@ -155,7 +155,7 @@ async fn send(reply: Reply, headers: &HeaderMap) -> Response {
     response
 }
 
-fn problem(code: StatusCode, name: &'static str, title: &'static str) -> Response {
+pub(super) fn problem(code: StatusCode, name: &'static str, title: &'static str) -> Response {
     let mut r = Problem::new(code, name, title).into_response();
     api_headers(r.headers_mut());
     r
@@ -174,7 +174,7 @@ fn authority<'a>(uri: &'a Uri, headers: &'a HeaderMap) -> &'a str {
 }
 
 /// The realm the request reached; the plain 404 names none (§17.9.6).
-async fn realm<D: Directory, K: Keys, KI, C, M>(
+pub(super) async fn realm<D: Directory, K: Keys, KI, C, M>(
     s: &Shared<D, K, KI, C, M>,
     params: &HashMap<String, String>,
     uri: &Uri,
@@ -194,7 +194,7 @@ async fn realm<D: Directory, K: Keys, KI, C, M>(
 
 /// A state-changing request carries JSON, so a cross-site form cannot send it without a
 /// preflight this surface never answers.
-fn json_only(headers: &HeaderMap) -> Result<(), Response> {
+pub(super) fn json_only(headers: &HeaderMap) -> Result<(), Response> {
     let ok = headers
         .get(header::CONTENT_TYPE)
         .and_then(|v| v.to_str().ok())
