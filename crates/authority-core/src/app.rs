@@ -1178,7 +1178,8 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                 exercise,
                 artifacts: receipt.iter().chain(pap.iter()).map(|r| r.0).collect(),
             };
-            let items = self.items(inc, &shape, &evaluation, &snapshot, &resolved)?;
+            let derived = self.derived(req, &resolved, exercise, now).await?;
+            let items = self.items(inc, &shape, &evaluation, &snapshot, &resolved, &derived)?;
             match self.leader.commit(now, &items).await {
                 Ok(Committed::Appended(positions)) => {
                     let mut response = answer(
@@ -1208,7 +1209,11 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
     }
 
     /// The Claim records of a request (L2-CLM-4).
-    fn claim_items(&mut self, resolved: &Proofs) -> Result<Vec<Item>, CoreError> {
+    fn claim_items(
+        &mut self,
+        resolved: &Proofs,
+        derived: &events::Derived,
+    ) -> Result<Vec<Item>, CoreError> {
         let mut out = Vec::with_capacity(resolved.claims.len());
         for c in &resolved.claims {
             let ckey = meta::key(kind::CLAIM, &c.id);
@@ -1264,7 +1269,8 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                     fields: fields(&mut self.salts, f)?,
                 },
                 nonce: None,
-                events: Vec::new(),
+                // OP-149 m.7
+                events: derived.claims.get(&c.id).cloned().unwrap_or_default(),
                 proofs: vec![(digest.0, c.bytes.clone())],
                 reads: vec![(ckey.clone(), 0)],
                 writes: effects.iter().map(|(k, _)| k.clone()).collect(),
@@ -1329,10 +1335,11 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         evaluation: &Evaluation,
         snapshot: &Snapshot,
         resolved: &Proofs,
+        derived: &events::Derived,
     ) -> Result<Vec<Item>, CoreError> {
         let req = &inc.request;
         let digest = shape.digest;
-        let mut items = self.claim_items(resolved)?;
+        let mut items = self.claim_items(resolved, derived)?;
         let allowed = evaluation.decision.outcome == Outcome::Allow;
         let outcome = match evaluation.decision.outcome {
             Outcome::Allow => "allow",
@@ -1416,7 +1423,12 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                 intent_digest: digest.0,
                 outcome: String::from(outcome),
             }),
-            events: Vec::new(),
+            // OP-130 m.9, OP-149 m.7: only a committed ALLOW changes state
+            events: if allowed {
+                derived.decision.clone()
+            } else {
+                Vec::new()
+            },
             proofs: foreign.map(|(d, b)| vec![(d.0, b)]).unwrap_or_default(),
             reads,
             writes: effects.iter().map(|(k, _)| k.clone()).collect(),
@@ -1565,6 +1577,7 @@ struct Shape<'a> {
 /// Namespace of a contribution's resource (L0-META-30).
 pub const CONTRIBUTION_NAMESPACE: &str = "access.contribution";
 
+mod events;
 mod proofs;
 
 pub use proofs::{Compromise, MAX_PROOFS, NewClaim, Resolved};

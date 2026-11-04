@@ -4025,3 +4025,211 @@ async fn keys_are_looked_up_at_a_ledger_position() {
 fn unreachable_response() -> Response {
     panic!("expected no answer")
 }
+
+async fn outbox_events(db: &TestDb, d: Digest) -> Vec<access_internal_api::events::Event> {
+    access_store::authority::read_outbox(&db.app, &DomainId::from_bytes(d.0), (0, 0), 100)
+        .await
+        .unwrap()
+        .iter()
+        .map(|r| access_internal_api::events::Event::from_bytes(&r.event).unwrap())
+        .collect()
+}
+
+// OP-149 m.7, §9.16, OP-130 m.9: an allowed revoke, terminate and depart write their events
+// with the record; a denied request writes none
+#[tokio::test]
+#[allow(
+    clippy::too_many_lines,
+    reason = "one domain through four meta-actions"
+)]
+async fn committed_meta_actions_derive_semantic_events() {
+    use access_internal_api::events::{Detail, Kind, ReasonClass, Source, Subject};
+    let db = fresh().await.unwrap();
+    let (mut core, d) = setup(&db).await;
+    onboard(&mut core, d, ROOT, ROOT_KEY, (1, 2)).await;
+    onboard(&mut core, d, ALICE, ALICE_KEY, (3, 4)).await;
+    onboard(&mut core, d, BOB, BOB_KEY, (5, 6)).await;
+    assert_eq!(outbox_events(&db, d).await.len(), 0);
+    let shop = meta::object_id(&d, kind::ANCHOR, 1);
+    let issue = Payload::GrantIssue(GrantContent {
+        basis: GrantBasis::Anchor(shop),
+        holder: SubjectSelector::Party(ALICE),
+        authority: authority(vec![action("shop", "read")], selector("shop")),
+        agency: BTreeSet::from([Capacity::Own]),
+        named: None,
+    });
+    let issued = send(
+        &mut core,
+        meta_request(d, 7, ExerciseBasis::Anchor(shop), issue),
+        ROOT_KEY,
+    )
+    .await
+    .unwrap();
+    allowed(&issued);
+    let grant = meta::object_id(&issued.exercise.unwrap(), kind::GRANT, 0);
+    let revoke = Payload::GrantRevoke { grant };
+    let denied = send(
+        &mut core,
+        meta_request(d, 8, ExerciseBasis::Anchor(shop), revoke.clone()),
+        ALICE_KEY,
+    )
+    .await
+    .unwrap();
+    assert_ne!(denied.decision.outcome, Outcome::Allow);
+    assert_eq!(outbox_events(&db, d).await.len(), 0);
+    let revoked = send(
+        &mut core,
+        meta_request(d, 9, ExerciseBasis::Anchor(shop), revoke),
+        ROOT_KEY,
+    )
+    .await
+    .unwrap();
+    allowed(&revoked);
+
+    let self_anchor = |n: u8| {
+        ExerciseBasis::Anchor(meta::object_id(
+            &meta::exercise_id(&d, &[n; 16]).unwrap(),
+            kind::ANCHOR,
+            0,
+        ))
+    };
+    let bob = meta::object_id(&meta::exercise_id(&d, &[6; 16]).unwrap(), kind::INSTANCE, 0);
+    let ended = send(
+        &mut core,
+        meta_request(
+            d,
+            10,
+            self_anchor(5),
+            Payload::InstanceTerminate { instance: bob },
+        ),
+        BOB_KEY,
+    )
+    .await
+    .unwrap();
+    allowed(&ended);
+    let departed = send(
+        &mut core,
+        meta_request(
+            d,
+            11,
+            ExerciseBasis::Anchor(meta::meta_anchor(&d)),
+            Payload::PartyDepart {
+                party: ALICE,
+                disposition: BTreeMap::new(),
+            },
+        ),
+        ROOT_KEY,
+    )
+    .await
+    .unwrap();
+    allowed(&departed);
+
+    let events = outbox_events(&db, d).await;
+    let shape: Vec<(Kind, Subject, Source)> = events
+        .iter()
+        .map(|e| (e.kind, e.subject, e.source))
+        .collect();
+    assert_eq!(
+        shape,
+        vec![
+            (
+                Kind::AuthorityRevoked,
+                Subject::Grant(grant),
+                Source::Exercise(revoked.exercise.unwrap())
+            ),
+            (
+                Kind::InstanceTerminated,
+                Subject::Instance(bob),
+                Source::Exercise(ended.exercise.unwrap())
+            ),
+            (
+                Kind::PartyDisabled,
+                Subject::Party(ALICE),
+                Source::Exercise(departed.exercise.unwrap())
+            ),
+        ]
+    );
+    assert!(events.iter().all(|e| e.domain == d && e.at == NOW));
+    assert_eq!(events[1].detail, Detail::Instance { party: BOB });
+    assert_eq!(
+        events[2].detail,
+        Detail::Disabled {
+            reason: ReasonClass::Departed
+        }
+    );
+    fold_check(&db.sequencer, d).await.unwrap();
+}
+
+// OP-149 m.7, SI-9, OP-141 m.31: a compromise declaration names the Party's Instances set up
+// inside the window, from occurred_at, or 72 hours before the declaration, to its commit
+#[tokio::test]
+async fn a_compromise_declaration_derives_party_compromised() {
+    use access_internal_api::events::{Detail, Kind, Subject};
+    let db = fresh().await.unwrap();
+    let mut g = genesis();
+    add_acceptances(
+        &mut g,
+        vec![Value::Map(vec![
+            (Value::text("issuer"), ROOT.to_value()),
+            (Value::text("use"), Value::text("predicate-input")),
+            (
+                Value::text("classes"),
+                Value::Array(vec![Value::text(access_kernel::claim::PARTY_COMPROMISE)]),
+            ),
+            (Value::text("subject"), SubjectSelector::Public.to_value()),
+            (
+                Value::text("validity"),
+                Value::Array(vec![Value::Unsigned(0), Value::Unsigned(1_000_000)]),
+            ),
+        ])],
+    );
+    let (mut core, d) = setup_with(&db, g).await;
+    onboard(&mut core, d, ROOT, ROOT_KEY, (1, 2)).await;
+    onboard(&mut core, d, ALICE, ALICE_KEY, (3, 4)).await;
+    let declare = |nonce: u8, value: EqValue| {
+        meta_request(
+            d,
+            nonce,
+            ExerciseBasis::Anchor(meta::meta_anchor(&d)),
+            Payload::ClaimIssue {
+                subject: ALICE,
+                class: access_kernel::claim::PARTY_COMPROMISE.to_owned(),
+                value,
+                validity: None,
+                bound_intent: None,
+                supersedes: None,
+            },
+        )
+    };
+    let known = send(&mut core, declare(10, EqValue::Int(20_000)), ROOT_KEY)
+        .await
+        .unwrap();
+    allowed(&known);
+    let unknown = send(&mut core, declare(11, EqValue::Bool(true)), ROOT_KEY)
+        .await
+        .unwrap();
+    allowed(&unknown);
+    let events = outbox_events(&db, d).await;
+    assert_eq!(events.len(), 2);
+    let alice = meta::object_id(&meta::exercise_id(&d, &[4; 16]).unwrap(), kind::INSTANCE, 0);
+    let set_up = vec![(alice, thumbprint(&public(ALICE_KEY)))];
+    // Alice's Instance was set up before 20 000, so only the 72-hour window covers it
+    for (e, (from, covered)) in events.iter().zip([
+        (20_000, Vec::new()),
+        (NOW.saturating_sub(72 * 3_600_000), set_up),
+    ]) {
+        assert_eq!(e.kind, Kind::PartyCompromised);
+        assert_eq!(e.subject, Subject::Party(ALICE));
+        let Detail::Compromised {
+            keys,
+            occurred_at,
+            declared_at,
+            ..
+        } = &e.detail
+        else {
+            panic!("{e:?}");
+        };
+        assert_eq!((*occurred_at, *declared_at), (from, NOW));
+        assert_eq!(keys, &covered);
+    }
+}

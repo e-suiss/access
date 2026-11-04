@@ -15,6 +15,7 @@ pub mod secret_file;
 pub mod token;
 pub mod totp;
 pub mod webauthn;
+pub mod webhook;
 
 pub use suiss_crypto::{dit, envelope, secret};
 

@@ -257,6 +257,8 @@ name = "access-internal-api"
 version = "0.2.5"
 dependencies = [
  "esuiss-access-kernel",
+ "esuiss-crypto",
+ "thiserror",
 ]
 
 [[package]]

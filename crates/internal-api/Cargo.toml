@@ -10,6 +10,8 @@ publish = false
 
 [dependencies]
 access-kernel = { workspace = true }
+suiss-crypto = { workspace = true }
+thiserror = { workspace = true }
 
 [lints]
 workspace = true
