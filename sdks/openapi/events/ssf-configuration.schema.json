@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:suiss:access:schema:ssf-configuration:1",
+  "title": "SSF transmitter metadata at /.well-known/ssf-configuration (SSF 1.0 §7.1)",
+  "type": "object",
+  "required": [
+    "spec_version",
+    "issuer",
+    "jwks_uri",
+    "delivery_methods_supported",
+    "configuration_endpoint",
+    "authorization_schemes",
+    "default_subjects"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "spec_version": {
+      "const": "1_0"
+    },
+    "issuer": {
+      "type": "string",
+      "pattern": "^https://"
+    },
+    "jwks_uri": {
+      "type": "string",
+      "pattern": "^https://"
+    },
+    "delivery_methods_supported": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "urn:ietf:rfc:8935",
+          "urn:ietf:rfc:8936",
+          "urn:suiss:access:delivery:webhook"
+        ]
+      }
+    },
+    "configuration_endpoint": {
+      "type": "string",
+      "pattern": "^https://"
+    },
+    "authorization_schemes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "spec_urn"
+        ],
+        "properties": {
+          "spec_urn": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "default_subjects": {
+      "type": "string",
+      "enum": [
+        "ALL",
+        "NONE"
+      ]
+    }
+  }
+}

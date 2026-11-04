@@ -1,0 +1,12 @@
+{
+  "delivery": {
+    "method": "urn:suiss:access:delivery:webhook",
+    "endpoint_url": "https://work.example/v1/access/events"
+  },
+  "aud": "work",
+  "events_requested": [
+    "urn:suiss:access:event:api_client.created",
+    "urn:suiss:access:event:party.compromised"
+  ],
+  "description": "Work tenant mapping"
+}

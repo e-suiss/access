@@ -1,0 +1,39 @@
+{
+  "specversion": "1.0",
+  "id": "AQIxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+  "source": "urn:suiss:access:realm:019a0000-0000-7000-8000-0000000000a1",
+  "type": "urn:suiss:access:event:party.compromised",
+  "subject": "AgICAgICAgICAgICAgICAg",
+  "time": "2026-11-04T00:00:00.000Z",
+  "datacontenttype": "application/json",
+  "accesstenant": "019a0000-0000-7000-8000-000000000001",
+  "accessrealm": "019a0000-0000-7000-8000-0000000000a1",
+  "data": {
+    "iss": "https://id.example/realms/shop",
+    "aud": "work",
+    "iat": 1793750400,
+    "jti": "AQIxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "sub_id": {
+      "format": "opaque",
+      "id": "AgICAgICAgICAgICAgICAg"
+    },
+    "events": {
+      "urn:suiss:access:event:party.compromised": {
+        "domain": "BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc",
+        "source": {
+          "claim": "CAgICAgICAgICAgICAgICA"
+        },
+        "party": "AgICAgICAgICAgICAgICAg",
+        "instances": [
+          "BAQEBAQEBAQEBAQEBAQEBA"
+        ],
+        "kids": [
+          "-Y4E9TMm6RHXdEMV2FRRKJiFNF_gobJnrL4wNhDQHX8"
+        ],
+        "occurred_at": 1793491200000,
+        "declared_at": 1793750400000,
+        "evidence_digest": "CQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQk"
+      }
+    }
+  }
+}

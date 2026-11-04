@@ -1,0 +1,21 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.event_delivery\n                SET state = $5, attempts = attempts + 1, last_status = $6, last_reason = $7,\n                    next_attempt_at = coalesce(to_timestamp($8::bigint / 1000.0), next_attempt_at),\n                    updated_at = now()\n              WHERE tenant_id = $1 AND realm_id = $2 AND subscription_id = $3 AND event_id = $4\n                AND state = 'pending'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Text",
+        "Int4",
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "bf62dbbc2d69d50bc88e86acb361a4f151a072615190421a52ca03f33d2de65c"
+}

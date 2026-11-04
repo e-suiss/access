@@ -376,6 +376,57 @@ async fn exchange<S: AsyncRead + AsyncWrite + Unpin>(
     read_answer(stream, max_body).await
 }
 
+fn header_ok(name: &str, value: &str) -> bool {
+    !name.is_empty()
+        && name.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'-')
+        && value.bytes().all(|c| c == b' ' || c.is_ascii_graphic())
+}
+
+/// The bytes of `POST target` with `body`: the request [`Outbound::post`] sends, also for a
+/// test receiver.
+///
+/// # Errors
+/// [`OutboundError::Url`] for a header that cannot be carried.
+pub fn post_request(
+    target: &Target,
+    content_type: &str,
+    headers: &[(&str, String)],
+    body: &[u8],
+) -> Result<Vec<u8>, OutboundError> {
+    if !header_ok("content-type", content_type) || !headers.iter().all(|(n, v)| header_ok(n, v)) {
+        return Err(OutboundError::Url);
+    }
+    let mut head = format!(
+        "POST {} HTTP/1.1\r\nHost: {}\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\n\
+         User-Agent: access\r\nCache-Control: no-store\r\nConnection: close\r\n",
+        target.path,
+        target.host_header(),
+        body.len(),
+    );
+    for (n, v) in headers {
+        head.push_str(n);
+        head.push_str(": ");
+        head.push_str(v);
+        head.push_str("\r\n");
+    }
+    head.push_str("\r\n");
+    let mut out = head.into_bytes();
+    out.extend_from_slice(body);
+    Ok(out)
+}
+
+/// Sends `request` over `stream` and reads the answer's head: the exchange of
+/// [`Outbound::post`], also for a test receiver.
+///
+/// # Errors
+/// [`OutboundError`].
+pub async fn post_over<S: AsyncRead + AsyncWrite + Unpin>(
+    stream: &mut S,
+    request: &[u8],
+) -> Result<Answer, OutboundError> {
+    exchange(stream, request, 0).await
+}
+
 /// HTTPS to client-registered URLs behind the SSRF guard. Only port 443 is reached: the
 /// server's runtime lockdown opens no other outbound port for it (OP-92).
 #[derive(Clone)]
@@ -415,8 +466,8 @@ impl Outbound {
         if target.port != PORT {
             return Err(OutboundError::Blocked);
         }
-        let connector = self.connector.as_ref().ok_or(OutboundError::Unreachable)?;
         let addr = resolve(target).await?;
+        let connector = self.connector.as_ref().ok_or(OutboundError::Unreachable)?;
         let name = match target.host.parse::<IpAddr>() {
             Ok(ip) => ServerName::IpAddress(ip.into()),
             Err(_) => ServerName::try_from(target.host.clone()).map_err(|_| OutboundError::Url)?,
@@ -460,6 +511,24 @@ impl Outbound {
             target.host_header(),
         );
         self.bounded(&target, request.into_bytes(), max_body).await
+    }
+
+    /// `POST url` with `body` of `content_type` and extra `headers` (OP-149 m.4, m.7); only
+    /// the status and headers are read. A header name or value that is not a visible ASCII
+    /// token, or contains a line break, is [`OutboundError::Url`].
+    ///
+    /// # Errors
+    /// [`OutboundError`].
+    pub async fn post(
+        &self,
+        url: &str,
+        content_type: &str,
+        headers: &[(&str, String)],
+        body: &[u8],
+    ) -> Result<Answer, OutboundError> {
+        let target = Target::parse(url)?;
+        let request = post_request(&target, content_type, headers, body)?;
+        self.bounded(&target, request, 0).await
     }
 
     /// `POST url` with a form body; only the status and headers are read.

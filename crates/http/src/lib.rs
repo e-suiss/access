@@ -7,6 +7,7 @@ pub mod problem;
 pub mod product;
 pub mod realm;
 mod security_txt;
+pub mod ssf;
 pub mod tls;
 
 use std::time::Duration;

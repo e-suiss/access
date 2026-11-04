@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.event_delivery\n                SET state = CASE WHEN event_id = ANY($4) THEN 'acknowledged' ELSE 'failed' END,\n                    last_reason = CASE WHEN event_id = ANY($4) THEN NULL ELSE 'receiver' END,\n                    attempts = attempts + 1, updated_at = now()\n              WHERE tenant_id = $1 AND realm_id = $2 AND subscription_id = $3\n                AND channel = 'ssf_poll' AND state = 'pending'\n                AND (event_id = ANY($4) OR event_id = ANY($5))",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "TextArray",
+        "TextArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "44ee8d7e33aee184accbe605b3db4106a0dd64f5b05066c8df824582deba3dd1"
+}

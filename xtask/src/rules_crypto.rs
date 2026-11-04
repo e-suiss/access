@@ -265,6 +265,10 @@ pub(crate) const HMAC_ALLOWED: &[(&str, &str)] = &[
         "crates/crypto/src/totp.rs",
         "OP-146 m.3: TOTP codes (RFC 6238), one-party: the server both holds the seed and checks",
     ),
+    (
+        "crates/crypto/src/webhook.rs",
+        "OP-149 m.4: Standard Webhooks signatures; two-party like client_secret_jwt (CR-3): one secret per subscription, between Access and that one receiver",
+    ),
 ];
 
 const HMAC_TOKENS: &[&str] = &[

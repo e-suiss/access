@@ -1,0 +1,97 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:suiss:access:schema:event:instance-terminated:1",
+  "title": "An Instance ended (§9.16)",
+  "description": "The member of the SET `events` claim, and of the CloudEvent `data.events`, under `urn:suiss:access:event:instance-terminated`.",
+  "type": "object",
+  "required": [
+    "domain",
+    "source",
+    "subject",
+    "at"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "domain": {
+      "$ref": "#/$defs/b64url32"
+    },
+    "source": {
+      "$ref": "#/$defs/source"
+    },
+    "subject": {
+      "type": "object",
+      "required": [
+        "kind",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "instance"
+          ]
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{22}([A-Za-z0-9_-]{21})?$",
+          "description": "base64url of a 16-byte id, or of a 32-byte projection digest."
+        }
+      }
+    },
+    "at": {
+      "$ref": "#/$defs/ms"
+    },
+    "party": {
+      "$ref": "#/$defs/b64url16"
+    }
+  },
+  "$defs": {
+    "b64url32": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{43}$"
+    },
+    "b64url16": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{22}$"
+    },
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "ms": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Unix time, milliseconds."
+    },
+    "source": {
+      "description": "The Exercise whose decision recorded the event, or the Claim whose record admitted it.",
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "exercise"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "exercise": {
+              "$ref": "#/$defs/b64url32"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "claim"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "claim": {
+              "$ref": "#/$defs/b64url16"
+            }
+          }
+        }
+      ]
+    }
+  }
+}

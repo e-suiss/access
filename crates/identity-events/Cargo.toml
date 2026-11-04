@@ -1,0 +1,32 @@
+[package]
+name = "access-identity-events"
+description = "Event delivery of the identity plane (OP-149 m.4, m.7, §9.16): SET transmitter, SSF push and poll, and the Suiss webhook profile."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+access-crypto = { workspace = true }
+access-identity-account = { workspace = true }
+access-identity-oauth = { workspace = true }
+access-internal-api = { workspace = true }
+access-kernel = { workspace = true }
+access-store = { workspace = true }
+suiss-crypto = { workspace = true, features = ["aead"] }
+serde_json = { workspace = true, features = ["std"] }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["sync", "time"] }
+tracing = { workspace = true, features = ["std"] }
+zeroize = { workspace = true, features = ["alloc", "std"] }
+
+[dev-dependencies]
+access-crypto = { workspace = true, features = ["testing"] }
+access-store = { workspace = true, features = ["testing"] }
+suiss-crypto = { workspace = true, features = ["aead", "testing"] }
+tokio = { workspace = true, features = ["macros", "net", "io-util", "rt-multi-thread", "time"] }
+
+[lints]
+workspace = true

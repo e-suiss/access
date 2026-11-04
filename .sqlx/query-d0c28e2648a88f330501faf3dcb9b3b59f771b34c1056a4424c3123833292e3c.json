@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.event_delivery\n                (tenant_id, realm_id, subscription_id, channel, event_id, event_type, payload,\n                 occurred_at, next_attempt_at)\n             VALUES ($1, $2, $3, $4, $5, $6, $7, to_timestamp($8::bigint / 1000.0),\n                     to_timestamp($9::bigint / 1000.0))\n             ON CONFLICT (tenant_id, realm_id, subscription_id, event_id) DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Text",
+        "Text",
+        "Bytea",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d0c28e2648a88f330501faf3dcb9b3b59f771b34c1056a4424c3123833292e3c"
+}

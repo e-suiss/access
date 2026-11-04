@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:suiss:access:schema:event-set:1",
+  "title": "Access Security Event Token claims (RFC 8417, SSF 1.0)",
+  "description": "The claims of every SET Access sends, signed as a JWS of typ secevent+jwt with the realm key for SSF push and poll, and carried unsigned as CloudEvent data in the webhook profile. `events` has exactly one member; its key is the event type URN and its value matches that event's schema.",
+  "type": "object",
+  "required": [
+    "iss",
+    "aud",
+    "iat",
+    "jti",
+    "sub_id",
+    "events"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "iss": {
+      "type": "string",
+      "pattern": "^https://"
+    },
+    "aud": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512
+    },
+    "iat": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "NumericDate, seconds."
+    },
+    "jti": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{43}$",
+      "description": "The event id; the dedup key of every channel."
+    },
+    "sub_id": {
+      "type": "object",
+      "required": [
+        "format",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "format": {
+          "const": "opaque"
+        },
+        "id": {
+          "type": "string"
+        }
+      }
+    },
+    "events": {
+      "type": "object",
+      "minProperties": 1,
+      "maxProperties": 1,
+      "propertyNames": {
+        "type": "string",
+        "pattern": "^urn:suiss:access:event:[a-z][a-z0-9_.-]*$"
+      },
+      "additionalProperties": {
+        "type": "object"
+      }
+    }
+  }
+}

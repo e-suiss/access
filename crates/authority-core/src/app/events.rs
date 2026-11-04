@@ -60,6 +60,22 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
     ) -> Result<Derived, CoreError> {
         let mut out = Derived::default();
         let domain = req.domain;
+        let events = self.decision_events(req, exercise, now).await?;
+        for e in &events {
+            out.decision.push(encode(e)?);
+        }
+        out.claims = self.claim_events(domain, resolved, now).await?;
+        Ok(out)
+    }
+
+    /// The events of the decision, by the meta-action it commits.
+    async fn decision_events(
+        &self,
+        req: &Request,
+        exercise: Digest,
+        now: u64,
+    ) -> Result<Vec<Event>, CoreError> {
+        let domain = req.domain;
         let base = |kind, subject, detail| Event {
             kind,
             domain,
@@ -159,11 +175,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             }
             _ => {}
         }
-        for e in &events {
-            out.decision.push(encode(e)?);
-        }
-        out.claims = self.claim_events(domain, resolved, now).await?;
-        Ok(out)
+        Ok(events)
     }
 
     /// OP-149 m.7: the events of the admitted signed declarations.

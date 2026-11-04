@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:suiss:access:schema:poll-request:1",
+  "title": "RFC 8936 poll request, authorized by the stream's bearer credential",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "ack": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "setErrs": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "err",
+          "description"
+        ],
+        "properties": {
+          "err": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "maxEvents": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "returnImmediately": {
+      "type": "boolean"
+    }
+  }
+}

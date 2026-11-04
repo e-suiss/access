@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.event_delivery SET state = 'failed', last_reason = 'receiver',\n                    updated_at = now()\n              WHERE tenant_id = $1 AND realm_id = $2 AND subscription_id = $3\n                AND state = 'pending'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "2e5817b28ca6e6ffc7dd773f592113897b3e3aa61eb533e73998515fbedcabdb"
+}

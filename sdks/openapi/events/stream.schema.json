@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:suiss:access:schema:stream:1",
+  "title": "Stream configuration (SSF 1.0 §8.1.1) with its status",
+  "type": "object",
+  "required": [
+    "stream_id",
+    "iss",
+    "aud",
+    "events_supported",
+    "events_requested",
+    "events_delivered",
+    "delivery",
+    "status"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "stream_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "iss": {
+      "type": "string",
+      "pattern": "^https://"
+    },
+    "aud": {
+      "type": "string",
+      "minLength": 1
+    },
+    "events_supported": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^urn:suiss:access:event:[a-z][a-z0-9_.-]*$"
+      }
+    },
+    "events_requested": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^urn:suiss:access:event:[a-z][a-z0-9_.-]*$"
+      }
+    },
+    "events_delivered": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^urn:suiss:access:event:[a-z][a-z0-9_.-]*$"
+      }
+    },
+    "delivery": {
+      "type": "object",
+      "required": [
+        "method"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "method": {
+          "type": "string",
+          "enum": [
+            "urn:ietf:rfc:8935",
+            "urn:ietf:rfc:8936",
+            "urn:suiss:access:delivery:webhook"
+          ]
+        },
+        "endpoint_url": {
+          "type": "string",
+          "pattern": "^https://"
+        }
+      }
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "enabled",
+        "paused",
+        "disabled"
+      ]
+    }
+  }
+}

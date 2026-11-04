@@ -1,0 +1,17 @@
+{
+  "spec_version": "1_0",
+  "issuer": "https://id.example/realms/shop",
+  "jwks_uri": "https://id.example/realms/shop/jwks.json",
+  "delivery_methods_supported": [
+    "urn:ietf:rfc:8935",
+    "urn:ietf:rfc:8936",
+    "urn:suiss:access:delivery:webhook"
+  ],
+  "configuration_endpoint": "https://id.example/realms/shop/ssf/streams",
+  "authorization_schemes": [
+    {
+      "spec_urn": "urn:ietf:rfc:6750"
+    }
+  ],
+  "default_subjects": "NONE"
+}

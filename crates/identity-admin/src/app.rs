@@ -19,6 +19,9 @@ use access_store::idp::{self, ClientRow, Decision as Bind, Governing, SettingsRo
 use access_store::scope::DomainId;
 use access_store::tenancy::{self, HostKind};
 
+use access_identity_events::app::emit;
+use access_identity_events::domain::catalog::{ClientChange, IdentityEvent, IdentityKind};
+
 use crate::AdminError;
 use crate::domain::{
     Attribute, AuthMethod, CLIENT_PREFIX, Change, Client, ClientId, Invalid, JoseAlg, cose_key,
@@ -377,6 +380,7 @@ impl<D: Decider, G: Governance, K: RealmKeys> Admin<'_, D, G, K> {
             });
         };
         let secret = self.write(&mut t, &bound, &p.change).await?;
+        self.announce(&mut t, p, &committed.exercise).await?;
         t.commit().await?;
         self.after(p).await?;
         Ok(Applied::Written {
@@ -396,6 +400,38 @@ impl<D: Decider, G: Governance, K: RealmKeys> Admin<'_, D, G, K> {
                 .await
                 .map_err(|e| AdminError::Unavailable(e.0))?;
         }
+        Ok(())
+    }
+
+    /// OP-149 m.4: an API client change queues its event in the write's transaction, so it
+    /// is delivered exactly when the change is written.
+    async fn announce(
+        &self,
+        t: &mut TenantTx,
+        p: &Proposal,
+        exercise: &Digest,
+    ) -> Result<(), AdminError> {
+        let (kind, client_id) = match &p.change {
+            Change::ClientRegister(c) => (IdentityKind::ApiClientCreated, c.id.as_str()),
+            Change::ClientUpdate(c) => (IdentityKind::ApiClientUpdated, c.id.as_str()),
+            Change::ClientRetire(id) => (IdentityKind::ApiClientDisabled, id.as_str()),
+            _ => return Ok(()),
+        };
+        let at = access_store::authority::server_time(self.app).await?;
+        let id = access_crypto::random::bytes::<32>().map_err(|_| AdminError::Encode)?;
+        let event = IdentityEvent::api_client(
+            kind,
+            id,
+            &ClientChange {
+                tenant: p.tenant.as_bytes(),
+                realm: p.realm.as_bytes(),
+                client_id,
+                exercise: &exercise.0,
+                platform_product: None,
+                at,
+            },
+        );
+        emit(t, &event).await?;
         Ok(())
     }
 

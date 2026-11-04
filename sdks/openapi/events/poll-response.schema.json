@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:suiss:access:schema:poll-response:1",
+  "title": "RFC 8936 poll response: SETs by jti",
+  "type": "object",
+  "required": [
+    "sets",
+    "moreAvailable"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "sets": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9_-]+[.][A-Za-z0-9_-]+[.][A-Za-z0-9_-]+$"
+      }
+    },
+    "moreAvailable": {
+      "type": "boolean"
+    }
+  }
+}

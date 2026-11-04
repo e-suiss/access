@@ -30,6 +30,7 @@ access-identity-account = { path = "crates/identity-account", default-features =
 access-identity-webauthn = { path = "crates/identity-webauthn", default-features = false }
 access-identity-ui = { path = "crates/identity-ui", default-features = false }
 access-identity-admin = { path = "crates/identity-admin", default-features = false }
+access-identity-events = { path = "crates/identity-events", default-features = false }
 
 # F-2
 secrecy = { version = "0.10.3", default-features = false }

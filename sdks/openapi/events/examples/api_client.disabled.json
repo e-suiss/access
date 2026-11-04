@@ -1,0 +1,30 @@
+{
+  "specversion": "1.0",
+  "id": "AQOxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+  "source": "urn:suiss:access:realm:019a0000-0000-7000-8000-0000000000a1",
+  "type": "urn:suiss:access:event:api_client.disabled",
+  "subject": "cli_0b5yq2mtzk6x4hd1e8fg3wa7rc",
+  "time": "2026-11-04T00:00:00.000Z",
+  "datacontenttype": "application/json",
+  "accesstenant": "019a0000-0000-7000-8000-000000000001",
+  "accessrealm": "019a0000-0000-7000-8000-0000000000a1",
+  "data": {
+    "iss": "https://id.example/realms/shop",
+    "aud": "work",
+    "iat": 1793750400,
+    "jti": "AQOxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "sub_id": {
+      "format": "opaque",
+      "id": "cli_0b5yq2mtzk6x4hd1e8fg3wa7rc"
+    },
+    "events": {
+      "urn:suiss:access:event:api_client.disabled": {
+        "tenant": "019a0000-0000-7000-8000-000000000001",
+        "realm": "019a0000-0000-7000-8000-0000000000a1",
+        "client_id": "cli_0b5yq2mtzk6x4hd1e8fg3wa7rc",
+        "exercise": "CQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQk",
+        "at": 1793750400000
+      }
+    }
+  }
+}

@@ -35,6 +35,7 @@ tracing = { workspace = true, features = ["std"] }
 
 [dev-dependencies]
 access-crypto = { workspace = true, features = ["testing"] }
+access-identity-events = { workspace = true }
 access-store = { workspace = true, features = ["testing"] }
 ed25519-dalek = { workspace = true }
 rcgen = { workspace = true, features = ["aws_lc_rs", "pem"] }

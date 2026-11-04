@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.event_domain_cursor (domain_id, pos, idx) VALUES ($1, $2, $3)\n         ON CONFLICT (domain_id) DO UPDATE SET pos = EXCLUDED.pos, idx = EXCLUDED.idx,\n                updated_at = now()\n          WHERE (event_domain_cursor.pos, event_domain_cursor.idx) < (EXCLUDED.pos, EXCLUDED.idx)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Int8",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "7b5b97bcb9ee83232e5869a23a963e7464e32c8bbe918a4c956ef53ec1cc86f3"
+}

@@ -425,6 +425,22 @@ async fn a_client_is_registered_through_commit() {
         w.admin().apply(&p, ais).await.unwrap(),
         Applied::AlreadyWritten { position, .. } if position == pos
     ));
+    // OP-149 m.4: the write queued one api_client.created in its transaction; the retry none
+    let queued: Vec<_> =
+        access_store::identity::poll(&w.db.reader, access_store::identity::Cursor::default(), 100)
+            .await
+            .unwrap()
+            .into_iter()
+            .filter(|e| e.kind.starts_with("event."))
+            .collect();
+    assert_eq!(queued.len(), 1);
+    assert_eq!(queued[0].kind, "event.api_client.created");
+    let event = access_identity_events::domain::catalog::IdentityEvent::from_outbox(
+        &queued[0].kind,
+        &queued[0].payload,
+    )
+    .unwrap();
+    assert_eq!(event.payload["client_id"], c.id.as_str());
     let mut t = TenantTx::begin(&w.db.app, tenant, realm).await.unwrap();
     let row = client(&mut t, c.id.as_str()).await.unwrap().unwrap();
     assert!(row.client_id.starts_with("cli_") && row.display_name == "Shop");

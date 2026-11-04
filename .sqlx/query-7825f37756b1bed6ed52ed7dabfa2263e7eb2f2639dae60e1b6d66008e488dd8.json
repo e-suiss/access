@@ -1,0 +1,98 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT event_id, event_type, payload, attempts, state, last_reason,\n                      (extract(epoch FROM occurred_at) * 1000)::bigint AS \"occurred_ms!\"\n                 FROM access.event_delivery\n                WHERE tenant_id = $1 AND realm_id = $2 AND subscription_id = $3\n                  AND channel = 'ssf_poll' AND state = 'pending'\n                ORDER BY created_at, event_id LIMIT $4",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "event_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.event_delivery",
+            "name": "event_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "event_type",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.event_delivery",
+            "name": "event_type"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "payload",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.event_delivery",
+            "name": "payload"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "attempts",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "access.event_delivery",
+            "name": "attempts"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "state",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.event_delivery",
+            "name": "state"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "last_reason",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.event_delivery",
+            "name": "last_reason"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "occurred_ms!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      null
+    ]
+  },
+  "hash": "7825f37756b1bed6ed52ed7dabfa2263e7eb2f2639dae60e1b6d66008e488dd8"
+}

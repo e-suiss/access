@@ -1,0 +1,179 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT realm_id, subscription_id, channel, endpoint, audience, events, description,\n                      secret_kek_id, secret_wrapped_dek, secret_nonce, secret_ciphertext,\n                      token_digest, status, disabled_at IS NOT NULL AS \"disabled!\"\n                 FROM access.event_subscription WHERE tenant_id = $1 AND disabled_at IS NULL ORDER BY realm_id, subscription_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "realm_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.event_subscription",
+            "name": "realm_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "subscription_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.event_subscription",
+            "name": "subscription_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "channel",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.event_subscription",
+            "name": "channel"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "endpoint",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.event_subscription",
+            "name": "endpoint"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "audience",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.event_subscription",
+            "name": "audience"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "events",
+        "type_info": "TextArray",
+        "origin": {
+          "Table": {
+            "table": "access.event_subscription",
+            "name": "events"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "description",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.event_subscription",
+            "name": "description"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "secret_kek_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.event_subscription",
+            "name": "secret_kek_id"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "secret_wrapped_dek",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.event_subscription",
+            "name": "secret_wrapped_dek"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "secret_nonce",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.event_subscription",
+            "name": "secret_nonce"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "secret_ciphertext",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.event_subscription",
+            "name": "secret_ciphertext"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "token_digest",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.event_subscription",
+            "name": "token_digest"
+          }
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "status",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.event_subscription",
+            "name": "status"
+          }
+        }
+      },
+      {
+        "ordinal": 13,
+        "name": "disabled!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      false,
+      null
+    ]
+  },
+  "hash": "7cede04aa40703703c2aca22a9c4e3aec5688449832daecc7fe9310425911203"
+}

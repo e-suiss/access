@@ -1,0 +1,13 @@
+{
+  "ack": [
+    "AQAxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+  ],
+  "setErrs": {
+    "AQBxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx": {
+      "err": "invalid_request",
+      "description": "unknown subject"
+    }
+  },
+  "maxEvents": 10,
+  "returnImmediately": true
+}

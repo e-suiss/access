@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:suiss:access:schema:event:party.compromised:1",
+  "title": "Access declared a Party compromised (OP-149 m.7, SI-9); the window runs from occurred_at to declared_at",
+  "description": "The member of the SET `events` claim, and of the CloudEvent `data.events`, under `urn:suiss:access:event:party.compromised`.",
+  "type": "object",
+  "required": [
+    "party",
+    "instances",
+    "kids",
+    "occurred_at",
+    "declared_at",
+    "evidence_digest",
+    "domain",
+    "source"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "party": {
+      "$ref": "#/$defs/b64url16"
+    },
+    "instances": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/b64url16"
+      },
+      "description": "The Party's live Instances set up inside the window."
+    },
+    "kids": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/b64url32"
+      },
+      "description": "RFC 7638 thumbprints of those Instances' keys, in the same order (CR-24)."
+    },
+    "occurred_at": {
+      "$ref": "#/$defs/ms",
+      "description": "Window start: the declared time, or declared_at minus 72 hours when it is unknown."
+    },
+    "declared_at": {
+      "$ref": "#/$defs/ms",
+      "description": "When the declaration committed."
+    },
+    "evidence_digest": {
+      "$ref": "#/$defs/b64url32"
+    },
+    "domain": {
+      "$ref": "#/$defs/b64url32"
+    },
+    "source": {
+      "$ref": "#/$defs/source"
+    }
+  },
+  "$defs": {
+    "b64url32": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{43}$"
+    },
+    "b64url16": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{22}$"
+    },
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "ms": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Unix time, milliseconds."
+    },
+    "source": {
+      "description": "The Exercise whose decision recorded the event, or the Claim whose record admitted it.",
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "exercise"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "exercise": {
+              "$ref": "#/$defs/b64url32"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "claim"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "claim": {
+              "$ref": "#/$defs/b64url16"
+            }
+          }
+        }
+      ]
+    }
+  }
+}

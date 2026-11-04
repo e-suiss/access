@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:suiss:access:schema:event-cloudevent:1",
+  "title": "Suiss webhook profile: CloudEvents 1.0 structured JSON",
+  "description": "POSTed as application/cloudevents+json with Standard Webhooks headers webhook-id (= id), webhook-timestamp and webhook-signature (v1, HMAC-SHA256 under the subscription secret). Delivery is at least once; receivers deduplicate by id. The receiving model is Relay's POST /v1/access/events.",
+  "type": "object",
+  "required": [
+    "specversion",
+    "id",
+    "source",
+    "type",
+    "time",
+    "datacontenttype",
+    "accesstenant",
+    "accessrealm",
+    "data"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "specversion": {
+      "const": "1.0"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{43}$"
+    },
+    "source": {
+      "type": "string",
+      "pattern": "^urn:suiss:access:realm:[0-9a-f-]{36}$"
+    },
+    "type": {
+      "type": "string",
+      "pattern": "^urn:suiss:access:event:[a-z][a-z0-9_.-]*$"
+    },
+    "subject": {
+      "type": "string"
+    },
+    "time": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}[.][0-9]{3}Z$"
+    },
+    "datacontenttype": {
+      "const": "application/json"
+    },
+    "accesstenant": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "accessrealm": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "data": {
+      "type": "object",
+      "description": "The SET claims (urn:suiss:access:schema:event-set:1)."
+    }
+  }
+}
