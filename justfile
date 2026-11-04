@@ -451,7 +451,16 @@ crates-publish tag:
     set -euo pipefail
     version="$(cargo metadata --locked --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "esuiss-access-kernel") | .version')"
     if [[ "{{tag}}" != "v$version" ]]; then echo "tag {{tag}} does not match workspace version $version" >&2; exit 1; fi
-    cargo publish --locked {{published}}
+    todo=()
+    for crate in $(echo "{{published}}" | sed 's/-p //g'); do
+        if curl -fsS -A "e-suiss/access release" "https://crates.io/api/v1/crates/$crate/$version" > /dev/null 2>&1; then
+            echo "$crate $version is already on crates.io; skipping"
+        else
+            todo+=(-p "$crate")
+        fi
+    done
+    if [[ ${#todo[@]} -eq 0 ]]; then echo "every crate is already published"; exit 0; fi
+    cargo publish --locked "${todo[@]}"
 
 # F-1
 audit:
