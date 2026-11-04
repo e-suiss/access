@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.5
+
+No changes; released with `esuiss-retention`.
+
 ## 0.2.4
 
 ### Changed

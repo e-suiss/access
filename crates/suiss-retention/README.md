@@ -12,7 +12,7 @@ The retention contract every Suiss product shares: the retention classes, how lo
 
 ```toml
 [dependencies]
-esuiss-retention = { version = "=0.2.4", features = ["serde"] }
+esuiss-retention = { version = "=0.2.5", features = ["serde"] }
 ```
 
 ```rust
