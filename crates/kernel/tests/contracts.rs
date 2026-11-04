@@ -159,6 +159,13 @@ fn suiss_discovery_examples_meet_the_cddl() {
     check_examples("suiss-discovery.json");
 }
 
+// OP-149 m.8: the auth_context examples meet their CDDL; the session id never stands in for
+// session_ref, and the AIS digest is required
+#[test]
+fn auth_context_examples_meet_the_cddl() {
+    check_examples("auth-context.json");
+}
+
 // OP-149 m.8: the CDDL actor kinds are the Kernel's
 #[test]
 fn actor_kinds_match_the_cddl() {

@@ -1,0 +1,38 @@
+; Access auth_context artifact, version 1 (RFC 8610; OP-149 m.8).
+; Deterministic CBOR (RFC 8949 §4.2.1). Its digest is
+;   SHA-256("suiss/auth-context/v1" || 0x00 || dCBOR(auth-context)).
+; POST /v1/me/auth-context returns it signed as a tagged COSE_Sign1 by the realm's identity
+; signer key: protected header {1: alg (-9 ESP256 or -19 Ed25519), 3: content type
+; "application/access-auth-context+cbor", 4: kid (RFC 7638 thumbprint of the realm key in the
+; realm JWKS)}, empty unprotected header, attached payload.
+
+auth-context = {
+  v: 1,
+  realm: https-url,                   ; the realm's issuer
+  session_ref: digest,                ; SHA-256("suiss/auth-context/session/v1" || 0x00 || session id); never the id
+  aal: "aal1" / "aal2" / "aal3",      ; NIST SP 800-63B-4
+  assurance_flags: [* assurance-flag], ; a set: bytewise ascending, no repeats
+  auth_time: uint,                    ; Unix milliseconds of the session's latest authentication
+  ? step_up_time: uint,               ; Unix milliseconds of the session's latest step-up
+  ais_digest: digest,                 ; SHA-256("suiss/auth-context/ais/v1" || 0x00 || dCBOR(ais))
+  ? content_type: media-type,         ; present exactly when content_digest is
+  ? content_digest: digest,           ; SHA-256 of the content the caller binds
+}
+
+; The assurance statement ais_digest commits to: the session's whole assurance vector (§10.1.6).
+ais = {
+  aal: "aal1" / "aal2" / "aal3",
+  flags: [* assurance-flag],
+  auth_time: uint,
+  ? loa_eidas: "low" / "substantial" / "high",
+}
+
+assurance-flag = "app_controlled_factor" / "hardware_bound" / "human_presence" /
+  "non_custodial" / "phishing_resistant" / "synced" / "uv"
+
+; type/subtype, lower case, no parameters (RFC 6838)
+media-type = tstr .regexp "[a-z0-9!#$&^_.+-]{1,63}/[a-z0-9!#$&^_.+-]{1,63}"
+
+digest = [-16, bstr .size 32]
+
+https-url = tstr .regexp "https://[!-~]{1,2040}"

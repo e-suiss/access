@@ -1,0 +1,592 @@
+{
+  "components": {
+    "schemas": {
+      "AuthContextIssued": {
+        "additionalProperties": false,
+        "properties": {
+          "auth_context": {
+            "description": "Tagged COSE_Sign1 of the auth-context (conformance/cddl/auth-context.cddl) by the realm's identity signer key; content type application/access-auth-context+cbor.",
+            "pattern": "^[A-Za-z0-9_-]*$",
+            "type": "string"
+          },
+          "digest": {
+            "description": "SHA-256(\"suiss/auth-context/v1\" || 0x00 || payload), 32 bytes.",
+            "pattern": "^[A-Za-z0-9_-]*$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "auth_context",
+          "digest"
+        ],
+        "type": "object"
+      },
+      "AuthContextRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "content_digest": {
+            "description": "SHA-256 of the content, 32 bytes.",
+            "pattern": "^[A-Za-z0-9_-]*$",
+            "type": "string"
+          },
+          "content_type": {
+            "pattern": "^[a-z0-9!#$&^_.+-]{1,63}/[a-z0-9!#$&^_.+-]{1,63}$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "content_type",
+          "content_digest"
+        ],
+        "type": "object"
+      },
+      "InstanceChallenge": {
+        "additionalProperties": false,
+        "properties": {
+          "challenge": {
+            "description": "32 bytes the proof of possession signs.",
+            "pattern": "^[A-Za-z0-9_-]*$",
+            "type": "string"
+          },
+          "expires_at": {
+            "description": "When it stops being accepted.",
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "challenge",
+          "expires_at"
+        ],
+        "type": "object"
+      },
+      "InstanceRegistered": {
+        "additionalProperties": false,
+        "properties": {
+          "instance": {
+            "pattern": "^ins_[0-9a-hjkmnp-tv-z]{26}$",
+            "type": "string"
+          },
+          "kid": {
+            "description": "RFC 7638 thumbprint of the key (CR-24).",
+            "pattern": "^[A-Za-z0-9_-]*$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "instance",
+          "kid"
+        ],
+        "type": "object"
+      },
+      "InstanceRegistration": {
+        "additionalProperties": false,
+        "properties": {
+          "key": {
+            "description": "COSE_Key (RFC 9052 §7): OKP Ed25519 or EC2 P-256.",
+            "pattern": "^[A-Za-z0-9_-]*$",
+            "type": "string"
+          },
+          "pop": {
+            "description": "Tagged COSE_Sign1 by the key over {\"v\": 1, \"aud\": issuer, \"challenge\": bytes} in deterministic CBOR; content type application/access-instance-pop+cbor; kid the RFC 7638 thumbprint.",
+            "pattern": "^[A-Za-z0-9_-]*$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "pop"
+        ],
+        "type": "object"
+      },
+      "InstanceTerminated": {
+        "additionalProperties": false,
+        "properties": {
+          "exercise": {
+            "description": "ExerciseID, 32 bytes (TN-110).",
+            "pattern": "^[A-Za-z0-9_-]*$",
+            "type": "string"
+          }
+        },
+        "required": [
+          "exercise"
+        ],
+        "type": "object"
+      },
+      "InstanceTermination": {
+        "additionalProperties": false,
+        "properties": {
+          "ais": {
+            "description": "AIS (COSE_Sign1) by one of the user's own Instances over the access/instance_terminate intent, mode commit, capacity own, pep \"access-identity\".",
+            "pattern": "^[A-Za-z0-9_-]*$",
+            "type": "string"
+          },
+          "basis": {
+            "description": "The actor Party's self-anchor id, 16 bytes.",
+            "pattern": "^[A-Za-z0-9_-]*$",
+            "type": "string"
+          },
+          "nonce": {
+            "description": "Exercise nonce, 16 to 64 bytes.",
+            "pattern": "^[A-Za-z0-9_-]*$",
+            "type": "string"
+          },
+          "valid_from": {
+            "description": "Intent validity start, millisecond precision at most.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "valid_until": {
+            "description": "Intent validity end, millisecond precision at most.",
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "nonce",
+          "basis",
+          "valid_from",
+          "valid_until",
+          "ais"
+        ],
+        "type": "object"
+      },
+      "Problem": {
+        "properties": {
+          "detail": {
+            "type": "string"
+          },
+          "status": {
+            "type": "integer"
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "title",
+          "status"
+        ],
+        "type": "object"
+      },
+      "ProblemCode": {
+        "enum": [
+          "session-required",
+          "step-up-required",
+          "invalid-challenge",
+          "invalid-instance-key",
+          "invalid-proof-of-possession",
+          "instance-not-registered",
+          "instance-not-terminated",
+          "invalid-request",
+          "invalid-content",
+          "invalid-approval-request",
+          "invalid-state",
+          "invalid-redirect-uri",
+          "approval-surface-unavailable",
+          "unavailable"
+        ],
+        "type": "string"
+      }
+    }
+  },
+  "info": {
+    "license": {
+      "identifier": "Apache-2.0",
+      "name": "Apache-2.0"
+    },
+    "title": "Access Frontend API: device Instances, auth_context and approval",
+    "version": "1"
+  },
+  "openapi": "3.1.1",
+  "paths": {
+    "/v1/approve": {
+      "get": {
+        "operationId": "approve",
+        "parameters": [
+          {
+            "description": "The authority request's digest (base64url, 32 bytes) or a pushed request_uri (urn:ietf:params:oauth:request_uri:…).",
+            "in": "query",
+            "name": "request",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Exactly a redirect URI an active client of the realm registered.",
+            "in": "query",
+            "name": "redirect_uri",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "1 to 512 printable ASCII characters, echoed unchanged.",
+            "in": "query",
+            "name": "state",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "303": {
+            "description": "Back to redirect_uri?exercise=<base64url ExerciseID>&render_digest=<base64url>&state=<state>.",
+            "headers": {
+              "Location": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "invalid-approval-request, invalid-state or invalid-redirect-uri; the browser is not redirected."
+          },
+          "501": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "The Approval Surface is not served yet (approval-surface-unavailable)."
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Temporarily unavailable."
+          }
+        },
+        "summary": "The approval call (OP-149 m.9): shows the authority request on the Approval Surface and sends the browser back to redirect_uri with exercise, render_digest and state; the result is confirmed with GET /access/v1/exercises/{id}."
+      }
+    },
+    "/v1/me/auth-context": {
+      "post": {
+        "operationId": "issueAuthContext",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 255,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AuthContextRequest"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthContextIssued"
+                }
+              }
+            },
+            "description": "The signed artifact and its digest."
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "invalid-content or invalid-request."
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "No live session (session-required)."
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Temporarily unavailable."
+          }
+        },
+        "summary": "The session's auth_context artifact, signed by the realm's identity signer key (OP-149 m.8)."
+      }
+    },
+    "/v1/me/instances": {
+      "post": {
+        "operationId": "registerInstance",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 255,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InstanceRegistration"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InstanceRegistered"
+                }
+              }
+            },
+            "description": "The Instance and its kid."
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "invalid-challenge, invalid-instance-key, invalid-proof-of-possession or invalid-request."
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "No live session (session-required)."
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "The session is below AAL2 or its last authentication or step-up is older than five minutes (OP-149 m.6); step up and retry."
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "The authority plane did not open the Instance (instance-not-registered)."
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Temporarily unavailable."
+          }
+        },
+        "summary": "Registers the device key as an Instance of the user's Party (OP-149 m.6). The challenge is used up by any answer."
+      }
+    },
+    "/v1/me/instances/challenges": {
+      "post": {
+        "operationId": "createInstanceChallenge",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 255,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InstanceChallenge"
+                }
+              }
+            },
+            "description": "The challenge."
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "No live session (session-required)."
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Temporarily unavailable."
+          }
+        },
+        "summary": "A single-use challenge for a device key, bound to this session (OP-149 m.6)."
+      }
+    },
+    "/v1/me/instances/{instance}": {
+      "delete": {
+        "operationId": "terminateInstance",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 255,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InstanceTermination"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InstanceTerminated"
+                }
+              }
+            },
+            "description": "Recorded."
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "invalid-request."
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "No live session (session-required)."
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "The session is below AAL2 or its last authentication or step-up is older than five minutes (OP-149 m.6); step up and retry."
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Denied or refused by the authority plane (instance-not-terminated)."
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Temporarily unavailable."
+          }
+        },
+        "summary": "Ends a device Instance with an instance_terminate the user's own Instance signed (OP-149 m.6, OP-146 m.4 (i)); Access forwards it as PEP."
+      },
+      "parameters": [
+        {
+          "in": "path",
+          "name": "instance",
+          "required": true,
+          "schema": {
+            "pattern": "^ins_[0-9a-hjkmnp-tv-z]{26}$",
+            "type": "string"
+          }
+        }
+      ]
+    }
+  }
+}

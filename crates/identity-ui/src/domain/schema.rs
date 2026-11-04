@@ -7,11 +7,11 @@ use super::flow::{CONTRACT_VERSION, FLOWS_PATH};
 use super::message::TextId;
 use super::node::{FieldName, Method};
 
-fn r(name: &str) -> Value {
+pub(crate) fn r(name: &str) -> Value {
     json!({ "$ref": format!("#/components/schemas/{name}") })
 }
 
-fn object(properties: &Value, required: &[&str]) -> Value {
+pub(crate) fn object(properties: &Value, required: &[&str]) -> Value {
     json!({
         "type": "object",
         "additionalProperties": false,
@@ -20,7 +20,7 @@ fn object(properties: &Value, required: &[&str]) -> Value {
     })
 }
 
-fn string_enum(values: &[&str]) -> Value {
+pub(crate) fn string_enum(values: &[&str]) -> Value {
     json!({ "type": "string", "enum": values })
 }
 

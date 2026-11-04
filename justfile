@@ -242,9 +242,9 @@ web-e2e: wasm login-e2e
 login-e2e:
     cd web/login && npm run e2e
 
-# OP-65: rewrite sdks/openapi/login.json and its examples from crates/identity-ui
+# OP-65: rewrite sdks/openapi/login.json, frontend.json and their examples from crates/identity-ui
 login-contract:
-    ACCESS_UPDATE_CONTRACTS=1 cargo test --locked -p access-identity-ui --test contract
+    ACCESS_UPDATE_CONTRACTS=1 cargo test --locked -p access-identity-ui --test contract --test frontend_contract
 
 # OP-65, OP-149: rewrite sdks/openapi/access-v1.json and its examples from crates/http
 access-contract:
