@@ -4,6 +4,7 @@
 use std::collections::BTreeMap;
 
 use access_authority_sequencer::ports::DomainLog;
+use access_internal_api::events::compromise_from;
 use access_kernel::claim::{self, ClaimState, Disposition, Gate, Statement};
 use access_kernel::codec::Canonical;
 use access_kernel::digest::Digest;
@@ -12,13 +13,14 @@ use std::collections::BTreeSet;
 use access_kernel::meta::{
     self, ContentState, ContributionState, ExerciseBasis, GrantState, InstanceState, kind,
 };
-use access_kernel::model::{Conjunct, EqValue, Id, ProofKind, SubjectSelector};
+use access_kernel::model::{Conjunct, Id, ProofKind, SubjectSelector};
 use access_kernel::requirement::{Proof, ProofBinding};
 use access_kernel::verify::cose::PublicKey;
 use suiss_crypto::dcbor::Value;
 
 use crate::CoreError;
 use crate::app::Authority;
+use crate::app::events::occurred;
 use crate::domain::{ProofRef, Request, Snapshot};
 use crate::ports::{Binding, Reader, Salts};
 
@@ -454,13 +456,11 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             {
                 continue;
             }
-            let from = match state.statement.value {
-                Some(EqValue::Int(t)) if t >= 0 => u64::try_from(t).unwrap_or(0),
-                _ => state
-                    .statement
-                    .issued_at
-                    .saturating_sub(claim::COMPROMISE_LOOKBACK_MS),
-            };
+            // OP-149 m.17 (d)
+            let from = compromise_from(
+                occurred(state.statement.value.as_ref()),
+                state.statement.issued_at,
+            );
             found.push(Compromise {
                 from,
                 claim: id,

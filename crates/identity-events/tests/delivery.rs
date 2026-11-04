@@ -456,7 +456,8 @@ fn compromised(d: &DomainId) -> Event {
         at: T0,
         detail: Detail::Compromised {
             keys: vec![(Id([4; 16]), [5; 32])],
-            occurred_at: compromise_from(None, T0),
+            occurred_at: None,
+            window_from: compromise_from(None, T0),
             declared_at: T0,
             evidence: Digest([6; 32]),
         },
@@ -596,7 +597,8 @@ async fn poll_returns_and_settles_sets() {
         if urn.ends_with("party.compromised") {
             let e = &claims["events"][&urn];
             assert_eq!(e["declared_at"], T0);
-            assert_eq!(e["occurred_at"], T0 - 72 * 3_600_000);
+            assert_eq!(e["window_from"], T0 - 72 * 3_600_000);
+            assert!(e.get("occurred_at").is_none());
             found = true;
         }
     }

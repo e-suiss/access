@@ -1,14 +1,14 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:suiss:access:schema:event:party.compromised:1",
-  "title": "Access declared a Party compromised (OP-149 m.7, SI-9); the window runs from occurred_at to declared_at",
+  "title": "Access declared a Party compromised (OP-149 m.7, m.17 (d), SI-9); the window runs from window_from to declared_at",
   "description": "The member of the SET `events` claim, and of the CloudEvent `data.events`, under `urn:suiss:access:event:party.compromised`.",
   "type": "object",
   "required": [
     "party",
     "instances",
     "kids",
-    "occurred_at",
+    "window_from",
     "declared_at",
     "evidence_digest",
     "domain",
@@ -35,7 +35,11 @@
     },
     "occurred_at": {
       "$ref": "#/$defs/ms",
-      "description": "Window start: the declared time, or declared_at minus 72 hours when it is unknown."
+      "description": "When the compromise began, as declared; absent when unknown."
+    },
+    "window_from": {
+      "$ref": "#/$defs/ms",
+      "description": "Window start, the value Access itself enforces: occurred_at, or the declaring Claim's issued_at minus 72 hours when occurred_at is unknown. Consumers use it as given and never compute it."
     },
     "declared_at": {
       "$ref": "#/$defs/ms",

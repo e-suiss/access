@@ -322,6 +322,7 @@ pub fn authority_ready(e: &Event, event_id: &[u8; 32]) -> Ready {
             Detail::Compromised {
                 keys,
                 occurred_at,
+                window_from,
                 declared_at,
                 evidence,
             },
@@ -337,7 +338,10 @@ pub fn authority_ready(e: &Event, event_id: &[u8; 32]) -> Ready {
                     .map(|(_, k)| Value::from(b64url_encode(k)))
                     .collect(),
             );
-            m.insert("occurred_at".into(), (*occurred_at).into());
+            if let Some(t) = occurred_at {
+                m.insert("occurred_at".into(), (*t).into());
+            }
+            m.insert("window_from".into(), (*window_from).into());
             m.insert("declared_at".into(), (*declared_at).into());
             m.insert("evidence_digest".into(), b64url_encode(&evidence.0).into());
         }

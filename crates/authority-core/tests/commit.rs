@@ -4160,8 +4160,9 @@ async fn committed_meta_actions_derive_semantic_events() {
     fold_check(&db.sequencer, d).await.unwrap();
 }
 
-// OP-149 m.7, SI-9, OP-141 m.31: a compromise declaration names the Party's Instances set up
-// inside the window, from occurred_at, or 72 hours before the declaration, to its commit
+// OP-149 m.7, m.17 (d), SI-9, OP-141 m.31: a compromise declaration names the Party's Instances
+// set up inside the window, from occurred_at, or 72 hours before the Claim's issued_at (0 for a
+// domain-issued Claim, as in the overlay), to its commit; the event carries that start
 #[tokio::test]
 async fn a_compromise_declaration_derives_party_compromised() {
     use access_internal_api::events::{Detail, Kind, Subject};
@@ -4213,23 +4214,26 @@ async fn a_compromise_declaration_derives_party_compromised() {
     assert_eq!(events.len(), 2);
     let alice = meta::object_id(&meta::exercise_id(&d, &[4; 16]).unwrap(), kind::INSTANCE, 0);
     let set_up = vec![(alice, thumbprint(&public(ALICE_KEY)))];
-    // Alice's Instance was set up before 20 000, so only the 72-hour window covers it
-    for (e, (from, covered)) in events.iter().zip([
-        (20_000, Vec::new()),
-        (NOW.saturating_sub(72 * 3_600_000), set_up),
-    ]) {
+    for (e, (occurred, from, covered)) in events
+        .iter()
+        .zip([(Some(20_000), 20_000, Vec::new()), (None, 0, set_up)])
+    {
         assert_eq!(e.kind, Kind::PartyCompromised);
         assert_eq!(e.subject, Subject::Party(ALICE));
         let Detail::Compromised {
             keys,
             occurred_at,
+            window_from,
             declared_at,
             ..
         } = &e.detail
         else {
             panic!("{e:?}");
         };
-        assert_eq!((*occurred_at, *declared_at), (from, NOW));
+        assert_eq!(
+            (*occurred_at, *window_from, *declared_at),
+            (occurred, from, NOW)
+        );
         assert_eq!(keys, &covered);
     }
 }

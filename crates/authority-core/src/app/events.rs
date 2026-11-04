@@ -41,7 +41,8 @@ fn revoked(disposition: &BTreeMap<Id, Disposition>) -> impl Iterator<Item = Subj
 }
 
 /// OP-149 m.7: a declared `occurred_at` is a non-negative integer value.
-fn occurred(value: Option<&EqValue>) -> Option<u64> {
+/// A `party_compromise` Claim's declared occurredAt: a non-negative integer value.
+pub(crate) fn occurred(value: Option<&EqValue>) -> Option<u64> {
     match value {
         Some(EqValue::Int(t)) => u64::try_from(*t).ok(),
         _ => None,
@@ -166,7 +167,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                         domain,
                         Source::Exercise(exercise),
                         *subject,
-                        occurred(Some(value)),
+                        (occurred(Some(value)), 0),
                         now,
                         exercise,
                     )
@@ -195,7 +196,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                         domain,
                         Source::Claim(c.id),
                         c.statement.subject,
-                        occurred(c.statement.value.as_ref()),
+                        (occurred(c.statement.value.as_ref()), c.statement.issued_at),
                         now,
                         claim::claim_digest(&c.bytes),
                     )
@@ -215,19 +216,20 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             .and_then(|v| InstanceState::from_value(&v).ok()))
     }
 
-    /// `party.compromised`: the window runs from `occurred_at`, or 72 hours before the
-    /// declaration, to its commit (OP-149 m.7, SI-9). It names the Party's live Instances
-    /// established inside the window, the ones the overlay denies (OP-141 m.31 (c)).
+    /// `party.compromised`: the window runs from `occurred_at`, or 72 hours before the Claim's
+    /// `issued_at`, to its commit, as in the overlay (OP-149 m.7, m.17 (d), OP-141 m.31 (b),
+    /// SI-9). It names the Party's live Instances established inside the window, the ones the
+    /// overlay denies (OP-141 m.31 (c)).
     async fn compromise(
         &self,
         domain: Digest,
         source: Source,
         party: Id,
-        occurred_at: Option<u64>,
+        (occurred_at, issued_at): (Option<u64>, u64),
         now: u64,
         evidence: Digest,
     ) -> Result<Event, CoreError> {
-        let from = compromise_from(occurred_at, now);
+        let from = compromise_from(occurred_at, issued_at);
         let mut keys = Vec::new();
         let index = self.fetch(&[meta::key(kind::INSTANCES, &party)]).await?;
         let ids: Vec<Id> = match index.into_iter().next().and_then(|(_, v, _)| v) {
@@ -253,7 +255,8 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             at: now,
             detail: Detail::Compromised {
                 keys,
-                occurred_at: from,
+                occurred_at,
+                window_from: from,
                 declared_at: now,
                 evidence,
             },

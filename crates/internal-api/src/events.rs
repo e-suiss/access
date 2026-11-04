@@ -172,8 +172,11 @@ pub enum Detail {
     Compromised {
         /// The Party's Instances the window covers, with their key's RFC 7638 thumbprint.
         keys: Vec<(Id, [u8; 32])>,
-        /// Start of the window, Unix ms (SI-9).
-        occurred_at: u64,
+        /// When the compromise began, as declared; `None` when unknown.
+        occurred_at: Option<u64>,
+        /// Start of the window, Unix ms: the value the Kernel overlay uses (OP-149 m.17 (d),
+        /// OP-141 m.31 (b)), so a consumer never computes it.
+        window_from: u64,
         /// When the declaration committed, Unix ms.
         declared_at: u64,
         /// Digest of the declaring Claim.
@@ -203,13 +206,14 @@ pub struct Event {
 #[error("malformed semantic event")]
 pub struct Malformed;
 
-/// The window start of a compromise declaration (OP-149 m.7, SI-9): the declared
-/// `occurred_at`, or `declared_at − 72 h` when it is unknown.
+/// The window start of a compromise declaration (OP-149 m.17 (d), OP-141 m.31 (b), SI-9): the
+/// declared `occurred_at`, or the Claim's `issued_at` − 72 h when it is unknown; the Kernel
+/// overlay and the `party.compromised` event both use it.
 #[must_use]
-pub const fn compromise_from(occurred_at: Option<u64>, declared_at: u64) -> u64 {
+pub const fn compromise_from(occurred_at: Option<u64>, issued_at: u64) -> u64 {
     match occurred_at {
         Some(t) => t,
-        None => declared_at.saturating_sub(COMPROMISE_LOOKBACK_MS),
+        None => issued_at.saturating_sub(COMPROMISE_LOOKBACK_MS),
     }
 }
 
@@ -284,6 +288,7 @@ impl Event {
             Detail::Compromised {
                 keys,
                 occurred_at,
+                window_from,
                 declared_at,
                 evidence,
             } => {
@@ -295,7 +300,10 @@ impl Event {
                             .collect(),
                     ),
                 ));
-                m.push((text("occurred_at"), Value::Unsigned(*occurred_at)));
+                if let Some(t) = occurred_at {
+                    m.push((text("occurred_at"), Value::Unsigned(*t)));
+                }
+                m.push((text("window_from"), Value::Unsigned(*window_from)));
                 m.push((text("declared_at"), Value::Unsigned(*declared_at)));
                 m.push((text("evidence"), bytes(&evidence.0)));
             }
@@ -358,7 +366,8 @@ impl Event {
                     .collect::<Result<Vec<_>, _>>()?;
                 Detail::Compromised {
                     keys,
-                    occurred_at: as_u64(get(&map, "occurred_at")?)?,
+                    occurred_at: map.get("occurred_at").map(as_u64).transpose()?,
+                    window_from: as_u64(get(&map, "window_from")?)?,
                     declared_at: as_u64(get(&map, "declared_at")?)?,
                     evidence: Digest(as_bytes(get(&map, "evidence")?)?),
                 }
@@ -392,7 +401,8 @@ mod tests {
                 },
                 Kind::PartyCompromised => Detail::Compromised {
                     keys: vec![(Id([4; 16]), [5; 32])],
-                    occurred_at: 1,
+                    occurred_at: Some(1),
+                    window_from: 1,
                     declared_at: 2,
                     evidence: Digest([6; 32]),
                 },

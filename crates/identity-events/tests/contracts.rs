@@ -73,14 +73,15 @@ fn every_example_is_valid() {
     );
 }
 
-// OP-149 m.7: the schemas refuse what the contract forbids
+// OP-149 m.7, m.17 (d): the schemas refuse what the contract forbids; a compromise without
+// its window start is malformed
 #[test]
 fn schemas_refuse_malformed_events() {
     let mut e = load("examples/party.compromised.json");
     e["data"]["events"]["urn:suiss:access:event:party.compromised"]
         .as_object_mut()
         .unwrap()
-        .remove("occurred_at");
+        .remove("window_from");
     let s = load("party.compromised.schema.json");
     let errors = support::schema::Schema::new(&s)
         .errors(&e["data"]["events"]["urn:suiss:access:event:party.compromised"]);
@@ -114,7 +115,8 @@ fn sample(kind: Kind) -> Event {
             Subject::Party(Id([2; 16])),
             Detail::Compromised {
                 keys: vec![(Id([4; 16]), [5; 32])],
-                occurred_at: 1,
+                occurred_at: None,
+                window_from: 1,
                 declared_at: 2,
                 evidence: Digest([6; 32]),
             },
