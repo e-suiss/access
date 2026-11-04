@@ -19,6 +19,7 @@ fn client() -> Client {
         jwks: None,
         platform_product: None,
         service_key: None,
+        event_receiver: None,
     })
     .unwrap()
 }

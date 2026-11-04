@@ -732,6 +732,7 @@ fn platform_client(id: ClientId, product: PlatformProduct, seed: u8) -> Client {
         platform: Some(Platform {
             product,
             service_key: public(seed.wrapping_add(1)),
+            event_receiver: Some(String::from("https://work.suiss.example/ssf")),
         }),
     }
 }
@@ -796,6 +797,10 @@ async fn a_platform_client_pairs_with_every_realm() {
     assert_eq!(row.jwks_uri, None);
     assert!(row.jwks.unwrap().contains(r#""crv":"Ed25519""#));
     assert_eq!(row.platform_product.as_deref(), Some("work"));
+    assert_eq!(
+        row.event_receiver.as_deref(),
+        Some("https://work.suiss.example/ssf")
+    );
     // OP-149 m.4, m.17a
     let created = identity_events(&w.db, "event.api_client.", 1).await;
     let event = access_identity_events::domain::catalog::IdentityEvent::from_outbox(

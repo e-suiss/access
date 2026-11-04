@@ -19,6 +19,7 @@ fn row(method: &str, jwks: Option<&str>, secret: Option<[u8; 32]>) -> ClientRow 
         jwks: None,
         platform_product: None,
         service_key: None,
+        event_receiver: None,
     }
 }
 

@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.idp_clients SET display_name = $4, auth_method = $5, jwks_uri = $6,\n                redirect_uris = $7, domain_id = $8, decision_pos = $9, secret_hash = $10,\n                post_logout_redirect_uris = $11, backchannel_logout_uri = $12, jwks = $13,\n                platform_product = $14, service_key = $15, suiss_event_receiver = $16\n          WHERE tenant_id = $1 AND realm_id = $2 AND client_id = $3 AND status = 'active'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "TextArray",
+        "Bytea",
+        "Int8",
+        "Bytea",
+        "TextArray",
+        "Text",
+        "Text",
+        "Text",
+        "Bytea",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e275ba526b3f9090d1ee1a467b8e666f7863a8f767e5560b3e903adcbee1f84c"
+}

@@ -130,3 +130,41 @@ fn the_intent_binds_the_change() {
     let update = Change::ClientUpdate(client(&["https://shop.example/cb"]));
     assert_ne!(a.digest().unwrap(), update.digest().unwrap());
 }
+
+// OP-149 m.4: a platform client's suiss_event_receiver is an absolute https URL Access may push
+// to, and it is part of what the registration's intent authorizes
+#[test]
+fn the_event_receiver_is_an_https_url_in_the_change() {
+    // RFC 8935
+    let mut base = [0x66; 32];
+    base[0] = 0x58;
+    let key = PublicKey::Ed25519(base);
+    let mut c = Client {
+        auth: AuthMethod::PrivateKeyJwtKey { key: key.clone() },
+        platform: Some(Platform {
+            product: PlatformProduct::Work,
+            service_key: key,
+            event_receiver: Some(String::from("https://work.example/ssf")),
+        }),
+        ..client(&["https://work.example/cb"])
+    };
+    assert_eq!(c.check(), Ok(()));
+    let with = Change::ClientRegister(c.clone()).digest().unwrap();
+    for bad in [
+        "http://work.example/ssf",
+        "https://user@work.example/ssf",
+        "https://work.example/ssf#x",
+        "work.example/ssf",
+        "",
+    ] {
+        if let Some(p) = c.platform.as_mut() {
+            p.event_receiver = Some(String::from(bad));
+        }
+        assert_eq!(c.check(), Err(Invalid::EventReceiver), "{bad}");
+    }
+    if let Some(p) = c.platform.as_mut() {
+        p.event_receiver = None;
+    }
+    assert_eq!(c.check(), Ok(()));
+    assert_ne!(Change::ClientRegister(c).digest().unwrap(), with);
+}

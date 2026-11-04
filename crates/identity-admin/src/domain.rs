@@ -107,6 +107,10 @@ pub enum Invalid {
     /// A public key that is not Ed25519 or P-256 (OP-149 m.14 (a)).
     #[error("bad public key")]
     PublicKey,
+    /// A `suiss_event_receiver` that is not an absolute `https` URL Access may push to
+    /// (OP-149 m.4).
+    #[error("bad suiss_event_receiver")]
+    EventReceiver,
 }
 
 impl Invalid {
@@ -128,6 +132,7 @@ impl Invalid {
             Self::PlatformTenant => "platform-tenant-only",
             Self::PlatformAuth => "platform-requires-private-key-jwt",
             Self::PublicKey => "invalid-public-key",
+            Self::EventReceiver => "invalid-event-receiver",
         }
     }
 }
@@ -336,6 +341,20 @@ pub struct Platform {
     pub product: PlatformProduct,
     /// The service Instance key; its private key stays in the product's PKCS#11 token.
     pub service_key: PublicKey,
+    /// `suiss_event_receiver`: the absolute `https` URL where the product receives Access
+    /// events. Pairing opens one SSF push stream (RFC 8935) to it for the client.
+    pub event_receiver: Option<String>,
+}
+
+impl Platform {
+    /// Whether the event receiver, when given, is an `https` URL the SSRF-guarded client can
+    /// post to.
+    #[must_use]
+    pub fn receiver_ok(&self) -> bool {
+        self.event_receiver.as_deref().is_none_or(|u| {
+            https(u) && access_identity_oauth::adapters::outbound::Target::parse(u).is_ok()
+        })
+    }
 }
 
 /// How the client authenticates at the token endpoint (§11.4.5).
@@ -464,6 +483,9 @@ impl Client {
             if !usable(&p.service_key) {
                 return Err(Invalid::PublicKey);
             }
+            if !p.receiver_ok() {
+                return Err(Invalid::EventReceiver);
+            }
         }
         Ok(())
     }
@@ -498,6 +520,9 @@ impl Client {
                 Value::text("service_key"),
                 Value::Bytes(cose_key(&p.service_key)),
             ));
+            if let Some(u) = &p.event_receiver {
+                m.push((Value::text("suiss_event_receiver"), Value::text(u)));
+            }
         }
         if !self.post_logout_redirect_uris.is_empty() {
             m.push((

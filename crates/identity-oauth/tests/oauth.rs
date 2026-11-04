@@ -298,6 +298,7 @@ fn client(n: u8, id: &str, method: &str) -> ClientRow {
         jwks: None,
         platform_product: None,
         service_key: None,
+        event_receiver: None,
     }
 }
 
