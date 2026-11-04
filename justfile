@@ -81,6 +81,8 @@ cross:
     # OP-76, OP-140 m.2: the verify feature is no_std and builds for a microcontroller too
     for t in {{kernel_targets}} thumbv7em-none-eabihf; do cargo build --locked -p esuiss-crypto --no-default-features --features verify --target "$t"; done
     for t in {{kernel_targets}} thumbv7em-none-eabihf; do cargo build --locked -p esuiss-ledger --target "$t"; done
+    # OP-147 m.2
+    for t in {{kernel_targets}} thumbv7em-none-eabihf; do cargo build --locked -p esuiss-retention --all-features --target "$t"; done
     # OP-104 m.7
     for t in {{kernel_targets}}; do just _ndk "$t" cargo build --locked -p esuiss-restriction --target "$t"; done
     # OP-116 m.3
@@ -88,6 +90,7 @@ cross:
     CARGO_TARGET_WASM32_WASIP1_RUNNER=wasmtime cargo test --locked -p esuiss-access-kernel --target wasm32-wasip1
     CARGO_TARGET_WASM32_WASIP1_RUNNER=wasmtime cargo test --locked -p esuiss-crypto --target wasm32-wasip1
     CARGO_TARGET_WASM32_WASIP1_RUNNER=wasmtime cargo test --locked -p esuiss-ledger --target wasm32-wasip1
+    CARGO_TARGET_WASM32_WASIP1_RUNNER=wasmtime cargo test --locked -p esuiss-retention --all-features --target wasm32-wasip1
     # E43
     CARGO_TARGET_WASM32_WASIP1_RUNNER=wasmtime cargo test --locked -p esuiss-restriction --target wasm32-wasip1
 
@@ -415,7 +418,7 @@ vet:
     cargo vet --locked
 
 # OP-76, OP-102, OP-139
-published := "-p esuiss-crypto -p esuiss-ledger -p esuiss-restriction -p esuiss-sandbox -p esuiss-access-kernel -p esuiss-access-verify"
+published := "-p esuiss-crypto -p esuiss-ledger -p esuiss-retention -p esuiss-restriction -p esuiss-sandbox -p esuiss-access-kernel -p esuiss-access-verify"
 
 # OP-140 m.3: copy the shared vectors into the suiss-crypto package and list their SHA-256
 shared-vectors:

@@ -37,6 +37,9 @@ audit-as-crates-io = false
 [policy.esuiss-restriction]
 audit-as-crates-io = false
 
+[policy.esuiss-retention]
+audit-as-crates-io = false
+
 [policy.esuiss-sandbox]
 audit-as-crates-io = false
 

@@ -1603,6 +1603,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "esuiss-retention"
+version = "0.2.4"
+dependencies = [
+ "proptest",
+ "serde",
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
 name = "esuiss-sandbox"
 version = "0.2.4"
 dependencies = [

@@ -257,11 +257,12 @@ pub(crate) fn check_prealloc(root: &Path) -> Result<Vec<Violation>, String> {
 
 const TIMERS: &str = "no-semantic-timers";
 
-/// Pure code that computes semantics (TI-10): the Kernel, the shared restriction and
+/// Pure code that computes semantics (TI-10): the Kernel, the shared restriction, retention and
 /// codec crates, and every component's `domain` layer.
 pub(crate) const TIMER_PATHS: &[&str] = &[
     "crates/kernel/src/",
     "crates/suiss-restriction/src/",
+    "crates/suiss-retention/src/",
     "crates/suiss-crypto/src/",
     "crates/*/src/domain/",
     "crates/*/src/domain.rs",

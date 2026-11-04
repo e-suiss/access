@@ -1,0 +1,23 @@
+[package]
+name = "esuiss-retention"
+description = "Suiss shared retention contract: retention classes, schedules, legal holds and the destroy decision (OP-76, OP-147)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[features]
+# OP-147 m.4: the wire form of schedules and holds in the push events and the snapshot
+serde = ["dep:serde"]
+
+[dependencies]
+thiserror = { workspace = true }
+serde = { workspace = true, optional = true, features = ["alloc", "derive"] }
+
+[dev-dependencies]
+proptest = { workspace = true, features = ["std"] }
+serde_json = { workspace = true, features = ["std"] }
+
+[lints]
+workspace = true
