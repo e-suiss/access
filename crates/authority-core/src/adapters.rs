@@ -17,18 +17,20 @@ use access_kernel::meta::{self, GrantState};
 use access_kernel::model::{Id, ResourceSelector, SubjectSelector};
 use access_kernel::record::RecordEnvelope;
 use access_kernel::verify::cose::PublicKey;
+use access_store::authority::position_at;
 use access_store::authority::read_log;
 use access_store::authority::{
     NonceRow, StateRow, counter, domain_tenant, find_nonce, state_of, state_prefix,
 };
-use access_store::derived::{GrantRow, advance, cursor};
+use access_store::derived::{GrantRow, KeyChange, advance_with, cursor, keys_of};
 use access_store::scope::DomainId;
 use access_store::{Pool, StoreError};
 use suiss_crypto::dcbor::{self, Limits, Value};
 use suiss_crypto::pkcs11::KeyStore;
 
 use crate::CoreError;
-use crate::app::{Authority, Incoming, Response};
+use crate::app::{Authority, Compromise, Incoming, Response};
+use crate::keys;
 use crate::ports::{Binding, Keys, Reader, Row, Salts};
 use crate::query::{Hit, Query, page_after, page_body};
 
@@ -340,6 +342,19 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
     /// # Errors
     /// [`CoreError`]; [`CoreError::Unavailable`] when the domain cannot be led here.
     pub async fn exercise(&self, inc: &Incoming) -> Result<Response, CoreError> {
+        self.decide(inc, None).await
+    }
+
+    /// The single-subject eligibility check of `inc` for `subject` on its domain's leader: a
+    /// `check` that records nothing (OP-149 m.10).
+    ///
+    /// # Errors
+    /// As [`Authority::eligible`].
+    pub async fn eligible(&self, inc: &Incoming, subject: Id) -> Result<Response, CoreError> {
+        self.decide(inc, Some(subject)).await
+    }
+
+    async fn decide(&self, inc: &Incoming, subject: Option<Id>) -> Result<Response, CoreError> {
         let domain = inc.request.domain;
         let mut guard = self.leading(domain).await?;
         let Some(led) = guard.as_mut() else {
@@ -364,7 +379,10 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
             .now()
             .await
             .map_err(|_| CoreError::Unavailable("time"))?;
-        let mut result = led.core.exercise(inc, now).await;
+        let mut result = match subject {
+            None => led.core.exercise(inc, now).await,
+            Some(s) => led.core.eligible(inc, s, now).await,
+        };
         // OP-141 m.22 (e), (f)
         if let Ok(r) = &mut result {
             r.consistency = Some(
@@ -473,6 +491,97 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
         }
     }
 
+    /// The keys `kids` of `domain` at `as_of` (OP-149 m.5): the derived index is brought up to
+    /// the head first, the `party_compromise` overlay is read on the leader, and with `sign` the
+    /// payload is signed under usage `key-lookup`. Nothing is recorded.
+    ///
+    /// # Errors
+    /// [`CoreError::Protocol`] for more than [`keys::MAX_KIDS`] kids or a time before the
+    /// domain's Genesis; [`CoreError::Unavailable`] for a position past the head.
+    pub async fn lookup_keys(
+        &self,
+        domain: Digest,
+        kids: &[[u8; 32]],
+        as_of: keys::AsOf,
+        sign: bool,
+    ) -> Result<KeyAnswer, CoreError> {
+        if kids.is_empty() || kids.len() > keys::MAX_KIDS {
+            return Err(CoreError::Protocol("kids"));
+        }
+        let mut guard = self.leading(domain).await?;
+        let Some(led) = guard.as_mut() else {
+            return Err(CoreError::Unavailable("leader"));
+        };
+        let now = led
+            .clock
+            .now()
+            .await
+            .map_err(|_| CoreError::Unavailable("time"))?;
+        let id = DomainId::from_bytes(domain.0);
+        match derive(&self.setup.deriver, domain).await {
+            Ok(_) | Err(CoreError::Store(StoreError::Stale)) => {}
+            Err(e) => return Err(e),
+        }
+        let head = led.core.head();
+        let pos = match as_of {
+            keys::AsOf::Head => head,
+            keys::AsOf::Position(p) if p <= head => p,
+            keys::AsOf::Position(_) => return Err(CoreError::Unavailable("consistency")),
+            keys::AsOf::Time(t) => position_at(&self.setup.app, &id, t)
+                .await?
+                .ok_or(CoreError::Protocol("as_of"))?
+                .min(head),
+        };
+        if cursor(&self.setup.app, &id).await? < pos {
+            return Err(CoreError::Unavailable("index"));
+        }
+        let rows = keys_of(&self.setup.app, &id, kids).await?;
+        let mut compromises: BTreeMap<[u8; 16], Vec<Compromise>> = BTreeMap::new();
+        for r in &rows {
+            if let std::collections::btree_map::Entry::Vacant(slot) = compromises.entry(r.party) {
+                slot.insert(led.core.compromises(&Id(r.party), now).await?);
+            }
+        }
+        let mut lookup = keys::Lookup {
+            domain,
+            pos,
+            iat: now,
+            keys: Vec::with_capacity(kids.len()),
+            unknown: Vec::new(),
+        };
+        for kid in kids {
+            let found = rows.iter().find(|r| r.kid == *kid).and_then(|r| {
+                let c = compromises.get(&r.party).map_or(&[][..], Vec::as_slice);
+                keys::entry(r, pos, c)
+            });
+            match found {
+                Some(e) => lookup.keys.push(e),
+                None => lookup.unknown.push(*kid),
+            }
+        }
+        let consistency = led
+            .tokens
+            .seal(&domain.0, CONSISTENCY, &head.to_be_bytes())
+            .map_err(|_| CoreError::Unavailable("token-key"))?;
+        let signed = match (sign, &self.setup.signer) {
+            (true, Some(path)) => {
+                let payload = keys::payload(&lookup);
+                Some(
+                    sign_artefact(path, led, domain, Artefact::KeyLookup, payload, now)
+                        .await
+                        .ok_or(CoreError::Unavailable("signer"))?,
+                )
+            }
+            (true, None) => return Err(CoreError::Unavailable("signer")),
+            (false, _) => None,
+        };
+        Ok(KeyAnswer {
+            lookup,
+            consistency,
+            signed,
+        })
+    }
+
     /// Brings the derived index of every domain led here up to its head (OP-141 m.22 (g)); the
     /// failures are returned and left for the next round.
     pub async fn derive(&self) -> Vec<CoreError> {
@@ -536,11 +645,23 @@ fn grant_row(id: [u8; 16], g: &GrantState, pos: u64) -> GrantRow {
     }
 }
 
-/// What a decision point asks the signer to sign after a commit.
+/// A key lookup answer (OP-149 m.5).
+#[derive(Clone, Debug)]
+pub struct KeyAnswer {
+    /// The keys at the answer's position.
+    pub lookup: keys::Lookup,
+    /// The head it was answered at, as an opaque token (OP-141 m.22 (f)).
+    pub consistency: String,
+    /// The signed `key-lookup` payload and its key excerpt, when asked for.
+    pub signed: Option<(Vec<u8>, Vec<u8>)>,
+}
+
+/// What a decision point asks the signer to sign.
 #[derive(Clone, Copy)]
 enum Artefact {
     Receipt,
     Pap,
+    KeyLookup,
 }
 
 /// Asks the signer at `path` to sign an artefact payload, opening the domain's keyring first
@@ -565,6 +686,7 @@ async fn sign_artefact<B: Binding, S: Salts, C>(
     let (usage, content_type) = match artefact {
         Artefact::Receipt => (KeyUsage::Receipt, access_kernel::receipt::CONTENT_TYPE),
         Artefact::Pap => (KeyUsage::Pap, access_kernel::pap::CONTENT_TYPE),
+        Artefact::KeyLookup => (KeyUsage::KeyLookup, keys::CONTENT_TYPE),
     };
     let sign = SignRequest::Sign {
         domain,
@@ -592,6 +714,7 @@ pub async fn derive(deriver: &Pool, domain: Digest) -> Result<u64, CoreError> {
     while at < head {
         let to = head.min(at.saturating_add(DERIVE_STEP));
         let mut rows: BTreeMap<[u8; 16], GrantRow> = BTreeMap::new();
+        let mut changes: Vec<KeyChange> = Vec::new();
         for r in read_log(deriver, &id, at.saturating_add(1), to).await? {
             let record = RecordEnvelope::from_bytes(&r.envelope)
                 .map_err(|_| CoreError::Store(StoreError::Corrupt))?;
@@ -604,6 +727,11 @@ pub async fn derive(deriver: &Pool, domain: Digest) -> Result<u64, CoreError> {
                 let (Some(Value::Text(kind)), Some(Value::Bytes(g))) = (k.first(), k.get(1)) else {
                     continue;
                 };
+                // OP-149 m.5
+                if let Some(change) = keys::change(kind, g, value.as_ref(), r.pos, r.recorded_at) {
+                    changes.push(change);
+                    continue;
+                }
                 if kind != meta::kind::GRANT {
                     continue;
                 }
@@ -617,7 +745,7 @@ pub async fn derive(deriver: &Pool, domain: Digest) -> Result<u64, CoreError> {
             }
         }
         let rows: Vec<GrantRow> = rows.into_values().collect();
-        advance(deriver, &id, at, to, &rows).await?;
+        advance_with(deriver, &id, at, to, &rows, &changes).await?;
         at = to;
     }
     Ok(at)

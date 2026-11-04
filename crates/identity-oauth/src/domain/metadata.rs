@@ -250,6 +250,8 @@ pub enum Document {
     ProtectedResource,
     /// `/jwks.json`.
     Jwks,
+    /// `/.well-known/suiss-configuration` (OP-149 m.3).
+    SuissConfiguration,
 }
 
 /// Every request path at which `issuer` serves `doc`. A path issuer serves OIDC Discovery at
@@ -269,5 +271,14 @@ pub fn paths(issuer: &Issuer, doc: Document) -> Vec<String> {
         Document::AuthorizationServer => vec![issuer.well_known_inserted(AS_SUFFIX)],
         Document::ProtectedResource => vec![issuer.well_known_inserted(PRM_SUFFIX)],
         Document::Jwks => vec![format!("{}{JWKS_PATH}", issuer.path())],
+        Document::SuissConfiguration => {
+            let appended = issuer.well_known_appended(crate::domain::suiss::SUFFIX);
+            let inserted = issuer.well_known_inserted(crate::domain::suiss::SUFFIX);
+            if appended == inserted {
+                vec![appended]
+            } else {
+                vec![inserted, appended]
+            }
+        }
     }
 }

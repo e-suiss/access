@@ -35,6 +35,13 @@ data:
     realm_base = "https://id.access.example"
     signer = "/run/access/identity-signer.sock"
 
+    # OP-149 m.3, m.4
+    [suiss]
+    region = "eu-central"
+    relay = "https://relay.access.example"
+    management_api = "https://api.access.example"
+    products = { work = "https://work.access.example" }
+
     # OP-94, OP-141 m.18 (h)
     [hsm]
     module = "/opt/pkcs11/module.so"

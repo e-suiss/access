@@ -1057,22 +1057,71 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         Ok(())
     }
 
+    /// A `check` of `inc` as if `subject` asked it, without an AIS: the single-subject
+    /// eligibility check (OP-149 m.10, §9.5.2 rule 1). Nothing is recorded.
+    ///
+    /// # Errors
+    /// [`CoreError::Protocol`] for anything but an anonymous `check` without a payload; else as
+    /// [`Authority::exercise`].
+    pub async fn eligible(
+        &mut self,
+        inc: &Incoming,
+        subject: Id,
+        now: u64,
+    ) -> Result<Response, CoreError> {
+        if inc.request.mode != Mode::Check || inc.ais.is_some() || inc.request.payload.is_some() {
+            return Err(CoreError::Protocol("eligibility"));
+        }
+        self.run(inc, now, Some(subject)).await
+    }
+
     /// Runs one request through the commit path (§17.1.1).
     ///
     /// # Errors
     /// [`CoreError`] for a request that gets no decision.
     pub async fn exercise(&mut self, inc: &Incoming, now: u64) -> Result<Response, CoreError> {
+        self.run(inc, now, None).await
+    }
+
+    /// The actor and its rate-limit bucket: from the AIS, or for an eligibility check its
+    /// `subject` with the PEP's bucket (OP-141 m.23, OP-149 m.10).
+    async fn requester(
+        &self,
+        inc: &Incoming,
+        digest: &Digest,
+        now: u64,
+        subject: Option<Id>,
+    ) -> Result<(Option<Actor>, Who), CoreError> {
+        Ok(match subject {
+            None => {
+                let actor = self.actor(inc, digest, now).await?;
+                (actor, who(inc, actor))
+            }
+            Some(party) => (
+                Some(Actor {
+                    party,
+                    instance: Id([0; 16]),
+                }),
+                Who::Pep(inc.pep.clone()),
+            ),
+        })
+    }
+
+    /// The commit path; an eligibility check names its `subject`.
+    async fn run(
+        &mut self,
+        inc: &Incoming,
+        now: u64,
+        subject: Option<Id>,
+    ) -> Result<Response, CoreError> {
         let req = &inc.request;
         if req.domain != self.domain {
             return Err(CoreError::Protocol("domain"));
         }
         Self::check_payload(req)?;
         let digest = intent_digest(&req.intent).map_err(|_| CoreError::Protocol("intent"))?;
-        let actor = self.actor(inc, &digest, now).await?;
-        if !self
-            .limiter
-            .admit(Self::class_of(inc), who(inc, actor), now)
-        {
+        let (actor, bucket) = self.requester(inc, &digest, now, subject).await?;
+        if !self.limiter.admit(Self::class_of(inc), bucket, now) {
             return Err(CoreError::Limited);
         }
         self.continued(req, &digest, actor).await?;
@@ -1518,4 +1567,4 @@ pub const CONTRIBUTION_NAMESPACE: &str = "access.contribution";
 
 mod proofs;
 
-pub use proofs::{MAX_PROOFS, NewClaim, Resolved};
+pub use proofs::{Compromise, MAX_PROOFS, NewClaim, Resolved};

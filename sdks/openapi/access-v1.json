@@ -1,0 +1,887 @@
+{
+  "openapi": "3.1.1",
+  "info": {
+    "title": "Access product client API",
+    "version": "1.0.0",
+    "license": {
+      "name": "Apache-2.0",
+      "identifier": "Apache-2.0"
+    }
+  },
+  "security": [
+    {
+      "client": []
+    }
+  ],
+  "paths": {
+    "/access/v1/keys/{kid}": {
+      "get": {
+        "operationId": "getKey",
+        "summary": "One Instance key at a ledger position (OP-149 m.5).",
+        "parameters": [
+          {
+            "name": "kid",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Kid"
+            }
+          },
+          {
+            "name": "domain",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/DomainId"
+            },
+            "description": "The authority domain."
+          },
+          {
+            "name": "as_of",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/AsOf"
+            },
+            "description": "Defaults to the head."
+          }
+        ],
+        "responses": {
+          "400": {
+            "description": "The request is refused; nothing is read.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No client certificate (OP-141 m.18 (b)).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The key is not held at the position.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Over a rate limit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporarily unavailable; retry.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "The key.",
+            "headers": {
+              "ETag": {
+                "description": "The ledger position, quoted.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "`max-age=60`, or `max-age=31536000, immutable` once every key has ended.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "access-key-excerpt": {
+                "description": "With `application/cose`: the binding-signed excerpt of the signing key, base64url (CR-58 m.1).",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/cose; cose-type=\"cose-sign1\"": {
+                "schema": {
+                  "type": "string",
+                  "contentMediaType": "application/cose"
+                },
+                "description": "Canonical: COSE_Sign1 under usage `key-lookup` over `conformance/cddl/key-lookup.cddl`."
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KeyLookup"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/access/v1/keys:batchGet": {
+      "post": {
+        "operationId": "batchGetKeys",
+        "summary": "Up to 100 Instance keys at one ledger position (OP-149 m.5).",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/KeyBatchRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "400": {
+            "description": "The request is refused; nothing is read.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No client certificate (OP-141 m.18 (b)).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Over a rate limit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporarily unavailable; retry.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "The keys; the others are listed as `unknown`.",
+            "headers": {
+              "ETag": {
+                "description": "The ledger position, quoted.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "`max-age=60`, or `max-age=31536000, immutable` once every key has ended.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "access-key-excerpt": {
+                "description": "With `application/cose`: the binding-signed excerpt of the signing key, base64url (CR-58 m.1).",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/cose; cose-type=\"cose-sign1\"": {
+                "schema": {
+                  "type": "string",
+                  "contentMediaType": "application/cose"
+                },
+                "description": "Canonical: COSE_Sign1 under usage `key-lookup` over `conformance/cddl/key-lookup.cddl`."
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KeyLookup"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/access/v1/eligibility:check": {
+      "post": {
+        "operationId": "checkEligibility",
+        "summary": "Whether one subject may act as the `check` describes; records nothing (OP-149 m.10).",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EligibilityRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "400": {
+            "description": "The request is refused; nothing is read.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No client certificate (OP-141 m.18 (b)).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Over a rate limit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporarily unavailable; retry.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EligibilityResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/access/v1/tenants": {
+      "get": {
+        "operationId": "listTenants",
+        "summary": "Tenant snapshots, one page at a time (OP-149 m.4).",
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "400": {
+            "description": "The request is refused; nothing is read.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No client certificate (OP-141 m.18 (b)).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Over a rate limit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporarily unavailable; retry.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "One page.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantPage"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/access/v1/tenants/{tenant}/snapshot": {
+      "get": {
+        "operationId": "getTenantSnapshot",
+        "summary": "One tenant's snapshot (OP-149 m.4, OP-147 m.4).",
+        "parameters": [
+          {
+            "name": "tenant",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "No client certificate (OP-141 m.18 (b)).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such tenant.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Over a rate limit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporarily unavailable; retry.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "The snapshot.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantSnapshot"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/.well-known/suiss-configuration": {
+      "get": {
+        "operationId": "getSuissConfiguration",
+        "summary": "The realm's Suiss discovery document (OP-149 m.3); also under the realm path of a path issuer. `Cache-Control: max-age=300`.",
+        "security": [],
+        "responses": {
+          "404": {
+            "description": "No realm here.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporarily unavailable.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "The document.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuissConfiguration"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Problem": {
+        "type": "object",
+        "description": "RFC 9457. `type` is `urn:suiss:access:problem:<code>`, or `about:blank` when the status says all.",
+        "required": [
+          "type",
+          "title",
+          "status",
+          "code"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "description": "Problem type URI."
+          },
+          "title": {
+            "type": "string",
+            "description": "Short title."
+          },
+          "status": {
+            "type": "integer"
+          },
+          "code": {
+            "type": "string",
+            "description": "Stable error code (OP-65)."
+          },
+          "detail": {
+            "type": "string",
+            "description": "Detail."
+          }
+        }
+      },
+      "Position": {
+        "type": "string",
+        "pattern": "^[0-9]+$",
+        "description": "A ledger position, in decimal."
+      },
+      "Time": {
+        "type": "string",
+        "description": "RFC 3339, UTC."
+      },
+      "DomainId": {
+        "type": "string",
+        "pattern": "^sha-256:[A-Za-z0-9_-]{43}$"
+      },
+      "Kid": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9_-]{43}$",
+        "description": "RFC 7638 SHA-256 thumbprint, unpadded base64url (CR-24)."
+      },
+      "LedgerPoint": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "position",
+          "time"
+        ],
+        "properties": {
+          "position": {
+            "$ref": "#/components/schemas/Position"
+          },
+          "time": {
+            "$ref": "#/components/schemas/Time"
+          }
+        }
+      },
+      "Compromise": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "from",
+          "declared_at",
+          "source"
+        ],
+        "properties": {
+          "from": {
+            "$ref": "#/components/schemas/Time"
+          },
+          "declared_at": {
+            "$ref": "#/components/schemas/Time"
+          },
+          "source": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "The party_compromise ClaimID."
+          }
+        }
+      },
+      "KeyEntry": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "kid",
+          "alg",
+          "public_key",
+          "party",
+          "instance",
+          "since",
+          "key_state"
+        ],
+        "properties": {
+          "kid": {
+            "$ref": "#/components/schemas/Kid"
+          },
+          "alg": {
+            "type": "integer",
+            "description": "COSE algorithm: -19 Ed25519, -9 ESP256."
+          },
+          "public_key": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "The RFC 9052 COSE_Key, CBOR, base64url."
+          },
+          "party": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "PartyID."
+          },
+          "instance": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "InstanceID."
+          },
+          "since": {
+            "$ref": "#/components/schemas/LedgerPoint"
+          },
+          "ended": {
+            "$ref": "#/components/schemas/LedgerPoint"
+          },
+          "successor": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "The recovery successor InstanceID."
+          },
+          "key_state": {
+            "type": "string",
+            "enum": [
+              "active",
+              "ended",
+              "compromised"
+            ]
+          },
+          "compromise": {
+            "$ref": "#/components/schemas/Compromise"
+          }
+        }
+      },
+      "KeyLookup": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "domain",
+          "position",
+          "iat",
+          "keys",
+          "unknown",
+          "consistency_token"
+        ],
+        "properties": {
+          "domain": {
+            "$ref": "#/components/schemas/DomainId"
+          },
+          "position": {
+            "$ref": "#/components/schemas/Position"
+          },
+          "iat": {
+            "$ref": "#/components/schemas/Time"
+          },
+          "keys": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/KeyEntry"
+            }
+          },
+          "unknown": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Kid"
+            }
+          },
+          "consistency_token": {
+            "type": "string",
+            "description": "Opaque; the head the answer was read at."
+          }
+        }
+      },
+      "KeyBatchRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "domain",
+          "kids"
+        ],
+        "properties": {
+          "domain": {
+            "$ref": "#/components/schemas/DomainId"
+          },
+          "kids": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Kid"
+            },
+            "minItems": 1,
+            "maxItems": 100,
+            "uniqueItems": true
+          },
+          "as_of": {
+            "$ref": "#/components/schemas/AsOf"
+          }
+        }
+      },
+      "AsOf": {
+        "type": "string",
+        "description": "A ledger position in decimal, or an RFC 3339 time."
+      },
+      "EligibilityRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "subject",
+          "set"
+        ],
+        "properties": {
+          "subject": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "PartyID of the subject."
+          },
+          "set": {
+            "type": "object",
+            "description": "The context of an ADP `check` without `mode` and `nonce`: `domain`, `intent`, `basis`, `capacity`, `proofs` (L1-ADP-5…9)."
+          },
+          "as_of": {
+            "type": "string",
+            "description": "A consistency token: answered at or after it (P36)."
+          }
+        }
+      },
+      "EligibilityResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "eligible",
+          "consistency_token"
+        ],
+        "properties": {
+          "eligible": {
+            "type": "boolean"
+          },
+          "consistency_token": {
+            "type": "string",
+            "description": "Opaque; the head the answer was read at."
+          }
+        }
+      },
+      "TenantSnapshot": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "tenant",
+          "organizations",
+          "region",
+          "status",
+          "version",
+          "retention"
+        ],
+        "properties": {
+          "tenant": {
+            "type": "string",
+            "description": "Opaque tenant id (`tnt_…`)."
+          },
+          "organizations": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "region": {
+            "type": "string",
+            "description": "The deployment's region."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "provisioning",
+              "active",
+              "suspended",
+              "deleted"
+            ]
+          },
+          "version": {
+            "type": "string",
+            "description": "Changes exactly when the snapshot does."
+          },
+          "retention": {
+            "type": "object",
+            "description": "Retention policies (OP-147); empty until they are stored."
+          }
+        }
+      },
+      "TenantPage": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "tenants"
+        ],
+        "properties": {
+          "tenants": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TenantSnapshot"
+            }
+          },
+          "next_cursor": {
+            "type": "string",
+            "description": "Absent on the last page."
+          }
+        }
+      },
+      "SuissConfiguration": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "suiss_configuration_version",
+          "issuer",
+          "suiss_region",
+          "suiss_relay",
+          "suiss_management_api",
+          "suiss_event_subscriptions",
+          "suiss_products",
+          "endpoints"
+        ],
+        "properties": {
+          "suiss_configuration_version": {
+            "const": 1
+          },
+          "issuer": {
+            "type": "string",
+            "description": "The realm issuer."
+          },
+          "suiss_region": {
+            "type": "string",
+            "description": "The deployment's region."
+          },
+          "suiss_relay": {
+            "type": "string",
+            "description": "Relay's base URL."
+          },
+          "suiss_management_api": {
+            "type": "string",
+            "description": "The management API's base URL."
+          },
+          "suiss_event_subscriptions": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "ssf_configuration": {
+                "type": "string"
+              },
+              "webhooks": {
+                "type": "string"
+              }
+            }
+          },
+          "suiss_products": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "endpoints": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "adp": {
+                "type": "string"
+              },
+              "key_lookup": {
+                "type": "string"
+              },
+              "key_batch": {
+                "type": "string"
+              },
+              "eligibility": {
+                "type": "string"
+              },
+              "tenant_snapshot": {
+                "type": "string"
+              },
+              "auth_context": {
+                "type": "string"
+              },
+              "instances": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "securitySchemes": {
+      "client": {
+        "type": "mutualTLS",
+        "description": "The client certificate names the product client (OP-141 m.18 (b))."
+      }
+    }
+  }
+}

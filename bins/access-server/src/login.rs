@@ -27,6 +27,13 @@ const ID_KEY_ROOT: &str = "access/opaque-id";
 /// The derivation context of the working id key.
 const ID_KEY_CONTEXT: &[u8] = b"access/opaque-id/v1";
 
+/// The cell's working opaque-id key material (OP-137).
+pub(crate) fn id_key_bytes(keys: &KeyStore) -> Result<[u8; 32], String> {
+    keys.mac(ID_KEY_ROOT)
+        .and_then(|m| m.mac(ID_KEY_CONTEXT))
+        .map_err(|e| e.to_string())
+}
+
 /// The token label of a realm's KEK: `access/realm-kek/<RealmID hex>` (OP-146 m.15 (e)).
 pub(crate) fn kek_label(realm: &[u8; 16]) -> String {
     let mut out = String::from("access/realm-kek/");
@@ -91,11 +98,7 @@ impl HsmKits {
             .keys
             .mac(&decoy_label(entry.realm.as_bytes()))
             .map_err(|e| e.to_string())?;
-        let ids = self
-            .keys
-            .mac(ID_KEY_ROOT)
-            .and_then(|m| m.mac(ID_KEY_CONTEXT))
-            .map_err(|e| e.to_string())?;
+        let ids = id_key_bytes(&self.keys)?;
         let issuer = entry.issuer.as_str().to_owned();
         let host = entry
             .issuer

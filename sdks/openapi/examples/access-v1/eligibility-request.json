@@ -1,0 +1,35 @@
+{
+  "subject": "AgICAgICAgICAgICAgICAg",
+  "set": {
+    "domain": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+    "intent": {
+      "action": {
+        "namespace": "work",
+        "name": "approve",
+        "major": 1,
+        "schema": "BAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQ"
+      },
+      "resources": [
+        {
+          "namespace": "work",
+          "path": [
+            "gate-1"
+          ]
+        }
+      ],
+      "validity": {
+        "from": 0,
+        "until": 2000000000000
+      }
+    },
+    "basis": {
+      "holding": {
+        "grant": "BgYGBgYGBgYGBgYGBgYGBg",
+        "holder": "AgICAgICAgICAgICAgICAg",
+        "since": 4
+      }
+    },
+    "capacity": "own"
+  },
+  "as_of": "ct-2"
+}

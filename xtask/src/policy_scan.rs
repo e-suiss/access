@@ -30,6 +30,10 @@ pub(crate) fn checks() -> Vec<Check> {
             name: "normative-standards",
             run: normative_standards,
         },
+        Check {
+            name: "single-urn-prefix",
+            run: single_urn_prefix,
+        },
     ]
 }
 
@@ -306,9 +310,48 @@ fn normative_standards(root: &Path) -> Result<Vec<Violation>, String> {
         .collect())
 }
 
+/// The retired URN prefix, built in two parts so this file does not match itself.
+const OLD_URN: [&str; 2] = ["urn:es", "uiss:"];
+
+fn urn_findings(text: &str) -> Vec<usize> {
+    let needle = OLD_URN.concat();
+    text.lines()
+        .enumerate()
+        .filter(|(_, line)| line.to_ascii_lowercase().contains(&needle))
+        .map(|(n, _)| n)
+        .collect()
+}
+
+// OP-149 m.2
+fn single_urn_prefix(root: &Path) -> Result<Vec<Violation>, String> {
+    let mut out = Vec::new();
+    for file in repo_files(root)? {
+        for n in urn_findings(&read(root, file.as_str())) {
+            out.push(violation(
+                "OP-149",
+                &file,
+                n,
+                "every Suiss URN starts with `urn:suiss:`; `esuiss` names packages only".to_owned(),
+            ));
+        }
+    }
+    Ok(out)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // OP-149
+    #[test]
+    fn op_149_retired_urn_prefix_is_rejected() {
+        let old = format!("{}access:adp:1", OLD_URN.concat());
+        assert_eq!(urn_findings(&format!("a\n\"{old}\"\n")), vec![1]);
+        assert_eq!(
+            urn_findings("\"urn:suiss:access:adp:1\" esuiss-retention"),
+            Vec::<usize>::new()
+        );
+    }
 
     // SA-23
     #[test]

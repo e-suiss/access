@@ -246,6 +246,10 @@ login-e2e:
 login-contract:
     ACCESS_UPDATE_CONTRACTS=1 cargo test --locked -p access-identity-ui --test contract
 
+# OP-65, OP-149: rewrite sdks/openapi/access-v1.json and its examples from crates/http
+access-contract:
+    ACCESS_UPDATE_CONTRACTS=1 cargo test --locked -p access-http --test product
+
 web-e2e-update-snapshots: wasm
     docker run --rm --ipc=host -v "{{justfile_directory()}}:/work" \
       -v /work/web/console/node_modules -v /work/sdks/typescript/node_modules -w /work \

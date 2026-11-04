@@ -24,7 +24,7 @@ tokio = { workspace = true, features = ["net", "macros", "rt", "sync", "time"] }
 tokio-rustls = { workspace = true, features = ["aws_lc_rs"] }
 serde = { workspace = true, features = ["derive", "std"] }
 serde_json = { workspace = true, features = ["std"] }
-time = { workspace = true, features = ["std", "formatting", "macros"] }
+time = { workspace = true, features = ["std", "formatting", "parsing", "macros"] }
 tower = { workspace = true, features = ["limit", "util"] }
 tower-http = { workspace = true, features = ["catch-panic", "limit", "timeout", "request-id", "trace"] }
 tracing = { workspace = true, features = ["std"] }

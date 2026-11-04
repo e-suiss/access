@@ -6,6 +6,7 @@ mod idp;
 mod jobs;
 mod login;
 mod oauth;
+mod product;
 
 use std::fmt::Write as _;
 use std::path::Path;
@@ -333,10 +334,14 @@ async fn pools(config: &Config, prepared: &Prepared) -> Result<Pools, String> {
 async fn identity(config: &Config, router: Pool) -> Result<axum::Router, String> {
     let identity = config.identity.as_ref().ok_or("no identity section")?;
     let base = RealmBase::parse(&identity.realm_base).map_err(|e| e.to_string())?;
+    let suiss = config.suiss.as_ref().ok_or("no suiss section")?;
+    let api_base = config.issuer.as_deref().ok_or("no issuer")?;
+    // OP-149 m.3
     let discovery = RealmDiscovery::new(
         PgDirectory::new(router),
         SignerKeys::new(identity.signer.clone()),
-    );
+    )
+    .with_suiss(suiss.settings(api_base));
     let realms = discovery.check(&base).await.map_err(|e| e.to_string())?;
     tracing::info!(realms, "identity plane checks passed");
     Ok(realm_router(discovery))
@@ -485,6 +490,7 @@ async fn serve(
         prepared.outbound,
     )?;
     let identity_section = config.identity.as_ref().ok_or("no identity section")?;
+    let tenant_keys = prepared.identity_keys.clone();
     // OP-146 m.16 (m)
     let _realm_keys = idp::RealmKeyring::new(
         SignerKeys::new(identity_section.signer.clone()),
@@ -504,6 +510,7 @@ async fn serve(
         prepared.login_keys,
         prepared.assets,
     )?;
+    let tenants_pool = router_pool.clone();
     let realms = identity(config, router_pool).await?;
     let sequencer_for_time = sequencer.clone();
     let (idp_sequencer, idp_app) = (sequencer.clone(), app.clone());
@@ -547,6 +554,7 @@ async fn serve(
         Service::new(domains.clone(), limits.max_body_bytes),
         Discovery { issuer },
     );
+    let products = product::routes(config, domains.clone(), tenants_pool, tenant_keys)?;
     let health = Health {
         status: "ok",
         sandbox: SandboxHealth {
@@ -560,7 +568,10 @@ async fn serve(
         config.security_txt(),
         health,
         limits,
-        adp.merge(realms).merge(sign_in).merge(authorize),
+        adp.merge(products)
+            .merge(realms)
+            .merge(sign_in)
+            .merge(authorize),
     );
     listener.set_nonblocking(true).map_err(|e| e.to_string())?;
     let listener = tokio::net::TcpListener::from_std(listener).map_err(|e| e.to_string())?;

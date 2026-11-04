@@ -1,16 +1,21 @@
-; Suiss discovery endpoints, version 1 (RFC 8610).
-; The deterministic CBOR (RFC 8949 §4.2.1) of this map is the `discovery` byte string of Domain
-; Metadata, which the Kernel keeps opaque (CR-58 m.3). The same map is the `endpoints` member of
-; the realm's /.well-known/suiss-configuration document (OP-149 m.3).
+; Suiss discovery, version 1 (RFC 8610; OP-149 m.3).
+; The deterministic CBOR (RFC 8949 §4.2.1) of `suiss-discovery` is the `discovery` byte string of
+; Domain Metadata, which the Kernel keeps opaque (CR-58 m.3). The `endpoints` map is the same map
+; the realm's /.well-known/suiss-configuration document carries. Only endpoints in service appear.
 
 suiss-discovery = {
-  adp: https-url,
-  key_lookup: https-url,
-  key_batch: https-url,
-  eligibility: https-url,
-  tenant_snapshot: https-url,
-  auth_context: https-url,
-  instances: https-url,
+  v: 1,
+  endpoints: suiss-endpoints,
+}
+
+suiss-endpoints = {
+  ? adp: https-url,
+  ? key_lookup: https-url,
+  ? key_batch: https-url,
+  ? eligibility: https-url,
+  ? tenant_snapshot: https-url,
+  ? auth_context: https-url,
+  ? instances: https-url,
 }
 
 ; An absolute https URL in printable ASCII. A path variable is an RFC 6570 level 1 template

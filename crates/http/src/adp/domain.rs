@@ -423,6 +423,46 @@ fn decode_value(root: &Json) -> R<Decoded> {
     Ok(decoded)
 }
 
+/// What an eligibility body's `set` may not carry: it is always an anonymous `check`.
+const NOT_IN_SET: [&str; 6] = [
+    "mode",
+    "nonce",
+    "payload",
+    "exercise",
+    "consistency_token",
+    "ais",
+];
+
+/// Decodes an eligibility body `{subject, set, as_of?}` (OP-149 m.10): `set` is the context
+/// of an ADP `check` (`domain`, `intent`, `basis`, `capacity`, `proofs`) and `as_of` a
+/// consistency token. The nonce is derived from the body, since nothing is recorded.
+///
+/// # Errors
+/// [`AdpError`] names the protocol error.
+pub fn decode_eligibility(body: &[u8], max_len: usize) -> R<(Decoded, Id)> {
+    let root = access_kernel::json::parse(body, max_len).map_err(|_| AdpError("json"))?;
+    let mut top = Obj::of(&root, "eligibility")?;
+    let subject = id(top.req("subject", "subject")?)?;
+    let set = top.req("set", "set")?;
+    let as_of = top.opt("as_of").cloned();
+    top.done()?;
+    let mut ctx = Obj::of(set, "set")?;
+    if NOT_IN_SET.iter().any(|m| ctx.opt(m).is_some()) {
+        return Err(AdpError("set"));
+    }
+    let mode = Json::Str(String::from("check"));
+    let nonce = Json::Str(b64url_encode(&suiss_crypto::digest::sha256(body)));
+    ctx.members.push(("mode", &mode));
+    ctx.members.push(("nonce", &nonce));
+    if let Some(t) = &as_of {
+        ctx.members.push(("consistency_token", t));
+    }
+    let intent = intent(ctx.req("intent", "intent")?)?;
+    let decoded = context(&mut ctx, intent)?;
+    ctx.done()?;
+    Ok((decoded, subject))
+}
+
 /// Decodes an explain body: the request and, for a recorded decision, `context.record`
 /// (L1-ADP-15, OP-141 m.36 (b)).
 ///

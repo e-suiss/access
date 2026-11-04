@@ -3795,3 +3795,233 @@ async fn a_pap_names_parties_by_pseudonym() {
     assert_eq!(pap.validity.bounds.recipient, pap.bounds.recipient);
     assert_ne!(pseudonym, ALICE.0);
 }
+
+/// Registers ROOT and ALICE with their keys on `a`.
+async fn onboard_both(a: &Domains<Listed, Bound, Counter, Fixed>, d: Digest) {
+    let public_basis = ExerciseBasis::Public(meta::object_id(&d, kind::GRANT, 0));
+    for (nonce, seed, party) in [
+        (1, ROOT_KEY, ROOT),
+        (2, ROOT_KEY, ROOT),
+        (3, ALICE_KEY, ALICE),
+        (4, ALICE_KEY, ALICE),
+    ] {
+        let payload = if nonce % 2 == 1 {
+            Payload::PartyRegister {
+                party,
+                root: Root::Sole(party),
+                actor_kind: ActorKind::Human,
+            }
+        } else {
+            Payload::InstanceCreate {
+                party,
+                key: public(seed),
+                mandate: None,
+            }
+        };
+        let inc = incoming(meta_request(d, nonce, public_basis, payload), seed);
+        allowed(&a.exercise(&inc).await.unwrap());
+    }
+}
+
+// OP-149 m.10, §9.5.2 rule 1, INV-22: the eligibility check is a `check` for its subject; it
+// records nothing, not even its nonce, and answers with the head it read
+#[tokio::test]
+async fn an_eligibility_check_records_nothing() {
+    // G28
+    let db = fresh().await.unwrap();
+    let d = create_genesis(&db.sequencer, TENANT, genesis(), 1_000)
+        .await
+        .unwrap();
+    let a = process(&db, "a", vec![d]);
+    onboard_both(&a, d).await;
+    let id = DomainId::from_bytes(d.0);
+    let head = access_store::authority::read_head(&db.app, &id)
+        .await
+        .unwrap();
+    let shop = meta::object_id(&d, kind::ANCHOR, 1);
+    let inc = Incoming {
+        request: shop_request(d, 50, Mode::Check, ExerciseBasis::Anchor(shop)),
+        ais: None,
+        pep: PEP.to_owned(),
+        explain: false,
+    };
+    let root = a.eligible(&inc, ROOT).await.unwrap();
+    allowed(&root);
+    assert!(root.record.is_none() && root.exercise.is_none());
+    assert!(root.consistency.is_some());
+    let alice = a.eligible(&inc, ALICE).await.unwrap();
+    assert_ne!(alice.decision.outcome, Outcome::Allow);
+    assert_eq!(
+        access_store::authority::read_head(&db.app, &id)
+            .await
+            .unwrap(),
+        head
+    );
+    assert!(
+        access_store::authority::find_nonce(&db.app, &id, &inc.request.nonce)
+            .await
+            .unwrap()
+            .is_none()
+    );
+    let mut commit = inc.clone();
+    commit.request.mode = Mode::Commit;
+    assert_eq!(
+        a.eligible(&commit, ROOT).await.unwrap_err().code(),
+        "protocol"
+    );
+    let mut signed = inc;
+    signed.ais = incoming(signed.request.clone(), ROOT_KEY).ais;
+    assert_eq!(
+        a.eligible(&signed, ROOT).await.unwrap_err().code(),
+        "protocol"
+    );
+    fold_check(&db.sequencer, d).await.unwrap();
+}
+
+// OP-149 m.5, CR-24, CMP-9, SEC12: keys are read from the derived index at a ledger position,
+// with the `party_compromise` overlay as declared by then; nothing is recorded
+#[tokio::test]
+#[allow(clippy::too_many_lines, reason = "one key through its lookups")]
+async fn keys_are_looked_up_at_a_ledger_position() {
+    use access_authority_core::keys::{AsOf, KeyState};
+    let db = fresh().await.unwrap();
+    let mut fields = genesis();
+    add_acceptances(
+        &mut fields,
+        vec![Value::Map(vec![
+            (Value::text("issuer"), ROOT.to_value()),
+            (Value::text("use"), Value::text("predicate-input")),
+            (
+                Value::text("classes"),
+                Value::Array(vec![Value::text(access_kernel::claim::PARTY_COMPROMISE)]),
+            ),
+            (Value::text("subject"), SubjectSelector::Public.to_value()),
+            (
+                Value::text("validity"),
+                Value::Array(vec![Value::Unsigned(0), Value::Unsigned(1_000_000)]),
+            ),
+        ])],
+    );
+    let d = create_genesis(&db.sequencer, TENANT, fields, 1_000)
+        .await
+        .unwrap();
+    let a = process(&db, "a", vec![d]);
+    onboard_both(&a, d).await;
+    let (root_kid, alice_kid) = (
+        thumbprint(&public(ROOT_KEY)),
+        thumbprint(&public(ALICE_KEY)),
+    );
+    let all = [root_kid, alice_kid, [0xee; 32]];
+
+    let now = a.lookup_keys(d, &all, AsOf::Head, false).await.unwrap();
+    let first = &now.lookup;
+    assert_eq!(first.unknown, [[0xee; 32]]);
+    let (root, alice) = (&first.keys[0], &first.keys[1]);
+    assert_eq!(
+        (root.kid, root.party, root.key.clone()),
+        (root_kid, ROOT, public(ROOT_KEY))
+    );
+    assert_eq!((alice.kid, alice.party), (alice_kid, ALICE));
+    assert!(first.keys.iter().all(|k| k.state == KeyState::Active));
+    assert!(alice.since.pos > root.since.pos && alice.since.pos <= first.pos);
+    assert_eq!(alice.since.at, NOW);
+
+    // a position before Alice's Instance does not know her key
+    let early = a
+        .lookup_keys(
+            d,
+            &[alice_kid],
+            AsOf::Position(alice.since.pos.saturating_sub(1)),
+            false,
+        )
+        .await
+        .unwrap();
+    assert_eq!(early.lookup.keys, Vec::new());
+
+    let meta_anchor = ExerciseBasis::Anchor(meta::meta_anchor(&d));
+    let declared = meta_request(
+        d,
+        10,
+        meta_anchor,
+        Payload::ClaimIssue {
+            subject: ALICE,
+            class: access_kernel::claim::PARTY_COMPROMISE.to_owned(),
+            value: EqValue::Int(0),
+            validity: None,
+            bound_intent: None,
+            supersedes: None,
+        },
+    );
+    let claim = a.exercise(&incoming(declared, ROOT_KEY)).await.unwrap();
+    allowed(&claim);
+    let claim_id = meta::object_id(&claim.exercise.unwrap(), kind::CLAIM, 0);
+    let after = a.lookup_keys(d, &all, AsOf::Head, false).await.unwrap();
+    let alice_now = &after.lookup.keys[1];
+    assert_eq!(alice_now.state, KeyState::Compromised);
+    let found = alice_now.compromise.unwrap();
+    assert_eq!(
+        (found.from, found.claim, found.declared_at),
+        (0, claim_id, NOW)
+    );
+    assert_eq!(after.lookup.keys[0].state, KeyState::Active);
+    // the earlier position does not see the later declaration
+    let then = a
+        .lookup_keys(d, &all, AsOf::Position(first.pos), false)
+        .await
+        .unwrap();
+    assert_eq!(then.lookup.keys[1].state, KeyState::Active);
+    assert_eq!(then.lookup.pos, first.pos);
+
+    // a time is the last position recorded by then; before Genesis there is none
+    let late = a
+        .lookup_keys(d, &[root_kid], AsOf::Time(u64::MAX), false)
+        .await
+        .unwrap();
+    assert_eq!(late.lookup.pos, after.lookup.pos);
+    assert_eq!(
+        a.lookup_keys(d, &[root_kid], AsOf::Time(10), false)
+            .await
+            .unwrap_err()
+            .code(),
+        "protocol"
+    );
+    assert_eq!(
+        unavailable(
+            a.lookup_keys(
+                d,
+                &[root_kid],
+                AsOf::Position(after.lookup.pos.saturating_add(1)),
+                false
+            )
+            .await
+            .map(|_| unreachable_response())
+        ),
+        "consistency"
+    );
+    // no signer, no canonical answer
+    assert_eq!(
+        unavailable(
+            a.lookup_keys(d, &[root_kid], AsOf::Head, true)
+                .await
+                .map(|_| unreachable_response())
+        ),
+        "signer"
+    );
+    assert_eq!(
+        a.lookup_keys(d, &[[1; 32]; 101], AsOf::Head, false)
+            .await
+            .unwrap_err()
+            .code(),
+        "protocol"
+    );
+    let head = access_store::authority::read_head(&db.app, &DomainId::from_bytes(d.0))
+        .await
+        .unwrap()
+        .pos;
+    assert_eq!(head, after.lookup.pos);
+    fold_check(&db.sequencer, d).await.unwrap();
+}
+
+fn unreachable_response() -> Response {
+    panic!("expected no answer")
+}

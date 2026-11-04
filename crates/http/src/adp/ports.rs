@@ -8,6 +8,7 @@ use access_authority_core::CoreError;
 use access_authority_core::app::{Incoming, Response, Scope};
 use access_authority_core::query::{Hit, Query};
 use access_kernel::digest::Digest;
+use access_kernel::model::Id;
 
 /// Evaluates one request (the authority core of the request's domain).
 pub trait Pdp: Send + Sync {
@@ -23,6 +24,17 @@ pub trait Pdp: Send + Sync {
     ) -> impl Future<Output = Result<Response, CoreError>> + Send {
         let _ = (inc, record, scope);
         std::future::ready(Err(CoreError::Protocol("explain-record")))
+    }
+
+    /// The eligibility of `subject` for the anonymous `check` `inc` (OP-149 m.10); none by
+    /// default.
+    fn eligible(
+        &self,
+        inc: Incoming,
+        subject: Id,
+    ) -> impl Future<Output = Result<Response, CoreError>> + Send {
+        let _ = (inc, subject);
+        std::future::ready(Err(CoreError::Protocol("eligibility")))
     }
 
     /// One page of a search (OP-141 m.22); none by default.
@@ -59,6 +71,14 @@ impl<P: Pdp> Pdp for Arc<P> {
         scope: Scope,
     ) -> impl Future<Output = Result<Response, CoreError>> + Send {
         (**self).explain_recorded(inc, record, scope)
+    }
+
+    fn eligible(
+        &self,
+        inc: Incoming,
+        subject: Id,
+    ) -> impl Future<Output = Result<Response, CoreError>> + Send {
+        (**self).eligible(inc, subject)
     }
 
     fn search(

@@ -10,6 +10,7 @@ use access_authority_core::ports::{Binding, Keys, Salts};
 use access_authority_core::query::Query;
 use access_authority_sequencer::ports::Clock;
 use access_kernel::digest::Digest;
+use access_kernel::model::Id;
 use access_kernel::verify::key_scope::METADATA_CONTENT_TYPE;
 use axum::Router;
 use axum::body::Bytes;
@@ -52,6 +53,7 @@ pub fn router<P: Pdp + 'static>(service: Service<P>, discovery: Discovery) -> Ro
         .route("/access/v1/evaluations", post(evaluations::<P>))
         .route("/access/v1/explain", post(explain::<P>))
         .route("/access/v1/search/{kind}", post(search::<P>))
+        .route("/access/v1/eligibility:check", post(eligibility::<P>))
         .route(
             "/.well-known/authzen-configuration",
             get(configuration::<P>),
@@ -102,6 +104,19 @@ async fn explain<P: Pdp>(
     let reply = shared
         .service
         .explain(&body, pep.map(|axum::Extension(Pep(p))| p))
+        .await;
+    respond(reply, &headers)
+}
+
+async fn eligibility<P: Pdp>(
+    State(shared): State<Arc<Shared<P>>>,
+    pep: Option<axum::Extension<Pep>>,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Response {
+    let reply = shared
+        .service
+        .eligibility(&body, pep.map(|axum::Extension(Pep(p))| p))
         .await;
     respond(reply, &headers)
 }
@@ -182,9 +197,9 @@ fn discovery(issuer: &str, pdp: &str) -> serde_json::Map<String, serde_json::Val
     body.insert(
         String::from("capabilities"),
         serde_json::json!([
-            "urn:esuiss:access:adp:1",
-            "urn:esuiss:access:explain:1",
-            "urn:esuiss:access:consistency-token:1"
+            "urn:suiss:access:adp:1",
+            "urn:suiss:access:explain:1",
+            "urn:suiss:access:consistency-token:1"
         ]),
     );
     body
@@ -208,7 +223,7 @@ async fn configuration<P: Pdp>(State(shared): State<Arc<Shared<P>>>) -> Response
 
 /// A `DomainID` in its text form: `sha-256:` and the unpadded base64url of 32 bytes
 /// (L0-ENC-20).
-fn domain_id(text: &str) -> Option<Digest> {
+pub(crate) fn domain_id(text: &str) -> Option<Digest> {
     let b64 = text.strip_prefix("sha-256:")?;
     let bytes = access_kernel::json::b64url_decode(b64).ok()?;
     let id = <[u8; 32]>::try_from(bytes).ok().map(Digest)?;
@@ -281,6 +296,10 @@ where
 {
     async fn evaluate(&self, inc: Incoming) -> Result<Decided, CoreError> {
         self.exercise(&inc).await
+    }
+
+    async fn eligible(&self, inc: Incoming, subject: Id) -> Result<Decided, CoreError> {
+        Domains::eligible(self, &inc, subject).await
     }
 
     async fn explain_recorded(

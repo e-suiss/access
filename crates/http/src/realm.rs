@@ -1,11 +1,13 @@
 //! The realm surface of the identity plane (CMP-15.1): OIDC Discovery, RFC 8414 and RFC 9728
-//! metadata and the JWKS of the realm the request's `Host` selects, at the host root for a
-//! subdomain issuer and under `/realms/{slug}` for a path issuer (TN-10, §17.9.6).
+//! metadata, the Suiss discovery document (OP-149 m.3) and the JWKS of the realm the request's
+//! `Host` selects, at the host root for a subdomain issuer and under `/realms/{slug}` for a path
+//! issuer (TN-10, §17.9.6).
 
 use std::sync::Arc;
 
 use access_identity_oauth::app::{Discovery, Reply};
 use access_identity_oauth::domain::metadata::{Document, JWKS_CACHE_CONTROL, JWKS_CONTENT_TYPE};
+use access_identity_oauth::domain::suiss;
 use access_identity_oauth::ports::{Directory, Keys};
 use axum::Router;
 use axum::extract::{Path, State};
@@ -49,6 +51,13 @@ where
             "/jwks.json",
             None,
             Some("/realms/{slug}/jwks.json"),
+        ),
+        // OP-149 m.3
+        (
+            Document::SuissConfiguration,
+            "/.well-known/suiss-configuration",
+            Some("/.well-known/suiss-configuration/realms/{slug}"),
+            Some("/realms/{slug}/.well-known/suiss-configuration"),
         ),
     ] {
         r = r.route(
@@ -118,6 +127,20 @@ fn respond(reply: Reply) -> Response {
                 (
                     header::CACHE_CONTROL,
                     HeaderValue::from_static(JWKS_CACHE_CONTROL),
+                ),
+            ],
+            doc,
+        )
+            .into_response(),
+        Reply::Suiss(doc) => (
+            [
+                (
+                    header::CONTENT_TYPE,
+                    HeaderValue::from_static("application/json"),
+                ),
+                (
+                    header::CACHE_CONTROL,
+                    HeaderValue::from_static(suiss::CACHE_CONTROL),
                 ),
             ],
             doc,

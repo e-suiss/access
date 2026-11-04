@@ -118,7 +118,9 @@ fn op_90_server_refuses_to_start_without_lockdown() {
              [identity]\nrealm_base = \"https://id.access.example\"\n\
              signer = \"/run/access/identity-signer.sock\"\n\
              [hsm]\nmodule = {module:?}\ntoken = {token:?}\npin_file = {pin:?}\n\
-             [login]\ndist_dir = {dist:?}\n",
+             [login]\ndist_dir = {dist:?}\n\
+             [suiss]\nregion = \"eu-central\"\nrelay = \"https://relay.example\"\n\
+             management_api = \"https://api.access.example\"\n",
             crt = dir.join("tls.crt"),
             key = dir.join("tls.key"),
             pw = dir.join("db-password"),

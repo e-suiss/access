@@ -2,12 +2,12 @@
 
 use access_authority_core::CoreError;
 use access_authority_core::app::Incoming;
-use access_kernel::combinator::Mode;
+use access_kernel::combinator::{Mode, Outcome};
 use serde_json::Value;
 
 use crate::adp::domain::{
-    Decoded, Semantic, decode, decode_batch, decode_explain, decode_search, encode, encode_for,
-    encode_search,
+    Decoded, Semantic, decode, decode_batch, decode_eligibility, decode_explain, decode_search,
+    encode, encode_for, encode_search,
 };
 use crate::adp::ports::Pdp;
 
@@ -144,6 +144,32 @@ impl<P: Pdp> Service<P> {
                 Reply::Decision(v)
             }
             other => other,
+        }
+    }
+
+    /// `POST /access/v1/eligibility:check`: whether `subject` may act on the `check` its `set`
+    /// describes, with the head it was answered at; a thin wrapper over `check` that records
+    /// nothing (OP-149 m.10, §9.5.2 rule 1, P36).
+    pub async fn eligibility(&self, body: &[u8], pep: Option<String>) -> Reply {
+        let Some(pep) = pep else {
+            return Reply::Unauthenticated;
+        };
+        let (decoded, subject) = match decode_eligibility(body, self.max_body) {
+            Ok(d) => d,
+            Err(e) => return Reply::Protocol(e.0),
+        };
+        let inc = Incoming {
+            request: decoded.request,
+            ais: None,
+            pep,
+            explain: false,
+        };
+        match self.pdp.eligible(inc, subject).await {
+            Ok(r) => Reply::Decision(serde_json::json!({
+                "eligible": r.decision.outcome == Outcome::Allow,
+                "consistency_token": r.consistency,
+            })),
+            Err(e) => failed(e),
         }
     }
 

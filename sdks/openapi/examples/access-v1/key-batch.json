@@ -1,0 +1,40 @@
+{
+  "domain": "sha-256:AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+  "position": "9",
+  "iat": "2026-11-04T10:03:00Z",
+  "keys": [
+    {
+      "kid": "oaGhoaGhoaGhoaGhoaGhoaGhoaGhoaGhoaGhoaGhoaE",
+      "alg": -19,
+      "public_key": "pAEBAzIgBiFYIAkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJ",
+      "party": "AgICAgICAgICAgICAgICAg",
+      "instance": "AwMDAwMDAwMDAwMDAwMDAw",
+      "since": {
+        "position": "4",
+        "time": "2026-11-04T10:00:00Z"
+      },
+      "key_state": "active"
+    },
+    {
+      "kid": "o6Ojo6Ojo6Ojo6Ojo6Ojo6Ojo6Ojo6Ojo6Ojo6Ojo6M",
+      "alg": -19,
+      "public_key": "pAEBAzIgBiFYIAkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJ",
+      "party": "AgICAgICAgICAgICAgICAg",
+      "instance": "AwMDAwMDAwMDAwMDAwMDAw",
+      "since": {
+        "position": "4",
+        "time": "2026-11-04T10:00:00Z"
+      },
+      "key_state": "compromised",
+      "compromise": {
+        "from": "2026-11-04T09:00:00Z",
+        "declared_at": "2026-11-04T10:02:00Z",
+        "source": "BwcHBwcHBwcHBwcHBwcHBw"
+      }
+    }
+  ],
+  "unknown": [
+    "__________________________________________8"
+  ],
+  "consistency_token": "ct-9"
+}

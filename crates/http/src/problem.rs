@@ -6,14 +6,21 @@ use axum::http::{HeaderValue, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use serde::Serialize;
 
+/// Prefix of every problem type URI (OP-149 m.12).
+pub const TYPE_PREFIX: &str = "urn:suiss:access:problem:";
+
+/// Codes whose response means no more than its HTTP status; their `type` stays
+/// `about:blank` (OP-149 m.12).
+pub const BARE: [&str; 3] = ["not_found", "internal", "unavailable"];
+
 /// An RFC 9457 problem response.
 ///
-/// `type` stays `about:blank` until problem type URIs are published; the stable,
-/// documented error code travels in the `code` extension member.
+/// `type` is `urn:suiss:access:problem:<code>` for the stable code, which also travels in the
+/// `code` extension member; a [`BARE`] code keeps `about:blank` (OP-149 m.12).
 #[derive(Debug, Serialize)]
 pub struct Problem {
     #[serde(rename = "type")]
-    type_uri: &'static str,
+    type_uri: String,
     title: &'static str,
     status: u16,
     code: &'static str,
@@ -22,11 +29,16 @@ pub struct Problem {
 }
 
 impl Problem {
-    /// Creates a problem with a stable `code` (used in the `type` URI) and a short title.
+    /// Creates a problem with a stable `code` (named by the `type` URI) and a short title.
     #[must_use]
     pub fn new(status: StatusCode, code: &'static str, title: &'static str) -> Self {
+        let type_uri = if BARE.contains(&code) {
+            String::from("about:blank")
+        } else {
+            format!("{TYPE_PREFIX}{code}")
+        };
         Self {
-            type_uri: "about:blank",
+            type_uri,
             title,
             status: status.as_u16(),
             code,

@@ -8,9 +8,12 @@
     reason = "test code with fakes of async ports; the request-path lints (OP-3) do not apply"
 )]
 
+use std::collections::BTreeMap;
+
 use access_http::realm::router;
 use access_identity_oauth::app::Discovery;
 use access_identity_oauth::domain::issuer::Issuer;
+use access_identity_oauth::domain::suiss::Settings;
 use access_identity_oauth::ports::{Directory, Keys, RealmEntry, Unavailable};
 use access_store::identity::{RealmId, TenantId};
 use axum::Router;
@@ -59,8 +62,55 @@ impl Keys for KeySet {
     }
 }
 
+fn settings() -> Settings {
+    Settings {
+        region: "eu-central".to_owned(),
+        relay: "https://relay.test".to_owned(),
+        management_api: "https://api.test".to_owned(),
+        api_base: "https://access.test".to_owned(),
+        products: BTreeMap::from([("work".to_owned(), "https://work.test".to_owned())]),
+    }
+}
+
 fn app() -> Router {
-    router(Discovery::new(Rows, KeySet))
+    router(Discovery::new(Rows, KeySet).with_suiss(settings()))
+}
+
+// OP-149 m.3: each realm serves its Suiss discovery document with the deployment's settings,
+// the served endpoints and a five-minute cache; a path realm at both well-known variants
+#[tokio::test]
+async fn a_realm_serves_its_suiss_configuration() {
+    let (status, headers, body) = get("/.well-known/suiss-configuration", "acme.id.test").await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(headers[header::CONTENT_TYPE], "application/json");
+    assert_eq!(headers[header::CACHE_CONTROL], "max-age=300");
+    let doc: serde_json::Value = serde_json::from_str(&body).unwrap();
+    assert_eq!(doc["suiss_configuration_version"], 1);
+    assert_eq!(doc["issuer"], "https://acme.id.test");
+    assert_eq!(doc["suiss_region"], "eu-central");
+    assert_eq!(doc["suiss_relay"], "https://relay.test");
+    assert_eq!(doc["suiss_management_api"], "https://api.test");
+    assert_eq!(doc["suiss_products"]["work"], "https://work.test");
+    assert_eq!(
+        doc["endpoints"]["key_lookup"],
+        "https://access.test/access/v1/keys/{kid}"
+    );
+    assert_eq!(
+        doc["endpoints"]["adp"],
+        "https://access.test/.well-known/authzen-configuration"
+    );
+    // §10.4.6: what is not served is not declared
+    assert!(doc["endpoints"].get("auth_context").is_none());
+    for path in [
+        "/.well-known/suiss-configuration/realms/beta",
+        "/realms/beta/.well-known/suiss-configuration",
+    ] {
+        let (status, _, body) = get(path, "id.test").await;
+        assert_eq!(status, StatusCode::OK, "{path}");
+        assert!(body.contains(r#""issuer":"https://id.test/realms/beta""#));
+    }
+    let (status, _, _) = get("/.well-known/suiss-configuration", "evil.test").await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
 }
 
 async fn get(path: &str, host: &str) -> (StatusCode, axum::http::HeaderMap, String) {

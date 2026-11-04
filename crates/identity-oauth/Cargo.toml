@@ -15,6 +15,7 @@ access-identity-session = { workspace = true }
 access-identity-signer = { path = "../identity-signer" }
 access-kernel = { workspace = true }
 access-store = { workspace = true }
+suiss-crypto = { workspace = true }
 serde = { workspace = true, features = ["derive", "std"] }
 serde_json = { workspace = true, features = ["std"] }
 thiserror = { workspace = true }

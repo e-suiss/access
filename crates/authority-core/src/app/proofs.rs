@@ -86,6 +86,19 @@ fn claim_proof(id: Id, s: &Statement, instance: Option<Id>, position: u64) -> Pr
     }
 }
 
+/// One accepted `party_compromise` Claim (SEC12, OP-149 m.5).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Compromise {
+    /// occurredAt: from when the Party is taken as compromised, in trusted milliseconds.
+    pub from: u64,
+    /// The Claim.
+    pub claim: Id,
+    /// Position of the Claim's record.
+    pub declared: u64,
+    /// Trusted time of that record.
+    pub declared_at: u64,
+}
+
 const fn current(s: &Statement, now: u64) -> bool {
     s.validity.from <= now && now <= s.validity.until
 }
@@ -380,10 +393,41 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         let Some(actor) = actor else {
             return Ok(false);
         };
+        let Some(cutoff) = self
+            .compromises(&actor.party, now)
+            .await?
+            .iter()
+            .map(|c| c.from)
+            .min()
+        else {
+            return Ok(false);
+        };
         let mut snap = Snapshot::default();
-        let mut cutoff: Option<u64> = None;
+        let since = self
+            .get(&mut snap, &meta::key(kind::INSTANCE, &actor.instance))
+            .await?
+            .and_then(|v| InstanceState::from_value(&v).ok())
+            .map(|i| i.since);
+        let Some(since) = since else {
+            return Ok(false);
+        };
+        Ok(self
+            .reader
+            .recorded_at(since)
+            .await?
+            .is_none_or(|at| at >= cutoff))
+    }
+
+    /// The accepted, current `party_compromise` Claims about `party` that assert in their
+    /// issuer line, each with its occurredAt (SEC12, OP-141 m.31, OP-149 m.5).
+    ///
+    /// # Errors
+    /// [`CoreError::Store`].
+    pub async fn compromises(&self, party: &Id, now: u64) -> Result<Vec<Compromise>, CoreError> {
+        let mut snap = Snapshot::default();
+        let mut found = Vec::new();
         for (_, value, _) in self
-            .scan(&claim::member_prefix(claim::PARTY_COMPROMISE, &actor.party))
+            .scan(&claim::member_prefix(claim::PARTY_COMPROMISE, party))
             .await?
         {
             let Some(id) = value.and_then(|v| Id::from_value(&v).ok()) else {
@@ -395,7 +439,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                 .and_then(|v| ClaimState::from_value(&v).ok())
                 .filter(|s| {
                     s.ended.is_none()
-                        && s.statement.subject == actor.party
+                        && s.statement.subject == *party
                         && s.statement.class == claim::PARTY_COMPROMISE
                         && current(&s.statement, now)
                 })
@@ -410,31 +454,21 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             {
                 continue;
             }
-            let occurred = match state.statement.value {
+            let from = match state.statement.value {
                 Some(EqValue::Int(t)) if t >= 0 => u64::try_from(t).unwrap_or(0),
                 _ => state
                     .statement
                     .issued_at
                     .saturating_sub(claim::COMPROMISE_LOOKBACK_MS),
             };
-            cutoff = Some(cutoff.map_or(occurred, |c| c.min(occurred)));
+            found.push(Compromise {
+                from,
+                claim: id,
+                declared: state.since,
+                declared_at: self.reader.recorded_at(state.since).await?.unwrap_or(0),
+            });
         }
-        let Some(cutoff) = cutoff else {
-            return Ok(false);
-        };
-        let since = self
-            .get(&mut snap, &meta::key(kind::INSTANCE, &actor.instance))
-            .await?
-            .and_then(|v| InstanceState::from_value(&v).ok())
-            .map(|i| i.since);
-        let Some(since) = since else {
-            return Ok(false);
-        };
-        Ok(self
-            .reader
-            .recorded_at(since)
-            .await?
-            .is_none_or(|at| at >= cutoff))
+        Ok(found)
     }
 
     /// The episode behind a holding basis whose Grant is held by a predicate.

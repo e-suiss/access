@@ -1,0 +1,51 @@
+; Instance key lookup answer (OP-149 m.5, CR-24).
+;
+; Payload of a COSE_Sign1 signed by a domain operational key with usage "key-lookup", content
+; type "application/access-key-lookup+cbor". The `application/json` answer carries the same
+; content unsigned, with positions as decimal strings, times as RFC 3339, binaries as unpadded
+; base64url, `public_key` as the base64url of its COSE_Key, and a `consistency_token`.
+; `digest`, `id`, `key-id` and `trusted-time` are the rules of kernel.cddl.
+
+key-lookup = {
+  domain: digest,
+  pos: uint,
+  iat: trusted-time,
+  keys: [* key-lookup-entry],
+  unknown: [* key-id],
+}
+
+key-lookup-entry = {
+  kid: key-id,
+  alg: int,
+  public_key: cose-key,
+  party: id,
+  instance: id,
+  since: ledger-point,
+  ? ended: ledger-point,
+  ? successor: id,
+  key_state: "active" / "ended" / "compromised",
+  ? compromise: key-compromise,
+}
+
+; A ledger position and its trusted time.
+ledger-point = {
+  pos: uint,
+  at: trusted-time,
+}
+
+; The accepted party_compromise Claim that covers the key: occurredAt, the commit time of its
+; record, and its ClaimID (SEC12, SI-9).
+key-compromise = {
+  from: trusted-time,
+  declared_at: trusted-time,
+  source: id,
+}
+
+; RFC 9052 COSE_Key: OKP Ed25519 (alg -19), EC2 P-256 (alg -9) or AKP ML-DSA (RFC 9964).
+cose-key = {
+  1 => 1 / 2 / 7,
+  3 => int,
+  ? -1 => uint / bstr,
+  ? -2 => bstr,
+  ? -3 => bstr,
+}

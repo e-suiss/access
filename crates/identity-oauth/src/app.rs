@@ -8,6 +8,7 @@ pub mod oauth;
 
 use crate::domain::issuer::{IssuerStyle, PATH_PREFIX, RealmBase, check_slug};
 use crate::domain::metadata::{self, Document, SERVED, Served};
+use crate::domain::suiss;
 use crate::ports::{Directory, Keys, RealmEntry, Unavailable};
 
 /// A key set that publishes nothing (CR-27: a realm always publishes a key).
@@ -20,6 +21,8 @@ pub enum Reply {
     Metadata(String),
     /// The realm's JWKS (CR-25).
     Jwks(String),
+    /// The realm's Suiss discovery document (OP-149 m.3).
+    Suiss(String),
     /// No realm here; the answer names none (§17.9.6).
     NotFound,
     /// The directory or the signer did not answer (fail-closed).
@@ -49,6 +52,7 @@ pub struct Discovery<D, K> {
     directory: D,
     keys: K,
     served: Served,
+    suiss: Option<suiss::Settings>,
 }
 
 /// The lower-case host of a request authority, without its port; `None` for anything that
@@ -102,7 +106,16 @@ impl<D: Directory, K: Keys> Discovery<D, K> {
             directory,
             keys,
             served: SERVED,
+            suiss: None,
         }
+    }
+
+    /// Also serves the Suiss discovery document from `settings` (OP-149 m.3); without them it
+    /// is not found.
+    #[must_use]
+    pub fn with_suiss(mut self, settings: suiss::Settings) -> Self {
+        self.suiss = Some(settings);
+        self
     }
 
     /// The realm a request reached: `Host` selects it, through its hostname or, for a path
@@ -138,6 +151,9 @@ impl<D: Directory, K: Keys> Discovery<D, K> {
                 .jwks(realm.realm)
                 .await
                 .map_or(Reply::Unavailable, Reply::Jwks),
+            Document::SuissConfiguration => self.suiss.as_ref().map_or(Reply::NotFound, |s| {
+                Reply::Suiss(suiss::document(&realm.issuer, s, suiss::SERVED))
+            }),
         }
     }
 

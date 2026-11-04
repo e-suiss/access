@@ -3,7 +3,8 @@
 pub mod adp;
 pub mod login;
 pub mod oauth;
-mod problem;
+pub mod problem;
+pub mod product;
 pub mod realm;
 mod security_txt;
 pub mod tls;

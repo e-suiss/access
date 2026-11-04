@@ -127,7 +127,7 @@ Access computes the intent digest from the decoded envelope ([L0-ENC-23](../l0/e
 
 ## 4. Discovery
 
-<a id="L1-ADP-11"></a>**L1-ADP-11. Configuration.** `GET /.well-known/authzen-configuration` returns `policy_decision_point`, the issuer the document was fetched from; `access_evaluation_endpoint`; `access_evaluations_endpoint`; and `capabilities` with `urn:esuiss:access:adp:1`, `urn:esuiss:access:explain:1` and `urn:esuiss:access:consistency-token:1`.
+<a id="L1-ADP-11"></a>**L1-ADP-11. Configuration.** `GET /.well-known/authzen-configuration` returns `policy_decision_point`, the issuer the document was fetched from; `access_evaluation_endpoint`; `access_evaluations_endpoint`; and `capabilities` with `urn:suiss:access:adp:1`, `urn:suiss:access:explain:1` and `urn:suiss:access:consistency-token:1`.
 
 ## License
 

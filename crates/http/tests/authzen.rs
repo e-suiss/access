@@ -278,7 +278,7 @@ async fn discovery_names_the_pdp_and_the_profile() {
         body["capabilities"]
             .as_array()
             .unwrap()
-            .contains(&Value::from("urn:esuiss:access:adp:1"))
+            .contains(&Value::from("urn:suiss:access:adp:1"))
     );
     assert!(body.get("signed_metadata").is_none());
 }
@@ -325,6 +325,11 @@ async fn domain_metadata_without_a_signature_is_not_found() {
             assert_eq!(headers[header::CONTENT_TYPE], "application/problem+json");
             let problem: Value = serde_json::from_slice(&body).unwrap();
             assert_eq!(problem["code"], "domain-metadata-unavailable");
+            // OP-149 m.12
+            assert_eq!(
+                problem["type"],
+                "urn:suiss:access:problem:domain-metadata-unavailable"
+            );
         }
     }
 }
@@ -347,7 +352,7 @@ async fn domain_discovery_carries_signed_metadata() {
         body["capabilities"]
             .as_array()
             .unwrap()
-            .contains(&Value::from("urn:esuiss:access:adp:1"))
+            .contains(&Value::from("urn:suiss:access:adp:1"))
     );
 }
 

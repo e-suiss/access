@@ -1,5 +1,6 @@
 //! Process configuration (OP-63 rule 4).
 
+use std::collections::BTreeMap;
 use std::net::{Ipv4Addr, SocketAddr};
 use std::path::PathBuf;
 
@@ -38,6 +39,56 @@ pub(crate) struct Config {
     /// The identity plane (TN-10, CMP-22b, OP-138).
     pub(crate) identity: Option<Identity>,
     pub(crate) login: Login,
+    /// The Suiss deployment this Access belongs to (OP-149 m.3, E42).
+    pub(crate) suiss: Option<Suiss>,
+}
+
+/// What the Suiss discovery document and the tenant snapshot name (OP-149 m.3, m.4).
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct Suiss {
+    /// The deployment's region, e.g. `eu-central`.
+    pub(crate) region: String,
+    /// Relay's base URL.
+    pub(crate) relay: String,
+    /// The management API's base URL.
+    pub(crate) management_api: String,
+    /// Product name (`work`, `relay`, `one`) to base URL.
+    #[serde(default)]
+    pub(crate) products: BTreeMap<String, String>,
+}
+
+impl Suiss {
+    fn valid(&self) -> bool {
+        let region =
+            !self.region.is_empty()
+                && self.region.len() <= 63
+                && self.region.bytes().enumerate().all(|(i, b)| {
+                    b.is_ascii_lowercase() || b.is_ascii_digit() || (i > 0 && b == b'-')
+                });
+        let url = |u: &String| Issuer::parse(u).is_ok();
+        let product = |n: &String| {
+            !n.is_empty() && n.len() <= 32 && n.bytes().all(|b| b.is_ascii_lowercase() || b == b'-')
+        };
+        region
+            && url(&self.relay)
+            && url(&self.management_api)
+            && self.products.iter().all(|(n, u)| product(n) && url(u))
+    }
+
+    /// The deployment's part of the Suiss discovery document; `api_base` is the ADP issuer.
+    pub(crate) fn settings(
+        &self,
+        api_base: &str,
+    ) -> access_identity_oauth::domain::suiss::Settings {
+        access_identity_oauth::domain::suiss::Settings {
+            region: self.region.clone(),
+            relay: self.relay.clone(),
+            management_api: self.management_api.clone(),
+            api_base: api_base.to_owned(),
+            products: self.products.clone(),
+        }
+    }
 }
 
 /// The hosted login (OP-146 m.12, m.14).
@@ -199,6 +250,7 @@ impl Default for Config {
             signer: None,
             identity: None,
             login: Login::default(),
+            suiss: None,
         }
     }
 }
@@ -230,6 +282,10 @@ pub(crate) enum ConfigError {
     RedirectTo,
     #[error("identity.realm_base must be an https origin without a path or trailing slash (TN-10)")]
     RealmBase,
+    #[error(
+        "the suiss section is required: region, and https base URLs without a trailing slash for relay, management_api and products (OP-149 m.3)"
+    )]
+    Suiss,
     #[error(transparent)]
     SecretEnvironment(#[from] access_crypto::secret_file::SecretFileError),
 }
@@ -283,6 +339,9 @@ impl Config {
         let to = &self.login.redirect_to;
         if !to.starts_with('/') || to.starts_with("//") || to.contains('\\') {
             return Err(ConfigError::RedirectTo);
+        }
+        if !self.suiss.as_ref().is_some_and(Suiss::valid) {
+            return Err(ConfigError::Suiss);
         }
         Ok(())
     }
@@ -347,6 +406,12 @@ mod tests {
                 realm_base: "https://id.access.example".to_owned(),
                 signer: "/run/access/identity-signer.sock".into(),
                 outbound_ca_file: None,
+            }),
+            suiss: Some(Suiss {
+                region: "eu-central".to_owned(),
+                relay: "https://relay.example".to_owned(),
+                management_api: "https://api.access.example".to_owned(),
+                products: BTreeMap::from([("work".to_owned(), "https://work.example".to_owned())]),
             }),
             ..Config::default()
         }
@@ -458,6 +523,31 @@ mod tests {
                 "{base}"
             );
         }
+    }
+
+    // OP-149 m.3, E42: the Suiss section is not optional; its URLs are https bases
+    #[test]
+    fn the_suiss_section_is_checked() {
+        let none = Config {
+            suiss: None,
+            ..with_tls()
+        };
+        assert!(matches!(none.validate(), Err(ConfigError::Suiss)));
+        let bad = |f: fn(&mut Suiss)| {
+            let mut c = with_tls();
+            if let Some(s) = c.suiss.as_mut() {
+                f(s);
+            }
+            matches!(c.validate(), Err(ConfigError::Suiss))
+        };
+        assert!(bad(|s| s.region = "EU".to_owned()));
+        assert!(bad(|s| s.region = "-eu".to_owned()));
+        assert!(bad(|s| s.relay = "http://relay.example".to_owned()));
+        assert!(bad(|s| s.management_api = "https://api.example/".to_owned()));
+        assert!(bad(|s| {
+            s.products
+                .insert("Work".to_owned(), "https://w.example".to_owned());
+        }));
     }
 
     // OP-63, TI-9

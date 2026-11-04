@@ -1,0 +1,26 @@
+{
+  "domain": "sha-256:AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+  "position": "9",
+  "iat": "2026-11-04T10:03:00Z",
+  "keys": [
+    {
+      "kid": "oqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqI",
+      "alg": -19,
+      "public_key": "pAEBAzIgBiFYIAkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJ",
+      "party": "AgICAgICAgICAgICAgICAg",
+      "instance": "AwMDAwMDAwMDAwMDAwMDAw",
+      "since": {
+        "position": "4",
+        "time": "2026-11-04T10:00:00Z"
+      },
+      "ended": {
+        "position": "8",
+        "time": "2026-11-04T10:01:00Z"
+      },
+      "successor": "BQUFBQUFBQUFBQUFBQUFBQ",
+      "key_state": "ended"
+    }
+  ],
+  "unknown": [],
+  "consistency_token": "ct-9"
+}
