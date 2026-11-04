@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.event_subscription\n                (tenant_id, realm_id, subscription_id, channel, endpoint, audience, events,\n                 description, secret_kek_id, secret_wrapped_dek, secret_nonce, secret_ciphertext,\n                 token_digest, status, owner_client_id, platform_product)\n             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Text",
+        "Text",
+        "TextArray",
+        "Text",
+        "Text",
+        "Bytea",
+        "Bytea",
+        "Bytea",
+        "Bytea",
+        "Text",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e201b767ba8bea89b6fdb065a220dce344078159ff6a1dce728bc9755811575c"
+}

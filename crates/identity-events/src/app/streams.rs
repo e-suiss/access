@@ -10,6 +10,7 @@ use access_crypto::webhook::WebhookSecret;
 use access_kernel::json::b64url_encode;
 use access_store::events::SubscriptionRow;
 use access_store::identity::{RealmId, TenantId, TenantTx};
+use access_store::idp;
 use serde_json::Value;
 use zeroize::Zeroizing;
 
@@ -133,6 +134,42 @@ impl<K: Sealer, R: Random> Streams<K, R> {
         realm: RealmId,
         req: &StreamRequest,
     ) -> Result<Created, StreamError> {
+        self.open(tenant, realm, req, None).await
+    }
+
+    /// Creates a stream owned by the platform client `client_id` of `realm` (OP-149 m.17 (e)):
+    /// it receives the events of every tenant, `tenant.created` among them.
+    ///
+    /// # Errors
+    /// [`StreamError::NotFound`] when `client_id` is not an active platform client of the realm.
+    pub async fn create_for_platform(
+        &self,
+        tenant: TenantId,
+        realm: RealmId,
+        req: &StreamRequest,
+        client_id: &str,
+    ) -> Result<Created, StreamError> {
+        let mut t = TenantTx::begin(&self.db.app, tenant, realm)
+            .await
+            .map_err(down)?;
+        let product = idp::client(&mut t, client_id)
+            .await
+            .map_err(down)?
+            .filter(|c| c.active)
+            .and_then(|c| c.platform_product)
+            .ok_or(StreamError::NotFound)?;
+        t.commit().await.map_err(down)?;
+        self.open(tenant, realm, req, Some((client_id, product)))
+            .await
+    }
+
+    async fn open(
+        &self,
+        tenant: TenantId,
+        realm: RealmId,
+        req: &StreamRequest,
+        owner: Option<(&str, String)>,
+    ) -> Result<Created, StreamError> {
         let issuer = self.issuer(tenant, realm).await?;
         let mut raw = [0_u8; 16];
         self.random.fill(&mut raw)?;
@@ -163,6 +200,8 @@ impl<K: Sealer, R: Random> Streams<K, R> {
             token_digest: token.as_deref().map(|t| token_digest(t)),
             status: String::from("enabled"),
             disabled: false,
+            owner_client_id: owner.as_ref().map(|(c, _)| String::from(*c)),
+            platform_product: owner.map(|(_, p)| p),
         };
         let mut t = TenantTx::begin(&self.db.app, tenant, realm)
             .await

@@ -15,7 +15,7 @@ mod support;
 use access_identity_events::domain::catalog::{
     ClientChange, IdentityEvent, IdentityKind, NAMES, PlatformProduct, authority_ready, urn,
 };
-use access_identity_events::domain::set::{cloud_event, set_claims};
+use access_identity_events::domain::set::{cloud_event, set_claims, set_tenant};
 use access_identity_events::domain::stream::{
     Channel, parse_poll, parse_stream, poll_response, ssf_configuration, stream_json,
 };
@@ -192,8 +192,15 @@ fn built_events_meet_the_contracts() {
     names.dedup();
     assert_eq!(names.len(), NAMES.len());
     for r in &built {
-        let claims = set_claims(r, "https://id.example/realms/shop", "work", 1_793_750_400);
+        let mut claims = set_claims(r, "https://id.example/realms/shop", "work", 1_793_750_400);
         assert_set(&claims);
+        // OP-149 m.17 (e)
+        set_tenant(&mut claims, &[7; 16]);
+        assert_set(&claims);
+        assert_eq!(
+            claims["access_tenant"],
+            "07070707-0707-0707-0707-070707070707"
+        );
         let ce: Json =
             serde_json::from_slice(&cloud_event(&claims, &[1; 16], &[2; 16], r.at).unwrap())
                 .unwrap();

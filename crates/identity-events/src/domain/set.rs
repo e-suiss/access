@@ -36,6 +36,14 @@ pub fn set_claims(event: &Ready, iss: &str, aud: &str, iat_s: u64) -> Value {
     })
 }
 
+/// Names the tenant the event happened in, for a platform product's subscription that
+/// receives every tenant's events (OP-149 m.17 (e)).
+pub fn set_tenant(claims: &mut Value, tenant: &[u8; 16]) {
+    if let Some(m) = claims.as_object_mut() {
+        m.insert("access_tenant".into(), uuid(tenant).into());
+    }
+}
+
 /// What a stored SET says about itself.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SetHead {

@@ -72,6 +72,20 @@ pub async fn create_realm(
     Ok(RealmId::from_bytes(*id.as_bytes()))
 }
 
+/// How many realms the tenant has ever had, deleted ones included.
+///
+/// # Errors
+/// [`StoreError`].
+pub async fn realm_count(t: &mut TenantTx) -> Result<u64, StoreError> {
+    let n = sqlx::query_scalar!(
+        r#"SELECT count(*) AS "n!" FROM access.realms WHERE tenant_id = $1"#,
+        Uuid::from_bytes(*t.tenant.as_bytes()),
+    )
+    .fetch_one(&mut *t.tx)
+    .await?;
+    u64::try_from(n).map_err(|_| StoreError::Corrupt)
+}
+
 /// Soft-deletes a realm and its hostnames; the realm id and slug stay taken (INV-32).
 ///
 /// # Errors

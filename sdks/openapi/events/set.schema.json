@@ -60,6 +60,11 @@
       "additionalProperties": {
         "type": "object"
       }
+    },
+    "access_tenant": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+      "description": "The tenant the event happened in. Present only on a platform product's subscription, which receives the events of every tenant (OP-149 m.17 (e)); iss and aud are then the platform realm's and its subscriber's."
     }
   }
 }

@@ -348,9 +348,13 @@ async fn new_client(w: &World) -> Client {
     }
 }
 
-/// The identity outbox's events once at least `n` are visible. The outbox watermark is
+/// The identity outbox's events of a kind that starts with `kind` once at least `n` are visible. The outbox watermark is
 /// cluster-wide, so another test's open transaction delays an event, never loses it.
-async fn identity_events(db: &TestDb, n: usize) -> Vec<access_store::identity::OutboxEvent> {
+async fn identity_events(
+    db: &TestDb,
+    kind: &str,
+    n: usize,
+) -> Vec<access_store::identity::OutboxEvent> {
     let deadline = std::time::Instant::now() + Duration::from_secs(20);
     loop {
         let queued: Vec<_> = access_store::identity::poll(
@@ -361,7 +365,7 @@ async fn identity_events(db: &TestDb, n: usize) -> Vec<access_store::identity::O
         .await
         .unwrap()
         .into_iter()
-        .filter(|e| e.kind.starts_with("event."))
+        .filter(|e| e.kind.starts_with(kind))
         .collect();
         if queued.len() >= n {
             return queued;
@@ -412,6 +416,15 @@ async fn realm_creation_opens_genesis_and_fixes_the_issuer() {
     );
     // OP-146 m.16 (m)
     assert_eq!(w.opened(), vec![(*realm.as_bytes(), JoseAlg::Es256)]);
+    // OP-149 m.4, m.17 (e)
+    let created = identity_events(&w.db, "event.tenant.", 1).await;
+    assert_eq!(created.len(), 1);
+    let event = access_identity_events::domain::catalog::IdentityEvent::from_outbox(
+        &created[0].kind,
+        &created[0].payload,
+    )
+    .unwrap();
+    assert_eq!(event.payload["placement"], "pool-default");
     let taken = w
         .admin()
         .create_realm(&NewRealm {
@@ -455,7 +468,7 @@ async fn a_client_is_registered_through_commit() {
         Applied::AlreadyWritten { position, .. } if position == pos
     ));
     // OP-149 m.4: the write queued one api_client.created in its transaction; the retry none
-    let queued = identity_events(&w.db, 1).await;
+    let queued = identity_events(&w.db, "event.api_client.", 1).await;
     assert_eq!(queued.len(), 1);
     assert_eq!(queued[0].kind, "event.api_client.created");
     let event = access_identity_events::domain::catalog::IdentityEvent::from_outbox(
@@ -771,7 +784,7 @@ async fn a_platform_client_pairs_with_every_realm() {
     assert!(row.jwks.unwrap().contains(r#""crv":"Ed25519""#));
     assert_eq!(row.platform_product.as_deref(), Some("work"));
     // OP-149 m.4, m.17a
-    let created = identity_events(&w.db, 1).await;
+    let created = identity_events(&w.db, "event.api_client.", 1).await;
     let event = access_identity_events::domain::catalog::IdentityEvent::from_outbox(
         &created[0].kind,
         &created[0].payload,
@@ -841,7 +854,7 @@ async fn a_platform_client_pairs_with_every_realm() {
         ROOT_KEY,
     );
     written(&platform.apply(&retire, ais).await.unwrap());
-    let events = identity_events(&w.db, 2).await;
+    let events = identity_events(&w.db, "event.api_client.", 2).await;
     assert_eq!(events[1].kind, "event.api_client.disabled");
     let disabled = access_identity_events::domain::catalog::IdentityEvent::from_outbox(
         &events[1].kind,
@@ -903,4 +916,155 @@ async fn a_party_terminates_its_own_instance_through_the_identity_plane() {
         },
         "the ended Instance signs nothing more"
     );
+}
+
+/// Seals nothing: the test's streams push SETs and hold no webhook secret.
+struct NoSeal;
+
+impl access_identity_events::ports::Sealer for NoSeal {
+    fn seal(
+        &self,
+        _: TenantId,
+        _: RealmId,
+        _: &[u8; 16],
+        _: &[u8],
+    ) -> Result<access_store::events::SealedKey, access_identity_events::Unavailable> {
+        Err(access_identity_events::Unavailable)
+    }
+
+    fn open(
+        &self,
+        _: TenantId,
+        _: RealmId,
+        _: &[u8; 16],
+        _: &access_store::events::SealedKey,
+    ) -> Result<zeroize::Zeroizing<Vec<u8>>, access_identity_events::Unavailable> {
+        Err(access_identity_events::Unavailable)
+    }
+}
+
+// OP-149 m.17 (e), m.4: a stream owned by a platform product client receives the events of
+// every tenant, tenant.created among them, each SET naming the tenant it happened in; a tenant's
+// own stream receives only its tenant's events, and only a platform client may own such a stream
+#[tokio::test]
+async fn a_platform_subscription_receives_every_tenant() {
+    // OP-131, TN-1, OP-132 m.3
+    use access_identity_events::app::Db;
+    use access_identity_events::app::fanout::Fanout;
+    use access_identity_events::app::streams::{StreamError, Streams};
+    use access_identity_events::domain::catalog::{IdentityEvent, urn};
+    use access_identity_events::domain::stream::parse_stream;
+    use access_identity_oauth::adapters::dpop::SystemClock as OAuthClock;
+    use access_identity_oauth::adapters::oauth::OsRandom;
+
+    let w = World::new().await;
+    let (pt, pr, pd) = w.realm("platform").await;
+    onboard(&w.plane, pd, ROOT, ROOT_KEY).await;
+    let platform = Admin {
+        platform_tenant: Some(pt),
+        ..w.admin()
+    };
+    let c = platform_client(
+        w.admin().new_client_id().await.unwrap(),
+        PlatformProduct::Work,
+        40,
+    );
+    let p = proposal(
+        (pt, pr),
+        Change::ClientRegister(c.clone()),
+        3,
+        idp_anchor(pd),
+        1,
+    );
+    let prepared = platform.prepare(&p).await.unwrap();
+    let ais = sign(
+        &statement(prepared.domain, &p.nonce, prepared.digest, p.basis),
+        ROOT_KEY,
+    );
+    written(&platform.apply(&p, ais).await.unwrap());
+
+    let db = Db {
+        app: w.db.app.clone(),
+        reader: w.db.reader.clone(),
+    };
+    let streams = Streams::new(db.clone(), NoSeal, OsRandom);
+    let request = |aud: &str| {
+        parse_stream(
+            &serde_json::to_vec(&serde_json::json!({
+                "delivery": {"method": "urn:ietf:rfc:8935", "endpoint_url": "https://work.example/ssf"},
+                "aud": aud,
+                "events_requested": [urn("tenant.created"), urn("api_client.created")],
+            }))
+            .unwrap(),
+        )
+        .unwrap()
+    };
+    let shop = new_client(&w).await;
+    assert!(matches!(
+        streams
+            .create_for_platform(pt, pr, &request("work"), shop.id.as_str())
+            .await,
+        Err(StreamError::NotFound)
+    ));
+    let work = streams
+        .create_for_platform(pt, pr, &request("work"), c.id.as_str())
+        .await
+        .unwrap();
+
+    let (t2, r2, _) = w.realm("acme").await;
+    let own = streams.create(t2, r2, &request("acme")).await.unwrap();
+    let listed = access_store::events::platform_subscriptions(&w.db.reader)
+        .await
+        .unwrap();
+    assert_eq!(listed.len(), 1);
+    assert_eq!(listed[0].id, work.id);
+
+    let created = identity_events(&w.db, "event.tenant.", 2).await;
+    let ids: Vec<(String, String)> = created
+        .iter()
+        .map(|e| {
+            let e = IdentityEvent::from_outbox(&e.kind, &e.payload).unwrap();
+            (
+                e.ready().id,
+                e.payload["tenant"].as_str().unwrap().to_owned(),
+            )
+        })
+        .collect();
+    let fanout = Fanout::new(db, OAuthClock);
+    let deadline = std::time::Instant::now() + Duration::from_secs(20);
+    let mut queued = 0;
+    while queued < 4 {
+        queued += fanout.identity_step().await.unwrap();
+        assert!(
+            std::time::Instant::now() < deadline,
+            "{queued} of 4 after 20 s"
+        );
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    let uuid = |t: TenantId| access_identity_events::domain::catalog::uuid(t.as_bytes());
+    let (acme_event, _) = ids.iter().find(|(_, t)| *t == uuid(t2)).unwrap();
+    let (platform_event, _) = ids.iter().find(|(_, t)| *t == uuid(pt)).unwrap();
+    let mut t = TenantTx::begin(&w.db.app, pt, pr).await.unwrap();
+    let across = t.delivery(pr, work.id, acme_event).await.unwrap().unwrap();
+    let home = t
+        .delivery(pr, work.id, platform_event)
+        .await
+        .unwrap()
+        .unwrap();
+    t.commit().await.unwrap();
+    let claims: serde_json::Value = serde_json::from_slice(&across.payload).unwrap();
+    assert_eq!(claims["access_tenant"], uuid(t2));
+    assert_eq!(claims["aud"], "work");
+    assert!(claims["events"].get(urn("tenant.created")).is_some());
+    let claims: serde_json::Value = serde_json::from_slice(&home.payload).unwrap();
+    assert!(claims.get("access_tenant").is_none());
+    let mut t = TenantTx::begin(&w.db.app, t2, r2).await.unwrap();
+    assert!(t.delivery(r2, own.id, acme_event).await.unwrap().is_some());
+    assert!(
+        t.delivery(r2, own.id, platform_event)
+            .await
+            .unwrap()
+            .is_none()
+    );
+    t.commit().await.unwrap();
 }

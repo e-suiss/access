@@ -172,7 +172,8 @@ fn host_of(authority: &str) -> &str {
 impl<D: Decider, G: Governance, K: RealmKeys> Admin<'_, D, G, K> {
     /// Creates a realm: opens its governing domain with a Genesis, then writes the realm with
     /// its fixed issuer and the Genesis default settings (TN-111, TN-16, OP-146 m.8 (c)). There
-    /// is no master realm; every realm is created this way.
+    /// is no master realm; every realm is created this way. A tenant's first realm also queues
+    /// `tenant.created` (OP-149 m.4): from then on the tenant can be paired with.
     ///
     /// # Errors
     /// [`AdminError`]; a slug taken by another realm leaves the new domain without a realm.
@@ -198,6 +199,13 @@ impl<D: Decider, G: Governance, K: RealmKeys> Admin<'_, D, G, K> {
             return Err(AdminError::Conflict);
         }
         idp::create_settings(&mut t).await?;
+        // OP-149 m.4, m.17 (e)
+        if tenancy::realm_count(&mut t).await? == 1 {
+            let at = access_store::authority::server_time(self.app).await?;
+            let id = access_crypto::random::bytes::<32>().map_err(|_| AdminError::Encode)?;
+            let event = IdentityEvent::tenant_created(id, r.tenant.as_bytes(), r.placement, at);
+            emit(&mut t, &event).await?;
+        }
         t.commit().await?;
         // OP-146 m.16 (m)
         self.open_keys(r.tenant, realm).await?;

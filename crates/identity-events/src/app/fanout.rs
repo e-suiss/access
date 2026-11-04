@@ -17,7 +17,7 @@ use access_store::{Pool, idp, tenancy};
 use crate::app::courier::POLL_INTERVAL;
 use crate::app::{Db, down, realm_signing};
 use crate::domain::catalog::{IdentityEvent, OUTBOX_PREFIX, Ready, authority_ready, urn};
-use crate::domain::set::set_claims;
+use crate::domain::set::{set_claims, set_tenant};
 use crate::ports::{Clock, Unavailable};
 
 /// The fan-out's cursor name in `access_ops.outbox_cursor`.
@@ -157,7 +157,9 @@ impl<C: Clock + Send + Sync> Fanout<C> {
         }
     }
 
-    /// One delivery per live subscription of `tenant` that asked for the event's type.
+    /// One delivery per live subscription of `tenant` that asked for the event's type, and per
+    /// live platform product subscription of another tenant (OP-149 m.17 (e)); the latter's
+    /// SET names the event's tenant.
     async fn queue(&self, tenant: TenantId, ready: &Ready) -> Result<u32, Unavailable> {
         let now = self.clock.now().map_err(down)?;
         let urn = urn(ready.name);
@@ -166,24 +168,49 @@ impl<C: Clock + Send + Sync> Fanout<C> {
             .map_err(down)?;
         let subs = t.live_subscriptions().await.map_err(down)?;
         t.commit().await.map_err(down)?;
-        let mut by_realm: BTreeMap<[u8; 16], Vec<SubscriptionRow>> = BTreeMap::new();
+        let mut by_realm: BTreeMap<([u8; 16], [u8; 16]), Vec<SubscriptionRow>> = BTreeMap::new();
         for s in subs.into_iter().filter(|s| s.events.contains(&urn)) {
-            by_realm.entry(s.realm).or_default().push(s);
+            by_realm
+                .entry((*tenant.as_bytes(), s.realm))
+                .or_default()
+                .push(s);
+        }
+        for p in store::platform_subscriptions(&self.db.reader)
+            .await
+            .map_err(down)?
+        {
+            if p.tenant == tenant || !p.events.contains(&urn) {
+                continue;
+            }
+            let mut t = TenantTx::begin(&self.db.app, p.tenant, p.realm)
+                .await
+                .map_err(down)?;
+            let s = t.subscription(p.realm, p.id).await.map_err(down)?;
+            t.commit().await.map_err(down)?;
+            if let Some(s) = s.filter(|s| !s.disabled) {
+                by_realm
+                    .entry((*p.tenant.as_bytes(), *p.realm.as_bytes()))
+                    .or_default()
+                    .push(s);
+            }
         }
         let mut queued = 0_u32;
-        for (realm, subs) in by_realm {
-            let realm = RealmId::from_bytes(realm);
-            let Some((issuer, _)) = realm_signing(&self.db.app, tenant, realm).await? else {
+        for ((owner, realm), subs) in by_realm {
+            let (owner, realm) = (TenantId::from_bytes(owner), RealmId::from_bytes(realm));
+            let Some((issuer, _)) = realm_signing(&self.db.app, owner, realm).await? else {
                 continue;
             };
-            let mut t = TenantTx::begin(&self.db.app, tenant, realm)
+            let mut t = TenantTx::begin(&self.db.app, owner, realm)
                 .await
                 .map_err(down)?;
             for s in subs {
-                let claims = set_claims(ready, issuer.as_str(), &s.audience, now / 1000);
+                let mut claims = set_claims(ready, issuer.as_str(), &s.audience, now / 1000);
+                if owner != tenant {
+                    set_tenant(&mut claims, tenant.as_bytes());
+                }
                 let payload = serde_json::to_vec(&claims).map_err(down)?;
                 let row = DeliveryRow {
-                    tenant: *tenant.as_bytes(),
+                    tenant: *owner.as_bytes(),
                     realm: s.realm,
                     subscription: s.id,
                     channel: s.channel.clone(),

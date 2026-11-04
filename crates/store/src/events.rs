@@ -56,6 +56,23 @@ pub struct SubscriptionRow {
     pub status: String,
     /// Whether it has ended.
     pub disabled: bool,
+    /// The platform client that owns it, when a platform product subscribed (OP-149 m.17 (e)).
+    pub owner_client_id: Option<String>,
+    /// That client's product: the subscription receives the events of every tenant.
+    pub platform_product: Option<String>,
+}
+
+/// A platform product's live subscription as the fan-out finds it across tenants.
+#[derive(Clone, PartialEq, Eq)]
+pub struct PlatformSubscription {
+    /// Its tenant, the platform tenant.
+    pub tenant: TenantId,
+    /// Its realm.
+    pub realm: RealmId,
+    /// Its id.
+    pub id: [u8; 16],
+    /// Event type URNs it receives.
+    pub events: Vec<String>,
 }
 
 /// One queued delivery.
@@ -136,6 +153,8 @@ struct Raw {
     token_digest: Option<Vec<u8>>,
     status: String,
     disabled: bool,
+    owner_client_id: Option<String>,
+    platform_product: Option<String>,
 }
 
 impl Raw {
@@ -170,6 +189,8 @@ impl Raw {
                 .transpose()?,
             status: self.status,
             disabled: self.disabled,
+            owner_client_id: self.owner_client_id,
+            platform_product: self.platform_product,
         })
     }
 }
@@ -184,8 +205,8 @@ impl TenantTx {
             "INSERT INTO access.event_subscription
                 (tenant_id, realm_id, subscription_id, channel, endpoint, audience, events,
                  description, secret_kek_id, secret_wrapped_dek, secret_nonce, secret_ciphertext,
-                 token_digest, status)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)",
+                 token_digest, status, owner_client_id, platform_product)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)",
             uuid(self.tenant.as_bytes()),
             uuid(&s.realm),
             uuid(&s.id),
@@ -200,6 +221,8 @@ impl TenantTx {
             s.secret.as_ref().map(|k| k.ciphertext.clone()),
             s.token_digest.map(|d| d.to_vec()),
             s.status,
+            s.owner_client_id,
+            s.platform_product,
         )
         .execute(&mut *self.tx)
         .await?;
@@ -219,7 +242,8 @@ impl TenantTx {
             Raw,
             r#"SELECT realm_id, subscription_id, channel, endpoint, audience, events, description,
                       secret_kek_id, secret_wrapped_dek, secret_nonce, secret_ciphertext,
-                      token_digest, status, disabled_at IS NOT NULL AS "disabled!"
+                      token_digest, status, disabled_at IS NOT NULL AS "disabled!",
+                      owner_client_id, platform_product
                  FROM access.event_subscription WHERE tenant_id = $1 AND realm_id = $2 AND subscription_id = $3"#,
             uuid(self.tenant.as_bytes()),
             uuid(realm.as_bytes()),
@@ -243,7 +267,8 @@ impl TenantTx {
             Raw,
             r#"SELECT realm_id, subscription_id, channel, endpoint, audience, events, description,
                       secret_kek_id, secret_wrapped_dek, secret_nonce, secret_ciphertext,
-                      token_digest, status, disabled_at IS NOT NULL AS "disabled!"
+                      token_digest, status, disabled_at IS NOT NULL AS "disabled!",
+                      owner_client_id, platform_product
                  FROM access.event_subscription WHERE tenant_id = $1 AND realm_id = $2 AND token_digest = $3 AND disabled_at IS NULL"#,
             uuid(self.tenant.as_bytes()),
             uuid(realm.as_bytes()),
@@ -263,7 +288,8 @@ impl TenantTx {
             Raw,
             r#"SELECT realm_id, subscription_id, channel, endpoint, audience, events, description,
                       secret_kek_id, secret_wrapped_dek, secret_nonce, secret_ciphertext,
-                      token_digest, status, disabled_at IS NOT NULL AS "disabled!"
+                      token_digest, status, disabled_at IS NOT NULL AS "disabled!",
+                      owner_client_id, platform_product
                  FROM access.event_subscription WHERE tenant_id = $1 AND disabled_at IS NULL ORDER BY realm_id, subscription_id"#,
             uuid(self.tenant.as_bytes())
         )
@@ -515,6 +541,32 @@ impl TenantTx {
         .await?;
         Ok(done.rows_affected())
     }
+}
+
+/// The live subscriptions of platform products in every tenant (OP-149 m.17 (e)). Read as
+/// `access_outbox_reader`, which sees only these rows and only these columns.
+///
+/// # Errors
+/// [`StoreError`].
+pub async fn platform_subscriptions(
+    reader: &PgPool,
+) -> Result<Vec<PlatformSubscription>, StoreError> {
+    let rows = sqlx::query!(
+        "SELECT tenant_id, realm_id, subscription_id, events FROM access.event_subscription
+          WHERE platform_product IS NOT NULL AND disabled_at IS NULL
+          ORDER BY tenant_id, realm_id, subscription_id",
+    )
+    .fetch_all(reader)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(|r| PlatformSubscription {
+            tenant: TenantId::from_bytes(*r.tenant_id.as_bytes()),
+            realm: RealmId::from_bytes(*r.realm_id.as_bytes()),
+            id: *r.subscription_id.as_bytes(),
+            events: r.events,
+        })
+        .collect())
 }
 
 /// A pending push delivery, as the transmitter finds it across tenants.

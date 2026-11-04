@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT realm_id, subscription_id, channel, endpoint, audience, events, description,\n                      secret_kek_id, secret_wrapped_dek, secret_nonce, secret_ciphertext,\n                      token_digest, status, disabled_at IS NOT NULL AS \"disabled!\"\n                 FROM access.event_subscription WHERE tenant_id = $1 AND realm_id = $2 AND token_digest = $3 AND disabled_at IS NULL",
+  "query": "SELECT realm_id, subscription_id, channel, endpoint, audience, events, description,\n                      secret_kek_id, secret_wrapped_dek, secret_nonce, secret_ciphertext,\n                      token_digest, status, disabled_at IS NOT NULL AS \"disabled!\",\n                      owner_client_id, platform_product\n                 FROM access.event_subscription WHERE tenant_id = $1 AND realm_id = $2 AND subscription_id = $3",
   "describe": {
     "columns": [
       {
@@ -151,13 +151,35 @@
         "name": "disabled!",
         "type_info": "Bool",
         "origin": "Expression"
+      },
+      {
+        "ordinal": 14,
+        "name": "owner_client_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.event_subscription",
+            "name": "owner_client_id"
+          }
+        }
+      },
+      {
+        "ordinal": 15,
+        "name": "platform_product",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.event_subscription",
+            "name": "platform_product"
+          }
+        }
       }
     ],
     "parameters": {
       "Left": [
         "Uuid",
         "Uuid",
-        "Bytea"
+        "Uuid"
       ]
     },
     "nullable": [
@@ -174,8 +196,10 @@
       true,
       true,
       false,
-      null
+      null,
+      true,
+      true
     ]
   },
-  "hash": "b3dac63efb0a759ce4b9fab365f581d09c7de301711cdf4ac5a8dc2cfc287319"
+  "hash": "596d17991aee090dc6d1ac927610f9891cba869df3b9ce4bcabda8ac1912fc67"
 }

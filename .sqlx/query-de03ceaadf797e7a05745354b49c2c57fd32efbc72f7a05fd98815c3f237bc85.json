@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT realm_id, subscription_id, channel, endpoint, audience, events, description,\n                      secret_kek_id, secret_wrapped_dek, secret_nonce, secret_ciphertext,\n                      token_digest, status, disabled_at IS NOT NULL AS \"disabled!\"\n                 FROM access.event_subscription WHERE tenant_id = $1 AND disabled_at IS NULL ORDER BY realm_id, subscription_id",
+  "query": "SELECT realm_id, subscription_id, channel, endpoint, audience, events, description,\n                      secret_kek_id, secret_wrapped_dek, secret_nonce, secret_ciphertext,\n                      token_digest, status, disabled_at IS NOT NULL AS \"disabled!\",\n                      owner_client_id, platform_product\n                 FROM access.event_subscription WHERE tenant_id = $1 AND disabled_at IS NULL ORDER BY realm_id, subscription_id",
   "describe": {
     "columns": [
       {
@@ -151,6 +151,28 @@
         "name": "disabled!",
         "type_info": "Bool",
         "origin": "Expression"
+      },
+      {
+        "ordinal": 14,
+        "name": "owner_client_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.event_subscription",
+            "name": "owner_client_id"
+          }
+        }
+      },
+      {
+        "ordinal": 15,
+        "name": "platform_product",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.event_subscription",
+            "name": "platform_product"
+          }
+        }
       }
     ],
     "parameters": {
@@ -172,8 +194,10 @@
       true,
       true,
       false,
-      null
+      null,
+      true,
+      true
     ]
   },
-  "hash": "7cede04aa40703703c2aca22a9c4e3aec5688449832daecc7fe9310425911203"
+  "hash": "de03ceaadf797e7a05745354b49c2c57fd32efbc72f7a05fd98815c3f237bc85"
 }
