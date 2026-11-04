@@ -26,7 +26,7 @@ use access_kernel::combinator::{Capacity, Mode, Outcome};
 use access_kernel::digest::Digest;
 use access_kernel::intent::{ContextRefs, IntentEnvelope};
 use access_kernel::meta::{
-    self, ExerciseBasis, GrantBasis, GrantContent, HoldingRef, Payload, Root, kind,
+    self, ActorKind, ExerciseBasis, GrantBasis, GrantContent, HoldingRef, Payload, Root, kind,
 };
 use access_kernel::model::{
     ActionRef, ActionSet, AuthoritySet, Binding as ProofBinding, CanonicalAuthority, ConstraintSet,
@@ -404,10 +404,22 @@ fn allowed(r: &Response) {
 
 /// Registers `party` with the key `seed` under the Public bootstrap Grant.
 async fn onboard(core: &mut Core, d: Digest, party: Id, seed: u8, nonces: (u8, u8)) {
+    onboard_as(core, d, (party, ActorKind::Human), seed, nonces).await;
+}
+
+/// Registers `party` as an actor of `actor_kind` with the key `seed`.
+async fn onboard_as(
+    core: &mut Core,
+    d: Digest,
+    (party, actor_kind): (Id, ActorKind),
+    seed: u8,
+    nonces: (u8, u8),
+) {
     let public_basis = ExerciseBasis::Public(meta::object_id(&d, kind::GRANT, 0));
     let register = Payload::PartyRegister {
         party,
         root: Root::Sole(party),
+        actor_kind,
     };
     allowed(
         &send(
@@ -592,6 +604,7 @@ async fn an_anonymous_meta_action_is_denied() {
     let register = Payload::PartyRegister {
         party: ROOT,
         root: Root::Sole(ROOT),
+        actor_kind: ActorKind::Human,
     };
     let mut inc = incoming(meta_request(d, 12, public_basis, register), ROOT_KEY);
     inc.ais = None;
@@ -688,6 +701,7 @@ async fn a_process_leads_a_domain_from_its_first_request() {
             Payload::PartyRegister {
                 party: ROOT,
                 root: Root::Sole(ROOT),
+                actor_kind: ActorKind::Human,
             },
         ),
         (
@@ -902,6 +916,26 @@ fn claim_after(
 fn with_proofs(mut r: Request, proofs: Vec<ProofRef>) -> Request {
     r.proofs = proofs;
     r
+}
+
+// OP-149 m.8, L0-EVAL-30: the commit path derives actor_is_agent from the actor Party's
+// actor_kind, so a human-presence term is not satisfiable by an agent actor
+#[tokio::test]
+async fn an_agent_party_cannot_satisfy_human_presence_itself() {
+    let mut present = term(ProofKind::Authentication, "presence", ProofBinding::None);
+    present.assurance.insert("human_presence".to_owned(), 1);
+    for (actor_kind, satisfiable) in [(ActorKind::Human, true), (ActorKind::Agent, false)] {
+        let db = fresh().await.unwrap();
+        let (mut core, d) = setup_with(&db, gated(&[present.clone()])).await;
+        onboard_as(&mut core, d, (ROOT, actor_kind), ROOT_KEY, (1, 2)).await;
+        let shop = ExerciseBasis::Anchor(meta::object_id(&d, kind::ANCHOR, 1));
+        let asked = send(&mut core, shop_request(d, 9, Mode::Commit, shop), ROOT_KEY)
+            .await
+            .unwrap();
+        assert_eq!(asked.decision.outcome, Outcome::RequireAction);
+        assert_eq!(asked.decision.unmet.len(), 1);
+        assert_eq!(asked.decision.unmet[0].satisfiable_by_actor, satisfiable);
+    }
 }
 
 // OP-141 m.19 (a)–(d), (h), L2-CLM-3, L2-CLM-4: an accepted Claim meets the requirement on the
@@ -2046,6 +2080,7 @@ async fn search_shows_what_the_reader_may_see() {
                 Payload::PartyRegister {
                     party,
                     root: Root::Sole(party),
+                    actor_kind: ActorKind::Human,
                 },
             ),
             (
@@ -2854,6 +2889,7 @@ async fn onboard_signed(
         Payload::PartyRegister {
             party: ROOT,
             root: Root::Sole(ROOT),
+            actor_kind: ActorKind::Human,
         },
         Payload::InstanceCreate {
             party: ROOT,
@@ -3026,6 +3062,7 @@ async fn an_allow_carries_a_signed_receipt() {
             Payload::PartyRegister {
                 party: ROOT,
                 root: Root::Sole(ROOT),
+                actor_kind: ActorKind::Human,
             },
         ),
         (
@@ -3390,6 +3427,7 @@ async fn home_pap(
         Payload::PartyRegister {
             party: ALICE,
             root: Root::Sole(ALICE),
+            actor_kind: ActorKind::Human,
         },
         Payload::InstanceCreate {
             party: ALICE,

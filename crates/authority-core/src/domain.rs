@@ -1377,13 +1377,21 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
         Ok(r) => r,
         Err(r) => return Pass::Rejected(r),
     };
+    // OP-149 m.8
+    let actor_is_agent = actor
+        .as_ref()
+        .is_some_and(|a| meta::actor_is_agent(snapshot, &a.party));
+    let missing = snapshot.missing();
+    if !missing.is_empty() {
+        return Pass::Need(missing);
+    }
     let input = EvaluationInput {
         mode: req.mode,
         intent: &req.intent,
         intent_digest,
         now,
         actor_instance: actor.map(|a| a.instance),
-        actor_is_agent: false,
+        actor_is_agent,
         mandate: mandate.as_ref(),
         capacity: req.capacity,
         bases: &bases,

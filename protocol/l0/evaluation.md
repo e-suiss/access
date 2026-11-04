@@ -20,7 +20,7 @@ A decision has one of three outcomes: `allow`, `deny` or `require_action`. There
 | `intent`, `intent_digest` | The intent envelope and its digest ([L0-ENC-23](encoding.md#L0-ENC-23)) |
 | `now` | Trusted evaluation time |
 | `actor_instance` | The authenticated actor Instance, if any |
-| `actor_is_agent` | Present and `true` when the actor Instance is a software agent |
+| `actor_is_agent` | Present and `true` when the actor Instance's Party was registered with `actor_kind` `agent` ([L0-META-22](meta.md#L0-META-22)) |
 | `mandate` | The actor Instance's own limits, if it has any |
 | `capacity` | The capacity the actor declares: `own` or `for` a Party |
 | `bases` | Candidate bases. Each is a list of hops from hop 0 toward the root, and the capacities the basis permits |

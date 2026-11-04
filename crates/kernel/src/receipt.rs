@@ -3,6 +3,7 @@
 //! Exercise, one intent and one audience.
 
 use alloc::string::String;
+use alloc::vec::Vec;
 
 use crate::codec::{Canonical, Fields, ModelError, map, uint};
 use crate::combinator::Capacity;
@@ -41,6 +42,41 @@ pub struct Receipt {
     pub iat: TrustedTime,
     /// Whether the ALLOW drew from a budget.
     pub drawn: bool,
+    /// The chain the actor acted on behalf of, from the principal to the agent; empty when
+    /// it acted for itself (OP-149 m.11).
+    pub agency: Vec<AgencyLink>,
+}
+
+/// One link of a receipt's agency chain (OP-149 m.11).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct AgencyLink {
+    /// The Mandate the agent acted under.
+    pub mandate: Id,
+    /// The Party acted for.
+    pub principal: Id,
+    /// The Party that acted; the principal of the next link.
+    pub agent: Id,
+}
+
+impl Canonical for AgencyLink {
+    fn to_value(&self) -> suiss_crypto::dcbor::Value {
+        map([
+            ("mandate", Some(self.mandate.to_value())),
+            ("principal", Some(self.principal.to_value())),
+            ("agent", Some(self.agent.to_value())),
+        ])
+    }
+
+    fn from_value(v: &suiss_crypto::dcbor::Value) -> Result<Self, ModelError> {
+        let mut f = Fields::of(v)?;
+        let l = Self {
+            mandate: Id::from_value(f.req("mandate")?)?,
+            principal: Id::from_value(f.req("principal")?)?,
+            agent: Id::from_value(f.req("agent")?)?,
+        };
+        f.done()?;
+        Ok(l)
+    }
 }
 
 impl Canonical for Receipt {
@@ -58,6 +94,11 @@ impl Canonical for Receipt {
             ("audience", Some(Value::text(&self.audience))),
             ("iat", Some(Value::Unsigned(self.iat))),
             ("drawn", Some(Value::Bool(self.drawn))),
+            (
+                "agency",
+                (!self.agency.is_empty())
+                    .then(|| Value::Array(self.agency.iter().map(Canonical::to_value).collect())),
+            ),
         ])
     }
 
@@ -82,6 +123,14 @@ impl Canonical for Receipt {
             drawn: match f.req("drawn")? {
                 Value::Bool(b) => *b,
                 _ => return Err(ModelError::Shape),
+            },
+            agency: match f.opt("agency") {
+                None => Vec::new(),
+                Some(Value::Array(links)) if !links.is_empty() => links
+                    .iter()
+                    .map(AgencyLink::from_value)
+                    .collect::<Result<_, _>>()?,
+                Some(_) => return Err(ModelError::Shape),
             },
         };
         f.done()?;

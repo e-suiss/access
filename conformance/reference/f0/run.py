@@ -13,7 +13,7 @@ from f0.version import CORE_VERSION, VERSION
 from f0.codec import Rejection, decode_canonical, decode_canonical_authority, decode_subject_selector, encode
 from f0.combinator import evaluate_bytes
 from f0.cose import CoseError, verify_sign1
-from f0.keyscope import KeyScopeError, check_public_key, operational_key
+from f0.keyscope import KeyScopeError, check_public_key, jwk_members, operational_key, thumbprint
 
 
 def run_evaluate(case, document):
@@ -334,7 +334,8 @@ def run_codec_encode(case, document):
 
 def run_ais(case, document):
     # L2-AIS-1 to L2-AIS-4
-    key = decode_canonical(bytes.fromhex(document["key"]))
+    # OP-149 m.6: a case may name its own Instance key
+    key = decode_canonical(bytes.fromhex(case.get("key", document["key"])))
     request = decode_canonical(bytes.fromhex(case["request"]))
     try:
         ais.verify(bytes.fromhex(case["sign1"]), key, request, case["now"])
@@ -344,6 +345,17 @@ def run_ais(case, document):
             out["field"] = error.field
         return out, None
     return {"valid": True}, None
+
+
+def run_thumbprint(case, document):
+    # CR-24, L0-SIG-14
+    key = decode_canonical(bytes.fromhex(case["key"]))
+    check_public_key(key)
+    members = jwk_members(key)
+    return {
+        "jwk": json.dumps(members, sort_keys=True, separators=(",", ":"), ensure_ascii=False),
+        "kid": thumbprint(key).hex(),
+    }, None
 
 
 def run_claim(case, document):
@@ -427,6 +439,7 @@ OPERATIONS = {
     "digest.body_commit": (run_body_commit, ("commit", "rejection")),
     "validity.horizon": (run_validity_horizon, ("horizon", "error")),
     "ais.verify": (run_ais, ("valid", "error", "field")),
+    "key.thumbprint": (run_thumbprint, ("jwk", "kid")),
     "claim.verify": (run_claim, ("disposition", "claim_id", "error")),
     "note.checkpoint": (run_checkpoint, ("size", "root", "extensions", "cosigned", "error")),
     "meta.apply": (run_meta_apply, ("effects", "requirements", "expansion", "error")),

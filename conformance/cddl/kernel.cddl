@@ -305,6 +305,7 @@ evaluation-input = {
   intent_digest: digest,
   now: trusted-time,
   ? actor_instance: instance-ref,
+  ; Derived from the actor Party's actor-kind (OP-149 m.8).
   ? actor_is_agent: true,
   ? mandate: mandate,
   capacity: capacity,
@@ -389,6 +390,10 @@ cose-alg = -19 / -9 / -7 / -48 / -49 / -50
 public-key = { ed25519: bstr .size 32 }
            / { p256: bstr .size 65 }
            / { ml_dsa: [cose-alg, bstr] }
+
+; OP-149 m.6: an Instance key is Ed25519 (COSE -19) or P-256, the uncompressed SEC 1 point,
+; signing with ESP256 (COSE -9). ML-DSA keys are operational and binding keys only.
+instance-key = { ed25519: bstr .size 32 } / { p256: bstr .size 65 }
 
 ; RFC 7638 SHA-256 thumbprint of the key; the Kernel recomputes it (CR-55 m.4).
 key-id = bstr .size 32
@@ -545,6 +550,46 @@ opening-fields = {
   ? exercise: digest,
 }
 
+; ---------------------------------------------------------------- approval act (E32, §9.14)
+
+; The statement one user act approves (OP-149 m.9). It is a proof and never an intent envelope:
+; `target` is the intent digest of the request it approves (act "contribution") or of the
+; approver's own meta-Exercise (act "authority-act"). The challenge of the approver's single
+; assertion commits to it, and an `authentication` Claim binds its digest. Content type
+; "application/access-aas+cbor".
+approval-act-statement = contribution-act / authority-act
+
+contribution-act = {
+  act: "contribution",
+  ; The `contribute` class the approval exercises, for example "approve" or "co_sign".
+  contribution_class: ident,
+  approval-act-fields,
+}
+
+authority-act = {
+  act: "authority-act",
+  approval-act-fields,
+}
+
+approval-act-fields = (
+  approver: { instance: instance-ref, party: party-ref },
+  capacity: capacity,
+  target: digest,
+  ; Stable before the ExerciseID exists: the nonce of the contribution Exercise, or of the
+  ; approver's own meta-Exercise.
+  exercise_ref: [domain: domain-id, nonce: bstr .size (16..64)],
+  ; Present when a Work Gate waits on the approval: the Gate and the Work Declaration content.
+  ? work_gate: { gate: digest, declaration: digest },
+  ; The Approval Surface conformance profile the approval was given on.
+  surface: { profile: tstr .size (1..255), version: uint },
+  ; Digest of the render shown to the approver, produced from the action schema's render.
+  render_digest: digest,
+  ; The material fields the render showed, sorted, without repeats.
+  material_fields: [* ident],
+  issued_at: trusted-time,
+  expires_at: trusted-time,
+)
+
 ; ---------------------------------------------------------------- authority objects (OP-141)
 
 root-value = { sole: party-ref } / { joint: { parties: [2* party-ref], k: uint .ge 1 } }
@@ -631,12 +676,12 @@ meta-payload =
   / { anchor_transfer: { anchor: id, root: root-value, disposition: disposition } }
   / { anchor_amend: { anchor: id, ? root: root-value, ? root_terms: requirement-set } }
   / { anchor_retire: { anchor: id, disposition: disposition } }
-  / { party_register: { party: party-ref, root: root-value } }
+  / { party_register: { party: party-ref, root: root-value, actor_kind: actor-kind } }
   / { party_depart: { party: party-ref, disposition: disposition } }
-  / { instance_create: { party: party-ref, key: public-key, ? mandate: mandate-envelope } }
-  / { instance_rekey: { instance: instance-ref, key: public-key } }
+  / { instance_create: { party: party-ref, key: instance-key, ? mandate: mandate-envelope } }
+  / { instance_rekey: { instance: instance-ref, key: instance-key } }
   / { instance_terminate: { instance: instance-ref } }
-  / { instance_recover: { instance: instance-ref, key: public-key } }
+  / { instance_recover: { instance: instance-ref, key: instance-key } }
   / { mandate_bind: { instance: instance-ref, envelope: mandate-envelope } }
   / { mandate_rebind: { mandate: id, envelope: mandate-envelope } }
   / { mandate_revoke: { mandate: id } }
@@ -654,6 +699,10 @@ meta-payload =
   / { consumption_release: { exercise: digest, grounds: [+ id] } }
   / { authority_set_define: { name: ident, authority: authority-set } }
   / { projection_issue: { bounds: canonical-authority, audience: [+ tstr .size (1..255)], profile: projection-profile, ? max_staleness_ms: uint, ? offline_slice: slice-request } }
+
+; OP-149 m.8: what kind of actor a Party is. `party_register` sets it and no action changes it;
+; an evaluation's `actor_is_agent` is true exactly when the actor's Party is an "agent".
+actor-kind = "human" / "agent" / "system" / "machine" / "organization"
 
 ; The connectivity profile a projection is issued for; the variant belongs to the class as in
 ; validity-contract (OP-143 m.7).
@@ -700,8 +749,8 @@ ended = { at: uint, how: "revoked" / "renounced" / "retired" / "terminated" / "r
 
 anchor-state = { scope: anchor-scope, root: root-value, ? root_terms: requirement-set, since: uint, ? ended: ended }
 grant-state = { content: grant-content, since: uint, revision: uint, ? ended: ended }
-party-state = { anchor: id, since: uint, ? ended: ended }
-instance-state = { party: party-ref, key: public-key, since: uint, ? successor: instance-ref, ? ended: ended }
+party-state = { anchor: id, actor_kind: actor-kind, since: uint, ? ended: ended }
+instance-state = { party: party-ref, key: instance-key, since: uint, ? successor: instance-ref, ? ended: ended }
 mandate-state = { instance: instance-ref, envelope: mandate-envelope, since: uint, ? ended: ended }
 acceptance-state = { content: acceptance-content, since: uint, ? ended: ended }
 policy-state = { content: policy-content, since: uint, ? ended: ended }
@@ -763,6 +812,15 @@ receipt = {
   audience: tstr .size (1..255),
   iat: trusted-time,
   drawn: bool,
+  ? agency: [+ agency-link],
+}
+
+; OP-149 m.11: one link of the chain the actor acted on behalf of, in order from the principal
+; to the agent; the agent of a link is the principal of the next one.
+agency-link = {
+  mandate: id,
+  principal: party-ref,
+  agent: party-ref,
 }
 
 ; ---------------------------------------------------------------- Portable Authority Proof (L2-PAP-1)

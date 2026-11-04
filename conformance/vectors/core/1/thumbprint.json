@@ -1,0 +1,12 @@
+{
+ "rule": "CR-24",
+ "track": "core",
+ "version": 1,
+ "operation": "key.thumbprint",
+ "rules": ["L0-SIG-14"],
+ "cases": [
+  {"id": "ed25519-rfc8037", "rules": ["L0-SIG-14"], "key": "a167656432353531395820d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a", "jwk": "{\"crv\":\"Ed25519\",\"kty\":\"OKP\",\"x\":\"11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo\"}", "kid": "90facafea9b1556698540f70c0117a22ea37bd5cf3ed3c47093c1707282b4b89"},
+  {"id": "p256-rfc7515", "rules": ["L0-SIG-14"], "key": "a164703235365841047fcdce2770f6c45d4183cbee6fdb4b7b580733357be9ef13bacf6e3c7bd15445c7f144cd1bbd9b7e872cdfedb9eeb9f4b3695d6ea90b24ad8a4623288588e5ad", "jwk": "{\"crv\":\"P-256\",\"kty\":\"EC\",\"x\":\"f83OJ3D2xF1Bg8vub9tLe1gHMzV76e8Tus9uPHvRVEU\",\"y\":\"x_FEzRu9m36HLN_tue659LNpXW6pCyStikYjKIWI5a0\"}", "kid": "a0a232c2f194a53553cb1310ddbc0821e414b9d7ebfc290b323084d7d1020fe5"},
+  {"id": "p256-seed", "rules": ["L0-SIG-14"], "key": "a164703235365841047135fa4fd93a09dce98bbf681b4bfcf50e7c0d6354e62afb0bff2a3429617865ed4c1f02ddb9023ee56a557e515d6a9dc66c11f220960de594334df588776724", "jwk": "{\"crv\":\"P-256\",\"kty\":\"EC\",\"x\":\"cTX6T9k6Cdzpi79oG0v89Q58DWNU5ir7C_8qNClheGU\",\"y\":\"7UwfAt25Aj7lalV-UV1qncZsEfIglg3llDNN9Yh3ZyQ\"}", "kid": "c27f3e6b114a9ce1449e76982418241985320e39b7dbc23e8e9fa3eda7a05be9"}
+ ]
+}

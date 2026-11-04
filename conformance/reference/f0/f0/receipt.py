@@ -11,6 +11,7 @@ from .codec import (
     check_choice,
     check_digest,
     check_id,
+    check_list,
     check_map,
     check_uint,
     decode_canonical,
@@ -45,6 +46,11 @@ def check_basis(value):
     check_choice(value, {"anchor": check_id, "holding": check_holding, "public": check_id})
 
 
+def check_agency_link(value):
+    # OP-149 m.11
+    check_map(value, {"mandate": check_id, "principal": check_id, "agent": check_id})
+
+
 def check_receipt(value):
     # L2-RCP-1
     check_map(value, {
@@ -57,7 +63,7 @@ def check_receipt(value):
         "audience": check_audience,
         "iat": check_uint,
         "drawn": check_bool,
-    }, {"instance": check_id, "ais": check_digest})
+    }, {"instance": check_id, "ais": check_digest, "agency": check_list(check_agency_link, nonempty=True)})
 
 
 def decode(payload):

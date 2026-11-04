@@ -846,6 +846,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             audience: inc.pep.clone(),
             iat: fixed.now,
             drawn: fixed.drawn,
+            agency: Vec::new(),
         };
         let digest =
             access_kernel::receipt::digest(&r).map_err(|_| CoreError::Protocol("receipt"))?;

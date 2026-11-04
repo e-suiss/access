@@ -60,7 +60,7 @@ The Actor Intent Statement (AIS) is how an actor makes an Exercise its own. A PE
 
 <a id="L2-AIS-4"></a>**L2-AIS-4. Time.** An AIS whose `iat` is more than 60 seconds after the receiver's trusted time is rejected (reason `ais-future`). How old an AIS may be is decided by the nonce rule of [L2-REC-5](#L2-REC-5).
 
-Vectors: [`core/1/ais.json`](../../conformance/vectors/core/1/ais.json), operation `ais.verify`: each case gives the COSE_Sign1, the request as an `actor-intent-statement` whose `iat` is ignored, and the trusted time; the file gives the Instance's key.
+Vectors: [`core/1/ais.json`](../../conformance/vectors/core/1/ais.json), operation `ais.verify`: each case gives the COSE_Sign1, the request as an `actor-intent-statement` whose `iat` is ignored, and the trusted time; the file gives the Instance's key, and a case that gives its own `key` uses that one. The `esp256-` cases are a P-256 Instance.
 
 ## Claims
 
@@ -82,7 +82,7 @@ A Claim is a signed statement by an issuer Party about a subject Party. It enter
 
 ## Decision receipts
 
-<a id="L2-RCP-1"></a><!-- no-vector: definition: the field set; L2-RCP-3 checks it -->**L2-RCP-1.** A receipt carries the fields of the CDDL rule `receipt`: the domain, the ExerciseID and the position of its decision record, the intent digest, the actor Instance and the digest of its AIS (both absent for an anonymous actor), the capacity, the basis, the audience (the PEP that applies the decision), `iat` (the trusted evaluation time, which is also the signing time) and `drawn` (whether the ALLOW drew from a budget). A receipt names one Exercise, one intent and one audience; it is never a credential for another effect.
+<a id="L2-RCP-1"></a><!-- no-vector: definition: the field set; L2-RCP-3 checks it -->**L2-RCP-1.** A receipt carries the fields of the CDDL rule `receipt`: the domain, the ExerciseID and the position of its decision record, the intent digest, the actor Instance and the digest of its AIS (both absent for an anonymous actor), the capacity, the basis, the audience (the PEP that applies the decision), `iat` (the trusted evaluation time, which is also the signing time), `drawn` (whether the ALLOW drew from a budget) and, when the actor acted on behalf of others, `agency`: the chain of `{mandate, principal, agent}` links in order from the principal to the agent, where each link's agent is the next link's principal. A receipt with an empty `agency` is malformed. A receipt names one Exercise, one intent and one audience; it is never a credential for another effect.
 
 <a id="L2-RCP-2"></a><!-- no-vector: outside-operation: a producer rule; the core test an_allow_carries_a_signed_receipt checks it -->**L2-RCP-2.** The producer computes the receipt digest under the context `access/receipt/v1` and writes it into the decision record's `artifacts` before the commit. It signs the receipt only after the record is committed, with an operational key whose excerpt names usage `receipt` and whose window contains `iat` ([L2-SIG-3](#L2-SIG-3)). If no key may sign, the receipt is delayed; an unsigned receipt is never released.
 
@@ -104,7 +104,7 @@ Vectors: [`core/1/pap.json`](../../conformance/vectors/core/1/pap.json), operati
 
 <a id="L2-SIG-1"></a>**L2-SIG-1.** Every L2 artefact is a COSE_Sign1 whose protected header carries exactly `alg`, the content type and `kid`, as [L0-SIG-10](../l0/signatures.md#L0-SIG-10) requires. The payload is the deterministic CBOR encoding of the artefact.
 
-<a id="L2-SIG-2"></a>**L2-SIG-2.** The default algorithm is Ed25519 (COSE `-19`). ES256 (`-9`) is also produced on request. A producer never signs an L2 artefact with RSA or with a realm JOSE key.
+<a id="L2-SIG-2"></a>**L2-SIG-2.** The default algorithm is Ed25519 (COSE `-19`). ESP256 (`-9`) is also produced on request. A producer never signs an L2 artefact with RSA or with a realm JOSE key.
 
 <a id="L2-SIG-3"></a>**L2-SIG-3.** A producer only signs with an operational key inside its excerpt window, and only for usages the excerpt names.
 
@@ -133,7 +133,7 @@ These parts arrive with the features that produce them, each in its own version 
 | Part | Contents |
 |---|---|
 | Actor Intent Statement (AIS) | The signed statement of an actor's exact intent |
-| Approval Act Statement (AAS) | A human approval bound to an intent digest |
+| Approval Act Statement (AAS) | A human approval bound to an intent digest; its data model is the CDDL rule `approval-act-statement` |
 | Schema Publication Package | Action schemas and their catalog digests |
 | Authority Record Exchange | Record transfer, handover and recovery |
 

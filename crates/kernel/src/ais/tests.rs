@@ -1,3 +1,5 @@
+#![allow(clippy::arithmetic_side_effects, reason = "test fixtures")]
+
 use alloc::vec;
 
 use ed25519_dalek::Signer as _;
@@ -29,10 +31,50 @@ fn statement() -> Statement {
 }
 
 pub(crate) fn sign(s: &Statement, with: &ed25519_dalek::SigningKey) -> Vec<u8> {
-    let kid = thumbprint(&PublicKey::Ed25519(with.verifying_key().to_bytes()));
+    let key = PublicKey::Ed25519(with.verifying_key().to_bytes());
+    sign_with(s, &key, -19, |m| with.sign(m).to_bytes().to_vec())
+}
+
+fn p256_signing(seed: u8) -> p256::ecdsa::SigningKey {
+    p256::ecdsa::SigningKey::from_slice(&[seed; 32]).unwrap()
+}
+
+fn p256_key(seed: u8) -> PublicKey {
+    PublicKey::P256(
+        p256_signing(seed)
+            .verifying_key()
+            .to_sec1_point(false)
+            .as_bytes()
+            .to_vec(),
+    )
+}
+
+fn high_s(low: &[u8]) -> Vec<u8> {
+    let mut n = crate::verify::P256_N;
+    let mut borrow = false;
+    for i in (0..32).rev() {
+        let (d1, b1) = n[i].overflowing_sub(low[32 + i]);
+        let (d2, b2) = d1.overflowing_sub(u8::from(borrow));
+        n[i] = d2;
+        borrow = b1 || b2;
+    }
+    [low[..32].to_vec(), n.to_vec()].concat()
+}
+
+fn sign_p256(s: &Statement, seed: u8, high: bool) -> Vec<u8> {
+    use p256::ecdsa::signature::Signer as _;
+    sign_with(s, &p256_key(seed), -9, |m| {
+        let sig: p256::ecdsa::Signature = p256_signing(seed).sign(m);
+        let low = sig.normalize_s().to_bytes().to_vec();
+        if high { high_s(&low) } else { low }
+    })
+}
+
+fn sign_with(s: &Statement, key: &PublicKey, alg: i64, sig: impl Fn(&[u8]) -> Vec<u8>) -> Vec<u8> {
+    let kid = thumbprint(key);
     let prot = dcbor::encode(
         &Value::Map(vec![
-            (Value::Unsigned(ALG), Value::int(-19)),
+            (Value::Unsigned(ALG), Value::int(alg)),
             (Value::Unsigned(CT_LABEL), Value::text(CONTENT_TYPE)),
             (Value::Unsigned(KID), Value::Bytes(kid.to_vec())),
         ]),
@@ -40,18 +82,42 @@ pub(crate) fn sign(s: &Statement, with: &ed25519_dalek::SigningKey) -> Vec<u8> {
     )
     .unwrap();
     let payload = s.to_bytes().unwrap();
-    let sig = with.sign(&to_be_signed(&prot, &payload)).to_bytes();
+    let signature = sig(&to_be_signed(&prot, &payload));
     let body = dcbor::encode(
         &Value::Array(vec![
             Value::Bytes(prot),
             Value::Map(Vec::new()),
             Value::Bytes(payload),
-            Value::Bytes(sig.to_vec()),
+            Value::Bytes(signature),
         ]),
         Limits::CEILING,
     )
     .unwrap();
     [vec![0xd2], body].concat()
+}
+
+// OP-149 m.6, L2-AIS-2: a P-256 Instance signs its statement with ESP256, low S only
+#[test]
+fn a_p256_instance_signs_with_esp256() {
+    let s = statement();
+    let signed = sign_p256(&s, 21, false);
+    assert_eq!(
+        verify(&signed, &p256_key(21), &expected(&s), 1_000).unwrap(),
+        s
+    );
+    assert!(matches!(
+        verify(
+            &sign_p256(&s, 21, true),
+            &p256_key(21),
+            &expected(&s),
+            1_000
+        ),
+        Err(AisError::Signature(_))
+    ));
+    assert!(matches!(
+        verify(&signed, &p256_key(22), &expected(&s), 1_000),
+        Err(AisError::Signature(_))
+    ));
 }
 
 fn expected(s: &Statement) -> Expected<'_> {
@@ -137,6 +203,7 @@ type Case = (
     Vec<u8>,
     Statement,
     u64,
+    Option<PublicKey>,
 );
 
 // L2-AIS-*: statement vectors, byte for byte
@@ -158,6 +225,7 @@ fn ais_vectors_match() {
             good.clone(),
             s.clone(),
             1_000,
+            None,
         ),
         (
             "intent-differs",
@@ -168,6 +236,7 @@ fn ais_vectors_match() {
                 ..s.clone()
             },
             1_000,
+            None,
         ),
         (
             "pep-differs",
@@ -178,6 +247,7 @@ fn ais_vectors_match() {
                 ..s.clone()
             },
             1_000,
+            None,
         ),
         (
             "mode-differs",
@@ -188,6 +258,7 @@ fn ais_vectors_match() {
                 ..s.clone()
             },
             1_000,
+            None,
         ),
         (
             "nonce-differs",
@@ -198,6 +269,7 @@ fn ais_vectors_match() {
                 ..s.clone()
             },
             1_000,
+            None,
         ),
         (
             "basis-differs",
@@ -208,6 +280,7 @@ fn ais_vectors_match() {
                 ..s.clone()
             },
             1_000,
+            None,
         ),
         (
             "other-key",
@@ -215,6 +288,7 @@ fn ais_vectors_match() {
             sign(&s, &ed25519_dalek::SigningKey::from_bytes(&[12; 32])),
             s.clone(),
             1_000,
+            None,
         ),
         (
             "future",
@@ -222,6 +296,7 @@ fn ais_vectors_match() {
             sign(&future, &signing()),
             future.clone(),
             39_999,
+            None,
         ),
         (
             "future-within-skew",
@@ -229,6 +304,7 @@ fn ais_vectors_match() {
             sign(&future, &signing()),
             future.clone(),
             40_000,
+            None,
         ),
         (
             "nonce-too-short",
@@ -236,11 +312,45 @@ fn ais_vectors_match() {
             sign(&short, &signing()),
             short.clone(),
             1_000,
+            None,
+        ),
+        (
+            "esp256-valid",
+            &["L2-AIS-2", "L0-SIG-4", "L0-SIG-7"],
+            sign_p256(&s, 21, false),
+            s.clone(),
+            1_000,
+            Some(p256_key(21)),
+        ),
+        (
+            "esp256-high-s",
+            &["L2-AIS-2", "L0-SIG-6"],
+            sign_p256(&s, 21, true),
+            s.clone(),
+            1_000,
+            Some(p256_key(21)),
+        ),
+        (
+            "esp256-other-key",
+            &["L2-AIS-2"],
+            sign_p256(&s, 22, false),
+            s.clone(),
+            1_000,
+            Some(p256_key(21)),
+        ),
+        (
+            "esp256-signed-ed25519-instance",
+            &["L2-AIS-2", "L0-SIG-7"],
+            sign_p256(&s, 21, false),
+            s.clone(),
+            1_000,
+            None,
         ),
     ];
     let mut rows = Vec::new();
-    for (id, rules, sign1, exp, now) in &cases {
-        let expect = match verify(sign1, &key(), &expected(exp), *now) {
+    for (id, rules, sign1, exp, now, own_key) in &cases {
+        let instance_key = own_key.clone().unwrap_or_else(key);
+        let expect = match verify(sign1, &instance_key, &expected(exp), *now) {
             Ok(_) => String::from("\"valid\": true"),
             Err(AisError::Mismatch(f)) => {
                 format!("\"error\": \"ais-mismatch\", \"field\": \"{f}\"")
@@ -248,8 +358,11 @@ fn ais_vectors_match() {
             Err(e) => format!("\"error\": \"{}\"", e.code()),
         };
         let request = exp.to_bytes().unwrap();
+        let key_field = own_key.as_ref().map_or_else(String::new, |k| {
+            format!("\"key\": \"{}\", ", hex(&k.to_bytes().unwrap()))
+        });
         rows.push(format!(
-            "  {{\"id\": \"{id}\", {}, \"sign1\": \"{}\", \"request\": \"{}\", \"now\": {now}, {expect}}}",
+            "  {{\"id\": \"{id}\", {}, {key_field}\"sign1\": \"{}\", \"request\": \"{}\", \"now\": {now}, {expect}}}",
             field(rules),
             hex(sign1),
             hex(&request)

@@ -166,6 +166,8 @@ pub enum Payload {
         party: Id,
         /// Root of its self-anchor.
         root: Root,
+        /// What kind of actor it is; fixed for its life.
+        actor_kind: ActorKind,
     },
     /// `party_depart`.
     PartyDepart {
@@ -804,11 +806,19 @@ impl Canonical for Payload {
                     ("disposition", Some(disposition_value(disposition))),
                 ]),
             ),
-            Self::PartyRegister { party, root } => (
+            Self::PartyRegister {
+                party,
+                root,
+                actor_kind,
+            } => (
                 "party_register",
                 map([
                     ("party", Some(party.to_value())),
                     ("root", Some(root_value(root))),
+                    (
+                        "actor_kind",
+                        Some(crate::codec::word_of(*actor_kind, &ACTOR_KINDS)),
+                    ),
                 ]),
             ),
             Self::PartyDepart { party, disposition } => (
@@ -1023,6 +1033,7 @@ impl Canonical for Payload {
             "party_register" => Self::PartyRegister {
                 party: id(f.req("party")?)?,
                 root: root(f.req("root")?)?,
+                actor_kind: crate::codec::word(f.req("actor_kind")?, &ACTOR_KINDS)?,
             },
             "party_depart" => Self::PartyDepart {
                 party: id(f.req("party")?)?,
@@ -1030,7 +1041,7 @@ impl Canonical for Payload {
             },
             "instance_create" => Self::InstanceCreate {
                 party: id(f.req("party")?)?,
-                key: PublicKey::from_value(f.req("key")?)?,
+                key: instance_key(f.req("key")?)?,
                 mandate: f
                     .opt("mandate")
                     .map(MandateEnvelope::from_value)
@@ -1038,14 +1049,14 @@ impl Canonical for Payload {
             },
             "instance_rekey" => Self::InstanceRekey {
                 instance: id(f.req("instance")?)?,
-                key: PublicKey::from_value(f.req("key")?)?,
+                key: instance_key(f.req("key")?)?,
             },
             "instance_terminate" => Self::InstanceTerminate {
                 instance: id(f.req("instance")?)?,
             },
             "instance_recover" => Self::InstanceRecover {
                 instance: id(f.req("instance")?)?,
-                key: PublicKey::from_value(f.req("key")?)?,
+                key: instance_key(f.req("key")?)?,
             },
             "mandate_bind" => Self::MandateBind {
                 instance: id(f.req("instance")?)?,
@@ -1529,11 +1540,77 @@ impl Canonical for GrantState {
     }
 }
 
+/// What kind of actor a Party is (OP-149 m.8).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum ActorKind {
+    /// A person.
+    Human,
+    /// A software agent.
+    Agent,
+    /// A system of the platform or of a product.
+    System,
+    /// A device or workload.
+    Machine,
+    /// An organization acting as itself.
+    Organization,
+}
+
+impl ActorKind {
+    /// The `actor_is_agent` of an evaluation whose actor belongs to a Party of this kind.
+    #[must_use]
+    pub const fn is_agent(self) -> bool {
+        matches!(self, Self::Agent)
+    }
+
+    /// The wire name.
+    #[must_use]
+    pub fn name(self) -> &'static str {
+        ACTOR_KINDS
+            .iter()
+            .find(|(_, k)| *k == self)
+            .map_or("", |(n, _)| n)
+    }
+
+    /// The kind with this wire name.
+    #[must_use]
+    pub fn parse(name: &str) -> Option<Self> {
+        ACTOR_KINDS
+            .iter()
+            .find(|(n, _)| *n == name)
+            .map(|(_, k)| *k)
+    }
+}
+
+const ACTOR_KINDS: [(&str, ActorKind); 5] = [
+    ("human", ActorKind::Human),
+    ("agent", ActorKind::Agent),
+    ("system", ActorKind::System),
+    ("machine", ActorKind::Machine),
+    ("organization", ActorKind::Organization),
+];
+
+// OP-149 m.6
+fn instance_key(v: &Value) -> Result<PublicKey, ModelError> {
+    match PublicKey::from_value(v)? {
+        k @ (PublicKey::Ed25519(_) | PublicKey::P256(_)) => Ok(k),
+        PublicKey::MlDsa(..) => Err(ModelError::Unknown),
+    }
+}
+
+/// Whether the actor Party `party` is a software agent: the Kernel's `actor_is_agent`, derived
+/// from the kind its `party_register` recorded (OP-149 m.8). An unknown Party is not an agent.
+#[must_use]
+pub fn actor_is_agent(view: &dyn View, party: &Id) -> bool {
+    read::<PartyState>(view, kind::PARTY, party).is_ok_and(|p| p.actor_kind.is_agent())
+}
+
 /// A Party's admission.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PartyState {
     /// Its self-anchor.
     pub anchor: Id,
+    /// What kind of actor it is; `party_register` sets it and nothing changes it.
+    pub actor_kind: ActorKind,
     /// Admitting position.
     pub since: u64,
     /// Departure.
@@ -1544,6 +1621,10 @@ impl Canonical for PartyState {
     fn to_value(&self) -> Value {
         map([
             ("anchor", Some(self.anchor.to_value())),
+            (
+                "actor_kind",
+                Some(crate::codec::word_of(self.actor_kind, &ACTOR_KINDS)),
+            ),
             ("since", Some(Value::Unsigned(self.since))),
             ("ended", self.ended.as_ref().map(ended_value)),
         ])
@@ -1553,6 +1634,7 @@ impl Canonical for PartyState {
         let mut f = Fields::of(v)?;
         let s = Self {
             anchor: id(f.req("anchor")?)?,
+            actor_kind: crate::codec::word(f.req("actor_kind")?, &ACTOR_KINDS)?,
             since: uint(f.req("since")?)?,
             ended: ended(f.opt("ended"))?,
         };
@@ -1594,7 +1676,7 @@ impl Canonical for InstanceState {
         let mut f = Fields::of(v)?;
         let s = Self {
             party: id(f.req("party")?)?,
-            key: PublicKey::from_value(f.req("key")?)?,
+            key: instance_key(f.req("key")?)?,
             since: uint(f.req("since")?)?,
             successor: f.opt("successor").map(id).transpose()?,
             ended: ended(f.opt("ended"))?,
@@ -2445,7 +2527,11 @@ pub fn apply(ctx: &Context<'_>, payload: &Payload, view: &dyn View) -> Result<Ou
             out.requirements = req;
             set(&mut out, kind::ANCHOR, anchor, a.to_value());
         }
-        Payload::PartyRegister { party, root: r } => {
+        Payload::PartyRegister {
+            party,
+            root: r,
+            actor_kind,
+        } => {
             if !matches!(ctx.basis, ExerciseBasis::Public(_)) {
                 return Err(MetaError::Basis);
             }
@@ -2475,6 +2561,7 @@ pub fn apply(ctx: &Context<'_>, payload: &Payload, view: &dyn View) -> Result<Ou
                 party,
                 PartyState {
                     anchor: a,
+                    actor_kind: *actor_kind,
                     since: ctx.pos,
                     ended: None,
                 }

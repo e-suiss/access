@@ -33,6 +33,7 @@ from .codec import (
     encode,
     same,
 )
+from . import p256
 from .keyscope import check_binding_key, thumbprint
 from .validity import VARIANT_CLASS
 
@@ -108,8 +109,18 @@ def check_disposition(value):
     check_list(entry)(value)
 
 
-def check_ed25519_key(value):
-    check_choice(value, {"ed25519": check_bytes(32)})
+def check_p256_point(value):
+    # L0-SIG-4
+    if not isinstance(value, bytes) or p256.decode_public_key(value) is None:
+        refuse("meta-malformed")
+
+
+def check_instance_key(value):
+    # OP-149 m.6: Ed25519 or P-256 (ESP256)
+    check_choice(value, {"ed25519": check_bytes(32), "p256": check_p256_point})
+
+
+ACTOR_KINDS = ("human", "agent", "system", "machine", "organization")
 
 
 def check_mandate_envelope(value):
@@ -245,12 +256,12 @@ PAYLOADS = {
     "anchor_transfer": ({"anchor": check_id, "root": check_root, "disposition": check_disposition}, {}),
     "anchor_amend": ({"anchor": check_id}, {"root": check_root, "root_terms": check_requirement_set}),
     "anchor_retire": ({"anchor": check_id, "disposition": check_disposition}, {}),
-    "party_register": ({"party": check_id, "root": check_root}, {}),
+    "party_register": ({"party": check_id, "root": check_root, "actor_kind": check_text_in(*ACTOR_KINDS)}, {}),
     "party_depart": ({"party": check_id, "disposition": check_disposition}, {}),
-    "instance_create": ({"party": check_id, "key": check_ed25519_key}, {"mandate": check_mandate_envelope}),
-    "instance_rekey": ({"instance": check_id, "key": check_ed25519_key}, {}),
+    "instance_create": ({"party": check_id, "key": check_instance_key}, {"mandate": check_mandate_envelope}),
+    "instance_rekey": ({"instance": check_id, "key": check_instance_key}, {}),
     "instance_terminate": ({"instance": check_id}, {}),
-    "instance_recover": ({"instance": check_id, "key": check_ed25519_key}, {}),
+    "instance_recover": ({"instance": check_id, "key": check_instance_key}, {}),
     "mandate_bind": ({"instance": check_id, "envelope": check_mandate_envelope}, {}),
     "mandate_rebind": ({"mandate": check_id, "envelope": check_mandate_envelope}, {}),
     "mandate_revoke": ({"mandate": check_id}, {}),
@@ -569,7 +580,8 @@ class Apply:
             refuse("meta-ended")
         anchor_id = self.new_id("anchor")
         self.write("anchor", anchor_id, {"scope": {"party": self.party}, "root": body["root"], "since": self.pos})
-        self.write("party", self.party, {"anchor": anchor_id, "since": self.pos})
+        # OP-149 m.8
+        self.write("party", self.party, {"anchor": anchor_id, "actor_kind": body["actor_kind"], "since": self.pos})
         return True
 
     def party_depart(self, body):

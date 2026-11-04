@@ -1,4 +1,5 @@
 use alloc::string::ToString;
+use alloc::vec;
 
 use super::*;
 use crate::model::{ActionRef, ActionSet, DelegationTerms, Structural};
@@ -372,6 +373,97 @@ fn agency_is_continuous() {
     );
 }
 
+fn p256_key(seed: u8) -> PublicKey {
+    PublicKey::P256(
+        p256::ecdsa::SigningKey::from_slice(&[seed; 32])
+            .unwrap()
+            .verifying_key()
+            .to_sec1_point(false)
+            .as_bytes()
+            .to_vec(),
+    )
+}
+
+// OP-149 m.8: the actor kind is recorded at registration and decides actor_is_agent
+#[test]
+fn the_actor_kind_is_recorded_and_decides_agency() {
+    let public = ExerciseBasis::Public(Id([9; 16]));
+    for (kind_of, agent) in [
+        (ActorKind::Human, false),
+        (ActorKind::Agent, true),
+        (ActorKind::System, false),
+        (ActorKind::Machine, false),
+        (ActorKind::Organization, false),
+    ] {
+        let mut r = Run::new();
+        let register = Payload::PartyRegister {
+            party: ALICE,
+            root: Root::Sole(ALICE),
+            actor_kind: kind_of,
+        };
+        assert_eq!(Payload::from_value(&register.to_value()).unwrap(), register);
+        r.act(ALICE, ALICE, public, &register).unwrap();
+        let p: PartyState = read(&r.state, kind::PARTY, &ALICE).unwrap();
+        assert_eq!(p.actor_kind, kind_of);
+        assert_eq!(actor_is_agent(&r.state, &ALICE), agent);
+        assert_eq!(ActorKind::parse(kind_of.name()), Some(kind_of));
+    }
+    assert!(!actor_is_agent(&Run::new().state, &BOB));
+    assert_eq!(ActorKind::parse("robot"), None);
+}
+
+// OP-149 m.8: a registration without an actor kind, or with an unknown one, is malformed
+#[test]
+fn a_registration_names_a_known_actor_kind() {
+    let register = Payload::PartyRegister {
+        party: ALICE,
+        root: Root::Sole(ALICE),
+        actor_kind: ActorKind::Human,
+    };
+    let Value::Map(mut outer) = register.to_value() else {
+        panic!("a payload is a map");
+    };
+    let Value::Map(body) = &mut outer[0].1 else {
+        panic!("a payload body is a map");
+    };
+    let kind_at = body
+        .iter()
+        .position(|(k, _)| *k == Value::text("actor_kind"))
+        .unwrap();
+    body[kind_at].1 = Value::text("robot");
+    assert!(Payload::from_value(&Value::Map(outer.clone())).is_err());
+    let Value::Map(body) = &mut outer[0].1 else {
+        panic!("a payload body is a map");
+    };
+    body.remove(kind_at);
+    assert!(Payload::from_value(&Value::Map(outer)).is_err());
+}
+
+// OP-149 m.6, L0-SIG-4: an Instance key is Ed25519 or P-256; an ML-DSA key is not one
+#[test]
+fn instance_keys_are_ed25519_or_p256() {
+    let create = |key: PublicKey| Payload::InstanceCreate {
+        party: ALICE,
+        key,
+        mandate: None,
+    };
+    let p = create(p256_key(3));
+    assert_eq!(Payload::from_value(&p.to_value()).unwrap(), p);
+    let ml = create(PublicKey::MlDsa(
+        crate::verify::cose::Algorithm::MlDsa44,
+        vec![0; 1312],
+    ));
+    assert_eq!(
+        Payload::from_value(&ml.to_value()),
+        Err(ModelError::Unknown)
+    );
+    let mut off = p256_key(3);
+    if let PublicKey::P256(b) = &mut off {
+        b[64] ^= 1;
+    }
+    assert!(Payload::from_value(&create(off).to_value()).is_err());
+}
+
 // E6, §7.9.2.3, OP-141 m.2, m.4: a Party registers itself with its self-anchor, then creates its
 // own Instance; neither can be done for someone else
 #[test]
@@ -381,6 +473,7 @@ fn register_then_create_own_instance() {
     let register = Payload::PartyRegister {
         party: ALICE,
         root: Root::Sole(ALICE),
+        actor_kind: ActorKind::Human,
     };
     assert_eq!(
         r.act(BOB, BOB, public, &register),
@@ -1232,6 +1325,7 @@ fn meta_vectors_match() {
     let register = Payload::PartyRegister {
         party: BOB,
         root: Root::Sole(BOB),
+        actor_kind: ActorKind::Human,
     };
     r.step(
         "register-someone-else",
@@ -2112,6 +2206,89 @@ fn meta_vectors_match() {
             party: BOB,
             disposition: BTreeMap::new(),
         },
+    );
+    let dave = Id([5; 16]);
+    let edit = |payload: &Payload, name: &str, value: Option<Value>| -> Value {
+        let Value::Map(mut outer) = payload.to_value() else {
+            panic!("a payload is a map");
+        };
+        if let Value::Map(body) = &mut outer[0].1 {
+            body.retain(|(k, _)| *k != Value::text(name));
+            if let Some(v) = value {
+                body.push((Value::text(name), v));
+                body.sort_by_key(|(k, _)| dcbor::encode(k, Limits::CEILING).unwrap());
+            }
+        }
+        Value::Map(outer)
+    };
+    let register_agent = Payload::PartyRegister {
+        party: dave,
+        root: Root::Sole(dave),
+        actor_kind: ActorKind::Agent,
+    };
+    r.step_raw(
+        "register-without-actor-kind",
+        &["L0-META-1", "L0-META-22"],
+        (dave, dave),
+        public,
+        &edit(&register_agent, "actor_kind", None),
+    );
+    r.step_raw(
+        "register-unknown-actor-kind",
+        &["L0-META-1", "L0-META-22"],
+        (dave, dave),
+        public,
+        &edit(&register_agent, "actor_kind", Some(Value::text("robot"))),
+    );
+    r.step(
+        "register-agent",
+        &["L0-META-22"],
+        (dave, dave),
+        public,
+        &register_agent,
+    );
+    let create_p256 = Payload::InstanceCreate {
+        party: dave,
+        key: p256_key(6),
+        mandate: None,
+    };
+    let mut off_curve = p256_key(6).to_value();
+    if let Value::Map(m) = &mut off_curve
+        && let Value::Bytes(b) = &mut m[0].1
+    {
+        b[64] ^= 1;
+    }
+    r.step_raw(
+        "instance-create-p256-off-curve",
+        &["L0-META-1", "L0-META-23"],
+        (dave, dave),
+        public,
+        &edit(&create_p256, "key", Some(off_curve)),
+    );
+    r.step_raw(
+        "instance-create-ml-dsa",
+        &["L0-META-1", "L0-META-23"],
+        (dave, dave),
+        public,
+        &edit(
+            &create_p256,
+            "key",
+            Some(
+                PublicKey::MlDsa(crate::verify::cose::Algorithm::MlDsa44, vec![0; 1312]).to_value(),
+            ),
+        ),
+    );
+    let p256_instance = object_id(
+        &exercise_id(&DOMAIN, &r.run.pos.to_be_bytes().repeat(2)).unwrap(),
+        kind::INSTANCE,
+        0,
+    );
+    r.step(
+        "instance-create-p256",
+        &["L0-META-23"],
+        (dave, p256_instance),
+        public,
+        &create_p256,
     );
     let json = format!(
         "{{\n \"rule\": \"OP-141\",\n \"track\": \"core\",\n \"version\": 1,\n \"operation\": \"meta.apply\",\n {},\n \"cases\": [\n{}\n ]\n}}\n",

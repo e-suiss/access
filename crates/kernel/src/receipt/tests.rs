@@ -114,6 +114,26 @@ fn receipt() -> Receipt {
         audience: "pep.example".to_string(),
         iat: 10 * HOUR + HOUR / 2,
         drawn: false,
+        agency: Vec::new(),
+    }
+}
+
+fn delegated() -> Receipt {
+    Receipt {
+        capacity: Capacity::For(Id([8; 16])),
+        agency: vec![
+            AgencyLink {
+                mandate: Id([10; 16]),
+                principal: Id([8; 16]),
+                agent: Id([11; 16]),
+            },
+            AgencyLink {
+                mandate: Id([12; 16]),
+                principal: Id([11; 16]),
+                agent: Id([13; 16]),
+            },
+        ],
+        ..receipt()
     }
 }
 
@@ -198,7 +218,33 @@ fn cases() -> Vec<(&'static str, Case)> {
         &dcbor::encode(&v, Limits::CEILING).unwrap(),
     );
     out.push(("payload-without-drawn", c));
+    out.push(("valid-agency-chain", Case::of(&delegated())));
+    let mut c = Case::of(&receipt());
+    let mut v = receipt().to_value();
+    if let Value::Map(entries) = &mut v {
+        entries.push((Value::text("agency"), Value::Array(Vec::new())));
+    }
+    c.receipt = sign1(
+        2,
+        CONTENT_TYPE,
+        &dcbor::encode(&v, Limits::CEILING).unwrap(),
+    );
+    out.push(("agency-empty", c));
     out
+}
+
+// OP-149 m.11: the agency chain keeps its order, from the principal to the agent
+#[test]
+fn the_agency_chain_round_trips_in_order() {
+    let r = delegated();
+    let back = Receipt::from_value(&r.to_value()).unwrap();
+    assert_eq!(back, r);
+    assert_eq!(back.agency[0].principal, Id([8; 16]));
+    assert_eq!(back.agency[0].agent, back.agency[1].principal);
+    let Value::Map(plain) = receipt().to_value() else {
+        panic!("a receipt is a map");
+    };
+    assert!(!plain.iter().any(|(k, _)| *k == Value::text("agency")));
 }
 
 // L2-RCP-3: each check rejects its case; the valid receipts verify
@@ -210,7 +256,9 @@ fn receipts_verify_or_name_their_failure() {
         .collect();
     assert_eq!(got[0].1, Ok(receipt()));
     assert!(got[1].1.is_ok());
-    let errors: Vec<&str> = got[2..]
+    assert_eq!(got[10].1, Ok(delegated()));
+    assert_eq!(got[11].1, Err("receipt-malformed"));
+    let errors: Vec<&str> = got[2..10]
         .iter()
         .map(|(_, r)| r.clone().unwrap_err())
         .collect();

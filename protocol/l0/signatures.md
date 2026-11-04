@@ -53,6 +53,8 @@ Vectors: [`core/1/ed25519-strict.json`](../../conformance/vectors/core/1/ed25519
 
 <a id="L0-SIG-14"></a>**L0-SIG-14. Key identifier.** `kid` is the raw 32-byte RFC 7638 SHA-256 thumbprint of the signing key ([L0-SIG-66](#L0-SIG-66)). It is only an exact lookup key into the verifier's key set. An unknown `kid` is rejected (reason `unknown-kid`).
 
+Vectors: [`core/1/thumbprint.json`](../../conformance/vectors/core/1/thumbprint.json), operation `key.thumbprint`. Each case gives a `public-key`, the JWK members the thumbprint is taken over, as compact JSON with sorted member names, and the `kid`.
+
 <a id="L0-SIG-15"></a>**L0-SIG-15. Algorithm.** `alg` MUST be in the allowlist ([L0-SIG-2](#L0-SIG-2)) (reason `algorithm`). The key found by `kid` MUST match `alg` ([L0-SIG-7](#L0-SIG-7)) (reason `key-type`).
 
 <a id="L0-SIG-16"></a>**L0-SIG-16. Content type.** The content type MUST equal the content type expected for the artifact being verified, for example `application/access-receipt+cbor` (reason `content-type`). Content type, not a context string, separates artifact kinds.

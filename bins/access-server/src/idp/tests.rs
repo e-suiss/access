@@ -24,7 +24,7 @@ use access_kernel::ais::{CONTENT_TYPE, Statement};
 use access_kernel::codec::Canonical;
 use access_kernel::combinator::Capacity;
 use access_kernel::intent::{ContextRefs, IntentEnvelope, intent_digest};
-use access_kernel::meta::{self, ExerciseBasis, Payload, Root, kind};
+use access_kernel::meta::{self, ActorKind, ExerciseBasis, Payload, Root, kind};
 use access_kernel::model::{Id, ResourceRef, Window};
 use access_kernel::verify::cose::{ALG, CONTENT_TYPE as CT, KID, PublicKey, to_be_signed};
 use access_kernel::verify::key_scope::thumbprint;
@@ -236,6 +236,7 @@ async fn onboard(plane: &TestPlane, d: Digest, party: Id, seed: u8) {
         Payload::PartyRegister {
             party,
             root: Root::Sole(party),
+            actor_kind: ActorKind::Human,
         },
         Payload::InstanceCreate {
             party,

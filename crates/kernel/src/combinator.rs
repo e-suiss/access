@@ -146,7 +146,8 @@ pub struct EvaluationInput<'a> {
     pub now: TrustedTime,
     /// Actor instance, if authenticated.
     pub actor_instance: Option<Id>,
-    /// Whether the actor instance is an agent.
+    /// Whether the actor is a software agent; the actor Party's `actor_kind` decides it
+    /// ([`crate::meta::actor_is_agent`], OP-149 m.8).
     pub actor_is_agent: bool,
     /// Instance limits.
     pub mandate: Option<&'a Mandate>,

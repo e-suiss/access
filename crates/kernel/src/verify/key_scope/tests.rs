@@ -661,3 +661,77 @@ fn key_scope_vectors_match() {
         json
     );
 }
+
+fn jwk_members(key: &PublicKey) -> String {
+    use crate::json::b64url_encode;
+    use alloc::format;
+    match key {
+        PublicKey::Ed25519(x) => format!(
+            "{{\"crv\":\"Ed25519\",\"kty\":\"OKP\",\"x\":\"{}\"}}",
+            b64url_encode(x)
+        ),
+        PublicKey::P256(p) => format!(
+            "{{\"crv\":\"P-256\",\"kty\":\"EC\",\"x\":\"{}\",\"y\":\"{}\"}}",
+            b64url_encode(&p[1..33]),
+            b64url_encode(&p[33..])
+        ),
+        PublicKey::MlDsa(..) => panic!("not an Instance key"),
+    }
+}
+
+// CR-24, OP-149 m.6, L0-SIG-14: the kid of an Instance key is its RFC 7638 thumbprint; the
+// Ed25519 case is the RFC 8037 §A.3 key and the P-256 case the RFC 7515 §A.3 key
+#[test]
+fn thumbprint_vectors_match() {
+    use crate::json::{b64url_decode, b64url_encode};
+    use crate::vector_rules::{field, golden, hex};
+    use alloc::format;
+    let rfc7515 = PublicKey::P256(
+        [
+            vec![4],
+            b64url_decode("f83OJ3D2xF1Bg8vub9tLe1gHMzV76e8Tus9uPHvRVEU").unwrap(),
+            b64url_decode("x_FEzRu9m36HLN_tue659LNpXW6pCyStikYjKIWI5a0").unwrap(),
+        ]
+        .concat(),
+    );
+    let rfc8037 = PublicKey::Ed25519(
+        b64url_decode("11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo")
+            .unwrap()
+            .try_into()
+            .unwrap(),
+    );
+    assert_eq!(
+        b64url_encode(&thumbprint(&rfc8037)),
+        "kPrK_qmxVWaYVA9wwBF6Iuo3vVzz7TxHCTwXBygrS4k"
+    );
+    let cases = [
+        ("ed25519-rfc8037", rfc8037),
+        ("p256-rfc7515", rfc7515),
+        ("p256-seed", p_pub()),
+    ];
+    let rows: Vec<String> = cases
+        .iter()
+        .map(|(id, key)| {
+            let jwk = jwk_members(key);
+            let kid = thumbprint(key);
+            assert_eq!(kid, <[u8; 32]>::from(Sha256::digest(jwk.as_bytes())));
+            format!(
+                "  {{\"id\": \"{id}\", {}, \"key\": \"{}\", \"jwk\": {}, \"kid\": \"{}\"}}",
+                field(&["L0-SIG-14"]),
+                hex(&key.to_bytes().unwrap()),
+                serde_json::to_string(&jwk).unwrap(),
+                hex(&kid)
+            )
+        })
+        .collect();
+    let json = format!(
+        "{{\n \"rule\": \"CR-24\",\n \"track\": \"core\",\n \"version\": 1,\n \"operation\": \"key.thumbprint\",\n {},\n \"cases\": [\n{}\n ]\n}}\n",
+        field(&["L0-SIG-14"]),
+        rows.join(",\n")
+    );
+    golden(
+        "thumbprint.json",
+        include_str!("../../../../../conformance/vectors/core/1/thumbprint.json"),
+        &json,
+    );
+}
