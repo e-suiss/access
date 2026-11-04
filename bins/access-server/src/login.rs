@@ -1,6 +1,7 @@
 //! The hosted login's realm kits from the HSM (OP-94, OP-146 m.12): a realm's KEK and decoy key
 //! live in the token under labels named by the realm; the cell's opaque-id key is derived in the
-//! token from its root (OP-137). Kits are loaded on a realm's first sign-in and kept.
+//! token from its root (OP-137). Kits are loaded on a realm's first sign-in and kept. The same
+//! realm KEKs seal event subscriptions' webhook secrets (OP-149 m.17 (b)).
 
 use std::collections::HashMap;
 use std::fmt::Write as _;
@@ -9,6 +10,7 @@ use std::sync::{Arc, Mutex};
 use access_crypto::Secret;
 use access_crypto::opaque_id::IdKey;
 use access_crypto::webauthn::{DecoyKey, decoy_label};
+use access_identity_events::adapters::RealmKek;
 use access_identity_oauth::ports::{RealmEntry, Unavailable};
 use access_identity_session::domain::requirement::AuthPolicy;
 use access_identity_session::domain::session::SessionPolicy;
@@ -18,6 +20,7 @@ use access_identity_webauthn::domain::ids::RealmId as WaRealm;
 use access_identity_webauthn::domain::policy::RealmPolicy;
 use access_identity_webauthn::domain::rp::{RelyingParty, RpId};
 use access_store::Pool;
+use access_store::identity::{RealmId, TenantId};
 use access_store::tenancy::realm_tenant;
 use suiss_crypto::envelope::{Dek, EnvelopeError, Kek};
 use suiss_crypto::pkcs11::{HsmKek, KeyStore};
@@ -69,31 +72,88 @@ impl Kek for LockedKek {
     }
 }
 
+/// A shared [`LockedKek`].
+struct SharedKek(Arc<LockedKek>);
+
+impl Kek for SharedKek {
+    fn id(&self) -> &str {
+        self.0.id()
+    }
+
+    fn wrap(&self, dek: &Dek) -> Result<Vec<u8>, EnvelopeError> {
+        self.0.wrap(dek)
+    }
+
+    fn unwrap(&self, wrapped: &[u8]) -> Result<Dek, EnvelopeError> {
+        self.0.unwrap(wrapped)
+    }
+}
+
+/// The realms' KEKs from the token, opened once per realm and shared by the hosted login and
+/// event delivery.
+#[derive(Clone)]
+pub(crate) struct RealmKeks {
+    keys: Arc<KeyStore>,
+    loaded: Arc<Mutex<HashMap<[u8; 16], Arc<LockedKek>>>>,
+}
+
+impl RealmKeks {
+    pub(crate) fn new(keys: Arc<KeyStore>) -> Self {
+        Self {
+            keys,
+            loaded: Arc::new(Mutex::new(HashMap::new())),
+        }
+    }
+
+    fn get(&self, realm: &[u8; 16]) -> Result<Arc<LockedKek>, String> {
+        let mut loaded = self.loaded.lock().map_err(|_| "kek cache")?;
+        if let Some(k) = loaded.get(realm) {
+            return Ok(k.clone());
+        }
+        let label = kek_label(realm);
+        let kek = Arc::new(LockedKek {
+            inner: Mutex::new(self.keys.kek(&label).map_err(|e| e.to_string())?),
+            id: label,
+        });
+        loaded.insert(*realm, kek.clone());
+        Ok(kek)
+    }
+}
+
+impl RealmKek for RealmKeks {
+    fn kek(&self, _: TenantId, realm: RealmId) -> Option<Arc<dyn Kek + Send + Sync>> {
+        match self.get(realm.as_bytes()) {
+            Ok(k) => Some(Arc::new(SharedKek(k))),
+            Err(error) => {
+                tracing::error!(%error, "realm KEK unavailable");
+                None
+            }
+        }
+    }
+}
+
 /// The realm kits of this process.
 pub(crate) struct HsmKits {
-    keys: KeyStore,
+    keys: Arc<KeyStore>,
+    keks: RealmKeks,
     router: Pool,
     lifetimes: SessionPolicy,
     loaded: Mutex<HashMap<[u8; 16], Arc<RealmKit>>>,
 }
 
 impl HsmKits {
-    pub(crate) fn new(keys: KeyStore, router: Pool, lifetimes: SessionPolicy) -> Self {
+    pub(crate) fn new(keks: RealmKeks, router: Pool, lifetimes: SessionPolicy) -> Self {
         Self {
-            keys,
+            keys: keks.keys.clone(),
+            keks,
             router,
             lifetimes,
             loaded: Mutex::new(HashMap::new()),
         }
     }
 
-    fn load(
-        &self,
-        entry: &RealmEntry,
-        tenant: access_store::identity::TenantId,
-    ) -> Result<RealmKit, String> {
-        let label = kek_label(entry.realm.as_bytes());
-        let kek = self.keys.kek(&label).map_err(|e| e.to_string())?;
+    fn load(&self, entry: &RealmEntry, tenant: TenantId) -> Result<RealmKit, String> {
+        let kek = self.keks.get(entry.realm.as_bytes())?;
         let decoy = self
             .keys
             .mac(&decoy_label(entry.realm.as_bytes()))
@@ -112,10 +172,7 @@ impl HsmKits {
             realm: entry.realm,
             issuer: issuer.clone(),
             name: entry.slug.clone(),
-            kek: Box::new(LockedKek {
-                id: label,
-                inner: Mutex::new(kek),
-            }),
+            kek: Box::new(SharedKek(kek)),
             ids: IdKey::new(Secret::new(ids)),
             decoys: RealmDecoyKeys::default().with(wa, DecoyKey::token(decoy)),
             rp: RelyingParty {

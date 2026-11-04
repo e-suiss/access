@@ -9,7 +9,7 @@
     reason = "test code with fakes of async ports; the request-path lints (OP-3) do not apply"
 )]
 
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use access_crypto::jose::JwsAlg;
 use access_http::ssf::router;
@@ -54,11 +54,11 @@ impl Directory for One {
     }
 }
 
-struct Kek1(SoftKek);
+struct Kek1(Arc<SoftKek>);
 
 impl RealmKek for Kek1 {
-    fn kek(&self, _: TenantId, _: RealmId) -> Option<&(dyn Kek + Send + Sync)> {
-        Some(&self.0)
+    fn kek(&self, _: TenantId, _: RealmId) -> Option<Arc<dyn Kek + Send + Sync>> {
+        Some(self.0.clone())
     }
 }
 
@@ -161,7 +161,7 @@ async fn the_transmitter_serves_metadata_streams_and_poll() {
         app: db.app.clone(),
         reader: db.reader.clone(),
     };
-    let sealer = || KekSealer(Kek1(SoftKek::new("k1", [9; 32])));
+    let sealer = || KekSealer(Kek1(Arc::new(SoftKek::new("k1", [9; 32]))));
     let created = Streams::new(pools.clone(), sealer(), OsRandom)
         .create(
             tenant,

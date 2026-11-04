@@ -64,11 +64,11 @@ impl Clock for TestClock {
     }
 }
 
-struct OneKek(SoftKek);
+struct OneKek(Arc<SoftKek>);
 
 impl RealmKek for OneKek {
-    fn kek(&self, _: TenantId, _: RealmId) -> Option<&(dyn Kek + Send + Sync)> {
-        Some(&self.0)
+    fn kek(&self, _: TenantId, _: RealmId) -> Option<Arc<dyn Kek + Send + Sync>> {
+        Some(self.0.clone())
     }
 }
 
@@ -418,7 +418,7 @@ async fn settle_domain(fanout: &Fanout<TestClock>, domain: &DomainId, n: u32) ->
 }
 
 fn sealer() -> KekSealer<OneKek> {
-    KekSealer(OneKek(SoftKek::new("realm-kek-1", [9; 32])))
+    KekSealer(OneKek(Arc::new(SoftKek::new("realm-kek-1", [9; 32]))))
 }
 
 fn stream_request(method: &str, endpoint: Option<&str>, events: &[&str]) -> Vec<u8> {

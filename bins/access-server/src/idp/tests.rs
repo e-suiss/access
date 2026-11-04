@@ -40,6 +40,7 @@ use ed25519_dalek::Signer as _;
 use suiss_crypto::dcbor::{self, Limits, Value};
 
 use super::*;
+use crate::testing::hsm;
 
 const NOW: u64 = 10_000;
 const ROOT: Id = Id([1; 16]);
@@ -346,6 +347,33 @@ async fn new_client(w: &World) -> Client {
     }
 }
 
+/// The identity outbox's events once at least `n` are visible. The outbox watermark is
+/// cluster-wide, so another test's open transaction delays an event, never loses it.
+async fn identity_events(db: &TestDb, n: usize) -> Vec<access_store::identity::OutboxEvent> {
+    let deadline = std::time::Instant::now() + Duration::from_secs(20);
+    loop {
+        let queued: Vec<_> = access_store::identity::poll(
+            &db.reader,
+            access_store::identity::Cursor::default(),
+            100,
+        )
+        .await
+        .unwrap()
+        .into_iter()
+        .filter(|e| e.kind.starts_with("event."))
+        .collect();
+        if queued.len() >= n {
+            return queued;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "{} of {n} after 20 s",
+            queued.len()
+        );
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+}
+
 fn written(a: &Applied) -> u64 {
     match a {
         Applied::Written { position, .. } => *position,
@@ -426,13 +454,7 @@ async fn a_client_is_registered_through_commit() {
         Applied::AlreadyWritten { position, .. } if position == pos
     ));
     // OP-149 m.4: the write queued one api_client.created in its transaction; the retry none
-    let queued: Vec<_> =
-        access_store::identity::poll(&w.db.reader, access_store::identity::Cursor::default(), 100)
-            .await
-            .unwrap()
-            .into_iter()
-            .filter(|e| e.kind.starts_with("event."))
-            .collect();
+    let queued = identity_events(&w.db, 1).await;
     assert_eq!(queued.len(), 1);
     assert_eq!(queued[0].kind, "event.api_client.created");
     let event = access_identity_events::domain::catalog::IdentityEvent::from_outbox(
@@ -612,41 +634,6 @@ async fn realm_settings_change_through_commit() {
             (*realm.as_bytes(), JoseAlg::Ed25519)
         ]
     );
-}
-
-/// A fresh token in the `SoftHSM` store `just test` prepares (`SOFTHSM2_CONF`, OP-69).
-fn hsm(name: &str) -> (std::path::PathBuf, String) {
-    assert!(
-        std::env::var_os("SOFTHSM2_CONF").is_some(),
-        "run the PKCS#11 tests through `just test`, which sets SOFTHSM2_CONF (OP-69)"
-    );
-    let module = [
-        std::env::var("SUISS_PKCS11_MODULE").unwrap_or_default(),
-        String::from("/opt/homebrew/lib/softhsm/libsofthsm2.so"),
-        String::from("/usr/lib/softhsm/libsofthsm2.so"),
-        String::from("/usr/lib/x86_64-linux-gnu/softhsm/libsofthsm2.so"),
-        String::from("/usr/lib/aarch64-linux-gnu/softhsm/libsofthsm2.so"),
-    ]
-    .iter()
-    .map(std::path::PathBuf::from)
-    .find(|p| p.is_file())
-    .unwrap();
-    let label = format!("{name}-{}", std::process::id());
-    let out = std::process::Command::new("softhsm2-util")
-        .args([
-            "--init-token",
-            "--free",
-            "--label",
-            &label,
-            "--pin",
-            "1234-test-only",
-            "--so-pin",
-            "5678-test-only",
-        ])
-        .output()
-        .unwrap();
-    assert!(out.status.success(), "{out:?}");
-    (module, label)
 }
 
 // OP-146 m.16 (m), m.15 (e), m.7 (b), OP-94: a new realm's KEK, decoy key and DPoP nonce keys

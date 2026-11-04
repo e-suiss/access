@@ -1,16 +1,20 @@
 //! The fan-out (OP-149 m.4, m.7): each event of the identity outbox and of a domain's
 //! authority outbox becomes one unsigned SET per live subscription of its tenant that asked for
 //! its type. The cursor moves only after the deliveries are stored, and a repeated step stores
-//! nothing twice (the event id is the key), so no event is lost or doubled.
+//! nothing twice (the event id is the key), so no event is lost or doubled. [`Fanout::run`]
+//! steps the identity outbox and the outbox of every live realm's governing domain.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
+use std::time::{Duration, Instant};
 
 use access_internal_api::events::Event;
 use access_store::authority;
 use access_store::events::{self as store, DeliveryRow, SubscriptionRow};
 use access_store::identity::{self, RealmId, TenantId, TenantTx};
 use access_store::scope::DomainId;
+use access_store::{Pool, idp, tenancy};
 
+use crate::app::courier::POLL_INTERVAL;
 use crate::app::{Db, down, realm_signing};
 use crate::domain::catalog::{IdentityEvent, OUTBOX_PREFIX, Ready, authority_ready, urn};
 use crate::domain::set::set_claims;
@@ -21,6 +25,9 @@ pub const CONSUMER: &str = "events";
 
 /// Events read per step (PD).
 pub const BATCH: u32 = 100;
+
+/// How often [`Fanout::run`] reads the governing domains again (PD).
+pub const DOMAINS_REFRESH: Duration = Duration::from_secs(30);
 
 /// Turns outbox events into deliveries.
 pub struct Fanout<C> {
@@ -94,6 +101,60 @@ impl<C: Clock + Send + Sync> Fanout<C> {
                 .map_err(down)?;
         }
         Ok(queued)
+    }
+
+    /// The governing domains of the live realms, read through the router role (`router`) and
+    /// each realm's own scope.
+    ///
+    /// # Errors
+    /// [`Unavailable`].
+    pub async fn domains(&self, router: &Pool) -> Result<Vec<DomainId>, Unavailable> {
+        let mut out = BTreeSet::new();
+        for r in tenancy::routes(router).await.map_err(down)? {
+            let mut t = TenantTx::begin(&self.db.app, r.tenant, r.realm)
+                .await
+                .map_err(down)?;
+            let g = idp::governance(&mut t).await.map_err(down)?;
+            t.commit().await.map_err(down)?;
+            if let Some(g) = g {
+                out.insert(*g.domain.as_bytes());
+            }
+        }
+        Ok(out.into_iter().map(DomainId::from_bytes).collect())
+    }
+
+    /// Steps the identity outbox and every governing domain's outbox until `stop` resolves,
+    /// sleeping while idle; the domains are read again every [`DOMAINS_REFRESH`].
+    pub async fn run(&self, router: &Pool, stop: &tokio::sync::watch::Receiver<bool>) {
+        let mut stop = stop.clone();
+        let mut domains = Vec::new();
+        let mut read_at: Option<Instant> = None;
+        while !*stop.borrow() {
+            if read_at.is_none_or(|t| t.elapsed() >= DOMAINS_REFRESH) {
+                if let Ok(d) = self.domains(router).await {
+                    domains = d;
+                    read_at = Some(Instant::now());
+                } else {
+                    tracing::warn!("governing domains not read");
+                }
+            }
+            let mut queued = 0_u32;
+            if let Ok(n) = self.identity_step().await {
+                queued = queued.saturating_add(n);
+            } else {
+                tracing::warn!("identity event fan-out step failed");
+            }
+            for d in &domains {
+                if let Ok(n) = self.domain_step(d).await {
+                    queued = queued.saturating_add(n);
+                } else {
+                    tracing::warn!("authority event fan-out step failed");
+                }
+            }
+            if queued == 0 {
+                let _ = tokio::time::timeout(POLL_INTERVAL, stop.changed()).await;
+            }
+        }
     }
 
     /// One delivery per live subscription of `tenant` that asked for the event's type.

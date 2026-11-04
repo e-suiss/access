@@ -15,6 +15,7 @@ access-crypto = { workspace = true }
 access-http = { workspace = true }
 access-identity-account = { workspace = true }
 access-identity-admin = { workspace = true }
+access-identity-events = { workspace = true }
 access-identity-oauth = { workspace = true }
 access-identity-session = { workspace = true }
 access-identity-ui = { workspace = true }
@@ -35,10 +36,10 @@ tracing = { workspace = true, features = ["std"] }
 
 [dev-dependencies]
 access-crypto = { workspace = true, features = ["testing"] }
-access-identity-events = { workspace = true }
 access-store = { workspace = true, features = ["testing"] }
 ed25519-dalek = { workspace = true }
 rcgen = { workspace = true, features = ["aws_lc_rs", "pem"] }
+serde_json = { workspace = true, features = ["std"] }
 
 [lints]
 workspace = true

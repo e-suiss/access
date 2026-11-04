@@ -2,11 +2,14 @@
 //! telemetry and composes crates; business logic lives in `crates/` (OP-62).
 
 mod config;
+mod events;
 mod idp;
 mod jobs;
 mod login;
 mod oauth;
 mod product;
+#[cfg(test)]
+mod testing;
 
 use std::fmt::Write as _;
 use std::path::Path;
@@ -81,7 +84,7 @@ struct Prepared {
     archive_password: SecretFile,
     outbox_password: SecretFile,
     keys: KeyStore,
-    login_keys: KeyStore,
+    login_keys: Arc<KeyStore>,
     identity_keys: Arc<KeyStore>,
     assets: Option<Assets>,
     outbound: Outbound,
@@ -196,7 +199,7 @@ fn prepare(config: &Config, tls: Arc<access_http::tls::ServerConfig>) -> Result<
     let pin = SecretFile::load(&hsm.pin_file).map_err(|e| e.to_string())?;
     let keys = KeyStore::open(&hsm.module, &hsm.token, pin.value()).map_err(|e| e.to_string())?;
     let login_keys =
-        KeyStore::open(&hsm.module, &hsm.token, pin.value()).map_err(|e| e.to_string())?;
+        Arc::new(KeyStore::open(&hsm.module, &hsm.token, pin.value()).map_err(|e| e.to_string())?);
     let identity_keys =
         Arc::new(KeyStore::open(&hsm.module, &hsm.token, pin.value()).map_err(|e| e.to_string())?);
     // OP-146 m.12 (f): the built login app is read before the lockdown closes the file system
@@ -381,7 +384,7 @@ fn login(
     config: &Config,
     router: Pool,
     app: Pool,
-    keys: KeyStore,
+    keks: login::RealmKeks,
     assets: Option<Assets>,
 ) -> Result<(axum::Router, HostedLogin), String> {
     let identity = config.identity.as_ref().ok_or("no identity section")?;
@@ -391,7 +394,7 @@ fn login(
         SignerKeys::new(identity.signer.clone()),
     );
     let hosted = Arc::new(Hosted {
-        kits: login::HsmKits::new(keys, router, lifetimes),
+        kits: login::HsmKits::new(keks, router, lifetimes),
         db: app,
         clock: SystemClock,
         messages: Outbox,
@@ -452,17 +455,31 @@ fn courier(config: &Config, pools: &Pools, outbound: Outbound) -> Result<LogoutC
     ))
 }
 
-/// The identity plane's background work: the back-channel courier and the day-partition
-/// opener.
+/// The identity plane's background work: the back-channel courier, event delivery and the
+/// day-partition opener.
 struct Background {
     stop: tokio::sync::watch::Sender<bool>,
     delivering: tokio::task::JoinHandle<()>,
+    events: events::Delivery,
     opening: tokio::task::JoinHandle<()>,
 }
 
 impl Background {
-    fn start(config: &Config, pools: &Pools, outbound: Outbound) -> Result<Self, String> {
-        let logout = courier(config, pools, outbound)?;
+    fn start(
+        config: &Config,
+        pools: &Pools,
+        outbound: Outbound,
+        keks: login::RealmKeks,
+    ) -> Result<Self, String> {
+        let identity = config.identity.as_ref().ok_or("no identity section")?;
+        let logout = courier(config, pools, outbound.clone())?;
+        // OP-149 m.4, m.7, m.17
+        let events = events::Delivery::outbound(
+            &event_pools(pools),
+            outbound,
+            SignerKeys::new(identity.signer.clone()),
+            keks,
+        );
         let (stop, stopped) = tokio::sync::watch::channel(false);
         let delivering = tokio::spawn(async move { logout.run(&stopped).await });
         // OP-146 m.5 (f)
@@ -474,15 +491,25 @@ impl Background {
         Ok(Self {
             stop,
             delivering,
+            events,
             opening,
         })
     }
 
-    /// The courier finishes its step; the opener is stopped.
+    /// The couriers and the fan-out finish their step; the opener is stopped.
     async fn stop(self) {
         let _ = self.stop.send(true);
         let _ = self.delivering.await;
+        self.events.stop().await;
         self.opening.abort();
+    }
+}
+
+fn event_pools(pools: &Pools) -> events::EventPools {
+    events::EventPools {
+        app: pools.app.clone(),
+        reader: pools.outbox_reader.clone(),
+        router: pools.router.clone(),
     }
 }
 
@@ -509,21 +536,22 @@ async fn serve(
     report: &LockdownReport,
 ) -> Result<(), String> {
     let all = pools(config, &prepared).await?;
-    let background = Background::start(config, &all, prepared.outbound.clone())?;
+    let keks = login::RealmKeks::new(prepared.login_keys);
+    let background = Background::start(config, &all, prepared.outbound.clone(), keks.clone())?;
+    let identity_section = config.identity.as_ref().ok_or("no identity section")?;
+    let signer = || SignerKeys::new(identity_section.signer.clone());
+    // OP-149 m.7
     let authorize = authorization(
         config,
         all.app.clone(),
         all.router.clone(),
         prepared.identity_keys.clone(),
         prepared.outbound,
-    )?;
-    let identity_section = config.identity.as_ref().ok_or("no identity section")?;
+    )?
+    .merge(events::ssf(&event_pools(&all), signer(), keks.clone()));
     let tenant_keys = prepared.identity_keys.clone();
     // OP-146 m.16 (m)
-    let _realm_keys = idp::RealmKeyring::new(
-        SignerKeys::new(identity_section.signer.clone()),
-        prepared.identity_keys,
-    );
+    let _realm_keys = idp::RealmKeyring::new(signer(), prepared.identity_keys);
     let Pools {
         sequencer,
         app,
@@ -535,7 +563,7 @@ async fn serve(
         config,
         router_pool.clone(),
         app.clone(),
-        prepared.login_keys,
+        keks,
         prepared.assets,
     )?;
     let tenants_pool = router_pool.clone();

@@ -1,6 +1,8 @@
 //! Adapters: PostgreSQL through `access-store`, the SSRF-guarded HTTPS client, and the realm
 //! KEK envelope for webhook secrets.
 
+use std::sync::Arc;
+
 use access_identity_oauth::adapters::outbound::{Outbound, OutboundError};
 use access_store::events::SealedKey;
 use access_store::identity::{RealmId, TenantId};
@@ -38,7 +40,7 @@ impl Transport for OutboundTransport {
 /// The realm KEK of a tenant's realm (OP-42, OP-135).
 pub trait RealmKek: Send + Sync {
     /// The realm's current KEK, when this process holds it.
-    fn kek(&self, tenant: TenantId, realm: RealmId) -> Option<&(dyn Kek + Send + Sync)>;
+    fn kek(&self, tenant: TenantId, realm: RealmId) -> Option<Arc<dyn Kek + Send + Sync>>;
 }
 
 const CONTEXT: &[u8] = b"access/webhook-secret/v1\0";

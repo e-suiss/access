@@ -332,6 +332,7 @@ dependencies = [
  "figment",
  "rcgen",
  "serde",
+ "serde_json",
  "thiserror",
  "time",
  "tokio",
