@@ -1021,6 +1021,7 @@ async fn a_platform_subscription_receives_every_tenant() {
     let db = Db {
         app: w.db.app.clone(),
         reader: w.db.reader.clone(),
+        ids: Arc::new(IdKey::new(Secret::new([8; 32]))),
     };
     let streams = Streams::new(db.clone(), NoSeal, OsRandom);
     let request = |aud: &str| {
@@ -1076,7 +1077,11 @@ async fn a_platform_subscription_receives_every_tenant() {
         );
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
-    let uuid = |t: TenantId| access_identity_events::domain::catalog::uuid(t.as_bytes());
+    // OP-149 m.15 (i)
+    let uuid = |t: TenantId| {
+        use access_identity_events::ports::TenantIds as _;
+        w.ids.external(t.as_bytes()).unwrap()
+    };
     let (acme_event, _) = ids.iter().find(|(_, t)| *t == uuid(t2)).unwrap();
     let (platform_event, _) = ids.iter().find(|(_, t)| *t == uuid(pt)).unwrap();
     let mut t = TenantTx::begin(&w.db.app, pt, pr).await.unwrap();

@@ -98,6 +98,42 @@ fn schemas_refuse_malformed_events() {
     );
 }
 
+/// Tenants by their `tnt_` ids (OP-149 m.15 (i)).
+const TENANT: &str = "tnt_0123456789abcdefghjkmnpqrs";
+const OTHER: &str = "tnt_zyxwvtsrqpnmkjhgfedcba9876";
+
+// OP-149 m.15 (i): every surface names a tenant by its opaque tnt_ id, never its UUID
+#[test]
+fn tenants_are_named_by_their_opaque_id() {
+    use access_crypto::opaque_id::IdKey;
+    use access_crypto::secret::Secret;
+    use access_identity_events::ports::TenantIds;
+    let ids = IdKey::new(Secret::new([3; 32]));
+    let t = ids.external(&[1; 16]).unwrap();
+    assert!(t.starts_with("tnt_") && t.len() == 30);
+    let e = IdentityEvent::tenant_created([2; 32], &t, "pool-default", 5);
+    let mut claims = set_claims(&e.ready(), "https://id.example", "work", 1);
+    set_tenant(&mut claims, &t);
+    assert_set(&claims);
+    let ce: Json = serde_json::from_slice(&cloud_event(&claims, &t, &[2; 16], 5).unwrap()).unwrap();
+    assert_cloud_event(&ce);
+    for v in [
+        &ce["accesstenant"],
+        &ce["subject"],
+        &claims["access_tenant"],
+    ] {
+        assert_eq!(v, &Json::from(t.clone()));
+    }
+    let mut uuid = ce;
+    uuid["accesstenant"] = Json::from("01010101-0101-0101-0101-010101010101");
+    assert_ne!(
+        support::schema::Schema::new(&load("cloudevent.schema.json"))
+            .errors(&uuid)
+            .len(),
+        0
+    );
+}
+
 fn sample(kind: Kind) -> Event {
     let d = Digest([7; 32]);
     let (subject, detail) = match kind {
@@ -154,7 +190,7 @@ fn built_events_meet_the_contracts() {
             kind,
             [1; 32],
             &ClientChange {
-                tenant: &[1; 16],
+                tenant: TENANT,
                 realm: &[2; 16],
                 client_id: "cli_abc",
                 exercise: &[3; 32],
@@ -167,18 +203,18 @@ fn built_events_meet_the_contracts() {
         change(IdentityKind::ApiClientCreated),
         change(IdentityKind::ApiClientUpdated),
         change(IdentityKind::ApiClientDisabled),
-        IdentityEvent::tenant_created([2; 32], &[1; 16], "pool-default", 5),
+        IdentityEvent::tenant_created([2; 32], TENANT, "pool-default", 5),
         IdentityEvent::organization(
             IdentityKind::OrganizationCreated,
             [3; 32],
-            &[1; 16],
+            TENANT,
             &[4; 16],
             5,
         ),
         IdentityEvent::organization(
             IdentityKind::OrganizationUpdated,
             [4; 32],
-            &[1; 16],
+            TENANT,
             &[4; 16],
             5,
         ),
@@ -197,15 +233,12 @@ fn built_events_meet_the_contracts() {
         let mut claims = set_claims(r, "https://id.example/realms/shop", "work", 1_793_750_400);
         assert_set(&claims);
         // OP-149 m.17 (e)
-        set_tenant(&mut claims, &[7; 16]);
+        set_tenant(&mut claims, OTHER);
         assert_set(&claims);
-        assert_eq!(
-            claims["access_tenant"],
-            "07070707-0707-0707-0707-070707070707"
-        );
+        assert_eq!(claims["access_tenant"], OTHER);
         let ce: Json =
-            serde_json::from_slice(&cloud_event(&claims, &[1; 16], &[2; 16], r.at).unwrap())
-                .unwrap();
+            serde_json::from_slice(&cloud_event(&claims, TENANT, &[2; 16], r.at).unwrap()).unwrap();
+        assert_eq!(ce["accesstenant"], TENANT);
         assert_cloud_event(&ce);
     }
 }

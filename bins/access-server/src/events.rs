@@ -3,6 +3,8 @@
 //! and the realms' SSF transmitter. Webhook secrets are sealed under the realm KEKs the hosted
 //! login opens.
 
+use std::sync::Arc;
+
 use access_identity_account::notify::delivery::Backoff;
 use access_identity_events::adapters::{KekSealer, OutboundTransport};
 use access_identity_events::app::Db;
@@ -10,7 +12,7 @@ use access_identity_events::app::courier::Courier;
 use access_identity_events::app::fanout::Fanout;
 use access_identity_events::app::ssf::Transmitter;
 use access_identity_events::app::streams::Streams;
-use access_identity_events::ports::Transport;
+use access_identity_events::ports::{TenantIds, Transport};
 use access_identity_oauth::adapters::dpop::SystemClock;
 use access_identity_oauth::adapters::oauth::OsRandom;
 use access_identity_oauth::adapters::outbound::Outbound;
@@ -28,13 +30,16 @@ pub(crate) struct EventPools {
     pub(crate) reader: Pool,
     /// `access_router`, for the live realms.
     pub(crate) router: Pool,
+    /// The tenants' `tnt_` ids (OP-149 m.15 (i)).
+    pub(crate) ids: Arc<dyn TenantIds>,
 }
 
 impl EventPools {
-    fn db(&self) -> Db {
+    pub(crate) fn db(&self) -> Db {
         Db {
             app: self.app.clone(),
             reader: self.reader.clone(),
+            ids: self.ids.clone(),
         }
     }
 }

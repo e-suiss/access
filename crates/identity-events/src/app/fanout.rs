@@ -206,7 +206,7 @@ impl<C: Clock + Send + Sync> Fanout<C> {
             for s in subs {
                 let mut claims = set_claims(ready, issuer.as_str(), &s.audience, now / 1000);
                 if owner != tenant {
-                    set_tenant(&mut claims, tenant.as_bytes());
+                    set_tenant(&mut claims, &self.db.tenant(tenant)?);
                 }
                 let payload = serde_json::to_vec(&claims).map_err(down)?;
                 let row = DeliveryRow {

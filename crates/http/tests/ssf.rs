@@ -160,6 +160,9 @@ async fn the_transmitter_serves_metadata_streams_and_poll() {
     let pools = Db {
         app: db.app.clone(),
         reader: db.reader.clone(),
+        ids: Arc::new(access_crypto::opaque_id::IdKey::new(
+            access_crypto::secret::Secret::new([4; 32]),
+        )),
     };
     let sealer = || KekSealer(Kek1(Arc::new(SoftKek::new("k1", [9; 32]))));
     let created = Streams::new(pools.clone(), sealer(), OsRandom)

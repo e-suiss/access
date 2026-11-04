@@ -12,7 +12,7 @@
   "additionalProperties": false,
   "properties": {
     "tenant": {
-      "$ref": "#/$defs/uuid"
+      "$ref": "#/$defs/tenant"
     },
     "organization": {
       "$ref": "#/$defs/uuid"
@@ -67,6 +67,11 @@
           }
         }
       ]
+    },
+    "tenant": {
+      "type": "string",
+      "pattern": "^tnt_[0-9a-hjkmnp-tv-z]{26}$",
+      "description": "A tenant's opaque external id, the same one the tenant snapshot uses (OP-149 m.15 (i))."
     }
   }
 }

@@ -4,6 +4,7 @@
 mod config;
 mod events;
 mod idp;
+mod ids;
 mod jobs;
 mod login;
 mod oauth;
@@ -470,12 +471,13 @@ impl Background {
         pools: &Pools,
         outbound: Outbound,
         keks: login::RealmKeks,
+        ids: &Arc<ids::CellIds>,
     ) -> Result<Self, String> {
         let identity = config.identity.as_ref().ok_or("no identity section")?;
         let logout = courier(config, pools, outbound.clone())?;
         // OP-149 m.4, m.7, m.17
         let events = events::Delivery::outbound(
-            &event_pools(pools),
+            &event_pools(pools, ids),
             outbound,
             SignerKeys::new(identity.signer.clone()),
             keks,
@@ -505,11 +507,12 @@ impl Background {
     }
 }
 
-fn event_pools(pools: &Pools) -> events::EventPools {
+fn event_pools(pools: &Pools, ids: &Arc<ids::CellIds>) -> events::EventPools {
     events::EventPools {
         app: pools.app.clone(),
         reader: pools.outbox_reader.clone(),
         router: pools.router.clone(),
+        ids: ids.clone(),
     }
 }
 
@@ -537,7 +540,15 @@ async fn serve(
 ) -> Result<(), String> {
     let all = pools(config, &prepared).await?;
     let keks = login::RealmKeks::new(prepared.login_keys);
-    let background = Background::start(config, &all, prepared.outbound.clone(), keks.clone())?;
+    // OP-137, OP-149 m.15 (i)
+    let cell_ids = Arc::new(ids::CellIds::new(prepared.identity_keys.clone()));
+    let background = Background::start(
+        config,
+        &all,
+        prepared.outbound.clone(),
+        keks.clone(),
+        &cell_ids,
+    )?;
     let identity_section = config.identity.as_ref().ok_or("no identity section")?;
     let signer = || SignerKeys::new(identity_section.signer.clone());
     // OP-149 m.7
@@ -548,8 +559,11 @@ async fn serve(
         prepared.identity_keys.clone(),
         prepared.outbound,
     )?
-    .merge(events::ssf(&event_pools(&all), signer(), keks.clone()));
-    let tenant_keys = prepared.identity_keys.clone();
+    .merge(events::ssf(
+        &event_pools(&all, &cell_ids),
+        signer(),
+        keks.clone(),
+    ));
     // OP-146 m.16 (m)
     let _realm_keys = idp::RealmKeyring::new(signer(), prepared.identity_keys);
     let Pools {
@@ -601,7 +615,7 @@ async fn serve(
         Service::new(domains.clone(), limits.max_body_bytes),
         Discovery { issuer },
     );
-    let products = product::routes(config, domains.clone(), tenants_pool, tenant_keys)?;
+    let products = product::routes(config, domains.clone(), tenants_pool, cell_ids)?;
     let health = Health {
         status: "ok",
         sandbox: SandboxHealth {

@@ -220,8 +220,9 @@ where
                 let secret = WebhookSecret::from_bytes(raw.to_vec()).map_err(down)?;
                 let claims: Value = serde_json::from_slice(&row.payload).map_err(down)?;
                 let occurred = u64::try_from(row.occurred_ms).map_err(down)?;
-                let body = cloud_event(&claims, tenant.as_bytes(), realm.as_bytes(), occurred)
-                    .map_err(down)?;
+                let external = self.db.tenant(tenant)?;
+                let body =
+                    cloud_event(&claims, &external, realm.as_bytes(), occurred).map_err(down)?;
                 let ts = now / 1000;
                 let signature = secret.sign(&row.event_id, ts, &body);
                 (

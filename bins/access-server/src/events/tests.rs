@@ -202,12 +202,17 @@ async fn the_server_delivers_events_to_a_webhook() {
         })
         .clone();
     store.generate_kek(&kek_label(realm.as_bytes())).unwrap();
-    let keks = RealmKeks::new(store);
+    if store.mac(crate::login::ID_KEY_ROOT).is_err() {
+        store.generate_mac(crate::login::ID_KEY_ROOT).unwrap();
+    }
+    let keks = RealmKeks::new(store.clone());
     let pools = EventPools {
         app: db.app.clone(),
         reader: db.reader.clone(),
         router: db.router.clone(),
+        ids: Arc::new(crate::ids::CellIds::new(store.clone())),
     };
+    let tenant_id = pools.ids.external(tenant.as_bytes()).unwrap();
     let request = serde_json::json!({
         "delivery": {
             "method": "urn:suiss:access:delivery:webhook",
@@ -231,7 +236,7 @@ async fn the_server_delivers_events_to_a_webhook() {
         IdentityKind::ApiClientCreated,
         [1; 32],
         &ClientChange {
-            tenant: tenant.as_bytes(),
+            tenant: &tenant_id,
             realm: realm.as_bytes(),
             client_id: "cli_shop",
             exercise: &[3; 32],
@@ -282,6 +287,8 @@ async fn the_server_delivers_events_to_a_webhook() {
         assert!(secret.verify(&h("webhook-id"), ts, body, &h("webhook-signature"), ts));
         let ce: Json = serde_json::from_slice(body).unwrap();
         assert_eq!(ce["data"]["iss"], ISSUER);
+        // OP-149 m.15 (i)
+        assert_eq!(ce["accesstenant"], tenant_id.as_str());
         types.push(ce["type"].as_str().unwrap().to_owned());
     }
     types.sort();

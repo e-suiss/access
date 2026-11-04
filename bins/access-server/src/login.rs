@@ -26,7 +26,7 @@ use suiss_crypto::envelope::{Dek, EnvelopeError, Kek};
 use suiss_crypto::pkcs11::{HsmKek, KeyStore};
 
 /// The root of the cell's opaque-id key in the token (OP-137).
-const ID_KEY_ROOT: &str = "access/opaque-id";
+pub(crate) const ID_KEY_ROOT: &str = "access/opaque-id";
 /// The derivation context of the working id key.
 const ID_KEY_CONTEXT: &[u8] = b"access/opaque-id/v1";
 

@@ -20,6 +20,8 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use access_crypto::jose::JwsAlg;
+use access_crypto::opaque_id::IdKey;
+use access_crypto::secret::Secret;
 use access_crypto::webhook::WebhookSecret;
 use access_identity_account::notify::delivery::Backoff;
 use access_identity_events::adapters::{KekSealer, OutboundTransport, RealmKek};
@@ -29,7 +31,9 @@ use access_identity_events::app::streams::{StreamError, Streams};
 use access_identity_events::app::{Db, emit};
 use access_identity_events::domain::catalog::{ClientChange, IdentityEvent, IdentityKind, urn};
 use access_identity_events::domain::stream::parse_stream;
-use access_identity_events::ports::{Clock, PostError, Reply, TokenSigner, Transport, Unavailable};
+use access_identity_events::ports::{
+    Clock, PostError, Reply, TenantIds, TokenSigner, Transport, Unavailable,
+};
 use access_identity_oauth::adapters::oauth::OsRandom;
 use access_identity_oauth::adapters::outbound::{Outbound, Target, post_over, post_request};
 use access_identity_oauth::ports::dpop::ClockUnavailable;
@@ -258,7 +262,13 @@ impl World {
         Db {
             app: self.db.app.clone(),
             reader: self.db.reader.clone(),
+            ids: Arc::new(ids()),
         }
+    }
+
+    /// The tenant's `tnt_` id (OP-149 m.15 (i)).
+    fn tenant_id(&self) -> String {
+        ids().external(self.tenant.as_bytes()).unwrap()
     }
 
     fn streams(&self) -> Streams<KekSealer<OneKek>, OsRandom> {
@@ -296,7 +306,7 @@ impl World {
             IdentityKind::ApiClientCreated,
             id,
             &ClientChange {
-                tenant: self.tenant.as_bytes(),
+                tenant: &self.tenant_id(),
                 realm: self.realm.as_bytes(),
                 client_id,
                 exercise: &[3; 32],
@@ -417,6 +427,11 @@ async fn settle_domain(fanout: &Fanout<TestClock>, domain: &DomainId, n: u32) ->
     }
 }
 
+/// The cell's id key of these tests.
+fn ids() -> IdKey {
+    IdKey::new(Secret::new([4; 32]))
+}
+
 fn sealer() -> KekSealer<OneKek> {
     KekSealer(OneKek(Arc::new(SoftKek::new("realm-kek-1", [9; 32]))))
 }
@@ -524,6 +539,8 @@ async fn webhook_delivery_is_signed_retried_and_deduplicated() {
         );
         let ce: Json = serde_json::from_slice(&g.body).unwrap();
         support::assert_cloud_event(&ce);
+        // OP-149 m.15 (i)
+        assert_eq!(ce["accesstenant"], w.tenant_id());
         assert_eq!(ce["id"], id);
         assert_eq!(ce["data"]["iss"], ISSUER);
         assert_eq!(ce["data"]["aud"], "work");

@@ -6,7 +6,7 @@
   "subject": "cli_0b5yq2mtzk6x4hd1e8fg3wa7rc",
   "time": "2026-11-04T00:00:00.000Z",
   "datacontenttype": "application/json",
-  "accesstenant": "019a0000-0000-7000-8000-000000000001",
+  "accesstenant": "tnt_0123456789abcdefghjkmnpqrs",
   "accessrealm": "019a0000-0000-7000-8000-0000000000a1",
   "data": {
     "iss": "https://id.example/realms/shop",
@@ -19,7 +19,7 @@
     },
     "events": {
       "urn:suiss:access:event:api_client.created": {
-        "tenant": "019a0000-0000-7000-8000-000000000001",
+        "tenant": "tnt_0123456789abcdefghjkmnpqrs",
         "realm": "019a0000-0000-7000-8000-0000000000a1",
         "client_id": "cli_0b5yq2mtzk6x4hd1e8fg3wa7rc",
         "exercise": "CQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQk",

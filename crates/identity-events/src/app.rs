@@ -7,6 +7,8 @@ pub mod fanout;
 pub mod ssf;
 pub mod streams;
 
+use std::sync::Arc;
+
 use access_crypto::jose::JwsAlg;
 use access_identity_oauth::domain::issuer::Issuer;
 use access_store::identity::{RealmId, TenantId, TenantTx};
@@ -14,7 +16,7 @@ use access_store::{Pool, StoreError, idp};
 
 use crate::domain::Invalid;
 use crate::domain::catalog::IdentityEvent;
-use crate::ports::Unavailable;
+use crate::ports::{TenantIds, Unavailable};
 
 /// Queues `event` in the caller's transaction (OP-10, OP-63): it is delivered only if the
 /// transaction commits.
@@ -27,13 +29,23 @@ pub async fn emit(tx: &mut TenantTx, event: &IdentityEvent) -> Result<(), StoreE
 }
 
 /// The pools delivery uses: `access_app` for realm-scoped rows and the authority outbox,
-/// `access_outbox_reader` for the identity outbox and the due queue (OP-131).
+/// `access_outbox_reader` for the identity outbox and the due queue (OP-131), and the external
+/// ids the wire forms name tenants by.
 #[derive(Clone)]
 pub struct Db {
     /// `access_app`.
     pub app: Pool,
     /// `access_outbox_reader`.
     pub reader: Pool,
+    /// The tenants' `tnt_` ids (OP-149 m.15 (i)).
+    pub ids: Arc<dyn TenantIds>,
+}
+
+impl Db {
+    /// The external id of `tenant`.
+    pub(crate) fn tenant(&self, tenant: TenantId) -> Result<String, Unavailable> {
+        self.ids.external(tenant.as_bytes()).ok_or(Unavailable)
+    }
 }
 
 pub(crate) fn down<E>(_: E) -> Unavailable {

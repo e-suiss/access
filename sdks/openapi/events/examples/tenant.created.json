@@ -3,10 +3,10 @@
   "id": "AQJxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
   "source": "urn:suiss:access:realm:019a0000-0000-7000-8000-0000000000a1",
   "type": "urn:suiss:access:event:tenant.created",
-  "subject": "019a0000-0000-7000-8000-000000000001",
+  "subject": "tnt_0123456789abcdefghjkmnpqrs",
   "time": "2026-11-04T00:00:00.000Z",
   "datacontenttype": "application/json",
-  "accesstenant": "019a0000-0000-7000-8000-000000000001",
+  "accesstenant": "tnt_0123456789abcdefghjkmnpqrs",
   "accessrealm": "019a0000-0000-7000-8000-0000000000a1",
   "data": {
     "iss": "https://id.example/realms/shop",
@@ -15,11 +15,11 @@
     "jti": "AQJxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
     "sub_id": {
       "format": "opaque",
-      "id": "019a0000-0000-7000-8000-000000000001"
+      "id": "tnt_0123456789abcdefghjkmnpqrs"
     },
     "events": {
       "urn:suiss:access:event:tenant.created": {
-        "tenant": "019a0000-0000-7000-8000-000000000001",
+        "tenant": "tnt_0123456789abcdefghjkmnpqrs",
         "placement": "pool-default",
         "at": 1793750400000
       }

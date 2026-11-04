@@ -36,11 +36,11 @@ pub fn set_claims(event: &Ready, iss: &str, aud: &str, iat_s: u64) -> Value {
     })
 }
 
-/// Names the tenant the event happened in, for a platform product's subscription that
-/// receives every tenant's events (OP-149 m.17 (e)).
-pub fn set_tenant(claims: &mut Value, tenant: &[u8; 16]) {
+/// Names the tenant the event happened in by its external `tnt_` id, for a platform product's
+/// subscription that receives every tenant's events (OP-149 m.17 (e), m.15 (i)).
+pub fn set_tenant(claims: &mut Value, tenant: &str) {
     if let Some(m) = claims.as_object_mut() {
-        m.insert("access_tenant".into(), uuid(tenant).into());
+        m.insert("access_tenant".into(), tenant.into());
     }
 }
 
@@ -84,13 +84,14 @@ pub fn head(claims: &Value) -> Result<SetHead, Invalid> {
 }
 
 /// The structured `CloudEvent` carrying `claims` as `data` (OP-149 m.7). `id` is the SET's
-/// `jti`, so a receiver deduplicates both forms by the same value.
+/// `jti`, so a receiver deduplicates both forms by the same value. `tenant` is the subscription
+/// tenant's external `tnt_` id (OP-149 m.15 (i)).
 ///
 /// # Errors
 /// [`Invalid`] when the claims have no head or a time is out of range.
 pub fn cloud_event(
     claims: &Value,
-    tenant: &[u8; 16],
+    tenant: &str,
     realm: &[u8; 16],
     occurred_ms: u64,
 ) -> Result<Vec<u8>, Invalid> {
@@ -110,7 +111,7 @@ pub fn cloud_event(
     }
     e.insert("time".into(), time.into());
     e.insert("datacontenttype".into(), "application/json".into());
-    e.insert("accesstenant".into(), uuid(tenant).into());
+    e.insert("accesstenant".into(), tenant.into());
     e.insert("accessrealm".into(), uuid(realm).into());
     e.insert("data".into(), claims.clone());
     serde_json::to_vec(&Value::Object(e)).map_err(|_| Invalid("encoding"))

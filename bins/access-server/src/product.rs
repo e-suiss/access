@@ -1,20 +1,19 @@
 //! The tenant directory of the product client API (OP-149 m.4): tenants read through the router
-//! role, named outside by the cell's opaque ids (OP-137, MD-18). The id key is taken from the
-//! token on first use, as the hosted login does.
+//! role, named outside by the cell's opaque ids (OP-137, MD-18), the same `tnt_` ids the events
+//! carry (OP-149 m.15 (i)).
 
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
-use access_crypto::Secret;
-use access_crypto::opaque_id::IdKey;
 use access_http::product::adapters::router as product_router;
 use access_http::product::app::Service;
 use access_http::product::ports::{KeyDirectory, Tenant, Tenants, Unavailable};
+use access_identity_events::domain::catalog::TENANT_PREFIX;
 use access_store::Pool;
 use access_store::identity::TenantId;
 use access_store::tenancy::{TenantRow, tenant, tenants_after};
-use suiss_crypto::pkcs11::KeyStore;
 
 use crate::config::Config;
+use crate::ids::CellIds;
 
 /// The product client routes over `keys` and the tenants the router role reads (OP-149 m.4,
 /// m.5).
@@ -22,7 +21,7 @@ pub(crate) fn routes<K: KeyDirectory + 'static>(
     config: &Config,
     keys: K,
     router: Pool,
-    id_keys: Arc<KeyStore>,
+    ids: Arc<CellIds>,
 ) -> Result<axum::Router, String> {
     let region = config
         .suiss
@@ -32,37 +31,20 @@ pub(crate) fn routes<K: KeyDirectory + 'static>(
         .clone();
     Ok(product_router(Service::new(
         keys,
-        PgTenants::new(router, id_keys),
+        PgTenants::new(router, ids),
         region,
     )))
 }
 
-/// The type prefix of a tenant's external id.
-const PREFIX: &str = "tnt";
-
 /// Tenants from the database.
 pub(crate) struct PgTenants {
     router: Pool,
-    keys: Arc<KeyStore>,
-    ids: Mutex<Option<Arc<IdKey>>>,
+    ids: Arc<CellIds>,
 }
 
 impl PgTenants {
-    pub(crate) const fn new(router: Pool, keys: Arc<KeyStore>) -> Self {
-        Self {
-            router,
-            keys,
-            ids: Mutex::new(None),
-        }
-    }
-
-    fn ids(&self) -> Option<Arc<IdKey>> {
-        let mut slot = self.ids.lock().ok()?;
-        if slot.is_none() {
-            let bytes = crate::login::id_key_bytes(&self.keys).ok()?;
-            *slot = Some(Arc::new(IdKey::new(Secret::new(bytes))));
-        }
-        slot.clone()
+    pub(crate) const fn new(router: Pool, ids: Arc<CellIds>) -> Self {
+        Self { router, ids }
     }
 }
 
@@ -90,10 +72,10 @@ impl Tenants for PgTenants {
     }
 
     fn external(&self, id: [u8; 16]) -> Option<String> {
-        self.ids()?.encode(PREFIX, id).ok()
+        self.ids.encode(TENANT_PREFIX, id)
     }
 
     fn internal(&self, text: &str) -> Option<[u8; 16]> {
-        self.ids()?.decode(PREFIX, text).ok()
+        self.ids.decode(TENANT_PREFIX, text)
     }
 }

@@ -20,7 +20,9 @@ use access_store::scope::DomainId;
 use access_store::tenancy::{self, HostKind};
 
 use access_identity_events::app::emit;
-use access_identity_events::domain::catalog::{ClientChange, IdentityEvent, IdentityKind};
+use access_identity_events::domain::catalog::{
+    ClientChange, IdentityEvent, IdentityKind, TENANT_PREFIX,
+};
 
 use crate::AdminError;
 use crate::domain::{
@@ -219,7 +221,8 @@ impl<D: Decider, G: Governance, K: RealmKeys> Admin<'_, D, G, K> {
         if tenancy::realm_count(&mut t).await? == 1 {
             let at = access_store::authority::server_time(self.app).await?;
             let id = access_crypto::random::bytes::<32>().map_err(|_| AdminError::Encode)?;
-            let event = IdentityEvent::tenant_created(id, r.tenant.as_bytes(), r.placement, at);
+            let tenant = self.ids.encode(TENANT_PREFIX, *r.tenant.as_bytes())?;
+            let event = IdentityEvent::tenant_created(id, &tenant, r.placement, at);
             emit(&mut t, &event).await?;
         }
         t.commit().await?;
@@ -454,11 +457,12 @@ impl<D: Decider, G: Governance, K: RealmKeys> Admin<'_, D, G, K> {
         };
         let at = access_store::authority::server_time(self.app).await?;
         let id = access_crypto::random::bytes::<32>().map_err(|_| AdminError::Encode)?;
+        let tenant = self.ids.encode(TENANT_PREFIX, *p.tenant.as_bytes())?;
         let event = IdentityEvent::api_client(
             kind,
             id,
             &ClientChange {
-                tenant: p.tenant.as_bytes(),
+                tenant: &tenant,
                 realm: p.realm.as_bytes(),
                 client_id,
                 exercise: &exercise.0,

@@ -44,7 +44,8 @@
     },
     "accesstenant": {
       "type": "string",
-      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+      "pattern": "^tnt_[0-9a-hjkmnp-tv-z]{26}$",
+      "description": "The subscription's tenant by its opaque tnt_ id, as the tenant snapshot names it (OP-149 m.15 (i))."
     },
     "accessrealm": {
       "type": "string",

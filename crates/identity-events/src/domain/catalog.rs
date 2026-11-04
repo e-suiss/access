@@ -13,6 +13,10 @@ use crate::domain::Invalid;
 /// Prefix of every event type URN.
 pub const URN_PREFIX: &str = "urn:suiss:access:event:";
 
+/// Type prefix of a tenant's opaque external id (OP-137, OP-149 m.15 (i)): every product-facing
+/// surface names a tenant `tnt_…`, the events as the tenant snapshot does.
+pub const TENANT_PREFIX: &str = "tnt";
+
 /// Prefix of the identity outbox kinds this crate reads.
 pub const OUTBOX_PREFIX: &str = "event.";
 
@@ -143,8 +147,8 @@ pub use access_internal_api::instances::PlatformProduct;
 /// An API client change as `idp.client.*` committed it.
 #[derive(Clone, Copy, Debug)]
 pub struct ClientChange<'a> {
-    /// Tenant.
-    pub tenant: &'a [u8; 16],
+    /// Tenant, its external `tnt_` id.
+    pub tenant: &'a str,
     /// Realm.
     pub realm: &'a [u8; 16],
     /// The `client_id`.
@@ -162,7 +166,7 @@ impl IdentityEvent {
     #[must_use]
     pub fn api_client(kind: IdentityKind, id: [u8; 32], c: &ClientChange<'_>) -> Self {
         let mut p = json!({
-            "tenant": uuid(c.tenant),
+            "tenant": c.tenant,
             "realm": uuid(c.realm),
             "client_id": c.client_id,
             "exercise": b64url_encode(c.exercise),
@@ -178,22 +182,22 @@ impl IdentityEvent {
         }
     }
 
-    /// `tenant.created`.
+    /// `tenant.created`; `tenant` is the external `tnt_` id.
     #[must_use]
-    pub fn tenant_created(id: [u8; 32], tenant: &[u8; 16], placement: &str, at: u64) -> Self {
+    pub fn tenant_created(id: [u8; 32], tenant: &str, placement: &str, at: u64) -> Self {
         Self {
             kind: IdentityKind::TenantCreated,
             id,
-            payload: json!({"tenant": uuid(tenant), "placement": placement, "at": at}),
+            payload: json!({"tenant": tenant, "placement": placement, "at": at}),
         }
     }
 
-    /// `organization.created` or `organization.updated`.
+    /// `organization.created` or `organization.updated`; `tenant` is the external `tnt_` id.
     #[must_use]
     pub fn organization(
         kind: IdentityKind,
         id: [u8; 32],
-        tenant: &[u8; 16],
+        tenant: &str,
         organization: &[u8; 16],
         at: u64,
     ) -> Self {
@@ -201,7 +205,7 @@ impl IdentityEvent {
             kind,
             id,
             payload: json!({
-                "tenant": uuid(tenant),
+                "tenant": tenant,
                 "organization": uuid(organization),
                 "at": at,
             }),
