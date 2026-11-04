@@ -3,6 +3,7 @@
 //! CBOR forms of an example are the same value. The Kernel's own vectors are checked against
 //! `kernel.cddl` too. `ACCESS_UPDATE_VECTORS=1` rewrites the examples' `cbor` hex.
 
+#![cfg(not(target_family = "wasm"))]
 #![allow(
     clippy::unwrap_used,
     clippy::expect_used,

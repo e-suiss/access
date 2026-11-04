@@ -37,6 +37,13 @@ paths = [
 ]
 
 [[allowlists]]
+description = "Thumbprint vectors: hex COSE public keys of RFC 8037, RFC 7515 and seeded test keys, no private material (CR-24); other rules still apply here"
+targetRules = ["generic-api-key"]
+paths = [
+    '''^conformance/vectors/core/1/thumbprint\.json$''',
+]
+
+[[allowlists]]
 description = "Claim vectors: the hex COSE public key of a test issuer, no private material (OP-141 m.19); other rules still apply here"
 targetRules = ["generic-api-key"]
 paths = [
