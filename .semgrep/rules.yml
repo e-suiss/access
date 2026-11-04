@@ -76,6 +76,7 @@ rules:
         - "**/tests/**"
         - "**/benches/**"
         - "**/tests.rs"
+        - "**/testing.rs"
         - "**/examples/**"
         - "xtask/**"
     patterns:

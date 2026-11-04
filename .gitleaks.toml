@@ -59,3 +59,13 @@ paths = [
 regexes = [
     '''eyJ0eXAiOiJhdCtqd3QifQ\.e30\.c2ln''',
 ]
+
+[[allowlists]]
+description = "Contract examples: opaque tnt_ tenant ids are public identifiers, not secrets (OP-149 m.15 (i), m.19 (a)); other rules still apply here"
+targetRules = ["generic-api-key"]
+paths = [
+    '''^sdks/openapi/.+\.json$''',
+]
+regexes = [
+    '''^tnt_[0-9a-z]{26}$''',
+]
