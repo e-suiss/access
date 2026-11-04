@@ -1,0 +1,203 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:suiss:access:schema:authority-request:1",
+  "title": "Typed authority request, version 1",
+  "description": "JSON form of the CDDL rule authority-request (authority-request.cddl), in the ADP encodings: binary values are base64url without padding, a digest is its 32 SHA-256 bytes, a time window is {from, until}. The x-cbor annotation names how a value maps to its CBOR form.",
+  "type": "object",
+  "required": ["requester", "action", "resource", "params", "capacity", "reason", "expires_at"],
+  "additionalProperties": false,
+  "properties": {
+    "requester": { "$ref": "#/$defs/requester" },
+    "action": { "$ref": "#/$defs/action_ref" },
+    "resource": { "$ref": "#/$defs/resource_ref" },
+    "params": {
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/ident" },
+      "additionalProperties": { "$ref": "#/$defs/param_value" }
+    },
+    "capacity": { "$ref": "#/$defs/capacity" },
+    "reason": { "type": "string", "minLength": 1, "maxLength": 1024 },
+    "work_ref": { "$ref": "#/$defs/digest" },
+    "commitment_ref": { "$ref": "#/$defs/digest" },
+    "gate_ref": { "$ref": "#/$defs/digest" },
+    "require_action": { "$ref": "#/$defs/require_action_ref" },
+    "expires_at": { "$ref": "#/$defs/trusted_time" }
+  },
+  "$defs": {
+    "ident": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,62}$" },
+    "namespace": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]{0,62}(\\.[a-z][a-z0-9_-]{0,62}){0,7}$"
+    },
+    "unit": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,15}$" },
+    "uint": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+    "amount": { "type": "integer", "minimum": -9007199254740991, "maximum": 9007199254740991 },
+    "trusted_time": { "$ref": "#/$defs/uint" },
+    "id": {
+      "type": "string",
+      "contentEncoding": "base64url",
+      "pattern": "^[A-Za-z0-9_-]{21}[AQgw]$",
+      "x-cbor": "bytes"
+    },
+    "digest": {
+      "type": "string",
+      "contentEncoding": "base64url",
+      "pattern": "^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$",
+      "x-cbor": "digest"
+    },
+    "nonce": {
+      "type": "string",
+      "contentEncoding": "base64url",
+      "pattern": "^[A-Za-z0-9_-]{22,86}$",
+      "x-cbor": "bytes"
+    },
+    "requester": {
+      "type": "object",
+      "required": ["party"],
+      "additionalProperties": false,
+      "properties": {
+        "party": { "$ref": "#/$defs/id" },
+        "instance": { "$ref": "#/$defs/id" }
+      }
+    },
+    "action_ref": {
+      "type": "object",
+      "required": ["namespace", "name", "major", "schema"],
+      "additionalProperties": false,
+      "properties": {
+        "namespace": { "$ref": "#/$defs/namespace" },
+        "name": { "$ref": "#/$defs/ident" },
+        "major": { "$ref": "#/$defs/uint" },
+        "schema": { "$ref": "#/$defs/digest" }
+      }
+    },
+    "resource_ref": {
+      "type": "object",
+      "required": ["namespace", "path", "incarnation"],
+      "additionalProperties": false,
+      "properties": {
+        "namespace": { "$ref": "#/$defs/namespace" },
+        "path": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1, "maxLength": 128 }
+        },
+        "incarnation": { "$ref": "#/$defs/uint" }
+      }
+    },
+    "window": {
+      "type": "object",
+      "required": ["from", "until"],
+      "additionalProperties": false,
+      "properties": {
+        "from": { "$ref": "#/$defs/trusted_time" },
+        "until": { "$ref": "#/$defs/trusted_time" }
+      },
+      "x-cbor": "window"
+    },
+    "eq": {
+      "oneOf": [
+        { "type": "string" },
+        { "$ref": "#/$defs/amount" },
+        { "type": "boolean" },
+        {
+          "type": "object",
+          "required": ["bytes"],
+          "additionalProperties": false,
+          "properties": {
+            "bytes": { "type": "string", "contentEncoding": "base64url", "pattern": "^[A-Za-z0-9_-]*$" }
+          },
+          "x-cbor": "bytes-member"
+        }
+      ]
+    },
+    "purpose_ref": {
+      "oneOf": [
+        { "$ref": "#/$defs/single_code" },
+        { "$ref": "#/$defs/single_work" },
+        { "$ref": "#/$defs/single_aim" }
+      ]
+    },
+    "single_code": {
+      "type": "object", "required": ["code"], "additionalProperties": false,
+      "properties": { "code": { "$ref": "#/$defs/ident" } }
+    },
+    "single_work": {
+      "type": "object", "required": ["work"], "additionalProperties": false,
+      "properties": { "work": { "$ref": "#/$defs/digest" } }
+    },
+    "single_aim": {
+      "type": "object", "required": ["aim"], "additionalProperties": false,
+      "properties": { "aim": { "$ref": "#/$defs/digest" } }
+    },
+    "param_value": {
+      "oneOf": [
+        {
+          "type": "object", "required": ["enum"], "additionalProperties": false,
+          "properties": { "enum": { "type": "string" } }
+        },
+        {
+          "type": "object", "required": ["eq"], "additionalProperties": false,
+          "properties": { "eq": { "$ref": "#/$defs/eq" } }
+        },
+        {
+          "type": "object", "required": ["amount"], "additionalProperties": false,
+          "properties": {
+            "amount": {
+              "type": "object",
+              "required": ["value", "unit"],
+              "additionalProperties": false,
+              "properties": {
+                "value": { "$ref": "#/$defs/amount" },
+                "unit": { "$ref": "#/$defs/unit" }
+              }
+            }
+          }
+        },
+        {
+          "type": "object", "required": ["count"], "additionalProperties": false,
+          "properties": { "count": { "$ref": "#/$defs/uint" } }
+        },
+        {
+          "type": "object", "required": ["interval"], "additionalProperties": false,
+          "properties": { "interval": { "$ref": "#/$defs/window" } }
+        },
+        {
+          "type": "object", "required": ["resource"], "additionalProperties": false,
+          "properties": { "resource": { "$ref": "#/$defs/resource_ref" } }
+        },
+        {
+          "type": "object", "required": ["subject"], "additionalProperties": false,
+          "properties": { "subject": { "$ref": "#/$defs/id" } }
+        },
+        {
+          "type": "object", "required": ["purpose"], "additionalProperties": false,
+          "properties": { "purpose": { "$ref": "#/$defs/purpose_ref" } }
+        },
+        {
+          "type": "object", "required": ["flag"], "additionalProperties": false,
+          "properties": { "flag": { "type": "boolean" } }
+        }
+      ]
+    },
+    "capacity": {
+      "oneOf": [
+        { "const": "own" },
+        {
+          "type": "object", "required": ["for"], "additionalProperties": false,
+          "properties": { "for": { "$ref": "#/$defs/id" } }
+        }
+      ]
+    },
+    "require_action_ref": {
+      "type": "object",
+      "required": ["domain", "nonce", "intent"],
+      "additionalProperties": false,
+      "properties": {
+        "domain": { "$ref": "#/$defs/digest" },
+        "nonce": { "$ref": "#/$defs/nonce" },
+        "intent": { "$ref": "#/$defs/digest" }
+      }
+    }
+  }
+}

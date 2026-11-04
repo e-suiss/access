@@ -1,0 +1,29 @@
+; Typed authority request, version 1 (RFC 8610).
+; A coordinator (Work Needs Attention, One "Bekleyenler") owns the request and opens it on
+; Access's trusted approval surface; Access never stores it (XI-7, E44, OP-149 m.9). Rules this
+; file does not define are those of kernel.cddl. Encoding: deterministic CBOR, RFC 8949 §4.2.1.
+; The JSON form follows the ADP encodings and is authority-request.schema.json.
+
+authority-request = {
+  requester: requester,
+  action: action-ref,
+  resource: resource-ref,
+  params: { * ident => param-value },
+  capacity: capacity,
+  reason: tstr .size (1..1024),
+  ? work_ref: digest,
+  ? commitment_ref: digest,
+  ? gate_ref: digest,
+  ? require_action: require-action-ref,
+  expires_at: trusted-time,
+}
+
+; The Party asking, and the Instance it asks through when it is software.
+requester = { party: party-ref, ? instance: instance-ref }
+
+; The REQUIRE_ACTION the request answers: its domain, nonce and intent digest.
+require-action-ref = {
+  domain: domain-id,
+  nonce: bstr .size (16..64),
+  intent: digest,
+}

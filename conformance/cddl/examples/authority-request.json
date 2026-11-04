@@ -1,0 +1,197 @@
+{
+  "cases": [
+    {
+      "cbor": "aa66616374696f6ea4646e616d6566726566756e64656d616a6f720166736368656d61822f58200101010101010101010101010101010101010101010101010101010101010101696e616d6573706163656473686f7066706172616d73a266616d6f756e74a166616d6f756e74a264756e6974686575725f63656e746576616c75651910686b726561736f6e5f636f6465a164656e756d6764616d6167656466726561736f6e783654686520637573746f6d6572207265706f727465642074686174207468652070617263656c20617272697665642064616d616765642e686361706163697479a163666f72500303030303030303030303030303030368676174655f726566822f58202222222222222222222222222222222222222222222222222222222222222222687265736f75726365a3647061746882666f7264657273666f2d31303432696e616d6573706163656473686f706b696e6361726e6174696f6e0068776f726b5f726566822f5820111111111111111111111111111111111111111111111111111111111111111169726571756573746572a2657061727479500101010101010101010101010101010168696e7374616e636550020202020202020202020202020202026a657870697265735f61741b0000019b76daa8006e726571756972655f616374696f6ea3656e6f6e636550000102030405060708090a0b0c0d0e0f66646f6d61696e822f5820333333333333333333333333333333333333333333333333333333333333333366696e74656e74822f58204444444444444444444444444444444444444444444444444444444444444444",
+      "edn": "{\"requester\": {\"party\": h'01010101010101010101010101010101', \"instance\": h'02020202020202020202020202020202'}, \"action\": {\"namespace\": \"shop\", \"name\": \"refund\", \"major\": 1, \"schema\": [-16, h'0101010101010101010101010101010101010101010101010101010101010101']}, \"resource\": {\"namespace\": \"shop\", \"path\": [\"orders\", \"o-1042\"], \"incarnation\": 0}, \"params\": {\"amount\": {\"amount\": {\"value\": 4200, \"unit\": \"eur_cent\"}}, \"reason_code\": {\"enum\": \"damaged\"}}, \"capacity\": {\"for\": h'03030303030303030303030303030303'}, \"reason\": \"The customer reported that the parcel arrived damaged.\", \"work_ref\": [-16, h'1111111111111111111111111111111111111111111111111111111111111111'], \"gate_ref\": [-16, h'2222222222222222222222222222222222222222222222222222222222222222'], \"require_action\": {\"domain\": [-16, h'3333333333333333333333333333333333333333333333333333333333333333'], \"nonce\": h'000102030405060708090a0b0c0d0e0f', \"intent\": [-16, h'4444444444444444444444444444444444444444444444444444444444444444']}, \"expires_at\": 1767225600000}",
+      "id": "agent-asks-to-refund-for-its-principal",
+      "json": {
+        "action": {
+          "major": 1,
+          "name": "refund",
+          "namespace": "shop",
+          "schema": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE"
+        },
+        "capacity": {
+          "for": "AwMDAwMDAwMDAwMDAwMDAw"
+        },
+        "expires_at": 1767225600000,
+        "gate_ref": "IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI",
+        "params": {
+          "amount": {
+            "amount": {
+              "unit": "eur_cent",
+              "value": 4200
+            }
+          },
+          "reason_code": {
+            "enum": "damaged"
+          }
+        },
+        "reason": "The customer reported that the parcel arrived damaged.",
+        "requester": {
+          "instance": "AgICAgICAgICAgICAgICAg",
+          "party": "AQEBAQEBAQEBAQEBAQEBAQ"
+        },
+        "require_action": {
+          "domain": "MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM",
+          "intent": "REREREREREREREREREREREREREREREREREREREREREQ",
+          "nonce": "AAECAwQFBgcICQoLDA0ODw"
+        },
+        "resource": {
+          "incarnation": 0,
+          "namespace": "shop",
+          "path": [
+            "orders",
+            "o-1042"
+          ]
+        },
+        "work_ref": "ERERERERERERERERERERERERERERERERERERERERERE"
+      },
+      "valid": true
+    },
+    {
+      "cbor": "a866616374696f6ea4646e616d656472656164656d616a6f720266736368656d61822f58200202020202020202020202020202020202020202020202020202020202020202696e616d6573706163656a646f63732e647269766566706172616d73a066726561736f6e745175617274657220636c6f736520726576696577686361706163697479636f776e687265736f75726365a36470617468826766696e616e63656971332d7265706f7274696e616d6573706163656a646f63732e64726976656b696e6361726e6174696f6e0169726571756573746572a165706172747950555555555555555555555555555555556a657870697265735f61741b0000019b7c0104006e636f6d6d69746d656e745f726566822f58200303030303030303030303030303030303030303030303030303030303030303",
+      "edn": "{\"requester\": {\"party\": h'55555555555555555555555555555555'}, \"action\": {\"namespace\": \"docs.drive\", \"name\": \"read\", \"major\": 2, \"schema\": [-16, h'0202020202020202020202020202020202020202020202020202020202020202']}, \"resource\": {\"namespace\": \"docs.drive\", \"path\": [\"finance\", \"q3-report\"], \"incarnation\": 1}, \"params\": {}, \"capacity\": \"own\", \"reason\": \"Quarter close review\", \"commitment_ref\": [-16, h'0303030303030303030303030303030303030303030303030303030303030303'], \"expires_at\": 1767312000000}",
+      "id": "person-asks-for-own-access",
+      "json": {
+        "action": {
+          "major": 2,
+          "name": "read",
+          "namespace": "docs.drive",
+          "schema": "AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI"
+        },
+        "capacity": "own",
+        "commitment_ref": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM",
+        "expires_at": 1767312000000,
+        "params": {},
+        "reason": "Quarter close review",
+        "requester": {
+          "party": "VVVVVVVVVVVVVVVVVVVVVQ"
+        },
+        "resource": {
+          "incarnation": 1,
+          "namespace": "docs.drive",
+          "path": [
+            "finance",
+            "q3-report"
+          ]
+        }
+      },
+      "valid": true
+    },
+    {
+      "edn": "{\"requester\": {\"party\": h'55555555555555555555555555555555'}, \"action\": {\"namespace\": \"docs\", \"name\": \"read\", \"major\": 1, \"schema\": [-16, h'0202020202020202020202020202020202020202020202020202020202020202']}, \"resource\": {\"namespace\": \"docs\", \"path\": [\"a\"], \"incarnation\": 0}, \"params\": {}, \"capacity\": \"own\", \"expires_at\": 1}",
+      "id": "without-reason",
+      "json": {
+        "action": {
+          "major": 1,
+          "name": "read",
+          "namespace": "docs",
+          "schema": "AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI"
+        },
+        "capacity": "own",
+        "expires_at": 1,
+        "params": {},
+        "requester": {
+          "party": "VVVVVVVVVVVVVVVVVVVVVQ"
+        },
+        "resource": {
+          "incarnation": 0,
+          "namespace": "docs",
+          "path": [
+            "a"
+          ]
+        }
+      },
+      "valid": false
+    },
+    {
+      "edn": "{\"requester\": {\"party\": h'55555555555555555555555555555555'}, \"action\": {\"namespace\": \"docs\", \"name\": \"read\", \"major\": 1, \"schema\": [-16, h'0202020202020202020202020202020202020202020202020202020202020202']}, \"resource\": {\"namespace\": \"docs\", \"path\": [\"a\"], \"incarnation\": 0}, \"params\": {}, \"capacity\": \"own\", \"reason\": \"r\", \"priority\": \"high\", \"expires_at\": 1}",
+      "id": "unknown-member",
+      "json": {
+        "action": {
+          "major": 1,
+          "name": "read",
+          "namespace": "docs",
+          "schema": "AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI"
+        },
+        "capacity": "own",
+        "expires_at": 1,
+        "params": {},
+        "priority": "high",
+        "reason": "r",
+        "requester": {
+          "party": "VVVVVVVVVVVVVVVVVVVVVQ"
+        },
+        "resource": {
+          "incarnation": 0,
+          "namespace": "docs",
+          "path": [
+            "a"
+          ]
+        }
+      },
+      "valid": false
+    },
+    {
+      "edn": "{\"requester\": {\"party\": h'555555555555555555555555555555'}, \"action\": {\"namespace\": \"docs\", \"name\": \"read\", \"major\": 1, \"schema\": [-16, h'0202020202020202020202020202020202020202020202020202020202020202']}, \"resource\": {\"namespace\": \"docs\", \"path\": [\"a\"], \"incarnation\": 0}, \"params\": {}, \"capacity\": \"own\", \"reason\": \"r\", \"expires_at\": 1}",
+      "id": "short-id",
+      "json": {
+        "action": {
+          "major": 1,
+          "name": "read",
+          "namespace": "docs",
+          "schema": "AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI"
+        },
+        "capacity": "own",
+        "expires_at": 1,
+        "params": {},
+        "reason": "r",
+        "requester": {
+          "party": "VVVVVVVVVVVVVVVVVVVV"
+        },
+        "resource": {
+          "incarnation": 0,
+          "namespace": "docs",
+          "path": [
+            "a"
+          ]
+        }
+      },
+      "valid": false
+    },
+    {
+      "edn": "{\"requester\": {\"party\": h'55555555555555555555555555555555'}, \"action\": {\"namespace\": \"docs\", \"name\": \"Read\", \"major\": 1, \"schema\": [-16, h'0202020202020202020202020202020202020202020202020202020202020202']}, \"resource\": {\"namespace\": \"docs\", \"path\": [\"a\"], \"incarnation\": 0}, \"params\": {}, \"capacity\": \"own\", \"reason\": \"r\", \"expires_at\": 1}",
+      "id": "bad-action-name",
+      "json": {
+        "action": {
+          "major": 1,
+          "name": "Read",
+          "namespace": "docs",
+          "schema": "AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI"
+        },
+        "capacity": "own",
+        "expires_at": 1,
+        "params": {},
+        "reason": "r",
+        "requester": {
+          "party": "VVVVVVVVVVVVVVVVVVVVVQ"
+        },
+        "resource": {
+          "incarnation": 0,
+          "namespace": "docs",
+          "path": [
+            "a"
+          ]
+        }
+      },
+      "valid": false
+    }
+  ],
+  "cddl": [
+    "kernel.cddl",
+    "authority-request.cddl"
+  ],
+  "contract": "authority-request",
+  "schema": "authority-request.schema.json"
+}
