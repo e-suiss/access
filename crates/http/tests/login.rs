@@ -468,11 +468,11 @@ impl Web {
             let cookies: Vec<String> = self.jar.iter().map(|(k, v)| format!("{k}={v}")).collect();
             req = req.header(header::COOKIE, cookies.join("; "));
         }
-        if method == "POST" {
+        if method == "POST" || body.is_some() {
             req = req.header(header::CONTENT_TYPE, "application/json");
-            if let Some(k) = key {
-                req = req.header("idempotency-key", k);
-            }
+        }
+        if let Some(k) = key {
+            req = req.header("idempotency-key", k);
         }
         let body = body.map_or_else(HttpBody::empty, |b| HttpBody::from(b.to_string()));
         let mut req = req.body(body).unwrap();
@@ -1264,6 +1264,33 @@ async fn product_endpoints_follow_the_frontend_contract() {
         )
         .await;
     assert_eq!(extra.status, StatusCode::BAD_REQUEST);
+    // OP-149 m.16 (f)
+    let termination = json!({
+        "nonce": b64url_encode(&[1; 16]),
+        "basis": b64url_encode(&[2; 16]),
+        "valid_from": "2026-01-01T00:00:00Z",
+        "valid_until": "2026-01-01T00:05:00Z",
+        "ais": b64url_encode(&[0xd2; 8]),
+    });
+    let prefixed = b
+        .send(
+            "DELETE",
+            "/v1/me/instances/ins_0123456789abcdefghjkmnpqrs",
+            Some(termination.clone()),
+            Some("del-1"),
+        )
+        .await;
+    assert_eq!(prefixed.status, StatusCode::BAD_REQUEST);
+    let by_id = b
+        .send(
+            "DELETE",
+            &format!("/v1/me/instances/{}", b64url_encode(&[9; 16])),
+            Some(termination),
+            Some("del-2"),
+        )
+        .await;
+    assert_eq!(by_id.status, StatusCode::FORBIDDEN);
+    assert_eq!(by_id.json()["code"], "step-up-required");
 
     let issued = b.post("/v1/me/auth-context", None).await;
     assert_eq!(issued.status, StatusCode::OK);

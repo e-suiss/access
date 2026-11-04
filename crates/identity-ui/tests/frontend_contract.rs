@@ -108,7 +108,7 @@ fn committed_examples_match_the_code_and_the_schema() {
         "InstanceRegistered",
         "instance-registered",
         &InstanceRegistered {
-            instance: String::from("ins_0123456789abcdefghjkmnpqrs"),
+            instance: b64(0x09, 16),
             kid: b64(0x22, 32),
         },
     );

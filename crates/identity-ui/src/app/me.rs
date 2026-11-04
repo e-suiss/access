@@ -22,8 +22,8 @@ use serde_json::json;
 
 use super::{Browser, Hosted, Reply, SESSION_REQUIRED, failed, signin};
 use crate::domain::frontend::{
-    ApproveQuery, ApproveRejection, AuthContextRequest, INSTANCE_PREFIX, InstanceRegistration,
-    InstanceTermination, approval_request, rfc3339, unix_ms,
+    ApproveQuery, ApproveRejection, AuthContextRequest, InstanceRegistration, InstanceTermination,
+    approval_request, rfc3339, unix_ms,
 };
 use crate::ports::{ArtifactSigner, DeviceInstances, Kits, Messages, RealmKit};
 
@@ -181,15 +181,14 @@ where
             })
             .await;
         match verdict {
-            Ok(RegistrationVerdict::Registered(r)) => {
-                match kit.ids.encode(INSTANCE_PREFIX, r.instance.0) {
-                    Ok(instance) => Reply::json(
-                        201,
-                        json!({ "instance": instance, "kid": b64url_encode(&r.kid) }),
-                    ),
-                    Err(_) => unavailable(),
-                }
-            }
+            // OP-149 m.16 (f)
+            Ok(RegistrationVerdict::Registered(r)) => Reply::json(
+                201,
+                json!({
+                    "instance": b64url_encode(&r.instance.0),
+                    "kid": b64url_encode(&r.kid),
+                }),
+            ),
             Ok(RegistrationVerdict::Refused { code }) => {
                 tracing::info!(%code, "device instance not registered");
                 problem(
@@ -221,7 +220,9 @@ where
         let Some(cookie) = b.session else {
             return session_required();
         };
-        let Ok(instance) = kit.ids.decode(INSTANCE_PREFIX, instance) else {
+        // OP-149 m.16 (f)
+        let Some(instance) = bytes(instance, 16, 16).and_then(|b| <[u8; 16]>::try_from(b).ok())
+        else {
             return invalid();
         };
         let (Some(nonce), Some(basis), Some(ais), Some(from), Some(until)) = (

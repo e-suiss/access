@@ -64,7 +64,8 @@
         "additionalProperties": false,
         "properties": {
           "instance": {
-            "pattern": "^ins_[0-9a-hjkmnp-tv-z]{26}$",
+            "description": "InstanceID, base64url of its 16 bytes (ADP JSON encoding, OP-149 m.16 (f)).",
+            "pattern": "^[A-Za-z0-9_-]{22}$",
             "type": "string"
           },
           "kid": {
@@ -578,11 +579,12 @@
       },
       "parameters": [
         {
+          "description": "InstanceID, base64url of its 16 bytes (ADP JSON encoding, OP-149 m.16 (f)).",
           "in": "path",
           "name": "instance",
           "required": true,
           "schema": {
-            "pattern": "^ins_[0-9a-hjkmnp-tv-z]{26}$",
+            "pattern": "^[A-Za-z0-9_-]{22}$",
             "type": "string"
           }
         }

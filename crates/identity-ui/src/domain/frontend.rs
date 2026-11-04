@@ -29,9 +29,6 @@ pub const APPROVE_PATH: &str = "/v1/approve";
 /// `access/instance_terminate` names.
 pub const IDENTITY_PEP: &str = "access-identity";
 
-/// Type prefix of an Instance's external id (OP-137).
-pub const INSTANCE_PREFIX: &str = "ins";
-
 /// Longest `state` accepted, in bytes.
 pub const MAX_STATE: usize = 512;
 
@@ -63,7 +60,8 @@ pub struct InstanceRegistration {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct InstanceRegistered {
-    /// The Instance, `ins_…`.
+    /// The `InstanceID`, base64url of its 16 bytes: the ADP JSON encoding of Kernel ids
+    /// (OP-149 m.16 (f)), as key lookup answers it.
     pub instance: String,
     /// The key's RFC 7638 thumbprint, base64url (CR-24).
     pub kid: String,
@@ -275,7 +273,7 @@ fn components() -> Value {
         ),
         "InstanceRegistered": object(
             &json!({
-                "instance": { "type": "string", "pattern": "^ins_[0-9a-hjkmnp-tv-z]{26}$" },
+                "instance": { "type": "string", "pattern": "^[A-Za-z0-9_-]{22}$", "description": "InstanceID, base64url of its 16 bytes (ADP JSON encoding, OP-149 m.16 (f))." },
                 "kid": b64("RFC 7638 thumbprint of the key (CR-24)."),
             }),
             &["instance", "kid"],
@@ -412,7 +410,8 @@ pub fn openapi() -> Value {
                 "name": "instance",
                 "in": "path",
                 "required": true,
-                "schema": { "type": "string", "pattern": "^ins_[0-9a-hjkmnp-tv-z]{26}$" },
+                "description": "InstanceID, base64url of its 16 bytes (ADP JSON encoding, OP-149 m.16 (f)).",
+                "schema": { "type": "string", "pattern": "^[A-Za-z0-9_-]{22}$" },
             }],
             "delete": {
                 "operationId": "terminateInstance",
