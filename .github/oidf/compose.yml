@@ -22,6 +22,10 @@ services:
       BASE_MTLS_URL: https://localhost.emobix.co.uk:8444
       MONGODB_HOST: mongodb
       SPRING_PROFILES_ACTIVE: dev
+      OIDC_GOOGLE_CLIENTID: google-client
+      OIDC_GOOGLE_SECRET: google-secret
+      OIDC_GITLAB_CLIENTID: gitlab-client
+      OIDC_GITLAB_SECRET: gitlab-secret
     extra_hosts:
       - "acme.id.test:host-gateway"
     depends_on:
