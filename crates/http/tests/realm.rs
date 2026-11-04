@@ -99,8 +99,24 @@ async fn a_realm_serves_its_suiss_configuration() {
         doc["endpoints"]["adp"],
         "https://access.test/.well-known/authzen-configuration"
     );
-    // §10.4.6: what is not served is not declared
-    assert!(doc["endpoints"].get("auth_context").is_none());
+    // OP-149 m.6, m.8
+    assert_eq!(
+        doc["endpoints"]["auth_context"],
+        "https://acme.id.test/v1/me/auth-context"
+    );
+    assert_eq!(
+        doc["endpoints"]["instances"],
+        "https://acme.id.test/v1/me/instances"
+    );
+    // OP-149 m.7, m.17a
+    assert_eq!(
+        doc["suiss_event_subscriptions"]["ssf_configuration"],
+        "https://acme.id.test/.well-known/ssf-configuration"
+    );
+    assert_eq!(
+        doc["suiss_event_subscriptions"]["webhooks"],
+        "urn:suiss:access:delivery:webhook"
+    );
     for path in [
         "/.well-known/suiss-configuration/realms/beta",
         "/realms/beta/.well-known/suiss-configuration",
@@ -108,6 +124,9 @@ async fn a_realm_serves_its_suiss_configuration() {
         let (status, _, body) = get(path, "id.test").await;
         assert_eq!(status, StatusCode::OK, "{path}");
         assert!(body.contains(r#""issuer":"https://id.test/realms/beta""#));
+        assert!(body.contains(
+            r#""ssf_configuration":"https://id.test/.well-known/ssf-configuration/realms/beta""#
+        ));
     }
     let (status, _, _) = get("/.well-known/suiss-configuration", "evil.test").await;
     assert_eq!(status, StatusCode::NOT_FOUND);

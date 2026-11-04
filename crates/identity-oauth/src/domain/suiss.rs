@@ -80,7 +80,31 @@ pub const SERVED: &[Endpoint] = &[
     Endpoint::KeyBatch,
     Endpoint::Eligibility,
     Endpoint::TenantSnapshot,
+    Endpoint::AuthContext,
+    Endpoint::Instances,
 ];
+
+/// Well-known suffix of the realm's SSF transmitter metadata (SSF 1.0 §7.1).
+pub const SSF_SUFFIX: &str = "ssf-configuration";
+
+/// The delivery method of the Suiss webhook profile (OP-149 m.4, m.7): `CloudEvents` 1.0
+/// structured JSON signed per Standard Webhooks.
+pub const WEBHOOK_PROFILE: &str = "urn:suiss:access:delivery:webhook";
+
+/// `suiss_event_subscriptions` of `issuer` (OP-149 m.3, m.7): the realm's SSF transmitter
+/// metadata URL, the well-known path inserted before the issuer's path, and the webhook
+/// profile a stream names as its delivery method.
+#[must_use]
+pub fn event_subscriptions(issuer: &Issuer) -> Value {
+    json!({
+        "ssf_configuration": format!(
+            "https://{}{}",
+            issuer.authority(),
+            issuer.well_known_inserted(SSF_SUFFIX)
+        ),
+        "webhooks": WEBHOOK_PROFILE,
+    })
+}
 
 /// The deployment's part of the document, from configuration.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -126,7 +150,10 @@ pub fn document(issuer: &Issuer, s: &Settings, served: &[Endpoint]) -> String {
         "suiss_management_api".into(),
         s.management_api.as_str().into(),
     );
-    m.insert("suiss_event_subscriptions".into(), json!({}));
+    m.insert(
+        "suiss_event_subscriptions".into(),
+        event_subscriptions(issuer),
+    );
     m.insert("suiss_products".into(), json!(s.products));
     m.insert("endpoints".into(), json!(endpoints(issuer, s, served)));
     Value::Object(m).to_string()

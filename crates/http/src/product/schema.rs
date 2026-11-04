@@ -156,7 +156,11 @@ fn other_components() -> Value {
                 "suiss_event_subscriptions": {
                     "type": "object",
                     "additionalProperties": false,
-                    "properties": { "ssf_configuration": { "type": "string" }, "webhooks": { "type": "string" } },
+                    "properties": {
+                        "ssf_configuration": text("The realm's SSF transmitter metadata (SSF 1.0 §7.1)."),
+                        "webhooks": { "const": "urn:suiss:access:delivery:webhook", "description": "The Suiss webhook profile's delivery method: CloudEvents 1.0 structured JSON signed per Standard Webhooks." },
+                    },
+                    "required": ["ssf_configuration", "webhooks"],
                 },
                 "suiss_products": { "type": "object", "additionalProperties": { "type": "string" } },
                 "endpoints": {
