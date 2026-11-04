@@ -1,8 +1,10 @@
 //! The in-process seam between the planes for `idp.*` (OP-62, MD-14, TN-111): the identity
-//! plane's ports, served by the authority core of this process, and the realm keys a new
-//! realm opens (OP-146 m.16 (m)).
+//! plane's ports, served by the authority core of this process, the actor-binding of
+//! self-signed registrations (OP-149 m.16 (a), L0-META-7), and the realm keys a new realm opens
+//! (OP-146 m.16 (m)).
 
-use std::sync::Arc;
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 
 use access_authority_core::CoreError;
 use access_authority_core::adapters::{Domains, OsSalts};
@@ -20,9 +22,14 @@ use access_identity_admin::ports::{Decider, Governance, Instances, RealmKeys};
 use access_identity_oauth::adapters::SignerKeys;
 use access_identity_ui::ports::DeviceInstances;
 use access_internal_api::instances::{
-    Registration, RegistrationVerdict, Termination, terminate_intent, terminate_payload,
+    Registered, Registration, RegistrationVerdict, SelfSigned, Termination, bootstrap_basis,
+    self_signed_intent, terminate_intent, terminate_payload,
 };
 use access_kernel::combinator::Capacity;
+use access_kernel::meta::Payload;
+use access_kernel::model::Id;
+use access_kernel::verify::cose::PublicKey;
+use access_kernel::verify::key_scope::thumbprint;
 use access_store::identity::RealmId;
 use suiss_crypto::pkcs11::{HsmError, KeyStore};
 
@@ -37,27 +44,92 @@ use access_store::Pool;
 use access_store::authority::find_nonce;
 use access_store::scope::DomainId;
 
+/// The actor-binding of self-signed registrations (§7.9.2.3, OP-149 m.16 (a)): while the
+/// identity plane forwards a `party_register` or `instance_create`, the new key's `kid` is bound
+/// to the Party the identity plane checked, so the core verifies the Exercise's AIS with that key
+/// and L0-META-7 holds the actor to that Party. Nothing else is bound; an unbound key is
+/// anonymous.
+#[derive(Clone, Default)]
+pub(crate) struct ActorBindings(Arc<Mutex<HashMap<[u8; 32], Held>>>);
+
+struct Held {
+    party: Id,
+    key: PublicKey,
+    holds: usize,
+}
+
+/// One forwarded registration's hold on a binding; dropping it releases the binding.
+pub(crate) struct Hold {
+    bindings: ActorBindings,
+    kid: [u8; 32],
+}
+
+impl ActorBindings {
+    /// Binds `key` to `party` until the hold is dropped. `None` when the key is bound to
+    /// another Party at the moment.
+    pub(crate) fn hold(&self, party: Id, key: &PublicKey) -> Option<Hold> {
+        let kid = thumbprint(key);
+        let mut map = self.0.lock().ok()?;
+        let held = map.entry(kid).or_insert_with(|| Held {
+            party,
+            key: key.clone(),
+            holds: 0,
+        });
+        if held.party != party || held.key != *key {
+            return None;
+        }
+        held.holds = held.holds.saturating_add(1);
+        Some(Hold {
+            bindings: self.clone(),
+            kid,
+        })
+    }
+}
+
+impl Drop for Hold {
+    fn drop(&mut self) {
+        if let Ok(mut map) = self.bindings.0.lock()
+            && let Some(held) = map.get_mut(&self.kid)
+        {
+            held.holds = held.holds.saturating_sub(1);
+            if held.holds == 0 {
+                map.remove(&self.kid);
+            }
+        }
+    }
+}
+
+impl Binding for ActorBindings {
+    fn bound(&self, kid: &[u8; 32]) -> Option<(Id, PublicKey)> {
+        let map = self.0.lock().ok()?;
+        map.get(kid).map(|h| (h.party, h.key.clone()))
+    }
+}
+
 /// The authority plane as the identity plane's [`Decider`] and [`Governance`].
 pub(crate) struct Plane<K, B: Binding, S: Salts, C> {
     domains: Arc<Domains<K, B, S, C>>,
     sequencer: Pool,
     app: Pool,
     clock: C,
+    actors: ActorBindings,
 }
 
 impl<K, B: Binding, S: Salts, C> Plane<K, B, S, C> {
-    /// Over the domains this process leads.
+    /// Over the domains this process leads; `actors` is the binding those domains read.
     pub(crate) const fn new(
         domains: Arc<Domains<K, B, S, C>>,
         sequencer: Pool,
         app: Pool,
         clock: C,
+        actors: ActorBindings,
     ) -> Self {
         Self {
             domains,
             sequencer,
             app,
             clock,
+            actors,
         }
     }
 }
@@ -145,26 +217,94 @@ where
     }
 }
 
-/// Why the identity plane cannot open an Instance on its own yet: `party_register` and
-/// `instance_create` are signed by the new key itself under an actor-binding (L0-META-7), and
-/// the key's holder alone has its private key (OP-149 m.4, m.6).
-pub(crate) const REGISTRATION_REFUSED: &str = "actor-binding-required";
+/// A key bound to another Party while this registration was forwarded.
+pub(crate) const BINDING_BUSY: &str = "actor-binding-busy";
+
+/// Why a registration's Exercise was not recorded: the core's stable code, or `denied`.
+fn not_registered(v: Verdict) -> Result<RegistrationVerdict, Unavailable> {
+    match v {
+        Verdict::Committed(_) => Err(Unavailable(String::from("committed"))),
+        Verdict::Refused { code } => Ok(RegistrationVerdict::Refused { code }),
+        Verdict::NotAllowed { .. } => Ok(RegistrationVerdict::Refused {
+            code: String::from("denied"),
+        }),
+    }
+}
+
+impl<K, B, S, C> Plane<K, B, S, C>
+where
+    K: Keys + Send + Sync + 'static,
+    B: Binding + Clone + Send + Sync + 'static,
+    S: Salts + Clone + Send + Sync + 'static,
+    C: Clock + Clone + Send + Sync + 'static,
+{
+    /// Commits one self-signed `payload` of `r` under the bootstrap basis.
+    async fn self_signed(
+        &self,
+        r: &Registration,
+        e: &SelfSigned,
+        payload: Payload,
+    ) -> Result<Verdict, Unavailable> {
+        let Some(intent) = self_signed_intent(&payload, r.party, e.validity) else {
+            return Ok(Verdict::Refused {
+                code: String::from("protocol"),
+            });
+        };
+        let request = Request {
+            domain: r.domain,
+            mode: Mode::Commit,
+            nonce: e.nonce.clone(),
+            intent,
+            payload: Some(payload),
+            basis: bootstrap_basis(&r.domain),
+            capacity: Capacity::Own,
+            proofs: Vec::new(),
+            exercise: None,
+            consistency: None,
+        };
+        self.commit(request, e.ais.clone(), r.pep.clone()).await
+    }
+
+    /// OP-149 m.16 (a), L0-META-7: binds the new key to the checked Party, commits
+    /// `party_register` when the Party is new and then `instance_create`, both signed by that
+    /// key, and releases the binding.
+    async fn register_signed(&self, r: Registration) -> Result<RegistrationVerdict, Unavailable> {
+        let Some(_hold) = self.actors.hold(r.party, &r.key) else {
+            return Ok(RegistrationVerdict::Refused {
+                code: String::from(BINDING_BUSY),
+            });
+        };
+        if let Some(e) = &r.register {
+            match self.self_signed(&r, e, r.register_payload()).await? {
+                Verdict::Committed(_) => {}
+                other => return not_registered(other),
+            }
+        }
+        let created = match self.self_signed(&r, &r.create, r.create_payload()).await? {
+            Verdict::Committed(c) => c,
+            other => return not_registered(other),
+        };
+        let instance = r
+            .instance()
+            .ok_or_else(|| Unavailable(String::from("nonce")))?;
+        Ok(RegistrationVerdict::Registered(Registered {
+            party: r.party,
+            instance,
+            kid: thumbprint(&r.key),
+            replayed: created.replayed,
+        }))
+    }
+}
 
 impl<K, B, S, C> Instances for Plane<K, B, S, C>
 where
-    K: Send + Sync,
-    B: Binding + Send + Sync,
-    S: Salts + Send + Sync,
-    C: Send + Sync,
+    K: Keys + Send + Sync + 'static,
+    B: Binding + Clone + Send + Sync + 'static,
+    S: Salts + Clone + Send + Sync + 'static,
+    C: Clock + Clone + Send + Sync + 'static,
 {
-    fn register(
-        &self,
-        r: Registration,
-    ) -> impl std::future::Future<Output = Result<RegistrationVerdict, Unavailable>> + Send {
-        let _ = r;
-        std::future::ready(Ok(RegistrationVerdict::Refused {
-            code: String::from(REGISTRATION_REFUSED),
-        }))
+    async fn register(&self, r: Registration) -> Result<RegistrationVerdict, Unavailable> {
+        self.register_signed(r).await
     }
 }
 
@@ -176,7 +316,7 @@ where
     C: Clock + Clone + Send + Sync + 'static,
 {
     async fn register(&self, r: Registration) -> Result<RegistrationVerdict, Unavailable> {
-        Instances::register(self, r).await
+        self.register_signed(r).await
     }
 
     async fn terminate(&self, t: Termination) -> Result<Verdict, Unavailable> {

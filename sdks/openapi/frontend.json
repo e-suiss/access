@@ -43,8 +43,18 @@
       "InstanceChallenge": {
         "additionalProperties": false,
         "properties": {
+          "basis": {
+            "description": "GrantID of the Genesis bootstrap Grant, 16 bytes: both Exercises name the basis public with it (L0-META-7).",
+            "pattern": "^[A-Za-z0-9_-]*$",
+            "type": "string"
+          },
           "challenge": {
-            "description": "32 bytes the proof of possession signs.",
+            "description": "32 bytes: the nonce of the device's instance_create; party_register uses it followed by the byte 0x01.",
+            "pattern": "^[A-Za-z0-9_-]*$",
+            "type": "string"
+          },
+          "domain": {
+            "description": "The realm's governing DomainID, 32 bytes.",
             "pattern": "^[A-Za-z0-9_-]*$",
             "type": "string"
           },
@@ -52,11 +62,24 @@
             "description": "When it stops being accepted.",
             "format": "date-time",
             "type": "string"
+          },
+          "party": {
+            "description": "The user's Party once its first device registered it; absent before.",
+            "pattern": "^[A-Za-z0-9_-]{22}$",
+            "type": "string"
+          },
+          "pep": {
+            "const": "access-identity",
+            "description": "The PEP name both AIS name.",
+            "type": "string"
           }
         },
         "required": [
           "challenge",
-          "expires_at"
+          "expires_at",
+          "domain",
+          "basis",
+          "pep"
         ],
         "type": "object"
       },
@@ -72,31 +95,66 @@
             "description": "RFC 7638 thumbprint of the key (CR-24).",
             "pattern": "^[A-Za-z0-9_-]*$",
             "type": "string"
+          },
+          "party": {
+            "description": "The Party the Instance belongs to.",
+            "pattern": "^[A-Za-z0-9_-]{22}$",
+            "type": "string"
           }
         },
         "required": [
           "instance",
-          "kid"
+          "kid",
+          "party"
         ],
         "type": "object"
       },
       "InstanceRegistration": {
         "additionalProperties": false,
         "properties": {
+          "ais": {
+            "description": "AIS (tagged COSE_Sign1) by the device key over the access/instance_create intent on access.party:[hex(party)], nonce the challenge, mode commit, capacity own, the challenge's basis and pep (OP-149 m.16 (a)). Its signature is the proof of possession.",
+            "pattern": "^[A-Za-z0-9_-]*$",
+            "type": "string"
+          },
+          "challenge": {
+            "description": "The challenge this registration answers.",
+            "pattern": "^[A-Za-z0-9_-]*$",
+            "type": "string"
+          },
           "key": {
             "description": "COSE_Key (RFC 9052 §7): OKP Ed25519 or EC2 P-256.",
             "pattern": "^[A-Za-z0-9_-]*$",
             "type": "string"
           },
-          "pop": {
-            "description": "Tagged COSE_Sign1 by the key over {\"v\": 1, \"aud\": issuer, \"challenge\": bytes} in deterministic CBOR; content type application/access-instance-pop+cbor; kid the RFC 7638 thumbprint.",
+          "party": {
+            "description": "The user's Party, or a new one registered with register_ais.",
+            "pattern": "^[A-Za-z0-9_-]{22}$",
+            "type": "string"
+          },
+          "register_ais": {
+            "description": "AIS by the device key over the access/party_register intent (the Party roots itself, actor kind human), nonce the challenge followed by 0x01; required exactly when the user has no Party yet.",
             "pattern": "^[A-Za-z0-9_-]*$",
+            "type": "string"
+          },
+          "valid_from": {
+            "description": "Intent validity start, millisecond precision at most.",
+            "format": "date-time",
+            "type": "string"
+          },
+          "valid_until": {
+            "description": "Intent validity end, millisecond precision at most.",
+            "format": "date-time",
             "type": "string"
           }
         },
         "required": [
+          "challenge",
+          "party",
           "key",
-          "pop"
+          "valid_from",
+          "valid_until",
+          "ais"
         ],
         "type": "object"
       },
@@ -181,6 +239,7 @@
           "invalid-challenge",
           "invalid-instance-key",
           "invalid-proof-of-possession",
+          "invalid-party",
           "instance-not-registered",
           "instance-not-terminated",
           "invalid-request",
@@ -394,7 +453,7 @@
                 }
               }
             },
-            "description": "invalid-challenge, invalid-instance-key, invalid-proof-of-possession or invalid-request."
+            "description": "invalid-challenge, invalid-instance-key, invalid-proof-of-possession, invalid-party or invalid-request."
           },
           "401": {
             "content": {
@@ -437,7 +496,7 @@
             "description": "Temporarily unavailable."
           }
         },
-        "summary": "Registers the device key as an Instance of the user's Party (OP-149 m.6). The challenge is used up by any answer."
+        "summary": "Registers the device key as an Instance of the user's Party with the device's own instance_create, and party_register for a new Party (OP-149 m.6, m.16 (a), L0-META-7). Access binds the key to the session's Party and forwards the Exercises. The challenge is used up by any answer."
       }
     },
     "/v1/me/instances/challenges": {
@@ -486,7 +545,7 @@
             "description": "Temporarily unavailable."
           }
         },
-        "summary": "A single-use challenge for a device key, bound to this session (OP-149 m.6)."
+        "summary": "A single-use challenge for a device key, bound to this session, with the governing domain, basis and PEP the device's Exercises name (OP-149 m.6, m.16 (a))."
       }
     },
     "/v1/me/instances/{instance}": {

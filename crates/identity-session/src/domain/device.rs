@@ -1,10 +1,10 @@
-//! Device Instances from a user session (OP-149 m.6): the session a registration or termination
-//! needs, the `COSE_Key` a device presents, its RFC 7638 `kid` (CR-24) and the proof of
-//! possession over a single-use server challenge.
+//! Device Instances from a user session (OP-149 m.6, m.16 (a)): the session a registration or
+//! termination needs, the `COSE_Key` a device presents and its RFC 7638 `kid` (CR-24). The
+//! proof of possession is the device's own `instance_create` Exercise, whose nonce is a
+//! single-use server challenge; the authority plane verifies its signature.
 
 use access_parse::cbor::{Item, Limits, decode};
-use suiss_crypto::aws::AwsLcBackend;
-use suiss_crypto::cose::{self, Algorithm, KeySet, PublicKey};
+use suiss_crypto::cose::PublicKey;
 use suiss_crypto::dcbor::{self, Value};
 
 use super::assurance::Aal;
@@ -18,17 +18,8 @@ pub const MIN_AAL: Aal = Aal::Aal2;
 /// How long a challenge may be answered (PD).
 pub const CHALLENGE_TTL_MS: u64 = 5 * 60 * 1000;
 
-/// The content type of a proof of possession's `COSE_Sign1`.
-pub const POP_CONTENT_TYPE: &str = "application/access-instance-pop+cbor";
-
-/// Version of the proof's payload.
-pub const POP_VERSION: u64 = 1;
-
 /// Largest `COSE_Key` accepted, in bytes.
 pub const MAX_KEY: usize = 256;
-
-/// Largest proof accepted, in bytes.
-pub const MAX_POP: usize = 1024;
 
 const KTY: i64 = 1;
 const ALG: i64 = 3;
@@ -70,7 +61,7 @@ pub enum KeyRejection {
     /// Not a `COSE_Key` for Ed25519 or P-256, or not a valid point (OP-149 m.14 (a)).
     #[error("key")]
     Key,
-    /// The proof is not a `COSE_Sign1` by that key over the challenge.
+    /// The key's own Exercise does not verify: its AIS is not by that key over the request.
     #[error("proof of possession")]
     Pop,
 }
@@ -166,64 +157,6 @@ pub fn cose_key(key: &PublicKey) -> Vec<u8> {
 #[must_use]
 pub fn kid(key: &PublicKey) -> [u8; 32] {
     access_kernel::verify::key_scope::thumbprint(key)
-}
-
-/// The payload a device signs: `{"v": 1, "aud": issuer, "challenge": bytes}` in deterministic
-/// CBOR, so a proof is bound to one realm and one challenge.
-#[must_use]
-pub fn pop_payload(issuer: &str, challenge: &[u8; 32]) -> Vec<u8> {
-    let v = Value::Map(vec![
-        (Value::text("v"), Value::Unsigned(POP_VERSION)),
-        (Value::text("aud"), Value::text(issuer)),
-        (Value::text("challenge"), Value::Bytes(challenge.to_vec())),
-    ]);
-    dcbor::encode(&v, dcbor::Limits::CEILING).unwrap_or_default()
-}
-
-/// The challenge a proof names, read before it is verified: the proof's payload says which
-/// single-use challenge it answers. `None` for anything that is not such a proof.
-#[must_use]
-pub fn pop_challenge(pop: &[u8]) -> Option<[u8; 32]> {
-    if pop.len() > MAX_POP {
-        return None;
-    }
-    let payload = cose::parse_sign1(pop).ok()?.payload?;
-    let Ok(Value::Map(m)) = dcbor::decode(&payload, dcbor::Limits::CEILING) else {
-        return None;
-    };
-    m.into_iter().find_map(|(k, v)| match (k, v) {
-        (Value::Text(t), Value::Bytes(b)) if t == "challenge" => <[u8; 32]>::try_from(b).ok(),
-        _ => None,
-    })
-}
-
-/// Verifies a proof of possession: a tagged `COSE_Sign1` whose protected header names
-/// [`POP_CONTENT_TYPE`] and the key's `kid`, with low-S ECDSA (CR-9, OP-149 m.14 (b)), over
-/// [`pop_payload`].
-///
-/// # Errors
-/// [`KeyRejection::Pop`].
-pub fn verify_pop(
-    key: &PublicKey,
-    pop: &[u8],
-    issuer: &str,
-    challenge: &[u8; 32],
-) -> Result<(), KeyRejection> {
-    if pop.len() > MAX_POP {
-        return Err(KeyRejection::Pop);
-    }
-    let mut keys = KeySet::default();
-    keys.insert(kid(key), key.clone())
-        .map_err(|_| KeyRejection::Pop)?;
-    keys.allowed = [Algorithm::Ed25519, Algorithm::Esp256, Algorithm::Es256]
-        .into_iter()
-        .collect();
-    let verified = cose::verify_sign1(&AwsLcBackend, pop, &keys, POP_CONTENT_TYPE)
-        .map_err(|_| KeyRejection::Pop)?;
-    if verified.payload != pop_payload(issuer, challenge) {
-        return Err(KeyRejection::Pop);
-    }
-    Ok(())
 }
 
 #[cfg(test)]

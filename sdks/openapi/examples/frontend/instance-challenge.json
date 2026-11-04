@@ -1,4 +1,7 @@
 {
   "challenge": "ERERERERERERERERERERERERERERERERERERERERERE",
-  "expires_at": "2025-12-31T23:55:00Z"
+  "expires_at": "2025-12-31T23:55:00Z",
+  "domain": "BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc",
+  "basis": "BQUFBQUFBQUFBQUFBQUFBQ",
+  "pep": "access-identity"
 }

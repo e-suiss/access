@@ -11,7 +11,10 @@ use access_identity_session::domain::device::{Assurance, KeyRejection};
 use access_identity_session::domain::session::{SESSION_COOKIE, clear_cookie};
 use access_identity_session::ports::Clock;
 use access_internal_api::idp::Verdict;
-use access_internal_api::instances::{Registrant, Registration, RegistrationVerdict, Termination};
+use access_internal_api::instances::{
+    Registrant, Registration, RegistrationVerdict, SelfSigned, Termination, bootstrap_basis,
+    register_nonce,
+};
 use access_kernel::digest::Digest;
 use access_kernel::json::{b64url_decode, b64url_encode};
 use access_kernel::meta::ExerciseBasis;
@@ -99,6 +102,103 @@ fn bytes(text: &str, min: usize, max: usize) -> Option<Vec<u8>> {
         .filter(|b| (min..=max).contains(&b.len()))
 }
 
+/// The answer to a forwarded registration.
+fn registered(
+    verdict: Result<RegistrationVerdict, access_internal_api::idp::Unavailable>,
+) -> Reply {
+    match verdict {
+        // OP-149 m.16 (f)
+        Ok(RegistrationVerdict::Registered(r)) => Reply::json(
+            201,
+            json!({
+                "instance": b64url_encode(&r.instance.0),
+                "kid": b64url_encode(&r.kid),
+                "party": b64url_encode(&r.party.0),
+            }),
+        ),
+        Ok(RegistrationVerdict::Refused { code }) if code.starts_with("ais-") => {
+            tracing::info!(%code, "device instance not registered");
+            problem(
+                400,
+                KeyRejection::Pop.code(),
+                "The device key could not be verified",
+            )
+        }
+        Ok(RegistrationVerdict::Refused { code }) => {
+            tracing::info!(%code, "device instance not registered");
+            problem(
+                409,
+                "instance-not-registered",
+                "The device could not be registered",
+            )
+        }
+        Err(_) => unavailable(),
+    }
+}
+
+/// A registration body in bytes.
+struct Parsed {
+    key: Vec<u8>,
+    challenge: [u8; 32],
+    party: [u8; 16],
+    ais: Vec<u8>,
+    register_ais: Option<Vec<u8>>,
+    validity: Window,
+}
+
+fn parsed(body: &InstanceRegistration) -> Option<Parsed> {
+    let register_ais = match body.register_ais.as_deref() {
+        None => None,
+        Some(a) => Some(bytes(a, 1, 8192)?),
+    };
+    let (from, until) = (unix_ms(&body.valid_from)?, unix_ms(&body.valid_until)?);
+    (from <= until).then_some(())?;
+    Some(Parsed {
+        key: bytes(&body.key, 1, 256)?,
+        challenge: <[u8; 32]>::try_from(bytes(&body.challenge, 32, 32)?).ok()?,
+        party: <[u8; 16]>::try_from(bytes(&body.party, 16, 16)?).ok()?,
+        ais: bytes(&body.ais, 1, 8192)?,
+        register_ais,
+        validity: Window { from, until },
+    })
+}
+
+/// The Party the subject's device Instances belong to (OP-149 m.16 (a)).
+async fn bound_party(
+    db: &access_store::Pool,
+    kit: &RealmKit,
+    subject: &[u8; 16],
+) -> Result<Option<[u8; 16]>, Reply> {
+    let mut t = TenantTx::begin(db, kit.tenant, kit.realm)
+        .await
+        .map_err(|_| unavailable())?;
+    let p = idp::subject_party(&mut t, subject)
+        .await
+        .map_err(|_| unavailable())?;
+    t.commit().await.map_err(|_| unavailable())?;
+    Ok(p)
+}
+
+/// Records the Party the subject's first device registered.
+async fn bind_party(
+    db: &access_store::Pool,
+    kit: &RealmKit,
+    subject: &[u8; 16],
+    party: &[u8; 16],
+) -> Result<(), Reply> {
+    let mut t = TenantTx::begin(db, kit.tenant, kit.realm)
+        .await
+        .map_err(|_| unavailable())?;
+    if !idp::bind_subject_party(&mut t, subject, party)
+        .await
+        .map_err(|_| unavailable())?
+    {
+        tracing::warn!("device party already bound");
+    }
+    t.commit().await.map_err(|_| unavailable())?;
+    Ok(())
+}
+
 /// The realm's governing domain.
 async fn governing(db: &access_store::Pool, kit: &RealmKit) -> Result<Digest, Reply> {
     let mut t = TenantTx::begin(db, kit.tenant, kit.realm)
@@ -116,8 +216,15 @@ where
     C: Clock + Sync,
     M: Messages,
 {
-    /// `POST /v1/me/instances/challenges`.
-    pub async fn instance_challenge(&self, entry: &RealmEntry, b: &Browser<'_>) -> Reply {
+    /// `POST /v1/me/instances/challenges` (OP-149 m.6, m.16 (a)): the challenge, and what the
+    /// device's Exercises name: the governing domain, the bootstrap basis, the PEP and the
+    /// user's Party once there is one.
+    pub async fn instance_challenge<A, I>(
+        &self,
+        devices: &Devices<A, I>,
+        entry: &RealmEntry,
+        b: &Browser<'_>,
+    ) -> Reply {
         let kit = match self.kit(entry).await {
             Ok(k) => k,
             Err(r) => return r,
@@ -126,18 +233,39 @@ where
         let Some(cookie) = b.session else {
             return session_required();
         };
-        match auth.instance_challenge(cookie).await {
-            Ok(Ok(c)) => Reply::json(
-                201,
-                json!({ "challenge": c.challenge, "expires_at": rfc3339(c.expires_ms) }),
-            ),
-            Ok(Err(status)) => ended(&status),
-            Err(e) => failed(&e),
+        let c = match auth.instance_challenge(cookie).await {
+            Ok(Ok(c)) => c,
+            Ok(Err(status)) => return ended(&status),
+            Err(e) => return failed(&e),
+        };
+        let domain = match governing(&self.db, &kit).await {
+            Ok(d) => d,
+            Err(r) => return r,
+        };
+        let party = match bound_party(&self.db, &kit, &c.subject).await {
+            Ok(p) => p,
+            Err(r) => return r,
+        };
+        let ExerciseBasis::Public(grant) = bootstrap_basis(&domain) else {
+            return unavailable();
+        };
+        let mut out = json!({
+            "challenge": c.challenge,
+            "expires_at": rfc3339(c.expires_ms),
+            "domain": b64url_encode(&domain.0),
+            "basis": b64url_encode(&grant.0),
+            "pep": devices.pep,
+        });
+        if let (Some(p), Some(m)) = (party, out.as_object_mut()) {
+            m.insert("party".into(), b64url_encode(&p).into());
         }
+        Reply::json(201, out)
     }
 
-    /// `POST /v1/me/instances` (OP-149 m.6): the session's step-up and the proof first, then
-    /// the authority plane opens the Instance through `internal-api`.
+    /// `POST /v1/me/instances` (OP-149 m.6, m.16 (a)): the session's step-up and its challenge
+    /// first; the Party must be the user's, or a new one the device registers when the user has
+    /// none; then the device's own Exercises go to the authority plane through `internal-api`,
+    /// which binds the key to that Party for their commit (L0-META-7).
     pub async fn register_instance<A, I: DeviceInstances>(
         &self,
         devices: &Devices<A, I>,
@@ -153,21 +281,42 @@ where
         let Some(cookie) = b.session else {
             return session_required();
         };
-        let (Some(key), Some(pop)) = (bytes(&body.key, 1, 256), bytes(&body.pop, 1, 1024)) else {
+        let Some(Parsed {
+            key,
+            challenge,
+            party,
+            ais,
+            register_ais,
+            validity,
+        }) = parsed(body)
+        else {
             return invalid();
         };
         let proven = match auth
-            .prove_instance_key(cookie, &key, &pop, &kit.issuer, b.correlation)
+            .claim_instance_challenge(cookie, &key, &challenge, b.correlation)
             .await
         {
             Ok(Ok(p)) => p,
             Ok(Err(r)) => return refused(&r),
             Err(e) => return failed(&e),
         };
+        let subject = proven.session.subject;
         let domain = match governing(&self.db, &kit).await {
             Ok(d) => d,
             Err(r) => return r,
         };
+        let bound = match bound_party(&self.db, &kit, &subject).await {
+            Ok(p) => p,
+            Err(r) => return r,
+        };
+        let fits = match (bound, &register_ais) {
+            (Some(p), None) => p == party,
+            (None, Some(_)) => true,
+            _ => false,
+        };
+        if !fits {
+            return problem(400, "invalid-party", "The Party is not this user's");
+        }
         let verdict = devices
             .instances
             .register(Registration {
@@ -175,30 +324,29 @@ where
                 domain,
                 registrant: Registrant::Device {
                     realm: *kit.realm.as_bytes(),
-                    subject: proven.session.subject,
+                    subject,
                 },
+                party: Id(party),
                 key: proven.key,
+                register: register_ais.map(|ais| SelfSigned {
+                    nonce: register_nonce(&challenge),
+                    validity,
+                    ais,
+                }),
+                create: SelfSigned {
+                    nonce: challenge.to_vec(),
+                    validity,
+                    ais,
+                },
+                pep: devices.pep.clone(),
             })
             .await;
-        match verdict {
-            // OP-149 m.16 (f)
-            Ok(RegistrationVerdict::Registered(r)) => Reply::json(
-                201,
-                json!({
-                    "instance": b64url_encode(&r.instance.0),
-                    "kid": b64url_encode(&r.kid),
-                }),
-            ),
-            Ok(RegistrationVerdict::Refused { code }) => {
-                tracing::info!(%code, "device instance not registered");
-                problem(
-                    409,
-                    "instance-not-registered",
-                    "The device could not be registered",
-                )
-            }
-            Err(_) => unavailable(),
+        if let (Ok(RegistrationVerdict::Registered(_)), None) = (&verdict, bound)
+            && let Err(r) = bind_party(&self.db, &kit, &subject, &party).await
+        {
+            return r;
         }
+        registered(verdict)
     }
 
     /// `DELETE /v1/me/instances/{instance}` (OP-149 m.6, OP-146 m.4 (i)): the user's own

@@ -28,6 +28,53 @@ fn scope(t: &TenantTx) -> Result<(Uuid, Uuid), StoreError> {
     ))
 }
 
+/// The Party a session subject's device Instances belong to, when its registration has
+/// committed (OP-149 m.16 (a)).
+///
+/// # Errors
+/// [`StoreError`].
+pub async fn subject_party(
+    t: &mut TenantTx,
+    subject: &[u8; 16],
+) -> Result<Option<[u8; 16]>, StoreError> {
+    let (tenant, realm) = scope(t)?;
+    let row = sqlx::query_scalar!(
+        "SELECT party_id FROM access.subject_party
+          WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3",
+        tenant,
+        realm,
+        Uuid::from_bytes(*subject),
+    )
+    .fetch_optional(&mut *t.tx)
+    .await?;
+    row.map(|p| <[u8; 16]>::try_from(p.as_slice()).map_err(|_| StoreError::Corrupt))
+        .transpose()
+}
+
+/// Records that `subject`'s device Instances belong to `party`; `false` when the subject or the
+/// Party is bound already. Never changed afterwards.
+///
+/// # Errors
+/// [`StoreError`].
+pub async fn bind_subject_party(
+    t: &mut TenantTx,
+    subject: &[u8; 16],
+    party: &[u8; 16],
+) -> Result<bool, StoreError> {
+    let (tenant, realm) = scope(t)?;
+    let done = sqlx::query!(
+        "INSERT INTO access.subject_party (tenant_id, realm_id, subject_id, party_id)
+         VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING",
+        tenant,
+        realm,
+        Uuid::from_bytes(*subject),
+        party.as_slice(),
+    )
+    .execute(&mut *t.tx)
+    .await?;
+    Ok(done.rows_affected() == 1)
+}
+
 /// A committed ALLOW as the identity plane binds it (EI-25).
 pub struct Decision<'a> {
     /// The realm's governing domain.

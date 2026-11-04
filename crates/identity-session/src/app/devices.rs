@@ -1,6 +1,7 @@
-//! Device Instances and the `auth_context` artifact from a live session (OP-149 m.6, m.8): a
-//! single-use challenge, the proof of possession that answers it, the step-up rule both
-//! registration and termination need, and the facts the artifact is built from.
+//! Device Instances and the `auth_context` artifact from a live session (OP-149 m.6, m.8,
+//! m.16 (a)): a single-use challenge the device's own `instance_create` Exercise uses as its
+//! nonce, the step-up rule both registration and termination need, and the facts the artifact
+//! is built from.
 
 use access_identity_account::ports::AccountTx;
 use access_identity_webauthn::ports::{CredentialRegistry, SignalSink};
@@ -11,8 +12,7 @@ use super::{Auth, FlowRef, Notifier, audit, i64_of, load, save};
 use crate::SessionError;
 use crate::domain::auth_context::{AuthContext, Content};
 use crate::domain::device::{
-    Assurance, CHALLENGE_TTL_MS, KeyRejection, assurance, instance_key, kid, pop_challenge,
-    verify_pop,
+    Assurance, CHALLENGE_TTL_MS, KeyRejection, assurance, instance_key, kid,
 };
 use crate::domain::flow::{FlowState, Purpose};
 use crate::ports::{Clock, Random, SessionDb, SessionTx};
@@ -20,11 +20,12 @@ use crate::ports::{Clock, Random, SessionDb, SessionTx};
 /// A challenge for a device key.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Challenge {
-    /// The 32 challenge bytes, base64url: the device signs them (see
-    /// [`crate::domain::device::pop_payload`]).
+    /// The 32 challenge bytes, base64url: the nonce of the device's `instance_create`.
     pub challenge: String,
     /// When it stops being accepted, Unix milliseconds.
     pub expires_ms: u64,
+    /// The session's subject.
+    pub subject: [u8; 16],
 }
 
 /// Why a device request was refused; a decision, not an error (OP-64).
@@ -40,7 +41,8 @@ pub enum DeviceRefusal {
     Key(KeyRejection),
 }
 
-/// A key the session's device proved it holds.
+/// A key presented with a claimed challenge; its Exercise's signature, which the authority
+/// plane verifies, proves the device holds it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ProvenKey {
     /// The session.
@@ -85,6 +87,7 @@ where
         Ok(Ok(Challenge {
             challenge,
             expires_ms: state.expires_ms,
+            subject: row.subject,
         }))
     }
 
@@ -121,19 +124,17 @@ where
         Ok(out)
     }
 
-    /// Answers a challenge (OP-149 m.6): the session passes the step-up rule, the challenge the
-    /// proof names is this session's and still open, `cose_key` is an Ed25519 or P-256 key and
-    /// `pop` is its `COSE_Sign1` over that challenge for `issuer`. The challenge is used up by
-    /// any answer that reaches it, right or wrong.
+    /// Claims a challenge for a registration (OP-149 m.6, m.16 (a)): the session passes the
+    /// step-up rule, `challenge` is this session's and still open, and `cose_key` is an Ed25519
+    /// or P-256 key. The challenge is used up by any claim that reaches it, right or wrong.
     ///
     /// # Errors
     /// [`SessionError`].
-    pub async fn prove_instance_key(
+    pub async fn claim_instance_challenge(
         &self,
         cookie: &str,
         cose_key: &[u8],
-        pop: &[u8],
-        issuer: &str,
+        challenge: &[u8; 32],
         correlation: &str,
     ) -> Result<Result<ProvenKey, DeviceRefusal>, SessionError> {
         let now = self.now();
@@ -145,11 +146,7 @@ where
                 return Ok(Err(r));
             }
         };
-        let Some(bytes) = pop_challenge(pop) else {
-            tx.commit().await?;
-            return Ok(Err(DeviceRefusal::Challenge));
-        };
-        let handle = super::encode(&bytes);
+        let handle = super::encode(challenge);
         let flow = FlowRef {
             handle: &handle,
             device: cookie,
@@ -167,11 +164,7 @@ where
             return Ok(Err(DeviceRefusal::Challenge));
         }
         save(&mut tx, &loaded, "done", super::Resume::Clear).await?;
-        let proven = instance_key(cose_key).and_then(|key| {
-            verify_pop(&key, pop, issuer, &bytes)?;
-            Ok(key)
-        });
-        let key = match proven {
+        let key = match instance_key(cose_key) {
             Ok(k) => k,
             Err(e) => {
                 tx.commit().await?;
@@ -181,7 +174,7 @@ where
         let target = self.external(session.subject)?;
         audit(
             &mut tx,
-            "instance.key_proven",
+            "instance.challenge_claimed",
             &target,
             &target,
             correlation,

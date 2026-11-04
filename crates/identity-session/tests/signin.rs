@@ -991,55 +991,46 @@ async fn a_passkey_signs_in_phishing_resistant_and_steps_up() {
 /// `auth_context` carries the step-up time.
 async fn device_instances_need_a_fresh_step_up(e: &Env, cookie: &str) {
     use access_identity_session::app::devices::DeviceRefusal;
-    use access_identity_session::domain::device::{
-        Assurance, KeyRejection, POP_CONTENT_TYPE, cose_key, kid, pop_payload,
-    };
-    use suiss_crypto::signer::{Signer, SoftSigner, sign_sign1};
+    use access_identity_session::domain::device::{Assurance, KeyRejection, cose_key, kid};
+    use suiss_crypto::signer::{Signer, SoftSigner};
 
     const ISSUER: &str = "https://acme.suiss.example";
     let device = SoftSigner::generate_p256().unwrap().0;
     let key = cose_key(&device.public_key());
-    let prove = async |challenge: &str, signer: &SoftSigner| {
+    let claim = async |challenge: &str, key: &[u8]| {
         let bytes: [u8; 32] = b64url_decode(challenge).unwrap().try_into().unwrap();
-        let pop = sign_sign1(
-            signer,
-            kid(&signer.public_key()),
-            POP_CONTENT_TYPE,
-            &pop_payload(ISSUER, &bytes),
-        )
-        .unwrap();
-        e.with(async |a| {
-            a.prove_instance_key(cookie, &key, &pop, ISSUER, "req")
-                .await
-        })
-        .await
-        .unwrap()
+        e.with(async |a| a.claim_instance_challenge(cookie, key, &bytes, "req").await)
+            .await
+            .unwrap()
     };
     let c = e
         .with(async |a| a.instance_challenge(cookie).await)
         .await
         .unwrap()
         .unwrap();
-    let wrong = SoftSigner::generate_p256().unwrap().0;
     assert_eq!(
-        prove(&c.challenge, &wrong).await,
-        Err(DeviceRefusal::Key(KeyRejection::Pop))
+        claim(&c.challenge, &[0xa0]).await,
+        Err(DeviceRefusal::Key(KeyRejection::Key))
     );
     assert_eq!(
-        prove(&c.challenge, &device).await,
+        claim(&c.challenge, &key).await,
         Err(DeviceRefusal::Challenge),
-        "a challenge is used up by any answer"
+        "a challenge is used up by any claim"
+    );
+    assert_eq!(
+        claim(&access_kernel::json::b64url_encode(&[7; 32]), &key).await,
+        Err(DeviceRefusal::Challenge)
     );
     let c = e
         .with(async |a| a.instance_challenge(cookie).await)
         .await
         .unwrap()
         .unwrap();
-    let proven = prove(&c.challenge, &device).await.unwrap();
+    let proven = claim(&c.challenge, &key).await.unwrap();
     assert_eq!(proven.kid, kid(&device.public_key()));
     assert_eq!(proven.key, device.public_key());
     assert_eq!(
-        prove(&c.challenge, &device).await,
+        claim(&c.challenge, &key).await,
         Err(DeviceRefusal::Challenge)
     );
     let context = e
@@ -1057,7 +1048,7 @@ async fn device_instances_need_a_fresh_step_up(e: &Env, cookie: &str) {
         .unwrap()
         .unwrap();
     assert_eq!(
-        prove(&c.challenge, &device).await,
+        claim(&c.challenge, &key).await,
         Err(DeviceRefusal::Assurance(Assurance::Stale))
     );
     assert_eq!(

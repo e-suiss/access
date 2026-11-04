@@ -144,7 +144,7 @@ handler! {
     /// `POST /v1/me/instances/challenges`.
     challenge(s, entry, jar, p, bytes, headers, uri) true {
         let _ = (&p, &bytes, &uri);
-        Ok::<_, Response>(s.login.hosted.instance_challenge(&entry, &jar.browser()).await)
+        Ok::<_, Response>(s.login.hosted.instance_challenge(&s.devices, &entry, &jar.browser()).await)
     }
 }
 

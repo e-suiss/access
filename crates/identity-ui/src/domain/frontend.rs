@@ -35,25 +35,53 @@ pub const MAX_STATE: usize = 512;
 /// The `request_uri` prefix of a pushed request (RFC 9126).
 pub const REQUEST_URI_PREFIX: &str = "urn:ietf:params:oauth:request_uri:";
 
-/// A challenge for a device key.
+/// A challenge for a device key, with what the device's Exercises name (OP-149 m.16 (a)).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct InstanceChallenge {
-    /// 32 bytes, base64url: what [`InstanceRegistration::pop`] signs.
+    /// 32 bytes, base64url: the nonce of the device's `instance_create`; `party_register` uses
+    /// it followed by the byte `0x01`.
     pub challenge: String,
     /// When it stops being accepted, RFC 3339.
     pub expires_at: String,
+    /// The realm's governing `DomainID`, base64url of its 32 bytes.
+    pub domain: String,
+    /// The basis both Exercises name: `public` with this Genesis bootstrap `GrantID`, base64url
+    /// of its 16 bytes (L0-META-7).
+    pub basis: String,
+    /// The PEP name both AIS name.
+    pub pep: String,
+    /// The user's Party, base64url of its 16 bytes, once its first device registered it; absent
+    /// before, when the device registers a new Party too.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub party: Option<String>,
 }
 
-/// `POST /v1/me/instances`.
+/// `POST /v1/me/instances` (OP-149 m.16 (a)): the device's own `instance_create` Exercise, and
+/// its `party_register` when the user has no Party yet, both signed by the device key. Each
+/// intent is `access/<action>` on `access.party:[hex(party)]` with the payload digest in
+/// `opaque["payload"]`, over `[valid_from, valid_until]`; mode commit, capacity own.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct InstanceRegistration {
+    /// The challenge this registration answers, base64url.
+    pub challenge: String,
+    /// The `PartyID`, base64url of its 16 bytes: the user's Party, or a new one with
+    /// [`Self::register_ais`].
+    pub party: String,
     /// The device key as a `COSE_Key`, base64url: Ed25519 or P-256.
     pub key: String,
-    /// The key's `COSE_Sign1` over `{"v": 1, "aud": issuer, "challenge": bytes}`, base64url;
-    /// content type `application/access-instance-pop+cbor`, `kid` the key's RFC 7638 thumbprint.
-    pub pop: String,
+    /// The intents' validity start, RFC 3339 with at most millisecond precision.
+    pub valid_from: String,
+    /// The intents' validity end, RFC 3339 with at most millisecond precision.
+    pub valid_until: String,
+    /// The AIS (`COSE_Sign1`) of `instance_create` by the device key, base64url; its nonce is
+    /// the challenge. Its signature is the proof of possession.
+    pub ais: String,
+    /// The AIS of `party_register` (the Party roots itself, actor kind `human`) by the device
+    /// key, base64url; required exactly when the user has no Party yet.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub register_ais: Option<String>,
 }
 
 /// A registered device Instance.
@@ -65,6 +93,8 @@ pub struct InstanceRegistered {
     pub instance: String,
     /// The key's RFC 7638 thumbprint, base64url (CR-24).
     pub kid: String,
+    /// The `PartyID`, base64url of its 16 bytes.
+    pub party: String,
 }
 
 /// `DELETE /v1/me/instances/{instance}`: an `instance_terminate` Exercise the user's own
@@ -251,6 +281,10 @@ fn b64(description: &str) -> Value {
     })
 }
 
+fn id16(description: &str) -> Value {
+    json!({ "type": "string", "pattern": "^[A-Za-z0-9_-]{22}$", "description": description })
+}
+
 fn time_field(description: &str) -> Value {
     json!({ "type": "string", "format": "date-time", "description": description })
 }
@@ -259,24 +293,34 @@ fn components() -> Value {
     json!({
         "InstanceChallenge": object(
             &json!({
-                "challenge": b64("32 bytes the proof of possession signs."),
+                "challenge": b64("32 bytes: the nonce of the device's instance_create; party_register uses it followed by the byte 0x01."),
                 "expires_at": time_field("When it stops being accepted."),
+                "domain": b64("The realm's governing DomainID, 32 bytes."),
+                "basis": b64("GrantID of the Genesis bootstrap Grant, 16 bytes: both Exercises name the basis public with it (L0-META-7)."),
+                "pep": { "type": "string", "const": "access-identity", "description": "The PEP name both AIS name." },
+                "party": id16("The user's Party once its first device registered it; absent before."),
             }),
-            &["challenge", "expires_at"],
+            &["challenge", "expires_at", "domain", "basis", "pep"],
         ),
         "InstanceRegistration": object(
             &json!({
+                "challenge": b64("The challenge this registration answers."),
+                "party": id16("The user's Party, or a new one registered with register_ais."),
                 "key": b64("COSE_Key (RFC 9052 §7): OKP Ed25519 or EC2 P-256."),
-                "pop": b64("Tagged COSE_Sign1 by the key over {\"v\": 1, \"aud\": issuer, \"challenge\": bytes} in deterministic CBOR; content type application/access-instance-pop+cbor; kid the RFC 7638 thumbprint."),
+                "valid_from": time_field("Intent validity start, millisecond precision at most."),
+                "valid_until": time_field("Intent validity end, millisecond precision at most."),
+                "ais": b64("AIS (tagged COSE_Sign1) by the device key over the access/instance_create intent on access.party:[hex(party)], nonce the challenge, mode commit, capacity own, the challenge's basis and pep (OP-149 m.16 (a)). Its signature is the proof of possession."),
+                "register_ais": b64("AIS by the device key over the access/party_register intent (the Party roots itself, actor kind human), nonce the challenge followed by 0x01; required exactly when the user has no Party yet."),
             }),
-            &["key", "pop"],
+            &["challenge", "party", "key", "valid_from", "valid_until", "ais"],
         ),
         "InstanceRegistered": object(
             &json!({
                 "instance": { "type": "string", "pattern": "^[A-Za-z0-9_-]{22}$", "description": "InstanceID, base64url of its 16 bytes (ADP JSON encoding, OP-149 m.16 (f))." },
                 "kid": b64("RFC 7638 thumbprint of the key (CR-24)."),
+                "party": id16("The Party the Instance belongs to."),
             }),
-            &["instance", "kid"],
+            &["instance", "kid", "party"],
         ),
         "InstanceTermination": object(
             &json!({
@@ -325,6 +369,7 @@ fn components() -> Value {
             "invalid-challenge",
             "invalid-instance-key",
             "invalid-proof-of-possession",
+            "invalid-party",
             "instance-not-registered",
             "instance-not-terminated",
             "invalid-request",
@@ -377,7 +422,7 @@ pub fn openapi() -> Value {
         CHALLENGES_PATH.to_owned(),
         json!({ "post": {
             "operationId": "createInstanceChallenge",
-            "summary": "A single-use challenge for a device key, bound to this session (OP-149 m.6).",
+            "summary": "A single-use challenge for a device key, bound to this session, with the governing domain, basis and PEP the device's Exercises name (OP-149 m.6, m.16 (a)).",
             "parameters": [idempotency()],
             "responses": {
                 "201": json_response("The challenge.", "InstanceChallenge"),
@@ -390,12 +435,12 @@ pub fn openapi() -> Value {
         INSTANCES_PATH.to_owned(),
         json!({ "post": {
             "operationId": "registerInstance",
-            "summary": "Registers the device key as an Instance of the user's Party (OP-149 m.6). The challenge is used up by any answer.",
+            "summary": "Registers the device key as an Instance of the user's Party with the device's own instance_create, and party_register for a new Party (OP-149 m.6, m.16 (a), L0-META-7). Access binds the key to the session's Party and forwards the Exercises. The challenge is used up by any answer.",
             "parameters": [idempotency()],
             "requestBody": body("InstanceRegistration", true),
             "responses": {
                 "201": json_response("The Instance and its kid.", "InstanceRegistered"),
-                "400": problem("invalid-challenge, invalid-instance-key, invalid-proof-of-possession or invalid-request."),
+                "400": problem("invalid-challenge, invalid-instance-key, invalid-proof-of-possession, invalid-party or invalid-request."),
                 "401": problem("No live session (session-required)."),
                 "403": problem(step_up),
                 "409": problem("The authority plane did not open the Instance (instance-not-registered)."),

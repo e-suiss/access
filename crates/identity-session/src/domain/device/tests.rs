@@ -3,12 +3,9 @@
     reason = "simulated clocks in test code"
 )]
 
-use suiss_crypto::signer::{Signer, SoftSigner, sign_sign1};
+use suiss_crypto::signer::{Signer, SoftSigner};
 
 use super::*;
-
-const ISSUER: &str = "https://acme.suiss.example";
-const CHALLENGE: [u8; 32] = [7; 32];
 
 fn ed25519() -> SoftSigner {
     SoftSigner::generate_ed25519().unwrap().0
@@ -16,10 +13,6 @@ fn ed25519() -> SoftSigner {
 
 fn p256() -> SoftSigner {
     SoftSigner::generate_p256().unwrap().0
-}
-
-fn pop(signer: &SoftSigner, content_type: &str, payload: &[u8]) -> Vec<u8> {
-    sign_sign1(signer, kid(&signer.public_key()), content_type, payload).unwrap()
 }
 
 // OP-149 m.6, PD: AAL2 and an authentication within five minutes
@@ -96,42 +89,4 @@ fn other_keys_are_refused() {
     assert_eq!(instance_key(&off_curve), Err(KeyRejection::Key));
     assert_eq!(instance_key(&[0xa0]), Err(KeyRejection::Key));
     assert_eq!(instance_key(b"not cbor"), Err(KeyRejection::Key));
-}
-
-// OP-149 m.6, CR-9: the proof is a COSE_Sign1 by the presented key over this realm's challenge
-#[test]
-fn the_proof_binds_key_realm_and_challenge() {
-    for signer in [ed25519(), p256()] {
-        let key = signer.public_key();
-        let good = pop(&signer, POP_CONTENT_TYPE, &pop_payload(ISSUER, &CHALLENGE));
-        assert_eq!(verify_pop(&key, &good, ISSUER, &CHALLENGE), Ok(()));
-        assert_eq!(pop_challenge(&good), Some(CHALLENGE));
-        assert_eq!(pop_challenge(b"junk"), None);
-        assert_eq!(
-            verify_pop(&key, &good, ISSUER, &[8; 32]),
-            Err(KeyRejection::Pop)
-        );
-        assert_eq!(
-            verify_pop(&key, &good, "https://other.suiss.example", &CHALLENGE),
-            Err(KeyRejection::Pop)
-        );
-        let other = ed25519();
-        assert_eq!(
-            verify_pop(&other.public_key(), &good, ISSUER, &CHALLENGE),
-            Err(KeyRejection::Pop)
-        );
-        let wrong_type = pop(
-            &signer,
-            "application/cose",
-            &pop_payload(ISSUER, &CHALLENGE),
-        );
-        assert_eq!(
-            verify_pop(&key, &wrong_type, ISSUER, &CHALLENGE),
-            Err(KeyRejection::Pop)
-        );
-        assert_eq!(
-            verify_pop(&key, &[0xd2; 2000], ISSUER, &CHALLENGE),
-            Err(KeyRejection::Pop)
-        );
-    }
 }

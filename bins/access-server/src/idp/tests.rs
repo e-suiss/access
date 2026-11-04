@@ -7,30 +7,28 @@
     reason = "test code; the request-path lints (OP-3) do not apply"
 )]
 
-use std::collections::BTreeMap;
 use std::time::Duration;
 
 use access_authority_core::adapters::Setup;
-use access_authority_core::app::Response;
-use access_authority_core::genesis::{BOOTSTRAP_GRANT, IDP_ANCHOR, core_action};
+use access_authority_core::genesis::{BOOTSTRAP_GRANT, IDP_ANCHOR};
 use access_authority_sequencer::SequencerError;
 use access_authority_sequencer::adapters::fold_check;
 use access_crypto::event_id::EventKey;
 use access_crypto::opaque_id::IdKey;
 use access_crypto::secret::Secret;
 use access_identity_admin::AdminError;
-use access_identity_admin::app::{Admin, Applied, NewRealm, Proposal};
+use access_identity_admin::app::{Admin, Applied, NewRealm, PairTarget, Proposal};
 use access_identity_admin::domain::{
     AuthMethod, Change, Client, ClientId, Invalid, Platform, RedirectUri, RpId,
 };
 use access_identity_oauth::domain::issuer::{IssuerStyle, RealmBase};
-use access_internal_api::instances::{PlatformProduct, Registrant};
+use access_internal_api::instances::{PlatformProduct, Registrant, register_nonce};
 use access_kernel::ais::{CONTENT_TYPE, Statement};
 use access_kernel::codec::Canonical;
 use access_kernel::combinator::Capacity;
-use access_kernel::intent::{ContextRefs, IntentEnvelope, intent_digest};
+use access_kernel::intent::intent_digest;
 use access_kernel::meta::{self, ActorKind, ExerciseBasis, Payload, Root, kind};
-use access_kernel::model::{Id, ResourceRef, Window};
+use access_kernel::model::{Id, Window};
 use access_kernel::verify::cose::{ALG, CONTENT_TYPE as CT, KID, PublicKey, to_be_signed};
 use access_kernel::verify::key_scope::thumbprint;
 use access_store::identity::{RealmId, TenantId, TenantTx};
@@ -49,6 +47,7 @@ const ROOT_KEY: u8 = 11;
 const ALICE: Id = Id([2; 16]);
 const ALICE_KEY: u8 = 12;
 const PEP: &str = "identity-admin";
+const WORK: Id = Id([3; 16]);
 const HOUR: u64 = 3_600_000;
 
 fn signing(seed: u8) -> ed25519_dalek::SigningKey {
@@ -81,19 +80,6 @@ impl Keys for AnyKeys {
     }
 }
 
-/// The identity plane's actor-binding, fixed for the test.
-#[derive(Clone)]
-struct Bound;
-
-impl Binding for Bound {
-    fn bound(&self, kid: &[u8; 32]) -> Option<(Id, PublicKey)> {
-        [(ROOT, ROOT_KEY), (ALICE, ALICE_KEY)]
-            .into_iter()
-            .find(|(_, k)| thumbprint(&public(*k)) == *kid)
-            .map(|(p, k)| (p, public(k)))
-    }
-}
-
 #[derive(Clone)]
 struct Fixed;
 
@@ -103,22 +89,23 @@ impl Clock for Fixed {
     }
 }
 
-type TestPlane = Plane<AnyKeys, Bound, OsSalts, Fixed>;
+type TestPlane = Plane<AnyKeys, ActorBindings, OsSalts, Fixed>;
 
 fn plane(db: &TestDb) -> TestPlane {
+    let actors = ActorBindings::default();
     let domains = Arc::new(Domains::new(Setup {
         sequencer: db.sequencer.clone(),
         app: db.app.clone(),
         keys: AnyKeys,
         holder: String::from("t"),
         ttl: Duration::from_secs(10),
-        binding: Bound,
+        binding: actors.clone(),
         salts: OsSalts,
         clock: Fixed,
         deriver: db.deriver.clone(),
         signer: None,
     }));
-    Plane::new(domains, db.sequencer.clone(), db.app.clone(), Fixed)
+    Plane::new(domains, db.sequencer.clone(), db.app.clone(), Fixed, actors)
 }
 
 /// The realm keys opened, in order.
@@ -236,62 +223,88 @@ fn statement(domain: Digest, nonce: &[u8], intent: Digest, basis: ExerciseBasis)
     }
 }
 
-/// Registers `party` with the key `seed` under the Genesis bootstrap Grant (L0-META-7).
-async fn onboard(plane: &TestPlane, d: Digest, party: Id, seed: u8) {
-    let basis = ExerciseBasis::Public(meta::object_id(&d, kind::GRANT, BOOTSTRAP_GRANT));
-    let payloads = [
-        Payload::PartyRegister {
-            party,
-            root: Root::Sole(party),
-            actor_kind: ActorKind::Human,
+/// The challenge a registration by the key `seed` answers: the `instance_create` nonce.
+fn challenge_of(seed: u8) -> Vec<u8> {
+    let mut c = vec![seed; 32];
+    c[0] = 0xe1;
+    c
+}
+
+/// The AIS by the key `seed` over the self-signed `payload` of `party` (OP-149 m.16 (a)).
+fn self_signed(d: Digest, nonce: &[u8], payload: &Payload, party: Id, seed: u8) -> Vec<u8> {
+    let validity = Window {
+        from: 0,
+        until: HOUR,
+    };
+    let intent = self_signed_intent(payload, party, validity).unwrap();
+    sign(
+        &statement(
+            d,
+            nonce,
+            intent_digest(&intent).unwrap(),
+            bootstrap_basis(&d),
+        ),
+        seed,
+    )
+}
+
+/// The registration of `party` by `registrant` with the key `seed`, both Exercises signed by
+/// that key: `party_register` when `new`, then `instance_create`.
+fn registration(d: Digest, registrant: Registrant, party: Id, seed: u8, new: bool) -> Registration {
+    let validity = Window {
+        from: 0,
+        until: HOUR,
+    };
+    let challenge = challenge_of(seed);
+    let mut r = Registration {
+        tenant: [0; 16],
+        domain: d,
+        registrant,
+        party,
+        key: public(seed),
+        register: None,
+        create: SelfSigned {
+            nonce: challenge.clone(),
+            validity,
+            ais: Vec::new(),
         },
-        Payload::InstanceCreate {
-            party,
-            key: public(seed),
-            mandate: None,
-        },
-    ];
-    for (i, payload) in payloads.into_iter().enumerate() {
-        let intent = IntentEnvelope {
-            action: core_action(payload.action()),
-            resources: vec![ResourceRef {
-                namespace: String::from("access.party"),
-                path: vec![String::from("p")],
-                incarnation: 0,
-            }],
-            params: BTreeMap::new(),
-            opaque: BTreeMap::from([(String::from("payload"), payload.digest().unwrap())]),
-            recipient: None,
-            purpose: None,
-            context: ContextRefs::default(),
-            validity: Window {
-                from: 0,
-                until: HOUR,
-            },
-        };
-        let mut nonce = vec![seed; 16];
-        nonce[0] = 0xe0 + u8::try_from(i).unwrap();
-        let digest = intent_digest(&intent).unwrap();
-        let inc = Incoming {
-            ais: Some(sign(&statement(d, &nonce, digest, basis), seed)),
-            request: Request {
-                domain: d,
-                mode: Mode::Commit,
-                nonce,
-                intent,
-                payload: Some(payload),
-                basis,
-                capacity: Capacity::Own,
-                proofs: Vec::new(),
-                exercise: None,
-                consistency: None,
-            },
-            pep: String::from(PEP),
-            explain: false,
-        };
-        let r: Response = plane.domains.exercise(&inc).await.unwrap();
-        assert_eq!(r.decision.outcome, Outcome::Allow, "{r:?}");
+        pep: String::from(PEP),
+    };
+    r.create.ais = self_signed(d, &challenge, &r.create_payload(), party, seed);
+    if new {
+        let nonce = register_nonce(&challenge);
+        r.register = Some(SelfSigned {
+            ais: self_signed(d, &nonce, &r.register_payload(), party, seed),
+            nonce,
+            validity,
+        });
     }
+    r
+}
+
+fn device() -> Registrant {
+    Registrant::Device {
+        realm: [0; 16],
+        subject: [0; 16],
+    }
+}
+
+// L0-META-7, TN-111: the basis a self-signed registration names is the Genesis bootstrap Grant
+#[test]
+fn the_registration_basis_is_the_bootstrap_grant() {
+    assert_eq!(
+        access_internal_api::instances::BOOTSTRAP_GRANT,
+        BOOTSTRAP_GRANT
+    );
+}
+
+/// Registers `party` with the key `seed` through the identity plane's self-signed path
+/// (L0-META-7, OP-149 m.16 (a)).
+async fn onboard(plane: &TestPlane, d: Digest, party: Id, seed: u8) {
+    let v = Instances::register(plane, registration(d, device(), party, seed, true))
+        .await
+        .unwrap();
+    assert!(matches!(v, RegistrationVerdict::Registered(_)), "{v:?}");
 }
 
 fn idp_anchor(d: Digest) -> ExerciseBasis {
@@ -802,7 +815,26 @@ async fn a_platform_client_pairs_with_every_realm() {
     );
 
     let recorder = Recorder::default();
-    let targets = [(pt, pr), (t2, r2)];
+    let service = |tenant, realm, d| {
+        let r = registration(
+            d,
+            Registrant::Service {
+                product: PlatformProduct::Work,
+                client: String::from(c.id.as_str()),
+            },
+            WORK,
+            41,
+            true,
+        );
+        PairTarget {
+            tenant,
+            realm,
+            party: WORK,
+            register: r.register,
+            create: r.create,
+        }
+    };
+    let targets = [service(pt, pr, pd), service(t2, r2, d2)];
     let paired = platform.pair(&recorder, pr, &c.id, &targets).await.unwrap();
     assert_eq!(paired.len(), 2);
     let again = platform.pair(&recorder, pr, &c.id, &targets).await.unwrap();
@@ -824,17 +856,22 @@ async fn a_platform_client_pairs_with_every_realm() {
             }
         );
     }
-    // L0-META-7
-    let real = platform
-        .pair(&w.plane, pr, &c.id, &targets[..1])
-        .await
-        .unwrap();
-    assert_eq!(
-        real[0].verdict,
-        RegistrationVerdict::Refused {
-            code: String::from(REGISTRATION_REFUSED)
-        }
-    );
+    // L0-META-7, OP-149 m.16 (a)
+    let real = platform.pair(&w.plane, pr, &c.id, &targets).await.unwrap();
+    for p in &real {
+        let RegistrationVerdict::Registered(r) = &p.verdict else {
+            panic!("{:?}", p.verdict);
+        };
+        assert_eq!(
+            (r.party, r.kid, r.replayed),
+            (WORK, thumbprint(&public(41)), false)
+        );
+    }
+    let again = platform.pair(&w.plane, pr, &c.id, &targets).await.unwrap();
+    assert!(again.iter().all(|p| matches!(
+        &p.verdict,
+        RegistrationVerdict::Registered(r) if r.replayed
+    )));
     // OP-149 m.17a
     let retire = proposal(
         (pt, pr),
@@ -872,10 +909,8 @@ async fn a_party_terminates_its_own_instance_through_the_identity_plane() {
     let w = World::new().await;
     let (_, _, d) = w.realm("acme").await;
     onboard(&w.plane, d, ALICE, ALICE_KEY).await;
-    let mut register = vec![ALICE_KEY; 16];
-    register[0] = 0xe0;
-    let mut create = vec![ALICE_KEY; 16];
-    create[0] = 0xe1;
+    let create = challenge_of(ALICE_KEY);
+    let register = register_nonce(&create);
     let anchor = meta::object_id(&meta::exercise_id(&d, &register).unwrap(), kind::ANCHOR, 0);
     let instance = meta::object_id(&meta::exercise_id(&d, &create).unwrap(), kind::INSTANCE, 0);
     let validity = Window {
@@ -1067,4 +1102,42 @@ async fn a_platform_subscription_receives_every_tenant() {
             .is_none()
     );
     t.commit().await.unwrap();
+}
+
+// OP-149 m.16 (a), L0-META-7, §7.9.2.3: a registration commits only with Exercises the new key
+// itself signed while the identity plane binds it to the checked Party; another key's
+// signature, someone else's Party or a Party that was never registered gets nothing, and the
+// binding ends with the request
+#[tokio::test]
+async fn self_signed_registration_binds_only_the_signing_key() {
+    // E6, OP-141 m.2
+    let w = World::new().await;
+    let (_, _, d) = w.realm("acme").await;
+    onboard(&w.plane, d, ALICE, ALICE_KEY).await;
+    let registered = |v: &RegistrationVerdict| matches!(v, RegistrationVerdict::Registered(_));
+
+    let mut forged = registration(d, device(), Id([4; 16]), 13, true);
+    let other = registration(d, device(), Id([4; 16]), 14, true);
+    forged.create.ais = other.create.ais;
+    forged.register = other.register;
+    let v = Instances::register(&w.plane, forged).await.unwrap();
+    assert!(!registered(&v), "{v:?}");
+
+    let taken = registration(d, device(), ALICE, 15, true);
+    let v = Instances::register(&w.plane, taken).await.unwrap();
+    assert!(!registered(&v), "{v:?}");
+
+    let never = registration(d, device(), Id([5; 16]), 16, false);
+    let v = Instances::register(&w.plane, never).await.unwrap();
+    assert!(!registered(&v), "{v:?}");
+
+    let second = registration(d, device(), ALICE, 17, false);
+    let v = Instances::register(&w.plane, second.clone()).await.unwrap();
+    let RegistrationVerdict::Registered(r) = v else {
+        panic!("{v:?}");
+    };
+    assert_eq!((r.party, r.instance), (ALICE, second.instance().unwrap()));
+    for seed in [13, 14, 15, 16, 17] {
+        assert!(w.plane.actors.bound(&thumbprint(&public(seed))).is_none());
+    }
 }

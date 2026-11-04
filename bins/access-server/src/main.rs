@@ -17,7 +17,7 @@ use std::process::ExitCode;
 use std::sync::Arc;
 use std::time::Duration;
 
-use access_authority_core::adapters::{Domains, OsSalts, Setup, Unbound};
+use access_authority_core::adapters::{Domains, OsSalts, Setup};
 use access_authority_sequencer::LEASE_TTL;
 use access_authority_sequencer::adapters::SourcesClock;
 use access_crypto::secret_file::SecretFile;
@@ -572,39 +572,28 @@ async fn serve(
     let (idp_sequencer, idp_app) = (sequencer.clone(), app.clone());
     let issuer = config.issuer.clone().ok_or("no issuer")?;
     let limits = Limits::default();
-    // OP-141 m.18 (a), (e), (f)
+    // OP-141 m.18 (a), (e), (f), OP-149 m.16 (a)
+    let actors = idp::ActorBindings::default();
     let domains = Arc::new(Domains::new(Setup {
         sequencer,
         app,
         keys: prepared.keys,
         holder: holder()?,
         ttl: LEASE_TTL,
-        binding: Unbound,
+        binding: actors.clone(),
         salts: OsSalts,
         clock: SourcesClock::new(sequencer_for_time),
         deriver,
         signer: config.signer.clone(),
     }));
-    let renewing = tokio::spawn({
-        let domains = domains.clone();
-        async move {
-            let mut tick = tokio::time::interval(LEASE_TTL.checked_div(3).unwrap_or(LEASE_TTL));
-            loop {
-                tick.tick().await;
-                domains.renew().await;
-                // OP-141 m.22 (g)
-                for error in domains.derive().await {
-                    tracing::warn!(%error, "derived index not brought up to the head");
-                }
-            }
-        }
-    });
+    let renewing = tokio::spawn(renew(domains.clone()));
     // OP-62, MD-14, TN-111: the identity plane's idp.* write path and realm Genesis
     let idp_plane = idp::Plane::new(
         domains.clone(),
         idp_sequencer.clone(),
         idp_app,
         SourcesClock::new(idp_sequencer),
+        actors,
     );
     // OP-149 m.6, m.8, m.9
     let me = frontend(config, tenants_pool.clone(), hosted, idp_plane)?;
@@ -640,6 +629,23 @@ async fn serve(
     renewing.abort();
     domains.release().await;
     served.map_err(|e| e.to_string())
+}
+
+/// The domains of this process.
+type ServerDomains = Domains<KeyStore, idp::ActorBindings, OsSalts, SourcesClock>;
+
+/// Renews the held leases and brings the derived indexes up to their heads, every third of the
+/// lease, until the task is aborted.
+async fn renew(domains: Arc<ServerDomains>) {
+    let mut tick = tokio::time::interval(LEASE_TTL.checked_div(3).unwrap_or(LEASE_TTL));
+    loop {
+        tick.tick().await;
+        domains.renew().await;
+        // OP-141 m.22 (g)
+        for error in domains.derive().await {
+            tracing::warn!(%error, "derived index not brought up to the head");
+        }
+    }
 }
 
 /// Resolves on SIGTERM (orchestrators, OP-50) or SIGINT. In-flight requests finish.

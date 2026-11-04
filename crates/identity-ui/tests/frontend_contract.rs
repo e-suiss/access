@@ -81,7 +81,7 @@ fn the_document_has_every_endpoint() {
     assert_eq!(names, ["request", "redirect_uri", "state"]);
 }
 
-// OP-65, OP-149 m.6, m.8: the examples meet the schemas and read back unchanged
+// OP-65, OP-149 m.6, m.8, m.16 (a), (f): the examples meet the schemas and read back unchanged
 #[test]
 fn committed_examples_match_the_code_and_the_schema() {
     let doc = openapi();
@@ -92,6 +92,10 @@ fn committed_examples_match_the_code_and_the_schema() {
         &InstanceChallenge {
             challenge: b64(0x11, 32),
             expires_at: rfc3339(1_767_225_300_000),
+            domain: b64(0x07, 32),
+            basis: b64(0x05, 16),
+            pep: String::from("access-identity"),
+            party: None,
         },
     );
     example(
@@ -99,8 +103,13 @@ fn committed_examples_match_the_code_and_the_schema() {
         "InstanceRegistration",
         "instance-registration",
         &InstanceRegistration {
+            challenge: b64(0x11, 32),
+            party: b64(0x08, 16),
             key: b64(0xa4, 77),
-            pop: b64(0xd2, 160),
+            valid_from: rfc3339(1_767_225_000_000),
+            valid_until: rfc3339(1_767_225_300_000),
+            ais: b64(0xd2, 200),
+            register_ais: Some(b64(0xd2, 190)),
         },
     );
     example(
@@ -110,6 +119,7 @@ fn committed_examples_match_the_code_and_the_schema() {
         &InstanceRegistered {
             instance: b64(0x09, 16),
             kid: b64(0x22, 32),
+            party: b64(0x08, 16),
         },
     );
     example(

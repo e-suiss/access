@@ -893,8 +893,8 @@ async fn totp_recovery_codes_and_sign_out() {
     );
 }
 
-// §10.2.4, TN-96, TN-97, OP-146 m.9: a passkey registered from a session signs in from the
-// identifier step's discoverable button
+// §10.2.4, TN-96, TN-97, OP-146 m.9, OP-149 m.16 (a): a passkey registered from a session signs
+// in from the identifier step's discoverable button; that stepped-up session registers devices
 #[tokio::test]
 async fn a_passkey_registered_from_a_session_signs_in() {
     let e = env(7, "lg-g", AuthPolicy::DEFAULT).await;
@@ -971,6 +971,52 @@ async fn a_passkey_registered_from_a_session_signs_in() {
         .submit(&first, "passkey", json!({ "passkey_credential": "{}" }))
         .await;
     assert_eq!(replayed.status, StatusCode::GONE);
+    devices_bind_the_session_party(&mut c).await;
+}
+
+/// OP-149 m.16 (a), L0-META-7: a stepped-up session's first device registers a new Party with
+/// its own `party_register`; the identity plane binds the session's subject to that Party, names
+/// it in later challenges and forwards later registrations for that Party only.
+async fn devices_bind_the_session_party(c: &mut Web) {
+    let party = b64url_encode(&[8; 16]);
+    let mut register = async |party: &str, new: bool| {
+        let ch = c.post("/v1/me/instances/challenges", None).await;
+        assert_eq!(ch.status, StatusCode::CREATED);
+        let mut body = json!({
+            "challenge": ch.json()["challenge"],
+            "party": party,
+            "key": b64url_encode(&access_identity_session::domain::device::cose_key(
+                &SoftSigner::generate_ed25519().unwrap().0.public_key(),
+            )),
+            "valid_from": "2026-01-01T00:00:00Z",
+            "valid_until": "2026-01-01T00:05:00Z",
+            "ais": b64url_encode(&[0xd2; 40]),
+        });
+        if new {
+            body["register_ais"] = json!(b64url_encode(&[0xd2; 40]));
+        }
+        (ch.json(), c.post("/v1/me/instances", Some(body)).await)
+    };
+    let (first, unbound) = register(&party, false).await;
+    assert!(first.get("party").is_none());
+    assert_eq!(unbound.status, StatusCode::BAD_REQUEST);
+    assert_eq!(unbound.json()["code"], "invalid-party");
+    let (_, created) = register(&party, true).await;
+    assert_eq!(created.status, StatusCode::CREATED);
+    assert_eq!(created.json()["party"], party.as_str());
+    assert_eq!(
+        b64url_decode(created.json()["instance"].as_str().unwrap())
+            .unwrap()
+            .len(),
+        16
+    );
+    let (second, again) = register(&party, true).await;
+    assert_eq!(second["party"], party.as_str());
+    assert_eq!(again.json()["code"], "invalid-party");
+    let (_, other) = register(&b64url_encode(&[6; 16]), false).await;
+    assert_eq!(other.json()["code"], "invalid-party");
+    let (_, next) = register(&party, false).await;
+    assert_eq!(next.status, StatusCode::CREATED);
 }
 
 // §10.2.2, TN-102, OP-146 m.14 (h): a magic link is previewed without being consumed and
@@ -1217,9 +1263,10 @@ async fn enumeration_timing_parity_nightly() {
     }
 }
 
-// OP-149 m.6, m.8, m.9, G57: the product endpoints need a live session; registering a device
-// needs AAL2 and a fresh step-up; auth_context is the session's artifact signed by the realm key;
-// an approval call never redirects to an unregistered URI
+// OP-149 m.6, m.8, m.9, m.16 (a), G57: the product endpoints need a live session; a challenge
+// names what the device's own Exercises sign; registering a device needs AAL2 and a fresh
+// step-up; auth_context is the session's artifact signed by the realm key; an approval call never
+// redirects to an unregistered URI
 #[tokio::test]
 async fn product_endpoints_follow_the_frontend_contract() {
     use access_identity_session::domain::auth_context::{CONTENT_TYPE, DIGEST_LABEL};
@@ -1249,20 +1296,36 @@ async fn product_endpoints_follow_the_frontend_contract() {
             .len(),
         32
     );
-    let weak = b
-        .post(
-            "/v1/me/instances",
-            Some(json!({ "key": "pQECIAEhWCA", "pop": "0oRD" })),
-        )
-        .await;
+    // OP-149 m.16 (a)
+    assert_eq!(
+        b64url_decode(c.json()["domain"].as_str().unwrap())
+            .unwrap()
+            .len(),
+        32
+    );
+    assert_eq!(
+        b64url_decode(c.json()["basis"].as_str().unwrap())
+            .unwrap()
+            .len(),
+        16
+    );
+    assert_eq!(c.json()["pep"], "access-identity");
+    assert!(c.json().get("party").is_none());
+    let registration = json!({
+        "challenge": c.json()["challenge"],
+        "party": b64url_encode(&[8; 16]),
+        "key": "pQECIAEhWCA",
+        "valid_from": "2026-01-01T00:00:00Z",
+        "valid_until": "2026-01-01T00:05:00Z",
+        "ais": "0oRD",
+        "register_ais": "0oRD",
+    });
+    let weak = b.post("/v1/me/instances", Some(registration.clone())).await;
     assert_eq!(weak.status, StatusCode::FORBIDDEN);
     assert_eq!(weak.json()["code"], "step-up-required");
-    let extra = b
-        .post(
-            "/v1/me/instances",
-            Some(json!({ "key": "a", "pop": "b", "party": "c" })),
-        )
-        .await;
+    let mut extra = registration;
+    extra["pop"] = json!("b");
+    let extra = b.post("/v1/me/instances", Some(extra)).await;
     assert_eq!(extra.status, StatusCode::BAD_REQUEST);
     // OP-149 m.16 (f)
     let termination = json!({

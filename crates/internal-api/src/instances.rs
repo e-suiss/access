@@ -1,12 +1,18 @@
 //! Instances the identity plane opens and ends in a governing domain (OP-62, OP-149 m.4, m.6):
 //! a platform product's service Instance in each tenant, a user's device Instance from a
 //! stepped-up session, and the termination of a device Instance by its own Party.
+//!
+//! Registration is self-signed (OP-149 m.16 (a), L0-META-7): `party_register` and
+//! `instance_create` are Exercises the new key signs itself under the Genesis bootstrap Grant,
+//! so the signature is the proof of possession. The identity plane checks who may hold the
+//! Party, binds the key to it for the commit and forwards the Exercises; Access never holds the
+//! private key.
 
 use std::collections::BTreeMap;
 
 use access_kernel::digest::Digest;
 use access_kernel::intent::{ContextRefs, IntentEnvelope};
-use access_kernel::meta::{ActorKind, ExerciseBasis, NAMESPACE, Payload};
+use access_kernel::meta::{self, ActorKind, ExerciseBasis, NAMESPACE, Payload, kind};
 use access_kernel::model::{ActionRef, Id, ResourceRef, Window};
 use access_kernel::schema::{ActionSchema, EffectClass, action_digest};
 use access_kernel::verify::cose::PublicKey;
@@ -16,6 +22,16 @@ pub const INSTANCE_NAMESPACE: &str = "access.instance";
 
 /// The intent parameter that carries the meta payload's digest.
 pub const PAYLOAD_PARAM: &str = "payload";
+
+/// The resource namespace a self-signed registration intent names its Party in.
+pub const PARTY_NAMESPACE: &str = "access.party";
+
+/// Index of the Genesis bootstrap Grant among the Genesis objects (L0-META-7, TN-111).
+pub const BOOTSTRAP_GRANT: u64 = 0;
+
+/// Appended to a challenge to form the `party_register` nonce; `instance_create` uses the
+/// challenge itself (OP-149 m.16 (a)).
+pub const REGISTER_NONCE_SUFFIX: u8 = 0x01;
 
 /// A Suiss product that pairs with Access as a platform client (OP-149 m.4).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -80,8 +96,20 @@ impl Registrant {
     }
 }
 
-/// An Instance to open. Repeating the same registration opens nothing new: the answer is the
-/// Instance the first one opened (idempotent by tenant, domain, registrant and key).
+/// One meta Exercise the new key signed: commit mode, capacity `own`, the bootstrap basis of
+/// the domain and the intent [`self_signed_intent`] forms (OP-149 m.16 (a)).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SelfSigned {
+    /// The Exercise nonce.
+    pub nonce: Vec<u8>,
+    /// The intent's validity.
+    pub validity: Window,
+    /// The AIS (`COSE_Sign1`) by the new key.
+    pub ais: Vec<u8>,
+}
+
+/// An Instance to open from Exercises its own key signed. Repeating the same registration opens
+/// nothing new: the answer is the Instance the first one opened (the nonces replay).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Registration {
     /// The tenant.
@@ -90,9 +118,91 @@ pub struct Registration {
     pub domain: Digest,
     /// Whose Instance it is.
     pub registrant: Registrant,
+    /// The Party the Instance belongs to.
+    pub party: Id,
     /// The Instance key: Ed25519 or P-256 (OP-149 m.14 (a)); its holder alone has the private
     /// key.
     pub key: PublicKey,
+    /// `party_register`, when the Party is new.
+    pub register: Option<SelfSigned>,
+    /// `instance_create`.
+    pub create: SelfSigned,
+    /// The identity plane as PEP.
+    pub pep: String,
+}
+
+impl Registration {
+    /// The `party_register` payload: the Party roots itself and is of the registrant's kind.
+    #[must_use]
+    pub fn register_payload(&self) -> Payload {
+        Payload::PartyRegister {
+            party: self.party,
+            root: meta::Root::Sole(self.party),
+            actor_kind: self.registrant.actor_kind(),
+        }
+    }
+
+    /// The `instance_create` payload.
+    #[must_use]
+    pub fn create_payload(&self) -> Payload {
+        Payload::InstanceCreate {
+            party: self.party,
+            key: self.key.clone(),
+            mandate: None,
+        }
+    }
+
+    /// The Instance `instance_create` opens: the first object of its Exercise.
+    ///
+    /// `None` when the nonce cannot be encoded.
+    #[must_use]
+    pub fn instance(&self) -> Option<Id> {
+        let exercise = meta::exercise_id(&self.domain, &self.create.nonce).ok()?;
+        Some(meta::object_id(&exercise, kind::INSTANCE, 0))
+    }
+}
+
+/// The basis a self-signed registration names: the Genesis bootstrap Grant of `domain`, held
+/// by the public (L0-META-7).
+#[must_use]
+pub fn bootstrap_basis(domain: &Digest) -> ExerciseBasis {
+    ExerciseBasis::Public(meta::object_id(domain, kind::GRANT, BOOTSTRAP_GRANT))
+}
+
+/// The `party_register` nonce of a registration answering `challenge`.
+#[must_use]
+pub fn register_nonce(challenge: &[u8]) -> Vec<u8> {
+    let mut n = challenge.to_vec();
+    n.push(REGISTER_NONCE_SUFFIX);
+    n
+}
+
+/// The intent the new key signs for `payload` (`party_register` or `instance_create`) of
+/// `party` over `validity`: `access/<action>` on `access.party:[hex(party)]`, the payload's
+/// digest in `opaque["payload"]`.
+///
+/// `None` when the payload cannot be encoded.
+#[must_use]
+pub fn self_signed_intent(
+    payload: &Payload,
+    party: Id,
+    validity: Window,
+) -> Option<IntentEnvelope> {
+    let digest = payload.digest().ok()?;
+    Some(IntentEnvelope {
+        action: core_action(payload.action()),
+        resources: vec![ResourceRef {
+            namespace: String::from(PARTY_NAMESPACE),
+            path: vec![hex(&party)],
+            incarnation: 0,
+        }],
+        params: BTreeMap::new(),
+        opaque: BTreeMap::from([(String::from(PAYLOAD_PARAM), digest)]),
+        recipient: None,
+        purpose: None,
+        context: ContextRefs::default(),
+        validity,
+    })
 }
 
 /// An opened Instance.
