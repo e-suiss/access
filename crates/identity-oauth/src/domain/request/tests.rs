@@ -16,6 +16,9 @@ fn client() -> Client {
         secret_hash: None,
         post_logout_redirect_uris: Vec::new(),
         backchannel_logout_uri: None,
+        jwks: None,
+        platform_product: None,
+        service_key: None,
     })
     .unwrap()
 }

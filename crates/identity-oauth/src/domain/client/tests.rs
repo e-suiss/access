@@ -16,6 +16,9 @@ fn row(method: &str, jwks: Option<&str>, secret: Option<[u8; 32]>) -> ClientRow 
         secret_hash: secret,
         post_logout_redirect_uris: vec![String::from("https://shop.example/bye")],
         backchannel_logout_uri: None,
+        jwks: None,
+        platform_product: None,
+        service_key: None,
     }
 }
 
@@ -67,6 +70,32 @@ fn rows_that_do_not_fit_the_model_are_no_client() {
         ..row("none", None, None)
     };
     assert!(Client::from_row(retired).is_none());
+}
+
+// OP-149 m.4, RFC 7523: private_key_jwt takes a JWKS URI or one registered key, never both
+#[test]
+fn private_key_jwt_takes_a_jwks_uri_or_one_key() {
+    let one = ClientRow {
+        jwks: Some(String::from(r#"{"keys":[]}"#)),
+        ..row("private_key_jwt", None, None)
+    };
+    let c = Client::from_row(one.clone()).unwrap();
+    assert_eq!(
+        c.auth,
+        ClientAuth::PrivateKeyJwtKey {
+            jwks: String::from(r#"{"keys":[]}"#)
+        }
+    );
+    assert_eq!(c.client_type(), ClientType::Confidential);
+    let p = presented(None, Some("cli_x"), Some(ASSERTION_TYPE), Some("a.b.c"))
+        .unwrap()
+        .unwrap();
+    assert_eq!(check_method(&c, &p), Ok(()));
+    let both = ClientRow {
+        jwks_uri: Some(String::from("https://shop.example/jwks")),
+        ..one
+    };
+    assert!(Client::from_row(both).is_none());
 }
 
 // RFC 6749 §2.3, §2.3.1, CR-38, CR-39: one method only; Basic is form-decoded and the

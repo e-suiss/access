@@ -5,9 +5,13 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use access_identity_account::domain::password::Argon2Params;
 use access_internal_api::idp::{IdpAction, RESOURCE_NAMESPACE};
+use access_internal_api::instances::PlatformProduct;
 use access_kernel::digest::Digest;
 use access_kernel::intent::{ContextRefs, IntentEnvelope};
+use access_kernel::json::b64url_encode;
 use access_kernel::model::{ResourceRef, Window};
+use access_kernel::verify::cose::PublicKey;
+use access_kernel::verify::key_scope::thumbprint;
 use suiss_crypto::dcbor::{self, Limits, Value};
 use suiss_crypto::digest::context_digest;
 
@@ -94,6 +98,15 @@ pub enum Invalid {
     /// The client exists already.
     #[error("client exists")]
     ClientExists,
+    /// A platform product client outside the platform tenant (OP-149 m.4).
+    #[error("platform clients belong to the platform tenant")]
+    PlatformTenant,
+    /// A platform product client that does not use `private_key_jwt` (OP-149 m.4).
+    #[error("platform clients use private_key_jwt")]
+    PlatformAuth,
+    /// A public key that is not Ed25519 or P-256 (OP-149 m.14 (a)).
+    #[error("bad public key")]
+    PublicKey,
 }
 
 impl Invalid {
@@ -112,6 +125,9 @@ impl Invalid {
             Self::RpId => "invalid-rp-id",
             Self::NoClient => "no-such-client",
             Self::ClientExists => "client-exists",
+            Self::PlatformTenant => "platform-tenant-only",
+            Self::PlatformAuth => "platform-requires-private-key-jwt",
+            Self::PublicKey => "invalid-public-key",
         }
     }
 }
@@ -229,6 +245,99 @@ fn https(s: &str) -> bool {
             .is_some_and(|a| !a.contains('@') && host(a.split_once(':').map_or(a, |(h, _)| h)))
 }
 
+/// An Instance or client key: Ed25519 or P-256 (OP-149 m.14 (a)).
+fn usable(key: &PublicKey) -> bool {
+    matches!(key, PublicKey::Ed25519(_) | PublicKey::P256(_)) && key.check().is_ok()
+}
+
+/// The key as a public JWK whose `kid` is its RFC 7638 thumbprint (CR-24).
+#[must_use]
+pub fn jwk(key: &PublicKey) -> String {
+    let kid = b64url_encode(&thumbprint(key));
+    match key {
+        PublicKey::Ed25519(x) => format!(
+            r#"{{"kty":"OKP","crv":"Ed25519","x":"{}","kid":"{kid}","use":"sig"}}"#,
+            b64url_encode(x)
+        ),
+        PublicKey::P256(sec1) => {
+            let (x, y) = sec1
+                .get(1..)
+                .and_then(|xy| xy.split_at_checked(32))
+                .unwrap_or_default();
+            format!(
+                r#"{{"kty":"EC","crv":"P-256","x":"{}","y":"{}","kid":"{kid}","use":"sig"}}"#,
+                b64url_encode(x),
+                b64url_encode(y)
+            )
+        }
+        PublicKey::MlDsa(..) => String::from("{}"),
+    }
+}
+
+/// The key as a deterministic `COSE_Key` (RFC 9052 §7), without `alg`.
+#[must_use]
+pub fn cose_key(key: &PublicKey) -> Vec<u8> {
+    let v = match key {
+        PublicKey::Ed25519(x) => Value::Map(vec![
+            (Value::Unsigned(1), Value::Unsigned(1)),
+            (Value::int(-1), Value::Unsigned(6)),
+            (Value::int(-2), Value::Bytes(x.to_vec())),
+        ]),
+        PublicKey::P256(sec1) => {
+            let (x, y) = sec1
+                .get(1..)
+                .and_then(|xy| xy.split_at_checked(32))
+                .unwrap_or_default();
+            Value::Map(vec![
+                (Value::Unsigned(1), Value::Unsigned(2)),
+                (Value::int(-1), Value::Unsigned(1)),
+                (Value::int(-2), Value::Bytes(x.to_vec())),
+                (Value::int(-3), Value::Bytes(y.to_vec())),
+            ])
+        }
+        PublicKey::MlDsa(..) => Value::Map(Vec::new()),
+    };
+    dcbor::encode(&v, Limits::CEILING).unwrap_or_default()
+}
+
+/// The key of a stored [`cose_key`]; `None` for anything but a usable Ed25519 or P-256 key.
+#[must_use]
+pub fn from_cose_key(bytes: &[u8]) -> Option<PublicKey> {
+    let Ok(Value::Map(m)) = dcbor::decode(bytes, Limits::CEILING) else {
+        return None;
+    };
+    let get = |k: &Value| m.iter().find(|(key, _)| key == k).map(|(_, v)| v);
+    let Some(Value::Bytes(x)) = get(&Value::int(-2)) else {
+        return None;
+    };
+    let key = match (get(&Value::Unsigned(1)), get(&Value::int(-1))) {
+        (Some(Value::Unsigned(1)), Some(Value::Unsigned(6))) => {
+            PublicKey::Ed25519(x.clone().try_into().ok()?)
+        }
+        (Some(Value::Unsigned(2)), Some(Value::Unsigned(1))) => {
+            let Some(Value::Bytes(y)) = get(&Value::int(-3)) else {
+                return None;
+            };
+            let mut sec1 = vec![4];
+            sec1.extend_from_slice(x);
+            sec1.extend_from_slice(y);
+            PublicKey::P256(sec1)
+        }
+        _ => return None,
+    };
+    usable(&key).then_some(key)
+}
+
+/// A platform product's pairing (OP-149 m.4): the product, and the public key of the service
+/// Instance it holds in each tenant.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Platform {
+    /// The product.
+    pub product: PlatformProduct,
+    /// The service Instance key; its private key stays in the product's PKCS#11 token.
+    pub service_key: PublicKey,
+}
+
 /// How the client authenticates at the token endpoint (§11.4.5).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum AuthMethod {
@@ -238,6 +347,11 @@ pub enum AuthMethod {
     PrivateKeyJwt {
         /// The client's JWKS.
         jwks_uri: String,
+    },
+    /// `private_key_jwt` against one registered public key (RFC 7523, OP-149 m.4).
+    PrivateKeyJwtKey {
+        /// Ed25519 or P-256.
+        key: PublicKey,
     },
     /// A shared secret, for pre-registered confidential clients only.
     ClientSecretBasic,
@@ -249,7 +363,7 @@ impl AuthMethod {
     pub const fn name(&self) -> &'static str {
         match self {
             Self::None => "none",
-            Self::PrivateKeyJwt { .. } => "private_key_jwt",
+            Self::PrivateKeyJwt { .. } | Self::PrivateKeyJwtKey { .. } => "private_key_jwt",
             Self::ClientSecretBasic => "client_secret_basic",
         }
     }
@@ -259,6 +373,15 @@ impl AuthMethod {
     pub fn jwks_uri(&self) -> Option<&str> {
         match self {
             Self::PrivateKeyJwt { jwks_uri } => Some(jwks_uri),
+            _ => None,
+        }
+    }
+
+    /// The one-key JWKS of a `private_key_jwt` client registered with a single key.
+    #[must_use]
+    pub fn jwks(&self) -> Option<String> {
+        match self {
+            Self::PrivateKeyJwtKey { key } => Some(format!(r#"{{"keys":[{}]}}"#, jwk(key))),
             _ => None,
         }
     }
@@ -294,6 +417,8 @@ pub struct Client {
     pub post_logout_redirect_uris: Vec<RedirectUri>,
     /// The back-channel logout endpoint, `https` (§10.4.6).
     pub backchannel_logout_uri: Option<String>,
+    /// The platform product it pairs (OP-149 m.4); set only in the platform tenant.
+    pub platform: Option<Platform>,
 }
 
 impl Client {
@@ -324,6 +449,22 @@ impl Client {
         {
             return Err(Invalid::JwksUri);
         }
+        if let AuthMethod::PrivateKeyJwtKey { key } = &self.auth
+            && !usable(key)
+        {
+            return Err(Invalid::PublicKey);
+        }
+        if let Some(p) = &self.platform {
+            if !matches!(
+                self.auth,
+                AuthMethod::PrivateKeyJwt { .. } | AuthMethod::PrivateKeyJwtKey { .. }
+            ) {
+                return Err(Invalid::PlatformAuth);
+            }
+            if !usable(&p.service_key) {
+                return Err(Invalid::PublicKey);
+            }
+        }
         Ok(())
     }
 
@@ -344,6 +485,19 @@ impl Client {
         ];
         if let Some(u) = self.auth.jwks_uri() {
             m.push((Value::text("jwks_uri"), Value::text(u)));
+        }
+        if let AuthMethod::PrivateKeyJwtKey { key } = &self.auth {
+            m.push((Value::text("public_key"), Value::Bytes(cose_key(key))));
+        }
+        if let Some(p) = &self.platform {
+            m.push((
+                Value::text("platform_product"),
+                Value::text(p.product.name()),
+            ));
+            m.push((
+                Value::text("service_key"),
+                Value::Bytes(cose_key(&p.service_key)),
+            ));
         }
         if !self.post_logout_redirect_uris.is_empty() {
             m.push((

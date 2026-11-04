@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT client_uuid, client_id, display_name, auth_method, jwks_uri, redirect_uris, status,\n                secret_hash, post_logout_redirect_uris, backchannel_logout_uri\n           FROM access.idp_clients WHERE tenant_id = $1 AND realm_id = $2 AND client_id = $3",
+  "query": "SELECT client_uuid, client_id, display_name, auth_method, jwks_uri, redirect_uris, status,\n                secret_hash, post_logout_redirect_uris, backchannel_logout_uri, jwks,\n                platform_product, service_key\n           FROM access.idp_clients WHERE tenant_id = $1 AND realm_id = $2 AND client_id = $3",
   "describe": {
     "columns": [
       {
@@ -112,6 +112,39 @@
             "name": "backchannel_logout_uri"
           }
         }
+      },
+      {
+        "ordinal": 10,
+        "name": "jwks",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.idp_clients",
+            "name": "jwks"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "platform_product",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.idp_clients",
+            "name": "platform_product"
+          }
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "service_key",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.idp_clients",
+            "name": "service_key"
+          }
+        }
       }
     ],
     "parameters": {
@@ -131,8 +164,11 @@
       false,
       true,
       false,
+      true,
+      true,
+      true,
       true
     ]
   },
-  "hash": "10a6f886034ac3566d53217deb4e577c142a25028afc194acaaf260ae7313a22"
+  "hash": "e822d55a2158affcc440d8504f6faaeabb2ba7a1309ded82183d1844a90b144b"
 }

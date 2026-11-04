@@ -17,6 +17,7 @@ fn client(uris: &[&str]) -> Client {
             .collect(),
         post_logout_redirect_uris: Vec::new(),
         backchannel_logout_uri: None,
+        platform: None,
     }
 }
 

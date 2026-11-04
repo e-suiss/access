@@ -124,6 +124,9 @@ fn client_row(seed: u8) -> ClientRow {
         secret_hash: None,
         post_logout_redirect_uris: Vec::new(),
         backchannel_logout_uri: None,
+        jwks: None,
+        platform_product: None,
+        service_key: None,
     }
 }
 

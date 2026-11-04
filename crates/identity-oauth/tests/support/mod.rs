@@ -351,6 +351,9 @@ pub fn client_row(uuid: [u8; 16], id: &str, method: &str, secret: &str, jwks: &s
         secret_hash: (method == "client_secret_basic").then(|| secret_digest(secret.as_bytes())),
         post_logout_redirect_uris: vec![String::from(BYE)],
         backchannel_logout_uri: Some(String::from(BACKCHANNEL)),
+        jwks: None,
+        platform_product: None,
+        service_key: None,
     }
 }
 

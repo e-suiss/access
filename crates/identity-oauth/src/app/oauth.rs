@@ -311,10 +311,16 @@ impl<E: Env> OAuth<E> {
         if let Err(e) = check_method(&client, &presented) {
             return Ok(Err(e));
         }
-        if let (ClientAuth::PrivateKeyJwt { jwks_uri }, Presented::Assertion { assertion, .. }) =
-            (&client.auth, &presented)
-        {
-            let doc = self.env.client_keys().fetch(jwks_uri).await?;
+        if let Presented::Assertion { assertion, .. } = &presented {
+            let doc = match &client.auth {
+                ClientAuth::PrivateKeyJwt { jwks_uri } => {
+                    self.env.client_keys().fetch(jwks_uri).await?
+                }
+                ClientAuth::PrivateKeyJwtKey { jwks } => jwks.clone().into_bytes(),
+                ClientAuth::None | ClientAuth::SecretBasic { .. } => {
+                    return Ok(Err(ClientAuthError::Method));
+                }
+            };
             let Ok(keys) = parse_jwks(&doc) else {
                 return Ok(Err(ClientAuthError::Rejected));
             };

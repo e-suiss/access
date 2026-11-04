@@ -4,6 +4,7 @@
 use std::future::Future;
 
 use access_internal_api::idp::{GenesisOpened, GenesisOrder, Submission, Unavailable, Verdict};
+use access_internal_api::instances::{Registration, RegistrationVerdict};
 use access_store::identity::RealmId;
 
 use crate::domain::JoseAlg;
@@ -37,4 +38,15 @@ pub trait Governance: Send + Sync {
         &self,
         order: GenesisOrder,
     ) -> impl Future<Output = Result<GenesisOpened, Unavailable>> + Send;
+}
+
+/// Opens Instances in a governing domain (OP-149 m.4): the identity plane service Party
+/// registers a paired product's system Party and its service Instance there.
+pub trait Instances: Send + Sync {
+    /// Opens the Instance of `registration`, or answers with the one an identical earlier
+    /// registration opened.
+    fn register(
+        &self,
+        registration: Registration,
+    ) -> impl Future<Output = Result<RegistrationVerdict, Unavailable>> + Send;
 }

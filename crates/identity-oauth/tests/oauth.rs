@@ -295,6 +295,9 @@ fn client(n: u8, id: &str, method: &str) -> ClientRow {
         secret_hash: (method == "client_secret_basic").then(|| secret_digest(SECRET.as_bytes())),
         post_logout_redirect_uris: vec![String::from("https://shop.example/bye")],
         backchannel_logout_uri: Some(String::from("https://shop.example/backchannel")),
+        jwks: None,
+        platform_product: None,
+        service_key: None,
     }
 }
 

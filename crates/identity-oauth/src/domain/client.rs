@@ -17,6 +17,11 @@ pub enum ClientAuth {
         /// The JWKS URI.
         jwks_uri: String,
     },
+    /// `private_key_jwt` against the one key the client registered (OP-149 m.4).
+    PrivateKeyJwtKey {
+        /// The registered one-key JWKS.
+        jwks: String,
+    },
     /// `client_secret_basic` with a server-generated secret stored as a digest (CR-38).
     SecretBasic {
         /// The secret's digest.
@@ -51,10 +56,18 @@ impl Client {
         if !row.active {
             return None;
         }
-        let auth = match (row.auth_method.as_str(), row.jwks_uri, row.secret_hash) {
-            ("none", None, None) => ClientAuth::None,
-            ("private_key_jwt", Some(jwks_uri), None) => ClientAuth::PrivateKeyJwt { jwks_uri },
-            ("client_secret_basic", None, Some(digest)) => ClientAuth::SecretBasic { digest },
+        let auth = match (
+            row.auth_method.as_str(),
+            row.jwks_uri,
+            row.jwks,
+            row.secret_hash,
+        ) {
+            ("none", None, None, None) => ClientAuth::None,
+            ("private_key_jwt", Some(jwks_uri), None, None) => {
+                ClientAuth::PrivateKeyJwt { jwks_uri }
+            }
+            ("private_key_jwt", None, Some(jwks), None) => ClientAuth::PrivateKeyJwtKey { jwks },
+            ("client_secret_basic", None, None, Some(digest)) => ClientAuth::SecretBasic { digest },
             _ => return None,
         };
         Some(Self {
@@ -291,7 +304,10 @@ pub fn presented(
 pub fn check_method(client: &Client, presented: &Presented) -> Result<(), ClientAuthError> {
     match (&client.auth, presented) {
         (ClientAuth::None, Presented::Id(_))
-        | (ClientAuth::PrivateKeyJwt { .. }, Presented::Assertion { .. }) => Ok(()),
+        | (
+            ClientAuth::PrivateKeyJwt { .. } | ClientAuth::PrivateKeyJwtKey { .. },
+            Presented::Assertion { .. },
+        ) => Ok(()),
         (ClientAuth::SecretBasic { digest }, Presented::Basic { secret, .. }) => {
             if secret_matches(digest, secret.as_bytes()) {
                 Ok(())

@@ -161,6 +161,12 @@ pub struct ClientRow {
     pub post_logout_redirect_uris: Vec<String>,
     /// The back-channel logout endpoint (§10.4.6).
     pub backchannel_logout_uri: Option<String>,
+    /// A one-key JWKS for `private_key_jwt`, instead of a JWKS URI (OP-149 m.4).
+    pub jwks: Option<String>,
+    /// The platform product the client pairs (OP-149 m.4).
+    pub platform_product: Option<String>,
+    /// The `COSE_Key` of the product's service Instance in each tenant (OP-149 m.4).
+    pub service_key: Option<Vec<u8>>,
 }
 
 /// Inserts a client under `bound`.
@@ -176,8 +182,9 @@ pub async fn insert_client(
     sqlx::query!(
         "INSERT INTO access.idp_clients (tenant_id, realm_id, client_uuid, client_id, display_name,
                 auth_method, jwks_uri, redirect_uris, domain_id, decision_pos, secret_hash,
-                post_logout_redirect_uris, backchannel_logout_uri)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)",
+                post_logout_redirect_uris, backchannel_logout_uri, jwks, platform_product,
+                service_key)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)",
         tenant,
         realm,
         Uuid::from_bytes(c.client_uuid),
@@ -191,6 +198,9 @@ pub async fn insert_client(
         c.secret_hash.as_ref().map(<[u8; 32]>::as_slice),
         &c.post_logout_redirect_uris,
         c.backchannel_logout_uri,
+        c.jwks,
+        c.platform_product,
+        c.service_key.as_deref(),
     )
     .execute(&mut *t.tx)
     .await?;
@@ -210,7 +220,8 @@ pub async fn update_client(
     let done = sqlx::query!(
         "UPDATE access.idp_clients SET display_name = $4, auth_method = $5, jwks_uri = $6,
                 redirect_uris = $7, domain_id = $8, decision_pos = $9, secret_hash = $10,
-                post_logout_redirect_uris = $11, backchannel_logout_uri = $12
+                post_logout_redirect_uris = $11, backchannel_logout_uri = $12, jwks = $13,
+                platform_product = $14, service_key = $15
           WHERE tenant_id = $1 AND realm_id = $2 AND client_id = $3 AND status = 'active'",
         tenant,
         realm,
@@ -224,6 +235,9 @@ pub async fn update_client(
         c.secret_hash.as_ref().map(<[u8; 32]>::as_slice),
         &c.post_logout_redirect_uris,
         c.backchannel_logout_uri,
+        c.jwks,
+        c.platform_product,
+        c.service_key.as_deref(),
     )
     .execute(&mut *t.tx)
     .await?
@@ -265,7 +279,8 @@ pub async fn client(t: &mut TenantTx, client_id: &str) -> Result<Option<ClientRo
     let (tenant, realm) = scope(t)?;
     let row = sqlx::query!(
         "SELECT client_uuid, client_id, display_name, auth_method, jwks_uri, redirect_uris, status,
-                secret_hash, post_logout_redirect_uris, backchannel_logout_uri
+                secret_hash, post_logout_redirect_uris, backchannel_logout_uri, jwks,
+                platform_product, service_key
            FROM access.idp_clients WHERE tenant_id = $1 AND realm_id = $2 AND client_id = $3",
         tenant,
         realm,
@@ -288,9 +303,33 @@ pub async fn client(t: &mut TenantTx, client_id: &str) -> Result<Option<ClientRo
                 .transpose()?,
             post_logout_redirect_uris: r.post_logout_redirect_uris,
             backchannel_logout_uri: r.backchannel_logout_uri,
+            jwks: r.jwks,
+            platform_product: r.platform_product,
+            service_key: r.service_key,
         })
     })
     .transpose()
+}
+
+/// The active clients of the realm that registered `redirect_uri` exactly (IDP-7).
+///
+/// # Errors
+/// [`StoreError`].
+pub async fn clients_with_redirect(
+    t: &mut TenantTx,
+    redirect_uri: &str,
+) -> Result<Vec<String>, StoreError> {
+    let (tenant, realm) = scope(t)?;
+    Ok(sqlx::query_scalar!(
+        "SELECT client_id FROM access.idp_clients
+          WHERE tenant_id = $1 AND realm_id = $2 AND status = 'active' AND $3 = ANY (redirect_uris)
+          ORDER BY client_id",
+        tenant,
+        realm,
+        redirect_uri,
+    )
+    .fetch_all(&mut *t.tx)
+    .await?)
 }
 
 /// The realm's client with internal id `uuid`, active or retired.
