@@ -411,10 +411,21 @@ impl<D: Decider, G: Governance, K: RealmKeys> Admin<'_, D, G, K> {
         p: &Proposal,
         exercise: &Digest,
     ) -> Result<(), AdminError> {
-        let (kind, client_id) = match &p.change {
-            Change::ClientRegister(c) => (IdentityKind::ApiClientCreated, c.id.as_str()),
-            Change::ClientUpdate(c) => (IdentityKind::ApiClientUpdated, c.id.as_str()),
-            Change::ClientRetire(id) => (IdentityKind::ApiClientDisabled, id.as_str()),
+        let product = |c: &Client| c.platform.as_ref().map(|p| p.product);
+        let (kind, client_id, platform_product) = match &p.change {
+            Change::ClientRegister(c) => {
+                (IdentityKind::ApiClientCreated, c.id.as_str(), product(c))
+            }
+            Change::ClientUpdate(c) => (IdentityKind::ApiClientUpdated, c.id.as_str(), product(c)),
+            Change::ClientRetire(id) => (
+                IdentityKind::ApiClientDisabled,
+                id.as_str(),
+                idp::client(t, id.as_str())
+                    .await?
+                    .and_then(|r| r.platform_product)
+                    .as_deref()
+                    .and_then(PlatformProduct::parse),
+            ),
             _ => return Ok(()),
         };
         let at = access_store::authority::server_time(self.app).await?;
@@ -427,7 +438,7 @@ impl<D: Decider, G: Governance, K: RealmKeys> Admin<'_, D, G, K> {
                 realm: p.realm.as_bytes(),
                 client_id,
                 exercise: &exercise.0,
-                platform_product: None,
+                platform_product,
                 at,
             },
         );

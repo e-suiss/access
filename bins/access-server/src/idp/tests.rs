@@ -3,6 +3,7 @@
     clippy::panic,
     clippy::arithmetic_side_effects,
     clippy::many_single_char_names,
+    clippy::too_many_lines,
     reason = "test code; the request-path lints (OP-3) do not apply"
 )]
 
@@ -769,6 +770,14 @@ async fn a_platform_client_pairs_with_every_realm() {
     assert_eq!(row.jwks_uri, None);
     assert!(row.jwks.unwrap().contains(r#""crv":"Ed25519""#));
     assert_eq!(row.platform_product.as_deref(), Some("work"));
+    // OP-149 m.4, m.17a
+    let created = identity_events(&w.db, 1).await;
+    let event = access_identity_events::domain::catalog::IdentityEvent::from_outbox(
+        &created[0].kind,
+        &created[0].payload,
+    )
+    .unwrap();
+    assert_eq!(event.payload["platform_product"], "work");
     // CR-24
     assert!(
         AuthMethod::PrivateKeyJwtKey { key: public(40) }
@@ -813,6 +822,33 @@ async fn a_platform_client_pairs_with_every_realm() {
             code: String::from(REGISTRATION_REFUSED)
         }
     );
+    // OP-149 m.17a
+    let retire = proposal(
+        (pt, pr),
+        Change::ClientRetire(c.id.clone()),
+        4,
+        idp_anchor(pd),
+        1,
+    );
+    let prepared = platform.prepare(&retire).await.unwrap();
+    let ais = sign(
+        &statement(
+            prepared.domain,
+            &retire.nonce,
+            prepared.digest,
+            retire.basis,
+        ),
+        ROOT_KEY,
+    );
+    written(&platform.apply(&retire, ais).await.unwrap());
+    let events = identity_events(&w.db, 2).await;
+    assert_eq!(events[1].kind, "event.api_client.disabled");
+    let disabled = access_identity_events::domain::catalog::IdentityEvent::from_outbox(
+        &events[1].kind,
+        &events[1].payload,
+    )
+    .unwrap();
+    assert_eq!(disabled.payload["platform_product"], "work");
 }
 
 // OP-149 m.6, OP-146 m.4 (i): a device Instance is ended by an instance_terminate its own Party

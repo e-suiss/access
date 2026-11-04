@@ -138,28 +138,7 @@ pub fn uuid(b: &[u8; 16]) -> String {
     out
 }
 
-/// A product a platform client is matched to (OP-149 m.4).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum PlatformProduct {
-    /// Suiss Work.
-    Work,
-    /// Suiss Relay.
-    Relay,
-    /// Suiss One.
-    One,
-}
-
-impl PlatformProduct {
-    /// The wire name.
-    #[must_use]
-    pub const fn name(self) -> &'static str {
-        match self {
-            Self::Work => "work",
-            Self::Relay => "relay",
-            Self::One => "one",
-        }
-    }
-}
+pub use access_internal_api::instances::PlatformProduct;
 
 /// An API client change as `idp.client.*` committed it.
 #[derive(Clone, Copy, Debug)]
