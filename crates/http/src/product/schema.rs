@@ -1,7 +1,8 @@
 //! The product client contract as an `OpenAPI` 3.1 document (JSON Schema 2020-12 components),
 //! generated from code and committed as `sdks/openapi/access-v1.json` (OP-65, TN-112, OP-149):
 //! the Suiss discovery document (m.3), tenant snapshots (m.4), Instance key lookup (m.5),
-//! the eligibility check (m.10), the problem types (m.12) and the platform product routes:
+//! the eligibility check (m.10), the problem types (m.12), subject resolution (A11), allowed
+//! Exercises (m.9) and the platform product routes:
 //! pairing (m.4, m.16 (a)) and the platform client's event streams (m.17 (e), (g)).
 
 use serde_json::{Map, Value, json};
@@ -100,10 +101,15 @@ fn key_components() -> Value {
 }
 
 mod platform;
+mod records;
 
 fn components() -> Value {
     let mut all = key_components();
-    for more in [other_components(), platform::components()] {
+    for more in [
+        other_components(),
+        records::components(),
+        platform::components(),
+    ] {
         if let (Value::Object(m), Value::Object(more)) = (&mut all, more) {
             m.extend(more);
         }
@@ -191,6 +197,8 @@ fn other_components() -> Value {
                         "pairing_challenges": { "type": "string" },
                         "pairing": { "type": "string" },
                         "platform_streams": { "type": "string" },
+                        "subject_resolution": { "type": "string" },
+                        "exercise": { "type": "string" },
                     },
                 },
             }),
@@ -341,6 +349,7 @@ pub fn openapi() -> Value {
             ),
         }}),
     );
+    records::paths(&mut paths, &common);
     platform::paths(&mut paths);
     json!({
         "openapi": "3.1.1",

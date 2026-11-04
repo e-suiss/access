@@ -7,7 +7,7 @@ use access_kernel::digest::Digest;
 use serde_json::{Value, json};
 
 use super::domain::{self, BadRequest, TENANT_PAGE};
-use super::ports::{KeyDirectory, Tenants};
+use super::ports::{Exercises, KeyDirectory, Subjects, Tenants};
 
 /// The form of a key lookup answer.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -49,9 +49,10 @@ pub enum Reply {
 }
 
 /// The product client API of one deployment.
-pub struct Service<K, T> {
+pub struct Service<K, T, S> {
     keys: K,
     tenants: T,
+    subjects: S,
     region: String,
 }
 
@@ -63,12 +64,13 @@ fn failed(e: &CoreError) -> Reply {
     }
 }
 
-impl<K: KeyDirectory, T: Tenants> Service<K, T> {
-    /// A service over `keys` and `tenants` in `region`.
-    pub const fn new(keys: K, tenants: T, region: String) -> Self {
+impl<K: KeyDirectory, T: Tenants, S> Service<K, T, S> {
+    /// A service over `keys`, `tenants` and `subjects` in `region`.
+    pub const fn new(keys: K, tenants: T, subjects: S, region: String) -> Self {
         Self {
             keys,
             tenants,
+            subjects,
             region,
         }
     }
@@ -193,5 +195,57 @@ impl<K: KeyDirectory, T: Tenants> Service<K, T> {
             m.insert("next_cursor".into(), next.into());
         }
         Reply::Json(body)
+    }
+}
+
+impl<K: KeyDirectory + Exercises, T: Tenants, S: Subjects> Service<K, T, S> {
+    /// `POST /access/v1/tenants/{tenant}/subjects:resolve` (OP-149 A11): between the realm's
+    /// `PartyID`s and the pairwise `sub` the named client sees, one direction per call; what does
+    /// not resolve is listed as `unknown`. A Party's `sub` for the client is the one its tokens
+    /// carry, assigned now when the client has not seen the subject yet (MD-10).
+    pub async fn resolve(&self, client: Option<String>, tenant: &str, body: &[u8]) -> Reply {
+        if client.is_none() {
+            return Reply::Unauthenticated;
+        }
+        let Some(id) = self.tenants.internal(tenant) else {
+            return Reply::NotFound("tenant-unknown");
+        };
+        let req = match domain::resolve_request(body) {
+            Ok(r) => r,
+            Err(BadRequest(code)) => return Reply::Bad(code),
+        };
+        match self
+            .subjects
+            .resolve(id, req.realm, &req.client_id, req.lookup.clone())
+            .await
+        {
+            Ok(Some(found)) => Reply::Json(domain::resolution_json(&req, &found)),
+            Ok(None) => Reply::NotFound("client-unknown"),
+            Err(_) => Reply::Unavailable,
+        }
+    }
+
+    /// `GET /access/v1/exercises/{id}?domain=…` (OP-149 m.9): an allowed Exercise, with the
+    /// receipt the decision point issued when kept; 404 for one the domain never allowed.
+    pub async fn exercise(
+        &self,
+        client: Option<String>,
+        exercise: &str,
+        domain: Option<&str>,
+    ) -> Reply {
+        if client.is_none() {
+            return Reply::Unauthenticated;
+        }
+        let Some(id) = domain::kid(exercise).map(Digest) else {
+            return Reply::Bad("exercise");
+        };
+        let Some(domain) = domain.and_then(crate::adp::adapters::domain_id) else {
+            return Reply::Bad("domain");
+        };
+        match self.keys.exercise(domain, id).await {
+            Ok(Some(r)) => Reply::Json(domain::exercise_json(&domain, &r)),
+            Ok(None) => Reply::NotFound("exercise-unknown"),
+            Err(e) => failed(&e),
+        }
     }
 }

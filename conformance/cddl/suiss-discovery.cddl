@@ -19,8 +19,10 @@ suiss-endpoints = {
   ? pairing_challenges: https-url,
   ? pairing: https-url,
   ? platform_streams: https-url,
+  ? subject_resolution: https-url,
+  ? exercise: https-url,
 }
 
 ; An absolute https URL in printable ASCII. A path variable is an RFC 6570 level 1 template
-; expression, for example {kid} in key_lookup and {tenant} in tenant_snapshot and pairing.
+; expression, for example {kid} in key_lookup, {tenant} in tenant_snapshot and {exercise} in exercise.
 https-url = tstr .regexp "https://[!-~]{1,2040}"

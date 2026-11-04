@@ -7,6 +7,7 @@
     clippy::panic,
     clippy::indexing_slicing,
     clippy::unused_async_trait_impl,
+    clippy::too_many_lines,
     reason = "test code with fakes of async ports; the request-path lints (OP-3) do not apply"
 )]
 
@@ -14,7 +15,7 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use access_authority_core::CoreError;
-use access_authority_core::adapters::KeyAnswer;
+use access_authority_core::adapters::{ExerciseRecord, KeyAnswer};
 use access_authority_core::app::{Compromise, Incoming, Response};
 use access_authority_core::keys::{AsOf, KeyEntry, KeyState, Lookup, Point};
 use access_http::adp::adapters::{Discovery as AdpDiscovery, Pep, router as adp_router};
@@ -22,7 +23,9 @@ use access_http::adp::app::Service as AdpService;
 use access_http::adp::ports::Pdp;
 use access_http::product::adapters::router;
 use access_http::product::app::Service;
-use access_http::product::ports::{KeyDirectory, Realm, Tenant, Tenants, Unavailable};
+use access_http::product::ports::{
+    Exercises, KeyDirectory, Realm, Resolved, SubjectQuery, Subjects, Tenant, Tenants, Unavailable,
+};
 use access_http::product::schema::openapi;
 use access_http::{Limits, harden};
 use access_identity_oauth::domain::issuer::Issuer;
@@ -164,9 +167,91 @@ impl Tenants for Directory {
     }
 }
 
+/// One allowed Exercise with a signed receipt and one known only from state.
+const SIGNED: [u8; 32] = [0xe1; 32];
+const FROM_STATE: [u8; 32] = [0xe2; 32];
+
+impl Exercises for Ledger {
+    async fn exercise(
+        &self,
+        domain: Digest,
+        exercise: Digest,
+    ) -> Result<Option<ExerciseRecord>, CoreError> {
+        if domain != DOMAIN {
+            return Ok(None);
+        }
+        let base = ExerciseRecord {
+            exercise,
+            position: 12,
+            intent: Digest([0x1e; 32]),
+            instance: Some(Id([3; 16])),
+            receipt: None,
+            signed_receipt: None,
+        };
+        Ok(match exercise.0 {
+            SIGNED => Some(ExerciseRecord {
+                receipt: Some(vec![0xa1, 0x61, 0x76, 0x01]),
+                signed_receipt: Some((SIGN1.to_vec(), EXCERPT.to_vec())),
+                ..base
+            }),
+            FROM_STATE => Some(base),
+            _ => None,
+        })
+    }
+}
+
+/// One realm of tenant 1 with client `cli_relay`; Party 2 is subject `sub-2…` to it.
+struct People;
+
+const REALM: [u8; 16] = [0xa1; 16];
+
+fn sub_of(party: u8) -> String {
+    b64url_encode(&[party; 32])
+}
+
+impl Subjects for People {
+    async fn resolve(
+        &self,
+        tenant: [u8; 16],
+        realm: [u8; 16],
+        client_id: &str,
+        lookup: SubjectQuery,
+    ) -> Result<Option<Resolved>, Unavailable> {
+        if tenant != [1; 16] || realm != REALM || client_id != "cli_relay" {
+            return Ok(None);
+        }
+        let known = [2_u8, 4];
+        let pairs = match lookup {
+            SubjectQuery::Parties(list) => list
+                .into_iter()
+                .filter(|p| known.contains(&p[0]) && p.iter().all(|b| *b == p[0]))
+                .map(|p| (p, sub_of(p[0])))
+                .collect(),
+            SubjectQuery::Subs(list) => list
+                .into_iter()
+                .filter_map(|s| {
+                    known
+                        .iter()
+                        .find(|n| sub_of(**n) == s)
+                        .map(|n| ([*n; 16], s))
+                })
+                .collect(),
+        };
+        Ok(Some(Resolved {
+            pairs,
+            consistency: "ct-7".to_owned(),
+        }))
+    }
+}
+
 fn app(client: bool) -> Router {
     let limits = Limits::default();
-    let routes = router(Service::new(Ledger, Directory, "eu-central".to_owned()));
+    let routes = router(Service::new(
+        Ledger,
+        Directory,
+        People,
+        "eu-central".to_owned(),
+    ));
     let routes = if client {
         routes.layer(axum::Extension(Pep("product-client".to_owned())))
     } else {
@@ -221,6 +306,127 @@ fn problem_type(body: &[u8]) -> String {
     v["type"].as_str().unwrap().to_owned()
 }
 
+fn resolve_request(body: &Value) -> Request<Body> {
+    Request::post("/access/v1/tenants/tnt_01/subjects:resolve")
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(body.to_string()))
+        .unwrap()
+}
+
+fn get_exercise(id: [u8; 32]) -> Request<Body> {
+    Request::get(format!(
+        "/access/v1/exercises/{}?domain={}",
+        b64url_encode(&id),
+        domain_text()
+    ))
+    .body(Body::empty())
+    .unwrap()
+}
+
+fn parties_request() -> Value {
+    json!({
+        "realm": "a1a1a1a1-a1a1-a1a1-a1a1-a1a1a1a1a1a1",
+        "client_id": "cli_relay",
+        "parties": [b64url_encode(&[2; 16]), b64url_encode(&[3; 16])],
+    })
+}
+
+// OP-149 A11: Parties resolve to the pairwise sub one client sees and back, one direction per
+// call, at most 100 entries; what does not resolve is listed, with the consistency token
+#[tokio::test]
+async fn subjects_resolve_both_ways() {
+    // MD-10, OP-141 m.22 (f)
+    let (status, _, body) = call(app(true), resolve_request(&parties_request())).await;
+    assert_eq!(status, StatusCode::OK);
+    let v: Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(
+        v["resolved"],
+        json!([{ "party": b64url_encode(&[2; 16]), "sub": sub_of(2) }])
+    );
+    assert_eq!(v["unknown"], json!([b64url_encode(&[3; 16])]));
+    assert_eq!(v["consistency_token"], "ct-7");
+    let back = json!({
+        "realm": "a1a1a1a1-a1a1-a1a1-a1a1-a1a1a1a1a1a1",
+        "client_id": "cli_relay",
+        "subs": [sub_of(4), sub_of(9)],
+    });
+    let (_, _, body) = call(app(true), resolve_request(&back)).await;
+    let v: Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(
+        v["resolved"],
+        json!([{ "party": b64url_encode(&[4; 16]), "sub": sub_of(4) }])
+    );
+    assert_eq!(v["unknown"], json!([sub_of(9)]));
+    let many: Vec<String> = (0..101_u8).map(|n| b64url_encode(&[n; 16])).collect();
+    let mut bad = parties_request();
+    for (change, code) in [
+        (json!({ "parties": many }), "parties"),
+        (json!({ "parties": [] }), "parties"),
+        (json!({ "subs": [sub_of(4)] }), "parties-or-subs"),
+        (
+            json!({ "realm": "A1A1A1A1-A1A1-A1A1-A1A1-A1A1A1A1A1A1" }),
+            "realm",
+        ),
+        (json!({ "x": 1 }), "unknown-member"),
+    ] {
+        let mut req = bad.clone();
+        for (k, v) in change.as_object().unwrap() {
+            req[k] = v.clone();
+        }
+        let (status, _, body) = call(app(true), resolve_request(&req)).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{change}");
+        assert_eq!(
+            problem_type(&body),
+            format!("urn:suiss:access:problem:{code}")
+        );
+    }
+    let mut short = parties_request();
+    short.as_object_mut().unwrap().remove("parties");
+    short["subs"] = json!(["short"]);
+    let (status, _, body) = call(app(true), resolve_request(&short)).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(problem_type(&body), "urn:suiss:access:problem:subs");
+    bad["client_id"] = json!("cli_other");
+    let (status, _, body) = call(app(true), resolve_request(&bad)).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert_eq!(
+        problem_type(&body),
+        "urn:suiss:access:problem:client-unknown"
+    );
+}
+
+// OP-149 m.9: an allowed Exercise with the receipt the decision point issued; one known only
+// from state; and a 404 problem for one never allowed
+#[tokio::test]
+async fn an_exercise_is_read_by_its_id() {
+    // §9.8, L2-RCP-2
+    let (status, _, body) = call(app(true), get_exercise(SIGNED)).await;
+    assert_eq!(status, StatusCode::OK);
+    let v: Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(v["status"], "allowed");
+    assert_eq!(v["position"], "12");
+    assert_eq!(v["receipt"]["cose_sign1"], b64url_encode(&SIGN1));
+    assert_eq!(v["receipt"]["key_excerpt"], b64url_encode(&EXCERPT));
+    let (_, _, body) = call(app(true), get_exercise(FROM_STATE)).await;
+    let v: Value = serde_json::from_slice(&body).unwrap();
+    assert!(v.get("receipt").is_none());
+    assert_eq!(v["instance"], b64url_encode(&[3; 16]));
+    let (status, _, body) = call(app(true), get_exercise([0xe9; 32])).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert_eq!(
+        problem_type(&body),
+        "urn:suiss:access:problem:exercise-unknown"
+    );
+    let (status, _, _) = call(
+        app(true),
+        Request::get(format!("/access/v1/exercises/{}", b64url_encode(&SIGNED)))
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+}
+
 // OP-149 m.5, OP-141 m.18 (b): without a client certificate nothing is answered
 #[tokio::test]
 async fn a_client_certificate_is_required() {
@@ -233,6 +439,8 @@ async fn a_client_certificate_is_required() {
         Request::get("/access/v1/tenants/tnt_01/snapshot")
             .body(Body::empty())
             .unwrap(),
+        resolve_request(&parties_request()),
+        get_exercise(SIGNED),
     ] {
         let (status, _, body) = call(app(false), req).await;
         assert_eq!(status, StatusCode::UNAUTHORIZED);
@@ -623,6 +831,17 @@ async fn committed_examples_match_the_code_and_the_schema() {
             "SuissConfiguration",
             serde_json::from_str(&suiss::document(&issuer, &settings(), suiss::SERVED)).unwrap(),
         ),
+        (
+            "subjects-resolve-request",
+            "ResolveRequest",
+            parties_request(),
+        ),
+        (
+            "subjects-resolved",
+            "Resolution",
+            body_of(resolve_request(&parties_request())).await,
+        ),
+        ("exercise", "Exercise", body_of(get_exercise(SIGNED)).await),
         (
             "problem",
             "Problem",

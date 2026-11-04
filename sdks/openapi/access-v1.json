@@ -475,6 +475,183 @@
         }
       }
     },
+    "/access/v1/tenants/{tenant}/subjects:resolve": {
+      "post": {
+        "operationId": "resolveSubjects",
+        "summary": "Between a realm's PartyIDs and the pairwise `sub` one of its clients sees, one direction per call, at most 100 entries; what does not resolve is listed as `unknown` (OP-149 A11). A Party's `sub` is the one the client's tokens carry, assigned now when the client has not seen the subject yet (MD-10).",
+        "parameters": [
+          {
+            "name": "tenant",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResolveRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "400": {
+            "description": "The request is refused; nothing is read.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No client certificate (OP-141 m.18 (b)).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "tenant-unknown, or client-unknown: no such realm or active client.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Over a rate limit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporarily unavailable; retry.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "The pairs.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Resolution"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/access/v1/exercises/{id}": {
+      "get": {
+        "operationId": "getExercise",
+        "summary": "An allowed Exercise: its decision record position, intent, actor and the receipt the decision point issued (OP-149 m.9, §9.8).",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{43}$",
+              "description": "ExerciseID, base64url of 32 bytes."
+            }
+          },
+          {
+            "name": "domain",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/DomainId"
+            },
+            "description": "The authority domain."
+          }
+        ],
+        "responses": {
+          "400": {
+            "description": "The request is refused; nothing is read.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No client certificate (OP-141 m.18 (b)).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "exercise-unknown: the domain never allowed it.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Over a rate limit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporarily unavailable; retry.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "The Exercise.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Exercise"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/access/v1/tenants/{tenant}/pairing/challenges": {
       "post": {
         "operationId": "createPairingChallenges",
@@ -1317,6 +1494,173 @@
               },
               "platform_streams": {
                 "type": "string"
+              },
+              "subject_resolution": {
+                "type": "string"
+              },
+              "exercise": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "ResolveRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "realm",
+          "client_id"
+        ],
+        "properties": {
+          "realm": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "description": "The realm, as the tenant snapshot names it."
+          },
+          "client_id": {
+            "type": "string",
+            "description": "The client whose pairwise `sub` is meant, its sector (MD-10), e.g. Relay's client of the realm."
+          },
+          "parties": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "description": "PartyID, base64url of 16 bytes."
+            },
+            "minItems": 1,
+            "maxItems": 100,
+            "uniqueItems": true
+          },
+          "subs": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "description": "A pairwise `sub` of the client, 43 characters."
+            },
+            "minItems": 1,
+            "maxItems": 100,
+            "uniqueItems": true
+          }
+        }
+      },
+      "Resolution": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "realm",
+          "client_id",
+          "resolved",
+          "unknown",
+          "consistency_token"
+        ],
+        "properties": {
+          "realm": {
+            "type": "string",
+            "description": "The realm."
+          },
+          "client_id": {
+            "type": "string",
+            "description": "The client."
+          },
+          "resolved": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "party",
+                "sub"
+              ],
+              "properties": {
+                "party": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_-]+$",
+                  "description": "PartyID."
+                },
+                "sub": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_-]+$",
+                  "description": "The pairwise `sub` the client sees."
+                }
+              }
+            }
+          },
+          "unknown": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The entries asked for that did not resolve, as given."
+          },
+          "consistency_token": {
+            "type": "string",
+            "description": "Opaque; the governing domain's head before the read."
+          }
+        }
+      },
+      "Exercise": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "exercise",
+          "domain",
+          "status",
+          "position",
+          "intent"
+        ],
+        "properties": {
+          "exercise": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "ExerciseID, 32 bytes."
+          },
+          "domain": {
+            "$ref": "#/components/schemas/DomainId"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "allowed"
+            ],
+            "description": "Only allowed Exercises are recorded; others are not found."
+          },
+          "position": {
+            "$ref": "#/components/schemas/Position"
+          },
+          "intent": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "The intent digest it was allowed for."
+          },
+          "instance": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "The actor InstanceID; absent for an anonymous actor."
+          },
+          "receipt": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "payload"
+            ],
+            "properties": {
+              "payload": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_-]+$",
+                "description": "The receipt payload, dCBOR (`application/access-receipt+cbor`)."
+              },
+              "cose_sign1": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_-]+$",
+                "description": "The receipt as the decision point signed it, COSE_Sign1 under usage `receipt`."
+              },
+              "key_excerpt": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_-]+$",
+                "description": "The binding-signed excerpt of the signing key (CR-58 m.1)."
               }
             }
           }

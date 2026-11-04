@@ -1,28 +1,42 @@
 //! The tenant directory of the product client API (OP-149 m.4): tenants read through the router
 //! role, named outside by the cell's opaque ids (OP-137, MD-18), the same `tnt_` ids the events
-//! carry (OP-149 m.15 (i)).
+//! carry (OP-149 m.15 (i)); and the resolution between a realm's Parties and a client's pairwise
+//! `sub` (OP-149 A11).
 
 use std::sync::Arc;
 
+use access_authority_core::CoreError;
+use access_authority_core::adapters::Domains;
+use access_authority_core::ports::{Binding, Keys, Salts};
+use access_authority_sequencer::ports::Clock;
 use access_http::product::adapters::router as product_router;
 use access_http::product::app::Service;
-use access_http::product::ports::{KeyDirectory, Realm, Tenant, Tenants, Unavailable};
+use access_http::product::ports::{
+    Exercises, KeyDirectory, Realm, Resolved, SubjectQuery, Subjects, Tenant, Tenants, Unavailable,
+};
 use access_identity_events::domain::catalog::TENANT_PREFIX;
+use access_kernel::digest::Digest;
+use access_kernel::json::b64url_encode;
 use access_store::Pool;
-use access_store::identity::TenantId;
+use access_store::identity::{RealmId, TenantId, TenantTx};
+use access_store::idp;
 use access_store::tenancy::{RealmRoute, TenantRow, tenant, tenant_routes, tenants_after};
 
 use crate::config::Config;
 use crate::ids::CellIds;
 
-/// The product client routes over `keys` and the tenants the router role reads (OP-149 m.4,
-/// m.5).
-pub(crate) fn routes<K: KeyDirectory + 'static>(
+/// The product client routes over the domains `keys`, the tenants the router role reads and
+/// the realms' subjects (OP-149 m.4, m.5, m.9, A11).
+pub(crate) fn routes<K>(
     config: &Config,
-    keys: K,
-    router: Pool,
+    keys: Arc<K>,
+    pools: (Pool, Pool),
     ids: Arc<CellIds>,
-) -> Result<axum::Router, String> {
+) -> Result<axum::Router, String>
+where
+    K: KeyDirectory + Exercises + Consistency + 'static,
+{
+    let (router, app) = pools;
     let region = config
         .suiss
         .as_ref()
@@ -30,10 +44,105 @@ pub(crate) fn routes<K: KeyDirectory + 'static>(
         .region
         .clone();
     Ok(product_router(Service::new(
-        keys,
+        keys.clone(),
         PgTenants::new(router, ids),
+        PgSubjects { app, domains: keys },
         region,
     )))
+}
+
+/// The head of a governing domain as a consistency token (OP-141 m.22 (f)).
+pub(crate) trait Consistency: Send + Sync {
+    /// The token of `domain`'s head now.
+    fn consistency(
+        &self,
+        domain: Digest,
+    ) -> impl std::future::Future<Output = Result<String, CoreError>> + Send;
+}
+
+impl<K, B, S, C> Consistency for Domains<K, B, S, C>
+where
+    K: Keys,
+    B: Binding + Clone + Send + Sync,
+    S: Salts + Clone + Send + Sync,
+    C: Clock + Clone + Send + Sync,
+{
+    async fn consistency(&self, domain: Digest) -> Result<String, CoreError> {
+        Domains::consistency(self, domain).await
+    }
+}
+
+/// A realm's subjects (OP-149 A11): the Party a session subject's device Instances belong to
+/// (`subject_party`) and the pairwise `sub` a client sees of that subject (MD-10).
+pub(crate) struct PgSubjects<D> {
+    pub(crate) app: Pool,
+    pub(crate) domains: Arc<D>,
+}
+
+/// The pairwise value a client is shown first: 32 random bytes in base64url (MD-10).
+fn candidate() -> Result<String, Unavailable> {
+    access_crypto::random::bytes::<32>()
+        .map(|b| b64url_encode(&b))
+        .map_err(|_| Unavailable)
+}
+
+impl<D: Consistency> Subjects for PgSubjects<D> {
+    async fn resolve(
+        &self,
+        tenant: [u8; 16],
+        realm: [u8; 16],
+        client_id: &str,
+        lookup: SubjectQuery,
+    ) -> Result<Option<Resolved>, Unavailable> {
+        let down = |_| Unavailable;
+        let (tenant, realm) = (TenantId::from_bytes(tenant), RealmId::from_bytes(realm));
+        let mut t = TenantTx::begin(&self.app, tenant, realm)
+            .await
+            .map_err(down)?;
+        let g = idp::governance(&mut t).await.map_err(down)?;
+        let client = idp::client(&mut t, client_id).await.map_err(down)?;
+        t.commit().await.map_err(down)?;
+        let (Some(g), Some(client)) = (g, client.filter(|c| c.active)) else {
+            return Ok(None);
+        };
+        // OP-141 m.22 (f)
+        let consistency = self
+            .domains
+            .consistency(Digest(*g.domain.as_bytes()))
+            .await
+            .map_err(|_| Unavailable)?;
+        let sector = client.client_uuid;
+        let mut t = TenantTx::begin(&self.app, tenant, realm)
+            .await
+            .map_err(down)?;
+        let mut pairs = Vec::new();
+        match lookup {
+            SubjectQuery::Parties(parties) => {
+                for party in parties {
+                    if let Some(subject) = idp::party_subject(&mut t, &party).await.map_err(down)? {
+                        let sub = t
+                            .pairwise(subject, sector, &candidate()?)
+                            .await
+                            .map_err(down)?;
+                        pairs.push((party, sub));
+                    }
+                }
+            }
+            SubjectQuery::Subs(subs) => {
+                for sub in subs {
+                    let Some(subject) = t.pairwise_subject(sector, &sub).await.map_err(down)?
+                    else {
+                        continue;
+                    };
+                    if let Some(party) = idp::subject_party(&mut t, &subject).await.map_err(down)? {
+                        pairs.push((party, sub));
+                    }
+                }
+            }
+        }
+        t.commit().await.map_err(down)?;
+        Ok(Some(Resolved { pairs, consistency }))
+    }
 }
 
 /// Tenants from the database.

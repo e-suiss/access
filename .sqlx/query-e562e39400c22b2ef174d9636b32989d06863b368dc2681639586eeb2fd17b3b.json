@@ -1,0 +1,77 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT exercise_id, pos, payload, sign1, excerpt FROM access.authority_receipt\n          WHERE domain_id = $1 AND exercise_id = $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "exercise_id",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.authority_receipt",
+            "name": "exercise_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "pos",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.authority_receipt",
+            "name": "pos"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "payload",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.authority_receipt",
+            "name": "payload"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "sign1",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.authority_receipt",
+            "name": "sign1"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "excerpt",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.authority_receipt",
+            "name": "excerpt"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "e562e39400c22b2ef174d9636b32989d06863b368dc2681639586eeb2fd17b3b"
+}

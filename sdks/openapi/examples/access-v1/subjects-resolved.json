@@ -1,0 +1,14 @@
+{
+  "realm": "a1a1a1a1-a1a1-a1a1-a1a1-a1a1a1a1a1a1",
+  "client_id": "cli_relay",
+  "resolved": [
+    {
+      "party": "AgICAgICAgICAgICAgICAg",
+      "sub": "AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI"
+    }
+  ],
+  "unknown": [
+    "AwMDAwMDAwMDAwMDAwMDAw"
+  ],
+  "consistency_token": "ct-7"
+}

@@ -51,6 +51,27 @@ pub async fn subject_party(
         .transpose()
 }
 
+/// The session subject bound to `party` in this realm (OP-149 m.16 (a), A11).
+///
+/// # Errors
+/// [`StoreError`].
+pub async fn party_subject(
+    t: &mut TenantTx,
+    party: &[u8; 16],
+) -> Result<Option<[u8; 16]>, StoreError> {
+    let (tenant, realm) = scope(t)?;
+    let row = sqlx::query_scalar!(
+        "SELECT subject_id FROM access.subject_party
+          WHERE tenant_id = $1 AND realm_id = $2 AND party_id = $3",
+        tenant,
+        realm,
+        party.as_slice(),
+    )
+    .fetch_optional(&mut *t.tx)
+    .await?;
+    Ok(row.map(|s| *s.as_bytes()))
+}
+
 /// Records that `subject`'s device Instances belong to `party`; `false` when the subject or the
 /// Party is bound already. Never changed afterwards.
 ///

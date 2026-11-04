@@ -4,7 +4,7 @@ use std::future::Future;
 use std::sync::Arc;
 
 use access_authority_core::CoreError;
-use access_authority_core::adapters::KeyAnswer;
+use access_authority_core::adapters::{ExerciseRecord, KeyAnswer};
 use access_authority_core::keys::AsOf;
 use access_kernel::digest::Digest;
 
@@ -81,4 +81,56 @@ pub trait Tenants: Send + Sync {
 
     /// The internal id of an external id.
     fn internal(&self, text: &str) -> Option<[u8; 16]>;
+}
+
+/// Reads allowed Exercises of a domain (OP-149 m.9).
+pub trait Exercises: Send + Sync {
+    /// The allowed Exercise `exercise` of `domain`; `None` when the domain never allowed it.
+    fn exercise(
+        &self,
+        domain: Digest,
+        exercise: Digest,
+    ) -> impl Future<Output = Result<Option<ExerciseRecord>, CoreError>> + Send;
+}
+
+impl<E: Exercises> Exercises for Arc<E> {
+    fn exercise(
+        &self,
+        domain: Digest,
+        exercise: Digest,
+    ) -> impl Future<Output = Result<Option<ExerciseRecord>, CoreError>> + Send {
+        (**self).exercise(domain, exercise)
+    }
+}
+
+/// What a resolution asks for, one direction at a time (OP-149 A11).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum SubjectQuery {
+    /// `PartyID`s to their pairwise `sub`.
+    Parties(Vec<[u8; 16]>),
+    /// Pairwise `sub`s to their `PartyID`.
+    Subs(Vec<String>),
+}
+
+/// The pairs a resolution found, read at or after `consistency`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Resolved {
+    /// `(party, sub)` for every entry that resolved.
+    pub pairs: Vec<([u8; 16], String)>,
+    /// The governing domain's head before the read, as an opaque token (OP-141 m.22 (f)).
+    pub consistency: String,
+}
+
+/// Resolves between a realm's Parties and the pairwise `sub` a client of it sees (OP-149 A11,
+/// MD-10).
+pub trait Subjects: Send + Sync {
+    /// The pairs of `lookup` in `realm` of `tenant` for the client `client_id`, its pairwise
+    /// sector. `None` when the realm or an active client with that id is not there.
+    fn resolve(
+        &self,
+        tenant: [u8; 16],
+        realm: [u8; 16],
+        client_id: &str,
+        lookup: SubjectQuery,
+    ) -> impl Future<Output = Result<Option<Resolved>, Unavailable>> + Send;
 }

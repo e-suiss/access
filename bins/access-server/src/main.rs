@@ -562,11 +562,7 @@ async fn serve(
         prepared.identity_keys.clone(),
         prepared.outbound,
     )?
-    .merge(events::ssf(
-        &event_pools(&all, &cell_ids),
-        signer(),
-        keks.clone(),
-    ));
+    .merge(events::ssf(&platform_pools, signer(), keks.clone()));
     // OP-146 m.16 (m)
     let _realm_keys = idp::RealmKeyring::new(signer(), prepared.identity_keys);
     let Pools {
@@ -585,7 +581,7 @@ async fn serve(
     )?;
     let tenants_pool = router_pool.clone();
     let realms = identity(config, router_pool).await?;
-    let (idp_sequencer, idp_app) = (sequencer.clone(), app.clone());
+    let (idp_sequencer, idp_app, product_app) = (sequencer.clone(), app.clone(), app.clone());
     let issuer = config.issuer.clone().ok_or("no issuer")?;
     let limits = Limits::default();
     // OP-141 m.18 (a), (e), (f), OP-149 m.16 (a)
@@ -625,7 +621,12 @@ async fn serve(
         Service::new(domains.clone(), limits.max_body_bytes),
         Discovery { issuer },
     );
-    let products = product::routes(config, domains.clone(), tenants_pool, cell_ids)?;
+    let products = product::routes(
+        config,
+        domains.clone(),
+        (tenants_pool, product_app),
+        cell_ids,
+    )?;
     let app = router(
         config.security_txt(),
         health(report),
@@ -636,15 +637,27 @@ async fn serve(
             .merge(sign_in.merge(me))
             .merge(authorize),
     );
-    listener.set_nonblocking(true).map_err(|e| e.to_string())?;
-    let listener = tokio::net::TcpListener::from_std(listener).map_err(|e| e.to_string())?;
-    tracing::info!(listen = %config.listen, "access-server listening (TLS 1.3)");
-    let served = access_http::tls::serve(listener, prepared.tls, app, shutdown_signal()).await;
+    let served = listen(config, listener, prepared.tls, app).await;
     // OP-31
     background.stop().await;
     renewing.abort();
     domains.release().await;
-    served.map_err(|e| e.to_string())
+    served
+}
+
+/// Serves `app` over TLS 1.3 on `listener` until a shutdown signal.
+async fn listen(
+    config: &Config,
+    listener: std::net::TcpListener,
+    tls: Arc<access_http::tls::ServerConfig>,
+    app: axum::Router,
+) -> Result<(), String> {
+    listener.set_nonblocking(true).map_err(|e| e.to_string())?;
+    let listener = tokio::net::TcpListener::from_std(listener).map_err(|e| e.to_string())?;
+    tracing::info!(listen = %config.listen, "access-server listening (TLS 1.3)");
+    access_http::tls::serve(listener, tls, app, shutdown_signal())
+        .await
+        .map_err(|e| e.to_string())
 }
 
 /// What `/healthz` reports: the lockdown in force (SA-22).

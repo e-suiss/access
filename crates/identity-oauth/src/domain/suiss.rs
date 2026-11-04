@@ -41,6 +41,10 @@ pub enum Endpoint {
     Pairing,
     /// `/access/v1/platform/streams`: a platform client's event streams (OP-149 m.17 (g)).
     PlatformStreams,
+    /// `POST /access/v1/tenants/{tenant}/subjects:resolve` (OP-149 A11).
+    SubjectResolution,
+    /// `GET /access/v1/exercises/{exercise}` (OP-149 m.9).
+    Exercise,
 }
 
 impl Endpoint {
@@ -58,6 +62,8 @@ impl Endpoint {
             Self::PairingChallenges => "pairing_challenges",
             Self::Pairing => "pairing",
             Self::PlatformStreams => "platform_streams",
+            Self::SubjectResolution => "subject_resolution",
+            Self::Exercise => "exercise",
         }
     }
 
@@ -75,6 +81,8 @@ impl Endpoint {
             Self::PairingChallenges => "/access/v1/tenants/{tenant}/pairing/challenges",
             Self::Pairing => "/access/v1/tenants/{tenant}/pairing",
             Self::PlatformStreams => "/access/v1/platform/streams",
+            Self::SubjectResolution => "/access/v1/tenants/{tenant}/subjects:resolve",
+            Self::Exercise => "/access/v1/exercises/{exercise}",
         }
     }
 
@@ -97,6 +105,8 @@ pub const SERVED: &[Endpoint] = &[
     Endpoint::PairingChallenges,
     Endpoint::Pairing,
     Endpoint::PlatformStreams,
+    Endpoint::SubjectResolution,
+    Endpoint::Exercise,
 ];
 
 /// Well-known suffix of the realm's SSF transmitter metadata (SSF 1.0 §7.1).

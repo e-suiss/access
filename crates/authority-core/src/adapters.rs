@@ -20,7 +20,8 @@ use access_kernel::verify::cose::PublicKey;
 use access_store::authority::position_at;
 use access_store::authority::read_log;
 use access_store::authority::{
-    NonceRow, StateRow, counter, domain_tenant, find_nonce, state_of, state_prefix,
+    NonceRow, ReceiptRow, StateRow, counter, domain_tenant, find_nonce, keep_receipt, receipt,
+    state_of, state_prefix,
 };
 use access_store::derived::{GrantRow, KeyChange, advance_with, cursor, keys_of};
 use access_store::scope::DomainId;
@@ -398,6 +399,19 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
             r.signed_receipt =
                 sign_artefact(path, led, domain, Artefact::Receipt, payload, now).await;
         }
+        // OP-149 m.9: kept for GET /access/v1/exercises/{id}; without it the answer comes from state
+        if let Ok(r) = &result
+            && let (Some(payload), Some(exercise), Some(pos)) = (&r.receipt, r.exercise, r.record)
+        {
+            let row = ReceiptRow {
+                exercise: exercise.0,
+                pos,
+                payload: payload.clone(),
+                signed: r.signed_receipt.clone(),
+            };
+            let _ =
+                keep_receipt(&self.setup.sequencer, &DomainId::from_bytes(domain.0), &row).await;
+        }
         if let (Ok(r), Some(path)) = (&mut result, &self.setup.signer)
             && let Some(payload) = r.pap.clone()
         {
@@ -582,6 +596,62 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
         })
     }
 
+    /// The head of `domain` as an opaque consistency token (OP-141 m.22 (f)): an answer read
+    /// after it reflects at least that head.
+    ///
+    /// # Errors
+    /// [`CoreError::Unavailable`] when the domain cannot be led here.
+    pub async fn consistency(&self, domain: Digest) -> Result<String, CoreError> {
+        let mut guard = self.leading(domain).await?;
+        let Some(led) = guard.as_mut() else {
+            return Err(CoreError::Unavailable("leader"));
+        };
+        led.tokens
+            .seal(&domain.0, CONSISTENCY, &led.core.head().to_be_bytes())
+            .map_err(|_| CoreError::Unavailable("token-key"))
+    }
+
+    /// The allowed Exercise `exercise` of `domain` (OP-149 m.9): the receipt the decision
+    /// point issued when it was kept, else what the state records of it. `None` for an
+    /// Exercise the domain never allowed.
+    ///
+    /// # Errors
+    /// [`CoreError`].
+    pub async fn exercise_record(
+        &self,
+        domain: Digest,
+        exercise: Digest,
+    ) -> Result<Option<ExerciseRecord>, CoreError> {
+        let id = DomainId::from_bytes(domain.0);
+        if let Some(r) = receipt(&self.setup.app, &id, &exercise.0).await? {
+            let parsed = access_kernel::receipt::Receipt::from_bytes(&r.payload)
+                .map_err(|_| CoreError::Store(StoreError::Corrupt))?;
+            return Ok(Some(ExerciseRecord {
+                exercise,
+                position: r.pos,
+                intent: parsed.intent,
+                instance: parsed.instance,
+                receipt: Some(r.payload),
+                signed_receipt: r.signed,
+            }));
+        }
+        let key = meta::exercise_key(meta::kind::EXERCISE, &exercise);
+        let rows = state_of(&self.setup.app, &id, &[key]).await?;
+        let Some(value) = rows.into_iter().find_map(|r| r.value) else {
+            return Ok(None);
+        };
+        let s = meta::ExerciseState::from_bytes(&value)
+            .map_err(|_| CoreError::Store(StoreError::Corrupt))?;
+        Ok(Some(ExerciseRecord {
+            exercise,
+            position: s.since,
+            intent: s.intent,
+            instance: Some(s.actor),
+            receipt: None,
+            signed_receipt: None,
+        }))
+    }
+
     /// Brings the derived index of every domain led here up to its head (OP-141 m.22 (g)); the
     /// failures are returned and left for the next round.
     pub async fn derive(&self) -> Vec<CoreError> {
@@ -643,6 +713,23 @@ fn grant_row(id: [u8; 16], g: &GrantState, pos: u64) -> GrantRow {
         ended: g.ended.is_some(),
         pos,
     }
+}
+
+/// An allowed Exercise as `GET /access/v1/exercises/{id}` shows it (OP-149 m.9).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ExerciseRecord {
+    /// The `ExerciseID`.
+    pub exercise: Digest,
+    /// Position of the allowing decision record.
+    pub position: u64,
+    /// The intent digest it was allowed for.
+    pub intent: Digest,
+    /// The actor Instance; `None` for an anonymous actor.
+    pub instance: Option<Id>,
+    /// The unsigned receipt payload, when kept.
+    pub receipt: Option<Vec<u8>>,
+    /// The signed receipt and its key excerpt, when the signer signed it.
+    pub signed_receipt: Option<(Vec<u8>, Vec<u8>)>,
 }
 
 /// A key lookup answer (OP-149 m.5).

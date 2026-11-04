@@ -853,6 +853,79 @@ pub async fn find_nonce(
     .transpose()
 }
 
+/// The receipt of an ALLOW as the decision point issued it (§9.8, OP-149 m.9).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ReceiptRow {
+    /// The `ExerciseID`.
+    pub exercise: [u8; 32],
+    /// Position of the decision record.
+    pub pos: u64,
+    /// The unsigned receipt payload (dCBOR).
+    pub payload: Vec<u8>,
+    /// The `COSE_Sign1` and its key excerpt, when the signer signed it.
+    pub signed: Option<(Vec<u8>, Vec<u8>)>,
+}
+
+/// Keeps the receipt of a new ALLOW (sequencer role); a receipt kept before stays.
+///
+/// # Errors
+/// [`StoreError`].
+pub async fn keep_receipt(
+    sequencer: &PgPool,
+    domain: &DomainId,
+    r: &ReceiptRow,
+) -> Result<(), StoreError> {
+    let mut t = DomainTx::begin(sequencer, domain).await?;
+    sqlx::query!(
+        "INSERT INTO access.authority_receipt (domain_id, exercise_id, pos, payload, sign1, excerpt)
+         VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT DO NOTHING",
+        domain.as_bytes().as_slice(),
+        r.exercise.as_slice(),
+        signed(r.pos)?,
+        r.payload,
+        r.signed.as_ref().map(|s| s.0.as_slice()),
+        r.signed.as_ref().map(|s| s.1.as_slice()),
+    )
+    .execute(&mut *t.tx)
+    .await?;
+    t.commit().await?;
+    Ok(())
+}
+
+/// The receipt kept for `exercise`.
+///
+/// # Errors
+/// [`StoreError`].
+pub async fn receipt(
+    pool: &PgPool,
+    domain: &DomainId,
+    exercise: &[u8; 32],
+) -> Result<Option<ReceiptRow>, StoreError> {
+    let mut t = DomainTx::begin(pool, domain).await?;
+    let row = sqlx::query!(
+        "SELECT exercise_id, pos, payload, sign1, excerpt FROM access.authority_receipt
+          WHERE domain_id = $1 AND exercise_id = $2",
+        domain.as_bytes().as_slice(),
+        exercise.as_slice(),
+    )
+    .fetch_optional(&mut *t.tx)
+    .await?;
+    t.commit().await?;
+    row.map(|r| {
+        Ok(ReceiptRow {
+            exercise: hash(r.exercise_id)?,
+            pos: unsigned(r.pos)?,
+            payload: r.payload,
+            signed: match (r.sign1, r.excerpt) {
+                (Some(s), Some(e)) => Some((s, e)),
+                (None, None) => None,
+                _ => return Err(StoreError::Corrupt),
+            },
+        })
+    })
+    .transpose()
+}
+
 /// Outbox events after `(pos, idx)`, in order, up to `limit`. The authority cursor is
 /// `(domain_id, pos, idx)`: positions are gapless and in commit order (OP-20, T26).
 ///

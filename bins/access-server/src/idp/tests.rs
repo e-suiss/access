@@ -42,6 +42,7 @@ use super::*;
 use crate::testing::hsm;
 
 mod platform;
+mod records;
 
 const NOW: u64 = 10_000;
 const ROOT: Id = Id([1; 16]);

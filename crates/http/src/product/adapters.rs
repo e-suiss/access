@@ -5,7 +5,7 @@
 use std::sync::Arc;
 
 use access_authority_core::CoreError;
-use access_authority_core::adapters::{Domains, KeyAnswer};
+use access_authority_core::adapters::{Domains, ExerciseRecord, KeyAnswer};
 use access_authority_core::keys::AsOf;
 use access_authority_core::ports::{Binding, Keys, Salts};
 use access_authority_sequencer::ports::Clock;
@@ -20,7 +20,7 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 
 use super::app::{Form, Reply, Service};
-use super::ports::{KeyDirectory, Tenants};
+use super::ports::{Exercises, KeyDirectory, Subjects, Tenants};
 use crate::Problem;
 use crate::adp::adapters::Pep;
 
@@ -32,22 +32,28 @@ pub const EXCERPT_HEADER: HeaderName = HeaderName::from_static("access-key-excer
 
 const REQUEST_ID: HeaderName = HeaderName::from_static("x-request-id");
 
-type Shared<K, T> = State<Arc<Service<K, T>>>;
+type Shared<K, T, S> = State<Arc<Service<K, T, S>>>;
 
 /// The product client routes.
-pub fn router<K, T>(service: Service<K, T>) -> Router
+pub fn router<K, T, S>(service: Service<K, T, S>) -> Router
 where
-    K: KeyDirectory + 'static,
+    K: KeyDirectory + Exercises + 'static,
     T: Tenants + 'static,
+    S: Subjects + 'static,
 {
     Router::new()
-        .route("/access/v1/keys/{kid}", get(key::<K, T>))
-        .route("/access/v1/keys:batchGet", post(keys::<K, T>))
-        .route("/access/v1/tenants", get(tenants::<K, T>))
+        .route("/access/v1/keys/{kid}", get(key::<K, T, S>))
+        .route("/access/v1/keys:batchGet", post(keys::<K, T, S>))
+        .route("/access/v1/tenants", get(tenants::<K, T, S>))
         .route(
             "/access/v1/tenants/{tenant}/snapshot",
-            get(snapshot::<K, T>),
+            get(snapshot::<K, T, S>),
         )
+        .route(
+            "/access/v1/tenants/{tenant}/subjects:resolve",
+            post(resolve::<K, T, S>),
+        )
+        .route("/access/v1/exercises/{id}", get(exercise::<K, T, S>))
         .with_state(Arc::new(service))
 }
 
@@ -74,8 +80,8 @@ fn form(headers: &HeaderMap) -> Form {
     }
 }
 
-async fn key<K: KeyDirectory, T: Tenants>(
-    State(s): Shared<K, T>,
+async fn key<K: KeyDirectory, T: Tenants, S>(
+    State(s): Shared<K, T, S>,
     Path(kid): Path<String>,
     uri: Uri,
     pep: Option<axum::Extension<Pep>>,
@@ -96,8 +102,8 @@ async fn key<K: KeyDirectory, T: Tenants>(
     respond(reply, &headers)
 }
 
-async fn keys<K: KeyDirectory, T: Tenants>(
-    State(s): Shared<K, T>,
+async fn keys<K: KeyDirectory, T: Tenants, S>(
+    State(s): Shared<K, T, S>,
     pep: Option<axum::Extension<Pep>>,
     headers: HeaderMap,
     body: Bytes,
@@ -106,8 +112,8 @@ async fn keys<K: KeyDirectory, T: Tenants>(
     respond(reply, &headers)
 }
 
-async fn snapshot<K: KeyDirectory, T: Tenants>(
-    State(s): Shared<K, T>,
+async fn snapshot<K: KeyDirectory, T: Tenants, S>(
+    State(s): Shared<K, T, S>,
     Path(tenant): Path<String>,
     pep: Option<axum::Extension<Pep>>,
     headers: HeaderMap,
@@ -116,8 +122,8 @@ async fn snapshot<K: KeyDirectory, T: Tenants>(
     respond(reply, &headers)
 }
 
-async fn tenants<K: KeyDirectory, T: Tenants>(
-    State(s): Shared<K, T>,
+async fn tenants<K: KeyDirectory, T: Tenants, S>(
+    State(s): Shared<K, T, S>,
     uri: Uri,
     pep: Option<axum::Extension<Pep>>,
     headers: HeaderMap,
@@ -126,6 +132,31 @@ async fn tenants<K: KeyDirectory, T: Tenants>(
         return respond(Reply::Bad("query"), &headers);
     };
     let reply = s.tenants(client(pep), q.get("cursor")).await;
+    respond(reply, &headers)
+}
+
+async fn resolve<K: KeyDirectory + Exercises, T: Tenants, S: Subjects>(
+    State(s): Shared<K, T, S>,
+    Path(tenant): Path<String>,
+    pep: Option<axum::Extension<Pep>>,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Response {
+    let reply = s.resolve(client(pep), &tenant, &body).await;
+    respond(reply, &headers)
+}
+
+async fn exercise<K: KeyDirectory + Exercises, T: Tenants, S: Subjects>(
+    State(s): Shared<K, T, S>,
+    Path(id): Path<String>,
+    uri: Uri,
+    pep: Option<axum::Extension<Pep>>,
+    headers: HeaderMap,
+) -> Response {
+    let Some(q) = query(&uri) else {
+        return respond(Reply::Bad("query"), &headers);
+    };
+    let reply = s.exercise(client(pep), &id, q.get("domain")).await;
     respond(reply, &headers)
 }
 
@@ -213,5 +244,21 @@ where
         sign: bool,
     ) -> Result<KeyAnswer, CoreError> {
         self.lookup_keys(domain, &kids, as_of, sign).await
+    }
+}
+
+impl<K, B, S, C> Exercises for Domains<K, B, S, C>
+where
+    K: Keys,
+    B: Binding + Clone + Send + Sync,
+    S: Salts + Clone + Send + Sync,
+    C: Clock + Clone + Send + Sync,
+{
+    async fn exercise(
+        &self,
+        domain: Digest,
+        exercise: Digest,
+    ) -> Result<Option<ExerciseRecord>, CoreError> {
+        self.exercise_record(domain, exercise).await
     }
 }

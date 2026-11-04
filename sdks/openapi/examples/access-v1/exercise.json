@@ -1,0 +1,13 @@
+{
+  "exercise": "4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eE",
+  "domain": "sha-256:AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+  "status": "allowed",
+  "position": "12",
+  "intent": "Hh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4",
+  "instance": "AwMDAwMDAwMDAwMDAwMDAw",
+  "receipt": {
+    "payload": "oWF2AQ",
+    "cose_sign1": "0oRAoA",
+    "key_excerpt": "0oQ"
+  }
+}

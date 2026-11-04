@@ -170,6 +170,168 @@ pub fn cache_control(a: &KeyAnswer) -> &'static str {
     }
 }
 
+/// Most entries one subject resolution names (OP-149 A11, PD; as `keys:batchGet`).
+pub const MAX_RESOLVE: usize = 100;
+
+/// A canonical lower-case UUID.
+#[must_use]
+pub fn parse_uuid(text: &str) -> Option<[u8; 16]> {
+    if text.len() != 36 {
+        return None;
+    }
+    let hex: String = text.chars().filter(|c| *c != '-').collect();
+    let mut out = [0_u8; 16];
+    for (i, o) in out.iter_mut().enumerate() {
+        let at = i.checked_mul(2)?;
+        *o = u8::from_str_radix(hex.get(at..at.checked_add(2)?)?, 16).ok()?;
+    }
+    (uuid(&out) == text).then_some(out)
+}
+
+/// A pairwise `sub`: 32 random bytes in unpadded base64url (MD-10).
+fn sub_ok(s: &str) -> bool {
+    s.len() == 43
+        && s.bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
+}
+
+/// A resolution request (OP-149 A11): `{realm, client_id, parties | subs}`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ResolveRequest {
+    /// The realm, as the tenant snapshot names it.
+    pub realm: [u8; 16],
+    /// The client whose pairwise `sub` is meant: its sector.
+    pub client_id: String,
+    /// The direction and entries.
+    pub lookup: super::ports::SubjectQuery,
+}
+
+/// Reads a resolution request: exactly one of `parties` (base64url `PartyID`s) and `subs`,
+/// 1 to [`MAX_RESOLVE`] distinct entries.
+///
+/// # Errors
+/// [`BadRequest`].
+pub fn resolve_request(body: &[u8]) -> Result<ResolveRequest, BadRequest> {
+    use super::ports::SubjectQuery;
+    let Ok(Value::Object(mut m)) = serde_json::from_slice::<Value>(body) else {
+        return Err(BadRequest("json"));
+    };
+    let realm = m
+        .remove("realm")
+        .and_then(|r| r.as_str().and_then(parse_uuid))
+        .ok_or(BadRequest("realm"))?;
+    let client_id = match m.remove("client_id") {
+        Some(Value::String(c)) if !c.is_empty() && c.len() <= 128 => c,
+        _ => return Err(BadRequest("client_id")),
+    };
+    let list = |v: Value, code: &'static str| -> Result<Vec<String>, BadRequest> {
+        let Value::Array(items) = v else {
+            return Err(BadRequest(code));
+        };
+        if items.is_empty() || items.len() > MAX_RESOLVE {
+            return Err(BadRequest(code));
+        }
+        let mut out: Vec<String> = Vec::with_capacity(items.len());
+        for i in items {
+            let s = i.as_str().ok_or(BadRequest(code))?;
+            if out.iter().any(|o| o == s) {
+                return Err(BadRequest(code));
+            }
+            out.push(String::from(s));
+        }
+        Ok(out)
+    };
+    let lookup = match (m.remove("parties"), m.remove("subs")) {
+        (Some(p), None) => {
+            let mut parties = Vec::new();
+            for text in list(p, "parties")? {
+                let id = b64url_decode(&text)
+                    .ok()
+                    .and_then(|b| <[u8; 16]>::try_from(b).ok())
+                    .filter(|id| b64url_encode(id) == text)
+                    .ok_or(BadRequest("parties"))?;
+                parties.push(id);
+            }
+            SubjectQuery::Parties(parties)
+        }
+        (None, Some(s)) => {
+            let subs = list(s, "subs")?;
+            if !subs.iter().all(|s| sub_ok(s)) {
+                return Err(BadRequest("subs"));
+            }
+            SubjectQuery::Subs(subs)
+        }
+        _ => return Err(BadRequest("parties-or-subs")),
+    };
+    if !m.is_empty() {
+        return Err(BadRequest("unknown-member"));
+    }
+    Ok(ResolveRequest {
+        realm,
+        client_id,
+        lookup,
+    })
+}
+
+/// The answer to a resolution (OP-149 A11): the pairs found and the entries that did not
+/// resolve, in the request's direction, with the consistency token.
+#[must_use]
+pub fn resolution_json(req: &ResolveRequest, found: &super::ports::Resolved) -> Value {
+    use super::ports::SubjectQuery;
+    let pairs: Vec<Value> = found
+        .pairs
+        .iter()
+        .map(|(p, s)| json!({ "party": b64url_encode(p), "sub": s }))
+        .collect();
+    let unknown: Vec<Value> = match &req.lookup {
+        SubjectQuery::Parties(list) => list
+            .iter()
+            .filter(|p| !found.pairs.iter().any(|(q, _)| q == *p))
+            .map(|p| Value::from(b64url_encode(p)))
+            .collect(),
+        SubjectQuery::Subs(list) => list
+            .iter()
+            .filter(|s| !found.pairs.iter().any(|(_, t)| t == *s))
+            .map(|s| Value::from(s.as_str()))
+            .collect(),
+    };
+    json!({
+        "realm": uuid(&req.realm),
+        "client_id": req.client_id,
+        "resolved": pairs,
+        "unknown": unknown,
+        "consistency_token": found.consistency,
+    })
+}
+
+/// An allowed Exercise as JSON (OP-149 m.9): where its decision is, what it allowed and the
+/// receipt the decision point issued, when kept.
+#[must_use]
+pub fn exercise_json(
+    domain: &Digest,
+    r: &access_authority_core::adapters::ExerciseRecord,
+) -> Value {
+    let mut m = Map::new();
+    m.insert("exercise".into(), b64url_encode(&r.exercise.0).into());
+    m.insert("domain".into(), domain_text(domain).into());
+    m.insert("status".into(), "allowed".into());
+    m.insert("position".into(), r.position.to_string().into());
+    m.insert("intent".into(), b64url_encode(&r.intent.0).into());
+    if let Some(i) = r.instance {
+        m.insert("instance".into(), b64url_encode(&i.0).into());
+    }
+    if let Some(p) = &r.receipt {
+        let mut receipt = Map::new();
+        receipt.insert("payload".into(), b64url_encode(p).into());
+        if let Some((sign1, excerpt)) = &r.signed_receipt {
+            receipt.insert("cose_sign1".into(), b64url_encode(sign1).into());
+            receipt.insert("key_excerpt".into(), b64url_encode(excerpt).into());
+        }
+        m.insert("receipt".into(), Value::Object(receipt));
+    }
+    Value::Object(m)
+}
+
 /// The snapshot of `tenant` named `id` (OP-149 m.4): its `version` is the digest of the rest,
 /// so it changes exactly when the snapshot does. The retention section is empty until OP-147
 /// policies are stored. A realm is named by its id as events name it in `accessrealm`, its

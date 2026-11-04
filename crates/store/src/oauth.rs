@@ -592,6 +592,29 @@ impl TenantTx {
         Ok(n == 1)
     }
 
+    /// The subject whose pairwise value for `sector` is `value` (OP-149 A11).
+    ///
+    /// # Errors
+    /// [`StoreError`].
+    pub async fn pairwise_subject(
+        &mut self,
+        sector: [u8; 16],
+        value: &str,
+    ) -> Result<Option<[u8; 16]>, StoreError> {
+        let (tenant, realm) = self.oauth_scope()?;
+        let row = sqlx::query_scalar!(
+            "SELECT subject_id FROM access.pairwise_subjects
+              WHERE tenant_id = $1 AND realm_id = $2 AND sector = $3 AND value = $4",
+            tenant,
+            realm,
+            uuid(sector),
+            value,
+        )
+        .fetch_optional(&mut *self.tx)
+        .await?;
+        Ok(row.map(|s| *s.as_bytes()))
+    }
+
     /// The subject's pairwise value for `sector`: the stored one, else `candidate`, stored now
     /// (MD-10: random, never derived).
     ///
