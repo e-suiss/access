@@ -274,3 +274,56 @@ pub async fn resolve_host(
         )
     }))
 }
+
+/// A tenant as its snapshot shows it (OP-149 m.4).
+#[derive(Clone)]
+pub struct TenantRow {
+    /// The tenant.
+    pub tenant: TenantId,
+    /// `provisioning`, `active`, `suspended` or `deleted`.
+    pub status: String,
+}
+
+/// The tenant `tenant`, read by the router role (OP-149 m.4).
+///
+/// # Errors
+/// [`StoreError`].
+pub async fn tenant(router: &PgPool, tenant: TenantId) -> Result<Option<TenantRow>, StoreError> {
+    let row = sqlx::query!(
+        "SELECT tenant_id, status FROM access.tenants WHERE tenant_id = $1",
+        Uuid::from_bytes(*tenant.as_bytes()),
+    )
+    .fetch_optional(router)
+    .await?;
+    Ok(row.map(|r| TenantRow {
+        tenant: TenantId::from_bytes(*r.tenant_id.as_bytes()),
+        status: r.status,
+    }))
+}
+
+/// At most `limit` tenants in id order after `after`, read by the router role (OP-149 m.4).
+///
+/// # Errors
+/// [`StoreError`].
+pub async fn tenants_after(
+    router: &PgPool,
+    after: Option<TenantId>,
+    limit: u32,
+) -> Result<Vec<TenantRow>, StoreError> {
+    let after = Uuid::from_bytes(after.map_or([0; 16], |t| *t.as_bytes()));
+    let rows = sqlx::query!(
+        "SELECT tenant_id, status FROM access.tenants WHERE tenant_id > $1
+          ORDER BY tenant_id LIMIT $2",
+        after,
+        i64::from(limit),
+    )
+    .fetch_all(router)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(|r| TenantRow {
+            tenant: TenantId::from_bytes(*r.tenant_id.as_bytes()),
+            status: r.status,
+        })
+        .collect())
+}

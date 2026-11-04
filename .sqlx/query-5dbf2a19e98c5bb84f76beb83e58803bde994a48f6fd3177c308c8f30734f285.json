@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access_derived.key_index\n                       (domain_id, kid, instance_id, party_id, public_key, since_pos, since_at,\n                        ended_pos, ended_at, successor_id, pos)\n                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)\n                     ON CONFLICT (domain_id, kid) DO UPDATE\n                       SET instance_id = EXCLUDED.instance_id, party_id = EXCLUDED.party_id,\n                           public_key = EXCLUDED.public_key,\n                           since_at = CASE WHEN access_derived.key_index.since_pos = EXCLUDED.since_pos\n                                           THEN access_derived.key_index.since_at\n                                           ELSE EXCLUDED.since_at END,\n                           since_pos = EXCLUDED.since_pos,\n                           ended_at = CASE WHEN access_derived.key_index.ended_pos = EXCLUDED.ended_pos\n                                           THEN access_derived.key_index.ended_at\n                                           ELSE EXCLUDED.ended_at END,\n                           ended_pos = EXCLUDED.ended_pos,\n                           successor_id = EXCLUDED.successor_id, pos = EXCLUDED.pos",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Bytea",
+        "Bytea",
+        "Bytea",
+        "Bytea",
+        "Int8",
+        "Int8",
+        "Int8",
+        "Int8",
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "5dbf2a19e98c5bb84f76beb83e58803bde994a48f6fd3177c308c8f30734f285"
+}

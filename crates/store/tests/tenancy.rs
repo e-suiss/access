@@ -13,6 +13,7 @@ use access_store::scope::DomainId;
 use access_store::tenancy::{
     HostKind, add_hostname, create_realm, create_tenant, delete_realm, realm_tenant,
     remove_hostname, resolve_host, route_by_host, route_by_slug, routes, set_issuer,
+    tenant as tenant_of, tenants_after,
 };
 use access_store::testing::{TestDb, fresh};
 use sqlx::Row;
@@ -290,4 +291,35 @@ async fn the_router_routes_live_realms_with_an_issuer() {
             .is_none()
     );
     assert!(route_by_slug(&db.router, "acme-j").await.unwrap().is_none());
+}
+
+// OP-149 m.4: the router reads every tenant's status in id order, and nothing else of it
+#[tokio::test]
+async fn the_router_pages_through_tenants() {
+    let db = fresh().await.unwrap();
+    let a = create_tenant(&db.app, "pool-default").await.unwrap();
+    let b = create_tenant(&db.app, "pool-default").await.unwrap();
+    let first = tenants_after(&db.router, None, 1).await.unwrap();
+    assert_eq!(first.len(), 1);
+    assert_eq!(first[0].tenant.as_bytes(), a.as_bytes());
+    assert_eq!(first[0].status, "active");
+    let next = tenants_after(&db.router, Some(first[0].tenant), 10)
+        .await
+        .unwrap();
+    assert_eq!(next.len(), 1);
+    assert_eq!(next[0].tenant.as_bytes(), b.as_bytes());
+    let one = tenant_of(&db.router, b).await.unwrap().unwrap();
+    assert_eq!(one.status, "active");
+    assert!(
+        tenant_of(&db.router, TenantId::from_bytes([9; 16]))
+            .await
+            .unwrap()
+            .is_none()
+    );
+    assert!(
+        sqlx::query("SELECT placement_id FROM access.tenants")
+            .fetch_all(&db.router)
+            .await
+            .is_err()
+    );
 }

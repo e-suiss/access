@@ -1,5 +1,6 @@
-//! The derived index (CMP-9, OP-141 m.22 (g), (k)): Grants by holder and namespace, written by
-//! the deriver from the domain log and read by the query side. Never a commit input (INV-33).
+//! The derived index (CMP-9, OP-141 m.22 (g), (k)): Grants by holder and namespace, and Instance
+//! keys by thumbprint (OP-149 m.5), written by the deriver from the domain log and read by the
+//! query side. Never a commit input (INV-33).
 
 use sqlx::PgPool;
 
@@ -63,6 +64,61 @@ pub async fn advance(
     to: u64,
     rows: &[GrantRow],
 ) -> Result<(), StoreError> {
+    advance_with(deriver, domain, from, to, rows, &[]).await
+}
+
+/// One Instance key as the key index keeps it (OP-149 m.5).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct KeyRow {
+    /// RFC 7638 thumbprint.
+    pub kid: [u8; 32],
+    /// The Instance holding it.
+    pub instance: [u8; 16],
+    /// The Instance's Party.
+    pub party: [u8; 16],
+    /// Canonical CBOR of the public key.
+    pub public_key: Vec<u8>,
+    /// Position from which the Instance holds the key.
+    pub since_pos: u64,
+    /// Trusted time of `since_pos`.
+    pub since_at: u64,
+    /// Position and trusted time at which it stopped holding it.
+    pub ended: Option<(u64, u64)>,
+    /// The recovery successor of the Instance.
+    pub successor: Option<[u8; 16]>,
+    /// Position of the record that last changed the row.
+    pub pos: u64,
+}
+
+/// A change the deriver applies to the key index, in log order.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum KeyChange {
+    /// The key's row as its Instance now stands; a row with the same `since_pos` or
+    /// `ended_pos` keeps its `since_at` or `ended_at`.
+    Put(KeyRow),
+    /// The Instance stopped holding `kid` at `pos`, recorded at `at`; an end already set stays.
+    End {
+        /// Thumbprint.
+        kid: [u8; 32],
+        /// Position.
+        pos: u64,
+        /// Trusted time.
+        at: u64,
+    },
+}
+
+/// Like [`advance`], also applying `keys` to the key index in order (OP-149 m.5).
+///
+/// # Errors
+/// [`StoreError::Stale`]; [`StoreError::Db`].
+pub async fn advance_with(
+    deriver: &PgPool,
+    domain: &DomainId,
+    from: u64,
+    to: u64,
+    rows: &[GrantRow],
+    keys: &[KeyChange],
+) -> Result<(), StoreError> {
     let mut t = DomainTx::begin(deriver, domain).await?;
     let id = domain.as_bytes().as_slice();
     let moved = if from == 0 {
@@ -107,7 +163,115 @@ pub async fn advance(
         .execute(&mut *t.tx)
         .await?;
     }
+    apply_keys(&mut t, keys).await?;
     t.commit().await
+}
+
+async fn apply_keys(t: &mut DomainTx, keys: &[KeyChange]) -> Result<(), StoreError> {
+    let domain = t.domain;
+    let id = domain.as_bytes().as_slice();
+    for change in keys {
+        match change {
+            KeyChange::Put(k) => {
+                let (ended_pos, ended_at) = match k.ended {
+                    Some((p, a)) => (Some(signed(p)?), Some(signed(a)?)),
+                    None => (None, None),
+                };
+                sqlx::query!(
+                    "INSERT INTO access_derived.key_index
+                       (domain_id, kid, instance_id, party_id, public_key, since_pos, since_at,
+                        ended_pos, ended_at, successor_id, pos)
+                     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                     ON CONFLICT (domain_id, kid) DO UPDATE
+                       SET instance_id = EXCLUDED.instance_id, party_id = EXCLUDED.party_id,
+                           public_key = EXCLUDED.public_key,
+                           since_at = CASE WHEN access_derived.key_index.since_pos = EXCLUDED.since_pos
+                                           THEN access_derived.key_index.since_at
+                                           ELSE EXCLUDED.since_at END,
+                           since_pos = EXCLUDED.since_pos,
+                           ended_at = CASE WHEN access_derived.key_index.ended_pos = EXCLUDED.ended_pos
+                                           THEN access_derived.key_index.ended_at
+                                           ELSE EXCLUDED.ended_at END,
+                           ended_pos = EXCLUDED.ended_pos,
+                           successor_id = EXCLUDED.successor_id, pos = EXCLUDED.pos",
+                    id,
+                    k.kid.as_slice(),
+                    k.instance.as_slice(),
+                    k.party.as_slice(),
+                    k.public_key.as_slice(),
+                    signed(k.since_pos)?,
+                    signed(k.since_at)?,
+                    ended_pos,
+                    ended_at,
+                    k.successor.as_ref().map(<[u8; 16]>::as_slice),
+                    signed(k.pos)?,
+                )
+                .execute(&mut *t.tx)
+                .await?;
+            }
+            KeyChange::End { kid, pos, at } => {
+                sqlx::query!(
+                    "UPDATE access_derived.key_index
+                        SET ended_pos = $3, ended_at = $4, pos = $3
+                      WHERE domain_id = $1 AND kid = $2 AND ended_pos IS NULL",
+                    id,
+                    kid.as_slice(),
+                    signed(*pos)?,
+                    signed(*at)?,
+                )
+                .execute(&mut *t.tx)
+                .await?;
+            }
+        }
+    }
+    Ok(())
+}
+
+fn id32(v: &[u8]) -> Result<[u8; 32], StoreError> {
+    <[u8; 32]>::try_from(v).map_err(|_| StoreError::Corrupt)
+}
+
+/// The key index rows of `kids` that exist, in no particular order (OP-149 m.5).
+///
+/// # Errors
+/// [`StoreError::Db`]; [`StoreError::Corrupt`].
+pub async fn keys_of(
+    pool: &PgPool,
+    domain: &DomainId,
+    kids: &[[u8; 32]],
+) -> Result<Vec<KeyRow>, StoreError> {
+    let wanted: Vec<Vec<u8>> = kids.iter().map(|k| k.to_vec()).collect();
+    let mut t = DomainTx::begin(pool, domain).await?;
+    let rows = sqlx::query!(
+        "SELECT kid, instance_id, party_id, public_key, since_pos, since_at, ended_pos, ended_at,
+                successor_id, pos
+           FROM access_derived.key_index
+          WHERE domain_id = $1 AND kid = ANY($2)",
+        domain.as_bytes().as_slice(),
+        &wanted,
+    )
+    .fetch_all(&mut *t.tx)
+    .await?;
+    t.commit().await?;
+    rows.into_iter()
+        .map(|r| {
+            Ok(KeyRow {
+                kid: id32(&r.kid)?,
+                instance: id16(&r.instance_id)?,
+                party: id16(&r.party_id)?,
+                public_key: r.public_key,
+                since_pos: unsigned(r.since_pos)?,
+                since_at: unsigned(r.since_at)?,
+                ended: match (r.ended_pos, r.ended_at) {
+                    (Some(p), Some(a)) => Some((unsigned(p)?, unsigned(a)?)),
+                    (None, None) => None,
+                    _ => return Err(StoreError::Corrupt),
+                },
+                successor: r.successor_id.as_deref().map(id16).transpose()?,
+                pos: unsigned(r.pos)?,
+            })
+        })
+        .collect()
 }
 
 /// The live Grants whose resource is in `namespace`, at most `limit`, in id order after

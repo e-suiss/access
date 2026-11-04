@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access_derived.key_index\n                        SET ended_pos = $3, ended_at = $4, pos = $3\n                      WHERE domain_id = $1 AND kid = $2 AND ended_pos IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Bytea",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "093e0aab19d7e9e5bf9792393520365b5c173c0c3ec1e9fab50451cd4f4b9291"
+}

@@ -779,6 +779,28 @@ pub async fn read_log(
         .collect()
 }
 
+/// The last position recorded at or before trusted time `at`, if any (OP-149 m.5 `as_of`).
+///
+/// # Errors
+/// [`StoreError`].
+pub async fn position_at(
+    pool: &PgPool,
+    domain: &DomainId,
+    at: u64,
+) -> Result<Option<u64>, StoreError> {
+    let mut t = DomainTx::begin(pool, domain).await?;
+    let pos = sqlx::query_scalar!(
+        "SELECT pos FROM access.authority_log
+          WHERE domain_id = $1 AND recorded_at <= $2 ORDER BY pos DESC LIMIT 1",
+        domain.as_bytes().as_slice(),
+        i64::try_from(at).unwrap_or(i64::MAX),
+    )
+    .fetch_optional(&mut *t.tx)
+    .await?;
+    t.commit().await?;
+    pos.map(unsigned).transpose()
+}
+
 /// The position of the first decision recorded for a nonce (OP-141 m.34 (c)).
 ///
 /// # Errors

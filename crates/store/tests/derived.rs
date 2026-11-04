@@ -8,7 +8,9 @@
 
 use access_store::StoreError;
 use access_store::authority::{LogRecord, create_domain};
-use access_store::derived::{GrantRow, advance, cursor, grants_for, grants_in};
+use access_store::derived::{
+    GrantRow, KeyChange, KeyRow, advance, advance_with, cursor, grants_for, grants_in, keys_of,
+};
 use access_store::scope::DomainId;
 use access_store::testing::fresh;
 
@@ -79,5 +81,91 @@ async fn the_index_follows_its_cursor() {
     assert_eq!(
         grants_for(&db.app, &d, &[9; 16], None, 10).await.unwrap(),
         [[2; 16]]
+    );
+}
+
+fn key(kid: u8, since: u64, ended: Option<u64>) -> KeyRow {
+    KeyRow {
+        kid: [kid; 32],
+        instance: [2; 16],
+        party: [3; 16],
+        public_key: vec![0xa0],
+        since_pos: since,
+        since_at: since.saturating_mul(1_000),
+        ended: ended.map(|p| (p, p.saturating_mul(1_000))),
+        successor: None,
+        pos: ended.unwrap_or(since),
+    }
+}
+
+// OP-149 m.5, INV-33: the key index keeps a key's first time across later puts and ends it once
+#[tokio::test]
+async fn the_key_index_keeps_each_keys_history() {
+    let db = fresh().await.unwrap();
+    let d = DomainId::from_bytes([4; 32]);
+    let genesis = LogRecord {
+        pos: 0,
+        kind: "genesis",
+        recorded_at: 1_000,
+        leaf_hash: [2; 32],
+        envelope: vec![0xa0],
+    };
+    create_domain(&db.sequencer, &d, TENANT, &genesis, &[])
+        .await
+        .unwrap();
+    advance_with(
+        &db.deriver,
+        &d,
+        0,
+        3,
+        &[],
+        &[
+            KeyChange::Put(key(1, 2, None)),
+            KeyChange::Put(key(2, 3, None)),
+        ],
+    )
+    .await
+    .unwrap();
+    let mut later = key(1, 2, Some(6));
+    later.since_at = 99;
+    advance_with(
+        &db.deriver,
+        &d,
+        3,
+        6,
+        &[],
+        &[
+            KeyChange::Put(later),
+            KeyChange::End {
+                kid: [2; 32],
+                pos: 5,
+                at: 5_000,
+            },
+            KeyChange::End {
+                kid: [2; 32],
+                pos: 6,
+                at: 6_000,
+            },
+        ],
+    )
+    .await
+    .unwrap();
+    let mut rows = keys_of(&db.app, &d, &[[1; 32], [2; 32], [3; 32]])
+        .await
+        .unwrap();
+    rows.sort_by_key(|r| r.kid);
+    assert_eq!(
+        rows,
+        [key(1, 2, Some(6)), {
+            let mut k = key(2, 3, Some(5));
+            k.pos = 5;
+            k
+        }]
+    );
+    assert_eq!(
+        keys_of(&db.app, &DomainId::from_bytes([5; 32]), &[[1; 32]])
+            .await
+            .unwrap(),
+        Vec::new()
     );
 }
