@@ -249,6 +249,38 @@ pub async fn routes(router: &PgPool) -> Result<Vec<RealmRoute>, StoreError> {
         .collect())
 }
 
+/// The live realms with an issuer of `tenants`, by tenant and slug, read by the router role
+/// (OP-149 m.4: the realms of a tenant snapshot).
+///
+/// # Errors
+/// [`StoreError`].
+pub async fn tenant_routes(
+    router: &PgPool,
+    tenants: &[TenantId],
+) -> Result<Vec<RealmRoute>, StoreError> {
+    let ids: Vec<Uuid> = tenants
+        .iter()
+        .map(|t| Uuid::from_bytes(*t.as_bytes()))
+        .collect();
+    let rows = sqlx::query!(
+        r#"SELECT tenant_id, realm_id, slug, issuer AS "issuer!" FROM access.realms
+            WHERE tenant_id = ANY($1) AND status = 'active' AND issuer IS NOT NULL
+            ORDER BY tenant_id, slug"#,
+        &ids,
+    )
+    .fetch_all(router)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(|r| RealmRoute {
+            tenant: TenantId::from_bytes(*r.tenant_id.as_bytes()),
+            realm: RealmId::from_bytes(*r.realm_id.as_bytes()),
+            slug: r.slug,
+            issuer: r.issuer,
+        })
+        .collect())
+}
+
 /// The tenant of the live realm `realm`, read by the router role (OP-132 m.3): the identity
 /// plane loads a realm's keys after the router has resolved it.
 ///

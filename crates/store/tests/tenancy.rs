@@ -13,7 +13,7 @@ use access_store::scope::DomainId;
 use access_store::tenancy::{
     HostKind, add_hostname, create_realm, create_tenant, delete_realm, realm_tenant,
     remove_hostname, resolve_host, route_by_host, route_by_slug, routes, set_issuer,
-    tenant as tenant_of, tenants_after,
+    tenant as tenant_of, tenant_routes, tenants_after,
 };
 use access_store::testing::{TestDb, fresh};
 use sqlx::Row;
@@ -278,6 +278,16 @@ async fn the_router_routes_live_realms_with_an_issuer() {
         .map(|r| r.slug)
         .collect();
     assert_eq!(all, ["acme-j", "acme-k"]);
+    // OP-149 m.4: a tenant snapshot's realms
+    let of_k: Vec<String> = tenant_routes(&db.router, &[t2])
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|r| r.issuer)
+        .collect();
+    assert_eq!(of_k, ["https://id.test/realms/acme-k"]);
+    assert_eq!(tenant_routes(&db.router, &[t, t2]).await.unwrap().len(), 2);
+    assert!(tenant_routes(&db.router, &[]).await.unwrap().is_empty());
     let owner = realm_tenant(&db.router, r2).await.unwrap().unwrap();
     assert_eq!(owner.as_bytes(), t2.as_bytes());
     let mut tx = TenantTx::begin_tenant(&db.app, t).await.unwrap();

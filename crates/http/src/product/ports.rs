@@ -41,6 +41,19 @@ pub struct Tenant {
     pub status: String,
     /// Its organizations' external ids.
     pub organizations: Vec<String>,
+    /// Its live realms, by slug.
+    pub realms: Vec<Realm>,
+}
+
+/// A live realm of a tenant as its snapshot shows it (OP-149 m.4).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Realm {
+    /// The realm's id, as events name it in `accessrealm`.
+    pub id: [u8; 16],
+    /// Its fixed issuer.
+    pub issuer: String,
+    /// Its immutable slug.
+    pub slug: String,
 }
 
 /// The tenant directory could not be read.

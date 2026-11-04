@@ -52,14 +52,30 @@ fn the_snapshot_version_follows_its_content() {
         id: [1; 16],
         status: "active".into(),
         organizations: Vec::new(),
+        realms: Vec::new(),
     };
     let a = snapshot("tnt_a", &t, "eu-central");
     assert_eq!(a, snapshot("tnt_a", &t, "eu-central"));
     let suspended = Tenant {
         status: "suspended".into(),
-        ..t
+        ..t.clone()
     };
     let b = snapshot("tnt_a", &suspended, "eu-central");
     assert_ne!(a["version"], b["version"]);
     assert_eq!(a["retention"], json!({}));
+    // OP-149 m.4: a new realm is a new snapshot
+    let grown = Tenant {
+        realms: vec![super::super::ports::Realm {
+            id: [2; 16],
+            issuer: "https://shop.id.example".into(),
+            slug: "shop".into(),
+        }],
+        ..t
+    };
+    let c = snapshot("tnt_a", &grown, "eu-central");
+    assert_ne!(a["version"], c["version"]);
+    assert_eq!(
+        c["realms"],
+        json!([{ "id": "02020202-0202-0202-0202-020202020202", "issuer": "https://shop.id.example", "slug": "shop" }])
+    );
 }

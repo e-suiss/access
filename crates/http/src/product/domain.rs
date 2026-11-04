@@ -3,6 +3,7 @@
 
 use access_authority_core::adapters::KeyAnswer;
 use access_authority_core::keys::{self, AsOf, KeyEntry, KeyState, Point};
+use access_identity_events::domain::catalog::uuid;
 use access_kernel::digest::Digest;
 use access_kernel::json::{b64url_decode, b64url_encode};
 use serde_json::{Map, Value, json};
@@ -171,12 +172,19 @@ pub fn cache_control(a: &KeyAnswer) -> &'static str {
 
 /// The snapshot of `tenant` named `id` (OP-149 m.4): its `version` is the digest of the rest,
 /// so it changes exactly when the snapshot does. The retention section is empty until OP-147
-/// policies are stored.
+/// policies are stored. A realm is named by its id as events name it in `accessrealm`, its
+/// issuer and its slug.
 #[must_use]
 pub fn snapshot(id: &str, tenant: &Tenant, region: &str) -> Value {
+    let realms: Vec<Value> = tenant
+        .realms
+        .iter()
+        .map(|r| json!({ "id": uuid(&r.id), "issuer": r.issuer, "slug": r.slug }))
+        .collect();
     let mut body = json!({
         "tenant": id,
         "organizations": tenant.organizations,
+        "realms": realms,
         "region": region,
         "status": tenant.status,
         "retention": {},

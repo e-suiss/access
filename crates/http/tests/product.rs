@@ -22,7 +22,7 @@ use access_http::adp::app::Service as AdpService;
 use access_http::adp::ports::Pdp;
 use access_http::product::adapters::router;
 use access_http::product::app::Service;
-use access_http::product::ports::{KeyDirectory, Tenant, Tenants, Unavailable};
+use access_http::product::ports::{KeyDirectory, Realm, Tenant, Tenants, Unavailable};
 use access_http::product::schema::openapi;
 use access_http::{Limits, harden};
 use access_identity_oauth::domain::issuer::Issuer;
@@ -126,6 +126,11 @@ fn tenant(n: u8, status: &str) -> Tenant {
         id: [n; 16],
         status: status.to_owned(),
         organizations: Vec::new(),
+        realms: vec![Realm {
+            id: [n.saturating_add(0xa0); 16],
+            issuer: format!("https://shop{n}.id.example"),
+            slug: format!("shop{n}"),
+        }],
     }
 }
 
@@ -364,6 +369,10 @@ async fn tenants_are_listed_by_cursor() {
     assert_eq!(v["tenant"], "tnt_02");
     assert_eq!(v["status"], "suspended");
     assert_eq!(v["region"], "eu-central");
+    // OP-149 m.4
+    assert_eq!(v["realms"][0]["slug"], "shop2");
+    assert_eq!(v["realms"][0]["issuer"], "https://shop2.id.example");
+    assert_eq!(v["realms"][0]["id"], "a2a2a2a2-a2a2-a2a2-a2a2-a2a2a2a2a2a2");
     let (status, _, body) = call(app(true), get("/access/v1/tenants/tnt_09/snapshot")).await;
     assert_eq!(status, StatusCode::NOT_FOUND);
     assert_eq!(
@@ -690,6 +699,16 @@ fn errors(doc: &Value, schema: &Value, value: &Value, at: &str) -> Vec<String> {
             }
             "^sha-256:[A-Za-z0-9_-]{43}$" => {
                 s.strip_prefix("sha-256:").is_some_and(|r| r.len() == 43)
+            }
+            "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" => {
+                s.len() == 36
+                    && s.bytes().enumerate().all(|(i, b)| {
+                        if matches!(i, 8 | 13 | 18 | 23) {
+                            b == b'-'
+                        } else {
+                            b.is_ascii_digit() || (b'a'..=b'f').contains(&b)
+                        }
+                    })
             }
             other => panic!("pattern {other} not checked"),
         };

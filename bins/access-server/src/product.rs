@@ -6,11 +6,11 @@ use std::sync::Arc;
 
 use access_http::product::adapters::router as product_router;
 use access_http::product::app::Service;
-use access_http::product::ports::{KeyDirectory, Tenant, Tenants, Unavailable};
+use access_http::product::ports::{KeyDirectory, Realm, Tenant, Tenants, Unavailable};
 use access_identity_events::domain::catalog::TENANT_PREFIX;
 use access_store::Pool;
 use access_store::identity::TenantId;
-use access_store::tenancy::{TenantRow, tenant, tenants_after};
+use access_store::tenancy::{RealmRoute, TenantRow, tenant, tenant_routes, tenants_after};
 
 use crate::config::Config;
 use crate::ids::CellIds;
@@ -48,27 +48,46 @@ impl PgTenants {
     }
 }
 
-fn of(row: &TenantRow) -> Tenant {
-    Tenant {
-        id: *row.tenant.as_bytes(),
-        status: row.status.clone(),
-        organizations: Vec::new(),
-    }
+/// The tenants of `rows` with their live realms (OP-149 m.4).
+async fn with_realms(router: &Pool, rows: &[TenantRow]) -> Result<Vec<Tenant>, Unavailable> {
+    let ids: Vec<TenantId> = rows.iter().map(|r| r.tenant).collect();
+    let found = tenant_routes(router, &ids).await.map_err(|_| Unavailable)?;
+    let realm = |r: &RealmRoute| Realm {
+        id: *r.realm.as_bytes(),
+        issuer: r.issuer.clone(),
+        slug: r.slug.clone(),
+    };
+    Ok(rows
+        .iter()
+        .map(|row| Tenant {
+            id: *row.tenant.as_bytes(),
+            status: row.status.clone(),
+            organizations: Vec::new(),
+            realms: found
+                .iter()
+                .filter(|r| r.tenant == row.tenant)
+                .map(realm)
+                .collect(),
+        })
+        .collect())
 }
 
 impl Tenants for PgTenants {
     async fn tenant(&self, id: [u8; 16]) -> Result<Option<Tenant>, Unavailable> {
-        tenant(&self.router, TenantId::from_bytes(id))
+        let row = tenant(&self.router, TenantId::from_bytes(id))
             .await
-            .map(|r| r.as_ref().map(of))
-            .map_err(|_| Unavailable)
+            .map_err(|_| Unavailable)?;
+        let Some(row) = row else {
+            return Ok(None);
+        };
+        Ok(with_realms(&self.router, &[row]).await?.pop())
     }
 
     async fn after(&self, after: Option<[u8; 16]>, limit: u32) -> Result<Vec<Tenant>, Unavailable> {
-        tenants_after(&self.router, after.map(TenantId::from_bytes), limit)
+        let rows = tenants_after(&self.router, after.map(TenantId::from_bytes), limit)
             .await
-            .map(|rows| rows.iter().map(of).collect())
-            .map_err(|_| Unavailable)
+            .map_err(|_| Unavailable)?;
+        with_realms(&self.router, &rows).await
     }
 
     fn external(&self, id: [u8; 16]) -> Option<String> {

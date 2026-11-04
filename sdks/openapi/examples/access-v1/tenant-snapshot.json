@@ -1,8 +1,15 @@
 {
   "tenant": "tnt_01",
   "organizations": [],
+  "realms": [
+    {
+      "id": "a1a1a1a1-a1a1-a1a1-a1a1-a1a1a1a1a1a1",
+      "issuer": "https://shop1.id.example",
+      "slug": "shop1"
+    }
+  ],
   "region": "eu-central",
   "status": "active",
   "retention": {},
-  "version": "v1.YEIXvItug6VrNILgbcoGuLgSvw8KgBON4WSWRkR3jK8"
+  "version": "v1.TW_NkF3wQL5e0gu68aNpun7QDV3pW6TFX1xYzGXG3xc"
 }

@@ -738,6 +738,7 @@
         "required": [
           "tenant",
           "organizations",
+          "realms",
           "region",
           "status",
           "version",
@@ -746,13 +747,20 @@
         "properties": {
           "tenant": {
             "type": "string",
-            "description": "Opaque tenant id (`tnt_…`)."
+            "description": "Opaque tenant id (`tnt_…`), the same id events carry in `accesstenant`, `access_tenant` and `tenant` (OP-149 m.15 (i))."
           },
           "organizations": {
             "type": "array",
             "items": {
               "type": "string"
             }
+          },
+          "realms": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TenantRealm"
+            },
+            "description": "The tenant's live realms, by slug."
           },
           "region": {
             "type": "string",
@@ -774,6 +782,30 @@
           "retention": {
             "type": "object",
             "description": "Retention policies (OP-147); empty until they are stored."
+          }
+        }
+      },
+      "TenantRealm": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "issuer",
+          "slug"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "description": "The realm, as events name it in `accessrealm` and `realm`."
+          },
+          "issuer": {
+            "type": "string",
+            "description": "The realm's fixed issuer; its `/.well-known/suiss-configuration` describes it."
+          },
+          "slug": {
+            "type": "string",
+            "description": "The realm's immutable slug."
           }
         }
       },

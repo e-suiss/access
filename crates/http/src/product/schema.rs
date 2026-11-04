@@ -130,14 +130,23 @@ fn other_components() -> Value {
         ),
         "TenantSnapshot": object(
             &json!({
-                "tenant": text("Opaque tenant id (`tnt_…`)."),
+                "tenant": text("Opaque tenant id (`tnt_…`), the same id events carry in `accesstenant`, `access_tenant` and `tenant` (OP-149 m.15 (i))."),
                 "organizations": { "type": "array", "items": { "type": "string" } },
+                "realms": { "type": "array", "items": r("TenantRealm"), "description": "The tenant's live realms, by slug." },
                 "region": text("The deployment's region."),
                 "status": { "type": "string", "enum": ["provisioning", "active", "suspended", "deleted"] },
                 "version": text("Changes exactly when the snapshot does."),
                 "retention": { "type": "object", "description": "Retention policies (OP-147); empty until they are stored." },
             }),
-            &["tenant", "organizations", "region", "status", "version", "retention"],
+            &["tenant", "organizations", "realms", "region", "status", "version", "retention"],
+        ),
+        "TenantRealm": object(
+            &json!({
+                "id": { "type": "string", "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", "description": "The realm, as events name it in `accessrealm` and `realm`." },
+                "issuer": text("The realm's fixed issuer; its `/.well-known/suiss-configuration` describes it."),
+                "slug": text("The realm's immutable slug."),
+            }),
+            &["id", "issuer", "slug"],
         ),
         "TenantPage": object(
             &json!({
