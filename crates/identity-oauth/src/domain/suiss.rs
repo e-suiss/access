@@ -35,6 +35,12 @@ pub enum Endpoint {
     AuthContext,
     /// `POST /v1/me/instances` on the realm (OP-149 m.6).
     Instances,
+    /// `POST /access/v1/tenants/{tenant}/pairing/challenges` (OP-149 m.4, m.16 (a)).
+    PairingChallenges,
+    /// `POST /access/v1/tenants/{tenant}/pairing` (OP-149 m.4, m.16 (a)).
+    Pairing,
+    /// `/access/v1/platform/streams`: a platform client's event streams (OP-149 m.17 (g)).
+    PlatformStreams,
 }
 
 impl Endpoint {
@@ -49,6 +55,9 @@ impl Endpoint {
             Self::TenantSnapshot => "tenant_snapshot",
             Self::AuthContext => "auth_context",
             Self::Instances => "instances",
+            Self::PairingChallenges => "pairing_challenges",
+            Self::Pairing => "pairing",
+            Self::PlatformStreams => "platform_streams",
         }
     }
 
@@ -63,6 +72,9 @@ impl Endpoint {
             Self::TenantSnapshot => "/access/v1/tenants/{tenant}/snapshot",
             Self::AuthContext => "/v1/me/auth-context",
             Self::Instances => "/v1/me/instances",
+            Self::PairingChallenges => "/access/v1/tenants/{tenant}/pairing/challenges",
+            Self::Pairing => "/access/v1/tenants/{tenant}/pairing",
+            Self::PlatformStreams => "/access/v1/platform/streams",
         }
     }
 
@@ -82,6 +94,9 @@ pub const SERVED: &[Endpoint] = &[
     Endpoint::TenantSnapshot,
     Endpoint::AuthContext,
     Endpoint::Instances,
+    Endpoint::PairingChallenges,
+    Endpoint::Pairing,
+    Endpoint::PlatformStreams,
 ];
 
 /// Well-known suffix of the realm's SSF transmitter metadata (SSF 1.0 §7.1).

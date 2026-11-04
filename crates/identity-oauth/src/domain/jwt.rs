@@ -237,6 +237,22 @@ pub fn assertion_subject(token: &str) -> Result<String, JwtError> {
         .ok_or(JwtError::Claims)
 }
 
+/// The single audience a client assertion names, read before its keys are fetched: a caller
+/// outside a realm's own endpoints finds the realm by it (OP-149 m.4). The signature and the
+/// audience are checked later by [`verify_assertion`].
+///
+/// # Errors
+/// [`JwtError`].
+pub fn assertion_audience(token: &str) -> Result<String, JwtError> {
+    let parts = split(token)?;
+    match parts.payload.get("aud") {
+        Some(Json::Str(a)) => Some(a.clone()),
+        Some(Json::Array(a)) if a.len() == 1 => a.first().and_then(Json::as_str).map(String::from),
+        _ => None,
+    }
+    .ok_or(JwtError::Claims)
+}
+
 /// The audiences a client assertion may name: the issuer or the token endpoint (§10.4.5).
 #[derive(Clone, Copy, Debug)]
 pub struct AssertionRules<'a> {

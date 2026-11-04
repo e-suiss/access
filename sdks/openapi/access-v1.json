@@ -474,6 +474,405 @@
           }
         }
       }
+    },
+    "/access/v1/tenants/{tenant}/pairing/challenges": {
+      "post": {
+        "operationId": "createPairingChallenges",
+        "summary": "For each realm, the Instance an earlier pairing with the current service key opened, or a challenge and what the product's own party_register and instance_create name (OP-149 m.4, m.16 (a)). A challenge still valid is handed out again.",
+        "security": [
+          {
+            "platform_client": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "tenant",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PairingChallengeRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "400": {
+            "description": "invalid-request, realms or unknown-member.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid client assertion of an active platform client.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "tenant-unknown or realm-unknown.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporarily unavailable; retry.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "The targets.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PairingChallenges"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/access/v1/tenants/{tenant}/pairing": {
+      "post": {
+        "operationId": "pair",
+        "summary": "The product's self-signed Exercises for the challenged realms (L0-META-7): Access binds the service key to the product's Party, forwards them to each governing domain and records the Instance. A target the authority plane refuses is reported, not retried. Once a target is paired, the client's SSF push stream to its suiss_event_receiver is opened, once (OP-149 m.17 (e)).",
+        "security": [
+          {
+            "platform_client": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "tenant",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PairingRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "400": {
+            "description": "invalid-challenge, invalid-party, invalid-request, targets or unknown-member.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid client assertion of an active platform client.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "tenant-unknown or realm-unknown.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporarily unavailable; retry.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Each target paired or refused.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PairingResult"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/access/v1/platform/streams": {
+      "post": {
+        "operationId": "createPlatformStream",
+        "summary": "A stream the platform client owns: it receives every tenant's events, each SET naming its tenant in access_tenant (OP-149 m.17 (e), (g)). The body is an SSF stream request (`sdks/openapi/events/stream-request.schema.json`).",
+        "security": [
+          {
+            "platform_client": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "responses": {
+          "400": {
+            "description": "The stream request is not valid.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid client assertion of an active platform client.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "stream-exists: a live stream to that endpoint.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporarily unavailable; retry.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "The stream.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformStream"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "operationId": "listPlatformStreams",
+        "summary": "The platform client's streams, live first.",
+        "security": [
+          {
+            "platform_client": []
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "No valid client assertion of an active platform client.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporarily unavailable; retry.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "The streams.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformStreams"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/access/v1/platform/streams/{id}": {
+      "get": {
+        "operationId": "getPlatformStream",
+        "summary": "One stream the platform client owns.",
+        "security": [
+          {
+            "platform_client": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "No valid client assertion of an active platform client.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "no-such-stream.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporarily unavailable; retry.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "The stream.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformStream"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "closePlatformStream",
+        "summary": "Disables a live stream the platform client owns; nothing is deleted (OP-73).",
+        "security": [
+          {
+            "platform_client": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "No valid client assertion of an active platform client.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "no-such-stream.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporarily unavailable; retry.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "204": {
+            "description": "Disabled."
+          }
+        }
+      }
     }
   },
   "components": {
@@ -909,7 +1308,261 @@
               },
               "instances": {
                 "type": "string"
+              },
+              "pairing_challenges": {
+                "type": "string"
+              },
+              "pairing": {
+                "type": "string"
+              },
+              "platform_streams": {
+                "type": "string"
               }
+            }
+          }
+        }
+      },
+      "PairingChallengeRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [],
+        "properties": {
+          "realms": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+              "description": "A live realm of the tenant, as the tenant snapshot names it."
+            },
+            "minItems": 1,
+            "maxItems": 64,
+            "description": "The realms to pair with; every live realm of the tenant when absent (OP-149 m.16 (d))."
+          }
+        }
+      },
+      "PairingExercise": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "nonce",
+          "intent"
+        ],
+        "properties": {
+          "nonce": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "The instance_create nonce."
+          },
+          "intent": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "Digest of the instance_create intent (L0-ENC-23): `access/instance_create` on `access.party:[hex(party)]`, the payload digest in `opaque[\"payload\"]`, validity `valid_from`..`valid_until`."
+          }
+        }
+      },
+      "PairingRegister": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "nonce",
+          "intent"
+        ],
+        "properties": {
+          "nonce": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "The party_register nonce."
+          },
+          "intent": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "Digest of the party_register intent (L0-ENC-23): `access/party_register` on `access.party:[hex(party)]`, the payload digest in `opaque[\"payload\"]`, validity `valid_from`..`valid_until`."
+          }
+        }
+      },
+      "PairingTarget": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "realm",
+          "status"
+        ],
+        "properties": {
+          "realm": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "description": "The realm."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "unpaired",
+              "paired",
+              "refused"
+            ]
+          },
+          "domain": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "The realm's governing DomainID, 32 bytes."
+          },
+          "basis": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "The Genesis bootstrap Grant the Exercises name as `public` basis (L0-META-7)."
+          },
+          "pep": {
+            "type": "string",
+            "description": "The PEP the AIS addresses: the identity plane."
+          },
+          "party": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "The product's system Party in the domain, 16 bytes; new until its party_register commits."
+          },
+          "instance": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "The service Instance, 16 bytes (paired)."
+          },
+          "kid": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "RFC 7638 thumbprint of the registered service key (CR-24)."
+          },
+          "challenge": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "32 bytes: the instance_create nonce; party_register uses it followed by 0x01 (OP-149 m.17b (e))."
+          },
+          "valid_from": {
+            "type": "string",
+            "description": "RFC 3339: start of the intents' validity."
+          },
+          "valid_until": {
+            "type": "string",
+            "description": "RFC 3339: end of it; the challenge is not accepted later."
+          },
+          "instance_create": {
+            "$ref": "#/components/schemas/PairingExercise"
+          },
+          "party_register": {
+            "$ref": "#/components/schemas/PairingRegister"
+          },
+          "code": {
+            "type": "string",
+            "description": "Why the authority plane refused (refused)."
+          }
+        }
+      },
+      "PairingChallenges": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "tenant",
+          "targets"
+        ],
+        "properties": {
+          "tenant": {
+            "type": "string",
+            "description": "The tenant (`tnt_…`)."
+          },
+          "targets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PairingTarget"
+            }
+          }
+        }
+      },
+      "PairingAnswer": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "realm",
+          "challenge",
+          "ais"
+        ],
+        "properties": {
+          "realm": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "description": "The realm of the challenge."
+          },
+          "challenge": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "The challenge answered."
+          },
+          "ais": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "AIS (tagged COSE_Sign1) by the service key over the instance_create intent: nonce the challenge, mode commit, capacity own, the challenge's domain, basis and pep."
+          },
+          "register_ais": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "AIS by the service key over the party_register intent (the Party roots itself, actor kind system); exactly when the challenge names party_register."
+          }
+        }
+      },
+      "PairingRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "targets"
+        ],
+        "properties": {
+          "targets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PairingAnswer"
+            },
+            "minItems": 1,
+            "maxItems": 64
+          }
+        }
+      },
+      "PairingResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "tenant",
+          "targets"
+        ],
+        "properties": {
+          "tenant": {
+            "type": "string",
+            "description": "The tenant (`tnt_…`)."
+          },
+          "targets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PairingTarget"
+            }
+          },
+          "event_stream": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "description": "The client's SSF push stream to its `suiss_event_receiver`, opened on its first pairing; the same for every tenant (OP-149 m.17 (e))."
+          }
+        }
+      },
+      "PlatformStream": {
+        "type": "object",
+        "description": "An SSF 1.0 §8.1.1 stream configuration with `status`; its schema is `sdks/openapi/events/stream.schema.json`. At creation a webhook stream also carries its `secret` and a poll stream its `access_token`, shown once."
+      },
+      "PlatformStreams": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "streams"
+        ],
+        "properties": {
+          "streams": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlatformStream"
             }
           }
         }
@@ -919,6 +1572,12 @@
       "client": {
         "type": "mutualTLS",
         "description": "The client certificate names the product client (OP-141 m.18 (b))."
+      },
+      "platform_client": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "An RFC 7523 client assertion (private_key_jwt) of an active platform_product client, signed with its registered client key: iss = sub = client_id, aud = the platform realm's issuer (or the full URL of the endpoint called), exp at most 5 minutes ahead, jti used once. ES256 (OP-149 m.4)."
       }
     }
   }

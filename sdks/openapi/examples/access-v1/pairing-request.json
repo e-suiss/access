@@ -1,0 +1,10 @@
+{
+  "targets": [
+    {
+      "realm": "019a0000-0000-7000-8000-0000000000a1",
+      "challenge": "J8o3uQm6R0nqv2bX7yT1kZcLwP4sE9dH5aF6gK2iM0o",
+      "ais": "0oRYKKMBMgNyYXBwbGljYXRpb24vYWlzK2Nib3IEWCA",
+      "register_ais": "0oRYKKMBMgNyYXBwbGljYXRpb24vYWlzK2Nib3IEWCB"
+    }
+  ]
+}

@@ -1,18 +1,18 @@
 //! Use cases over the domain and its ports (OP-63): realm creation (TN-111) and the `idp.*`
-//! write path (MD-14, EI-25).
+//! write path (MD-14, EI-25), and the platform product API (OP-149 m.4).
+
+pub mod platform;
 
 use access_crypto::opaque_id::IdKey;
 use access_identity_account::domain::password::Argon2Params;
 use access_identity_oauth::domain::issuer::{Issuer, IssuerStyle, RealmBase};
 use access_internal_api::idp::{GenesisOrder, Submission, Verdict};
-use access_internal_api::instances::{
-    PlatformProduct, Registrant, Registration, RegistrationVerdict, SelfSigned,
-};
+use access_internal_api::instances::PlatformProduct;
 use access_kernel::combinator::{Capacity, Decision};
 use access_kernel::digest::Digest;
 use access_kernel::intent::{IntentEnvelope, intent_digest};
 use access_kernel::meta::{ExerciseBasis, Root};
-use access_kernel::model::{Id, Window};
+use access_kernel::model::Window;
 use access_store::Pool;
 use access_store::identity::{RealmId, TenantId, TenantTx};
 use access_store::idp::{self, ClientRow, Decision as Bind, Governing, SettingsRow};
@@ -27,9 +27,9 @@ use access_identity_events::domain::catalog::{
 use crate::AdminError;
 use crate::domain::{
     Attribute, AuthMethod, CLIENT_PREFIX, Change, Client, ClientId, Invalid, JoseAlg, cose_key,
-    from_cose_key, raises,
+    raises,
 };
-use crate::ports::{Decider, Governance, Instances, RealmKeys};
+use crate::ports::{Decider, Governance, RealmKeys};
 
 /// A realm to create (TN-111, TN-16, TN-10).
 pub struct NewRealm<'a> {
@@ -152,33 +152,6 @@ pub struct Admin<'a, D, G, K> {
     /// The platform tenant: only its administrators register platform product clients
     /// (OP-149 m.4). `None` allows none.
     pub platform_tenant: Option<TenantId>,
-}
-
-/// What the product signed for one realm it pairs with (OP-149 m.4, m.16 (a)): its system
-/// Party there and the Exercises its service key signed itself.
-#[derive(Clone, PartialEq, Eq)]
-pub struct PairTarget {
-    /// The tenant.
-    pub tenant: TenantId,
-    /// The realm whose governing domain gets the service Instance.
-    pub realm: RealmId,
-    /// The product's system Party in that domain.
-    pub party: Id,
-    /// `party_register`, when the Party is new there.
-    pub register: Option<SelfSigned>,
-    /// `instance_create`.
-    pub create: SelfSigned,
-}
-
-/// The pairing of a platform client in one realm's governing domain (OP-149 m.4).
-#[derive(Clone, PartialEq, Eq)]
-pub struct Paired {
-    /// The tenant.
-    pub tenant: TenantId,
-    /// The realm whose governing domain holds the service Instance.
-    pub realm: RealmId,
-    /// The authority plane's answer.
-    pub verdict: RegistrationVerdict,
 }
 
 fn host_of(authority: &str) -> &str {
@@ -585,73 +558,6 @@ fn settings_with(mut s: SettingsRow, change: &Change) -> SettingsRow {
         | Change::MapperSet { .. } => {}
     }
     s
-}
-
-impl<D: Decider, G: Governance, K: RealmKeys> Admin<'_, D, G, K> {
-    /// Pairs the platform client `client` of the platform tenant's realm `home` with every realm
-    /// in `targets` (OP-149 m.4, m.16 (a)): in each realm's governing domain the product's
-    /// system Party and its service Instance are registered by Exercises the product signed with
-    /// the service key the client registered; the identity plane binds that key to the
-    /// product's Party and forwards them. A repeat opens nothing new (the nonces replay); a
-    /// realm the authority plane refuses is reported, not retried.
-    ///
-    /// # Errors
-    /// [`AdminError`]: no such active platform client, storage, or the authority plane
-    /// unreachable.
-    pub async fn pair<I: Instances>(
-        &self,
-        instances: &I,
-        home: RealmId,
-        client: &ClientId,
-        targets: &[PairTarget],
-    ) -> Result<Vec<Paired>, AdminError> {
-        let platform = self.platform_tenant.ok_or(Invalid::PlatformTenant)?;
-        let mut t = TenantTx::begin(self.app, platform, home).await?;
-        let row = idp::client(&mut t, client.as_str())
-            .await?
-            .filter(|r| r.active)
-            .ok_or(Invalid::NoClient)?;
-        t.commit().await?;
-        let product = row
-            .platform_product
-            .as_deref()
-            .and_then(PlatformProduct::parse)
-            .ok_or(Invalid::NoClient)?;
-        let key = row
-            .service_key
-            .as_deref()
-            .and_then(from_cose_key)
-            .ok_or(Invalid::PublicKey)?;
-        let mut out = Vec::new();
-        for target in targets {
-            let mut t = TenantTx::begin(self.app, target.tenant, target.realm).await?;
-            let g = idp::governance(&mut t).await?;
-            t.commit().await?;
-            let Some(g) = g else { continue };
-            let verdict = instances
-                .register(Registration {
-                    tenant: *target.tenant.as_bytes(),
-                    domain: Digest(*g.domain.as_bytes()),
-                    registrant: Registrant::Service {
-                        product,
-                        client: String::from(client.as_str()),
-                    },
-                    party: target.party,
-                    key: key.clone(),
-                    register: target.register.clone(),
-                    create: target.create.clone(),
-                    pep: String::from(self.pep),
-                })
-                .await
-                .map_err(|e| AdminError::Unavailable(e.0))?;
-            out.push(Paired {
-                tenant: target.tenant,
-                realm: target.realm,
-                verdict,
-            });
-        }
-        Ok(out)
-    }
 }
 
 /// The realm's JOSE algorithm, ES256 until a decision changes it (OP-146 m.8 (e)).

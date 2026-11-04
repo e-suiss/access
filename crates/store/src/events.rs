@@ -229,6 +229,69 @@ impl TenantTx {
         Ok(())
     }
 
+    /// Stores a platform client's stream unless the client already owns a live one with the
+    /// same channel and endpoint (OP-149 m.17 (e)); `false` when it does.
+    ///
+    /// # Errors
+    /// [`StoreError`].
+    pub async fn insert_platform_stream(
+        &mut self,
+        s: &SubscriptionRow,
+    ) -> Result<bool, StoreError> {
+        let done = sqlx::query!(
+            "INSERT INTO access.event_subscription
+                (tenant_id, realm_id, subscription_id, channel, endpoint, audience, events,
+                 description, token_digest, status, owner_client_id, platform_product)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+             ON CONFLICT (tenant_id, realm_id, owner_client_id, channel, endpoint)
+               WHERE owner_client_id IS NOT NULL AND disabled_at IS NULL AND endpoint IS NOT NULL
+             DO NOTHING",
+            uuid(self.tenant.as_bytes()),
+            uuid(&s.realm),
+            uuid(&s.id),
+            s.channel,
+            s.endpoint,
+            s.audience,
+            &s.events,
+            s.description,
+            s.token_digest.map(|d| d.to_vec()),
+            s.status,
+            s.owner_client_id,
+            s.platform_product,
+        )
+        .execute(&mut *self.tx)
+        .await?
+        .rows_affected();
+        Ok(done == 1)
+    }
+
+    /// The streams of `realm` the client `client_id` owns, live first, newest first.
+    ///
+    /// # Errors
+    /// [`StoreError`].
+    pub async fn owned_subscriptions(
+        &mut self,
+        realm: RealmId,
+        client_id: &str,
+    ) -> Result<Vec<SubscriptionRow>, StoreError> {
+        let raws = sqlx::query_as!(
+            Raw,
+            r#"SELECT realm_id, subscription_id, channel, endpoint, audience, events, description,
+                      secret_kek_id, secret_wrapped_dek, secret_nonce, secret_ciphertext,
+                      token_digest, status, disabled_at IS NOT NULL AS "disabled!",
+                      owner_client_id, platform_product
+                 FROM access.event_subscription
+                WHERE tenant_id = $1 AND realm_id = $2 AND owner_client_id = $3
+                ORDER BY disabled_at IS NOT NULL, created_at DESC, subscription_id"#,
+            uuid(self.tenant.as_bytes()),
+            uuid(realm.as_bytes()),
+            client_id
+        )
+        .fetch_all(&mut *self.tx)
+        .await?;
+        raws.into_iter().map(Raw::row).collect()
+    }
+
     /// The subscription `id` of `realm`, ended or not.
     ///
     /// # Errors

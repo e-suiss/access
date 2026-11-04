@@ -8,6 +8,7 @@ mod ids;
 mod jobs;
 mod login;
 mod oauth;
+mod platform;
 mod product;
 #[cfg(test)]
 mod testing;
@@ -551,6 +552,8 @@ async fn serve(
     )?;
     let identity_section = config.identity.as_ref().ok_or("no identity section")?;
     let signer = || SignerKeys::new(identity_section.signer.clone());
+    let (platform_outbound, platform_keks) = (prepared.outbound.clone(), keks.clone());
+    let platform_pools = event_pools(&all, &cell_ids);
     // OP-149 m.7
     let authorize = authorization(
         config,
@@ -582,21 +585,20 @@ async fn serve(
     )?;
     let tenants_pool = router_pool.clone();
     let realms = identity(config, router_pool).await?;
-    let sequencer_for_time = sequencer.clone();
     let (idp_sequencer, idp_app) = (sequencer.clone(), app.clone());
     let issuer = config.issuer.clone().ok_or("no issuer")?;
     let limits = Limits::default();
     // OP-141 m.18 (a), (e), (f), OP-149 m.16 (a)
     let actors = idp::ActorBindings::default();
     let domains = Arc::new(Domains::new(Setup {
-        sequencer,
+        sequencer: sequencer.clone(),
         app,
         keys: prepared.keys,
         holder: holder()?,
         ttl: LEASE_TTL,
         binding: actors.clone(),
         salts: OsSalts,
-        clock: SourcesClock::new(sequencer_for_time),
+        clock: SourcesClock::new(sequencer),
         deriver,
         signer: config.signer.clone(),
     }));
@@ -609,6 +611,14 @@ async fn serve(
         SourcesClock::new(idp_sequencer),
         actors,
     );
+    // OP-149 m.4, m.16 (a), m.17 (e), (g)
+    let platform = platform::routes(
+        &platform_pools,
+        platform_outbound,
+        platform_keks,
+        idp_plane.clone(),
+        issuer.clone(),
+    );
     // OP-149 m.6, m.8, m.9
     let me = frontend(config, tenants_pool.clone(), hosted, idp_plane)?;
     let adp = adp_router(
@@ -616,20 +626,12 @@ async fn serve(
         Discovery { issuer },
     );
     let products = product::routes(config, domains.clone(), tenants_pool, cell_ids)?;
-    let health = Health {
-        status: "ok",
-        sandbox: SandboxHealth {
-            profile: report.profile.as_str(),
-            seccomp_phase: report.seccomp_phase,
-            landlock_required_abi: report.landlock_required_abi.as_u32(),
-            landlock_kernel_abi: report.landlock_kernel_abi,
-        },
-    };
     let app = router(
         config.security_txt(),
-        health,
+        health(report),
         limits,
         adp.merge(products)
+            .merge(platform)
             .merge(realms)
             .merge(sign_in.merge(me))
             .merge(authorize),
@@ -643,6 +645,19 @@ async fn serve(
     renewing.abort();
     domains.release().await;
     served.map_err(|e| e.to_string())
+}
+
+/// What `/healthz` reports: the lockdown in force (SA-22).
+fn health(report: &LockdownReport) -> Health {
+    Health {
+        status: "ok",
+        sandbox: SandboxHealth {
+            profile: report.profile.as_str(),
+            seccomp_phase: report.seccomp_phase,
+            landlock_required_abi: report.landlock_required_abi.as_u32(),
+            landlock_kernel_abi: report.landlock_kernel_abi,
+        },
+    }
 }
 
 /// The domains of this process.

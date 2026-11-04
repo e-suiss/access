@@ -115,6 +115,18 @@ pub(crate) struct Plane<K, B: Binding, S: Salts, C> {
     actors: ActorBindings,
 }
 
+impl<K, B: Binding + Clone, S: Salts, C: Clone> Clone for Plane<K, B, S, C> {
+    fn clone(&self) -> Self {
+        Self {
+            domains: Arc::clone(&self.domains),
+            sequencer: self.sequencer.clone(),
+            app: self.app.clone(),
+            clock: self.clock.clone(),
+            actors: self.actors.clone(),
+        }
+    }
+}
+
 impl<K, B: Binding, S: Salts, C> Plane<K, B, S, C> {
     /// Over the domains this process leads; `actors` is the binding those domains read.
     pub(crate) const fn new(

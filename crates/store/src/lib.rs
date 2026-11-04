@@ -20,6 +20,7 @@ pub mod idp;
 pub mod jobs;
 pub mod oauth;
 pub mod passkeys;
+pub mod platform;
 pub mod relay;
 pub mod scope;
 pub mod sessions;

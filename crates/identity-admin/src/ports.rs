@@ -40,8 +40,8 @@ pub trait Governance: Send + Sync {
     ) -> impl Future<Output = Result<GenesisOpened, Unavailable>> + Send;
 }
 
-/// Opens Instances in a governing domain (OP-149 m.4): the identity plane service Party
-/// registers a paired product's system Party and its service Instance there.
+/// Opens Instances in a governing domain (OP-149 m.4, m.16 (a)): the identity plane forwards a
+/// paired product's self-signed `party_register` and `instance_create` there.
 pub trait Instances: Send + Sync {
     /// Opens the Instance of `registration`, or answers with the one an identical earlier
     /// registration opened.

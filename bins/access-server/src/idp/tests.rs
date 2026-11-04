@@ -17,7 +17,7 @@ use access_crypto::event_id::EventKey;
 use access_crypto::opaque_id::IdKey;
 use access_crypto::secret::Secret;
 use access_identity_admin::AdminError;
-use access_identity_admin::app::{Admin, Applied, NewRealm, PairTarget, Proposal};
+use access_identity_admin::app::{Admin, Applied, NewRealm, Proposal};
 use access_identity_admin::domain::{
     AuthMethod, Change, Client, ClientId, Invalid, Platform, RedirectUri, RpId,
 };
@@ -41,13 +41,14 @@ use suiss_crypto::dcbor::{self, Limits, Value};
 use super::*;
 use crate::testing::hsm;
 
+mod platform;
+
 const NOW: u64 = 10_000;
 const ROOT: Id = Id([1; 16]);
 const ROOT_KEY: u8 = 11;
 const ALICE: Id = Id([2; 16]);
 const ALICE_KEY: u8 = 12;
 const PEP: &str = "identity-admin";
-const WORK: Id = Id([3; 16]);
 const HOUR: u64 = 3_600_000;
 
 fn signing(seed: u8) -> ed25519_dalek::SigningKey {
@@ -695,32 +696,6 @@ fn realm_keys_are_made_once_in_the_hsm() {
     );
 }
 
-/// Records the registrations the identity plane asks for and opens each once.
-#[derive(Default)]
-struct Recorder(std::sync::Mutex<Vec<Registration>>);
-
-impl Instances for Recorder {
-    fn register(
-        &self,
-        r: Registration,
-    ) -> impl std::future::Future<Output = Result<RegistrationVerdict, Unavailable>> + Send {
-        let mut seen = self.0.lock().unwrap();
-        let replayed = seen.contains(&r);
-        let kid = thumbprint(&r.key);
-        if !replayed {
-            seen.push(r);
-        }
-        std::future::ready(Ok(RegistrationVerdict::Registered(
-            access_internal_api::instances::Registered {
-                party: Id([7; 16]),
-                instance: Id([8; 16]),
-                kid,
-                replayed,
-            },
-        )))
-    }
-}
-
 fn platform_client(id: ClientId, product: PlatformProduct, seed: u8) -> Client {
     Client {
         id,
@@ -738,16 +713,14 @@ fn platform_client(id: ClientId, product: PlatformProduct, seed: u8) -> Client {
 }
 
 // OP-149 m.4, CT2: only the platform tenant registers a platform product client; it uses
-// private_key_jwt with one registered key, and pairing asks for a system service Party and its
-// Instance in every realm's governing domain, once
+// private_key_jwt with one registered key and names its service key and event receiver
 #[tokio::test]
-async fn a_platform_client_pairs_with_every_realm() {
+async fn a_platform_client_is_registered_in_the_platform_tenant() {
     // MD-14, EI-25, RFC 7523, OP-62
     let w = World::new().await;
     let (pt, pr, pd) = w.realm("platform").await;
-    let (t2, r2, d2) = w.realm("acme").await;
+    let (t2, _, _) = w.realm("acme").await;
     onboard(&w.plane, pd, ROOT, ROOT_KEY).await;
-    onboard(&w.plane, d2, ROOT, ROOT_KEY).await;
     let c = platform_client(
         w.admin().new_client_id().await.unwrap(),
         PlatformProduct::Work,
@@ -819,64 +792,6 @@ async fn a_platform_client_pairs_with_every_realm() {
             ))))
     );
 
-    let recorder = Recorder::default();
-    let service = |tenant, realm, d| {
-        let r = registration(
-            d,
-            Registrant::Service {
-                product: PlatformProduct::Work,
-                client: String::from(c.id.as_str()),
-            },
-            WORK,
-            41,
-            true,
-        );
-        PairTarget {
-            tenant,
-            realm,
-            party: WORK,
-            register: r.register,
-            create: r.create,
-        }
-    };
-    let targets = [service(pt, pr, pd), service(t2, r2, d2)];
-    let paired = platform.pair(&recorder, pr, &c.id, &targets).await.unwrap();
-    assert_eq!(paired.len(), 2);
-    let again = platform.pair(&recorder, pr, &c.id, &targets).await.unwrap();
-    assert!(again.iter().all(|p| matches!(
-        &p.verdict,
-        RegistrationVerdict::Registered(r) if r.replayed
-    )));
-    let seen = recorder.0.lock().unwrap().clone();
-    assert_eq!(seen.len(), 2);
-    for (r, d) in seen.iter().zip([pd, d2]) {
-        assert_eq!(r.domain, d);
-        assert_eq!(r.key, public(41));
-        assert_eq!(r.registrant.actor_kind(), ActorKind::System);
-        assert_eq!(
-            r.registrant,
-            Registrant::Service {
-                product: PlatformProduct::Work,
-                client: String::from(c.id.as_str()),
-            }
-        );
-    }
-    // L0-META-7, OP-149 m.16 (a)
-    let real = platform.pair(&w.plane, pr, &c.id, &targets).await.unwrap();
-    for p in &real {
-        let RegistrationVerdict::Registered(r) = &p.verdict else {
-            panic!("{:?}", p.verdict);
-        };
-        assert_eq!(
-            (r.party, r.kid, r.replayed),
-            (WORK, thumbprint(&public(41)), false)
-        );
-    }
-    let again = platform.pair(&w.plane, pr, &c.id, &targets).await.unwrap();
-    assert!(again.iter().all(|p| matches!(
-        &p.verdict,
-        RegistrationVerdict::Registered(r) if r.replayed
-    )));
     // OP-149 m.17a
     let retire = proposal(
         (pt, pr),

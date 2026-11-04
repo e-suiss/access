@@ -1,0 +1,114 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT challenge, client_id, kid, party_id, register, valid_from_ms, valid_until_ms,\n                    instance_id\n               FROM access.platform_pairing\n              WHERE tenant_id = $1 AND realm_id = $2 AND challenge = $3",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "challenge",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.platform_pairing",
+            "name": "challenge"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "client_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.platform_pairing",
+            "name": "client_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "kid",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.platform_pairing",
+            "name": "kid"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "party_id",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.platform_pairing",
+            "name": "party_id"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "register",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "access.platform_pairing",
+            "name": "register"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "valid_from_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.platform_pairing",
+            "name": "valid_from_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "valid_until_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.platform_pairing",
+            "name": "valid_until_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "instance_id",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.platform_pairing",
+            "name": "instance_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "8dffbd903f23831725f0d378357c298e105b02baac9650776f58399f6be973f1"
+}

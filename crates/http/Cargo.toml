@@ -11,6 +11,7 @@ publish = false
 [dependencies]
 access-authority-core = { path = "../authority-core" }
 access-authority-sequencer = { path = "../authority-sequencer" }
+access-identity-admin = { workspace = true }
 access-identity-events = { workspace = true }
 access-identity-oauth = { workspace = true }
 access-identity-ui = { workspace = true }

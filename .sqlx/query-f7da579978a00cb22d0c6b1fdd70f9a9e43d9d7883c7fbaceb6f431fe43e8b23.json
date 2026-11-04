@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.platform_pairing SET instance_id = $4, paired_at = now()\n              WHERE tenant_id = $1 AND realm_id = $2 AND challenge = $3 AND instance_id IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Bytea",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "f7da579978a00cb22d0c6b1fdd70f9a9e43d9d7883c7fbaceb6f431fe43e8b23"
+}

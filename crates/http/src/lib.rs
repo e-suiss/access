@@ -3,6 +3,7 @@
 pub mod adp;
 pub mod login;
 pub mod oauth;
+pub mod platform;
 pub mod problem;
 pub mod product;
 pub mod realm;

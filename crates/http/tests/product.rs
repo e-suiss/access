@@ -756,3 +756,47 @@ fn validate(doc: &Value, schema: &Value, value: &Value, name: &str) {
     let errs = errors(doc, schema, value, name);
     assert!(errs.is_empty(), "{errs:#?}");
 }
+
+// OP-149 m.4, m.16 (a), m.17 (g): the platform route examples meet the contract, and its
+// routes name the platform client scheme instead of a client certificate; the server tests
+// check the live answers against the same schemas
+#[test]
+fn platform_examples_meet_the_contract() {
+    let doc = openapi();
+    for (name, schema) in [
+        ("pairing-challenge-request", "PairingChallengeRequest"),
+        ("pairing-challenges", "PairingChallenges"),
+        ("pairing-request", "PairingRequest"),
+        ("pairing-result", "PairingResult"),
+        ("platform-streams", "PlatformStreams"),
+    ] {
+        let path = root()
+            .join("examples/access-v1")
+            .join(format!("{name}.json"));
+        let v: Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+        validate(
+            &doc,
+            &json!({ "$ref": format!("#/components/schemas/{schema}") }),
+            &v,
+            name,
+        );
+    }
+    for (path, method) in [
+        ("/access/v1/tenants/{tenant}/pairing/challenges", "post"),
+        ("/access/v1/tenants/{tenant}/pairing", "post"),
+        ("/access/v1/platform/streams", "post"),
+        ("/access/v1/platform/streams", "get"),
+        ("/access/v1/platform/streams/{id}", "get"),
+        ("/access/v1/platform/streams/{id}", "delete"),
+    ] {
+        assert_eq!(
+            doc["paths"][path][method]["security"],
+            json!([{ "platform_client": [] }]),
+            "{method} {path}"
+        );
+    }
+    assert_eq!(
+        doc["components"]["securitySchemes"]["platform_client"]["scheme"],
+        "bearer"
+    );
+}

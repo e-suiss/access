@@ -1,7 +1,8 @@
 //! The product client contract as an `OpenAPI` 3.1 document (JSON Schema 2020-12 components),
 //! generated from code and committed as `sdks/openapi/access-v1.json` (OP-65, TN-112, OP-149):
 //! the Suiss discovery document (m.3), tenant snapshots (m.4), Instance key lookup (m.5),
-//! the eligibility check (m.10) and the problem types (m.12).
+//! the eligibility check (m.10), the problem types (m.12) and the platform product routes:
+//! pairing (m.4, m.16 (a)) and the platform client's event streams (m.17 (e), (g)).
 
 use serde_json::{Map, Value, json};
 
@@ -98,10 +99,14 @@ fn key_components() -> Value {
     })
 }
 
+mod platform;
+
 fn components() -> Value {
     let mut all = key_components();
-    if let (Value::Object(m), Value::Object(more)) = (&mut all, other_components()) {
-        m.extend(more);
+    for more in [other_components(), platform::components()] {
+        if let (Value::Object(m), Value::Object(more)) = (&mut all, more) {
+            m.extend(more);
+        }
     }
     all
 }
@@ -183,6 +188,9 @@ fn other_components() -> Value {
                         "tenant_snapshot": { "type": "string" },
                         "auth_context": { "type": "string" },
                         "instances": { "type": "string" },
+                        "pairing_challenges": { "type": "string" },
+                        "pairing": { "type": "string" },
+                        "platform_streams": { "type": "string" },
                     },
                 },
             }),
@@ -333,6 +341,7 @@ pub fn openapi() -> Value {
             ),
         }}),
     );
+    platform::paths(&mut paths);
     json!({
         "openapi": "3.1.1",
         "info": {
@@ -344,7 +353,10 @@ pub fn openapi() -> Value {
         "paths": paths,
         "components": {
             "schemas": components(),
-            "securitySchemes": { "client": { "type": "mutualTLS", "description": "The client certificate names the product client (OP-141 m.18 (b))." } },
+            "securitySchemes": {
+                "client": { "type": "mutualTLS", "description": "The client certificate names the product client (OP-141 m.18 (b))." },
+                "platform_client": platform::scheme(),
+            },
         },
     })
 }

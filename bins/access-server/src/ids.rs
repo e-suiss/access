@@ -47,4 +47,8 @@ impl TenantIds for CellIds {
     fn external(&self, tenant: &[u8; 16]) -> Option<String> {
         self.encode(TENANT_PREFIX, *tenant)
     }
+
+    fn internal(&self, text: &str) -> Option<[u8; 16]> {
+        self.decode(TENANT_PREFIX, text)
+    }
 }

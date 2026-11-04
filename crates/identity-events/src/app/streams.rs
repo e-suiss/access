@@ -31,6 +31,9 @@ pub enum StreamError {
     /// No live stream for this credential or id.
     #[error("no such stream")]
     NotFound,
+    /// The platform client already owns a live stream to that endpoint (OP-149 m.17 (e)).
+    #[error("stream exists")]
+    Exists,
     /// Storage, keys or the signer failed.
     #[error("unavailable")]
     Unavailable,
@@ -49,6 +52,7 @@ impl StreamError {
         match self {
             Self::Invalid(i) => (400, i.0),
             Self::NotFound => (404, "no-such-stream"),
+            Self::Exists => (409, "stream-exists"),
             Self::Unavailable => (503, "temporarily-unavailable"),
         }
     }
@@ -149,6 +153,17 @@ impl<K: Sealer, R: Random> Streams<K, R> {
         req: &StreamRequest,
         client_id: &str,
     ) -> Result<Created, StreamError> {
+        let product = self.platform_product(tenant, realm, client_id).await?;
+        self.open(tenant, realm, req, Some((client_id, product)))
+            .await
+    }
+
+    async fn platform_product(
+        &self,
+        tenant: TenantId,
+        realm: RealmId,
+        client_id: &str,
+    ) -> Result<String, StreamError> {
         let mut t = TenantTx::begin(&self.db.app, tenant, realm)
             .await
             .map_err(down)?;
@@ -159,8 +174,129 @@ impl<K: Sealer, R: Random> Streams<K, R> {
             .and_then(|c| c.platform_product)
             .ok_or(StreamError::NotFound)?;
         t.commit().await.map_err(down)?;
-        self.open(tenant, realm, req, Some((client_id, product)))
+        Ok(product)
+    }
+
+    /// The SSF push stream (RFC 8935) of the platform client `client_id` to `endpoint`, opened
+    /// on its first pairing with every catalog event and the client as `aud`; a later pairing
+    /// finds the same stream, so a cross-tenant subscription is never doubled (OP-149 m.4,
+    /// m.17 (e)).
+    ///
+    /// # Errors
+    /// [`StreamError::NotFound`] when `client_id` is not an active platform client of the realm.
+    pub async fn ensure_platform_push(
+        &self,
+        tenant: TenantId,
+        realm: RealmId,
+        client_id: &str,
+        endpoint: &str,
+    ) -> Result<[u8; 16], StreamError> {
+        let req = StreamRequest {
+            channel: Channel::SsfPush,
+            endpoint: Some(String::from(endpoint)),
+            audience: String::from(client_id),
+            events: crate::domain::stream::supported(),
+            description: Some(String::from("platform pairing")),
+        };
+        match self
+            .create_for_platform(tenant, realm, &req, client_id)
             .await
+        {
+            Ok(c) => Ok(c.id),
+            Err(StreamError::Exists) => {
+                let mut t = TenantTx::begin(&self.db.app, tenant, realm)
+                    .await
+                    .map_err(down)?;
+                let owned = t
+                    .owned_subscriptions(realm, client_id)
+                    .await
+                    .map_err(down)?;
+                t.commit().await.map_err(down)?;
+                owned
+                    .into_iter()
+                    .find(|s| {
+                        !s.disabled
+                            && s.channel == Channel::SsfPush.name()
+                            && s.endpoint.as_deref() == Some(endpoint)
+                    })
+                    .map(|s| s.id)
+                    .ok_or(StreamError::Unavailable)
+            }
+            Err(e) => Err(e),
+        }
+    }
+
+    /// The streams the platform client `client_id` owns in `realm`, live first (OP-149
+    /// m.17 (g)).
+    ///
+    /// # Errors
+    /// [`StreamError`].
+    pub async fn owned(
+        &self,
+        tenant: TenantId,
+        realm: RealmId,
+        client_id: &str,
+    ) -> Result<Vec<Value>, StreamError> {
+        let issuer = self.issuer(tenant, realm).await?;
+        let mut t = TenantTx::begin(&self.db.app, tenant, realm)
+            .await
+            .map_err(down)?;
+        let owned = t
+            .owned_subscriptions(realm, client_id)
+            .await
+            .map_err(down)?;
+        t.commit().await.map_err(down)?;
+        Ok(owned.iter().map(|s| Self::render(&issuer, s)).collect())
+    }
+
+    async fn owned_row(
+        &self,
+        tenant: TenantId,
+        realm: RealmId,
+        client_id: &str,
+        id: [u8; 16],
+    ) -> Result<SubscriptionRow, StreamError> {
+        let mut t = TenantTx::begin(&self.db.app, tenant, realm)
+            .await
+            .map_err(down)?;
+        let s = t.subscription(realm, id).await.map_err(down)?;
+        t.commit().await.map_err(down)?;
+        s.filter(|s| s.owner_client_id.as_deref() == Some(client_id))
+            .ok_or(StreamError::NotFound)
+    }
+
+    /// One stream the platform client `client_id` owns.
+    ///
+    /// # Errors
+    /// [`StreamError::NotFound`] for a stream it does not own.
+    pub async fn get_owned(
+        &self,
+        tenant: TenantId,
+        realm: RealmId,
+        client_id: &str,
+        id: [u8; 16],
+    ) -> Result<Value, StreamError> {
+        let issuer = self.issuer(tenant, realm).await?;
+        let s = self.owned_row(tenant, realm, client_id, id).await?;
+        Ok(Self::render(&issuer, &s))
+    }
+
+    /// Disables a stream the platform client `client_id` owns (OP-73: nothing is deleted).
+    ///
+    /// # Errors
+    /// [`StreamError::NotFound`] for a stream it does not own or one already disabled.
+    pub async fn disable_owned(
+        &self,
+        tenant: TenantId,
+        realm: RealmId,
+        client_id: &str,
+        id: [u8; 16],
+    ) -> Result<(), StreamError> {
+        let s = self.owned_row(tenant, realm, client_id, id).await?;
+        if s.disabled {
+            return Err(StreamError::NotFound);
+        }
+        self.disable(tenant, realm, id).await
     }
 
     async fn open(
@@ -206,7 +342,15 @@ impl<K: Sealer, R: Random> Streams<K, R> {
         let mut t = TenantTx::begin(&self.db.app, tenant, realm)
             .await
             .map_err(down)?;
-        t.insert_subscription(&row).await.map_err(down)?;
+        if row.owner_client_id.is_some() && row.endpoint.is_some() {
+            // OP-149 m.17 (e)
+            if !t.insert_platform_stream(&row).await.map_err(down)? {
+                t.rollback().await.map_err(down)?;
+                return Err(StreamError::Exists);
+            }
+        } else {
+            t.insert_subscription(&row).await.map_err(down)?;
+        }
         t.commit().await.map_err(down)?;
         Ok(Created {
             id,
