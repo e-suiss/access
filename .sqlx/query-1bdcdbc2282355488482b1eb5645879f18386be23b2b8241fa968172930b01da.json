@@ -1,0 +1,101 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT family_id, client_id, holder_id, root_exercise, status_uri, status_idx, revoked_pos\n           FROM access.projection_family WHERE domain_id = $1 AND family_id = $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "family_id",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.projection_family",
+            "name": "family_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "client_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.projection_family",
+            "name": "client_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "holder_id",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.projection_family",
+            "name": "holder_id"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "root_exercise",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.projection_family",
+            "name": "root_exercise"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "status_uri",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.projection_family",
+            "name": "status_uri"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "status_idx",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.projection_family",
+            "name": "status_idx"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "revoked_pos",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.projection_family",
+            "name": "revoked_pos"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "1bdcdbc2282355488482b1eb5645879f18386be23b2b8241fa968172930b01da"
+}

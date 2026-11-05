@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.projection_family\n           (domain_id, family_id, client_id, holder_id, root_exercise, status_uri, status_idx)\n         VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT (domain_id, family_id) DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Bytea",
+        "Text",
+        "Bytea",
+        "Bytea",
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "a89856cb0455bb1acf41e39421b12859a421673ed10e622763b643ca16638e10"
+}

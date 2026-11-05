@@ -128,6 +128,7 @@ mod tests {
             ("oauth_codes", "oauth_codes_d"),
             ("client_assertion_replay", "client_assertion_replay_d"),
             ("dpop_replay", "dpop_replay_d"),
+            ("claim_ingest", "claim_ingest_d"),
         ] {
             let open = partitions(&db.owner, table).await.unwrap();
             for name in days(prefix) {

@@ -1,8 +1,8 @@
 //! Day partitions of the ephemeral protocol tables (OP-146 m.5 (f), m.7 (d), m.10 (g)): login
-//! flows, authorization requests and codes, client assertion and DPoP replay keys, and login
-//! counters. The archive role opens each day ahead; a day that is not open is a cache outage
-//! for DPoP and lands in the default partition elsewhere. Closing old days is the archive
-//! job's and is not here (OP-73).
+//! flows, authorization requests and codes, client assertion and DPoP replay keys, login
+//! counters and Claim Ingest submission digests (OP-150 m.2). The archive role opens each day
+//! ahead; a day that is not open is a cache outage for DPoP and Claim Ingest and lands in the
+//! default partition elsewhere. Closing old days is the archive job's and is not here (OP-73).
 
 use sqlx::PgPool;
 
@@ -45,7 +45,7 @@ pub async fn partitions(owner: &PgPool, table: &str) -> Result<Vec<String>, Stor
 pub struct Opened {
     /// Days since the Unix epoch.
     pub day: i32,
-    /// `auth_flows`, `oauth`, `dpop_replay` or `login_throttle`.
+    /// `auth_flows`, `oauth`, `dpop_replay`, `claim_ingest` or `login_throttle`.
     pub family: &'static str,
     /// Whether it is open now.
     pub result: Result<(), StoreError>,
@@ -81,6 +81,17 @@ pub async fn open_days(archive: &PgPool, from: i32, ahead: i32) -> Vec<Opened> {
             day,
             family: "dpop_replay",
             result: dpop,
+        });
+        let ingest = match u32::try_from(day) {
+            Ok(d) => crate::claims::open_claim_ingest_day(archive, d)
+                .await
+                .map(drop),
+            Err(_) => Err(StoreError::Range),
+        };
+        out.push(Opened {
+            day,
+            family: "claim_ingest",
+            result: ingest,
         });
         let throttle = open_throttle_day(archive, day).await.map(drop);
         out.push(Opened {

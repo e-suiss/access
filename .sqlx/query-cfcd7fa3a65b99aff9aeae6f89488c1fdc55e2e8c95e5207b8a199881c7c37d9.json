@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.projection_family SET revoked_at = now(), revoked_pos = $3\n          WHERE domain_id = $1 AND family_id = $2 AND revoked_at IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "cfcd7fa3a65b99aff9aeae6f89488c1fdc55e2e8c95e5207b8a199881c7c37d9"
+}

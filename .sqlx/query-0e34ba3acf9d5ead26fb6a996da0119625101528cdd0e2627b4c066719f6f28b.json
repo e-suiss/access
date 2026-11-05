@@ -1,0 +1,137 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT pos, claim_id, exercise_id, previous, first_seq, next_seq, head, period_from_ms,\n                period_until_ms, body\n           FROM access.offline_report\n          WHERE domain_id = $1 AND exercise_id = $2 ORDER BY first_seq DESC, pos DESC LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "pos",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.offline_report",
+            "name": "pos"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "claim_id",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.offline_report",
+            "name": "claim_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "exercise_id",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.offline_report",
+            "name": "exercise_id"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "previous",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.offline_report",
+            "name": "previous"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "first_seq",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.offline_report",
+            "name": "first_seq"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "next_seq",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.offline_report",
+            "name": "next_seq"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "head",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.offline_report",
+            "name": "head"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "period_from_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.offline_report",
+            "name": "period_from_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "period_until_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.offline_report",
+            "name": "period_until_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "body",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.offline_report",
+            "name": "body"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "0e34ba3acf9d5ead26fb6a996da0119625101528cdd0e2627b4c066719f6f28b"
+}

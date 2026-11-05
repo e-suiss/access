@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.realm_domain_binding SET retired_at = now()\n          WHERE tenant_id = $1 AND realm_id = $2 AND domain_id = $3 AND retired_at IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "c45b7c0c772fe7ce997e4b7e33bddf2d2965b82f7ecf7793699403a6e8f9f341"
+}

@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.realm_domain_binding (tenant_id, realm_id, domain_id, role, acceptance_id)\n         VALUES ($1, $2, $3, $4, $5) ON CONFLICT (tenant_id, realm_id, domain_id) DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Bytea",
+        "Text",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "31195a34589a20fe6f02b5ea339814c6e7bf4927f225f0e4f6bea84bcd6f807e"
+}
