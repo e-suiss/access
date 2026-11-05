@@ -25,6 +25,7 @@ use access_kernel::model::{
     ConstraintSet, DelegationTerms, Id, ResourceSelector, Structural, SubjectSelector,
     WhileCondition, Window,
 };
+use access_kernel::receipt::AgencyLink;
 use access_kernel::schema::{ActionSchema, Spp};
 use suiss_crypto::dcbor::Value;
 
@@ -231,6 +232,8 @@ pub struct Evaluation {
     pub action: Option<Box<ActionSchema>>,
     /// The foreign PAP a bridging holding relied on (OP-143 m.13 (g)).
     pub foreign: Option<Vec<u8>>,
+    /// The agency chain of an allowed Exercise made for another Party (OP-149 m.11).
+    pub agency: Vec<AgencyLink>,
 }
 
 /// A budget draw: counter key, limit, demand and the unit of an `amount` term.
@@ -876,8 +879,27 @@ pub(crate) fn slice_entries(
     Some(out)
 }
 
-/// The Instance's Mandate, if it has a live one; the first by id (C14).
-fn mandate(view: &dyn View, actor: Option<&Actor>) -> Option<Mandate> {
+/// The agency chain of an allowed Exercise (OP-149 m.11, m.14 (d)): one link from the
+/// principal the actor acted for to the actor's Party, under the live Mandate of the actor
+/// Instance that bounded the decision. Acting for oneself, or with no live Mandate, has none.
+fn agency(
+    capacity: Capacity,
+    actor: Option<&Actor>,
+    mandate: Option<&(Id, Mandate)>,
+    allowed: bool,
+) -> Vec<AgencyLink> {
+    match (capacity, actor, mandate) {
+        (Capacity::For(principal), Some(actor), Some((id, _))) if allowed => vec![AgencyLink {
+            mandate: *id,
+            principal,
+            agent: actor.party,
+        }],
+        _ => Vec::new(),
+    }
+}
+
+/// The Instance's Mandate and its id, if it has a live one; the first by id (C14).
+fn mandate(view: &dyn View, actor: Option<&Actor>) -> Option<(Id, Mandate)> {
     let actor = actor?;
     let list = view.get(&meta::key(kind::MANDATES, &actor.instance))?;
     let Value::Array(ids) = list else {
@@ -886,10 +908,13 @@ fn mandate(view: &dyn View, actor: Option<&Actor>) -> Option<Mandate> {
     ids.iter().find_map(|id| {
         let id = access_kernel::model::Id::from_value(id).ok()?;
         let m: MandateState = read(view, kind::MANDATE, &id)?;
-        m.ended.is_none().then_some(Mandate {
-            authority: m.envelope.authority,
-            requirements: m.envelope.requirements,
-        })
+        m.ended.is_none().then_some((
+            id,
+            Mandate {
+                authority: m.envelope.authority,
+                requirements: m.envelope.requirements,
+            },
+        ))
     })
 }
 
@@ -1062,6 +1087,7 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
             expansion: false,
             action: None,
             foreign: None,
+            agency: Vec::new(),
         });
     }
     // OP-141 m.35 (e), (f)
@@ -1087,6 +1113,7 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
                     expansion: false,
                     action: None,
                     foreign: None,
+                    agency: Vec::new(),
                 });
             }
         }
@@ -1113,6 +1140,7 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
                 expansion: false,
                 action: None,
                 foreign: None,
+                agency: Vec::new(),
             });
         };
         let ctx = meta::Context {
@@ -1136,6 +1164,7 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
                     expansion: false,
                     action: None,
                     foreign: None,
+                    agency: Vec::new(),
                 });
             }
         }
@@ -1167,6 +1196,7 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
                     expansion: false,
                     action: None,
                     foreign: None,
+                    agency: Vec::new(),
                 });
             }
         }
@@ -1185,6 +1215,7 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
                 expansion: false,
                 action: None,
                 foreign: None,
+                agency: Vec::new(),
             });
         };
         let ctx = meta::Context {
@@ -1212,6 +1243,7 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
                     expansion: false,
                     action: None,
                     foreign: None,
+                    agency: Vec::new(),
                 });
             }
             Ok(out) => {
@@ -1392,7 +1424,7 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
         now,
         actor_instance: actor.map(|a| a.instance),
         actor_is_agent,
-        mandate: mandate.as_ref(),
+        mandate: mandate.as_ref().map(|(_, m)| m),
         capacity: req.capacity,
         bases: &bases,
         restrictions: &restrictions,
@@ -1401,7 +1433,8 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
     };
     match evaluate(&input, &mut Fuel(FUEL)) {
         Ok(decision) => {
-            if decision.outcome != KernelOutcome::Allow {
+            let allowed = decision.outcome == KernelOutcome::Allow;
+            if !allowed {
                 effects.clear();
                 draws.clear();
                 releases.clear();
@@ -1414,6 +1447,7 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
                 expansion,
                 action: schema,
                 foreign: foreign_pap,
+                agency: agency(req.capacity, actor.as_ref(), mandate.as_ref(), allowed),
             })
         }
         Err(r) => Pass::Rejected(r),

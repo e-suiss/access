@@ -3132,6 +3132,126 @@ async fn an_allow_carries_a_signed_receipt() {
     );
 }
 
+// OP-149 m.11, m.14 (d), L2-RCP-1, INV-4, C14: an agent acting FOR its principal under its
+// Instance's Mandate gets a receipt naming the chain; acting without a Mandate names none
+#[tokio::test]
+#[allow(
+    clippy::too_many_lines,
+    reason = "two agents, one Mandate and two receipts from registration to the chain"
+)]
+async fn a_receipt_names_the_agency_chain_of_a_mandated_agent() {
+    // OP-149 m.11
+    // L2-RCP-1
+    let db = fresh().await.unwrap();
+    let (mut core, d) = setup(&db).await;
+    onboard(&mut core, d, ROOT, ROOT_KEY, (1, 2)).await;
+    let public_basis = ExerciseBasis::Public(meta::object_id(&d, kind::GRANT, 0));
+    allowed(
+        &send(
+            &mut core,
+            meta_request(
+                d,
+                3,
+                public_basis,
+                Payload::PartyRegister {
+                    party: ALICE,
+                    root: Root::Sole(ALICE),
+                    actor_kind: ActorKind::Agent,
+                },
+            ),
+            ALICE_KEY,
+        )
+        .await
+        .unwrap(),
+    );
+    let shop_read = authority(vec![action("shop", "read")], selector("shop"));
+    let created = send(
+        &mut core,
+        meta_request(
+            d,
+            4,
+            public_basis,
+            Payload::InstanceCreate {
+                party: ALICE,
+                key: public(ALICE_KEY),
+                mandate: Some(meta::MandateEnvelope {
+                    authority: shop_read.authority.clone(),
+                    constraints: shop_read.constraints.clone(),
+                    requirements: BTreeSet::new(),
+                    pin: None,
+                }),
+            },
+        ),
+        ALICE_KEY,
+    )
+    .await
+    .unwrap();
+    allowed(&created);
+    let mandate = meta::object_id(&created.exercise.unwrap(), kind::MANDATE, 0);
+    onboard_as(&mut core, d, (BOB, ActorKind::Agent), BOB_KEY, (5, 6)).await;
+
+    let shop = meta::object_id(&d, kind::ANCHOR, 1);
+    let mut holdings = Vec::new();
+    for (nonce, holder) in [(7, ALICE), (8, BOB)] {
+        let issued = send(
+            &mut core,
+            meta_request(
+                d,
+                nonce,
+                ExerciseBasis::Anchor(shop),
+                Payload::GrantIssue(GrantContent {
+                    basis: GrantBasis::Anchor(shop),
+                    holder: SubjectSelector::Party(holder),
+                    authority: shop_read.clone(),
+                    agency: BTreeSet::from([Capacity::For(ROOT)]),
+                    named: None,
+                }),
+            ),
+            ROOT_KEY,
+        )
+        .await
+        .unwrap();
+        allowed(&issued);
+        holdings.push(ExerciseBasis::Holding(HoldingRef {
+            grant: meta::object_id(&issued.exercise.unwrap(), kind::GRANT, 0),
+            holder,
+            since: issued.record.unwrap(),
+        }));
+    }
+    let on_behalf = |nonce, basis| {
+        let mut r = shop_request(d, nonce, Mode::Commit, basis);
+        r.capacity = Capacity::For(ROOT);
+        r
+    };
+    let receipt = |r: &Response| {
+        access_kernel::receipt::Receipt::from_bytes(r.receipt.as_deref().expect("receipt")).unwrap()
+    };
+
+    let mandated = send(&mut core, on_behalf(9, holdings[0]), ALICE_KEY)
+        .await
+        .unwrap();
+    allowed(&mandated);
+    let r = receipt(&mandated);
+    assert_eq!(r.capacity, Capacity::For(ROOT));
+    assert_eq!(
+        r.agency,
+        vec![access_kernel::receipt::AgencyLink {
+            mandate,
+            principal: ROOT,
+            agent: ALICE,
+        }]
+    );
+
+    // OP-149 m.14 (d): a link needs a Mandate; without one the receipt carries no chain
+    let unmandated = send(&mut core, on_behalf(10, holdings[1]), BOB_KEY)
+        .await
+        .unwrap();
+    allowed(&unmandated);
+    assert_eq!(receipt(&unmandated).agency, Vec::new());
+
+    fold_check(&db.sequencer, d).await.unwrap();
+}
+
 // OP-143 m.12, INV-21, G3: an offline slice is drawn from the lineage budget when the
 // projection commits; the PAP names it; a slice the budget cannot cover is denied
 #[tokio::test]

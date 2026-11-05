@@ -846,7 +846,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             audience: inc.pep.clone(),
             iat: fixed.now,
             drawn: fixed.drawn,
-            agency: Vec::new(),
+            agency: fixed.agency.clone(),
         };
         let digest =
             access_kernel::receipt::digest(&r).map_err(|_| CoreError::Protocol("receipt"))?;
@@ -1167,6 +1167,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                 intent: digest,
                 now,
                 drawn: !evaluation.draws.is_empty(),
+                agency: evaluation.agency.clone(),
             };
             let (receipt, pap) = self.artefacts(inc, actor, &fixed, allowed).await?;
             let shape = Shape {
@@ -1562,6 +1563,7 @@ struct Fixed {
     intent: Digest,
     now: u64,
     drawn: bool,
+    agency: Vec<access_kernel::receipt::AgencyLink>,
 }
 
 struct Shape<'a> {
