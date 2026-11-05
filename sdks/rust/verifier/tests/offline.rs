@@ -441,7 +441,7 @@ fn uses_are_chained_into_a_report_that_verifies_and_continues() {
     assert!(report::verify(&hidden).is_err());
 }
 
-// §13.7.2, SEC14
+// §13.7.2
 #[test]
 fn report_deadline_is_horizon_plus_a_day() {
     assert_eq!(caps::report_deadline(10), 10 + 24 * HOUR_MS);
