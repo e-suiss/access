@@ -29,7 +29,7 @@ fn the_session_id_never_appears() {
 // OP-149 m.8: deterministic CBOR; the digest is SHA-256 under suiss/auth-context/v1
 #[test]
 fn encoding_and_digest_are_deterministic() {
-    let content = Content::new("application/vnd.suiss.work.record+cbor", [9; 32]).unwrap();
+    let content = Content::new("application/work-record+cbor", [9; 32]).unwrap();
     let a = AuthContext::of(
         ISSUER,
         &SESSION,

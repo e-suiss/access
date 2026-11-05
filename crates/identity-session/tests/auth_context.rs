@@ -37,7 +37,7 @@ fn committed(id: &str) -> Vec<u8> {
 #[test]
 fn the_code_produces_the_committed_examples() {
     let assurance = vector(&[Factor::passkey([2; 16], true, true, false, T)]);
-    let content = Content::new("application/vnd.suiss.work.record+cbor", [9; 32]).unwrap();
+    let content = Content::new("application/work-record+cbor", [9; 32]).unwrap();
     let full = AuthContext::of(
         "https://acme.suiss.example",
         &[1; 16],

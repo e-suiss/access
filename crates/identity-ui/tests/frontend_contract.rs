@@ -147,7 +147,7 @@ fn committed_examples_match_the_code_and_the_schema() {
         "AuthContextRequest",
         "auth-context-request",
         &AuthContextRequest {
-            content_type: String::from("application/vnd.suiss.work.record+cbor"),
+            content_type: String::from("application/work-record+cbor"),
             content_digest: b64(0x66, 32),
         },
     );
