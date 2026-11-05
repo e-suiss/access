@@ -1,4 +1,6 @@
-//! Structured logging for Access (OP-64 rule 6, OP-67).
+//! Structured logging and process counters for Access (OP-64 rule 6, OP-67).
+
+pub mod counters;
 
 use std::io::Write;
 
