@@ -580,6 +580,7 @@ where
                 service_key: p.service_key.clone(),
                 event_receiver: p.event_receiver.clone(),
             }),
+            require_par: false,
         };
         let id = String::from(client.id.as_str());
         let w = Moment::at(server_time(self.app).await?);
