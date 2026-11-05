@@ -3,24 +3,31 @@
 //! plane uses in production. Realms are created by `Admin::create_realm` (Genesis through the
 //! authority plane), their root Party registers its Instance by the self-signed Exercises
 //! (L0-META-7), and a platform client is an `idp.client.register` Exercise that root signs
-//! (MD-14, EI-25). Every step looks for its result first, so a second run changes nothing.
+//! (MD-14, EI-25). A sample realm can publish a product's catalog in its Genesis, and its root
+//! then grants a sample subject one action by a `grant_issue` Exercise, so a product can run a
+//! real eligibility check (OP-149 m.10). Every step looks for its result first, so a second run
+//! changes nothing.
 
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
+use std::future::Future;
 use std::path::{Path, PathBuf};
 
+use access_authority_core::domain::Request;
 use access_authority_core::genesis::IDP_ANCHOR;
 use access_crypto::Secret;
 use access_crypto::oauth::ClientKey;
 use access_crypto::opaque_id::IdKey;
 use access_identity_admin::AdminError;
 use access_identity_admin::app::{Admin, Applied, NewRealm, Proposal};
-use access_identity_admin::domain::{AuthMethod, Change, Client, Platform, RedirectUri};
+use access_identity_admin::domain::{AuthMethod, Change, Client, ClientId, Platform, RedirectUri};
 use access_identity_admin::ports::{Decider, Governance, Instances, RealmKeys};
 use access_identity_events::domain::catalog::TENANT_PREFIX;
 use access_identity_oauth::adapters::outbound::DeclaredTargets;
 use access_identity_oauth::domain::issuer::{IssuerStyle, RealmBase};
 use access_identity_oauth::domain::jwt::parse_jwks;
 use access_identity_ui::domain::frontend::IDENTITY_PEP;
+use access_internal_api::idp::{Unavailable, Verdict};
 use access_internal_api::instances::{
     PlatformProduct, Registrant, Registration, RegistrationVerdict, SelfSigned, bootstrap_basis,
     register_nonce, self_signed_intent,
@@ -31,8 +38,12 @@ use access_kernel::combinator::{Capacity, Mode};
 use access_kernel::digest::Digest;
 use access_kernel::intent::intent_digest;
 use access_kernel::json::b64url_encode;
-use access_kernel::meta::{self, ExerciseBasis, Root, kind};
-use access_kernel::model::{Id, Window};
+use access_kernel::meta::{self, ExerciseBasis, GrantBasis, GrantContent, Payload, Root, kind};
+use access_kernel::model::{
+    ActionRef, ActionSet, AuthoritySet, CanonicalAuthority, ConstraintSet, DelegationTerms, Id,
+    ResourceSelector, Structural, SubjectSelector, Window,
+};
+use access_kernel::schema::{ActionSchema, EffectClass, Spp};
 use access_kernel::verify::cose::PublicKey;
 use access_kernel::verify::key_scope::thumbprint;
 use access_store::authority::{find_nonce, server_time};
@@ -51,8 +62,17 @@ use crate::login::id_key_bytes;
 /// The token label of the bootstrap root key: the founding root of every realm it creates.
 pub(crate) const ROOT_LABEL: &str = "access/bootstrap/root";
 
-/// What the root signs to derive its `instance_create` challenge in a domain.
+/// The token label of the sample subject's key (OP-149 m.10).
+pub(crate) const SUBJECT_LABEL: &str = "access/bootstrap/sample-subject";
+
+/// What a key signs to derive its `instance_create` challenge in a domain.
 const ROOT_CHALLENGE_LABEL: &[u8] = b"access-bootstrap/root-instance:1";
+
+/// What the root signs to derive the nonce of the sample Grant's `grant_issue`.
+const SAMPLE_GRANT_LABEL: &[u8] = b"access-bootstrap/sample-grant:1";
+
+/// The resource path a sample eligibility check names.
+const SAMPLE_PATH: &str = "sample";
 
 /// The placement new tenants and realms are created in (OP-40).
 const PLACEMENT: &str = "pool-default";
@@ -105,6 +125,106 @@ struct PlanFile {
     issuer_style: Style,
     #[serde(default)]
     products: Vec<ProductFile>,
+    sample: Option<SampleFile>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SampleFile {
+    realm: String,
+    namespace: String,
+    action: String,
+}
+
+/// A sample catalog and Grant for a product's eligibility checks (OP-149 m.10): the realm's
+/// Genesis publishes `action` in `namespace`, and its root grants it over the whole namespace
+/// to the sample subject.
+#[derive(Clone, Debug)]
+pub(crate) struct SamplePlan {
+    /// The slug of one of the plan's sample tenants.
+    pub(crate) realm: String,
+    /// The catalog's namespace, such as `work`.
+    pub(crate) namespace: String,
+    /// The action's name.
+    pub(crate) action: String,
+}
+
+impl SamplePlan {
+    /// The Action Schema of the sample action: version 1, reversible, no parameters.
+    fn schema(&self) -> ActionSchema {
+        ActionSchema {
+            name: self.action.clone(),
+            major: 1,
+            effect: EffectClass::Reversible,
+            reserved: false,
+            consumption_bearing: false,
+            params: BTreeMap::new(),
+            resource_types: BTreeSet::new(),
+            render: None,
+        }
+    }
+
+    /// The catalog `publisher` publishes in the realm's Genesis.
+    fn catalog(&self, publisher: Id) -> Spp {
+        Spp {
+            publisher,
+            namespace: self.namespace.clone(),
+            catalog_version: 1,
+            actions: vec![self.schema()],
+            retirements: BTreeSet::new(),
+            core_spec_min: None,
+        }
+    }
+
+    /// The sample action's reference.
+    fn action_ref(&self) -> ActionRef {
+        ActionRef {
+            namespace: self.namespace.clone(),
+            name: self.action.clone(),
+            major: 1,
+            schema: access_kernel::schema::action_digest(&self.schema()),
+        }
+    }
+
+    /// The Grant of the action over the whole namespace to `holder`, on the meta-anchor.
+    fn grant(&self, domain: &Digest, holder: Id) -> GrantContent {
+        GrantContent {
+            basis: GrantBasis::Anchor(meta::meta_anchor(domain)),
+            holder: SubjectSelector::Party(holder),
+            authority: CanonicalAuthority {
+                authority: AuthoritySet {
+                    actions: ActionSet {
+                        exact: BTreeSet::from([self.action_ref()]),
+                        prefix: BTreeSet::new(),
+                    },
+                    resource: ResourceSelector::Structural(Structural {
+                        namespace: self.namespace.clone(),
+                        prefix: Vec::new(),
+                        kind: None,
+                        attrs: BTreeMap::new(),
+                    }),
+                    params: BTreeMap::new(),
+                    recipient: None,
+                    purpose: None,
+                },
+                constraints: ConstraintSet {
+                    validity: Window {
+                        from: 0,
+                        until: u64::MAX,
+                    },
+                    conditions: BTreeSet::new(),
+                    budget: BTreeSet::new(),
+                },
+                delegation: DelegationTerms {
+                    depth: 0,
+                    downstream_holder_class: None,
+                },
+                requirements: BTreeSet::new(),
+            },
+            agency: BTreeSet::from([Capacity::Own]),
+            named: None,
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -140,6 +260,7 @@ pub(crate) struct Plan {
     pub(crate) tenants: Vec<String>,
     pub(crate) style: Style,
     pub(crate) products: Vec<ProductPlan>,
+    pub(crate) sample: Option<SamplePlan>,
 }
 
 /// One public key from a file holding a JWK or a one-key JWKS.
@@ -181,12 +302,63 @@ impl Plan {
                     .map_err(|e| BootstrapError::Plan(e.to_string()))?,
             });
         }
+        let sample = match file.sample {
+            None => None,
+            Some(s) => {
+                if !file.tenants.contains(&s.realm) {
+                    return Err(BootstrapError::Plan(format!(
+                        "sample realm {} is not one of the plan's tenants",
+                        s.realm
+                    )));
+                }
+                let sample = SamplePlan {
+                    realm: s.realm,
+                    namespace: s.namespace,
+                    action: s.action,
+                };
+                // OP-141 m.35 (a)
+                let catalog = sample.catalog(Id([0; 16]));
+                if Spp::from_value(&catalog.to_value()).as_ref() != Ok(&catalog)
+                    || sample.namespace == meta::NAMESPACE
+                    || sample.namespace.starts_with("idp.")
+                {
+                    return Err(BootstrapError::Plan(String::from(
+                        "the sample namespace or action is not a valid catalog entry",
+                    )));
+                }
+                Some(sample)
+            }
+        };
         Ok(Self {
             platform: file.platform,
             tenants: file.tenants,
             style: file.issuer_style,
             products,
+            sample,
         })
+    }
+}
+
+impl ProductPlan {
+    /// The platform client registration of this product (OP-149 m.4), as the
+    /// `idp.client.register` Exercise checks it.
+    pub(crate) fn client(&self, id: ClientId) -> Client {
+        Client {
+            id,
+            display_name: self.display_name.clone(),
+            auth: AuthMethod::PrivateKeyJwtKey {
+                key: self.client_key.clone(),
+            },
+            redirect_uris: vec![self.redirect_uri.clone()],
+            post_logout_redirect_uris: Vec::new(),
+            backchannel_logout_uri: None,
+            platform: Some(Platform {
+                product: self.product,
+                service_key: self.service_key.clone(),
+                event_receiver: self.event_receiver.clone(),
+            }),
+            require_par: false,
+        }
     }
 }
 
@@ -229,6 +401,24 @@ pub(crate) struct RootOut {
     pub(crate) kid: String,
 }
 
+/// What a product's eligibility check names to be answered `eligible` (OP-149 m.10), in the
+/// ADP JSON encoding (base64url ids and digests).
+#[derive(Clone, Debug, Serialize)]
+pub(crate) struct SampleOut {
+    /// The realm's slug.
+    pub(crate) realm: String,
+    /// Its governing domain: `set.domain`.
+    pub(crate) domain: String,
+    /// The sample subject's Party: the check's `subject`.
+    pub(crate) subject: String,
+    /// The granted action: `set.intent.action`.
+    pub(crate) action: serde_json::Value,
+    /// A resource the Grant covers: an entry of `set.intent.resources`.
+    pub(crate) resource: serde_json::Value,
+    /// The subject's holding of the Grant: `set.basis`.
+    pub(crate) basis: serde_json::Value,
+}
+
 /// What a product needs from the bootstrap.
 #[derive(Clone, Debug, Serialize)]
 pub(crate) struct Summary {
@@ -237,6 +427,21 @@ pub(crate) struct Summary {
     pub(crate) root: RootOut,
     pub(crate) realms: Vec<RealmOut>,
     pub(crate) clients: Vec<ClientOut>,
+    /// Present when the plan names a sample.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) sample: Option<SampleOut>,
+}
+
+/// Meta-actions the bootstrap's keys sign, committed by the authority plane with the identity
+/// plane as PEP (EI-25).
+pub(crate) trait MetaExercises: Send + Sync {
+    /// Commits `request` with the actor's `ais` as `pep`.
+    fn meta(
+        &self,
+        request: Request,
+        ais: Vec<u8>,
+        pep: String,
+    ) -> impl Future<Output = Result<Verdict, Unavailable>> + Send;
 }
 
 /// The ports and stores the bootstrap runs over.
@@ -267,15 +472,20 @@ async fn cell_ids(app: &Pool, hsm: &KeyStore) -> Result<IdKey, BootstrapError> {
     Ok(IdKey::new(Secret::new(bytes)))
 }
 
-/// The bootstrap root key, made in the token once.
-fn root_key(hsm: &KeyStore) -> Result<HsmSigner, BootstrapError> {
-    Ok(match hsm.signer(ROOT_LABEL) {
+/// The bootstrap key `label`, made in the token once.
+fn token_key(hsm: &KeyStore, label: &str) -> Result<HsmSigner, BootstrapError> {
+    Ok(match hsm.signer(label) {
         Ok(s) => s,
-        Err(_) => hsm.generate_ed25519(ROOT_LABEL)?,
+        Err(_) => hsm.generate_ed25519(label)?,
     })
 }
 
-/// The root's Party: the first half of its key's thumbprint, so every run names the same one.
+/// The bootstrap root key, made in the token once.
+fn root_key(hsm: &KeyStore) -> Result<HsmSigner, BootstrapError> {
+    token_key(hsm, ROOT_LABEL)
+}
+
+/// A bootstrap key's Party: the first half of its thumbprint, so every run names the same one.
 fn root_party(key: &PublicKey) -> Id {
     let t = thumbprint(key);
     let mut id = [0; 16];
@@ -354,7 +564,7 @@ impl Moment {
 
 impl<P, K> Bootstrap<'_, P, K>
 where
-    P: Decider + Governance + Instances,
+    P: Decider + Governance + Instances + MetaExercises,
     K: RealmKeys,
 {
     /// Makes sure of everything `plan` names and reports it.
@@ -374,10 +584,20 @@ where
         let slugs =
             std::iter::once((&plan.platform, true)).chain(plan.tenants.iter().map(|s| (s, false)));
         let mut platform = None;
+        let mut sample = None;
         for (slug, is_platform) in slugs {
             let admin = self.admin(&ids, None);
-            let (tenant, realm, domain, created) = self.realm(&admin, slug, style, party).await?;
+            let catalog = plan
+                .sample
+                .as_ref()
+                .filter(|s| !is_platform && s.realm == *slug);
+            let schemas = catalog.map(|s| vec![s.catalog(party)]).unwrap_or_default();
+            let (tenant, realm, domain, created) =
+                self.realm(&admin, slug, style, party, schemas).await?;
             self.onboard(tenant, realm, domain, &root, party).await?;
+            if let Some(s) = catalog {
+                sample = Some(self.sample(s, (tenant, realm), domain, &root).await?);
+            }
             let route = route_by_slug(self.router, slug)
                 .await?
                 .ok_or(AdminError::NoRealm)?;
@@ -420,7 +640,104 @@ where
             },
             realms,
             clients,
+            sample,
         })
+    }
+
+    /// The sample subject in the sample realm and its Grant of the sample action, issued by a
+    /// `grant_issue` Exercise the root signs when its nonce has no ALLOW yet (OP-149 m.10).
+    async fn sample(
+        &self,
+        s: &SamplePlan,
+        (tenant, realm): (TenantId, RealmId),
+        domain: Digest,
+        root: &HsmSigner,
+    ) -> Result<SampleOut, BootstrapError> {
+        let subject_key = token_key(self.hsm, SUBJECT_LABEL)?;
+        let subject = root_party(&subject_key.public_key());
+        self.onboard(tenant, realm, domain, &subject_key, subject)
+            .await?;
+        let action = s.action_ref();
+        let mut label = SAMPLE_GRANT_LABEL.to_vec();
+        label.extend_from_slice(&domain.0);
+        label.extend_from_slice(&subject.0);
+        label.extend_from_slice(&action.schema.0);
+        let signature = root
+            .sign(&label)
+            .map_err(|e| BootstrapError::Unavailable(String::from(e.code())))?;
+        let nonce = suiss_crypto::digest::sha256(&signature).to_vec();
+        let found = find_nonce(self.app, &DomainId::from_bytes(domain.0), &nonce)
+            .await?
+            .filter(|n| n.outcome == "allow");
+        let since = match found {
+            Some(row) => row.decision_pos,
+            None => self.issue(s, domain, subject, root, &nonce).await?,
+        };
+        let exercise = meta::exercise_id(&domain, &nonce).map_err(|_| BootstrapError::Encode)?;
+        let grant = meta::object_id(&exercise, kind::GRANT, 0);
+        Ok(SampleOut {
+            realm: s.realm.clone(),
+            domain: b64url_encode(&domain.0),
+            subject: b64url_encode(&subject.0),
+            action: serde_json::json!({
+                "namespace": action.namespace,
+                "name": action.name,
+                "major": action.major,
+                "schema": b64url_encode(&action.schema.0),
+            }),
+            resource: serde_json::json!({
+                "namespace": s.namespace,
+                "path": [SAMPLE_PATH],
+            }),
+            basis: serde_json::json!({
+                "holding": {
+                    "grant": b64url_encode(&grant.0),
+                    "holder": b64url_encode(&subject.0),
+                    "since": since,
+                }
+            }),
+        })
+    }
+
+    /// Commits the sample Grant's `grant_issue` on the meta-anchor, signed by the root; returns
+    /// its record's position.
+    async fn issue(
+        &self,
+        s: &SamplePlan,
+        domain: Digest,
+        subject: Id,
+        root: &HsmSigner,
+        nonce: &[u8],
+    ) -> Result<u64, BootstrapError> {
+        let w = Moment::at(server_time(self.app).await?);
+        let payload = Payload::GrantIssue(s.grant(&domain, subject));
+        let intent =
+            self_signed_intent(&payload, subject, w.validity).ok_or(BootstrapError::Encode)?;
+        let digest = intent_digest(&intent).map_err(|_| BootstrapError::Encode)?;
+        let basis = ExerciseBasis::Anchor(meta::meta_anchor(&domain));
+        let ais = sign(root, &w.statement(domain, nonce, digest, basis))?;
+        let request = Request {
+            domain,
+            mode: Mode::Commit,
+            nonce: nonce.to_vec(),
+            intent,
+            payload: Some(payload),
+            basis,
+            capacity: Capacity::Own,
+            proofs: Vec::new(),
+            exercise: None,
+            consistency: None,
+        };
+        match MetaExercises::meta(self.plane, request, ais, String::from(IDENTITY_PEP))
+            .await
+            .map_err(|e| BootstrapError::Unavailable(e.0))?
+        {
+            Verdict::Committed(c) => Ok(c.position),
+            Verdict::Refused { code } => Err(BootstrapError::Refused(code)),
+            Verdict::NotAllowed { decision, .. } => {
+                Err(BootstrapError::Refused(format!("{:?}", decision.outcome)))
+            }
+        }
     }
 
     fn admin<'b>(&'b self, ids: &'b IdKey, platform: Option<TenantId>) -> Admin<'b, P, P, K> {
@@ -446,6 +763,7 @@ where
         slug: &str,
         style: IssuerStyle,
         root: Id,
+        schemas: Vec<Spp>,
     ) -> Result<(TenantId, RealmId, Digest, bool), BootstrapError> {
         if let Some(route) = route_by_slug(self.router, slug).await? {
             let mut t = TenantTx::begin(self.app, route.tenant, route.realm).await?;
@@ -468,6 +786,7 @@ where
                 placement: PLACEMENT,
                 root: Root::Sole(root),
                 ct3_delay_s: None,
+                schemas,
             })
             .await?;
         Ok((tenant, created.realm, created.domain, true))
@@ -479,9 +798,9 @@ where
         Ok(row.is_some_and(|n| n.outcome == "allow"))
     }
 
-    /// The root's Instance in `domain`: `party_register` when the Party is new, then
-    /// `instance_create`, both signed by the root key under the bootstrap Grant (L0-META-7,
-    /// OP-149 m.16 (a)). A recorded ALLOW of a step is not repeated.
+    /// The Instance of the bootstrap key `root` in `domain`: `party_register` when the Party is
+    /// new, then `instance_create`, both signed by that key under the bootstrap Grant
+    /// (L0-META-7, OP-149 m.16 (a)). A recorded ALLOW of a step is not repeated.
     async fn onboard(
         &self,
         tenant: TenantId,
@@ -568,22 +887,7 @@ where
         if let Some(id) = found {
             return Ok((id, false));
         }
-        let client = Client {
-            id: admin.new_client_id().await?,
-            display_name: p.display_name.clone(),
-            auth: AuthMethod::PrivateKeyJwtKey {
-                key: p.client_key.clone(),
-            },
-            redirect_uris: vec![p.redirect_uri.clone()],
-            post_logout_redirect_uris: Vec::new(),
-            backchannel_logout_uri: None,
-            platform: Some(Platform {
-                product: p.product,
-                service_key: p.service_key.clone(),
-                event_receiver: p.event_receiver.clone(),
-            }),
-            require_par: false,
-        };
+        let client = p.client(admin.new_client_id().await?);
         let id = String::from(client.id.as_str());
         let w = Moment::at(server_time(self.app).await?);
         let nonce = access_crypto::random::bytes::<16>()

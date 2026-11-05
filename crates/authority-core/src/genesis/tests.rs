@@ -36,6 +36,7 @@ fn order(root: Root) -> GenesisOrder {
         tenant: [1; 16],
         root,
         ct3_delay_s: None,
+        schemas: Vec::new(),
     }
 }
 
@@ -114,4 +115,52 @@ fn idp_actions_carry_their_consequence_tiers() {
     for a in IdpAction::ALL {
         assert_eq!(IdpAction::from_label(&a.label()), Some(a));
     }
+}
+
+fn catalog(publisher: Id, namespace: &str) -> access_kernel::schema::Spp {
+    access_kernel::schema::Spp {
+        publisher,
+        namespace: String::from(namespace),
+        catalog_version: 1,
+        actions: vec![access_kernel::schema::ActionSchema {
+            name: String::from("approve"),
+            major: 1,
+            effect: access_kernel::schema::EffectClass::Reversible,
+            reserved: false,
+            consumption_bearing: false,
+            params: BTreeMap::new(),
+            resource_types: BTreeSet::new(),
+            render: None,
+        }],
+        retirements: BTreeSet::new(),
+        core_spec_min: None,
+    }
+}
+
+// OP-141 m.35 (c), OP-149 m.10, SEC8: a Genesis may publish further catalogs of the founder in
+// namespaces of their own; one by another publisher, or in a namespace Access publishes, is
+// refused
+#[test]
+fn a_genesis_publishes_the_founders_further_catalogs() {
+    let d = Digest([7; 32]);
+    let founder = Id([2; 16]);
+    let mut o = order(Root::Sole(founder));
+    o.schemas = vec![catalog(founder, "work")];
+    let effects = meta::genesis_effects(&d, &values(&o)).unwrap();
+    let keys: BTreeSet<Vec<u8>> = effects.iter().map(|(k, _)| k.clone()).collect();
+    assert!(keys.contains(&access_kernel::schema::schemas_key("work")));
+    assert!(keys.contains(&access_kernel::schema::schemas_key("idp.client")));
+    for bad in [
+        catalog(Id([3; 16]), "work"),
+        catalog(founder, "idp.client"),
+        catalog(founder, "access"),
+    ] {
+        o.schemas = vec![bad];
+        assert!(matches!(
+            realm(&o, &mut Fixed),
+            Err(CoreError::Protocol("genesis-schema"))
+        ));
+    }
+    o.schemas = vec![catalog(founder, "work"), catalog(founder, "work")];
+    assert!(realm(&o, &mut Fixed).is_err());
 }

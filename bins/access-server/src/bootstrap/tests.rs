@@ -30,6 +30,55 @@ const PIN: &str = "1234-test-only";
 
 type TestPlane = Plane<KeyStore, ActorBindings, OsSalts, SourcesClock>;
 
+type AuthoritySigner = Arc<
+    Mutex<
+        access_authority_signer::service::Service<
+            access_authority_signer::adapters::SealedFactory<SoftKek>,
+            access_authority_signer::adapters::HsmBindings,
+            access_authority_signer::adapters::DirVault,
+        >,
+    >,
+>;
+
+/// A real authority signer on a Unix socket, its binding keys in `store`, with the production
+/// policy but a zero publish lead: the test runs the key schedule itself.
+fn authority_signer(name: &str, store: KeyStore) -> (PathBuf, AuthoritySigner) {
+    use access_authority_signer::adapters as signer;
+    let dir = std::env::temp_dir().join(format!("abs-auth-{name}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let policy = Policy {
+        publish_lead_ms: 0,
+        ..Policy::AUTHORITY
+    };
+    let service = Arc::new(Mutex::new(
+        access_authority_signer::service::Service::start(
+            signer::SealedFactory::new(SoftKek::new("authority-kek", [8; 32])),
+            signer::HsmBindings::new(store),
+            signer::DirVault::new(&dir),
+            policy,
+            signer::now_ms(),
+        )
+        .unwrap(),
+    ));
+    let path = dir.join("a.sock");
+    let listener = UnixListener::bind(&path).unwrap();
+    let uid = std::os::unix::fs::MetadataExt::uid(&std::fs::metadata(&dir).unwrap());
+    tokio::spawn(signer::serve(
+        listener,
+        Arc::clone(&service),
+        vec![uid],
+        signer::now_ms,
+    ));
+    (path, service)
+}
+
+/// One round of every keyring's schedule, as the signer runs it on its own.
+fn schedule(signer: &AuthoritySigner) {
+    let now = access_authority_signer::adapters::now_ms();
+    assert_eq!(signer.lock().unwrap().tick(now, now), Vec::<Digest>::new());
+}
+
 /// A real identity signer on a Unix socket in a fresh directory.
 fn identity_signer(name: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!("abs-{name}-{}", std::process::id()));
@@ -67,10 +116,21 @@ struct World {
 
 impl World {
     async fn new(name: &str) -> Self {
+        Self::open(name, false).await.0
+    }
+
+    /// With an authority signer when `with_signer`.
+    async fn open(name: &str, with_signer: bool) -> (Self, Option<AuthoritySigner>) {
         let db = fresh().await.unwrap();
         let (module, label) = hsm(name);
         let pin = Secret::new(String::from(PIN));
         let open = || KeyStore::open(&module, &label, &pin).unwrap();
+        let (signer, service) = if with_signer {
+            let (path, service) = authority_signer(name, open());
+            (Some(path), Some(service))
+        } else {
+            (None, None)
+        };
         let actors = ActorBindings::default();
         let domains = Arc::new(Domains::new(Setup {
             sequencer: db.sequencer.clone(),
@@ -82,7 +142,7 @@ impl World {
             salts: OsSalts,
             clock: SourcesClock::new(db.sequencer.clone()),
             deriver: db.deriver.clone(),
-            signer: None,
+            signer,
         }));
         let plane = Plane::new(
             domains.clone(),
@@ -94,14 +154,50 @@ impl World {
         let keys = Arc::new(open());
         Box::leak(Box::new(keys.clone()));
         let keyring = RealmKeyring::new(SignerKeys::new(identity_signer(name)), keys.clone());
-        Self {
+        let world = Self {
             db,
             plane,
             domains,
             keys,
             keyring,
             base: RealmBase::parse("https://access.test").unwrap(),
-        }
+        };
+        (world, service)
+    }
+
+    /// A new tenant's realm `slug` with the bootstrap root as founder, created through the
+    /// admin path alone.
+    async fn admin_realm(
+        &self,
+        slug: &str,
+    ) -> (TenantId, access_identity_admin::app::CreatedRealm) {
+        let ids = cell_ids(&self.db.app, &self.keys).await.unwrap();
+        let declared = DeclaredTargets::default();
+        let bootstrap = Bootstrap {
+            app: &self.db.app,
+            router: &self.db.router,
+            plane: &self.plane,
+            realm_keys: &self.keyring,
+            hsm: &self.keys,
+            base: &self.base,
+            declared: &declared,
+        };
+        let admin = bootstrap.admin(&ids, None);
+        let tenant = create_tenant(&self.db.app, PLACEMENT).await.unwrap();
+        let root = root_party(&root_key(&self.keys).unwrap().public_key());
+        let created = admin
+            .create_realm(&NewRealm {
+                tenant,
+                slug,
+                style: IssuerStyle::Path,
+                placement: PLACEMENT,
+                root: Root::Sole(root),
+                ct3_delay_s: None,
+                schemas: Vec::new(),
+            })
+            .await
+            .unwrap();
+        (tenant, created)
     }
 
     async fn run(&self, plan: &Plan) -> Summary {
@@ -145,6 +241,7 @@ fn plan() -> Plan {
             event_receiver: Some(String::from("https://work.test/ssf")),
             redirect_uri: RedirectUri::parse("https://work.test/cb").unwrap(),
         }],
+        sample: None,
     }
 }
 
@@ -301,18 +398,6 @@ fn plans_refuse_unknown_settings() {
     assert!(Plan::load(&dir.join("missing.toml")).is_err());
 }
 
-// OP-69, OP-149 m.21: the local deployment's plan is valid
-#[test]
-fn the_local_deployment_plan_is_valid() {
-    let path = concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/../../deploy/compose/access/bootstrap.toml"
-    );
-    let plan = Plan::load(Path::new(path)).unwrap();
-    assert_eq!(plan.platform, "platform");
-    assert_eq!(plan.style, Style::Path);
-}
-
 // OP-149 m.22 (g), OP-141 m.18 (d), m.22 (d), TN-111: a realm created through the admin path
 // alone has its domain's event-id and token keys, and the domain can be led at once
 #[tokio::test]
@@ -339,6 +424,7 @@ async fn admin_realm_creation_opens_the_domain_keys() {
             placement: PLACEMENT,
             root: Root::Sole(Id([4; 16])),
             ct3_delay_s: None,
+            schemas: Vec::new(),
         })
         .await
         .unwrap();
@@ -347,4 +433,225 @@ async fn admin_realm_creation_opens_the_domain_keys() {
     assert!(w.keys.aead(&access_crypto::token::label(&d.0)).is_ok());
     assert!(w.domains.consistency(d).await.is_ok());
     w.domains.release().await;
+}
+
+// OP-149 m.5, SAI-46, CR-25, OP-146 m.16 (m): a realm created through the admin path opens its
+// domain's keyring at Genesis, so the publish lead of its first operational key runs from then
+// and signed key lookups are answered once it is due; before, the answer is a 503 naming why
+#[tokio::test]
+async fn admin_realms_sign_key_lookups_once_the_first_key_is_due() {
+    use access_authority_core::CoreError;
+    use access_authority_core::keys::AsOf;
+    let (w, signer) = World::open("bootstrap-key-lookup", true).await;
+    let signer = signer.unwrap();
+    let (tenant, created) = w.admin_realm("lookups").await;
+    let root = root_key(&w.keys).unwrap();
+    let party = root_party(&root.public_key());
+    let kid = thumbprint(&root.public_key());
+    let declared = DeclaredTargets::default();
+    let bootstrap = Bootstrap {
+        app: &w.db.app,
+        router: &w.db.router,
+        plane: &w.plane,
+        realm_keys: &w.keyring,
+        hsm: &w.keys,
+        base: &w.base,
+        declared: &declared,
+    };
+
+    schedule(&signer);
+    schedule(&signer);
+    bootstrap
+        .onboard(tenant, created.realm, created.domain, &root, party)
+        .await
+        .unwrap();
+    let answer = w
+        .domains
+        .lookup_keys(created.domain, &[kid], AsOf::Head, true)
+        .await
+        .unwrap();
+    let (sign1, excerpt) = answer.signed.unwrap();
+    assert!(!sign1.is_empty() && !excerpt.is_empty());
+    assert_eq!(answer.lookup.keys.len(), 1);
+
+    let (fresh_tenant, fresh) = w.admin_realm("fresh").await;
+    bootstrap
+        .onboard(fresh_tenant, fresh.realm, fresh.domain, &root, party)
+        .await
+        .unwrap();
+    let early = w
+        .domains
+        .lookup_keys(fresh.domain, &[kid], AsOf::Head, true)
+        .await;
+    assert!(
+        matches!(early, Err(CoreError::Unavailable("signer-no-key"))),
+        "{early:?}"
+    );
+    w.domains.release().await;
+}
+
+/// The plan of the local deployment's Work sample.
+fn sample_plan() -> Plan {
+    Plan {
+        sample: Some(SamplePlan {
+            realm: String::from("acme"),
+            namespace: String::from("work"),
+            action: String::from("approve"),
+        }),
+        ..plan()
+    }
+}
+
+/// The eligibility body a product sends for `subject` from a bootstrap summary's sample.
+fn eligibility_body(sample: &serde_json::Value, subject: &str, now: u64) -> Vec<u8> {
+    serde_json::json!({
+        "subject": subject,
+        "set": {
+            "domain": sample["domain"],
+            "intent": {
+                "action": sample["action"],
+                "resources": [sample["resource"]],
+                "validity": { "from": now.saturating_sub(60_000), "until": now.saturating_add(60_000) },
+            },
+            "basis": sample["basis"],
+            "capacity": "own",
+        },
+    })
+    .to_string()
+    .into_bytes()
+}
+
+// OP-149 m.10, OP-141 m.35 (c), OP-69: the sample realm's Genesis publishes the Work catalog,
+// its root grants the sample action to the sample subject by a grant_issue Exercise, and the
+// summary is what an eligibility check names: the subject is eligible, another Party is not,
+// and a second run issues nothing new
+#[tokio::test]
+async fn the_bootstrapped_sample_is_eligible() {
+    use access_http::adp::app::{Reply, Service};
+    let w = World::new("bootstrap-sample").await;
+    let plan = sample_plan();
+    let first = w.run(&plan).await;
+    let json = serde_json::to_value(&first).unwrap();
+    let sample = &json["sample"];
+    assert_eq!(sample["realm"], "acme");
+    assert_eq!(sample["action"]["namespace"], "work");
+    let acme = first.realms.iter().find(|r| r.slug == "acme").unwrap();
+    assert_eq!(sample["domain"], acme.domain.as_str());
+
+    let adp = Service::new(w.domains.clone(), 64 * 1024);
+    let now = server_time(&w.db.app).await.unwrap();
+    let subject = sample["subject"].as_str().unwrap();
+    let pep = || Some(String::from("work"));
+    let eligible = adp
+        .eligibility(&eligibility_body(sample, subject, now), pep())
+        .await;
+    let Reply::Decision(v) = eligible else {
+        panic!("{eligible:?}");
+    };
+    assert_eq!(v["eligible"], true, "{v}");
+    let other = b64url_encode(&[0x5a; 16]);
+    let refused = adp
+        .eligibility(&eligibility_body(sample, &other, now), pep())
+        .await;
+    let Reply::Decision(v) = refused else {
+        panic!("{refused:?}");
+    };
+    assert_eq!(v["eligible"], false);
+    w.domains.release().await;
+
+    let second = w.run(&plan).await;
+    assert_eq!(serde_json::to_value(&second).unwrap()["sample"], *sample);
+}
+
+/// A plan file with its key paths moved under `keys`, where a P-256 client key and an Ed25519
+/// service key are written for the products it names.
+fn shipped(path: &Path, keys: &Path) -> Plan {
+    use aws_lc_rs::signature::{ECDSA_P256_SHA256_FIXED_SIGNING, EcdsaKeyPair, KeyPair as _};
+    let p256 = EcdsaKeyPair::generate(&ECDSA_P256_SHA256_FIXED_SIGNING).unwrap();
+    let point = p256.public_key().as_ref();
+    let client = serde_json::json!({
+        "kty": "EC",
+        "crv": "P-256",
+        "x": b64url_encode(&point[1..33]),
+        "y": b64url_encode(&point[33..65]),
+    });
+    let service = serde_json::json!({
+        "kty": "OKP",
+        "crv": "Ed25519",
+        "x": b64url_encode(
+            ed25519_dalek::SigningKey::from_bytes(&[9; 32])
+                .verifying_key()
+                .as_bytes()
+        ),
+    });
+    std::fs::write(keys.join("work-client.jwk"), client.to_string()).unwrap();
+    std::fs::write(keys.join("work-service.jwk"), service.to_string()).unwrap();
+    let text = std::fs::read_to_string(path).unwrap();
+    let local = keys.join(path.file_name().unwrap());
+    std::fs::write(
+        &local,
+        text.replace("/etc/access/products", keys.to_str().unwrap()),
+    )
+    .unwrap();
+    Plan::load(&local).unwrap()
+}
+
+// OP-69, OP-149 m.21, IDP-7, OP-149 m.23: every plan the local deployment ships loads, and each
+// product client it registers passes the checks of idp.client.register
+#[test]
+fn every_shipped_plan_is_valid() {
+    let dir = Path::new(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../deploy/compose/access"
+    ));
+    let keys = std::env::temp_dir().join(format!("abs-shipped-{}", std::process::id()));
+    std::fs::create_dir_all(&keys).unwrap();
+    let mut plans = 0;
+    for entry in std::fs::read_dir(dir).unwrap() {
+        let path = entry.unwrap().path();
+        let name = path.file_name().unwrap().to_str().unwrap().to_owned();
+        if !(name.starts_with("bootstrap")
+            && path
+                .extension()
+                .is_some_and(|e| e.eq_ignore_ascii_case("toml")))
+        {
+            continue;
+        }
+        plans += 1;
+        let plan = shipped(&path, &keys);
+        assert_eq!(plan.platform, "platform", "{name}");
+        for p in &plan.products {
+            let id = ClientId::parse("cli_0123456789abcdefghjkmnpqrs").unwrap();
+            assert_eq!(
+                p.client(id).check(&DeclaredTargets::default()),
+                Ok(()),
+                "{name}"
+            );
+        }
+    }
+    assert!(plans >= 2);
+}
+
+// OP-69, OP-141 m.35 (a): a sample names one of the plan's tenants and a catalog entry the
+// kernel accepts, outside the namespaces Access publishes itself
+#[test]
+fn a_sample_names_a_tenant_and_a_valid_action() {
+    let dir = std::env::temp_dir().join(format!("abs-sample-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let plan = |name: &str, realm: &str, namespace: &str| {
+        let path = dir.join(format!("{name}.toml"));
+        std::fs::write(
+            &path,
+            format!(
+                "platform = 'platform'\ntenants = ['acme']\n[sample]\nrealm = '{realm}'\nnamespace = '{namespace}'\naction = 'approve'\n"
+            ),
+        )
+        .unwrap();
+        Plan::load(&path)
+    };
+    assert!(plan("other", "other", "work").is_err());
+    assert!(plan("access", "acme", "access").is_err());
+    assert!(plan("idp", "acme", "idp.client").is_err());
+    assert!(plan("upper", "acme", "Work").is_err());
+    assert!(plan("ok", "acme", "work").unwrap().sample.is_some());
 }

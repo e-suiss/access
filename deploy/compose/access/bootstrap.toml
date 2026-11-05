@@ -3,3 +3,10 @@
 platform = "platform"
 tenants = ["acme"]
 issuer_style = "path"
+
+# OP-149 m.10: acme's Genesis publishes the Work catalog with this action, and its root grants it
+# to a sample subject; the bootstrap prints what an eligibility check names as `sample`
+[sample]
+realm = "acme"
+namespace = "work"
+action = "approve"

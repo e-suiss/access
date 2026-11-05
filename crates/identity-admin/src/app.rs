@@ -14,6 +14,7 @@ use access_kernel::digest::Digest;
 use access_kernel::intent::{IntentEnvelope, intent_digest};
 use access_kernel::meta::{ExerciseBasis, Root};
 use access_kernel::model::Window;
+use access_kernel::schema::Spp;
 use access_store::Pool;
 use access_store::identity::{RealmId, TenantId, TenantTx};
 use access_store::idp::{self, ClientRow, Decision as Bind, Governing, SettingsRow};
@@ -46,6 +47,8 @@ pub struct NewRealm<'a> {
     pub root: Root,
     /// The CT3 time-lock; `None` keeps the default.
     pub ct3_delay_s: Option<u64>,
+    /// Further catalogs its Genesis publishes, by the founding root (OP-141 m.35 (c)).
+    pub schemas: Vec<Spp>,
 }
 
 /// A created realm.
@@ -180,6 +183,7 @@ impl<D: Decider, G: Governance, K: RealmKeys> Admin<'_, D, G, K> {
                 tenant: *r.tenant.as_bytes(),
                 root: r.root.clone(),
                 ct3_delay_s: r.ct3_delay_s,
+                schemas: r.schemas.clone(),
             })
             .await
             .map_err(|e| AdminError::Unavailable(e.0))?;

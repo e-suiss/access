@@ -36,6 +36,7 @@ tokio = { workspace = true, features = ["macros", "net", "rt-multi-thread", "sig
 tracing = { workspace = true, features = ["std"] }
 
 [dev-dependencies]
+access-authority-signer = { path = "../../crates/authority-signer" }
 access-crypto = { workspace = true, features = ["testing"] }
 access-identity-signer = { path = "../../crates/identity-signer" }
 access-store = { workspace = true, features = ["testing"] }

@@ -331,6 +331,7 @@ version = "0.2.6"
 dependencies = [
  "access-authority-core",
  "access-authority-sequencer",
+ "access-authority-signer",
  "access-crypto",
  "access-http",
  "access-identity-account",

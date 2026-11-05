@@ -4,6 +4,13 @@ platform = "platform"
 tenants = ["acme"]
 issuer_style = "path"
 
+# OP-149 m.10: acme's Genesis publishes the Work catalog with this action, and its root grants it
+# to a sample subject; the bootstrap prints what an eligibility check names as `sample`
+[sample]
+realm = "acme"
+namespace = "work"
+action = "approve"
+
 [[products]]
 product = "work"
 display_name = "Suiss Work"
@@ -18,4 +25,4 @@ service_key = "/etc/access/products/work-service.jwk"
 #   ACCESS_DELIVERY_TARGETS='[{url="https://work-server:8443/v1/inbound/events", ca_file="/var/lib/access/certs/ca.crt"}]'
 # Without the declaration the bootstrap refuses it (invalid-event-receiver).
 # event_receiver = "https://work-server:8443/v1/inbound/events"
-redirect_uri = "https://work:8443/callback"
+redirect_uri = "https://work.localhost/v1/access/approval"

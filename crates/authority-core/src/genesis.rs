@@ -17,6 +17,7 @@ use access_kernel::model::{
     ResourceSelector, Structural, SubjectSelector, Window,
 };
 use access_kernel::record::Opened;
+use access_kernel::schema::Spp;
 use suiss_crypto::dcbor::{self, Limits, Value};
 
 use crate::CoreError;
@@ -141,6 +142,11 @@ fn bootstrap() -> Value {
 
 /// OP-141 m.35 (c): the `schema-definition` Acceptance of one `idp.*` namespace.
 fn schemas(namespace: &str, founder: Id) -> Value {
+    published(&spp(namespace, founder), founder)
+}
+
+/// OP-141 m.35 (c): the `schema-definition` Acceptance by `founder` of the catalog `package`.
+fn published(package: &Spp, founder: Id) -> Value {
     Value::Map(vec![
         (Value::text("issuer"), founder.to_value()),
         (Value::text("use"), Value::text("schema-definition")),
@@ -153,7 +159,7 @@ fn schemas(namespace: &str, founder: Id) -> Value {
             Value::text("validity"),
             Value::Array(vec![Value::Unsigned(0), Value::Unsigned(u64::MAX)]),
         ),
-        (Value::text("spp"), spp(namespace, founder).to_value()),
+        (Value::text("spp"), package.to_value()),
     ])
 }
 
@@ -167,6 +173,14 @@ pub fn realm(
     salts: &mut impl Salts,
 ) -> Result<BTreeMap<String, Opened>, CoreError> {
     let founder = founder(&order.root).ok_or(CoreError::Protocol("genesis-root"))?;
+    // OP-141 m.35 (c)
+    let mut namespaces: BTreeSet<&str> = NAMESPACES.iter().copied().collect();
+    namespaces.insert(meta::NAMESPACE);
+    for package in &order.schemas {
+        if package.publisher != founder || !namespaces.insert(package.namespace.as_str()) {
+            return Err(CoreError::Protocol("genesis-schema"));
+        }
+    }
     let root = root_value(&order.root);
     let idp = Value::Map(vec![
         (
@@ -184,7 +198,11 @@ pub fn realm(
         ("grants", set(vec![bootstrap()])?),
         (
             "acceptances",
-            set(NAMESPACES.iter().map(|ns| schemas(ns, founder)).collect())?,
+            set(NAMESPACES
+                .iter()
+                .map(|ns| schemas(ns, founder))
+                .chain(order.schemas.iter().map(|p| published(p, founder)))
+                .collect())?,
         ),
         (
             "versions",

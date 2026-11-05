@@ -315,6 +315,23 @@ where
     }
 }
 
+impl<K, B, S, C> crate::bootstrap::MetaExercises for Plane<K, B, S, C>
+where
+    K: Keys + Send + Sync + 'static,
+    B: Binding + Clone + Send + Sync + 'static,
+    S: Salts + Clone + Send + Sync + 'static,
+    C: Clock + Clone + Send + Sync + 'static,
+{
+    async fn meta(
+        &self,
+        request: Request,
+        ais: Vec<u8>,
+        pep: String,
+    ) -> Result<Verdict, Unavailable> {
+        self.commit(request, ais, pep).await
+    }
+}
+
 impl<K, B, S, C> DeviceInstances for Plane<K, B, S, C>
 where
     K: Keys + Send + Sync + 'static,

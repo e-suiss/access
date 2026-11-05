@@ -235,6 +235,9 @@ pub struct GenesisOrder {
     pub root: Root,
     /// The CT3 time-lock in seconds; `None` keeps the default (OP-141 m.34 (d)).
     pub ct3_delay_s: Option<u64>,
+    /// Further catalogs the founder publishes in the Genesis besides the `idp.*` ones (OP-141
+    /// m.35 (c)); each one's publisher is the founder.
+    pub schemas: Vec<Spp>,
 }
 
 /// The domain a Genesis opened.
