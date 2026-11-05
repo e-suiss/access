@@ -1,10 +1,13 @@
 use alloc::format;
 use alloc::string::String;
+use alloc::vec;
+use alloc::vec::Vec;
 
 use ed25519_dalek::Signer as _;
 use sha2::{Digest as _, Sha256};
 
 use super::*;
+use crate::vector_rules::{field, golden};
 use crate::verify::PureBackend;
 use crate::verify::cose::{Algorithm, PublicKey};
 
@@ -306,5 +309,353 @@ fn pap_profile_is_checked() {
     assert_eq!(
         run_pap(&wrong_typ),
         Err(ProjectionError::SdJwt(SdJwtError::Jws(JwsError::Type)))
+    );
+}
+
+fn key_header() -> String {
+    format!(
+        "\"keys\": {{\"{}\": \"{}\"}},\n \"allowed\": [-19]",
+        b64url_encode(&[1; 32]),
+        b64url_encode(&issuer_key().verifying_key().to_bytes())
+    )
+}
+
+fn outcome<T>(r: Result<T, ProjectionError>, ok: impl FnOnce(T) -> String) -> String {
+    match r {
+        Ok(v) => ok(v),
+        Err(e) => format!("\"error\": \"{}\"", e.code()),
+    }
+}
+
+fn access_token_cases() -> Vec<(&'static str, &'static str, String, Confirmation)> {
+    let aud = format!("\"{RS}\"");
+    let full = at_payload(&aud, &jkt_json(), &detail("intent"));
+    let mut out = vec![
+        (
+            "intent",
+            "L2-JOS-1",
+            at(&aud, &jkt_json(), &detail("intent")),
+            jkt(),
+        ),
+        (
+            "bounds",
+            "L2-JOS-1",
+            at(
+                &aud,
+                &jkt_json(),
+                &format!("{},{}", detail("bounds"), detail("bounds")),
+            ),
+            jkt(),
+        ),
+        (
+            "mtls",
+            "L2-JOS-1",
+            at(
+                &aud,
+                &format!(r#"{{"x5t#S256":"{}"}}"#, b64url_encode(&[6; 32])),
+                &detail("bounds"),
+            ),
+            Confirmation::X5tS256([6; 32]),
+        ),
+        (
+            "audience-array",
+            "L2-JOS-2",
+            at(&format!("[\"{RS}\"]"), &jkt_json(), &detail("intent")),
+            jkt(),
+        ),
+        (
+            "audience-other",
+            "L2-JOS-2",
+            at("\"other\"", &jkt_json(), &detail("intent")),
+            jkt(),
+        ),
+        (
+            "expired",
+            "L2-JOS-2",
+            issued(
+                ACCESS_TOKEN_TYP,
+                &full.replace("\"exp\":2000", "\"exp\":900"),
+            ),
+            jkt(),
+        ),
+        (
+            "typ-other",
+            "L2-JOS-2",
+            issued("access-receipt+jwt", &full),
+            jkt(),
+        ),
+        (
+            "signature",
+            "L2-JOS-2",
+            sign(
+                &holder_key(),
+                &format!(
+                    r#"{{"alg":"Ed25519","kid":"{}","typ":"at+jwt"}}"#,
+                    b64url_encode(&[1; 32])
+                ),
+                &full,
+            ),
+            jkt(),
+        ),
+        (
+            "payload-not-object",
+            "L2-JOS-2",
+            issued(ACCESS_TOKEN_TYP, "[1]"),
+            jkt(),
+        ),
+        (
+            "cnf-other-key",
+            "L2-JOS-3",
+            at(
+                &aud,
+                &format!(r#"{{"jkt":"{}"}}"#, b64url_encode(&[9; 32])),
+                &detail("intent"),
+            ),
+            jkt(),
+        ),
+        (
+            "cnf-two",
+            "L2-JOS-3",
+            at(
+                &aud,
+                &format!(
+                    r#"{{"jkt":"{0}","x5t#S256":"{0}"}}"#,
+                    b64url_encode(&[5; 32])
+                ),
+                &detail("intent"),
+            ),
+            jkt(),
+        ),
+        (
+            "cnf-jwk",
+            "L2-JOS-3",
+            at(&aud, r#"{"jwk":{"kty":"OKP"}}"#, &detail("intent")),
+            jkt(),
+        ),
+        (
+            "cnf-not-object",
+            "L2-JOS-3",
+            at(&aud, "\"x\"", &detail("intent")),
+            jkt(),
+        ),
+        (
+            "cnf-other-method",
+            "L2-JOS-3",
+            at(&aud, &jkt_json(), &detail("intent")),
+            Confirmation::X5tS256([5; 32]),
+        ),
+        (
+            "details-empty",
+            "L2-JOS-4",
+            at(&aud, &jkt_json(), ""),
+            jkt(),
+        ),
+        (
+            "details-mixed",
+            "L2-JOS-4",
+            at(
+                &aud,
+                &jkt_json(),
+                &format!("{},{}", detail("intent"), detail("bounds")),
+            ),
+            jkt(),
+        ),
+        (
+            "details-two-intents",
+            "L2-JOS-4",
+            at(
+                &aud,
+                &jkt_json(),
+                &format!("{},{}", detail("intent"), detail("intent")),
+            ),
+            jkt(),
+        ),
+        (
+            "details-other-domain",
+            "L2-JOS-4",
+            at(
+                &aud,
+                &jkt_json(),
+                r#"{"type":"t","kind":"bounds","domain":"sha-256:x","validity":{}}"#,
+            ),
+            jkt(),
+        ),
+        (
+            "details-scope-kind",
+            "L2-JOS-4",
+            at(&aud, &jkt_json(), &detail("scope")),
+            jkt(),
+        ),
+        (
+            "details-untyped",
+            "L2-JOS-4",
+            at(&aud, &jkt_json(), r#"{"kind":"bounds"}"#),
+            jkt(),
+        ),
+        (
+            "details-no-validity",
+            "L2-JOS-4",
+            at(
+                &aud,
+                &jkt_json(),
+                &format!(
+                    r#"{{"type":"t","kind":"bounds","domain":"{}"}}"#,
+                    digest_text(&domain())
+                ),
+            ),
+            jkt(),
+        ),
+        (
+            "details-not-object",
+            "L2-JOS-4",
+            at(&aud, &jkt_json(), "1"),
+            jkt(),
+        ),
+    ];
+    for (id, name) in [
+        ("no-sub", "sub"),
+        ("no-iat", "iat"),
+        ("no-jti", "jti"),
+        ("no-client-id", "client_id"),
+    ] {
+        out.push((
+            id,
+            "L2-JOS-2",
+            issued(
+                ACCESS_TOKEN_TYP,
+                &full.replace(&format!("\"{name}\":"), "\"x-removed\":"),
+            ),
+            jkt(),
+        ));
+    }
+    out
+}
+
+// L2-JOS-1, L2-JOS-2, L2-JOS-3, L2-JOS-4, PI-11, §9.9.3
+#[test]
+fn access_token_vectors_match() {
+    let lines: Vec<String> = access_token_cases()
+        .into_iter()
+        .map(|(id, rule, token, cnf)| {
+            let result = outcome(run(&token, &cnf), |t| {
+                format!(
+                    "\"kind\": \"{}\"",
+                    if t.kind == Kind::Intent {
+                        "intent"
+                    } else {
+                        "bounds"
+                    }
+                )
+            });
+            format!(
+                "  {{\"id\": \"{id}\", {}, \"token\": \"{token}\", \"cnf\": {{\"{}\": \"{}\"}}, {result}}}",
+                field(&[rule]),
+                cnf.member(),
+                b64url_encode(cnf.thumbprint())
+            )
+        })
+        .collect();
+    let json = format!(
+        "{{\n \"rule\": \"OP-150\",\n \"track\": \"core\",\n \"version\": 1,\n \"operation\": \"projection.access_token\",\n {},\n \"context\": {{\"issuer\": \"{ISSUER}\", \"audience\": \"{RS}\", \"domain\": \"{}\", \"now\": {NOW}, \"skew_ms\": 60000}},\n \"cases\": [\n{}\n ]\n}}\n",
+        key_header(),
+        digest_text(&domain()),
+        lines.join(",\n")
+    );
+    golden(
+        "access-token.json",
+        include_str!("../../../../../conformance/vectors/core/1/access-token.json"),
+        &json,
+    );
+}
+
+fn pap_sd_jwt_cases() -> Vec<(&'static str, &'static str, String)> {
+    let iss = digest_text(&domain());
+    let good = pap_payload(&iss, &cnf());
+    let mut out = vec![
+        ("valid", "L2-JOS-5", bound(&good)),
+        (
+            "unbound",
+            "L2-JOS-5",
+            format!("{}~", issued(PAP_TYP, &pap_payload(&iss, ""))),
+        ),
+        (
+            "other-domain",
+            "L2-JOS-6",
+            bound(&pap_payload("sha-256:other", &cnf())),
+        ),
+        ("typ-other", "L2-JOS-5", {
+            let prefix = format!("{}~", issued("at+jwt", &good));
+            format!("{prefix}{}", kb(&prefix))
+        }),
+        ("kb-other-nonce", "L2-JOS-5", {
+            let prefix = format!("{}~", issued(PAP_TYP, &good));
+            let sd_hash = b64url_encode(&Sha256::digest(prefix.as_bytes()));
+            let payload =
+                format!(r#"{{"iat":1000,"aud":"pep:shop","nonce":"n-2","sd_hash":"{sd_hash}"}}"#);
+            let kb = sign(
+                &holder_key(),
+                r#"{"alg":"Ed25519","typ":"kb+jwt"}"#,
+                &payload,
+            );
+            format!("{prefix}{kb}")
+        }),
+        (
+            "iat-text",
+            "L2-JOS-6",
+            bound(&good.replace("\"iat\":900", "\"iat\":\"900\"")),
+        ),
+    ];
+    for (id, from, to) in [
+        ("bounds-not-object", "\"bounds\":{}", "\"bounds\":1"),
+        ("holder-not-object", "\"holder\":{}", "\"holder\":[]"),
+        (
+            "validity-not-object",
+            "\"validity\":{}",
+            "\"validity\":\"v\"",
+        ),
+        (
+            "no-exercise",
+            "\"projection_exercise\":\"e\"",
+            "\"x_exercise\":\"e\"",
+        ),
+        (
+            "empty-lineage",
+            "\"lineage_commitment\":\"l\"",
+            "\"lineage_commitment\":\"\"",
+        ),
+        (
+            "no-capacity",
+            "\"capacity\":\"own\"",
+            "\"x_capacity\":\"own\"",
+        ),
+    ] {
+        out.push((id, "L2-JOS-6", bound(&good.replace(from, to))));
+    }
+    out
+}
+
+// L2-JOS-5, L2-JOS-6, OP-143 m.15 (b)
+#[test]
+fn pap_sd_jwt_vectors_match() {
+    let lines: Vec<String> = pap_sd_jwt_cases()
+        .into_iter()
+        .map(|(id, rule, presentation)| {
+            let result = outcome(run_pap(&presentation), |_| String::from("\"valid\": true"));
+            format!(
+                "  {{\"id\": \"{id}\", {}, \"presentation\": \"{presentation}\", {result}}}",
+                field(&[rule])
+            )
+        })
+        .collect();
+    let json = format!(
+        "{{\n \"rule\": \"OP-150\",\n \"track\": \"core\",\n \"version\": 1,\n \"operation\": \"projection.pap_sd_jwt\",\n {},\n \"context\": {{\"audience\": \"pep:shop\", \"nonce\": \"n-1\", \"domain\": \"{}\", \"now\": {NOW}, \"skew_ms\": 60000}},\n \"cases\": [\n{}\n ]\n}}\n",
+        key_header(),
+        digest_text(&domain()),
+        lines.join(",\n")
+    );
+    golden(
+        "pap-sd-jwt.json",
+        include_str!("../../../../../conformance/vectors/core/1/pap-sd-jwt.json"),
+        &json,
     );
 }

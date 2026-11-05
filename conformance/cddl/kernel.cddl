@@ -24,6 +24,8 @@ hash-alg = -16
 ;   [class, claim body] (claim-body-binding) "access/claim-body/v1"
 ;   approval-act-statement (H(AAS))           "access/aas/v1"
 ;   offline report chain link                "access/report-chain/v1"
+;   validity-contract (report contract)      "access/validity/v1"
+;   COSE_Sign1 PAP presentation as received  "access/pap-presentation/v1"
 ; Hash prefixes (OP-106 m.12), raw SHA-256 without a context:
 ;   0x00 Merkle leaf   0x01 Merkle interior node   0x02 field commitment   0x03 body commitment
 

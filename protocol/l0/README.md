@@ -66,6 +66,8 @@ Conformance vectors live in [`conformance/vectors/`](../../conformance/vectors).
 | [`core/1/key-scope.json`](../../conformance/vectors/core/1/key-scope.json) | `key_scope.operational_key` | [L0-SIG-60](signatures.md#L0-SIG-60) to [L0-SIG-72](signatures.md#L0-SIG-72), [L0-SIG-75a](signatures.md#L0-SIG-75a) |
 | [`core/1/jwt-claims.json`](../../conformance/vectors/core/1/jwt-claims.json) | `verify.jws_compact` | [L0-SIG-41](signatures.md#L0-SIG-41) to [L0-SIG-41b](signatures.md#L0-SIG-41b), [L0-ENC-15](encoding.md#L0-ENC-15) |
 | [`core/1/sd-jwt.json`](../../conformance/vectors/core/1/sd-jwt.json) | `verify.sd_jwt` | [L0-SIG-50](signatures.md#L0-SIG-50) to [L0-SIG-53](signatures.md#L0-SIG-53) |
+| [`core/1/access-token.json`](../../conformance/vectors/core/1/access-token.json) | `projection.access_token` | [L2-JOS-1](../l2/README.md#L2-JOS-1) to [L2-JOS-4](../l2/README.md#L2-JOS-4) |
+| [`core/1/pap-sd-jwt.json`](../../conformance/vectors/core/1/pap-sd-jwt.json) | `projection.pap_sd_jwt` | [L2-JOS-5](../l2/README.md#L2-JOS-5), [L2-JOS-6](../l2/README.md#L2-JOS-6) |
 | [`core/1/algebra.json`](../../conformance/vectors/core/1/algebra.json) | `algebra.meet` | [L0-ALG-42](algebra.md#L0-ALG-42), [L0-ALG-46](algebra.md#L0-ALG-46), [L0-ALG-51](algebra.md#L0-ALG-51) |
 | [`core/1/digest.json`](../../conformance/vectors/core/1/digest.json) | `digest.intent`, `digest.body_commit` | [L0-ENC-23](encoding.md#L0-ENC-23), [L0-ENC-29a](encoding.md#L0-ENC-29a) |
 | [`core/1/version.json`](../../conformance/vectors/core/1/version.json) | `version.check` | [L0-ENC-38](encoding.md#L0-ENC-38), [L0-GEN-7](#L0-GEN-7) |

@@ -7,7 +7,7 @@ import tempfile
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
-from f0 import aas, ais, algebra, claim, claimbody, codec, dcbor, digest, ed25519, fold, jose, merkle, meta, note, pap, receipt, record, report, sdjwt, status, validity, version_check
+from f0 import aas, ais, algebra, claim, claimbody, codec, dcbor, digest, ed25519, fold, jose, merkle, meta, note, pap, projection, receipt, record, report, sdjwt, status, validity, version_check
 from f0.algebra import child_within_parent
 from f0.version import CORE_VERSION, VERSION
 from f0.codec import Rejection, decode_canonical, decode_canonical_authority, decode_subject_selector, encode
@@ -186,6 +186,35 @@ def run_sd_jwt(case, document):
     except sdjwt.SdJwtError as error:
         return {"error": error.name}, None
     return {"claims": json.loads(sdjwt.disclosed_json(disclosed))}, None
+
+
+def run_access_token(case, document):
+    # L2-JOS-1 to L2-JOS-4
+    keys = jose.decode_key_set(document["keys"])
+    context = document["context"]
+    (member, thumbprint), = case["cnf"].items()
+    try:
+        kind = projection.verify_access_token(
+            case["token"], keys, document["allowed"], context["issuer"], context["audience"],
+            context["domain"], member, jose.b64url_decode(thumbprint), context["now"], context["skew_ms"],
+        )
+    except projection.ProjectionError as error:
+        return {"error": error.code}, None
+    return {"kind": kind}, None
+
+
+def run_pap_sd_jwt(case, document):
+    # L2-JOS-5, L2-JOS-6
+    keys = jose.decode_key_set(document["keys"])
+    context = document["context"]
+    try:
+        projection.verify_pap_sd_jwt(
+            case["presentation"], keys, document["allowed"], context["audience"], context["nonce"],
+            context["domain"], context["now"], context["skew_ms"],
+        )
+    except projection.ProjectionError as error:
+        return {"error": error.code}, None
+    return {"valid": True}, None
 
 
 def run_sd_jwt_disclosure(case, document):
@@ -509,6 +538,8 @@ OPERATIONS = {
     "report.verify": (run_report, ("head", "next_seq", "drawn", "error")),
     "status.lookup": (run_status, ("invalid", "error")),
     "aas.verify": (run_aas, ("digest", "error")),
+    "projection.access_token": (run_access_token, ("kind", "error")),
+    "projection.pap_sd_jwt": (run_pap_sd_jwt, ("valid", "error")),
 }
 
 # Operations in the vectors that F0 does not implement, each with its reason. Any other

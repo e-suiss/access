@@ -171,6 +171,8 @@ where `context(K)` is the UTF-8 bytes of the context string, followed by one zer
 | Claim body, as `[class, body]` ([L2-CLB-1](../l2/README.md#L2-CLB-1)) | `access/claim-body/v1` |
 | Approval Act Statement, H(AAS) ([L2-AAS-1](../l2/README.md#L2-AAS-1)) | `access/aas/v1` |
 | Offline report chain link ([L2-RPT-2](../l2/README.md#L2-RPT-2)) | `access/report-chain/v1` |
+| Validity contract, an offline report's `contract` ([L2-RPT-1](../l2/README.md#L2-RPT-1)) | `access/validity/v1` |
+| PAP presentation as received, an offline report entry's `holder_proof` ([L2-RPT-1](../l2/README.md#L2-RPT-1)) | `access/pap-presentation/v1` |
 
 The AIS digest is taken over the COSE_Sign1 bytes the actor sent, unchanged, because the signature covers them; it names the statement in the opening record and in its proof row.
 
