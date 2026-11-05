@@ -118,6 +118,9 @@ jobs:
     env:
       ACCESS_IMAGE: ${{ needs.image.outputs.local }}
       COMPOSE: docker compose --file deploy/compose/access.yaml
+      # OP-149 m.23: a declared delivery target and its product certificate
+      ACCESS_LOCAL_PRODUCT_HOSTS: work-server
+      ACCESS_DELIVERY_TARGETS: '[{url="https://work-server:8443/v1/inbound/events", ca_file="/var/lib/access/certs/ca.crt"}]'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -149,6 +152,9 @@ jobs:
           curl "${tls[@]}" https://access-server:8443/realms/platform/.well-known/suiss-configuration
           curl "${tls[@]}" --cert "$RUNNER_TEMP/pep.crt" --key "$RUNNER_TEMP/pep.key" \
             https://access-server:8443/access/v1/tenants | grep -q '"tnt_'
+          $COMPOSE logs --no-color access-server | grep -q 'declared delivery targets'
+          $COMPOSE run --rm --no-deps -T --entrypoint openssl init \
+            verify -CAfile /var/lib/access/certs/ca.crt /var/lib/access/product-tls/work-server.crt
       - name: Bootstrap again
         run: |
           $COMPOSE run --rm --no-deps -T bootstrap > "$RUNNER_TEMP/again.json"

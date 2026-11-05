@@ -11,7 +11,11 @@ display_name = "Suiss Work"
 client_key = "/etc/access/products/work-client.jwk"
 # Ed25519 or P-256 JWK: Work's service Instance key, signing its pairing Exercises
 service_key = "/etc/access/products/work-service.jwk"
-# Push delivery (RFC 8935) reaches only public addresses on port 443 (SSRF guard, §14.3); on a
-# local network Work reads its events from a poll stream (RFC 8936) instead.
-# event_receiver = "https://work.example/ssf"
+# OP-149 m.19 (c), m.23: Access opens one SSF push stream (RFC 8935) to this URL on the first
+# pairing. On the local network it is a private address on port 8443, so the server must declare
+# exactly this URL, with the local CA, and init must issue work-server's certificate:
+#   ACCESS_LOCAL_PRODUCT_HOSTS=work-server
+#   ACCESS_DELIVERY_TARGETS='[{url="https://work-server:8443/v1/inbound/events", ca_file="/var/lib/access/certs/ca.crt"}]'
+# Without the declaration the bootstrap refuses it (invalid-event-receiver).
+# event_receiver = "https://work-server:8443/v1/inbound/events"
 redirect_uri = "https://work:8443/callback"

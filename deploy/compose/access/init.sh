@@ -4,14 +4,18 @@
 # volumes: a local CA and leaf certificates, database login passwords, SoftHSM tokens and the
 # signers' KEKs.
 #
-#   /var/lib/access/certs    public: CA and leaf certificates; the PEP client key (0644)
-#   /var/lib/access/secrets  this deployment's processes only (0600)
-#   /var/lib/access/initdb   what the postgres container reads at its first start (0640)
+#   /var/lib/access/certs        public: CA and leaf certificates; the PEP client key (0644)
+#   /var/lib/access/secrets      this deployment's processes only (0600)
+#   /var/lib/access/initdb       what the postgres container reads at its first start (0640)
+#   /var/lib/access/product-tls  OP-149 m.23: a server certificate for each host named in
+#                                ACCESS_LOCAL_PRODUCT_HOSTS, issued by the local CA, and the CA;
+#                                keys are 0640, readable by uid or group 65532
 set -eu
 
 certs=/var/lib/access/certs
 secrets=/var/lib/access/secrets
 initdb=/var/lib/access/initdb
+products=/var/lib/access/product-tls
 
 random() {
     openssl rand -hex 24
@@ -34,10 +38,10 @@ ca() {
     fi
 }
 
-# leaf <name> <key path> <eku> [subjectAltName]
+# leaf <name> <key path> <eku> [subjectAltName] [certificate directory]
 leaf() {
-    name="$1" key="$2" eku="$3" san="${4:-}"
-    if [ -s "$certs/$name.crt" ]; then
+    name="$1" key="$2" eku="$3" san="${4:-}" dir="${5:-$certs}"
+    if [ -s "$dir/$name.crt" ]; then
         return
     fi
     (umask 077 && openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -out "$key")
@@ -52,7 +56,7 @@ leaf() {
     } > "$ext"
     openssl req -new -key "$key" -subj "/CN=$name" \
         | openssl x509 -req -CA "$certs/ca.crt" -CAkey "$secrets/ca.key" -CAcreateserial \
-            -CAserial "$secrets/ca.srl" -sha256 -days 365 -extfile "$ext" -out "$certs/$name.crt"
+            -CAserial "$secrets/ca.srl" -sha256 -days 365 -extfile "$ext" -out "$dir/$name.crt"
     rm -f "$ext"
 }
 
@@ -72,6 +76,24 @@ leaf postgres "$initdb/postgres.key" serverAuth "DNS:postgres"
 leaf pep "$certs/pep.key" clientAuth
 chmod 0644 "$certs"/*.crt "$certs/pep.key"
 chmod 0640 "$initdb/postgres.key"
+
+# OP-149 m.23: products on the local network serve TLS from the local CA, so Access verifies them
+# when it pushes to a declared delivery target (ACCESS_DELIVERY_TARGETS)
+for host in ${ACCESS_LOCAL_PRODUCT_HOSTS:-}; do
+    case "$host" in
+        -* | *[!a-z0-9.-]*)
+            echo "access-local-init: product host '$host' is not a lowercase DNS name" >&2
+            exit 1
+            ;;
+    esac
+    leaf "$host" "$products/$host.key" serverAuth "DNS:$host" "$products"
+    chmod 0644 "$products/$host.crt"
+    chmod 0640 "$products/$host.key"
+done
+if [ -n "${ACCESS_LOCAL_PRODUCT_HOSTS:-}" ]; then
+    cp "$certs/ca.crt" "$products/ca.crt"
+    chmod 0644 "$products/ca.crt"
+fi
 
 # OP-130 m.2: the database administrator's setup, run by the postgres image's first start
 mkdir -p "$initdb/sql"

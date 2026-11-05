@@ -106,7 +106,23 @@ ACCESS_BOOTSTRAP_PLAN=/etc/access/local/bootstrap-work.toml \
 
 `work-client.jwk` (P-256) verifies the product's client assertions and `work-service.jwk` (Ed25519 or P-256) is its service key for pairing. Running the bootstrap again changes nothing and prints the same ids.
 
-Your own containers join the `access-local` network. The `certs` volume holds the local CA (`ca.crt`) and a PEP client certificate (`pep.crt`, `pep.key`) for the `/access/v1` API. Access pushes events only to public addresses on port 443, so on a local network read them from a poll stream (`POST /access/v1/platform/streams`). Pin the image with `ACCESS_IMAGE=ghcr.io/e-suiss/access:main-<sha>-local`.
+Your own containers join the `access-local` network. The `certs` volume holds the local CA (`ca.crt`) and a PEP client certificate (`pep.crt`, `pep.key`) for the `/access/v1` API. Pin the image with `ACCESS_IMAGE=ghcr.io/e-suiss/access:main-<sha>-local`.
+
+### Receive pushed events on the local network
+
+Access pushes events (SSF push, webhooks) only to public addresses on port 443, unless the operator declares the exact endpoint URL. The declaration is an ordinary server setting, the same in every deployment and empty by default; TLS to a declared endpoint is always verified, and redirects are not followed. To push to a product on the `access-local` network:
+
+```sh
+ACCESS_LOCAL_PRODUCT_HOSTS=work-server \
+ACCESS_DELIVERY_TARGETS='[{url="https://work-server:8443/v1/inbound/events", ca_file="/var/lib/access/certs/ca.crt"}]' \
+ACCESS_PRODUCT_KEYS=./my-keys \
+ACCESS_BOOTSTRAP_PLAN=/etc/access/local/bootstrap-work.toml \
+  docker compose -f deploy/compose/access.yaml up -d
+```
+
+- `ACCESS_LOCAL_PRODUCT_HOSTS` (space separated) makes the provisioning issue `<host>.crt` and `<host>.key` (server certificate, `DNS:<host>`) from the local CA into the `product-tls` volume, next to `ca.crt`. Keys are readable by uid or group 65532: mount the volume read-only in your product and run it as that user or with `group_add: ["65532"]`.
+- `ACCESS_DELIVERY_TARGETS` lists the declared endpoints (`delivery_targets` in the server's TOML). A URL is matched byte for byte: `https`, lowercase host, the port unless 443, the full path. `ca_file`, when given, is the only trust anchor for that endpoint.
+- The product's `suiss_event_receiver` (`event_receiver` in the bootstrap plan) and any stream it creates must use exactly a declared URL; anything else on a private address or another port is refused.
 
 ## Tech stack
 

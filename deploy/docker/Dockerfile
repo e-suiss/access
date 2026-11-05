@@ -36,7 +36,8 @@ RUN apt-get update \
  && useradd --uid 65532 --gid 65532 --groups softhsm --no-create-home --shell /usr/sbin/nologin nonroot \
  && install -d -o 65532 -g 65532 -m 0750 \
       /var/lib/access/certs /var/lib/access/secrets /var/lib/access/initdb \
-      /var/lib/access/signer /var/lib/access/identity-signer /var/lib/access/bootstrap /run/access \
+      /var/lib/access/signer /var/lib/access/identity-signer /var/lib/access/bootstrap \
+      /var/lib/access/product-tls /run/access \
  && chown 65532:softhsm /var/lib/softhsm/tokens \
  && chmod 0755 /var/lib/softhsm \
  && install -d -m 0755 /etc/access/local /usr/share/access/postgres
