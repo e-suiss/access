@@ -67,6 +67,20 @@ pub struct AuthRequest {
     pub acr_values: Vec<String>,
     /// `dpop_jkt` (RFC 9449 §10).
     pub dpop_jkt: Option<[u8; 32]>,
+    /// The authority asked for (RFC 9396, RFC 8707): the token endpoint decides it later as a
+    /// `projection.issue` (§9.9).
+    #[serde(default)]
+    pub authority: Option<AuthorityAsk>,
+}
+
+/// The authority an authorization request asks for: the one resource server and the RFC 9396
+/// details as sent; the token request may ask for these or fewer (RFC 9396 §6.1).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AuthorityAsk {
+    /// The RFC 8707 resource.
+    pub resource: String,
+    /// `authorization_details` as sent.
+    pub details: String,
 }
 
 impl AuthRequest {
@@ -324,10 +338,7 @@ pub fn stage_two(
     let dpop_jkt = authorization_request_jkt(params.get("dpop_jkt"))
         .map_err(|_| AuthError::invalid_request("dpop_jkt is malformed"))?
         .map(|j| j.0);
-    // RFC 8707, AG-8
-    if params.get("resource").is_some_and(|r| r != issuer.as_str()) {
-        return Err(AuthError::new("invalid_target", "unknown resource"));
-    }
+    let authority = authority_ask(params, issuer)?;
     let state = params.get("state").map(String::from);
     let nonce = params.get("nonce").map(String::from);
     if state.as_ref().is_some_and(|s| s.len() > MAX_STATE)
@@ -346,7 +357,37 @@ pub fn stage_two(
         max_age_s,
         acr_values,
         dpop_jkt,
+        authority,
     })
+}
+
+/// The authority an authorization request asks for (RFC 9396, §9.9, AG-8): one resource server,
+/// never a default one, and valid details; without details the only resource is the realm.
+fn authority_ask(params: &Params, issuer: &Issuer) -> Result<Option<AuthorityAsk>, AuthError> {
+    let resource = params.get("resource");
+    let Some(details) = params.get(crate::domain::authority::DETAILS_PARAM) else {
+        // RFC 8707, AG-8
+        if resource.is_some_and(|r| r != issuer.as_str()) {
+            return Err(AuthError::new("invalid_target", "unknown resource"));
+        }
+        return Ok(None);
+    };
+    let Some(resource) = resource.filter(|r| *r != issuer.as_str()) else {
+        return Err(AuthError::new(
+            "invalid_target",
+            "one resource server is required",
+        ));
+    };
+    if crate::domain::authority::parse_details(details, resource).is_err() {
+        return Err(AuthError::new(
+            "invalid_authorization_details",
+            "the authorization details are not valid",
+        ));
+    }
+    Ok(Some(AuthorityAsk {
+        resource: String::from(resource),
+        details: String::from(details),
+    }))
 }
 
 /// The authorization error response: `redirect_uri` with `error`, `error_description`,

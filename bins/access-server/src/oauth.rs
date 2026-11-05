@@ -12,6 +12,7 @@ use access_identity_oauth::adapters::oauth::{HostedPages, OsRandom, PgOAuth};
 use access_identity_oauth::adapters::{PgDirectory, SignerKeys};
 use access_identity_oauth::app::oauth::Env;
 use access_identity_oauth::domain::dpop::DpopProfile;
+use access_internal_api::projections::Projections;
 use access_store::Pool;
 use access_store::identity::{RealmId, TenantId};
 use suiss_crypto::pkcs11::KeyStore;
@@ -65,8 +66,9 @@ impl HsmNonces {
     }
 }
 
-/// What the authorization server reaches in this process.
-pub(crate) struct ServerEnv {
+/// What the authorization server reaches in this process; `P` is the authority plane's token
+/// projections (OP-150 m.2).
+pub(crate) struct ServerEnv<P> {
     pub(crate) db: PgOAuth,
     pub(crate) signer: SignerKeys,
     pub(crate) client_keys: HttpClientKeys,
@@ -74,9 +76,10 @@ pub(crate) struct ServerEnv {
     pub(crate) app: Pool,
     pub(crate) nonces: HsmNonces,
     pub(crate) dpop: DpopProfile,
+    pub(crate) projections: P,
 }
 
-impl Env for ServerEnv {
+impl<P: Projections + 'static> Env for ServerEnv<P> {
     type Db = PgOAuth;
     type Signer = SignerKeys;
     type ClientKeys = HttpClientKeys;
@@ -85,6 +88,7 @@ impl Env for ServerEnv {
     type Random = OsRandom;
     type Directory = PgDirectory;
     type Replay = PgReplayCache;
+    type Projections = P;
 
     fn db(&self) -> &PgOAuth {
         &self.db
@@ -124,5 +128,9 @@ impl Env for ServerEnv {
 
     fn dpop(&self) -> &DpopProfile {
         &self.dpop
+    }
+
+    fn projections(&self) -> &P {
+        &self.projections
     }
 }

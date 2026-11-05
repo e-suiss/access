@@ -153,6 +153,13 @@ fn approval_act_statement_examples_meet_the_cddl() {
     check_examples("approval-act-statement.json");
 }
 
+// §9.9, OP-150 m.2: the holder's projection.issue Exercise at the token endpoint meets its CDDL;
+// an Exercise without its AIS, with a short nonce or an unknown member does not
+#[test]
+fn token_exercise_examples_meet_the_cddl() {
+    check_examples("token-exercise.json");
+}
+
 // OP-149 m.3, CR-58 m.3: the discovery endpoint map is deterministic CBOR of https URLs
 #[test]
 fn suiss_discovery_examples_meet_the_cddl() {

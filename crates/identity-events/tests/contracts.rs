@@ -219,12 +219,19 @@ fn built_events_meet_the_contracts() {
             5,
         ),
         IdentityEvent::party_suspended([5; 32], &[2; 16], 5),
+        // §9.9.3 rule 6, P50
+        IdentityEvent::projection_invalidated([6; 32], &[7; 32], &[8; 32], &[9; 16], 5),
     ] {
         let back =
             IdentityEvent::from_outbox(e.kind.outbox_kind(), &e.to_outbox().unwrap()).unwrap();
         assert_eq!(back, e);
         built.push(e.ready());
     }
+    // the realm's authorization server writes what the transmitter reads
+    assert_eq!(
+        IdentityKind::ProjectionInvalidated.outbox_kind(),
+        access_identity_oauth::domain::tokens::INVALIDATED_OUTBOX
+    );
     let mut names: Vec<&str> = built.iter().map(|r| r.name).collect();
     names.sort_unstable();
     names.dedup();

@@ -36,6 +36,10 @@ pub const ACCESS_TYP: &str = "at+jwt";
 /// `typ` of the logout token (OIDC Back-Channel Logout §2.4).
 pub const LOGOUT_TYP: &str = "logout+jwt";
 
+/// The identity outbox kind of a `projection-invalidated` event: a refresh family of authority
+/// tokens ended on reuse (§9.9.3 rule 6, §9.16).
+pub const INVALIDATED_OUTBOX: &str = "event.projection_invalidated";
+
 /// The back-channel logout event (OIDC Back-Channel Logout §2.4).
 pub const LOGOUT_EVENT: &str = "http://schemas.openid.net/event/backchannel-logout";
 
@@ -223,6 +227,15 @@ pub struct GrantDetails {
     pub aal: Aal,
     /// Whether an ID token is issued.
     pub openid: bool,
+    /// The authority the grant was asked for; its tokens are `projection.issue` decisions.
+    #[serde(default)]
+    pub authority: Option<crate::domain::request::AuthorityAsk>,
+    /// The refresh family of its authority tokens, once the first one is issued (P50).
+    #[serde(default)]
+    pub family: Option<[u8; 16]>,
+    /// The `ExerciseID` of the family's first token.
+    #[serde(default)]
+    pub projection: Option<[u8; 32]>,
 }
 
 /// What a code carries to the token endpoint.

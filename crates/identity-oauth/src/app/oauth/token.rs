@@ -1,12 +1,16 @@
-//! `POST /token` (RFC 6749 §3.2, §4.1.3, §6; RFC 7636 §4.6; RFC 9449 §5): the code exchange
-//! and refresh rotation. Every token request carries a DPoP proof: there is no bearer access
-//! token (TN-27). ROPC and implicit do not exist; client credentials and device code are later
-//! stages (OP-146 m.6).
+//! `POST /token` (RFC 6749 §3.2, §4.1.3, §4.4, §6; RFC 7636 §4.6; RFC 9449 §5): the code
+//! exchange, refresh rotation and client credentials. Every token request carries a DPoP proof:
+//! there is no bearer access token (TN-27). A request for authority (RFC 9396
+//! `authorization_details`) is a `projection.issue` decision of the authority plane (§9.9);
+//! client credentials exist only for it. ROPC and implicit do not exist; device code is a later
+//! stage (OP-146 m.6). A refused request is written to the identity audit log (OP-39).
 
 use access_crypto::dpop::Role;
 use access_crypto::oauth::pkce_matches;
+use access_kernel::digest::Digest;
 use access_store::oauth::NewGrant;
 
+use super::authority::Asked;
 use super::{
     ClientRequest, Env, OAuth, Realm, Reply, code_digest, decode32, from_day, grant_live,
     refresh_digest, session_live, signed, unsigned,
@@ -39,6 +43,17 @@ fn binding(e: BindingError) -> Reply {
     Reply::oauth_error(400, e.error(), "the DPoP key does not match the grant")
 }
 
+/// A request value as an audit field: identifiers only (OP-10); anything else is `-`.
+fn audit_text(v: Option<&str>, max: usize) -> &str {
+    v.filter(|s| {
+        !s.is_empty()
+            && s.len() <= max
+            && s.bytes()
+                .all(|c| c.is_ascii_alphanumeric() || matches!(c, b'_' | b':' | b'.' | b'-'))
+    })
+    .unwrap_or("-")
+}
+
 fn verifier_ok(v: &str) -> bool {
     (43..=128).contains(&v.len())
         && v.bytes()
@@ -48,10 +63,34 @@ fn verifier_ok(v: &str) -> bool {
 impl<E: Env> OAuth<E> {
     /// `POST /token`, form-encoded (§11.4.5 #19).
     pub async fn token(&self, realm: &Realm, params: &Params, http: TokenHttp<'_>) -> Reply {
-        match self.token_inner(realm, params, http).await {
+        let reply = match self.token_inner(realm, params, http).await {
             Ok(r) => r,
-            Err(Unavailable) => Reply::Unavailable,
+            Err(Unavailable) => return Reply::Unavailable,
+        };
+        // OP-39: every refused token request, unsampled
+        if let Some(error) = super::authority::error_of(&reply)
+            && self.audit_refusal(realm, params, &error).await.is_err()
+        {
+            return Reply::Unavailable;
         }
+        reply
+    }
+
+    async fn audit_refusal(
+        &self,
+        realm: &Realm,
+        params: &Params,
+        error: &str,
+    ) -> Result<(), Unavailable> {
+        let mut tx = self.begin(realm).await?;
+        tx.audit(
+            "oauth.token.refused",
+            audit_text(params.get("client_id"), 200),
+            audit_text(Some(error), 200),
+            audit_text(params.get("grant_type"), 128),
+        )
+        .await?;
+        tx.commit().await
     }
 
     async fn token_inner(
@@ -61,7 +100,10 @@ impl<E: Env> OAuth<E> {
         http: TokenHttp<'_>,
     ) -> Result<Reply, Unavailable> {
         let grant_type = params.get("grant_type");
-        if !matches!(grant_type, Some("authorization_code" | "refresh_token")) {
+        if !matches!(
+            grant_type,
+            Some("authorization_code" | "refresh_token" | "client_credentials")
+        ) {
             return Ok(match grant_type {
                 None => Reply::oauth_error(400, "invalid_request", "grant_type is required"),
                 Some(_) => Reply::oauth_error(
@@ -122,6 +164,12 @@ impl<E: Env> OAuth<E> {
                 return Ok(reply.with_nonce(nonce));
             }
         };
+        if grant_type == Some("client_credentials") {
+            let reply = self
+                .client_credentials(realm, &client, params, proof.jkt, now)
+                .await?;
+            return Ok(reply.with_nonce(Some(proof.nonce)));
+        }
         let mut tx = self.begin(realm).await?;
         let reply = if grant_type == Some("authorization_code") {
             self.exchange(&mut tx, realm, &client, params, proof.jkt, now)
@@ -189,8 +237,16 @@ impl<E: Env> OAuth<E> {
         let Ok(bound) = refresh_binding(client.client_type(), Some(jkt)) else {
             return Ok(binding(BindingError::ProofRequired));
         };
+        let mut grant_details = details.grant.clone();
+        let projected = match self
+            .code_projection(realm, client, params, &mut grant_details, jkt)
+            .await?
+        {
+            Ok(p) => p,
+            Err(r) => return Ok(r),
+        };
         let sid = self.random::<16>()?;
-        let encoded = serde_json::to_vec(&details.grant).map_err(|_| Unavailable)?;
+        let encoded = serde_json::to_vec(&grant_details).map_err(|_| Unavailable)?;
         let grant_id = tx
             .insert_grant(&NewGrant {
                 sid,
@@ -208,9 +264,20 @@ impl<E: Env> OAuth<E> {
             .redeem_code(row.day, &hash, signed(now), grant_id)
             .await?
         {
+            if let Some(p) = &projected {
+                self.invalidate(tx, p.domain, p.token.family, &p.token.exercise, now)
+                    .await?;
+            }
             return Ok(invalid_grant());
         }
         let grant = tx.grant(grant_id).await?.ok_or(Unavailable)?;
+        let nonce = details.nonce.as_deref();
+        if let Some(p) = &projected {
+            let body = self
+                .authority_tokens(tx, realm, client, &grant, &grant_details, p, nonce, now)
+                .await?;
+            return Ok(Reply::json(200, &body));
+        }
         let body = self
             .issue(
                 tx,
@@ -219,7 +286,7 @@ impl<E: Env> OAuth<E> {
                 &grant,
                 &details.grant,
                 &jkt.text(),
-                details.nonce.as_deref(),
+                nonce,
                 now,
             )
             .await?;
@@ -251,10 +318,19 @@ impl<E: Env> OAuth<E> {
         if grant.client != client.uuid {
             return Ok(invalid_grant());
         }
+        let details: GrantDetails =
+            serde_json::from_slice(&grant.details).map_err(|_| Unavailable)?;
         if row.rotated_ms.is_some() {
             // TN-31, RR-18
             tx.revoke_grant(grant.id, signed(now), "reuse").await?;
             tx.end_sessions(grant.subject).await?;
+            // §9.9.3 rule 6, P50: the whole family of authority tokens ends
+            if let (Some(family), Some(root), Some(domain)) =
+                (details.family, details.projection, tx.governing().await?)
+            {
+                self.invalidate(tx, Digest(domain), family, &Digest(root), now)
+                    .await?;
+            }
             return Ok(invalid_grant());
         }
         if !grant_live(&grant, now) {
@@ -270,8 +346,27 @@ impl<E: Env> OAuth<E> {
         if let Err(e) = check_refresh(grant.dpop_jkt.map(Jkt), Some(jkt)) {
             return Ok(binding(e));
         }
-        let details: GrantDetails =
-            serde_json::from_slice(&grant.details).map_err(|_| Unavailable)?;
+        if let (Some(a), Some(family)) = (&details.authority, details.family) {
+            // §9.9.3 rule 6, L19: every refresh is a new decision of the family
+            let asked = Asked {
+                params,
+                authorized: Some(a),
+                family: Some(family),
+            };
+            let p = match self.project(realm, client, &asked, jkt).await? {
+                Ok(p) => p,
+                Err(r) => return Ok(r),
+            };
+            if !tx.rotate_refresh(&hash, signed(now)).await? {
+                self.invalidate(tx, p.domain, family, &p.token.exercise, now)
+                    .await?;
+                return Ok(invalid_grant());
+            }
+            let body = self
+                .authority_tokens(tx, realm, client, &grant, &details, &p, None, now)
+                .await?;
+            return Ok(Reply::json(200, &body));
+        }
         if let Some(scope) = params.get("scope")
             && scope
                 .split(' ')

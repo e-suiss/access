@@ -343,7 +343,8 @@ async fn code_exchange_downgrades_are_refused() {
         ("", "invalid_request"),
         ("password", "unsupported_grant_type"),
         ("implicit", "unsupported_grant_type"),
-        ("client_credentials", "unsupported_grant_type"),
+        // §10.4.1: only a confidential client, and only for authority
+        ("client_credentials", "unauthorized_client"),
         (
             "urn:ietf:params:oauth:grant-type:jwt-bearer",
             "unsupported_grant_type",

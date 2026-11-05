@@ -137,7 +137,7 @@ fn the_served_core_is_declared() {
     );
     assert_eq!(
         m["grant_types_supported"],
-        serde_json::json!(["authorization_code", "refresh_token"])
+        serde_json::json!(["authorization_code", "refresh_token", "client_credentials"])
     );
     assert!(!m.contains_key("client_id_metadata_document_supported"));
 }

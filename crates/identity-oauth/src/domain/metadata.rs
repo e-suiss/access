@@ -54,8 +54,8 @@ pub enum Feature {
     ClientIdMetadataDocument,
     /// OIDC Back-Channel Logout 1.0 with `sid`.
     BackchannelLogout,
-    /// RFC 9396 `authorization_details` for authority token projections (OP-150 m.2); not
-    /// served yet.
+    /// RFC 9396 `authorization_details` for authority token projections, with client
+    /// credentials for them (OP-150 m.2, §10.4.1).
     AuthorizationDetails,
 }
 
@@ -94,7 +94,11 @@ pub const SERVED: Served = Served {
         Endpoint::Introspect,
         Endpoint::EndSession,
     ],
-    features: &[Feature::Dpop, Feature::BackchannelLogout],
+    features: &[
+        Feature::Dpop,
+        Feature::BackchannelLogout,
+        Feature::AuthorizationDetails,
+    ],
 };
 
 /// The protocol scopes the metadata declares (OP-146 m.5 (c)).
@@ -169,10 +173,12 @@ pub fn authorization_server(issuer: &Issuer, served: &Served) -> String {
             "token_endpoint".into(),
             issuer.endpoint(Endpoint::Token.path()).into(),
         );
-        m.insert(
-            "grant_types_supported".into(),
-            json!(["authorization_code", "refresh_token"]),
-        );
+        let grants = if served.feature(Feature::AuthorizationDetails) {
+            json!(["authorization_code", "refresh_token", "client_credentials"])
+        } else {
+            json!(["authorization_code", "refresh_token"])
+        };
+        m.insert("grant_types_supported".into(), grants);
         m.insert(
             "token_endpoint_auth_methods_supported".into(),
             json!(["none", "private_key_jwt", "client_secret_basic"]),

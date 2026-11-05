@@ -214,6 +214,29 @@ impl OAuthTx for PgOAuthTx {
         self.0.outbox(kind, payload).await.map_err(down)
     }
 
+    async fn governing(&mut self) -> Result<Option<[u8; 32]>, Unavailable> {
+        let g = idp::governance(&mut self.0).await.map_err(down)?;
+        Ok(g.map(|g| *g.domain.as_bytes()))
+    }
+
+    async fn audit(
+        &mut self,
+        event_type: &str,
+        actor: &str,
+        target: &str,
+        correlation: &str,
+    ) -> Result<(), Unavailable> {
+        self.0
+            .audit(&access_store::audit::AuditEvent {
+                event_type,
+                actor,
+                target,
+                correlation,
+            })
+            .await
+            .map_err(down)
+    }
+
     async fn commit(self) -> Result<(), Unavailable> {
         self.0.commit().await.map_err(down)
     }

@@ -16,6 +16,7 @@ fn req(prompt: Prompt, max_age_s: Option<u64>, acr: &[&str]) -> AuthRequest {
         max_age_s,
         acr_values: acr.iter().map(|a| String::from(*a)).collect(),
         dpop_jkt: None,
+        authority: None,
     }
 }
 

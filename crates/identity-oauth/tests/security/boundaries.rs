@@ -12,8 +12,9 @@ use crate::support::{CB, Cluster, VERIFIER, body, error, location, now, query};
 
 // TN-34, TN-101, IDP-7, RR-18, §10.4.1, §10.4.6, IDP-24, MD-3, CR-5, §16.4.10, OP-146 m.8 (d):
 // the served metadata offers only the code flow with S256, no implicit or hybrid response, no
-// ROPC, client credentials or device grant, no OIDC Session Management iframe, no Token Binding,
-// no EdDSA, no unsigned or symmetric ID token and no request objects
+// ROPC or device grant, client credentials only for authority tokens (OP-150 m.2), no OIDC
+// Session Management iframe, no Token Binding, no EdDSA, no unsigned or symmetric ID token and
+// no request objects
 #[test]
 fn metadata_offers_no_forbidden_surface() {
     let issuer = Issuer::parse("https://acme.id.test").unwrap();
@@ -27,7 +28,7 @@ fn metadata_offers_no_forbidden_surface() {
     );
     assert_eq!(
         m["grant_types_supported"],
-        serde_json::json!(["authorization_code", "refresh_token"])
+        serde_json::json!(["authorization_code", "refresh_token", "client_credentials"])
     );
     for key in [
         "check_session_iframe",
@@ -49,7 +50,6 @@ fn metadata_offers_no_forbidden_surface() {
         "plain",
         "password",
         "implicit",
-        "client_credentials",
         "device_code",
         "id_token token",
         "client_secret_post",

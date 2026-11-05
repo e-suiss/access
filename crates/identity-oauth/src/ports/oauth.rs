@@ -158,6 +158,16 @@ pub trait OAuthTx: Send {
         kind: &str,
         payload: &[u8],
     ) -> impl Future<Output = Result<(), Unavailable>> + Send;
+    /// The realm's governing authority domain (TN-4, OP-149 m.22 (g)).
+    fn governing(&mut self) -> impl Future<Output = Result<Option<[u8; 32]>, Unavailable>> + Send;
+    /// Writes an identity audit row in this transaction (OP-10, OP-39): identifiers only.
+    fn audit(
+        &mut self,
+        event_type: &str,
+        actor: &str,
+        target: &str,
+        correlation: &str,
+    ) -> impl Future<Output = Result<(), Unavailable>> + Send;
     /// Commits.
     fn commit(self) -> impl Future<Output = Result<(), Unavailable>> + Send;
 }

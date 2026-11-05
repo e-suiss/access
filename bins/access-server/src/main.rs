@@ -662,14 +662,16 @@ fn login(
 }
 
 /// The realm authorization server (OP-146 I7) over the application pool, the identity signer,
-/// clients' endpoints and the HSM's DPoP nonce keys.
-fn authorization(
+/// clients' endpoints, the HSM's DPoP nonce keys and the authority plane's token projections
+/// (OP-150 m.2).
+fn authorization<P>(
     config: &Config,
-    app: Pool,
-    router: Pool,
-    nonce_keys: Arc<KeyStore>,
-    outbound: Outbound,
-) -> Result<axum::Router, String> {
+    (app, router, nonce_keys, outbound): (Pool, Pool, Arc<KeyStore>, Outbound),
+    projections: P,
+) -> Result<axum::Router, String>
+where
+    P: access_internal_api::projections::Projections + 'static,
+{
     let identity = config.identity.as_ref().ok_or("no identity section")?;
     let env = oauth::ServerEnv {
         db: PgOAuth::new(app.clone()),
@@ -679,6 +681,7 @@ fn authorization(
         app,
         nonces: oauth::HsmNonces::new(nonce_keys),
         dpop: DpopProfile::default(),
+        projections,
     };
     Ok(oauth_router(OAuth::new(env)))
 }
@@ -806,15 +809,14 @@ async fn serve(
     let signer = || SignerKeys::new(identity_section.signer.clone());
     let (platform_outbound, platform_keks) = (prepared.outbound.clone(), keks.clone());
     let platform_pools = event_pools(&all, &cell_ids, prepared.outbound.declared());
-    // OP-149 m.7
-    let authorize = authorization(
-        config,
+    let oauth_inputs = (
         all.app.clone(),
         all.router.clone(),
         prepared.identity_keys.clone(),
         prepared.outbound,
-    )?
-    .merge(events::ssf(&platform_pools, signer(), keks.clone()));
+    );
+    // OP-149 m.7
+    let ssf = events::ssf(&platform_pools, signer(), keks.clone());
     // OP-146 m.16 (m)
     let _realm_keys = idp::RealmKeyring::new(signer(), prepared.identity_keys);
     let Pools {
@@ -866,6 +868,8 @@ async fn serve(
         idp_plane.clone(),
         issuer.clone(),
     );
+    // OP-150 m.2: authority tokens are the authority plane's projection.issue decisions
+    let authorize = authorization(config, oauth_inputs, idp_plane.clone())?.merge(ssf);
     // OP-149 m.6, m.8, m.9
     let me = frontend(config, tenants_pool.clone(), hosted, idp_plane)?;
     let adp = adp_router(

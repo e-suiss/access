@@ -203,6 +203,9 @@ impl<E: Env> OAuth<E> {
                 auth_time_ms: s.auth_time_ms,
                 aal: s.aal,
                 openid: req.openid(),
+                authority: req.authority.clone(),
+                family: None,
+                projection: None,
             },
         };
         let encoded = serde_json::to_vec(&details).map_err(|_| Unavailable)?;

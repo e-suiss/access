@@ -43,6 +43,8 @@ use access_identity_session::domain::session::cookie_digest;
 use access_identity_signer::adapters::{DirVault, SealedFactory, now_ms, serve};
 use access_identity_signer::protocol::{Realm as SignerRealm, Request, Response};
 use access_identity_signer::service::Service;
+use access_internal_api::idp::Unavailable as PlaneUnavailable;
+use access_internal_api::projections::{Projections, TokenProjection, TokenProjectionRequest};
 use access_kernel::json::{b64url_decode, b64url_encode};
 use access_kernel::verify::cose::PublicKey;
 use access_kernel::verify::dpop::ath;
@@ -112,6 +114,41 @@ impl ClientKeys for StaticKeys {
     }
 }
 
+/// The authority plane as the tests script it: each `issue` answers what `answer` holds and is
+/// kept in `asked`; `revoke_family` keeps the families it ended.
+#[derive(Clone, Default)]
+pub struct Scripted {
+    pub answer: Arc<Mutex<Option<Result<TokenProjection, PlaneUnavailable>>>>,
+    pub asked: Arc<Mutex<Vec<TokenProjectionRequest>>>,
+    pub revoked: Arc<Mutex<Vec<[u8; 16]>>>,
+}
+
+impl Projections for Scripted {
+    fn issue(
+        &self,
+        request: TokenProjectionRequest,
+    ) -> impl Future<Output = Result<TokenProjection, PlaneUnavailable>> + Send {
+        self.asked.lock().unwrap().push(request);
+        let answer = self.answer.lock().unwrap().clone().unwrap_or_else(|| {
+            Err(PlaneUnavailable(String::from(
+                access_internal_api::projections::UNAVAILABLE,
+            )))
+        });
+        std::future::ready(answer)
+    }
+
+    fn revoke_family(
+        &self,
+        _domain: access_kernel::digest::Digest,
+        family: [u8; 16],
+    ) -> impl Future<Output = Result<bool, PlaneUnavailable>> + Send {
+        let mut r = self.revoked.lock().unwrap();
+        let first = !r.contains(&family);
+        r.push(family);
+        std::future::ready(Ok(first))
+    }
+}
+
 /// The nonce keys of one realm.
 #[derive(Clone)]
 pub struct Rings {
@@ -129,6 +166,7 @@ pub struct TestEnv {
     pub socket: PathBuf,
     pub rings: Arc<HashMap<RealmId, Rings>>,
     pub profile: DpopProfile,
+    pub plane: Scripted,
 }
 
 impl Clone for TestEnv {
@@ -143,6 +181,7 @@ impl Clone for TestEnv {
             socket: self.socket.clone(),
             rings: self.rings.clone(),
             profile: self.profile.clone(),
+            plane: self.plane.clone(),
         }
     }
 }
@@ -156,6 +195,7 @@ impl Env for TestEnv {
     type Random = OsRandom;
     type Directory = PgDirectory;
     type Replay = PgReplayCache;
+    type Projections = Scripted;
 
     fn db(&self) -> &PgOAuth {
         &self.db
@@ -190,6 +230,9 @@ impl Env for TestEnv {
     }
     fn dpop(&self) -> &DpopProfile {
         &self.profile
+    }
+    fn projections(&self) -> &Scripted {
+        &self.plane
     }
 }
 
@@ -522,6 +565,7 @@ impl Cluster {
             socket,
             rings: Arc::new(rings),
             profile: DpopProfile::default(),
+            plane: Scripted::default(),
         };
         let oauth = OAuth::new(env);
         let mut realms = Vec::new();

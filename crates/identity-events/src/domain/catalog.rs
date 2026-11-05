@@ -69,10 +69,13 @@ pub enum IdentityKind {
     ApiClientDisabled,
     /// `party.disabled` from a suspension.
     PartyDisabled,
+    /// `projection-invalidated`: the realm's authorization server ended a refresh family of
+    /// authority tokens on reuse (§9.9.3 rule 6).
+    ProjectionInvalidated,
 }
 
 impl IdentityKind {
-    const ALL: [Self; 7] = [
+    const ALL: [Self; 8] = [
         Self::TenantCreated,
         Self::OrganizationCreated,
         Self::OrganizationUpdated,
@@ -80,6 +83,7 @@ impl IdentityKind {
         Self::ApiClientUpdated,
         Self::ApiClientDisabled,
         Self::PartyDisabled,
+        Self::ProjectionInvalidated,
     ];
 
     /// The event name.
@@ -93,6 +97,7 @@ impl IdentityKind {
             Self::ApiClientUpdated => "api_client.updated",
             Self::ApiClientDisabled => "api_client.disabled",
             Self::PartyDisabled => "party.disabled",
+            Self::ProjectionInvalidated => "projection-invalidated",
         }
     }
 
@@ -107,6 +112,7 @@ impl IdentityKind {
             Self::ApiClientUpdated => "event.api_client.updated",
             Self::ApiClientDisabled => "event.api_client.disabled",
             Self::PartyDisabled => "event.party.disabled",
+            Self::ProjectionInvalidated => "event.projection_invalidated",
         }
     }
 
@@ -222,6 +228,28 @@ impl IdentityEvent {
                 "party": b64url_encode(party),
                 "at": at,
                 "reason_class": "suspended",
+            }),
+        }
+    }
+
+    /// `projection-invalidated` of the refresh family `family` of `domain`, whose first token
+    /// came from `exercise` (§9.9.3 rule 6, P50).
+    #[must_use]
+    pub fn projection_invalidated(
+        id: [u8; 32],
+        domain: &[u8; 32],
+        exercise: &[u8; 32],
+        family: &[u8; 16],
+        at: u64,
+    ) -> Self {
+        Self {
+            kind: IdentityKind::ProjectionInvalidated,
+            id,
+            payload: json!({
+                "domain": b64url_encode(domain),
+                "source": { "exercise": b64url_encode(exercise) },
+                "subject": { "kind": "projection", "id": b64url_encode(family) },
+                "at": at,
             }),
         }
     }

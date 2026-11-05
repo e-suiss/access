@@ -123,6 +123,7 @@ impl Env for TestEnv {
     type Random = OsRandom;
     type Directory = PgDirectory;
     type Replay = PgReplayCache;
+    type Projections = access_internal_api::projections::Unserved;
 
     fn db(&self) -> &PgOAuth {
         &self.db
@@ -156,6 +157,9 @@ impl Env for TestEnv {
     }
     fn dpop(&self) -> &DpopProfile {
         &self.profile
+    }
+    fn projections(&self) -> &access_internal_api::projections::Unserved {
+        &access_internal_api::projections::Unserved
     }
 }
 
@@ -788,16 +792,18 @@ async fn the_exchange_checks_redirect_pkce_client_and_key() {
     assert_eq!(error(&w.exchange(&bound).await), "invalid_dpop_proof");
     // the right code still works after all of that
     assert!(body(&w.exchange(&code).await, 200)["access_token"].is_string());
-    // RFC 6749 §5.2, OP-146 m.6: no ROPC, no implicit; client credentials and device code later
+    // RFC 6749 §5.2, OP-146 m.6: no ROPC, no implicit; device code later
     for grant in [
         "password",
-        "client_credentials",
         "urn:ietf:params:oauth:grant-type:device_code",
         "implicit",
     ] {
         let p = [("grant_type", grant), ("client_id", PUBLIC)];
         assert_eq!(error(&w.token(&p, None).await), "unsupported_grant_type");
     }
+    // §10.4.1: client credentials only for a confidential client
+    let p = [("grant_type", "client_credentials"), ("client_id", PUBLIC)];
+    assert_eq!(error(&w.token(&p, None).await), "unauthorized_client");
 }
 
 // TN-31, RR-18, CR-38, TN-50, G57: the refresh token rotates; presenting a rotated one revokes
@@ -1227,6 +1233,7 @@ async fn par_required_per_client_and_expiry() {
         max_age_s: None,
         acr_values: Vec::new(),
         dpop_jkt: None,
+        authority: None,
     };
     let params = serde_json::to_vec(&request).unwrap();
     let at = now();

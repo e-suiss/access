@@ -5,6 +5,7 @@
 //! `503 + Retry-After`, never `invalid_grant` (G50, EP-2), except introspection, which answers
 //! `active: false` (MD-8).
 
+mod authority;
 mod authorize;
 mod logout;
 mod resource;
@@ -17,6 +18,7 @@ use access_crypto::oauth::opaque_digest;
 use access_identity_account::domain::status::AccountStatus;
 use access_identity_session::domain::assurance::{Aal, AssuranceVector};
 use access_identity_session::domain::session::{SessionCheck, SessionFacts, check};
+use access_internal_api::projections::Projections;
 use access_kernel::json::{b64url_decode, b64url_encode};
 use access_store::identity::{RealmId, TenantId};
 use access_store::oauth::GrantRow;
@@ -68,6 +70,8 @@ pub trait Env: Send + Sync + 'static {
     type Directory: Directory;
     /// A realm's DPoP replay cache.
     type Replay: ReplayCache + Send + Sync;
+    /// The authority plane's token projections (OP-150 m.2).
+    type Projections: Projections;
 
     /// The realm rows.
     fn db(&self) -> &Self::Db;
@@ -89,6 +93,8 @@ pub trait Env: Send + Sync + 'static {
     fn nonces(&self, realm: RealmId, role: Role) -> Option<Arc<NonceRing>>;
     /// The DPoP profile.
     fn dpop(&self) -> &DpopProfile;
+    /// The authority plane's token projections.
+    fn projections(&self) -> &Self::Projections;
 }
 
 /// What an endpoint answers; the HTTP layer only renders it.
@@ -441,5 +447,42 @@ impl<E: Env> OAuth<E> {
             }
         }
         Ok(body)
+    }
+
+    /// The ID token of a grant (OIDC Core §2): an identity assertion, sector-pairwise `sub`
+    /// (MD-10, §9.9.3 rule 8).
+    #[expect(clippy::too_many_arguments, reason = "the facts of one issuance")]
+    pub(crate) async fn id_token(
+        &self,
+        tx: &mut <E::Db as OAuthDb>::Tx,
+        realm: &Realm,
+        client: &Client,
+        grant: &GrantRow,
+        details: &GrantDetails,
+        nonce: Option<&str>,
+        now: u64,
+    ) -> Result<String, Unavailable> {
+        let sub = self.pairwise(tx, grant.subject, client.uuid).await?;
+        let sid = b64url_encode(&grant.sid);
+        let facts = TokenFacts {
+            issuer: &realm.issuer,
+            client_id: &client.id,
+            sub: &sub,
+            sid: &sid,
+            auth_time_ms: details.auth_time_ms,
+            aal: details.aal,
+            now_ms: now,
+        };
+        let alg = tx.jose_alg().await?;
+        self.env
+            .signer()
+            .sign(
+                realm.realm,
+                alg,
+                ID_TYP,
+                &id_token_claims(&facts, nonce),
+                now,
+            )
+            .await
     }
 }

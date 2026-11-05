@@ -101,6 +101,7 @@ impl Env for Down {
     type Random = OsRandom;
     type Directory = Rows;
     type Replay = NoCache;
+    type Projections = access_internal_api::projections::Unserved;
 
     fn db(&self) -> &NoDb {
         &NoDb
@@ -131,6 +132,9 @@ impl Env for Down {
     }
     fn dpop(&self) -> &DpopProfile {
         &self.profile
+    }
+    fn projections(&self) -> &access_internal_api::projections::Unserved {
+        &access_internal_api::projections::Unserved
     }
 }
 

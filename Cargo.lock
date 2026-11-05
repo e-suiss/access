@@ -190,6 +190,7 @@ dependencies = [
  "access-identity-account",
  "access-identity-session",
  "access-identity-signer",
+ "access-internal-api",
  "access-store",
  "aws-lc-rs",
  "ed25519-dalek",

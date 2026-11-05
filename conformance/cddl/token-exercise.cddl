@@ -1,0 +1,25 @@
+; Token Exercise, version 1 (RFC 8610): the holder Instance's signed projection.issue Exercise
+; that a request for an authority token carries to the realm's token endpoint (§9.9, OP-150
+; m.2). It travels as the form parameter `access_exercise`, base64url (RFC 4648 §5, no padding)
+; of its deterministic CBOR (RFC 8949 §4.2.1). Rules this file does not define are those of
+; kernel.cddl.
+;
+; The request beside it names the same authority: `authorization_details` (RFC 9396) has one
+; detail per bounds action, or one `intent` detail whose `intent` is the digest of `target`;
+; each detail's `type` is "<namespace>:<name>:<major>" and `schema` the Action Schema digest in
+; text form ("sha-256:" base64url). `resource` (RFC 8707) is one member of the payload's
+; `audience`. The AIS is a COSE_Sign1 by the holder Instance's key over an
+; actor-intent-statement whose `pep` is the realm's issuer; that key is the request's DPoP key,
+; so the token's `cnf.jkt` is the actor Instance's KeyBinding (§9.9.4). A refresh carries a new
+; Exercise: every refresh is a new decision (§9.9.3 rule 6).
+
+token-exercise = {
+  domain: domain-id,                  ; the realm's governing domain
+  nonce: bstr .size (16..64),
+  intent: intent-envelope,            ; access/projection_issue, opaque.payload = digest of payload
+  payload: bstr,                      ; meta-payload { projection_issue: … }, deterministic CBOR
+  basis: exercise-basis,
+  capacity: capacity,
+  ais: bstr,                          ; COSE_Sign1, application/access-ais+cbor
+  ? target: intent-envelope,          ; the one intent of an exact-intent token
+}
