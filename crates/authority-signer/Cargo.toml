@@ -9,6 +9,7 @@ repository.workspace = true
 publish = false
 
 [dependencies]
+access-crypto = { workspace = true }
 access-kernel = { workspace = true }
 suiss-crypto = { workspace = true, features = ["pkcs11", "aead"] }
 thiserror = { workspace = true }

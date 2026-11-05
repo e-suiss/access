@@ -1583,6 +1583,7 @@ pub const CONTRIBUTION_NAMESPACE: &str = "access.contribution";
 
 mod events;
 mod ingest;
+mod projection;
 mod proofs;
 mod regime;
 

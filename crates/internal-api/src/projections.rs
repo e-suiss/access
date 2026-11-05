@@ -65,10 +65,14 @@ pub struct TokenProjectionRequest {
     pub ais: Vec<u8>,
     /// The identity plane as PEP.
     pub pep: String,
+    /// The authorization server's issuer identifier, the token's `iss`.
+    pub issuer: String,
     /// The OAuth client the token is for.
     pub client_id: String,
     /// The token class.
     pub kind: TokenKind,
+    /// The one intent of an exact-intent token ([`TokenKind::Intent`]); `None` for bounds.
+    pub target: Option<IntentEnvelope>,
     /// The key binding.
     pub confirmation: Confirmation,
     /// RFC 8707 resources, which become the audience; never empty (no default resource).
@@ -129,6 +133,14 @@ pub trait Projections: Send + Sync {
         &self,
         request: TokenProjectionRequest,
     ) -> impl Future<Output = Result<TokenProjection, Unavailable>> + Send;
+
+    /// Revokes a refresh family at the domain's head (§9.9.3 rule 6, P50): no refresh of it is
+    /// decided again. `true` the first time; an unknown family is `false`.
+    fn revoke_family(
+        &self,
+        domain: Digest,
+        family: [u8; 16],
+    ) -> impl Future<Output = Result<bool, Unavailable>> + Send;
 }
 
 /// The projections of a process that does not serve them yet: every call is [`UNAVAILABLE`].
@@ -140,6 +152,14 @@ impl Projections for Unserved {
         &self,
         _request: TokenProjectionRequest,
     ) -> impl Future<Output = Result<TokenProjection, Unavailable>> + Send {
+        std::future::ready(Err(Unavailable(String::from(UNAVAILABLE))))
+    }
+
+    fn revoke_family(
+        &self,
+        _domain: Digest,
+        _family: [u8; 16],
+    ) -> impl Future<Output = Result<bool, Unavailable>> + Send {
         std::future::ready(Err(Unavailable(String::from(UNAVAILABLE))))
     }
 }
@@ -175,14 +195,20 @@ mod tests {
             capacity: Capacity::Own,
             ais: Vec::new(),
             pep: String::from("access-identity"),
+            issuer: String::from("https://id.example"),
             client_id: String::from("cli_x"),
             kind: TokenKind::Bounds,
+            target: None,
             confirmation: Confirmation::DpopJkt([4; 32]),
             resources: vec![String::from("https://rs.example")],
             family: None,
         };
         assert_eq!(
             crate::block_on(Unserved.issue(request)),
+            Err(Unavailable(String::from(UNAVAILABLE)))
+        );
+        assert_eq!(
+            crate::block_on(Unserved.revoke_family(Digest([1; 32]), [2; 16])),
             Err(Unavailable(String::from(UNAVAILABLE)))
         );
         assert_eq!(MAX_TOKEN_BYTES, 8 * 1024);

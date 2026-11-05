@@ -35,6 +35,12 @@ use crate::keys;
 use crate::ports::{Binding, Keys, Reader, Row, Salts};
 use crate::query::{Hit, Query, page_after, page_body};
 
+mod projection;
+pub use projection::{
+    BOUNDS_HORIZON_MS, CONTRACT_LABEL, INTENT_HORIZON_MS, Projected, Token, TokenAuthority,
+    TokenOrder,
+};
+
 /// Reads one domain's state and nonces through the application role.
 #[derive(Clone)]
 pub struct PgReader {
@@ -806,7 +812,7 @@ enum Artefact {
 }
 
 /// The signer's stable error codes; a code not listed reads as `signer-error`.
-const SIGNER_CODES: [&str; 7] = [
+const SIGNER_CODES: [&str; 9] = [
     "signer-binding",
     "signer-unknown-domain",
     "signer-time",
@@ -814,6 +820,8 @@ const SIGNER_CODES: [&str; 7] = [
     "signer-usage",
     "signer-encode",
     "signer-note",
+    "signer-token",
+    "signer-token-horizon",
 ];
 
 /// The stable reason of a signer's refusal (OP-149 m.5): a domain's first operational key

@@ -43,6 +43,17 @@ pub enum Request {
     },
     /// The binding-signed Genesis statement of a domain.
     Genesis(Digest),
+    /// Signs an authority-carrying access token of a domain (usage `token`, `typ` `at+jwt`,
+    /// §9.9.3 rule 7): `claims` is its JSON claims set, holder-bound by `cnf` (PI-11), with an
+    /// `exp` no later than the time the signing key stays published (CR-19).
+    SignToken {
+        /// Domain.
+        domain: Digest,
+        /// The JSON claims set.
+        claims: Vec<u8>,
+        /// The signing time; within the signer's clock skew of its own clock.
+        at: u64,
+    },
 }
 
 /// The signer's answer.
@@ -68,6 +79,13 @@ pub enum Response {
     },
     /// Binding-signed Genesis statement.
     Genesis(Vec<u8>),
+    /// A signed access token.
+    Token {
+        /// The compact JWS.
+        jws: String,
+        /// Binding-signed excerpt of the key that signed it.
+        excerpt: Vec<u8>,
+    },
     /// A refusal, by stable code.
     Error(String),
 }
@@ -243,10 +261,25 @@ impl Request {
                 ]),
             )]),
             Self::Genesis(d) => map(vec![("genesis", d.to_value())]),
+            Self::SignToken { domain, claims, at } => map(vec![(
+                "sign_token",
+                map(vec![
+                    ("domain", domain.to_value()),
+                    ("claims", Value::Bytes(claims.clone())),
+                    ("at", Value::Unsigned(*at)),
+                ]),
+            )]),
         }
     }
 
     fn from_value(v: &Value) -> Result<Self, FrameError> {
+        if let Some(s) = v.get("sign_token") {
+            return Ok(Self::SignToken {
+                domain: digest(s.get("domain"))?,
+                claims: bytes(s.get("claims"))?,
+                at: uint(s.get("at"))?,
+            });
+        }
         if let Some(t) = v.get("open") {
             return Ok(Self::Open(Box::new(template_of(t)?)));
         }
@@ -299,6 +332,13 @@ impl Response {
                 ]),
             )]),
             Self::Genesis(b) => map(vec![("genesis", Value::Bytes(b.clone()))]),
+            Self::Token { jws, excerpt } => map(vec![(
+                "token",
+                map(vec![
+                    ("jws", Value::text(jws)),
+                    ("excerpt", Value::Bytes(excerpt.clone())),
+                ]),
+            )]),
             Self::Error(code) => map(vec![("error", Value::text(code))]),
         }
     }
@@ -324,6 +364,12 @@ impl Response {
         }
         if let Some(g) = v.get("genesis") {
             return Ok(Self::Genesis(bytes(Some(g))?));
+        }
+        if let Some(t) = v.get("token") {
+            return Ok(Self::Token {
+                jws: text(t.get("jws"))?,
+                excerpt: bytes(t.get("excerpt"))?,
+            });
         }
         Ok(Self::Error(text(v.get("error"))?))
     }

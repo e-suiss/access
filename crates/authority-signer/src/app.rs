@@ -304,6 +304,49 @@ impl Keyring {
         Ok(Noted { line, excerpt })
     }
 
+    /// Signs an access token's JSON `claims` at `now` as an `at+jwt` JWS with the key that may
+    /// sign `token` now (§9.9.3 rule 7). The claims must bind a holder (`cnf`, PI-11) and carry
+    /// an `exp` no later than the end of the key's publication, its window plus the retention
+    /// (CR-19: `T_token < T_sign`). Without a key, nothing is signed (CR-23, G42).
+    ///
+    /// # Errors
+    /// [`SignerError::Token`], [`SignerError::TokenHorizon`], [`SignerError::NoKey`],
+    /// [`SignerError::Usage`] or the signer's failure.
+    pub fn sign_token(&mut self, claims: &[u8], now: u64) -> Result<Token, SignerError> {
+        let parsed = access_kernel::json::parse(claims, access_kernel::verify::jws::MAX_PAYLOAD)
+            .map_err(|_| SignerError::Token)?;
+        let exp_ms = parsed
+            .get("exp")
+            .and_then(access_kernel::json::Json::as_int)
+            .and_then(|s| u64::try_from(s).ok())
+            .and_then(|s| s.checked_mul(1000))
+            .ok_or(SignerError::Token)?;
+        let bound = matches!(
+            parsed.get("cnf"),
+            Some(access_kernel::json::Json::Object(m)) if !m.is_empty()
+        );
+        if !bound {
+            return Err(SignerError::Token);
+        }
+        let retain = self.policy.retain_ms;
+        let records = self.records();
+        let until = rotation::signing_key(&records, &self.policy, now)
+            .map(|k| k.valid_until.saturating_add(retain))
+            .ok_or(SignerError::NoKey)?;
+        if exp_ms > until {
+            return Err(SignerError::TokenHorizon);
+        }
+        let (jws, excerpt, kid) = self.with_key(KeyUsage::Token, now, |signer, kid| {
+            access_crypto::jose::sign_compact(signer, &kid, TOKEN_TYP, claims).map_err(
+                |e| match e {
+                    access_crypto::jose::JoseError::Sign(s) => s,
+                    _ => SignError::Encode,
+                },
+            )
+        })?;
+        Ok(Token { jws, excerpt, kid })
+    }
+
     fn with_key<T>(
         &mut self,
         usage: KeyUsage,
@@ -357,6 +400,20 @@ impl Keyring {
     pub fn keep_genesis(&mut self, signed: Vec<u8>) {
         self.genesis = Some(signed);
     }
+}
+
+/// `typ` of an authority-carrying access token (RFC 9068 §2.1).
+pub const TOKEN_TYP: &str = "at+jwt";
+
+/// An access token and the excerpt that declares its key.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Token {
+    /// The compact JWS.
+    pub jws: String,
+    /// Binding-signed excerpt of the operational key (CR-58 m.1).
+    pub excerpt: Vec<u8>,
+    /// The key's `kid`.
+    pub kid: [u8; 32],
 }
 
 /// A note signature line and the excerpt that declares its key.

@@ -439,5 +439,7 @@ impl RealmKeys for RealmKeyring {
     }
 }
 
+mod projections;
+
 #[cfg(test)]
 mod tests;

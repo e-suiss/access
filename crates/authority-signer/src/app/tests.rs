@@ -124,6 +124,51 @@ fn an_artefact_verifies_through_metadata_and_excerpt() {
     );
 }
 
+// §9.9.3 rule 7, PI-11, CR-19: an access token is an `at+jwt` by the operational key under
+// usage `token`; it must be holder-bound and must not outlive the key's publication
+#[test]
+fn a_token_is_holder_bound_and_within_the_key_publication() {
+    // CR-24, MD-7
+    let mut ring = keyring();
+    let mut factory = Factory { down: false };
+    let now = Policy::AUTHORITY.publish_lead_ms + 2 * MINUTE;
+    advance(&mut ring, &mut factory, 0, now);
+    let exp = (now + 5 * MINUTE) / 1000;
+    let claims = format!(r#"{{"aud":"https://rs.example","exp":{exp},"cnf":{{"jkt":"x"}}}}"#);
+    let t = ring.sign_token(claims.as_bytes(), now).unwrap();
+    let mut parts = t.jws.split('.');
+    let header = access_kernel::json::b64url_decode(parts.next().unwrap()).unwrap();
+    let header = access_kernel::json::parse(&header, 1024).unwrap();
+    assert_eq!(header.get("typ").and_then(|v| v.as_str()), Some(TOKEN_TYP));
+    assert_eq!(
+        header.get("kid").and_then(|v| v.as_str()),
+        Some(access_kernel::json::b64url_encode(&t.kid).as_str())
+    );
+    // PI-11: no bearer token
+    let bearer = format!(r#"{{"aud":"https://rs.example","exp":{exp}}}"#);
+    assert_eq!(
+        ring.sign_token(bearer.as_bytes(), now),
+        Err(SignerError::Token)
+    );
+    let empty = format!(r#"{{"exp":{exp},"cnf":{{}}}}"#);
+    assert_eq!(
+        ring.sign_token(empty.as_bytes(), now),
+        Err(SignerError::Token)
+    );
+    assert_eq!(
+        ring.sign_token(br#"{"cnf":{"jkt":"x"}}"#, now),
+        Err(SignerError::Token)
+    );
+    // CR-19: T_token < T_sign
+    let far = (now + 30 * 24 * HOUR) / 1000;
+    let long = format!(r#"{{"exp":{far},"cnf":{{"jkt":"x"}}}}"#);
+    assert_eq!(
+        ring.sign_token(long.as_bytes(), now),
+        Err(SignerError::TokenHorizon)
+    );
+    assert_eq!(SignerError::TokenHorizon.code(), "signer-token-horizon");
+}
+
 // CR-25, SAI-46: nothing is signed before a key has been published for the lead
 #[test]
 fn nothing_signs_before_the_lead() {

@@ -38,6 +38,11 @@ fn messages_round_trip() {
             at: 5,
         },
         Request::Genesis(Digest([7; 32])),
+        Request::SignToken {
+            domain: Digest([7; 32]),
+            claims: br#"{"cnf":{}}"#.to_vec(),
+            at: 6,
+        },
     ];
     for r in requests {
         let f = encode_request(&r).unwrap();
@@ -56,6 +61,10 @@ fn messages_round_trip() {
             excerpt: vec![4],
         },
         Response::Genesis(vec![5]),
+        Response::Token {
+            jws: String::from("a.b.c"),
+            excerpt: vec![6],
+        },
         Response::Error(String::from("signer-no-key")),
     ];
     for r in responses {

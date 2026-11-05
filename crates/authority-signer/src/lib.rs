@@ -30,6 +30,12 @@ pub enum SignerError {
     /// A note body that is not a checkpoint of the domain's log.
     #[error("note")]
     Note,
+    /// Token claims that are not a holder-bound claims set with an `exp` (PI-11).
+    #[error("token claims")]
+    Token,
+    /// A token that would outlive the publication of the key that signs it (CR-19).
+    #[error("token horizon")]
+    TokenHorizon,
 }
 
 impl SignerError {
@@ -42,6 +48,8 @@ impl SignerError {
             Self::Sign(e) => e.code(),
             Self::Encode => "signer-encode",
             Self::Note => "signer-note",
+            Self::Token => "signer-token",
+            Self::TokenHorizon => "signer-token-horizon",
         }
     }
 }

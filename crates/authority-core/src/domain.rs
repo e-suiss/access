@@ -468,6 +468,18 @@ fn schema_catalog(
     }
 }
 
+/// The accepted Action Schema of `action` now, if a live `schema-definition` Acceptance of its
+/// namespace declares it and has not retired it (OP-141 m.35 (e)).
+pub(crate) fn accepted_schema(
+    view: &Snapshot,
+    action: &ActionRef,
+    now: u64,
+) -> Option<ActionSchema> {
+    schema_catalog(view, action, now, &Catalog::default())
+        .ok()
+        .map(|(_, s)| s)
+}
+
 /// Whether every while-condition of a hop holds now (OP-141 m.33); what is not fetched yet is
 /// noted as missing and reads as not holding.
 fn conditions_hold(

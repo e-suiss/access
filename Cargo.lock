@@ -51,6 +51,7 @@ dependencies = [
 name = "access-authority-signer"
 version = "0.2.6"
 dependencies = [
+ "access-crypto",
  "esuiss-access-kernel",
  "esuiss-crypto",
  "thiserror",

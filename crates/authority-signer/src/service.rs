@@ -282,6 +282,21 @@ impl<F: KeyFactory, B: Bindings, V: Vault> Service<F, B, V> {
                     || Response::Error(String::from("signer-unknown-domain")),
                     |m| Response::Metadata(m.to_vec()),
                 ),
+            Request::SignToken { domain, claims, at } => {
+                if at.abs_diff(now) > MAX_SKEW_MS {
+                    return Response::Error(String::from("signer-time"));
+                }
+                let Some((_, ring)) = self.rings.get_mut(&domain) else {
+                    return Response::Error(String::from("signer-unknown-domain"));
+                };
+                match ring.sign_token(&claims, at) {
+                    Ok(t) => Response::Token {
+                        jws: t.jws,
+                        excerpt: t.excerpt,
+                    },
+                    Err(e) => Response::Error(String::from(e.code())),
+                }
+            }
             Request::Sign {
                 domain,
                 usage,

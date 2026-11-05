@@ -4360,3 +4360,500 @@ async fn a_compromise_declaration_derives_party_compromised() {
         assert_eq!(keys, &covered);
     }
 }
+
+/// A Genesis whose `shop` SPP also publishes `schema`.
+fn genesis_with_schema(schema: access_kernel::schema::ActionSchema) -> BTreeMap<String, Opened> {
+    let mut g = genesis();
+    let mut spp = shop_spp();
+    spp.actions.push(schema);
+    let mut schemas = shop_schemas();
+    if let Value::Map(m) = &mut schemas {
+        for (k, v) in m.iter_mut() {
+            if *k == Value::text("spp") {
+                *v = spp.to_value();
+            }
+        }
+    }
+    g.remove("acceptances");
+    add_acceptances(&mut g, vec![schemas]);
+    g
+}
+
+const RS: &str = "https://rs.example";
+const AS_ISSUER: &str = "https://acme.id.example";
+
+/// The irreversible `shop/ship` action: CT2 (§13.7.1).
+fn ship_schema() -> access_kernel::schema::ActionSchema {
+    access_kernel::schema::ActionSchema {
+        effect: access_kernel::schema::EffectClass::Irreversible,
+        ..schema_of("ship")
+    }
+}
+
+fn ship() -> ActionRef {
+    ActionRef {
+        schema: access_kernel::schema::action_digest(&ship_schema()),
+        ..action("shop", "ship")
+    }
+}
+
+/// ROOT's `projection.issue` of `actions` for `audience`, valid for `life` ms from NOW.
+fn token_order(
+    d: Digest,
+    nonce: u8,
+    actions: Vec<ActionRef>,
+    audience: &str,
+    life: u64,
+    authority: access_authority_core::adapters::TokenAuthority,
+    family: Option<[u8; 16]>,
+) -> access_authority_core::adapters::TokenOrder {
+    use access_kernel::validity::{ProfileClass, ProfileVariant};
+    let shop = ExerciseBasis::Anchor(meta::object_id(&d, kind::ANCHOR, 1));
+    let mut bounds = authority_of(actions);
+    bounds.constraints.validity = Window {
+        from: NOW,
+        until: NOW.checked_add(life).unwrap(),
+    };
+    let issue = Payload::ProjectionIssue {
+        bounds,
+        audience: BTreeSet::from([RS.to_owned()]),
+        class: ProfileClass::Online,
+        variant: ProfileVariant::OnlineStrict,
+        max_staleness_ms: None,
+        offline_slice: None,
+    };
+    access_authority_core::adapters::TokenOrder {
+        incoming: incoming(meta_request(d, nonce, shop, issue), ROOT_KEY),
+        issuer: AS_ISSUER.to_owned(),
+        client_id: "cli_shop".to_owned(),
+        audience: audience.to_owned(),
+        confirmation: access_kernel::verify::projection::Confirmation::Jkt(thumbprint(&public(
+            ROOT_KEY,
+        ))),
+        authority,
+        family,
+    }
+}
+
+fn authority_of(actions: Vec<ActionRef>) -> CanonicalAuthority {
+    authority(actions, selector("shop"))
+}
+
+/// The domain's operational keys that sign tokens, from its metadata.
+fn token_keys(
+    metadata: &access_kernel::verify::key_scope::DomainMetadata,
+) -> access_kernel::verify::cose::KeySet {
+    let mut keys = access_kernel::verify::cose::KeySet::default();
+    for k in &metadata.operational_keys {
+        if k.usage
+            .contains(&access_kernel::verify::key_scope::KeyUsage::Token)
+        {
+            keys.insert(k.kid, k.key.clone()).unwrap();
+            keys.allowed.insert(k.alg);
+        }
+    }
+    keys
+}
+
+async fn head_of(db: &TestDb, d: Digest) -> u64 {
+    access_store::authority::read_head(&db.app, &DomainId::from_bytes(d.0))
+        .await
+        .unwrap()
+        .pos
+}
+
+// §9.9, P17, PI-11, §9.9.3 rules 1, 2, 3, 7, TN-14, TN-27: every authority token is the ALLOW of
+// its holder's projection.issue; the at+jwt is signed by the domain's operational key, holder
+// bound, for one resource server, its authority only in RAR, its exp the contract's horizon
+#[tokio::test]
+async fn an_authority_token_is_a_projection_issue_decision() {
+    use access_authority_core::adapters::{Projected, TokenAuthority};
+    // INV-22, MD-7
+    let db = fresh().await.unwrap();
+    let d = create_genesis(&db.sequencer, TENANT, genesis(), 1_000)
+        .await
+        .unwrap();
+    let (socket, service) = start_signer("token");
+    let a = signing_process(&db, d, &socket);
+    onboard_signed(&a, d, &service).await;
+    let before = head_of(&db, d).await;
+    let order = token_order(
+        d,
+        20,
+        vec![action("shop", "read")],
+        RS,
+        600_000,
+        TokenAuthority::Bounds,
+        None,
+    );
+    let Projected::Issued(t) = a.project(&order).await.unwrap() else {
+        panic!("not issued");
+    };
+    // the issuance is a recorded decision
+    assert!(head_of(&db, d).await > before);
+    assert_eq!(t.expires_at, NOW.checked_add(600_000).unwrap());
+    let metadata = signer_metadata(&socket, d).await;
+    let cnf = access_kernel::verify::projection::Confirmation::Jkt(thumbprint(&public(ROOT_KEY)));
+    let verify = |audience: &str, cnf: &access_kernel::verify::projection::Confirmation| {
+        access_kernel::verify::projection::verify_access_token(
+            &access_kernel::verify::PureBackend,
+            &t.jws,
+            &token_keys(&metadata),
+            &access_kernel::verify::projection::AccessTokenRules {
+                issuer: AS_ISSUER,
+                audience,
+                domain: &d,
+                confirmation: cnf,
+                now: NOW,
+                skew_ms: 60_000,
+            },
+        )
+    };
+    let verified = verify(RS, &cnf).unwrap();
+    let claims = &verified.claims;
+    assert_eq!(
+        claims
+            .get("exp")
+            .and_then(access_kernel::json::Json::as_int),
+        Some(610)
+    );
+    let details = claims.get("authorization_details").unwrap();
+    let access_kernel::json::Json::Array(details) = details else {
+        panic!("details");
+    };
+    assert_eq!(details.len(), 1);
+    assert_eq!(
+        details[0]
+            .get("kind")
+            .and_then(access_kernel::json::Json::as_str),
+        Some("bounds")
+    );
+    assert_eq!(
+        details[0]
+            .get("exercise")
+            .and_then(access_kernel::json::Json::as_str),
+        Some(access_kernel::verify::projection::digest_text(&t.exercise).as_str())
+    );
+    // the sub is a pseudonym, never the PartyID (MD-10)
+    assert_ne!(
+        claims
+            .get("sub")
+            .and_then(access_kernel::json::Json::as_str),
+        Some(access_kernel::json::b64url_encode(&ROOT.0).as_str())
+    );
+    // one audience, holder bound
+    assert!(verify("https://other.example", &cnf).is_err());
+    assert!(
+        verify(
+            RS,
+            &access_kernel::verify::projection::Confirmation::Jkt([9; 32])
+        )
+        .is_err()
+    );
+    // P50: the family is opened by the first token
+    let f = a.family(d, t.family).await.unwrap().unwrap();
+    assert_eq!(f.client_id, "cli_shop");
+    assert_eq!(f.root_exercise, t.exercise.0);
+    assert!(f.revoked_pos.is_none());
+}
+
+// §9.9.3 rules 1, 4, OP-150 m.3 (s): what cannot become a token is refused before anything is
+// decided: another resource, a horizon past the ceiling, a meta-action, CT2+ in a bounds token
+#[tokio::test]
+#[allow(
+    clippy::too_many_lines,
+    reason = "every refusal of one domain, then the head unchanged"
+)]
+async fn an_unprojectable_token_is_refused_before_the_decision() {
+    use access_authority_core::adapters::{
+        BOUNDS_HORIZON_MS, INTENT_HORIZON_MS, Projected, TokenAuthority,
+    };
+    // AG-8, MD-7, P48
+    let db = fresh().await.unwrap();
+    let d = create_genesis(
+        &db.sequencer,
+        TENANT,
+        genesis_with_schema(ship_schema()),
+        1_000,
+    )
+    .await
+    .unwrap();
+    let (socket, service) = start_signer("token-refused");
+    let a = signing_process(&db, d, &socket);
+    onboard_signed(&a, d, &service).await;
+    let before = head_of(&db, d).await;
+    let read = || vec![action("shop", "read")];
+    let refused = |p: Projected| match p {
+        Projected::Refused(c) => c,
+        other => panic!("{other:?}"),
+    };
+    let cases = [
+        (
+            token_order(
+                d,
+                30,
+                read(),
+                "https://other.example",
+                60_000,
+                TokenAuthority::Bounds,
+                None,
+            ),
+            "invalid-target",
+        ),
+        (
+            token_order(
+                d,
+                31,
+                read(),
+                RS,
+                BOUNDS_HORIZON_MS.checked_add(1).unwrap(),
+                TokenAuthority::Bounds,
+                None,
+            ),
+            "projection-horizon",
+        ),
+        (
+            token_order(
+                d,
+                32,
+                vec![action("access", "grant_issue")],
+                RS,
+                60_000,
+                TokenAuthority::Bounds,
+                None,
+            ),
+            "projection-authority",
+        ),
+        // §9.9.3 rule 4: CT2+ only as an exact-intent token
+        (
+            token_order(
+                d,
+                33,
+                vec![ship()],
+                RS,
+                60_000,
+                TokenAuthority::Bounds,
+                None,
+            ),
+            "projection-tier",
+        ),
+    ];
+    for (order, code) in cases {
+        assert_eq!(refused(a.project(&order).await.unwrap()), code);
+    }
+    // the exact intent of a CT2 action has the shorter ceiling
+    let mut target = shop_request(d, 34, Mode::Commit, ExerciseBasis::Anchor(Id([0; 16]))).intent;
+    target.action = ship();
+    let long = token_order(
+        d,
+        35,
+        vec![ship()],
+        RS,
+        INTENT_HORIZON_MS.checked_add(1).unwrap(),
+        TokenAuthority::Intent(Box::new(target.clone())),
+        None,
+    );
+    assert_eq!(
+        refused(a.project(&long).await.unwrap()),
+        "projection-horizon"
+    );
+    // and another action than the one in its bounds is no exact intent
+    let other = token_order(
+        d,
+        36,
+        vec![action("shop", "read")],
+        RS,
+        60_000,
+        TokenAuthority::Intent(Box::new(target)),
+        None,
+    );
+    assert_eq!(
+        refused(a.project(&other).await.unwrap()),
+        "projection-authority"
+    );
+    assert_eq!(head_of(&db, d).await, before);
+}
+
+// §9.9.1, P17: an exact-intent token carries one intent digest, kind=intent, ≤ 5 minutes, even
+// for a CT2 action
+#[tokio::test]
+async fn an_exact_intent_token_carries_its_intent() {
+    use access_authority_core::adapters::{Projected, TokenAuthority};
+    let db = fresh().await.unwrap();
+    let d = create_genesis(
+        &db.sequencer,
+        TENANT,
+        genesis_with_schema(ship_schema()),
+        1_000,
+    )
+    .await
+    .unwrap();
+    let (socket, service) = start_signer("token-intent");
+    let a = signing_process(&db, d, &socket);
+    onboard_signed(&a, d, &service).await;
+    let mut target = shop_request(d, 40, Mode::Commit, ExerciseBasis::Anchor(Id([0; 16]))).intent;
+    target.action = ship();
+    let order = token_order(
+        d,
+        41,
+        vec![ship()],
+        RS,
+        300_000,
+        TokenAuthority::Intent(Box::new(target.clone())),
+        None,
+    );
+    let Projected::Issued(t) = a.project(&order).await.unwrap() else {
+        panic!("not issued");
+    };
+    let payload = t.jws.split('.').nth(1).unwrap();
+    let claims =
+        access_kernel::json::parse(&access_kernel::json::b64url_decode(payload).unwrap(), 8192)
+            .unwrap();
+    let access_kernel::json::Json::Array(details) = claims.get("authorization_details").unwrap()
+    else {
+        panic!("details");
+    };
+    assert_eq!(details.len(), 1);
+    assert_eq!(
+        details[0]
+            .get("kind")
+            .and_then(access_kernel::json::Json::as_str),
+        Some("intent")
+    );
+    assert_eq!(
+        details[0]
+            .get("intent")
+            .and_then(access_kernel::json::Json::as_str),
+        Some(
+            access_kernel::verify::projection::digest_text(
+                &access_kernel::intent::intent_digest(&target).unwrap()
+            )
+            .as_str()
+        )
+    );
+}
+
+// §9.9.3 rule 6, L19, P50, PI-10: a refresh is a new decision of the same family; after the
+// family is revoked no refresh is decided
+#[tokio::test]
+async fn a_refresh_is_a_new_decision_until_its_family_is_revoked() {
+    use access_authority_core::adapters::{Projected, TokenAuthority};
+    let db = fresh().await.unwrap();
+    let d = create_genesis(&db.sequencer, TENANT, genesis(), 1_000)
+        .await
+        .unwrap();
+    let (socket, service) = start_signer("token-refresh");
+    let a = signing_process(&db, d, &socket);
+    onboard_signed(&a, d, &service).await;
+    let read = || vec![action("shop", "read")];
+    let Projected::Issued(first) = a
+        .project(&token_order(
+            d,
+            50,
+            read(),
+            RS,
+            60_000,
+            TokenAuthority::Bounds,
+            None,
+        ))
+        .await
+        .unwrap()
+    else {
+        panic!("first");
+    };
+    let head = head_of(&db, d).await;
+    let Projected::Issued(second) = a
+        .project(&token_order(
+            d,
+            51,
+            read(),
+            RS,
+            60_000,
+            TokenAuthority::Bounds,
+            Some(first.family),
+        ))
+        .await
+        .unwrap()
+    else {
+        panic!("refresh");
+    };
+    assert_eq!(second.family, first.family);
+    assert_ne!(second.exercise, first.exercise);
+    assert!(second.position > head);
+    // replaying the same nonce makes no second token
+    assert_eq!(
+        a.project(&token_order(
+            d,
+            51,
+            read(),
+            RS,
+            60_000,
+            TokenAuthority::Bounds,
+            Some(first.family),
+        ))
+        .await
+        .unwrap(),
+        Projected::Refused("replayed")
+    );
+    assert!(a.revoke_family(d, first.family).await.unwrap());
+    assert!(!a.revoke_family(d, first.family).await.unwrap());
+    let head = head_of(&db, d).await;
+    assert_eq!(
+        a.project(&token_order(
+            d,
+            52,
+            read(),
+            RS,
+            60_000,
+            TokenAuthority::Bounds,
+            Some(first.family),
+        ))
+        .await
+        .unwrap(),
+        Projected::Refused("family-revoked")
+    );
+    assert_eq!(head_of(&db, d).await, head);
+    assert_eq!(
+        a.project(&token_order(
+            d,
+            53,
+            read(),
+            RS,
+            60_000,
+            TokenAuthority::Bounds,
+            Some([0xee; 16]),
+        ))
+        .await
+        .unwrap(),
+        Projected::Refused("family-unknown")
+    );
+}
+
+// K17, §16.7.1: without the signer there is no token, and no other key signs one
+#[tokio::test]
+async fn no_signer_no_token() {
+    use access_authority_core::adapters::{Projected, TokenAuthority};
+    let db = fresh().await.unwrap();
+    let d = create_genesis(&db.sequencer, TENANT, genesis(), 1_000)
+        .await
+        .unwrap();
+    let (socket, service) = start_signer("token-down");
+    let a = signing_process(&db, d, &socket);
+    onboard_signed(&a, d, &service).await;
+    a.release().await;
+    let gone = std::env::temp_dir().join(format!("access-no-signer-{}", std::process::id()));
+    let b = signing_process(&db, d, &gone);
+    let order = token_order(
+        d,
+        60,
+        vec![action("shop", "read")],
+        RS,
+        60_000,
+        TokenAuthority::Bounds,
+        None,
+    );
+    assert_eq!(
+        b.project(&order).await.unwrap(),
+        Projected::Refused(access_internal_api::projections::SIGNER_UNAVAILABLE)
+    );
+}
