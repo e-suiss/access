@@ -63,6 +63,23 @@ pub fn unknown_version(kind: &'static str, track: &'static str) -> u64 {
     total
 }
 
+/// Issuer quota windows used up (G44, §16.7): one per issuer and window.
+pub static ISSUER_QUOTA: Counter = Counter::new("access_claim_issuer_quota_reached_total");
+
+/// Records that an issuer used up its Claim quota for a window and logs the permanent event
+/// `claim.issuer.quota`; the issuer itself learns it from the `quota` reason of its held
+/// Claims (§16.7).
+pub fn issuer_quota(window_s: u64) -> u64 {
+    let total = ISSUER_QUOTA.incr();
+    tracing::warn!(
+        event = "claim.issuer.quota",
+        window_s,
+        total,
+        "an issuer used up its Claim quota; qualifying Claims are held (G44)"
+    );
+    total
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

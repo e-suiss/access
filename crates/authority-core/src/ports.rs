@@ -46,6 +46,15 @@ pub trait Reader {
     fn recorded_at(&self, pos: u64) -> impl Future<Output = Result<Option<u64>, CoreError>> + Send;
     /// A SYNC-DERIVED counter's used amount; 0 when never drawn.
     fn counter(&self, key: &[u8]) -> impl Future<Output = Result<u64, CoreError>> + Send;
+    /// The bytes a record kept as a proof under `digest` (a Claim, or a Claim body by its
+    /// digest); none by default.
+    fn proof(
+        &self,
+        digest: &[u8; 32],
+    ) -> impl Future<Output = Result<Option<Vec<u8>>, CoreError>> + Send {
+        let _ = digest;
+        std::future::ready(Ok(None))
+    }
     /// The position of the first decision of a nonce (OP-141 m.34 (c)).
     fn nonce_opened(
         &self,

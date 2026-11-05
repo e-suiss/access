@@ -576,6 +576,12 @@ fn a_pinned_key_set_is_read_and_only_shrinks_by_narrowing() {
     assert!(pinned.key_set().keys.contains_key(&thumbprint(&key(9))));
     assert!(narrows(&both, &one));
     assert!(!narrows(&one, &both));
-    assert!(!narrows(&one, &Gate { pinned: None, ..one.clone() }));
+    assert!(!narrows(
+        &one,
+        &Gate {
+            pinned: None,
+            ..one.clone()
+        }
+    ));
     assert!(Gate::of(&pinned_content(vec![])).is_err());
 }

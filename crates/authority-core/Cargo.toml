@@ -9,11 +9,13 @@ repository.workspace = true
 publish = false
 
 [dependencies]
+access-authority-ingest = { workspace = true }
 access-authority-signer = { path = "../authority-signer" }
 access-crypto = { workspace = true }
 access-internal-api = { workspace = true }
 access-kernel = { workspace = true }
 access-store = { workspace = true }
+access-telemetry = { workspace = true }
 access-authority-sequencer = { path = "../authority-sequencer" }
 suiss-crypto = { workspace = true, features = ["pkcs11"] }
 suiss-restriction = { workspace = true }

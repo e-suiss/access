@@ -185,3 +185,25 @@ pub async fn quota_notified(
     t.commit().await?;
     Ok(done.rows_affected() == 1)
 }
+
+/// The bytes a record kept as a proof under `digest` (§9.13): a Claim, or a Claim body by its
+/// digest.
+///
+/// # Errors
+/// [`StoreError`].
+pub async fn proof(
+    pool: &PgPool,
+    domain: &DomainId,
+    digest: &[u8; 32],
+) -> Result<Option<Vec<u8>>, StoreError> {
+    let mut t = DomainTx::begin(pool, domain).await?;
+    let bytes = sqlx::query_scalar!(
+        "SELECT bytes FROM access.proof_store WHERE domain_id = $1 AND digest = $2",
+        domain.as_bytes().as_slice(),
+        digest.as_slice(),
+    )
+    .fetch_optional(&mut *t.tx)
+    .await?;
+    t.commit().await?;
+    Ok(bytes)
+}

@@ -36,8 +36,9 @@ pub struct NewClaim {
     pub id: Id,
     /// What it says.
     pub statement: Statement,
-    /// The Instance that signed it.
-    pub instance: Id,
+    /// The Instance that signed it; `None` for a Claim that came unsigned or by an external
+    /// carrier.
+    pub instance: Option<Id>,
     /// Its disposition.
     pub disposition: Disposition,
     /// Position of its record.
@@ -136,7 +137,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
 
     /// Whether Claim `id` asserts in its issuer line: it has no recorded successor and is not
     /// one side of a fork (TI-RT7, OP-141 m.30 (c), (d)).
-    async fn in_line(
+    pub(crate) async fn in_line(
         &self,
         snap: &mut Snapshot,
         id: &Id,
@@ -159,7 +160,11 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         }
     }
 
-    async fn get(&self, snap: &mut Snapshot, key: &[u8]) -> Result<Option<Value>, CoreError> {
+    pub(crate) async fn get(
+        &self,
+        snap: &mut Snapshot,
+        key: &[u8],
+    ) -> Result<Option<Value>, CoreError> {
         if !snap.has(key) {
             snap.fill(self.fetch(&[key.to_vec()]).await?);
         }
@@ -188,7 +193,11 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
     }
 
     /// The live Acceptances of `issuer` (L0-META-5).
-    async fn gates(&self, snap: &mut Snapshot, issuer: &Id) -> Result<Vec<Gate>, CoreError> {
+    pub(crate) async fn gates(
+        &self,
+        snap: &mut Snapshot,
+        issuer: &Id,
+    ) -> Result<Vec<Gate>, CoreError> {
         Ok(self
             .widened_gates(snap, issuer)
             .await?
@@ -549,7 +558,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             bytes: bytes.to_vec(),
             id,
             statement,
-            instance,
+            instance: Some(instance),
             disposition,
             pos,
             draw,

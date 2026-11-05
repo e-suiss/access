@@ -1229,7 +1229,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                             Some(
                                 ClaimState {
                                     statement: c.statement.clone(),
-                                    instance: Some(c.instance),
+                                    instance: c.instance,
                                     since: c.pos,
                                     ended: None,
                                 }
@@ -1581,6 +1581,8 @@ struct Shape<'a> {
 pub const CONTRIBUTION_NAMESPACE: &str = "access.contribution";
 
 mod events;
+mod ingest;
 mod proofs;
 
+pub use ingest::Ingested;
 pub use proofs::{Compromise, MAX_PROOFS, NewClaim, Resolved};

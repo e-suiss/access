@@ -87,6 +87,10 @@ impl Reader for PgReader {
             .collect())
     }
 
+    async fn proof(&self, digest: &[u8; 32]) -> Result<Option<Vec<u8>>, CoreError> {
+        Ok(access_store::claims::proof(&self.pool, &self.domain, digest).await?)
+    }
+
     async fn recorded_at(&self, pos: u64) -> Result<Option<u64>, CoreError> {
         Ok(read_log(&self.pool, &self.domain, pos, pos)
             .await?
@@ -921,3 +925,5 @@ pub async fn derive(deriver: &Pool, domain: Digest) -> Result<u64, CoreError> {
     }
     Ok(at)
 }
+
+mod ingest;

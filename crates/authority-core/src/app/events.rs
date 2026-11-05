@@ -180,7 +180,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
     }
 
     /// OP-149 m.7: the events of the admitted signed declarations.
-    async fn claim_events(
+    pub(crate) async fn claim_events(
         &self,
         domain: Digest,
         resolved: &Proofs,

@@ -11,6 +11,11 @@ publish = false
 [dependencies]
 access-internal-api = { workspace = true }
 access-kernel = { workspace = true }
+suiss-crypto = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+ed25519-dalek = { workspace = true }
 
 [lints]
 workspace = true
