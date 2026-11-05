@@ -1063,3 +1063,55 @@ async fn party_recovery_frees_only_instances_created_after_it() {
     assert_eq!(act(&mut core, d, 51, 43, 31_000).await.0, Outcome::Allow);
     assert_eq!(act(&mut core, d, 50, 44, 31_000).await.0, Outcome::Deny);
 }
+
+// §9.12.3, §9.12.4, E30, P28, INV-21, PI-9: a PEP's authority-state acknowledgement is admitted
+// and recorded as a detection signal only: it derives no event and changes no decision
+#[tokio::test]
+async fn an_authority_state_ack_is_recorded_and_widens_nothing() {
+    use access_kernel::claim::body::{AckEvent, AckScope, AuthorityStateAck};
+    let db = fresh().await.unwrap();
+    let (mut core, d) = setup(
+        &db,
+        vec![acceptance(
+            BOB,
+            "predicate-input",
+            &["authority_state_ack"],
+            vec![],
+        )],
+    )
+    .await;
+    let scope = DomainId::from_bytes(d.0);
+    let before = act(&mut core, d, ALICE_KEY, 30, NOW).await;
+    assert_eq!(before.0, Outcome::Allow);
+    let events = access_store::authority::read_outbox(&db.app, &scope, (0, 0), 100)
+        .await
+        .unwrap()
+        .len();
+    let ack = Body::AuthorityStateAck(AuthorityStateAck {
+        pep: PEP.to_owned(),
+        event: AckEvent::Exercise(Digest([9; 32])),
+        applied_at: NOW,
+        clock_evidence: None,
+        basis: 3,
+        scope: BTreeSet::from([AckScope::Cache, AckScope::Token]),
+    });
+    let s = statement(d, BOB, ALICE, "authority_state_ack", EqValue::Int(0));
+    assert!(matches!(
+        core.ingest(&with_body(s, &ack, BOB_KEY), NOW)
+            .await
+            .unwrap()
+            .verdict,
+        ClaimVerdict::Admitted {
+            replayed: false,
+            ..
+        }
+    ));
+    assert_eq!(
+        access_store::authority::read_outbox(&db.app, &scope, (0, 0), 100)
+            .await
+            .unwrap()
+            .len(),
+        events
+    );
+    assert_eq!(act(&mut core, d, ALICE_KEY, 31, NOW).await, before);
+}

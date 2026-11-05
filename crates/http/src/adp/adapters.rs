@@ -30,8 +30,13 @@ pub struct Pep(pub String);
 const REQUEST_ID: HeaderName = HeaderName::from_static("x-request-id");
 
 /// Domain Metadata caching (§9.15.1): re-signed at each rotation, revalidated within minutes,
-/// a stale copy served while the signer is unreachable.
-const METADATA_CACHE: &str = "max-age=300, stale-while-revalidate=600, stale-if-error=86400";
+/// a stale copy served while the signer is unreachable, never past an hour in all: without a
+/// witness the verifier's metadata cache is at most 1 hour old (§9.15, T29, TI-RT5, OP-150
+/// m.3 (q), UDC).
+pub const METADATA_CACHE: &str = "max-age=300, stale-while-revalidate=300, stale-if-error=3300";
+
+/// The longest a cache may hold Domain Metadata, seconds (TI-RT5, OP-150 m.3 (q)).
+pub const METADATA_MAX_AGE_S: u64 = 3_600;
 
 /// Discovery document fields (L1-ADP-11).
 #[derive(Clone, Debug)]

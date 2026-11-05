@@ -283,8 +283,9 @@ async fn discovery_names_the_pdp_and_the_profile() {
     assert!(body.get("signed_metadata").is_none());
 }
 
-// §9.15.1, OP-143 m.4: the signer's Domain Metadata is served as signed, with its media type
-// and cache lifetime
+// §9.15.1, OP-143 m.4, T29, TI-RT5, OP-150 m.3 (q): the signer's Domain Metadata is served as
+// signed, with its media type and a cache lifetime that, stale copies included, never passes
+// one hour
 #[tokio::test]
 async fn domain_metadata_is_served_as_signed() {
     let (status, headers, body) = get(&format!(
@@ -297,10 +298,21 @@ async fn domain_metadata_is_served_as_signed() {
         headers[header::CONTENT_TYPE],
         "application/access-domain-metadata+cbor"
     );
-    assert_eq!(
-        headers[header::CACHE_CONTROL],
-        "max-age=300, stale-while-revalidate=600, stale-if-error=86400"
+    let cache = headers[header::CACHE_CONTROL].to_str().unwrap();
+    assert_eq!(cache, access_http::adp::adapters::METADATA_CACHE);
+    let secs = |name: &str| -> u64 {
+        cache
+            .split(", ")
+            .find_map(|d| d.strip_prefix(name)?.strip_prefix('='))
+            .unwrap()
+            .parse()
+            .unwrap()
+    };
+    let fresh = secs("max-age");
+    assert!(
+        fresh + secs("stale-while-revalidate") <= access_http::adp::adapters::METADATA_MAX_AGE_S
     );
+    assert!(fresh + secs("stale-if-error") <= access_http::adp::adapters::METADATA_MAX_AGE_S);
     assert_eq!(body, METADATA);
 }
 
@@ -656,4 +668,42 @@ async fn a_rate_limited_batch_is_429() {
     .await;
     assert_eq!(status, StatusCode::TOO_MANY_REQUESTS);
     assert_eq!(body["code"], "rate-limited");
+}
+
+// §9.15.1 k.2, P60, MD-5: Domain Metadata, the realm's AS metadata and the authzen
+// configuration are three documents; none stands in for another, and the identity document's
+// issuer is no authority claim
+#[tokio::test]
+async fn the_three_discovery_documents_stay_separate() {
+    use access_identity_oauth::domain::issuer::Issuer;
+    use access_identity_oauth::domain::metadata::{SERVED, authorization_server};
+    let domain = domain_text(SIGNED);
+    let (_, md_headers, md) = get(&format!("/.well-known/access-domain-metadata/{domain}")).await;
+    let (_, az_headers, az) = get(&format!("/.well-known/authzen-configuration/{domain}")).await;
+    assert_eq!(
+        md_headers[header::CONTENT_TYPE],
+        "application/access-domain-metadata+cbor"
+    );
+    assert_eq!(az_headers[header::CONTENT_TYPE], "application/json");
+    assert!(serde_json::from_slice::<Value>(&md).is_err());
+    let az: Value = serde_json::from_slice(&az).unwrap();
+    let issuer = Issuer::parse("https://acme.id.example").unwrap();
+    let as_meta: Value = serde_json::from_str(&authorization_server(&issuer, &SERVED)).unwrap();
+    for authority in [
+        "signed_metadata",
+        "policy_decision_point",
+        "operational_keys",
+        "access_evaluation_endpoint",
+    ] {
+        assert!(as_meta.get(authority).is_none(), "{authority}");
+    }
+    for identity in [
+        "issuer",
+        "jwks_uri",
+        "token_endpoint",
+        "authorization_endpoint",
+    ] {
+        assert!(az.get(identity).is_none(), "{identity}");
+    }
+    assert_eq!(az["signed_metadata"], b64url_encode(&md));
 }
