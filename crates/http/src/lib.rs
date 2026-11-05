@@ -12,6 +12,7 @@ pub mod product;
 pub mod realm;
 mod security_txt;
 pub mod ssf;
+pub mod status;
 pub mod tls;
 
 use std::time::Duration;

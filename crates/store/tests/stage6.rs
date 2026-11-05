@@ -292,6 +292,7 @@ async fn status_lists_and_families() {
             iat_ms: 2_000,
             entries: 8,
             token: vec![0xd2],
+            excerpt: None,
         };
         assert!(publish(&db.sequencer, &d, &p).await.unwrap());
     }

@@ -45,13 +45,16 @@ where
         .clone();
     // CMP-8
     let ingest = crate::ingest::routes(keys.clone(), app.clone());
+    // OP-150 m.3 (a)
+    let status = crate::status::routes(app.clone());
     Ok(product_router(Service::new(
         keys.clone(),
         PgTenants::new(router, ids),
         PgSubjects { app, domains: keys },
         region,
     ))
-    .merge(ingest))
+    .merge(ingest)
+    .merge(status))
 }
 
 /// The head of a governing domain as a consistency token (OP-141 m.22 (f)).

@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.status_list SET allocated = allocated + 1\n                      WHERE domain_id = $1 AND list_no = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e7deeca33a5bf54ed86335dfdd4bab26a45ead90be80910c9b4edb228c51905c"
+}

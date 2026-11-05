@@ -1227,15 +1227,14 @@ async fn eligibility_problems_name_the_refused_part() {
     assert_eq!(v["reason"], "lease-held");
 }
 
-// OP-150 m.2, OP-149 m.3, CMP-8: Claim Ingest is served and discovered; the status list
-// endpoint is in the contract, marked unserved, and no discovery document names it until a
-// lane serves it
+// OP-150 m.2, m.3 (a), OP-149 m.3, CMP-8: Claim Ingest and the status list endpoint are served
+// and discovered
 #[test]
 fn stage6_entries_are_documented_and_discovered_once_served() {
     let doc = openapi();
     for (path, method, served) in [
         ("/access/v1/claims:ingest", "post", true),
-        ("/access/v1/status-lists/{list}", "get", false),
+        ("/access/v1/status-lists/{list}", "get", true),
     ] {
         assert_eq!(
             doc["paths"][path][method]["x-suiss-served"],
@@ -1252,8 +1251,8 @@ fn stage6_entries_are_documented_and_discovered_once_served() {
         assert!(doc["components"]["schemas"][schema].is_object(), "{schema}");
     }
     assert!(suiss::SERVED.contains(&suiss::Endpoint::ClaimIngest));
-    assert!(!suiss::SERVED.contains(&suiss::Endpoint::StatusList));
+    assert!(suiss::SERVED.contains(&suiss::Endpoint::StatusList));
     let issuer = Issuer::parse("https://acme.example").unwrap();
     let map = suiss::endpoints(&issuer, &settings(), suiss::SERVED);
-    assert!(map.contains_key("claim_ingest") && !map.contains_key("status_list"));
+    assert!(map.contains_key("claim_ingest") && map.contains_key("status_list"));
 }

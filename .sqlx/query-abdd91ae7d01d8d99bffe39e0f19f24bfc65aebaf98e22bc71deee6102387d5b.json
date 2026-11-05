@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT list_uri, seq, applied_pos, iat_ms, entries, token\n           FROM access.status_list_publication\n          WHERE domain_id = $1 AND list_uri = $2 ORDER BY seq DESC LIMIT 1",
+  "query": "SELECT list_uri, seq, applied_pos, iat_ms, entries, token, excerpt\n           FROM access.status_list_publication\n          WHERE domain_id = $1 AND list_uri = $2 ORDER BY seq DESC LIMIT 1",
   "describe": {
     "columns": [
       {
@@ -68,6 +68,17 @@
             "name": "token"
           }
         }
+      },
+      {
+        "ordinal": 6,
+        "name": "excerpt",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.status_list_publication",
+            "name": "excerpt"
+          }
+        }
       }
     ],
     "parameters": {
@@ -82,8 +93,9 @@
       false,
       false,
       false,
-      false
+      false,
+      true
     ]
   },
-  "hash": "0ea35036ec099d5c8f26f7b227c72e8010c8bd0965249276ad129f3e63d4de7d"
+  "hash": "abdd91ae7d01d8d99bffe39e0f19f24bfc65aebaf98e22bc71deee6102387d5b"
 }

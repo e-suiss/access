@@ -6,7 +6,10 @@
 use serde_json::{Map, Value, json};
 
 use access_internal_api::claims::UNAVAILABLE as INGEST_UNAVAILABLE;
-use access_kernel::status::{CWT_CONTENT_TYPE, JWT_CONTENT_TYPE};
+use access_kernel::status::CWT_CONTENT_TYPE;
+
+use crate::product::adapters::EXCERPT_HEADER;
+use crate::status::CACHE as STATUS_CACHE;
 
 use super::{json_ok, object, path, problems, query, r, text, with};
 
@@ -94,25 +97,39 @@ pub(super) fn paths(paths: &mut Map<String, Value>, common: &[(&str, &str); 4]) 
             ),
         }}),
     );
+    let mut status_problems = problems(&[
+        common[0],
+        ("404", "status-list-unknown."),
+        common[2],
+        ("503", "status-list-unavailable: retry."),
+    ]);
+    status_problems.insert(
+        "304".into(),
+        json!({ "description": "`If-None-Match` names the current list." }),
+    );
     paths.insert(
         "/access/v1/status-lists/{list}".into(),
         json!({ "get": {
             "operationId": "getStatusList",
-            "summary": "A domain's Token Status List (IETF Token Status List, 1 bit per entry; OP-150 m.3 (s)). `iat` and `as_of` are the recorded_at and position the list reflects, not the publication time (T24). An information channel, never the safety mechanism (§9.12.4).",
-            "x-suiss-served": false,
+            "summary": "A domain's Token Status List (IETF Token Status List, 1 bit per entry; OP-150 m.3 (s)), as `COSE_Sign1` under usage `status-list` with the binding-signed excerpt of its key in `access-key-excerpt`. `iat` and `as_of` are the recorded_at and position the list reflects, not the publication time (T24). An information channel, never the safety mechanism (§9.12.4).",
+            "x-suiss-served": true,
             "security": [],
             "parameters": [
-                path("list", &json!({ "type": "string" })),
+                path("list", &json!({ "type": "string", "pattern": "^(0|[1-9][0-9]{0,18})$" })),
                 query("domain", true, "DomainId", "The authority domain."),
             ],
             "responses": with(
-                problems(&[common[0], ("404", "status-list-unknown."), common[2], common[3]]),
+                status_problems,
                 "200",
                 json!({
                     "description": "The signed list.",
+                    "headers": {
+                        "ETag": { "description": "The position the list reflects, quoted.", "schema": { "type": "string" } },
+                        "Cache-Control": { "description": format!("`{STATUS_CACHE}`."), "schema": { "type": "string" } },
+                        EXCERPT_HEADER.as_str(): { "description": "The binding-signed excerpt of the signing key, base64url (CR-58 m.1).", "schema": { "type": "string" } },
+                    },
                     "content": {
                         CWT_CONTENT_TYPE: { "schema": { "type": "string", "contentMediaType": "application/cose" }, "description": "COSE_Sign1 under usage `status-list` over `status-list-cwt` (kernel.cddl)." },
-                        JWT_CONTENT_TYPE: { "schema": { "type": "string" }, "description": "The same claims as a compact JWS." },
                     },
                 }),
             ),

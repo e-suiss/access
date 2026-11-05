@@ -9,6 +9,7 @@ pub mod ports;
 pub mod query;
 pub mod rate;
 pub mod restrict;
+pub mod status;
 
 use access_authority_sequencer::SequencerError;
 use access_kernel::ais::AisError;

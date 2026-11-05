@@ -18,6 +18,7 @@ mod login;
 mod oauth;
 mod platform;
 mod product;
+mod status;
 #[cfg(test)]
 mod testing;
 
@@ -848,11 +849,12 @@ async fn serve(
         ttl: LEASE_TTL,
         binding: actors.clone(),
         salts: OsSalts,
-        clock: SourcesClock::new(sequencer),
+        clock: SourcesClock::new(sequencer.clone()),
         deriver,
         signer: config.signer.clone(),
     }));
     let renewing = tokio::spawn(renew(domains.clone()));
+    let _publishing = status::spawn(&domains, &product_app, &sequencer, config.signer.as_ref());
     // OP-62, MD-14, TN-111: the identity plane's idp.* write path and realm Genesis
     let idp_plane = idp::Plane::new(
         domains.clone(),

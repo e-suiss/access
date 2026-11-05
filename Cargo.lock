@@ -17,6 +17,7 @@ dependencies = [
  "esuiss-access-kernel",
  "esuiss-crypto",
  "esuiss-restriction",
+ "miniz_oxide",
  "serde_json",
  "thiserror",
  "tokio",

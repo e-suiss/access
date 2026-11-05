@@ -49,7 +49,7 @@ pub enum Endpoint {
     ExerciseAgency,
     /// `POST /access/v1/claims:ingest` (CMP-8, OP-150 m.2); not served yet.
     ClaimIngest,
-    /// `GET /access/v1/status-lists/{list}` (OP-150 m.3 (a), (s)); not served yet.
+    /// `GET /access/v1/status-lists/{list}` (OP-150 m.3 (a), (s)).
     StatusList,
 }
 
@@ -121,6 +121,7 @@ pub const SERVED: &[Endpoint] = &[
     Endpoint::Exercise,
     Endpoint::ExerciseAgency,
     Endpoint::ClaimIngest,
+    Endpoint::StatusList,
 ];
 
 /// Well-known suffix of the realm's SSF transmitter metadata (SSF 1.0 §7.1).

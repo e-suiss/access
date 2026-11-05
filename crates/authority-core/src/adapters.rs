@@ -712,16 +712,20 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
         }))
     }
 
+    /// The domains led here.
+    #[must_use]
+    pub fn led(&self) -> Vec<Digest> {
+        self.led
+            .lock()
+            .map(|m| m.keys().copied().collect())
+            .unwrap_or_default()
+    }
+
     /// Brings the derived index of every domain led here up to its head (OP-141 m.22 (g)); the
     /// failures are returned and left for the next round.
     pub async fn derive(&self) -> Vec<CoreError> {
-        let domains: Vec<Digest> = self
-            .led
-            .lock()
-            .map(|m| m.keys().copied().collect())
-            .unwrap_or_default();
         let mut failed = Vec::new();
-        for d in domains {
+        for d in self.led() {
             if let Err(error) = derive(&self.setup.deriver, d).await {
                 failed.push(error);
             }
@@ -827,7 +831,7 @@ const SIGNER_CODES: [&str; 9] = [
 /// The stable reason of a signer's refusal (OP-149 m.5): a domain's first operational key
 /// signs only `T_publish_lead` after it is published (SAI-46), and until then the signer
 /// answers `signer-no-key`.
-fn signer_reason(code: &str) -> &'static str {
+pub(crate) fn signer_reason(code: &str) -> &'static str {
     SIGNER_CODES
         .into_iter()
         .find(|c| *c == code)
@@ -836,7 +840,7 @@ fn signer_reason(code: &str) -> &'static str {
 
 /// Opens the keyring of `domain` in the signer at `path`, so that its key schedule runs; the
 /// signer keeps an open keyring as it is (OP-143 m.4).
-async fn open_keyring(path: &std::path::Path, domain: Digest) -> bool {
+pub(crate) async fn open_keyring(path: &std::path::Path, domain: Digest) -> bool {
     use access_authority_signer::adapters::call;
     use access_authority_signer::protocol::{Request as SignRequest, Response as SignResponse};
     let open = SignRequest::Open(Box::new(access_authority_signer::domain::default_template(
