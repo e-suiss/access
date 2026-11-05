@@ -448,7 +448,7 @@ fn validity_vectors() {
             None => assert!(r.accepted(), "{}", c["id"]),
         }
     }
-    assert_eq!(cases(&v).len(), 25);
+    assert_eq!(cases(&v).len(), 26);
 }
 
 fn path(c: &J) -> String {

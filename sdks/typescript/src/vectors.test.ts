@@ -354,7 +354,7 @@ describe("Kernel vectors through the Wasm binding", () => {
       const want = "error" in c ? { error: field(c, "error") } : { ok: true };
       expect(got, c.id).toEqual(want);
     }
-    expect(v.cases).toHaveLength(25);
+    expect(v.cases).toHaveLength(26);
   });
 
   it("merkle.json", async () => {
