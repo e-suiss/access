@@ -1587,6 +1587,8 @@ mod ingest;
 mod projection;
 mod proofs;
 mod regime;
+mod roles;
 
 pub use ingest::Ingested;
 pub use proofs::{Compromise, MAX_PROOFS, NewClaim, Resolved};
+pub use roles::ROLES_CLAIM;

@@ -4912,3 +4912,187 @@ async fn introspection_reflects_signature_horizon_and_family() {
     assert!(a.revoke_family(d, t.family).await.unwrap());
     assert!(!a.introspect(d, &t.jws, NOW).await.unwrap().0);
 }
+
+/// ALICE's bounds token for `shop.read` over `resource`, decided on `basis`.
+fn alice_order(
+    d: Digest,
+    nonce: u8,
+    basis: ExerciseBasis,
+    resource: ResourceSelector,
+) -> access_authority_core::adapters::TokenOrder {
+    use access_kernel::validity::{ProfileClass, ProfileVariant};
+    let mut bounds = authority(vec![action("shop", "read")], resource);
+    bounds.constraints.validity = Window {
+        from: NOW,
+        until: NOW.checked_add(600_000).unwrap(),
+    };
+    let issue = Payload::ProjectionIssue {
+        bounds,
+        audience: BTreeSet::from([RS.to_owned()]),
+        class: ProfileClass::Online,
+        variant: ProfileVariant::OnlineStrict,
+        max_staleness_ms: None,
+        offline_slice: None,
+    };
+    access_authority_core::adapters::TokenOrder {
+        incoming: incoming(meta_request(d, nonce, basis, issue), ALICE_KEY),
+        issuer: AS_ISSUER.to_owned(),
+        client_id: "cli_shop".to_owned(),
+        audience: RS.to_owned(),
+        confirmation: access_kernel::verify::projection::Confirmation::Jkt(thumbprint(&public(
+            ALICE_KEY,
+        ))),
+        authority: access_authority_core::adapters::TokenAuthority::Bounds,
+        family: None,
+    }
+}
+
+// §5.3, §5.17, INV-33, S-1, OP-141 m.32, OP-148 carry-over: a role in an authority token is the
+// projection of the Grant that pins a Named AuthoritySet; the token names the role only when
+// its decided bounds cover the whole named version, so the role never says more than the
+// token's authority; a Grant without a pin, or bounds narrower than the role, name none
+#[tokio::test]
+#[allow(
+    clippy::too_many_lines,
+    reason = "a role defined, pinned by two Grants and projected three ways"
+)]
+async fn a_role_claim_is_a_grant_projection() {
+    use access_authority_core::adapters::Projected;
+    use access_kernel::meta::authority_set_digest;
+    // §9.9.6, P55, PI-8
+    let db = fresh().await.unwrap();
+    let d = create_genesis(&db.sequencer, TENANT, genesis(), 1_000)
+        .await
+        .unwrap();
+    let (socket, service) = start_signer("roles");
+    let a = signing_process(&db, d, &socket);
+    onboard_signed(&a, d, &service).await;
+    let public_basis = ExerciseBasis::Public(meta::object_id(&d, kind::GRANT, 0));
+    for (nonce, payload) in [
+        (
+            3,
+            Payload::PartyRegister {
+                party: ALICE,
+                root: Root::Sole(ALICE),
+                actor_kind: ActorKind::Human,
+            },
+        ),
+        (
+            4,
+            Payload::InstanceCreate {
+                party: ALICE,
+                key: public(ALICE_KEY),
+                mandate: None,
+            },
+        ),
+    ] {
+        allowed(
+            &a.exercise(&incoming(
+                meta_request(d, nonce, public_basis, payload),
+                ALICE_KEY,
+            ))
+            .await
+            .unwrap(),
+        );
+    }
+    let reader = authority_of(vec![action("shop", "read")]).authority;
+    allowed(
+        &a.exercise(&incoming(
+            meta_request(
+                d,
+                5,
+                ExerciseBasis::Anchor(meta::meta_anchor(&d)),
+                Payload::AuthoritySetDefine {
+                    name: "reader".to_owned(),
+                    authority: reader.clone(),
+                },
+            ),
+            ROOT_KEY,
+        ))
+        .await
+        .unwrap(),
+    );
+    let shop = meta::object_id(&d, kind::ANCHOR, 1);
+    let grant = |named| {
+        Payload::GrantIssue(GrantContent {
+            basis: GrantBasis::Anchor(shop),
+            holder: SubjectSelector::Party(ALICE),
+            authority: authority_of(vec![action("shop", "read")]),
+            agency: BTreeSet::from([Capacity::Own]),
+            named,
+        })
+    };
+    let mut holdings = Vec::new();
+    for (nonce, named) in [
+        (
+            6,
+            Some(("reader".to_owned(), 1, authority_set_digest(&reader))),
+        ),
+        (7, None),
+    ] {
+        let issued = a
+            .exercise(&incoming(
+                meta_request(d, nonce, ExerciseBasis::Anchor(shop), grant(named)),
+                ROOT_KEY,
+            ))
+            .await
+            .unwrap();
+        allowed(&issued);
+        holdings.push(ExerciseBasis::Holding(HoldingRef {
+            grant: meta::object_id(&issued.exercise.unwrap(), kind::GRANT, 0),
+            holder: ALICE,
+            since: issued.record.unwrap(),
+        }));
+    }
+    let metadata = signer_metadata(&socket, d).await;
+    let cnf = access_kernel::verify::projection::Confirmation::Jkt(thumbprint(&public(ALICE_KEY)));
+    let roles = |jws: &str| {
+        let verified = access_kernel::verify::projection::verify_access_token(
+            &access_kernel::verify::PureBackend,
+            jws,
+            &token_keys(&metadata),
+            &access_kernel::verify::projection::AccessTokenRules {
+                issuer: AS_ISSUER,
+                audience: RS,
+                domain: &d,
+                confirmation: &cnf,
+                now: NOW,
+                skew_ms: 60_000,
+            },
+        )
+        .unwrap();
+        verified.claims.get("roles").cloned()
+    };
+    let orders = [
+        alice_order(d, 20, holdings[0], selector("shop")),
+        alice_order(d, 21, holdings[1], selector("shop")),
+        alice_order(
+            d,
+            22,
+            holdings[0],
+            ResourceSelector::Structural(Structural {
+                namespace: "shop".to_owned(),
+                prefix: vec!["orders".to_owned()],
+                kind: None,
+                attrs: BTreeMap::new(),
+            }),
+        ),
+    ];
+    let mut seen = Vec::new();
+    for order in &orders {
+        let Projected::Issued(t) = a.project(order).await.unwrap() else {
+            panic!("not issued");
+        };
+        seen.push(roles(&t.jws));
+    }
+    assert_eq!(
+        seen,
+        vec![
+            Some(access_kernel::json::Json::Array(vec![
+                access_kernel::json::Json::Str("reader".to_owned())
+            ])),
+            None,
+            None,
+        ]
+    );
+}

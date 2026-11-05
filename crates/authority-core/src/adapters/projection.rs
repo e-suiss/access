@@ -312,6 +312,17 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
             String::from(FAMILY_CLAIM),
             Json::Str(b64url_encode(&family)),
         ));
+        // INV-33, S-1, §5.17
+        let roles = led
+            .core
+            .projected_roles(&order.incoming.request.basis, &pap.bounds, pap.iat)
+            .await?;
+        if !roles.is_empty() {
+            claims.push((
+                String::from(crate::app::ROLES_CLAIM),
+                Json::Array(roles.into_iter().map(Json::Str).collect()),
+            ));
+        }
         let claims = Json::Object(claims);
         let claims = access_crypto::jose::output::to_string(&claims);
         // OP-150 m.3 (s)
