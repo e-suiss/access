@@ -28,6 +28,14 @@ pub const PREDICATE_INPUT: &str = "predicate-input";
 /// The use under which a Claim is a group membership (OP-141 m.20).
 pub const SUBJECT_SELECTION: &str = "subject-selection";
 
+/// The use under which a Claim binds an actor to an Instance (§10.1.4, E18): admitted, but
+/// neither a proof nor a membership.
+pub const ACTOR_BINDING: &str = "actor-binding";
+
+/// The uses whose Acceptance admits a Claim (L2-CLM-3, OP-141 m.20 (a), OP-150): each counts
+/// only for its own use (INV-15).
+pub const ADMITTING_USES: [&str; 3] = [PREDICATE_INPUT, SUBJECT_SELECTION, ACTOR_BINDING];
+
 /// Kind of the membership index (OP-141 m.20 (b)).
 pub const MEMBER: &str = "member";
 /// `SHA-256("access/acceptance/v1" ‖ 0x00 ‖ dCBOR(acceptance-content))`, the digest a
@@ -303,6 +311,69 @@ pub fn verify(
     Ok(s)
 }
 
+/// The carrier key set of an issuer identified by a pinned key set (§9.13 issuer
+/// identification): the `iss` and `aud` its JWS carriers name and the keys they verify under,
+/// each by its RFC 7638 thumbprint. Rotation is an `acceptance_amend`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Pinned {
+    /// The issuer identifier the carriers name.
+    pub iss: String,
+    /// The audience the carriers name: this domain at the issuer.
+    pub aud: String,
+    /// The keys.
+    pub keys: Vec<PublicKey>,
+}
+
+impl Pinned {
+    fn from_value(v: &Value) -> Result<Self, ModelError> {
+        let mut f = Fields::of(v)?;
+        let iss = String::from(crate::codec::text(f.req("iss")?)?);
+        let aud = String::from(crate::codec::text(f.req("aud")?)?);
+        let Value::Array(items) = f.req("keys")? else {
+            return Err(ModelError::Shape);
+        };
+        if items.is_empty() || iss.is_empty() || aud.is_empty() {
+            return Err(ModelError::Range);
+        }
+        let keys = items
+            .iter()
+            .map(PublicKey::from_value)
+            .collect::<Result<Vec<_>, _>>()?;
+        f.done()?;
+        Ok(Self { iss, aud, keys })
+    }
+
+    /// The keys by thumbprint, with the algorithms their types allow.
+    #[must_use]
+    pub fn key_set(&self) -> KeySet {
+        let mut keys = KeySet::default();
+        for k in &self.keys {
+            if keys.insert(thumbprint(k), k.clone()).is_ok() {
+                keys.allowed.extend(match k {
+                    PublicKey::Ed25519(_) => [Algorithm::Ed25519].as_slice(),
+                    PublicKey::P256(_) => [Algorithm::Es256, Algorithm::Esp256].as_slice(),
+                    PublicKey::MlDsa(..) => [].as_slice(),
+                });
+            }
+        }
+        keys
+    }
+
+    /// Whether `new` keeps the issuer and audience and only drops keys.
+    #[must_use]
+    pub fn narrows(&self, new: &Self) -> bool {
+        self.iss == new.iss && self.aud == new.aud && new.keys.iter().all(|k| self.keys.contains(k))
+    }
+}
+
+/// Checks the `pinned` member of an `acceptance-content`.
+///
+/// # Errors
+/// [`ModelError`].
+pub fn check_pinned(v: &Value) -> Result<(), ModelError> {
+    Pinned::from_value(v).map(|_| ())
+}
+
 /// What decides whether a Claim is admitted: the parts of an `acceptance-content` (§9.13).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Gate {
@@ -324,6 +395,10 @@ pub struct Gate {
     pub issued_until: Option<u64>,
     /// Declared quota: Claims per window of seconds (OP-141 m.21 (a)).
     pub quota: Option<(u64, u64)>,
+    /// The Anchor the Acceptance is scoped to (§5.2).
+    pub anchor: Option<Id>,
+    /// The carrier key set of a pinned key-set issuer.
+    pub pinned: Option<Pinned>,
 }
 
 /// Domain default quota when an Acceptance declares none: Claims per window (PD).
@@ -357,8 +432,9 @@ impl Gate {
             ingest_until: f.opt("ingest_until").map(uint).transpose()?,
             issued_until: f.opt("issued_until").map(uint).transpose()?,
             quota: f.opt("quota").map(quota).transpose()?,
+            anchor: f.opt("anchor").map(Id::from_value).transpose()?,
+            pinned: f.opt("pinned").map(Pinned::from_value).transpose()?,
         };
-        let _ = f.opt("anchor");
         f.done()?;
         Ok(g)
     }
@@ -424,14 +500,15 @@ impl Disposition {
 pub fn disposition(s: &Statement, gates: &[Gate], now: u64) -> Disposition {
     if s.issued_at > now.saturating_add(SKEW_MS) {
         Disposition::Future
-    } else if gates
-        .iter()
-        .any(|g| g.admits_for(PREDICATE_INPUT, s, now) || g.admits_for(SUBJECT_SELECTION, s, now))
-    {
+    } else if gates.iter().any(|g| admits_any(g, s, now)) {
         Disposition::Admit
     } else {
         Disposition::SourceNotAccepted
     }
+}
+
+fn admits_any(g: &Gate, s: &Statement, now: u64) -> bool {
+    ADMITTING_USES.iter().any(|u| g.admits_for(u, s, now))
 }
 
 fn quota(v: &Value) -> Result<(u64, u64), ModelError> {
@@ -451,9 +528,7 @@ fn quota(v: &Value) -> Result<(u64, u64), ModelError> {
 pub fn quota_of(s: &Statement, gates: &[Gate], now: u64) -> Option<(u64, u64)> {
     gates
         .iter()
-        .filter(|g| {
-            g.admits_for(PREDICATE_INPUT, s, now) || g.admits_for(SUBJECT_SELECTION, s, now)
-        })
+        .filter(|g| admits_any(g, s, now))
         .map(|g| g.quota.unwrap_or(DEFAULT_QUOTA))
         .max()
         .map(|(count, window_s)| (count.saturating_mul(2), window_s.saturating_mul(1_000)))
@@ -501,6 +576,12 @@ pub fn narrows(old: &Gate, new: &Gate) -> bool {
         && earlier(new.ingest_until, old.ingest_until)
         && earlier(new.issued_until, old.issued_until)
         && quota
+        && new.anchor == old.anchor
+        && match (&old.pinned, &new.pinned) {
+            (None, None) => true,
+            (Some(o), Some(n)) => o.narrows(n),
+            _ => false,
+        }
 }
 
 /// A recorded Claim (`claim-state`).

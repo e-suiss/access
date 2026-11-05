@@ -75,7 +75,7 @@ def _admits(acceptance, statement, now):
     until = acceptance.get("ingest_until")
     issued_until = acceptance.get("issued_until")
     return (
-        acceptance["use"] in ("predicate-input", "subject-selection")
+        acceptance["use"] in ("predicate-input", "subject-selection", "actor-binding")
         and isinstance(issuer, bytes)
         and issuer == statement["issuer"]
         and statement["class"] in acceptance["classes"]

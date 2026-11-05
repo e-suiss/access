@@ -80,6 +80,8 @@ fn gate() -> Gate {
         ingest_until: None,
         issued_until: None,
         quota: None,
+        anchor: None,
+        pinned: None,
     }
 }
 
@@ -139,7 +141,7 @@ fn an_acceptance_admits_a_claim() {
     assert_eq!(disposition(&s, &[], 2_000), Disposition::SourceNotAccepted);
     let refusing = [
         Gate {
-            use_: String::from("actor-binding"),
+            use_: String::from("schema-definition"),
             ..gate()
         },
         Gate {
@@ -180,10 +182,8 @@ fn an_acceptance_admits_a_claim() {
     assert_eq!(disposition(&future, &[gate()], 10_000), Disposition::Future);
 }
 
-// L2-CLM-3: the gate reads an acceptance-content
-#[test]
-fn a_gate_reads_acceptance_content() {
-    let content = map([
+fn acceptance_content() -> Value {
+    map([
         ("issuer", Some(ISSUER.to_value())),
         ("use", Some(Value::text("predicate-input"))),
         ("classes", Some(Value::Array(vec![Value::text("kyc")]))),
@@ -193,7 +193,13 @@ fn a_gate_reads_acceptance_content() {
             Some(map([("aal", Some(Value::Unsigned(2)))])),
         ),
         ("validity", Some(gate().validity.to_value())),
-    ]);
+    ])
+}
+
+// L2-CLM-3: the gate reads an acceptance-content
+#[test]
+fn a_gate_reads_acceptance_content() {
+    let content = acceptance_content();
     assert_eq!(Gate::of(&content).unwrap(), gate());
 }
 
@@ -233,6 +239,13 @@ fn claim_vectors_match() {
             "assurance_floor",
             Some(map([("aal", Some(Value::Unsigned(2)))])),
         ),
+        ("validity", Some(gate().validity.to_value())),
+    ]);
+    let other_use = map([
+        ("issuer", Some(ISSUER.to_value())),
+        ("use", Some(Value::text("schema-definition"))),
+        ("classes", Some(Value::Array(vec![Value::text("kyc")]))),
+        ("subject", Some(SubjectSelector::Public.to_value())),
         ("validity", Some(gate().validity.to_value())),
     ]);
     let binding_use = map([
@@ -305,6 +318,14 @@ fn claim_vectors_match() {
         ),
         (
             "other-use",
+            &["L2-CLM-3"],
+            good.clone(),
+            ISSUER,
+            vec![other_use],
+            2_000,
+        ),
+        (
+            "actor-binding-use",
             &["L2-CLM-3"],
             good.clone(),
             ISSUER,
@@ -505,4 +526,56 @@ fn narrowing_an_acceptance() {
         ..gate()
     };
     assert!(!narrows(&capped, &old));
+}
+
+// L2-CLM-3, E18, INV-15, OP-150: an actor-binding Acceptance admits a Claim, which is then
+// neither a proof nor a membership
+#[test]
+fn an_actor_binding_acceptance_admits_for_its_use_only() {
+    let s = statement();
+    let binding = Gate {
+        use_: String::from(ACTOR_BINDING),
+        ..gate()
+    };
+    assert_eq!(
+        disposition(&s, core::slice::from_ref(&binding), 2_000),
+        Disposition::Admit
+    );
+    assert!(!binding.admits(&s, 2_000));
+    assert!(!binding.admits_for(SUBJECT_SELECTION, &s, 2_000));
+    assert!(binding.admits_for(ACTOR_BINDING, &s, 2_000));
+    assert!(quota_of(&s, &[binding], 2_000).is_some());
+}
+
+fn pinned_content(keys: Vec<Value>) -> Value {
+    let mut c = acceptance_content();
+    if let Value::Map(m) = &mut c {
+        m.push((
+            Value::text("pinned"),
+            Value::Map(vec![
+                (Value::text("iss"), Value::text("https://idp.example")),
+                (Value::text("aud"), Value::text("access")),
+                (Value::text("keys"), Value::Array(keys)),
+            ]),
+        ));
+    }
+    c
+}
+
+// OP-150, §9.13 issuer identification: a pinned key set travels in the Acceptance; dropping
+// keys narrows, adding one widens
+#[test]
+fn a_pinned_key_set_is_read_and_only_shrinks_by_narrowing() {
+    let k1 = key(9).to_value();
+    let k2 = key(8).to_value();
+    let both = Gate::of(&pinned_content(vec![k1.clone(), k2])).unwrap();
+    let one = Gate::of(&pinned_content(vec![k1])).unwrap();
+    let pinned = both.pinned.clone().unwrap();
+    assert_eq!(pinned.iss, "https://idp.example");
+    assert_eq!(pinned.key_set().keys.len(), 2);
+    assert!(pinned.key_set().keys.contains_key(&thumbprint(&key(9))));
+    assert!(narrows(&both, &one));
+    assert!(!narrows(&one, &both));
+    assert!(!narrows(&one, &Gate { pinned: None, ..one.clone() }));
+    assert!(Gate::of(&pinned_content(vec![])).is_err());
 }

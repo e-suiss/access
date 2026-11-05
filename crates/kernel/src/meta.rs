@@ -1206,6 +1206,13 @@ fn acceptance_content(v: &Value) -> Result<Value, ModelError> {
     set_of(f.req("classes")?, true, crate::codec::ident)?;
     SubjectSelector::from_value(f.req("subject")?)?;
     f.opt("anchor").map(id).transpose()?;
+    // OP-150: a pinned key-set issuer is a Party of this domain
+    if let Some(p) = f.opt("pinned") {
+        if foreign {
+            return Err(ModelError::Shape);
+        }
+        crate::claim::check_pinned(p)?;
+    }
     crate::codec::assurance(f.opt("assurance_floor"))?;
     Window::from_value(f.req("validity")?)?;
     f.opt("ingest_until").map(uint).transpose()?;

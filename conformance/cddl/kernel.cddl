@@ -636,7 +636,14 @@ acceptance-content = {
   ? issued_until: trusted-time,
   ? quota: { count: uint .ge 1, window_s: uint .ge 1 },
   ? spp: spp,
+  ? pinned: pinned-issuer,
 }
+
+; OP-150: the carrier key set of an issuer identified by a pinned key set (§9.13): the `iss`
+; and `aud` its JWS carriers (OIDC ID token, SET) name and the keys they verify under, each
+; found by its RFC 7638 thumbprint as `kid`. Not with a foreign issuer. Rotation is an
+; acceptance_amend; dropping keys narrows, any other change widens.
+pinned-issuer = { iss: tstr, aud: tstr, keys: [+ public-key] }
 
 foreign-issuer = { domain: domain-id, binding: [+ binding-key] }
 

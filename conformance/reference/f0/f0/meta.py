@@ -191,7 +191,19 @@ def check_acceptance_content(value):
         "ingest_until": check_uint,
         "issued_until": check_uint,
         "quota": lambda quota: check_map(quota, {"count": check_uint_at_least(1), "window_s": check_uint_at_least(1)}),
+        "pinned": check_pinned,
     })
+    # OP-150: a pinned key-set issuer is a Party of this domain
+    if isinstance(value.get("issuer"), dict) and "pinned" in value:
+        refuse("meta-malformed")
+
+
+def check_pinned(value):
+    from .keyscope import check_public_key
+
+    check_map(value, {"iss": check_tstr, "aud": check_tstr, "keys": check_list(check_public_key, nonempty=True)})
+    if not value["iss"] or not value["aud"]:
+        refuse("meta-malformed")
 
 
 def check_requirement_map(value):
