@@ -224,6 +224,12 @@ impl Keyring {
         &self.jwks
     }
 
+    /// How long the active key is past its rotation time at `now`, if it is (CR-23).
+    #[must_use]
+    pub fn overdue(&self, now: u64) -> Option<u64> {
+        rotation::overdue(&self.records(), &self.policy, now)
+    }
+
     /// The rotation records of every key, dropped ones included.
     #[must_use]
     pub fn keys(&self) -> Vec<Key> {

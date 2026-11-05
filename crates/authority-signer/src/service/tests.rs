@@ -297,3 +297,101 @@ fn the_genesis_statement_is_signed_on_open_and_kept() {
         .handle(Request::Genesis(Digest([7; 32])), MINUTE);
     assert_eq!(again, Response::Genesis(g));
 }
+
+struct Flaky(std::rc::Rc<std::cell::Cell<bool>>);
+
+impl KeyFactory for Flaky {
+    fn generate(&mut self, alg: suiss_crypto::cose::Algorithm) -> Result<Generated, SignError> {
+        if self.0.get() {
+            return Err(SignError::Key);
+        }
+        Soft.generate(alg)
+    }
+
+    fn load(
+        &mut self,
+        alg: suiss_crypto::cose::Algorithm,
+        sealed: &[u8],
+    ) -> Result<Box<dyn Signer + Send>, SignError> {
+        Soft.load(alg, sealed)
+    }
+}
+
+const HOUR: u64 = 60 * MINUTE;
+
+// CR-23, CR-27, OP-150: each round reports its key transitions, the OPERATIONAL audit events;
+// while keys can be made no rotation is late, and a key-generation outage makes the round report
+// the delayed rotation
+#[test]
+fn rounds_report_transitions_and_delays() {
+    let down = std::rc::Rc::new(std::cell::Cell::new(false));
+    let (_, doc) = SoftSigner::generate_ed25519().unwrap();
+    let mut s = Service::start(
+        Flaky(down.clone()),
+        Binding(doc),
+        Mem::default(),
+        Policy::AUTHORITY,
+        0,
+    )
+    .unwrap();
+    assert_eq!(
+        s.handle(Request::Open(Box::new(template())), 0),
+        Response::Opened
+    );
+    let mut names = BTreeSet::new();
+    let mut now = 0;
+    while now <= 6 * HOUR {
+        let report = s.round(now, now);
+        assert_eq!(report.delayed, Vec::new(), "{now}");
+        names.extend(report.transitions.iter().map(|(d, step)| {
+            assert_eq!(*d, Digest([7; 32]));
+            step.name()
+        }));
+        now += MINUTE;
+    }
+    assert!(names.is_superset(&BTreeSet::from(["publish", "activate", "retire"])));
+    down.set(true);
+    let mut late = None;
+    while now <= 12 * HOUR {
+        let report = s.round(now, now);
+        late = late.or_else(|| report.delayed.first().map(|(_, ms)| *ms));
+        now += MINUTE;
+    }
+    assert!(late.is_some_and(|ms| ms > 0));
+}
+
+// CR-26, CR-27, OP-150: a dropped operational key loses its private material but its public
+// declaration and binding-signed excerpt stay in the vault, across a restart
+#[test]
+fn dropped_keys_stay_archived() {
+    let (_, doc) = SoftSigner::generate_ed25519().unwrap();
+    let vault = Mem::default();
+    let mut s = Service::start(
+        Soft,
+        Binding(doc.clone()),
+        vault.clone(),
+        Policy::AUTHORITY,
+        0,
+    )
+    .unwrap();
+    let _ = s.handle(Request::Open(Box::new(template())), 0);
+    let mut now = 0;
+    while now <= 120 * HOUR {
+        let _ = s.tick(now, now);
+        now += 10 * MINUTE;
+    }
+    let archived = |s: &Service<Soft, Binding, Mem>| -> Vec<OperationalKey> {
+        s.rings[&Digest([7; 32])]
+            .1
+            .saved()
+            .into_iter()
+            .filter(|k| k.record.state == State::Dropped)
+            .inspect(|k| assert!(k.sealed.is_none() && k.excerpt.is_some()))
+            .map(|k| k.declared)
+            .collect()
+    };
+    let dropped = archived(&s);
+    assert_ne!(dropped.len(), 0);
+    let again = Service::start(Soft, Binding(doc), vault, Policy::AUTHORITY, now).unwrap();
+    assert_eq!(archived(&again), dropped);
+}

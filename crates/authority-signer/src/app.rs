@@ -173,6 +173,12 @@ impl Keyring {
         Ok(round)
     }
 
+    /// How long the active key is past its rotation time at `now`, if it is (CR-23).
+    #[must_use]
+    pub fn overdue(&self, now: u64) -> Option<u64> {
+        rotation::overdue(&self.records(), &self.policy, now)
+    }
+
     fn declared(&self, kid: &[u8; 32]) -> Result<OperationalKey, SignerError> {
         self.entries
             .iter()

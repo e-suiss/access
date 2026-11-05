@@ -107,6 +107,29 @@ pub enum Step {
     Drop([u8; 32]),
 }
 
+impl Step {
+    /// The transition's stable name, for audit events (CR-27).
+    #[must_use]
+    pub const fn name(&self) -> &'static str {
+        match self {
+            Self::Generate { .. } => "generate",
+            Self::Publish(_) => "publish",
+            Self::Activate(_) => "activate",
+            Self::Retire(_) => "retire",
+            Self::Drop(_) => "drop",
+        }
+    }
+
+    /// The key the transition moves; none for [`Step::Generate`].
+    #[must_use]
+    pub const fn kid(&self) -> Option<&[u8; 32]> {
+        match self {
+            Self::Generate { .. } => None,
+            Self::Publish(k) | Self::Activate(k) | Self::Retire(k) | Self::Drop(k) => Some(k),
+        }
+    }
+}
+
 /// Whether `key` may sign at `now`: active, published at least the lead before, inside its
 /// window and under its signature limit (SAI-46).
 #[must_use]
@@ -140,6 +163,26 @@ pub fn rotate_at(key: &Key, policy: &Policy) -> Option<u64> {
         .saturating_add(i128::from(policy.lifetime_ms))
         .saturating_add(shift);
     u64::try_from(at.max(i128::from(start))).ok()
+}
+
+/// How long the active key has stayed past its rotation time at `now` with no backup to rotate
+/// to: after a schedule round, a rotation deferred by a key-generation outage (CR-23). `None`
+/// while the active key is within its lifetime, while a backup waits for its lead, or without
+/// an active key.
+#[must_use]
+pub fn overdue(keys: &[Key], policy: &Policy, now: u64) -> Option<u64> {
+    let active = keys
+        .iter()
+        .filter(|k| k.state == State::Active)
+        .max_by_key(|k| (k.activated_at, k.valid_from))?;
+    let backup = keys
+        .iter()
+        .any(|k| matches!(k.state, State::Pending | State::Published) && now <= k.valid_until);
+    if backup {
+        return None;
+    }
+    now.checked_sub(rotate_at(active, policy)?)
+        .filter(|late| *late > 0)
 }
 
 /// The jitter a new key takes from a random draw: uniform in `±policy.jitter_permille`.

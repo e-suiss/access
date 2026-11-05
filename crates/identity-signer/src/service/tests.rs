@@ -6,6 +6,7 @@
 use std::collections::BTreeMap;
 
 use suiss_crypto::envelope::SoftKek;
+use suiss_crypto::signer::SignError;
 
 use super::*;
 use crate::adapters::SealedFactory;
@@ -232,4 +233,61 @@ fn the_cell_key_survives_a_restart() {
         other.open_cell("cell-b").err(),
         Some(crate::cell::CellError::OtherCell)
     );
+}
+
+struct Flaky(
+    SealedFactory<SoftKek>,
+    std::sync::Arc<std::sync::atomic::AtomicBool>,
+);
+
+impl KeyFactory for Flaky {
+    fn generate(&mut self, alg: JwsAlg) -> Result<crate::ports::Generated, SignError> {
+        if self.1.load(std::sync::atomic::Ordering::Relaxed) {
+            return Err(SignError::Key);
+        }
+        self.0.generate(alg)
+    }
+
+    fn load(
+        &mut self,
+        alg: JwsAlg,
+        sealed: &[u8],
+    ) -> Result<Box<dyn suiss_crypto::signer::Signer + Send>, SignError> {
+        self.0.load(alg, sealed)
+    }
+}
+
+// CR-23, CR-27, OP-150: each round reports the realm key transitions, the realm audit events;
+// while keys can be made no rotation is late, and a key-generation outage makes the round report
+// the delayed rotation of that realm
+#[test]
+fn rounds_report_transitions_and_delays() {
+    let down = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let mut s = Service::start(
+        Flaky(factory(), down.clone()),
+        MemVault::default(),
+        Policy::REALM,
+    )
+    .unwrap();
+    let open = Request::Open {
+        realm: A,
+        alg: JwsAlg::Es256,
+    };
+    assert_eq!(s.handle(open, 0, 7), Response::Opened);
+    let day = 86_400_000;
+    let mut names = std::collections::BTreeSet::new();
+    for d in 1..=400_u64 {
+        let report = s.round(d * day, 7);
+        assert_eq!(report.delayed, Vec::new(), "day {d}");
+        names.extend(report.transitions.iter().map(|(r, step)| {
+            assert_eq!(*r, A);
+            step.name()
+        }));
+    }
+    assert!(names.is_superset(&std::collections::BTreeSet::from([
+        "publish", "activate", "retire", "drop"
+    ])));
+    down.store(true, std::sync::atomic::Ordering::Relaxed);
+    let late = (401..=800_u64).find_map(|d| s.round(d * day, 7).delayed.first().copied());
+    assert!(late.is_some_and(|(r, ms)| r == A && ms > 0));
 }

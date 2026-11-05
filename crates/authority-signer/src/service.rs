@@ -7,7 +7,7 @@ use access_kernel::codec::Canonical;
 use access_kernel::digest::Digest;
 use access_kernel::verify::key_scope::OperationalKey;
 use suiss_crypto::dcbor::{self, Limits, Value};
-use suiss_crypto::rotation::{Key, Policy, State};
+use suiss_crypto::rotation::{Key, Policy, State, Step};
 
 use crate::app::{Keyring, Saved};
 use crate::domain::Template;
@@ -16,6 +16,18 @@ use crate::protocol::{Request, Response};
 
 /// How far a requested signing time may be from the signer's clock (PD).
 pub const MAX_SKEW_MS: u64 = 60_000;
+
+/// What one schedule round did across the domains (CR-23, CR-27).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Report {
+    /// Domains whose round failed or hit a key-generation outage.
+    pub troubled: Vec<Digest>,
+    /// Each applied step; each is an OPERATIONAL audit event (CR-27).
+    pub transitions: Vec<(Digest, Step)>,
+    /// Domains whose active key is past its rotation time after the round, and by how many
+    /// milliseconds: the rotation delay alarm (CR-23).
+    pub delayed: Vec<(Digest, u64)>,
+}
 
 /// The signer of one process.
 pub struct Service<F, B, V> {
@@ -189,19 +201,35 @@ impl<F: KeyFactory, B: Bindings, V: Vault> Service<F, B, V> {
     /// Runs the schedule of every domain at `now` and keeps the vault current; returns the
     /// domains whose round failed or hit a key-generation outage.
     pub fn tick(&mut self, now: u64, draw: u64) -> Vec<Digest> {
-        let mut troubled = Vec::new();
+        self.round(now, draw).troubled
+    }
+
+    /// [`Self::tick`], reporting every applied step, an OPERATIONAL audit event, and every
+    /// delayed rotation (CR-23, CR-27).
+    pub fn round(&mut self, now: u64, draw: u64) -> Report {
+        let mut report = Report::default();
         let domains: Vec<Digest> = self.rings.keys().copied().collect();
         for d in domains {
-            let ok = self
+            let round = self
                 .rings
                 .get_mut(&d)
-                .map(|(_, ring)| ring.tick(&mut self.factory, now, draw))
-                .is_some_and(|r| r.is_ok_and(|round| !round.outage));
+                .map(|(_, ring)| ring.tick(&mut self.factory, now, draw));
+            let ok = round
+                .as_ref()
+                .is_some_and(|r| r.as_ref().is_ok_and(|round| !round.outage));
             if !self.persist(&d) || !ok {
-                troubled.push(d);
+                report.troubled.push(d);
+            }
+            if let Some(Ok(round)) = round {
+                report
+                    .transitions
+                    .extend(round.applied.into_iter().map(|step| (d, step)));
+            }
+            if let Some(late) = self.rings.get(&d).and_then(|(_, r)| r.overdue(now)) {
+                report.delayed.push((d, late));
             }
         }
-        troubled
+        report
     }
 
     /// Answers one request at `now`.

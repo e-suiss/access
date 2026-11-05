@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 use access_crypto::jose::JwsAlg;
 use suiss_crypto::cose::PublicKey;
 use suiss_crypto::dcbor::{self, Limits, Value};
-use suiss_crypto::rotation::{Key, Policy, State};
+use suiss_crypto::rotation::{Key, Policy, State, Step};
 
 use crate::app::{Keyring, Saved};
 use crate::cell::{CellError, CellKey};
@@ -15,6 +15,18 @@ use crate::protocol::{Realm, Request, Response, alg_of};
 
 /// How far a requested signing time may be from the signer's clock (PD).
 pub const MAX_SKEW_MS: u64 = 60_000;
+
+/// What one schedule round did across the realms (CR-23, CR-27).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Report {
+    /// Realms whose round failed or hit a key-generation outage.
+    pub troubled: Vec<Realm>,
+    /// Each applied step; each is a realm audit event (CR-27).
+    pub transitions: Vec<(Realm, Step)>,
+    /// Realms whose active key is past its rotation time after the round, and by how many
+    /// milliseconds: the rotation delay alarm (CR-23).
+    pub delayed: Vec<(Realm, u64)>,
+}
 
 /// The identity signer of one process.
 pub struct Service<F, V> {
@@ -201,21 +213,41 @@ impl<F: KeyFactory, V: Vault> Service<F, V> {
     }
 
     fn tick_one(&mut self, realm: Realm, now: u64, draw: u64) -> bool {
-        let ok = self
+        let mut report = Report::default();
+        self.round_one(realm, now, draw, &mut report);
+        report.troubled.is_empty()
+    }
+
+    fn round_one(&mut self, realm: Realm, now: u64, draw: u64, report: &mut Report) {
+        let round = self
             .rings
             .get_mut(&realm)
-            .is_some_and(|(_, ring)| !ring.tick(&mut self.factory, now, draw).outage);
-        self.persist(realm) && ok
+            .map(|(_, ring)| ring.tick(&mut self.factory, now, draw));
+        let ok = round.as_ref().is_some_and(|r| !r.outage);
+        if !(self.persist(realm) && ok) {
+            report.troubled.push(realm);
+        }
+        for step in round.map(|r| r.applied).unwrap_or_default() {
+            report.transitions.push((realm, step));
+        }
+        if let Some(late) = self.rings.get(&realm).and_then(|(_, r)| r.overdue(now)) {
+            report.delayed.push((realm, late));
+        }
     }
 
     /// Runs the schedule of every realm at `now` and keeps the vault current; returns the
     /// realms whose round failed or hit a key-generation outage (CR-23).
     pub fn tick(&mut self, now: u64, draw: u64) -> Vec<Realm> {
-        let realms = self.realms();
-        realms
-            .into_iter()
-            .filter(|r| !self.tick_one(*r, now, draw))
-            .collect()
+        self.round(now, draw).troubled
+    }
+
+    /// [`Self::tick`], reporting every applied step and every delayed rotation (CR-23, CR-27).
+    pub fn round(&mut self, now: u64, draw: u64) -> Report {
+        let mut report = Report::default();
+        for realm in self.realms() {
+            self.round_one(realm, now, draw, &mut report);
+        }
+        report
     }
 
     /// Answers one request at `now`; `draw` is a random value for a new key's jitter.

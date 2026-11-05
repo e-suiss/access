@@ -121,6 +121,19 @@ fn an_outage_signs_to_the_end_of_the_window_then_nothing() {
     }
 }
 
+// CR-23, OP-150: a round that keeps the schedule leaves no rotation overdue; a key-generation
+// outage leaves the active key past its rotation time, which the delay alarm reports
+#[test]
+fn an_outage_makes_rotation_overdue() {
+    let p = Policy::AUTHORITY;
+    let (keys, _) = run(&p, 10 * HOUR, |_| true);
+    assert_eq!(overdue(&keys, &p, 10 * HOUR), None);
+    let (keys, _) = run(&p, 10 * HOUR, |now| now < 3 * HOUR);
+    let late = overdue(&keys, &p, 10 * HOUR).unwrap();
+    assert!(late > 0 && late < 10 * HOUR, "{late}");
+    assert_eq!(overdue(&[], &p, 10 * HOUR), None);
+}
+
 // CR-21, CR-23: a key that reaches its signature limit stops signing; the next signs once its
 // lead has passed, and in between nothing is signed
 #[test]

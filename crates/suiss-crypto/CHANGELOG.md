@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- `rotation::overdue`: how long the active key has stayed past its rotation time with no backup to rotate to, for a rotation delay alarm during a key-generation outage.
+- `rotation::Step::name` and `Step::kid`, for audit events of key transitions.
+
 ## 0.2.6
 
 No changes; released with `esuiss-access-kernel` and published from CI with trusted publishing.

@@ -125,6 +125,40 @@ fn init(config: &Config, hsm: &config::Hsm) -> ExitCode {
     }
 }
 
+fn hex(bytes: &[u8]) -> String {
+    bytes.iter().fold(String::new(), |mut out, b| {
+        let _ = std::fmt::Write::write_fmt(&mut out, format_args!("{b:02x}"));
+        out
+    })
+}
+
+/// CR-23, CR-27: each key transition goes to the OPERATIONAL audit stream; a rotation the
+/// round could not make raises the rotation delay alarm.
+fn audit(report: &access_authority_signer::service::Report) {
+    for (domain, step) in &report.transitions {
+        tracing::info!(
+            event = "key.rotation",
+            step = step.name(),
+            domain = hex(&domain.0),
+            kid = step.kid().map(|k| hex(k)).unwrap_or_default(),
+        );
+    }
+    for (domain, late_ms) in &report.delayed {
+        tracing::error!(
+            event = "key.rotation.delayed",
+            domain = hex(&domain.0),
+            late_ms,
+            "operational key rotation delayed (CR-23)"
+        );
+    }
+    if !report.troubled.is_empty() {
+        tracing::warn!(
+            domains = report.troubled.len(),
+            "key schedule round failed (CR-23)"
+        );
+    }
+}
+
 /// CR-39, OP-150 (o): a production signer does not start on `aarch64-apple-*`.
 fn unsafe_host() -> bool {
     access_crypto::platform::signer_host(access_crypto::platform::Target::BUILT)
@@ -216,16 +250,11 @@ fn main() -> ExitCode {
             let mut interval = tokio::time::interval(every);
             loop {
                 interval.tick().await;
-                let troubled = ticking
+                let report = ticking
                     .lock()
-                    .map(|mut s| s.tick(now_ms(), draw()))
+                    .map(|mut s| s.round(now_ms(), draw()))
                     .unwrap_or_default();
-                if !troubled.is_empty() {
-                    tracing::warn!(
-                        domains = troubled.len(),
-                        "key schedule round failed (CR-23)"
-                    );
-                }
+                audit(&report);
             }
         });
         let listener = tokio::net::UnixListener::from_std(listener)?;
