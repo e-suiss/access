@@ -98,10 +98,11 @@ fn unique_name() -> String {
     )
 }
 
-/// Clones older than an hour belong to finished test processes; clones are never dropped by
-/// their own test, so the cluster would otherwise grow with every run.
+/// Clones older than 20 minutes belong to finished test processes (the PR suite runs at most
+/// 10 minutes, SA-59); clones are never dropped by their own test, so the cluster would
+/// otherwise grow with every run.
 async fn sweep_stale(c: &mut PgConnection) -> Result<(), TestDbError> {
-    const STALE_NANOS: u128 = 3_600_000_000_000;
+    const STALE_NANOS: u128 = 1_200_000_000_000;
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_or(0, |d| d.as_nanos());
