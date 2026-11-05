@@ -1226,3 +1226,34 @@ async fn eligibility_problems_name_the_refused_part() {
     assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
     assert_eq!(v["reason"], "lease-held");
 }
+
+// OP-150 m.2, OP-149 m.3: Claim Ingest and the status list endpoint are in the contract, marked
+// unserved, and no discovery document names them until a lane serves them
+#[test]
+fn stage6_entries_are_documented_but_not_discovered() {
+    let doc = openapi();
+    for (path, method) in [
+        ("/access/v1/claims:ingest", "post"),
+        ("/access/v1/status-lists/{list}", "get"),
+    ] {
+        assert_eq!(
+            doc["paths"][path][method]["x-suiss-served"],
+            json!(false),
+            "{method} {path}"
+        );
+    }
+    for schema in [
+        "ClaimSubmission",
+        "ClaimVerdict",
+        "StatusRef",
+        "IntrospectionExtensions",
+    ] {
+        assert!(doc["components"]["schemas"][schema].is_object(), "{schema}");
+    }
+    for e in [suiss::Endpoint::ClaimIngest, suiss::Endpoint::StatusList] {
+        assert!(!suiss::SERVED.contains(&e));
+    }
+    let issuer = Issuer::parse("https://acme.example").unwrap();
+    let map = suiss::endpoints(&issuer, &settings(), suiss::SERVED);
+    assert!(!map.contains_key("claim_ingest") && !map.contains_key("status_list"));
+}

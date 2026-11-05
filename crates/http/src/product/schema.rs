@@ -3,7 +3,8 @@
 //! the Suiss discovery document (m.3), tenant snapshots (m.4), Instance key lookup (m.5),
 //! the eligibility check (m.10), the problem types (m.12), subject resolution (A11), allowed
 //! Exercises (m.9) and the platform product routes:
-//! pairing (m.4, m.16 (a)) and the platform client's event streams (m.17 (e), (g)).
+//! pairing (m.4, m.16 (a)) and the platform client's event streams (m.17 (e), (g)), and the
+//! Stage 6 entries not served yet (OP-150 m.2).
 
 use serde_json::{Map, Value, json};
 
@@ -115,6 +116,7 @@ fn key_components() -> Value {
 
 mod platform;
 mod records;
+mod stage6;
 
 fn components() -> Value {
     let mut all = key_components();
@@ -123,6 +125,7 @@ fn components() -> Value {
         records::components(),
         platform::components(),
         crate::declarations::openapi_components(),
+        stage6::components(),
     ] {
         if let (Value::Object(m), Value::Object(more)) = (&mut all, more) {
             m.extend(more);
@@ -214,6 +217,8 @@ fn other_components() -> Value {
                         "subject_resolution": { "type": "string" },
                         "exercise": { "type": "string" },
                         "exercise_agency": { "type": "string" },
+                        "claim_ingest": { "type": "string" },
+                        "status_list": { "type": "string" },
                     },
                 },
             }),
@@ -370,6 +375,7 @@ pub fn openapi() -> Value {
     );
     records::paths(&mut paths, &common);
     platform::paths(&mut paths);
+    stage6::paths(&mut paths, &common);
     json!({
         "openapi": "3.1.1",
         "info": {

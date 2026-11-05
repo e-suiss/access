@@ -54,6 +54,9 @@ pub enum Feature {
     ClientIdMetadataDocument,
     /// OIDC Back-Channel Logout 1.0 with `sid`.
     BackchannelLogout,
+    /// RFC 9396 `authorization_details` for authority token projections (OP-150 m.2); not
+    /// served yet.
+    AuthorizationDetails,
 }
 
 /// What the realm's authorization server serves; the metadata declares nothing else (§10.4.6).

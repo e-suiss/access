@@ -47,6 +47,10 @@ pub enum Endpoint {
     Exercise,
     /// `GET /access/v1/exercises/{exercise}/agency` (OP-149 m.11).
     ExerciseAgency,
+    /// `POST /access/v1/claims:ingest` (CMP-8, OP-150 m.2); not served yet.
+    ClaimIngest,
+    /// `GET /access/v1/status-lists/{list}` (OP-150 m.3 (a), (s)); not served yet.
+    StatusList,
 }
 
 impl Endpoint {
@@ -67,6 +71,8 @@ impl Endpoint {
             Self::SubjectResolution => "subject_resolution",
             Self::Exercise => "exercise",
             Self::ExerciseAgency => "exercise_agency",
+            Self::ClaimIngest => "claim_ingest",
+            Self::StatusList => "status_list",
         }
     }
 
@@ -87,6 +93,8 @@ impl Endpoint {
             Self::SubjectResolution => "/access/v1/tenants/{tenant}/subjects:resolve",
             Self::Exercise => "/access/v1/exercises/{exercise}",
             Self::ExerciseAgency => "/access/v1/exercises/{exercise}/agency",
+            Self::ClaimIngest => "/access/v1/claims:ingest",
+            Self::StatusList => "/access/v1/status-lists/{list}",
         }
     }
 

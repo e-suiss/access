@@ -22,8 +22,12 @@ suiss-endpoints = {
   ? subject_resolution: https-url,
   ? exercise: https-url,
   ? exercise_agency: https-url,
+  ; OP-150 m.2: Claim Ingest and the Token Status List, once served.
+  ? claim_ingest: https-url,
+  ? status_list: https-url,
 }
 
 ; An absolute https URL in printable ASCII. A path variable is an RFC 6570 level 1 template
-; expression, for example {kid} in key_lookup, {tenant} in tenant_snapshot and {exercise} in exercise and exercise_agency.
+; expression, for example {kid} in key_lookup, {tenant} in tenant_snapshot and {exercise} in exercise and exercise_agency,
+; {list} in status_list.
 https-url = tstr .regexp "https://[!-~]{1,2040}"
