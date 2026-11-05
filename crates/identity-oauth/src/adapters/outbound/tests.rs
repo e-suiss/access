@@ -213,3 +213,192 @@ fn jwks_cache_bounds_max_age() {
     assert_eq!(p.keep_s(Some(600)), 600);
     assert_eq!(p.keep_s(Some(86_400)), 3_600);
 }
+
+fn tls_with(root: rustls::pki_types::CertificateDer<'static>) -> Arc<rustls::ClientConfig> {
+    let mut roots = rustls::RootCertStore::empty();
+    roots.add(root).unwrap();
+    Arc::new(
+        rustls::ClientConfig::builder_with_provider(Arc::new(
+            rustls::crypto::aws_lc_rs::default_provider(),
+        ))
+        .with_safe_default_protocol_versions()
+        .unwrap()
+        .with_root_certificates(roots)
+        .with_no_client_auth(),
+    )
+}
+
+fn other_anchor() -> Arc<rustls::ClientConfig> {
+    let other = rcgen::generate_simple_self_signed(vec!["localhost".to_owned()]).unwrap();
+    tls_with(other.cert.der().clone())
+}
+
+/// A receiver on a private address and a port other than 443 answering `202`, and the trust
+/// anchors its certificate chains to.
+async fn private_receiver() -> (u16, Arc<rustls::ClientConfig>) {
+    use rustls::pki_types::{PrivateKeyDer, PrivatePkcs8KeyDer};
+
+    let cert = rcgen::generate_simple_self_signed(vec!["localhost".to_owned()]).unwrap();
+    let der = cert.cert.der().clone();
+    let key = PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(cert.signing_key.serialize_der()));
+    let server = rustls::ServerConfig::builder_with_provider(Arc::new(
+        rustls::crypto::aws_lc_rs::default_provider(),
+    ))
+    .with_safe_default_protocol_versions()
+    .unwrap()
+    .with_no_client_auth()
+    .with_single_cert(vec![der.clone()], key)
+    .unwrap();
+    let acceptor = tokio_rustls::TlsAcceptor::from(Arc::new(server));
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    tokio::spawn(async move {
+        loop {
+            let (tcp, _) = listener.accept().await.unwrap();
+            let acceptor = acceptor.clone();
+            tokio::spawn(async move {
+                let Ok(mut s) = acceptor.accept(tcp).await else {
+                    return;
+                };
+                let mut buf = Vec::new();
+                let mut chunk = [0_u8; 4096];
+                while !buf.windows(4).any(|w| w == b"\r\n\r\n") {
+                    let n = s.read(&mut chunk).await.unwrap();
+                    if n == 0 {
+                        return;
+                    }
+                    buf.extend_from_slice(&chunk[..n]);
+                }
+                let _ = s
+                    .write_all(b"HTTP/1.1 202 Accepted\r\nContent-Length: 0\r\n\r\n")
+                    .await;
+                let _ = s.shutdown().await;
+            });
+        }
+    });
+    (port, tls_with(der))
+}
+
+async fn deliver(outbound: &Outbound, url: &str) -> Result<u16, OutboundError> {
+    outbound
+        .post(url, "application/secevent+jwt", &[], b"x.y.z")
+        .await
+        .map(|a| a.status)
+}
+
+// OP-149 m.23, §14.3: a declared target is written as Access writes URLs, https only, without
+// user info or fragment
+#[test]
+fn declared_targets_are_canonical_urls() {
+    assert!(DeclaredTarget::new("https://work-server:8443/v1/inbound/events", None).is_ok());
+    assert_eq!(
+        DeclaredTarget::new("https://work-server:8443/v1/inbound/events", None)
+            .unwrap()
+            .port(),
+        8443
+    );
+    for bad in [
+        "http://work-server:8443/v1/inbound/events",
+        "https://Work-Server:8443/v1/inbound/events",
+        "https://work-server:443/v1/inbound/events",
+        "https://work-server:8443",
+        "https://u@work-server:8443/v1/inbound/events",
+        "https://work-server:8443/v1/inbound/events#f",
+        "https://work-server:08443/v1/inbound/events",
+    ] {
+        assert_eq!(
+            DeclaredTarget::new(bad, None).unwrap_err(),
+            OutboundError::Url,
+            "{bad}"
+        );
+    }
+}
+
+// OP-149 m.23, §14.3: an endpoint on a private address literal or another port than 443 is
+// accepted as a stream endpoint only when declared byte for byte
+#[test]
+fn only_declared_private_endpoints_are_accepted() {
+    let url = "https://work-server:8443/v1/inbound/events";
+    let none = DeclaredTargets::default();
+    let declared = DeclaredTargets::new([String::from(url)]);
+    assert!(!none.accepts(url));
+    assert!(declared.accepts(url));
+    for ok in ["https://work.example/ssf", "https://1.1.1.1/ssf"] {
+        assert!(none.accepts(ok), "{ok}");
+    }
+    for refused in [
+        "https://work-server:8443/v1/inbound/events/",
+        "https://work-server:8443/v1/inbound/other",
+        "https://work-server:9443/v1/inbound/events",
+        "https://WORK-server:8443/v1/inbound/events",
+        "https://u@work-server:8443/v1/inbound/events",
+        "https://work-server:8443/v1/inbound/events#x",
+        "http://work-server:8443/v1/inbound/events",
+        "https://10.0.0.1/v1/inbound/events",
+        "https://[::1]/v1/inbound/events",
+        "https://127.0.0.1:8443/v1/inbound/events",
+    ] {
+        assert!(!declared.accepts(refused), "{refused}");
+    }
+}
+
+// OP-149 m.23, §14.3, TI-9: a declared target on a private address and another port is
+// reached over verified TLS; an undeclared one and every near miss are not
+#[tokio::test]
+async fn a_declared_private_target_is_reached_and_near_misses_are_not() {
+    let (port, anchors) = private_receiver().await;
+    let url = format!("https://localhost:{port}/v1/inbound/events");
+    let plain = Outbound::new(other_anchor(), Duration::from_secs(5));
+    assert_eq!(deliver(&plain, &url).await, Err(OutboundError::Blocked));
+    let declared = plain.clone().declaring(vec![
+        DeclaredTarget::new(&url, Some(anchors.clone())).unwrap(),
+    ]);
+    assert_eq!(deliver(&declared, &url).await, Ok(202));
+    assert_eq!(declared.declared(), DeclaredTargets::new([url.clone()]));
+    for near in [
+        format!("https://localhost:{port}/v1/inbound/events/"),
+        format!("https://localhost:{port}/v1/inbound/other"),
+        format!("https://LOCALHOST:{port}/v1/inbound/events"),
+        format!("https://127.0.0.1:{port}/v1/inbound/events"),
+        format!("https://localhost:{port}/v1/inbound/events?x=1"),
+    ] {
+        assert_eq!(
+            deliver(&declared, &near).await,
+            Err(OutboundError::Blocked),
+            "{near}"
+        );
+    }
+    assert_eq!(
+        deliver(
+            &declared,
+            &format!("https://u@localhost:{port}/v1/inbound/events")
+        )
+        .await,
+        Err(OutboundError::Url)
+    );
+    assert_eq!(
+        declared.get(&url, "*/*", 16).await.map(|a| a.status),
+        Err(OutboundError::Blocked)
+    );
+    assert_eq!(
+        declared.post_form(&url, "a=b").await.map(|a| a.status),
+        Err(OutboundError::Blocked)
+    );
+    let fallback = Outbound::new(anchors, Duration::from_secs(5))
+        .declaring(vec![DeclaredTarget::new(&url, None).unwrap()]);
+    assert_eq!(deliver(&fallback, &url).await, Ok(202));
+}
+
+// OP-149 m.23, CR-12: TLS to a declared target is verified against its own anchors only
+#[tokio::test]
+async fn a_declared_target_with_the_wrong_anchor_is_unreachable() {
+    let (port, anchors) = private_receiver().await;
+    let url = format!("https://localhost:{port}/v1/inbound/events");
+    let wrong = Outbound::new(anchors, Duration::from_secs(5)).declaring(vec![
+        DeclaredTarget::new(&url, Some(other_anchor())).unwrap(),
+    ]);
+    assert_eq!(deliver(&wrong, &url).await, Err(OutboundError::Unreachable));
+    let none = Outbound::disabled(Duration::from_secs(5))
+        .declaring(vec![DeclaredTarget::new(&url, None).unwrap()]);
+    assert_eq!(deliver(&none, &url).await, Err(OutboundError::Unreachable));
+}

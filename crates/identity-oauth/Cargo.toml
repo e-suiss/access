@@ -30,6 +30,7 @@ access-crypto = { workspace = true, features = ["testing"] }
 access-store = { workspace = true, features = ["testing"] }
 aws-lc-rs = { workspace = true }
 ed25519-dalek = { workspace = true }
+rcgen = { workspace = true, features = ["aws_lc_rs", "pem"] }
 suiss-crypto = { workspace = true, features = ["signer", "aead", "testing"] }
 tokio = { workspace = true, features = ["macros", "net", "rt-multi-thread", "time"] }
 

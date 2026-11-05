@@ -9,6 +9,11 @@
 //!   resolution cannot point it elsewhere;
 //! - redirects are not followed; a `3xx` is an answer like any other;
 //! - one deadline for the whole exchange, a bounded response head and a bounded body.
+//!
+//! The one exception is an event delivery endpoint the operator declared (OP-149 m.23): a push
+//! or webhook `POST` to a URL byte-for-byte equal to a declared target may reach a private
+//! address and a port other than 443. Its certificate is still verified, against the target's
+//! own trust anchors when it names them. Every other request keeps the rules above.
 
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::sync::Arc;
@@ -124,6 +129,18 @@ impl Target {
         })
     }
 
+    /// The port connected to.
+    #[must_use]
+    pub const fn port(&self) -> u16 {
+        self.port
+    }
+
+    /// The URL as Access writes it: lowercase host, the port only when not 443, and a path.
+    #[must_use]
+    pub fn canonical(&self) -> String {
+        format!("https://{}{}", self.host_header(), self.path)
+    }
+
     fn host_header(&self) -> String {
         let host = if self.host.contains(':') {
             format!("[{}]", self.host)
@@ -218,6 +235,109 @@ async fn resolve(target: &Target) -> Result<SocketAddr, OutboundError> {
         return Err(OutboundError::Blocked);
     }
     found.into_iter().next().ok_or(OutboundError::Unreachable)
+}
+
+/// A connection to a declared target: its host may resolve to any address; the first that
+/// answers is used.
+async fn connect_declared(target: &Target) -> Result<TcpStream, OutboundError> {
+    let found: Vec<SocketAddr> = match target.host.parse::<IpAddr>() {
+        Ok(ip) => vec![SocketAddr::new(ip, target.port)],
+        Err(_) => tokio::net::lookup_host((target.host.as_str(), target.port))
+            .await
+            .map_err(|_| OutboundError::Unreachable)?
+            .collect(),
+    };
+    for addr in found {
+        if let Ok(tcp) = TcpStream::connect(addr).await {
+            return Ok(tcp);
+        }
+    }
+    Err(OutboundError::Unreachable)
+}
+
+/// The exact URLs of the event delivery targets the operator declared (OP-149 m.23): what
+/// stream creation and the `suiss_event_receiver` check consult.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct DeclaredTargets(Arc<[String]>);
+
+impl DeclaredTargets {
+    /// The declarations of `urls`.
+    #[must_use]
+    pub fn new(urls: impl IntoIterator<Item = String>) -> Self {
+        Self(urls.into_iter().collect())
+    }
+
+    /// The declared URLs.
+    #[must_use]
+    pub fn urls(&self) -> &[String] {
+        &self.0
+    }
+
+    /// Whether `url` is byte-for-byte a declared target.
+    #[must_use]
+    pub fn declares(&self, url: &str) -> bool {
+        self.0.iter().any(|d| d == url)
+    }
+
+    /// Whether `url` may be an event delivery endpoint: an `https` URL Access requests that is
+    /// declared, or that is on port 443 without a non-public address literal for a host. A
+    /// host name that resolves to a private address is refused at delivery (§14.3).
+    #[must_use]
+    pub fn accepts(&self, url: &str) -> bool {
+        let Ok(t) = Target::parse(url) else {
+            return false;
+        };
+        self.declares(url) || (t.port == PORT && t.host.parse::<IpAddr>().ok().is_none_or(public))
+    }
+}
+
+/// One delivery target the operator declared (OP-149 m.23): its exact URL and, when given, the
+/// only trust anchors its certificate may chain to.
+#[derive(Clone)]
+pub struct DeclaredTarget {
+    url: String,
+    target: Target,
+    connector: Option<TlsConnector>,
+}
+
+impl core::fmt::Debug for DeclaredTarget {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("DeclaredTarget")
+            .field("url", &self.url)
+            .field("own_anchors", &self.connector.is_some())
+            .finish_non_exhaustive()
+    }
+}
+
+impl DeclaredTarget {
+    /// `url`, which must be written as [`Target::canonical`] writes it, verified against `tls`
+    /// when given and against the operator's trust anchors otherwise.
+    ///
+    /// # Errors
+    /// [`OutboundError::Url`].
+    pub fn new(url: &str, tls: Option<Arc<rustls::ClientConfig>>) -> Result<Self, OutboundError> {
+        let target = Target::parse(url)?;
+        if target.canonical() != url {
+            return Err(OutboundError::Url);
+        }
+        Ok(Self {
+            url: String::from(url),
+            target,
+            connector: tls.map(TlsConnector::from),
+        })
+    }
+
+    /// The declared URL.
+    #[must_use]
+    pub fn url(&self) -> &str {
+        &self.url
+    }
+
+    /// The port it is reached on.
+    #[must_use]
+    pub const fn port(&self) -> u16 {
+        self.target.port
+    }
 }
 
 fn header<'a>(headers: &'a [httparse::Header<'_>], name: &str) -> Option<&'a str> {
@@ -427,12 +547,14 @@ pub async fn post_over<S: AsyncRead + AsyncWrite + Unpin>(
     exchange(stream, request, 0).await
 }
 
-/// HTTPS to client-registered URLs behind the SSRF guard. Only port 443 is reached: the
-/// server's runtime lockdown opens no other outbound port for it (OP-92).
+/// HTTPS to client-registered URLs behind the SSRF guard. Only port 443 is reached, and the
+/// ports of declared targets: the server's runtime lockdown opens no other outbound port for it
+/// (OP-92, OP-149 m.23).
 #[derive(Clone)]
 pub struct Outbound {
     connector: Option<TlsConnector>,
     timeout: Duration,
+    declared: Arc<[DeclaredTarget]>,
 }
 
 /// The one port of clients' endpoints Access connects to.
@@ -445,16 +567,31 @@ impl Outbound {
         Self {
             connector: Some(TlsConnector::from(tls)),
             timeout,
+            declared: Arc::new([]),
         }
     }
 
     /// A client without trust anchors: every request is [`OutboundError::Unreachable`].
     #[must_use]
-    pub const fn disabled(timeout: Duration) -> Self {
+    pub fn disabled(timeout: Duration) -> Self {
         Self {
             connector: None,
             timeout,
+            declared: Arc::new([]),
         }
+    }
+
+    /// This client with the operator's declared delivery targets (OP-149 m.23).
+    #[must_use]
+    pub fn declaring(mut self, targets: Vec<DeclaredTarget>) -> Self {
+        self.declared = targets.into();
+        self
+    }
+
+    /// The URLs of the declared delivery targets.
+    #[must_use]
+    pub fn declared(&self) -> DeclaredTargets {
+        DeclaredTargets::new(self.declared.iter().map(|d| d.url.clone()))
     }
 
     async fn send(
@@ -462,19 +599,31 @@ impl Outbound {
         target: &Target,
         request: Vec<u8>,
         max_body: usize,
+        declared: Option<&DeclaredTarget>,
     ) -> Result<Answer, OutboundError> {
-        if target.port != PORT {
-            return Err(OutboundError::Blocked);
-        }
-        let addr = resolve(target).await?;
-        let connector = self.connector.as_ref().ok_or(OutboundError::Unreachable)?;
+        let (connector, tcp) = if let Some(d) = declared {
+            // OP-149 m.23
+            let connector = d
+                .connector
+                .as_ref()
+                .or(self.connector.as_ref())
+                .ok_or(OutboundError::Unreachable)?;
+            (connector, connect_declared(target).await?)
+        } else {
+            if target.port != PORT {
+                return Err(OutboundError::Blocked);
+            }
+            let addr = resolve(target).await?;
+            let connector = self.connector.as_ref().ok_or(OutboundError::Unreachable)?;
+            let tcp = TcpStream::connect(addr)
+                .await
+                .map_err(|_| OutboundError::Unreachable)?;
+            (connector, tcp)
+        };
         let name = match target.host.parse::<IpAddr>() {
             Ok(ip) => ServerName::IpAddress(ip.into()),
             Err(_) => ServerName::try_from(target.host.clone()).map_err(|_| OutboundError::Url)?,
         };
-        let tcp = TcpStream::connect(addr)
-            .await
-            .map_err(|_| OutboundError::Unreachable)?;
         let mut tls = connector
             .connect(name, tcp)
             .await
@@ -487,8 +636,9 @@ impl Outbound {
         target: &Target,
         request: Vec<u8>,
         max_body: usize,
+        declared: Option<&DeclaredTarget>,
     ) -> Result<Answer, OutboundError> {
-        tokio::time::timeout(self.timeout, self.send(target, request, max_body))
+        tokio::time::timeout(self.timeout, self.send(target, request, max_body, declared))
             .await
             .map_err(|_| OutboundError::Unreachable)?
     }
@@ -510,12 +660,14 @@ impl Outbound {
             target.path,
             target.host_header(),
         );
-        self.bounded(&target, request.into_bytes(), max_body).await
+        self.bounded(&target, request.into_bytes(), max_body, None)
+            .await
     }
 
-    /// `POST url` with `body` of `content_type` and extra `headers` (OP-149 m.4, m.7); only
-    /// the status and headers are read. A header name or value that is not a visible ASCII
-    /// token, or contains a line break, is [`OutboundError::Url`].
+    /// `POST url` with `body` of `content_type` and extra `headers`: an event delivery
+    /// (OP-149 m.4, m.7), the one request a declared target is reached by (m.23). Only the
+    /// status and headers are read. A header name or value that is not a visible ASCII token,
+    /// or contains a line break, is [`OutboundError::Url`].
     ///
     /// # Errors
     /// [`OutboundError`].
@@ -528,7 +680,8 @@ impl Outbound {
     ) -> Result<Answer, OutboundError> {
         let target = Target::parse(url)?;
         let request = post_request(&target, content_type, headers, body)?;
-        self.bounded(&target, request, 0).await
+        let declared = self.declared.iter().find(|d| d.url == url);
+        self.bounded(&target, request, 0, declared).await
     }
 
     /// `POST url` with a form body; only the status and headers are read.
@@ -545,7 +698,7 @@ impl Outbound {
             target.host_header(),
             form.len(),
         );
-        self.bounded(&target, request.into_bytes(), 0).await
+        self.bounded(&target, request.into_bytes(), 0, None).await
     }
 }
 

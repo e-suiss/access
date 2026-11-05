@@ -180,6 +180,7 @@ dependencies = [
  "esuiss-access-kernel",
  "esuiss-crypto",
  "httparse",
+ "rcgen",
  "rustls",
  "serde",
  "serde_json",
