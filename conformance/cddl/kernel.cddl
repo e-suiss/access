@@ -21,6 +21,9 @@ hash-alg = -16
 ;   receipt (decision receipt payload)       "access/receipt/v1"
 ;   COSE_Sign1 PAP bytes as signed           "access/pap/v1"
 ;   pap-holder                               "access/holder/v1"
+;   [class, claim body] (claim-body-binding) "access/claim-body/v1"
+;   approval-act-statement (H(AAS))           "access/aas/v1"
+;   offline report chain link                "access/report-chain/v1"
 ; Hash prefixes (OP-106 m.12), raw SHA-256 without a context:
 ;   0x00 Merkle leaf   0x01 Merkle interior node   0x02 field commitment   0x03 body commitment
 
@@ -340,6 +343,8 @@ validity-contract = {
   verifier_profile_ref: digest,
   clock: { source_class: ident, skew_ms: uint },
   ? must_understand: [+ ident],
+  ; OP-150 m.3 (a), (s): the projection's entry in a Token Status List.
+  ? status: status-ref,
 }
 
 ; ---------------------------------------------------------------- record envelope (§17.6.1, OP-106)
@@ -855,4 +860,183 @@ pap-presentation = {
   audience: tstr .size (1..255),
   nonce: bstr .size (16..64),
   iat: trusted-time,
+}
+
+; ---------------------------------------------------------------- Approval Act Statement digest (L2-AAS-1)
+
+; H(AAS) is the digest of the statement under "access/aas/v1". A WebAuthn assertion carries its
+; 32 bytes as the challenge; an Instance key signs the statement itself as a COSE_Sign1 with
+; content type "application/access-aas+cbor". Either way an `authentication` Claim names the
+; digest in `statement`.
+
+; ---------------------------------------------------------------- Claim bodies (OP-150 m.2, §9.13, §10.1.5)
+
+; Class names on the wire are idents: "account.status" is "account_status", "party.key-state"
+; is "party_key_state", "identity-binding.person" is "identity_binding_person" (OP-141 m.31).
+; A class with one scalar field carries it in the Claim's `value`:
+;   account_status           tstr: "active" / "locked" / "suspended" / "deactivated" / "tombstone"
+;   party_compromise         uint: occurred_at; absent when unknown (OP-141 m.31)
+;   party_terminated         uint: the time
+;   party_identity_break     ident: the reason
+;   controller_of            party-ref: the controller
+;   operated_by              party-ref: the operator
+;   sponsored_by             party-ref: the sponsor
+;   agent_kind               ident: the kind of agent
+; Every other Stage 6 class has a body: its `value` is the 32-byte digest of the
+; claim-body-binding, and the body travels beside the Claim. A withheld body leaves a
+; digest-valued Claim (E26).
+claim-body-binding = [class: ident, body: claim-body]
+
+claim-body = authentication / authenticator-binding / device-posture / verifier-profile
+           / offline-exercise-report / authority-state-ack / party-key-state / party-recovered
+           / identity-binding
+
+auth-method = "webauthn" / "password" / "totp" / "device-key" / "oidc" / "saml" / "ldap-bind"
+            / "kerberos" / "x509"
+
+; Class "authentication" (§10.1.2, §10.1.5): subject the Party, `bound_instance` the Instance it
+; authenticated, `assurance` the vector; a step-up bound to an intent names it in `bound_intent`.
+authentication = {
+  method: auth-method,
+  auth_time: trusted-time,
+  ; H(AAS) the assertion's challenge committed to (§9.14.1).
+  ? statement: digest,
+  ; Digest of the raw assertion; the assertion itself stays in the PII vault (§10.1.2 rule 1).
+  ? evidence: digest,
+  ? webauthn: { aaguid: bstr .size 16, sign_count: uint, ? up: true, ? uv: true, ? be: true, ? bs: true },
+  ? upstream: { iss: tstr .size (1..2048), ? acr: tstr, ? amr: [+ tstr] },
+}
+
+; Class "authenticator_binding" (§10.1.3, IDP-2): subject the Party, `bound_instance` the
+; Instance. `material` is the digest of public material only (the credential id and public key,
+; or the device key); never a secret.
+authenticator-binding = {
+  kind: "passkey" / "device-key" / "password" / "totp" / "x509",
+  material: digest,
+  ? alg: int,
+  ? attestation: { format: tstr .size (1..64), result: "verified" / "self" / "none" / "failed" },
+  ? aaguid: bstr .size 16,
+  ? be: true,
+  ? transports: [+ tstr .size (1..32)],
+}
+
+; Class "posture_device" (§5.9, §7.9.12.2): subject the Party, `bound_instance` the Instance.
+device-posture = {
+  verdict: "compliant" / "noncompliant" / "unknown",
+  source: tstr .size (1..255),
+  observed_at: trusted-time,
+  ? nonce: digest,
+  ? evidence: digest,
+}
+
+; Class "verifier_profile" (§9.12.1): issuer the verifier's operator, subject the verifier's
+; Party. A ValidityContract names this Claim's body digest in `verifier_profile_ref`.
+verifier-profile = {
+  verifier: { instance: instance-ref } / { workload: tstr .size (1..255) },
+  ; The connectivity profiles it implements, by variant, with their parameter ceilings.
+  profiles: { + profile-variant => { ? params: { + ident => uint } } },
+  versions: spec-versions,
+  clock: { source_class: ident, skew_ms: uint },
+  ? tamper_evident_counter: true,
+  ? offline_report: true,
+  ; §9.10.1 step 8.
+  ? content_position_check: true,
+  ; Status and revocation sources it reaches.
+  ? status_access: [+ tstr],
+  ; How often it refreshes epochs and status; absent for a JWT-only RS (§9.11.2).
+  ? refresh_interval_ms: uint,
+  ? attestation: digest,
+  ; Its local acceptance ceilings in milliseconds (cap_horizon, U25).
+  ? cap_horizon: { + profile-variant => { + ct-key => uint } },
+  ? slice_max: { + unit => amount },
+  ; RS and PEP conformance declarations (§11.5.6).
+  ? conformance: [+ tstr .size (1..255)],
+}
+
+profile-variant = "online-strict" / "bounded-staleness" / "revalidate-on-reconnect"
+                / "checkpointed-offline" / "checkpoint-continuation"
+
+; Class "offline_exercise_report" (§9.12.2): issuer the verifier, subject the projection
+; holder's Party. Its chain (L2-RPT-2) runs across reports: `previous` is the head of the last
+; report for the projection, `first_seq` the sequence number of the first entry.
+offline-exercise-report = {
+  verifier: { profile: digest, ? instance: instance-ref },
+  projection: { exercise: digest, contract: digest },
+  period: time-window,
+  ? previous: digest,
+  first_seq: uint,
+  entries: [* report-entry],
+  head: digest,
+  ? slice_unused: [+ { budget_term: digest, amount: uint }],
+  profile_version: uint,
+}
+
+report-entry = {
+  intent: digest,
+  ? params: digest,
+  time: trusted-time,
+  ? clock_evidence: digest,
+  outcome: "allow" / "deny",
+  ? drawn: [+ { budget_term: digest, amount: uint .ge 1 }],
+  ? holder_proof: digest,
+}
+
+; Class "authority_state_ack" (§9.12.3): issuer the PEP. A detection signal, never safety.
+authority-state-ack = {
+  pep: tstr .size (1..255),
+  event: { exercise: digest } / { event: tstr .size (1..255) },
+  applied_at: trusted-time,
+  ? clock_evidence: digest,
+  basis: uint,
+  scope: [+ "cache" / "decision" / "session" / "token"],
+}
+
+; Class "party_key_state" (§10.1.5): the controller-signed key-event state. `designated` names,
+; per Claim class, the issuers the Party designated (§9.13.1).
+party-key-state = {
+  sequence: uint,
+  keys: [+ digest],
+  ? designated: { + ident => [+ party-ref] },
+}
+
+; Class "party_recovered": the digests of the key-state bodies before and after.
+party-recovered = { previous: digest, next: digest }
+
+; Classes "identity_binding_<kind>", kind person, organization, workload, agent or
+; legal_representative: the digest of the evidence of the external identity.
+identity-binding = { evidence: digest }
+
+; ---------------------------------------------------------------- unsigned Claims (§9.13 rule 2, OP-142)
+
+; A Claim carried over an authenticated channel without a signature: attributable to the
+; channel's peer, never meeting an assurance floor that asks for a signature. A PEP fact has
+; channel "pep", the SHA-256 thumbprint of the PEP's client certificate (x5t#S256); only a
+; `predicate-input` Acceptance admits it (§5.10, P37). ClaimID: the first 16 bytes of the
+; digest of these bytes under "access/claim/v1".
+unsigned-claim = {
+  statement: claim-statement,
+  channel: { pep: bstr .size 32 } / { scim: bstr .size 32 },
+}
+
+; ---------------------------------------------------------------- Token Status List (OP-150 m.3 (a), (s))
+
+; The `status` claim of a referenced token: the projection's index in one list (IETF Token
+; Status List). One bit per index: 0 valid, 1 invalid.
+status-ref = { status_list: { idx: uint, uri: tstr .size (1..2048) } }
+
+; `lst` is the ZLIB (RFC 1950) compressed byte array; index i is bit (i mod 8) of byte (i div 8),
+; least significant first.
+status-list = { bits: 1, lst: bstr, ? aggregation_uri: tstr }
+
+; Payload of a COSE_Sign1 signed by an operational key with usage "status-list", content type
+; "application/statuslist+cwt". Key 2 is the list's uri, 6 `iat` in seconds, 4 `exp`, 65534
+; `ttl`, 65533 the list. `iat` and `as_of` are the recorded_at and position of the canonical
+; state the list reflects, not the publication time (T24, SI-7).
+status-list-cwt = {
+  2 => tstr,
+  6 => uint,
+  ? 4 => uint,
+  ? 65534 => uint,
+  65533 => status-list,
+  "as_of" => uint,
 }

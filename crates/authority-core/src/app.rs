@@ -962,6 +962,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             clock_source: String::from("trusted"),
             clock_skew_ms: access_kernel::ais::SKEW_MS,
             must_understand: BTreeSet::new(),
+            status: None,
         };
         let pap = access_kernel::pap::Pap {
             domain: self.domain,

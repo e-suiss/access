@@ -125,6 +125,7 @@ fn contract(holder: &Holder, prefix: bool) -> ValidityContract {
         clock_source: String::from("trusted"),
         clock_skew_ms: 60_000,
         must_understand: BTreeSet::new(),
+        status: None,
     }
 }
 

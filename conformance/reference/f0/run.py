@@ -7,7 +7,7 @@ import tempfile
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
-from f0 import ais, algebra, claim, codec, dcbor, digest, ed25519, fold, jose, merkle, meta, note, pap, receipt, record, sdjwt, validity, version_check
+from f0 import aas, ais, algebra, claim, claimbody, codec, dcbor, digest, ed25519, fold, jose, merkle, meta, note, pap, receipt, record, report, sdjwt, status, validity, version_check
 from f0.algebra import child_within_parent
 from f0.version import CORE_VERSION, VERSION
 from f0.codec import Rejection, decode_canonical, decode_canonical_authority, decode_subject_selector, encode
@@ -374,6 +374,65 @@ def run_claim(case, document):
     }, None
 
 
+def run_claim_body(case, document):
+    # L2-CLB-1 to L2-CLB-3
+    value = decode_canonical(bytes.fromhex(case["value"])) if "value" in case else None
+    body = bytes.fromhex(case["body"]) if "body" in case else None
+    try:
+        digest = claimbody.check(case["class"], value, body)
+    except claimbody.BodyError as error:
+        return {"error": error.code}, None
+    if digest is None:
+        return {"valid": True}, None
+    return {"digest": digest.hex()}, None
+
+
+def run_claim_unsigned(case, document):
+    # L2-CLM-5
+    domain = decode_canonical(bytes.fromhex(document["domain"]))
+    channel = {case["channel"]: bytes.fromhex(case["thumbprint"])}
+    try:
+        claim_id = claimbody.unsigned(bytes.fromhex(case["claim"]), domain, channel)
+    except claimbody.BodyError as error:
+        return {"error": error.code}, None
+    return {"claim_id": claim_id.hex()}, None
+
+
+def run_report(case, document):
+    # L2-RPT-1 to L2-RPT-3
+    try:
+        head, next_seq, drawn = report.verify(bytes.fromhex(case["report"]))
+    except report.ReportError as error:
+        return {"error": error.code}, None
+    return {"head": head.hex(), "next_seq": next_seq, "drawn": [[t.hex(), n] for t, n in drawn]}, None
+
+
+def run_status(case, document):
+    # L2-STL-2, L2-STL-3
+    try:
+        invalid = status.lookup(bytes.fromhex(case["token"]), bytes.fromhex(case["list"]), bytes.fromhex(case["reference"]))
+    except status.StatusError as error:
+        return {"error": error.code}, None
+    return {"invalid": invalid}, None
+
+
+def run_aas(case, document):
+    # L2-AAS-1 to L2-AAS-4
+    try:
+        digest = aas.verify(
+            bytes.fromhex(case["sign1"]),
+            decode_canonical(bytes.fromhex(document["key"])),
+            decode_canonical(bytes.fromhex(document["domain"])),
+            decode_canonical(bytes.fromhex(document["target"])),
+            bytes.fromhex(document["instance"]),
+            decode_canonical(bytes.fromhex(document["render_digest"])),
+            case["now"],
+        )
+    except aas.AasError as error:
+        return {"error": error.code}, None
+    return {"digest": digest.hex()}, None
+
+
 def run_checkpoint(case, document):
     # L2-CKP-1 to L2-CKP-4
     log = note.parse_vkey(document["log"])
@@ -445,6 +504,11 @@ OPERATIONS = {
     "meta.apply": (run_meta_apply, ("effects", "requirements", "expansion", "error")),
     "receipt.verify": (run_receipt, ("receipt", "error")),
     "pap.verify": (run_pap, ("pap", "error")),
+    "claim.body": (run_claim_body, ("digest", "valid", "error")),
+    "claim.unsigned": (run_claim_unsigned, ("claim_id", "error")),
+    "report.verify": (run_report, ("head", "next_seq", "drawn", "error")),
+    "status.lookup": (run_status, ("invalid", "error")),
+    "aas.verify": (run_aas, ("digest", "error")),
 }
 
 # Operations in the vectors that F0 does not implement, each with its reason. Any other

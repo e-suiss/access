@@ -52,6 +52,7 @@ fn contract(variant: ProfileVariant) -> ValidityContract {
         clock_source: "ntp".to_string(),
         clock_skew_ms: 60_000,
         must_understand: BTreeSet::new(),
+        status: None,
     }
 }
 
@@ -387,12 +388,18 @@ fn contract_scenarios() -> Vec<(&'static str, ValidityContract, u64)> {
     narrow.clock_skew_ms = 500;
     let mut mismatch = base();
     mismatch.class = ProfileClass::Offline;
+    let mut status = base();
+    status.status = Some(crate::status::StatusRef {
+        idx: 7,
+        uri: "https://access.example/status/7".to_string(),
+    });
     vec![
         ("audience-other", other, 5_000),
         ("must-understand-unknown", ext, 5_000),
         ("contract-skew-narrows-edge", narrow.clone(), 10_500),
         ("contract-skew-narrows-past", narrow, 10_501),
         ("class-variant-mismatch", mismatch, 5_000),
+        ("status-entry", status, 5_000),
     ]
 }
 
@@ -415,6 +422,7 @@ fn validity_rules(id: &str) -> &'static [&'static str] {
             &["L0-VAL-11", "L0-VAL-14", "L0-VAL-14a"]
         }
         "class-variant-mismatch" => &["L0-VAL-3"],
+        "status-entry" => &["L2-STL-1"],
         _ => &["L0-VAL-10", "L0-VAL-10a", "L0-VAL-10b", "L0-VAL-11"],
     }
 }

@@ -241,3 +241,166 @@ fn meta_vectors_meet_the_cddl() {
     }
     assert!(states >= 3);
 }
+
+fn sign1_payload(h: &str) -> Value {
+    let bytes = unhex(h);
+    let Value::Array(parts) = dcbor::decode(&bytes[1..], LIMITS).unwrap() else {
+        panic!("a COSE_Sign1 is an array");
+    };
+    let Value::Bytes(payload) = &parts[2] else {
+        panic!("an attached payload");
+    };
+    dcbor::decode(payload, LIMITS).unwrap()
+}
+
+fn body_rule(class: &str) -> &'static str {
+    match class {
+        "authentication" => "authentication",
+        "authenticator_binding" => "authenticator-binding",
+        "posture_device" => "device-posture",
+        "verifier_profile" => "verifier-profile",
+        "offline_exercise_report" => "offline-exercise-report",
+        "authority_state_ack" => "authority-state-ack",
+        "party_key_state" => "party-key-state",
+        "party_recovered" => "party-recovered",
+        c if c.starts_with("identity_binding_") => "identity-binding",
+        other => panic!("no body rule for {other}"),
+    }
+}
+
+// L2-CLB-1, L2-CLB-3, OP-150 m.2: every body the Kernel accepts is the CDDL body of its class,
+// and a body it refuses for its shape is not
+#[test]
+fn claim_body_vectors_meet_the_cddl() {
+    let k = kernel();
+    let doc = vectors("claim-body.json");
+    let (mut accepted, mut refused) = (0, 0);
+    for case in doc["cases"].as_array().unwrap() {
+        let Some(body) = case.get("body").and_then(Json::as_str) else {
+            continue;
+        };
+        let class = case["class"].as_str().unwrap();
+        let value = decoded(body);
+        let rule = body_rule(class);
+        match case.get("error").and_then(Json::as_str) {
+            None | Some("claim-body-digest") => {
+                k.validate(rule, &value)
+                    .unwrap_or_else(|e| panic!("{}: {e}", case["id"]));
+                k.validate(
+                    "claim-body-binding",
+                    &Value::Array(vec![Value::text(class), value]),
+                )
+                .unwrap();
+                accepted += 1;
+            }
+            Some(_) => {
+                assert!(k.validate(rule, &value).is_err(), "{}", case["id"]);
+                refused += 1;
+            }
+        }
+    }
+    assert!(accepted >= 11 && refused >= 3);
+}
+
+// L2-RPT-1: every report the Kernel decodes is a CDDL report
+#[test]
+fn report_vectors_meet_the_cddl() {
+    let k = kernel();
+    let doc = vectors("report.json");
+    let mut seen = 0;
+    for case in doc["cases"].as_array().unwrap() {
+        if case.get("error").and_then(Json::as_str) == Some("report-malformed") {
+            continue;
+        }
+        k.validate(
+            "offline-exercise-report",
+            &decoded(case["report"].as_str().unwrap()),
+        )
+        .unwrap_or_else(|e| panic!("{}: {e}", case["id"]));
+        seen += 1;
+    }
+    assert!(seen >= 9);
+}
+
+// L2-AAS-1: every statement the Kernel accepts is a CDDL approval-act-statement
+#[test]
+fn aas_vectors_meet_the_cddl() {
+    let k = kernel();
+    let doc = vectors("aas.json");
+    let mut seen = 0;
+    for case in doc["cases"].as_array().unwrap() {
+        if case.get("digest").is_some() {
+            k.validate(
+                "approval-act-statement",
+                &sign1_payload(case["sign1"].as_str().unwrap()),
+            )
+            .unwrap_or_else(|e| panic!("{}: {e}", case["id"]));
+            seen += 1;
+        }
+    }
+    assert!(seen >= 3);
+}
+
+// L2-STL-1, L2-STL-2: references and list tokens meet the CDDL
+#[test]
+fn status_list_vectors_meet_the_cddl() {
+    let k = kernel();
+    let doc = vectors("status-list.json");
+    for case in doc["cases"].as_array().unwrap() {
+        k.validate("status-ref", &decoded(case["reference"].as_str().unwrap()))
+            .unwrap();
+        let token = decoded(case["token"].as_str().unwrap());
+        let malformed = case.get("error").and_then(Json::as_str) == Some("status-malformed");
+        assert_eq!(
+            k.validate("status-list-cwt", &token).is_ok(),
+            !malformed,
+            "{}",
+            case["id"]
+        );
+    }
+}
+
+// L2-CLM-5: the unsigned Claims the Kernel reads are CDDL unsigned-claims
+#[test]
+fn unsigned_claim_vectors_meet_the_cddl() {
+    let k = kernel();
+    let doc = vectors("claim-unsigned.json");
+    let mut seen = 0;
+    for case in doc["cases"].as_array().unwrap() {
+        let value = decoded(case["claim"].as_str().unwrap());
+        let valid = k.validate("unsigned-claim", &value).is_ok();
+        if case.get("claim_id").is_some() {
+            assert!(valid, "{}", case["id"]);
+            seen += 1;
+        }
+        if case["id"] == "two-channels" {
+            assert!(!valid);
+        }
+    }
+    assert!(seen >= 2);
+}
+
+// L2-STL-1, OP-150 m.3 (a): a contract that names its status entry is a CDDL contract
+#[test]
+fn validity_vectors_meet_the_cddl() {
+    let k = kernel();
+    let doc = vectors("validity.json");
+    k.validate(
+        "validity-contract",
+        &decoded(doc["contract"].as_str().unwrap()),
+    )
+    .unwrap();
+    let mut with_status = 0;
+    for case in doc["cases"].as_array().unwrap() {
+        let Some(c) = case.get("contract").and_then(Json::as_str) else {
+            continue;
+        };
+        let v = decoded(c);
+        let Value::Map(m) = &v else { continue };
+        if m.iter().any(|(key, _)| *key == Value::text("status")) {
+            k.validate("validity-contract", &v).unwrap();
+            with_status += 1;
+        }
+    }
+    assert!(with_status >= 1);
+}

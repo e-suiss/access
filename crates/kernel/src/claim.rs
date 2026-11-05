@@ -582,5 +582,78 @@ impl Canonical for ClaimState {
     }
 }
 
+/// The authenticated channel an unsigned Claim came over (§9.13 ingest rule 2, OP-142).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Channel {
+    /// A PEP, by the SHA-256 thumbprint of its client certificate (`x5t#S256`): a PEP fact,
+    /// admitted only by a `predicate-input` Acceptance (§5.10, P37).
+    Pep([u8; 32]),
+    /// A SCIM client, by the SHA-256 thumbprint of its credential.
+    Scim([u8; 32]),
+}
+
+/// A Claim without a signature, attributable to its channel (CDDL `unsigned-claim`,
+/// L2-CLM-5). It never meets an assurance floor that asks for a signature.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Unsigned {
+    /// The statement.
+    pub statement: Statement,
+    /// The channel.
+    pub channel: Channel,
+}
+
+fn thumb(v: &Value) -> Result<[u8; 32], ModelError> {
+    match v {
+        Value::Bytes(b) => <[u8; 32]>::try_from(b.as_slice()).map_err(|_| ModelError::Range),
+        _ => Err(ModelError::Shape),
+    }
+}
+
+impl Canonical for Unsigned {
+    fn to_value(&self) -> Value {
+        let channel = match self.channel {
+            Channel::Pep(t) => map([("pep", Some(Value::Bytes(t.to_vec())))]),
+            Channel::Scim(t) => map([("scim", Some(Value::Bytes(t.to_vec())))]),
+        };
+        map([
+            ("statement", Some(self.statement.to_value())),
+            ("channel", Some(channel)),
+        ])
+    }
+
+    fn from_value(v: &Value) -> Result<Self, ModelError> {
+        let mut f = Fields::of(v)?;
+        let mut c = Fields::of(f.req("channel")?)?;
+        let channel = match (c.opt("pep"), c.opt("scim")) {
+            (Some(t), None) => Channel::Pep(thumb(t)?),
+            (None, Some(t)) => Channel::Scim(thumb(t)?),
+            _ => return Err(ModelError::Shape),
+        };
+        c.done()?;
+        let u = Self {
+            statement: Statement::from_value(f.req("statement")?)?,
+            channel,
+        };
+        f.done()?;
+        Ok(u)
+    }
+}
+
+/// Reads an unsigned Claim for `domain` that came over `channel` (L2-CLM-5): the bytes are
+/// canonical, the statement is for this domain and the channel it names is the one it came
+/// over. Its `ClaimID` is [`claim_id`] of the same bytes.
+///
+/// # Errors
+/// [`ClaimError::Payload`].
+pub fn unsigned(bytes: &[u8], domain: &Digest, channel: &Channel) -> Result<Unsigned, ClaimError> {
+    let u = Unsigned::from_bytes(bytes).map_err(ClaimError::Payload)?;
+    if u.statement.domain != *domain || u.channel != *channel {
+        return Err(ClaimError::Payload(ModelError::Range));
+    }
+    Ok(u)
+}
+
+pub mod body;
+
 #[cfg(test)]
 mod tests;

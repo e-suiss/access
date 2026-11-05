@@ -16,6 +16,7 @@ from .codec import (
     decode_canonical,
     fail,
 )
+from .status import check_status_ref
 
 
 VARIANT_CLASS = {
@@ -85,6 +86,8 @@ def check_validity_contract(value):
         "offline_slice": check_list(check_slice_entry, nonempty=True, is_set=True),
         "local_requirements": check_requirement_set,
         "must_understand": check_list(check_ident, nonempty=True, is_set=True),
+        # L2-STL-1
+        "status": check_status_ref,
     })
 
 

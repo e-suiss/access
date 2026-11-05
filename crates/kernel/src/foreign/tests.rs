@@ -168,6 +168,7 @@ fn pap(namespace: &str) -> Pap {
             clock_source: "trusted".to_string(),
             clock_skew_ms: 60_000,
             must_understand: BTreeSet::new(),
+            status: None,
         },
         lineage_commitment: d(4),
         iat: IAT,

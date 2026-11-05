@@ -177,7 +177,7 @@ fn validity_vectors() {
             .map_or(Ok(()), |e| Err(e.as_str().unwrap().to_string()));
         assert_eq!(got, want, "{}", c["id"]);
     }
-    assert_eq!(cases(&v).len(), 25);
+    assert_eq!(cases(&v).len(), 26);
 }
 
 // OP-116 m.6, CR-57
@@ -698,6 +698,7 @@ fn contract(variant: ProfileVariant) -> Vec<u8> {
         clock_source: "ntp".to_string(),
         clock_skew_ms: 60_000,
         must_understand: ["geo".to_string()].into_iter().collect(),
+        status: None,
     }
     .to_bytes()
     .unwrap()

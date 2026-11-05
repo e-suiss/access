@@ -725,7 +725,7 @@ impl Canonical for DomainMetadata {
 }
 
 // OP-118 m.4
-fn horizon_caps(v: &Value) -> Result<BTreeMap<u8, u64>, ModelError> {
+pub(crate) fn horizon_caps(v: &Value) -> Result<BTreeMap<u8, u64>, ModelError> {
     let mut f = Fields::of(v)?;
     if f.is_empty() {
         return Err(ModelError::Range);
@@ -747,7 +747,7 @@ fn ct_of(key: &str) -> Result<u8, ModelError> {
         .ok_or(ModelError::Unknown)
 }
 
-fn ct_key(ct: u8) -> Value {
+pub(crate) fn ct_key(ct: u8) -> Value {
     Value::text(CT_KEYS.get(usize::from(ct)).copied().unwrap_or(""))
 }
 

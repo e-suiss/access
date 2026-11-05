@@ -5,6 +5,7 @@
 
 extern crate alloc;
 
+pub mod aas;
 pub mod ais;
 pub mod algebra;
 pub mod binding;
@@ -21,9 +22,11 @@ pub mod model;
 pub mod pap;
 pub mod receipt;
 pub mod record;
+pub mod report;
 pub mod requirement;
 pub mod restriction;
 pub mod schema;
+pub mod status;
 pub mod tier;
 pub mod validity;
 pub mod verify;

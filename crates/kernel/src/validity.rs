@@ -116,6 +116,8 @@ pub struct ValidityContract {
     pub clock_skew_ms: u64,
     /// Extensions the verifier must understand.
     pub must_understand: BTreeSet<String>,
+    /// The projection's Token Status List entry (OP-150 m.3 (a)).
+    pub status: Option<crate::status::StatusRef>,
 }
 
 pub(crate) const CLASSES: [(&str, ProfileClass); 4] = [
@@ -258,6 +260,7 @@ impl Canonical for ValidityContract {
                 ])),
             ),
             ("must_understand", opt_texts(&self.must_understand)),
+            ("status", self.status.as_ref().map(Canonical::to_value)),
         ])
     }
 
@@ -346,6 +349,10 @@ impl Canonical for ValidityContract {
                 .map(|m| set_of(m, true, ident))
                 .transpose()?
                 .unwrap_or_default(),
+            status: f
+                .opt("status")
+                .map(crate::status::StatusRef::from_value)
+                .transpose()?,
         };
         f.done()?;
         Ok(vc)

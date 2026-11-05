@@ -203,6 +203,7 @@ fn contract() -> ValidityContract {
         clock_source: "ntp".to_string(),
         clock_skew_ms: 60_000,
         must_understand: BTreeSet::new(),
+        status: None,
     }
 }
 

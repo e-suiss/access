@@ -21,6 +21,12 @@ L2 defines the artefacts that only Access produces: their data model, how they a
 | Decision receipt | `receipt` | `application/access-receipt+cbor` | An operational key of the domain with usage `receipt` | [L2-RCP-1](#L2-RCP-1) to [L2-RCP-3](#L2-RCP-3) |
 | Portable Authority Proof | `pap` | `application/access-pap+cbor` | An operational key of the domain with usage `pap` | [L2-PAP-1](#L2-PAP-1) to [L2-PAP-3](#L2-PAP-3) |
 | PAP presentation | `pap-presentation` | `application/access-pap-presentation+cbor` | The holder's key | [L2-PAP-3](#L2-PAP-3) |
+| Claim body | `claim-body-binding` | travels beside its Claim | not signed by itself; its digest is the Claim's `value` | [L2-CLB-1](#L2-CLB-1) to [L2-CLB-3](#L2-CLB-3) |
+| Unsigned Claim | `unsigned-claim` | carried over an authenticated channel | not signed | [L2-CLM-5](#L2-CLM-5) |
+| Approval Act Statement | `approval-act-statement` | `application/access-aas+cbor` | The approver Instance's key, or a WebAuthn assertion over its digest | [L2-AAS-1](#L2-AAS-1) to [L2-AAS-4](#L2-AAS-4) |
+| Offline Exercise Report | `offline-exercise-report` | the body of an `offline_exercise_report` Claim | the verifier, as the Claim's issuer | [L2-RPT-1](#L2-RPT-1) to [L2-RPT-3](#L2-RPT-3) |
+| Verifier Profile | `verifier-profile` | the body of a `verifier_profile` Claim | the verifier's operator, as the Claim's issuer | [L2-VPR-1](#L2-VPR-1) |
+| Token Status List | `status-list-cwt`, `status-ref` | `application/statuslist+cwt`, `application/statuslist+jwt` | An operational key of the domain with usage `status-list` | [L2-STL-1](#L2-STL-1) to [L2-STL-3](#L2-STL-3) |
 
 The data model is [`conformance/cddl/kernel.cddl`](../../conformance/cddl/kernel.cddl).
 
@@ -100,6 +106,64 @@ Vectors: [`core/1/receipt.json`](../../conformance/vectors/core/1/receipt.json),
 
 Vectors: [`core/1/pap.json`](../../conformance/vectors/core/1/pap.json), operation `pap.verify`.
 
+## Claim bodies
+
+The Claims that cross from the identity plane, from verifiers and from PEPs have classes with structure. A class with one scalar field carries it in the Claim's `value`; any other class carries a body, and the Claim's `value` is the body's digest. The body travels beside the Claim and can be withheld, which leaves a Claim whose value is only a digest.
+
+<a id="L2-CLB-1"></a>**L2-CLB-1. Body digest.** A Claim of a class with a body carries in `value` the 32 bytes of `SHA-256("access/claim-body/v1" ‖ 0x00 ‖ dCBOR([class, body]))`, the CDDL rule `claim-body-binding`. The class is inside the digest, so a body of one class never stands for another. Class names on the wire are idents: `account.status` is `account_status`, `party.key-state` is `party_key_state`, `identity-binding.person` is `identity_binding_person`.
+
+<a id="L2-CLB-2"></a>**L2-CLB-2. Values.** The classes `account_status` (one of `active`, `locked`, `suspended`, `deactivated`, `tombstone`), `party_compromise` (`occurred_at`, a non-negative integer, or absent), `party_terminated` (a non-negative integer), `party_identity_break` and `agent_kind` (an ident), and `controller_of`, `operated_by` and `sponsored_by` (a PartyID) carry their field in `value` and travel without a body. Every other class in the table of `kernel.cddl` carries a 32-byte digest in `value`. A value of another shape is refused (reason `claim-value`). A Claim of a class with a body that arrives without it is accepted as a digest-valued Claim: what is withheld cannot be read by a policy, so it can only fail a requirement that needs it. Classes outside the table are not checked by this rule.
+
+<a id="L2-CLB-3"></a>**L2-CLB-3. Bodies.** A body that arrives beside its Claim is decoded as the CDDL body of the Claim's class (`authentication`, `authenticator-binding`, `device-posture`, `verifier-profile`, `offline-exercise-report`, `authority-state-ack`, `party-key-state`, `party-recovered`, `identity-binding`); a field the rule does not define, or any other shape, is refused (reason `claim-body`). Its digest under [L2-CLB-1](#L2-CLB-1) must be the Claim's value (reason `claim-body-digest`). An `authenticator-binding` body holds only the digest of public material; a secret has no field to go in.
+
+Vectors: [`core/1/claim-body.json`](../../conformance/vectors/core/1/claim-body.json), operation `claim.body`: each case gives the class, the canonical `value` when there is one and the body when it travels, and the result: the digest the body was checked against, `valid` when nothing more was checked, or the reason.
+
+<a id="L2-CLM-5"></a>**L2-CLM-5. Unsigned Claims.** A Claim may arrive without a signature over an authenticated channel, as the CDDL rule `unsigned-claim`: the statement and the channel it came over, a PEP (`pep`, the SHA-256 thumbprint of its client certificate) or a SCIM client (`scim`). It is read only when the statement is for the receiver's domain and the channel it names is the one it arrived on (reason `claim-payload` otherwise). Its ClaimID is taken over the bytes as received, as in [L2-CLM-1](#L2-CLM-1). An unsigned Claim is attributable to its channel but never meets an assurance floor that asks for a signature. A PEP fact is an unsigned Claim from a PEP: only a `predicate-input` Acceptance admits it, and it never selects a holder.
+
+Vectors: [`core/1/claim-unsigned.json`](../../conformance/vectors/core/1/claim-unsigned.json), operation `claim.unsigned`: each case gives the bytes, the channel the receiver saw and the resulting ClaimID or the reason.
+
+## Approval Act Statements
+
+An approval is one act by one person, bound to one statement of what they approved. The statement is never an intent: its `target` is the digest of the intent it approves.
+
+<a id="L2-AAS-1"></a>**L2-AAS-1. Content and digest.** An Approval Act Statement is the CDDL rule `approval-act-statement`. An act of kind `contribution` names its `contribution_class`; an `authority-act` names none. H(AAS) is the digest of the statement under `access/aas/v1`. A WebAuthn assertion carries the 32 bytes of H(AAS) as its challenge; an `authentication` Claim made from either form names H(AAS) in its `statement`.
+
+<a id="L2-AAS-2"></a>**L2-AAS-2. Signed form.** An Instance key may sign the statement as a COSE_Sign1 with content type `application/access-aas+cbor`, under the approver Instance's current key with `kid` its RFC 7638 thumbprint and the profile of [L0-SIG-10](../l0/signatures.md#L0-SIG-10). Any other key or content type is refused (reason `aas-signature`); a payload that is not a statement is refused (reason `aas-malformed`).
+
+<a id="L2-AAS-3"></a>**L2-AAS-3. Binding.** The decision point accepts a statement only for its own domain (`exercise_ref`), for the intent digest it is deciding (`target`), from the approver Instance the assertion authenticated and with the render digest it computed itself from the accepted action schema, checked in this order (reasons `aas-domain`, `aas-target`, `aas-approver`, `aas-render`).
+
+<a id="L2-AAS-4"></a>**L2-AAS-4. Time.** A statement whose `issued_at` is more than the AIS skew (60 seconds) after trusted time is refused (reason `aas-future`). One whose `expires_at` is before its `issued_at`, or before trusted time, is refused (reason `aas-expired`); `expires_at` itself is still inside.
+
+Vectors: [`core/1/aas.json`](../../conformance/vectors/core/1/aas.json), operation `aas.verify`: the file gives the approver's key and the expected domain, target, Instance and render digest; each case gives the COSE_Sign1 and the trusted time, and the resulting H(AAS) or the reason.
+
+## Offline Exercise Reports
+
+An offline verifier reports its local uses when it reconnects. The report is a Claim: it never changes authority state or what remains of a budget, and only an explicit `consumption_release` can return an unused slice.
+
+<a id="L2-RPT-1"></a>**L2-RPT-1. Content.** A report is the body of an `offline_exercise_report` Claim, the CDDL rule `offline-exercise-report`: the verifier's profile digest and Instance, the projection's ExerciseID and contract digest, the local period it covers, the chain start (`previous`, `first_seq`), the entries, the chain head, the unused slice and the profile version. Each entry gives the intent digest, the parameter digest, the local time and clock evidence, the local outcome, what it drew from the slice and the holder's proof. A body of another shape is refused (reason `report-malformed`).
+
+<a id="L2-RPT-2"></a>**L2-RPT-2. Chain.** The chain of a projection starts at the digest of `[exercise, contract]` under `access/report-chain/v1`. The entry numbered `seq` moves it from `h` to the digest of `[h, seq, entry]` under the same context. A projection's first report has `first_seq` 0 and no `previous`; each later report names the head the previous one ended with and starts at the next number. A report that does not continue the last head leaves a gap that reconciliation shows; it does not reset the chain.
+
+<a id="L2-RPT-3"></a>**L2-RPT-3. Checks.** A report is accepted only when `previous` is present exactly when `first_seq` is not 0 (`report-start`), every entry's time lies in the period (`report-period`), only `allow` entries draw and no total overflows (`report-entry`), and the chain through every entry from `previous`, or from the projection's start, leads to `head` (`report-chain`). An accepted report gives its head, the next sequence number and the total drawn per budget term.
+
+Vectors: [`core/1/report.json`](../../conformance/vectors/core/1/report.json), operation `report.verify`.
+
+## Verifier Profiles
+
+<a id="L2-VPR-1"></a><!-- no-vector: no-operation: issuing a contract is a projection.issue decision; the Kernel's covers and cap_horizon are property-tested -->**L2-VPR-1. Profile.** A verifier declares its capabilities as the body of a `verifier_profile` Claim, the CDDL rule `verifier-profile`: who it is, the connectivity variants it implements with their parameter ceilings, the versions it supports, its clock, whether it keeps a tamper-evident counter, sends offline reports and checks content positions, the status sources it reaches, its refresh interval, its attestation, its local horizon ceilings by variant and CT (`cap_horizon`) and slice ceilings, and its conformance declarations. A contract's `verifier_profile_ref` is the body digest of the profile it was issued against. A profile covers a contract only when it implements the contract's variant and declares a ceiling at or above each of the contract's parameters; an issuer does not issue a contract the profile does not cover.
+
+## Token Status List
+
+A projection may have one entry in a domain's Token Status List. The list is an information channel: a verifier that cannot read a fresh list falls back to the contract's horizon and Δ and does not accept beyond them.
+
+<a id="L2-STL-1"></a>**L2-STL-1. Reference.** A ValidityContract's `status` is the CDDL rule `status-ref`, the `status` claim of the IETF Token Status List: the projection's index `idx` in the list at `uri`.
+
+<a id="L2-STL-2"></a>**L2-STL-2. List token.** A list token is a COSE_Sign1 with content type `application/statuslist+cwt` whose payload is `status-list-cwt`, signed by an operational key with usage `status-list`; the JWT form `application/statuslist+jwt` carries the same claims. Each entry is one bit (`bits` 1). `iat` and `as_of` are the `recorded_at` and the position of the canonical state the list reflects, never the publication time, so a late list uses up Δ instead of extending it. A payload of another shape is refused (reason `status-malformed`).
+
+<a id="L2-STL-3"></a>**L2-STL-3. Lookup.** The entry is read only from the list the reference names (`status-uri`). After ZLIB decompression of `lst`, index `i` is bit `i mod 8` of byte `i div 8`, least significant bit first; an index past the end is refused (`status-index`). A set bit is invalid.
+
+Vectors: [`core/1/status-list.json`](../../conformance/vectors/core/1/status-list.json), operation `status.lookup`: each case gives the token payload, the decompressed list and the reference, and whether the entry is invalid or the reason.
+
 ## Signing profile
 
 <a id="L2-SIG-1"></a>**L2-SIG-1.** Every L2 artefact is a COSE_Sign1 whose protected header carries exactly `alg`, the content type and `kid`, as [L0-SIG-10](../l0/signatures.md#L0-SIG-10) requires. The payload is the deterministic CBOR encoding of the artefact.
@@ -133,7 +197,6 @@ These parts arrive with the features that produce them, each in its own version 
 | Part | Contents |
 |---|---|
 | Actor Intent Statement (AIS) | The signed statement of an actor's exact intent |
-| Approval Act Statement (AAS) | A human approval bound to an intent digest; its data model is the CDDL rule `approval-act-statement` |
 | Schema Publication Package | Action schemas and their catalog digests |
 | Authority Record Exchange | Record transfer, handover and recovery |
 
