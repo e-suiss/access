@@ -17,6 +17,8 @@ mod limits;
 mod profile;
 #[path = "rules_restriction.rs"]
 mod restriction;
+#[path = "rules_seam.rs"]
+mod seam;
 #[path = "rules_source.rs"]
 pub(crate) mod source;
 #[path = "rules_switches.rs"]
@@ -26,11 +28,18 @@ mod vectors;
 
 use crate::Check;
 
+/// `dependency-direction` with its source half, `no-authority-to-identity-write` (§5.12).
+fn planes(root: &std::path::Path) -> Result<Vec<crate::Violation>, String> {
+    let mut out = deps::check(root)?;
+    out.extend(seam::check(root)?);
+    Ok(out)
+}
+
 pub(crate) fn checks() -> Vec<Check> {
     vec![
         Check {
             name: "dependency-direction",
-            run: deps::check,
+            run: planes,
         },
         Check {
             name: "kernel-purity",
