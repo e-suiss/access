@@ -107,6 +107,10 @@ pub enum Invalid {
     /// A public key that is not Ed25519 or P-256 (OP-149 m.14 (a)).
     #[error("bad public key")]
     PublicKey,
+    /// A `private_key_jwt` client key that is not P-256: client assertions are ES256 and `EdDSA`
+    /// is never accepted in JOSE (MD-3, OP-149 m.20).
+    #[error("client keys are P-256")]
+    ClientKey,
     /// A `suiss_event_receiver` that is not an absolute `https` URL Access may push to
     /// (OP-149 m.4).
     #[error("bad suiss_event_receiver")]
@@ -132,6 +136,7 @@ impl Invalid {
             Self::PlatformTenant => "platform-tenant-only",
             Self::PlatformAuth => "platform-requires-private-key-jwt",
             Self::PublicKey => "invalid-public-key",
+            Self::ClientKey => "client-key-not-p256",
             Self::EventReceiver => "invalid-event-receiver",
         }
     }
@@ -369,7 +374,7 @@ pub enum AuthMethod {
     },
     /// `private_key_jwt` against one registered public key (RFC 7523, OP-149 m.4).
     PrivateKeyJwtKey {
-        /// Ed25519 or P-256.
+        /// P-256 (MD-3, OP-149 m.20).
         key: PublicKey,
     },
     /// A shared secret, for pre-registered confidential clients only.
@@ -468,10 +473,13 @@ impl Client {
         {
             return Err(Invalid::JwksUri);
         }
-        if let AuthMethod::PrivateKeyJwtKey { key } = &self.auth
-            && !usable(key)
-        {
-            return Err(Invalid::PublicKey);
+        if let AuthMethod::PrivateKeyJwtKey { key } = &self.auth {
+            if !usable(key) {
+                return Err(Invalid::PublicKey);
+            }
+            if !matches!(key, PublicKey::P256(_)) {
+                return Err(Invalid::ClientKey);
+            }
         }
         if let Some(p) = &self.platform {
             if !matches!(

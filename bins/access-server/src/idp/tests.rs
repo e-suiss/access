@@ -60,6 +60,13 @@ fn public(seed: u8) -> PublicKey {
     PublicKey::Ed25519(signing(seed).verifying_key().to_bytes())
 }
 
+/// A fresh P-256 client key (MD-3, OP-149 m.20).
+fn client_key() -> PublicKey {
+    use aws_lc_rs::signature::{ECDSA_P256_SHA256_FIXED_SIGNING, EcdsaKeyPair, KeyPair as _};
+    let key = EcdsaKeyPair::generate(&ECDSA_P256_SHA256_FIXED_SIGNING).unwrap();
+    PublicKey::P256(key.public_key().as_ref().to_vec())
+}
+
 /// Event-id, token and pseudonym keys for every domain.
 struct AnyKeys;
 
@@ -701,7 +708,7 @@ fn platform_client(id: ClientId, product: PlatformProduct, seed: u8) -> Client {
     Client {
         id,
         display_name: String::from("Suiss Work"),
-        auth: AuthMethod::PrivateKeyJwtKey { key: public(seed) },
+        auth: AuthMethod::PrivateKeyJwtKey { key: client_key() },
         redirect_uris: vec![RedirectUri::parse("https://work.suiss.example/cb").unwrap()],
         post_logout_redirect_uris: Vec::new(),
         backchannel_logout_uri: None,
@@ -769,7 +776,7 @@ async fn a_platform_client_is_registered_in_the_platform_tenant() {
     t.commit().await.unwrap();
     assert_eq!(row.auth_method, "private_key_jwt");
     assert_eq!(row.jwks_uri, None);
-    assert!(row.jwks.unwrap().contains(r#""crv":"Ed25519""#));
+    assert!(row.jwks.unwrap().contains(r#""crv":"P-256""#));
     assert_eq!(row.platform_product.as_deref(), Some("work"));
     assert_eq!(
         row.event_receiver.as_deref(),
@@ -784,13 +791,12 @@ async fn a_platform_client_is_registered_in_the_platform_tenant() {
     .unwrap();
     assert_eq!(event.payload["platform_product"], "work");
     // CR-24
+    let key = client_key();
     assert!(
-        AuthMethod::PrivateKeyJwtKey { key: public(40) }
+        AuthMethod::PrivateKeyJwtKey { key: key.clone() }
             .jwks()
             .unwrap()
-            .contains(&access_kernel::json::b64url_encode(&thumbprint(&public(
-                40
-            ))))
+            .contains(&access_kernel::json::b64url_encode(&thumbprint(&key)))
     );
 
     // OP-149 m.17a
