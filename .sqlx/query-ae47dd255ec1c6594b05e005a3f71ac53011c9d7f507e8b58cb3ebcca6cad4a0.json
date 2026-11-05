@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT instance_id FROM access.device_keys\n          WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND status = 'active'\n          ORDER BY created_at, device_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "instance_id",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.device_keys",
+            "name": "instance_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "ae47dd255ec1c6594b05e005a3f71ac53011c9d7f507e8b58cb3ebcca6cad4a0"
+}

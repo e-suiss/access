@@ -83,6 +83,12 @@ pub enum Registrant {
         /// The product's platform client.
         client: String,
     },
+    /// A realm's identity Claim issuer (§10.1.7, OP-150 L2): a system Party whose Instance is
+    /// the realm's Claim issuer key, the issuer the governing domain's default Acceptance names.
+    ClaimIssuer {
+        /// The realm.
+        realm: [u8; 16],
+    },
 }
 
 impl Registrant {
@@ -91,7 +97,7 @@ impl Registrant {
     pub const fn actor_kind(&self) -> ActorKind {
         match self {
             Self::Device { .. } => ActorKind::Human,
-            Self::Service { .. } => ActorKind::System,
+            Self::Service { .. } | Self::ClaimIssuer { .. } => ActorKind::System,
         }
     }
 }

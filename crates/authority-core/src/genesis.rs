@@ -164,8 +164,10 @@ fn published(package: &Spp, founder: Id) -> Value {
 }
 
 /// The classes the realm issuer's default Acceptance covers: who acts, by which authenticator
-/// and under which identity (§10.1.4 rule 3, §10.1.5).
-pub const REALM_ISSUER_CLASSES: [&str; 3] = [
+/// and under which identity (§10.1.4 rule 3, §10.1.5), and whether that account still stands,
+/// which only narrows (§12.3.1, TN-49, Ek B K04 default DENY overlay).
+pub const REALM_ISSUER_CLASSES: [&str; 4] = [
+    "account_status",
     "authentication",
     "authenticator_binding",
     "identity_binding_person",

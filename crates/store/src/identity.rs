@@ -127,6 +127,19 @@ impl TenantTx {
         self.realm
     }
 
+    /// The database server's clock, Unix milliseconds (OP-129 m.1).
+    ///
+    /// # Errors
+    /// [`StoreError`].
+    pub async fn server_time(&mut self) -> Result<u64, StoreError> {
+        let ms = sqlx::query_scalar!(
+            r#"SELECT (extract(epoch FROM clock_timestamp()) * 1000)::bigint AS "ms!""#
+        )
+        .fetch_one(&mut *self.tx)
+        .await?;
+        u64::try_from(ms).map_err(|_| StoreError::Corrupt)
+    }
+
     /// Adds an event to the outbox in this transaction (OP-10).
     ///
     /// # Errors

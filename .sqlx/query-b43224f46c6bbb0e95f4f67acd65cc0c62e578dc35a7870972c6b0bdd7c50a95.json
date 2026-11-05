@@ -1,0 +1,31 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT instance_id FROM access.claim_issuer_instance\n          WHERE tenant_id = $1 AND realm_id = $2 AND domain_id = $3 AND kid = $4",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "instance_id",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.claim_issuer_instance",
+            "name": "instance_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Bytea",
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "b43224f46c6bbb0e95f4f67acd65cc0c62e578dc35a7870972c6b0bdd7c50a95"
+}

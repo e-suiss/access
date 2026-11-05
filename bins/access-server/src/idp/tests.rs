@@ -50,6 +50,7 @@ use suiss_crypto::rotation::Policy;
 use super::*;
 use crate::testing::hsm;
 
+mod claims;
 mod governance;
 mod platform;
 mod records;
@@ -130,8 +131,12 @@ fn plane(db: &TestDb) -> TestPlane {
     Plane::new(domains, db.app.clone(), Fixed, actors)
 }
 
+/// Realm key sets and Claim issuer keys, in memory.
 #[derive(Default)]
-struct MemVault(std::collections::BTreeMap<SignerRealm, Vec<u8>>);
+struct MemVault(
+    std::collections::BTreeMap<SignerRealm, Vec<u8>>,
+    std::collections::BTreeMap<SignerRealm, Vec<u8>>,
+);
 
 impl Vault for MemVault {
     fn all(&mut self) -> Result<Vec<Vec<u8>>, VaultError> {
@@ -148,6 +153,15 @@ impl Vault for MemVault {
     }
 
     fn put_cell(&mut self, _bytes: &[u8]) -> Result<(), VaultError> {
+        Ok(())
+    }
+
+    fn issuer(&mut self, realm: &SignerRealm) -> Result<Option<Vec<u8>>, VaultError> {
+        Ok(self.1.get(realm).cloned())
+    }
+
+    fn put_issuer(&mut self, realm: &SignerRealm, bytes: &[u8]) -> Result<(), VaultError> {
+        self.1.insert(*realm, bytes.to_vec());
         Ok(())
     }
 }
@@ -192,6 +206,17 @@ impl Opened {
     fn rekeyed(&self, request: SignerRequest) -> Result<(), Unavailable> {
         match self.ask(request) {
             SignerResponse::Rekeyed(_) => Ok(()),
+            other => Err(Unavailable(format!("{other:?}"))),
+        }
+    }
+
+    fn sign_claim(&self, realm: RealmId, payload: &[u8], at: u64) -> Result<Vec<u8>, Unavailable> {
+        match self.ask(SignerRequest::SignClaim {
+            realm: SignerRealm(*realm.as_bytes()),
+            payload: payload.to_vec(),
+            at,
+        }) {
+            SignerResponse::SignedCose { sign1, .. } => Ok(sign1),
             other => Err(Unavailable(format!("{other:?}"))),
         }
     }
@@ -262,6 +287,38 @@ impl RealmKeys for Opened {
             realm: SignerRealm(*realm.as_bytes()),
             policy,
         }))
+    }
+
+    fn open_issuer(
+        &self,
+        realm: RealmId,
+        party: [u8; 16],
+    ) -> impl std::future::Future<Output = Result<PublicKey, Unavailable>> + Send {
+        std::future::ready(
+            match self.ask(SignerRequest::OpenIssuer {
+                realm: SignerRealm(*realm.as_bytes()),
+                party,
+            }) {
+                SignerResponse::Issuer { key, .. } => Ok(PublicKey::Ed25519(key)),
+                other => Err(Unavailable(format!("{other:?}"))),
+            },
+        )
+    }
+
+    fn sign_issuer_registration(
+        &self,
+        realm: RealmId,
+        registration: access_identity_admin::ports::IssuerAis,
+    ) -> impl std::future::Future<Output = Result<Vec<u8>, Unavailable>> + Send {
+        std::future::ready(
+            match self.ask(SignerRequest::SignIssuerRegistration {
+                realm: SignerRealm(*realm.as_bytes()),
+                registration,
+            }) {
+                SignerResponse::SignedCose { sign1, .. } => Ok(sign1),
+                other => Err(Unavailable(format!("{other:?}"))),
+            },
+        )
     }
 }
 

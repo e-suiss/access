@@ -134,6 +134,15 @@ pub trait AccountTx: Send {
         day: i32,
         row: &ThrottleRow,
     ) -> impl Future<Output = Result<(), AccountError>> + Send;
+    /// The database server's clock, Unix milliseconds (OP-129 m.1).
+    fn server_time(&mut self) -> impl Future<Output = Result<u64, AccountError>> + Send;
+    /// Queues an identity outbox entry in this transaction (OP-10): it exists only if the
+    /// transaction commits.
+    fn outbox(
+        &mut self,
+        kind: &str,
+        payload: &[u8],
+    ) -> impl Future<Output = Result<(), AccountError>> + Send;
     /// Writes the audit row of this transaction (OPI-6).
     fn audit(
         &mut self,

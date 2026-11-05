@@ -325,6 +325,15 @@ where
     async fn register(&self, r: Registration) -> Result<RegistrationVerdict, Unavailable> {
         self.register_signed(r).await
     }
+
+    async fn now(&self) -> Result<u64, Unavailable> {
+        // OP-129 m.1
+        self.clock
+            .clone()
+            .now()
+            .await
+            .map_err(|e| Unavailable(e.to_string()))
+    }
 }
 
 impl<K, B, S, C> crate::bootstrap::MetaExercises for Plane<K, B, S, C>
@@ -477,6 +486,25 @@ impl RealmKeys for RealmKeyring {
     ) -> Result<(), Unavailable> {
         self.signer
             .set_policy(realm, policy)
+            .await
+            .map_err(|_| Unavailable(String::from("identity-signer")))
+    }
+
+    async fn open_issuer(&self, realm: RealmId, party: [u8; 16]) -> Result<PublicKey, Unavailable> {
+        self.signer
+            .open_issuer(realm, party)
+            .await
+            .map(PublicKey::Ed25519)
+            .map_err(|_| Unavailable(String::from("identity-signer")))
+    }
+
+    async fn sign_issuer_registration(
+        &self,
+        realm: RealmId,
+        registration: access_identity_admin::ports::IssuerAis,
+    ) -> Result<Vec<u8>, Unavailable> {
+        self.signer
+            .sign_issuer_registration(realm, registration)
             .await
             .map_err(|_| Unavailable(String::from("identity-signer")))
     }

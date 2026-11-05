@@ -8,6 +8,7 @@
 //! its logs go to standard error.
 
 mod bootstrap;
+mod claims;
 mod config;
 mod events;
 mod idp;
@@ -853,7 +854,8 @@ async fn serve(
         deriver,
         signer: config.signer.clone(),
     }));
-    let renewing = tokio::spawn(renew(domains.clone()));
+    // OP-150 L2, CMP-8
+    let renewing = claims::start(signer(), &platform_pools, domains.clone(), renew);
     let _publishing = status::spawn(&domains, &product_app, &sequencer, config.signer.as_ref());
     // OP-62, MD-14, TN-111: the identity plane's idp.* write path and realm Genesis
     let idp_plane = idp::Plane::new(
@@ -898,7 +900,7 @@ async fn serve(
     let served = listen(config, listener, prepared.tls, app).await;
     // OP-31
     background.stop().await;
-    renewing.abort();
+    renewing.stop().await;
     domains.release().await;
     served
 }

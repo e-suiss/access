@@ -186,6 +186,71 @@ impl SignerKeys {
     }
 }
 
+impl SignerKeys {
+    /// Opens the realm's Claim issuer key for its issuer Party `party`: its Ed25519 public key
+    /// (§10.1.7).
+    ///
+    /// # Errors
+    /// [`Unavailable`], also when the signer refuses.
+    pub async fn open_issuer(
+        &self,
+        realm: RealmId,
+        party: [u8; 16],
+    ) -> Result<[u8; 32], Unavailable> {
+        let request = Request::OpenIssuer {
+            realm: Realm(*realm.as_bytes()),
+            party,
+        };
+        match self.ask(&request).await? {
+            Response::Issuer { key, party: p, .. } if p == party => Ok(key),
+            _ => Err(Unavailable),
+        }
+    }
+
+    /// The AIS of one self-signed registration Exercise of the realm's issuer Party (OP-149
+    /// m.16 (a)).
+    ///
+    /// # Errors
+    /// [`Unavailable`], also when the signer refuses.
+    pub async fn sign_issuer_registration(
+        &self,
+        realm: RealmId,
+        registration: access_identity_signer::issuer::Registration,
+    ) -> Result<Vec<u8>, Unavailable> {
+        let request = Request::SignIssuerRegistration {
+            realm: Realm(*realm.as_bytes()),
+            registration,
+        };
+        match self.ask(&request).await? {
+            Response::SignedCose { sign1, .. } => Ok(sign1),
+            _ => Err(Unavailable),
+        }
+    }
+}
+
+/// The realm issuer's Claims are signed by the realm's Claim issuer key (L2-CLM-1, §10.1.7).
+impl access_identity_account::app::claims::ClaimSigner for SignerKeys {
+    async fn sign(
+        &self,
+        realm: RealmId,
+        payload: Vec<u8>,
+        at: u64,
+    ) -> Result<Vec<u8>, access_internal_api::idp::Unavailable> {
+        let request = Request::SignClaim {
+            realm: Realm(*realm.as_bytes()),
+            payload,
+            at,
+        };
+        match self.ask(&request).await {
+            Ok(Response::SignedCose { sign1, .. }) => Ok(sign1),
+            Ok(Response::Error(code)) => Err(access_internal_api::idp::Unavailable(code)),
+            _ => Err(access_internal_api::idp::Unavailable(String::from(
+                "identity-signer",
+            ))),
+        }
+    }
+}
+
 impl Keys for SignerKeys {
     async fn ping(&self) -> Result<(), Unavailable> {
         match self.ask(&Request::Ping).await? {

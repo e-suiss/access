@@ -131,6 +131,14 @@ impl AccountTx for PgTx {
         Ok(self.0.put_throttle(key, day, row).await?)
     }
 
+    async fn server_time(&mut self) -> Result<u64, AccountError> {
+        Ok(self.0.server_time().await?)
+    }
+
+    async fn outbox(&mut self, kind: &str, payload: &[u8]) -> Result<(), AccountError> {
+        Ok(self.0.outbox(kind, payload).await?)
+    }
+
     async fn audit(&mut self, event: &AuditEvent<'_>) -> Result<(), AccountError> {
         Ok(self.0.audit(event).await?)
     }

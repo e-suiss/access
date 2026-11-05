@@ -287,6 +287,7 @@ async fn record<D: AccountDb>(
                 .set_status(id, AccountStatus::Active, AccountStatus::Locked)
                 .await?
         {
+            crate::app::accounts::status_claim(&mut tx, id, AccountStatus::Locked).await?;
             audit(&mut tx, "account.locked", &actor, &target).await?;
         }
     }

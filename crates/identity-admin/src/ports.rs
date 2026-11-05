@@ -3,8 +3,10 @@
 
 use std::future::Future;
 
+pub use access_identity_signer::issuer::Registration as IssuerAis;
 use access_internal_api::idp::{GenesisOpened, GenesisOrder, Submission, Unavailable, Verdict};
 use access_internal_api::instances::{Registration, RegistrationVerdict};
+use access_kernel::verify::cose::PublicKey;
 use access_store::identity::RealmId;
 use suiss_crypto::rotation::Policy;
 
@@ -55,6 +57,22 @@ pub trait RealmKeys: Send + Sync {
         realm: RealmId,
         policy: Policy,
     ) -> impl Future<Output = Result<(), Unavailable>> + Send;
+
+    /// Opens the realm's Claim issuer key for its issuer Party `party` and returns its public key
+    /// (§10.1.7); repeating it changes nothing.
+    fn open_issuer(
+        &self,
+        realm: RealmId,
+        party: [u8; 16],
+    ) -> impl Future<Output = Result<PublicKey, Unavailable>> + Send;
+
+    /// The AIS of one self-signed registration Exercise of the issuer Party, by the realm's
+    /// Claim issuer key (OP-149 m.16 (a)).
+    fn sign_issuer_registration(
+        &self,
+        realm: RealmId,
+        registration: IssuerAis,
+    ) -> impl Future<Output = Result<Vec<u8>, Unavailable>> + Send;
 }
 
 /// Opens the governing domain of a new realm (TN-111).
@@ -75,4 +93,7 @@ pub trait Instances: Send + Sync {
         &self,
         registration: Registration,
     ) -> impl Future<Output = Result<RegistrationVerdict, Unavailable>> + Send;
+
+    /// The trusted time the domain judges a registration's intent and AIS by (OP-129 m.1).
+    fn now(&self) -> impl Future<Output = Result<u64, Unavailable>> + Send;
 }

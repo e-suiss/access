@@ -1,6 +1,7 @@
 //! Use cases over the domain and its ports (OP-63): realm creation (TN-111) and the `idp.*`
 //! write path (MD-14, EI-25), and the platform product API (OP-149 m.4).
 
+pub mod issuer;
 pub mod platform;
 
 use access_crypto::opaque_id::IdKey;
@@ -34,7 +35,7 @@ use crate::domain::{
     Attribute, AuthMethod, CLIENT_PREFIX, Change, Client, ClientId, Invalid, JoseAlg, cose_key,
     issuer_cutoff, policy_value, raises,
 };
-use crate::ports::{Decider, Governance, RealmKeys};
+use crate::ports::{Decider, Governance, Instances, RealmKeys};
 
 /// A realm to create (TN-111, TN-16, TN-10).
 pub struct NewRealm<'a> {
@@ -174,7 +175,7 @@ fn host_of(authority: &str) -> &str {
         .map_or(authority, |(host, _)| host)
 }
 
-impl<D: Decider, G: Governance, K: RealmKeys> Admin<'_, D, G, K> {
+impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
     /// Creates a realm: opens its governing domain with a Genesis, then writes the realm with
     /// its fixed issuer and the Genesis default settings (TN-111, TN-16, OP-146 m.8 (c)). There
     /// is no master realm; every realm is created this way. A tenant's first realm also queues
@@ -184,6 +185,8 @@ impl<D: Decider, G: Governance, K: RealmKeys> Admin<'_, D, G, K> {
     /// [`AdminError`]; a slug taken by another realm leaves the new domain without a realm.
     pub async fn create_realm(&self, r: &NewRealm<'_>) -> Result<CreatedRealm, AdminError> {
         let issuer = self.base.issuer(r.slug, r.style)?;
+        // §10.1.4 rule 3, OP-150 L2
+        let claim_issuer = issuer::new_party()?;
         let opened = self
             .governance
             .open(GenesisOrder {
@@ -192,7 +195,7 @@ impl<D: Decider, G: Governance, K: RealmKeys> Admin<'_, D, G, K> {
                 root: r.root.clone(),
                 ct3_delay_s: r.ct3_delay_s,
                 schemas: r.schemas.clone(),
-                issuer: None,
+                issuer: Some(access_kernel::model::Id(claim_issuer)),
             })
             .await
             .map_err(|e| AdminError::Unavailable(e.0))?;
@@ -200,6 +203,7 @@ impl<D: Decider, G: Governance, K: RealmKeys> Admin<'_, D, G, K> {
         let mut t = TenantTx::begin_tenant(self.app, r.tenant).await?;
         let realm = tenancy::create_realm(&mut t, &domain, r.slug, r.placement).await?;
         t.enter_realm(realm).await?;
+        access_store::issuer::set_realm_issuer(&mut t, &claim_issuer).await?;
         if r.style == IssuerStyle::Subdomain {
             tenancy::add_hostname(&mut t, host_of(issuer.authority()), HostKind::Subdomain).await?;
         }
@@ -237,7 +241,11 @@ impl<D: Decider, G: Governance, K: RealmKeys> Admin<'_, D, G, K> {
         self.keys
             .open(realm, alg)
             .await
-            .map_err(|e| AdminError::Unavailable(e.0))
+            .map_err(|e| AdminError::Unavailable(e.0))?;
+        // OP-150 L2
+        Box::pin(self.register_issuer(tenant, realm))
+            .await
+            .map(drop)
     }
 
     /// A fresh `client_id` (OP-137, TN-15): the permuted `UUIDv7` of the new client.

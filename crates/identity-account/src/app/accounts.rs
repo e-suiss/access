@@ -37,6 +37,28 @@ async fn audit<T: AccountTx>(
     .await
 }
 
+/// Queues the realm issuer's `account_status` Claim of a status change in the same transaction
+/// (TN-49, §12.3.1, OP-150 L2): authority narrowing comes from this Claim, never from the
+/// identity plane writing authority state.
+///
+/// # Errors
+/// [`AccountError`].
+pub async fn status_claim<T: AccountTx>(
+    tx: &mut T,
+    subject: [u8; 16],
+    to: AccountStatus,
+) -> Result<(), AccountError> {
+    if !access_kernel::claim::body::ACCOUNT_STATUSES.contains(&to.name()) {
+        return Ok(());
+    }
+    let at = tx.server_time().await?;
+    crate::app::claims::emit(
+        tx,
+        &crate::domain::claims::account_status(subject, to.name(), at),
+    )
+    .await
+}
+
 /// Creates a `staged` account with its identifiers and its own DEK under the realm KEK.
 ///
 /// # Errors
@@ -90,6 +112,7 @@ pub async fn change_status<D: AccountDb>(
     if from.can_authenticate() && !to.can_authenticate() {
         tx.end_sessions(subject).await?;
     }
+    status_claim(&mut tx, subject, to).await?;
     let event = format!("account.{}", to.name());
     audit(&mut tx, &event, who, &realm.external(subject)?).await?;
     tx.commit().await
@@ -140,6 +163,7 @@ pub async fn deactivate<D: AccountDb>(
         .end_sessions(subject)
         .await?
         .ok_or(AccountError::Corrupt)?;
+    status_claim(&mut tx, subject, AccountStatus::Deactivated).await?;
     audit(
         &mut tx,
         "account.deactivated",

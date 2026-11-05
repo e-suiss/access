@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.realm_claim_issuer (tenant_id, realm_id, party_id) VALUES ($1, $2, $3)\n         ON CONFLICT (tenant_id, realm_id) DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "346ee07c62732b9c991f32f04aee7898ad467b61213c2399baea087e7be82454"
+}

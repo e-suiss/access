@@ -10,6 +10,8 @@ publish = false
 
 [dependencies]
 access-crypto = { workspace = true }
+access-internal-api = { workspace = true }
+access-kernel = { workspace = true }
 access-store = { workspace = true }
 suiss-crypto = { workspace = true, features = ["aead"] }
 argon2 = { workspace = true, features = ["alloc", "password-hash"] }

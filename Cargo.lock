@@ -118,8 +118,10 @@ name = "access-identity-account"
 version = "0.2.6"
 dependencies = [
  "access-crypto",
+ "access-internal-api",
  "access-store",
  "argon2",
+ "esuiss-access-kernel",
  "esuiss-crypto",
  "httparse",
  "rcgen",
