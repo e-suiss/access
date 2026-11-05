@@ -302,7 +302,6 @@ async fn seed(
     }));
     let plane = idp::Plane::new(
         domains.clone(),
-        all.sequencer.clone(),
         all.app.clone(),
         SourcesClock::new(all.sequencer.clone()),
         actors,
@@ -791,7 +790,8 @@ async fn serve(
 ) -> Result<(), String> {
     let all = pools(config, &prepared).await?;
     let keks = login::RealmKeks::new(prepared.login_keys);
-    // OP-137, OP-149 m.15 (i)
+    // OP-137, OP-149 m.15 (i), m.22 (g)
+    ids::open_root(&all.app, &prepared.identity_keys).await?;
     let cell_ids = Arc::new(ids::CellIds::new(prepared.identity_keys.clone()));
     let background = Background::start(
         config,
@@ -852,7 +852,6 @@ async fn serve(
     // OP-62, MD-14, TN-111: the identity plane's idp.* write path and realm Genesis
     let idp_plane = idp::Plane::new(
         domains.clone(),
-        idp_sequencer.clone(),
         idp_app,
         SourcesClock::new(idp_sequencer),
         actors,

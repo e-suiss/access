@@ -86,7 +86,6 @@ impl World {
         }));
         let plane = Plane::new(
             domains.clone(),
-            db.sequencer.clone(),
             db.app.clone(),
             SourcesClock::new(db.sequencer.clone()),
             actors,
@@ -312,4 +311,40 @@ fn the_local_deployment_plan_is_valid() {
     let plan = Plan::load(Path::new(path)).unwrap();
     assert_eq!(plan.platform, "platform");
     assert_eq!(plan.style, Style::Path);
+}
+
+// OP-149 m.22 (g), OP-141 m.18 (d), m.22 (d), TN-111: a realm created through the admin path
+// alone has its domain's event-id and token keys, and the domain can be led at once
+#[tokio::test]
+async fn admin_realm_creation_opens_the_domain_keys() {
+    let w = World::new("bootstrap-admin-realm").await;
+    let ids = cell_ids(&w.db.app, &w.keys).await.unwrap();
+    let declared = DeclaredTargets::default();
+    let bootstrap = Bootstrap {
+        app: &w.db.app,
+        router: &w.db.router,
+        plane: &w.plane,
+        realm_keys: &w.keyring,
+        hsm: &w.keys,
+        base: &w.base,
+        declared: &declared,
+    };
+    let admin = bootstrap.admin(&ids, None);
+    let tenant = create_tenant(&w.db.app, PLACEMENT).await.unwrap();
+    let created = admin
+        .create_realm(&NewRealm {
+            tenant,
+            slug: "keys",
+            style: IssuerStyle::Path,
+            placement: PLACEMENT,
+            root: Root::Sole(Id([4; 16])),
+            ct3_delay_s: None,
+        })
+        .await
+        .unwrap();
+    let d = created.domain;
+    assert!(w.keys.mac(&access_crypto::event_id::label(&d.0)).is_ok());
+    assert!(w.keys.aead(&access_crypto::token::label(&d.0)).is_ok());
+    assert!(w.domains.consistency(d).await.is_ok());
+    w.domains.release().await;
 }

@@ -46,7 +46,7 @@ use serde::{Deserialize, Serialize};
 use suiss_crypto::pkcs11::{HsmError, HsmSigner, KeyStore};
 use suiss_crypto::signer::{Signer as _, sign_sign1};
 
-use crate::login::{ID_KEY_ROOT, id_key_bytes};
+use crate::login::id_key_bytes;
 
 /// The token label of the bootstrap root key: the founding root of every realm it creates.
 pub(crate) const ROOT_LABEL: &str = "access/bootstrap/root";
@@ -257,28 +257,14 @@ pub(crate) struct Bootstrap<'a, P, K> {
     pub(crate) declared: &'a DeclaredTargets,
 }
 
-/// The cell's opaque-id key; its root is made in the token once (OP-137).
-pub(crate) fn cell_ids(hsm: &KeyStore) -> Result<IdKey, BootstrapError> {
-    if hsm.mac(ID_KEY_ROOT).is_err() {
-        hsm.generate_mac(ID_KEY_ROOT)?;
-    }
+/// The cell's opaque-id key; its root is made by the path the server starts with (OP-137,
+/// OP-149 m.22 (g)).
+async fn cell_ids(app: &Pool, hsm: &KeyStore) -> Result<IdKey, BootstrapError> {
+    crate::ids::open_root(app, hsm)
+        .await
+        .map_err(BootstrapError::Unavailable)?;
     let bytes = id_key_bytes(hsm).map_err(BootstrapError::Unavailable)?;
     Ok(IdKey::new(Secret::new(bytes)))
-}
-
-/// OP-141 m.18 (d), OP-143: a governing domain's event-id and token keys, made in the token
-/// beside its Genesis; a key that exists is kept. The leader does not open a domain without
-/// them.
-fn domain_keys(hsm: &KeyStore, domain: &Digest) -> Result<(), BootstrapError> {
-    let event = access_crypto::event_id::label(&domain.0);
-    if hsm.mac(&event).is_err() {
-        hsm.generate_mac(&event)?;
-    }
-    let token = access_crypto::token::label(&domain.0);
-    if hsm.aead(&token).is_err() {
-        hsm.generate_aead(&token)?;
-    }
-    Ok(())
 }
 
 /// The bootstrap root key, made in the token once.
@@ -376,7 +362,7 @@ where
     /// # Errors
     /// [`BootstrapError`]; what was done stays.
     pub(crate) async fn run(&self, plan: &Plan) -> Result<Summary, BootstrapError> {
-        let ids = cell_ids(self.hsm)?;
+        let ids = cell_ids(self.app, self.hsm).await?;
         let root = root_key(self.hsm)?;
         let key = root.public_key();
         let party = root_party(&key);
@@ -391,7 +377,6 @@ where
         for (slug, is_platform) in slugs {
             let admin = self.admin(&ids, None);
             let (tenant, realm, domain, created) = self.realm(&admin, slug, style, party).await?;
-            domain_keys(self.hsm, &domain)?;
             self.onboard(tenant, realm, domain, &root, party).await?;
             let route = route_by_slug(self.router, slug)
                 .await?

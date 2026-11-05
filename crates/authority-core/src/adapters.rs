@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use access_authority_sequencer::SequencerError;
-use access_authority_sequencer::adapters::PgLog;
+use access_authority_sequencer::adapters::{PgLog, create_genesis};
 use access_authority_sequencer::app::Leader;
 use access_authority_sequencer::ports::Clock;
 use access_crypto::event_id::{EventKey, label};
@@ -14,8 +14,8 @@ use access_kernel::codec::Canonical as _;
 use access_kernel::digest::Digest;
 use access_kernel::fold;
 use access_kernel::meta::{self, GrantState};
-use access_kernel::model::{Id, ResourceSelector, SubjectSelector};
-use access_kernel::record::RecordEnvelope;
+use access_kernel::model::{Id, ResourceSelector, SubjectSelector, TrustedTime};
+use access_kernel::record::{Opened, RecordEnvelope};
 use access_kernel::verify::cose::PublicKey;
 use access_store::authority::position_at;
 use access_store::authority::read_log;
@@ -196,6 +196,20 @@ impl Keys for KeyStore {
             .map(access_crypto::pseudonym::PseudonymKey::token)
             .map_err(|_| CoreError::Unavailable("pseudonym-key"))
     }
+
+    fn open_domain(&self, domain: &Digest) -> Result<(), CoreError> {
+        let event = label(&domain.0);
+        if self.mac(&event).is_err() {
+            self.generate_mac(&event)
+                .map_err(|_| CoreError::Unavailable("event-key"))?;
+        }
+        let token = access_crypto::token::label(&domain.0);
+        if self.aead(&token).is_err() {
+            self.generate_aead(&token)
+                .map_err(|_| CoreError::Unavailable("token-key"))?;
+        }
+        Ok(())
+    }
 }
 
 /// Kind of the consistency token (OP-141 m.22 (f)).
@@ -249,6 +263,25 @@ const PAGE_TOKEN: &str = "page";
 pub struct Domains<K, B: Binding, S: Salts, C> {
     setup: Setup<K, B, S, C>,
     led: Mutex<HashMap<Digest, Slot<B, S, C>>>,
+}
+
+impl<K: Keys, B: Binding, S: Salts, C> Domains<K, B, S, C> {
+    /// Opens a new domain of `tenant` (TN-111): writes its Genesis, then makes its event-id and
+    /// token keys (OP-141 m.18 (d), m.22 (d), OP-149 m.22 (g)), so every domain this returns can
+    /// be led. When making a key fails, the new domain is returned to nobody and stays unused.
+    ///
+    /// # Errors
+    /// [`CoreError`].
+    pub async fn create(
+        &self,
+        tenant: [u8; 16],
+        fields: BTreeMap<String, Opened>,
+        recorded_at: TrustedTime,
+    ) -> Result<Digest, CoreError> {
+        let domain = create_genesis(&self.setup.sequencer, tenant, fields, recorded_at).await?;
+        self.setup.keys.open_domain(&domain)?;
+        Ok(domain)
+    }
 }
 
 impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K, B, S, C> {

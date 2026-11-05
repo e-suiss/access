@@ -637,6 +637,9 @@ impl Keys for Listed {
             [7; 32],
         )))
     }
+    fn open_domain(&self, _: &Digest) -> Result<(), CoreError> {
+        Ok(())
+    }
 }
 
 #[derive(Clone)]

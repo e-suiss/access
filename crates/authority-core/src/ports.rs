@@ -95,4 +95,10 @@ pub trait Keys: Send + Sync {
         &self,
         domain: &Digest,
     ) -> Result<access_crypto::pseudonym::PseudonymKey, CoreError>;
+    /// Makes the event-id and token keys of the new domain `domain` that are missing
+    /// (OP-141 m.18 (d), m.22 (d)); a key that exists is kept.
+    ///
+    /// # Errors
+    /// [`CoreError::Unavailable`] when the token fails.
+    fn open_domain(&self, domain: &Digest) -> Result<(), CoreError>;
 }

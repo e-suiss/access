@@ -88,6 +88,9 @@ impl Keys for AnyKeys {
             [7; 32],
         )))
     }
+    fn open_domain(&self, _: &Digest) -> Result<(), CoreError> {
+        Ok(())
+    }
 }
 
 #[derive(Clone)]
@@ -115,7 +118,7 @@ fn plane(db: &TestDb) -> TestPlane {
         deriver: db.deriver.clone(),
         signer: None,
     }));
-    Plane::new(domains, db.sequencer.clone(), db.app.clone(), Fixed, actors)
+    Plane::new(domains, db.app.clone(), Fixed, actors)
 }
 
 /// The realm keys opened, in order.

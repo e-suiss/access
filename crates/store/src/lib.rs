@@ -18,6 +18,7 @@ pub use sqlx::PgPool as Pool;
 pub mod identity;
 pub mod idp;
 pub mod jobs;
+pub mod locks;
 pub mod oauth;
 pub mod passkeys;
 pub mod platform;

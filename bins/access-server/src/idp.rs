@@ -12,7 +12,6 @@ use access_authority_core::app::Incoming;
 use access_authority_core::domain::Request;
 use access_authority_core::genesis;
 use access_authority_core::ports::{Binding, Keys, Salts};
-use access_authority_sequencer::adapters::create_genesis;
 use access_authority_sequencer::ports::Clock;
 use access_crypto::dpop::{Role as NonceRole, label as nonce_label};
 use access_crypto::jose::JwsAlg;
@@ -109,7 +108,6 @@ impl Binding for ActorBindings {
 /// The authority plane as the identity plane's [`Decider`] and [`Governance`].
 pub(crate) struct Plane<K, B: Binding, S: Salts, C> {
     domains: Arc<Domains<K, B, S, C>>,
-    sequencer: Pool,
     app: Pool,
     clock: C,
     actors: ActorBindings,
@@ -119,7 +117,6 @@ impl<K, B: Binding + Clone, S: Salts, C: Clone> Clone for Plane<K, B, S, C> {
     fn clone(&self) -> Self {
         Self {
             domains: Arc::clone(&self.domains),
-            sequencer: self.sequencer.clone(),
             app: self.app.clone(),
             clock: self.clock.clone(),
             actors: self.actors.clone(),
@@ -131,14 +128,12 @@ impl<K, B: Binding, S: Salts, C> Plane<K, B, S, C> {
     /// Over the domains this process leads; `actors` is the binding those domains read.
     pub(crate) const fn new(
         domains: Arc<Domains<K, B, S, C>>,
-        sequencer: Pool,
         app: Pool,
         clock: C,
         actors: ActorBindings,
     ) -> Self {
         Self {
             domains,
-            sequencer,
             app,
             clock,
             actors,
@@ -356,7 +351,7 @@ where
 
 impl<K, B, S, C> Governance for Plane<K, B, S, C>
 where
-    K: Send + Sync,
+    K: Keys + Send + Sync,
     B: Binding + Send + Sync,
     S: Salts + Send + Sync,
     C: Clock + Clone + Send + Sync,
@@ -371,7 +366,10 @@ where
             .now()
             .await
             .map_err(|e| Unavailable(e.to_string()))?;
-        let domain = create_genesis(&self.sequencer, order.tenant, fields, now)
+        // OP-149 m.22 (g)
+        let domain = self
+            .domains
+            .create(order.tenant, fields, now)
             .await
             .map_err(|e| Unavailable(e.to_string()))?;
         Ok(GenesisOpened { domain })
