@@ -1,6 +1,6 @@
 [package]
-name = "esuiss-access-verifier-sdk"
-description = "Access Offline Verifier SDK: the Kernel plus the device ports an offline verifier needs (CMP-17, T25, OP-150)."
+name = "esuiss-access-verifier"
+description = "Access offline verifier SDK: Portable Authority Proofs, ValidityContracts, Verifier Profiles and Offline Exercise Reports on the open Kernel (§9.10, §9.12, OP-150)."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -17,10 +17,11 @@ testing = []
 [dependencies]
 # OP-150 (c)
 access-kernel = { workspace = true }
+suiss-crypto = { workspace = true, features = ["verify"] }
 thiserror = { workspace = true }
 
 [dev-dependencies]
-esuiss-access-verifier-sdk = { path = ".", features = ["testing"] }
+esuiss-access-verifier = { path = ".", features = ["testing"] }
 
 [lints]
 workspace = true

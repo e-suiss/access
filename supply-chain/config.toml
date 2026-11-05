@@ -25,6 +25,12 @@ url = "https://raw.githubusercontent.com/zcash/rust-ecosystem/main/supply-chain/
 [policy.esuiss-access-kernel]
 audit-as-crates-io = false
 
+[policy.esuiss-access-sdk]
+audit-as-crates-io = false
+
+[policy.esuiss-access-verifier]
+audit-as-crates-io = false
+
 [policy.esuiss-access-verify]
 audit-as-crates-io = false
 

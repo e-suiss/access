@@ -1,13 +1,6 @@
 [workspace]
 resolver = "3"
-members = [
-    "crates/*",
-    "bins/*",
-    "sdks/bindings/wasm",
-    "sdks/bindings/uniffi",
-    "sdks/rust/verifier",
-    "xtask",
-]
+members = ["crates/*", "bins/*", "sdks/bindings/wasm", "sdks/bindings/uniffi", "sdks/rust/*", "xtask"]
 
 [workspace.package]
 version = "0.2.6"
@@ -38,6 +31,9 @@ access-identity-webauthn = { path = "crates/identity-webauthn", default-features
 access-identity-ui = { path = "crates/identity-ui", default-features = false }
 access-identity-admin = { path = "crates/identity-admin", default-features = false }
 access-identity-events = { path = "crates/identity-events", default-features = false }
+access-authority-ingest = { path = "crates/authority-ingest", default-features = false }
+access-sdk = { package = "esuiss-access-sdk", path = "sdks/rust/access", version = "=0.2.6", default-features = false }
+access-verifier = { package = "esuiss-access-verifier", path = "sdks/rust/verifier", version = "=0.2.6", default-features = false }
 
 # F-2
 secrecy = { version = "0.10.3", default-features = false }

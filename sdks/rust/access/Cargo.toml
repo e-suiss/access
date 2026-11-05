@@ -1,0 +1,18 @@
+[package]
+name = "esuiss-access-sdk"
+description = "Access SDK for Rust: the PEP side of an Access decision, fail-closed (CMP-17, OP-150)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+name = "access_sdk"
+
+[dependencies]
+access-kernel = { workspace = true }
+suiss-crypto = { workspace = true, features = ["verify"] }
+
+[lints]
+workspace = true

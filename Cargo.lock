@@ -21,6 +21,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "access-authority-ingest"
+version = "0.2.6"
+dependencies = [
+ "access-internal-api",
+ "esuiss-access-kernel",
+]
+
+[[package]]
 name = "access-authority-sequencer"
 version = "0.2.6"
 dependencies = [
@@ -1594,11 +1602,20 @@ dependencies = [
 ]
 
 [[package]]
-name = "esuiss-access-verifier-sdk"
+name = "esuiss-access-sdk"
 version = "0.2.6"
 dependencies = [
  "esuiss-access-kernel",
- "esuiss-access-verifier-sdk",
+ "esuiss-crypto",
+]
+
+[[package]]
+name = "esuiss-access-verifier"
+version = "0.2.6"
+dependencies = [
+ "esuiss-access-kernel",
+ "esuiss-access-verifier",
+ "esuiss-crypto",
  "thiserror",
 ]
 

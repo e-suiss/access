@@ -1,0 +1,16 @@
+[package]
+name = "access-authority-ingest"
+description = "CMP-8 Claim Ingest pipeline: carrier adapters, issuer authentication, minimisation, deduplication and quotas in front of the sequencer (§9.13, OP-150)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+access-internal-api = { workspace = true }
+access-kernel = { workspace = true }
+
+[lints]
+workspace = true

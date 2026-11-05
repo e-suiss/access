@@ -72,6 +72,7 @@ fn contract() -> ValidityContract {
         clock_source: "monotonic+signed".to_owned(),
         clock_skew_ms: SKEW,
         must_understand: BTreeSet::new(),
+        status: None,
     }
 }
 
