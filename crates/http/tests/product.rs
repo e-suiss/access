@@ -1088,6 +1088,7 @@ fn platform_examples_meet_the_contract() {
         ("pairing-request", "PairingRequest"),
         ("pairing-result", "PairingResult"),
         ("platform-streams", "PlatformStreams"),
+        ("provider-declarations", "ProviderDeclarations"),
     ] {
         let path = root()
             .join("examples/access-v1")

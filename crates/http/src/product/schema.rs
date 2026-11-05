@@ -122,6 +122,7 @@ fn components() -> Value {
         other_components(),
         records::components(),
         platform::components(),
+        crate::declarations::openapi_components(),
     ] {
         if let (Value::Object(m), Value::Object(more)) = (&mut all, more) {
             m.extend(more);
@@ -362,6 +363,10 @@ pub fn openapi() -> Value {
                 json_ok("The document.", "SuissConfiguration"),
             ),
         }}),
+    );
+    paths.insert(
+        crate::declarations::PATH.into(),
+        crate::declarations::openapi_path(),
     );
     records::paths(&mut paths, &common);
     platform::paths(&mut paths);

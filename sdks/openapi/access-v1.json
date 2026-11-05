@@ -475,6 +475,25 @@
         }
       }
     },
+    "/.well-known/access-provider-declarations": {
+      "get": {
+        "operationId": "getProviderDeclarations",
+        "summary": "What the provider declares about its keys: no custody, the binding key's scope, the KMS/HSM quota and its sharing, HSM partition sharing and the identity plane's own KMS (SI-13, CR-18, CR-22, CR-30, T31, OP-150 m.3 (e)). `Cache-Control: max-age=3600`.",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "The declarations.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProviderDeclarations"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/access/v1/tenants/{tenant}/subjects:resolve": {
       "post": {
         "operationId": "resolveSubjects",
@@ -2124,6 +2143,83 @@
             "items": {
               "$ref": "#/components/schemas/PlatformStream"
             }
+          }
+        }
+      },
+      "ProviderDeclarations": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "version",
+          "custody",
+          "binding_key_scope",
+          "kms",
+          "hsm_partition_shared",
+          "identity_kms"
+        ],
+        "properties": {
+          "version": {
+            "const": 1
+          },
+          "custody": {
+            "enum": [
+              "none"
+            ],
+            "description": "No custodial key exists (SI-13, OP-150 m.3 (e))."
+          },
+          "binding_key_scope": {
+            "enum": [
+              "domain"
+            ],
+            "description": "One binding key per domain (CR-18, MD-6)."
+          },
+          "kms": {
+            "$ref": "#/components/schemas/ProviderKms"
+          },
+          "hsm_partition_shared": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Whether the HSM partition is shared (CR-30, RT12); null while undeclared."
+          },
+          "identity_kms": {
+            "enum": [
+              "separate"
+            ],
+            "description": "The identity plane has its own token and KEK (T31)."
+          }
+        }
+      },
+      "ProviderKms": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "quota_use",
+          "quota_per_second",
+          "shared"
+        ],
+        "properties": {
+          "quota_use": {
+            "enum": [
+              "per-key-operation"
+            ],
+            "description": "The signers spend the quota on key generation and unwrap, never per signature (CR-22)."
+          },
+          "quota_per_second": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0,
+            "description": "Operations per second the KMS/HSM grants; null while undeclared."
+          },
+          "shared": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Whether the quota is shared with other domains or tenants (HL-20); null while undeclared."
           }
         }
       }

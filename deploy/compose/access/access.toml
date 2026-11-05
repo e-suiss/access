@@ -38,6 +38,11 @@ relay = "https://relay:8443"
 management_api = "https://access-server:8443"
 products = { work = "https://work:8443" }
 
+# SI-13, CR-22, CR-30, OP-150: SoftHSM has no quota; one token store serves every local domain
+[provider]
+kms_shared = false
+hsm_partition_shared = true
+
 # OP-94, OP-141 m.18 (h), OP-69
 [hsm]
 module = "/usr/lib/softhsm/libsofthsm2.so"

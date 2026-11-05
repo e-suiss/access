@@ -47,6 +47,10 @@ pub(crate) struct Config {
     /// 443. Empty by default. In the environment:
     /// `ACCESS_DELIVERY_TARGETS='[{url="https://host:8443/path", ca_file="/ca.pem"}]'`.
     pub(crate) delivery_targets: Vec<DeliveryTarget>,
+    /// What the operator declares about its key infrastructure, published with what the code
+    /// fixes (SI-13, CR-22, CR-30, OP-150 m.3 (e)); undeclared facts are published as null.
+    #[serde(default)]
+    pub(crate) provider: access_http::declarations::Stated,
 }
 
 /// One declared event delivery target (OP-149 m.23).
@@ -275,6 +279,7 @@ impl Default for Config {
             login: Login::default(),
             suiss: None,
             delivery_targets: Vec::new(),
+            provider: access_http::declarations::Stated::default(),
         }
     }
 }

@@ -33,6 +33,7 @@ use access_authority_sequencer::adapters::SourcesClock;
 use access_crypto::secret_file::SecretFile;
 use access_http::adp::adapters::{Discovery, router as adp_router};
 use access_http::adp::app::Service;
+use access_http::declarations::{Declarations, router as declared};
 use access_http::login::{Assets, me_router, router as login_router};
 use access_http::oauth::router as oauth_router;
 use access_http::realm::router as realm_router;
@@ -884,7 +885,8 @@ async fn serve(
             .merge(platform)
             .merge(realms)
             .merge(sign_in.merge(me))
-            .merge(authorize),
+            .merge(authorize)
+            .merge(declared(&Declarations::of(config.provider))),
     );
     let served = listen(config, listener, prepared.tls, app).await;
     // OP-31

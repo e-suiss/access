@@ -176,3 +176,23 @@ async fn non_canonical_paths_never_reach_a_route() {
         assert!(body_string(response).await.contains("path-not-canonical"));
     }
 }
+
+// SI-13, OP-150, CR-22: the provider declarations are served without authentication and state
+// that no custodial key exists
+#[tokio::test]
+async fn the_provider_declarations_are_public() {
+    use access_http::declarations::{Declarations, PATH, Stated};
+    let app = harden(
+        access_http::declarations::router(&Declarations::of(Stated::default())),
+        Limits::default(),
+    );
+    let response = app
+        .oneshot(Request::get(PATH).body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(response.headers()["content-type"], "application/json");
+    let body: serde_json::Value = serde_json::from_str(&body_string(response).await).unwrap();
+    assert_eq!(body["custody"], "none");
+    assert_eq!(body["version"], 1);
+}

@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "custody": "none",
+  "binding_key_scope": "domain",
+  "kms": {
+    "quota_use": "per-key-operation",
+    "quota_per_second": 100,
+    "shared": false
+  },
+  "hsm_partition_shared": false,
+  "identity_kms": "separate"
+}

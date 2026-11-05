@@ -1,6 +1,7 @@
 //! HTTP layer shared by both Access planes (OP-62).
 
 pub mod adp;
+pub mod declarations;
 pub mod login;
 pub mod oauth;
 pub mod path;
