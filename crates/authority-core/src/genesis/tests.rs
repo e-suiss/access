@@ -37,6 +37,7 @@ fn order(root: Root) -> GenesisOrder {
         root,
         ct3_delay_s: None,
         schemas: Vec::new(),
+        issuer: None,
     }
 }
 
@@ -163,4 +164,34 @@ fn a_genesis_publishes_the_founders_further_catalogs() {
     }
     o.schemas = vec![catalog(founder, "work"), catalog(founder, "work")];
     assert!(realm(&o, &mut Fixed).is_err());
+}
+
+// §10.1.4 rule 3, E18, OP-142, first-party neutrality (§9.13.2): a domain is born accepting its
+// realm's issuer for actor-binding only; predicate input and subject selection are not implied
+#[test]
+fn the_realm_issuer_is_accepted_for_actor_binding_only() {
+    let d = Digest([7; 32]);
+    let issuer = Id([9; 16]);
+    let mut o = order(Root::Sole(Id([2; 16])));
+    let without = meta::genesis_effects(&d, &values(&o)).unwrap();
+    assert!(
+        !without
+            .iter()
+            .any(|(k, _)| *k == meta::key(kind::ACCEPTANCES, &issuer))
+    );
+    o.issuer = Some(issuer);
+    let effects = meta::genesis_effects(&d, &values(&o)).unwrap();
+    let gates: Vec<access_kernel::claim::Gate> = effects
+        .iter()
+        .filter_map(|(_, v)| v.as_ref())
+        .filter_map(|v| access_kernel::meta::ContentState::from_value(v).ok())
+        .filter_map(|c| access_kernel::claim::Gate::of(&c.content).ok())
+        .filter(|g| g.issuer == Some(issuer))
+        .collect();
+    assert_eq!(gates.len(), 1);
+    assert_eq!(gates[0].use_, access_kernel::claim::ACTOR_BINDING);
+    assert_eq!(
+        gates[0].classes,
+        REALM_ISSUER_CLASSES.map(String::from).to_vec()
+    );
 }

@@ -184,6 +184,7 @@ impl<D: Decider, G: Governance, K: RealmKeys> Admin<'_, D, G, K> {
                 root: r.root.clone(),
                 ct3_delay_s: r.ct3_delay_s,
                 schemas: r.schemas.clone(),
+                issuer: None,
             })
             .await
             .map_err(|e| AdminError::Unavailable(e.0))?;

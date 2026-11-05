@@ -197,3 +197,20 @@ fn binding_value_and_context_round_trip() {
     assert_eq!(window_start(3_700, 1_000), 3_000);
     assert_eq!(day_of(86_400_000 * 3 + 5), 3);
 }
+
+// TN-4, §12.1.1, MD-5: a realm's Claims go to its governing domain and to each consuming domain
+// only while that domain's Acceptance is live
+#[test]
+fn realm_claims_go_to_governing_and_accepting_domains() {
+    let gov = Digest([1; 32]);
+    let a = Digest([2; 32]);
+    let b = Digest([3; 32]);
+    let bindings = [
+        (b, Bound::Consuming(Id([8; 16]))),
+        (gov, Bound::Governing),
+        (a, Bound::Consuming(Id([7; 16]))),
+    ];
+    let live = |_: &Digest, acc: &Id| *acc == Id([7; 16]);
+    assert_eq!(targets(&bindings, live), vec![gov, a]);
+    assert_eq!(targets(&bindings, |_, _| false), vec![gov]);
+}

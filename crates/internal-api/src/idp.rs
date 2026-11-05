@@ -238,6 +238,9 @@ pub struct GenesisOrder {
     /// Further catalogs the founder publishes in the Genesis besides the `idp.*` ones (OP-141
     /// m.35 (c)); each one's publisher is the founder.
     pub schemas: Vec<Spp>,
+    /// The realm's identity Claim issuer Party, when it has one: the domain is born accepting
+    /// it for `actor-binding` only (§10.1.4 rule 3, OP-142).
+    pub issuer: Option<access_kernel::model::Id>,
 }
 
 /// The domain a Genesis opened.

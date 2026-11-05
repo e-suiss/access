@@ -163,6 +163,40 @@ fn published(package: &Spp, founder: Id) -> Value {
     ])
 }
 
+/// The classes the realm issuer's default Acceptance covers: who acts, by which authenticator
+/// and under which identity (§10.1.4 rule 3, §10.1.5).
+pub const REALM_ISSUER_CLASSES: [&str; 3] = [
+    "authentication",
+    "authenticator_binding",
+    "identity_binding_person",
+];
+
+/// The default Acceptance of the realm's identity issuer: `actor-binding` only; predicate
+/// input and subject selection are added explicitly (§10.1.4 rule 3, E18, OP-142).
+fn realm_issuer(issuer: Id) -> Value {
+    Value::Map(vec![
+        (Value::text("issuer"), issuer.to_value()),
+        (
+            Value::text("use"),
+            Value::text(access_kernel::claim::ACTOR_BINDING),
+        ),
+        (
+            Value::text("classes"),
+            Value::Array(
+                REALM_ISSUER_CLASSES
+                    .iter()
+                    .map(|c| Value::text(c))
+                    .collect(),
+            ),
+        ),
+        (Value::text("subject"), SubjectSelector::Public.to_value()),
+        (
+            Value::text("validity"),
+            Value::Array(vec![Value::Unsigned(0), Value::Unsigned(u64::MAX)]),
+        ),
+    ])
+}
+
 /// The Genesis fields of a realm's new governing domain.
 ///
 /// # Errors
@@ -202,6 +236,7 @@ pub fn realm(
                 .iter()
                 .map(|ns| schemas(ns, founder))
                 .chain(order.schemas.iter().map(|p| published(p, founder)))
+                .chain(order.issuer.map(realm_issuer))
                 .collect())?,
         ),
         (

@@ -397,6 +397,32 @@ pub fn map_set(token: &[u8], f: &Frame<'_>) -> Result<Mapped, Refusal> {
     })
 }
 
+/// How a domain takes a realm's identity Claims (TN-4, §12.1.1, MD-5).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Bound {
+    /// The realm's governing domain.
+    Governing,
+    /// A domain that consumes the realm's Claims through this Acceptance.
+    Consuming(Id),
+}
+
+/// The domains a realm's identity Claims go to (TN-4): its governing domain and each consuming
+/// domain whose Acceptance is still live there (`live`). A Claim names one domain, so the
+/// issuer signs one per target; a domain without a live Acceptance gets none.
+pub fn targets(bindings: &[(Digest, Bound)], live: impl Fn(&Digest, &Id) -> bool) -> Vec<Digest> {
+    let mut out: Vec<Digest> = bindings
+        .iter()
+        .filter(|(d, b)| match b {
+            Bound::Governing => true,
+            Bound::Consuming(a) => live(d, a),
+        })
+        .map(|(d, _)| *d)
+        .collect();
+    out.sort_unstable();
+    out.dedup();
+    out
+}
+
 /// The start of the quota window holding `now`.
 #[must_use]
 pub fn window_start(now: u64, window_ms: u64) -> u64 {
