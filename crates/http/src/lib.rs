@@ -3,6 +3,7 @@
 pub mod adp;
 pub mod login;
 pub mod oauth;
+pub mod path;
 pub mod platform;
 pub mod problem;
 pub mod product;
@@ -89,6 +90,8 @@ pub fn harden(routes: Router, limits: Limits) -> Router {
             StatusCode::SERVICE_UNAVAILABLE,
             limits.request_timeout,
         ))
+        // TN-113
+        .layer(axum::middleware::from_fn(path::canonical))
         // SA-21, R-3
         .layer(CatchPanicLayer::custom(problem::from_panic))
 }

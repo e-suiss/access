@@ -148,3 +148,31 @@ async fn unknown_path_is_404_problem() {
         "application/problem+json"
     );
 }
+
+// TN-113: a path reaches routing and path-based permissions only in its one canonical spelling;
+// dot segments, empty segments and needless percent-encoding are refused before any route
+#[tokio::test]
+async fn non_canonical_paths_never_reach_a_route() {
+    let app = router(security_txt(), health(), Limits::default(), Router::new());
+    let ok = app
+        .clone()
+        .oneshot(Request::get("/healthz").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(ok.status(), StatusCode::OK);
+    for path in [
+        "/x/../healthz",
+        "/./healthz",
+        "//healthz",
+        "/%68ealthz",
+        "/x/%2E%2E/healthz",
+    ] {
+        let response = app
+            .clone()
+            .oneshot(Request::get(path).body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST, "{path}");
+        assert!(body_string(response).await.contains("path-not-canonical"));
+    }
+}
