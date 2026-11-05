@@ -158,11 +158,12 @@ services:
     entrypoint: ["sh", "-c"]
     command:
       - >-
-        access-server bootstrap "$${ACCESS_BOOTSTRAP_PLAN}" > /var/lib/access/bootstrap/bootstrap.json &&
+        access-server bootstrap "$${BOOTSTRAP_PLAN}" > /var/lib/access/bootstrap/bootstrap.json &&
         cat /var/lib/access/bootstrap/bootstrap.json
     environment:
       ACCESS_CONFIG: /etc/access/local/access.toml
-      ACCESS_BOOTSTRAP_PLAN: ${ACCESS_BOOTSTRAP_PLAN:-/etc/access/local/bootstrap.toml}
+      # not ACCESS_*: that prefix is the server configuration
+      BOOTSTRAP_PLAN: ${ACCESS_BOOTSTRAP_PLAN:-/etc/access/local/bootstrap.toml}
     volumes:
       - certs:/var/lib/access/certs:ro
       - secrets:/var/lib/access/secrets:ro
