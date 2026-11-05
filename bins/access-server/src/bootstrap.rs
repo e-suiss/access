@@ -50,8 +50,8 @@ use crate::login::{ID_KEY_ROOT, id_key_bytes};
 /// The token label of the bootstrap root key: the founding root of every realm it creates.
 pub(crate) const ROOT_LABEL: &str = "access/bootstrap/root";
 
-/// The challenge of the root's `instance_create` in each realm's domain; nonces are per domain.
-const ROOT_CHALLENGE: &[u8; 32] = b"access-bootstrap/root-instance:1";
+/// What the root signs to derive its `instance_create` challenge in a domain.
+const ROOT_CHALLENGE_LABEL: &[u8] = b"access-bootstrap/root-instance:1";
 
 /// The placement new tenants and realms are created in (OP-40).
 const PLACEMENT: &str = "pool-default";
@@ -307,6 +307,18 @@ pub(crate) fn uuid(b: &[u8; 16]) -> String {
 }
 
 /// The AIS `root` signs over `s` (`COSE_Sign1`, L2-SIG-1).
+/// The root's `instance_create` challenge in `domain`: the SHA-256 of the root's Ed25519
+/// signature over a label and the domain. Ed25519 signing is deterministic (RFC 8032), so a
+/// second run finds the same nonce, and nobody without the root key can predict it.
+fn root_challenge(root: &HsmSigner, domain: Digest) -> Result<Vec<u8>, BootstrapError> {
+    let mut message = ROOT_CHALLENGE_LABEL.to_vec();
+    message.extend_from_slice(&domain.0);
+    let signature = root
+        .sign(&message)
+        .map_err(|e| BootstrapError::Unavailable(String::from(e.code())))?;
+    Ok(suiss_crypto::digest::sha256(&signature).to_vec())
+}
+
 fn sign(root: &HsmSigner, s: &Statement) -> Result<Vec<u8>, BootstrapError> {
     let payload = s.to_bytes().map_err(|_| BootstrapError::Encode)?;
     sign_sign1(root, thumbprint(&root.public_key()), CONTENT_TYPE, &payload)
@@ -489,7 +501,8 @@ where
         root: &HsmSigner,
         party: Id,
     ) -> Result<(), BootstrapError> {
-        if self.allowed(domain, ROOT_CHALLENGE).await? {
+        let challenge = root_challenge(root, domain)?;
+        if self.allowed(domain, &challenge).await? {
             return Ok(());
         }
         let w = Moment::at(server_time(self.app).await?);
@@ -504,7 +517,7 @@ where
             key: root.public_key(),
             register: None,
             create: SelfSigned {
-                nonce: ROOT_CHALLENGE.to_vec(),
+                nonce: challenge.clone(),
                 validity: w.validity,
                 ais: Vec::new(),
             },
@@ -519,8 +532,8 @@ where
                 &w.statement(domain, nonce, digest, bootstrap_basis(&domain)),
             )
         };
-        r.create.ais = signed(ROOT_CHALLENGE, &r.create_payload())?;
-        let register = register_nonce(ROOT_CHALLENGE);
+        r.create.ais = signed(&challenge, &r.create_payload())?;
+        let register = register_nonce(&challenge);
         if !self.allowed(domain, &register).await? {
             let ais = signed(&register, &r.register_payload())?;
             r.register = Some(SelfSigned {

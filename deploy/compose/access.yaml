@@ -1,4 +1,4 @@
-# OP-69, OP-149 m.21, TI-9, OP-49, RAUTHY-008, §14.3: a real Access for products to test against.
+# OP-69, OP-149 m.22, TI-9, OP-49, RAUTHY-008, §14.3: a real Access for products to test against.
 # Same binaries and checks as production; SoftHSM is the local PKCS#11 token and a local CA
 # issues every certificate. Nothing here is a development mode.
 #
@@ -20,10 +20,38 @@ x-access: &access
     - /tmp:uid=65532,gid=65532
 
 services:
+  # Fresh named volumes are root-owned, or take the owner of whichever container mounts them
+  # first; this sets their owners before anything writes to them.
+  volume-owners:
+    <<: *hardening
+    image: ${ACCESS_IMAGE:-ghcr.io/e-suiss/access:local}
+    user: "0:0"
+    cap_add: [CHOWN, FOWNER]
+    read_only: true
+    entrypoint: ["sh", "-c"]
+    command:
+      - >-
+        chown 65532:65532 /var/lib/access/certs /var/lib/access/secrets /var/lib/access/initdb
+        /var/lib/access/signer /var/lib/access/identity-signer /var/lib/access/bootstrap &&
+        chmod 0750 /var/lib/access/certs /var/lib/access/secrets /var/lib/access/initdb
+        /var/lib/access/signer /var/lib/access/identity-signer /var/lib/access/bootstrap &&
+        chown 65532:softhsm /var/lib/softhsm/tokens && chmod 0770 /var/lib/softhsm/tokens
+    volumes:
+      - certs:/var/lib/access/certs
+      - secrets:/var/lib/access/secrets
+      - initdb:/var/lib/access/initdb
+      - softhsm:/var/lib/softhsm/tokens
+      - signer:/var/lib/access/signer
+      - identity-signer:/var/lib/access/identity-signer
+      - bootstrap:/var/lib/access/bootstrap
+
   # OP-69, CR-28: certificates, credentials, tokens and KEKs, once
   init:
     <<: *access
     command: ["access-local-init"]
+    depends_on:
+      volume-owners:
+        condition: service_completed_successfully
     volumes:
       - certs:/var/lib/access/certs
       - secrets:/var/lib/access/secrets

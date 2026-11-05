@@ -208,7 +208,9 @@ async fn the_bootstrap_is_idempotent() {
         let g = idp::governance(&mut t).await.unwrap().unwrap();
         t.commit().await.unwrap();
         // L0-META-7: the root's Instance is registered once in each governing domain
-        for nonce in [ROOT_CHALLENGE.to_vec(), register_nonce(ROOT_CHALLENGE)] {
+        let challenge =
+            root_challenge(&root_key(&w.keys).unwrap(), Digest(*g.domain.as_bytes())).unwrap();
+        for nonce in [challenge.clone(), register_nonce(&challenge)] {
             let row = find_nonce(&w.db.app, &g.domain, &nonce)
                 .await
                 .unwrap()
