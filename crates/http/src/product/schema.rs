@@ -289,6 +289,14 @@ fn path(name: &str, schema: &Value) -> Value {
     json!({ "name": name, "in": "path", "required": true, "schema": schema })
 }
 
+/// CR-22: the provider declarations document (OP-150).
+fn declarations(paths: &mut serde_json::Map<String, Value>) {
+    paths.insert(
+        crate::declarations::PATH.into(),
+        crate::declarations::openapi_path(),
+    );
+}
+
 /// The `OpenAPI` document of the product client contract.
 #[must_use]
 pub fn openapi() -> Value {
@@ -369,10 +377,7 @@ pub fn openapi() -> Value {
             ),
         }}),
     );
-    paths.insert(
-        crate::declarations::PATH.into(),
-        crate::declarations::openapi_path(),
-    );
+    declarations(&mut paths);
     records::paths(&mut paths, &common);
     platform::paths(&mut paths);
     stage6::paths(&mut paths, &common);
