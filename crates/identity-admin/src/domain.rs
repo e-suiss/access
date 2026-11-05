@@ -441,6 +441,9 @@ pub struct Client {
     pub post_logout_redirect_uris: Vec<RedirectUri>,
     /// The back-channel logout endpoint, `https` (§10.4.6).
     pub backchannel_logout_uri: Option<String>,
+    /// Whether its authorization requests are accepted only by `request_uri` from `/par`
+    /// (RFC 9126 §6, §10.4.3).
+    pub require_par: bool,
     /// The platform product it pairs (OP-149 m.4); set only in the platform tenant.
     pub platform: Option<Platform>,
 }
@@ -545,6 +548,12 @@ impl Client {
         }
         if let Some(u) = &self.backchannel_logout_uri {
             m.push((Value::text("backchannel_logout_uri"), Value::text(u)));
+        }
+        if self.require_par {
+            m.push((
+                Value::text("require_pushed_authorization_requests"),
+                Value::Bool(true),
+            ));
         }
         Value::Map(m)
     }

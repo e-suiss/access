@@ -172,7 +172,15 @@ async fn handle<E: Env>(State(s): Shared<E>, endpoint: Endpoint, req: Incoming) 
     let cookie = session_cookie(&req.headers);
     let reply = match endpoint {
         Endpoint::Authorize => s.authorize(&realm, &p, cookie.as_deref()).await,
-        Endpoint::Par => s.par(&realm, &p, authorization).await,
+        Endpoint::Par => {
+            let proofs: Vec<&str> = req
+                .headers
+                .get_all("dpop")
+                .iter()
+                .filter_map(|v| v.to_str().ok())
+                .collect();
+            s.par(&realm, &p, authorization, &proofs).await
+        }
         Endpoint::Token => {
             let proofs: Vec<&str> = req
                 .headers

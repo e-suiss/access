@@ -17,6 +17,7 @@ fn client(uris: &[&str]) -> Client {
             .collect(),
         post_logout_redirect_uris: Vec::new(),
         backchannel_logout_uri: None,
+        require_par: false,
         platform: None,
     }
 }
@@ -199,4 +200,19 @@ fn a_client_key_is_p256_because_assertions_are_es256() {
     c.auth = AuthMethod::PrivateKeyJwtKey { key: p256() };
     assert_eq!(c.check(), Ok(()));
     assert!(c.auth.jwks().unwrap().contains(r#""crv":"P-256""#));
+}
+
+// RFC 9126 §6, §10.4.3: requiring pushed authorization requests is part of what the
+// registration's intent authorizes; a client that does not require them keeps its digest
+#[test]
+fn requiring_par_is_in_the_change() {
+    // RFC 9126
+    let c = client(&["https://shop.example/cb"]);
+    let without = Change::ClientRegister(c.clone()).digest().unwrap();
+    let required = Client {
+        require_par: true,
+        ..c
+    };
+    assert_eq!(required.check(), Ok(()));
+    assert_ne!(Change::ClientRegister(required).digest().unwrap(), without);
 }

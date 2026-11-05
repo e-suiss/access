@@ -355,6 +355,7 @@ pub fn client_row(uuid: [u8; 16], id: &str, method: &str, secret: &str, jwks: &s
         platform_product: None,
         service_key: None,
         event_receiver: None,
+        require_par: false,
     }
 }
 

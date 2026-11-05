@@ -46,6 +46,8 @@ pub struct Client {
     pub post_logout_redirect_uris: Vec<String>,
     /// The back-channel logout endpoint.
     pub backchannel_logout_uri: Option<String>,
+    /// Whether its authorization requests are accepted only from `/par` (RFC 9126 §6).
+    pub require_par: bool,
 }
 
 impl Client {
@@ -78,6 +80,7 @@ impl Client {
             redirect_uris: row.redirect_uris,
             post_logout_redirect_uris: row.post_logout_redirect_uris,
             backchannel_logout_uri: row.backchannel_logout_uri,
+            require_par: row.require_par,
         })
     }
 

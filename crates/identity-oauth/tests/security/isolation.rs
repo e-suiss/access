@@ -43,7 +43,10 @@ async fn mint(x: &At<'_>) -> Minted {
         .collect(),
     )
     .unwrap();
-    let pushed = body(&x.oauth().par(x.realm(), &par, Some(&x.basic())).await, 201);
+    let pushed = body(
+        &x.oauth().par(x.realm(), &par, Some(&x.basic()), &[]).await,
+        201,
+    );
     Minted {
         cookie,
         code,

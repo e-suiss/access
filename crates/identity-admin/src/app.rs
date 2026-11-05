@@ -491,6 +491,7 @@ impl<D: Decider, G: Governance, K: RealmKeys> Admin<'_, D, G, K> {
                 platform_product: c.platform.as_ref().map(|p| String::from(p.product.name())),
                 service_key: c.platform.as_ref().map(|p| cose_key(&p.service_key)),
                 event_receiver: c.platform.as_ref().and_then(|p| p.event_receiver.clone()),
+                require_par: c.require_par,
             },
             secret,
         ))

@@ -73,6 +73,7 @@ const PUBLIC: &str = "cli_0000000000000000000000000a";
 const CONFIDENTIAL: &str = "cli_0000000000000000000000000b";
 const KEYED: &str = "cli_0000000000000000000000000c";
 const KEYED_JWKS: &str = "https://shop.example/jwks.json";
+const PUSHED: &str = "cli_0000000000000000000000000d";
 const SECRET: &str = "shop-secret-shop-secret-shop-secret-shop-se";
 
 struct SysClock;
@@ -299,6 +300,7 @@ fn client(n: u8, id: &str, method: &str) -> ClientRow {
         platform_product: None,
         service_key: None,
         event_receiver: None,
+        require_par: false,
     }
 }
 
@@ -328,7 +330,7 @@ async fn world() -> World {
         open_dpop_replay_day(&db.archive, d).await.unwrap();
     }
     let t = create_tenant(&db.app, "pool-default").await.unwrap();
-    let d = domain(&db, t, 3).await;
+    let d = domain(&db, t, 4).await;
     let mut tx = TenantTx::begin_tenant(&db.app, t).await.unwrap();
     let r = create_realm(&mut tx, &d, "acme", "pool-default")
         .await
@@ -347,6 +349,7 @@ async fn world() -> World {
         (PUBLIC, "none"),
         (CONFIDENTIAL, "client_secret_basic"),
         (KEYED, "private_key_jwt"),
+        (PUSHED, "client_secret_basic"),
     ]
     .into_iter()
     .enumerate()
@@ -366,9 +369,11 @@ async fn world() -> World {
         .await
         .unwrap()
         .unwrap();
-        insert_client(&mut tx, &b, &client(n, id, method))
-            .await
-            .unwrap();
+        let row = ClientRow {
+            require_par: id == PUSHED,
+            ..client(n, id, method)
+        };
+        insert_client(&mut tx, &b, &row).await.unwrap();
     }
     let subject = tx
         .insert_subject("active", "realm-kek:1", &[9; 40])
@@ -440,6 +445,16 @@ impl World {
     }
 
     fn proof(&self, method: &str, uri: &str, access_token: Option<&str>) -> String {
+        self.proof_by(&self.dpop_key, method, uri, access_token)
+    }
+
+    fn proof_by(
+        &self,
+        key: &EcdsaKeyPair,
+        method: &str,
+        uri: &str,
+        access_token: Option<&str>,
+    ) -> String {
         let role = if access_token.is_some() {
             &self.oauth.env().rs_ring
         } else {
@@ -451,10 +466,10 @@ impl World {
             .map(|t| format!(r#","ath":"{}""#, ath(t)))
             .unwrap_or_default();
         sign(
-            &self.dpop_key,
+            key,
             &format!(
                 r#"{{"typ":"dpop+jwt","alg":"ES256","jwk":{}}}"#,
-                ec_jwk(&self.dpop_key)
+                ec_jwk(key)
             ),
             &format!(
                 r#"{{"jti":"{jti}","htm":"{method}","htu":"{uri}","iat":{},"nonce":"{nonce}"{extra}}}"#,
@@ -969,7 +984,7 @@ async fn redirect_exactness_errors_and_par() {
     .unwrap();
     let pushed = body(
         &w.oauth
-            .par(&w.realm, &p, Some(&basic(CONFIDENTIAL, SECRET)))
+            .par(&w.realm, &p, Some(&basic(CONFIDENTIAL, SECRET)), &[])
             .await,
         201,
     );
@@ -1001,11 +1016,247 @@ async fn redirect_exactness_errors_and_par() {
     assert_eq!(
         error(
             &w.oauth
-                .par(&w.realm, &p, Some(&basic(CONFIDENTIAL, "x")))
+                .par(&w.realm, &p, Some(&basic(CONFIDENTIAL, "x")), &[])
                 .await
         ),
         "invalid_client"
     );
+}
+
+fn push_params(extra: &[(&str, &str)]) -> Params {
+    let mut p: Vec<(String, String)> = [
+        ("redirect_uri", CB),
+        ("response_type", "code"),
+        ("scope", "openid"),
+        ("code_challenge", CHALLENGE),
+        ("code_challenge_method", "S256"),
+        ("state", "par"),
+    ]
+    .into_iter()
+    .map(|(k, v)| (k.into(), v.into()))
+    .collect();
+    p.extend(extra.iter().map(|(k, v)| ((*k).into(), (*v).into())));
+    Params::new(p).unwrap()
+}
+
+fn use_uri(client: &str, uri: &str) -> Params {
+    Params::new(vec![
+        ("client_id".into(), client.into()),
+        ("request_uri".into(), uri.into()),
+    ])
+    .unwrap()
+}
+
+fn keyed_assertion(w: &World, aud: &str) -> String {
+    let jti = b64url_encode(&access_crypto::random::bytes::<16>().unwrap());
+    sign(
+        &w.client_key,
+        r#"{"alg":"ES256","typ":"JWT"}"#,
+        &format!(
+            r#"{{"iss":"{KEYED}","sub":"{KEYED}","aud":"{aud}","exp":{},"iat":{},"jti":"{jti}"}}"#,
+            now() / 1000 + 60,
+            now() / 1000
+        ),
+    )
+}
+
+const ASSERTION_TYPE: &str = "urn:ietf:params:oauth:client-assertion-type:jwt-bearer";
+
+// RFC 9126 §2.1, RFC 7523, RFC 9449 §10.1, IDP-11, TN-27: a private_key_jwt client pushes its
+// request; a DPoP proof sent with it binds the code to the proof key like dpop_jkt, so only that
+// key redeems it; a proof that does not match dpop_jkt or the endpoint is refused
+#[tokio::test]
+async fn par_with_private_key_jwt_and_dpop() {
+    // RFC 9126
+    // IDP-11
+    let w = world().await;
+    let w = &w;
+    let par_uri = format!("{ISSUER}/par");
+    let push = |assertion: String, extra: Vec<(&'static str, String)>, dpop: Vec<String>| {
+        let mut pairs: Vec<(&str, String)> = vec![
+            ("client_assertion_type", String::from(ASSERTION_TYPE)),
+            ("client_assertion", assertion),
+        ];
+        pairs.extend(extra);
+        let p = push_params(
+            &pairs
+                .iter()
+                .map(|(k, v)| (*k, v.as_str()))
+                .collect::<Vec<_>>(),
+        );
+        let w = &w;
+        async move {
+            let proofs: Vec<&str> = dpop.iter().map(String::as_str).collect();
+            w.oauth.par(&w.realm, &p, None, &proofs).await
+        }
+    };
+    let redeem = |uri: String| async move {
+        let to = location(
+            &w.oauth
+                .authorize(&w.realm, &use_uri(KEYED, &uri), Some(&w.cookie))
+                .await,
+        );
+        assert_eq!(query(&to, "state"), "par");
+        query(&to, "code")
+    };
+    let exchange = |code: String| async move {
+        w.token(
+            &[
+                ("grant_type", "authorization_code"),
+                ("code", &code),
+                ("redirect_uri", CB),
+                ("code_verifier", VERIFIER),
+                ("client_assertion_type", ASSERTION_TYPE),
+                ("client_assertion", &keyed_assertion(w, ISSUER)),
+            ],
+            None,
+        )
+        .await
+    };
+
+    // RFC 7523 §3: the assertion's audience is the issuer or the endpoint it is sent to
+    for aud in [ISSUER, par_uri.as_str()] {
+        let pushed = body(&push(keyed_assertion(w, aud), vec![], vec![]).await, 201);
+        assert_eq!(pushed["expires_in"], 60);
+    }
+    assert_eq!(
+        error(&push(keyed_assertion(w, "https://evil.test"), vec![], vec![]).await),
+        "invalid_client"
+    );
+
+    // the proof key at /par is the key the code is bound to
+    let proof = w.proof("POST", &par_uri, None);
+    let pushed = push(keyed_assertion(w, ISSUER), vec![], vec![proof]).await;
+    let Reply::Json { dpop_nonce, .. } = &pushed else {
+        panic!("{pushed:?}");
+    };
+    assert!(dpop_nonce.is_some());
+    let uri = body(&pushed, 201)["request_uri"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let t = body(&exchange(redeem(uri).await).await, 200);
+    assert_eq!(t["token_type"], "DPoP");
+
+    let other = EcdsaKeyPair::generate(&ECDSA_P256_SHA256_FIXED_SIGNING).unwrap();
+    let proof = w.proof_by(&other, "POST", &par_uri, None);
+    let pushed = push(keyed_assertion(w, ISSUER), vec![], vec![proof]).await;
+    let uri = body(&pushed, 201)["request_uri"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    assert_eq!(
+        error(&exchange(redeem(uri).await).await),
+        "invalid_dpop_proof"
+    );
+
+    // RFC 9449 §10.1: dpop_jkt and the proof name one key
+    let proof = w.proof_by(&other, "POST", &par_uri, None);
+    assert_eq!(
+        error(
+            &push(
+                keyed_assertion(w, ISSUER),
+                vec![("dpop_jkt", w.jkt())],
+                vec![proof]
+            )
+            .await
+        ),
+        "invalid_dpop_proof"
+    );
+    let proof = w.proof("POST", &par_uri, None);
+    body(
+        &push(
+            keyed_assertion(w, ISSUER),
+            vec![("dpop_jkt", w.jkt())],
+            vec![proof],
+        )
+        .await,
+        201,
+    );
+    let wrong = w.proof("POST", &format!("{ISSUER}/token"), None);
+    assert_eq!(
+        error(&push(keyed_assertion(w, ISSUER), vec![], vec![wrong]).await),
+        "invalid_dpop_proof"
+    );
+}
+
+// RFC 9126 §6, §2.2, §4, §10.4.3: a client registered to require PAR is refused at /authorize
+// without a pushed request, and served with one; a pushed request past its expiry is refused
+#[tokio::test]
+async fn par_required_per_client_and_expiry() {
+    // RFC 9126
+    let w = world().await;
+    let direct = location(&w.authorize(&[("client_id", PUSHED)], Some(&w.cookie)).await);
+    assert!(direct.starts_with(CB), "{direct}");
+    assert_eq!(query(&direct, "error"), "invalid_request");
+    assert_eq!(query(&direct, "iss"), ISSUER);
+    assert_eq!(query(&direct, "state"), "st");
+    // the other clients may still send their requests directly
+    assert!(query(&location(&w.authorize(&[], Some(&w.cookie)).await), "code").len() > 10);
+
+    let pushed = body(
+        &w.oauth
+            .par(
+                &w.realm,
+                &push_params(&[]),
+                Some(&basic(PUSHED, SECRET)),
+                &[],
+            )
+            .await,
+        201,
+    );
+    let uri = pushed["request_uri"].as_str().unwrap();
+    let to = location(
+        &w.oauth
+            .authorize(&w.realm, &use_uri(PUSHED, uri), Some(&w.cookie))
+            .await,
+    );
+    assert_eq!(query(&to, "state"), "par");
+    assert!(query(&to, "code").len() > 10);
+
+    // RFC 9126 §2.2: a request_uri is refused past its expiry
+    let handle: [u8; 32] = access_crypto::random::bytes().unwrap();
+    let request = access_identity_oauth::domain::request::AuthRequest {
+        client_id: String::from(CONFIDENTIAL),
+        redirect_uri: String::from(CB),
+        scope: vec![String::from("openid")],
+        state: Some(String::from("late")),
+        nonce: None,
+        code_challenge: b64url_decode(CHALLENGE).unwrap().try_into().unwrap(),
+        prompt: access_identity_oauth::domain::request::Prompt::default(),
+        max_age_s: None,
+        acr_values: Vec::new(),
+        dpop_jkt: None,
+    };
+    let params = serde_json::to_vec(&request).unwrap();
+    let at = now();
+    let mut tx = TenantTx::begin(&w.db.app, w.realm.tenant, w.realm.realm)
+        .await
+        .unwrap();
+    tx.insert_oauth_request(&access_store::oauth::NewRequest {
+        day: i32::try_from(at / 86_400_000).unwrap(),
+        hash: &access_crypto::oauth::opaque_digest(
+            access_identity_oauth::app::oauth::REQUEST_CONTEXT,
+            &handle,
+        ),
+        client: [2; 16],
+        pushed: true,
+        params: &params,
+        created_ms: i64::try_from(at - 61_000).unwrap(),
+        expires_ms: i64::try_from(at - 1_000).unwrap(),
+    })
+    .await
+    .unwrap();
+    tx.commit().await.unwrap();
+    let late = format!(
+        "urn:ietf:params:oauth:request_uri:{}",
+        b64url_encode(&handle)
+    );
+    let r = w
+        .oauth
+        .authorize(&w.realm, &use_uri(CONFIDENTIAL, &late), Some(&w.cookie))
+        .await;
+    assert!(matches!(r, Reply::Problem { status: 400, .. }), "{r:?}");
 }
 
 // RFC 7662, RFC 7009, MD-8, P-ID-8, PI-10: introspection answers for the caller's own live

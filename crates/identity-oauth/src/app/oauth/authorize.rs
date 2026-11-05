@@ -1,5 +1,6 @@
 //! `/authorize` and `/par` (RFC 6749 §4.1, RFC 7636, RFC 9126, RFC 9207, OIDC Core §3.1.2).
 
+use access_crypto::dpop::Role;
 use access_crypto::oauth::opaque_digest;
 use access_identity_session::domain::session::cookie_digest;
 use access_kernel::json::b64url_encode;
@@ -10,7 +11,9 @@ use super::{
     ClientRequest, Env, OAuth, Realm, Reply, code_digest, day, decode32, from_day, session_aal,
     session_live, signed, unsigned,
 };
+use crate::app::dpop::DpopRequest;
 use crate::domain::client::Client;
+use crate::domain::dpop::Failure;
 use crate::domain::login::return_to;
 use crate::domain::metadata::Endpoint;
 use crate::domain::request::{
@@ -99,6 +102,15 @@ impl<E: Env> OAuth<E> {
         let Some(client) = client else {
             return Ok(Err(problem(Unredirectable::Client)));
         };
+        // RFC 9126 §6
+        if client.require_par {
+            return Ok(Err(Reply::Redirect(error_redirect(
+                redirect,
+                AuthError::PAR_REQUIRED,
+                params.get("state"),
+                &realm.issuer,
+            ))));
+        }
         match stage_two(params, &client, redirect, &realm.issuer) {
             Ok(request) => Ok(Ok(Loaded {
                 client,
@@ -238,9 +250,16 @@ impl<E: Env> OAuth<E> {
     }
 
     /// `POST /par` (RFC 9126): the client authenticates, the request is validated as
-    /// `/authorize` would, and a single-use `request_uri` comes back.
-    pub async fn par(&self, realm: &Realm, params: &Params, authorization: Option<&str>) -> Reply {
-        match self.par_inner(realm, params, authorization).await {
+    /// `/authorize` would, and a single-use `request_uri` comes back. A `DPoP` proof sent with
+    /// it binds the code to its key, as `dpop_jkt` does (RFC 9449 §10.1).
+    pub async fn par(
+        &self,
+        realm: &Realm,
+        params: &Params,
+        authorization: Option<&str>,
+        dpop: &[&str],
+    ) -> Reply {
+        match self.par_inner(realm, params, authorization, dpop).await {
             Ok(r) => r,
             Err(Unavailable) => Reply::Unavailable,
         }
@@ -251,6 +270,7 @@ impl<E: Env> OAuth<E> {
         realm: &Realm,
         params: &Params,
         authorization: Option<&str>,
+        dpop: &[&str],
     ) -> Result<Reply, Unavailable> {
         let now = self.now()?;
         let mut tx = self.begin(realm).await?;
@@ -276,10 +296,51 @@ impl<E: Env> OAuth<E> {
                 "redirect_uri is not registered",
             ));
         };
-        let request = match stage_two(params, &client, redirect, &realm.issuer) {
+        let mut request = match stage_two(params, &client, redirect, &realm.issuer) {
             Ok(r) => r,
             Err(e) => return Ok(Reply::oauth_error(400, e.error, e.description)),
         };
+        // RFC 9449 §10.1
+        let mut nonce = None;
+        if !dpop.is_empty() {
+            let par_uri = realm.issuer.endpoint(Endpoint::Par.path());
+            let proof = match self
+                .dpop(
+                    realm,
+                    Role::AuthorizationServer,
+                    &DpopRequest {
+                        proofs: dpop,
+                        method: "POST",
+                        uri: &par_uri,
+                        access_token: None,
+                        bound: None,
+                    },
+                )
+                .await
+            {
+                Ok(p) => p,
+                Err(Failure::Unavailable) => return Err(Unavailable),
+                Err(f) => {
+                    let nonce = f.nonce().map(String::from);
+                    return Ok(Reply::oauth_error(
+                        400,
+                        f.error(),
+                        "the DPoP proof was not accepted",
+                    )
+                    .with_nonce(nonce));
+                }
+            };
+            if request.dpop_jkt.is_some_and(|j| j != proof.jkt.0) {
+                return Ok(Reply::oauth_error(
+                    400,
+                    "invalid_dpop_proof",
+                    "dpop_jkt does not match the DPoP proof",
+                )
+                .with_nonce(Some(proof.nonce)));
+            }
+            request.dpop_jkt = Some(proof.jkt.0);
+            nonce = Some(proof.nonce);
+        }
         let uri = self
             .store_request(&mut tx, &client, &request, true, now, PAR_TTL_MS)
             .await?;
@@ -287,6 +348,7 @@ impl<E: Env> OAuth<E> {
         Ok(Reply::json(
             201,
             &json!({ "request_uri": uri, "expires_in": PAR_TTL_MS / 1000 }),
-        ))
+        )
+        .with_nonce(nonce))
     }
 }

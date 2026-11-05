@@ -237,6 +237,8 @@ pub struct ClientRow {
     pub service_key: Option<Vec<u8>>,
     /// Where the platform product receives Access events by SSF push (OP-149 m.4).
     pub event_receiver: Option<String>,
+    /// Whether its authorization requests are accepted only from `/par` (RFC 9126 §6).
+    pub require_par: bool,
 }
 
 /// Inserts a client under `bound`.
@@ -253,8 +255,8 @@ pub async fn insert_client(
         "INSERT INTO access.idp_clients (tenant_id, realm_id, client_uuid, client_id, display_name,
                 auth_method, jwks_uri, redirect_uris, domain_id, decision_pos, secret_hash,
                 post_logout_redirect_uris, backchannel_logout_uri, jwks, platform_product,
-                service_key, suiss_event_receiver)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)",
+                service_key, suiss_event_receiver, require_pushed_authorization_requests)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)",
         tenant,
         realm,
         Uuid::from_bytes(c.client_uuid),
@@ -272,6 +274,7 @@ pub async fn insert_client(
         c.platform_product,
         c.service_key.as_deref(),
         c.event_receiver,
+        c.require_par,
     )
     .execute(&mut *t.tx)
     .await?;
@@ -292,7 +295,8 @@ pub async fn update_client(
         "UPDATE access.idp_clients SET display_name = $4, auth_method = $5, jwks_uri = $6,
                 redirect_uris = $7, domain_id = $8, decision_pos = $9, secret_hash = $10,
                 post_logout_redirect_uris = $11, backchannel_logout_uri = $12, jwks = $13,
-                platform_product = $14, service_key = $15, suiss_event_receiver = $16
+                platform_product = $14, service_key = $15, suiss_event_receiver = $16,
+                require_pushed_authorization_requests = $17
           WHERE tenant_id = $1 AND realm_id = $2 AND client_id = $3 AND status = 'active'",
         tenant,
         realm,
@@ -310,6 +314,7 @@ pub async fn update_client(
         c.platform_product,
         c.service_key.as_deref(),
         c.event_receiver,
+        c.require_par,
     )
     .execute(&mut *t.tx)
     .await?
@@ -352,7 +357,8 @@ pub async fn client(t: &mut TenantTx, client_id: &str) -> Result<Option<ClientRo
     let row = sqlx::query!(
         "SELECT client_uuid, client_id, display_name, auth_method, jwks_uri, redirect_uris, status,
                 secret_hash, post_logout_redirect_uris, backchannel_logout_uri, jwks,
-                platform_product, service_key, suiss_event_receiver
+                platform_product, service_key, suiss_event_receiver,
+                require_pushed_authorization_requests
            FROM access.idp_clients WHERE tenant_id = $1 AND realm_id = $2 AND client_id = $3",
         tenant,
         realm,
@@ -379,6 +385,7 @@ pub async fn client(t: &mut TenantTx, client_id: &str) -> Result<Option<ClientRo
             platform_product: r.platform_product,
             service_key: r.service_key,
             event_receiver: r.suiss_event_receiver,
+            require_par: r.require_pushed_authorization_requests,
         })
     })
     .transpose()

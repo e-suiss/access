@@ -141,6 +141,13 @@ impl AuthError {
         Self::new("invalid_request", description)
     }
 
+    /// `invalid_request` for a client registered to require pushed authorization requests
+    /// that sent its request to `/authorize` directly (RFC 9126 §6).
+    pub const PAR_REQUIRED: Self = Self::new(
+        "invalid_request",
+        "this client must push its authorization requests to the pushed authorization request endpoint",
+    );
+
     /// `login_required`: the same answer whether or not any account exists (CR-40).
     pub const LOGIN_REQUIRED: Self = Self::new("login_required", "the user is not signed in");
 
