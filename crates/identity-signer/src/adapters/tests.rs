@@ -91,3 +91,19 @@ async fn undeclared_callers_get_no_answer() {
     let (path, _) = listening(&dir, 1);
     assert!(call(&path, &Request::Ping).await.is_err());
 }
+
+// OP-150, CMP-22b: the cell key is served over the socket and kept in its own vault file, apart
+// from the realm files
+#[tokio::test]
+async fn the_socket_serves_the_cell_key() {
+    let dir = temp("cell");
+    let (path, service) = listening(&dir, 0);
+    service.lock().unwrap().open_cell("cell-a").unwrap();
+    let Response::CellKey { origin, vkey } = call(&path, &Request::CellKey).await.unwrap() else {
+        panic!("cell key");
+    };
+    assert_eq!(origin, "cell-a/identity-audit");
+    assert!(vkey.starts_with("cell-a/identity-audit+"), "{vkey}");
+    assert!(DirVault::new(&dir).cell().unwrap().is_some());
+    assert_eq!(DirVault::new(&dir).all().unwrap().len(), 0);
+}
