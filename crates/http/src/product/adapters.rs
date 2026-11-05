@@ -54,6 +54,7 @@ where
             post(resolve::<K, T, S>),
         )
         .route("/access/v1/exercises/{id}", get(exercise::<K, T, S>))
+        .route("/access/v1/exercises/{id}/agency", get(agency::<K, T, S>))
         .with_state(Arc::new(service))
 }
 
@@ -157,6 +158,20 @@ async fn exercise<K: KeyDirectory + Exercises, T: Tenants, S: Subjects>(
         return respond(Reply::Bad("query"), &headers);
     };
     let reply = s.exercise(client(pep), &id, q.get("domain")).await;
+    respond(reply, &headers)
+}
+
+async fn agency<K: KeyDirectory + Exercises, T: Tenants, S: Subjects>(
+    State(s): Shared<K, T, S>,
+    Path(id): Path<String>,
+    uri: Uri,
+    pep: Option<axum::Extension<Pep>>,
+    headers: HeaderMap,
+) -> Response {
+    let Some(q) = query(&uri) else {
+        return respond(Reply::Bad("query"), &headers);
+    };
+    let reply = s.agency(client(pep), &id, q.get("domain")).await;
     respond(reply, &headers)
 }
 

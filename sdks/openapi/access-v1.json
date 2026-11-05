@@ -652,6 +652,95 @@
         }
       }
     },
+    "/access/v1/exercises/{id}/agency": {
+      "get": {
+        "operationId": "getExerciseAgency",
+        "summary": "The chain an allowed Exercise's actor acted on behalf of, from the receipt the decision point issued, with that receipt (OP-149 m.11, L2-RCP-1).",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{43}$",
+              "description": "ExerciseID, base64url of 32 bytes."
+            }
+          },
+          {
+            "name": "domain",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/DomainId"
+            },
+            "description": "The authority domain."
+          }
+        ],
+        "responses": {
+          "400": {
+            "description": "The request is refused; nothing is read.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No client certificate (OP-141 m.18 (b)).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "exercise-unknown: the domain never allowed it; receipt-unavailable: it was allowed before receipts were kept, so there is no chain to answer with.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Over a rate limit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporarily unavailable; retry.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "The chain.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Agency"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/access/v1/tenants/{tenant}/pairing/challenges": {
       "post": {
         "operationId": "createPairingChallenges",
@@ -1500,6 +1589,9 @@
               },
               "exercise": {
                 "type": "string"
+              },
+              "exercise_agency": {
+                "type": "string"
               }
             }
           }
@@ -1651,6 +1743,106 @@
                 "type": "string",
                 "pattern": "^[A-Za-z0-9_-]+$",
                 "description": "The receipt payload, dCBOR (`application/access-receipt+cbor`)."
+              },
+              "cose_sign1": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_-]+$",
+                "description": "The receipt as the decision point signed it, COSE_Sign1 under usage `receipt`."
+              },
+              "key_excerpt": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_-]+$",
+                "description": "The binding-signed excerpt of the signing key (CR-58 m.1)."
+              }
+            }
+          }
+        }
+      },
+      "Agency": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "exercise",
+          "domain",
+          "capacity",
+          "agency",
+          "receipt"
+        ],
+        "properties": {
+          "exercise": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "ExerciseID, 32 bytes."
+          },
+          "domain": {
+            "$ref": "#/components/schemas/DomainId"
+          },
+          "capacity": {
+            "description": "The capacity the actor declared: `own`, or `{for}` the PartyID it acted for.",
+            "oneOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "own"
+                ]
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "for"
+                ],
+                "properties": {
+                  "for": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9_-]+$",
+                    "description": "PartyID, 16 bytes."
+                  }
+                }
+              }
+            ]
+          },
+          "agency": {
+            "type": "array",
+            "description": "The chain from the principal to the agent; the agent of a link is the principal of the next. Empty when the actor acted for itself, or for another Party without a Mandate on its Instance.",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "mandate",
+                "principal",
+                "agent"
+              ],
+              "properties": {
+                "mandate": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_-]+$",
+                  "description": "The MandateID the agent acted under, 16 bytes."
+                },
+                "principal": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_-]+$",
+                  "description": "The PartyID acted for, 16 bytes."
+                },
+                "agent": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_-]+$",
+                  "description": "The PartyID that acted, 16 bytes."
+                }
+              }
+            }
+          },
+          "receipt": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "payload"
+            ],
+            "properties": {
+              "payload": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_-]+$",
+                "description": "The receipt payload, dCBOR (`application/access-receipt+cbor`); its `agency` is the chain above."
               },
               "cose_sign1": {
                 "type": "string",

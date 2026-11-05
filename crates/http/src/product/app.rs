@@ -248,4 +248,34 @@ impl<K: KeyDirectory + Exercises, T: Tenants, S: Subjects> Service<K, T, S> {
             Err(e) => failed(&e),
         }
     }
+
+    /// `GET /access/v1/exercises/{id}/agency?domain=…` (OP-149 m.11): the chain the actor
+    /// acted on behalf of, read from the receipt the decision point issued, with that receipt
+    /// so the chain can be verified offline. An Exercise allowed before receipts were kept has
+    /// no chain to answer with.
+    pub async fn agency(
+        &self,
+        client: Option<String>,
+        exercise: &str,
+        domain: Option<&str>,
+    ) -> Reply {
+        if client.is_none() {
+            return Reply::Unauthenticated;
+        }
+        let Some(id) = domain::kid(exercise).map(Digest) else {
+            return Reply::Bad("exercise");
+        };
+        let Some(domain) = domain.and_then(crate::adp::adapters::domain_id) else {
+            return Reply::Bad("domain");
+        };
+        match self.keys.exercise(domain, id).await {
+            Ok(Some(r)) => match domain::agency_json(&domain, &r) {
+                Ok(Some(v)) => Reply::Json(v),
+                Ok(None) => Reply::NotFound("receipt-unavailable"),
+                Err(_) => Reply::Unavailable,
+            },
+            Ok(None) => Reply::NotFound("exercise-unknown"),
+            Err(e) => failed(&e),
+        }
+    }
 }

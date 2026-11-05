@@ -320,16 +320,63 @@ pub fn exercise_json(
     if let Some(i) = r.instance {
         m.insert("instance".into(), b64url_encode(&i.0).into());
     }
-    if let Some(p) = &r.receipt {
-        let mut receipt = Map::new();
-        receipt.insert("payload".into(), b64url_encode(p).into());
-        if let Some((sign1, excerpt)) = &r.signed_receipt {
-            receipt.insert("cose_sign1".into(), b64url_encode(sign1).into());
-            receipt.insert("key_excerpt".into(), b64url_encode(excerpt).into());
-        }
-        m.insert("receipt".into(), Value::Object(receipt));
+    if let Some(receipt) = receipt_json(r) {
+        m.insert("receipt".into(), receipt);
     }
     Value::Object(m)
+}
+
+/// The kept receipt of an Exercise: its payload and, once signed, its `COSE_Sign1` and key
+/// excerpt.
+fn receipt_json(r: &access_authority_core::adapters::ExerciseRecord) -> Option<Value> {
+    let p = r.receipt.as_ref()?;
+    let mut receipt = Map::new();
+    receipt.insert("payload".into(), b64url_encode(p).into());
+    if let Some((sign1, excerpt)) = &r.signed_receipt {
+        receipt.insert("cose_sign1".into(), b64url_encode(sign1).into());
+        receipt.insert("key_excerpt".into(), b64url_encode(excerpt).into());
+    }
+    Some(Value::Object(receipt))
+}
+
+/// The agency chain of an allowed Exercise as JSON (OP-149 m.11), from its kept receipt: the
+/// declared capacity, the links from the principal to the agent (empty when the actor acted
+/// for itself) and the receipt that signs them. `None` when no receipt was kept.
+///
+/// # Errors
+/// The kept receipt does not decode.
+pub fn agency_json(
+    domain: &Digest,
+    r: &access_authority_core::adapters::ExerciseRecord,
+) -> Result<Option<Value>, access_kernel::codec::ModelError> {
+    use access_kernel::codec::Canonical as _;
+    use access_kernel::combinator::Capacity;
+    let Some(payload) = &r.receipt else {
+        return Ok(None);
+    };
+    let parsed = access_kernel::receipt::Receipt::from_bytes(payload)?;
+    let capacity = match parsed.capacity {
+        Capacity::Own => Value::from("own"),
+        Capacity::For(p) => json!({ "for": b64url_encode(&p.0) }),
+    };
+    let agency: Vec<Value> = parsed
+        .agency
+        .iter()
+        .map(|l| {
+            json!({
+                "mandate": b64url_encode(&l.mandate.0),
+                "principal": b64url_encode(&l.principal.0),
+                "agent": b64url_encode(&l.agent.0),
+            })
+        })
+        .collect();
+    Ok(Some(json!({
+        "exercise": b64url_encode(&r.exercise.0),
+        "domain": domain_text(domain),
+        "capacity": capacity,
+        "agency": agency,
+        "receipt": receipt_json(r),
+    })))
 }
 
 /// The snapshot of `tenant` named `id` (OP-149 m.4): its `version` is the digest of the rest,

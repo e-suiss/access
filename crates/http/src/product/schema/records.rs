@@ -1,4 +1,5 @@
-//! Subject resolution (OP-149 A11) and allowed Exercises (OP-149 m.9) in the contract.
+//! Subject resolution (OP-149 A11), allowed Exercises (OP-149 m.9) and their agency chains
+//! (OP-149 m.11) in the contract.
 
 use serde_json::{Map, Value, json};
 
@@ -50,6 +51,40 @@ pub(super) fn components() -> Value {
             }),
             &["exercise", "domain", "status", "position", "intent"],
         ),
+        "Agency": object(
+            &json!({
+                "exercise": b64("ExerciseID, 32 bytes."),
+                "domain": r("DomainId"),
+                "capacity": {
+                    "description": "The capacity the actor declared: `own`, or `{for}` the PartyID it acted for.",
+                    "oneOf": [
+                        { "type": "string", "enum": ["own"] },
+                        object(&json!({ "for": b64("PartyID, 16 bytes.") }), &["for"]),
+                    ],
+                },
+                "agency": {
+                    "type": "array",
+                    "description": "The chain from the principal to the agent; the agent of a link is the principal of the next. Empty when the actor acted for itself, or for another Party without a Mandate on its Instance.",
+                    "items": object(
+                        &json!({
+                            "mandate": b64("The MandateID the agent acted under, 16 bytes."),
+                            "principal": b64("The PartyID acted for, 16 bytes."),
+                            "agent": b64("The PartyID that acted, 16 bytes."),
+                        }),
+                        &["mandate", "principal", "agent"],
+                    ),
+                },
+                "receipt": object(
+                    &json!({
+                        "payload": b64("The receipt payload, dCBOR (`application/access-receipt+cbor`); its `agency` is the chain above."),
+                        "cose_sign1": b64("The receipt as the decision point signed it, COSE_Sign1 under usage `receipt`."),
+                        "key_excerpt": b64("The binding-signed excerpt of the signing key (CR-58 m.1)."),
+                    }),
+                    &["payload"],
+                ),
+            }),
+            &["exercise", "domain", "capacity", "agency", "receipt"],
+        ),
     })
 }
 
@@ -81,6 +116,22 @@ pub(super) fn paths(paths: &mut Map<String, Value>, common: &[(&str, &str); 4]) 
                 problems(&[common[0], common[1], ("404", "exercise-unknown: the domain never allowed it."), common[2], common[3]]),
                 "200",
                 json_ok("The Exercise.", "Exercise"),
+            ),
+        }}),
+    );
+    paths.insert(
+        "/access/v1/exercises/{id}/agency".into(),
+        json!({ "get": {
+            "operationId": "getExerciseAgency",
+            "summary": "The chain an allowed Exercise's actor acted on behalf of, from the receipt the decision point issued, with that receipt (OP-149 m.11, L2-RCP-1).",
+            "parameters": [
+                path("id", &json!({ "type": "string", "pattern": "^[A-Za-z0-9_-]{43}$", "description": "ExerciseID, base64url of 32 bytes." })),
+                query("domain", true, "DomainId", "The authority domain."),
+            ],
+            "responses": with(
+                problems(&[common[0], common[1], ("404", "exercise-unknown: the domain never allowed it; receipt-unavailable: it was allowed before receipts were kept, so there is no chain to answer with."), common[2], common[3]]),
+                "200",
+                json_ok("The chain.", "Agency"),
             ),
         }}),
     );

@@ -1,0 +1,19 @@
+{
+  "exercise": "4-Pj4-Pj4-Pj4-Pj4-Pj4-Pj4-Pj4-Pj4-Pj4-Pj4-M",
+  "domain": "sha-256:AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE",
+  "capacity": {
+    "for": "AgICAgICAgICAgICAgICAg"
+  },
+  "agency": [
+    {
+      "mandate": "BAQEBAQEBAQEBAQEBAQEBA",
+      "principal": "AgICAgICAgICAgICAgICAg",
+      "agent": "BgYGBgYGBgYGBgYGBgYGBg"
+    }
+  ],
+  "receipt": {
+    "payload": "q2NpYXQbAAABoaYATQBlYmFzaXOhZnB1YmxpY1AFBQUFBQUFBQUFBQUFBQUFZWRyYXdu9GZhZ2VuY3mBo2VhZ2VudFAGBgYGBgYGBgYGBgYGBgYGZ21hbmRhdGVQBAQEBAQEBAQEBAQEBAQEBGlwcmluY2lwYWxQAgICAgICAgICAgICAgICAmZkb21haW6CL1ggAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQFmaW50ZW50gi9YIB4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eZnJlY29yZAxoYXVkaWVuY2VrcGVwLmV4YW1wbGVoY2FwYWNpdHmhY2ZvclACAgICAgICAgICAgICAgICaGV4ZXJjaXNlgi9YIOPj4-Pj4-Pj4-Pj4-Pj4-Pj4-Pj4-Pj4-Pj4-Pj4-PjaGluc3RhbmNlUAMDAwMDAwMDAwMDAwMDAwM",
+    "cose_sign1": "0oRAoA",
+    "key_excerpt": "0oQ"
+  }
+}

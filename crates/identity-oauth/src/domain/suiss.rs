@@ -45,6 +45,8 @@ pub enum Endpoint {
     SubjectResolution,
     /// `GET /access/v1/exercises/{exercise}` (OP-149 m.9).
     Exercise,
+    /// `GET /access/v1/exercises/{exercise}/agency` (OP-149 m.11).
+    ExerciseAgency,
 }
 
 impl Endpoint {
@@ -64,6 +66,7 @@ impl Endpoint {
             Self::PlatformStreams => "platform_streams",
             Self::SubjectResolution => "subject_resolution",
             Self::Exercise => "exercise",
+            Self::ExerciseAgency => "exercise_agency",
         }
     }
 
@@ -83,6 +86,7 @@ impl Endpoint {
             Self::PlatformStreams => "/access/v1/platform/streams",
             Self::SubjectResolution => "/access/v1/tenants/{tenant}/subjects:resolve",
             Self::Exercise => "/access/v1/exercises/{exercise}",
+            Self::ExerciseAgency => "/access/v1/exercises/{exercise}/agency",
         }
     }
 
@@ -107,6 +111,7 @@ pub const SERVED: &[Endpoint] = &[
     Endpoint::PlatformStreams,
     Endpoint::SubjectResolution,
     Endpoint::Exercise,
+    Endpoint::ExerciseAgency,
 ];
 
 /// Well-known suffix of the realm's SSF transmitter metadata (SSF 1.0 §7.1).

@@ -16,6 +16,7 @@
     "auth_context": "https://acme.id.example/v1/me/auth-context",
     "eligibility": "https://access.example/access/v1/eligibility:check",
     "exercise": "https://access.example/access/v1/exercises/{exercise}",
+    "exercise_agency": "https://access.example/access/v1/exercises/{exercise}/agency",
     "instances": "https://acme.id.example/v1/me/instances",
     "key_batch": "https://access.example/access/v1/keys:batchGet",
     "key_lookup": "https://access.example/access/v1/keys/{kid}",

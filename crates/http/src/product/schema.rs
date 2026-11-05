@@ -199,6 +199,7 @@ fn other_components() -> Value {
                         "platform_streams": { "type": "string" },
                         "subject_resolution": { "type": "string" },
                         "exercise": { "type": "string" },
+                        "exercise_agency": { "type": "string" },
                     },
                 },
             }),

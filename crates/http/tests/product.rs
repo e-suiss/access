@@ -170,6 +170,33 @@ impl Tenants for Directory {
 /// One allowed Exercise with a signed receipt and one known only from state.
 const SIGNED: [u8; 32] = [0xe1; 32];
 const FROM_STATE: [u8; 32] = [0xe2; 32];
+/// An allowed Exercise of an agent acting for Party 2 under Mandate 4.
+const AGENT: [u8; 32] = [0xe3; 32];
+
+fn agent_receipt() -> Vec<u8> {
+    use access_kernel::codec::Canonical as _;
+    use access_kernel::receipt::{AgencyLink, Receipt};
+    Receipt {
+        domain: DOMAIN,
+        exercise: Digest(AGENT),
+        record: 12,
+        intent: Digest([0x1e; 32]),
+        instance: Some(Id([3; 16])),
+        ais: None,
+        capacity: access_kernel::combinator::Capacity::For(Id([2; 16])),
+        basis: access_kernel::meta::ExerciseBasis::Public(Id([5; 16])),
+        audience: "pep.example".to_owned(),
+        iat: T0,
+        drawn: false,
+        agency: vec![AgencyLink {
+            mandate: Id([4; 16]),
+            principal: Id([2; 16]),
+            agent: Id([6; 16]),
+        }],
+    }
+    .to_bytes()
+    .unwrap()
+}
 
 impl Exercises for Ledger {
     async fn exercise(
@@ -195,6 +222,11 @@ impl Exercises for Ledger {
                 ..base
             }),
             FROM_STATE => Some(base),
+            AGENT => Some(ExerciseRecord {
+                receipt: Some(agent_receipt()),
+                signed_receipt: Some((SIGN1.to_vec(), EXCERPT.to_vec())),
+                ..base
+            }),
             _ => None,
         })
     }
@@ -323,6 +355,16 @@ fn get_exercise(id: [u8; 32]) -> Request<Body> {
     .unwrap()
 }
 
+fn get_agency(id: [u8; 32]) -> Request<Body> {
+    Request::get(format!(
+        "/access/v1/exercises/{}/agency?domain={}",
+        b64url_encode(&id),
+        domain_text()
+    ))
+    .body(Body::empty())
+    .unwrap()
+}
+
 fn parties_request() -> Value {
     json!({
         "realm": "a1a1a1a1-a1a1-a1a1-a1a1-a1a1a1a1a1a1",
@@ -427,6 +469,42 @@ async fn an_exercise_is_read_by_its_id() {
     assert_eq!(status, StatusCode::BAD_REQUEST);
 }
 
+// OP-149 m.11, L2-RCP-1: the agency chain is read from the kept receipt, which comes with it;
+// an Exercise without a kept receipt has no chain and one never allowed is unknown
+#[tokio::test]
+async fn an_exercise_agency_chain_is_read_from_its_receipt() {
+    // OP-149 m.11
+    let (status, _, body) = call(app(true), get_agency(AGENT)).await;
+    assert_eq!(status, StatusCode::OK);
+    let v: Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(v["capacity"], json!({ "for": b64url_encode(&[2; 16]) }));
+    assert_eq!(
+        v["agency"],
+        json!([{
+            "mandate": b64url_encode(&[4; 16]),
+            "principal": b64url_encode(&[2; 16]),
+            "agent": b64url_encode(&[6; 16]),
+        }])
+    );
+    assert_eq!(v["receipt"]["payload"], b64url_encode(&agent_receipt()));
+    assert_eq!(v["receipt"]["cose_sign1"], b64url_encode(&SIGN1));
+    let (status, _, body) = call(app(true), get_agency(FROM_STATE)).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert_eq!(
+        problem_type(&body),
+        "urn:suiss:access:problem:receipt-unavailable"
+    );
+    let (status, _, body) = call(app(true), get_agency([0xe9; 32])).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert_eq!(
+        problem_type(&body),
+        "urn:suiss:access:problem:exercise-unknown"
+    );
+    // a kept receipt that does not decode is not answered as an empty chain
+    let (status, _, _) = call(app(true), get_agency(SIGNED)).await;
+    assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
+}
+
 // OP-149 m.5, OP-141 m.18 (b): without a client certificate nothing is answered
 #[tokio::test]
 async fn a_client_certificate_is_required() {
@@ -441,6 +519,7 @@ async fn a_client_certificate_is_required() {
             .unwrap(),
         resolve_request(&parties_request()),
         get_exercise(SIGNED),
+        get_agency(AGENT),
     ] {
         let (status, _, body) = call(app(false), req).await;
         assert_eq!(status, StatusCode::UNAUTHORIZED);
@@ -843,6 +922,11 @@ async fn committed_examples_match_the_code_and_the_schema() {
         ),
         ("exercise", "Exercise", body_of(get_exercise(SIGNED)).await),
         (
+            "exercise-agency",
+            "Agency",
+            body_of(get_agency(AGENT)).await,
+        ),
+        (
             "problem",
             "Problem",
             body_of(get_key([0xff; 32], None, "")).await,
@@ -933,6 +1017,15 @@ fn errors(doc: &Value, schema: &Value, value: &Value, at: &str) -> Vec<String> {
         };
         if !ok {
             out.push(format!("{at}: {s} does not match {p}"));
+        }
+    }
+    if let Some(choices) = schema.get("oneOf").and_then(Value::as_array) {
+        let matching = choices
+            .iter()
+            .filter(|c| errors(doc, c, value, at).is_empty())
+            .count();
+        if matching != 1 {
+            out.push(format!("{at}: {matching} oneOf choices match"));
         }
     }
     if let Some(items) = schema.get("items")
