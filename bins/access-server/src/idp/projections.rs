@@ -12,8 +12,8 @@ use access_authority_sequencer::ports::Clock;
 use access_internal_api::epochs::{AuthorityPosition, Epochs, KeyEpoch};
 use access_internal_api::idp::Unavailable;
 use access_internal_api::projections::{
-    Confirmation, IssuedToken, Projections, SIGNER_UNAVAILABLE, TokenKind, TokenProjection,
-    TokenProjectionRequest,
+    Confirmation, Introspection, IssuedToken, Projections, SIGNER_UNAVAILABLE, TokenKind,
+    TokenProjection, TokenProjectionRequest,
 };
 use access_kernel::codec::Canonical as _;
 use access_kernel::combinator::{Mode, Outcome};
@@ -123,6 +123,29 @@ where
             Ok(p) => answer(p),
             Err(e) => failed(&e),
         }
+    }
+
+    async fn introspect(
+        &self,
+        domain: Digest,
+        token: String,
+    ) -> Result<Introspection, Unavailable> {
+        let now = self
+            .clock
+            .clone()
+            .now()
+            .await
+            .map_err(|e| Unavailable(e.to_string()))?;
+        let (active, claims, as_of) = self
+            .domains
+            .introspect(domain, &token, now)
+            .await
+            .map_err(|e| Unavailable(e.to_string()))?;
+        Ok(Introspection {
+            active,
+            claims,
+            as_of,
+        })
     }
 
     async fn revoke_family(&self, domain: Digest, family: [u8; 16]) -> Result<bool, Unavailable> {

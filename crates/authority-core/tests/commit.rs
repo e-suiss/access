@@ -4857,3 +4857,51 @@ async fn no_signer_no_token() {
         Projected::Refused(access_internal_api::projections::SIGNER_UNAVAILABLE)
     );
 }
+
+// §9.9.3 rule 5, MD-8, OPI-3, P50, OP-150 m.2: the authority plane's introspection answers at
+// least at the head; a token is active only signed by the domain's token key, within its
+// horizon and while its family stands
+#[tokio::test]
+async fn introspection_reflects_signature_horizon_and_family() {
+    use access_authority_core::adapters::{FAMILY_CLAIM, Projected, TokenAuthority};
+    // T24, OP-45
+    let db = fresh().await.unwrap();
+    let d = create_genesis(&db.sequencer, TENANT, genesis(), 1_000)
+        .await
+        .unwrap();
+    let (socket, service) = start_signer("token-introspect");
+    let a = signing_process(&db, d, &socket);
+    onboard_signed(&a, d, &service).await;
+    let order = token_order(
+        d,
+        70,
+        vec![action("shop", "read")],
+        RS,
+        60_000,
+        TokenAuthority::Bounds,
+        None,
+    );
+    let Projected::Issued(t) = a.project(&order).await.unwrap() else {
+        panic!("not issued");
+    };
+    let (active, claims, as_of) = a.introspect(d, &t.jws, NOW).await.unwrap();
+    assert!(active);
+    assert_eq!(as_of, head_of(&db, d).await);
+    let claims = access_kernel::json::parse(claims.unwrap().as_bytes(), 8192).unwrap();
+    assert_eq!(
+        claims
+            .get(FAMILY_CLAIM)
+            .and_then(access_kernel::json::Json::as_str),
+        Some(access_kernel::json::b64url_encode(&t.family).as_str())
+    );
+    // past the horizon
+    let late = NOW.checked_add(61_000).unwrap();
+    assert!(!a.introspect(d, &t.jws, late).await.unwrap().0);
+    // a token whose payload was changed is not the domain's
+    let mut parts: Vec<String> = t.jws.split('.').map(str::to_owned).collect();
+    parts[1] = access_kernel::json::b64url_encode(br#"{"exp":99999999999}"#);
+    assert!(!a.introspect(d, &parts.join("."), NOW).await.unwrap().0);
+    // P50: the family revoked, no token of it is active
+    assert!(a.revoke_family(d, t.family).await.unwrap());
+    assert!(!a.introspect(d, &t.jws, NOW).await.unwrap().0);
+}

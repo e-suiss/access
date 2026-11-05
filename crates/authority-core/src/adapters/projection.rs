@@ -18,7 +18,7 @@ use access_kernel::codec::Canonical as _;
 use access_kernel::combinator::Outcome;
 use access_kernel::digest::Digest;
 use access_kernel::intent::IntentEnvelope;
-use access_kernel::json::b64url_encode;
+use access_kernel::json::{Json, b64url_decode, b64url_encode};
 use access_kernel::meta::Payload;
 use access_kernel::model::Id;
 use access_kernel::pap::Pap;
@@ -38,6 +38,9 @@ pub const INTENT_HORIZON_MS: u64 = 5 * 60 * 1000;
 /// Longest horizon of a bounds token, from its decision: the top of the 5–15 minute range
 /// (§9.9.3 rule 4, MD-7, PD).
 pub const BOUNDS_HORIZON_MS: u64 = 15 * 60 * 1000;
+
+/// The claim that names a token's refresh family (P50).
+pub const FAMILY_CLAIM: &str = "family";
 
 /// Label of the digest of a token's `ValidityContract` (`access_contract`).
 pub const CONTRACT_LABEL: &str = "access/validity-contract/v1";
@@ -177,7 +180,7 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
             .to_bytes()
             .map(|b| Digest(suiss_crypto::digest::context_digest(CONTRACT_LABEL, &b).0))
             .map_err(|_| CoreError::Protocol("validity"))?;
-        Ok(match self.signed(order, &pap, &exercise).await? {
+        Ok(match self.signed(order, &pap, &exercise, family).await? {
             Ok(jws) => Projected::Issued(Token {
                 jws,
                 exercise,
@@ -269,6 +272,7 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
         order: &TokenOrder,
         pap: &Pap,
         exercise: &Digest,
+        family: [u8; 16],
     ) -> Result<Result<String, &'static str>, CoreError> {
         let domain = order.incoming.request.domain;
         let Some(path) = self.setup.signer.clone() else {
@@ -299,9 +303,15 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
             confirmation: order.confirmation,
             iat: pap.iat,
         };
-        let Ok(claims) = access_token_claims(&projection, &refs) else {
+        let Ok(Json::Object(mut claims)) = access_token_claims(&projection, &refs) else {
             return Ok(Err("projection-authority"));
         };
+        // P50: the family a revocation ends, read back by introspection
+        claims.push((
+            String::from(FAMILY_CLAIM),
+            Json::Str(b64url_encode(&family)),
+        ));
+        let claims = Json::Object(claims);
         let claims = access_crypto::jose::output::to_string(&claims);
         // OP-150 m.3 (s)
         if claims.len() > MAX_TOKEN_BYTES {
@@ -316,7 +326,7 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
     }
 }
 
-impl<K, B: Binding, S: Salts, C> Domains<K, B, S, C> {
+impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K, B, S, C> {
     /// Revokes the refresh family `family` of `domain` at the domain's head (§9.9.3 rule 6,
     /// P50): its later refreshes are refused before any decision. `true` the first time;
     /// `false` for a family already revoked or unknown.
@@ -342,6 +352,75 @@ impl<K, B: Binding, S: Salts, C> Domains<K, B, S, C> {
         family: [u8; 16],
     ) -> Result<Option<Family>, CoreError> {
         Ok(read_family(&self.setup.app, &DomainId::from_bytes(domain.0), &family).await?)
+    }
+
+    /// The state of the access token `token` of `domain` at least at the domain's head (RFC
+    /// 7662, MD-8, §9.9.3 rule 5): active when the domain's operational key signed it under
+    /// usage `token`, its horizon has not passed and its family is not revoked.
+    ///
+    /// # Errors
+    /// [`CoreError::Unavailable`] without the metadata; [`CoreError::Store`].
+    pub async fn introspect(
+        &self,
+        domain: Digest,
+        token: &str,
+        now: u64,
+    ) -> Result<(bool, Option<String>, u64), CoreError> {
+        let (head, _) = self.head(domain).await?;
+        let metadata = self
+            .metadata(domain)
+            .await
+            .ok_or(CoreError::Unavailable("signer"))?;
+        let declared = access_kernel::verify::cose::parse_sign1(&metadata)
+            .ok()
+            .and_then(|m| m.payload)
+            .and_then(|p| access_kernel::verify::key_scope::DomainMetadata::from_bytes(&p).ok())
+            .ok_or(CoreError::Unavailable("metadata"))?;
+        let mut keys = access_kernel::verify::cose::KeySet::default();
+        for k in declared.operational_keys.iter().filter(|k| {
+            k.usage
+                .contains(&access_kernel::verify::key_scope::KeyUsage::Token)
+        }) {
+            if keys.insert(k.kid, k.key.clone()).is_ok() {
+                keys.allowed.insert(k.alg);
+            }
+        }
+        let Ok(v) = access_kernel::verify::jws::verify_compact(
+            &access_crypto::AwsLcBackend,
+            token,
+            &keys,
+            access_kernel::verify::projection::ACCESS_TOKEN_TYP,
+            access_kernel::verify::jws::Origin::Native,
+        ) else {
+            return Ok((false, None, head));
+        };
+        let Ok(claims) =
+            access_kernel::json::parse(&v.payload, access_kernel::verify::jws::MAX_PAYLOAD)
+        else {
+            return Ok((false, None, head));
+        };
+        let live = claims
+            .get("exp")
+            .and_then(Json::as_int)
+            .and_then(|e| u64::try_from(e).ok())
+            .and_then(|e| e.checked_mul(1000))
+            .is_some_and(|e| e > now);
+        let family = claims
+            .get(FAMILY_CLAIM)
+            .and_then(Json::as_str)
+            .and_then(|f| b64url_decode(f).ok())
+            .and_then(|f| <[u8; 16]>::try_from(f).ok());
+        let Some(family) = family.filter(|_| live) else {
+            return Ok((false, None, head));
+        };
+        let revoked = self
+            .family(domain, family)
+            .await?
+            .is_none_or(|f| f.revoked_pos.is_some());
+        if revoked {
+            return Ok((false, None, head));
+        }
+        Ok((true, String::from_utf8(v.payload).ok(), head))
     }
 
     /// The domain's latest committed position and its `recorded_at` (G51).

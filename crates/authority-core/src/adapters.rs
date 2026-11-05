@@ -37,8 +37,8 @@ use crate::query::{Hit, Query, page_after, page_body};
 
 mod projection;
 pub use projection::{
-    BOUNDS_HORIZON_MS, CONTRACT_LABEL, INTENT_HORIZON_MS, Projected, Token, TokenAuthority,
-    TokenOrder,
+    BOUNDS_HORIZON_MS, CONTRACT_LABEL, FAMILY_CLAIM, INTENT_HORIZON_MS, Projected, Token,
+    TokenAuthority, TokenOrder,
 };
 
 /// Reads one domain's state and nonces through the application role.

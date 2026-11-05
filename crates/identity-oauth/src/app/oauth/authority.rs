@@ -384,6 +384,121 @@ impl<E: Env> OAuth<E> {
     }
 }
 
+fn member(v: &Value, k: &str) -> Value {
+    v.get(k).cloned().unwrap_or(Value::Null)
+}
+
+/// Whether `token` reads as an authority token: an `at+jwt` whose claims carry
+/// `authorization_details`. Only routing; the authority plane verifies it.
+pub(crate) fn looks_authority(token: &str) -> bool {
+    let mut parts = token.split('.');
+    let (Some(h), Some(p), Some(_), None) =
+        (parts.next(), parts.next(), parts.next(), parts.next())
+    else {
+        return false;
+    };
+    let json = |s: &str| {
+        access_kernel::json::b64url_decode(s)
+            .ok()
+            .and_then(|b| serde_json::from_slice::<Value>(&b).ok())
+    };
+    json(h).is_some_and(|h| {
+        h.get("typ").and_then(Value::as_str) == Some(crate::domain::tokens::ACCESS_TYP)
+    }) && json(p).is_some_and(|p| p.get(DETAILS_PARAM).is_some())
+}
+
+impl<E: Env> OAuth<E> {
+    /// The verified claims of an authority token of this realm that `client` holds, with the
+    /// head the authority plane answered at; `None` when it is not active (MD-8, OPI-3).
+    pub(crate) async fn authority_claims(
+        &self,
+        realm: &Realm,
+        client: &Client,
+        token: &str,
+    ) -> Result<Option<(Value, u64, Digest)>, Unavailable> {
+        let mut tx = self.begin(realm).await?;
+        let domain = Digest(tx.governing().await?.ok_or(Unavailable)?);
+        tx.commit().await?;
+        let answer = self
+            .env()
+            .projections()
+            .introspect(domain, String::from(token))
+            .await
+            .map_err(|_| Unavailable)?;
+        let claims = answer
+            .claims
+            .filter(|_| answer.active)
+            .and_then(|c| serde_json::from_str::<Value>(&c).ok())
+            .filter(|c| {
+                member(c, "iss") == realm.issuer.as_str()
+                    && member(c, "client_id") == client.id.as_str()
+            });
+        Ok(claims.map(|c| (c, answer.as_of, domain)))
+    }
+
+    /// RFC 7662 for an authority token (§9.9.3 rule 5, MD-8): the authority plane's state of it,
+    /// `at_least` the domain's head, with the Access members (OP-150 m.2); anything it cannot
+    /// prove is `active: false`, never 503 (OPI-3).
+    pub(crate) async fn introspect_authority(
+        &self,
+        realm: &Realm,
+        client: &Client,
+        token: &str,
+    ) -> Result<Reply, Unavailable> {
+        let Some((c, as_of, _)) = self.authority_claims(realm, client, token).await? else {
+            return Ok(Reply::json(200, &json!({ "active": false })));
+        };
+        let exercise = c
+            .get("jti")
+            .and_then(Value::as_str)
+            .and_then(|j| j.strip_prefix("sha-256:"))
+            .map(String::from);
+        Ok(Reply::json(
+            200,
+            &json!({
+                "active": true,
+                "iss": member(&c, "iss"),
+                "sub": member(&c, "sub"),
+                "aud": member(&c, "aud"),
+                "exp": member(&c, "exp"),
+                "iat": member(&c, "iat"),
+                "client_id": member(&c, "client_id"),
+                "token_type": "DPoP",
+                "cnf": member(&c, "cnf"),
+                "authorization_details": member(&c, "authorization_details"),
+                "exercise": exercise,
+                "as_of": as_of.to_string(),
+            }),
+        ))
+    }
+
+    /// RFC 7009 for an authority token: a projection cleanup that ends its family and cascades
+    /// nowhere else (§9.9 table, PI-10); `false` when it is not one of `client`'s.
+    pub(crate) async fn revoke_authority(
+        &self,
+        realm: &Realm,
+        client: &Client,
+        token: &str,
+    ) -> Result<bool, Unavailable> {
+        let Some((c, _, domain)) = self.authority_claims(realm, client, token).await? else {
+            return Ok(false);
+        };
+        let family = c
+            .get("family")
+            .and_then(Value::as_str)
+            .and_then(|f| access_kernel::json::b64url_decode(f).ok())
+            .and_then(|f| <[u8; 16]>::try_from(f).ok());
+        let Some(family) = family else {
+            return Ok(false);
+        };
+        self.env()
+            .projections()
+            .revoke_family(domain, family)
+            .await
+            .map_err(|_| Unavailable)
+    }
+}
+
 /// The OAuth `error` of a reply, for the audit row of a refused token request.
 pub(crate) fn error_of(r: &Reply) -> Option<String> {
     match r {

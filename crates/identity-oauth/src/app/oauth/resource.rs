@@ -20,6 +20,8 @@ use crate::domain::metadata::Endpoint;
 use crate::domain::request::Params;
 use crate::domain::tokens::{ACCESS_TYP, GrantDetails};
 use crate::ports::Unavailable;
+use access_internal_api::projections::Projections as _;
+
 use crate::ports::oauth::{OAuthTx, TokenSigner};
 
 /// A verified access token of this realm.
@@ -271,11 +273,26 @@ impl<E: Env> OAuth<E> {
                 "token is required",
             ));
         };
+        if super::authority::looks_authority(token) {
+            tx.commit().await?;
+            self.revoke_authority(realm, &client, token).await?;
+            return Ok(Reply::json(200, &json!({})));
+        }
         if let Some((grant, _)) = self.token_grant(&mut tx, realm, token, now).await?
             && grant.client == client.uuid
         {
             tx.revoke_grant(grant.id, super::signed(now), "revoked")
                 .await?;
+            // §9.9 table, PI-10: the grant's authority tokens end with it
+            let details: GrantDetails =
+                serde_json::from_slice(&grant.details).map_err(|_| Unavailable)?;
+            if let (Some(family), Some(domain)) = (details.family, tx.governing().await?) {
+                self.env()
+                    .projections()
+                    .revoke_family(access_kernel::digest::Digest(domain), family)
+                    .await
+                    .map_err(|_| Unavailable)?;
+            }
         }
         tx.commit().await?;
         Ok(Reply::json(200, &json!({})))
@@ -325,6 +342,10 @@ impl<E: Env> OAuth<E> {
                 "token is required",
             ));
         };
+        if super::authority::looks_authority(token) {
+            tx.commit().await?;
+            return self.introspect_authority(realm, &client, token).await;
+        }
         let Some((grant, at)) = self.token_grant(&mut tx, realm, token, now).await? else {
             tx.commit().await?;
             return Ok(active_false());

@@ -126,6 +126,18 @@ pub enum TokenProjection {
     },
 }
 
+/// The authority plane's answer about one of its tokens (RFC 7662, MD-8, §9.9.3 rule 5): what
+/// state it reflects, `at_least` the domain's head when it was asked.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Introspection {
+    /// Signed by the domain's operational key, within its horizon, its family not revoked.
+    pub active: bool,
+    /// The verified JSON claims, when active.
+    pub claims: Option<String>,
+    /// The head position the answer reflects (OP-150 m.3 (l)).
+    pub as_of: u64,
+}
+
 /// Decides and signs authority token projections (CMP-7).
 pub trait Projections: Send + Sync {
     /// Decides `request` as a `projection.issue` commit and signs the token when it is allowed.
@@ -141,6 +153,14 @@ pub trait Projections: Send + Sync {
         domain: Digest,
         family: [u8; 16],
     ) -> impl Future<Output = Result<bool, Unavailable>> + Send;
+
+    /// The current state of the authority token `token` of `domain` (RFC 7662, MD-8). Without
+    /// the head or the keys there is no answer; the caller answers `active: false` (OPI-3).
+    fn introspect(
+        &self,
+        domain: Digest,
+        token: String,
+    ) -> impl Future<Output = Result<Introspection, Unavailable>> + Send;
 }
 
 /// The projections of a process that does not serve them yet: every call is [`UNAVAILABLE`].
@@ -160,6 +180,14 @@ impl Projections for Unserved {
         _domain: Digest,
         _family: [u8; 16],
     ) -> impl Future<Output = Result<bool, Unavailable>> + Send {
+        std::future::ready(Err(Unavailable(String::from(UNAVAILABLE))))
+    }
+
+    fn introspect(
+        &self,
+        _domain: Digest,
+        _token: String,
+    ) -> impl Future<Output = Result<Introspection, Unavailable>> + Send {
         std::future::ready(Err(Unavailable(String::from(UNAVAILABLE))))
     }
 }
@@ -209,6 +237,10 @@ mod tests {
         );
         assert_eq!(
             crate::block_on(Unserved.revoke_family(Digest([1; 32]), [2; 16])),
+            Err(Unavailable(String::from(UNAVAILABLE)))
+        );
+        assert_eq!(
+            crate::block_on(Unserved.introspect(Digest([1; 32]), String::from("t"))),
             Err(Unavailable(String::from(UNAVAILABLE)))
         );
         assert_eq!(MAX_TOKEN_BYTES, 8 * 1024);

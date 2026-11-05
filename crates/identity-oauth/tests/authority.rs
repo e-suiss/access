@@ -23,7 +23,9 @@ use access_identity_oauth::domain::authority::{TokenExercise, encode_exercise};
 use access_identity_oauth::domain::tokens::INVALIDATED_OUTBOX;
 use access_internal_api::idp::Unavailable as PlaneUnavailable;
 use access_internal_api::instances::core_action;
-use access_internal_api::projections::{Confirmation, IssuedToken, TokenKind, TokenProjection};
+use access_internal_api::projections::{
+    Confirmation, Introspection, IssuedToken, TokenKind, TokenProjection,
+};
 use access_kernel::combinator::{
     Blocker, BlockerClass, Capacity, Decision, Outcome, Position, Remediation, Resolver,
 };
@@ -617,5 +619,91 @@ async fn authority_refresh_is_a_new_decision_and_reuse_ends_the_family() {
     assert_eq!(
         v["payload"]["source"]["exercise"],
         b64url_encode(&[0xe1; 32])
+    );
+}
+
+fn authority_token(at: &At<'_>, client: &str) -> (String, String) {
+    let claims = serde_json::json!({
+        "iss": at.f.issuer,
+        "sub": "pw-1",
+        "aud": RS,
+        "exp": now() / 1000 + 60,
+        "iat": now() / 1000,
+        "jti": format!("sha-256:{}", b64url_encode(&[0xe1; 32])),
+        "client_id": client,
+        "cnf": { "jkt": at.jkt() },
+        "authorization_details": [{ "type": "shop:read:1", "kind": "bounds" }],
+        "family": b64url_encode(&[4; 16]),
+    })
+    .to_string();
+    let token = format!(
+        "{}.{}.c2ln",
+        b64url_encode(br#"{"typ":"at+jwt","alg":"ES256","kid":"k"}"#),
+        b64url_encode(claims.as_bytes())
+    );
+    (token, claims)
+}
+
+// §9.9.3 rule 5, MD-8, OPI-3, OP-45, P-ID-8, T24, OP-150 m.2: an authority token is introspected
+// by the authority plane at least at its head, with the Access members; what cannot be proven
+// is active=false, never 503; RFC 7009 on it ends its family (PI-10)
+#[tokio::test]
+async fn authority_tokens_are_introspected_and_revoked_by_the_authority_plane() {
+    // §11.4.5 #16, CMP-1
+    let c = Cluster::new(&["intro"]).await;
+    let at = c.at(0);
+    let (token, claims) = authority_token(&at, &at.f.confidential);
+    *at.c.oauth.env().plane.introspection.lock().unwrap() = Some(Introspection {
+        active: true,
+        claims: Some(claims),
+        as_of: 42,
+    });
+    let b = at.introspect(&token).await;
+    assert_eq!(b["active"], true);
+    // a ledger position is a decimal string (OP-65)
+    assert_eq!(b["as_of"], "42");
+    assert_eq!(b["exercise"], b64url_encode(&[0xe1; 32]));
+    assert_eq!(b["authorization_details"][0]["kind"], "bounds");
+    assert_eq!(b["cnf"]["jkt"], at.jkt());
+    // another client's token is not this client's to read
+    let (theirs, their_claims) = authority_token(&at, &at.f.public);
+    *at.c.oauth.env().plane.introspection.lock().unwrap() = Some(Introspection {
+        active: true,
+        claims: Some(their_claims),
+        as_of: 42,
+    });
+    assert_eq!(at.introspect(&theirs).await["active"], false);
+    // inactive, and no answer at all, are both active=false
+    *at.c.oauth.env().plane.introspection.lock().unwrap() = Some(Introspection {
+        active: false,
+        claims: None,
+        as_of: 43,
+    });
+    assert_eq!(
+        at.introspect(&token).await,
+        serde_json::json!({ "active": false })
+    );
+    *at.c.oauth.env().plane.introspection.lock().unwrap() = None;
+    assert_eq!(
+        at.introspect(&token).await,
+        serde_json::json!({ "active": false })
+    );
+    // RFC 7009: projection cleanup of the token's family
+    let (_, claims) = authority_token(&at, &at.f.confidential);
+    *at.c.oauth.env().plane.introspection.lock().unwrap() = Some(Introspection {
+        active: true,
+        claims: Some(claims),
+        as_of: 44,
+    });
+    let p = access_identity_oauth::domain::request::Params::new(vec![(
+        String::from("token"),
+        token.clone(),
+    )])
+    .unwrap();
+    let r = at.c.oauth.revoke(&at.f.realm, &p, Some(&at.basic())).await;
+    assert_eq!(body(&r, 200), serde_json::json!({}));
+    assert_eq!(
+        *at.c.oauth.env().plane.revoked.lock().unwrap(),
+        vec![[4; 16]]
     );
 }

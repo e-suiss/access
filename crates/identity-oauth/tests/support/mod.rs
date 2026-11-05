@@ -44,7 +44,9 @@ use access_identity_signer::adapters::{DirVault, SealedFactory, now_ms, serve};
 use access_identity_signer::protocol::{Realm as SignerRealm, Request, Response};
 use access_identity_signer::service::Service;
 use access_internal_api::idp::Unavailable as PlaneUnavailable;
-use access_internal_api::projections::{Projections, TokenProjection, TokenProjectionRequest};
+use access_internal_api::projections::{
+    Introspection, Projections, TokenProjection, TokenProjectionRequest,
+};
 use access_kernel::json::{b64url_decode, b64url_encode};
 use access_kernel::verify::cose::PublicKey;
 use access_kernel::verify::dpop::ath;
@@ -121,6 +123,7 @@ pub struct Scripted {
     pub answer: Arc<Mutex<Option<Result<TokenProjection, PlaneUnavailable>>>>,
     pub asked: Arc<Mutex<Vec<TokenProjectionRequest>>>,
     pub revoked: Arc<Mutex<Vec<[u8; 16]>>>,
+    pub introspection: Arc<Mutex<Option<Introspection>>>,
 }
 
 impl Projections for Scripted {
@@ -146,6 +149,20 @@ impl Projections for Scripted {
         let first = !r.contains(&family);
         r.push(family);
         std::future::ready(Ok(first))
+    }
+
+    fn introspect(
+        &self,
+        _domain: access_kernel::digest::Digest,
+        _token: String,
+    ) -> impl Future<Output = Result<Introspection, PlaneUnavailable>> + Send {
+        std::future::ready(
+            self.introspection
+                .lock()
+                .unwrap()
+                .clone()
+                .ok_or_else(|| PlaneUnavailable(String::from("unscripted"))),
+        )
     }
 }
 
