@@ -42,8 +42,9 @@ pub const BOUNDS_HORIZON_MS: u64 = 15 * 60 * 1000;
 /// The claim that names a token's refresh family (P50).
 pub const FAMILY_CLAIM: &str = "family";
 
-/// Label of the digest of a token's `ValidityContract` (`access_contract`).
-pub const CONTRACT_LABEL: &str = "access/validity-contract/v1";
+/// Label of the digest of a token's `ValidityContract` (`access_contract`): the same digest an
+/// Offline Exercise Report names its contract by (L2-RPT-1).
+pub const CONTRACT_LABEL: &str = "access/validity/v1";
 
 /// What the token carries (§9.9.1).
 #[derive(Clone, Debug, PartialEq, Eq)]
