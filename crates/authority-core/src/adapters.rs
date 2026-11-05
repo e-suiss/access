@@ -341,11 +341,14 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
             Err(e) => return Err(e.into()),
         };
         let reader = PgReader::new(s.app.clone(), id);
-        // SAI-46
-        let signer_open = match &s.signer {
-            Some(path) => open_keyring(path, domain).await,
-            None => false,
-        };
+        // SAI-46: started without holding the lease's connection; the first signed artefact
+        // opens the keyring again if this has not finished
+        if let Some(path) = s.signer.clone() {
+            tokio::spawn(async move {
+                open_keyring(&path, domain).await;
+            });
+        }
+        let signer_open = false;
         Ok(Led {
             core: Authority::new(leader, reader, s.binding.clone(), s.salts.clone(), domain)
                 .with_pseudonyms(pseudonyms),
