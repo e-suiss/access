@@ -13,9 +13,11 @@ path = "src/main.rs"
 
 [dependencies]
 access-kernel = { workspace = true }
+access-verifier = { workspace = true }
+suiss-crypto = { workspace = true, features = ["verify"] }
 
 [dev-dependencies]
-suiss-crypto = { workspace = true, features = ["verify"] }
+miniz_oxide = { workspace = true }
 ed25519-dalek = { workspace = true }
 serde_json = { workspace = true, features = ["std"] }
 

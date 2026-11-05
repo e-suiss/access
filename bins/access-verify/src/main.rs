@@ -2,6 +2,7 @@
 //! It reads files, never the network or the system clock; time comes from `--now` and `--iat`.
 
 mod args;
+mod artefacts;
 mod commands;
 
 use std::fmt::Write as _;

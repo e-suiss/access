@@ -5,7 +5,7 @@
 //! [`Display`](core::fmt::Display) text is the stable name the vectors use (OP-116 m.1).
 //! Signatures are verified with [`PureBackend`] (OP-116 m.4, CR-54).
 
-use alloc::collections::BTreeSet;
+use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::string::String;
 use alloc::vec::Vec;
 use core::fmt::{self, Write as _};
@@ -19,7 +19,12 @@ use crate::combinator::{self, Fuel, Rejection};
 use crate::digest::{self, Digest, Hash};
 use crate::intent::{self, IntentEnvelope};
 use crate::json::Json;
+use crate::model::RequirementTerm;
 use crate::model::{CanonicalAuthority, SubjectSelector, TrustedTime};
+use crate::pap::{self, PapError};
+use crate::receipt::{self, ReceiptError};
+use crate::report::{self, ReportError};
+use crate::status::{self, ListToken, StatusError, StatusRef};
 use crate::validity::{self, ValidityContract, ValidityError, VerifierContext};
 use crate::verify::PureBackend;
 use crate::verify::SignatureError;
@@ -50,6 +55,16 @@ pub enum Error {
     SdJwt(SdJwtError),
     /// Validity contract does not allow use now.
     Validity(ValidityError),
+    /// PAP use refused (L2-PAP-3).
+    Pap(PapError),
+    /// Receipt refused (L2-RCP-3).
+    Receipt(ReceiptError),
+    /// Offline Exercise Report refused (L2-RPT-3).
+    Report(ReportError),
+    /// Status list lookup refused (L2-STL-3).
+    Status(StatusError),
+    /// Checkpoint note refused (L2-CKP-1 to L2-CKP-4); the stable name.
+    Checkpoint(&'static str),
 }
 
 /// The family of an [`Error`], one per stable name or name prefix; bindings map it to their
@@ -138,6 +153,16 @@ pub enum Kind {
     Stale,
     /// `online-required`.
     OnlineRequired,
+    /// A `pap-*` name.
+    Pap,
+    /// A `receipt-*` name.
+    Receipt,
+    /// A `report-*` name.
+    Report,
+    /// A `status-*` name.
+    Status,
+    /// A `note-*`, `checkpoint-*` or signature name of a checkpoint.
+    Checkpoint,
 }
 
 const fn cose_name(e: CoseError) -> &'static str {
@@ -283,6 +308,11 @@ impl Error {
             Self::Claim(e) => claim_kind(e),
             Self::SdJwt(e) => sd_jwt_kind(e),
             Self::Validity(e) => validity_kind(e),
+            Self::Pap(_) => Kind::Pap,
+            Self::Receipt(_) => Kind::Receipt,
+            Self::Report(_) => Kind::Report,
+            Self::Status(_) => Kind::Status,
+            Self::Checkpoint(_) => Kind::Checkpoint,
         }
     }
 
@@ -306,6 +336,11 @@ impl fmt::Display for Error {
             Self::Claim(e) => write!(f, "{e}"),
             Self::SdJwt(e) => write!(f, "{e}"),
             Self::Validity(e) => f.write_str(validity_name(*e)),
+            Self::Pap(e) => f.write_str(e.code()),
+            Self::Receipt(e) => f.write_str(e.code()),
+            Self::Report(e) => f.write_str(e.code()),
+            Self::Status(e) => f.write_str(e.code()),
+            Self::Checkpoint(name) => f.write_str(name),
         }
     }
 }
@@ -529,6 +564,200 @@ pub fn check_validity(
         horizon_cap_ms,
     };
     validity::check(&contract, &ctx).map_err(Error::Validity)
+}
+
+/// Verifies the use of a PAP for an intent (L2-PAP-3) and returns the `pap` payload. The
+/// arguments are those of the `pap.verify` vectors: `domain-metadata`, the PAP and
+/// presentation `COSE_Sign1`, the key excerpt, the domain `digest`, the `intent-envelope`, the
+/// `catalog`, the satisfied `requirement-term` set and the remaining slices as an array of
+/// `[digest, uint]`.
+///
+/// # Errors
+/// `input` or a `pap-*` name.
+#[allow(clippy::too_many_arguments, reason = "OP-116 m.9")]
+pub fn verify_pap(
+    metadata: &[u8],
+    sign1: &[u8],
+    excerpt: &[u8],
+    presentation: &[u8],
+    domain: &[u8],
+    intent: &[u8],
+    audience: &str,
+    nonce: &[u8],
+    now: TrustedTime,
+    catalog: &[u8],
+    satisfied: &[u8],
+    remaining: &[u8],
+    metadata_fresh: bool,
+    understood: Vec<String>,
+    last_refresh: Option<TrustedTime>,
+    online: bool,
+    skew_ms: u64,
+    horizon_cap_ms: u64,
+) -> Result<Vec<u8>, Error> {
+    let metadata: DomainMetadata = decode(metadata)?;
+    let domain: Digest = decode(domain)?;
+    let intent: IntentEnvelope = decode(intent)?;
+    let catalog: Catalog = decode(catalog)?;
+    let satisfied = requirement_set(satisfied)?;
+    let remaining = slice_map(remaining)?;
+    let understood: BTreeSet<String> = understood.into_iter().collect();
+    let expected = pap::Expected {
+        domain: &domain,
+        intent: &intent,
+        audience,
+        nonce,
+        now,
+        catalog: &catalog,
+        satisfied: &satisfied,
+        remaining: &remaining,
+        metadata_fresh,
+        understood: &understood,
+        last_refresh,
+        online,
+        skew_ms,
+        horizon_cap_ms,
+    };
+    let p = pap::verify(
+        &PureBackend,
+        &metadata,
+        sign1,
+        excerpt,
+        presentation,
+        &expected,
+    )
+    .map_err(Error::Pap)?;
+    p.to_bytes().map_err(|_| Error::Input)
+}
+
+fn requirement_set(bytes: &[u8]) -> Result<BTreeSet<RequirementTerm>, Error> {
+    let v = dcbor::decode(bytes, Limits::CEILING).map_err(|_| Error::Input)?;
+    crate::codec::set_of(&v, false, RequirementTerm::from_value).map_err(|_| Error::Input)
+}
+
+fn slice_map(bytes: &[u8]) -> Result<BTreeMap<Digest, u64>, Error> {
+    let Value::Array(items) = dcbor::decode(bytes, Limits::CEILING).map_err(|_| Error::Input)?
+    else {
+        return Err(Error::Input);
+    };
+    let mut out = BTreeMap::new();
+    for item in &items {
+        let Value::Array(pair) = item else {
+            return Err(Error::Input);
+        };
+        let [term, Value::Unsigned(n)] = pair.as_slice() else {
+            return Err(Error::Input);
+        };
+        let term = Digest::from_value(term).ok_or(Error::Input)?;
+        if out.insert(term, *n).is_some() {
+            return Err(Error::Input);
+        }
+    }
+    Ok(out)
+}
+
+/// Verifies a decision receipt for this PEP and intent (L2-RCP-3) and returns the `receipt`
+/// payload. `domain` and `intent` are `digest`s.
+///
+/// # Errors
+/// `input` or a `receipt-*` name.
+pub fn verify_receipt(
+    metadata: &[u8],
+    sign1: &[u8],
+    excerpt: &[u8],
+    domain: &[u8],
+    audience: &str,
+    intent: &[u8],
+    now: TrustedTime,
+) -> Result<Vec<u8>, Error> {
+    let metadata: DomainMetadata = decode(metadata)?;
+    let domain: Digest = decode(domain)?;
+    let intent: Digest = decode(intent)?;
+    let expected = receipt::Expected {
+        domain: &domain,
+        audience,
+        intent: &intent,
+        now,
+    };
+    let r = receipt::verify(&PureBackend, &metadata, sign1, excerpt, &expected)
+        .map_err(Error::Receipt)?;
+    r.to_bytes().map_err(|_| Error::Input)
+}
+
+/// Checks an Offline Exercise Report body (L2-RPT-3) and returns `{head, next_seq, drawn}`:
+/// the 32-byte head, the next sequence number and `[budget term, total]` pairs, each budget
+/// term digest as its 32 bytes.
+///
+/// # Errors
+/// A `report-*` name.
+pub fn verify_report(body: &[u8]) -> Result<Vec<u8>, Error> {
+    let (_, summary) = report::verify_bytes(body).map_err(Error::Report)?;
+    encode(&map([
+        ("head", Some(Value::Bytes(summary.head.0.to_vec()))),
+        ("next_seq", Some(Value::Unsigned(summary.next_seq))),
+        (
+            "drawn",
+            Some(Value::Array(
+                summary
+                    .drawn
+                    .iter()
+                    .map(|(t, n)| {
+                        Value::Array(alloc::vec![Value::Bytes(t.0.to_vec()), Value::Unsigned(*n)])
+                    })
+                    .collect(),
+            )),
+        ),
+    ]))
+}
+
+/// Looks a `status-ref` up in a list token payload whose `lst` the caller has inflated
+/// (L2-STL-2, L2-STL-3). `true` is invalid.
+///
+/// # Errors
+/// A `status-*` name.
+pub fn status_lookup(token: &[u8], inflated: &[u8], reference: &[u8]) -> Result<bool, Error> {
+    let token = ListToken::from_bytes(token).map_err(Error::Status)?;
+    let reference =
+        StatusRef::from_bytes(reference).map_err(|_| Error::Status(StatusError::Malformed))?;
+    status::lookup(&token, inflated, &reference).map_err(Error::Status)
+}
+
+/// Verifies a signed checkpoint note of `origin` under the log's verifier key and the known
+/// cosigners' (L2-CKP-1 to L2-CKP-4) and returns `{size, root, extensions, cosigned}`: the tree
+/// size, the root hash, the number of extension lines and the cosignature timestamps accepted.
+///
+/// # Errors
+/// `input` for a verifier key that does not parse, or a `note-*`, `checkpoint-*` or signature
+/// name.
+pub fn verify_checkpoint(
+    note: &str,
+    origin: &str,
+    log: &str,
+    cosigners: Vec<String>,
+) -> Result<Vec<u8>, Error> {
+    use suiss_crypto::note::{Verifier, verify_checkpoint};
+    let log = Verifier::parse(log).map_err(|_| Error::Input)?;
+    let cosigners = cosigners
+        .into_iter()
+        .map(|c| Verifier::parse(&c).map_err(|_| Error::Input))
+        .collect::<Result<Vec<_>, _>>()?;
+    let (cp, accepted) = verify_checkpoint(&PureBackend, note, origin, &log, &cosigners)
+        .map_err(|e| Error::Checkpoint(e.code()))?;
+    let extensions = u64::try_from(cp.extensions.len()).map_err(|_| Error::Input)?;
+    encode(&map([
+        ("size", Some(Value::Unsigned(cp.size))),
+        ("root", Some(Value::Bytes(cp.root.to_vec()))),
+        ("extensions", Some(Value::Unsigned(extensions))),
+        (
+            "cosigned",
+            Some(Value::Array(
+                accepted
+                    .iter()
+                    .filter_map(|a| a.timestamp.map(Value::Unsigned))
+                    .collect(),
+            )),
+        ),
+    ]))
 }
 
 /// RFC 9162 inclusion proof. `leaf_hash` and `root` are 32 bytes; `path` is the proof hashes

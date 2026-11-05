@@ -186,6 +186,104 @@ pub fn verify_consistency(
     binding::verify_consistency(first, second, first_root, second_root, path).map_err(js)
 }
 
+/// Use of a PAP for an intent (L2-PAP-3) to the `pap` payload.
+///
+/// # Errors
+/// `input` or a `pap-*` name.
+#[allow(clippy::too_many_arguments, reason = "OP-116 m.9")]
+#[wasm_bindgen(js_name = verifyPap)]
+pub fn verify_pap(
+    metadata: &[u8],
+    sign1: &[u8],
+    excerpt: &[u8],
+    presentation: &[u8],
+    domain: &[u8],
+    intent: &[u8],
+    audience: &str,
+    nonce: &[u8],
+    now: u64,
+    catalog: &[u8],
+    satisfied: &[u8],
+    remaining: &[u8],
+    metadata_fresh: bool,
+    understood: Vec<String>,
+    last_refresh: Option<u64>,
+    online: bool,
+    skew_ms: u64,
+    horizon_cap_ms: u64,
+) -> Result<Vec<u8>, JsError> {
+    binding::verify_pap(
+        metadata,
+        sign1,
+        excerpt,
+        presentation,
+        domain,
+        intent,
+        audience,
+        nonce,
+        now,
+        catalog,
+        satisfied,
+        remaining,
+        metadata_fresh,
+        understood,
+        last_refresh,
+        online,
+        skew_ms,
+        horizon_cap_ms,
+    )
+    .map_err(js)
+}
+
+/// Decision receipt for this PEP and intent (L2-RCP-3) to the `receipt` payload.
+///
+/// # Errors
+/// `input` or a `receipt-*` name.
+#[wasm_bindgen(js_name = verifyReceipt)]
+pub fn verify_receipt(
+    metadata: &[u8],
+    sign1: &[u8],
+    excerpt: &[u8],
+    domain: &[u8],
+    audience: &str,
+    intent: &[u8],
+    now: u64,
+) -> Result<Vec<u8>, JsError> {
+    binding::verify_receipt(metadata, sign1, excerpt, domain, audience, intent, now).map_err(js)
+}
+
+/// Offline Exercise Report body (L2-RPT-3) to `{head, next_seq, drawn}`.
+///
+/// # Errors
+/// A `report-*` name.
+#[wasm_bindgen(js_name = verifyReport)]
+pub fn verify_report(body: &[u8]) -> Result<Vec<u8>, JsError> {
+    binding::verify_report(body).map_err(js)
+}
+
+/// Status list lookup over an inflated list (L2-STL-3); `true` is invalid.
+///
+/// # Errors
+/// A `status-*` name.
+#[wasm_bindgen(js_name = statusLookup)]
+pub fn status_lookup(token: &[u8], inflated: &[u8], reference: &[u8]) -> Result<bool, JsError> {
+    binding::status_lookup(token, inflated, reference).map_err(js)
+}
+
+/// Signed checkpoint note (L2-CKP-1 to L2-CKP-4) to `{size, root, extensions, cosigned}`.
+///
+/// # Errors
+/// `input` or a checkpoint name.
+#[wasm_bindgen(js_name = verifyCheckpoint)]
+pub fn verify_checkpoint(
+    note: &str,
+    origin: &str,
+    log: &str,
+    cosigners: Vec<String>,
+) -> Result<Vec<u8>, JsError> {
+    binding::verify_checkpoint(note, origin, log, cosigners).map_err(js)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

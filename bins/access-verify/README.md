@@ -50,8 +50,14 @@ The first line is `accept` or `reject: <reason>`. An accepted result is followed
 | `inclusion --index I --size N --root H --path H,... (--leaf F \| --leaf-hash H)` | An RFC 9162 inclusion proof; `--leaf` is the leaf input, `--leaf-hash` its hash | none |
 | `consistency --first M --second N --first-root H --second-root H --path H,...` | An RFC 9162 consistency proof | none |
 | `record (--envelope F \| --disclosure F) [--size N --root H --path H,...]` | A record envelope or a selective disclosure, and with the proof options its inclusion at `pos` in the domain log | `leaf_hash`, `pos`, `domain` |
+| `pap --metadata F [--trusted F] --pap F --excerpt F --presentation F --domain H --intent F --audience A --nonce HEX --now T --catalog F --satisfied F --remaining F --fresh true\|false --online true\|false --skew-ms N --horizon-cap-ms N [--understood a,b] [--last-refresh T]` | One use of a Portable Authority Proof for an intent: key and signature, domain, validity, holder, the holder's presentation, bounds, local requirements, offline slice and metadata freshness, in that order | `pap` (hex) |
+| `receipt --metadata F [--trusted F] --receipt F --excerpt F --domain H --audience A --intent H --now T` | A decision receipt for this PEP and this intent digest | `receipt` (hex) |
+| `report --report F` | An Offline Exercise Report body and its hash chain | `head`, `next_seq`, `drawn` (`term:total,...`) |
+| `status --metadata F [--trusted F] --token F --excerpt F --uri U --idx N [--now T --max-age-ms N]` | A signed Token Status List: key, signature, ZLIB, then the entry; with `--max-age-ms`, the list's `iat` is at most that old | `invalid`, `iat`, `as_of` |
+| `status --payload F --list F --uri U --idx N` | The entry in a list token payload whose list is already inflated | `invalid` |
+| `checkpoint --note F --origin O --log VKEY [--cosigners VKEY,...]` | A signed checkpoint of a log and the witness cosignatures that verify | `size`, `root`, `extensions`, `cosigned` |
 
-`--iat` for `key` and `cose` is the signing time the artefact itself states. `--domain` is the 32-byte SHA-256 value of the DomainID, without its digest tag.
+`--iat` for `key` and `cose` is the signing time the artefact itself states. `--domain` and the receipt's `--intent` are the 32-byte SHA-256 values, without their digest tag. A PAP's `--intent` is the `intent-envelope` file, `--satisfied` a CBOR set of `requirement-term` and `--remaining` a CBOR array of `[digest, uint]` pairs.
 
 ## Example
 
@@ -68,7 +74,7 @@ reject: outside-binding-scope
 
 ## Conformance
 
-The tests run this binary over every case of the core track 1 vectors in [`conformance/vectors/core/1`](../../conformance/vectors/core/1) and compare the printed result with the expected one:
+The tests run this binary over every case of the core track 1 vectors in [`conformance/vectors/core/1`](../../conformance/vectors/core/1), and the checkpoint vectors of the exchange track, and compare the printed result with the expected one:
 
 ```sh
 cargo nextest run -p esuiss-access-verify

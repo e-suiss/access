@@ -1633,7 +1633,9 @@ version = "0.2.6"
 dependencies = [
  "ed25519-dalek",
  "esuiss-access-kernel",
+ "esuiss-access-verifier",
  "esuiss-crypto",
+ "miniz_oxide",
  "serde_json",
 ]
 

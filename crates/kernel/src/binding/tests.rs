@@ -784,3 +784,203 @@ fn api_version_and_names() {
         "signature: high-S signature"
     );
 }
+
+fn words(c: &J, k: &str) -> Vec<String> {
+    c[k].as_array()
+        .unwrap()
+        .iter()
+        .map(|w| w.as_str().unwrap().to_string())
+        .collect()
+}
+
+// L2-PAP-3, OP-150 m.6, SA-T10
+#[test]
+fn pap_vectors() {
+    let v = vectors(include_str!(
+        "../../../../conformance/vectors/core/1/pap.json"
+    ));
+    let (metadata, catalog) = (unhex(s(&v, "metadata")), unhex(s(&v, "catalog")));
+    for c in cases(&v) {
+        let got = verify_pap(
+            &metadata,
+            &unhex(s(c, "sign1")),
+            &unhex(s(c, "excerpt")),
+            &unhex(s(c, "presentation")),
+            &unhex(s(c, "domain")),
+            &unhex(s(c, "intent")),
+            s(c, "audience"),
+            &unhex(s(c, "nonce")),
+            c["now"].as_u64().unwrap(),
+            &catalog,
+            &unhex(s(c, "satisfied")),
+            &unhex(s(c, "remaining")),
+            c["fresh"].as_bool().unwrap(),
+            words(c, "understood"),
+            c["last_refresh"].as_u64(),
+            c["online"].as_bool().unwrap(),
+            c["skew_ms"].as_u64().unwrap(),
+            c["horizon_cap_ms"].as_u64().unwrap(),
+        );
+        match c["pap"].as_str() {
+            Some(p) => assert_eq!(got.map(|b| hex(&b)).as_deref(), Ok(p), "{}", c["id"]),
+            None => assert_eq!(
+                got.map_err(|e| e.name()),
+                Err(s(c, "error").to_string()),
+                "{}",
+                c["id"]
+            ),
+        }
+    }
+}
+
+// L2-RCP-3, SA-T10
+#[test]
+fn receipt_vectors() {
+    let v = vectors(include_str!(
+        "../../../../conformance/vectors/core/1/receipt.json"
+    ));
+    let metadata = unhex(s(&v, "metadata"));
+    for c in cases(&v) {
+        let got = verify_receipt(
+            &metadata,
+            &unhex(s(c, "sign1")),
+            &unhex(s(c, "excerpt")),
+            &unhex(s(c, "domain")),
+            s(c, "audience"),
+            &unhex(s(c, "intent")),
+            c["now"].as_u64().unwrap(),
+        );
+        match c["receipt"].as_str() {
+            Some(r) => assert_eq!(got.map(|b| hex(&b)).as_deref(), Ok(r), "{}", c["id"]),
+            None => assert_eq!(
+                got.map_err(|e| e.name()),
+                Err(s(c, "error").to_string()),
+                "{}",
+                c["id"]
+            ),
+        }
+    }
+}
+
+// L2-RPT-1, L2-RPT-2, L2-RPT-3, U4, SA-T10
+#[test]
+fn report_vectors() {
+    let v = vectors(include_str!(
+        "../../../../conformance/vectors/core/1/report.json"
+    ));
+    for c in cases(&v) {
+        let got = verify_report(&unhex(s(c, "report")));
+        let Some(head) = c["head"].as_str() else {
+            assert_eq!(
+                got.map_err(|e| e.name()),
+                Err(s(c, "error").to_string()),
+                "{}",
+                c["id"]
+            );
+            continue;
+        };
+        let out = dcbor::decode(&got.unwrap(), Limits::CEILING).unwrap();
+        assert_eq!(out.get("head"), Some(&Value::Bytes(unhex(head))));
+        assert_eq!(
+            out.get("next_seq"),
+            Some(&Value::Unsigned(c["next_seq"].as_u64().unwrap()))
+        );
+        let Some(Value::Array(drawn)) = out.get("drawn") else {
+            panic!("drawn");
+        };
+        let want = c["drawn"].as_array().unwrap();
+        assert_eq!(drawn.len(), want.len());
+        for (d, w) in drawn.iter().zip(want) {
+            let Value::Array(pair) = d else {
+                panic!("pair")
+            };
+            assert_eq!(pair[0], Value::Bytes(unhex(w[0].as_str().unwrap())));
+            assert_eq!(pair[1], Value::Unsigned(w[1].as_u64().unwrap()));
+        }
+    }
+}
+
+// L2-STL-2, L2-STL-3, SA-T10
+#[test]
+fn status_vectors() {
+    let v = vectors(include_str!(
+        "../../../../conformance/vectors/core/1/status-list.json"
+    ));
+    for c in cases(&v) {
+        let got = status_lookup(
+            &unhex(s(c, "token")),
+            &unhex(s(c, "list")),
+            &unhex(s(c, "reference")),
+        );
+        match c["invalid"].as_bool() {
+            Some(i) => assert_eq!(got.map_err(|e| e.name()), Ok(i), "{}", c["id"]),
+            None => assert_eq!(
+                got.map_err(|e| e.name()),
+                Err(s(c, "error").to_string()),
+                "{}",
+                c["id"]
+            ),
+        }
+    }
+}
+
+// L2-CKP-1, L2-CKP-2, L2-CKP-3, L2-CKP-4, SA-T10
+#[test]
+fn checkpoint_vectors() {
+    let v = vectors(include_str!(
+        "../../../../conformance/vectors/exchange/1/checkpoint.json"
+    ));
+    let cosigners = words(&v, "cosigners");
+    for c in cases(&v) {
+        let got = verify_checkpoint(
+            s(c, "note"),
+            s(&v, "origin"),
+            s(&v, "log"),
+            cosigners.clone(),
+        );
+        let Some(size) = c["size"].as_u64() else {
+            assert_eq!(
+                got.map_err(|e| e.name()),
+                Err(s(c, "error").to_string()),
+                "{}",
+                c["id"]
+            );
+            continue;
+        };
+        let out = dcbor::decode(&got.unwrap(), Limits::CEILING).unwrap();
+        assert_eq!(out.get("size"), Some(&Value::Unsigned(size)));
+        assert_eq!(
+            out.get("extensions"),
+            Some(&Value::Unsigned(c["extensions"].as_u64().unwrap()))
+        );
+        let cosigned: Vec<Value> = c["cosigned"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|t| Value::Unsigned(t.as_u64().unwrap()))
+            .collect();
+        assert_eq!(out.get("cosigned"), Some(&Value::Array(cosigned)));
+    }
+}
+
+// OP-116 m.1
+#[test]
+fn new_families_have_their_kind() {
+    assert_eq!(Error::Pap(PapError::Slice).kind(), Kind::Pap);
+    assert_eq!(Error::Pap(PapError::Slice).name(), "pap-slice");
+    assert_eq!(
+        Error::Receipt(ReceiptError::Future).name(),
+        "receipt-future"
+    );
+    assert_eq!(Error::Report(ReportError::Chain).name(), "report-chain");
+    assert_eq!(Error::Status(StatusError::Index).name(), "status-index");
+    assert_eq!(Error::Checkpoint("note-control").kind(), Kind::Checkpoint);
+    assert_eq!(
+        verify_checkpoint("x", "o", "bad", Vec::new()).map_err(|e| e.name()),
+        Err("input".to_string())
+    );
+    assert_eq!(
+        slice_map(&[0x81, 0x80]).map_err(|e| e.name()),
+        Err("input".to_string())
+    );
+}

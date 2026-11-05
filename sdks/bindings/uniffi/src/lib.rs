@@ -139,6 +139,21 @@ pub enum KernelError {
     /// `OnlineRequired` family.
     #[error("{0}")]
     OnlineRequired(String),
+    /// `Pap` family.
+    #[error("{0}")]
+    Pap(String),
+    /// `Receipt` family.
+    #[error("{0}")]
+    Receipt(String),
+    /// `Report` family.
+    #[error("{0}")]
+    Report(String),
+    /// `Status` family.
+    #[error("{0}")]
+    Status(String),
+    /// `Checkpoint` family.
+    #[error("{0}")]
+    Checkpoint(String),
 }
 
 impl From<binding::Error> for KernelError {
@@ -186,6 +201,11 @@ impl From<binding::Error> for KernelError {
             Kind::MustUnderstand => Self::MustUnderstand(name),
             Kind::Stale => Self::Stale(name),
             Kind::OnlineRequired => Self::OnlineRequired(name),
+            Kind::Pap => Self::Pap(name),
+            Kind::Receipt => Self::Receipt(name),
+            Kind::Report => Self::Report(name),
+            Kind::Status => Self::Status(name),
+            Kind::Checkpoint => Self::Checkpoint(name),
         }
     }
 }
@@ -408,4 +428,107 @@ mod tests {
             Ok(true)
         );
     }
+}
+
+/// Use of a PAP for an intent (L2-PAP-3) to the `pap` payload.
+///
+/// # Errors
+/// `input` or a `pap-*` name.
+#[allow(clippy::too_many_arguments, reason = "OP-116 m.9")]
+#[uniffi::export]
+pub fn verify_pap(
+    metadata: Vec<u8>,
+    sign1: Vec<u8>,
+    excerpt: Vec<u8>,
+    presentation: Vec<u8>,
+    domain: Vec<u8>,
+    intent: Vec<u8>,
+    audience: String,
+    nonce: Vec<u8>,
+    now: u64,
+    catalog: Vec<u8>,
+    satisfied: Vec<u8>,
+    remaining: Vec<u8>,
+    metadata_fresh: bool,
+    understood: Vec<String>,
+    last_refresh: Option<u64>,
+    online: bool,
+    skew_ms: u64,
+    horizon_cap_ms: u64,
+) -> Result<Vec<u8>, KernelError> {
+    Ok(binding::verify_pap(
+        &metadata,
+        &sign1,
+        &excerpt,
+        &presentation,
+        &domain,
+        &intent,
+        &audience,
+        &nonce,
+        now,
+        &catalog,
+        &satisfied,
+        &remaining,
+        metadata_fresh,
+        understood,
+        last_refresh,
+        online,
+        skew_ms,
+        horizon_cap_ms,
+    )?)
+}
+
+/// Decision receipt for this PEP and intent (L2-RCP-3) to the `receipt` payload.
+///
+/// # Errors
+/// `input` or a `receipt-*` name.
+#[uniffi::export]
+pub fn verify_receipt(
+    metadata: Vec<u8>,
+    sign1: Vec<u8>,
+    excerpt: Vec<u8>,
+    domain: Vec<u8>,
+    audience: String,
+    intent: Vec<u8>,
+    now: u64,
+) -> Result<Vec<u8>, KernelError> {
+    Ok(binding::verify_receipt(
+        &metadata, &sign1, &excerpt, &domain, &audience, &intent, now,
+    )?)
+}
+
+/// Offline Exercise Report body (L2-RPT-3) to `{head, next_seq, drawn}`.
+///
+/// # Errors
+/// A `report-*` name.
+#[uniffi::export]
+pub fn verify_report(body: Vec<u8>) -> Result<Vec<u8>, KernelError> {
+    Ok(binding::verify_report(&body)?)
+}
+
+/// Status list lookup over an inflated list (L2-STL-3); `true` is invalid.
+///
+/// # Errors
+/// A `status-*` name.
+#[uniffi::export]
+pub fn status_lookup(
+    token: Vec<u8>,
+    inflated: Vec<u8>,
+    reference: Vec<u8>,
+) -> Result<bool, KernelError> {
+    Ok(binding::status_lookup(&token, &inflated, &reference)?)
+}
+
+/// Signed checkpoint note (L2-CKP-1 to L2-CKP-4) to `{size, root, extensions, cosigned}`.
+///
+/// # Errors
+/// `input` or a checkpoint name.
+#[uniffi::export]
+pub fn verify_checkpoint(
+    note: String,
+    origin: String,
+    log: String,
+    cosigners: Vec<String>,
+) -> Result<Vec<u8>, KernelError> {
+    Ok(binding::verify_checkpoint(&note, &origin, &log, cosigners)?)
 }
