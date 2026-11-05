@@ -2,6 +2,7 @@
 //! CBOR bridge between the Kernel and the F0 reference evaluator (CR-49).
 
 use alloc::collections::{BTreeMap, BTreeSet};
+use alloc::string::String;
 use alloc::vec::Vec;
 
 use suiss_crypto::dcbor::Value;
@@ -12,7 +13,7 @@ use super::{
 };
 use crate::algebra::Catalog;
 use crate::codec::{
-    Canonical, Fields, ModelError, PROOF_KINDS, Stored, assurance, ident, map, map_value,
+    Canonical, Fields, ModelError, PROOF_KINDS, Stored, assurance, boolean, ident, map, map_value,
     set_items, set_of, set_value, single, tagged, text, uint, word, word_of,
 };
 use crate::digest::Digest;
@@ -691,4 +692,125 @@ pub fn decision_value(d: &Decision) -> Value {
                 .then(|| Value::Array(d.relied_on.iter().map(Canonical::to_value).collect())),
         ),
     ])
+}
+
+const OUTCOMES: [(&str, Outcome); 3] = [
+    ("allow", Outcome::Allow),
+    ("deny", Outcome::Deny),
+    ("require_action", Outcome::RequireAction),
+];
+
+const POSITIONS: [(&str, Position); 5] = [
+    ("instance", Position::Instance),
+    ("anchor", Position::Anchor),
+    ("domain-policy", Position::DomainPolicy),
+    ("foreign", Position::Foreign),
+    ("actor-side", Position::ActorSide),
+];
+
+const RESOLVERS: [(&str, Resolver); 7] = [
+    ("root", Resolver::Root),
+    ("restriction-owner", Resolver::RestrictionOwner),
+    ("issuer", Resolver::Issuer),
+    ("domain-admin", Resolver::DomainAdmin),
+    ("actor", Resolver::Actor),
+    ("actor-party", Resolver::ActorParty),
+    ("time", Resolver::Time),
+];
+
+const REMEDIATIONS: [(&str, Remediation); 5] = [
+    ("route-to-coordinator", Remediation::RouteToCoordinator),
+    ("refresh-claim", Remediation::RefreshClaim),
+    ("self-authenticate", Remediation::SelfAuthenticate),
+    (
+        "not-satisfiable-by-actor",
+        Remediation::NotSatisfiableByActor,
+    ),
+    ("new-request-required", Remediation::NewRequestRequired),
+];
+
+fn position_of(v: &Value) -> Result<Position, ModelError> {
+    if let Value::Text(_) = v {
+        return word(v, &POSITIONS);
+    }
+    match single(v)? {
+        ("hop", k) => Ok(Position::Hop(uint(k)?)),
+        _ => Err(ModelError::Unknown),
+    }
+}
+
+fn resolver_of(v: &Value) -> Result<Resolver, ModelError> {
+    if let Value::Text(_) = v {
+        return word(v, &RESOLVERS);
+    }
+    match single(v)? {
+        ("grantor_of_hop", k) => Ok(Resolver::GrantorOfHop(uint(k)?)),
+        _ => Err(ModelError::Unknown),
+    }
+}
+
+fn remediation_of(v: &Value) -> Result<Remediation, ModelError> {
+    if let Value::Text(_) = v {
+        return word(v, &REMEDIATIONS);
+    }
+    match single(v)? {
+        ("wait_until", t) => Ok(Remediation::WaitUntil(uint(t)?)),
+        _ => Err(ModelError::Unknown),
+    }
+}
+
+fn blocker_of(v: &Value) -> Result<Blocker, ModelError> {
+    let mut f = Fields::of(v)?;
+    let b = Blocker {
+        class: word(f.req("class")?, &CLASSES)?,
+        subcode: f.opt("subcode").map(text).transpose()?.map(String::from),
+        position: position_of(f.req("position")?)?,
+        resolver: resolver_of(f.req("resolver")?)?,
+        remediation: remediation_of(f.req("remediation")?)?,
+    };
+    f.done()?;
+    Ok(b)
+}
+
+fn unmet_of(v: &Value) -> Result<Unmet, ModelError> {
+    let mut f = Fields::of(v)?;
+    let u = Unmet {
+        term: RequirementTerm::from_value(f.req("term")?)?,
+        missing: uint(f.req("missing")?)?,
+        position: position_of(f.req("position")?)?,
+        satisfiable_by_actor: boolean(f.req("satisfiable_by_actor")?)?,
+    };
+    f.done()?;
+    if u.missing == 0 {
+        return Err(ModelError::Range);
+    }
+    Ok(u)
+}
+
+fn listed<T>(
+    v: Option<&Value>,
+    each: impl Fn(&Value) -> Result<T, ModelError>,
+) -> Result<Vec<T>, ModelError> {
+    v.map_or_else(
+        || Ok(Vec::new()),
+        |v| set_items(v, true)?.iter().map(each).collect(),
+    )
+}
+
+/// The decision of its canonical form ([`decision_value`]), the explanation format Suiss products
+/// share (E43): blockers, unmet terms and the proofs relied on are non-empty when present and in
+/// the order of their canonical encodings (OP-114 m.2, m.3), without repeats.
+///
+/// # Errors
+/// [`ModelError`] for anything [`decision_value`] does not produce.
+pub fn decision_from_value(v: &Value) -> Result<Decision, ModelError> {
+    let mut f = Fields::of(v)?;
+    let d = Decision {
+        outcome: word(f.req("outcome")?, &OUTCOMES)?,
+        blockers: listed(f.opt("blockers"), blocker_of)?,
+        unmet: listed(f.opt("unmet"), unmet_of)?,
+        relied_on: listed(f.opt("relied_on"), Id::from_value)?,
+    };
+    f.done()?;
+    Ok(d)
 }

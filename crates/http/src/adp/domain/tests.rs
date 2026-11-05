@@ -277,3 +277,62 @@ fn viewer_and_audit_filters_disclose_more() {
     let audit = encode_for(&r, Mode::Commit, Scope::Audit);
     assert!(audit.to_string().contains("secret-policy"));
 }
+
+fn explanation_case(id: &str) -> Out {
+    let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../conformance/cddl/examples/explanation.json");
+    let doc: Out = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+    doc["cases"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["id"] == id)
+        .unwrap()
+        .clone()
+}
+
+fn committed_decision(id: &str) -> Decision {
+    let hex = explanation_case(id)["cbor"].as_str().unwrap().to_owned();
+    let bytes: Vec<u8> = (0..hex.len())
+        .step_by(2)
+        .map(|i| u8::from_str_radix(&hex[i..i.saturating_add(2)], 16).unwrap())
+        .collect();
+    let value = suiss_crypto::dcbor::decode(&bytes, suiss_crypto::dcbor::Limits::CEILING).unwrap();
+    access_kernel::combinator::codec::decision_from_value(&value).unwrap()
+}
+
+fn explained(response: &Response, scope: access_authority_core::app::Scope) -> Out {
+    let context = encode_for(response, Mode::Check, scope)["context"].clone();
+    let mut out = Map::new();
+    for member in ["outcome", "blockers", "unmet", "relied_on"] {
+        if let Some(v) = context.get(member) {
+            out.insert(String::from(member), v.clone());
+        }
+    }
+    Out::Object(out)
+}
+
+// E43, L1-ADP-10, L1-ADP-15, TI-20, OP-141 m.38: the ADP context explains a decision in the
+// published explanation format; each reader's disclosure filter gives the committed example of
+// its view (`conformance/cddl/examples/explanation.json`)
+#[test]
+fn the_adp_explains_in_the_published_format() {
+    use access_authority_core::app::Scope;
+    let mut r = response(Outcome::Deny);
+    r.decision = committed_decision("deny-audit");
+    for (scope, id) in [
+        (Scope::Audit, "deny-audit"),
+        (Scope::Viewer, "deny-viewer"),
+        (Scope::Requester, "deny-requester"),
+    ] {
+        assert_eq!(explained(&r, scope), explanation_case(id)["json"], "{id}");
+    }
+    for id in ["allow-with-proofs", "allow-bare", "require-action"] {
+        r.decision = committed_decision(id);
+        assert_eq!(
+            explained(&r, Scope::Requester),
+            explanation_case(id)["json"],
+            "{id}"
+        );
+    }
+}

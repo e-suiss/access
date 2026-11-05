@@ -38,6 +38,11 @@ impl<'a> Schema<'a> {
         {
             out.push(format!("{at}: not {c}"));
         }
+        if let Some(list) = s.get("enum").and_then(Json::as_array)
+            && !list.contains(value)
+        {
+            out.push(format!("{at}: not one of {list:?}"));
+        }
         if let Some(alts) = s.get("oneOf").and_then(Json::as_array) {
             let n = alts.iter().filter(|a| self.valid(a, value)).count();
             if n != 1 {

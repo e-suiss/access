@@ -1,0 +1,41 @@
+; Decision explanation, version 1 (E43; Work PR-11, PR-17).
+;
+; The one format in which a Suiss product explains a decision or a rule evaluation: why an
+; outcome was reached, what blocks it and what is still missing. It is the Kernel `decision`
+; (kernel.cddl) as a reader sees it. Access answers it in the ADP `context` (L1-ADP-10, L1-ADP-15);
+; another product explaining its own restriction rules uses the same members.
+;
+; The JSON form is explanation.schema.json (`urn:suiss:access:schema:explanation:1`): the same
+; members in the ADP encodings (binaries as unpadded base64url, a digest as its 32 bytes).
+; `blocker-class`, `position`, `resolver`, `remediation`, `unmet-term` and `id` are the rules of
+; kernel.cddl.
+;
+; Arrays are non-empty when present, in the order of their members' unfiltered canonical
+; encodings, without repeats (OP-114 m.2, m.3); a disclosure filter keeps that order.
+;
+; A restriction rule's result (`restriction-outcome`) shows as:
+;   no_objection  nothing; a rule never allows (INV-14)
+;   deny          a `restricted` blocker at `domain-policy`, resolver `restriction-owner`,
+;                 remediation `not-satisfiable-by-actor`, subcode "restricted/policy:" followed by
+;                 the base64url policy id
+;   require       one unmet term per requirement, at `domain-policy`
+;
+; The reader's disclosure filter (TI-20, OP-141 m.38) is the last stage and removes members:
+;   requester  no `subcode`; `position` only when it is a lineage hop
+;   viewer     no `subcode` on a `restricted` blocker
+;   audit      nothing removed; the explanation is then exactly the Kernel `decision`
+
+explanation = {
+  outcome: "allow" / "deny" / "require_action",
+  ? blockers: [+ explained-blocker],
+  ? unmet: [+ unmet-term],
+  ? relied_on: [+ id],
+}
+
+explained-blocker = {
+  class: blocker-class,
+  ? subcode: tstr,
+  ? position: position,
+  resolver: resolver,
+  remediation: remediation,
+}

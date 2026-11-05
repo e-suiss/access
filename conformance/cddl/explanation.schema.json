@@ -1,0 +1,142 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:suiss:access:schema:explanation:1",
+  "title": "Decision explanation, version 1",
+  "description": "JSON form of the CDDL rule explanation (explanation.cddl), in the ADP encodings: binary values are base64url without padding, a digest is its 32 SHA-256 bytes. Access answers it in the ADP context (L1-ADP-10, L1-ADP-15); another Suiss product explaining its own restriction rules uses the same members (E43). A byte-valued conjunct value has no distinct JSON form; the CBOR form is canonical. The x-cbor annotation names how a value maps to its CBOR form.",
+  "type": "object",
+  "required": ["outcome"],
+  "additionalProperties": false,
+  "properties": {
+    "outcome": { "type": "string", "enum": ["allow", "deny", "require_action"] },
+    "blockers": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/blocker" } },
+    "unmet": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/unmet_term" } },
+    "relied_on": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/id" } }
+  },
+  "$defs": {
+    "ident": { "type": "string", "pattern": "^[a-z][a-z0-9_]{0,62}$" },
+    "uint": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+    "id": { "type": "string", "contentEncoding": "base64url", "pattern": "^[A-Za-z0-9_-]{21}[AQgw]$", "x-cbor": "bytes" },
+    "digest": { "type": "string", "contentEncoding": "base64url", "pattern": "^[A-Za-z0-9_-]{42}[AEIMQUYcgkosw048]$", "x-cbor": "digest" },
+    "blocker": {
+      "type": "object",
+      "required": ["class", "resolver", "remediation"],
+      "additionalProperties": false,
+      "properties": {
+        "class": {
+          "type": "string",
+          "enum": [
+            "no-covering-authority", "outside-instance-limits", "restricted", "budget-exhausted", "ended",
+            "capacity-mismatch", "source-not-accepted", "schema-not-accepted", "nonce-closed",
+            "foreign-status-unavailable"
+          ]
+        },
+        "subcode": { "type": "string", "description": "Namespaced subcode; the requester's view never has it, the viewer's not on a restricted blocker." },
+        "position": { "$ref": "#/$defs/position" },
+        "resolver": { "$ref": "#/$defs/resolver" },
+        "remediation": { "$ref": "#/$defs/remediation" }
+      }
+    },
+    "position": {
+      "description": "Where it sits; the requester's view keeps only a lineage hop.",
+      "oneOf": [
+        { "type": "string", "enum": ["instance", "anchor", "domain-policy", "foreign", "actor-side"] },
+        { "type": "object", "required": ["hop"], "additionalProperties": false, "properties": { "hop": { "$ref": "#/$defs/uint" } } }
+      ]
+    },
+    "resolver": {
+      "oneOf": [
+        { "type": "string", "enum": ["root", "restriction-owner", "issuer", "domain-admin", "actor", "actor-party", "time"] },
+        { "type": "object", "required": ["grantor_of_hop"], "additionalProperties": false, "properties": { "grantor_of_hop": { "$ref": "#/$defs/uint" } } }
+      ]
+    },
+    "remediation": {
+      "oneOf": [
+        { "type": "string", "enum": ["route-to-coordinator", "refresh-claim", "self-authenticate", "not-satisfiable-by-actor", "new-request-required"] },
+        { "type": "object", "required": ["wait_until"], "additionalProperties": false, "properties": { "wait_until": { "$ref": "#/$defs/uint" } } }
+      ]
+    },
+    "unmet_term": {
+      "type": "object",
+      "required": ["term", "missing", "position", "satisfiable_by_actor"],
+      "additionalProperties": false,
+      "properties": {
+        "term": { "$ref": "#/$defs/requirement_term" },
+        "missing": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+        "position": { "$ref": "#/$defs/position" },
+        "satisfiable_by_actor": { "type": "boolean" }
+      }
+    },
+    "requirement_term": {
+      "type": "object",
+      "required": ["proof_kind", "class"],
+      "additionalProperties": false,
+      "properties": {
+        "proof_kind": { "type": "string", "enum": ["claim", "contribution", "authentication", "foreign_authority"] },
+        "class": { "$ref": "#/$defs/ident" },
+        "count": { "type": "integer", "minimum": 2, "maximum": 9007199254740991 },
+        "binding": { "type": "string", "enum": ["actor_instance", "intent_digest", "resource"] },
+        "freshness_ms": { "$ref": "#/$defs/uint" },
+        "independence": {
+          "type": "object",
+          "required": ["distinct"],
+          "additionalProperties": false,
+          "properties": { "distinct": { "type": "string", "enum": ["party", "instance", "issuer"] } }
+        },
+        "consumption": { "const": "single_use" },
+        "source": { "$ref": "#/$defs/subject_selector" },
+        "assurance": { "$ref": "#/$defs/assurance" }
+      }
+    },
+    "subject_selector": {
+      "oneOf": [
+        { "const": "public" },
+        { "type": "object", "required": ["party"], "additionalProperties": false, "properties": { "party": { "$ref": "#/$defs/id" } } },
+        {
+          "type": "object",
+          "required": ["pred"],
+          "additionalProperties": false,
+          "properties": { "pred": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/conjunct" } } }
+        },
+        {
+          "type": "object",
+          "required": ["foreign"],
+          "additionalProperties": false,
+          "properties": {
+            "foreign": {
+              "type": "object",
+              "required": ["domain", "authority_class"],
+              "additionalProperties": false,
+              "properties": { "domain": { "$ref": "#/$defs/digest" }, "authority_class": { "$ref": "#/$defs/ident" } }
+            }
+          }
+        }
+      ]
+    },
+    "conjunct": {
+      "type": "object",
+      "required": ["claim_class"],
+      "additionalProperties": false,
+      "properties": {
+        "claim_class": { "$ref": "#/$defs/ident" },
+        "value": {
+          "oneOf": [
+            { "type": "string" },
+            { "type": "integer", "minimum": -9007199254740991, "maximum": 9007199254740991 },
+            { "type": "boolean" }
+          ]
+        }
+      }
+    },
+    "assurance": {
+      "type": "object",
+      "propertyNames": {
+        "type": "string",
+        "enum": [
+          "aal", "loa_eidas", "phishing_resistant", "hardware_bound", "non_custodial", "uv", "human_presence",
+          "app_controlled_factor", "synced"
+        ]
+      },
+      "additionalProperties": { "type": "integer", "minimum": 0, "maximum": 3 }
+    }
+  }
+}

@@ -33,6 +33,7 @@ mod schema;
 
 use std::path::PathBuf;
 
+use access_kernel::combinator::codec::{decision_from_value, decision_value};
 use access_kernel::meta::ActorKind;
 use serde_json::Value as Json;
 use suiss_crypto::dcbor::{self, Limits, Value};
@@ -178,6 +179,76 @@ fn auth_context_examples_meet_the_cddl() {
 #[test]
 fn key_lookup_examples_meet_the_cddl() {
     check_examples("key-lookup.json");
+}
+
+// E43, TI-20, OP-141 m.38: the decision explanation examples meet explanation.cddl and its JSON
+// Schema in every reader's view; no_objection is not an outcome and an empty list is not a list
+#[test]
+fn explanation_examples_meet_both_schemas() {
+    check_examples("explanation.json");
+}
+
+fn explanation_cddl() -> Cddl {
+    Cddl::new(&[&read("cddl/kernel.cddl"), &read("cddl/explanation.cddl")])
+}
+
+// E43, OP-114 m.2, OP-114 m.3: the Kernel's Decision is the explanation format; every unfiltered
+// example decodes into it and encodes back byte for byte, the requester's filtered view is no
+// Kernel decision, and an invalid one is not decoded
+#[test]
+fn explanation_examples_round_trip_through_the_kernel_decision() {
+    let doc: Json = serde_json::from_str(&read("cddl/examples/explanation.json")).unwrap();
+    let k = kernel();
+    let mut whole = 0;
+    for case in doc["cases"].as_array().unwrap() {
+        let id = case["id"].as_str().unwrap();
+        let bytes = dcbor::encode(&edn::parse(case["edn"].as_str().unwrap()), LIMITS).unwrap();
+        let value = dcbor::decode(&bytes, LIMITS).unwrap();
+        let decoded = decision_from_value(&value);
+        let filtered = matches!(id, "deny-viewer" | "deny-requester");
+        match (case["valid"].as_bool().unwrap(), filtered) {
+            (true, false) => {
+                let d = decoded.unwrap_or_else(|e| panic!("{id}: {e:?}"));
+                assert_eq!(
+                    dcbor::encode(&decision_value(&d), LIMITS).unwrap(),
+                    bytes,
+                    "{id}"
+                );
+                k.validate("decision", &value).unwrap();
+                whole += 1;
+            }
+            (true, true) if id == "deny-requester" => {
+                assert!(k.validate("decision", &value).is_err(), "{id}");
+            }
+            (true, true) => {}
+            (false, _) => assert!(decoded.is_err(), "{id}"),
+        }
+    }
+    assert!(whole >= 4);
+}
+
+// E43, OP-111 m.1: every decision in the Kernel's vectors decodes into a Decision, encodes back
+// byte for byte and is an explanation
+#[test]
+fn decision_vectors_are_explanations() {
+    let k = kernel();
+    let e = explanation_cddl();
+    let mut seen = 0;
+    for file in ["decision.json", "adversarial.json", "cve-regressions.json"] {
+        for case in vectors(file)["cases"].as_array().unwrap() {
+            let Some(h) = case.get("decision").and_then(Json::as_str) else {
+                continue;
+            };
+            let value = decoded(h);
+            let d = decision_from_value(&value)
+                .unwrap_or_else(|err| panic!("{file} {}: {err:?}", case["id"]));
+            assert_eq!(hex(&dcbor::encode(&decision_value(&d), LIMITS).unwrap()), h);
+            k.validate("decision", &value).unwrap();
+            e.validate("explanation", &value).unwrap();
+            seen += 1;
+        }
+    }
+    assert!(seen >= 100);
 }
 
 // OP-149 m.8: the CDDL actor kinds are the Kernel's
