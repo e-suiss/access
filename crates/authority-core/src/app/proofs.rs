@@ -135,9 +135,10 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         Ok(n)
     }
 
-    /// Whether Claim `id` asserts in its issuer line: it has no recorded successor and is not
-    /// one side of a fork (TI-RT7, OP-141 m.30 (c), (d)).
-    pub(crate) async fn in_line(
+    /// Whether Claim `id` is not superseded in its issuer line: it has no recorded successor and
+    /// is not one side of a fork (TI-RT7, OP-141 m.30 (c), (d)). A narrowing reader uses this;
+    /// a qualifying use also needs [`Authority::in_line`].
+    pub(crate) async fn unsuperseded(
         &self,
         snap: &mut Snapshot,
         id: &Id,
@@ -371,7 +372,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                 else {
                     continue;
                 };
-                if !self.in_line(snap, &id, &state.statement).await? {
+                if !self.in_line(snap, &id, &state.statement, now).await? {
                     continue;
                 }
                 // OP-141 m.42 (b)
@@ -400,10 +401,14 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         &self,
         actor: Option<meta::Actor>,
         now: u64,
-    ) -> Result<bool, CoreError> {
+    ) -> Result<Option<&'static str>, CoreError> {
         let Some(actor) = actor else {
-            return Ok(false);
+            return Ok(None);
         };
+        // §9.13, E5: the regime and account status overlays (restriction only)
+        if let Some(code) = self.overlaid(actor, now).await? {
+            return Ok(Some(code));
+        }
         let Some(cutoff) = self
             .compromises(&actor.party, now)
             .await?
@@ -411,7 +416,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             .map(|c| c.from)
             .min()
         else {
-            return Ok(false);
+            return Ok(None);
         };
         let mut snap = Snapshot::default();
         let since = self
@@ -420,13 +425,18 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             .and_then(|v| InstanceState::from_value(&v).ok())
             .map(|i| i.since);
         let Some(since) = since else {
-            return Ok(false);
+            return Ok(None);
         };
+        // §7.9.2.4: an Instance created after the Party's recovery is not covered
+        if self.recovered_before(&actor.party, since, now).await? {
+            return Ok(None);
+        }
         Ok(self
             .reader
             .recorded_at(since)
             .await?
-            .is_none_or(|at| at >= cutoff))
+            .is_none_or(|at| at >= cutoff)
+            .then_some("party-compromise"))
     }
 
     /// The accepted, current `party_compromise` Claims about `party` that assert in their
@@ -461,7 +471,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             if !gates
                 .iter()
                 .any(|g| g.admits_for(claim::PREDICATE_INPUT, &state.statement, now))
-                || !self.in_line(&mut snap, &id, &state.statement).await?
+                || !self.unsuperseded(&mut snap, &id, &state.statement).await?
             {
                 continue;
             }
@@ -549,7 +559,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         if disposition == Disposition::Admit
             && proof
             && current(&statement, now)
-            && self.in_line(snap, &id, &statement).await?
+            && self.in_line(snap, &id, &statement, now).await?
         {
             out.proofs
                 .push(claim_proof(id, &statement, Some(instance), pos));
@@ -584,7 +594,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         let gates = self.gates(snap, &state.statement.issuer).await?;
         if current(&state.statement, now)
             && gates.iter().any(|g| g.admits(&state.statement, now))
-            && self.in_line(snap, id, &state.statement).await?
+            && self.in_line(snap, id, &state.statement, now).await?
         {
             out.proofs.push(claim_proof(
                 *id,

@@ -1051,8 +1051,9 @@ pub struct Frame<'a> {
     pub held: Option<u64>,
     /// Compiled restriction policies (OP-141 m.27 (d)).
     pub policies: &'a crate::restrict::Cache,
-    /// Whether a `party_compromise` overlay covers the actor (OP-141 m.31).
-    pub compromised: bool,
+    /// The DENY overlay that covers the actor, by its subcode: a `party_compromise` (OP-141
+    /// m.31), a narrowing account status or a regime overlay (§9.13, E5).
+    pub compromised: Option<&'static str>,
 }
 
 /// One pass of the evaluation over `snapshot` (§17.1.1 steps 7–8). Implicit powers of a
@@ -1078,9 +1079,11 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
     } = *frame;
     snapshot.restart();
     // SEC12, OP-141 m.31 (c), (d)
-    if compromised && !matches!(req.payload, Some(Payload::InstanceTerminate { .. })) {
+    if let Some(code) = compromised
+        && !matches!(req.payload, Some(Payload::InstanceTerminate { .. }))
+    {
         return Pass::Done(Evaluation {
-            decision: deny(BlockerClass::Restricted, "party-compromise", Resolver::Root),
+            decision: deny(BlockerClass::Restricted, code, Resolver::Root),
             effects: Vec::new(),
             draws: Vec::new(),
             releases: Vec::new(),

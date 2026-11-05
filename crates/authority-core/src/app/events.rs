@@ -203,6 +203,24 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                     .await?;
                 out.entry(c.id).or_default().push(encode(&e)?);
             }
+            // OP-149 m.7, m.19 (f), TN-49: a narrowing account status disables the Party
+            if c.disposition == claim::Disposition::Admit
+                && c.statement.class == "account_status"
+                && matches!(&c.statement.value, Some(EqValue::Text(t))
+                    if ["suspended", "deactivated", "tombstone"].contains(&t.as_str()))
+            {
+                let e = Event {
+                    kind: Kind::PartyDisabled,
+                    domain,
+                    source: Source::Claim(c.id),
+                    subject: Subject::Party(c.statement.subject),
+                    at: now,
+                    detail: Detail::Disabled {
+                        reason: ReasonClass::Suspended,
+                    },
+                };
+                out.entry(c.id).or_default().push(encode(&e)?);
+            }
         }
         Ok(out)
     }

@@ -34,7 +34,7 @@ use access_kernel::combinator::{Capacity, Mode, Outcome};
 use access_kernel::digest::Digest;
 use access_kernel::intent::{ContextRefs, IntentEnvelope};
 use access_kernel::json::b64url_encode;
-use access_kernel::meta::{self, ActorKind, ExerciseBasis, Payload, Root, kind};
+use access_kernel::meta::{self, ActorKind, ExerciseBasis, HoldingRef, Payload, Root, kind};
 use access_kernel::model::{
     ActionRef, ActionSet, AuthoritySet, CanonicalAuthority, ConstraintSet, DelegationTerms,
     EqValue, Id, ResourceRef, ResourceSelector, Structural, SubjectSelector, Window,
@@ -137,26 +137,21 @@ fn pinned() -> (&'static str, Value) {
     )
 }
 
-fn genesis(acceptances: Vec<Value>) -> BTreeMap<String, Opened> {
-    let opened = |value| Opened {
-        value,
-        salt: [3; 32],
-    };
-    let bootstrap = Value::Map(vec![
+/// A Grant held by `holder` on the meta-anchor for `actions` on `namespace`.
+fn grant(holder: &SubjectSelector, actions: &[&str], namespace: &str) -> Value {
+    Value::Map(vec![
         (Value::text("anchor"), Value::Unsigned(0)),
-        (Value::text("holder"), SubjectSelector::Public.to_value()),
+        (Value::text("holder"), holder.to_value()),
         (
             Value::text("authority"),
             CanonicalAuthority {
                 authority: AuthoritySet {
                     actions: ActionSet {
-                        exact: [action("party_register"), action("instance_create")]
-                            .into_iter()
-                            .collect(),
+                        exact: actions.iter().map(|a| action(a)).collect(),
                         prefix: BTreeSet::new(),
                     },
                     resource: ResourceSelector::Structural(Structural {
-                        namespace: "access.party".to_owned(),
+                        namespace: namespace.to_owned(),
                         prefix: Vec::new(),
                         kind: None,
                         attrs: BTreeMap::new(),
@@ -185,7 +180,26 @@ fn genesis(acceptances: Vec<Value>) -> BTreeMap<String, Opened> {
             Value::text("agency"),
             Value::Array(vec![meta::capacity_value(Capacity::Own)]),
         ),
-    ]);
+    ])
+}
+
+fn genesis(acceptances: Vec<Value>) -> BTreeMap<String, Opened> {
+    let opened = |value| Opened {
+        value,
+        salt: [3; 32],
+    };
+    let grants = vec![
+        grant(
+            &SubjectSelector::Public,
+            &["party_register", "instance_create"],
+            "access.party",
+        ),
+        grant(
+            &SubjectSelector::Party(ALICE),
+            &["contribute"],
+            "access.contribution",
+        ),
+    ];
     let mut keyed: Vec<(Vec<u8>, Value)> = acceptances
         .into_iter()
         .map(|v| (dcbor::encode(&v, Limits::CEILING).unwrap(), v))
@@ -199,7 +213,7 @@ fn genesis(acceptances: Vec<Value>) -> BTreeMap<String, Opened> {
                 Value::Map(vec![(Value::text("sole"), ROOT.to_value())]),
             )])),
         ),
-        ("grants".to_owned(), opened(Value::Array(vec![bootstrap]))),
+        ("grants".to_owned(), opened(Value::Array(grants))),
         (
             "acceptances".to_owned(),
             opened(Value::Array(keyed.into_iter().map(|(_, v)| v).collect())),
@@ -242,6 +256,8 @@ fn binding() -> Bound {
             (ALICE, ALICE_KEY),
             (BOB, BOB_KEY),
             (REGIME, REGIME_KEY),
+            (ALICE, 50),
+            (ALICE, 51),
         ]
         .into_iter()
         .map(|(p, k)| (thumbprint(&public(k)), (p, public(k))))
@@ -356,6 +372,15 @@ fn request(d: Digest, nonce: u8, basis: ExerciseBasis, payload: Payload) -> Requ
 }
 
 async fn send(core: &mut Core, request: Request, seed: u8) -> Result<Response, CoreError> {
+    send_at(core, request, seed, NOW).await
+}
+
+async fn send_at(
+    core: &mut Core,
+    request: Request,
+    seed: u8,
+    now: u64,
+) -> Result<Response, CoreError> {
     let digest = access_kernel::intent::intent_digest(&request.intent).unwrap();
     let ais = Ais {
         domain: request.domain,
@@ -365,7 +390,7 @@ async fn send(core: &mut Core, request: Request, seed: u8) -> Result<Response, C
         pep: PEP.to_owned(),
         capacity: request.capacity,
         basis: request.basis,
-        iat: NOW,
+        iat: now,
         exercise: request.exercise,
     };
     let inc = Incoming {
@@ -374,7 +399,7 @@ async fn send(core: &mut Core, request: Request, seed: u8) -> Result<Response, C
         pep: PEP.to_owned(),
         explain: false,
     };
-    core.exercise(&inc, NOW).await
+    core.exercise(&inc, now).await
 }
 
 fn statement(d: Digest, issuer: Id, subject: Id, class: &str, value: EqValue) -> Statement {
@@ -817,4 +842,224 @@ async fn the_ledger_indexes_held_claims_and_quota_notices() {
     }
     assert_eq!(access_telemetry::counters::ISSUER_QUOTA.get(), before + 1);
     domains.release().await;
+}
+
+/// `party` (acting with key `actor`) asks to add an Instance with key `new`, at `now`: its
+/// outcome and the subcode of its first blocker.
+async fn add_key(
+    core: &mut Core,
+    d: Digest,
+    (party, actor): (Id, u8),
+    (new, nonce): (u8, u8),
+    now: u64,
+) -> (Outcome, Option<String>) {
+    let basis = ExerciseBasis::Public(meta::object_id(&d, kind::GRANT, 0));
+    let create = Payload::InstanceCreate {
+        party,
+        key: public(new),
+        mandate: None,
+    };
+    let r = send_at(core, request(d, nonce, basis, create), actor, now)
+        .await
+        .unwrap();
+    let subcode = r.decision.blockers.first().and_then(|b| b.subcode.clone());
+    (r.decision.outcome, subcode)
+}
+
+/// ALICE, by key `seed`, contributes an approval under her Grant, at `now`: a
+/// meta-action of an existing Instance.
+async fn act(
+    core: &mut Core,
+    d: Digest,
+    seed: u8,
+    nonce: u8,
+    now: u64,
+) -> (Outcome, Option<String>) {
+    let payload = Payload::Contribute {
+        target: Digest([nonce; 32]),
+        class: "approve".to_owned(),
+    };
+    let basis = ExerciseBasis::Holding(HoldingRef {
+        grant: meta::object_id(&d, kind::GRANT, 1),
+        holder: ALICE,
+        since: 0,
+    });
+    let mut r = request(d, nonce, basis, payload);
+    r.intent.resources = vec![ResourceRef {
+        namespace: "access.contribution".to_owned(),
+        path: vec!["approve".to_owned()],
+        incarnation: 0,
+    }];
+    let r = send_at(core, r, seed, now).await.unwrap();
+    let subcode = r.decision.blockers.first().and_then(|b| b.subcode.clone());
+    (r.decision.outcome, subcode)
+}
+
+fn regime_acceptance() -> Value {
+    acceptance(
+        REGIME,
+        "predicate-input",
+        &[
+            "account_status",
+            "party_recovered",
+            "party_compromise",
+            "party_terminated",
+            "party_identity_break",
+        ],
+        vec![],
+    )
+}
+
+fn status(d: Digest, party: Id, value: &str, issued_at: u64, supersedes: Option<Id>) -> Statement {
+    Statement {
+        issued_at,
+        supersedes,
+        ..statement(
+            d,
+            REGIME,
+            party,
+            "account_status",
+            EqValue::Text(value.to_owned()),
+        )
+    }
+}
+
+// TN-49, TN-50, SEC12, X36, E5, TI-RT7, G36: a narrowing account status denies the Party's
+// Instances from its ingest on, as a restriction; a newer status in the issuer line lifts it,
+// and one without an order keeps it (the disqualifying side wins)
+#[tokio::test]
+async fn account_status_overlays_the_party_until_superseded() {
+    let db = fresh().await.unwrap();
+    let (mut core, d) = setup(&db, vec![regime_acceptance()]).await;
+    assert_eq!(
+        add_key(&mut core, d, (ALICE, ALICE_KEY), (50, 20), NOW)
+            .await
+            .0,
+        Outcome::Allow
+    );
+    let suspended = signed(&status(d, ALICE, "suspended", NOW, None), REGIME_KEY);
+    let ClaimVerdict::Admitted { claim, .. } = core.ingest(&suspended, NOW).await.unwrap().verdict
+    else {
+        panic!("admitted");
+    };
+    assert_eq!(
+        add_key(&mut core, d, (ALICE, ALICE_KEY), (51, 21), NOW).await,
+        (Outcome::Deny, Some("account-status".to_owned()))
+    );
+    // OP-149 m.7, m.19 (f): the producer of party.disabled{suspended}
+    let events: Vec<_> =
+        access_store::authority::read_outbox(&db.app, &DomainId::from_bytes(d.0), (0, 0), 100)
+            .await
+            .unwrap()
+            .into_iter()
+            .map(|r| access_internal_api::events::Event::from_bytes(&r.event).unwrap())
+            .filter(|e| e.kind == access_internal_api::events::Kind::PartyDisabled)
+            .collect();
+    assert_eq!(events.len(), 1);
+    assert_eq!(
+        events[0].detail,
+        access_internal_api::events::Detail::Disabled {
+            reason: access_internal_api::events::ReasonClass::Suspended
+        }
+    );
+    assert_eq!(
+        events[0].subject,
+        access_internal_api::events::Subject::Party(ALICE)
+    );
+    let unordered = signed(&status(d, ALICE, "active", NOW - 1, None), REGIME_KEY);
+    core.ingest(&unordered, NOW).await.unwrap();
+    assert_eq!(
+        add_key(&mut core, d, (ALICE, ALICE_KEY), (51, 22), NOW)
+            .await
+            .0,
+        Outcome::Deny
+    );
+    let active = signed(&status(d, ALICE, "active", NOW, Some(claim)), REGIME_KEY);
+    core.ingest(&active, NOW).await.unwrap();
+    assert_eq!(
+        add_key(&mut core, d, (ALICE, ALICE_KEY), (51, 23), NOW)
+            .await
+            .0,
+        Outcome::Allow
+    );
+}
+
+// §7.9.2.4, §10.1.5, E5: termination denies every Instance of the Party and its actor-binding
+// fails closed; an identity break denies the Instances established before it
+#[tokio::test]
+async fn termination_and_identity_break_restrict_instances() {
+    let db = fresh().await.unwrap();
+    let (mut core, d) = setup(&db, vec![regime_acceptance()]).await;
+    let terminated = statement(d, REGIME, BOB, "party_terminated", EqValue::Int(5_000));
+    core.ingest(&signed(&terminated, REGIME_KEY), NOW)
+        .await
+        .unwrap();
+    assert_eq!(
+        add_key(&mut core, d, (BOB, BOB_KEY), (52, 30), NOW).await,
+        (Outcome::Deny, Some("party-terminated".to_owned()))
+    );
+    assert_eq!(
+        act(&mut core, d, ALICE_KEY, 32, NOW).await.0,
+        Outcome::Allow
+    );
+    let broken = statement(
+        d,
+        REGIME,
+        ALICE,
+        "party_identity_break",
+        EqValue::Text("key_loss".to_owned()),
+    );
+    core.ingest(&signed(&broken, REGIME_KEY), NOW)
+        .await
+        .unwrap();
+    assert_eq!(
+        act(&mut core, d, ALICE_KEY, 31, NOW).await,
+        (Outcome::Deny, Some("party-identity-break".to_owned()))
+    );
+}
+
+// SEC12, §7.9.2.3, §7.9.2.4: Instances set up after a compromise are denied; after the Party
+// recovers, an Instance set up later is not, and the ones before stay denied
+#[tokio::test]
+async fn party_recovery_frees_only_instances_created_after_it() {
+    let db = fresh().await.unwrap();
+    let (mut core, d) = setup(&db, vec![regime_acceptance()]).await;
+    let compromise = Statement {
+        issued_at: 20_000,
+        ..statement(d, REGIME, ALICE, "party_compromise", EqValue::Int(20_000))
+    };
+    core.ingest(&signed(&compromise, REGIME_KEY), 25_000)
+        .await
+        .unwrap();
+    assert_eq!(
+        add_key(&mut core, d, (ALICE, ALICE_KEY), (50, 40), 30_000)
+            .await
+            .0,
+        Outcome::Allow
+    );
+    assert_eq!(
+        act(&mut core, d, 50, 41, 30_000).await,
+        (Outcome::Deny, Some("party-compromise".to_owned()))
+    );
+    let recovered = Statement {
+        issued_at: 30_000,
+        ..statement(d, REGIME, ALICE, "party_recovered", EqValue::Bool(true))
+    };
+    let body = Body::PartyRecovered(access_kernel::claim::body::PartyRecovered {
+        previous: Digest([1; 32]),
+        next: Digest([2; 32]),
+    });
+    let v = core
+        .ingest(&with_body(recovered, &body, REGIME_KEY), 30_000)
+        .await
+        .unwrap();
+    assert!(matches!(v.verdict, ClaimVerdict::Admitted { .. }), "{v:?}");
+    assert_eq!(
+        add_key(&mut core, d, (ALICE, ALICE_KEY), (51, 42), 31_000)
+            .await
+            .0,
+        Outcome::Allow
+    );
+    assert_eq!(act(&mut core, d, 51, 43, 31_000).await.0, Outcome::Allow);
+    assert_eq!(act(&mut core, d, 50, 44, 31_000).await.0, Outcome::Deny);
 }

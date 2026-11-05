@@ -1156,6 +1156,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             let (mut evaluation, snapshot) = self.passes(req, &frame).await?;
             self.tiered(req, &mut evaluation, open, now).await?;
             self.throttled(&mut evaluation, actor, open, now).await?;
+            self.stale_holding(req, actor, &mut evaluation, now).await?;
             if req.mode == Mode::Check {
                 return Ok(answer(evaluation.decision, None, None, false));
             }
@@ -1583,6 +1584,7 @@ pub const CONTRIBUTION_NAMESPACE: &str = "access.contribution";
 mod events;
 mod ingest;
 mod proofs;
+mod regime;
 
 pub use ingest::Ingested;
 pub use proofs::{Compromise, MAX_PROOFS, NewClaim, Resolved};

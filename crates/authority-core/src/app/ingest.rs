@@ -385,7 +385,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                 claim::ADMITTING_USES
                     .iter()
                     .any(|u| g.admits_for(u, &state.statement, now))
-            }) && self.in_line(snap, &id, &state.statement).await?
+            }) && self.in_line(snap, &id, &state.statement, now).await?
             {
                 return Ok(true);
             }
@@ -424,7 +424,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                 g.admits_for(claim::ACTOR_BINDING, &state.statement, now)
                     || g.admits(&state.statement, now)
             });
-            if !accepted || !self.in_line(snap, &id, &state.statement).await? {
+            if !accepted || !self.unsuperseded(snap, &id, &state.statement).await? {
                 continue;
             }
             if !self.names(&state.statement, &s.class, &s.issuer).await? {
