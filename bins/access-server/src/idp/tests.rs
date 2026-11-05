@@ -473,6 +473,7 @@ fn proposal(
         },
         basis,
         capacity: Capacity::Own,
+        subject: None,
     }
 }
 
@@ -719,6 +720,7 @@ async fn only_the_governing_domain_commits_a_realm_change() {
             capacity: p.capacity,
             ais: sign(&statement(other, &p.nonce, digest, p.basis), ROOT_KEY),
             pep: String::from(PEP),
+            actor: None,
         },
     )
     .await

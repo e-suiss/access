@@ -42,6 +42,69 @@ fn brand(logo: &str) -> Branding {
     }
 }
 
+// §13.4 G54, MD-14, OP-149 m.16 (a), OP-63: an idp.* change asked for in a realm subject's
+// session commits only when a live Instance of the Party that subject is bound to signed it;
+// another Party's key, or a subject bound to no Party, is refused before anything is decided
+#[tokio::test]
+async fn idp_commits_carry_the_sessions_actor_binding() {
+    // L0-META-7, INV-2, PI-7
+    let w = World::new().await;
+    let (tenant, realm, d) = w.realm("bound").await;
+    onboard(&w.plane, d, ROOT, ROOT_KEY).await;
+    onboard(&w.plane, d, ALICE, ALICE_KEY).await;
+    let mut t = TenantTx::begin(&w.db.app, tenant, realm).await.unwrap();
+    let root_subject = t
+        .insert_subject("staged", "realm-kek:1", &[9; 40])
+        .await
+        .unwrap();
+    let alice_subject = t
+        .insert_subject("staged", "realm-kek:1", &[9; 40])
+        .await
+        .unwrap();
+    let nobody = t
+        .insert_subject("staged", "realm-kek:1", &[9; 40])
+        .await
+        .unwrap();
+    for (s, party) in [(root_subject, ROOT), (alice_subject, ALICE)] {
+        assert!(
+            access_store::idp::bind_subject_party(&mut t, &s, &party.0)
+                .await
+                .unwrap()
+        );
+    }
+    t.commit().await.unwrap();
+    let mapper = |nonce, subject| Proposal {
+        subject: Some(subject),
+        ..proposal(
+            (tenant, realm),
+            Change::MapperSet {
+                claim: ClaimName::parse("nick").unwrap(),
+                source: Some(Attribute::parse("nickname").unwrap()),
+            },
+            nonce,
+            idp_anchor(d),
+            1,
+        )
+    };
+    for (nonce, s) in [(1, alice_subject), (2, nobody)] {
+        assert!(matches!(
+            exercise(&w, &mapper(nonce, s), ROOT_KEY).await,
+            Err(AdminError::Refused(code)) if code == "actor-binding"
+        ));
+    }
+    let mut t = TenantTx::begin(&w.db.app, tenant, realm).await.unwrap();
+    assert_eq!(
+        access_store::idp::mappers(&mut t).await.unwrap(),
+        Vec::new()
+    );
+    t.commit().await.unwrap();
+    written(
+        &exercise(&w, &mapper(3, root_subject), ROOT_KEY)
+            .await
+            .unwrap(),
+    );
+}
+
 // TN-106, MD-14, K06: a realm's branding is data written only by an idp.realm.branding
 // Exercise; a logo outside its CSP origins is refused before anything is decided
 #[tokio::test]

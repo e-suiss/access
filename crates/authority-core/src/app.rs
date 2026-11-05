@@ -1581,6 +1581,7 @@ struct Shape<'a> {
 /// Namespace of a contribution's resource (L0-META-30).
 pub const CONTRIBUTION_NAMESPACE: &str = "access.contribution";
 
+mod binding;
 mod events;
 mod ingest;
 mod projection;

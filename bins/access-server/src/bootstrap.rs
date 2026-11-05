@@ -901,6 +901,7 @@ where
             validity: w.validity,
             basis: ExerciseBasis::Anchor(meta::object_id(&domain, kind::ANCHOR, IDP_ANCHOR)),
             capacity: Capacity::Own,
+            subject: None,
         };
         let prepared = admin.prepare(&proposal).await?;
         let ais = sign(
@@ -912,7 +913,7 @@ where
                 proposal.basis,
             ),
         )?;
-        match admin.apply(&proposal, ais).await? {
+        match Box::pin(admin.apply(&proposal, ais)).await? {
             Applied::Written { .. } | Applied::AlreadyWritten { .. } => Ok((id, true)),
             Applied::NotAllowed { decision, .. } => {
                 Err(BootstrapError::Refused(format!("{:?}", decision.outcome)))

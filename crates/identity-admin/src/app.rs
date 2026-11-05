@@ -7,13 +7,14 @@ use access_crypto::opaque_id::IdKey;
 use access_identity_account::domain::password::Argon2Params;
 use access_identity_oauth::adapters::outbound::DeclaredTargets;
 use access_identity_oauth::domain::issuer::{Issuer, IssuerStyle, RealmBase};
-use access_internal_api::idp::{GenesisOrder, Submission, Verdict};
+use access_internal_api::idp::{ACTOR_BINDING, GenesisOrder, Submission, Verdict};
 use access_internal_api::instances::PlatformProduct;
 use access_kernel::combinator::{Capacity, Decision};
 use access_kernel::digest::Digest;
 use access_kernel::intent::{IntentEnvelope, intent_digest};
 use access_kernel::json::{Json, b64url_decode};
 use access_kernel::meta::{ExerciseBasis, Root};
+use access_kernel::model::Id;
 use access_kernel::model::Window;
 use access_kernel::schema::Spp;
 use access_store::Pool;
@@ -79,6 +80,10 @@ pub struct Proposal {
     pub basis: ExerciseBasis,
     /// The actor's declared capacity.
     pub capacity: Capacity,
+    /// The realm subject whose authenticated session asks for the change: the AIS must be
+    /// signed by a live Instance of the Party that subject is bound to (§13.4 G54, OP-149
+    /// m.16 (a)). `None` only for the operator's own root key, which has no session.
+    pub subject: Option<[u8; 16]>,
 }
 
 /// What the actor signs: the realm's governing domain and the intent of the change.
@@ -364,9 +369,11 @@ impl<D: Decider, G: Governance, K: RealmKeys> Admin<'_, D, G, K> {
     /// [`AdminError`]; a DENY or a pending decision is [`Applied::NotAllowed`].
     pub async fn apply(&self, p: &Proposal, ais: Vec<u8>) -> Result<Applied, AdminError> {
         let prepared = self.prepared(p, false).await?;
+        let actor = self.actor(p).await?;
         let verdict = self
             .decider
             .decide(Submission {
+                actor,
                 domain: prepared.domain,
                 nonce: p.nonce.clone(),
                 intent: prepared.intent,
@@ -427,6 +434,20 @@ impl<D: Decider, G: Governance, K: RealmKeys> Admin<'_, D, G, K> {
             position: committed.position,
             secret,
         })
+    }
+
+    /// The Party the session subject of `p` is bound to (§13.4 G54, OP-149 m.16 (a)); a subject
+    /// without one cannot change the realm.
+    async fn actor(&self, p: &Proposal) -> Result<Option<Id>, AdminError> {
+        let Some(subject) = &p.subject else {
+            return Ok(None);
+        };
+        let mut t = TenantTx::begin(self.app, p.tenant, p.realm).await?;
+        let party = idp::subject_party(&mut t, subject).await?;
+        t.commit().await?;
+        party
+            .map(|p| Some(Id(p)))
+            .ok_or_else(|| AdminError::Refused(String::from(ACTOR_BINDING)))
     }
 
     /// What follows a written change outside the database: a new JOSE algorithm reaches the

@@ -35,7 +35,7 @@ use suiss_crypto::pkcs11::{HsmError, KeyStore};
 use crate::login::kek_label;
 use crate::oauth::NONCE_GENERATION;
 use access_internal_api::idp::{
-    Committed, GenesisOpened, GenesisOrder, Submission, Unavailable, Verdict,
+    ACTOR_BINDING, Committed, GenesisOpened, GenesisOrder, Submission, Unavailable, Verdict,
 };
 use access_kernel::combinator::{Mode, Outcome};
 use access_kernel::digest::Digest;
@@ -155,6 +155,18 @@ where
     C: Clock + Clone + Send + Sync + 'static,
 {
     async fn decide(&self, s: Submission) -> Result<Verdict, Unavailable> {
+        // §13.4 G54, OP-149 m.16 (a)
+        if let Some(party) = s.actor {
+            match self.domains.signer_party(s.domain, &s.ais).await {
+                Ok(Some(p)) if p == party => {}
+                Ok(_) => {
+                    return Ok(Verdict::Refused {
+                        code: String::from(ACTOR_BINDING),
+                    });
+                }
+                Err(e) => return Ok(refused(&e)),
+            }
+        }
         let request = Request {
             domain: s.domain,
             mode: Mode::Commit,

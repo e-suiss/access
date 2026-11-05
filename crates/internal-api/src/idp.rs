@@ -227,7 +227,15 @@ pub struct Submission {
     pub ais: Vec<u8>,
     /// The identity plane as PEP.
     pub pep: String,
+    /// The Party the identity plane bound the requesting session's subject to (§13.4 G54,
+    /// OP-149 m.16 (a)): the Exercise is refused with [`ACTOR_BINDING`] unless a live Instance
+    /// of that Party signed its AIS. `None` only for the operator's own root key, which has no
+    /// session.
+    pub actor: Option<Id>,
 }
+
+/// Stable code of an `idp.*` Exercise whose AIS no live Instance of the session's Party signed.
+pub const ACTOR_BINDING: &str = "actor-binding";
 
 /// A committed ALLOW of an `idp.*` action: what the identity plane binds its row to.
 #[derive(Clone, Debug, PartialEq, Eq)]

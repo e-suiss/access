@@ -35,6 +35,7 @@ use crate::keys;
 use crate::ports::{Binding, Keys, Reader, Row, Salts};
 use crate::query::{Hit, Query, page_after, page_body};
 
+mod binding;
 mod projection;
 pub use projection::{
     BOUNDS_HORIZON_MS, CONTRACT_LABEL, FAMILY_CLAIM, INTENT_HORIZON_MS, Projected, Token,
