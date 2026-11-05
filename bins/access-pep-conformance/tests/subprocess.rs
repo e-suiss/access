@@ -9,10 +9,20 @@
 use std::path::PathBuf;
 use std::process::{Command, Output};
 
+/// Real processes on a loaded machine: generous wall-clock limits, so only a wrong answer fails;
+/// the exact deadline is checked under paused time in `selftest.rs`.
 fn runner(sut: &str) -> Output {
     let cases = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../conformance/pep/cases");
     Command::new(env!("CARGO_BIN_EXE_access-pep-conformance"))
-        .args(["--sut", sut, "--deadline-ms", "300", "--cases"])
+        .args([
+            "--sut",
+            sut,
+            "--deadline-ms",
+            "2000",
+            "--grace-ms",
+            "5000",
+            "--cases",
+        ])
         .arg(cases)
         .output()
         .unwrap()
