@@ -87,3 +87,31 @@ fn bad_frames_are_refused() {
     .unwrap();
     assert_eq!(decode_request(&eddsa), Err(FrameError::Malformed));
 }
+
+// TN-118, §13.2: the decided key changes survive their frames
+#[test]
+fn key_changes_round_trip() {
+    let realm = Realm([3; 16]);
+    for r in [
+        Request::Rotate {
+            realm,
+            retire: [5; 32],
+        },
+        Request::DropKey {
+            realm,
+            kid: [4; 32],
+        },
+        Request::SetPolicy {
+            realm,
+            policy: Policy::REALM,
+        },
+    ] {
+        let f = encode_request(&r).unwrap();
+        assert_eq!(decode_request(&f[4..]).unwrap(), r);
+    }
+    let r = Response::Rekeyed(String::from(r#"{"keys":[]}"#));
+    assert_eq!(
+        decode_response(&encode_response(&r).unwrap()[4..]).unwrap(),
+        r
+    );
+}

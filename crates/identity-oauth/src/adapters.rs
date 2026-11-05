@@ -101,6 +101,53 @@ impl SignerKeys {
         }
     }
 
+    async fn rekey(&self, request: &Request) -> Result<(), Unavailable> {
+        match self.ask(request).await? {
+            Response::Rekeyed(_) => Ok(()),
+            _ => Err(Unavailable),
+        }
+    }
+
+    /// Rotates the realm's active key `retire` out now (TN-118).
+    ///
+    /// # Errors
+    /// [`Unavailable`], also when the signer refuses.
+    pub async fn rotate(&self, realm: RealmId, retire: [u8; 32]) -> Result<(), Unavailable> {
+        self.rekey(&Request::Rotate {
+            realm: Realm(*realm.as_bytes()),
+            retire,
+        })
+        .await
+    }
+
+    /// Drops the realm key `kid` at once (§13.2).
+    ///
+    /// # Errors
+    /// [`Unavailable`], also when the signer refuses.
+    pub async fn drop_key(&self, realm: RealmId, kid: [u8; 32]) -> Result<(), Unavailable> {
+        self.rekey(&Request::DropKey {
+            realm: Realm(*realm.as_bytes()),
+            kid,
+        })
+        .await
+    }
+
+    /// Replaces the realm's key rotation policy (TN-118).
+    ///
+    /// # Errors
+    /// [`Unavailable`], also when the signer refuses.
+    pub async fn set_policy(
+        &self,
+        realm: RealmId,
+        policy: suiss_crypto::rotation::Policy,
+    ) -> Result<(), Unavailable> {
+        self.rekey(&Request::SetPolicy {
+            realm: Realm(*realm.as_bytes()),
+            policy,
+        })
+        .await
+    }
+
     /// Signs deterministic CBOR as a tagged `COSE_Sign1` of `content_type` with the key that
     /// signs the realm's tokens, opening the realm's key set on first use (OP-149 m.8).
     ///

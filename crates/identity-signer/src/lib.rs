@@ -32,6 +32,15 @@ pub enum SignerError {
     /// The key could not sign.
     #[error("sign")]
     Sign,
+    /// A rotation found no published backup past its lead to activate (CR-25, MD-6).
+    #[error("no backup past its publish lead")]
+    NoBackup,
+    /// The key set holds no such key that is not dropped already.
+    #[error("unknown key")]
+    UnknownKey,
+    /// The rotation policy may not be taken (CR-26).
+    #[error("policy: {0}")]
+    Policy(#[from] crate::domain::PolicyError),
 }
 
 impl SignerError {
@@ -44,6 +53,9 @@ impl SignerError {
             Self::Payload => "signer-payload",
             Self::Note => "signer-note",
             Self::Sign => "signer-sign",
+            Self::NoBackup => "signer-no-backup",
+            Self::UnknownKey => "signer-unknown-key",
+            Self::Policy(p) => p.code(),
         }
     }
 }

@@ -291,3 +291,99 @@ fn rounds_report_transitions_and_delays() {
     let late = (401..=800_u64).find_map(|d| s.round(d * day, 7).delayed.first().copied());
     assert!(late.is_some_and(|(r, ms)| r == A && ms > 0));
 }
+
+// TN-118, §13.2, CR-23: decided rotation, emergency drop and policy reach the realm's key set
+// and survive a restart; another realm is untouched
+#[test]
+fn decided_key_changes_survive_a_restart() {
+    let vault = MemVault::default();
+    let mut s = Service::start(factory(), vault.clone(), Policy::REALM).unwrap();
+    for r in [A, B] {
+        let _ = s.handle(
+            Request::Open {
+                realm: r,
+                alg: JwsAlg::Es256,
+            },
+            0,
+            0,
+        );
+    }
+    let lead = Policy::REALM.publish_lead_ms;
+    let now = 2 * lead + 60_000;
+    assert_eq!(s.tick(lead, 1), Vec::<Realm>::new());
+    assert_eq!(s.tick(now, 1), Vec::<Realm>::new());
+    let b = jwks(&mut s, B);
+    let Response::Signed { kid, .. } = s.handle(
+        Request::Sign {
+            realm: A,
+            typ: String::from("JWT"),
+            payload: b"{}".to_vec(),
+            at: now,
+        },
+        now,
+        0,
+    ) else {
+        panic!("not signed");
+    };
+    let Response::Rekeyed(after) = s.handle(Request::DropKey { realm: A, kid }, now, 2) else {
+        panic!("not dropped");
+    };
+    assert!(!after.contains(&access_kernel::json::b64url_encode(&kid)));
+    assert_eq!(
+        s.handle(Request::DropKey { realm: A, kid }, now, 2),
+        Response::Rekeyed(after.clone())
+    );
+    assert_eq!(
+        s.handle(
+            Request::DropKey {
+                realm: A,
+                kid: [0; 32]
+            },
+            now,
+            2
+        ),
+        Response::Error(String::from("signer-unknown-key"))
+    );
+    let mut faster = Policy::REALM;
+    faster.lifetime_ms = 30 * 86_400_000;
+    faster.window_ms = 60 * 86_400_000;
+    assert!(matches!(
+        s.handle(
+            Request::SetPolicy {
+                realm: A,
+                policy: faster
+            },
+            now,
+            0
+        ),
+        Response::Rekeyed(_)
+    ));
+    let mut bad = Policy::REALM;
+    bad.publish_lead_ms = 0;
+    assert_eq!(
+        s.handle(
+            Request::SetPolicy {
+                realm: A,
+                policy: bad
+            },
+            now,
+            0
+        ),
+        Response::Error(String::from("realm-key-lead"))
+    );
+    assert_eq!(
+        s.handle(
+            Request::Rotate {
+                realm: Realm([9; 16]),
+                retire: kid
+            },
+            now,
+            0
+        ),
+        Response::Error(String::from(UNKNOWN_REALM))
+    );
+    let mut again = Service::start(factory(), vault, Policy::REALM).unwrap();
+    assert_eq!(jwks(&mut again, A), after);
+    assert_eq!(jwks(&mut again, B), b);
+    assert_eq!(again.rings.get(&A).map(|(_, r)| r.policy()), Some(faster));
+}

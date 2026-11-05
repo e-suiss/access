@@ -4,6 +4,7 @@
 
 use access_crypto::jose::JwsAlg;
 use suiss_crypto::dcbor::{self, Limits, Value};
+use suiss_crypto::rotation::Policy;
 
 /// Largest frame body.
 pub const MAX_FRAME: usize = 1 << 20;
@@ -68,6 +69,27 @@ pub enum Request {
         /// The `tlog-checkpoint` body.
         body: String,
     },
+    /// Rotates the realm's active key `retire` out now (TN-118, `idp.realm.key_rotate`).
+    Rotate {
+        /// Realm.
+        realm: Realm,
+        /// The active key's `kid`.
+        retire: [u8; 32],
+    },
+    /// Drops one key of the realm at once (§13.2, `idp.realm.key_drop`).
+    DropKey {
+        /// Realm.
+        realm: Realm,
+        /// The key's `kid`.
+        kid: [u8; 32],
+    },
+    /// Replaces the realm's rotation policy (TN-118, `idp.realm.key_policy`).
+    SetPolicy {
+        /// Realm.
+        realm: Realm,
+        /// The policy.
+        policy: Policy,
+    },
 }
 
 /// The identity signer's answer.
@@ -105,6 +127,8 @@ pub enum Response {
         /// The signature line, newline-terminated.
         line: String,
     },
+    /// The key set changed outside the schedule; its JWKS document now.
+    Rekeyed(String),
     /// A refusal, by stable code.
     Error(String),
 }
@@ -155,6 +179,42 @@ fn realm(v: Option<&Value>) -> Result<Realm, FrameError> {
         .try_into()
         .map(Realm)
         .map_err(|_| FrameError::Malformed)
+}
+
+fn kid(v: Option<&Value>) -> Result<[u8; 32], FrameError> {
+    bytes(v)?.try_into().map_err(|_| FrameError::Malformed)
+}
+
+/// A rotation policy as the protocol and the vault carry it.
+#[must_use]
+pub fn policy_value(p: &Policy) -> Value {
+    map(vec![
+        ("lifetime_ms", Value::Unsigned(p.lifetime_ms)),
+        ("window_ms", Value::Unsigned(p.window_ms)),
+        ("publish_lead_ms", Value::Unsigned(p.publish_lead_ms)),
+        ("retain_ms", Value::Unsigned(p.retain_ms)),
+        ("max_signatures", Value::Unsigned(p.max_signatures)),
+        (
+            "jitter_permille",
+            Value::Unsigned(u64::from(p.jitter_permille)),
+        ),
+    ])
+}
+
+/// The policy of a [`policy_value`].
+///
+/// # Errors
+/// [`FrameError::Malformed`].
+pub fn policy_of(v: &Value) -> Result<Policy, FrameError> {
+    Ok(Policy {
+        lifetime_ms: uint(v.get("lifetime_ms"))?,
+        window_ms: uint(v.get("window_ms"))?,
+        publish_lead_ms: uint(v.get("publish_lead_ms"))?,
+        retain_ms: uint(v.get("retain_ms"))?,
+        max_signatures: uint(v.get("max_signatures"))?,
+        jitter_permille: u16::try_from(uint(v.get("jitter_permille"))?)
+            .map_err(|_| FrameError::Malformed)?,
+    })
 }
 
 /// The algorithm by its JOSE name.
@@ -210,6 +270,27 @@ impl Request {
                 "sign_checkpoint",
                 map(vec![("body", Value::text(body))]),
             )]),
+            Self::Rotate { realm, retire } => map(vec![(
+                "rotate",
+                map(vec![
+                    ("realm", Value::Bytes(realm.0.to_vec())),
+                    ("retire", Value::Bytes(retire.to_vec())),
+                ]),
+            )]),
+            Self::DropKey { realm, kid } => map(vec![(
+                "drop_key",
+                map(vec![
+                    ("realm", Value::Bytes(realm.0.to_vec())),
+                    ("kid", Value::Bytes(kid.to_vec())),
+                ]),
+            )]),
+            Self::SetPolicy { realm, policy } => map(vec![(
+                "set_policy",
+                map(vec![
+                    ("realm", Value::Bytes(realm.0.to_vec())),
+                    ("policy", policy_value(policy)),
+                ]),
+            )]),
         }
     }
 
@@ -233,6 +314,24 @@ impl Request {
         }
         if let Some(r) = v.get("jwks") {
             return Ok(Self::Jwks(realm(Some(r))?));
+        }
+        if let Some(r) = v.get("rotate") {
+            return Ok(Self::Rotate {
+                realm: realm(r.get("realm"))?,
+                retire: kid(r.get("retire"))?,
+            });
+        }
+        if let Some(d) = v.get("drop_key") {
+            return Ok(Self::DropKey {
+                realm: realm(d.get("realm"))?,
+                kid: kid(d.get("kid"))?,
+            });
+        }
+        if let Some(p) = v.get("set_policy") {
+            return Ok(Self::SetPolicy {
+                realm: realm(p.get("realm"))?,
+                policy: policy_of(p.get("policy").ok_or(FrameError::Malformed)?)?,
+            });
         }
         if let Some(s) = v.get("sign_cose") {
             return Ok(Self::SignCose {
@@ -280,6 +379,7 @@ impl Response {
                 ]),
             )]),
             Self::Noted { line } => map(vec![("noted", map(vec![("line", Value::text(line))]))]),
+            Self::Rekeyed(doc) => map(vec![("rekeyed", Value::text(doc))]),
             Self::Error(code) => map(vec![("error", Value::text(code))]),
         }
     }
@@ -320,6 +420,9 @@ impl Response {
             return Ok(Self::Noted {
                 line: text(n.get("line"))?,
             });
+        }
+        if let Some(d) = v.get("rekeyed") {
+            return Ok(Self::Rekeyed(text(Some(d))?));
         }
         Ok(Self::Error(text(v.get("error"))?))
     }

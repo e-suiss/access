@@ -105,6 +105,124 @@ impl Keyring {
         self.alg = alg;
     }
 
+    /// The set's rotation policy.
+    #[must_use]
+    pub const fn policy(&self) -> Policy {
+        self.policy
+    }
+
+    /// Replaces the rotation policy (TN-118: an `idp.realm.key_policy` decision); the keys it
+    /// holds keep their windows and follow the new policy from the next round.
+    ///
+    /// # Errors
+    /// [`PolicyError`] for a policy the realm may not take (CR-26).
+    pub fn set_policy(&mut self, policy: Policy) -> Result<(), PolicyError> {
+        domain::check(&policy)?;
+        self.policy = policy;
+        Ok(())
+    }
+
+    fn step(&mut self, step: &Step, now: u64) {
+        let mut records = self.records();
+        rotation::apply(&mut records, step, now);
+        for (e, r) in self.entries.iter_mut().zip(records) {
+            e.record = r;
+            // CR-27, CR-33
+            if e.record.state == State::Dropped {
+                e.signer = None;
+                e.sealed = None;
+            }
+        }
+    }
+
+    /// Rotates now, outside the schedule (TN-118: an `idp.realm.key_rotate` decision): the
+    /// published backup past its lead becomes the signing key, the active key retires and stays
+    /// in the JWKS until its tokens expire, and a new backup is generated and published.
+    /// Publish-before-use holds: only a key relying parties could already have seen signs
+    /// (MD-6, CR-25, SAI-46). `retire` names the active key the decision rotates out; once it
+    /// is no longer active, a repeat changes nothing.
+    ///
+    /// # Errors
+    /// [`SignerError::UnknownKey`] when `retire` was never the set's active key;
+    /// [`SignerError::NoBackup`] when no backup is past its lead. Nothing changed.
+    pub fn rotate(
+        &mut self,
+        factory: &mut dyn KeyFactory,
+        retire: &[u8; 32],
+        now: u64,
+        draw: u64,
+    ) -> Result<Round, SignerError> {
+        match self.entries.iter().find(|e| e.record.kid == *retire) {
+            Some(e) if e.record.state == State::Active => {}
+            Some(e) if matches!(e.record.state, State::Retiring | State::Dropped) => {
+                return Ok(Round::default());
+            }
+            _ => return Err(SignerError::UnknownKey),
+        }
+        let lead = self.policy.publish_lead_ms;
+        let backup = self
+            .entries
+            .iter()
+            .filter(|e| {
+                e.record.state == State::Published
+                    && e.record.valid_from <= now
+                    && now <= e.record.valid_until
+                    && e.record
+                        .published_at
+                        .is_some_and(|p| p.saturating_add(lead) <= now)
+                    && e.signer.is_some()
+            })
+            .min_by_key(|e| e.record.valid_from)
+            .map(|e| e.record.kid)
+            .ok_or(SignerError::NoBackup)?;
+        let active: Vec<[u8; 32]> = self
+            .entries
+            .iter()
+            .filter(|e| e.record.state == State::Active)
+            .map(|e| e.record.kid)
+            .collect();
+        let mut applied = vec![Step::Activate(backup)];
+        applied.extend(active.into_iter().map(Step::Retire));
+        for step in &applied {
+            self.step(step, now);
+        }
+        let mut round = self.tick(factory, now, draw);
+        applied.append(&mut round.applied);
+        round.applied = applied;
+        self.rebuild();
+        Ok(round)
+    }
+
+    /// Withdraws `kid` at once, outside the schedule, and destroys its private material: the
+    /// emergency drop of a compromised key (§13.2, `idp.realm.key_drop`). It leaves the JWKS
+    /// now, so nothing it signed verifies any more and its `key_epoch` window ends; when it was
+    /// the signing key, the published backup past its lead takes over, and without one nothing
+    /// is signed until one is (CR-23, fail closed). Dropping a dropped key changes nothing.
+    ///
+    /// # Errors
+    /// [`SignerError::UnknownKey`] for a key the set does not hold.
+    pub fn drop_key(
+        &mut self,
+        factory: &mut dyn KeyFactory,
+        kid: &[u8; 32],
+        now: u64,
+        draw: u64,
+    ) -> Result<Round, SignerError> {
+        match self.entries.iter().find(|e| e.record.kid == *kid) {
+            None => return Err(SignerError::UnknownKey),
+            Some(e) if e.record.state == State::Dropped => return Ok(Round::default()),
+            Some(_) => {}
+        }
+        let mut applied = vec![Step::Drop(*kid)];
+        self.step(&Step::Drop(*kid), now);
+        self.rebuild();
+        let mut round = self.tick(factory, now, draw);
+        applied.append(&mut round.applied);
+        round.applied = applied;
+        self.rebuild();
+        Ok(round)
+    }
+
     fn records(&self) -> Vec<Key> {
         self.entries.iter().map(|e| e.record.clone()).collect()
     }
@@ -163,16 +281,7 @@ impl Keyring {
                 }
                 progressed = true;
                 changed |= matches!(step, Step::Publish(_) | Step::Drop(_));
-                let mut records = self.records();
-                rotation::apply(&mut records, &step, now);
-                for (e, r) in self.entries.iter_mut().zip(records) {
-                    e.record = r;
-                    // CR-27, CR-33
-                    if e.record.state == State::Dropped {
-                        e.signer = None;
-                        e.sealed = None;
-                    }
-                }
+                self.step(&step, now);
                 round.applied.push(step);
             }
             if !progressed {

@@ -333,3 +333,101 @@ fn artifacts_are_cose_signed_with_the_jwks_key() {
         );
     }
 }
+
+// TN-118, MD-6, CR-25, SAI-46: a decided rotation makes the published backup past its lead
+// sign at once; the old key retires and still verifies its tokens; without such a backup
+// nothing changes
+#[test]
+fn a_decided_rotation_uses_the_ready_backup() {
+    let mut ring = Keyring::new(JwsAlg::Es256, Policy::REALM).unwrap();
+    let mut factory = Factory { down: false };
+    advance(&mut ring, &mut factory, 0, LEAD, MINUTE);
+    let first = ring.sign(TYP, b"{}", LEAD).unwrap().kid;
+    let before = ring.keys();
+    assert_eq!(
+        ring.rotate(&mut factory, &first, LEAD, 1).map(|_| ()),
+        Err(SignerError::NoBackup)
+    );
+    assert_eq!(ring.keys(), before);
+    let now = 2 * LEAD + MINUTE;
+    advance(&mut ring, &mut factory, LEAD, now, MINUTE);
+    let old = ring.sign(TYP, br#"{"n":1}"#, now).unwrap();
+    let round = ring.rotate(&mut factory, &old.kid, now, 7).unwrap();
+    assert!(
+        round
+            .applied
+            .iter()
+            .any(|s| matches!(s, Step::Retire(k) if *k == old.kid))
+    );
+    let new = ring.sign(TYP, br#"{"n":2}"#, now).unwrap();
+    assert_ne!(new.kid, old.kid);
+    assert!(verify(ring.jwks(), &old.token).is_ok());
+    assert!(verify(ring.jwks(), &new.token).is_ok());
+    let records = ring.keys();
+    assert!(
+        records
+            .iter()
+            .any(|k| k.state == State::Published && k.kid != new.kid)
+    );
+    assert_eq!(
+        ring.rotate(&mut factory, &old.kid, now, 7)
+            .map(|r| r.applied),
+        Ok(Vec::new())
+    );
+    assert_eq!(ring.keys(), records);
+    assert_eq!(
+        ring.rotate(&mut factory, &[0; 32], now, 7).map(|_| ()),
+        Err(SignerError::UnknownKey)
+    );
+}
+
+// §13.2, CR-23, MD-7, OP-73: an emergency drop takes the key out of the JWKS at once and
+// destroys its material, so its tokens stop verifying; with no backup past its lead nothing
+// is signed until one is, and signing then resumes with a key that was published first
+#[test]
+fn an_emergency_drop_ends_a_key_at_once() {
+    let mut ring = Keyring::new(JwsAlg::Es256, Policy::REALM).unwrap();
+    let mut factory = Factory { down: false };
+    advance(&mut ring, &mut factory, 0, LEAD, MINUTE);
+    let stolen = ring.sign(TYP, br#"{"n":1}"#, LEAD).unwrap();
+    assert!(verify(ring.jwks(), &stolen.token).is_ok());
+    ring.drop_key(&mut factory, &stolen.kid, LEAD, 3).unwrap();
+    assert!(!kids(ring.jwks()).contains(&b64url_encode(&stolen.kid)));
+    assert!(verify(ring.jwks(), &stolen.token).is_err());
+    assert_eq!(ring.sign(TYP, b"{}", LEAD), Err(SignerError::NoKey));
+    assert!(
+        ring.saved()
+            .iter()
+            .any(|s| s.record.kid == stolen.kid && s.sealed.is_none())
+    );
+    assert_eq!(
+        ring.drop_key(&mut factory, &stolen.kid, LEAD, 3)
+            .map(|r| r.applied),
+        Ok(Vec::new())
+    );
+    assert_eq!(
+        ring.drop_key(&mut factory, &[0; 32], LEAD, 3).map(|_| ()),
+        Err(SignerError::UnknownKey)
+    );
+    let later = 2 * LEAD + MINUTE;
+    advance(&mut ring, &mut factory, LEAD, later, MINUTE);
+    let next = ring.sign(TYP, br#"{"n":2}"#, later).unwrap();
+    assert_ne!(next.kid, stolen.kid);
+    assert!(verify(ring.jwks(), &next.token).is_ok());
+}
+
+// TN-118, CR-26: a decided policy is checked like any other; one that would let a key sign
+// shorter than a token lives is refused and the set keeps its policy
+#[test]
+fn a_decided_policy_is_checked() {
+    let mut ring = Keyring::new(JwsAlg::Es256, Policy::REALM).unwrap();
+    let mut shorter = Policy::REALM;
+    shorter.lifetime_ms = TOKEN_MAX_MS;
+    assert_eq!(ring.set_policy(shorter), Err(PolicyError::Lifetime));
+    assert_eq!(ring.policy(), Policy::REALM);
+    let mut faster = Policy::REALM;
+    faster.lifetime_ms = 30 * DAY;
+    faster.window_ms = 60 * DAY;
+    assert_eq!(ring.set_policy(faster), Ok(()));
+    assert_eq!(ring.policy(), faster);
+}

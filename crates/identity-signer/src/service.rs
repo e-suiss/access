@@ -8,10 +8,11 @@ use suiss_crypto::cose::PublicKey;
 use suiss_crypto::dcbor::{self, Limits, Value};
 use suiss_crypto::rotation::{Key, Policy, State, Step};
 
-use crate::app::{Keyring, Saved};
+use crate::SignerError;
+use crate::app::{Keyring, Round, Saved};
 use crate::cell::{CellError, CellKey};
 use crate::ports::{KeyFactory, Vault, VaultError};
-use crate::protocol::{Realm, Request, Response, alg_of};
+use crate::protocol::{Realm, Request, Response, alg_of, policy_of, policy_value};
 
 /// How far a requested signing time may be from the signer's clock (PD).
 pub const MAX_SKEW_MS: u64 = 60_000;
@@ -132,11 +133,13 @@ fn saved_of(v: &Value) -> Option<Saved> {
     })
 }
 
-/// A realm's vault entry: its identifier, the algorithm of its new keys and its keys.
-fn stored(realm: Realm, alg: JwsAlg, saved: &[Saved]) -> Option<Vec<u8>> {
+/// A realm's vault entry: its identifier, the algorithm of its new keys, its rotation policy
+/// and its keys.
+fn stored(realm: Realm, alg: JwsAlg, policy: &Policy, saved: &[Saved]) -> Option<Vec<u8>> {
     let v = map(vec![
         ("realm", Some(Value::Bytes(realm.0.to_vec()))),
         ("alg", Some(Value::text(alg.name()))),
+        ("policy", Some(policy_value(policy))),
         (
             "keys",
             Some(Value::Array(saved.iter().map(saved_value).collect())),
@@ -145,7 +148,9 @@ fn stored(realm: Realm, alg: JwsAlg, saved: &[Saved]) -> Option<Vec<u8>> {
     dcbor::encode(&v, Limits::CEILING).ok()
 }
 
-fn restored(b: &[u8]) -> Option<(Realm, JwsAlg, Vec<Saved>)> {
+type Restored = (Realm, JwsAlg, Option<Policy>, Vec<Saved>);
+
+fn restored(b: &[u8]) -> Option<Restored> {
     let v = dcbor::decode(b, Limits::CEILING).ok()?;
     let realm = Realm(bytes(v.get("realm"))?.try_into().ok()?);
     let alg = match v.get("alg") {
@@ -155,7 +160,13 @@ fn restored(b: &[u8]) -> Option<(Realm, JwsAlg, Vec<Saved>)> {
     let Some(Value::Array(keys)) = v.get("keys") else {
         return None;
     };
-    Some((realm, alg, keys.iter().filter_map(saved_of).collect()))
+    let policy = v.get("policy").and_then(|p| policy_of(p).ok());
+    Some((
+        realm,
+        alg,
+        policy,
+        keys.iter().filter_map(saved_of).collect(),
+    ))
 }
 
 impl<F: KeyFactory, V: Vault> Service<F, V> {
@@ -172,8 +183,9 @@ impl<F: KeyFactory, V: Vault> Service<F, V> {
             policy,
             cell: None,
         };
-        for (realm, alg, saved) in all.iter().filter_map(|b| restored(b)) {
-            if let Ok(ring) = Keyring::restore(alg, s.policy, saved, &mut s.factory) {
+        for (realm, alg, policy, saved) in all.iter().filter_map(|b| restored(b)) {
+            let policy = policy.unwrap_or(s.policy);
+            if let Ok(ring) = Keyring::restore(alg, policy, saved, &mut s.factory) {
                 s.rings.insert(realm, (alg, ring));
             }
         }
@@ -209,7 +221,8 @@ impl<F: KeyFactory, V: Vault> Service<F, V> {
         let Some((alg, ring)) = self.rings.get(&realm) else {
             return false;
         };
-        stored(realm, *alg, &ring.saved()).is_some_and(|b| self.vault.put(&realm, &b).is_ok())
+        stored(realm, *alg, &ring.policy(), &ring.saved())
+            .is_some_and(|b| self.vault.put(&realm, &b).is_ok())
     }
 
     fn tick_one(&mut self, realm: Realm, now: u64, draw: u64) -> bool {
@@ -248,6 +261,26 @@ impl<F: KeyFactory, V: Vault> Service<F, V> {
             self.round_one(realm, now, draw, &mut report);
         }
         report
+    }
+
+    /// Changes `realm`'s key set outside the schedule and keeps the vault current (TN-118,
+    /// §13.2); a change the vault cannot keep is an outage.
+    fn rekey(
+        &mut self,
+        realm: Realm,
+        change: impl FnOnce(&mut Keyring, &mut dyn KeyFactory) -> Result<Round, SignerError>,
+    ) -> Response {
+        let Some((_, ring)) = self.rings.get_mut(&realm) else {
+            return Response::Error(String::from(UNKNOWN_REALM));
+        };
+        if let Err(e) = change(ring, &mut self.factory) {
+            return Response::Error(String::from(e.code()));
+        }
+        let jwks = ring.jwks().to_owned();
+        if !self.persist(realm) {
+            return Response::Error(String::from("signer-outage"));
+        }
+        Response::Rekeyed(jwks)
     }
 
     /// Answers one request at `now`; `draw` is a random value for a new key's jitter.
@@ -316,6 +349,16 @@ impl<F: KeyFactory, V: Vault> Service<F, V> {
                     Err(e) => Response::Error(String::from(e.code())),
                 }
             }
+            Request::Rotate { realm, retire } => {
+                self.rekey(realm, |ring, f| ring.rotate(f, &retire, now, draw))
+            }
+            Request::DropKey { realm, kid } => {
+                self.rekey(realm, |ring, f| ring.drop_key(f, &kid, now, draw))
+            }
+            Request::SetPolicy { realm, policy } => self.rekey(realm, |ring, _| {
+                ring.set_policy(policy)?;
+                Ok(Round::default())
+            }),
             Request::CellKey => self.cell.as_ref().map_or_else(
                 || Response::Error(String::from(NO_CELL)),
                 |c| Response::CellKey {
