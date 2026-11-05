@@ -1,0 +1,17 @@
+{
+  "id": "adp-malformed-body",
+  "rules": [
+    "CMP-17",
+    "X21",
+    "TI-9",
+    "INV-26"
+  ],
+  "description": "The ADP answers 200 with a body that is not JSON.",
+  "mode": "decision",
+  "adp": {
+    "kind": "raw",
+    "status": 200,
+    "body": "{\"decision\": tru"
+  },
+  "expect": "no-effect"
+}

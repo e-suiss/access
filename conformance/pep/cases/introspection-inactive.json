@@ -1,0 +1,19 @@
+{
+  "id": "introspection-inactive",
+  "rules": [
+    "CMP-17",
+    "X21",
+    "TI-9",
+    "INV-26"
+  ],
+  "description": "Introspection answers active false.",
+  "mode": "introspection",
+  "introspection": {
+    "kind": "json",
+    "status": 200,
+    "body": {
+      "active": false
+    }
+  },
+  "expect": "deny"
+}

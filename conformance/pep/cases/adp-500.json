@@ -1,0 +1,17 @@
+{
+  "id": "adp-500",
+  "rules": [
+    "CMP-17",
+    "X21",
+    "TI-9",
+    "INV-26",
+    "E25"
+  ],
+  "description": "The ADP answers 500.",
+  "mode": "decision",
+  "adp": {
+    "kind": "status",
+    "status": 500
+  },
+  "expect": "no-effect"
+}

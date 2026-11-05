@@ -1,0 +1,14 @@
+{
+  "id": "adp-receipt-other-audience",
+  "rules": [
+    "CMP-17",
+    "X21",
+    "TI-9",
+    "INV-26",
+    "L2-RCP-3"
+  ],
+  "description": "The ADP allows with a receipt for another PEP audience.",
+  "mode": "decision",
+  "audience": "other.example",
+  "expect": "deny"
+}

@@ -1,0 +1,17 @@
+{
+  "id": "adp-timeout",
+  "rules": [
+    "CMP-17",
+    "X21",
+    "TI-9",
+    "INV-26",
+    "E25",
+    "E28"
+  ],
+  "description": "The ADP accepts the request and never answers; the PEP gives up at its deadline.",
+  "mode": "decision",
+  "adp": {
+    "kind": "hang"
+  },
+  "expect": "no-effect"
+}

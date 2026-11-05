@@ -9,6 +9,7 @@ This folder is the conformance layer of the Access Protocol: the data model, the
 | [`reference/f0/`](reference/f0) | F0, a naive reference evaluator written from the protocol text alone |
 | [`lean/`](lean) | An executable Lean model of the constraint algebra with machine-checked proofs |
 | [`catalog/`](catalog) | Invariants, guarantees and claims the vectors and tests are traced to |
+| [`pep/`](pep) | PEP fault cases and a language-independent runner: no upstream fault may produce an effect |
 
 ## Vector format
 

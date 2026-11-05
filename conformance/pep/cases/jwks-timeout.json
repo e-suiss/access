@@ -1,0 +1,15 @@
+{
+  "id": "jwks-timeout",
+  "rules": [
+    "CMP-17",
+    "X21",
+    "TI-9",
+    "INV-26"
+  ],
+  "description": "The JWKS endpoint never answers.",
+  "mode": "jwt",
+  "jwks": {
+    "kind": "hang"
+  },
+  "expect": "no-effect"
+}

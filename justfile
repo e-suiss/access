@@ -358,6 +358,24 @@ vectors-crosscheck:
     target/vectors-venv/bin/python -I conformance/vectors/tools/record.py --check conformance/vectors/core/1/record.json
     target/vectors-venv/bin/python -I conformance/vectors/tools/fold.py --check conformance/vectors/core/1/record-fold.json
 
+# OP-150 m.1 (a), CMP-17, X21: PEP fault cases against `sut`, or the self-test without one
+pep-conformance sut="":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cargo build --locked --quiet -p access-pep-conformance --bins
+    bin="${CARGO_TARGET_DIR:-target}/debug"
+    if [[ -n "{{sut}}" ]]; then
+      exec "$bin/access-pep-conformance" --sut {{quote(sut)}}
+    fi
+    "$bin/access-pep-conformance" --sut "$bin/pep-reference"
+    status=0
+    "$bin/access-pep-conformance" --sut "$bin/pep-reference-leaky" || status=$?
+    if [[ "$status" -ne 1 ]]; then
+      echo "pep-conformance: the leaky control was not flagged (exit $status); the harness is blind" >&2
+      exit 1
+    fi
+    echo "pep-conformance: the leaky control was flagged"
+
 # OP-112, CR-49 m.2
 f0:
     target/f0-venv/bin/python -I -c 'import cbor2' 2>/dev/null || (rm -rf target/f0-venv && python3 -m venv target/f0-venv && target/f0-venv/bin/pip install --quiet --require-hashes -r conformance/reference/f0/requirements.txt)

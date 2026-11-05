@@ -1,0 +1,40 @@
+[package]
+name = "access-pep-conformance"
+description = "PEP conformance runner (CMP-17, X21, OP-150 m.1 (a)): fake upstreams, fault cases and a JSON-lines adapter protocol."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[[bin]]
+name = "access-pep-conformance"
+path = "src/main.rs"
+
+# OP-150 m.1 (a): the reference adapter the harness must pass
+[[bin]]
+name = "pep-reference"
+path = "src/bin/pep_reference.rs"
+
+# OP-150 m.1 (a): the negative control the harness must flag
+[[bin]]
+name = "pep-reference-leaky"
+path = "src/bin/pep_reference_leaky.rs"
+
+[dependencies]
+access-kernel = { workspace = true }
+suiss-crypto = { workspace = true, features = ["signer"] }
+axum = { workspace = true, features = ["http1", "tokio", "json"] }
+serde = { workspace = true, features = ["derive", "std"] }
+serde_json = { workspace = true, features = ["std"] }
+thiserror = { workspace = true, features = ["std"] }
+tokio = { workspace = true, features = ["macros", "net", "rt", "sync", "time"] }
+
+[dev-dependencies]
+http-body-util = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt", "test-util", "time"] }
+tower = { workspace = true, features = ["util"] }
+
+[lints]
+workspace = true

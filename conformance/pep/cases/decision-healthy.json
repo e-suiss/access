@@ -1,0 +1,10 @@
+{
+  "id": "decision-healthy",
+  "rules": [
+    "CMP-17",
+    "L2-RCP-3"
+  ],
+  "description": "Control: the ADP allows with a receipt for this intent and audience; the PEP performs the effect once.",
+  "mode": "decision",
+  "expect": "effect"
+}

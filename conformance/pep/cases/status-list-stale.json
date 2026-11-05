@@ -1,0 +1,17 @@
+{
+  "id": "status-list-stale",
+  "rules": [
+    "CMP-17",
+    "X21",
+    "TI-9",
+    "INV-26"
+  ],
+  "description": "The status list expired an hour before now.",
+  "mode": "jwt",
+  "status_list": {
+    "kind": "list",
+    "stale": true,
+    "revoked": false
+  },
+  "expect": "no-effect"
+}

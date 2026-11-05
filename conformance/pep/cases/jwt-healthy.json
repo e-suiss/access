@@ -1,0 +1,9 @@
+{
+  "id": "jwt-healthy",
+  "rules": [
+    "CMP-17"
+  ],
+  "description": "Control: the JWT verifies against the JWKS and its status list entry is valid; the PEP performs the effect once.",
+  "mode": "jwt",
+  "expect": "effect"
+}

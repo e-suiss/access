@@ -1,0 +1,18 @@
+{
+  "id": "adp-allow-without-receipt",
+  "rules": [
+    "CMP-17",
+    "X21",
+    "TI-9",
+    "INV-26",
+    "L2-RCP-3"
+  ],
+  "description": "The ADP answers decision true without a signed receipt.",
+  "mode": "decision",
+  "adp": {
+    "kind": "decision",
+    "decision": true,
+    "receipt": false
+  },
+  "expect": "deny"
+}

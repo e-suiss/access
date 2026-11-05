@@ -1,0 +1,16 @@
+{
+  "id": "jwks-500",
+  "rules": [
+    "CMP-17",
+    "X21",
+    "TI-9",
+    "INV-26"
+  ],
+  "description": "The JWKS endpoint answers 500, so the token signature cannot be checked.",
+  "mode": "jwt",
+  "jwks": {
+    "kind": "status",
+    "status": 500
+  },
+  "expect": "no-effect"
+}

@@ -1,0 +1,17 @@
+{
+  "id": "status-list-revoked",
+  "rules": [
+    "CMP-17",
+    "X21",
+    "TI-9",
+    "INV-26"
+  ],
+  "description": "The status list marks the token revoked.",
+  "mode": "jwt",
+  "status_list": {
+    "kind": "list",
+    "stale": false,
+    "revoked": true
+  },
+  "expect": "deny"
+}

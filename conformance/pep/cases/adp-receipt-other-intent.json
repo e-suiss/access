@@ -1,0 +1,14 @@
+{
+  "id": "adp-receipt-other-intent",
+  "rules": [
+    "CMP-17",
+    "X21",
+    "TI-9",
+    "INV-26",
+    "L2-RCP-3"
+  ],
+  "description": "The ADP allows with a receipt bound to another intent than the one the PEP applies.",
+  "mode": "decision",
+  "intent": "822f58200808080808080808080808080808080808080808080808080808080808080808",
+  "expect": "deny"
+}

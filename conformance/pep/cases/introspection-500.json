@@ -1,0 +1,16 @@
+{
+  "id": "introspection-500",
+  "rules": [
+    "CMP-17",
+    "X21",
+    "TI-9",
+    "INV-26"
+  ],
+  "description": "Introspection answers 500.",
+  "mode": "introspection",
+  "introspection": {
+    "kind": "status",
+    "status": 500
+  },
+  "expect": "no-effect"
+}

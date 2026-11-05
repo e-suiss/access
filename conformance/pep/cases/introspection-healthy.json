@@ -1,0 +1,9 @@
+{
+  "id": "introspection-healthy",
+  "rules": [
+    "CMP-17"
+  ],
+  "description": "Control: introspection says the token is active for this audience; the PEP performs the effect once.",
+  "mode": "introspection",
+  "expect": "effect"
+}

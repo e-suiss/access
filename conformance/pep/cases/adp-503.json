@@ -1,0 +1,18 @@
+{
+  "id": "adp-503",
+  "rules": [
+    "CMP-17",
+    "X21",
+    "TI-9",
+    "INV-26",
+    "E25",
+    "E28"
+  ],
+  "description": "The ADP answers 503: Access is unreachable, which is UNKNOWN for the PEP.",
+  "mode": "decision",
+  "adp": {
+    "kind": "status",
+    "status": 503
+  },
+  "expect": "no-effect"
+}

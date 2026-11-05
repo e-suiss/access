@@ -1,0 +1,17 @@
+{
+  "id": "decision-deny",
+  "rules": [
+    "CMP-17",
+    "X21",
+    "TI-9",
+    "INV-26"
+  ],
+  "description": "The ADP denies.",
+  "mode": "decision",
+  "adp": {
+    "kind": "decision",
+    "decision": false,
+    "receipt": false
+  },
+  "expect": "deny"
+}

@@ -311,6 +311,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "access-pep-conformance"
+version = "0.2.6"
+dependencies = [
+ "axum",
+ "esuiss-access-kernel",
+ "esuiss-crypto",
+ "http-body-util",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+ "tower",
+]
+
+[[package]]
 name = "access-server"
 version = "0.2.6"
 dependencies = [
