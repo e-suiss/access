@@ -2,6 +2,7 @@
 //! sequencer, the day's submission table and a clock.
 
 use std::future::Future;
+use std::sync::Arc;
 
 use access_internal_api::claims::{ClaimSubmission, ClaimVerdict};
 use access_internal_api::idp::Unavailable;
@@ -34,4 +35,14 @@ pub trait Submissions: Send + Sync {
 pub trait Clock: Send + Sync {
     /// Now, in milliseconds.
     fn now(&self) -> impl Future<Output = Result<u64, Unavailable>> + Send;
+}
+
+impl<L: Ledger> Ledger for Arc<L> {
+    fn record(
+        &self,
+        submission: ClaimSubmission,
+        resubmitted: bool,
+    ) -> impl Future<Output = Result<ClaimVerdict, Unavailable>> + Send {
+        (**self).record(submission, resubmitted)
+    }
 }

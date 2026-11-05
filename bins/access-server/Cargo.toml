@@ -9,6 +9,7 @@ repository.workspace = true
 publish = false
 
 [dependencies]
+access-authority-ingest = { workspace = true }
 access-authority-core = { path = "../../crates/authority-core" }
 access-authority-sequencer = { path = "../../crates/authority-sequencer" }
 access-crypto = { workspace = true }

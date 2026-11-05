@@ -78,13 +78,13 @@ pub(super) fn paths(paths: &mut Map<String, Value>, common: &[(&str, &str); 4]) 
         "/access/v1/claims:ingest".into(),
         json!({ "post": {
             "operationId": "ingestClaim",
-            "summary": "Records a Claim in a domain and answers its disposition: admitted, or held in quarantine with the reason (CMP-8, §9.13 rule 3). Ingest is not acceptance (INV-2). A Claim that does not verify is refused and not recorded.",
-            "x-suiss-served": false,
+            "summary": "Records a Claim in a domain and answers its disposition: admitted, or held in quarantine with the reason (CMP-8, §9.13 rule 3). Ingest is not acceptance (INV-2). A Claim that does not verify is refused and not recorded. The caller is its client certificate; an `oidc` or `set` carrier is verified under an Acceptance's pinned key set and its `body` is the carrier context `{subject: party-ref}` (dCBOR), which an `identity_binding_person` Claim on H(iss, sub) must hold.",
+            "x-suiss-served": true,
             "parameters": [{ "name": "Idempotency-Key", "in": "header", "required": true, "schema": { "type": "string" } }],
             "requestBody": { "required": true, "content": { "application/json": { "schema": r("ClaimSubmission") } } },
             "responses": with(
                 problems(&[
-                    ("400", "claim-signature, claim-payload, claim-value, claim-body or claim-body-digest: refused, not recorded."),
+                    ("400", "claim-signature, claim-payload, claim-value, claim-body, claim-body-digest, claim-size, claim-carrier, claim-carrier-event, claim-carrier-context, claim-issuer or claim-subject: refused, not recorded; ingest-malformed, ingest-carrier or idempotency-key-required: the request."),
                     common[1],
                     common[2],
                     ("503", &format!("{INGEST_UNAVAILABLE}: retry.")),

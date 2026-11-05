@@ -346,6 +346,7 @@ name = "access-server"
 version = "0.2.6"
 dependencies = [
  "access-authority-core",
+ "access-authority-ingest",
  "access-authority-sequencer",
  "access-authority-signer",
  "access-crypto",

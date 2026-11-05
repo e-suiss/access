@@ -2,6 +2,7 @@
 
 pub mod adp;
 pub mod declarations;
+pub mod ingest;
 pub mod login;
 pub mod oauth;
 pub mod path;

@@ -12,6 +12,7 @@ mod config;
 mod events;
 mod idp;
 mod ids;
+mod ingest;
 mod jobs;
 mod login;
 mod oauth;

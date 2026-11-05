@@ -14,6 +14,7 @@
   "endpoints": {
     "adp": "https://access.example/.well-known/authzen-configuration",
     "auth_context": "https://acme.id.example/v1/me/auth-context",
+    "claim_ingest": "https://access.example/access/v1/claims:ingest",
     "eligibility": "https://access.example/access/v1/eligibility:check",
     "exercise": "https://access.example/access/v1/exercises/{exercise}",
     "exercise_agency": "https://access.example/access/v1/exercises/{exercise}/agency",

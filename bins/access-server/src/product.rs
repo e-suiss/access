@@ -34,7 +34,7 @@ pub(crate) fn routes<K>(
     ids: Arc<CellIds>,
 ) -> Result<axum::Router, String>
 where
-    K: KeyDirectory + Exercises + Consistency + 'static,
+    K: KeyDirectory + Exercises + Consistency + access_authority_ingest::ports::Ledger + 'static,
 {
     let (router, app) = pools;
     let region = config
@@ -43,12 +43,15 @@ where
         .ok_or("no suiss section")?
         .region
         .clone();
+    // CMP-8
+    let ingest = crate::ingest::routes(keys.clone(), app.clone());
     Ok(product_router(Service::new(
         keys.clone(),
         PgTenants::new(router, ids),
         PgSubjects { app, domains: keys },
         region,
-    )))
+    ))
+    .merge(ingest))
 }
 
 /// The head of a governing domain as a consistency token (OP-141 m.22 (f)).

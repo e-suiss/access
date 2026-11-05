@@ -120,6 +120,7 @@ pub const SERVED: &[Endpoint] = &[
     Endpoint::SubjectResolution,
     Endpoint::Exercise,
     Endpoint::ExerciseAgency,
+    Endpoint::ClaimIngest,
 ];
 
 /// Well-known suffix of the realm's SSF transmitter metadata (SSF 1.0 §7.1).
