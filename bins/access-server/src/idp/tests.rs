@@ -21,6 +21,7 @@ use access_identity_admin::app::{Admin, Applied, NewRealm, Proposal};
 use access_identity_admin::domain::{
     AuthMethod, Change, Client, ClientId, Invalid, Platform, RedirectUri, RpId,
 };
+use access_identity_oauth::adapters::outbound::DeclaredTargets;
 use access_identity_oauth::domain::issuer::{IssuerStyle, RealmBase};
 use access_internal_api::instances::{PlatformProduct, Registrant, register_nonce};
 use access_kernel::ais::{CONTENT_TYPE, Statement};
@@ -163,6 +164,7 @@ impl World {
             base: &self.base,
             keys: &self.keys,
             platform_tenant: None,
+            declared: DeclaredTargets::default(),
         }
     }
 
@@ -764,7 +766,7 @@ async fn a_platform_client_is_registered_in_the_platform_tenant() {
         ..c.clone()
     };
     assert_eq!(
-        Change::ClientRegister(public_client).check(),
+        Change::ClientRegister(public_client).check(&DeclaredTargets::default()),
         Err(Invalid::PlatformAuth)
     );
     let prepared = platform.prepare(&p).await.unwrap();

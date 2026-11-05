@@ -47,7 +47,7 @@ use access_identity_account::notify::delivery::Backoff;
 use access_identity_oauth::adapters::clients::{CachePolicy, HttpClientKeys, HttpLogoutDelivery};
 use access_identity_oauth::adapters::dpop::SystemClock as OAuthClock;
 use access_identity_oauth::adapters::oauth::{OsRandom, PgLogoutQueue, PgOAuth};
-use access_identity_oauth::adapters::outbound::Outbound;
+use access_identity_oauth::adapters::outbound::{DeclaredTarget, DeclaredTargets, Outbound};
 use access_identity_oauth::adapters::{PgDirectory, SignerKeys};
 use access_identity_oauth::app::Discovery as RealmDiscovery;
 use access_identity_oauth::app::backchannel::Courier;
@@ -311,6 +311,7 @@ async fn seed(
         SignerKeys::new(identity.signer.clone()),
         prepared.identity_keys.clone(),
     );
+    let declared = prepared.outbound.declared();
     let summary = bootstrap::Bootstrap {
         app: &all.app,
         router: &all.router,
@@ -318,6 +319,7 @@ async fn seed(
         realm_keys: &keyring,
         hsm: &prepared.identity_keys,
         base: &base,
+        declared: &declared,
     }
     .run(plan)
     .await;
@@ -435,7 +437,8 @@ fn prepare(config: &Config, tls: Arc<access_http::tls::ServerConfig>) -> Result<
 }
 
 /// Requests to clients' own endpoints (§10.4.6, §11.3.6): the configured trust anchors, else
-/// the system's; without either they fail and the server still starts.
+/// the system's; without either they fail and the server still starts. The declared delivery
+/// targets and their own trust anchors are read here too (OP-149 m.23).
 fn outbound(config: &Config) -> Result<Outbound, String> {
     let configured = config
         .identity
@@ -445,14 +448,42 @@ fn outbound(config: &Config) -> Result<Outbound, String> {
         Some(f) => Some(std::fs::read(&f).map_err(|e| format!("{}: {e}", f.display()))?),
         None => SYSTEM_ROOTS.iter().find_map(|f| std::fs::read(f).ok()),
     };
-    let Some(pem) = pem else {
+    let outbound = if let Some(pem) = pem {
+        let tls = access_http::tls::client_config(&pem).map_err(|e| e.to_string())?;
+        Outbound::new(tls, OUTBOUND_TIMEOUT)
+    } else {
         tracing::warn!(
             "no trust anchors for clients' endpoints; jwks_uri and back-channel logout fail"
         );
-        return Ok(Outbound::disabled(OUTBOUND_TIMEOUT));
+        Outbound::disabled(OUTBOUND_TIMEOUT)
     };
-    let tls = access_http::tls::client_config(&pem).map_err(|e| e.to_string())?;
-    Ok(Outbound::new(tls, OUTBOUND_TIMEOUT))
+    let declared = declared_targets(config)?;
+    if !declared.is_empty() {
+        let urls: Vec<&str> = declared.iter().map(DeclaredTarget::url).collect();
+        tracing::info!(targets = ?urls, "declared delivery targets (OP-149 m.23)");
+    }
+    Ok(outbound.declaring(declared))
+}
+
+/// The operator's declared delivery targets, each with its own trust anchors when it names a
+/// CA file (OP-149 m.23).
+fn declared_targets(config: &Config) -> Result<Vec<DeclaredTarget>, String> {
+    config
+        .delivery_targets
+        .iter()
+        .map(|t| {
+            let tls = t
+                .ca_file
+                .as_ref()
+                .map(|f| {
+                    let pem = std::fs::read(f).map_err(|e| format!("{}: {e}", f.display()))?;
+                    access_http::tls::client_config(&pem)
+                        .map_err(|e| format!("{}: {e}", f.display()))
+                })
+                .transpose()?;
+            DeclaredTarget::new(&t.url, tls).map_err(|e| format!("{}: {e}", t.url))
+        })
+        .collect()
 }
 
 /// SA-22 with what the authority plane reaches after it (OP-141 m.18 (g), (h)).
@@ -463,6 +494,18 @@ fn lockdown(config: &Config) -> Lockdown {
     }
     // §10.4.6, §11.3.6
     lockdown = lockdown.allow_tcp_connect(access_identity_oauth::adapters::outbound::PORT);
+    // OP-149 m.23
+    let mut declared: Vec<u16> = config
+        .delivery_targets
+        .iter()
+        .filter_map(|t| DeclaredTarget::new(&t.url, None).ok().map(|t| t.port()))
+        .filter(|p| *p != access_identity_oauth::adapters::outbound::PORT)
+        .collect();
+    declared.sort_unstable();
+    declared.dedup();
+    for port in declared {
+        lockdown = lockdown.allow_tcp_connect(port);
+    }
     for file in RESOLVER.iter().filter(|f| Path::new(f).exists()) {
         lockdown = lockdown.allow_read(file);
     }
@@ -680,7 +723,7 @@ impl Background {
         let logout = courier(config, pools, outbound.clone())?;
         // OP-149 m.4, m.7, m.17
         let events = events::Delivery::outbound(
-            &event_pools(pools, ids),
+            &event_pools(pools, ids, outbound.declared()),
             outbound,
             SignerKeys::new(identity.signer.clone()),
             keks,
@@ -710,8 +753,13 @@ impl Background {
     }
 }
 
-fn event_pools(pools: &Pools, ids: &Arc<ids::CellIds>) -> events::EventPools {
+fn event_pools(
+    pools: &Pools,
+    ids: &Arc<ids::CellIds>,
+    declared: DeclaredTargets,
+) -> events::EventPools {
     events::EventPools {
+        declared,
         app: pools.app.clone(),
         reader: pools.outbox_reader.clone(),
         router: pools.router.clone(),
@@ -755,7 +803,7 @@ async fn serve(
     let identity_section = config.identity.as_ref().ok_or("no identity section")?;
     let signer = || SignerKeys::new(identity_section.signer.clone());
     let (platform_outbound, platform_keks) = (prepared.outbound.clone(), keks.clone());
-    let platform_pools = event_pools(&all, &cell_ids);
+    let platform_pools = event_pools(&all, &cell_ids, prepared.outbound.declared());
     // OP-149 m.7
     let authorize = authorization(
         config,

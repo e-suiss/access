@@ -17,6 +17,7 @@ use access_identity_admin::app::{Admin, Applied, NewRealm, Proposal};
 use access_identity_admin::domain::{AuthMethod, Change, Client, Platform, RedirectUri};
 use access_identity_admin::ports::{Decider, Governance, Instances, RealmKeys};
 use access_identity_events::domain::catalog::TENANT_PREFIX;
+use access_identity_oauth::adapters::outbound::DeclaredTargets;
 use access_identity_oauth::domain::issuer::{IssuerStyle, RealmBase};
 use access_identity_oauth::domain::jwt::parse_jwks;
 use access_identity_ui::domain::frontend::IDENTITY_PEP;
@@ -252,6 +253,8 @@ pub(crate) struct Bootstrap<'a, P, K> {
     pub(crate) hsm: &'a KeyStore,
     /// Where realm issuers are formed.
     pub(crate) base: &'a RealmBase,
+    /// The operator's declared delivery targets (OP-149 m.23).
+    pub(crate) declared: &'a DeclaredTargets,
 }
 
 /// The cell's opaque-id key; its root is made in the token once (OP-137).
@@ -445,6 +448,7 @@ where
             base: self.base,
             keys: self.realm_keys,
             platform_tenant: platform,
+            declared: self.declared.clone(),
         }
     }
 

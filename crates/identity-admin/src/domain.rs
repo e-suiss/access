@@ -4,6 +4,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use access_identity_account::domain::password::Argon2Params;
+use access_identity_oauth::adapters::outbound::DeclaredTargets;
 use access_internal_api::idp::{IdpAction, RESOURCE_NAMESPACE};
 use access_internal_api::instances::PlatformProduct;
 use access_kernel::digest::Digest;
@@ -112,7 +113,7 @@ pub enum Invalid {
     #[error("client keys are P-256")]
     ClientKey,
     /// A `suiss_event_receiver` that is not an absolute `https` URL Access may push to
-    /// (OP-149 m.4).
+    /// (OP-149 m.4, m.23).
     #[error("bad suiss_event_receiver")]
     EventReceiver,
 }
@@ -353,12 +354,13 @@ pub struct Platform {
 
 impl Platform {
     /// Whether the event receiver, when given, is an `https` URL the SSRF-guarded client can
-    /// post to.
+    /// post to: one the operator declared (OP-149 m.23), whose host may be a single label on
+    /// the local network, or one with a public DNS name on port 443.
     #[must_use]
-    pub fn receiver_ok(&self) -> bool {
-        self.event_receiver.as_deref().is_none_or(|u| {
-            https(u) && access_identity_oauth::adapters::outbound::Target::parse(u).is_ok()
-        })
+    pub fn receiver_ok(&self, declared: &DeclaredTargets) -> bool {
+        self.event_receiver
+            .as_deref()
+            .is_none_or(|u| declared.declares(u) || (https(u) && declared.accepts(u)))
     }
 }
 
@@ -449,11 +451,12 @@ pub struct Client {
 }
 
 impl Client {
-    /// Checks the parts that are not checked by their types.
+    /// Checks the parts that are not checked by their types; `declared` are the operator's
+    /// declared delivery targets (OP-149 m.23).
     ///
     /// # Errors
     /// [`Invalid`].
-    pub fn check(&self) -> Result<(), Invalid> {
+    pub fn check(&self, declared: &DeclaredTargets) -> Result<(), Invalid> {
         let n = self.display_name.chars().count();
         if n == 0 || n > 128 || self.display_name.chars().any(char::is_control) {
             return Err(Invalid::DisplayName);
@@ -494,7 +497,7 @@ impl Client {
             if !usable(&p.service_key) {
                 return Err(Invalid::PublicKey);
             }
-            if !p.receiver_ok() {
+            if !p.receiver_ok(declared) {
                 return Err(Invalid::EventReceiver);
             }
         }
@@ -747,13 +750,14 @@ impl Change {
         }
     }
 
-    /// Checks the change on its own.
+    /// Checks the change on its own, against the operator's declared delivery targets
+    /// (OP-149 m.23).
     ///
     /// # Errors
     /// [`Invalid`].
-    pub fn check(&self) -> Result<(), Invalid> {
+    pub fn check(&self, declared: &DeclaredTargets) -> Result<(), Invalid> {
         match self {
-            Self::ClientRegister(c) | Self::ClientUpdate(c) => c.check(),
+            Self::ClientRegister(c) | Self::ClientUpdate(c) => c.check(declared),
             Self::CimdPolicy(p) => p.check(),
             Self::Argon2(p) => Argon2Params::for_realm(p.m_kib, p.t, p.p)
                 .map(drop)

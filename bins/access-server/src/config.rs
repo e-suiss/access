@@ -1,10 +1,11 @@
 //! Process configuration (OP-63 rule 4).
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::net::{Ipv4Addr, SocketAddr};
 use std::path::PathBuf;
 
 use access_http::SecurityTxt;
+use access_identity_oauth::adapters::outbound::DeclaredTarget;
 use access_identity_oauth::domain::issuer::{Issuer, RealmBase};
 use figment::Figment;
 use figment::providers::{Env, Format, Serialized, Toml};
@@ -41,6 +42,24 @@ pub(crate) struct Config {
     pub(crate) login: Login,
     /// The Suiss deployment this Access belongs to (OP-149 m.3, E42).
     pub(crate) suiss: Option<Suiss>,
+    /// Event delivery targets the operator declares (OP-149 m.23): a push or webhook stream
+    /// endpoint with exactly one of these URLs may be on a private address or another port than
+    /// 443. Empty by default. In the environment:
+    /// `ACCESS_DELIVERY_TARGETS='[{url="https://host:8443/path", ca_file="/ca.pem"}]'`.
+    pub(crate) delivery_targets: Vec<DeliveryTarget>,
+}
+
+/// One declared event delivery target (OP-149 m.23).
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct DeliveryTarget {
+    /// The exact endpoint URL, written as Access writes URLs: `https`, lowercase host, the port
+    /// only when not 443, a path, no user info or fragment.
+    pub(crate) url: String,
+    /// PEM trust anchors its certificate must chain to; only these when given, else the
+    /// operator's trust anchors for clients' endpoints.
+    #[serde(default)]
+    pub(crate) ca_file: Option<PathBuf>,
 }
 
 /// What the Suiss discovery document and the tenant snapshot name (OP-149 m.3, m.4).
@@ -255,6 +274,7 @@ impl Default for Config {
             identity: None,
             login: Login::default(),
             suiss: None,
+            delivery_targets: Vec::new(),
         }
     }
 }
@@ -290,6 +310,10 @@ pub(crate) enum ConfigError {
         "the suiss section is required: region, and https base URLs without a trailing slash for relay, management_api and products (OP-149 m.3)"
     )]
     Suiss,
+    #[error(
+        "delivery_targets must be distinct https URLs with a lowercase host, the port only when not 443, a path and no user info or fragment (OP-149 m.23)"
+    )]
+    DeliveryTargets,
     #[error(transparent)]
     SecretEnvironment(#[from] access_crypto::secret_file::SecretFileError),
 }
@@ -346,6 +370,13 @@ impl Config {
         }
         if !self.suiss.as_ref().is_some_and(Suiss::valid) {
             return Err(ConfigError::Suiss);
+        }
+        // OP-149 m.23
+        let mut urls = BTreeSet::new();
+        for t in &self.delivery_targets {
+            if DeclaredTarget::new(&t.url, None).is_err() || !urls.insert(t.url.as_str()) {
+                return Err(ConfigError::DeliveryTargets);
+            }
         }
         Ok(())
     }
@@ -569,6 +600,62 @@ mod tests {
             .unwrap();
         config.validate().unwrap();
         assert!(config.database.and_then(|d| d.migrator).is_some());
+    }
+
+    // OP-149 m.23, TI-9, OP-69: declared delivery targets are empty by default, the same
+    // setting in every deployment, settable from the environment, and exact canonical URLs
+    #[test]
+    fn delivery_targets_are_declared_exactly() {
+        assert!(with_tls().delivery_targets.is_empty());
+        let env: figment::value::Value =
+            r#"[{url="https://work-server:8443/v1/inbound/events", ca_file="/var/lib/access/certs/ca.crt"}]"#
+                .parse()
+                .unwrap();
+        let config: Config = Figment::from(Serialized::defaults(with_tls()))
+            .merge(Serialized::default("delivery_targets", env))
+            .extract()
+            .unwrap();
+        config.validate().unwrap();
+        assert_eq!(
+            config.delivery_targets.first().map(|t| t.url.as_str()),
+            Some("https://work-server:8443/v1/inbound/events")
+        );
+        let empty: figment::value::Value = "[]".parse().unwrap();
+        let config: Config = Figment::from(Serialized::defaults(with_tls()))
+            .merge(Serialized::default("delivery_targets", empty))
+            .extract()
+            .unwrap();
+        assert!(config.delivery_targets.is_empty());
+        let target = |url: &str| DeliveryTarget {
+            url: url.to_owned(),
+            ca_file: None,
+        };
+        for bad in [
+            vec![target("http://work-server:8443/v1/inbound/events")],
+            vec![target("https://Work-Server:8443/v1/inbound/events")],
+            vec![target("https://work-server:8443")],
+            vec![target("https://u@work-server:8443/v1/inbound/events")],
+            vec![target("https://work-server:8443/v1/inbound/events#x")],
+            vec![
+                target("https://work-server:8443/v1/inbound/events"),
+                target("https://work-server:8443/v1/inbound/events"),
+            ],
+        ] {
+            let config = Config {
+                delivery_targets: bad,
+                ..with_tls()
+            };
+            assert!(matches!(
+                config.validate(),
+                Err(ConfigError::DeliveryTargets)
+            ));
+        }
+        let result: Result<Config, _> = Figment::from(Serialized::defaults(Config::default()))
+            .merge(Toml::string(
+                "delivery_targets = [{ url = \"https://a.example/x\", insecure = true }]",
+            ))
+            .extract();
+        assert!(result.is_err());
     }
 
     // OP-63, TI-9

@@ -52,11 +52,17 @@ fn redirect_uris_are_exact_and_constrained() {
         assert_eq!(RedirectUri::parse(bad), Err(Invalid::RedirectUri), "{bad}");
     }
     let mut c = client(&["https://shop.example/cb", "https://shop.example/cb"]);
-    assert_eq!(c.check(), Err(Invalid::RedirectUris));
+    assert_eq!(
+        c.check(&DeclaredTargets::default()),
+        Err(Invalid::RedirectUris)
+    );
     c.redirect_uris.pop();
-    assert_eq!(c.check(), Ok(()));
+    assert_eq!(c.check(&DeclaredTargets::default()), Ok(()));
     c.display_name = String::new();
-    assert_eq!(c.check(), Err(Invalid::DisplayName));
+    assert_eq!(
+        c.check(&DeclaredTargets::default()),
+        Err(Invalid::DisplayName)
+    );
 }
 
 // TN-15, OP-137: the client_id is the opaque `cli_` form only
@@ -110,7 +116,7 @@ fn argon2_parameters_only_rise() {
     assert!(!raises(&base, &base));
     assert!(!raises(&base, &more));
     let low = Change::Argon2(Argon2Params { t: 1, ..base });
-    assert_eq!(low.check(), Err(Invalid::Argon2));
+    assert_eq!(low.check(&DeclaredTargets::default()), Err(Invalid::Argon2));
 }
 
 // EI-25: the intent binds the change by digest; another change is another intent
@@ -149,7 +155,7 @@ fn the_event_receiver_is_an_https_url_in_the_change() {
         }),
         ..client(&["https://work.example/cb"])
     };
-    assert_eq!(c.check(), Ok(()));
+    assert_eq!(c.check(&DeclaredTargets::default()), Ok(()));
     let with = Change::ClientRegister(c.clone()).digest().unwrap();
     for bad in [
         "http://work.example/ssf",
@@ -161,13 +167,53 @@ fn the_event_receiver_is_an_https_url_in_the_change() {
         if let Some(p) = c.platform.as_mut() {
             p.event_receiver = Some(String::from(bad));
         }
-        assert_eq!(c.check(), Err(Invalid::EventReceiver), "{bad}");
+        assert_eq!(
+            c.check(&DeclaredTargets::default()),
+            Err(Invalid::EventReceiver),
+            "{bad}"
+        );
     }
     if let Some(p) = c.platform.as_mut() {
         p.event_receiver = None;
     }
-    assert_eq!(c.check(), Ok(()));
+    assert_eq!(c.check(&DeclaredTargets::default()), Ok(()));
     assert_ne!(Change::ClientRegister(c).digest().unwrap(), with);
+}
+
+// OP-149 m.23, §14.3: a suiss_event_receiver on a private address literal or another port than
+// 443 is accepted only when the operator declared that exact URL
+#[test]
+fn a_private_event_receiver_must_be_declared() {
+    let url = "https://work-server:8443/v1/inbound/events";
+    let declared = DeclaredTargets::new([String::from(url)]);
+    let mut c = Client {
+        auth: AuthMethod::PrivateKeyJwtKey { key: p256() },
+        platform: Some(Platform {
+            product: PlatformProduct::Work,
+            service_key: p256(),
+            event_receiver: Some(String::from(url)),
+        }),
+        ..client(&["https://work.example/cb"])
+    };
+    assert_eq!(c.check(&declared), Ok(()));
+    assert_eq!(
+        c.check(&DeclaredTargets::default()),
+        Err(Invalid::EventReceiver)
+    );
+    assert_eq!(Invalid::EventReceiver.code(), "invalid-event-receiver");
+    for near in [
+        "https://work-server:8443/v1/inbound/events/",
+        "https://work-server:8443/v1/inbound/other",
+        "https://work-server:9443/v1/inbound/events",
+        "https://Work-Server:8443/v1/inbound/events",
+        "https://10.0.0.1/v1/inbound/events",
+        "https://[::1]/v1/inbound/events",
+    ] {
+        if let Some(p) = c.platform.as_mut() {
+            p.event_receiver = Some(String::from(near));
+        }
+        assert_eq!(c.check(&declared), Err(Invalid::EventReceiver), "{near}");
+    }
 }
 
 /// The P-256 base point, a valid uncompressed SEC1 key.
@@ -195,10 +241,13 @@ fn a_client_key_is_p256_because_assertions_are_es256() {
         },
         ..client(&["https://shop.example/cb"])
     };
-    assert_eq!(c.check(), Err(Invalid::ClientKey));
+    assert_eq!(
+        c.check(&DeclaredTargets::default()),
+        Err(Invalid::ClientKey)
+    );
     assert_eq!(Invalid::ClientKey.code(), "client-key-not-p256");
     c.auth = AuthMethod::PrivateKeyJwtKey { key: p256() };
-    assert_eq!(c.check(), Ok(()));
+    assert_eq!(c.check(&DeclaredTargets::default()), Ok(()));
     assert!(c.auth.jwks().unwrap().contains(r#""crv":"P-256""#));
 }
 
@@ -213,6 +262,6 @@ fn requiring_par_is_in_the_change() {
         require_par: true,
         ..c
     };
-    assert_eq!(required.check(), Ok(()));
+    assert_eq!(required.check(&DeclaredTargets::default()), Ok(()));
     assert_ne!(Change::ClientRegister(required).digest().unwrap(), without);
 }

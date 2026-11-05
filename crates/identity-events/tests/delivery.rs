@@ -35,7 +35,9 @@ use access_identity_events::ports::{
     Clock, PostError, Reply, TenantIds, TokenSigner, Transport, Unavailable,
 };
 use access_identity_oauth::adapters::oauth::OsRandom;
-use access_identity_oauth::adapters::outbound::{Outbound, Target, post_over, post_request};
+use access_identity_oauth::adapters::outbound::{
+    DeclaredTargets, Outbound, Target, post_over, post_request,
+};
 use access_identity_oauth::ports::dpop::ClockUnavailable;
 use access_internal_api::events::{
     Detail, Event, Kind, ReasonClass, Source, Subject, compromise_from,
@@ -638,16 +640,19 @@ async fn poll_returns_and_settles_sets() {
     ));
 }
 
-// §14.3, OP-149 m.4: an endpoint the SSRF guard refuses fails at once, without retry, and a
+// §14.3, OP-149 m.4, m.23: an endpoint the SSRF guard refuses fails at once, without retry,
+// also one declared when the stream was created but not by the delivering client, and a
 // disabled stream gets nothing more (OP-73: it stays as a row)
 #[tokio::test]
 async fn refused_endpoints_and_disabled_streams_get_nothing() {
     let w = World::new().await;
-    let streams = w.streams();
+    let streams = w.streams().declaring(DeclaredTargets::new([String::from(
+        "https://10.0.0.1:8443/hook",
+    )]));
     let mut subs = Vec::new();
     for endpoint in [
-        "https://127.0.0.1/hook",
-        "https://10.0.0.1/hook",
+        "https://localhost/hook",
+        "https://10.0.0.1:8443/hook",
         "https://work.example/h",
     ] {
         subs.push(
@@ -693,4 +698,56 @@ async fn refused_endpoints_and_disabled_streams_get_nothing() {
         streams.disable(w.tenant, w.realm, subs[2].id).await,
         Err(StreamError::NotFound)
     ));
+}
+
+// OP-149 m.23, §14.3: a stream endpoint on a private address literal or another port than 443
+// is accepted only when the operator declared it byte for byte
+#[tokio::test]
+async fn only_declared_private_endpoints_open_streams() {
+    let w = World::new().await;
+    let declared = "https://work-server:8443/v1/inbound/events";
+    let request = |e: &str| {
+        parse_stream(&stream_request(
+            "urn:ietf:rfc:8935",
+            Some(e),
+            &["api_client.created"],
+        ))
+        .unwrap()
+    };
+    for refused in [
+        declared,
+        "https://10.0.0.1/hook",
+        "https://[fd00::1]/hook",
+        "https://work.example:8443/hook",
+    ] {
+        assert!(
+            matches!(
+                w.streams().create(w.tenant, w.realm, &request(refused)).await,
+                Err(StreamError::Invalid(i)) if i.0 == "endpoint_url"
+            ),
+            "{refused}"
+        );
+    }
+    let streams = w
+        .streams()
+        .declaring(DeclaredTargets::new([String::from(declared)]));
+    for near in [
+        "https://work-server:8443/v1/inbound/events/",
+        "https://work-server:8443/v1/inbound/other",
+        "https://work-server:9443/v1/inbound/events",
+        "https://Work-Server:8443/v1/inbound/events",
+    ] {
+        assert!(
+            matches!(
+                streams.create(w.tenant, w.realm, &request(near)).await,
+                Err(StreamError::Invalid(_))
+            ),
+            "{near}"
+        );
+    }
+    let created = streams
+        .create(w.tenant, w.realm, &request(declared))
+        .await
+        .unwrap();
+    assert_eq!(created.stream["delivery"]["endpoint_url"], declared);
 }

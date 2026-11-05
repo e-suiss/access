@@ -12,6 +12,7 @@ use access_authority_core::adapters::{Domains, OsSalts, Setup};
 use access_authority_sequencer::LEASE_TTL;
 use access_authority_sequencer::adapters::SourcesClock;
 use access_identity_oauth::adapters::SignerKeys;
+use access_identity_oauth::adapters::outbound::DeclaredTargets;
 use access_identity_signer::adapters::{DirVault, SealedFactory, now_ms, serve};
 use access_identity_signer::service::Service;
 use access_store::tenancy::tenants_after;
@@ -112,6 +113,7 @@ impl World {
             realm_keys: &self.keyring,
             hsm: &self.keys,
             base: &self.base,
+            declared: &DeclaredTargets::default(),
         }
         .run(plan)
         .await

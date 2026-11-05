@@ -15,13 +15,13 @@ use access_identity_events::app::streams::Streams;
 use access_identity_events::ports::{TenantIds, Transport};
 use access_identity_oauth::adapters::dpop::SystemClock;
 use access_identity_oauth::adapters::oauth::OsRandom;
-use access_identity_oauth::adapters::outbound::Outbound;
+use access_identity_oauth::adapters::outbound::{DeclaredTargets, Outbound};
 use access_identity_oauth::adapters::{PgDirectory, SignerKeys};
 use access_store::Pool;
 
 use crate::login::RealmKeks;
 
-/// The pools delivery reads and writes.
+/// The pools delivery and stream management read and write.
 #[derive(Clone)]
 pub(crate) struct EventPools {
     /// `access_app`.
@@ -32,6 +32,9 @@ pub(crate) struct EventPools {
     pub(crate) router: Pool,
     /// The tenants' `tnt_` ids (OP-149 m.15 (i)).
     pub(crate) ids: Arc<dyn TenantIds>,
+    /// The operator's declared delivery targets, which stream endpoints are checked against
+    /// (OP-149 m.23).
+    pub(crate) declared: DeclaredTargets,
 }
 
 impl EventPools {
@@ -102,7 +105,7 @@ impl Delivery {
 pub(crate) fn ssf(pools: &EventPools, signer: SignerKeys, keks: RealmKeks) -> axum::Router {
     access_http::ssf::router(Transmitter::new(
         PgDirectory::new(pools.router.clone()),
-        Streams::new(pools.db(), KekSealer(keks), OsRandom),
+        Streams::new(pools.db(), KekSealer(keks), OsRandom).declaring(pools.declared.clone()),
         signer,
         SystemClock,
     ))

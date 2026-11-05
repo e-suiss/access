@@ -7,6 +7,7 @@
 //!   It authenticates poll and the stream's own management calls (RFC 6750).
 
 use access_crypto::webhook::WebhookSecret;
+use access_identity_oauth::adapters::outbound::DeclaredTargets;
 use access_kernel::json::b64url_encode;
 use access_store::events::SubscriptionRow;
 use access_store::identity::{RealmId, TenantId, TenantTx};
@@ -99,12 +100,25 @@ pub struct Streams<K, R> {
     db: Db,
     sealer: K,
     random: R,
+    declared: DeclaredTargets,
 }
 
 impl<K: Sealer, R: Random> Streams<K, R> {
-    /// Streams over `db`.
-    pub const fn new(db: Db, sealer: K, random: R) -> Self {
-        Self { db, sealer, random }
+    /// Streams over `db`, with no declared delivery targets.
+    pub fn new(db: Db, sealer: K, random: R) -> Self {
+        Self {
+            db,
+            sealer,
+            random,
+            declared: DeclaredTargets::default(),
+        }
+    }
+
+    /// These streams with the operator's declared delivery targets (OP-149 m.23).
+    #[must_use]
+    pub fn declaring(mut self, declared: DeclaredTargets) -> Self {
+        self.declared = declared;
+        self
     }
 
     async fn issuer(&self, tenant: TenantId, realm: RealmId) -> Result<String, StreamError> {
@@ -306,6 +320,14 @@ impl<K: Sealer, R: Random> Streams<K, R> {
         req: &StreamRequest,
         owner: Option<(&str, String)>,
     ) -> Result<Created, StreamError> {
+        // OP-149 m.23, §14.3
+        if req
+            .endpoint
+            .as_deref()
+            .is_some_and(|u| !self.declared.accepts(u))
+        {
+            return Err(Invalid("endpoint_url").into());
+        }
         let issuer = self.issuer(tenant, realm).await?;
         let mut raw = [0_u8; 16];
         self.random.fill(&mut raw)?;

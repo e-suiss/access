@@ -5,6 +5,7 @@ pub mod platform;
 
 use access_crypto::opaque_id::IdKey;
 use access_identity_account::domain::password::Argon2Params;
+use access_identity_oauth::adapters::outbound::DeclaredTargets;
 use access_identity_oauth::domain::issuer::{Issuer, IssuerStyle, RealmBase};
 use access_internal_api::idp::{GenesisOrder, Submission, Verdict};
 use access_internal_api::instances::PlatformProduct;
@@ -152,6 +153,9 @@ pub struct Admin<'a, D, G, K> {
     /// The platform tenant: only its administrators register platform product clients
     /// (OP-149 m.4). `None` allows none.
     pub platform_tenant: Option<TenantId>,
+    /// The operator's declared delivery targets: a `suiss_event_receiver` on a private
+    /// address or another port than 443 must be one (OP-149 m.23).
+    pub declared: DeclaredTargets,
 }
 
 fn host_of(authority: &str) -> &str {
@@ -235,7 +239,7 @@ impl<D: Decider, G: Governance, K: RealmKeys> Admin<'_, D, G, K> {
     async fn governing(&self, p: &Proposal, state: bool) -> Result<Governing, AdminError> {
         let mut t = TenantTx::begin(self.app, p.tenant, p.realm).await?;
         let g = idp::governance(&mut t).await?.ok_or(AdminError::NoRealm)?;
-        let current = Self::current(&mut t, &p.change, &g, state).await;
+        let current = Self::current(&mut t, &p.change, &g, state, &self.declared).await;
         t.commit().await?;
         current?;
         Ok(g)
@@ -248,8 +252,9 @@ impl<D: Decider, G: Governance, K: RealmKeys> Admin<'_, D, G, K> {
         change: &Change,
         g: &Governing,
         state: bool,
+        declared: &DeclaredTargets,
     ) -> Result<(), AdminError> {
-        change.check()?;
+        change.check(declared)?;
         match change {
             Change::RpId(rp) => {
                 let issuer = g

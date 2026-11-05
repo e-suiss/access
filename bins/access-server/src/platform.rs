@@ -31,9 +31,10 @@ pub(crate) fn routes<I: Instances + 'static>(
             app: pools.app.clone(),
             router: pools.router.clone(),
             directory: PgDirectory::new(pools.router.clone()),
+            streams: Streams::new(pools.db(), KekSealer(keks), OsRandom)
+                .declaring(pools.declared.clone()),
             client_keys: HttpClientKeys::new(outbound, CachePolicy::default()),
             instances,
-            streams: Streams::new(pools.db(), KekSealer(keks), OsRandom),
             ids: Arc::clone(&pools.ids),
             pep: String::from(IDENTITY_PEP),
             clock: SystemClock,

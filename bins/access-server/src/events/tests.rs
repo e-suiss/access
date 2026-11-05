@@ -15,7 +15,7 @@ use access_identity_events::app::emit;
 use access_identity_events::domain::catalog::{ClientChange, IdentityEvent, IdentityKind, urn};
 use access_identity_events::domain::stream::parse_stream;
 use access_identity_events::ports::{PostError, Reply};
-use access_identity_oauth::adapters::outbound::{Target, post_over, post_request};
+use access_identity_oauth::adapters::outbound::{DeclaredTargets, Target, post_over, post_request};
 use access_internal_api::events::{Detail, Event, Kind, ReasonClass, Source, Subject};
 use access_kernel::digest::Digest;
 use access_kernel::model::Id;
@@ -211,6 +211,7 @@ async fn the_server_delivers_events_to_a_webhook() {
         reader: db.reader.clone(),
         router: db.router.clone(),
         ids: Arc::new(crate::ids::CellIds::new(store.clone())),
+        declared: DeclaredTargets::default(),
     };
     let tenant_id = pools.ids.external(tenant.as_bytes()).unwrap();
     let request = serde_json::json!({
