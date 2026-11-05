@@ -18,6 +18,12 @@ const WHY: &str = "no custodial key mode exists (OP-150 (e), SEC17, SEC19)";
 /// The rule spells out the vocabulary it forbids.
 const SELF_PATH: &str = "xtask/src/rules_custody.rs";
 
+/// Reviewed exceptions: (relative path, reason). Each entry needs Adem's review.
+const ALLOWLIST: &[(&str, &str)] = &[(
+    "crates/http/src/declarations.rs",
+    "the provider declaration that no custodial key exists (SI-13, OP-150 (e))",
+)];
+
 const DEPLOY_EXTENSIONS: &[&str] = &["toml", "yml", "yaml", "json", "sh", "conf", "env"];
 
 /// The custody word in an atom, unless it is the `non_custodial` assurance flag.
@@ -86,7 +92,7 @@ pub(crate) fn check(root: &Path) -> Result<Vec<Violation>, String> {
     let mut out = Vec::new();
     for path in walk(root)? {
         let rel_path = rel(root, &path);
-        if rel_path == SELF_PATH {
+        if rel_path == SELF_PATH || ALLOWLIST.iter().any(|(p, _)| *p == rel_path) {
             continue;
         }
         let ext = path

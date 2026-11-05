@@ -257,7 +257,7 @@ impl KeyFactory for Flaky {
     }
 }
 
-// CR-23, CR-27, OP-150: each round reports the realm key transitions, the realm audit events;
+// CR-23, CR-27, OP-150, TN-12, TN-118: each round reports the realm key transitions, the realm audit events;
 // while keys can be made no rotation is late, and a key-generation outage makes the round report
 // the delayed rotation of that realm
 #[test]

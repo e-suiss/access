@@ -319,7 +319,7 @@ impl KeyFactory for Flaky {
 
 const HOUR: u64 = 60 * MINUTE;
 
-// CR-23, CR-27, OP-150: each round reports its key transitions, the OPERATIONAL audit events;
+// CR-23, CR-27, OP-150, TN-12, TN-118: each round reports its key transitions, the OPERATIONAL audit events;
 // while keys can be made no rotation is late, and a key-generation outage makes the round report
 // the delayed rotation
 #[test]

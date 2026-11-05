@@ -855,3 +855,21 @@ negation = true
 sources = ["§13.4", "§13.8", "SAI-1"]
 rows = ["N-59"]
 honest = "Single-node profile: acknowledged writes can be lost with the node or disk."
+
+# §11.18 #6, EI-24, OP-150
+[[claim]]
+id = "legal-non-repudiation"
+scope = "all"
+phrases = ["legal non-repudiation", "legally non-repudiable", "legally binding signature", "court-proof signature"]
+negation = true
+sources = ["§11.18", "EI-24", "§13.2"]
+honest = "Technical non-repudiation: Actor Intent Statements, approvals, Claims, checkpoints, receipts and PAPs are signed; legal non-repudiation is not claimed."
+
+# SI-13, SEC17, OP-150 m.3 (e)
+[[claim]]
+id = "custodial-keys"
+scope = "all"
+phrases = ["custodial signing", "custodial key mode", "we hold your keys", "key custody service", "keys held in custody"]
+negation = true
+sources = ["SI-13", "SEC17", "§6.6"]
+honest = "Access has no custodial signing mode; Instance keys are held by their parties, as the provider declarations state."
