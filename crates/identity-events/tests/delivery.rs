@@ -484,6 +484,53 @@ fn compromised(d: &DomainId) -> Event {
 // OP-149 m.4, m.7, OP-63, OP-131: identity and authority outbox events reach a webhook
 // subscriber signed per Standard Webhooks, at least once with backoff, and the same id on a
 // redelivery; a repeated fan-out queues nothing twice
+// OP-21, §7.9.2.4, MD-7, OP-150 m.2: an admitted party.compromised ends the sessions and grants
+// of the Party's subject in the realms its domain governs, through the session epoch
+#[tokio::test]
+async fn a_party_compromise_raises_its_subjects_session_epoch() {
+    // TN-50, CMP-15.2
+    let w = World::new().await;
+    let mut t = TenantTx::begin(&w.db.app, w.tenant, w.realm).await.unwrap();
+    let subject = t
+        .insert_subject("active", "realm-kek:1", &[9; 40])
+        .await
+        .unwrap();
+    assert!(
+        access_store::idp::bind_subject_party(&mut t, &subject, &[2; 16])
+            .await
+            .unwrap()
+    );
+    let before = t
+        .subject(subject, false)
+        .await
+        .unwrap()
+        .unwrap()
+        .session_epoch;
+    t.commit().await.unwrap();
+    w.authority_events(&[compromised(&w.domain)]).await;
+    let fanout = w.fanout();
+    let deadline = std::time::Instant::now() + SETTLE;
+    loop {
+        fanout
+            .domain_step_in(&w.domain, Some(&w.db.router))
+            .await
+            .unwrap();
+        let mut t = TenantTx::begin(&w.db.app, w.tenant, w.realm).await.unwrap();
+        let now = t
+            .subject(subject, false)
+            .await
+            .unwrap()
+            .unwrap()
+            .session_epoch;
+        t.commit().await.unwrap();
+        if now > before {
+            break;
+        }
+        assert!(std::time::Instant::now() < deadline, "epoch not raised");
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+}
+
 #[tokio::test]
 async fn webhook_delivery_is_signed_retried_and_deduplicated() {
     let w = World::new().await;

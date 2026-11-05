@@ -7,7 +7,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::time::{Duration, Instant};
 
-use access_internal_api::events::Event;
+use access_internal_api::events::{Event, Kind, Subject};
 use access_store::authority;
 use access_store::events::{self as store, DeliveryRow, SubscriptionRow};
 use access_store::identity::{self, RealmId, TenantId, TenantTx};
@@ -74,6 +74,20 @@ impl<C: Clock + Send + Sync> Fanout<C> {
     /// # Errors
     /// [`Unavailable`].
     pub async fn domain_step(&self, domain: &DomainId) -> Result<u32, Unavailable> {
+        self.domain_step_in(domain, None).await
+    }
+
+    /// [`Fanout::domain_step`]; with the router role, an admitted `party.compromised` first
+    /// raises the `session_epoch` of the Party's subject in each realm the domain governs, so
+    /// its sessions and identity tokens end (OP-21, §7.9.2.4, OP-150 m.2).
+    ///
+    /// # Errors
+    /// [`Unavailable`]; the cursor has not passed an event whose effects are not stored.
+    pub async fn domain_step_in(
+        &self,
+        domain: &DomainId,
+        router: Option<&Pool>,
+    ) -> Result<u32, Unavailable> {
         let Some(tenant) = authority::domain_tenant(&self.db.app, domain)
             .await
             .map_err(down)?
@@ -91,6 +105,12 @@ impl<C: Clock + Send + Sync> Fanout<C> {
         for r in &rows {
             match Event::from_bytes(&r.event) {
                 Ok(e) => {
+                    if let (Some(router), Kind::PartyCompromised, Subject::Party(p)) =
+                        (router, e.kind, e.subject)
+                    {
+                        self.end_party_sessions(router, tenant, domain, &p.0)
+                            .await?;
+                    }
                     let ready = authority_ready(&e, &r.event_id);
                     queued = queued.saturating_add(self.queue(tenant, &ready).await?);
                 }
@@ -101,6 +121,37 @@ impl<C: Clock + Send + Sync> Fanout<C> {
                 .map_err(down)?;
         }
         Ok(queued)
+    }
+
+    /// Raises the `session_epoch` of the subject bound to `party` in every live realm of
+    /// `tenant` that `domain` governs (OP-21): its login sessions and grants end. Repeating it
+    /// only raises the epoch again.
+    async fn end_party_sessions(
+        &self,
+        router: &Pool,
+        tenant: TenantId,
+        domain: &DomainId,
+        party: &[u8; 16],
+    ) -> Result<(), Unavailable> {
+        for r in tenancy::tenant_routes(router, &[tenant])
+            .await
+            .map_err(down)?
+        {
+            let mut t = TenantTx::begin(&self.db.app, r.tenant, r.realm)
+                .await
+                .map_err(down)?;
+            let governed = idp::governance(&mut t)
+                .await
+                .map_err(down)?
+                .is_some_and(|g| g.domain == *domain);
+            if governed
+                && let Some(subject) = idp::party_subject(&mut t, party).await.map_err(down)?
+            {
+                t.end_sessions(subject).await.map_err(down)?;
+            }
+            t.commit().await.map_err(down)?;
+        }
+        Ok(())
     }
 
     /// The governing domains of the live realms, read through the router role (`router`) and
@@ -145,7 +196,7 @@ impl<C: Clock + Send + Sync> Fanout<C> {
                 tracing::warn!("identity event fan-out step failed");
             }
             for d in &domains {
-                if let Ok(n) = self.domain_step(d).await {
+                if let Ok(n) = self.domain_step_in(d, Some(router)).await {
                     queued = queued.saturating_add(n);
                 } else {
                     tracing::warn!("authority event fan-out step failed");

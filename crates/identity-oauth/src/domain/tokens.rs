@@ -142,6 +142,8 @@ pub struct TokenFacts<'a> {
     pub aal: Aal,
     /// Issue time, Unix milliseconds.
     pub now_ms: u64,
+    /// The subject's `session_epoch` the grant was issued under: the `rev` claim (OP-21).
+    pub rev: i64,
 }
 
 fn secs(ms: u64) -> u64 {
@@ -163,6 +165,7 @@ pub fn id_token_claims(f: &TokenFacts<'_>, nonce: Option<&str>) -> Vec<u8> {
     m.insert("auth_time".into(), secs(f.auth_time_ms).into());
     m.insert("acr".into(), acr(f.aal).into());
     m.insert("sid".into(), f.sid.into());
+    m.insert("rev".into(), f.rev.into());
     if let Some(n) = nonce {
         m.insert("nonce".into(), n.into());
     }
@@ -183,6 +186,7 @@ pub fn access_token_claims(f: &TokenFacts<'_>, scope: &str, jti: &str, jkt: &str
         "jti": jti,
         "scope": scope,
         "sid": f.sid,
+        "rev": f.rev,
         "auth_time": secs(f.auth_time_ms),
         "acr": acr(f.aal),
         "cnf": { "jkt": jkt },

@@ -116,6 +116,7 @@ fn identity_assertions_have_their_profile() {
         auth_time_ms: NOW - 5_000,
         aal: Aal::Aal2,
         now_ms: NOW,
+        rev: 3,
     };
     let id = claims(&id_token_claims(&f, Some("n")));
     assert_eq!(id["aud"], "cli_x");
@@ -128,6 +129,8 @@ fn identity_assertions_have_their_profile() {
     let at = claims(&access_token_claims(&f, "openid", "j", "k"));
     assert_eq!(at["aud"], "https://acme.id.test");
     assert_eq!(at["cnf"]["jkt"], "k");
+    // OP-21, CMP-15.2: the session epoch the token was issued under
+    assert_eq!((at["rev"].as_i64(), id["rev"].as_i64()), (Some(3), Some(3)));
     assert_eq!(
         at["exp"].as_u64().unwrap() - at["iat"].as_u64().unwrap(),
         600

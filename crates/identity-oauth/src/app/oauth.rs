@@ -409,6 +409,7 @@ impl<E: Env> OAuth<E> {
             auth_time_ms: details.auth_time_ms,
             aal: details.aal,
             now_ms: now,
+            rev: grant.session_epoch,
         };
         let alg = tx.jose_alg().await?;
         let jti = b64url_encode(&self.random::<16>()?);
@@ -472,6 +473,7 @@ impl<E: Env> OAuth<E> {
             auth_time_ms: details.auth_time_ms,
             aal: details.aal,
             now_ms: now,
+            rev: grant.session_epoch,
         };
         let alg = tx.jose_alg().await?;
         self.env
