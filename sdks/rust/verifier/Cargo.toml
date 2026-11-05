@@ -19,9 +19,12 @@ testing = []
 access-kernel = { workspace = true }
 suiss-crypto = { workspace = true, features = ["verify"] }
 thiserror = { workspace = true }
+# OP-150 m.6 (d)
+miniz_oxide = { workspace = true }
 
 [dev-dependencies]
 esuiss-access-verifier = { path = ".", features = ["testing"] }
+ed25519-dalek = { workspace = true }
 
 [lints]
 workspace = true

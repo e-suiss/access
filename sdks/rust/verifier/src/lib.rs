@@ -12,7 +12,13 @@
 
 extern crate alloc;
 
+pub mod caps;
 pub mod counter;
+pub mod metadata;
+pub mod offline;
+pub mod profile;
+pub mod report;
+pub mod status;
 #[cfg(feature = "testing")]
 pub mod testing;
 pub mod time;

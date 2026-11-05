@@ -84,6 +84,12 @@ impl SliceGuard {
         self.last
     }
 
+    /// The slice size.
+    #[must_use]
+    pub const fn slice(&self) -> u64 {
+        self.slice
+    }
+
     /// Units of the slice already used, by this verifier or by its group.
     #[must_use]
     pub const fn used(&self) -> u64 {

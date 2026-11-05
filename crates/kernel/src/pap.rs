@@ -287,7 +287,10 @@ pub struct Expected<'a> {
     pub horizon_cap_ms: u64,
 }
 
-fn demand(unit: &str, intent: &IntentEnvelope) -> Option<u64> {
+/// What one use of `intent` draws from a slice in `unit` (L2-PAP-3 step 5): one for `count`,
+/// else the sum of the intent's amounts in that unit; `None` when it does not fit.
+#[must_use]
+pub fn demand(unit: &str, intent: &IntentEnvelope) -> Option<u64> {
     if unit == "count" {
         return Some(1);
     }

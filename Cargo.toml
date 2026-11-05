@@ -91,6 +91,8 @@ libc = { version = "0.2.190", default-features = false }
 # OP-72
 divan = { version = "0.1.21", default-features = false }
 gungraun = { version = "=0.20.0", default-features = false }
+# OP-150 m.6 (d): ZLIB of Token Status Lists in the verifier SDK
+miniz_oxide = { version = "=0.9.1", default-features = false, features = ["with-alloc"] }
 # OP-83
 wasm-bindgen = { version = "=0.2.129", default-features = false }
 # OP-116
