@@ -327,6 +327,7 @@ fn outcome<T>(r: Result<T, ProjectionError>, ok: impl FnOnce(T) -> String) -> St
     }
 }
 
+#[allow(clippy::too_many_lines, reason = "one table of vector cases")]
 fn access_token_cases() -> Vec<(&'static str, &'static str, String, Confirmation)> {
     let aud = format!("\"{RS}\"");
     let full = at_payload(&aud, &jkt_json(), &detail("intent"));
