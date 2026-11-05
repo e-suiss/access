@@ -244,10 +244,16 @@ fn main() -> ExitCode {
             let mut interval = tokio::time::interval(every);
             loop {
                 interval.tick().await;
-                let report = ticking
-                    .lock()
-                    .map(|mut s| s.round(now_ms(), draw()))
-                    .unwrap_or_default();
+                let service = Arc::clone(&ticking);
+                // CR-28
+                let report = tokio::task::spawn_blocking(move || {
+                    service
+                        .lock()
+                        .map(|mut s| s.round(now_ms(), draw()))
+                        .unwrap_or_default()
+                })
+                .await
+                .unwrap_or_default();
                 audit(&report);
             }
         });

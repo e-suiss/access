@@ -166,14 +166,16 @@ pub fn draw() -> u64 {
     access_crypto::random::bytes::<8>().map_or(0, u64::from_le_bytes)
 }
 
+/// CR-28: the service runs on the blocking pool, since its key store calls (PKCS#11, KMS) block;
+/// a stuck HSM session holds a blocking thread, never the runtime's request tasks.
 async fn answer<F, V>(
     stream: &mut UnixStream,
-    service: &Mutex<Service<F, V>>,
+    service: &Arc<Mutex<Service<F, V>>>,
     clock: fn() -> u64,
 ) -> Result<(), std::io::Error>
 where
-    F: KeyFactory,
-    V: Vault,
+    F: KeyFactory + Send + 'static,
+    V: Vault + Send + 'static,
 {
     let mut header = [0_u8; 4];
     stream.read_exact(&mut header).await?;
@@ -182,11 +184,18 @@ where
             let mut body = vec![0_u8; len];
             stream.read_exact(&mut body).await?;
             match protocol::decode_request(&body) {
-                Ok(request) => service
-                    .lock()
-                    .map_or(Response::Error(String::from("signer-poisoned")), |mut s| {
-                        s.handle(request, clock(), draw())
-                    }),
+                Ok(request) => {
+                    let service = Arc::clone(service);
+                    tokio::task::spawn_blocking(move || {
+                        service
+                            .lock()
+                            .map_or(Response::Error(String::from("signer-poisoned")), |mut s| {
+                                s.handle(request, clock(), draw())
+                            })
+                    })
+                    .await
+                    .unwrap_or_else(|_| Response::Error(String::from("signer-poisoned")))
+                }
                 Err(_) => Response::Error(String::from("signer-frame")),
             }
         }
