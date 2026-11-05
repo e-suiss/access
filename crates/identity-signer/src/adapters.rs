@@ -133,7 +133,24 @@ impl Vault for DirVault {
         std::fs::write(&tmp, bytes).map_err(|_| VaultError)?;
         std::fs::rename(&tmp, self.dir.join(format!("{name}.cbor"))).map_err(|_| VaultError)
     }
+
+    fn cell(&mut self) -> Result<Option<Vec<u8>>, VaultError> {
+        match std::fs::read(self.dir.join(CELL_FILE)) {
+            Ok(bytes) => Ok(Some(bytes)),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            Err(_) => Err(VaultError),
+        }
+    }
+
+    fn put_cell(&mut self, bytes: &[u8]) -> Result<(), VaultError> {
+        let tmp = self.dir.join("cell.tmp");
+        std::fs::write(&tmp, bytes).map_err(|_| VaultError)?;
+        std::fs::rename(&tmp, self.dir.join(CELL_FILE)).map_err(|_| VaultError)
+    }
 }
+
+/// The cell key's file; not `.cbor`, so it is never read as a realm.
+const CELL_FILE: &str = "audit-checkpoint.key";
 
 /// Milliseconds since the Unix epoch.
 #[must_use]

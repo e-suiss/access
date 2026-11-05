@@ -60,6 +60,14 @@ pub enum Request {
         /// Signing time; within the signer's clock skew of its own clock.
         at: u64,
     },
+    /// The cell's audit log origin and the verifier key of its `audit-checkpoint` key
+    /// (OP-150 m.3 (h)).
+    CellKey,
+    /// Signs a checkpoint body of the cell's identity audit log as a C2SP note (OP-143 m.10).
+    SignCheckpoint {
+        /// The `tlog-checkpoint` body.
+        body: String,
+    },
 }
 
 /// The identity signer's answer.
@@ -84,6 +92,18 @@ pub enum Response {
         sign1: Vec<u8>,
         /// Its key's `kid`.
         kid: [u8; 32],
+    },
+    /// The cell's audit log origin and its C2SP verifier key.
+    CellKey {
+        /// Log origin and note key name.
+        origin: String,
+        /// Verifier key.
+        vkey: String,
+    },
+    /// A note signature line over a checkpoint body.
+    Noted {
+        /// The signature line, newline-terminated.
+        line: String,
     },
     /// A refusal, by stable code.
     Error(String),
@@ -185,12 +205,25 @@ impl Request {
                     ("at", Value::Unsigned(*at)),
                 ]),
             )]),
+            Self::CellKey => map(vec![("cell_key", Value::Bool(true))]),
+            Self::SignCheckpoint { body } => map(vec![(
+                "sign_checkpoint",
+                map(vec![("body", Value::text(body))]),
+            )]),
         }
     }
 
     fn from_value(v: &Value) -> Result<Self, FrameError> {
         if v.get("ping").is_some() {
             return Ok(Self::Ping);
+        }
+        if v.get("cell_key").is_some() {
+            return Ok(Self::CellKey);
+        }
+        if let Some(c) = v.get("sign_checkpoint") {
+            return Ok(Self::SignCheckpoint {
+                body: text(c.get("body"))?,
+            });
         }
         if let Some(o) = v.get("open") {
             return Ok(Self::Open {
@@ -239,6 +272,14 @@ impl Response {
                     ("kid", Value::Bytes(kid.to_vec())),
                 ]),
             )]),
+            Self::CellKey { origin, vkey } => map(vec![(
+                "cell_key",
+                map(vec![
+                    ("origin", Value::text(origin)),
+                    ("vkey", Value::text(vkey)),
+                ]),
+            )]),
+            Self::Noted { line } => map(vec![("noted", map(vec![("line", Value::text(line))]))]),
             Self::Error(code) => map(vec![("error", Value::text(code))]),
         }
     }
@@ -267,6 +308,17 @@ impl Response {
                 kid: bytes(s.get("kid"))?
                     .try_into()
                     .map_err(|_| FrameError::Malformed)?,
+            });
+        }
+        if let Some(c) = v.get("cell_key") {
+            return Ok(Self::CellKey {
+                origin: text(c.get("origin"))?,
+                vkey: text(c.get("vkey"))?,
+            });
+        }
+        if let Some(n) = v.get("noted") {
+            return Ok(Self::Noted {
+                line: text(n.get("line"))?,
             });
         }
         Ok(Self::Error(text(v.get("error"))?))

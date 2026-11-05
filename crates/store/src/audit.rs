@@ -55,6 +55,9 @@ pub struct CheckpointRow {
     pub frontier: Vec<[u8; 32]>,
     /// The last integrated row.
     pub cursor: Cursor,
+    /// The C2SP signed note of the cell's `audit-checkpoint` key over the checkpoint; `None`
+    /// only for checkpoints written before signing (OP-150 m.3 (h)).
+    pub note: Option<String>,
 }
 
 impl TenantTx {
@@ -168,7 +171,7 @@ pub async fn pending(
 /// [`StoreError`].
 pub async fn last_checkpoint(checkpointer: &PgPool) -> Result<Option<CheckpointRow>, StoreError> {
     let row = sqlx::query!(
-        r#"SELECT size, root, frontier, xid::text::bigint AS "xid!", id
+        r#"SELECT size, root, frontier, xid::text::bigint AS "xid!", id, note
              FROM access_ops.audit_checkpoint ORDER BY size DESC LIMIT 1"#
     )
     .fetch_optional(checkpointer)
@@ -182,6 +185,7 @@ pub async fn last_checkpoint(checkpointer: &PgPool) -> Result<Option<CheckpointR
                 xid: unsigned(r.xid)?,
                 id: r.id,
             },
+            note: r.note,
         })
     })
     .transpose()
@@ -195,13 +199,14 @@ pub async fn last_checkpoint(checkpointer: &PgPool) -> Result<Option<CheckpointR
 pub async fn append_checkpoint(checkpointer: &PgPool, c: &CheckpointRow) -> Result<(), StoreError> {
     let frontier: Vec<Vec<u8>> = c.frontier.iter().map(|h| h.to_vec()).collect();
     sqlx::query!(
-        "INSERT INTO access_ops.audit_checkpoint (size, root, frontier, xid, id)
-         VALUES ($1, $2, $3, $4::bigint::text::xid8, $5)",
+        "INSERT INTO access_ops.audit_checkpoint (size, root, frontier, xid, id, note)
+         VALUES ($1, $2, $3, $4::bigint::text::xid8, $5, $6)",
         i64::try_from(c.size).map_err(|_| StoreError::Range)?,
         c.root.as_slice(),
         &frontier,
         i64::try_from(c.cursor.xid).map_err(|_| StoreError::Range)?,
         c.cursor.id,
+        c.note.as_deref(),
     )
     .execute(checkpointer)
     .await?;

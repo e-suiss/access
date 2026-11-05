@@ -7,15 +7,61 @@
     reason = "test code; the request-path lints (OP-3) do not apply"
 )]
 
+use std::sync::{LazyLock, Mutex};
 use std::time::{Duration, Instant};
 
+use access_identity_audit::AuditError;
 use access_identity_audit::adapters::PgAudit;
 use access_identity_audit::app::step;
-use access_identity_audit::domain::leaf;
+use access_identity_audit::domain::{leaf, verify};
+use access_identity_audit::ports::NoteSigner;
+use access_identity_signer::adapters::SealedFactory;
+use access_identity_signer::cell::CellKey;
 use access_store::audit::{AuditEvent, append_checkpoint, last_checkpoint, open_month, pending};
 use access_store::identity::{Cursor, RealmId, TenantId, TenantTx};
 use access_store::testing::{TestDb, fresh};
+use suiss_crypto::envelope::SoftKek;
 use suiss_ledger::merkle::Frontier;
+
+/// The cell's audit-checkpoint key, in process (OP-150 m.3 (h)).
+struct Cell(Mutex<CellKey>);
+
+impl NoteSigner for Cell {
+    fn key(&self) -> impl Future<Output = Result<(String, String), AuditError>> + Send {
+        let key = self.0.lock().unwrap();
+        std::future::ready(Ok((key.origin().to_owned(), key.vkey())))
+    }
+
+    fn sign(&self, body: String) -> impl Future<Output = Result<String, AuditError>> + Send {
+        let key = self.0.lock().unwrap();
+        std::future::ready(
+            key.sign(&body)
+                .map_err(|e| AuditError::Unsigned(e.code().to_owned())),
+        )
+    }
+}
+
+static CELL: LazyLock<Cell> = LazyLock::new(|| {
+    let mut factory = SealedFactory::new(SoftKek::new("identity-kek", [5; 32]));
+    Cell(Mutex::new(
+        CellKey::generate("cell-a", &mut factory).unwrap(),
+    ))
+});
+
+/// A signer whose process is down.
+struct Down;
+
+impl NoteSigner for Down {
+    fn key(&self) -> impl Future<Output = Result<(String, String), AuditError>> + Send {
+        std::future::ready(Err(AuditError::Unsigned(String::from("refused"))))
+    }
+
+    fn sign(&self, _: String) -> impl Future<Output = Result<String, AuditError>> + Send {
+        std::future::ready(Err(AuditError::Unsigned(String::from("refused"))))
+    }
+}
+
+const NOW: u64 = 1_793_000_000_000;
 
 const T: TenantId = TenantId::from_bytes([1; 16]);
 const R: RealmId = RealmId::from_bytes([2; 16]);
@@ -42,7 +88,9 @@ async fn audit(db: &TestDb, n: usize) {
 async fn integrate(db: &TestDb, n: u64) -> u64 {
     let deadline = Instant::now() + Duration::from_secs(20);
     loop {
-        step(&PgAudit(db.checkpointer.clone())).await.unwrap();
+        step(&PgAudit(db.checkpointer.clone()), &*CELL, NOW)
+            .await
+            .unwrap();
         let size = last_checkpoint(&db.checkpointer)
             .await
             .unwrap()
@@ -111,7 +159,7 @@ async fn checkpoints_extend_one_tree() {
     );
     // OP-38: nothing new, no checkpoint
     assert!(
-        step(&PgAudit(db.checkpointer.clone()))
+        step(&PgAudit(db.checkpointer.clone()), &*CELL, NOW)
             .await
             .unwrap()
             .is_none()
@@ -133,7 +181,9 @@ async fn a_running_transaction_is_not_skipped() {
         .await
         .unwrap();
     audit(&db, 1).await;
-    step(&PgAudit(db.checkpointer.clone())).await.unwrap();
+    step(&PgAudit(db.checkpointer.clone()), &*CELL, NOW)
+        .await
+        .unwrap();
     assert!(last_checkpoint(&db.checkpointer).await.unwrap().is_none());
     early.commit().await.unwrap();
     assert_eq!(integrate(&db, 2).await, 2);
@@ -218,4 +268,47 @@ async fn monthly_partitions() {
         open_month(&db.app, 2030, 1).await.is_err(),
         "only the archive role opens partitions"
     );
+}
+
+// OP-150, OP-134, OP-143 m.10, L2-CKP-3: each checkpoint is stored with a signed note of the
+// cell key that states its size and root; a changed root no longer verifies
+#[tokio::test]
+async fn checkpoints_are_signed_by_the_cell_key() {
+    let db = fresh().await.unwrap();
+    audit(&db, 1).await;
+    audit(&db, 2).await;
+    integrate(&db, 2).await;
+    let (origin, vkey) = CELL.key().await.unwrap();
+    let mut c = last_checkpoint(&db.checkpointer).await.unwrap().unwrap();
+    assert_eq!(origin, "cell-a/identity-audit");
+    assert_eq!(
+        verify(&access_crypto::AwsLcBackend, &c, &origin, &vkey).unwrap(),
+        NOW
+    );
+    c.root = [0; 32];
+    assert!(verify(&access_crypto::AwsLcBackend, &c, &origin, &vkey).is_err());
+    let mut other = SealedFactory::new(SoftKek::new("identity-kek", [5; 32]));
+    let stranger = CellKey::generate("cell-a", &mut other).unwrap().vkey();
+    let c = last_checkpoint(&db.checkpointer).await.unwrap().unwrap();
+    assert!(verify(&access_crypto::AwsLcBackend, &c, &origin, &stranger).is_err());
+}
+
+// OP-150, CR-23, G42, OP-134 m.4: without the signer no checkpoint is written; the next step
+// with the signer integrates the same rows
+#[tokio::test]
+async fn no_signer_no_checkpoint() {
+    let db = fresh().await.unwrap();
+    audit(&db, 1).await;
+    let deadline = Instant::now() + Duration::from_secs(20);
+    loop {
+        match step(&PgAudit(db.checkpointer.clone()), &Down, NOW).await {
+            Err(AuditError::Unsigned(_)) => break,
+            Ok(None) => {}
+            other => panic!("{other:?}"),
+        }
+        assert!(Instant::now() < deadline, "row never pending");
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    assert!(last_checkpoint(&db.checkpointer).await.unwrap().is_none());
+    assert_eq!(integrate(&db, 1).await, 1);
 }

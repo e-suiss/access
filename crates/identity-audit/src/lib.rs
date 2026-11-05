@@ -1,5 +1,6 @@
 //! Identity plane audit checkpoints (OP-37, OP-38, OP-134): rows are sequenced by the database
-//! and integrated here into an RFC 9162 tree, so the request path never waits for it.
+//! and integrated here into an RFC 9162 tree, so the request path never waits for it. Each
+//! checkpoint is a C2SP signed note of the cell's `audit-checkpoint` key (OP-150 m.3 (h)).
 
 pub mod adapters;
 pub mod app;
@@ -21,4 +22,10 @@ pub enum AuditError {
     /// A row could not be encoded.
     #[error("row encoding")]
     Encode,
+    /// The signer is unreachable or refused; the checkpoint waits (CR-23, G42).
+    #[error("unsigned: {0}")]
+    Unsigned(String),
+    /// The note does not verify under the cell key or does not state the checkpoint.
+    #[error("note: {0}")]
+    Note(#[from] suiss_crypto::note::NoteError),
 }

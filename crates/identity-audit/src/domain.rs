@@ -3,6 +3,8 @@
 use access_kernel::digest;
 use access_store::audit::{AuditRow, CheckpointRow};
 use suiss_crypto::dcbor::{self, Limits, Value};
+use suiss_crypto::note::{Checkpoint, NoteError, Verifier, verify_checkpoint};
+use suiss_crypto::sig::Backend;
 use suiss_ledger::Hash;
 use suiss_ledger::merkle::Frontier;
 
@@ -60,5 +62,54 @@ pub fn next(
             xid: final_row.xid,
             id: final_row.id,
         },
+        note: None,
     }))
+}
+
+/// The checkpoint's last line: the signing time in Unix milliseconds (OP-143 m.10).
+pub const ISSUED_AT: &str = "issued_at ";
+
+/// The `tlog-checkpoint` body of `checkpoint` in the log `origin`, issued at `issued_at`.
+///
+/// # Errors
+/// [`AuditError::Note`] for an origin that cannot name a log.
+pub fn body(
+    origin: &str,
+    checkpoint: &CheckpointRow,
+    issued_at: u64,
+) -> Result<String, AuditError> {
+    Ok(Checkpoint {
+        origin: origin.to_owned(),
+        size: checkpoint.size,
+        root: checkpoint.root,
+        extensions: vec![format!("{ISSUED_AT}{issued_at}")],
+    }
+    .to_body()?)
+}
+
+/// Verifies a checkpoint's signed note under the cell key `vkey` (L2-CKP-3): the note verifies,
+/// names `origin`, and states the stored size and root. Returns its `issued_at`.
+///
+/// # Errors
+/// [`AuditError::Note`].
+pub fn verify(
+    backend: &impl Backend,
+    checkpoint: &CheckpointRow,
+    origin: &str,
+    vkey: &str,
+) -> Result<u64, AuditError> {
+    let note = checkpoint.note.as_deref().ok_or(NoteError::Unverified)?;
+    let key = Verifier::parse(vkey)?;
+    let (cp, _) = verify_checkpoint(backend, note, origin, &key, &[])?;
+    if cp.size != checkpoint.size || cp.root != checkpoint.root {
+        return Err(NoteError::Checkpoint.into());
+    }
+    let [line] = cp.extensions.as_slice() else {
+        return Err(NoteError::Checkpoint.into());
+    };
+    line.strip_prefix(ISSUED_AT)
+        .filter(|n| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()))
+        .filter(|n| n.len() == 1 || !n.starts_with('0'))
+        .and_then(|n| n.parse().ok())
+        .ok_or_else(|| NoteError::Checkpoint.into())
 }

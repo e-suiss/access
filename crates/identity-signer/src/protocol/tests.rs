@@ -1,6 +1,6 @@
 use super::*;
 
-// CMP-22b, OP-143 m.9 (e), OP-149 m.8: every message survives its frame
+// CMP-22b, OP-143 m.9 (e), OP-149 m.8, OP-150: every message survives its frame
 #[test]
 fn messages_round_trip() {
     let realm = Realm([3; 16]);
@@ -23,6 +23,10 @@ fn messages_round_trip() {
             payload: vec![0xa0],
             at: 42,
         },
+        Request::CellKey,
+        Request::SignCheckpoint {
+            body: String::from("cell/identity-audit\n1\nAAAA\n"),
+        },
     ];
     for r in requests {
         let f = encode_request(&r).unwrap();
@@ -41,6 +45,13 @@ fn messages_round_trip() {
         Response::SignedCose {
             sign1: vec![0xd2, 0x84],
             kid: [8; 32],
+        },
+        Response::CellKey {
+            origin: String::from("cell/identity-audit"),
+            vkey: String::from("cell/identity-audit+00000000+AA=="),
+        },
+        Response::Noted {
+            line: String::from("\u{2014} cell/identity-audit AAAA\n"),
         },
         Response::Error(String::from("signer-no-key")),
     ];

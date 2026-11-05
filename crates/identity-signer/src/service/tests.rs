@@ -10,8 +10,13 @@ use suiss_crypto::envelope::SoftKek;
 use super::*;
 use crate::adapters::SealedFactory;
 
+type Cell = std::sync::Arc<std::sync::Mutex<Option<Vec<u8>>>>;
+
 #[derive(Default, Clone)]
-struct MemVault(std::sync::Arc<std::sync::Mutex<BTreeMap<Realm, Vec<u8>>>>);
+struct MemVault(
+    std::sync::Arc<std::sync::Mutex<BTreeMap<Realm, Vec<u8>>>>,
+    Cell,
+);
 
 impl Vault for MemVault {
     fn all(&mut self) -> Result<Vec<Vec<u8>>, VaultError> {
@@ -20,6 +25,15 @@ impl Vault for MemVault {
 
     fn put(&mut self, realm: &Realm, bytes: &[u8]) -> Result<(), VaultError> {
         self.0.lock().unwrap().insert(*realm, bytes.to_vec());
+        Ok(())
+    }
+
+    fn cell(&mut self) -> Result<Option<Vec<u8>>, VaultError> {
+        Ok(self.1.lock().unwrap().clone())
+    }
+
+    fn put_cell(&mut self, bytes: &[u8]) -> Result<(), VaultError> {
+        *self.1.lock().unwrap() = Some(bytes.to_vec());
         Ok(())
     }
 }
@@ -134,4 +148,88 @@ fn a_restart_restores_every_realm() {
     let before = (jwks(&mut s, A), jwks(&mut s, B));
     let mut again = Service::start(factory(), vault, Policy::REALM).unwrap();
     assert_eq!((jwks(&mut again, A), jwks(&mut again, B)), before);
+}
+
+fn checkpoint(origin: &str, size: u64) -> String {
+    suiss_crypto::note::Checkpoint {
+        origin: String::from(origin),
+        size,
+        root: [7; 32],
+        extensions: vec![String::from("issued_at 1000")],
+    }
+    .to_body()
+    .unwrap()
+}
+
+// OP-150, CMP-22b, OP-143 m.10, L2-CKP-3: the cell key signs its own audit log's checkpoints
+// as notes its published verifier key verifies; another origin or no cell is refused
+#[test]
+fn the_cell_key_signs_audit_checkpoints() {
+    let mut s = Service::start(factory(), MemVault::default(), Policy::REALM).unwrap();
+    let body = checkpoint("cell-a/identity-audit", 3);
+    let sign = |body: &str| Request::SignCheckpoint {
+        body: String::from(body),
+    };
+    assert_eq!(
+        s.handle(sign(&body), 0, 0),
+        Response::Error(String::from(NO_CELL))
+    );
+    s.open_cell("cell-a").unwrap();
+    let Response::CellKey { origin, vkey } = s.handle(Request::CellKey, 0, 0) else {
+        panic!("no cell key");
+    };
+    assert_eq!(origin, "cell-a/identity-audit");
+    let Response::Noted { line } = s.handle(sign(&body), 0, 0) else {
+        panic!("not signed");
+    };
+    let verifier = suiss_crypto::note::Verifier::parse(&vkey).unwrap();
+    let note = format!("{body}\n{line}");
+    let (cp, _) = suiss_crypto::note::verify_checkpoint(
+        &access_crypto::AwsLcBackend,
+        &note,
+        &origin,
+        &verifier,
+        &[],
+    )
+    .unwrap();
+    assert_eq!(cp.size, 3);
+    assert_eq!(
+        s.handle(sign(&checkpoint("cell-b/identity-audit", 3)), 0, 0),
+        Response::Error(String::from("signer-note"))
+    );
+    assert_eq!(
+        s.handle(sign("cell-a/identity-audit\n3\n"), 0, 0),
+        Response::Error(String::from("signer-note"))
+    );
+}
+
+// OP-150, CR-23: the cell key survives a restart and realm rotation; a vault holding another
+// cell's key is refused
+#[test]
+fn the_cell_key_survives_a_restart() {
+    let vault = MemVault::default();
+    let mut s = Service::start(factory(), vault.clone(), Policy::REALM).unwrap();
+    s.open_cell("cell-a").unwrap();
+    let _ = s.handle(
+        Request::Open {
+            realm: A,
+            alg: JwsAlg::Ed25519,
+        },
+        0,
+        0,
+    );
+    let before = s.handle(Request::CellKey, 0, 0);
+    let day = 86_400_000;
+    for d in 1..=400_u64 {
+        assert_eq!(s.tick(d * day, 7), Vec::<Realm>::new());
+    }
+    assert_eq!(s.handle(Request::CellKey, 0, 0), before);
+    let mut again = Service::start(factory(), vault.clone(), Policy::REALM).unwrap();
+    again.open_cell("cell-a").unwrap();
+    assert_eq!(again.handle(Request::CellKey, 0, 0), before);
+    let mut other = Service::start(factory(), vault, Policy::REALM).unwrap();
+    assert_eq!(
+        other.open_cell("cell-b").err(),
+        Some(crate::cell::CellError::OtherCell)
+    );
 }

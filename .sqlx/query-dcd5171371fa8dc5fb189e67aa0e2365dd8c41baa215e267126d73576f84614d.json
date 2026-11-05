@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT size, root, frontier, xid::text::bigint AS \"xid!\", id\n             FROM access_ops.audit_checkpoint ORDER BY size DESC LIMIT 1",
+  "query": "SELECT size, root, frontier, xid::text::bigint AS \"xid!\", id, note\n             FROM access_ops.audit_checkpoint ORDER BY size DESC LIMIT 1",
   "describe": {
     "columns": [
       {
@@ -52,6 +52,17 @@
             "name": "id"
           }
         }
+      },
+      {
+        "ordinal": 5,
+        "name": "note",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access_ops.audit_checkpoint",
+            "name": "note"
+          }
+        }
       }
     ],
     "parameters": {
@@ -62,8 +73,9 @@
       false,
       false,
       null,
-      false
+      false,
+      true
     ]
   },
-  "hash": "e3579a7dbd1e0835f70cb7d64d2dcb8dc7f4d44f08ed23930bb8868baf4291c0"
+  "hash": "dcd5171371fa8dc5fb189e67aa0e2365dd8c41baa215e267126d73576f84614d"
 }

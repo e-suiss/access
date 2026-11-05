@@ -47,4 +47,16 @@ pub trait Vault {
     /// # Errors
     /// [`VaultError`].
     fn put(&mut self, realm: &crate::protocol::Realm, bytes: &[u8]) -> Result<(), VaultError>;
+
+    /// The stored cell `audit-checkpoint` key, if one was made (OP-150 m.3 (h)).
+    ///
+    /// # Errors
+    /// [`VaultError`].
+    fn cell(&mut self) -> Result<Option<Vec<u8>>, VaultError>;
+
+    /// Stores the cell `audit-checkpoint` key; it is written once.
+    ///
+    /// # Errors
+    /// [`VaultError`].
+    fn put_cell(&mut self, bytes: &[u8]) -> Result<(), VaultError>;
 }

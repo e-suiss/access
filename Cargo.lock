@@ -140,6 +140,8 @@ dependencies = [
 name = "access-identity-audit"
 version = "0.2.6"
 dependencies = [
+ "access-crypto",
+ "access-identity-signer",
  "access-store",
  "esuiss-access-kernel",
  "esuiss-crypto",
@@ -233,6 +235,7 @@ dependencies = [
  "serde",
  "thiserror",
  "tokio",
+ "toml 1.1.6+spec-1.1.0",
  "tracing",
 ]
 

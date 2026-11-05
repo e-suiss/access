@@ -21,6 +21,9 @@ pub(crate) struct Config {
     pub(crate) callers: Vec<u32>,
     /// Seconds between schedule rounds.
     pub(crate) tick_seconds: u64,
+    /// The cell's name; its identity audit log's origin is `<cell>/identity-audit` and its
+    /// `audit-checkpoint` key belongs to it (OP-150 m.3 (h)).
+    pub(crate) cell: String,
     /// The PKCS#11 token holding the KEK that seals realm keys (CR-21, T31).
     pub(crate) hsm: Option<Hsm>,
 }
@@ -50,6 +53,7 @@ impl Default for Config {
             vault: PathBuf::from("/var/lib/access/identity-signer"),
             callers: Vec::new(),
             tick_seconds: 30,
+            cell: String::new(),
             hsm: None,
         }
     }
@@ -73,6 +77,9 @@ pub(crate) enum ConfigError {
     /// The schedule interval is outside 1 to 300 seconds.
     #[error("tick_seconds out of range")]
     Tick,
+    /// The cell name is missing or cannot name a note key.
+    #[error("cell is not a valid name")]
+    Cell,
 }
 
 impl Config {
@@ -107,6 +114,10 @@ impl Config {
         if !(1..=300).contains(&self.tick_seconds) {
             return Err(ConfigError::Tick);
         }
+        let origin = access_identity_signer::cell::origin(&self.cell);
+        if self.cell.is_empty() || suiss_crypto::note::check_name(&origin).is_err() {
+            return Err(ConfigError::Cell);
+        }
         Ok(())
     }
 }
@@ -118,6 +129,7 @@ mod tests {
     fn valid() -> Config {
         Config {
             callers: vec![1000],
+            cell: "cell-1".to_owned(),
             hsm: Some(Hsm {
                 module: "/usr/lib/softhsm/libsofthsm2.so".into(),
                 token: "access".to_owned(),
@@ -143,7 +155,7 @@ mod tests {
         config.validate().unwrap();
     }
 
-    // CMP-22b, CR-21: callers, a token and a sane schedule are required
+    // CMP-22b, CR-21, OP-150: callers, a token, a sane schedule and a cell name are required
     #[test]
     fn incomplete_configurations_are_refused() {
         valid().validate().unwrap();
@@ -162,5 +174,32 @@ mod tests {
             ..valid()
         };
         assert!(matches!(tick.validate(), Err(ConfigError::Tick)));
+        for cell in ["", "a cell", "a+b"] {
+            let bad = Config {
+                cell: cell.to_owned(),
+                ..valid()
+            };
+            assert!(matches!(bad.validate(), Err(ConfigError::Cell)), "{cell}");
+        }
+    }
+
+    // CR-32, T31, CMP-22b: the local deployment's identity signer has its own token, KEK and
+    // vault, apart from the authority signer's
+    #[test]
+    fn the_identity_plane_keeps_its_own_key_store() {
+        let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/../../deploy/compose/access/");
+        let read = |name: &str| -> toml::Table {
+            std::fs::read_to_string(format!("{dir}{name}"))
+                .unwrap()
+                .parse()
+                .unwrap()
+        };
+        let identity = read("access-identity-signer.toml");
+        let authority = read("access-signer.toml");
+        for key in ["token", "kek", "pin_file"] {
+            assert_ne!(identity["hsm"][key], authority["hsm"][key], "{key}");
+        }
+        assert_ne!(identity["vault"], authority["vault"]);
+        assert_ne!(identity["socket"], authority["socket"]);
     }
 }

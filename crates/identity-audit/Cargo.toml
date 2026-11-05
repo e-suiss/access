@@ -9,6 +9,8 @@ repository.workspace = true
 publish = false
 
 [dependencies]
+access-crypto = { workspace = true }
+access-identity-signer = { path = "../identity-signer" }
 access-kernel = { workspace = true }
 access-store = { workspace = true }
 suiss-crypto = { workspace = true }
@@ -17,6 +19,7 @@ thiserror = { workspace = true }
 
 [dev-dependencies]
 access-store = { workspace = true, features = ["testing"] }
+suiss-crypto = { workspace = true, features = ["signer", "aead", "testing"] }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "time"] }
 
 [lints]

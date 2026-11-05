@@ -2,6 +2,8 @@
 socket = "/run/access/identity-signer.sock"
 vault = "/var/lib/access/identity-signer"
 callers = [65532]
+# OP-150: the identity audit log origin is "<cell>/identity-audit"
+cell = "local"
 
 [hsm]
 module = "/usr/lib/softhsm/libsofthsm2.so"

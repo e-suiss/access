@@ -1,10 +1,12 @@
 //! CMP-22b identity signer: the realm JOSE key set, which rotates under publish-before-use and
 //! is published as a JWKS, and the compact JWS signatures of identity tokens (MD-3, MD-6,
 //! CR-18 to CR-27, OP-143 m.1 E7), and the `COSE_Sign1` of identity plane artifacts such as
-//! `auth_context` (OP-149 m.8).
+//! `auth_context` (OP-149 m.8); and the cell's `audit-checkpoint` key, which signs the identity
+//! audit log's checkpoints (OP-150 m.3 (h)).
 
 pub mod adapters;
 pub mod app;
+pub mod cell;
 pub mod domain;
 pub mod ports;
 pub mod protocol;
@@ -24,6 +26,9 @@ pub enum SignerError {
     /// identity plane `+cbor` type (OP-149 m.8).
     #[error("payload")]
     Payload,
+    /// The note body is not a canonical checkpoint of the cell's audit log (L2-CKP-3).
+    #[error("note")]
+    Note,
     /// The key could not sign.
     #[error("sign")]
     Sign,
@@ -37,6 +42,7 @@ impl SignerError {
             Self::NoKey => "signer-no-key",
             Self::Jose(e) => e.code(),
             Self::Payload => "signer-payload",
+            Self::Note => "signer-note",
             Self::Sign => "signer-sign",
         }
     }

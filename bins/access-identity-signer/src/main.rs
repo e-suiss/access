@@ -35,6 +35,9 @@ fn lockdown(config: &Config, hsm: &config::Hsm) -> Lockdown {
 }
 
 fn configured() -> Option<Config> {
+    if unsafe_host() {
+        return None;
+    }
     let config = match Config::load() {
         Ok(config) => config,
         Err(error) => {
@@ -103,6 +106,41 @@ fn init(config: &Config, hsm: &config::Hsm) -> ExitCode {
     }
 }
 
+type Signer = Service<SealedFactory<suiss_crypto::pkcs11::HsmKek>, DirVault>;
+
+/// The service with every realm restored and the cell's `audit-checkpoint` key open (CR-23,
+/// OP-150 m.3 (h)).
+fn start(config: &Config, kek: suiss_crypto::pkcs11::HsmKek) -> Option<Signer> {
+    let mut service = match Service::start(
+        SealedFactory::new(kek),
+        DirVault::new(&config.vault),
+        Policy::REALM,
+    ) {
+        Ok(service) => service,
+        Err(error) => {
+            tracing::error!(%error, "vault unreadable; refusing to start (CR-23)");
+            return None;
+        }
+    };
+    if let Err(error) = service.open_cell(&config.cell) {
+        tracing::error!(%error, "audit-checkpoint key unusable; refusing to start (OP-150)");
+        return None;
+    }
+    Some(service)
+}
+
+/// CR-39, OP-150 (o): a production signer does not start on `aarch64-apple-*`.
+fn unsafe_host() -> bool {
+    access_crypto::platform::signer_host(access_crypto::platform::Target::BUILT)
+        .map_err(|error| {
+            #[allow(clippy::print_stderr)]
+            {
+                eprintln!("access-identity-signer: {error}; refusing to start");
+            }
+        })
+        .is_err()
+}
+
 fn main() -> ExitCode {
     let args: Vec<OsString> = std::env::args_os().skip(1).collect();
     let provision = match args.as_slice() {
@@ -161,17 +199,10 @@ fn main() -> ExitCode {
         tracing::error!(%error, "seccomp phase 2 failed; refusing to continue");
         return ExitCode::FAILURE;
     }
-    let service = match Service::start(
-        SealedFactory::new(kek),
-        DirVault::new(&config.vault),
-        Policy::REALM,
-    ) {
-        Ok(service) => Arc::new(Mutex::new(service)),
-        Err(error) => {
-            tracing::error!(%error, "vault unreadable; refusing to start (CR-23)");
-            return ExitCode::FAILURE;
-        }
+    let Some(service) = start(&config, kek) else {
+        return ExitCode::FAILURE;
     };
+    let service = Arc::new(Mutex::new(service));
     let ticking = Arc::clone(&service);
     let every = Duration::from_secs(config.tick_seconds);
     let result = runtime.block_on(async move {

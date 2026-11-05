@@ -24,5 +24,8 @@ thiserror = { workspace = true, features = ["std"] }
 tokio = { workspace = true, features = ["macros", "net", "rt-multi-thread", "time"] }
 tracing = { workspace = true, features = ["std"] }
 
+[dev-dependencies]
+toml = { workspace = true, features = ["std", "parse", "serde"] }
+
 [lints]
 workspace = true

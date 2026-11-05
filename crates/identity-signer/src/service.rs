@@ -9,6 +9,7 @@ use suiss_crypto::dcbor::{self, Limits, Value};
 use suiss_crypto::rotation::{Key, Policy, State};
 
 use crate::app::{Keyring, Saved};
+use crate::cell::{CellError, CellKey};
 use crate::ports::{KeyFactory, Vault, VaultError};
 use crate::protocol::{Realm, Request, Response, alg_of};
 
@@ -21,6 +22,7 @@ pub struct Service<F, V> {
     factory: F,
     vault: V,
     policy: Policy,
+    cell: Option<CellKey>,
 }
 
 const STATES: [(&str, State); 5] = [
@@ -156,6 +158,7 @@ impl<F: KeyFactory, V: Vault> Service<F, V> {
             factory,
             vault,
             policy,
+            cell: None,
         };
         for (realm, alg, saved) in all.iter().filter_map(|b| restored(b)) {
             if let Ok(ring) = Keyring::restore(alg, s.policy, saved, &mut s.factory) {
@@ -163,6 +166,25 @@ impl<F: KeyFactory, V: Vault> Service<F, V> {
             }
         }
         Ok(s)
+    }
+
+    /// Opens the `audit-checkpoint` key of `cell`: the stored one, or a new one stored before
+    /// it is used (OP-150 m.3 (h)). A vault holding another cell's key is refused.
+    ///
+    /// # Errors
+    /// [`CellError`]; [`CellError::Stored`] also when the vault cannot be read or written.
+    pub fn open_cell(&mut self, cell: &str) -> Result<(), CellError> {
+        if let Some(stored) = self.vault.cell().map_err(|_| CellError::Stored)? {
+            self.cell = Some(CellKey::restore(cell, &stored, &mut self.factory)?);
+            return Ok(());
+        }
+        let key = CellKey::generate(cell, &mut self.factory)?;
+        let stored = key.stored().ok_or(CellError::Stored)?;
+        self.vault
+            .put_cell(&stored)
+            .map_err(|_| CellError::Stored)?;
+        self.cell = Some(key);
+        Ok(())
     }
 
     /// The realms whose key sets are open.
@@ -262,9 +284,26 @@ impl<F: KeyFactory, V: Vault> Service<F, V> {
                     Err(e) => Response::Error(String::from(e.code())),
                 }
             }
+            Request::CellKey => self.cell.as_ref().map_or_else(
+                || Response::Error(String::from(NO_CELL)),
+                |c| Response::CellKey {
+                    origin: c.origin().to_owned(),
+                    vkey: c.vkey(),
+                },
+            ),
+            Request::SignCheckpoint { body } => match self.cell.as_ref() {
+                None => Response::Error(String::from(NO_CELL)),
+                Some(c) => match c.sign(&body) {
+                    Ok(line) => Response::Noted { line },
+                    Err(e) => Response::Error(String::from(e.code())),
+                },
+            },
         }
     }
 }
+
+/// The refusal when the cell's `audit-checkpoint` key is not open.
+pub const NO_CELL: &str = "signer-no-cell";
 
 /// The refusal for a realm whose key set is not open.
 pub const UNKNOWN_REALM: &str = "signer-unknown-realm";
