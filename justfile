@@ -492,6 +492,40 @@ bench *args:
 bench-instructions *args:
     cargo bench --locked -p esuiss-access-kernel --bench kernel_instructions -- {{args}}
 
+# OQ-MD4, OP-150 m.1 (c): Kernel call cost direct, on wasm32-wasip1, on Node and through uniffi; informational, not a gate
+bench-ffi iters="5000":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    target="${CARGO_TARGET_DIR:-target}"
+    out="$target/bench-ffi"
+    vectors="conformance/vectors/core/1"
+    rm -rf "$out" && mkdir -p "$out"
+    cargo build --locked --release -p esuiss-access-kernel --example ffi_cost
+    "$target/release/examples/ffi_cost" --vectors "$vectors" --iters {{iters}} --inputs "$out/inputs.json" | tee "$out/rust.jsonl"
+    if command -v wasmtime >/dev/null; then
+      cargo build --locked --release -p esuiss-access-kernel --example ffi_cost --target wasm32-wasip1
+      wasmtime run --dir "$vectors" "$target/wasm32-wasip1/release/examples/ffi_cost.wasm" --vectors "$vectors" --iters {{iters}} | tee "$out/wasip1.jsonl"
+    else
+      echo "bench-ffi: wasmtime not found; wasm32-wasip1 skipped" >&2
+    fi
+    want="$(grep -A1 '^name = "wasm-bindgen"$' Cargo.lock | sed -n 's/^version = "\(.*\)"$/\1/p')"
+    if command -v node >/dev/null && [[ "$(wasm-bindgen --version 2>/dev/null | cut -d' ' -f2)" == "$want" ]]; then
+      cargo build --locked --release --target wasm32-unknown-unknown -p access-kernel-wasm
+      wasm-bindgen --target web --out-dir "$out/wasm" "$target/wasm32-unknown-unknown/release/access_kernel_wasm.wasm"
+      node scripts/bench_ffi.mjs "$out/wasm" "$out/inputs.json" {{iters}} | tee "$out/node.jsonl"
+    else
+      echo "bench-ffi: node or wasm-bindgen-cli $want not found; Node skipped" >&2
+    fi
+    cargo build --locked --release -p access-kernel-uniffi
+    case "$(uname -s)" in Darwin) ext=dylib ;; *) ext=so ;; esac
+    lib="$target/release/libaccess_kernel_uniffi.$ext"
+    cargo run --locked --quiet -p access-kernel-uniffi --features bindgen --bin uniffi-bindgen -- \
+      generate --library "$lib" --language python --out-dir "$out/python"
+    cp "$lib" "$out/python/"
+    python3 -I scripts/bench_ffi.py uniffi "$out/python" "$out/inputs.json" {{iters}} | tee "$out/python.jsonl"
+    runs=(); for r in rust wasip1 node python; do if [[ -f "$out/$r.jsonl" ]]; then runs+=("$out/$r.jsonl"); fi; done
+    python3 -I scripts/bench_ffi.py summary "${runs[@]}" | tee "$out/summary.md"
+
 # SA-59
 mutants *args:
     cargo mutants --package esuiss-access-kernel --test-tool nextest {{args}}
