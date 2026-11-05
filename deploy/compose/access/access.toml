@@ -1,0 +1,46 @@
+# OP-69, OP-149 m.21: access-server in the local deployment (deploy/compose/access.yaml).
+# Paths are the volumes access-local-init fills; secrets are files, never environment variables.
+listen = "0.0.0.0:8443"
+issuer = "https://access-server:8443"
+# OP-143 m.5
+signer = "/run/access/signer.sock"
+
+[tls]
+cert_file = "/var/lib/access/certs/access-server.crt"
+key_file = "/var/lib/access/secrets/access-server.key"
+# OP-141 m.18 (b), OP-149 m.15 (h): PEP client certificates from the local CA
+client_ca_file = "/var/lib/access/certs/ca.crt"
+
+# OP-141 m.18 (g), OP-55
+[database]
+host = "postgres"
+port = 5432
+name = "access"
+root_cert_file = "/var/lib/access/certs/ca.crt"
+durability = "single-node"
+sequencer = { user = "access_sequencer_login", password_file = "/var/lib/access/secrets/db-sequencer", pool = 2 }
+app = { user = "access_app_login", password_file = "/var/lib/access/secrets/db-app", pool = 4 }
+deriver = { user = "access_deriver_login", password_file = "/var/lib/access/secrets/db-deriver", pool = 1 }
+router = { user = "access_router_login", password_file = "/var/lib/access/secrets/db-router", pool = 2 }
+archive = { user = "access_archive_login", password_file = "/var/lib/access/secrets/db-archive", pool = 1 }
+outbox_reader = { user = "access_outbox_reader_login", password_file = "/var/lib/access/secrets/db-outbox-reader", pool = 1 }
+migrator = { user = "access_migrator_login", password_file = "/var/lib/access/secrets/db-migrator", pool = 1 }
+
+# TN-10, CMP-22b, OP-138
+[identity]
+realm_base = "https://access-server:8443"
+signer = "/run/access/identity-signer.sock"
+
+# OP-149 m.3, m.15 (g)
+[suiss]
+region = "local"
+relay = "https://relay:8443"
+management_api = "https://access-server:8443"
+products = { work = "https://work:8443" }
+
+# OP-94, OP-141 m.18 (h), OP-69
+[hsm]
+module = "/usr/lib/softhsm/libsofthsm2.so"
+token = "access-server"
+pin_file = "/var/lib/access/secrets/hsm-access-server"
+paths = ["/var/lib/softhsm/tokens"]

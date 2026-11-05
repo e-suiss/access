@@ -1,4 +1,4 @@
-# OP-68, F-6, F-7, OP-49
+# OP-68, F-6, F-7, OP-49, OP-69
 name: Image
 
 on:
@@ -19,7 +19,9 @@ jobs:
   image:
     name: image
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 45
+    outputs:
+      local: ghcr.io/e-suiss/access@${{ steps.local.outputs.digest }}
     permissions:
       contents: read
       packages: write
@@ -50,28 +52,111 @@ jobs:
         with:
           context: .
           file: deploy/docker/Dockerfile
+          target: runtime
           platforms: linux/amd64
           push: true
           tags: ${{ env.IMAGE }}:${{ steps.tag.outputs.tag }}
           provenance: false
           sbom: false
-      - name: Sign the image (F-7)
+      # OP-69, OP-149 m.21: the same binaries with SoftHSM and the local provisioning
+      - name: Build and push the local image
+        id: local
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: deploy/docker/Dockerfile
+          target: local
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ env.IMAGE }}:${{ steps.tag.outputs.tag }}-local
+            ${{ env.IMAGE }}:local
+          provenance: false
+          sbom: false
+      - name: Sign the images (F-7)
         env:
           DIGEST: ${{ steps.build.outputs.digest }}
-        run: cosign sign --yes "$IMAGE@$DIGEST"
+          LOCAL: ${{ steps.local.outputs.digest }}
+        run: cosign sign --yes "$IMAGE@$DIGEST" "$IMAGE@$LOCAL"
       - name: Image provenance (F-6)
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-name: ${{ env.IMAGE }}
           subject-digest: ${{ steps.build.outputs.digest }}
           push-to-registry: true
+      - name: Local image provenance (F-6)
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ steps.local.outputs.digest }}
+          push-to-registry: true
       - name: Summary
         env:
           DIGEST: ${{ steps.build.outputs.digest }}
+          LOCAL: ${{ steps.local.outputs.digest }}
           TAG: ${{ steps.tag.outputs.tag }}
         run: |
           {
             echo "### ${IMAGE}:${TAG}"
             echo
             echo "\`${IMAGE}@${DIGEST}\`"
+            echo
+            echo "### ${IMAGE}:${TAG}-local"
+            echo
+            echo "\`${IMAGE}@${LOCAL}\`"
           } >> "$GITHUB_STEP_SUMMARY"
+
+  # OP-69, OP-149 m.21: the local deployment comes up from the pushed image and serves a product
+  local-smoke:
+    name: local-smoke
+    needs: image
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: read
+    env:
+      ACCESS_IMAGE: ${{ needs.image.outputs.local }}
+      COMPOSE: docker compose --file deploy/compose/access.yaml
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - name: Start
+        run: $COMPOSE up --detach --quiet-pull
+      - name: Serve
+        run: |
+          healthy=
+          for _ in $(seq 1 60); do
+            if $COMPOSE exec -T access-server \
+              curl -fsS --cacert /var/lib/access/certs/ca.crt https://localhost:8443/healthz; then
+              healthy=1
+              break
+            fi
+            sleep 2
+          done
+          test -n "$healthy"
+          for f in ca.crt pep.crt pep.key; do
+            $COMPOSE exec -T access-server cat "/var/lib/access/certs/$f" > "$RUNNER_TEMP/$f"
+          done
+          $COMPOSE logs --no-color bootstrap
+          tls=(-fsS --cacert "$RUNNER_TEMP/ca.crt" --resolve access-server:8443:127.0.0.1)
+          curl "${tls[@]}" https://access-server:8443/realms/platform/.well-known/suiss-configuration
+          curl "${tls[@]}" --cert "$RUNNER_TEMP/pep.crt" --key "$RUNNER_TEMP/pep.key" \
+            https://access-server:8443/access/v1/tenants | grep -q '"tnt_'
+      - name: Bootstrap again
+        run: |
+          $COMPOSE run --rm --no-deps -T bootstrap > "$RUNNER_TEMP/again.json"
+          grep -q '"created": false' "$RUNNER_TEMP/again.json"
+          ! grep -q '"created": true' "$RUNNER_TEMP/again.json"
+      - name: Logs
+        if: failure()
+        run: $COMPOSE logs --no-color
+      - name: Stop
+        if: always()
+        run: $COMPOSE down --volumes

@@ -1,0 +1,5 @@
+# OP-69, OP-149 m.21: what `access-server bootstrap` makes sure of. Every realm gets a path
+# issuer under https://access-server:8443/realms/<slug>.
+platform = "platform"
+tenants = ["acme"]
+issuer_style = "path"

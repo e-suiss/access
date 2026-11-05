@@ -1,0 +1,11 @@
+# OP-69, CMP-22b: the identity signer in the local deployment; its token is its own.
+socket = "/run/access/identity-signer.sock"
+vault = "/var/lib/access/identity-signer"
+callers = [65532]
+
+[hsm]
+module = "/usr/lib/softhsm/libsofthsm2.so"
+token = "access-identity-signer"
+pin_file = "/var/lib/access/secrets/hsm-access-identity-signer"
+kek = "access/identity-signer/kek"
+paths = ["/var/lib/softhsm/tokens"]

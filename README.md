@@ -79,6 +79,35 @@ You need Rust (the pinned toolchain installs itself from `rust-toolchain.toml`),
 
 SDKs are planned for TypeScript/Node, Python, Go, Java, .NET, Elixir, PHP and Ruby, plus iOS, Android, React Native and Flutter.
 
+## Run Access locally
+
+To build a product against a real Access, start the published image with Docker Compose. Nothing runs in a "development mode": the same binaries and checks as production, with SoftHSM as the PKCS#11 token and a local certificate authority for TLS.
+
+```sh
+docker compose -f deploy/compose/access.yaml up -d
+docker compose -f deploy/compose/access.yaml logs bootstrap   # tenant, realm and client ids
+```
+
+This starts PostgreSQL (TLS only), the authority and identity signers, applies the migrations (`access-server migrate`) and runs `access-server bootstrap`, which creates the platform tenant with its realm and a sample `acme` tenant. Access listens on `https://access-server:8443` inside the `access-local` network and on `127.0.0.1:8443` on your machine.
+
+The bootstrap prints, and keeps in the `bootstrap` volume as `bootstrap.json`:
+
+- `realms[]`: the `tnt_…` tenant id, realm id, issuer, governing domain and `discovery` URL (`/.well-known/suiss-configuration`) of each realm
+- `clients[]`: each registered platform product client and the `aud` its client assertions use
+- `root`: the Party that founded the realms
+
+To register a product's platform client, put its public keys as JWK files in a directory and run the bootstrap with the product plan:
+
+```sh
+ACCESS_PRODUCT_KEYS=./my-keys \
+ACCESS_BOOTSTRAP_PLAN=/etc/access/local/bootstrap-work.toml \
+  docker compose -f deploy/compose/access.yaml up -d
+```
+
+`work-client.jwk` (P-256) verifies the product's client assertions and `work-service.jwk` (Ed25519 or P-256) is its service key for pairing. Running the bootstrap again changes nothing and prints the same ids.
+
+Your own containers join the `access-local` network. The `certs` volume holds the local CA (`ca.crt`) and a PEP client certificate (`pep.crt`, `pep.key`) for the `/access/v1` API. Access pushes events only to public addresses on port 443, so on a local network read them from a poll stream (`POST /access/v1/platform/streams`). Pin the image with `ACCESS_IMAGE=ghcr.io/e-suiss/access:main-<sha>-local`.
+
 ## Tech stack
 
 Rust (single backend), PostgreSQL, NATS, HSM-backed keys over PKCS#11, React for UI components.

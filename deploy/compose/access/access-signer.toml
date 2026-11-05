@@ -1,0 +1,11 @@
+# OP-69, CMP-22a: the authority signer in the local deployment.
+socket = "/run/access/signer.sock"
+vault = "/var/lib/access/signer"
+callers = [65532]
+
+[hsm]
+module = "/usr/lib/softhsm/libsofthsm2.so"
+token = "access-signer"
+pin_file = "/var/lib/access/secrets/hsm-access-signer"
+kek = "access/signer/kek"
+paths = ["/var/lib/softhsm/tokens"]

@@ -1,0 +1,17 @@
+# OP-69, OP-149 m.4, m.21: the bootstrap with the Work platform client. Mount a directory with
+# Work's public keys at /etc/access/products and point ACCESS_BOOTSTRAP_PLAN here.
+platform = "platform"
+tenants = ["acme"]
+issuer_style = "path"
+
+[[products]]
+product = "work"
+display_name = "Suiss Work"
+# P-256 JWK: the key Work's client assertions (RFC 7523) are signed with
+client_key = "/etc/access/products/work-client.jwk"
+# Ed25519 or P-256 JWK: Work's service Instance key, signing its pairing Exercises
+service_key = "/etc/access/products/work-service.jwk"
+# Push delivery (RFC 8935) reaches only public addresses on port 443 (SSRF guard, §14.3); on a
+# local network Work reads its events from a poll stream (RFC 8936) instead.
+# event_receiver = "https://work.example/ssf"
+redirect_uri = "https://work:8443/callback"

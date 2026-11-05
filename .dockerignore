@@ -5,6 +5,7 @@
 CLAUDE.md
 docs
 deploy
+!deploy/compose/access
 target
 **/target
 node_modules

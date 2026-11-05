@@ -1,0 +1,188 @@
+# OP-69, OP-149 m.21, TI-9, OP-49, RAUTHY-008, §14.3: a real Access for products to test against.
+# Same binaries and checks as production; SoftHSM is the local PKCS#11 token and a local CA
+# issues every certificate. Nothing here is a development mode.
+#
+#   docker compose -f deploy/compose/access.yaml up -d
+#   docker compose -f deploy/compose/access.yaml run --rm bootstrap   # print the ids again
+
+name: access-local
+
+x-hardening: &hardening
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+
+x-access: &access
+  <<: *hardening
+  image: ${ACCESS_IMAGE:-ghcr.io/e-suiss/access:local}
+  user: "65532:65532"
+  read_only: true
+  tmpfs:
+    - /tmp:uid=65532,gid=65532
+
+services:
+  # OP-69, CR-28: certificates, credentials, tokens and KEKs, once
+  init:
+    <<: *access
+    command: ["access-local-init"]
+    volumes:
+      - certs:/var/lib/access/certs
+      - secrets:/var/lib/access/secrets
+      - initdb:/var/lib/access/initdb
+      - softhsm:/var/lib/softhsm/tokens
+      - signer:/var/lib/access/signer
+      - identity-signer:/var/lib/access/identity-signer
+
+  # OP-7, T8, OP-73, OP-130 m.10: TLS only, SCRAM logins, one per role
+  postgres:
+    <<: *hardening
+    image: postgres@sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336 # 18.6-trixie
+    user: "999:999"
+    group_add: ["65532"]
+    read_only: true
+    entrypoint:
+      - sh
+      - -c
+      - >-
+        install -m 0600 /docker-entrypoint-initdb.d/postgres.key /var/run/postgresql/server.key &&
+        exec docker-entrypoint.sh postgres
+        -c ssl=on -c ssl_min_protocol_version=TLSv1.3
+        -c ssl_cert_file=/var/lib/access/certs/postgres.crt
+        -c ssl_key_file=/var/run/postgresql/server.key
+    tmpfs:
+      - /var/run/postgresql:uid=999,gid=999
+      - /tmp:uid=999,gid=999
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD_FILE: /docker-entrypoint-initdb.d/superuser
+      POSTGRES_INITDB_ARGS: --auth=scram-sha-256 --data-checksums
+    volumes:
+      - pgdata:/var/lib/postgresql
+      - certs:/var/lib/access/certs:ro
+      - initdb:/docker-entrypoint-initdb.d:ro
+    depends_on:
+      init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-U", "postgres", "-d", "access"]
+      interval: 2s
+      timeout: 3s
+      retries: 60
+
+  # OP-55: schema migrations as the migration role; a second run applies nothing
+  migrate:
+    <<: *access
+    command: ["access-server", "migrate"]
+    environment:
+      ACCESS_CONFIG: /etc/access/local/access.toml
+    volumes:
+      - certs:/var/lib/access/certs:ro
+      - secrets:/var/lib/access/secrets:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # CMP-22a
+  signer:
+    <<: *access
+    command: ["access-signer"]
+    restart: unless-stopped
+    environment:
+      ACCESS_SIGNER_CONFIG: /etc/access/local/access-signer.toml
+    volumes:
+      - secrets:/var/lib/access/secrets:ro
+      - softhsm:/var/lib/softhsm/tokens
+      - signer:/var/lib/access/signer
+      - sockets:/run/access
+    depends_on:
+      init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "test", "-S", "/run/access/signer.sock"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  # CMP-22b
+  identity-signer:
+    <<: *access
+    command: ["access-identity-signer"]
+    restart: unless-stopped
+    environment:
+      ACCESS_IDENTITY_SIGNER_CONFIG: /etc/access/local/access-identity-signer.toml
+    volumes:
+      - secrets:/var/lib/access/secrets:ro
+      - softhsm:/var/lib/softhsm/tokens
+      - identity-signer:/var/lib/access/identity-signer
+      - sockets:/run/access
+    depends_on:
+      init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "test", "-S", "/run/access/identity-signer.sock"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  # OP-149 m.21: the platform tenant, sample tenants and product clients; prints their ids and
+  # keeps them in the bootstrap volume (bootstrap.json)
+  bootstrap:
+    <<: *access
+    entrypoint: ["sh", "-c"]
+    command:
+      - >-
+        access-server bootstrap "$${ACCESS_BOOTSTRAP_PLAN}" > /var/lib/access/bootstrap/bootstrap.json &&
+        cat /var/lib/access/bootstrap/bootstrap.json
+    environment:
+      ACCESS_CONFIG: /etc/access/local/access.toml
+      ACCESS_BOOTSTRAP_PLAN: ${ACCESS_BOOTSTRAP_PLAN:-/etc/access/local/bootstrap.toml}
+    volumes:
+      - certs:/var/lib/access/certs:ro
+      - secrets:/var/lib/access/secrets:ro
+      - softhsm:/var/lib/softhsm/tokens
+      - sockets:/run/access
+      - bootstrap:/var/lib/access/bootstrap
+      - ${ACCESS_PRODUCT_KEYS:-./access/products}:/etc/access/products:ro
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      signer:
+        condition: service_healthy
+      identity-signer:
+        condition: service_healthy
+
+  access-server:
+    <<: *access
+    command: ["access-server"]
+    restart: unless-stopped
+    environment:
+      ACCESS_CONFIG: /etc/access/local/access.toml
+    volumes:
+      - certs:/var/lib/access/certs:ro
+      - secrets:/var/lib/access/secrets:ro
+      - softhsm:/var/lib/softhsm/tokens
+      - sockets:/run/access
+    ports:
+      - "127.0.0.1:${ACCESS_PORT:-8443}:8443"
+    depends_on:
+      bootstrap:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "--cacert", "/var/lib/access/certs/ca.crt", "https://localhost:8443/healthz"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+networks:
+  default:
+    name: access-local
+
+volumes:
+  certs:
+  secrets:
+  initdb:
+  pgdata:
+  softhsm:
+  signer:
+  identity-signer:
+  sockets:
+  bootstrap:
