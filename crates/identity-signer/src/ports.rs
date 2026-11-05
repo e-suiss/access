@@ -59,4 +59,20 @@ pub trait Vault {
     /// # Errors
     /// [`VaultError`].
     fn put_cell(&mut self, bytes: &[u8]) -> Result<(), VaultError>;
+
+    /// The stored Claim issuer key of `realm`, if one was made (§10.1.7).
+    ///
+    /// # Errors
+    /// [`VaultError`].
+    fn issuer(&mut self, realm: &crate::protocol::Realm) -> Result<Option<Vec<u8>>, VaultError>;
+
+    /// Stores the Claim issuer key of `realm`; it is written once.
+    ///
+    /// # Errors
+    /// [`VaultError`].
+    fn put_issuer(
+        &mut self,
+        realm: &crate::protocol::Realm,
+        bytes: &[u8],
+    ) -> Result<(), VaultError>;
 }

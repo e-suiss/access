@@ -27,6 +27,26 @@ fn messages_round_trip() {
         Request::SignCheckpoint {
             body: String::from("cell/identity-audit\n1\nAAAA\n"),
         },
+        Request::OpenIssuer {
+            realm,
+            party: [4; 16],
+        },
+        Request::SignClaim {
+            realm,
+            payload: vec![0xa0],
+            at: 42,
+        },
+        Request::SignIssuerRegistration {
+            realm,
+            registration: crate::issuer::Registration {
+                domain: [5; 32],
+                nonce: vec![6; 32],
+                validity: (1, 2),
+                iat: 1,
+                pep: String::from("identity"),
+                step: crate::issuer::Step::Create,
+            },
+        },
     ];
     for r in requests {
         let f = encode_request(&r).unwrap();
@@ -52,6 +72,11 @@ fn messages_round_trip() {
         },
         Response::Noted {
             line: String::from("\u{2014} cell/identity-audit AAAA\n"),
+        },
+        Response::Issuer {
+            party: [4; 16],
+            key: [7; 32],
+            kid: [8; 32],
         },
         Response::Error(String::from("signer-no-key")),
     ];

@@ -17,6 +17,7 @@ type Cell = std::sync::Arc<std::sync::Mutex<Option<Vec<u8>>>>;
 struct MemVault(
     std::sync::Arc<std::sync::Mutex<BTreeMap<Realm, Vec<u8>>>>,
     Cell,
+    std::sync::Arc<std::sync::Mutex<BTreeMap<Realm, Vec<u8>>>>,
 );
 
 impl Vault for MemVault {
@@ -35,6 +36,15 @@ impl Vault for MemVault {
 
     fn put_cell(&mut self, bytes: &[u8]) -> Result<(), VaultError> {
         *self.1.lock().unwrap() = Some(bytes.to_vec());
+        Ok(())
+    }
+
+    fn issuer(&mut self, realm: &Realm) -> Result<Option<Vec<u8>>, VaultError> {
+        Ok(self.2.lock().unwrap().get(realm).cloned())
+    }
+
+    fn put_issuer(&mut self, realm: &Realm, bytes: &[u8]) -> Result<(), VaultError> {
+        self.2.lock().unwrap().insert(*realm, bytes.to_vec());
         Ok(())
     }
 }
@@ -386,4 +396,106 @@ fn decided_key_changes_survive_a_restart() {
     assert_eq!(jwks(&mut again, A), after);
     assert_eq!(jwks(&mut again, B), b);
     assert_eq!(again.rings.get(&A).map(|(_, r)| r.policy()), Some(faster));
+}
+fn claim_payload(issuer: [u8; 16], at: u64) -> Vec<u8> {
+    use access_kernel::codec::Canonical as _;
+    access_kernel::claim::Statement {
+        domain: access_kernel::digest::Digest([3; 32]),
+        issuer: access_kernel::model::Id(issuer),
+        subject: access_kernel::model::Id([9; 16]),
+        class: String::from("account_status"),
+        value: Some(access_kernel::model::EqValue::Text(String::from(
+            "suspended",
+        ))),
+        issued_at: at,
+        validity: access_kernel::model::Window {
+            from: at,
+            until: at + 10,
+        },
+        assurance: BTreeMap::new(),
+        bound_intent: None,
+        bound_instance: None,
+        bound_resource: None,
+        supersedes: None,
+    }
+    .to_bytes()
+    .unwrap()
+}
+
+// OP-144 carry-over, §10.1.7, MD-6, CR-23: each realm's Claim issuer key is its own Ed25519
+// key, apart from the realm's token keys, bound to the issuer Party it was opened for, and it
+// survives a restart; the token key never signs a Claim
+#[test]
+fn the_claim_issuer_key_is_separate_and_survives_a_restart() {
+    let vault = MemVault::default();
+    let mut s = Service::start(factory(), vault.clone(), Policy::REALM).unwrap();
+    let party = [4; 16];
+    let sign = |party| Request::SignClaim {
+        realm: A,
+        payload: claim_payload(party, 100),
+        at: 100,
+    };
+    assert_eq!(
+        s.handle(sign(party), 100, 0),
+        Response::Error(String::from(NO_ISSUER))
+    );
+    let open = |party| Request::OpenIssuer { realm: A, party };
+    let Response::Issuer { key, kid, .. } = s.handle(open(party), 0, 0) else {
+        panic!("not opened");
+    };
+    assert_eq!(s.handle(open(party), 0, 0), s.handle(open(party), 0, 0));
+    assert_eq!(
+        s.handle(open([5; 16]), 0, 0),
+        Response::Error(String::from("signer-issuer-party"))
+    );
+    let Response::SignedCose { sign1, kid: k } = s.handle(sign(party), 100, 0) else {
+        panic!("not signed");
+    };
+    assert_eq!(k, kid);
+    let pk = suiss_crypto::cose::PublicKey::Ed25519(key);
+    assert!(
+        access_kernel::claim::verify(
+            &sign1,
+            &pk,
+            &access_kernel::model::Id(party),
+            &access_kernel::digest::Digest([3; 32]),
+        )
+        .is_ok()
+    );
+    assert_eq!(
+        s.handle(sign([5; 16]), 100, 0),
+        Response::Error(String::from("signer-payload"))
+    );
+    assert_eq!(
+        s.handle(sign(party), 100 + MAX_SKEW_MS + 1, 0),
+        Response::Error(String::from("signer-time"))
+    );
+    let _ = s.handle(
+        Request::Open {
+            realm: A,
+            alg: JwsAlg::Ed25519,
+        },
+        0,
+        0,
+    );
+    let later = Policy::REALM.publish_lead_ms + 60_000;
+    assert_eq!(s.tick(later, 0), Vec::<Realm>::new());
+    for ct in PROTOCOL_TYPES {
+        let r = Request::SignCose {
+            realm: A,
+            content_type: String::from(ct),
+            payload: claim_payload(party, later),
+            at: later,
+        };
+        assert_eq!(
+            s.handle(r, later, 0),
+            Response::Error(String::from("signer-payload"))
+        );
+    }
+    assert!(!jwks(&mut s, A).contains(&access_kernel::json::b64url_encode(&key)));
+    let mut again = Service::start(factory(), vault, Policy::REALM).unwrap();
+    assert!(matches!(
+        again.handle(sign(party), 100, 0),
+        Response::SignedCose { kid: k, .. } if k == kid
+    ));
 }

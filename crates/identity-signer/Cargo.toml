@@ -11,6 +11,7 @@ publish = false
 [dependencies]
 access-kernel = { workspace = true }
 access-crypto = { workspace = true }
+access-internal-api = { workspace = true }
 suiss-crypto = { workspace = true, features = ["signer", "aead"] }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["net", "io-util", "rt"] }

@@ -1,13 +1,15 @@
 //! CMP-22b identity signer: the realm JOSE key set, which rotates under publish-before-use and
 //! is published as a JWKS, and the compact JWS signatures of identity tokens (MD-3, MD-6,
 //! CR-18 to CR-27, OP-143 m.1 E7), and the `COSE_Sign1` of identity plane artifacts such as
-//! `auth_context` (OP-149 m.8); and the cell's `audit-checkpoint` key, which signs the identity
-//! audit log's checkpoints (OP-150 m.3 (h)).
+//! `auth_context` (OP-149 m.8); the cell's `audit-checkpoint` key, which signs the identity
+//! audit log's checkpoints (OP-150 m.3 (h)); and each realm's Claim issuer key, which signs the
+//! identity plane's Claims (§10.1.7).
 
 pub mod adapters;
 pub mod app;
 pub mod cell;
 pub mod domain;
+pub mod issuer;
 pub mod ports;
 pub mod protocol;
 pub mod service;

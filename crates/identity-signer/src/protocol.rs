@@ -90,6 +90,32 @@ pub enum Request {
         /// The policy.
         policy: Policy,
     },
+    /// Opens the realm's Claim issuer key, bound to its issuer Party `party` when it is made
+    /// (§10.1.7); repeating it changes nothing, another Party is refused.
+    OpenIssuer {
+        /// Realm.
+        realm: Realm,
+        /// The realm's issuer Party.
+        party: [u8; 16],
+    },
+    /// Signs a canonical `claim-statement` of the realm's issuer as a `COSE_Sign1` Claim at `at`
+    /// with the realm's Claim issuer key (L2-CLM-1).
+    SignClaim {
+        /// Realm.
+        realm: Realm,
+        /// The statement.
+        payload: Vec<u8>,
+        /// Signing time; the statement's `issued_at`, within the signer's clock skew.
+        at: u64,
+    },
+    /// Signs the AIS of one self-signed registration Exercise of the issuer Party with the
+    /// realm's Claim issuer key (OP-149 m.16 (a)).
+    SignIssuerRegistration {
+        /// Realm.
+        realm: Realm,
+        /// What to sign.
+        registration: crate::issuer::Registration,
+    },
 }
 
 /// The identity signer's answer.
@@ -129,6 +155,15 @@ pub enum Response {
     },
     /// The key set changed outside the schedule; its JWKS document now.
     Rekeyed(String),
+    /// The realm's Claim issuer key.
+    Issuer {
+        /// Its Party.
+        party: [u8; 16],
+        /// Ed25519 public key.
+        key: [u8; 32],
+        /// Its RFC 7638 `kid`.
+        kid: [u8; 32],
+    },
     /// A refusal, by stable code.
     Error(String),
 }
@@ -172,6 +207,10 @@ fn uint(v: Option<&Value>) -> Result<u64, FrameError> {
         Some(Value::Unsigned(n)) => Ok(*n),
         _ => Err(FrameError::Malformed),
     }
+}
+
+fn fixed<const N: usize>(v: Option<&Value>) -> Result<[u8; N], FrameError> {
+    bytes(v)?.try_into().map_err(|_| FrameError::Malformed)
 }
 
 fn realm(v: Option<&Value>) -> Result<Realm, FrameError> {
@@ -291,6 +330,37 @@ impl Request {
                     ("policy", policy_value(policy)),
                 ]),
             )]),
+            Self::OpenIssuer { realm, party } => map(vec![(
+                "open_issuer",
+                map(vec![
+                    ("realm", Value::Bytes(realm.0.to_vec())),
+                    ("party", Value::Bytes(party.to_vec())),
+                ]),
+            )]),
+            Self::SignClaim { realm, payload, at } => map(vec![(
+                "sign_claim",
+                map(vec![
+                    ("realm", Value::Bytes(realm.0.to_vec())),
+                    ("payload", Value::Bytes(payload.clone())),
+                    ("at", Value::Unsigned(*at)),
+                ]),
+            )]),
+            Self::SignIssuerRegistration {
+                realm,
+                registration: r,
+            } => map(vec![(
+                "sign_issuer_registration",
+                map(vec![
+                    ("realm", Value::Bytes(realm.0.to_vec())),
+                    ("domain", Value::Bytes(r.domain.to_vec())),
+                    ("nonce", Value::Bytes(r.nonce.clone())),
+                    ("from", Value::Unsigned(r.validity.0)),
+                    ("until", Value::Unsigned(r.validity.1)),
+                    ("iat", Value::Unsigned(r.iat)),
+                    ("pep", Value::text(&r.pep)),
+                    ("step", Value::text(r.step.name())),
+                ]),
+            )]),
         }
     }
 
@@ -304,6 +374,33 @@ impl Request {
         if let Some(c) = v.get("sign_checkpoint") {
             return Ok(Self::SignCheckpoint {
                 body: text(c.get("body"))?,
+            });
+        }
+        if let Some(o) = v.get("open_issuer") {
+            return Ok(Self::OpenIssuer {
+                realm: realm(o.get("realm"))?,
+                party: fixed(o.get("party"))?,
+            });
+        }
+        if let Some(s) = v.get("sign_claim") {
+            return Ok(Self::SignClaim {
+                realm: realm(s.get("realm"))?,
+                payload: bytes(s.get("payload"))?,
+                at: uint(s.get("at"))?,
+            });
+        }
+        if let Some(s) = v.get("sign_issuer_registration") {
+            return Ok(Self::SignIssuerRegistration {
+                realm: realm(s.get("realm"))?,
+                registration: crate::issuer::Registration {
+                    domain: fixed(s.get("domain"))?,
+                    nonce: bytes(s.get("nonce"))?,
+                    validity: (uint(s.get("from"))?, uint(s.get("until"))?),
+                    iat: uint(s.get("iat"))?,
+                    pep: text(s.get("pep"))?,
+                    step: crate::issuer::Step::parse(&text(s.get("step"))?)
+                        .ok_or(FrameError::Malformed)?,
+                },
             });
         }
         if let Some(o) = v.get("open") {
@@ -380,6 +477,14 @@ impl Response {
             )]),
             Self::Noted { line } => map(vec![("noted", map(vec![("line", Value::text(line))]))]),
             Self::Rekeyed(doc) => map(vec![("rekeyed", Value::text(doc))]),
+            Self::Issuer { party, key, kid } => map(vec![(
+                "issuer",
+                map(vec![
+                    ("party", Value::Bytes(party.to_vec())),
+                    ("key", Value::Bytes(key.to_vec())),
+                    ("kid", Value::Bytes(kid.to_vec())),
+                ]),
+            )]),
             Self::Error(code) => map(vec![("error", Value::text(code))]),
         }
     }
@@ -414,6 +519,13 @@ impl Response {
             return Ok(Self::CellKey {
                 origin: text(c.get("origin"))?,
                 vkey: text(c.get("vkey"))?,
+            });
+        }
+        if let Some(i) = v.get("issuer") {
+            return Ok(Self::Issuer {
+                party: fixed(i.get("party"))?,
+                key: fixed(i.get("key"))?,
+                kid: fixed(i.get("kid"))?,
             });
         }
         if let Some(n) = v.get("noted") {

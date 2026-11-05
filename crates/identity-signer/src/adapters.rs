@@ -147,6 +147,25 @@ impl Vault for DirVault {
         std::fs::write(&tmp, bytes).map_err(|_| VaultError)?;
         std::fs::rename(&tmp, self.dir.join(CELL_FILE)).map_err(|_| VaultError)
     }
+
+    fn issuer(&mut self, realm: &Realm) -> Result<Option<Vec<u8>>, VaultError> {
+        match std::fs::read(self.dir.join(issuer_file(realm))) {
+            Ok(bytes) => Ok(Some(bytes)),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            Err(_) => Err(VaultError),
+        }
+    }
+
+    fn put_issuer(&mut self, realm: &Realm, bytes: &[u8]) -> Result<(), VaultError> {
+        let tmp = self.dir.join(format!("{}.issuer.tmp", hex(realm)));
+        std::fs::write(&tmp, bytes).map_err(|_| VaultError)?;
+        std::fs::rename(&tmp, self.dir.join(issuer_file(realm))).map_err(|_| VaultError)
+    }
+}
+
+/// A realm's Claim issuer key file; not `.cbor`, so it is never read as a realm key set.
+fn issuer_file(realm: &Realm) -> String {
+    format!("{}.{}.key", hex(realm), crate::issuer::LABEL)
 }
 
 /// The cell key's file; not `.cbor`, so it is never read as a realm.

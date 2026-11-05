@@ -233,6 +233,7 @@ name = "access-identity-signer"
 version = "0.2.6"
 dependencies = [
  "access-crypto",
+ "access-internal-api",
  "esuiss-access-kernel",
  "esuiss-crypto",
  "thiserror",

@@ -11,6 +11,7 @@ use suiss_crypto::rotation::{Key, Policy, State, Step};
 use crate::SignerError;
 use crate::app::{Keyring, Round, Saved};
 use crate::cell::{CellError, CellKey};
+use crate::issuer::{IssuerError, IssuerKey};
 use crate::ports::{KeyFactory, Vault, VaultError};
 use crate::protocol::{Realm, Request, Response, alg_of, policy_of, policy_value};
 
@@ -36,6 +37,7 @@ pub struct Service<F, V> {
     vault: V,
     policy: Policy,
     cell: Option<CellKey>,
+    issuers: BTreeMap<Realm, IssuerKey>,
 }
 
 const STATES: [(&str, State); 5] = [
@@ -182,6 +184,7 @@ impl<F: KeyFactory, V: Vault> Service<F, V> {
             vault,
             policy,
             cell: None,
+            issuers: BTreeMap::new(),
         };
         for (realm, alg, policy, saved) in all.iter().filter_map(|b| restored(b)) {
             let policy = policy.unwrap_or(s.policy);
@@ -341,6 +344,9 @@ impl<F: KeyFactory, V: Vault> Service<F, V> {
                 if at.abs_diff(now) > MAX_SKEW_MS {
                     return Response::Error(String::from("signer-time"));
                 }
+                if PROTOCOL_TYPES.contains(&content_type.as_str()) {
+                    return Response::Error(String::from(crate::SignerError::Payload.code()));
+                }
                 let Some((_, ring)) = self.rings.get_mut(&realm) else {
                     return Response::Error(String::from(UNKNOWN_REALM));
                 };
@@ -373,9 +379,100 @@ impl<F: KeyFactory, V: Vault> Service<F, V> {
                     Err(e) => Response::Error(String::from(e.code())),
                 },
             },
+            other => self.handle_issuer(&other, now),
         }
     }
+
+    /// Answers the Claim issuer key's requests (§10.1.7).
+    fn handle_issuer(&mut self, request: &Request, now: u64) -> Response {
+        let (realm, at) = match request {
+            Request::OpenIssuer { realm, party } => {
+                return match self.open_issuer(*realm, *party) {
+                    Ok(k) => Response::Issuer {
+                        party: k.party(),
+                        key: k.key(),
+                        kid: k.kid(),
+                    },
+                    Err(e) => Response::Error(String::from(e.code())),
+                };
+            }
+            Request::SignClaim { realm, at, .. } => (*realm, *at),
+            Request::SignIssuerRegistration {
+                realm,
+                registration,
+            } => (*realm, registration.iat),
+            _ => return Response::Error(String::from("signer-frame")),
+        };
+        if at.abs_diff(now) > MAX_SKEW_MS {
+            return Response::Error(String::from("signer-time"));
+        }
+        let Some(k) = self.issuer(realm) else {
+            return Response::Error(String::from(NO_ISSUER));
+        };
+        let signed = match request {
+            Request::SignClaim { payload, .. } => k.sign_claim(payload, at),
+            Request::SignIssuerRegistration { registration, .. } => {
+                k.sign_registration(registration)
+            }
+            _ => return Response::Error(String::from("signer-frame")),
+        };
+        match signed {
+            Ok(sign1) => Response::SignedCose {
+                sign1,
+                kid: k.kid(),
+            },
+            Err(e) => Response::Error(String::from(e.code())),
+        }
+    }
+
+    /// The Claim issuer key of `realm`: the open one, the stored one, or a new one stored before
+    /// it is used, bound to `party` (§10.1.7). A key bound to another Party is refused.
+    ///
+    /// # Errors
+    /// [`IssuerError`]; [`IssuerError::Stored`] also when the vault cannot be read or written.
+    pub fn open_issuer(
+        &mut self,
+        realm: Realm,
+        party: [u8; 16],
+    ) -> Result<&IssuerKey, IssuerError> {
+        if self.issuer(realm).is_none() {
+            let key = IssuerKey::generate(realm.0, party, &mut self.factory)?;
+            let stored = key.stored().ok_or(IssuerError::Stored)?;
+            self.vault
+                .put_issuer(&realm, &stored)
+                .map_err(|_| IssuerError::Stored)?;
+            self.issuers.insert(realm, key);
+        }
+        match self.issuers.get(&realm) {
+            Some(k) if k.party() == party => Ok(k),
+            Some(_) => Err(IssuerError::OtherIssuer),
+            None => Err(IssuerError::Stored),
+        }
+    }
+
+    /// The realm's open Claim issuer key, loaded from the vault after a restart.
+    fn issuer(&mut self, realm: Realm) -> Option<&IssuerKey> {
+        if !self.issuers.contains_key(&realm) {
+            let stored = self.vault.issuer(&realm).ok().flatten()?;
+            let key = IssuerKey::restore(realm.0, &stored, &mut self.factory).ok()?;
+            self.issuers.insert(realm, key);
+        }
+        self.issuers.get(&realm)
+    }
 }
+
+/// The refusal for a realm whose Claim issuer key was never opened.
+pub const NO_ISSUER: &str = "signer-no-issuer";
+
+/// The content types of Access protocol artefacts, which only their own keys sign: a realm's
+/// token key never signs a Claim, an AIS, an AAS, a PAP or a receipt (§10.1.7, MD-6).
+pub const PROTOCOL_TYPES: [&str; 5] = [
+    access_kernel::claim::CONTENT_TYPE,
+    access_kernel::ais::CONTENT_TYPE,
+    access_kernel::aas::CONTENT_TYPE,
+    access_kernel::pap::CONTENT_TYPE,
+    access_kernel::receipt::CONTENT_TYPE,
+];
 
 /// The refusal when the cell's `audit-checkpoint` key is not open.
 pub const NO_CELL: &str = "signer-no-cell";
