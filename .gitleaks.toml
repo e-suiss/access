@@ -69,3 +69,11 @@ paths = [
 regexes = [
     '''^tnt_[0-9a-z]{26}$''',
 ]
+
+[[allowlists]]
+description = "Status list and AAS vectors: hex CBOR status list tokens and the public COSE key of a test approver, no private material (L2-STL, L2-AAS, OP-150); other rules still apply here"
+targetRules = ["generic-api-key"]
+paths = [
+    '''^conformance/vectors/core/1/status-list\.json$''',
+    '''^conformance/vectors/core/1/aas\.json$''',
+]
