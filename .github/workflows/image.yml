@@ -130,6 +130,16 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ github.token }}
+      # OP-141 m.18 (b): a product's PEP key stays in its token; init signs its CSR
+      - name: Product CSR
+        run: |
+          mkdir -p "$RUNNER_TEMP/products"
+          openssl req -new -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes \
+            -keyout "$RUNNER_TEMP/work-pep.key" -subj "/CN=ignored" \
+            -out "$RUNNER_TEMP/products/work-pep.csr"
+          chmod 0755 "$RUNNER_TEMP/products"
+          chmod 0644 "$RUNNER_TEMP/products/work-pep.csr"
+          echo "ACCESS_PRODUCT_KEYS=$RUNNER_TEMP/products" >> "$GITHUB_ENV"
       - name: Start
         run: $COMPOSE up --detach --quiet-pull
       - name: Serve
@@ -155,6 +165,14 @@ jobs:
           $COMPOSE logs --no-color access-server | grep -q 'declared delivery targets'
           $COMPOSE run --rm --no-deps -T --entrypoint openssl init \
             verify -CAfile /var/lib/access/certs/ca.crt /var/lib/access/product-tls/work-server.crt
+          $COMPOSE run --rm --no-deps -T --entrypoint cat init \
+            /var/lib/access/product-tls/work-pep.crt > "$RUNNER_TEMP/work-pep.crt"
+          openssl verify -CAfile "$RUNNER_TEMP/ca.crt" -purpose sslclient "$RUNNER_TEMP/work-pep.crt"
+          curl "${tls[@]}" --cert "$RUNNER_TEMP/work-pep.crt" --key "$RUNNER_TEMP/work-pep.key" \
+            https://access-server:8443/access/v1/tenants | grep -q '"tnt_'
+          $COMPOSE run --rm --no-deps -T init
+          $COMPOSE run --rm --no-deps -T --entrypoint cat init \
+            /var/lib/access/product-tls/work-pep.crt | cmp - "$RUNNER_TEMP/work-pep.crt"
       - name: Bootstrap again
         run: |
           $COMPOSE run --rm --no-deps -T bootstrap > "$RUNNER_TEMP/again.json"

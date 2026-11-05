@@ -50,7 +50,8 @@ services:
 
   # OP-69, CR-28: certificates, credentials, tokens and KEKs, once. OP-149 m.23: with
   # ACCESS_LOCAL_PRODUCT_HOSTS="work-server ...", a server certificate per product host in the
-  # product-tls volume (mount it read-only in the product, as uid or group 65532).
+  # product-tls volume (mount it read-only in the product, as uid or group 65532). OP-141 m.18 (b):
+  # a PEP client certificate <name>.crt there for each <name>.csr in ACCESS_PRODUCT_KEYS.
   init:
     <<: *access
     command: ["access-local-init"]
@@ -61,6 +62,7 @@ services:
         condition: service_completed_successfully
     volumes:
       - product-tls:/var/lib/access/product-tls
+      - ${ACCESS_PRODUCT_KEYS:-./access/products}:/etc/access/products:ro
       - certs:/var/lib/access/certs
       - secrets:/var/lib/access/secrets
       - initdb:/var/lib/access/initdb

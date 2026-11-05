@@ -9,13 +9,15 @@
 #   /var/lib/access/initdb       what the postgres container reads at its first start (0640)
 #   /var/lib/access/product-tls  OP-149 m.23: a server certificate for each host named in
 #                                ACCESS_LOCAL_PRODUCT_HOSTS, issued by the local CA, and the CA;
-#                                keys are 0640, readable by uid or group 65532
+#                                keys are 0640, readable by uid or group 65532; and a PEP client
+#                                certificate <name>.crt for each <name>.csr in /etc/access/products
 set -eu
 
 certs=/var/lib/access/certs
 secrets=/var/lib/access/secrets
 initdb=/var/lib/access/initdb
 products=/var/lib/access/product-tls
+product_keys=/etc/access/products
 
 random() {
     openssl rand -hex 24
@@ -91,6 +93,61 @@ for host in ${ACCESS_LOCAL_PRODUCT_HOSTS:-}; do
     chmod 0640 "$products/$host.key"
 done
 if [ -n "${ACCESS_LOCAL_PRODUCT_HOSTS:-}" ]; then
+    cp "$certs/ca.crt" "$products/ca.crt"
+    chmod 0644 "$products/ca.crt"
+fi
+
+# OP-141 m.18 (b), OP-149 m.15 (h): a product whose PEP key is born in its own PKCS#11 token
+# hands in a CSR; each <name>.csr in the product keys directory becomes <name>.crt in the
+# product-tls volume, a PEP client certificate of the same profile as pep.crt. Only the key is
+# taken from the CSR: its subject and extensions are ignored. A changed CSR is signed again.
+csrs=0
+for csr in "$product_keys"/*.csr; do
+    [ -e "$csr" ] || continue
+    name="$(basename "$csr" .csr)"
+    case "$name" in
+        "" | -* | *[!a-z0-9-]*)
+            echo "access-local-init: CSR name '$name' is not lowercase letters, digits and hyphens" >&2
+            exit 1
+            ;;
+    esac
+    for host in ${ACCESS_LOCAL_PRODUCT_HOSTS:-}; do
+        if [ "$host" = "$name" ]; then
+            echo "access-local-init: $name.csr would replace the server certificate of $host" >&2
+            exit 1
+        fi
+    done
+    if ! openssl req -in "$csr" -noout -verify >/dev/null 2>&1; then
+        echo "access-local-init: $name.csr is not a CSR signed by its own key" >&2
+        exit 1
+    fi
+    if ! openssl req -in "$csr" -noout -pubkey | openssl pkey -pubin -noout -text 2>/dev/null \
+        | grep -q 'NIST CURVE: P-256'; then
+        echo "access-local-init: $name.csr must hold an EC P-256 key" >&2
+        exit 1
+    fi
+    digest="$(openssl dgst -sha256 -r "$csr" | cut -d' ' -f1)"
+    csrs=1
+    if [ -s "$products/$name.crt" ] && [ "$(cat "$products/$name.csr.sha256" 2>/dev/null)" = "$digest" ]; then
+        continue
+    fi
+    ext="$(mktemp)"
+    {
+        echo "basicConstraints=critical,CA:FALSE"
+        echo "keyUsage=critical,digitalSignature"
+        echo "extendedKeyUsage=clientAuth"
+    } > "$ext"
+    openssl x509 -req -in "$csr" -subj "/CN=$name" -CA "$certs/ca.crt" -CAkey "$secrets/ca.key" \
+        -CAcreateserial -CAserial "$secrets/ca.srl" -sha256 -days 365 -extfile "$ext" \
+        -out "$products/$name.crt.new"
+    rm -f "$ext"
+    chmod 0644 "$products/$name.crt.new"
+    mv "$products/$name.crt.new" "$products/$name.crt"
+    echo "$digest" > "$products/$name.csr.sha256"
+    chmod 0644 "$products/$name.csr.sha256"
+    echo "access-local-init: issued $name.crt"
+done
+if [ "$csrs" = 1 ]; then
     cp "$certs/ca.crt" "$products/ca.crt"
     chmod 0644 "$products/ca.crt"
 fi

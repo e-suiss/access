@@ -95,6 +95,9 @@ The bootstrap prints, and keeps in the `bootstrap` volume as `bootstrap.json`:
 - `realms[]`: the `tnt_…` tenant id, realm id, issuer, governing domain and `discovery` URL (`/.well-known/suiss-configuration`) of each realm
 - `clients[]`: each registered platform product client and the `aud` its client assertions use
 - `root`: the Party that founded the realms
+- `sample`: what a real `POST /access/v1/eligibility:check` names to be answered `eligible: true`. The `acme` realm publishes a `work` catalog with the action `approve`, and its root grants that action over the whole `work` namespace to a sample subject. `sample.subject` is the check's `subject`; `domain`, `action`, `resource` and `basis` go into its `set` (`resource` in `intent.resources`, with an `intent.validity` of at most 24 hours around now, and `"capacity": "own"`)
+
+Signed answers start a while after a domain is created. A new domain's first signing key is published before it may sign (65 minutes in the default schedule), and no flag shortens that. Until then, `application/cose` key lookups answer `503` with `"reason": "signer-no-key"`, and decisions carry no signed receipt. The `application/json` form of a key lookup works from the start. A `503` from `/access/v1` always carries a stable `reason`, and a `400` names the part of the body it refused in `errors[]` (`pointer`, `code`).
 
 To register a product's platform client, put its public keys as JWK files in a directory and run the bootstrap with the product plan:
 
@@ -107,6 +110,19 @@ ACCESS_BOOTSTRAP_PLAN=/etc/access/local/bootstrap-work.toml \
 `work-client.jwk` (P-256) verifies the product's client assertions and `work-service.jwk` (Ed25519 or P-256) is its service key for pairing. Running the bootstrap again changes nothing and prints the same ids.
 
 Your own containers join the `access-local` network. The `certs` volume holds the local CA (`ca.crt`) and a PEP client certificate (`pep.crt`, `pep.key`) for the `/access/v1` API. Pin the image with `ACCESS_IMAGE=ghcr.io/e-suiss/access:main-<sha>-local`.
+
+### Keep your PEP key in your own token
+
+If your product's PEP key must never leave its own PKCS#11 token, put a certificate signing request in the product keys directory instead of using `pep.key`:
+
+```sh
+# the key stays in the token; only the CSR is handed over
+openssl req -new -provider pkcs11 -provider default -key "pkcs11:token=work;object=pep" -subj "/CN=work-pep" \
+  -out ./my-keys/work-pep.csr
+ACCESS_PRODUCT_KEYS=./my-keys docker compose -f deploy/compose/access.yaml up -d
+```
+
+For each `<name>.csr` (lowercase letters, digits and hyphens; an EC P-256 key), the provisioning checks the CSR's signature and issues `<name>.crt` from the local CA into the `product-tls` volume, next to `ca.crt`. It has the same profile as `pep.crt`: `CN=<name>`, `clientAuth` only, one year. The certificate takes only the key from the CSR; its subject and extensions are ignored. Running the provisioning again keeps the certificate, and a changed CSR gets a new one (`docker compose -f deploy/compose/access.yaml run --rm init`). Access names the client by the certificate's SHA-256 thumbprint.
 
 ### Receive pushed events on the local network
 
