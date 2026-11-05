@@ -122,6 +122,7 @@ pub fn key_json(e: &KeyEntry) -> Value {
     m.insert("alg".into(), keys::alg(&e.key).into());
     m.insert("public_key".into(), b64url_encode(&cose).into());
     m.insert("party".into(), b64url_encode(&e.party.0).into());
+    m.insert("actor_kind".into(), e.actor_kind.name().into());
     m.insert("instance".into(), b64url_encode(&e.instance.0).into());
     m.insert("since".into(), point(e.since));
     if let Some(p) = e.ended {

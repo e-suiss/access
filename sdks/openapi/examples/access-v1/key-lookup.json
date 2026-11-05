@@ -8,6 +8,7 @@
       "alg": -19,
       "public_key": "pAEBAzIgBiFYIAkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJ",
       "party": "AgICAgICAgICAgICAgICAg",
+      "actor_kind": "agent",
       "instance": "AwMDAwMDAwMDAwMDAwMDAw",
       "since": {
         "position": "4",

@@ -13,7 +13,7 @@ use access_crypto::token::TokenKey;
 use access_kernel::codec::Canonical as _;
 use access_kernel::digest::Digest;
 use access_kernel::fold;
-use access_kernel::meta::{self, GrantState};
+use access_kernel::meta::{self, ActorKind, GrantState};
 use access_kernel::model::{Id, ResourceSelector, SubjectSelector, TrustedTime};
 use access_kernel::record::{Opened, RecordEnvelope};
 use access_kernel::verify::cose::PublicKey;
@@ -610,10 +610,17 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
             return Err(CoreError::Unavailable("index"));
         }
         let rows = keys_of(&self.setup.app, &id, kids).await?;
-        let mut compromises: BTreeMap<[u8; 16], Vec<Compromise>> = BTreeMap::new();
+        let mut parties: BTreeMap<[u8; 16], (ActorKind, Vec<Compromise>)> = BTreeMap::new();
         for r in &rows {
-            if let std::collections::btree_map::Entry::Vacant(slot) = compromises.entry(r.party) {
-                slot.insert(led.core.compromises(&Id(r.party), now).await?);
+            if let std::collections::btree_map::Entry::Vacant(slot) = parties.entry(r.party) {
+                let party = Id(r.party);
+                // OP-149 m.8
+                let kind = led
+                    .core
+                    .actor_kind(&party)
+                    .await?
+                    .ok_or(CoreError::Store(StoreError::Corrupt))?;
+                slot.insert((kind, led.core.compromises(&party, now).await?));
             }
         }
         let mut lookup = keys::Lookup {
@@ -625,8 +632,8 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
         };
         for kid in kids {
             let found = rows.iter().find(|r| r.kid == *kid).and_then(|r| {
-                let c = compromises.get(&r.party).map_or(&[][..], Vec::as_slice);
-                keys::entry(r, pos, c)
+                let (kind, c) = parties.get(&r.party)?;
+                keys::entry(r, pos, *kind, c)
             });
             match found {
                 Some(e) => lookup.keys.push(e),

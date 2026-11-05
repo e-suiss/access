@@ -11,7 +11,8 @@ use access_kernel::digest::Digest;
 use std::collections::BTreeSet;
 
 use access_kernel::meta::{
-    self, ContentState, ContributionState, ExerciseBasis, GrantState, InstanceState, kind,
+    self, ActorKind, ContentState, ContributionState, ExerciseBasis, GrantState, InstanceState,
+    PartyState, kind,
 };
 use access_kernel::model::{Conjunct, Id, ProofKind, SubjectSelector};
 use access_kernel::requirement::{Proof, ProofBinding};
@@ -437,6 +438,20 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             .await?
             .is_none_or(|at| at >= cutoff)
             .then_some("party-compromise"))
+    }
+
+    /// The actor kind `party_register` recorded for `party` (OP-149 m.8); nothing changes it, so
+    /// it holds at every position the Party is admitted at. `None` for an unknown Party.
+    ///
+    /// # Errors
+    /// [`CoreError::Store`].
+    pub async fn actor_kind(&self, party: &Id) -> Result<Option<ActorKind>, CoreError> {
+        let mut snap = Snapshot::default();
+        Ok(self
+            .get(&mut snap, &meta::key(kind::PARTY, party))
+            .await?
+            .and_then(|v| PartyState::from_value(&v).ok())
+            .map(|p| p.actor_kind))
     }
 
     /// The accepted, current `party_compromise` Claims about `party` that assert in their

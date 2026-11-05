@@ -3920,19 +3920,19 @@ async fn a_pap_names_parties_by_pseudonym() {
 }
 
 /// Registers ROOT and ALICE with their keys on `a`.
-async fn onboard_both(a: &Domains<Listed, Bound, Counter, Fixed>, d: Digest) {
+async fn onboard_both(a: &Domains<Listed, Bound, Counter, Fixed>, d: Digest, alice: ActorKind) {
     let public_basis = ExerciseBasis::Public(meta::object_id(&d, kind::GRANT, 0));
-    for (nonce, seed, party) in [
-        (1, ROOT_KEY, ROOT),
-        (2, ROOT_KEY, ROOT),
-        (3, ALICE_KEY, ALICE),
-        (4, ALICE_KEY, ALICE),
+    for (nonce, seed, party, actor_kind) in [
+        (1, ROOT_KEY, ROOT, ActorKind::Human),
+        (2, ROOT_KEY, ROOT, ActorKind::Human),
+        (3, ALICE_KEY, ALICE, alice),
+        (4, ALICE_KEY, ALICE, alice),
     ] {
         let payload = if nonce % 2 == 1 {
             Payload::PartyRegister {
                 party,
                 root: Root::Sole(party),
-                actor_kind: ActorKind::Human,
+                actor_kind,
             }
         } else {
             Payload::InstanceCreate {
@@ -3956,7 +3956,7 @@ async fn an_eligibility_check_records_nothing() {
         .await
         .unwrap();
     let a = process(&db, "a", vec![d]);
-    onboard_both(&a, d).await;
+    onboard_both(&a, d, ActorKind::Human).await;
     let id = DomainId::from_bytes(d.0);
     let head = access_store::authority::read_head(&db.app, &id)
         .await
@@ -4001,8 +4001,9 @@ async fn an_eligibility_check_records_nothing() {
     fold_check(&db.sequencer, d).await.unwrap();
 }
 
-// OP-149 m.5, CR-24, CMP-9, SEC12: keys are read from the derived index at a ledger position,
-// with the `party_compromise` overlay as declared by then; nothing is recorded
+// OP-149 m.5, OP-149 m.8, CR-24, CMP-9, SEC12: keys are read from the derived index at a ledger
+// position with their Party's actor kind and the `party_compromise` overlay as declared by then;
+// nothing is recorded
 #[tokio::test]
 #[allow(clippy::too_many_lines, reason = "one key through its lookups")]
 async fn keys_are_looked_up_at_a_ledger_position() {
@@ -4029,7 +4030,7 @@ async fn keys_are_looked_up_at_a_ledger_position() {
         .await
         .unwrap();
     let a = process(&db, "a", vec![d]);
-    onboard_both(&a, d).await;
+    onboard_both(&a, d, ActorKind::Agent).await;
     let (root_kid, alice_kid) = (
         thumbprint(&public(ROOT_KEY)),
         thumbprint(&public(ALICE_KEY)),
@@ -4045,6 +4046,11 @@ async fn keys_are_looked_up_at_a_ledger_position() {
         (root_kid, ROOT, public(ROOT_KEY))
     );
     assert_eq!((alice.kid, alice.party), (alice_kid, ALICE));
+    // OP-149 m.8: each key names its Party's actor kind
+    assert_eq!(
+        (root.actor_kind, alice.actor_kind),
+        (ActorKind::Human, ActorKind::Agent)
+    );
     assert!(first.keys.iter().all(|k| k.state == KeyState::Active));
     assert!(alice.since.pos > root.since.pos && alice.since.pos <= first.pos);
     assert_eq!(alice.since.at, NOW);
@@ -4093,6 +4099,7 @@ async fn keys_are_looked_up_at_a_ledger_position() {
         .await
         .unwrap();
     assert_eq!(then.lookup.keys[1].state, KeyState::Active);
+    assert_eq!(then.lookup.keys[1].actor_kind, ActorKind::Agent);
     assert_eq!(then.lookup.pos, first.pos);
 
     // a time is the last position recorded by then; before Genesis there is none

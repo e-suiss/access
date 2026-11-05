@@ -82,6 +82,11 @@ fn key_components() -> Value {
                 "alg": { "type": "integer", "description": "COSE algorithm: -19 Ed25519, -9 ESP256." },
                 "public_key": b64("The RFC 9052 COSE_Key, CBOR, base64url."),
                 "party": b64("PartyID."),
+                "actor_kind": {
+                    "type": "string",
+                    "enum": ["human", "agent", "system", "machine", "organization"],
+                    "description": "The kind the Party's `party_register` recorded; nothing changes it (OP-149 m.8).",
+                },
                 "instance": b64("InstanceID."),
                 "since": r("LedgerPoint"),
                 "ended": r("LedgerPoint"),
@@ -89,7 +94,7 @@ fn key_components() -> Value {
                 "key_state": { "type": "string", "enum": ["active", "ended", "compromised"] },
                 "compromise": r("Compromise"),
             }),
-            &["kid", "alg", "public_key", "party", "instance", "since", "key_state"],
+            &["kid", "alg", "public_key", "party", "actor_kind", "instance", "since", "key_state"],
         ),
         "KeyLookup": object(
             &json!({

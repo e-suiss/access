@@ -27,11 +27,11 @@ fn row(since: u64, ended: Option<u64>) -> KeyRow {
 #[test]
 fn a_key_is_read_at_a_ledger_position() {
     let r = row(5, Some(9));
-    assert!(entry(&r, 4, &[]).is_none());
-    let active = entry(&r, 8, &[]).unwrap();
+    assert!(entry(&r, 4, ActorKind::Human, &[]).is_none());
+    let active = entry(&r, 8, ActorKind::Human, &[]).unwrap();
     assert_eq!(active.state, KeyState::Active);
     assert!(active.ended.is_none() && active.successor.is_none());
-    let ended = entry(&r, 9, &[]).unwrap();
+    let ended = entry(&r, 9, ActorKind::Human, &[]).unwrap();
     assert_eq!(ended.state, KeyState::Ended);
     assert_eq!(ended.ended, Some(Point { pos: 9, at: 9_000 }));
     assert_eq!(ended.successor, Some(Id([4; 16])));
@@ -48,12 +48,18 @@ fn a_compromise_covers_keys_set_up_in_its_window() {
         declared_at: 12_000,
     };
     let inside = row(5, None);
-    assert_eq!(entry(&inside, 11, &[c]).unwrap().state, KeyState::Active);
-    let covered = entry(&inside, 12, &[c]).unwrap();
+    assert_eq!(
+        entry(&inside, 11, ActorKind::Human, &[c]).unwrap().state,
+        KeyState::Active
+    );
+    let covered = entry(&inside, 12, ActorKind::Human, &[c]).unwrap();
     assert_eq!(covered.state, KeyState::Compromised);
     assert_eq!(covered.compromise, Some(c));
     let before = row(3, Some(13));
-    assert_eq!(entry(&before, 20, &[c]).unwrap().state, KeyState::Ended);
+    assert_eq!(
+        entry(&before, 20, ActorKind::Human, &[c]).unwrap().state,
+        KeyState::Ended
+    );
 }
 
 // OP-149 m.5, L0-META-6: an Instance state puts its key with its successor and end; a removed
@@ -128,7 +134,7 @@ fn the_payload_is_deterministic() {
         domain: Digest([1; 32]),
         pos: 9,
         iat: 9_500,
-        keys: vec![entry(&row(5, Some(9)), 9, &[]).unwrap()],
+        keys: vec![entry(&row(5, Some(9)), 9, ActorKind::Human, &[]).unwrap()],
         unknown: vec![[8; 32]],
     };
     let bytes = payload(&lookup);
@@ -137,4 +143,62 @@ fn the_payload_is_deterministic() {
         panic!()
     };
     assert!(m.contains(&(Value::text("pos"), Value::Unsigned(9))));
+}
+
+fn committed(id: &str) -> Vec<u8> {
+    let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../conformance/cddl/examples/key-lookup.json");
+    let doc: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+    let case = doc["cases"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["id"] == id)
+        .unwrap();
+    let hex = case["cbor"].as_str().unwrap();
+    (0..hex.len())
+        .step_by(2)
+        .map(|i| u8::from_str_radix(&hex[i..i.saturating_add(2)], 16).unwrap())
+        .collect()
+}
+
+// OP-149 m.5, OP-149 m.8, CR-24: the payload is byte for byte the committed examples of
+// `conformance/cddl/examples/key-lookup.json`, which meet `key-lookup.cddl`; every key names its
+// Party's actor kind
+#[test]
+fn the_payload_is_the_committed_example() {
+    let ended = Lookup {
+        domain: Digest([1; 32]),
+        pos: 9,
+        iat: 9_500,
+        keys: vec![entry(&row(5, Some(9)), 9, ActorKind::Agent, &[]).unwrap()],
+        unknown: vec![[8; 32]],
+    };
+    assert_eq!(payload(&ended), committed("ended-key-of-an-agent"));
+    let c = Compromise {
+        from: 4_000,
+        claim: Id([7; 16]),
+        declared: 12,
+        declared_at: 12_000,
+    };
+    let compromised = Lookup {
+        domain: Digest([1; 32]),
+        pos: 12,
+        iat: 12_500,
+        keys: vec![entry(&row(5, None), 12, ActorKind::Human, &[c]).unwrap()],
+        unknown: Vec::new(),
+    };
+    assert_eq!(
+        payload(&compromised),
+        committed("compromised-key-of-a-human")
+    );
+    let nothing = Lookup {
+        domain: Digest([1; 32]),
+        pos: 3,
+        iat: 3_500,
+        keys: Vec::new(),
+        unknown: vec![[8; 32]],
+    };
+    assert_eq!(payload(&nothing), committed("nothing-known"));
 }

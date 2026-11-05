@@ -33,6 +33,7 @@ use access_identity_oauth::domain::suiss::{self, Settings};
 use access_kernel::combinator::{Decision, Mode, Outcome};
 use access_kernel::digest::Digest;
 use access_kernel::json::b64url_encode;
+use access_kernel::meta::ActorKind;
 use access_kernel::model::Id;
 use access_kernel::verify::cose::PublicKey;
 use axum::Router;
@@ -62,6 +63,7 @@ fn entry(kid: [u8; 32]) -> Option<KeyEntry> {
         kid,
         key: PublicKey::Ed25519([9; 32]),
         party: Id([2; 16]),
+        actor_kind: ActorKind::Agent,
         instance: Id([3; 16]),
         since,
         ended: None,
@@ -555,8 +557,8 @@ async fn the_canonical_answer_is_signed() {
     }
 }
 
-// OP-149 m.5: JSON carries the same content unsigned with the consistency token; an ended
-// key is immutable
+// OP-149 m.5, OP-149 m.8: JSON carries the same content unsigned with the consistency token
+// and the Party's actor kind; an ended key is immutable
 #[tokio::test]
 async fn json_is_the_same_content_unsigned() {
     let (status, headers, body) =
@@ -572,6 +574,7 @@ async fn json_is_the_same_content_unsigned() {
     assert_eq!(v["consistency_token"], "ct-9");
     assert_eq!(v["position"], "9");
     assert_eq!(v["keys"][0]["key_state"], "ended");
+    assert_eq!(v["keys"][0]["actor_kind"], "agent");
     assert_eq!(v["keys"][0]["ended"]["position"], "8");
     assert_eq!(v["keys"][0]["successor"], b64url_encode(&[5; 16]));
 }

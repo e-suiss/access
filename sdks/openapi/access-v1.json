@@ -1465,6 +1465,7 @@
           "alg",
           "public_key",
           "party",
+          "actor_kind",
           "instance",
           "since",
           "key_state"
@@ -1486,6 +1487,17 @@
             "type": "string",
             "pattern": "^[A-Za-z0-9_-]+$",
             "description": "PartyID."
+          },
+          "actor_kind": {
+            "type": "string",
+            "enum": [
+              "human",
+              "agent",
+              "system",
+              "machine",
+              "organization"
+            ],
+            "description": "The kind the Party's `party_register` recorded; nothing changes it (OP-149 m.8)."
           },
           "instance": {
             "type": "string",

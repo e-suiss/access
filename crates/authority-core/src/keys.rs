@@ -5,7 +5,7 @@
 
 use access_kernel::codec::Canonical;
 use access_kernel::digest::Digest;
-use access_kernel::meta::{self, InstanceState};
+use access_kernel::meta::{self, ActorKind, InstanceState};
 use access_kernel::model::Id;
 use access_kernel::verify::cose::PublicKey;
 use access_kernel::verify::key_scope::thumbprint;
@@ -72,6 +72,8 @@ pub struct KeyEntry {
     pub key: PublicKey,
     /// Its Instance's Party.
     pub party: Id,
+    /// The Party's actor kind; `party_register` sets it and nothing changes it (OP-149 m.8).
+    pub actor_kind: ActorKind,
     /// The Instance.
     pub instance: Id,
     /// From when the Instance holds it.
@@ -136,9 +138,15 @@ pub fn change(
     }
 }
 
-/// `row` as it stood at `pos`, with the Party's `compromises`; `None` before it was held.
+/// `row` as it stood at `pos`, with its Party's `actor_kind` and `compromises`; `None` before it
+/// was held.
 #[must_use]
-pub fn entry(row: &KeyRow, pos: u64, compromises: &[Compromise]) -> Option<KeyEntry> {
+pub fn entry(
+    row: &KeyRow,
+    pos: u64,
+    actor_kind: ActorKind,
+    compromises: &[Compromise],
+) -> Option<KeyEntry> {
     if row.since_pos > pos {
         return None;
     }
@@ -163,6 +171,7 @@ pub fn entry(row: &KeyRow, pos: u64, compromises: &[Compromise]) -> Option<KeyEn
         kid: row.kid,
         key,
         party: Id(row.party),
+        actor_kind,
         instance: Id(row.instance),
         since: Point {
             pos: row.since_pos,
@@ -234,6 +243,7 @@ fn entry_value(e: &KeyEntry) -> Value {
         text("alg", Value::int(alg(&e.key))),
         text("public_key", cose_key(&e.key)),
         text("party", e.party.to_value()),
+        text("actor_kind", Value::text(e.actor_kind.name())),
         text("instance", e.instance.to_value()),
         text("since", point(e.since)),
         text("key_state", Value::text(e.state.name())),

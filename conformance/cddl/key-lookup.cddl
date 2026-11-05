@@ -4,7 +4,7 @@
 ; type "application/access-key-lookup+cbor". The `application/json` answer carries the same
 ; content unsigned, with positions as decimal strings, times as RFC 3339, binaries as unpadded
 ; base64url, `public_key` as the base64url of its COSE_Key, and a `consistency_token`.
-; `digest`, `id`, `key-id` and `trusted-time` are the rules of kernel.cddl.
+; `digest`, `id`, `key-id`, `trusted-time` and `actor-kind` are the rules of kernel.cddl.
 
 key-lookup = {
   domain: digest,
@@ -14,11 +14,14 @@ key-lookup = {
   unknown: [* key-id],
 }
 
+; `actor_kind` is the kind the Party's `party_register` recorded (OP-149 m.8); nothing changes it,
+; so it is the Party's kind at every position the key is answered at.
 key-lookup-entry = {
   kid: key-id,
   alg: int,
   public_key: cose-key,
   party: id,
+  actor_kind: actor-kind,
   instance: id,
   since: ledger-point,
   ? ended: ledger-point,

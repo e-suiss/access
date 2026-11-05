@@ -173,6 +173,13 @@ fn auth_context_examples_meet_the_cddl() {
     check_examples("auth-context.json");
 }
 
+// OP-149 m.5, OP-149 m.8, CR-24: the key lookup examples meet their CDDL; every key names its
+// Party's actor kind, and a kind outside the closed set is not an answer
+#[test]
+fn key_lookup_examples_meet_the_cddl() {
+    check_examples("key-lookup.json");
+}
+
 // OP-149 m.8: the CDDL actor kinds are the Kernel's
 #[test]
 fn actor_kinds_match_the_cddl() {
