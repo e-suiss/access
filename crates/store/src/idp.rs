@@ -580,3 +580,135 @@ pub async fn mappers(t: &mut TenantTx) -> Result<Vec<(String, String)>, StoreErr
     .await?;
     Ok(rows.into_iter().map(|r| (r.claim, r.source)).collect())
 }
+
+/// Writes the realm's branding under `bound` (TN-106); `branding` is its deterministic CBOR.
+///
+/// # Errors
+/// [`StoreError`].
+pub async fn set_branding(
+    t: &mut TenantTx,
+    bound: &Bound,
+    branding: &[u8],
+) -> Result<(), StoreError> {
+    let (tenant, realm) = scope(t)?;
+    sqlx::query!(
+        "INSERT INTO access.idp_realm_branding (tenant_id, realm_id, branding, domain_id,
+                decision_pos)
+         VALUES ($1, $2, $3, $4, $5)
+         ON CONFLICT (tenant_id, realm_id) DO UPDATE
+            SET branding = EXCLUDED.branding, domain_id = EXCLUDED.domain_id,
+                decision_pos = EXCLUDED.decision_pos",
+        tenant,
+        realm,
+        branding,
+        bound.domain.as_bytes().as_slice(),
+        bound.position,
+    )
+    .execute(&mut *t.tx)
+    .await?;
+    Ok(())
+}
+
+/// The realm's branding as its deterministic CBOR, once one was decided.
+///
+/// # Errors
+/// [`StoreError`].
+pub async fn branding(t: &mut TenantTx) -> Result<Option<Vec<u8>>, StoreError> {
+    let (tenant, realm) = scope(t)?;
+    Ok(sqlx::query_scalar!(
+        "SELECT branding FROM access.idp_realm_branding WHERE tenant_id = $1 AND realm_id = $2",
+        tenant,
+        realm,
+    )
+    .fetch_optional(&mut *t.tx)
+    .await?)
+}
+
+/// A decided change of the realm's JOSE keys (TN-118, §13.2).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct KeyChange {
+    /// `idp.realm.key_policy`, `idp.realm.key_rotate` or `idp.realm.key_drop`.
+    pub action: String,
+    /// The key rotated out or dropped.
+    pub kid: Option<[u8; 32]>,
+    /// The new policy, deterministic CBOR.
+    pub policy: Option<Vec<u8>>,
+    /// When the dropped key was compromised, if known, ms.
+    pub compromised_at: Option<u64>,
+    /// When the change was written, ms.
+    pub declared_at: u64,
+    /// The issuer cutoff a drop declares, ms (§13.7.7).
+    pub cutoff_at: Option<u64>,
+}
+
+fn opt_signed(v: Option<u64>) -> Result<Option<i64>, StoreError> {
+    v.map(signed).transpose()
+}
+
+fn opt_unsigned(v: Option<i64>) -> Result<Option<u64>, StoreError> {
+    v.map(|n| u64::try_from(n).map_err(|_| StoreError::Corrupt))
+        .transpose()
+}
+
+fn kid32(k: &[u8]) -> Result<[u8; 32], StoreError> {
+    k.try_into().map_err(|_| StoreError::Corrupt)
+}
+
+/// Records a decided key change under `bound`.
+///
+/// # Errors
+/// [`StoreError`].
+pub async fn record_key_change(
+    t: &mut TenantTx,
+    bound: &Bound,
+    c: &KeyChange,
+) -> Result<(), StoreError> {
+    let (tenant, realm) = scope(t)?;
+    sqlx::query!(
+        "INSERT INTO access.idp_realm_key_changes (tenant_id, realm_id, domain_id, decision_pos,
+                action, kid, policy, compromised_at_ms, declared_at_ms, cutoff_at_ms)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
+        tenant,
+        realm,
+        bound.domain.as_bytes().as_slice(),
+        bound.position,
+        c.action,
+        c.kid.as_ref().map(<[u8; 32]>::as_slice),
+        c.policy.as_deref(),
+        opt_signed(c.compromised_at)?,
+        signed(c.declared_at)?,
+        opt_signed(c.cutoff_at)?,
+    )
+    .execute(&mut *t.tx)
+    .await?;
+    Ok(())
+}
+
+/// The realm's decided key changes, oldest first.
+///
+/// # Errors
+/// [`StoreError`].
+pub async fn key_changes(t: &mut TenantTx) -> Result<Vec<KeyChange>, StoreError> {
+    let (tenant, realm) = scope(t)?;
+    let rows = sqlx::query!(
+        "SELECT action, kid, policy, compromised_at_ms, declared_at_ms, cutoff_at_ms
+           FROM access.idp_realm_key_changes WHERE tenant_id = $1 AND realm_id = $2
+          ORDER BY declared_at_ms, decision_pos",
+        tenant,
+        realm,
+    )
+    .fetch_all(&mut *t.tx)
+    .await?;
+    rows.into_iter()
+        .map(|r| {
+            Ok(KeyChange {
+                action: r.action,
+                kid: r.kid.as_deref().map(kid32).transpose()?,
+                policy: r.policy,
+                compromised_at: opt_unsigned(r.compromised_at_ms)?,
+                declared_at: u64::try_from(r.declared_at_ms).map_err(|_| StoreError::Corrupt)?,
+                cutoff_at: opt_unsigned(r.cutoff_at_ms)?,
+            })
+        })
+        .collect()
+}

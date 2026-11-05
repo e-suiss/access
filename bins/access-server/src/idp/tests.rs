@@ -23,6 +23,12 @@ use access_identity_admin::domain::{
 };
 use access_identity_oauth::adapters::outbound::DeclaredTargets;
 use access_identity_oauth::domain::issuer::{IssuerStyle, RealmBase};
+use access_identity_signer::adapters::SealedFactory;
+use access_identity_signer::ports::{Vault, VaultError};
+use access_identity_signer::protocol::{
+    Realm as SignerRealm, Request as SignerRequest, Response as SignerResponse,
+};
+use access_identity_signer::service::Service;
 use access_internal_api::instances::{PlatformProduct, Registrant, register_nonce};
 use access_kernel::ais::{CONTENT_TYPE, Statement};
 use access_kernel::codec::Canonical;
@@ -38,10 +44,13 @@ use access_store::tenancy::{create_tenant, route_by_slug};
 use access_store::testing::{TestDb, fresh};
 use ed25519_dalek::Signer as _;
 use suiss_crypto::dcbor::{self, Limits, Value};
+use suiss_crypto::envelope::SoftKek;
+use suiss_crypto::rotation::Policy;
 
 use super::*;
 use crate::testing::hsm;
 
+mod governance;
 mod platform;
 mod records;
 
@@ -121,9 +130,72 @@ fn plane(db: &TestDb) -> TestPlane {
     Plane::new(domains, db.app.clone(), Fixed, actors)
 }
 
-/// The realm keys opened, in order.
 #[derive(Default)]
-struct Opened(std::sync::Mutex<Vec<([u8; 16], JoseAlg)>>);
+struct MemVault(std::collections::BTreeMap<SignerRealm, Vec<u8>>);
+
+impl Vault for MemVault {
+    fn all(&mut self) -> Result<Vec<Vec<u8>>, VaultError> {
+        Ok(self.0.values().cloned().collect())
+    }
+
+    fn put(&mut self, realm: &SignerRealm, bytes: &[u8]) -> Result<(), VaultError> {
+        self.0.insert(*realm, bytes.to_vec());
+        Ok(())
+    }
+
+    fn cell(&mut self) -> Result<Option<Vec<u8>>, VaultError> {
+        Ok(None)
+    }
+
+    fn put_cell(&mut self, _bytes: &[u8]) -> Result<(), VaultError> {
+        Ok(())
+    }
+}
+
+type TestSigner = Service<SealedFactory<SoftKek>, MemVault>;
+
+/// The realm keys opened, in order, over an identity signer whose clock the test moves.
+struct Opened {
+    log: std::sync::Mutex<Vec<([u8; 16], JoseAlg)>>,
+    signer: std::sync::Mutex<TestSigner>,
+    now: std::sync::atomic::AtomicU64,
+}
+
+impl Default for Opened {
+    fn default() -> Self {
+        let factory = SealedFactory::new(SoftKek::new("realm-kek", [5; 32]));
+        Self {
+            log: std::sync::Mutex::default(),
+            signer: std::sync::Mutex::new(
+                Service::start(factory, MemVault::default(), Policy::REALM).unwrap(),
+            ),
+            now: std::sync::atomic::AtomicU64::new(0),
+        }
+    }
+}
+
+impl Opened {
+    fn ask(&self, request: SignerRequest) -> SignerResponse {
+        let now = self.now.load(std::sync::atomic::Ordering::SeqCst);
+        self.signer.lock().unwrap().handle(request, now, 7)
+    }
+
+    /// Moves the signer's clock to `now` and runs its schedule.
+    fn at(&self, now: u64) {
+        self.now.store(now, std::sync::atomic::Ordering::SeqCst);
+        assert_eq!(
+            self.signer.lock().unwrap().tick(now, 7),
+            Vec::<SignerRealm>::new()
+        );
+    }
+
+    fn rekeyed(&self, request: SignerRequest) -> Result<(), Unavailable> {
+        match self.ask(request) {
+            SignerResponse::Rekeyed(_) => Ok(()),
+            other => Err(Unavailable(format!("{other:?}"))),
+        }
+    }
+}
 
 impl RealmKeys for Opened {
     fn open(
@@ -131,8 +203,65 @@ impl RealmKeys for Opened {
         realm: RealmId,
         alg: JoseAlg,
     ) -> impl std::future::Future<Output = Result<(), Unavailable>> + Send {
-        self.0.lock().unwrap().push((*realm.as_bytes(), alg));
-        std::future::ready(Ok(()))
+        self.log.lock().unwrap().push((*realm.as_bytes(), alg));
+        let alg = match alg {
+            JoseAlg::Es256 => JwsAlg::Es256,
+            JoseAlg::Ed25519 => JwsAlg::Ed25519,
+        };
+        let r = self.ask(SignerRequest::Open {
+            realm: SignerRealm(*realm.as_bytes()),
+            alg,
+        });
+        std::future::ready(if r == SignerResponse::Opened {
+            Ok(())
+        } else {
+            Err(Unavailable(format!("{r:?}")))
+        })
+    }
+
+    fn jwks(
+        &self,
+        realm: RealmId,
+    ) -> impl std::future::Future<Output = Result<String, Unavailable>> + Send {
+        std::future::ready(
+            match self.ask(SignerRequest::Jwks(SignerRealm(*realm.as_bytes()))) {
+                SignerResponse::Jwks(doc) => Ok(doc),
+                other => Err(Unavailable(format!("{other:?}"))),
+            },
+        )
+    }
+
+    fn rotate(
+        &self,
+        realm: RealmId,
+        retire: [u8; 32],
+    ) -> impl std::future::Future<Output = Result<(), Unavailable>> + Send {
+        std::future::ready(self.rekeyed(SignerRequest::Rotate {
+            realm: SignerRealm(*realm.as_bytes()),
+            retire,
+        }))
+    }
+
+    fn drop_key(
+        &self,
+        realm: RealmId,
+        kid: [u8; 32],
+    ) -> impl std::future::Future<Output = Result<(), Unavailable>> + Send {
+        std::future::ready(self.rekeyed(SignerRequest::DropKey {
+            realm: SignerRealm(*realm.as_bytes()),
+            kid,
+        }))
+    }
+
+    fn set_policy(
+        &self,
+        realm: RealmId,
+        policy: Policy,
+    ) -> impl std::future::Future<Output = Result<(), Unavailable>> + Send {
+        std::future::ready(self.rekeyed(SignerRequest::SetPolicy {
+            realm: SignerRealm(*realm.as_bytes()),
+            policy,
+        }))
     }
 }
 
@@ -172,7 +301,7 @@ impl World {
     }
 
     fn opened(&self) -> Vec<([u8; 16], JoseAlg)> {
-        self.keys.0.lock().unwrap().clone()
+        self.keys.log.lock().unwrap().clone()
     }
 
     async fn realm(&self, slug: &str) -> (TenantId, RealmId, Digest) {
@@ -551,6 +680,60 @@ async fn no_write_bypasses_the_commit() {
         &statement(signed_other.domain, &p.nonce, signed_other.digest, p.basis),
         ROOT_KEY,
     );
+    assert!(!matches!(
+        w.admin().apply(&p, ais).await,
+        Ok(Applied::Written { .. } | Applied::AlreadyWritten { .. })
+    ));
+    let mut t = TenantTx::begin(&w.db.app, tenant, realm).await.unwrap();
+    assert!(client(&mut t, c.id.as_str()).await.unwrap().is_none());
+}
+
+// MD-5a, TN-1, INV-37, F21: a realm has one governing domain; an idp.* commit about it in a
+// domain that only consumes its Claims, even by that domain's own root, finds no covering
+// authority, and the identity plane binds only its governing domain's decision
+#[tokio::test]
+async fn only_the_governing_domain_commits_a_realm_change() {
+    // MD-14, CI-15, EI-25, E34
+    let w = World::new().await;
+    let (tenant, realm, d) = w.realm("gov-a").await;
+    let (_, _, other) = w.realm("gov-b").await;
+    onboard(&w.plane, d, ROOT, ROOT_KEY).await;
+    onboard(&w.plane, other, ROOT, ROOT_KEY).await;
+    let c = new_client(&w).await;
+    let p = proposal(
+        (tenant, realm),
+        Change::ClientRegister(c.clone()),
+        3,
+        idp_anchor(other),
+        1,
+    );
+    let intent = p.change.intent("gov-a", p.validity).unwrap();
+    let digest = intent_digest(&intent).unwrap();
+    let v = Decider::decide(
+        &w.plane,
+        Submission {
+            domain: other,
+            nonce: p.nonce.clone(),
+            intent,
+            basis: p.basis,
+            capacity: p.capacity,
+            ais: sign(&statement(other, &p.nonce, digest, p.basis), ROOT_KEY),
+            pep: String::from(PEP),
+        },
+    )
+    .await
+    .unwrap();
+    let Verdict::NotAllowed { decision, .. } = v else {
+        panic!("{v:?}");
+    };
+    assert!(
+        decision
+            .blockers
+            .iter()
+            .any(|b| b.class == access_kernel::combinator::BlockerClass::NoCoveringAuthority),
+        "{decision:?}"
+    );
+    let ais = sign(&statement(other, &p.nonce, digest, p.basis), ROOT_KEY);
     assert!(!matches!(
         w.admin().apply(&p, ais).await,
         Ok(Applied::Written { .. } | Applied::AlreadyWritten { .. })

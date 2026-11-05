@@ -15,6 +15,7 @@ use access_kernel::verify::cose::PublicKey;
 use access_kernel::verify::key_scope::thumbprint;
 use suiss_crypto::dcbor::{self, Limits, Value};
 use suiss_crypto::digest::context_digest;
+use suiss_crypto::rotation::Policy;
 
 /// Context label of a change digest.
 pub const CHANGE_CONTEXT: &str = "access/idp-change/v1";
@@ -59,6 +60,70 @@ pub const RESERVED_CLAIMS: [&str; 21] = [
     "c_hash",
     "authorization_details",
 ];
+
+/// Claims only an authority projection carries (§5.3, §5.17, INV-33, S-1, P55): a role is a
+/// Grant's projection by `projection.issue`, group membership is an identity Claim that never
+/// stands as authority, and the rest name the token's own contract. A mapper cannot define them.
+pub const AUTHORITY_CLAIMS: [&str; 10] = [
+    "roles",
+    "role",
+    "groups",
+    "entitlements",
+    "permissions",
+    "access_contract",
+    "family",
+    "rev",
+    "status",
+    "events",
+];
+
+/// The profile attributes a mapper may take a claim from: the OpenID Connect standard claims
+/// of the subject's own profile (OIDC Core §5.1), nothing that names authority (§9.9.6, P55,
+/// PI-8). A tenant chooses among them; it cannot define a source.
+pub const PROFILE_ATTRIBUTES: [&str; 18] = [
+    "name",
+    "given_name",
+    "family_name",
+    "middle_name",
+    "nickname",
+    "preferred_username",
+    "profile",
+    "picture",
+    "website",
+    "email",
+    "email_verified",
+    "gender",
+    "birthdate",
+    "zoneinfo",
+    "locale",
+    "phone_number",
+    "phone_number_verified",
+    "updated_at",
+];
+
+/// Most CSP origins a realm's branding names (TN-106, PD).
+pub const MAX_CSP_ORIGINS: usize = 16;
+
+/// Longest branding display name, in characters.
+pub const MAX_BRAND_NAME: usize = 64;
+
+/// How far before a known compromise time the issuer cutoff falls (§13.7.7, PD).
+pub const CUTOFF_MARGIN_MS: u64 = 24 * 3_600_000;
+
+/// How far before the declaration the issuer cutoff falls when the compromise time is unknown
+/// (§13.7.7, PD).
+pub const CUTOFF_UNKNOWN_MS: u64 = 7 * 24 * 3_600_000;
+
+/// The issuer cutoff of a compromised realm key (§13.7.7, SEC9): `t_c − 24 h`, or `t_d − 7 d`
+/// when the compromise time `t_c` is unknown or later than the declaration `t_d`. Claims and
+/// tokens of the realm issued at or after it are not relied on.
+#[must_use]
+pub const fn issuer_cutoff(compromised_at: Option<u64>, declared_at: u64) -> u64 {
+    match compromised_at {
+        Some(t) if t <= declared_at => t.saturating_sub(CUTOFF_MARGIN_MS),
+        _ => declared_at.saturating_sub(CUTOFF_UNKNOWN_MS),
+    }
+}
 
 /// Why a change is not valid; a stable code for RFC 9457 problems.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
@@ -116,6 +181,15 @@ pub enum Invalid {
     /// (OP-149 m.4, m.23).
     #[error("bad suiss_event_receiver")]
     EventReceiver,
+    /// Branding outside its fields' shapes, or a logo outside its CSP origins (TN-106).
+    #[error("bad branding")]
+    Branding,
+    /// A key rotation policy the realm may not take (CR-26, TN-118).
+    #[error("bad key policy")]
+    KeyPolicy,
+    /// A rotation or drop of a key the realm does not publish.
+    #[error("no such key")]
+    NoKey,
 }
 
 impl Invalid {
@@ -139,6 +213,9 @@ impl Invalid {
             Self::PublicKey => "invalid-public-key",
             Self::ClientKey => "client-key-not-p256",
             Self::EventReceiver => "invalid-event-receiver",
+            Self::Branding => "invalid-branding",
+            Self::KeyPolicy => "invalid-key-policy",
+            Self::NoKey => "no-such-key",
         }
     }
 }
@@ -562,7 +639,8 @@ impl Client {
     }
 }
 
-/// A claim name a tenant may define: not a reserved protocol claim (must-never #18).
+/// A claim name a tenant may define: not a reserved protocol claim (must-never #18) and not a
+/// claim only an authority projection carries ([`AUTHORITY_CLAIMS`]).
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct ClaimName(String);
 
@@ -580,7 +658,7 @@ impl ClaimName {
     /// # Errors
     /// [`Invalid::Claim`].
     pub fn parse(s: &str) -> Result<Self, Invalid> {
-        if ident(s) && !RESERVED_CLAIMS.contains(&s) {
+        if ident(s) && !RESERVED_CLAIMS.contains(&s) && !AUTHORITY_CLAIMS.contains(&s) {
             Ok(Self(String::from(s)))
         } else {
             Err(Invalid::Claim)
@@ -594,7 +672,7 @@ impl ClaimName {
     }
 }
 
-/// A profile attribute a claim is taken from.
+/// A profile attribute a claim is taken from: one of [`PROFILE_ATTRIBUTES`].
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Attribute(String);
 
@@ -604,7 +682,7 @@ impl Attribute {
     /// # Errors
     /// [`Invalid::Attribute`].
     pub fn parse(s: &str) -> Result<Self, Invalid> {
-        if ident(s) {
+        if PROFILE_ATTRIBUTES.contains(&s) {
             Ok(Self(String::from(s)))
         } else {
             Err(Invalid::Attribute)
@@ -704,6 +782,132 @@ impl CimdPolicy {
     }
 }
 
+/// A `#rrggbb` colour, lower case.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Color(String);
+
+impl Color {
+    /// Checks a colour.
+    ///
+    /// # Errors
+    /// [`Invalid::Branding`].
+    pub fn parse(s: &str) -> Result<Self, Invalid> {
+        let ok = s.len() == 7
+            && s.strip_prefix('#').is_some_and(|h| {
+                h.bytes()
+                    .all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c))
+            });
+        if ok {
+            Ok(Self(String::from(s)))
+        } else {
+            Err(Invalid::Branding)
+        }
+    }
+
+    /// The text form.
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+/// The origin of an `https` URL: `https://host[:port]`.
+fn origin(u: &str) -> Option<&str> {
+    let rest = u.strip_prefix("https://")?;
+    let end = rest.find(['/', '?']).unwrap_or(rest.len());
+    u.get(..end.checked_add(8)?)
+}
+
+/// A realm's login branding (TN-106, §12.4.2): data only. There is no template, script or
+/// style sheet a tenant writes; the hosted page draws these values itself, and the only
+/// outside content it loads comes from the CSP origins listed here.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Branding {
+    /// The name the login page shows.
+    pub display_name: Option<String>,
+    /// The logo, an `https` URL from one of [`Branding::csp_origins`].
+    pub logo_uri: Option<String>,
+    /// The primary colour.
+    pub primary_color: Option<Color>,
+    /// The background colour.
+    pub background_color: Option<Color>,
+    /// The `https` origins the hosted page's CSP allows images from; widening it is an
+    /// expansion of what the page loads.
+    pub csp_origins: BTreeSet<String>,
+}
+
+impl Branding {
+    /// Checks the fields.
+    ///
+    /// # Errors
+    /// [`Invalid::Branding`].
+    pub fn check(&self) -> Result<(), Invalid> {
+        let name_ok = self.display_name.as_deref().is_none_or(|n| {
+            let len = n.chars().count();
+            (1..=MAX_BRAND_NAME).contains(&len) && !n.chars().any(char::is_control)
+        });
+        let origins_ok = self.csp_origins.len() <= MAX_CSP_ORIGINS
+            && self
+                .csp_origins
+                .iter()
+                .all(|o| https(o) && origin(o) == Some(o.as_str()));
+        let logo_ok = self
+            .logo_uri
+            .as_deref()
+            .is_none_or(|u| https(u) && origin(u).is_some_and(|o| self.csp_origins.contains(o)));
+        if name_ok && origins_ok && logo_ok {
+            Ok(())
+        } else {
+            Err(Invalid::Branding)
+        }
+    }
+
+    /// The branding as the change and its stored form carry it: deterministic CBOR.
+    #[must_use]
+    pub fn to_value(&self) -> Value {
+        let mut m = Vec::new();
+        if let Some(n) = &self.display_name {
+            m.push((Value::text("display_name"), Value::text(n)));
+        }
+        if let Some(u) = &self.logo_uri {
+            m.push((Value::text("logo_uri"), Value::text(u)));
+        }
+        if let Some(c) = &self.primary_color {
+            m.push((Value::text("primary_color"), Value::text(c.as_str())));
+        }
+        if let Some(c) = &self.background_color {
+            m.push((Value::text("background_color"), Value::text(c.as_str())));
+        }
+        m.push((
+            Value::text("csp_origins"),
+            Value::Array(self.csp_origins.iter().map(|o| Value::text(o)).collect()),
+        ));
+        Value::Map(m)
+    }
+}
+
+/// A rotation policy as the change and its digest carry it.
+#[must_use]
+pub fn policy_value(p: &Policy) -> Value {
+    Value::Map(vec![
+        (Value::text("lifetime_ms"), Value::Unsigned(p.lifetime_ms)),
+        (Value::text("window_ms"), Value::Unsigned(p.window_ms)),
+        (
+            Value::text("publish_lead_ms"),
+            Value::Unsigned(p.publish_lead_ms),
+        ),
+        (Value::text("retain_ms"), Value::Unsigned(p.retain_ms)),
+        (
+            Value::text("max_signatures"),
+            Value::Unsigned(p.max_signatures),
+        ),
+        (
+            Value::text("jitter_permille"),
+            Value::Unsigned(u64::from(p.jitter_permille)),
+        ),
+    ])
+}
+
 /// One `idp.*` configuration change.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Change {
@@ -728,6 +932,22 @@ pub enum Change {
     Argon2(Argon2Params),
     /// `idp.realm.rp_id`.
     RpId(RpId),
+    /// `idp.realm.branding`.
+    Branding(Branding),
+    /// `idp.realm.key_policy`.
+    KeyPolicy(Policy),
+    /// `idp.realm.key_rotate`: rotates out the active key `retire`.
+    KeyRotate {
+        /// The active key's `kid`.
+        retire: [u8; 32],
+    },
+    /// `idp.realm.key_drop`: drops `kid` at once.
+    KeyDrop {
+        /// The key's `kid`.
+        kid: [u8; 32],
+        /// When it was compromised, if known.
+        compromised_at: Option<u64>,
+    },
 }
 
 fn uint(v: u32) -> Value {
@@ -747,6 +967,10 @@ impl Change {
             Self::JoseAlg(_) => IdpAction::RealmJoseAlg,
             Self::Argon2(_) => IdpAction::RealmArgon2,
             Self::RpId(_) => IdpAction::RealmRpId,
+            Self::Branding(_) => IdpAction::RealmBranding,
+            Self::KeyPolicy(_) => IdpAction::RealmKeyPolicy,
+            Self::KeyRotate { .. } => IdpAction::RealmKeyRotate,
+            Self::KeyDrop { .. } => IdpAction::RealmKeyDrop,
         }
     }
 
@@ -762,9 +986,16 @@ impl Change {
             Self::Argon2(p) => Argon2Params::for_realm(p.m_kib, p.t, p.p)
                 .map(drop)
                 .map_err(|_| Invalid::Argon2),
-            Self::ClientRetire(_) | Self::MapperSet { .. } | Self::JoseAlg(_) | Self::RpId(_) => {
-                Ok(())
+            Self::Branding(b) => b.check(),
+            Self::KeyPolicy(p) => {
+                access_identity_signer::domain::check(p).map_err(|_| Invalid::KeyPolicy)
             }
+            Self::ClientRetire(_)
+            | Self::MapperSet { .. }
+            | Self::JoseAlg(_)
+            | Self::RpId(_)
+            | Self::KeyRotate { .. }
+            | Self::KeyDrop { .. } => Ok(()),
         }
     }
 
@@ -795,6 +1026,21 @@ impl Change {
                 (Value::text("p"), uint(p.p)),
             ]),
             Self::RpId(r) => Value::Map(vec![(Value::text("rp_id"), Value::text(r.as_str()))]),
+            Self::Branding(b) => b.to_value(),
+            Self::KeyPolicy(p) => policy_value(p),
+            Self::KeyRotate { retire } => {
+                Value::Map(vec![(Value::text("retire"), Value::Bytes(retire.to_vec()))])
+            }
+            Self::KeyDrop {
+                kid,
+                compromised_at,
+            } => {
+                let mut m = vec![(Value::text("kid"), Value::Bytes(kid.to_vec()))];
+                if let Some(t) = compromised_at {
+                    m.push((Value::text("compromised_at"), Value::Unsigned(*t)));
+                }
+                Value::Map(m)
+            }
         }
     }
 
@@ -825,8 +1071,15 @@ impl Change {
             Self::MapperSet { claim, .. } => {
                 path.extend([String::from("mapper"), String::from(claim.as_str())]);
             }
-            Self::CimdPolicy(_) | Self::JoseAlg(_) | Self::Argon2(_) | Self::RpId(_) => {
+            Self::CimdPolicy(_)
+            | Self::JoseAlg(_)
+            | Self::Argon2(_)
+            | Self::RpId(_)
+            | Self::Branding(_) => {
                 path.push(String::from("realm"));
+            }
+            Self::KeyPolicy(_) | Self::KeyRotate { .. } | Self::KeyDrop { .. } => {
+                path.push(String::from("keys"));
             }
         }
         ResourceRef {

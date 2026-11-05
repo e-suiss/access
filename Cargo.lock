@@ -142,6 +142,7 @@ dependencies = [
  "access-identity-account",
  "access-identity-events",
  "access-identity-oauth",
+ "access-identity-signer",
  "access-internal-api",
  "access-store",
  "esuiss-access-kernel",

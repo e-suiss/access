@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT branding FROM access.idp_realm_branding WHERE tenant_id = $1 AND realm_id = $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "branding",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.idp_realm_branding",
+            "name": "branding"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "3e8c1e95281dc678766a95b27f6775cb9a23d461dd898c94b5c03877522bfa0d"
+}

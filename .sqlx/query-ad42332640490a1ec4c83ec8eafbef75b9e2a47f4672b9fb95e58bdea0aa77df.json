@@ -1,0 +1,89 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT action, kid, policy, compromised_at_ms, declared_at_ms, cutoff_at_ms\n           FROM access.idp_realm_key_changes WHERE tenant_id = $1 AND realm_id = $2\n          ORDER BY declared_at_ms, decision_pos",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "action",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.idp_realm_key_changes",
+            "name": "action"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "kid",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.idp_realm_key_changes",
+            "name": "kid"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "policy",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.idp_realm_key_changes",
+            "name": "policy"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "compromised_at_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.idp_realm_key_changes",
+            "name": "compromised_at_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "declared_at_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.idp_realm_key_changes",
+            "name": "declared_at_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "cutoff_at_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.idp_realm_key_changes",
+            "name": "cutoff_at_ms"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      true,
+      true,
+      false,
+      true
+    ]
+  },
+  "hash": "ad42332640490a1ec4c83ec8eafbef75b9e2a47f4672b9fb95e58bdea0aa77df"
+}

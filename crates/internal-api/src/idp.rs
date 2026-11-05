@@ -18,7 +18,13 @@ pub const RESOURCE_NAMESPACE: &str = "idp";
 pub const CATALOG_VERSION: u64 = 1;
 
 /// The `idp.*` action namespaces, one SPP each (OP-141 m.35).
-pub const NAMESPACES: [&str; 4] = ["idp.client", "idp.mapper", "idp.realm", "idp.upstream"];
+pub const NAMESPACES: [&str; 5] = [
+    "idp.account",
+    "idp.client",
+    "idp.mapper",
+    "idp.realm",
+    "idp.upstream",
+];
 
 /// One `idp.*` domain action. Its Consequence Tier follows from its Action Schema (OP-141
 /// m.34 (a), m.35 (g)): reserved is CT3, irreversible at least CT2, reversible CT1.
@@ -46,11 +52,22 @@ pub enum IdpAction {
     UpstreamRegister,
     /// Maps upstream groups or claims onto realm membership (TN-117, L6): reserved, CT3.
     UpstreamMapping,
+    /// Changes the realm's login branding: name, logo, colours and the hosted page's CSP
+    /// origins (TN-106, §12.4.2): CT2.
+    RealmBranding,
+    /// Changes the realm's JOSE key rotation policy (TN-118, §12.1.2): reserved, CT3.
+    RealmKeyPolicy,
+    /// Rotates the realm's active JOSE key now, outside the schedule (TN-118): reserved, CT3.
+    RealmKeyRotate,
+    /// Drops a realm JOSE key at once, as on compromise (§13.2): narrowing, CT1 (§13.7.1).
+    RealmKeyDrop,
+    /// Erases an account for good by crypto-shredding (OP-73, TN-118): reserved, CT3.
+    AccountDelete,
 }
 
 impl IdpAction {
     /// Every action, in catalog order.
-    pub const ALL: [Self; 11] = [
+    pub const ALL: [Self; 16] = [
         Self::ClientRegister,
         Self::ClientUpdate,
         Self::ClientRetire,
@@ -62,6 +79,11 @@ impl IdpAction {
         Self::RealmRehome,
         Self::UpstreamRegister,
         Self::UpstreamMapping,
+        Self::RealmBranding,
+        Self::RealmKeyPolicy,
+        Self::RealmKeyRotate,
+        Self::RealmKeyDrop,
+        Self::AccountDelete,
     ];
 
     /// Its namespace.
@@ -72,10 +94,16 @@ impl IdpAction {
                 "idp.client"
             }
             Self::MapperSet => "idp.mapper",
-            Self::RealmJoseAlg | Self::RealmArgon2 | Self::RealmRpId | Self::RealmRehome => {
-                "idp.realm"
-            }
+            Self::RealmJoseAlg
+            | Self::RealmArgon2
+            | Self::RealmRpId
+            | Self::RealmRehome
+            | Self::RealmBranding
+            | Self::RealmKeyPolicy
+            | Self::RealmKeyRotate
+            | Self::RealmKeyDrop => "idp.realm",
             Self::UpstreamRegister | Self::UpstreamMapping => "idp.upstream",
+            Self::AccountDelete => "idp.account",
         }
     }
 
@@ -93,6 +121,11 @@ impl IdpAction {
             Self::RealmRpId => "rp_id",
             Self::RealmRehome => "rehome",
             Self::UpstreamMapping => "mapping",
+            Self::RealmBranding => "branding",
+            Self::RealmKeyPolicy => "key_policy",
+            Self::RealmKeyRotate => "key_rotate",
+            Self::RealmKeyDrop => "key_drop",
+            Self::AccountDelete => "delete",
         }
     }
 
@@ -112,7 +145,7 @@ impl IdpAction {
     #[must_use]
     pub const fn effect(self) -> EffectClass {
         match self {
-            Self::ClientRetire | Self::RealmArgon2 => EffectClass::Reversible,
+            Self::ClientRetire | Self::RealmArgon2 | Self::RealmKeyDrop => EffectClass::Reversible,
             _ => EffectClass::Irreversible,
         }
     }
@@ -122,7 +155,13 @@ impl IdpAction {
     pub const fn reserved(self) -> bool {
         matches!(
             self,
-            Self::RealmRpId | Self::RealmRehome | Self::UpstreamRegister | Self::UpstreamMapping
+            Self::RealmRpId
+                | Self::RealmRehome
+                | Self::UpstreamRegister
+                | Self::UpstreamMapping
+                | Self::RealmKeyPolicy
+                | Self::RealmKeyRotate
+                | Self::AccountDelete
         )
     }
 
@@ -231,6 +270,9 @@ pub enum Verdict {
 pub struct GenesisOrder {
     /// The tenant.
     pub tenant: [u8; 16],
+    /// The realm's immutable slug: the domain's `idp` Anchor covers `idp:[slug, …]` only, so
+    /// no other domain governs the realm (MD-5a, TN-1).
+    pub slug: String,
     /// The founding root of the domain and of its `idp` Anchor.
     pub root: Root,
     /// The CT3 time-lock in seconds; `None` keeps the default (OP-141 m.34 (d)).

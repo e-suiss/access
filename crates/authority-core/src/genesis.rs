@@ -68,10 +68,10 @@ fn set(items: Vec<Value>) -> Result<Value, CoreError> {
     Ok(Value::Array(keyed.into_iter().map(|(_, v)| v).collect()))
 }
 
-fn structural(namespace: &str) -> ResourceSelector {
+fn structural(namespace: &str, prefix: Vec<String>) -> ResourceSelector {
     ResourceSelector::Structural(Structural {
         namespace: String::from(namespace),
-        prefix: Vec::new(),
+        prefix,
         kind: None,
         attrs: BTreeMap::new(),
     })
@@ -110,7 +110,7 @@ fn bootstrap() -> Value {
                 ]),
                 prefix: BTreeSet::new(),
             },
-            resource: structural("access.party"),
+            resource: structural("access.party", Vec::new()),
             params: BTreeMap::new(),
             recipient: None,
             purpose: None,
@@ -215,13 +215,17 @@ pub fn realm(
             return Err(CoreError::Protocol("genesis-schema"));
         }
     }
+    if order.slug.is_empty() {
+        return Err(CoreError::Protocol("genesis-slug"));
+    }
     let root = root_value(&order.root);
+    // MD-5a, TN-1
     let idp = Value::Map(vec![
         (
             Value::text("scope"),
             Value::Map(vec![(
                 Value::text("resource"),
-                structural(RESOURCE_NAMESPACE).to_value(),
+                structural(RESOURCE_NAMESPACE, vec![order.slug.clone()]).to_value(),
             )]),
         ),
         (Value::text("root"), root.clone()),

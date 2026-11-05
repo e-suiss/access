@@ -437,6 +437,37 @@ impl RealmKeys for RealmKeyring {
         self.hsm(realm.as_bytes())
             .map_err(|e| Unavailable(String::from(e.code())))
     }
+
+    async fn jwks(&self, realm: RealmId) -> Result<String, Unavailable> {
+        access_identity_oauth::ports::Keys::jwks(&self.signer, realm)
+            .await
+            .map_err(|_| Unavailable(String::from("identity-signer")))
+    }
+
+    async fn rotate(&self, realm: RealmId, retire: [u8; 32]) -> Result<(), Unavailable> {
+        self.signer
+            .rotate(realm, retire)
+            .await
+            .map_err(|_| Unavailable(String::from("identity-signer")))
+    }
+
+    async fn drop_key(&self, realm: RealmId, kid: [u8; 32]) -> Result<(), Unavailable> {
+        self.signer
+            .drop_key(realm, kid)
+            .await
+            .map_err(|_| Unavailable(String::from("identity-signer")))
+    }
+
+    async fn set_policy(
+        &self,
+        realm: RealmId,
+        policy: suiss_crypto::rotation::Policy,
+    ) -> Result<(), Unavailable> {
+        self.signer
+            .set_policy(realm, policy)
+            .await
+            .map_err(|_| Unavailable(String::from("identity-signer")))
+    }
 }
 
 mod projections;

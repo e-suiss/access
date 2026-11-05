@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.idp_realm_key_changes (tenant_id, realm_id, domain_id, decision_pos,\n                action, kid, policy, compromised_at_ms, declared_at_ms, cutoff_at_ms)\n         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Bytea",
+        "Int8",
+        "Text",
+        "Bytea",
+        "Bytea",
+        "Int8",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "be684938069b4533743aa2d12cf93efa1e49cd71379d27f6fc50ebcf22260966"
+}

@@ -34,6 +34,7 @@ fn values(order: &GenesisOrder) -> BTreeMap<String, Value> {
 fn order(root: Root) -> GenesisOrder {
     GenesisOrder {
         tenant: [1; 16],
+        slug: String::from("acme"),
         root,
         ct3_delay_s: None,
         schemas: Vec::new(),
@@ -113,6 +114,12 @@ fn idp_actions_carry_their_consequence_tiers() {
     assert_eq!(tier(IdpAction::MapperSet), Tier::Ct2);
     assert_eq!(tier(IdpAction::ClientRetire), Tier::Ct1);
     assert_eq!(tier(IdpAction::RealmArgon2), Tier::Ct1);
+    // TN-118, TN-106, §13.2, §13.7.1, OP-73
+    assert_eq!(tier(IdpAction::RealmKeyPolicy), Tier::Ct3);
+    assert_eq!(tier(IdpAction::RealmKeyRotate), Tier::Ct3);
+    assert_eq!(tier(IdpAction::AccountDelete), Tier::Ct3);
+    assert_eq!(tier(IdpAction::RealmBranding), Tier::Ct2);
+    assert_eq!(tier(IdpAction::RealmKeyDrop), Tier::Ct1);
     for a in IdpAction::ALL {
         assert_eq!(IdpAction::from_label(&a.label()), Some(a));
     }
@@ -194,4 +201,41 @@ fn the_realm_issuer_is_accepted_for_actor_binding_only() {
         gates[0].classes,
         REALM_ISSUER_CLASSES.map(String::from).to_vec()
     );
+}
+
+// MD-5a, TN-1, INV-37: the `idp` Anchor covers only its own realm's resources, so the domain
+// governs that realm alone; a Genesis without a slug is refused
+#[test]
+fn the_idp_anchor_covers_its_realm_only() {
+    let o = order(Root::Sole(Id([2; 16])));
+    let Value::Array(anchors) = values(&o).remove("anchors").unwrap() else {
+        panic!("anchors");
+    };
+    let scope = anchors
+        .iter()
+        .find_map(|a| match a {
+            Value::Map(m) => m
+                .iter()
+                .find(|(k, _)| *k == Value::text("scope"))
+                .map(|(_, v)| v.clone()),
+            _ => None,
+        })
+        .unwrap();
+    let Value::Map(scope) = scope else {
+        panic!("scope");
+    };
+    let resource = ResourceSelector::from_value(&scope[0].1).unwrap();
+    let ResourceSelector::Structural(s) = resource else {
+        panic!("{resource:?}");
+    };
+    assert_eq!(
+        (s.namespace.as_str(), s.prefix),
+        ("idp", vec![String::from("acme")])
+    );
+    let mut bad = order(Root::Sole(Id([2; 16])));
+    bad.slug = String::new();
+    assert!(matches!(
+        realm(&bad, &mut Fixed),
+        Err(CoreError::Protocol("genesis-slug"))
+    ));
 }

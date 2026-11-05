@@ -265,3 +265,77 @@ fn requiring_par_is_in_the_change() {
     assert_eq!(required.check(&DeclaredTargets::default()), Ok(()));
     assert_ne!(Change::ClientRegister(required).digest().unwrap(), without);
 }
+
+// §13.7.7, SEC9: the issuer cutoff is 24 hours before a known compromise, or 7 days before the
+// declaration when the compromise time is unknown or claimed to be later
+#[test]
+fn the_issuer_cutoff_follows_the_margins() {
+    let day = 24 * 3_600_000;
+    assert_eq!(issuer_cutoff(Some(10 * day), 12 * day), 9 * day);
+    assert_eq!(issuer_cutoff(None, 12 * day), 5 * day);
+    assert_eq!(issuer_cutoff(Some(13 * day), 12 * day), 5 * day);
+    assert_eq!(issuer_cutoff(None, day), 0);
+}
+
+// TN-106: branding is data; colours are #rrggbb, CSP origins are bare https origins, the logo
+// comes from one of them, and the names are bounded
+#[test]
+fn branding_is_bounded_data() {
+    let ok = Branding {
+        display_name: Some(String::from("Acme")),
+        logo_uri: Some(String::from("https://cdn.acme.example/l.png")),
+        primary_color: Some(Color::parse("#00aaff").unwrap()),
+        background_color: None,
+        csp_origins: BTreeSet::from([String::from("https://cdn.acme.example")]),
+    };
+    assert_eq!(ok.check(), Ok(()));
+    for bad in ["#00AAFF", "00aaff", "#00aaf", "red"] {
+        assert_eq!(Color::parse(bad), Err(Invalid::Branding), "{bad}");
+    }
+    let path_origin = Branding {
+        csp_origins: BTreeSet::from([String::from("https://cdn.acme.example/x")]),
+        logo_uri: None,
+        ..ok.clone()
+    };
+    assert_eq!(path_origin.check(), Err(Invalid::Branding));
+    let http = Branding {
+        csp_origins: BTreeSet::from([String::from("http://cdn.acme.example")]),
+        logo_uri: None,
+        ..ok.clone()
+    };
+    assert_eq!(http.check(), Err(Invalid::Branding));
+    let long = Branding {
+        display_name: Some("x".repeat(MAX_BRAND_NAME + 1)),
+        ..ok.clone()
+    };
+    assert_eq!(long.check(), Err(Invalid::Branding));
+    let many = Branding {
+        csp_origins: (0..=MAX_CSP_ORIGINS)
+            .map(|i| format!("https://c{i}.acme.example"))
+            .collect(),
+        logo_uri: None,
+        ..ok
+    };
+    assert_eq!(many.check(), Err(Invalid::Branding));
+}
+
+// TN-118, §13.2, §13.7.1, OP-73: key policy and rotation are reserved, a drop is narrowing, and
+// permanent account deletion is declared reserved; the key changes address the realm's keys
+#[test]
+fn key_changes_and_deletion_are_declared() {
+    let drop = Change::KeyDrop {
+        kid: [1; 32],
+        compromised_at: None,
+    };
+    assert!(!drop.action().reserved());
+    assert!(Change::KeyRotate { retire: [1; 32] }.action().reserved());
+    assert!(Change::KeyPolicy(Policy::REALM).action().reserved());
+    assert!(IdpAction::AccountDelete.reserved());
+    assert_eq!(IdpAction::AccountDelete.label(), "idp.account.delete");
+    assert_eq!(drop.resource("acme").path, ["acme", "keys"]);
+    let other = Change::KeyDrop {
+        kid: [2; 32],
+        compromised_at: None,
+    };
+    assert_ne!(drop.digest().unwrap(), other.digest().unwrap());
+}

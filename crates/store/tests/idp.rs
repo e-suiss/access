@@ -335,10 +335,11 @@ async fn realm_settings_start_on_defaults_and_argon2_only_rises() {
     );
 }
 
-// must-never #18, §9.9.4 k.1, TN-117: a tenant cannot define a reserved protocol claim
+// must-never #18, §9.9.4 k.1, §9.9.6, TN-117: a tenant cannot define a reserved protocol claim
+// or an authority claim, and a mapper takes its value only from a standard profile attribute
 #[tokio::test]
 async fn reserved_claims_cannot_be_mapped() {
-    // P55, E39, F23, PI-8
+    // P55, E39, F23, PI-8, S-1, INV-33
     let db = fresh().await.unwrap();
     let t = create_tenant(&db.app, "pool-default").await.unwrap();
     let d = domain(&db, t, 70, 2).await;
@@ -348,20 +349,32 @@ async fn reserved_claims_cannot_be_mapped() {
         .await
         .unwrap()
         .unwrap();
-    set_mapper(&mut tx, &b, "department", Some("department"))
+    set_mapper(&mut tx, &b, "login", Some("preferred_username"))
         .await
         .unwrap();
     tx.commit().await.unwrap();
     let mut tx = TenantTx::begin(&db.app, t, r).await.unwrap();
     assert_eq!(
         mappers(&mut tx).await.unwrap(),
-        [(String::from("department"), String::from("department"))]
+        [(String::from("login"), String::from("preferred_username"))]
     );
-    let b = bind(&mut tx, &decision(&d, 2, &[2; 16], "idp.mapper.set"))
-        .await
-        .unwrap()
-        .unwrap();
-    assert!(set_mapper(&mut tx, &b, "sub", Some("email")).await.is_err());
+    for (claim, source) in [
+        ("sub", "email"),
+        ("roles", "email"),
+        ("groups", "email"),
+        ("department", "department"),
+    ] {
+        let mut tx = TenantTx::begin(&db.app, t, r).await.unwrap();
+        let b = bind(&mut tx, &decision(&d, 2, &[2; 16], "idp.mapper.set"))
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(
+            set_mapper(&mut tx, &b, claim, Some(source)).await.is_err(),
+            "{claim} <- {source}"
+        );
+        tx.rollback().await.unwrap();
+    }
 }
 
 // TN-20, OP-137: a client_id is global and never reused, also across tenants

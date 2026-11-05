@@ -6,6 +6,7 @@ use std::future::Future;
 use access_internal_api::idp::{GenesisOpened, GenesisOrder, Submission, Unavailable, Verdict};
 use access_internal_api::instances::{Registration, RegistrationVerdict};
 use access_store::identity::RealmId;
+use suiss_crypto::rotation::Policy;
 
 use crate::domain::JoseAlg;
 
@@ -28,6 +29,31 @@ pub trait RealmKeys: Send + Sync {
         &self,
         realm: RealmId,
         alg: JoseAlg,
+    ) -> impl Future<Output = Result<(), Unavailable>> + Send;
+
+    /// The realm's JWKS document as relying parties read it.
+    fn jwks(&self, realm: RealmId) -> impl Future<Output = Result<String, Unavailable>> + Send;
+
+    /// Rotates the realm's active key `retire` out now (TN-118); once it is no longer active,
+    /// repeating it changes nothing.
+    fn rotate(
+        &self,
+        realm: RealmId,
+        retire: [u8; 32],
+    ) -> impl Future<Output = Result<(), Unavailable>> + Send;
+
+    /// Drops the realm key `kid` at once (§13.2); repeating it changes nothing.
+    fn drop_key(
+        &self,
+        realm: RealmId,
+        kid: [u8; 32],
+    ) -> impl Future<Output = Result<(), Unavailable>> + Send;
+
+    /// Replaces the realm's key rotation policy (TN-118).
+    fn set_policy(
+        &self,
+        realm: RealmId,
+        policy: Policy,
     ) -> impl Future<Output = Result<(), Unavailable>> + Send;
 }
 

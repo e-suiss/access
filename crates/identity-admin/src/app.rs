@@ -12,14 +12,16 @@ use access_internal_api::instances::PlatformProduct;
 use access_kernel::combinator::{Capacity, Decision};
 use access_kernel::digest::Digest;
 use access_kernel::intent::{IntentEnvelope, intent_digest};
+use access_kernel::json::{Json, b64url_decode};
 use access_kernel::meta::{ExerciseBasis, Root};
 use access_kernel::model::Window;
 use access_kernel::schema::Spp;
 use access_store::Pool;
 use access_store::identity::{RealmId, TenantId, TenantTx};
-use access_store::idp::{self, ClientRow, Decision as Bind, Governing, SettingsRow};
+use access_store::idp::{self, ClientRow, Decision as Bind, Governing, KeyChange, SettingsRow};
 use access_store::scope::DomainId;
 use access_store::tenancy::{self, HostKind};
+use suiss_crypto::dcbor::{self, Limits};
 
 use access_identity_events::app::emit;
 use access_identity_events::domain::catalog::{
@@ -29,7 +31,7 @@ use access_identity_events::domain::catalog::{
 use crate::AdminError;
 use crate::domain::{
     Attribute, AuthMethod, CLIENT_PREFIX, Change, Client, ClientId, Invalid, JoseAlg, cose_key,
-    raises,
+    issuer_cutoff, policy_value, raises,
 };
 use crate::ports::{Decider, Governance, RealmKeys};
 
@@ -181,6 +183,7 @@ impl<D: Decider, G: Governance, K: RealmKeys> Admin<'_, D, G, K> {
             .governance
             .open(GenesisOrder {
                 tenant: *r.tenant.as_bytes(),
+                slug: String::from(r.slug),
                 root: r.root.clone(),
                 ct3_delay_s: r.ct3_delay_s,
                 schemas: r.schemas.clone(),
@@ -293,9 +296,33 @@ impl<D: Decider, G: Governance, K: RealmKeys> Admin<'_, D, G, K> {
                     return Err(Invalid::Argon2.into());
                 }
             }
-            Change::CimdPolicy(_) | Change::MapperSet { .. } | Change::JoseAlg(_) => {}
+            Change::CimdPolicy(_)
+            | Change::MapperSet { .. }
+            | Change::JoseAlg(_)
+            | Change::Branding(_)
+            | Change::KeyPolicy(_)
+            | Change::KeyRotate { .. }
+            | Change::KeyDrop { .. } => {}
         }
         Ok(())
+    }
+
+    /// A rotation or drop names a key the realm publishes now; a retry of an applied one no
+    /// longer has to (TN-118, §13.2).
+    async fn published(&self, p: &Proposal) -> Result<(), AdminError> {
+        let (Change::KeyRotate { retire: kid } | Change::KeyDrop { kid, .. }) = &p.change else {
+            return Ok(());
+        };
+        let doc = self
+            .keys
+            .jwks(p.realm)
+            .await
+            .map_err(|e| AdminError::Unavailable(e.0))?;
+        if jwks_kids(&doc).contains(kid) {
+            Ok(())
+        } else {
+            Err(Invalid::NoKey.into())
+        }
     }
 
     /// The intent the actor signs for `p` (EI-25), once the change fits the realm's current
@@ -304,7 +331,9 @@ impl<D: Decider, G: Governance, K: RealmKeys> Admin<'_, D, G, K> {
     /// # Errors
     /// [`AdminError`].
     pub async fn prepare(&self, p: &Proposal) -> Result<Prepared, AdminError> {
-        self.prepared(p, true).await
+        let prepared = self.prepared(p, true).await?;
+        self.published(p).await?;
+        Ok(prepared)
     }
 
     async fn prepared(&self, p: &Proposal, state: bool) -> Result<Prepared, AdminError> {
@@ -401,16 +430,19 @@ impl<D: Decider, G: Governance, K: RealmKeys> Admin<'_, D, G, K> {
     }
 
     /// What follows a written change outside the database: a new JOSE algorithm reaches the
-    /// identity signer for the realm's next keys (OP-146 m.8 (e), m.16 (m)). A retry of the
-    /// change repeats it.
+    /// identity signer for the realm's next keys (OP-146 m.8 (e), m.16 (m)), and a decided key
+    /// policy, rotation or drop reaches the realm's key set (TN-118, §13.2). A retry of the
+    /// change repeats it; each of them is idempotent.
     async fn after(&self, p: &Proposal) -> Result<(), AdminError> {
-        if let Change::JoseAlg(alg) = &p.change {
-            self.keys
-                .open(p.realm, *alg)
-                .await
-                .map_err(|e| AdminError::Unavailable(e.0))?;
-        }
-        Ok(())
+        let done = match &p.change {
+            Change::JoseAlg(alg) => self.keys.open(p.realm, *alg).await,
+            // TN-118, §13.2
+            Change::KeyPolicy(policy) => self.keys.set_policy(p.realm, *policy).await,
+            Change::KeyRotate { retire } => self.keys.rotate(p.realm, *retire).await,
+            Change::KeyDrop { kid, .. } => self.keys.drop_key(p.realm, *kid).await,
+            _ => Ok(()),
+        };
+        done.map_err(|e| AdminError::Unavailable(e.0))
     }
 
     /// OP-149 m.4: an API client change queues its event in the write's transaction, so it
@@ -541,6 +573,17 @@ impl<D: Decider, G: Governance, K: RealmKeys> Admin<'_, D, G, K> {
                 let s = idp::settings(t).await?.ok_or(AdminError::NoRealm)?;
                 idp::update_settings(t, bound, &settings_with(s, change)).await?
             }
+            Change::Branding(b) => {
+                let bytes = dcbor::encode(&b.to_value(), Limits::CEILING)
+                    .map_err(|_| AdminError::Encode)?;
+                idp::set_branding(t, bound, &bytes).await?;
+                true
+            }
+            Change::KeyPolicy(_) | Change::KeyRotate { .. } | Change::KeyDrop { .. } => {
+                let declared_at = access_store::authority::server_time(self.app).await?;
+                idp::record_key_change(t, bound, &key_change(change, declared_at)?).await?;
+                true
+            }
         };
         if done {
             Ok(secret)
@@ -566,9 +609,66 @@ fn settings_with(mut s: SettingsRow, change: &Change) -> SettingsRow {
         Change::ClientRegister(_)
         | Change::ClientUpdate(_)
         | Change::ClientRetire(_)
-        | Change::MapperSet { .. } => {}
+        | Change::MapperSet { .. }
+        | Change::Branding(_)
+        | Change::KeyPolicy(_)
+        | Change::KeyRotate { .. }
+        | Change::KeyDrop { .. } => {}
     }
     s
+}
+
+/// The record of a decided key change written at `declared_at`; a drop declares its issuer
+/// cutoff (§13.7.7, SEC9).
+fn key_change(change: &Change, declared_at: u64) -> Result<KeyChange, AdminError> {
+    let mut c = KeyChange {
+        action: change.action().label(),
+        kid: None,
+        policy: None,
+        compromised_at: None,
+        declared_at,
+        cutoff_at: None,
+    };
+    match change {
+        Change::KeyPolicy(p) => {
+            c.policy = Some(
+                dcbor::encode(&policy_value(p), Limits::CEILING).map_err(|_| AdminError::Encode)?,
+            );
+        }
+        Change::KeyRotate { retire } => c.kid = Some(*retire),
+        Change::KeyDrop {
+            kid,
+            compromised_at,
+        } => {
+            c.kid = Some(*kid);
+            c.compromised_at = *compromised_at;
+            c.cutoff_at = Some(issuer_cutoff(*compromised_at, declared_at));
+        }
+        _ => return Err(AdminError::Encode),
+    }
+    Ok(c)
+}
+
+/// The `kid`s of a JWKS document (RFC 7517, CR-24); a malformed one has none.
+#[must_use]
+pub fn jwks_kids(doc: &str) -> Vec<[u8; 32]> {
+    let Ok(Json::Object(top)) = access_kernel::json::parse(doc.as_bytes(), 64 * 1024) else {
+        return Vec::new();
+    };
+    let Some((_, Json::Array(keys))) = top.iter().find(|(k, _)| k == "keys") else {
+        return Vec::new();
+    };
+    keys.iter()
+        .filter_map(|k| match k {
+            Json::Object(m) => m
+                .iter()
+                .find(|(n, _)| n == "kid")
+                .and_then(|(_, v)| v.as_str()),
+            _ => None,
+        })
+        .filter_map(|kid| b64url_decode(kid).ok())
+        .filter_map(|b| b.try_into().ok())
+        .collect()
 }
 
 /// The realm's JOSE algorithm, ES256 until a decision changes it (OP-146 m.8 (e)).
