@@ -207,7 +207,7 @@ async fn the_transmitter_serves_metadata_streams_and_poll() {
         None,
     )
     .await;
-    assert_eq!((status, same), (StatusCode::OK, meta));
+    assert_eq!((status, &same), (StatusCode::OK, &meta));
     assert_eq!(
         call(
             &app,
@@ -253,6 +253,61 @@ async fn the_transmitter_serves_metadata_streams_and_poll() {
         updated["events_requested"][0],
         "urn:suiss:access:event:party.disabled"
     );
+
+    // SSF 1.0 §8.1.2, §8.1.4: the stream's own status and verification endpoints
+    assert_eq!(same["status_endpoint"], format!("{ISSUER}/ssf/status"));
+    assert_eq!(
+        meta["verification_endpoint"],
+        format!("{ISSUER}/ssf/verify")
+    );
+    let id = updated["stream_id"].as_str().unwrap();
+    let (status, state, cache) = call(
+        &app,
+        "GET",
+        &format!("/realms/shop/ssf/status?stream_id={id}"),
+        Some(&token),
+    )
+    .await;
+    assert_eq!(
+        (status, cache.as_deref()),
+        (StatusCode::OK, Some("no-store"))
+    );
+    assert_eq!(
+        state,
+        serde_json::json!({ "stream_id": id, "status": "paused" })
+    );
+    for (method, path, token, want) in [
+        (
+            "GET",
+            "/realms/shop/ssf/status",
+            Some(token.as_str()),
+            StatusCode::BAD_REQUEST,
+        ),
+        (
+            "GET",
+            "/realms/shop/ssf/status",
+            None,
+            StatusCode::UNAUTHORIZED,
+        ),
+        (
+            "POST",
+            "/realms/shop/ssf/verify",
+            Some(token.as_str()),
+            StatusCode::BAD_REQUEST,
+        ),
+        (
+            "POST",
+            "/realms/shop/ssf/verify",
+            None,
+            StatusCode::UNAUTHORIZED,
+        ),
+    ] {
+        assert_eq!(
+            call(&app, method, path, token).await.0,
+            want,
+            "{method} {path}"
+        );
+    }
 
     assert_eq!(
         call(&app, "DELETE", "/realms/shop/ssf/streams", Some(&token))

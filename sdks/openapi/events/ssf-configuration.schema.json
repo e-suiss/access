@@ -9,6 +9,8 @@
     "jwks_uri",
     "delivery_methods_supported",
     "configuration_endpoint",
+    "status_endpoint",
+    "verification_endpoint",
     "authorization_schemes",
     "default_subjects"
   ],
@@ -37,6 +39,14 @@
       }
     },
     "configuration_endpoint": {
+      "type": "string",
+      "pattern": "^https://"
+    },
+    "status_endpoint": {
+      "type": "string",
+      "pattern": "^https://"
+    },
+    "verification_endpoint": {
       "type": "string",
       "pattern": "^https://"
     },

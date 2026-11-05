@@ -49,6 +49,12 @@ CREATE TRIGGER allocate_only BEFORE UPDATE OR DELETE ON access.status_list
 ALTER TABLE access.status_list_publication
   ADD COLUMN excerpt bytea CHECK (excerpt IS NULL OR octet_length(excerpt) <= 65536);
 
+-- SSF 1.0 §8.1.4: a stream's verification SET is queued like any event under its SSF type.
+ALTER TABLE access.event_delivery DROP CONSTRAINT event_delivery_event_type_check;
+ALTER TABLE access.event_delivery ADD CONSTRAINT event_delivery_event_type_check
+  CHECK (event_type ~ '^urn:suiss:access:event:[a-z][a-z0-9_.-]{0,63}$'
+         OR event_type = 'https://schemas.openid.net/secevent/ssf/event-type/verification');
+
 CREATE INDEX projection_family_revoked ON access.projection_family (domain_id, status_uri, revoked_pos)
   WHERE status_uri IS NOT NULL AND revoked_pos IS NOT NULL;
 

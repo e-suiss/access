@@ -798,3 +798,71 @@ async fn only_declared_private_endpoints_open_streams() {
         .unwrap();
     assert_eq!(created.stream["delivery"]["endpoint_url"], declared);
 }
+
+// SSF 1.0 §8.1.2, §8.1.4, §9.16.2, PI-9: a stream reads and sets its own status by its
+// credential; verification queues a SET whose subject is the stream and which echoes the state,
+// delivered through the stream like any event; another stream's id is refused
+#[tokio::test]
+async fn a_stream_verifies_and_sets_its_status() {
+    use access_identity_events::domain::control::{VERIFICATION_EVENT, parse_status, parse_verify};
+    let w = World::new().await;
+    let streams = w.streams();
+    let poll = streams
+        .create(
+            w.tenant,
+            w.realm,
+            &parse_stream(&stream_request(
+                "urn:ietf:rfc:8936",
+                None,
+                &["party.disabled"],
+            ))
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    let token = poll.token.clone().unwrap();
+    let id = poll.stream["stream_id"].as_str().unwrap().to_owned();
+    let own = streams.by_token(w.tenant, w.realm, &token).await.unwrap();
+    assert_eq!(streams.status(&own, &id).unwrap()["status"], "enabled");
+    assert!(matches!(
+        streams.status(&own, "00000000-0000-4000-8000-000000000000"),
+        Err(StreamError::NotFound)
+    ));
+    let paused =
+        parse_status(format!(r#"{{"stream_id":"{id}","status":"paused"}}"#).as_bytes()).unwrap();
+    streams
+        .set_status(w.tenant, w.realm, &own, &paused)
+        .await
+        .unwrap();
+    let own = streams.by_token(w.tenant, w.realm, &token).await.unwrap();
+    assert_eq!(streams.status(&own, &id).unwrap()["status"], "paused");
+
+    let verify =
+        parse_verify(format!(r#"{{"stream_id":"{id}","state":"s-42"}}"#).as_bytes()).unwrap();
+    streams
+        .verify(w.tenant, w.realm, &own, &verify, T0)
+        .await
+        .unwrap();
+    let answer = streams
+        .poll(&ClearSigner, &w.clock, w.tenant, w.realm, &token, b"{}")
+        .await
+        .unwrap();
+    let sets = answer["sets"].as_object().unwrap();
+    assert_eq!(sets.len(), 1);
+    let (jti, t) = sets.iter().next().unwrap();
+    let (_, claims) = set_of(t.as_str().unwrap());
+    assert_eq!(claims["jti"], jti.as_str());
+    assert_eq!(claims["sub_id"]["id"], id.as_str());
+    assert_eq!(claims["events"][VERIFICATION_EVENT]["state"], "s-42");
+
+    let disabled =
+        parse_status(format!(r#"{{"stream_id":"{id}","status":"disabled"}}"#).as_bytes()).unwrap();
+    streams
+        .set_status(w.tenant, w.realm, &own, &disabled)
+        .await
+        .unwrap();
+    assert!(matches!(
+        streams.by_token(w.tenant, w.realm, &token).await,
+        Err(StreamError::NotFound)
+    ));
+}

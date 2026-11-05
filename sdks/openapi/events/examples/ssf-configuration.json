@@ -8,6 +8,8 @@
     "urn:suiss:access:delivery:webhook"
   ],
   "configuration_endpoint": "https://id.example/realms/shop/ssf/streams",
+  "status_endpoint": "https://id.example/realms/shop/ssf/status",
+  "verification_endpoint": "https://id.example/realms/shop/ssf/verify",
   "authorization_schemes": [
     {
       "spec_urn": "urn:ietf:rfc:6750"

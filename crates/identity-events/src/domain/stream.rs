@@ -197,7 +197,7 @@ pub fn supported() -> Vec<String> {
 }
 
 /// The transmitter metadata at `/.well-known/ssf-configuration` (SSF 1.0 §7.1). Stream
-/// management takes a stream's bearer credential (RFC 6750).
+/// management, status and verification take a stream's bearer credential (RFC 6750).
 #[must_use]
 pub fn ssf_configuration(issuer: &str, jwks_uri: &str) -> Value {
     json!({
@@ -206,6 +206,8 @@ pub fn ssf_configuration(issuer: &str, jwks_uri: &str) -> Value {
         "jwks_uri": jwks_uri,
         "delivery_methods_supported": [PUSH_METHOD, POLL_METHOD, WEBHOOK_METHOD],
         "configuration_endpoint": format!("{issuer}{STREAMS_PATH}"),
+        "status_endpoint": format!("{issuer}{}", crate::domain::control::STATUS_PATH),
+        "verification_endpoint": format!("{issuer}{}", crate::domain::control::VERIFY_PATH),
         "authorization_schemes": [{"spec_urn": "urn:ietf:rfc:6750"}],
         "default_subjects": "NONE",
     })

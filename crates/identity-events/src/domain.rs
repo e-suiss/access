@@ -2,6 +2,7 @@
 //! `CloudEvents` forms, streams and their channels, and how a receiver's answer is read.
 
 pub mod catalog;
+pub mod control;
 pub mod set;
 pub mod stream;
 

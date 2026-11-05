@@ -23,6 +23,8 @@ use crate::domain::stream::{
 };
 use crate::ports::{Clock, Random, Sealer, TokenSigner, Unavailable};
 
+mod control;
+
 /// Why a stream operation did not happen.
 #[derive(Debug, thiserror::Error)]
 pub enum StreamError {

@@ -1,6 +1,7 @@
 //! The realm's SSF transmitter over HTTP (OP-149 m.7, SSF 1.0, RFC 8936): the metadata at
 //! `/.well-known/ssf-configuration`, the stream a bearer credential names at `/ssf/streams`
-//! (`GET`, `PATCH`, `DELETE` disables it), and poll at `/ssf/poll`; at the host root for a
+//! (`GET`, `PATCH`, `DELETE` disables it), its status at `/ssf/status`, its verification at
+//! `/ssf/verify`, and poll at `/ssf/poll`; at the host root for a
 //! subdomain issuer and under `/realms/{slug}` for a path issuer. Stream and poll answers are
 //! `no-store`.
 
@@ -8,6 +9,7 @@ use std::sync::Arc;
 
 use access_identity_events::app::ssf::{SsfReply, StreamCall, Transmitter};
 use access_identity_events::ports::{Clock, Random, Sealer, TokenSigner};
+use access_identity_oauth::domain::request::Params;
 use access_identity_oauth::ports::Directory;
 use axum::Router;
 use axum::body::Bytes;
@@ -76,6 +78,19 @@ where
             get(streams_under::<D, K, R, S, C>)
                 .patch(streams_under::<D, K, R, S, C>)
                 .delete(streams_under::<D, K, R, S, C>),
+        )
+        .route(
+            "/ssf/status",
+            get(status_call::<D, K, R, S, C>).post(status_call::<D, K, R, S, C>),
+        )
+        .route(
+            "/realms/{slug}/ssf/status",
+            get(status_call::<D, K, R, S, C>).post(status_call::<D, K, R, S, C>),
+        )
+        .route("/ssf/verify", post(verify_call::<D, K, R, S, C>))
+        .route(
+            "/realms/{slug}/ssf/verify",
+            post(verify_call::<D, K, R, S, C>),
         )
         .route("/ssf/poll", post(poll::<D, K, R, S, C>))
         .route("/realms/{slug}/ssf/poll", post(poll_under::<D, K, R, S, C>))
@@ -169,6 +184,80 @@ where
     C: Clock,
 {
     stream_call(&s, Some(&slug), &method, &uri, &headers, &body).await
+}
+
+/// A stream's own status or verification call (SSF 1.0 §8.1.2, §8.1.4).
+#[derive(Clone, Copy)]
+enum Control {
+    Status,
+    Verify,
+}
+
+async fn control<D, K, R, S, C>(
+    s: &Transmitter<D, K, R, S, C>,
+    slug: Option<Path<String>>,
+    which: Control,
+    req: (&Method, &Uri, &HeaderMap, &Bytes),
+) -> Response
+where
+    D: Directory,
+    K: Sealer,
+    R: Random,
+    S: TokenSigner,
+    C: Clock,
+{
+    let (method, uri, headers, body) = req;
+    if too_large(body) {
+        return reply(SsfReply::Problem(413, "too-large"), true);
+    }
+    let slug = slug.as_ref().map(|p| p.0.as_str());
+    let (host, token) = (authority(uri, headers), bearer(headers));
+    let answer = match (which, *method == Method::GET) {
+        (Control::Status, true) => {
+            let params = Params::parse(uri.query().unwrap_or_default()).ok();
+            let id = params.as_ref().and_then(|p| p.get("stream_id"));
+            s.status(host, slug, token, id).await
+        }
+        (Control::Status, false) => s.set_status(host, slug, token, body).await,
+        (Control::Verify, _) => s.verify(host, slug, token, body).await,
+    };
+    reply(answer, true)
+}
+
+async fn status_call<D, K, R, S, C>(
+    State(s): Shared<Transmitter<D, K, R, S, C>>,
+    slug: Option<Path<String>>,
+    method: Method,
+    uri: Uri,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Response
+where
+    D: Directory,
+    K: Sealer,
+    R: Random,
+    S: TokenSigner,
+    C: Clock,
+{
+    control(&s, slug, Control::Status, (&method, &uri, &headers, &body)).await
+}
+
+async fn verify_call<D, K, R, S, C>(
+    State(s): Shared<Transmitter<D, K, R, S, C>>,
+    slug: Option<Path<String>>,
+    method: Method,
+    uri: Uri,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Response
+where
+    D: Directory,
+    K: Sealer,
+    R: Random,
+    S: TokenSigner,
+    C: Clock,
+{
+    control(&s, slug, Control::Verify, (&method, &uri, &headers, &body)).await
 }
 
 async fn poll<D, K, R, S, C>(
