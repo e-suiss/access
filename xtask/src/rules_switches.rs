@@ -2,7 +2,8 @@
 //! "test mode" or security-weakening switch. `fail-closed` (INV-26, TI-9): no
 //! switch turns an error, a timeout or a degraded dependency into ALLOW. Identifiers and string literals in
 //! non-test Rust code, and keys and values in configuration files, must not name
-//! one.
+//! one. Under `sdks/` (CMP-17, X21, OP-150 m.1 (a)) TypeScript and JavaScript sources are
+//! scanned too, and the PEP vocabulary also covers default-allow and skipped checks.
 
 use std::path::{Path, PathBuf};
 
@@ -22,6 +23,15 @@ const ALLOWLIST: &[(&str, &str, &str)] = &[(
 
 /// This file spells out the vocabulary it forbids.
 const SELF_PATH: &str = "xtask/src/rules_switches.rs";
+
+/// Script extensions scanned under [`SDK_PREFIX`].
+const SCRIPT_EXTENSIONS: &[&str] = &["ts", "tsx", "mts", "cts", "js", "mjs", "cjs"];
+
+/// SDK sources: the PEP and verifier packages (CMP-17).
+const SDK_PREFIX: &str = "sdks/";
+
+/// Generated SDK output that is not ours to name.
+const SDK_SKIP_PREFIXES: &[&str] = &["sdks/typescript/wasm/"];
 
 /// Configuration file extensions that are scanned.
 const CONFIG_EXTENSIONS: &[&str] = &["toml", "yml", "yaml", "json", "env", "ini", "conf", "cfg"];
@@ -135,24 +145,109 @@ pub(crate) fn fail_open_phrase(atom: &str) -> Option<String> {
     None
 }
 
+/// Faults an SDK switch could turn into ALLOW.
+const SDK_FAULT: &[&str] = &[
+    "timeout",
+    "timeouts",
+    "error",
+    "errors",
+    "failure",
+    "unavailable",
+    "unreachable",
+    "outage",
+];
+/// Allow words.
+const SDK_ALLOW: &[&str] = &["allow", "allows", "permit", "accept", "open"];
+/// Checks an SDK switch could skip.
+const SDK_CHECK: &[&str] = &[
+    "receipt",
+    "receipts",
+    "status",
+    "revocation",
+    "expiry",
+    "exp",
+    "audience",
+    "aud",
+    "signature",
+    "signatures",
+    "introspection",
+    "verify",
+    "verification",
+    "pep",
+    "enforcement",
+    "check",
+    "checks",
+    "horizon",
+    "freshness",
+];
+
+/// CMP-17, X21: the PEP SDK vocabulary on top of [`fail_open_phrase`]: an allow that
+/// follows a fault or is the default, and a check the caller can skip.
+pub(crate) fn fail_open_sdk_phrase(atom: &str) -> Option<String> {
+    if let Some(hit) = fail_open_phrase(atom) {
+        return Some(hit);
+    }
+    let w = words(atom);
+    let at = |i: usize| w.get(i).map_or("", String::as_str);
+    for i in 0..w.len() {
+        let (a, b, c) = (at(i), at(i.saturating_add(1)), at(i.saturating_add(2)));
+        let hit = if a == "on" && SDK_FAULT.contains(&b) && SDK_ALLOW.contains(&c) {
+            Some(format!("{a}_{b}_{c}"))
+        } else if (SDK_FAULT.contains(&a) || a == "default") && SDK_ALLOW.contains(&b) {
+            Some(format!("{a}_{b}"))
+        } else if SDK_ALLOW.contains(&a)
+            && matches!(b, "on" | "if" | "by")
+            && (SDK_FAULT.contains(&c) || c == "default")
+        {
+            Some(format!("{a}_{b}_{c}"))
+        } else if matches!(a, "skip" | "ignore" | "disable" | "bypass") && SDK_CHECK.contains(&b) {
+            Some(format!("{a}_{b}"))
+        } else {
+            None
+        };
+        let negated = i
+            .checked_sub(1)
+            .and_then(|p| w.get(p))
+            .is_some_and(|p| p == "no");
+        if hit.is_some() && !negated {
+            return hit;
+        }
+    }
+    None
+}
+
 const FAIL_CLOSED: &str = "fail-closed";
 
-/// One scan: the rule name, how to find a phrase and how to explain it.
+/// One scan: the rule name, how to find a phrase (everywhere, and under `sdks/`) and
+/// how to explain it.
 struct Scan {
     rule: &'static str,
     phrase: fn(&str) -> Option<String>,
+    sdk_phrase: fn(&str) -> Option<String>,
     why: &'static str,
+}
+
+impl Scan {
+    fn phrase_for(&self, rel_path: &str) -> fn(&str) -> Option<String> {
+        if rel_path.starts_with(SDK_PREFIX) {
+            self.sdk_phrase
+        } else {
+            self.phrase
+        }
+    }
 }
 
 const DEV_MODE: Scan = Scan {
     rule: RULE,
     phrase: forbidden_phrase,
+    sdk_phrase: forbidden_phrase,
     why: "no dev/test mode or security-weakening switch (TI-9, OP-69)",
 };
 
 const FAIL_OPEN: Scan = Scan {
     rule: FAIL_CLOSED,
     phrase: fail_open_phrase,
+    sdk_phrase: fail_open_sdk_phrase,
     why: "no fail-open path; errors and unknown states are DENY or REQUIRE_ACTION (INV-26, TI-9)",
 };
 
@@ -169,6 +264,7 @@ pub(crate) fn fail_open_rust(rel_path: &str, src: &str) -> Vec<Violation> {
 }
 
 fn scan_rust(scan: &Scan, rel_path: &str, src: &str) -> Vec<Violation> {
+    let phrase = scan.phrase_for(rel_path);
     let lexed = lex(src);
     let tests = test_regions(&lexed.code);
     let mut atoms: Vec<(usize, String)> = Vec::new();
@@ -184,7 +280,7 @@ fn scan_rust(scan: &Scan, rel_path: &str, src: &str) -> Vec<Violation> {
     atoms
         .into_iter()
         .filter(|(line, _)| !in_regions(&tests, *line))
-        .filter_map(|(line, atom)| (scan.phrase)(&atom).map(|p| (line, p)))
+        .filter_map(|(line, atom)| phrase(&atom).map(|p| (line, p)))
         .filter(|(_, p)| !allowlisted(rel_path, p))
         .map(|(line, p)| Violation {
             rule: scan.rule,
@@ -192,6 +288,121 @@ fn scan_rust(scan: &Scan, rel_path: &str, src: &str) -> Vec<Violation> {
             message: format!("`{p}`: {}", scan.why),
         })
         .collect()
+}
+
+/// Identifiers in code and the contents of string and template literals of a
+/// TypeScript or JavaScript source, with their lines; comments are dropped.
+fn script_atoms(src: &str) -> Vec<(usize, String)> {
+    let chars: Vec<char> = src.chars().collect();
+    let mut out = Vec::new();
+    let mut line = 1_usize;
+    let mut i = 0_usize;
+    let mut word = String::new();
+    let mut word_line = 1_usize;
+    let flush = |word: &mut String, at: usize, out: &mut Vec<(usize, String)>| {
+        if !word.is_empty() {
+            out.push((at, std::mem::take(word)));
+        }
+    };
+    while let Some(&c) = chars.get(i) {
+        let next = chars.get(i.saturating_add(1)).copied();
+        if c == '/' && next == Some('/') {
+            flush(&mut word, word_line, &mut out);
+            while chars.get(i).is_some_and(|&c| c != '\n') {
+                i = i.saturating_add(1);
+            }
+            continue;
+        }
+        if c == '/' && next == Some('*') {
+            flush(&mut word, word_line, &mut out);
+            i = i.saturating_add(2);
+            while let Some(&c) = chars.get(i) {
+                if c == '\n' {
+                    line = line.saturating_add(1);
+                }
+                if c == '*' && chars.get(i.saturating_add(1)) == Some(&'/') {
+                    i = i.saturating_add(2);
+                    break;
+                }
+                i = i.saturating_add(1);
+            }
+            continue;
+        }
+        if matches!(c, '"' | '\'' | '`') {
+            flush(&mut word, word_line, &mut out);
+            let start = line;
+            let mut text = String::new();
+            i = i.saturating_add(1);
+            while let Some(&s) = chars.get(i) {
+                i = i.saturating_add(1);
+                if s == '\\' {
+                    if let Some(&escaped) = chars.get(i) {
+                        text.push(escaped);
+                        i = i.saturating_add(1);
+                    }
+                    continue;
+                }
+                if s == c {
+                    break;
+                }
+                if s == '\n' {
+                    line = line.saturating_add(1);
+                }
+                text.push(s);
+            }
+            out.push((start, text));
+            continue;
+        }
+        if c.is_alphanumeric() || c == '_' || c == '$' {
+            if word.is_empty() {
+                word_line = line;
+            }
+            word.push(c);
+        } else {
+            flush(&mut word, word_line, &mut out);
+            if c == '\n' {
+                line = line.saturating_add(1);
+            }
+        }
+        i = i.saturating_add(1);
+    }
+    flush(&mut word, word_line, &mut out);
+    out
+}
+
+/// True for script files that only run as tests.
+fn is_script_test(rel_path: &str) -> bool {
+    let name = rel_path.rsplit('/').next().unwrap_or_default();
+    rel_path
+        .split('/')
+        .any(|p| matches!(p, "tests" | "test" | "__tests__" | "e2e"))
+        || [".test.", ".spec."].iter().any(|t| name.contains(t))
+}
+
+fn scan_script(scan: &Scan, rel_path: &str, src: &str) -> Vec<Violation> {
+    let phrase = scan.phrase_for(rel_path);
+    let mut out = Vec::new();
+    for (line, atom) in script_atoms(src) {
+        let hits = atom
+            .split(|c: char| c.is_whitespace() || "\"'=:,;[]{}()".contains(c))
+            .filter_map(phrase)
+            .filter(|p| !allowlisted(rel_path, p))
+            .collect::<Vec<_>>();
+        for p in hits {
+            out.push(Violation {
+                rule: scan.rule,
+                path: PathBuf::from(format!("{rel_path}:{line}")),
+                message: format!("`{p}`: {}", scan.why),
+            });
+        }
+    }
+    out
+}
+
+/// Violations in an SDK script's identifiers and string literals.
+#[cfg(test)]
+pub(crate) fn fail_open_script(rel_path: &str, src: &str) -> Vec<Violation> {
+    scan_script(&FAIL_OPEN, rel_path, src)
 }
 
 /// Violations in a configuration file; `#` comments are skipped.
@@ -210,6 +421,7 @@ pub(crate) fn fail_open_config(rel_path: &str, text: &str) -> Vec<Violation> {
 const NEGATIONS: &[&str] = &["no", "not", "never", "without"];
 
 fn scan_config(scan: &Scan, rel_path: &str, text: &str) -> Vec<Violation> {
+    let phrase = scan.phrase_for(rel_path);
     let mut out = Vec::new();
     for (i, line) in text.lines().enumerate() {
         let content = match line.find('#') {
@@ -232,7 +444,7 @@ fn scan_config(scan: &Scan, rel_path: &str, text: &str) -> Vec<Violation> {
             if negated {
                 continue;
             }
-            if let Some(p) = (scan.phrase)(atom).filter(|p| !allowlisted(rel_path, p)) {
+            if let Some(p) = phrase(atom).filter(|p| !allowlisted(rel_path, p)) {
                 out.push(Violation {
                     rule: scan.rule,
                     path: PathBuf::from(format!("{rel_path}:{}", i.saturating_add(1))),
@@ -270,6 +482,13 @@ fn check_with(root: &Path, scan: &Scan) -> Result<Vec<Violation>, String> {
         if ext == "rs" {
             if !is_test_file(&rel_path) {
                 out.extend(scan_rust(scan, &rel_path, &read(&path)?));
+            }
+        } else if SCRIPT_EXTENSIONS.contains(&ext) {
+            if rel_path.starts_with(SDK_PREFIX)
+                && !is_script_test(&rel_path)
+                && !SDK_SKIP_PREFIXES.iter().any(|p| rel_path.starts_with(p))
+            {
+                out.extend(scan_script(scan, &rel_path, &read(&path)?));
             }
         } else if (CONFIG_EXTENSIONS.contains(&ext) || name.starts_with(".env"))
             && !CONFIG_SKIP_PREFIXES.iter().any(|p| rel_path.starts_with(p))
@@ -379,6 +598,58 @@ mod tests {
         let test_only = "#[cfg(test)]\nmod tests { fn allow_on_error_is_rejected() {} }\n";
         assert!(fail_open_config("a.toml", "title = \"never fail-open\"\n").is_empty());
         assert!(fail_open_rust("a.rs", test_only).is_empty());
+    }
+
+    // CMP-17, X21, TI-9, OP-150 m.1 (a)
+    #[test]
+    fn sdk_vocabulary_names_default_allow_and_skipped_checks() {
+        for atom in [
+            "defaultAllow",
+            "allow_by_default",
+            "timeoutAllow",
+            "onUnavailableAllow",
+            "ALLOW_IF_UNREACHABLE",
+            "skipReceiptCheck",
+            "ignore_status",
+            "disableRevocation",
+            "bypassPep",
+            "failOpen",
+        ] {
+            assert!(fail_open_sdk_phrase(atom).is_some(), "{atom}");
+        }
+        for atom in [
+            "allowed",
+            "statusList",
+            "receipt",
+            "onError",
+            "timeout_ms",
+            "checkValidity",
+            "no_default_allow",
+            "verifyCoseSign1",
+        ] {
+            assert!(fail_open_sdk_phrase(atom).is_none(), "{atom}");
+        }
+        assert!(fail_open_phrase("defaultAllow").is_none());
+    }
+
+    // CMP-17, X21, TI-9, OP-150 m.1 (a)
+    #[test]
+    fn sdk_scripts_are_scanned_outside_comments_and_tests() {
+        let src = "// a failOpen option is forbidden\n/* skipReceipt */\nexport interface Options {\n  failOpen?: boolean;\n}\nconst mode = \"degraded-allow\";\nconst ok = `checked ${x}`;\n";
+        let v = fail_open_script("sdks/typescript/src/pep.ts", src);
+        let lines: Vec<String> = v.iter().map(|v| v.path.display().to_string()).collect();
+        assert_eq!(
+            lines,
+            [
+                "sdks/typescript/src/pep.ts:4",
+                "sdks/typescript/src/pep.ts:6"
+            ]
+        );
+        assert!(is_script_test("sdks/typescript/src/pep.test.ts"));
+        assert!(!is_script_test("sdks/typescript/src/pep.ts"));
+        let rust = "pub struct Options { pub skip_receipt: bool }";
+        assert_eq!(fail_open_rust("sdks/rust/access/src/a.rs", rust).len(), 1);
+        assert!(fail_open_rust("crates/http/src/a.rs", rust).is_empty());
     }
 
     #[test]
