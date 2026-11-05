@@ -280,6 +280,12 @@ impl<K: Keys, B: Binding, S: Salts, C> Domains<K, B, S, C> {
     ) -> Result<Digest, CoreError> {
         let domain = create_genesis(&self.setup.sequencer, tenant, fields, recorded_at).await?;
         self.setup.keys.open_domain(&domain)?;
+        // SAI-46, OP-146 m.16 (m)
+        if let Some(path) = &self.setup.signer
+            && !open_keyring(path, domain).await
+        {
+            return Err(CoreError::Unavailable("signer"));
+        }
         Ok(domain)
     }
 }
@@ -335,12 +341,17 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
             Err(e) => return Err(e.into()),
         };
         let reader = PgReader::new(s.app.clone(), id);
+        // SAI-46
+        let signer_open = match &s.signer {
+            Some(path) => open_keyring(path, domain).await,
+            None => false,
+        };
         Ok(Led {
             core: Authority::new(leader, reader, s.binding.clone(), s.salts.clone(), domain)
                 .with_pseudonyms(pseudonyms),
             clock: s.clock.clone(),
             tokens,
-            signer_open: false,
+            signer_open,
         })
     }
 
@@ -429,8 +440,9 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
         if let (Ok(r), Some(path)) = (&mut result, &self.setup.signer)
             && let Some(payload) = r.receipt.clone()
         {
-            r.signed_receipt =
-                sign_artefact(path, led, domain, Artefact::Receipt, payload, now).await;
+            r.signed_receipt = sign_artefact(path, led, domain, Artefact::Receipt, payload, now)
+                .await
+                .ok();
         }
         // OP-149 m.9: kept for GET /access/v1/exercises/{id}; without it the answer comes from state
         if let Ok(r) = &result
@@ -448,7 +460,9 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
         if let (Ok(r), Some(path)) = (&mut result, &self.setup.signer)
             && let Some(payload) = r.pap.clone()
         {
-            r.signed_pap = sign_artefact(path, led, domain, Artefact::Pap, payload, now).await;
+            r.signed_pap = sign_artefact(path, led, domain, Artefact::Pap, payload, now)
+                .await
+                .ok();
         }
         if let Ok(r) = &mut result
             && let Some(pos) = r.record
@@ -616,7 +630,7 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
                 Some(
                     sign_artefact(path, led, domain, Artefact::KeyLookup, payload, now)
                         .await
-                        .ok_or(CoreError::Unavailable("signer"))?,
+                        .map_err(CoreError::Unavailable)?,
                 )
             }
             (true, None) => return Err(CoreError::Unavailable("signer")),
@@ -784,8 +798,43 @@ enum Artefact {
     KeyLookup,
 }
 
+/// The signer's stable error codes; a code not listed reads as `signer-error`.
+const SIGNER_CODES: [&str; 7] = [
+    "signer-binding",
+    "signer-unknown-domain",
+    "signer-time",
+    "signer-no-key",
+    "signer-usage",
+    "signer-encode",
+    "signer-note",
+];
+
+/// The stable reason of a signer's refusal (OP-149 m.5): a domain's first operational key
+/// signs only `T_publish_lead` after it is published (SAI-46), and until then the signer
+/// answers `signer-no-key`.
+fn signer_reason(code: &str) -> &'static str {
+    SIGNER_CODES
+        .into_iter()
+        .find(|c| *c == code)
+        .unwrap_or("signer-error")
+}
+
+/// Opens the keyring of `domain` in the signer at `path`, so that its key schedule runs; the
+/// signer keeps an open keyring as it is (OP-143 m.4).
+async fn open_keyring(path: &std::path::Path, domain: Digest) -> bool {
+    use access_authority_signer::adapters::call;
+    use access_authority_signer::protocol::{Request as SignRequest, Response as SignResponse};
+    let open = SignRequest::Open(Box::new(access_authority_signer::domain::default_template(
+        domain,
+    )));
+    matches!(call(path, &open).await, Ok(SignResponse::Opened))
+}
+
 /// Asks the signer at `path` to sign an artefact payload, opening the domain's keyring first
 /// (L2-RCP-2, L2-PAP-2).
+///
+/// # Errors
+/// The signer's stable reason, or `signer-unreachable`.
 async fn sign_artefact<B: Binding, S: Salts, C>(
     path: &std::path::Path,
     led: &mut Led<B, S, C>,
@@ -793,15 +842,12 @@ async fn sign_artefact<B: Binding, S: Salts, C>(
     artefact: Artefact,
     payload: Vec<u8>,
     at: u64,
-) -> Option<(Vec<u8>, Vec<u8>)> {
+) -> Result<(Vec<u8>, Vec<u8>), &'static str> {
     use access_authority_signer::adapters::call;
     use access_authority_signer::protocol::{Request as SignRequest, Response as SignResponse};
     use access_kernel::verify::key_scope::KeyUsage;
     if !led.signer_open {
-        let open = SignRequest::Open(Box::new(access_authority_signer::domain::default_template(
-            domain,
-        )));
-        led.signer_open = matches!(call(path, &open).await, Ok(SignResponse::Opened));
+        led.signer_open = open_keyring(path, domain).await;
     }
     let (usage, content_type) = match artefact {
         Artefact::Receipt => (KeyUsage::Receipt, access_kernel::receipt::CONTENT_TYPE),
@@ -816,8 +862,10 @@ async fn sign_artefact<B: Binding, S: Salts, C>(
         at,
     };
     match call(path, &sign).await {
-        Ok(SignResponse::Signed { sign1, excerpt }) => Some((sign1, excerpt)),
-        _ => None,
+        Ok(SignResponse::Signed { sign1, excerpt }) => Ok((sign1, excerpt)),
+        Ok(SignResponse::Error(code)) => Err(signer_reason(&code)),
+        Ok(_) => Err("signer-error"),
+        Err(_) => Err("signer-unreachable"),
     }
 }
 
