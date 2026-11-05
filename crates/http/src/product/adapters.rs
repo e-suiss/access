@@ -225,11 +225,12 @@ fn respond(reply: Reply, headers: &HeaderMap) -> Response {
         Reply::NotFound(code) => {
             Problem::new(StatusCode::NOT_FOUND, code, "Not Found").into_response()
         }
-        Reply::Unavailable => Problem::new(
+        Reply::Unavailable(reason) => Problem::new(
             StatusCode::SERVICE_UNAVAILABLE,
             "unavailable",
             "Service Unavailable",
         )
+        .with_reason(reason)
         .into_response(),
         Reply::Limited => Problem::new(
             StatusCode::TOO_MANY_REQUESTS,

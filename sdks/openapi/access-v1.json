@@ -1171,6 +1171,30 @@
           "detail": {
             "type": "string",
             "description": "Detail."
+          },
+          "reason": {
+            "type": "string",
+            "description": "A stable, non-secret reason narrowing `code`, such as `signer-no-key` on a 503 while a new domain's first operational key is in its publish lead (SAI-46)."
+          },
+          "errors": {
+            "type": "array",
+            "description": "The parts of the request a protocol problem is about (RFC 9457 §3); never request values.",
+            "items": {
+              "type": "object",
+              "required": [
+                "code"
+              ],
+              "properties": {
+                "pointer": {
+                  "type": "string",
+                  "description": "A JSON Pointer (RFC 6901) into the request body, as a URI fragment, e.g. `#/set/basis`."
+                },
+                "code": {
+                  "type": "string",
+                  "description": "Stable code of what is wrong there."
+                }
+              }
+            }
           }
         }
       },

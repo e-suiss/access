@@ -13,10 +13,23 @@ pub const TYPE_PREFIX: &str = "urn:suiss:access:problem:";
 /// `about:blank` (OP-149 m.12).
 pub const BARE: [&str; 3] = ["not_found", "internal", "unavailable"];
 
+/// One part of a request a problem is about (RFC 9457 §3): the stable code of what is wrong
+/// and, when the body names it, where.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct FieldError {
+    /// A JSON Pointer (RFC 6901) into the request body, as a URI fragment (`#/set/basis`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pointer: Option<String>,
+    /// The stable code of what is wrong there.
+    pub code: &'static str,
+}
+
 /// An RFC 9457 problem response.
 ///
 /// `type` is `urn:suiss:access:problem:<code>` for the stable code, which also travels in the
-/// `code` extension member; a [`BARE`] code keeps `about:blank` (OP-149 m.12).
+/// `code` extension member; a [`BARE`] code keeps `about:blank` (OP-149 m.12). The `reason`
+/// extension member narrows the code with a stable, non-secret reason, and `errors` names the
+/// parts of the request a protocol problem is about; neither carries request values.
 #[derive(Debug, Serialize)]
 pub struct Problem {
     #[serde(rename = "type")]
@@ -24,6 +37,10 @@ pub struct Problem {
     title: &'static str,
     status: u16,
     code: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reason: Option<&'static str>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    errors: Vec<FieldError>,
     #[serde(skip)]
     status_code: StatusCode,
 }
@@ -42,8 +59,24 @@ impl Problem {
             title,
             status: status.as_u16(),
             code,
+            reason: None,
+            errors: Vec::new(),
             status_code: status,
         }
+    }
+
+    /// With a stable, non-secret `reason` that narrows the code.
+    #[must_use]
+    pub const fn with_reason(mut self, reason: Option<&'static str>) -> Self {
+        self.reason = reason;
+        self
+    }
+
+    /// With the parts of the request it is about.
+    #[must_use]
+    pub fn with_errors(mut self, errors: Vec<FieldError>) -> Self {
+        self.errors = errors;
+        self
     }
 }
 

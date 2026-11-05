@@ -42,8 +42,8 @@ pub enum Reply {
     Unauthenticated,
     /// 404 with a stable code.
     NotFound(&'static str),
-    /// 503.
-    Unavailable,
+    /// 503, with a stable, non-secret reason when there is one.
+    Unavailable(Option<&'static str>),
     /// 429.
     Limited,
 }
@@ -60,7 +60,7 @@ fn failed(e: &CoreError) -> Reply {
     match e {
         CoreError::Protocol(code) => Reply::Bad(code),
         CoreError::Limited => Reply::Limited,
-        _ => Reply::Unavailable,
+        _ => Reply::Unavailable(crate::adp::app::unavailable_reason(e)),
     }
 }
 
@@ -91,7 +91,7 @@ impl<K: KeyDirectory, T: Tenants, S> Service<K, T, S> {
     fn keys_reply(answer: &KeyAnswer, form: Form) -> Reply {
         let (body, excerpt) = match (&answer.signed, form) {
             (Some((sign1, excerpt)), Form::Cose) => (sign1.clone(), Some(excerpt.clone())),
-            (None, Form::Cose) => return Reply::Unavailable,
+            (None, Form::Cose) => return Reply::Unavailable(Some("signer")),
             (_, Form::Json) => (domain::lookup_json(answer).to_string().into_bytes(), None),
         };
         Reply::Keys {
@@ -160,7 +160,7 @@ impl<K: KeyDirectory, T: Tenants, S> Service<K, T, S> {
         match self.tenants.tenant(id).await {
             Ok(Some(t)) => Reply::Json(domain::snapshot(tenant, &t, &self.region)),
             Ok(None) => Reply::NotFound("tenant-unknown"),
-            Err(_) => Reply::Unavailable,
+            Err(_) => Reply::Unavailable(None),
         }
     }
 
@@ -178,13 +178,13 @@ impl<K: KeyDirectory, T: Tenants, S> Service<K, T, S> {
             },
         };
         let Ok(page) = self.tenants.after(after, TENANT_PAGE).await else {
-            return Reply::Unavailable;
+            return Reply::Unavailable(None);
         };
         let mut items = Vec::with_capacity(page.len());
         let mut last = None;
         for t in &page {
             let Some(id) = self.tenants.external(t.id) else {
-                return Reply::Unavailable;
+                return Reply::Unavailable(None);
             };
             items.push(domain::snapshot(&id, t, &self.region));
             last = Some(id);
@@ -221,7 +221,7 @@ impl<K: KeyDirectory + Exercises, T: Tenants, S: Subjects> Service<K, T, S> {
         {
             Ok(Some(found)) => Reply::Json(domain::resolution_json(&req, &found)),
             Ok(None) => Reply::NotFound("client-unknown"),
-            Err(_) => Reply::Unavailable,
+            Err(_) => Reply::Unavailable(None),
         }
     }
 
@@ -272,7 +272,7 @@ impl<K: KeyDirectory + Exercises, T: Tenants, S: Subjects> Service<K, T, S> {
             Ok(Some(r)) => match domain::agency_json(&domain, &r) {
                 Ok(Some(v)) => Reply::Json(v),
                 Ok(None) => Reply::NotFound("receipt-unavailable"),
-                Err(_) => Reply::Unavailable,
+                Err(_) => Reply::Unavailable(None),
             },
             Ok(None) => Reply::NotFound("exercise-unknown"),
             Err(e) => failed(&e),

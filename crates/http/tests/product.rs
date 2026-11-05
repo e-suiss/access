@@ -46,6 +46,8 @@ const DOMAIN: Digest = Digest([1; 32]);
 const ACTIVE: [u8; 32] = [0xa1; 32];
 const ENDED: [u8; 32] = [0xa2; 32];
 const COMPROMISED: [u8; 32] = [0xa3; 32];
+/// Asked for signed, its answer waits for the domain's first operational key (SAI-46).
+const PENDING: [u8; 32] = [0xa4; 32];
 const SIGN1: [u8; 4] = [0xd2, 0x84, 0x40, 0xa0];
 const EXCERPT: [u8; 2] = [0xd2, 0x84];
 const T0: u64 = 1_793_786_400_000;
@@ -105,6 +107,9 @@ impl KeyDirectory for Ledger {
         }
         if as_of == AsOf::Position(99) {
             return Err(CoreError::Unavailable("consistency"));
+        }
+        if sign && kids.contains(&PENDING) {
+            return Err(CoreError::Unavailable("signer-no-key"));
         }
         let (keys, unknown): (Vec<_>, Vec<_>) = kids.iter().partition(|k| entry(**k).is_some());
         Ok(KeyAnswer {
@@ -615,6 +620,8 @@ async fn lookups_are_refused_plainly() {
     assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
     // OP-149 m.12: a bare status keeps about:blank
     assert_eq!(problem_type(&body), "about:blank");
+    let v: Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(v["reason"], "consistency");
     let no_domain = Request::get(format!("/access/v1/keys/{}", b64url_encode(&ACTIVE)))
         .body(Body::empty())
         .unwrap();
@@ -1111,4 +1118,110 @@ fn platform_examples_meet_the_contract() {
         doc["components"]["securitySchemes"]["platform_client"]["scheme"],
         "bearer"
     );
+}
+
+// OP-149 m.5, SAI-46, OP-149 m.12: while a domain's first operational key is in its publish
+// lead, the signed answer is a 503 whose reason says so; the unsigned form is answered
+#[tokio::test]
+async fn a_signed_lookup_names_why_it_waits() {
+    let (status, _, body) = call(app(true), get_key(PENDING, None, "")).await;
+    assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
+    let v: Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(
+        (v["code"].as_str(), v["reason"].as_str()),
+        (Some("unavailable"), Some("signer-no-key"))
+    );
+    let (status, _, _) = call(app(true), batch(&[ACTIVE, PENDING], "application/cose")).await;
+    assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
+    let (status, _, _) = call(app(true), batch(&[ACTIVE, PENDING], "application/json")).await;
+    assert_eq!(status, StatusCode::OK);
+}
+
+/// Refuses every eligibility check the way the core does: with `code` for `reason`.
+struct Refusing(CoreError);
+
+impl Pdp for Refusing {
+    async fn evaluate(&self, _inc: Incoming) -> Result<Response, CoreError> {
+        Err(CoreError::Protocol("unused"))
+    }
+
+    async fn eligible(&self, _inc: Incoming, _subject: Id) -> Result<Response, CoreError> {
+        Err(match &self.0 {
+            CoreError::Protocol(r) => CoreError::Protocol(r),
+            CoreError::Unavailable(r) => CoreError::Unavailable(r),
+            _ => CoreError::Limited,
+        })
+    }
+}
+
+async fn eligibility_with<P: Pdp + 'static>(pdp: P, body: &Value) -> (StatusCode, Value) {
+    let limits = Limits::default();
+    let routes = adp_router(
+        AdpService::new(pdp, limits.max_body_bytes),
+        AdpDiscovery {
+            issuer: "https://access.test".to_owned(),
+        },
+    )
+    .layer(axum::Extension(Pep("product-client".to_owned())));
+    let req = Request::post("/access/v1/eligibility:check")
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(body.to_string()))
+        .unwrap();
+    let (status, _, bytes) = call(harden(routes, limits), req).await;
+    (status, serde_json::from_slice(&bytes).unwrap())
+}
+
+// OP-149 m.10, m.12, RFC 9457 §3: a refused eligibility check names the part of the body it
+// is about, by stable code and JSON Pointer, never by value; a 503 names its reason
+#[tokio::test]
+async fn eligibility_problems_name_the_refused_part() {
+    let mut body = eligibility_request();
+    body["set"]["basis"] = json!({ "holding": { "grant": "x" } });
+    let (status, v) = eligibility(&body).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(
+        v["errors"],
+        json!([{ "pointer": "#/set/basis", "code": "basis" }])
+    );
+    let mut body = eligibility_request();
+    body["subject"] = json!("not-an-id");
+    let (_, v) = eligibility(&body).await;
+    assert_eq!(
+        v["errors"],
+        json!([{ "pointer": "#/subject", "code": "subject" }])
+    );
+
+    let (status, v) = eligibility_with(
+        Refusing(CoreError::Protocol("domain")),
+        &eligibility_request(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(v["code"], "protocol");
+    assert_eq!(
+        v["errors"],
+        json!([{ "pointer": "#/set/domain", "code": "domain" }])
+    );
+    let (_, v) = eligibility_with(
+        Refusing(CoreError::Protocol("consistency_token")),
+        &eligibility_request(),
+    )
+    .await;
+    assert_eq!(
+        v["errors"],
+        json!([{ "pointer": "#/as_of", "code": "consistency_token" }])
+    );
+    let (_, v) = eligibility_with(
+        Refusing(CoreError::Protocol("eligibility")),
+        &eligibility_request(),
+    )
+    .await;
+    assert_eq!(v["errors"], json!([{ "code": "eligibility" }]));
+    let (status, v) = eligibility_with(
+        Refusing(CoreError::Unavailable("lease-held")),
+        &eligibility_request(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
+    assert_eq!(v["reason"], "lease-held");
 }

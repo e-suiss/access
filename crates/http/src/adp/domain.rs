@@ -33,6 +33,42 @@ pub struct Decoded {
 
 type R<T> = Result<T, AdpError>;
 
+/// Which body a request came in: an ADP request with its `context`, or an eligibility check
+/// with its `set` (OP-149 m.10).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Body {
+    /// `evaluation`, `evaluations`, `explain` and `search`.
+    Context,
+    /// `eligibility:check`.
+    Eligibility,
+}
+
+/// Where in `body` the part a protocol `code` names is, as a URI fragment JSON Pointer
+/// (RFC 6901, RFC 9457 §3); `None` for a code that names no single member.
+#[must_use]
+pub fn pointer(body: Body, code: &str) -> Option<String> {
+    let at = match body {
+        Body::Context => "#/context",
+        Body::Eligibility => "#/set",
+    };
+    let member = match (body, code) {
+        (Body::Eligibility, "subject" | "set") => return Some(format!("#/{code}")),
+        (Body::Eligibility, "consistency_token") => return Some(String::from("#/as_of")),
+        (Body::Context, "context") => return Some(String::from("#/context")),
+        (
+            _,
+            "domain" | "nonce" | "payload" | "mode" | "basis" | "capacity" | "proofs" | "exercise"
+            | "consistency_token" | "ais" | "intent" | "query" | "record" | "scope",
+        ) => code,
+        (_, "intent-validity" | "window") => "intent/validity",
+        (_, "action") => "intent/action",
+        (_, "resource") => "intent/resources",
+        (_, "param") => "intent/params",
+        _ => return None,
+    };
+    Some(format!("{at}/{member}"))
+}
+
 /// The members of one object; whatever is left unread is an unknown member (L1-ADP-9).
 struct Obj<'a> {
     members: Vec<(&'a str, &'a Json)>,
@@ -95,6 +131,17 @@ fn bytes(v: &Json, what: &'static str) -> R<Vec<u8>> {
 
 fn fixed<const N: usize>(v: &Json, what: &'static str) -> R<[u8; N]> {
     <[u8; N]>::try_from(bytes(v, what)?.as_slice()).map_err(|_| AdpError(what))
+}
+
+/// An error of a generic part as the member it sits in: `id` or `digest` alone names nothing.
+fn within(member: &'static str) -> impl Fn(AdpError) -> AdpError {
+    move |e| {
+        if matches!(e.0, "id" | "digest") {
+            AdpError(member)
+        } else {
+            e
+        }
+    }
 }
 
 fn id(v: &Json) -> R<Id> {
@@ -442,7 +489,7 @@ const NOT_IN_SET: [&str; 6] = [
 pub fn decode_eligibility(body: &[u8], max_len: usize) -> R<(Decoded, Id)> {
     let root = access_kernel::json::parse(body, max_len).map_err(|_| AdpError("json"))?;
     let mut top = Obj::of(&root, "eligibility")?;
-    let subject = id(top.req("subject", "subject")?)?;
+    let subject = id(top.req("subject", "subject")?).map_err(within("subject"))?;
     let set = top.req("set", "set")?;
     let as_of = top.opt("as_of").cloned();
     top.done()?;
@@ -457,7 +504,7 @@ pub fn decode_eligibility(body: &[u8], max_len: usize) -> R<(Decoded, Id)> {
     if let Some(t) = &as_of {
         ctx.members.push(("consistency_token", t));
     }
-    let intent = intent(ctx.req("intent", "intent")?)?;
+    let intent = intent(ctx.req("intent", "intent")?).map_err(within("intent"))?;
     let decoded = context(&mut ctx, intent)?;
     ctx.done()?;
     Ok((decoded, subject))
@@ -567,19 +614,23 @@ fn context(ctx: &mut Obj<'_>, intent: IntentEnvelope) -> R<Decoded> {
         .map(|p| Payload::from_bytes(&bytes(p, "payload")?).map_err(|_| AdpError("payload")))
         .transpose()?;
     let request = Request {
-        domain: digest(ctx.req("domain", "domain")?)?,
+        domain: digest(ctx.req("domain", "domain")?).map_err(within("domain"))?,
         mode: mode(ctx.req("mode", "mode")?)?,
         nonce,
         intent,
         payload,
-        basis: basis(ctx.req("basis", "basis")?)?,
-        capacity: capacity(ctx.req("capacity", "capacity")?)?,
+        basis: basis(ctx.req("basis", "basis")?).map_err(within("basis"))?,
+        capacity: capacity(ctx.req("capacity", "capacity")?).map_err(within("capacity"))?,
         proofs: ctx
             .opt("proofs")
             .map(proofs)
             .transpose()?
             .unwrap_or_default(),
-        exercise: ctx.opt("exercise").map(digest).transpose()?,
+        exercise: ctx
+            .opt("exercise")
+            .map(digest)
+            .transpose()
+            .map_err(within("exercise"))?,
         consistency: ctx
             .opt("consistency_token")
             .map(|t| text(t, "consistency_token"))

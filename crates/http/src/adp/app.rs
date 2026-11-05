@@ -6,24 +6,25 @@ use access_kernel::combinator::{Mode, Outcome};
 use serde_json::Value;
 
 use crate::adp::domain::{
-    Decoded, Semantic, decode, decode_batch, decode_eligibility, decode_explain, decode_search,
-    encode, encode_for, encode_search,
+    AdpError, Body, Decoded, Semantic, decode, decode_batch, decode_eligibility, decode_explain,
+    decode_search, encode, encode_for, encode_search, pointer,
 };
 use crate::adp::ports::Pdp;
+use crate::problem::FieldError;
 
 /// What the transport sends back.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Reply {
     /// 200 with a decision.
     Decision(Value),
-    /// 400: a protocol error; nothing is recorded.
-    Protocol(&'static str),
+    /// 400: a protocol error with the parts of the body it is about; nothing is recorded.
+    Protocol(&'static str, Vec<FieldError>),
     /// 401: no authenticated PEP.
     Unauthenticated,
     /// 422: the nonce belongs to another intent or actor.
     Conflict,
-    /// 503: the domain cannot decide now.
-    Unavailable,
+    /// 503: the domain cannot decide now, with a stable reason when there is one.
+    Unavailable(Option<&'static str>),
     /// 429: over a rate limit (§13.7.4, OP-35).
     Limited,
 }
@@ -51,8 +52,8 @@ impl<P: Pdp> Service<P> {
             return Reply::Unauthenticated;
         };
         match decode(body, self.max_body) {
-            Ok(d) => self.decide(d, pep, false).await,
-            Err(e) => Reply::Protocol(e.0),
+            Ok(d) => self.decide(d, pep, false, Body::Context).await,
+            Err(e) => bad(e, Body::Context),
         }
     }
 
@@ -64,7 +65,7 @@ impl<P: Pdp> Service<P> {
         };
         let (items, semantic) = match decode_batch(body, self.max_body) {
             Ok(b) => b,
-            Err(e) => return Reply::Protocol(e.0),
+            Err(e) => return bad(e, Body::Context),
         };
         let mut out = Vec::with_capacity(items.len());
         let mut stopped = false;
@@ -74,8 +75,8 @@ impl<P: Pdp> Service<P> {
                 continue;
             }
             let reply = match item {
-                Ok(d) => self.decide(d, pep.clone(), false).await,
-                Err(e) => Reply::Protocol(e.0),
+                Ok(d) => self.decide(d, pep.clone(), false, Body::Context).await,
+                Err(e) => bad(e, Body::Context),
             };
             // OP-141 m.25: a limit is the batch's answer, never an item inside a 200; items
             // already committed are answered again on retry with the same nonce (L2-REC-5)
@@ -84,9 +85,9 @@ impl<P: Pdp> Service<P> {
             }
             let value = match reply {
                 Reply::Decision(v) => v,
-                Reply::Protocol(code) => serde_json::json!({ "error": code }),
+                Reply::Protocol(code, _) => serde_json::json!({ "error": code }),
                 Reply::Conflict => serde_json::json!({ "error": "nonce-conflict" }),
-                Reply::Unavailable | Reply::Limited => {
+                Reply::Unavailable(_) | Reply::Limited => {
                     serde_json::json!({ "error": "unavailable" })
                 }
                 Reply::Unauthenticated => serde_json::json!({ "error": "pep-unauthenticated" }),
@@ -111,7 +112,7 @@ impl<P: Pdp> Service<P> {
         };
         let (decoded, record) = match decode_explain(body, self.max_body) {
             Ok(d) => d,
-            Err(e) => return Reply::Protocol(e.0),
+            Err(e) => return bad(e, Body::Context),
         };
         if let Some((record, scope)) = record {
             let mode = decoded.request.mode;
@@ -130,13 +131,13 @@ impl<P: Pdp> Service<P> {
                     }
                     Reply::Decision(v)
                 }
-                Err(e) => failed(e),
+                Err(e) => failed(e, Body::Context),
             };
         }
         if decoded.request.mode != Mode::Check {
-            return Reply::Protocol("explain-mode");
+            return bad(AdpError("explain-mode"), Body::Context);
         }
-        match self.decide(decoded, pep, true).await {
+        match self.decide(decoded, pep, true, Body::Context).await {
             Reply::Decision(mut v) => {
                 if let Some(ctx) = v.get_mut("context").and_then(Value::as_object_mut) {
                     ctx.insert(String::from("kind"), Value::from("hypothetical"));
@@ -156,7 +157,7 @@ impl<P: Pdp> Service<P> {
         };
         let (decoded, subject) = match decode_eligibility(body, self.max_body) {
             Ok(d) => d,
-            Err(e) => return Reply::Protocol(e.0),
+            Err(e) => return bad(e, Body::Eligibility),
         };
         let inc = Incoming {
             request: decoded.request,
@@ -169,7 +170,7 @@ impl<P: Pdp> Service<P> {
                 "eligible": r.decision.outcome == Outcome::Allow,
                 "consistency_token": r.consistency,
             })),
-            Err(e) => failed(e),
+            Err(e) => failed(e, Body::Eligibility),
         }
     }
 
@@ -181,7 +182,7 @@ impl<P: Pdp> Service<P> {
         };
         let (decoded, query, page) = match decode_search(body, self.max_body, kind) {
             Ok(d) => d,
-            Err(e) => return Reply::Protocol(e.0),
+            Err(e) => return bad(e, Body::Context),
         };
         let inc = Incoming {
             request: decoded.request,
@@ -191,11 +192,11 @@ impl<P: Pdp> Service<P> {
         };
         match self.pdp.search(inc, query, page).await {
             Ok((hits, next)) => Reply::Decision(encode_search(&hits, next.as_deref())),
-            Err(e) => failed(e),
+            Err(e) => failed(e, Body::Context),
         }
     }
 
-    async fn decide(&self, decoded: Decoded, pep: String, explain: bool) -> Reply {
+    async fn decide(&self, decoded: Decoded, pep: String, explain: bool, body: Body) -> Reply {
         let mode = decoded.request.mode;
         let inc = Incoming {
             request: decoded.request,
@@ -205,18 +206,48 @@ impl<P: Pdp> Service<P> {
         };
         match self.pdp.evaluate(inc).await {
             Ok(r) => Reply::Decision(encode(&r, mode)),
-            Err(e) => failed(e),
+            Err(e) => failed(e, body),
         }
     }
 }
 
-fn failed(e: CoreError) -> Reply {
+/// A body the decoder refused, with where in `body` the refused part is when known.
+fn bad(e: AdpError, body: Body) -> Reply {
+    Reply::Protocol(
+        e.0,
+        vec![FieldError {
+            pointer: pointer(body, e.0),
+            code: e.0,
+        }],
+    )
+}
+
+/// The stable, non-secret reason of a 503: what the domain could not reach or do.
+#[must_use]
+pub const fn unavailable_reason(e: &CoreError) -> Option<&'static str> {
+    match e {
+        CoreError::Unavailable(reason) => Some(reason),
+        CoreError::Store(_) => Some("store"),
+        CoreError::Sequencer(_) => Some("sequencer"),
+        _ => None,
+    }
+}
+
+fn failed(e: CoreError, body: Body) -> Reply {
     match e {
         CoreError::Nonce => Reply::Conflict,
         CoreError::Limited => Reply::Limited,
         CoreError::Sequencer(_) | CoreError::Store(_) | CoreError::Unavailable(_) => {
-            Reply::Unavailable
+            Reply::Unavailable(unavailable_reason(&e))
         }
-        e => Reply::Protocol(e.code()),
+        // OP-149 m.12
+        CoreError::Protocol(reason) => Reply::Protocol(
+            e.code(),
+            vec![FieldError {
+                pointer: pointer(body, reason),
+                code: reason,
+            }],
+        ),
+        e => Reply::Protocol(e.code(), Vec::new()),
     }
 }

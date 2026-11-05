@@ -146,8 +146,10 @@ fn respond(reply: Reply, headers: &HeaderMap) -> Response {
             v.to_string(),
         )
             .into_response(),
-        Reply::Protocol(code) => {
-            Problem::new(StatusCode::BAD_REQUEST, code, "Protocol Error").into_response()
+        Reply::Protocol(code, errors) => {
+            Problem::new(StatusCode::BAD_REQUEST, code, "Protocol Error")
+                .with_errors(errors)
+                .into_response()
         }
         Reply::Unauthenticated => Problem::new(
             StatusCode::UNAUTHORIZED,
@@ -161,11 +163,12 @@ fn respond(reply: Reply, headers: &HeaderMap) -> Response {
             "Nonce Conflict",
         )
         .into_response(),
-        Reply::Unavailable => Problem::new(
+        Reply::Unavailable(reason) => Problem::new(
             StatusCode::SERVICE_UNAVAILABLE,
             "unavailable",
             "Service Unavailable",
         )
+        .with_reason(reason)
         .into_response(),
         // OP-35, OP-141 m.23
         Reply::Limited => Problem::new(
