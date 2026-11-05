@@ -264,6 +264,45 @@ fn pair(v: &Value) -> Result<(&str, &Value), Malformed> {
 }
 
 impl Event {
+    /// `projection-invalidated` (§9.16, §9.9.3 k.6, P50): the projection family whose first
+    /// `projection.issue` was `root` no longer holds, because of `source`, effective `at`. The one
+    /// constructor every path that ends a family uses, so receivers see one shape.
+    #[must_use]
+    pub const fn projection_invalidated(
+        domain: Digest,
+        source: Source,
+        root: Digest,
+        at: u64,
+    ) -> Self {
+        Self {
+            kind: Kind::ProjectionInvalidated,
+            domain,
+            source,
+            subject: Subject::Projection(root),
+            at,
+            detail: Detail::None,
+        }
+    }
+
+    /// `authority-expired` (§9.16): the Grant or Mandate `subject`, issued by `source`, reached
+    /// the end of its validity `at`. Informational: expiry is deterministic and needs no signal.
+    #[must_use]
+    pub const fn authority_expired(
+        domain: Digest,
+        source: Source,
+        subject: Subject,
+        at: u64,
+    ) -> Self {
+        Self {
+            kind: Kind::AuthorityExpired,
+            domain,
+            source,
+            subject,
+            at,
+            detail: Detail::None,
+        }
+    }
+
     /// The canonical CBOR value.
     #[must_use]
     pub fn to_value(&self) -> Value {
@@ -419,6 +458,25 @@ mod tests {
             assert_eq!(Event::from_bytes(&e.to_bytes().unwrap()).unwrap(), e);
             assert_eq!(Kind::from_name(kind.name()), Some(kind));
         }
+    }
+
+    // OP-149 m.7, §9.16, §9.9.3 k.6, P50: the shared constructors give the kinds' one shape
+    #[test]
+    fn invalidated_and_expired_have_one_shape() {
+        let d = Digest([7; 32]);
+        let e = Event::projection_invalidated(d, Source::Exercise(d), Digest([2; 32]), 5);
+        assert_eq!(
+            (e.kind, e.subject, e.detail.clone()),
+            (
+                Kind::ProjectionInvalidated,
+                Subject::Projection(Digest([2; 32])),
+                Detail::None
+            )
+        );
+        assert_eq!(Event::from_bytes(&e.to_bytes().unwrap()).unwrap(), e);
+        let x = Event::authority_expired(d, Source::Exercise(d), Subject::Grant(Id([1; 16])), 6);
+        assert_eq!(x.kind.name(), "authority-expired");
+        assert_eq!(Event::from_bytes(&x.to_bytes().unwrap()).unwrap(), x);
     }
 
     // OP-149 m.7, SI-9

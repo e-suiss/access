@@ -314,3 +314,65 @@ async fn entries_are_unique_and_lists_roll_over() {
         vec![(0, 4), (1, 4), (2, 1)]
     );
 }
+
+// §9.9.3 k.6, P50, §9.16, OP-150 m.3 (a): ending a holder revokes its live families once, sets
+// their entries and gives one projection-invalidated event per family, keyed by the family's
+// first projection.issue; another holder's family is untouched
+#[tokio::test]
+async fn ending_a_holder_invalidates_its_families_once() {
+    use access_authority_core::status::adapters::revoke_holder;
+    use access_internal_api::events::{Kind, Source, Subject};
+    let db = fresh().await.unwrap();
+    let d = domain(&db, 33).await;
+    let scope = DomainId::from_bytes(d.0);
+    for n in 1..=3 {
+        let mut f = fam(n);
+        if n == 3 {
+            f.holder = [8; 16];
+        }
+        open_family(&db.sequencer, API, d, &f).await.unwrap();
+    }
+    let source = Source::Exercise(Digest([0xee; 32]));
+    let events = revoke_holder(&db.sequencer, d, &[4; 16], (2, source, NOW))
+        .await
+        .unwrap();
+    assert_eq!(
+        events
+            .iter()
+            .map(|e| (e.kind, e.subject, e.source, e.at))
+            .collect::<Vec<_>>(),
+        vec![
+            (
+                Kind::ProjectionInvalidated,
+                Subject::Projection(Digest([1; 32])),
+                source,
+                NOW
+            ),
+            (
+                Kind::ProjectionInvalidated,
+                Subject::Projection(Digest([2; 32])),
+                source,
+                NOW
+            ),
+        ]
+    );
+    assert_eq!(
+        revoke_holder(&db.sequencer, d, &[4; 16], (3, source, NOW))
+            .await
+            .unwrap(),
+        Vec::new()
+    );
+    let snap = access_store::status::snapshot(&db.app, &scope, &list_uri(API, &d, 0))
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(snap.revoked, vec![0, 1]);
+    assert_eq!(
+        family(&db.app, &scope, &[3; 16])
+            .await
+            .unwrap()
+            .unwrap()
+            .revoked_pos,
+        None
+    );
+}

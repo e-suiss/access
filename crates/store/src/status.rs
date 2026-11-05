@@ -298,3 +298,48 @@ pub async fn snapshot(
     })
     .transpose()
 }
+
+fn fixed<const N: usize>(v: &[u8]) -> Result<[u8; N], StoreError> {
+    <[u8; N]>::try_from(v).map_err(|_| StoreError::Corrupt)
+}
+
+/// The families of `holder` not yet revoked, with their entries: what ends when the holder
+/// Instance ends (§9.9.3 k.6, P50).
+///
+/// # Errors
+/// [`StoreError`].
+pub async fn live_families(
+    pool: &PgPool,
+    domain: &DomainId,
+    holder: &[u8; 16],
+) -> Result<Vec<crate::projections::Family>, StoreError> {
+    let mut t = DomainTx::begin(pool, domain).await?;
+    let rows = sqlx::query!(
+        "SELECT family_id, client_id, holder_id, root_exercise, status_uri, status_idx
+           FROM access.projection_family
+          WHERE domain_id = $1 AND holder_id = $2 AND revoked_at IS NULL
+          ORDER BY family_id",
+        domain.as_bytes().as_slice(),
+        holder.as_slice(),
+    )
+    .fetch_all(&mut *t.tx)
+    .await?;
+    t.commit().await?;
+    rows.into_iter()
+        .map(|r| {
+            let status = match (r.status_uri, r.status_idx) {
+                (Some(uri), Some(idx)) => Some((uri, unsigned(idx)?)),
+                (None, None) => None,
+                _ => return Err(StoreError::Corrupt),
+            };
+            Ok(crate::projections::Family {
+                family: fixed(&r.family_id)?,
+                client_id: r.client_id,
+                holder: fixed(&r.holder_id)?,
+                root_exercise: fixed(&r.root_exercise)?,
+                status,
+                revoked_pos: None,
+            })
+        })
+        .collect()
+}
