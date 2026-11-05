@@ -231,6 +231,8 @@ pub(crate) struct RootOut {
 /// What a product needs from the bootstrap.
 #[derive(Clone, Debug, Serialize)]
 pub(crate) struct Summary {
+    /// The version of this summary's shape.
+    pub(crate) v: u8,
     pub(crate) root: RootOut,
     pub(crate) realms: Vec<RealmOut>,
     pub(crate) clients: Vec<ClientOut>,
@@ -411,6 +413,7 @@ where
             }
         }
         Ok(Summary {
+            v: 1,
             root: RootOut {
                 party: b64url_encode(&party.0),
                 kid: b64url_encode(&thumbprint(&key)),

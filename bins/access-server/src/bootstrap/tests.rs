@@ -156,6 +156,20 @@ async fn the_bootstrap_is_idempotent() {
     let plan = plan();
     let first = w.run(&plan).await;
     assert_eq!(first.realms.len(), 2);
+    let json = serde_json::to_value(&first).unwrap();
+    assert_eq!(json["v"], 1);
+    for key in [
+        "tenant",
+        "realm",
+        "slug",
+        "issuer",
+        "discovery",
+        "domain",
+        "platform",
+        "created",
+    ] {
+        assert!(json["realms"][0].get(key).is_some(), "{key}");
+    }
     assert!(first.realms.iter().all(|r| r.created));
     let platform = &first.realms[0];
     assert!(platform.platform && !first.realms[1].platform);
@@ -282,4 +296,16 @@ fn plans_refuse_unknown_settings() {
     std::fs::write(&bad, "platform = \"platform\"\nskip_signatures = true\n").unwrap();
     assert!(Plan::load(&bad).is_err());
     assert!(Plan::load(&dir.join("missing.toml")).is_err());
+}
+
+// OP-69, OP-149 m.21: the local deployment's plan is valid
+#[test]
+fn the_local_deployment_plan_is_valid() {
+    let path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../deploy/compose/access/bootstrap.toml"
+    );
+    let plan = Plan::load(Path::new(path)).unwrap();
+    assert_eq!(plan.platform, "platform");
+    assert_eq!(plan.style, Style::Path);
 }

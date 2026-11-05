@@ -555,6 +555,22 @@ mod tests {
         }));
     }
 
+    // OP-69, OP-149 m.21, OP-55: the local deployment's configuration is valid and names the
+    // migration role
+    #[test]
+    fn the_local_deployment_configuration_is_valid() {
+        let path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../deploy/compose/access/access.toml"
+        );
+        let config: Config = Figment::from(Serialized::defaults(Config::default()))
+            .merge(Toml::file_exact(path))
+            .extract()
+            .unwrap();
+        config.validate().unwrap();
+        assert!(config.database.and_then(|d| d.migrator).is_some());
+    }
+
     // OP-63, TI-9
     #[test]
     fn unknown_configuration_key_is_rejected() {

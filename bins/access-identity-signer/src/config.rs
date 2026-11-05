@@ -129,6 +129,20 @@ mod tests {
         }
     }
 
+    // OP-69: the local deployment's configuration is valid
+    #[test]
+    fn the_local_deployment_configuration_is_valid() {
+        let path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../deploy/compose/access/access-identity-signer.toml"
+        );
+        let config: Config = Figment::from(Serialized::defaults(Config::default()))
+            .merge(Toml::file_exact(path))
+            .extract()
+            .unwrap();
+        config.validate().unwrap();
+    }
+
     // CMP-22b, CR-21: callers, a token and a sane schedule are required
     #[test]
     fn incomplete_configurations_are_refused() {

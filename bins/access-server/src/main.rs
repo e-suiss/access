@@ -4,7 +4,8 @@
 //! Two one-shot commands share the configuration and the lockdown: `access-server migrate`
 //! runs the schema migrations as the migration role (OP-55), and `access-server bootstrap
 //! <plan.toml>` creates the platform tenant, sample tenants and platform clients a local
-//! deployment starts from (OP-69, OP-149 m.21).
+//! deployment starts from (OP-69, OP-149 m.21). A command's standard output is its result, so
+//! its logs go to standard error.
 
 mod bootstrap;
 mod config;
@@ -148,7 +149,13 @@ fn main() -> ExitCode {
         }
     };
 
-    if let Err(error) = access_telemetry::init(&config.log) {
+    let logged = match command {
+        Command::Serve => access_telemetry::init(&config.log),
+        Command::Migrate | Command::Bootstrap(_) => {
+            access_telemetry::init_with_writer(&config.log, std::io::stderr)
+        }
+    };
+    if let Err(error) = logged {
         #[allow(clippy::print_stderr)]
         {
             eprintln!("access-server: {error}");
