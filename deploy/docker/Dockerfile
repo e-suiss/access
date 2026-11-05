@@ -38,6 +38,7 @@ RUN apt-get update \
       /var/lib/access/certs /var/lib/access/secrets /var/lib/access/initdb \
       /var/lib/access/signer /var/lib/access/identity-signer /var/lib/access/bootstrap /run/access \
  && chown 65532:softhsm /var/lib/softhsm/tokens \
+ && chmod 0755 /var/lib/softhsm \
  && install -d -m 0755 /etc/access/local /usr/share/access/postgres
 COPY --from=builder /src/target/release/access-server /src/target/release/access-signer \
      /src/target/release/access-identity-signer /usr/local/bin/
