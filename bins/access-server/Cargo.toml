@@ -29,6 +29,7 @@ access-telemetry = { workspace = true }
 axum = { workspace = true, features = ["http1", "http2", "tokio"] }
 figment = { workspace = true, features = ["env", "toml"] }
 serde = { workspace = true, features = ["derive", "std"] }
+serde_json = { workspace = true, features = ["std"] }
 thiserror = { workspace = true, features = ["std"] }
 time = { workspace = true, features = ["std"] }
 tokio = { workspace = true, features = ["macros", "net", "rt-multi-thread", "signal", "time"] }
@@ -36,12 +37,13 @@ tracing = { workspace = true, features = ["std"] }
 
 [dev-dependencies]
 access-crypto = { workspace = true, features = ["testing"] }
+access-identity-signer = { path = "../../crates/identity-signer" }
 access-store = { workspace = true, features = ["testing"] }
 aws-lc-rs = { workspace = true }
 ed25519-dalek = { workspace = true }
 http-body-util = { workspace = true }
 rcgen = { workspace = true, features = ["aws_lc_rs", "pem"] }
-serde_json = { workspace = true, features = ["std"] }
+suiss-crypto = { workspace = true, features = ["testing"] }
 tower = { workspace = true, features = ["util"] }
 zeroize = { workspace = true, features = ["alloc", "std"] }
 

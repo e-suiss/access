@@ -1,6 +1,12 @@
 //! Access server (OP-2). Thin by design: it reads configuration, installs
 //! telemetry and composes crates; business logic lives in `crates/` (OP-62).
+//!
+//! Two one-shot commands share the configuration and the lockdown: `access-server migrate`
+//! runs the schema migrations as the migration role (OP-55), and `access-server bootstrap
+//! <plan.toml>` creates the platform tenant, sample tenants and platform clients a local
+//! deployment starts from (OP-69, OP-149 m.21).
 
+mod bootstrap;
 mod config;
 mod events;
 mod idp;
@@ -13,8 +19,9 @@ mod product;
 #[cfg(test)]
 mod testing;
 
+use std::ffi::OsString;
 use std::fmt::Write as _;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::sync::Arc;
 use std::time::Duration;
@@ -102,7 +109,34 @@ struct Pools {
     outbox_reader: Pool,
 }
 
+/// What the process was asked to do.
+enum Command {
+    /// Serve (no arguments).
+    Serve,
+    /// `migrate`: apply the schema migrations and exit (OP-55).
+    Migrate,
+    /// `bootstrap <plan.toml>`: make sure of a local deployment's tenants and exit (OP-69).
+    Bootstrap(PathBuf),
+}
+
+fn command(args: &[OsString]) -> Option<Command> {
+    match args {
+        [] => Some(Command::Serve),
+        [c] if c == "migrate" => Some(Command::Migrate),
+        [c, plan] if c == "bootstrap" => Some(Command::Bootstrap(PathBuf::from(plan))),
+        _ => None,
+    }
+}
+
 fn main() -> ExitCode {
+    let args: Vec<OsString> = std::env::args_os().skip(1).collect();
+    let Some(command) = command(&args) else {
+        #[allow(clippy::print_stderr)]
+        {
+            eprintln!("usage: access-server [migrate | bootstrap <plan.toml>]");
+        }
+        return ExitCode::FAILURE;
+    };
     let config = match Config::load() {
         Ok(config) => config,
         Err(error) => {
@@ -122,8 +156,172 @@ fn main() -> ExitCode {
         return ExitCode::FAILURE;
     }
 
+    match command {
+        Command::Serve => serve_main(&config),
+        Command::Migrate => migrate_main(&config),
+        Command::Bootstrap(plan) => bootstrap_main(&config, &plan),
+    }
+}
+
+/// SA-22, OP-90: the lockdown, then the runtime, then the narrowed seccomp phase, as the server
+/// does; the one-shot commands run under it too.
+fn locked(config: &Config) -> Result<tokio::runtime::Runtime, String> {
+    let locked = lockdown(config)
+        .apply()
+        .map_err(|e| format!("runtime lockdown failed; refusing to start (OP-90): {e}"))?;
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .map_err(|e| format!("cannot start the async runtime: {e}"))?;
+    locked
+        .narrow()
+        .map_err(|e| format!("seccomp phase 2 failed: {e}"))?;
+    Ok(runtime)
+}
+
+const fn durability(db: &config::Database) -> access_store::connect::Durability {
+    match db.durability {
+        Durability::Replicated => access_store::connect::Durability::Replicated,
+        Durability::SingleNode => access_store::connect::Durability::SingleNode,
+    }
+}
+
+/// The migration role's root certificate and password, read before the lockdown.
+fn migrator_credentials(config: &Config) -> Result<(Vec<u8>, SecretFile), String> {
+    let db = config.database.as_ref().ok_or("no database section")?;
+    let role = db
+        .migrator
+        .as_ref()
+        .ok_or("database.migrator is required to migrate (OP-55)")?;
+    let root = std::fs::read(&db.root_cert_file)
+        .map_err(|e| format!("{}: {e}", db.root_cert_file.display()))?;
+    let password = SecretFile::load(&role.password_file).map_err(|e| e.to_string())?;
+    Ok((root, password))
+}
+
+/// OP-55: the migrations as the migration role, from a command of their own and never at
+/// server start. Applied migrations are skipped, so a second run changes nothing.
+fn migrate(config: &Config) -> Result<(), String> {
+    let (root, password) = migrator_credentials(config)?;
+    let db = config.database.as_ref().ok_or("no database section")?;
+    let role = db.migrator.as_ref().ok_or("no migrator")?;
+    let runtime = locked(config)?;
+    runtime.block_on(async {
+        let target = Target {
+            host: &db.host,
+            port: db.port,
+            database: &db.name,
+            user: &role.user,
+            password: password.value().expose(),
+            root_cert: &root,
+        };
+        let migrator = pool(options(&target), 1)
+            .await
+            .map_err(|e| format!("{}: {e}", role.user))?;
+        // OP-52
+        check_server(&migrator, 1, true, durability(db))
+            .await
+            .map_err(|e| e.to_string())?;
+        access_store::connect::migrate(&migrator)
+            .await
+            .map_err(|e| e.to_string())
+    })
+}
+
+fn migrate_main(config: &Config) -> ExitCode {
+    match migrate(config) {
+        Ok(()) => {
+            tracing::info!(
+                migrations = access_store::MIGRATOR.iter().count(),
+                "schema migrated (OP-55)"
+            );
+            ExitCode::SUCCESS
+        }
+        Err(error) => {
+            tracing::error!(%error, "migration failed");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+/// OP-69, OP-149 m.21: the bootstrap over the same pools, token and signers as the server.
+fn bootstrap(config: &Config, plan: &Path) -> Result<bootstrap::Summary, String> {
+    let plan = bootstrap::Plan::load(plan).map_err(|e| e.to_string())?;
+    let prepared = prepare(config, tls_config(config)?)?;
+    let runtime = locked(config)?;
+    runtime.block_on(seed(config, prepared, &plan))
+}
+
+/// Runs the bootstrap; its summary goes to standard output as JSON.
+fn bootstrap_main(config: &Config, plan: &Path) -> ExitCode {
+    let summary = bootstrap(config, plan)
+        .and_then(|s| serde_json::to_string_pretty(&s).map_err(|e| e.to_string()));
+    match summary {
+        Ok(json) => {
+            #[allow(clippy::print_stdout)]
+            {
+                println!("{json}");
+            }
+            ExitCode::SUCCESS
+        }
+        Err(error) => {
+            tracing::error!(%error, "bootstrap failed");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+/// The bootstrap over this process's pools, token and signers.
+async fn seed(
+    config: &Config,
+    prepared: Prepared,
+    plan: &bootstrap::Plan,
+) -> Result<bootstrap::Summary, String> {
+    let all = pools(config, &prepared).await?;
+    let identity = config.identity.as_ref().ok_or("no identity section")?;
+    let base = RealmBase::parse(&identity.realm_base).map_err(|e| e.to_string())?;
+    let actors = idp::ActorBindings::default();
+    let domains = Arc::new(Domains::new(Setup {
+        sequencer: all.sequencer.clone(),
+        app: all.app.clone(),
+        keys: prepared.keys,
+        holder: holder()?,
+        ttl: LEASE_TTL,
+        binding: actors.clone(),
+        salts: OsSalts,
+        clock: SourcesClock::new(all.sequencer.clone()),
+        deriver: all.deriver.clone(),
+        signer: config.signer.clone(),
+    }));
+    let plane = idp::Plane::new(
+        domains.clone(),
+        all.sequencer.clone(),
+        all.app.clone(),
+        SourcesClock::new(all.sequencer.clone()),
+        actors,
+    );
+    let keyring = idp::RealmKeyring::new(
+        SignerKeys::new(identity.signer.clone()),
+        prepared.identity_keys.clone(),
+    );
+    let summary = bootstrap::Bootstrap {
+        app: &all.app,
+        router: &all.router,
+        plane: &plane,
+        realm_keys: &keyring,
+        hsm: &prepared.identity_keys,
+        base: &base,
+    }
+    .run(plan)
+    .await;
+    // OP-31
+    domains.release().await;
+    summary.map_err(|e| e.to_string())
+}
+
+fn serve_main(config: &Config) -> ExitCode {
     // CR-12, OP-52: the TLS files are read before the lockdown closes the file system
-    let tls = match tls_config(&config) {
+    let tls = match tls_config(config) {
         Ok(tls) => tls,
         Err(error) => {
             tracing::error!(%error, "TLS configuration unusable; refusing to start (OP-52)");
@@ -131,7 +329,7 @@ fn main() -> ExitCode {
         }
     };
     // OP-129 m.3, OP-141 m.18 (g), (h)
-    let prepared = match prepare(&config, tls) {
+    let prepared = match prepare(config, tls) {
         Ok(prepared) => prepared,
         Err(error) => {
             tracing::error!(%error, "credentials unusable; refusing to start (OP-52)");
@@ -149,7 +347,7 @@ fn main() -> ExitCode {
     };
 
     // SA-22, OP-90, OP-92
-    let locked = match lockdown(&config).apply() {
+    let locked = match lockdown(config).apply() {
         Ok(locked) => locked,
         Err(error) => {
             tracing::error!(%error, "runtime lockdown failed; refusing to start (OP-90)");
@@ -183,7 +381,7 @@ fn main() -> ExitCode {
         "runtime lockdown in force"
     );
 
-    match runtime.block_on(serve(&config, listener, prepared, &report)) {
+    match runtime.block_on(serve(config, listener, prepared, &report)) {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
             tracing::error!(%error, "server stopped with an error");
@@ -300,10 +498,7 @@ async fn pools(config: &Config, prepared: &Prepared) -> Result<Pools, String> {
     let router = open(&db.router, &prepared.router_password).await?;
     let archive = open(&db.archive, &prepared.archive_password).await?;
     let outbox_reader = open(&db.outbox_reader, &prepared.outbox_password).await?;
-    let durability = match db.durability {
-        Durability::Replicated => access_store::connect::Durability::Replicated,
-        Durability::SingleNode => access_store::connect::Durability::SingleNode,
-    };
+    let durability = durability(db);
     let total = db
         .sequencer
         .pool
@@ -711,5 +906,39 @@ async fn shutdown_signal() {
     #[cfg(not(unix))]
     {
         let _ = tokio::signal::ctrl_c().await;
+    }
+}
+
+#[cfg(test)]
+mod commands {
+    use std::ffi::OsString;
+
+    use super::{Command, command};
+
+    fn args(a: &[&str]) -> Vec<OsString> {
+        a.iter().map(OsString::from).collect()
+    }
+
+    // OP-2, OP-55, OP-69, TI-9: no argument serves; the one-shot commands take exactly their own
+    // arguments and nothing else is a mode
+    #[test]
+    fn the_commands_are_closed() {
+        assert!(matches!(command(&args(&[])), Some(Command::Serve)));
+        assert!(matches!(
+            command(&args(&["migrate"])),
+            Some(Command::Migrate)
+        ));
+        assert!(matches!(
+            command(&args(&["bootstrap", "/etc/access/bootstrap.toml"])),
+            Some(Command::Bootstrap(p)) if p.ends_with("bootstrap.toml")
+        ));
+        for bad in [
+            &["bootstrap"][..],
+            &["migrate", "--force"],
+            &["serve"],
+            &["--dev"],
+        ] {
+            assert!(command(&args(bad)).is_none(), "{bad:?}");
+        }
     }
 }

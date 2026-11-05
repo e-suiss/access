@@ -257,6 +257,44 @@ pub async fn fresh() -> Result<TestDb, TestDbError> {
     })
 }
 
+/// A fresh database as the database administrator leaves it before the first migration
+/// (OP-130 m.2, OP-55): the cluster roles and the per-database setup, no migration.
+pub struct Unmigrated {
+    /// Name of the database.
+    pub name: String,
+    /// Logged in as a member of `access_migrator`.
+    pub migrator: PgPool,
+    /// Logged in as a member of `access_app`.
+    pub app: PgPool,
+}
+
+/// Creates a fresh, unmigrated database.
+///
+/// # Errors
+/// [`TestDbError`] when `DATABASE_URL` is missing or the cluster refuses.
+pub async fn unmigrated() -> Result<Unmigrated, TestDbError> {
+    let admin = admin_options()?;
+    ensure_template(&admin, &template_name()).await?;
+    let name = unique_name();
+    let mut c = PgConnection::connect_with(&admin)
+        .await
+        .at("connect as administrator")?;
+    exec(&mut c, format!("CREATE DATABASE {name}"), "create database").await?;
+    c.close().await.at("close")?;
+    let mut d = PgConnection::connect_with(&admin.clone().database(&name))
+        .await
+        .at("connect database")?;
+    d.execute(super::BOOTSTRAP_DATABASE)
+        .await
+        .at("bootstrap database")?;
+    d.close().await.at("close database")?;
+    Ok(Unmigrated {
+        migrator: pool(&admin, &name, "access_test_migrator").await?,
+        app: pool(&admin, &name, "access_test_app").await?,
+        name,
+    })
+}
+
 impl TestDb {
     /// Overwrites a stored state value as the table owner, to simulate a corruption no
     /// application path can cause (§17.6.12 tests).

@@ -322,6 +322,7 @@ dependencies = [
  "access-identity-events",
  "access-identity-oauth",
  "access-identity-session",
+ "access-identity-signer",
  "access-identity-ui",
  "access-identity-webauthn",
  "access-internal-api",

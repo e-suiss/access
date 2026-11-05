@@ -3,6 +3,7 @@
 
 mod config;
 
+use std::ffi::OsString;
 use std::process::ExitCode;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -11,7 +12,7 @@ use access_authority_signer::adapters::{DirVault, HsmBindings, SealedFactory, se
 use access_authority_signer::service::Service;
 use access_crypto::secret_file::SecretFile;
 use config::Config;
-use suiss_crypto::pkcs11::KeyStore;
+use suiss_crypto::pkcs11::{HsmError, KeyStore};
 use suiss_crypto::rotation::Policy;
 use suiss_sandbox::{LandlockAbi, Lockdown, Profile};
 
@@ -73,13 +74,76 @@ fn configured() -> Option<Config> {
     Some(config)
 }
 
+/// Makes the KEK labelled `label` in the token when it is missing; a KEK that exists is kept.
+/// True when it was made.
+fn ensure_kek(store: &KeyStore, label: &str) -> Result<bool, HsmError> {
+    if store.kek(label).is_ok() {
+        return Ok(false);
+    }
+    store.generate_kek(label).map(|_| true)
+}
+
+/// CR-21, OP-69: `init` provisions the token for this signer and exits. It runs before the
+/// signer, which still refuses to start without its KEK; on a production HSM the KEK comes
+/// from the key ceremony instead.
+fn init(config: &Config, hsm: &config::Hsm) -> ExitCode {
+    let opened = SecretFile::load(&hsm.pin_file)
+        .map_err(|e| e.to_string())
+        .and_then(|pin| {
+            KeyStore::open(&hsm.module, &hsm.token, pin.value()).map_err(|e| e.to_string())
+        });
+    let store = match opened {
+        Ok(store) => store,
+        Err(error) => {
+            tracing::error!(%error, "HSM unusable (CR-21)");
+            return ExitCode::FAILURE;
+        }
+    };
+    let locked = match lockdown(config, hsm).apply() {
+        Ok(locked) => locked,
+        Err(error) => {
+            tracing::error!(%error, "runtime lockdown failed; refusing to start (OP-90)");
+            return ExitCode::FAILURE;
+        }
+    };
+    if let Err(error) = locked.narrow() {
+        tracing::error!(%error, "seccomp phase 2 failed; refusing to continue");
+        return ExitCode::FAILURE;
+    }
+    match ensure_kek(&store, &hsm.kek) {
+        Ok(made) => {
+            tracing::info!(made, kek = %hsm.kek, "token provisioned");
+            ExitCode::SUCCESS
+        }
+        Err(error) => {
+            tracing::error!(%error, "KEK not made (CR-21)");
+            ExitCode::FAILURE
+        }
+    }
+}
+
 fn main() -> ExitCode {
+    let args: Vec<OsString> = std::env::args_os().skip(1).collect();
+    let provision = match args.as_slice() {
+        [] => false,
+        [a] if a == "init" => true,
+        _ => {
+            #[allow(clippy::print_stderr)]
+            {
+                eprintln!("usage: access-signer [init]");
+            }
+            return ExitCode::FAILURE;
+        }
+    };
     let Some(config) = configured() else {
         return ExitCode::FAILURE;
     };
     let Some(hsm) = &config.hsm else {
         return ExitCode::FAILURE;
     };
+    if provision {
+        return init(&config, hsm);
+    }
     let opened = open_hsm(hsm);
     let (store, kek) = match opened {
         Ok(opened) => opened,
@@ -158,5 +222,60 @@ fn main() -> ExitCode {
             tracing::error!(%error, "signer stopped with an error");
             ExitCode::FAILURE
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, reason = "test code")]
+
+    use access_crypto::Secret;
+
+    use super::*;
+
+    /// A fresh token in the `SoftHSM` store `just test` prepares (`SOFTHSM2_CONF`, OP-69). Its
+    /// handle is never dropped: unloading `SoftHSM` after it used OpenSSL leaves OpenSSL's exit
+    /// handler behind in some hosts' loaders, and the test process then crashes at exit.
+    fn token() -> &'static KeyStore {
+        assert!(
+            std::env::var_os("SOFTHSM2_CONF").is_some(),
+            "run the PKCS#11 tests through `just test`, which sets SOFTHSM2_CONF (OP-69)"
+        );
+        let module = [
+            std::env::var("SUISS_PKCS11_MODULE").unwrap_or_default(),
+            String::from("/opt/homebrew/lib/softhsm/libsofthsm2.so"),
+            String::from("/usr/lib/softhsm/libsofthsm2.so"),
+            String::from("/usr/lib/x86_64-linux-gnu/softhsm/libsofthsm2.so"),
+            String::from("/usr/lib/aarch64-linux-gnu/softhsm/libsofthsm2.so"),
+        ]
+        .iter()
+        .map(std::path::PathBuf::from)
+        .find(|p| p.is_file())
+        .unwrap();
+        let label = format!("kek-init-{}", std::process::id());
+        let out = std::process::Command::new("softhsm2-util")
+            .args(["--init-token", "--free", "--label", &label])
+            .args(["--pin", "1234-test-only", "--so-pin", "5678-test-only"])
+            .output()
+            .unwrap();
+        assert!(out.status.success(), "{out:?}");
+        Box::leak(Box::new(
+            KeyStore::open(
+                &module,
+                &label,
+                &Secret::new(String::from("1234-test-only")),
+            )
+            .unwrap(),
+        ))
+    }
+
+    // CR-21, OP-69: provisioning makes the KEK once and keeps it
+    #[test]
+    fn init_makes_the_kek_once() {
+        let store = token();
+        assert!(store.kek("access/test/kek").is_err());
+        assert!(ensure_kek(store, "access/test/kek").unwrap());
+        assert!(!ensure_kek(store, "access/test/kek").unwrap());
+        assert!(store.kek("access/test/kek").is_ok());
     }
 }

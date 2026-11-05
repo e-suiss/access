@@ -7,8 +7,8 @@
 )]
 
 use access_store::StoreError;
-use access_store::connect::{Durability, Target, check_server, fits, options, supported};
-use access_store::testing::fresh;
+use access_store::connect::{Durability, Target, check_server, fits, migrate, options, supported};
+use access_store::testing::{fresh, unmigrated};
 use sqlx::postgres::PgSslMode;
 
 // OP-130 m.10: the client always verifies the full chain against the given root
@@ -46,4 +46,33 @@ async fn the_server_check_refuses_an_unencrypted_connection() {
     // U51: the test servers have no synchronous standby, so a replicated deployment is refused
     let replicated = check_server(&db.app, 8, false, Durability::Replicated).await;
     assert!(matches!(replicated, Err(StoreError::Unsafe(m)) if m.contains("synchronous_commit")));
+}
+
+// OP-55, OP-12, OP-130 m.2: the migration job runs as the migration role on a database the
+// administrator prepared; a second run applies nothing and the tables belong to that role
+#[tokio::test]
+async fn the_migration_job_runs_as_the_migrator_and_is_idempotent() {
+    let db = unmigrated().await.unwrap();
+    let total = i64::try_from(access_store::MIGRATOR.iter().count()).unwrap();
+    let applied = async || -> i64 {
+        sqlx::query_scalar("SELECT count(*) FROM _sqlx_migrations WHERE success")
+            .fetch_one(&db.migrator)
+            .await
+            .unwrap()
+    };
+    migrate(&db.migrator).await.unwrap();
+    assert_eq!(applied().await, total);
+    migrate(&db.migrator).await.unwrap();
+    assert_eq!(applied().await, total);
+    let foreign: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+          WHERE n.nspname IN ('access', 'access_ops', 'access_derived')
+            AND pg_get_userbyid(c.relowner) <> 'access_migrator'",
+    )
+    .fetch_one(&db.migrator)
+    .await
+    .unwrap();
+    assert_eq!(foreign, 0);
+    // OP-12: the application role cannot migrate
+    assert!(migrate(&db.app).await.is_err());
 }

@@ -216,6 +216,10 @@ pub(crate) struct Database {
     pub(crate) archive: Role,
     /// `access_outbox_reader` login: the back-channel logout courier (OP-131).
     pub(crate) outbox_reader: Role,
+    /// `access_migrator` login: only `access-server migrate` uses it, never the server
+    /// (OP-55).
+    #[serde(default)]
+    pub(crate) migrator: Option<Role>,
 }
 
 /// The PKCS#11 token holding the domains' keys.
@@ -395,6 +399,7 @@ mod tests {
                 router: role("access_router_login"),
                 archive: role("access_archive_login"),
                 outbox_reader: role("access_outbox_reader_login"),
+                migrator: None,
             }),
             hsm: Some(Hsm {
                 module: "/usr/lib/softhsm/libsofthsm2.so".into(),
