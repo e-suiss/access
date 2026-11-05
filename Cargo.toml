@@ -1,6 +1,13 @@
 [workspace]
 resolver = "3"
-members = ["crates/*", "bins/*", "sdks/bindings/wasm", "sdks/bindings/uniffi", "xtask"]
+members = [
+    "crates/*",
+    "bins/*",
+    "sdks/bindings/wasm",
+    "sdks/bindings/uniffi",
+    "sdks/rust/verifier",
+    "xtask",
+]
 
 [workspace.package]
 version = "0.2.6"

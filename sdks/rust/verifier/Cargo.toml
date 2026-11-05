@@ -1,0 +1,26 @@
+[package]
+name = "esuiss-access-verifier-sdk"
+description = "Access Offline Verifier SDK: the Kernel plus the device ports an offline verifier needs (CMP-17, T25, OP-150)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+name = "access_verifier"
+
+[features]
+# OP-150 m.1 (b): emulated clock and counter for tests without hardware
+testing = []
+
+[dependencies]
+# OP-150 (c)
+access-kernel = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+esuiss-access-verifier-sdk = { path = ".", features = ["testing"] }
+
+[lints]
+workspace = true

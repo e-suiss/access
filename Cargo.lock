@@ -1575,6 +1575,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "esuiss-access-verifier-sdk"
+version = "0.2.6"
+dependencies = [
+ "esuiss-access-kernel",
+ "esuiss-access-verifier-sdk",
+ "thiserror",
+]
+
+[[package]]
 name = "esuiss-access-verify"
 version = "0.2.6"
 dependencies = [
