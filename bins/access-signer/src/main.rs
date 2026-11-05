@@ -46,6 +46,9 @@ fn lockdown(config: &Config, hsm: &config::Hsm) -> Lockdown {
 
 /// The configuration with telemetry installed, once the known-answer tests passed.
 fn configured() -> Option<Config> {
+    if unsafe_host() {
+        return None;
+    }
     let config = match Config::load() {
         Ok(config) => config,
         Err(error) => {
@@ -120,6 +123,18 @@ fn init(config: &Config, hsm: &config::Hsm) -> ExitCode {
             ExitCode::FAILURE
         }
     }
+}
+
+/// CR-39, OP-150 (o): a production signer does not start on `aarch64-apple-*`.
+fn unsafe_host() -> bool {
+    access_crypto::platform::signer_host(access_crypto::platform::Target::BUILT)
+        .map_err(|error| {
+            #[allow(clippy::print_stderr)]
+            {
+                eprintln!("access-signer: {error}; refusing to start");
+            }
+        })
+        .is_err()
 }
 
 fn main() -> ExitCode {

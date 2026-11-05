@@ -7,6 +7,7 @@ pub mod event_id;
 pub mod jose;
 pub mod oauth;
 pub mod opaque_id;
+pub mod platform;
 pub mod projection;
 pub mod pseudonym;
 pub mod random;
