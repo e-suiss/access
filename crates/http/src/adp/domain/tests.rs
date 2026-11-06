@@ -187,6 +187,7 @@ fn response(outcome: Outcome) -> Response {
         signed_receipt: None,
         pap: None,
         signed_pap: None,
+        ended: Vec::new(),
     }
 }
 

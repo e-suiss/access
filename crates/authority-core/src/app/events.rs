@@ -22,11 +22,16 @@ use crate::domain::Request;
 use crate::ports::{Binding, Reader, Salts};
 
 /// The events of one commit: those of its decision, recorded only on ALLOW, and those of each
-/// admitted Claim by its id.
+/// admitted Claim by its id; with them the holder Instances the commit ends (§9.9.3 k.6), whose
+/// live projection families the adapter revokes once the record is in.
 #[derive(Clone, Debug, Default)]
 pub(crate) struct Derived {
     pub(crate) decision: Vec<Vec<u8>>,
     pub(crate) claims: BTreeMap<Id, Vec<Vec<u8>>>,
+    /// Holders the decision ends; only an ALLOW ends them.
+    pub(crate) ended: Vec<Id>,
+    /// Holders the admitted Claims end, whatever the decision.
+    pub(crate) ended_by_claims: Vec<Id>,
 }
 
 fn encode(e: &Event) -> Result<Vec<u8>, CoreError> {
@@ -38,6 +43,14 @@ fn revoked(disposition: &BTreeMap<Id, Disposition>) -> impl Iterator<Item = Subj
         .iter()
         .filter(|(_, d)| **d == Disposition::Revoke)
         .map(|(g, _)| Subject::Grant(*g))
+}
+
+/// The Instances a `party.compromised` event names: the holders the compromise ends (§9.9.3 k.6).
+fn compromised(e: &Event) -> Vec<Id> {
+    match &e.detail {
+        Detail::Compromised { keys, .. } => keys.iter().map(|(id, _)| *id).collect(),
+        _ => Vec::new(),
+    }
 }
 
 /// OP-149 m.7: a declared `occurred_at` is a non-negative integer value.
@@ -61,12 +74,40 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
     ) -> Result<Derived, CoreError> {
         let mut out = Derived::default();
         let domain = req.domain;
-        let events = self.decision_events(req, exercise, now).await?;
+        let mut events = self.decision_events(req, exercise, now).await?;
+        out.ended = self.ended_by_decision(req, &events).await?;
+        let source = Source::Exercise(exercise);
+        events.extend(self.invalidations(domain, source, &out.ended, now).await?);
         for e in &events {
             out.decision.push(encode(e)?);
         }
-        out.claims = self.claim_events(domain, resolved, now).await?;
+        (out.claims, out.ended_by_claims) = self.claim_events(domain, resolved, now).await?;
         Ok(out)
+    }
+
+    /// The holder Instances a committed decision ends (§9.9.3 k.6, P50): the terminated or
+    /// recovered Instance, a departing Party's live Instances, the Instances its compromise
+    /// declaration names in `events`.
+    async fn ended_by_decision(
+        &self,
+        req: &Request,
+        events: &[Event],
+    ) -> Result<Vec<Id>, CoreError> {
+        Ok(match &req.payload {
+            Some(
+                Payload::InstanceTerminate { instance } | Payload::InstanceRecover { instance, .. },
+            ) => vec![*instance],
+            Some(Payload::PartyDepart { party, .. }) => self
+                .live_instances(party)
+                .await?
+                .into_iter()
+                .map(|(id, _)| id)
+                .collect(),
+            Some(Payload::ClaimIssue { class, .. }) if class == claim::PARTY_COMPROMISE => {
+                events.iter().flat_map(compromised).collect()
+            }
+            _ => Vec::new(),
+        })
     }
 
     /// The events of the decision, by the meta-action it commits.
@@ -77,10 +118,11 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         now: u64,
     ) -> Result<Vec<Event>, CoreError> {
         let domain = req.domain;
+        let source = Source::Exercise(exercise);
         let base = |kind, subject, detail| Event {
             kind,
             domain,
-            source: Source::Exercise(exercise),
+            source,
             subject,
             at: now,
             detail,
@@ -165,7 +207,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                 events.push(
                     self.compromise(
                         domain,
-                        Source::Exercise(exercise),
+                        source,
                         *subject,
                         (occurred(Some(value)), 0),
                         now,
@@ -179,29 +221,38 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         Ok(events)
     }
 
-    /// OP-149 m.7: the events of the admitted signed declarations.
+    /// OP-149 m.7: the events of the admitted signed declarations, and the holder Instances
+    /// an admitted compromise declaration ends (§9.9.3 k.6).
     pub(crate) async fn claim_events(
         &self,
         domain: Digest,
         resolved: &Proofs,
         now: u64,
-    ) -> Result<BTreeMap<Id, Vec<Vec<u8>>>, CoreError> {
+    ) -> Result<(BTreeMap<Id, Vec<Vec<u8>>>, Vec<Id>), CoreError> {
         let mut out: BTreeMap<Id, Vec<Vec<u8>>> = BTreeMap::new();
+        let mut ended: Vec<Id> = Vec::new();
         for c in &resolved.claims {
             if c.disposition == claim::Disposition::Admit
                 && c.statement.class == claim::PARTY_COMPROMISE
             {
+                let source = Source::Claim(c.id);
                 let e = self
                     .compromise(
                         domain,
-                        Source::Claim(c.id),
+                        source,
                         c.statement.subject,
                         (occurred(c.statement.value.as_ref()), c.statement.issued_at),
                         now,
                         claim::claim_digest(&c.bytes),
                     )
                     .await?;
-                out.entry(c.id).or_default().push(encode(&e)?);
+                let holders = compromised(&e);
+                let entry = out.entry(c.id).or_default();
+                entry.push(encode(&e)?);
+                for invalidated in self.invalidations(domain, source, &holders, now).await? {
+                    entry.push(encode(&invalidated)?);
+                }
+                ended.extend(holders);
             }
             // OP-149 m.7, m.19 (f), TN-49: a narrowing account status disables the Party
             if c.disposition == claim::Disposition::Admit
@@ -220,6 +271,44 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                     },
                 };
                 out.entry(c.id).or_default().push(encode(&e)?);
+            }
+        }
+        Ok((out, ended))
+    }
+
+    /// One `projection-invalidated` per live projection family of each of `holders`, because
+    /// of `source` (§9.9.3 k.6, §9.16, P50): the family's first `projection.issue` is its
+    /// subject. Written with the record that ends the holders, so a receiver sees the end and
+    /// the invalidations together.
+    async fn invalidations(
+        &self,
+        domain: Digest,
+        source: Source,
+        holders: &[Id],
+        now: u64,
+    ) -> Result<Vec<Event>, CoreError> {
+        let mut out = Vec::new();
+        for h in holders {
+            for root in self.reader.live_families(h).await? {
+                out.push(Event::projection_invalidated(domain, source, root, now));
+            }
+        }
+        Ok(out)
+    }
+
+    /// The live Instances of `party` with their states.
+    async fn live_instances(&self, party: &Id) -> Result<Vec<(Id, InstanceState)>, CoreError> {
+        let index = self.fetch(&[meta::key(kind::INSTANCES, party)]).await?;
+        let ids: Vec<Id> = match index.into_iter().next().and_then(|(_, v, _)| v) {
+            Some(Value::Array(list)) => {
+                list.iter().filter_map(|v| Id::from_value(v).ok()).collect()
+            }
+            _ => Vec::new(),
+        };
+        let mut out = Vec::new();
+        for id in ids {
+            if let Some(state) = self.instance(&id).await?.filter(|s| s.ended.is_none()) {
+                out.push((id, state));
             }
         }
         Ok(out)
@@ -249,17 +338,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
     ) -> Result<Event, CoreError> {
         let from = compromise_from(occurred_at, issued_at);
         let mut keys = Vec::new();
-        let index = self.fetch(&[meta::key(kind::INSTANCES, &party)]).await?;
-        let ids: Vec<Id> = match index.into_iter().next().and_then(|(_, v, _)| v) {
-            Some(Value::Array(list)) => {
-                list.iter().filter_map(|v| Id::from_value(v).ok()).collect()
-            }
-            _ => Vec::new(),
-        };
-        for id in ids {
-            let Some(state) = self.instance(&id).await?.filter(|s| s.ended.is_none()) else {
-                continue;
-            };
+        for (id, state) in self.live_instances(&party).await? {
             let established = self.reader.recorded_at(state.since).await?;
             if established.is_none_or(|at| at >= from) {
                 keys.push((id, thumbprint(&state.key)));

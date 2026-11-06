@@ -62,6 +62,9 @@ pub struct Response {
     pub pap: Option<Vec<u8>>,
     /// The signed PAP and its key excerpt.
     pub signed_pap: Option<(Vec<u8>, Vec<u8>)>,
+    /// The holder Instances this commit ended (§9.9.3 k.6, P50): their live projection
+    /// families are revoked at `record` once it is in. Empty for a replay.
+    pub ended: Vec<Id>,
 }
 
 /// One request with what came with it on the wire.
@@ -648,6 +651,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             signed_receipt: None,
             pap: None,
             signed_pap: None,
+            ended: Vec::new(),
         })))
     }
 
@@ -1193,6 +1197,12 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                     );
                     response.receipt = receipt.map(|r| r.1);
                     response.pap = pap.map(|p| p.1);
+                    // §9.9.3 k.6: a Claim ends its holders whatever the decision, the
+                    // decision only when allowed
+                    response.ended = derived.ended_by_claims;
+                    if allowed {
+                        response.ended.extend(derived.ended);
+                    }
                     return Ok(response);
                 }
                 Ok(Committed::Replayed(pos)) => {
@@ -1544,6 +1554,7 @@ const fn answer(
         signed_receipt: None,
         pap: None,
         signed_pap: None,
+        ended: Vec::new(),
     }
 }
 

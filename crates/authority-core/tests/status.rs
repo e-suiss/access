@@ -315,13 +315,12 @@ async fn entries_are_unique_and_lists_roll_over() {
     );
 }
 
-// §9.9.3 k.6, P50, §9.16, OP-150 m.3 (a): ending a holder revokes its live families once, sets
-// their entries and gives one projection-invalidated event per family, keyed by the family's
-// first projection.issue; another holder's family is untouched
+// §9.9.3 k.6, P50, §9.16, OP-150 m.3 (a): ending a holder revokes its live families once, at
+// the position that ended it, and sets their entries; a family already revoked is not revoked
+// again and another holder's family is untouched
 #[tokio::test]
 async fn ending_a_holder_invalidates_its_families_once() {
     use access_authority_core::status::adapters::revoke_holder;
-    use access_internal_api::events::{Kind, Source, Subject};
     let db = fresh().await.unwrap();
     let d = domain(&db, 33).await;
     let scope = DomainId::from_bytes(d.0);
@@ -332,35 +331,28 @@ async fn ending_a_holder_invalidates_its_families_once() {
         }
         open_family(&db.sequencer, API, d, &f).await.unwrap();
     }
-    let source = Source::Exercise(Digest([0xee; 32]));
-    let events = revoke_holder(&db.sequencer, d, &[4; 16], (2, source, NOW))
-        .await
-        .unwrap();
+    let revoked = revoke_holder(&db.sequencer, d, &[4; 16], 2).await.unwrap();
     assert_eq!(
-        events
+        revoked
             .iter()
-            .map(|e| (e.kind, e.subject, e.source, e.at))
+            .map(|f| (f.family, f.root_exercise, f.status.clone(), f.revoked_pos))
             .collect::<Vec<_>>(),
         vec![
-            (
-                Kind::ProjectionInvalidated,
-                Subject::Projection(Digest([1; 32])),
-                source,
-                NOW
-            ),
-            (
-                Kind::ProjectionInvalidated,
-                Subject::Projection(Digest([2; 32])),
-                source,
-                NOW
-            ),
+            ([1; 16], [1; 32], Some((list_uri(API, &d, 0), 0)), Some(2)),
+            ([2; 16], [2; 32], Some((list_uri(API, &d, 0), 1)), Some(2)),
         ]
     );
     assert_eq!(
-        revoke_holder(&db.sequencer, d, &[4; 16], (3, source, NOW))
-            .await
-            .unwrap(),
+        revoke_holder(&db.sequencer, d, &[4; 16], 3).await.unwrap(),
         Vec::new()
+    );
+    assert_eq!(
+        family(&db.app, &scope, &[1; 16])
+            .await
+            .unwrap()
+            .unwrap()
+            .revoked_pos,
+        Some(2)
     );
     let snap = access_store::status::snapshot(&db.app, &scope, &list_uri(API, &d, 0))
         .await

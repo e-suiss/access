@@ -22,15 +22,17 @@ use access_kernel::json::{Json, b64url_decode, b64url_encode};
 use access_kernel::meta::Payload;
 use access_kernel::model::Id;
 use access_kernel::pap::Pap;
+use access_kernel::status::StatusRef;
 use access_kernel::tier::Tier;
 use access_kernel::verify::projection::Confirmation;
-use access_store::projections::{Family, family as read_family, open_family};
+use access_store::projections::{Family, family as read_family};
 use access_store::scope::DomainId;
 
-use super::{Domains, Led, open_keyring, signer_reason};
+use super::{Domains, Guard, Led, open_keyring, signer_reason};
 use crate::CoreError;
 use crate::app::{Incoming, Response};
 use crate::ports::{Binding, Keys, Salts};
+use crate::status::adapters::open_family;
 
 /// Longest horizon of an exact-intent token, from its decision (§9.9.1, §9.9.3 rule 4).
 pub const INTENT_HORIZON_MS: u64 = 5 * 60 * 1000;
@@ -41,6 +43,10 @@ pub const BOUNDS_HORIZON_MS: u64 = 15 * 60 * 1000;
 
 /// The claim that names a token's refresh family (P50).
 pub const FAMILY_CLAIM: &str = "family";
+
+/// The claim that names a token's Token Status List entry, `{"status_list": {"idx", "uri"}}`
+/// as the IETF Token Status List defines it for a JWT (OP-150 m.3 (a), (s), §11.20).
+pub const STATUS_CLAIM: &str = "status";
 
 /// Label of the digest of a token's `ValidityContract` (`access_contract`): the same digest an
 /// Offline Exercise Report names its contract by (L2-RPT-1).
@@ -89,6 +95,9 @@ pub struct Token {
     pub expires_at: u64,
     /// Its refresh family.
     pub family: [u8; 16],
+    /// The family's Token Status List entry, the token's `status` claim; `None` only for a
+    /// refresh of a family opened without one.
+    pub status: Option<StatusRef>,
 }
 
 /// What a [`TokenOrder`] came to.
@@ -111,6 +120,22 @@ impl PartyRefs for Refs {
         let r = self.0.get(party).unwrap_or(party);
         PartyPseudonym::new(&b64url_encode(&r.0)).ok()
     }
+}
+
+/// The `status` claim of a token whose family holds `entry` (IETF Token Status List, JWT).
+fn status_claim(entry: &StatusRef) -> Option<Json> {
+    let idx = i64::try_from(entry.idx).ok()?;
+    Some(Json::Object(vec![(
+        String::from("status_list"),
+        Json::Object(vec![
+            (String::from("idx"), Json::Int(idx)),
+            (String::from("uri"), Json::Str(entry.uri.clone())),
+        ]),
+    )]))
+}
+
+fn status_ref(status: Option<(String, u64)>) -> Option<StatusRef> {
+    status.map(|(uri, idx)| StatusRef { idx, uri })
 }
 
 /// Why an order is refused before anything is decided.
@@ -154,15 +179,19 @@ fn precheck(order: &TokenOrder, tier: Option<Tier>, now: u64) -> Option<&'static
 impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K, B, S, C> {
     /// Decides `order` as its holder's `projection.issue` commit and, when it is allowed, signs
     /// the token (§9.9, P17): a token that cannot be checked first (wrong payload, resource,
-    /// horizon or tier, a revoked family) is refused before anything is recorded.
+    /// horizon or tier, a revoked family) is refused before anything is recorded. The domain's
+    /// leader is held from the decision to the family's opening, so a commit that ends the
+    /// holder cannot fall between them (§9.9.3 k.6).
     ///
     /// # Errors
     /// [`CoreError`] as [`Domains::exercise`].
     pub async fn project(&self, order: &TokenOrder) -> Result<Projected, CoreError> {
-        if let Some(code) = self.refusal(order).await? {
+        let domain = order.incoming.request.domain;
+        let mut guard = self.leading(domain).await?;
+        if let Some(code) = self.refusal(&mut guard, order).await? {
             return Ok(Projected::Refused(code));
         }
-        let r = self.exercise(&order.incoming).await?;
+        let r = self.decide_led(&mut guard, &order.incoming, None).await?;
         if r.decision.outcome != Outcome::Allow {
             return Ok(Projected::Decided(Box::new(r)));
         }
@@ -172,7 +201,7 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
             return Ok(Projected::Refused("replayed"));
         };
         let pap = Pap::from_bytes(pap).map_err(|_| CoreError::Protocol("pap"))?;
-        let family = match self.family_of(order, &pap, &exercise).await? {
+        let (family, status) = match self.family_of(order, &pap, &exercise).await? {
             Ok(f) => f,
             Err(code) => return Ok(Projected::Refused(code)),
         };
@@ -181,22 +210,35 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
             .to_bytes()
             .map(|b| Digest(suiss_crypto::digest::context_digest(CONTRACT_LABEL, &b).0))
             .map_err(|_| CoreError::Protocol("validity"))?;
-        Ok(match self.signed(order, &pap, &exercise, family).await? {
-            Ok(jws) => Projected::Issued(Token {
-                jws,
-                exercise,
-                position,
-                contract,
-                expires_at: pap.validity.horizon,
-                family,
-            }),
-            Err(code) => Projected::Refused(code),
-        })
+        let Some(led) = guard.as_mut() else {
+            return Err(CoreError::Unavailable("leader"));
+        };
+        Ok(
+            match self
+                .signed(led, order, &pap, &exercise, (family, status.as_ref()))
+                .await?
+            {
+                Ok(jws) => Projected::Issued(Token {
+                    jws,
+                    exercise,
+                    position,
+                    contract,
+                    expires_at: pap.validity.horizon,
+                    family,
+                    status,
+                }),
+                Err(code) => Projected::Refused(code),
+            },
+        )
     }
 
     /// Why `order` cannot become a token, known before any decision: a refresh of a family that
     /// is unknown, revoked or another client's (§9.9.3 rule 6), or [`precheck`].
-    async fn refusal(&self, order: &TokenOrder) -> Result<Option<&'static str>, CoreError> {
+    async fn refusal(
+        &self,
+        guard: &mut Guard<B, S, C>,
+        order: &TokenOrder,
+    ) -> Result<Option<&'static str>, CoreError> {
         let domain = order.incoming.request.domain;
         if let Some(f) = &order.family {
             match read_family(&self.setup.app, &DomainId::from_bytes(domain.0), f).await? {
@@ -208,7 +250,6 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
                 Some(_) => {}
             }
         }
-        let mut guard = self.leading(domain).await?;
         let Some(led) = guard.as_mut() else {
             return Err(CoreError::Unavailable("leader"));
         };
@@ -233,21 +274,23 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
         Ok(precheck(order, tier, now))
     }
 
-    /// The family of an allowed projection: the refreshed one, held by the same Instance, or a
-    /// new one named by the first 16 bytes of its `ExerciseID` (P50).
+    /// The family of an allowed projection with its Token Status List entry: the refreshed one,
+    /// held by the same Instance, or a new one named by the first 16 bytes of its `ExerciseID`
+    /// (P50), opened with the next entry of the domain's newest list (OP-150 m.3 (a)).
     async fn family_of(
         &self,
         order: &TokenOrder,
         pap: &Pap,
         exercise: &Digest,
-    ) -> Result<Result<[u8; 16], &'static str>, CoreError> {
-        let id = DomainId::from_bytes(order.incoming.request.domain.0);
+    ) -> Result<Result<([u8; 16], Option<StatusRef>), &'static str>, CoreError> {
+        let domain = order.incoming.request.domain;
+        let id = DomainId::from_bytes(domain.0);
         if let Some(f) = order.family {
             let row = read_family(&self.setup.app, &id, &f)
                 .await?
                 .ok_or(CoreError::Protocol("family"))?;
             return Ok(if row.holder == pap.holder.instance.0 {
-                Ok(f)
+                Ok((f, status_ref(row.status)))
             } else {
                 Err("family-mismatch")
             });
@@ -262,26 +305,30 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
             status: None,
             revoked_pos: None,
         };
-        open_family(&self.setup.sequencer, &id, &family).await?;
-        Ok(Ok(f))
+        let entry = match open_family(&self.setup.sequencer, &self.setup.api_base, domain, &family)
+            .await?
+        {
+            Some(entry) => Some(entry),
+            None => read_family(&self.setup.app, &id, &f)
+                .await?
+                .and_then(|row| row.status),
+        };
+        Ok(Ok((f, status_ref(entry))))
     }
 
     /// The signed token of an allowed projection, or the stable code that stopped it: no
     /// signer, a token over [`MAX_TOKEN_BYTES`], the signer's refusal.
     async fn signed(
         &self,
+        led: &mut Led<B, S, C>,
         order: &TokenOrder,
         pap: &Pap,
         exercise: &Digest,
-        family: [u8; 16],
+        (family, status): ([u8; 16], Option<&StatusRef>),
     ) -> Result<Result<String, &'static str>, CoreError> {
         let domain = order.incoming.request.domain;
         let Some(path) = self.setup.signer.clone() else {
             return Ok(Err(SIGNER_UNAVAILABLE));
-        };
-        let mut guard = self.leading(domain).await?;
-        let Some(led) = guard.as_mut() else {
-            return Err(CoreError::Unavailable("leader"));
         };
         let actor = led.core.instance_ref(&pap.holder.instance).await?;
         let refs = match &order.authority {
@@ -322,6 +369,13 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
                 String::from(crate::app::ROLES_CLAIM),
                 Json::Array(roles.into_iter().map(Json::Str).collect()),
             ));
+        }
+        // OP-150 m.3 (a), §11.20: the list entry a revocation sets, for verifiers
+        if let Some(entry) = status {
+            let Some(claim) = status_claim(entry) else {
+                return Ok(Err("status-entry"));
+            };
+            claims.push((String::from(STATUS_CLAIM), claim));
         }
         let claims = Json::Object(claims);
         let claims = access_crypto::jose::output::to_string(&claims);

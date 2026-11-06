@@ -51,6 +51,7 @@ const BOB: Id = Id([3; 16]);
 const BOB_KEY: u8 = 13;
 const PEP: &str = "pep.example";
 const NOW: u64 = 10_000;
+const API: &str = "https://api.example";
 
 fn signing(seed: u8) -> ed25519_dalek::SigningKey {
     ed25519_dalek::SigningKey::from_bytes(&[seed; 32])
@@ -663,6 +664,7 @@ fn process(db: &TestDb, holder: &str, keys: Vec<Digest>) -> Domains<Listed, Boun
         clock: Fixed,
         deriver: db.deriver.clone(),
         signer: None,
+        api_base: API.to_owned(),
     })
 }
 
@@ -2877,6 +2879,7 @@ fn signing_process(
         clock: Fixed,
         deriver: db.deriver.clone(),
         signer: Some(socket.to_path_buf()),
+        api_base: API.to_owned(),
     })
 }
 
@@ -3057,6 +3060,7 @@ async fn an_allow_carries_a_signed_receipt() {
         clock: Fixed,
         deriver: db.deriver.clone(),
         signer: Some(socket.clone()),
+        api_base: API.to_owned(),
     });
     let public_basis = ExerciseBasis::Public(meta::object_id(&d, kind::GRANT, 0));
     for (nonce, payload) in [
@@ -5095,4 +5099,235 @@ async fn a_role_claim_is_a_grant_projection() {
             None,
         ]
     );
+}
+
+/// The JSON claims of a compact JWS, unverified.
+fn jwt_claims(jws: &str) -> access_kernel::json::Json {
+    let payload = jws.split('.').nth(1).unwrap();
+    access_kernel::json::parse(&access_kernel::json::b64url_decode(payload).unwrap(), 8192).unwrap()
+}
+
+/// The latest signed list at `uri`, read without verifying, with its inflated bits.
+async fn published_bits(
+    db: &TestDb,
+    d: Digest,
+    uri: &str,
+) -> (access_kernel::status::ListToken, Vec<u8>) {
+    let p = access_store::status::latest(&db.app, &DomainId::from_bytes(d.0), uri)
+        .await
+        .unwrap()
+        .unwrap();
+    let payload = access_kernel::verify::cose::parse_sign1(&p.token)
+        .unwrap()
+        .payload
+        .unwrap();
+    let t = access_kernel::status::ListToken::from_bytes(&payload).unwrap();
+    let raw = miniz_oxide::inflate::decompress_to_vec_zlib(&t.lst).unwrap();
+    (t, raw)
+}
+
+fn entry(uri: &str, idx: u64) -> access_kernel::status::StatusRef {
+    access_kernel::status::StatusRef {
+        idx,
+        uri: uri.to_owned(),
+    }
+}
+
+// OP-150 m.3 (a), (s), m.10 (a), (b), §11.20, T24, G43, L2-STL-3: every family a real issuance
+// opens takes the next entry of the domain's newest list and the token names it in the IETF
+// Token Status List `status` claim; a refresh keeps the family's entry; the published list has
+// the bit clear until the family is revoked and set once the head has moved past the revocation
+#[tokio::test]
+async fn a_token_names_its_status_list_entry() {
+    use access_authority_core::adapters::{Projected, STATUS_CLAIM, TokenAuthority};
+    use access_authority_core::status::adapters::{PgLists, SignerSocket};
+    use access_authority_core::status::{Publisher, list_uri};
+    use access_kernel::json::Json;
+    use access_kernel::status::lookup;
+    let db = fresh().await.unwrap();
+    let d = create_genesis(&db.sequencer, TENANT, genesis(), 1_000)
+        .await
+        .unwrap();
+    let (socket, service) = start_signer("token-status");
+    let a = signing_process(&db, d, &socket);
+    onboard_signed(&a, d, &service).await;
+    let uri = list_uri(API, &d, 0);
+    let issue = |nonce, family| {
+        token_order(
+            d,
+            nonce,
+            vec![action("shop", "read")],
+            RS,
+            60_000,
+            TokenAuthority::Bounds,
+            family,
+        )
+    };
+    let issued = async |order| match a.project(&order).await.unwrap() {
+        Projected::Issued(t) => t,
+        other => panic!("{other:?}"),
+    };
+    let first = issued(issue(80, None)).await;
+    assert_eq!(first.status, Some(entry(&uri, 0)));
+    let status = jwt_claims(&first.jws);
+    let status = status
+        .get(STATUS_CLAIM)
+        .unwrap()
+        .get("status_list")
+        .unwrap();
+    assert_eq!(status.get("idx").and_then(Json::as_int), Some(0));
+    assert_eq!(status.get("uri").and_then(Json::as_str), Some(uri.as_str()));
+    assert!(first.jws.len() <= access_internal_api::projections::MAX_TOKEN_BYTES);
+    assert_eq!(
+        a.family(d, first.family).await.unwrap().unwrap().status,
+        Some((uri.clone(), 0))
+    );
+    let second = issued(issue(81, None)).await;
+    assert_eq!(second.status, Some(entry(&uri, 1)));
+    // a refresh is a new token of the same family, with the family's entry
+    let refreshed = issued(issue(82, Some(first.family))).await;
+    assert_eq!(refreshed.family, first.family);
+    assert_eq!(refreshed.status, Some(entry(&uri, 0)));
+    let (active, claims, _) = a.introspect(d, &refreshed.jws, NOW).await.unwrap();
+    assert!(active);
+    assert!(
+        access_kernel::json::parse(claims.unwrap().as_bytes(), 8192)
+            .unwrap()
+            .get(STATUS_CLAIM)
+            .is_some()
+    );
+
+    let publisher = Publisher::new(
+        PgLists {
+            app: db.app.clone(),
+            sequencer: db.sequencer.clone(),
+        },
+        SignerSocket(socket.clone()),
+    );
+    assert_eq!(publisher.publish(d, NOW).await.unwrap().len(), 1);
+    let (t, raw) = published_bits(&db, d, &uri).await;
+    assert_eq!(t.as_of, head_of(&db, d).await);
+    assert!(!lookup(&t, &raw, &entry(&uri, 0)).unwrap());
+    assert!(!lookup(&t, &raw, &entry(&uri, 1)).unwrap());
+    // the authorization server's revocation sets the entry at the head; the list is signed
+    // again only at a newer position (G43), here the next issuance
+    assert!(a.revoke_family(d, second.family).await.unwrap());
+    assert_eq!(publisher.publish(d, NOW).await.unwrap(), Vec::new());
+    let third = issued(issue(83, None)).await;
+    assert_eq!(third.status, Some(entry(&uri, 2)));
+    assert_eq!(publisher.publish(d, NOW).await.unwrap().len(), 1);
+    let (t, raw) = published_bits(&db, d, &uri).await;
+    assert_eq!(t.as_of, head_of(&db, d).await);
+    assert!(!lookup(&t, &raw, &entry(&uri, 0)).unwrap());
+    assert!(lookup(&t, &raw, &entry(&uri, 1)).unwrap());
+    assert!(!lookup(&t, &raw, &entry(&uri, 2)).unwrap());
+}
+
+// §9.9.3 k.6, §9.16, P50, OP-150 m.9 (d), m.10 (g): an instance.terminate revokes every live
+// family of the holder at its own record and writes one projection-invalidated per family with
+// that record, the family's first projection.issue as the subject; a replay of the terminate
+// adds nothing; the revoked families refuse refresh, introspect inactive and have their bits set
+#[tokio::test]
+async fn ending_a_holder_revokes_its_families_with_one_event_each() {
+    use access_authority_core::adapters::{Projected, TokenAuthority};
+    use access_authority_core::status::adapters::{PgLists, SignerSocket};
+    use access_authority_core::status::{Publisher, list_uri};
+    use access_internal_api::events::{Kind, Source, Subject};
+    use access_kernel::status::lookup;
+    let db = fresh().await.unwrap();
+    let d = create_genesis(&db.sequencer, TENANT, genesis(), 1_000)
+        .await
+        .unwrap();
+    let (socket, service) = start_signer("token-holder-end");
+    let a = signing_process(&db, d, &socket);
+    onboard_signed(&a, d, &service).await;
+    let uri = list_uri(API, &d, 0);
+    let issue = |nonce, family| {
+        token_order(
+            d,
+            nonce,
+            vec![action("shop", "read")],
+            RS,
+            60_000,
+            TokenAuthority::Bounds,
+            family,
+        )
+    };
+    let issued = async |order| match a.project(&order).await.unwrap() {
+        Projected::Issued(t) => t,
+        other => panic!("{other:?}"),
+    };
+    let first = issued(issue(90, None)).await;
+    let second = issued(issue(91, None)).await;
+    let before = outbox_events(&db, d).await.len();
+
+    // ROOT's Instance and self-anchor, from its registration (nonce 1) and instance (nonce 2)
+    let instance = meta::object_id(&meta::exercise_id(&d, &[2; 16]).unwrap(), kind::INSTANCE, 0);
+    let anchor = ExerciseBasis::Anchor(meta::object_id(
+        &meta::exercise_id(&d, &[1; 16]).unwrap(),
+        kind::ANCHOR,
+        0,
+    ));
+    let terminate = incoming(
+        meta_request(d, 92, anchor, Payload::InstanceTerminate { instance }),
+        ROOT_KEY,
+    );
+    let ended = a.exercise(&terminate).await.unwrap();
+    allowed(&ended);
+    assert_eq!(ended.ended, vec![instance]);
+    let pos = ended.record.unwrap();
+    for t in [&first, &second] {
+        assert_eq!(
+            a.family(d, t.family).await.unwrap().unwrap().revoked_pos,
+            Some(pos)
+        );
+    }
+    let events = outbox_events(&db, d).await;
+    let new = &events[before..];
+    assert_eq!(new[0].kind, Kind::InstanceTerminated);
+    assert_eq!(new[0].subject, Subject::Instance(instance));
+    let invalidated: Vec<_> = new
+        .iter()
+        .filter(|e| e.kind == Kind::ProjectionInvalidated)
+        .collect();
+    assert_eq!(invalidated.len(), 2);
+    assert_eq!(new.len(), 3);
+    let mut subjects: Vec<Subject> = invalidated.iter().map(|e| e.subject).collect();
+    subjects.sort_by_key(|s| s.bytes().to_vec());
+    let mut expected = vec![
+        Subject::Projection(first.exercise),
+        Subject::Projection(second.exercise),
+    ];
+    expected.sort_by_key(|s| s.bytes().to_vec());
+    assert_eq!(subjects, expected);
+    assert!(
+        invalidated
+            .iter()
+            .all(|e| e.source == Source::Exercise(ended.exercise.unwrap()) && e.at == NOW)
+    );
+    // the terminated key is no longer an actor: the same terminate again decides nothing and
+    // nothing ends twice
+    assert!(matches!(
+        a.exercise(&terminate).await,
+        Err(CoreError::Ais(_))
+    ));
+    assert_eq!(outbox_events(&db, d).await.len(), events.len());
+    // the families are over
+    assert_eq!(
+        a.project(&issue(93, Some(first.family))).await.unwrap(),
+        Projected::Refused("family-revoked")
+    );
+    assert!(!a.introspect(d, &first.jws, NOW).await.unwrap().0);
+    let publisher = Publisher::new(
+        PgLists {
+            app: db.app.clone(),
+            sequencer: db.sequencer.clone(),
+        },
+        SignerSocket(socket.clone()),
+    );
+    assert_eq!(publisher.publish(d, NOW).await.unwrap().len(), 1);
+    let (t, raw) = published_bits(&db, d, &uri).await;
+    assert_eq!(t.as_of, pos);
+    assert!(lookup(&t, &raw, &entry(&uri, 0)).unwrap());
+    assert!(lookup(&t, &raw, &entry(&uri, 1)).unwrap());
 }

@@ -712,6 +712,7 @@ impl Pdp for Eligible {
             signed_receipt: None,
             pap: None,
             signed_pap: None,
+            ended: Vec::new(),
         })
     }
 }

@@ -821,6 +821,7 @@ async fn the_ledger_indexes_held_claims_and_quota_notices() {
         clock: Fixed,
         deriver: db.deriver.clone(),
         signer: None,
+        api_base: "https://api.example".to_owned(),
     });
     let held = signed(&kyc(d, BOB, 1), BOB_KEY);
     let first = domains.record(held.clone(), false).await.unwrap();

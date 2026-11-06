@@ -97,3 +97,6 @@ pub(crate) fn spawn(
         ))
     }))
 }
+
+#[cfg(test)]
+mod tests;

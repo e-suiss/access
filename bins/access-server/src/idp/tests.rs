@@ -127,6 +127,7 @@ fn plane(db: &TestDb) -> TestPlane {
         clock: Fixed,
         deriver: db.deriver.clone(),
         signer: None,
+        api_base: String::from("https://access.test"),
     }));
     Plane::new(domains, db.app.clone(), Fixed, actors)
 }

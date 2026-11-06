@@ -303,6 +303,7 @@ async fn seed(
         clock: SourcesClock::new(all.sequencer.clone()),
         deriver: all.deriver.clone(),
         signer: config.signer.clone(),
+        api_base: config.issuer.clone().ok_or("no issuer")?,
     }));
     let plane = idp::Plane::new(
         domains.clone(),
@@ -838,8 +839,7 @@ async fn serve(
     let tenants_pool = router_pool.clone();
     let realms = identity(config, router_pool).await?;
     let (idp_sequencer, idp_app, product_app) = (sequencer.clone(), app.clone(), app.clone());
-    let issuer = config.issuer.clone().ok_or("no issuer")?;
-    let limits = Limits::default();
+    let (issuer, limits) = (config.issuer.clone().ok_or("no issuer")?, Limits::default());
     // OP-141 m.18 (a), (e), (f), OP-149 m.16 (a)
     let actors = idp::ActorBindings::default();
     let domains = Arc::new(Domains::new(Setup {
@@ -853,6 +853,7 @@ async fn serve(
         clock: SourcesClock::new(sequencer.clone()),
         deriver,
         signer: config.signer.clone(),
+        api_base: issuer.clone(),
     }));
     // OP-150 L2, CMP-8
     let renewing = claims::start(signer(), &platform_pools, domains.clone(), renew);

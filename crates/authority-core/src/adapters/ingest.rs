@@ -64,7 +64,28 @@ where
             .now()
             .await
             .map_err(|_| CoreError::Unavailable("time"))?;
-        let result = led.core.ingest(sub, now).await;
+        let mut result = led.core.ingest(sub, now).await;
+        // §9.9.3 k.6, P50: the holders an admitted compromise declaration ended lose their
+        // live families at its record, under the same leader
+        if let Ok(done) = &result
+            && let (ClaimVerdict::Admitted { position, .. }, false) =
+                (&done.verdict, done.ended.is_empty())
+        {
+            let pos = *position;
+            for holder in &done.ended {
+                if let Err(e) = crate::status::adapters::revoke_holder(
+                    &self.setup.sequencer,
+                    sub.domain,
+                    &holder.0,
+                    pos,
+                )
+                .await
+                {
+                    result = Err(e);
+                    break;
+                }
+            }
+        }
         if matches!(result, Err(CoreError::Sequencer(_) | CoreError::Store(_))) {
             *guard = None;
         }

@@ -33,6 +33,9 @@ pub struct Ingested {
     /// When its issuer's quota was used up: the window's start and length in milliseconds
     /// (G44, §16.7).
     pub quota: Option<(u64, u64)>,
+    /// The holder Instances an admitted compromise declaration ended (§9.9.3 k.6): their live
+    /// projection families are revoked at the record once it is in.
+    pub ended: Vec<Id>,
 }
 
 /// A verified submission: what it says, who signed it and its body.
@@ -81,6 +84,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                     issuer: Id([0; 16]),
                     class: String::new(),
                     quota: None,
+                    ended: Vec::new(),
                 });
             }
         };
@@ -102,6 +106,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                 issuer,
                 class,
                 quota: None,
+                ended: Vec::new(),
             });
         }
         for _ in 0..MAX_RETRIES {
@@ -125,12 +130,14 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                 }],
                 ..Resolved::default()
             };
-            let items = self.ingest_items(&resolved, &v, now).await?;
+            let (items, ended) = self.ingest_items(&resolved, &v, now).await?;
             match self.leader.commit(now, &items).await {
                 Ok(done) => {
-                    let position = match done {
-                        Committed::Appended(positions) => positions.last().copied().unwrap_or(pos),
-                        Committed::Replayed(at) => at,
+                    let (position, ended) = match done {
+                        Committed::Appended(positions) => {
+                            (positions.last().copied().unwrap_or(pos), ended)
+                        }
+                        Committed::Replayed(at) => (at, Vec::new()),
                     };
                     let verdict = match Quarantine::of(disposition) {
                         None => ClaimVerdict::Admitted {
@@ -149,6 +156,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                         issuer,
                         class,
                         quota,
+                        ended,
                     });
                 }
                 Err(e) if e.is_retry() => {}
@@ -162,16 +170,19 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
     }
 
     /// The `claim` record of an ingest: without the raw carrier of an external one (§10.1.2
-    /// rule 1), with the body kept by its digest (§9.13.1).
+    /// rule 1), with the body kept by its digest (§9.13.1). With it the holders the Claim ends.
     async fn ingest_items(
         &mut self,
         resolved: &Resolved,
         v: &Verified,
         now: u64,
-    ) -> Result<Vec<access_authority_sequencer::domain::Item>, CoreError> {
+    ) -> Result<(Vec<access_authority_sequencer::domain::Item>, Vec<Id>), CoreError> {
+        let (claims, ended) = self.claim_events(self.domain, resolved, now).await?;
         let derived = Derived {
             decision: Vec::new(),
-            claims: self.claim_events(self.domain, resolved, now).await?,
+            claims,
+            ended: Vec::new(),
+            ended_by_claims: ended.clone(),
         };
         let mut items = self.claim_items(resolved, &derived)?;
         if let Some(item) = items.first_mut() {
@@ -184,7 +195,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                 item.proofs.push((d, bytes.clone()));
             }
         }
-        Ok(items)
+        Ok((items, ended))
     }
 
     /// The disposition of `s`, its quota draw and, when the quota is used up, the window

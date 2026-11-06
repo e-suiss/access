@@ -65,6 +65,12 @@ pub trait Reader {
         &self,
         nonce: &[u8],
     ) -> impl Future<Output = Result<Option<NonceRow>, CoreError>> + Send;
+    /// The first `projection.issue` of each live projection family `holder` holds (§9.9.3
+    /// k.6, P50): the families that end with the holder Instance.
+    fn live_families(
+        &self,
+        holder: &Id,
+    ) -> impl Future<Output = Result<Vec<Digest>, CoreError>> + Send;
 }
 
 /// Confirms who a new key belongs to before it is an Instance: the actor-binding of

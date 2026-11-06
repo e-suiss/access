@@ -38,8 +38,8 @@ use crate::query::{Hit, Query, page_after, page_body};
 mod binding;
 mod projection;
 pub use projection::{
-    BOUNDS_HORIZON_MS, CONTRACT_LABEL, FAMILY_CLAIM, INTENT_HORIZON_MS, Projected, Token,
-    TokenAuthority, TokenOrder,
+    BOUNDS_HORIZON_MS, CONTRACT_LABEL, FAMILY_CLAIM, INTENT_HORIZON_MS, Projected, STATUS_CLAIM,
+    Token, TokenAuthority, TokenOrder,
 };
 
 /// Reads one domain's state and nonces through the application role.
@@ -96,6 +96,16 @@ impl Reader for PgReader {
 
     async fn proof(&self, digest: &[u8; 32]) -> Result<Option<Vec<u8>>, CoreError> {
         Ok(access_store::claims::proof(&self.pool, &self.domain, digest).await?)
+    }
+
+    async fn live_families(&self, holder: &Id) -> Result<Vec<Digest>, CoreError> {
+        Ok(
+            access_store::status::live_families(&self.pool, &self.domain, &holder.0)
+                .await?
+                .into_iter()
+                .map(|f| Digest(f.root_exercise))
+                .collect(),
+        )
     }
 
     async fn recorded_at(&self, pos: u64) -> Result<Option<u64>, CoreError> {
@@ -249,6 +259,9 @@ pub struct Setup<K, B, S, C> {
     pub deriver: Pool,
     /// The authority signer's socket; without one, receipts are not signed (OP-143 m.5).
     pub signer: Option<std::path::PathBuf>,
+    /// The deployment's API base: the address a domain's Token Status Lists are served under,
+    /// and the `uri` a token's `status` claim names (OP-150 m.10 (b)).
+    pub api_base: String,
 }
 
 struct Led<B: Binding, S: Salts, C> {
@@ -414,8 +427,19 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
     }
 
     async fn decide(&self, inc: &Incoming, subject: Option<Id>) -> Result<Response, CoreError> {
+        let mut guard = self.leading(inc.request.domain).await?;
+        self.decide_led(&mut guard, inc, subject).await
+    }
+
+    /// [`Domains::decide`] on the leader in `guard`, which the caller holds across whatever
+    /// must not interleave with another commit of the domain.
+    async fn decide_led(
+        &self,
+        guard: &mut Guard<B, S, C>,
+        inc: &Incoming,
+        subject: Option<Id>,
+    ) -> Result<Response, CoreError> {
         let domain = inc.request.domain;
-        let mut guard = self.leading(domain).await?;
         let Some(led) = guard.as_mut() else {
             return Err(CoreError::Unavailable("leader"));
         };
@@ -487,8 +511,28 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
                     .map_err(|_| CoreError::Unavailable("token-key"))?,
             );
         }
+        // §9.9.3 k.6, P50: the ended holders' live families are revoked at the record that
+        // ended them, under the same leader so no family of theirs opens in between
+        if let Ok(r) = &result
+            && let Some(pos) = r.record
+            && !r.replayed
+        {
+            for holder in &r.ended {
+                if let Err(e) = crate::status::adapters::revoke_holder(
+                    &self.setup.sequencer,
+                    domain,
+                    &holder.0,
+                    pos,
+                )
+                .await
+                {
+                    result = Err(e);
+                    break;
+                }
+            }
+        }
         if matches!(result, Err(CoreError::Sequencer(_) | CoreError::Store(_))) {
-            *guard = None;
+            **guard = None;
         }
         result
     }

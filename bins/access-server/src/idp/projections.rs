@@ -78,7 +78,7 @@ pub(crate) fn answer(p: Projected) -> Result<TokenProjection, Unavailable> {
             position: t.position,
             contract: t.contract,
             expires_at: t.expires_at,
-            status: None,
+            status: t.status,
             family: t.family,
         }),
         Projected::Decided(r) if r.decision.outcome == Outcome::RequireAction => {

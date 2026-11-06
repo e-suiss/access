@@ -2,6 +2,7 @@
     clippy::unwrap_used,
     clippy::panic,
     clippy::too_many_lines,
+    clippy::large_futures,
     reason = "test code; the request-path lints (OP-3) do not apply"
 )]
 
@@ -143,6 +144,7 @@ impl World {
             clock: SourcesClock::new(db.sequencer.clone()),
             deriver: db.deriver.clone(),
             signer,
+            api_base: String::from("https://access.test"),
         }));
         let plane = Plane::new(
             domains.clone(),

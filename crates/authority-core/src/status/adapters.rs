@@ -3,12 +3,11 @@
 
 use std::path::PathBuf;
 
-use access_internal_api::events::{Event, Source};
 use access_kernel::digest::Digest;
 use access_kernel::status::CWT_CONTENT_TYPE;
 use access_kernel::verify::key_scope::KeyUsage;
 use access_store::Pool;
-use access_store::projections::{Family, revoke_family};
+use access_store::projections::Family;
 use access_store::scope::DomainId;
 use access_store::status::{self, List, Publication, Snapshot};
 
@@ -104,10 +103,11 @@ pub async fn open_family(
     )
 }
 
-/// Revokes every live projection family of `holder` at `pos`, the position of the Exercise or
-/// Claim `source` that ended it (§9.9.3 k.6, P50), setting each family's status entry, and
-/// returns one `projection-invalidated` event per family it revoked, effective `at`, for the
-/// caller to deliver. A family another path revoked first gives no event here.
+/// Revokes every live projection family of `holder` at `pos`, the position of the record that
+/// ended it (§9.9.3 k.6, P50), setting each family's status entry, and returns the families it
+/// revoked, by id. The `projection-invalidated` events of those families are derived with that
+/// record (`Event::projection_invalidated`, one per family), so a family another path revoked
+/// first is not among them and raises no second event.
 ///
 /// # Errors
 /// [`CoreError::Store`].
@@ -115,19 +115,7 @@ pub async fn revoke_holder(
     sequencer: &Pool,
     domain: Digest,
     holder: &[u8; 16],
-    (pos, source, at): (u64, Source, u64),
-) -> Result<Vec<Event>, CoreError> {
-    let d = scope(domain);
-    let mut out = Vec::new();
-    for f in status::live_families(sequencer, &d, holder).await? {
-        if revoke_family(sequencer, &d, &f.family, pos).await? {
-            out.push(Event::projection_invalidated(
-                domain,
-                source,
-                Digest(f.root_exercise),
-                at,
-            ));
-        }
-    }
-    Ok(out)
+    pos: u64,
+) -> Result<Vec<Family>, CoreError> {
+    Ok(status::revoke_holder_families(sequencer, &scope(domain), holder, pos).await?)
 }
