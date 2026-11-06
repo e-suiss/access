@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.device_keys SET status = 'retired'\n          WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND instance_id = $4\n            AND status = 'active'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "c1a97debfbaa6448231ef66bbe9024ad1d63eb23d6f1ff4c30b6a20d8c8e7ff0"
+}

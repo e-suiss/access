@@ -8,8 +8,8 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use access_kernel::claim::Statement;
 use access_kernel::claim::body::{
-    AttestationResult, AuthMethod, Authentication, AuthenticatorBinding, AuthenticatorKind, Body,
-    Class, DevicePosture, Verdict, WebauthnDetail, body_digest,
+    AttestationResult, AuthMethod, Authentication, AuthenticatorBinding, AuthenticatorKind,
+    BindingKind, Body, Class, DevicePosture, IdentityBinding, Verdict, WebauthnDetail, body_digest,
 };
 use access_kernel::codec::Canonical;
 use access_kernel::digest::Digest;
@@ -42,6 +42,9 @@ pub const LINE_CONTEXT: &str = "access/claim-line/v1";
 
 /// Digest context of a WebAuthn assertion kept as evidence.
 pub const ASSERTION_CONTEXT: &str = "access/webauthn-assertion/v1";
+
+/// Digest context of the proof an identity binding rests on.
+pub const BINDING_EVIDENCE_CONTEXT: &str = "access/identity-binding-evidence/v1";
 
 /// What a Claim is bound to, besides its subject (§10.1.5 `binding`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -235,6 +238,8 @@ pub struct PasskeyFacts<'a> {
     pub subject: [u8; 16],
     /// The credential id.
     pub credential: &'a [u8],
+    /// The identity credential row that stands for it; its line is named by it.
+    pub sibling: [u8; 16],
     /// The COSE public key.
     pub public_key: &'a [u8],
     /// Its COSE algorithm.
@@ -284,7 +289,7 @@ pub fn passkey_binding(p: &PasskeyFacts<'_>) -> ClaimOrder {
         },
         assurance: BTreeMap::new(),
         bind: Bind::None,
-        line: Some(authenticator_line(AuthenticatorKind::Passkey, p.credential)),
+        line: Some(authenticator_line(AuthenticatorKind::Passkey, &p.sibling)),
         retract: false,
     }
 }
@@ -324,7 +329,8 @@ pub fn device_key_binding(
 }
 
 /// The order that ends an authenticator's line when it is removed: its last Claim is superseded
-/// by one that holds for no time. Instances are untouched (IDP-2, K04).
+/// by one that holds for no time. Instances are untouched (IDP-2, K04). `credential` names the
+/// line: a passkey's identity credential row, a device key's Instance.
 #[must_use]
 pub fn authenticator_removed(
     subject: [u8; 16],
@@ -375,6 +381,35 @@ pub fn account_status(subject: [u8; 16], status: &str, at: u64) -> ClaimOrder {
         assurance: BTreeMap::new(),
         bind: Bind::None,
         line: Some(status_line()),
+        retract: false,
+    }
+}
+
+/// The line of a subject's identity binding of `kind`: the next binding supersedes it.
+#[must_use]
+pub fn binding_line(kind: BindingKind) -> [u8; 32] {
+    line(&[Class::IdentityBinding(kind).name().as_bytes()])
+}
+
+/// The `identity_binding_<kind>` Claim that binds the subject to its Party (§10.1.3 IDP-2,
+/// §10.1.5): the proof the binding rests on enters as a digest only (E26). The Party itself is
+/// resolved when the Claim is issued.
+#[must_use]
+pub fn identity_binding(subject: [u8; 16], kind: BindingKind, proof: &[u8], at: u64) -> ClaimOrder {
+    ClaimOrder {
+        subject,
+        class: Class::IdentityBinding(kind).name(),
+        at,
+        ttl_ms: BINDING_TTL_MS,
+        content: Content::Body {
+            body: Body::IdentityBinding(IdentityBinding {
+                evidence: Digest(context_digest(BINDING_EVIDENCE_CONTEXT, proof).0),
+            }),
+            disclose: true,
+        },
+        assurance: BTreeMap::new(),
+        bind: Bind::None,
+        line: Some(binding_line(kind)),
         retract: false,
     }
 }

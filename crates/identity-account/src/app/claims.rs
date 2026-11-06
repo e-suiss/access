@@ -124,7 +124,7 @@ impl<S: ClaimSigner, I: ClaimIngest, C: Clock> Courier<S, I, C> {
             _ => None,
         };
         let supersedes = match &order.line {
-            Some(l) => store::last_in_line(&mut t, &g.domain, l)
+            Some(l) => store::last_in_line(&mut t, &order.subject, &g.domain, l)
                 .await
                 .map_err(down)?,
             None => None,

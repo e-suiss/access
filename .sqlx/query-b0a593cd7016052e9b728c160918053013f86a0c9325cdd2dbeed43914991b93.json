@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT claim_id FROM access.issued_claims\n          WHERE tenant_id = $1 AND realm_id = $2 AND domain_id = $3 AND line = $4\n            AND disposition NOT LIKE 'rejected%'\n          ORDER BY id DESC LIMIT 1",
+  "query": "SELECT claim_id FROM access.issued_claims\n          WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND domain_id = $4\n            AND line = $5 AND disposition NOT LIKE 'rejected%'\n          ORDER BY id DESC LIMIT 1",
   "describe": {
     "columns": [
       {
@@ -19,6 +19,7 @@
       "Left": [
         "Uuid",
         "Uuid",
+        "Uuid",
         "Bytea",
         "Bytea"
       ]
@@ -27,5 +28,5 @@
       false
     ]
   },
-  "hash": "dad1b888ece5c738165bda91346b2e8c817f3bc47e081da42c6743907c41cc1e"
+  "hash": "b0a593cd7016052e9b728c160918053013f86a0c9325cdd2dbeed43914991b93"
 }

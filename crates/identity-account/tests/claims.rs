@@ -19,7 +19,7 @@ use access_crypto::envelope::SoftKek;
 use access_crypto::opaque_id::IdKey;
 use access_identity_account::adapters::pg::PgAccounts;
 use access_identity_account::app::accounts::change_status;
-use access_identity_account::app::claims::{ClaimSigner, Courier, Issued, emit};
+use access_identity_account::app::claims::{ClaimSigner, Courier, Issued, Report, emit};
 use access_identity_account::app::{Actor, Realm};
 use access_identity_account::domain::claims::{AuthFacts, Bind, RiskSignal, authentication, risk};
 use access_identity_account::domain::status::AccountStatus;
@@ -42,6 +42,7 @@ use access_store::testing::{TestDb, fresh};
 const NOW: u64 = 1_800_000_000_000;
 const ISSUER: [u8; 16] = [0x15; 16];
 const PARTY: [u8; 16] = [0x9a; 16];
+const OTHER_PARTY: [u8; 16] = [0x9b; 16];
 
 struct Fixed;
 
@@ -182,6 +183,39 @@ impl Env {
     }
 }
 
+/// Steps the courier until `n` orders were answered in all; the outbox shows an order only once
+/// every older transaction in the cluster has ended.
+async fn answered(c: &Courier<Plain, &Plane, Fixed>, n: u32) -> Report {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
+    let mut total = Report::default();
+    loop {
+        let r = c.step().await.unwrap();
+        total.answered += r.answered;
+        total.unplaced += r.unplaced;
+        if total.answered >= n {
+            return total;
+        }
+        assert!(std::time::Instant::now() < deadline, "{total:?}");
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+}
+
+/// Steps the courier until a step fails, as it must once an order reaches a plane that is down.
+async fn until_down(c: &Courier<Plain, &Plane, Fixed>) {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
+    loop {
+        match c.step().await {
+            Err(_) => return,
+            Ok(r) => assert_eq!(r.answered, 0, "answered while the plane is down"),
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "the plane was never reached"
+        );
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+}
+
 fn statements(plane: &Plane) -> Vec<Statement> {
     plane
         .got
@@ -205,15 +239,20 @@ async fn status_changes_become_superseding_status_claims() {
         .unwrap();
     let plane = Plane::default();
     let c = e.courier(&plane);
-    assert_eq!(c.step().await.unwrap().answered, 1);
+    assert_eq!(answered(&c, 1).await.answered, 1);
     change_status(&pg, &e.realm(), s, AccountStatus::Active, &ADMIN)
         .await
         .unwrap();
-    assert_eq!(c.step().await.unwrap().answered, 1);
+    assert_eq!(answered(&c, 1).await.answered, 1);
+    let other = e.subject(Some(OTHER_PARTY)).await;
+    change_status(&pg, &e.realm(), other, AccountStatus::Suspended, &ADMIN)
+        .await
+        .unwrap();
+    assert_eq!(answered(&c, 1).await.answered, 1);
     assert_eq!(c.step().await.unwrap().answered, 0);
     let got = statements(&plane);
-    assert_eq!(got.len(), 2);
-    for st in &got {
+    assert_eq!(got.len(), 3);
+    for st in &got[..2] {
         assert_eq!(
             (st.domain, st.issuer, st.subject, st.class.as_str()),
             (Digest(e.domain), Id(ISSUER), Id(PARTY), "account_status")
@@ -223,6 +262,11 @@ async fn status_changes_become_superseding_status_claims() {
     assert_eq!(got[1].value, Some(EqValue::Text(String::from("active"))));
     let first = access_kernel::claim::claim_id(&plane.got.lock().unwrap()[0].claim);
     assert_eq!(got[1].supersedes, Some(first));
+    assert_eq!(
+        (got[2].subject, got[2].supersedes),
+        (Id(OTHER_PARTY), None),
+        "lines are per subject"
+    );
     assert!(plane.got.lock().unwrap().iter().all(|s| s.body.is_none()));
 }
 
@@ -243,7 +287,7 @@ async fn orders_wait_for_the_plane_and_need_a_party_and_an_issuer() {
         .await
         .unwrap();
     let courier = e.courier(&plane);
-    assert!(courier.step().await.is_err());
+    until_down(&courier).await;
     plane.down.store(false, Ordering::SeqCst);
     let report = courier.step().await.unwrap();
     assert_eq!((report.answered, report.unplaced), (1, 0));
@@ -314,7 +358,8 @@ async fn session_authentications_bind_the_registered_instance() {
     .unwrap();
     tx.commit().await.unwrap();
     let plane = Plane::default();
-    assert_eq!(e.courier(&plane).step().await.unwrap().answered, 1);
+    let c = e.courier(&plane);
+    assert_eq!(answered(&c, 1).await.answered, 1);
     let st = &statements(&plane)[0];
     assert_eq!(st.bound_instance, Some(Id([0x1d; 16])));
     assert_eq!(st.assurance.get("aal"), Some(&1));

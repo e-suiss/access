@@ -11,6 +11,8 @@ use super::*;
 const SUBJECT: [u8; 16] = [1; 16];
 const CREDENTIAL: [u8; 20] = [0xc7; 20];
 const PUBLIC_KEY: [u8; 40] = [0x9b; 40];
+const SIBLING: [u8; 16] = [0x5b; 16];
+const PROOF: [u8; 48] = [0xd2; 48];
 
 fn placement(now: u64) -> Placement {
     Placement {
@@ -27,6 +29,7 @@ fn passkey() -> ClaimOrder {
     passkey_binding(&PasskeyFacts {
         subject: SUBJECT,
         credential: &CREDENTIAL,
+        sibling: SIBLING,
         public_key: &PUBLIC_KEY,
         alg: -7,
         attestation: Some((String::from("packed"), AttestationResult::Verified)),
@@ -65,8 +68,9 @@ fn all() -> Vec<ClaimOrder> {
         login(Bind::Statement([9; 32])),
         passkey(),
         device_key_binding(SUBJECT, &PUBLIC_KEY, -8, [6; 16], 100),
-        authenticator_removed(SUBJECT, AuthenticatorKind::Passkey, &CREDENTIAL, 100),
+        authenticator_removed(SUBJECT, AuthenticatorKind::Passkey, &SIBLING, 100),
         account_status(SUBJECT, "suspended", 100),
+        identity_binding(SUBJECT, BindingKind::Person, &PROOF, 100),
         posture(
             SUBJECT,
             attestation_verdict(AttestationResult::Verified),
@@ -106,7 +110,12 @@ fn prepared_claims_fit_their_classes() {
             (Id([4; 16]), Id([5; 16]), 150)
         );
     }
-    let posture = all().remove(6).prepare(&placement(150)).unwrap();
+    let posture = all()
+        .into_iter()
+        .find(|o| o.class == "posture_device")
+        .unwrap()
+        .prepare(&placement(150))
+        .unwrap();
     assert!(posture.body.is_none());
     assert!(matches!(posture.statement.value, Some(EqValue::Bytes(ref d)) if d.len() == 32));
 }
@@ -154,7 +163,7 @@ fn claims_carry_digests_not_material() {
     for o in [
         passkey(),
         device_key_binding(SUBJECT, &PUBLIC_KEY, -8, [6; 16], 100),
-        authenticator_removed(SUBJECT, AuthenticatorKind::Passkey, &CREDENTIAL, 100),
+        authenticator_removed(SUBJECT, AuthenticatorKind::Passkey, &SIBLING, 100),
     ] {
         let p = o.prepare(&placement(150)).unwrap();
         for bytes in [p.statement.to_bytes().unwrap(), p.body.unwrap()] {
@@ -164,13 +173,31 @@ fn claims_carry_digests_not_material() {
     }
 }
 
+// §10.1.3 IDP-2, §10.1.5, E26: the binding of a subject to its Party is an identity_binding_person
+// Claim on the subject's binding line that carries only the digest of its proof
+#[test]
+fn identity_binding_carries_the_proof_digest_only() {
+    let o = identity_binding(SUBJECT, BindingKind::Person, &PROOF, 100);
+    assert_eq!(o.class, "identity_binding_person");
+    assert_eq!(o.line, Some(binding_line(BindingKind::Person)));
+    assert_ne!(
+        o.line,
+        identity_binding(SUBJECT, BindingKind::Workload, &PROOF, 100).line
+    );
+    let p = o.prepare(&placement(150)).unwrap();
+    assert_eq!(p.statement.validity.until, 100 + BINDING_TTL_MS);
+    for bytes in [p.statement.to_bytes().unwrap(), p.body.unwrap()] {
+        assert!(!contains(&bytes, &PROOF));
+    }
+}
+
 // IDP-2, K04: adding and removing an authenticator are lines of authenticator_binding Claims
 // about the Party; a removal supersedes the last Claim and holds for no time, and neither binds a
 // new Instance
 #[test]
 fn removal_ends_the_authenticator_line() {
     let added = passkey();
-    let removed = authenticator_removed(SUBJECT, AuthenticatorKind::Passkey, &CREDENTIAL, 300);
+    let removed = authenticator_removed(SUBJECT, AuthenticatorKind::Passkey, &SIBLING, 300);
     assert_eq!(added.line, removed.line);
     let p = Placement {
         supersedes: Some(Id([0xaa; 16])),

@@ -137,6 +137,7 @@ async fn the_realm_issuer_claims_are_accepted_for_actor_binding() {
     let passkey = passkey_binding(&PasskeyFacts {
         subject: alice,
         credential: &[0xc1; 16],
+        sibling: [0xc3; 16],
         public_key: &[0xc2; 77],
         alg: -7,
         attestation: Some((String::from("none"), AttestationResult::None)),
@@ -146,7 +147,7 @@ async fn the_realm_issuer_claims_are_accepted_for_actor_binding() {
         at: NOW - 1,
     });
     assert!(admitted(&c.issue(t, r, &passkey).await.unwrap()));
-    let removed = authenticator_removed(alice, AuthenticatorKind::Passkey, &[0xc1; 16], NOW);
+    let removed = authenticator_removed(alice, AuthenticatorKind::Passkey, &[0xc3; 16], NOW);
     assert!(admitted(&c.issue(t, r, &removed).await.unwrap()));
     // TN-49, §12.3.1, E5: the realm issuer's status Claim is accepted by default and only narrows
     assert!(admitted(
@@ -171,6 +172,14 @@ async fn the_realm_issuer_claims_are_accepted_for_actor_binding() {
     access_identity_account::ports::AccountTx::commit(tx)
         .await
         .unwrap();
-    let report = c.step().await.unwrap();
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
+    let report = loop {
+        let r = c.step().await.unwrap();
+        if r.answered > 0 {
+            break r;
+        }
+        assert!(std::time::Instant::now() < deadline, "{r:?}");
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    };
     assert_eq!((report.answered, report.unplaced), (1, 0));
 }

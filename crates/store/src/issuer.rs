@@ -168,6 +168,31 @@ pub async fn insert_device_key(
     Ok(row.map(|d| *d.as_bytes()))
 }
 
+/// Retires the subject's active device key of a terminated Instance (§10.1.3 `status`); `false`
+/// when there is none. The row stays (OP-73).
+///
+/// # Errors
+/// [`StoreError`].
+pub async fn retire_device_key(
+    t: &mut TenantTx,
+    subject: &[u8; 16],
+    instance: &[u8; 16],
+) -> Result<bool, StoreError> {
+    let (tenant, realm) = scope(t)?;
+    let done = sqlx::query!(
+        "UPDATE access.device_keys SET status = 'retired'
+          WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND instance_id = $4
+            AND status = 'active'",
+        tenant,
+        realm,
+        Uuid::from_bytes(*subject),
+        instance.as_slice(),
+    )
+    .execute(&mut *t.tx)
+    .await?;
+    Ok(done.rows_affected() == 1)
+}
+
 /// The active device Instance a session registered, the latest first (INV-13: at most one per
 /// device and domain).
 ///
@@ -254,24 +279,26 @@ pub async fn record_issued(t: &mut TenantTx, c: &IssuedClaim<'_>) -> Result<(), 
     Ok(())
 }
 
-/// The latest recorded Claim of `line` in `domain` that was not rejected: the one a new Claim
-/// of the line supersedes.
+/// The latest recorded Claim of `line` about `subject` in `domain` that was not rejected: the
+/// one a new Claim of the line supersedes. Lines are per subject.
 ///
 /// # Errors
 /// [`StoreError`].
 pub async fn last_in_line(
     t: &mut TenantTx,
+    subject: &[u8; 16],
     domain: &DomainId,
     line: &[u8; 32],
 ) -> Result<Option<[u8; 16]>, StoreError> {
     let (tenant, realm) = scope(t)?;
     let row = sqlx::query_scalar!(
         "SELECT claim_id FROM access.issued_claims
-          WHERE tenant_id = $1 AND realm_id = $2 AND domain_id = $3 AND line = $4
-            AND disposition NOT LIKE 'rejected%'
+          WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND domain_id = $4
+            AND line = $5 AND disposition NOT LIKE 'rejected%'
           ORDER BY id DESC LIMIT 1",
         tenant,
         realm,
+        Uuid::from_bytes(*subject),
         domain.as_bytes().as_slice(),
         line.as_slice(),
     )
