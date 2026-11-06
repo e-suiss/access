@@ -5,7 +5,14 @@ use std::os::unix::fs::PermissionsExt as _;
 use super::{SecretFile, SecretFileError, refuse_secret_environment};
 
 fn file(name: &str, body: &str, mode: u32) -> std::path::PathBuf {
-    let dir = std::env::temp_dir().join(format!("access-secret-{}-{name}", std::process::id()));
+    let nonce = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_nanos());
+    let dir = std::env::temp_dir().join(format!(
+        "access-secret-{}-{nonce}-{name}",
+        std::process::id()
+    ));
+    let _ = fs::remove_dir_all(&dir);
     fs::create_dir_all(&dir).unwrap();
     let path = dir.join("cred");
     fs::File::create(&path)
