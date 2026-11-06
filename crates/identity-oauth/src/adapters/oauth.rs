@@ -242,6 +242,12 @@ impl OAuthTx for PgOAuthTx {
     }
 }
 
+/// Names the identity signer's refusal of a token (OP-67); the code is the signer's stable one.
+fn refused(code: &str, typ: &str) -> Unavailable {
+    tracing::warn!(code, typ, "identity signer refused to sign");
+    Unavailable
+}
+
 impl TokenSigner for SignerKeys {
     async fn sign(
         &self,
@@ -261,13 +267,15 @@ impl TokenSigner for SignerKeys {
         match self.ask(&request).await? {
             Response::Signed { token, .. } => return Ok(token),
             Response::Error(code) if code == UNKNOWN_REALM => {}
+            Response::Error(code) => return Err(refused(&code, typ)),
             _ => return Err(Unavailable),
         }
         if self.ask(&Request::Open { realm: r, alg }).await? != Response::Opened {
-            return Err(Unavailable);
+            return Err(refused("open", typ));
         }
         match self.ask(&request).await? {
             Response::Signed { token, .. } => Ok(token),
+            Response::Error(code) => Err(refused(&code, typ)),
             _ => Err(Unavailable),
         }
     }

@@ -82,6 +82,29 @@ impl RealmKek for OneKek {
 /// read back what would be signed.
 struct ClearSigner;
 
+/// A signer whose realm key is unavailable (down, or a realm it cannot open).
+struct RefusingSigner;
+
+impl TokenSigner for RefusingSigner {
+    fn sign(
+        &self,
+        _: RealmId,
+        _: JwsAlg,
+        _: &str,
+        _: &[u8],
+        _: u64,
+    ) -> impl std::future::Future<Output = Result<String, Unavailable>> + Send {
+        std::future::ready(Err(Unavailable))
+    }
+
+    fn jwks(
+        &self,
+        _: RealmId,
+    ) -> impl std::future::Future<Output = Result<String, Unavailable>> + Send {
+        std::future::ready(Err(Unavailable))
+    }
+}
+
 impl TokenSigner for ClearSigner {
     fn sign(
         &self,
@@ -282,10 +305,18 @@ impl World {
     }
 
     fn courier<T: Transport>(&self, t: T) -> Courier<T, ClearSigner, KekSealer<OneKek>, TestClock> {
+        self.courier_with(t, ClearSigner)
+    }
+
+    fn courier_with<T: Transport, S: TokenSigner>(
+        &self,
+        t: T,
+        signer: S,
+    ) -> Courier<T, S, KekSealer<OneKek>, TestClock> {
         Courier::new(
             self.pools(),
             t,
-            ClearSigner,
+            signer,
             sealer(),
             self.clock.clone(),
             Backoff {
@@ -865,4 +896,65 @@ async fn a_stream_verifies_and_sets_its_status() {
         streams.by_token(w.tenant, w.realm, &token).await,
         Err(StreamError::NotFound)
     ));
+}
+
+// OP-149 m.4 at-least-once, m.7, OP-67, Work A24: a push SET that cannot be signed is that
+// delivery's transient failure, retried with backoff, and never holds back the other
+// deliveries of the step; once the signer is back the delivery goes out
+#[tokio::test]
+async fn an_unsignable_delivery_is_retried_without_blocking_the_others() {
+    let w = World::new().await;
+    let receiver = Receiver::default();
+    let port = receiver.start().await;
+    let streams = w.streams();
+    let hook = streams
+        .create(
+            w.tenant,
+            w.realm,
+            &parse_stream(&stream_request(
+                "urn:suiss:access:delivery:webhook",
+                Some("https://work.example/v1/access/events"),
+                &["api_client.created"],
+            ))
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    let push = streams
+        .create(
+            w.tenant,
+            w.realm,
+            &parse_stream(&stream_request(
+                "urn:ietf:rfc:8935",
+                Some("https://work.example/v1/inbound/events"),
+                &["api_client.created"],
+            ))
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    let id = w.api_client_created("cli_push").await;
+    let fanout = w.fanout();
+    assert_eq!(settle_identity(&fanout, 1).await, 2);
+
+    let down = w.courier_with(Local(port), RefusingSigner);
+    let first = down.step().await.unwrap();
+    assert_eq!((first.delivered, first.retried, first.failed), (1, 1, 0));
+    assert_eq!(w.state(hook.id, &id).await.0, "delivered");
+    assert_eq!(w.state(push.id, &id).await.0, "pending");
+    assert_eq!(receiver.got.lock().unwrap().len(), 1);
+    assert_eq!(down.step().await.unwrap(), Step::default());
+
+    w.advance(60_000);
+    let up = w.courier(Local(port));
+    let second = up.step().await.unwrap();
+    assert_eq!((second.delivered, second.retried, second.failed), (1, 0, 0));
+    assert_eq!(w.state(push.id, &id).await.0, "delivered");
+    let got = receiver.got.lock().unwrap().clone();
+    assert_eq!(got.len(), 2);
+    assert!(
+        got[1]
+            .header("content-type")
+            .starts_with("application/secevent+jwt")
+    );
 }

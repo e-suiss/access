@@ -16,7 +16,7 @@ use access_store::events::{self as store, DeliveryRow, Mark, SubscriptionRow};
 use access_store::identity::{RealmId, TenantId, TenantTx};
 use serde_json::Value;
 
-use crate::app::{Db, down, realm_signing};
+use crate::app::{Db, realm_signing};
 use crate::domain::set::{CLOUDEVENT_CONTENT_TYPE, SET_CONTENT_TYPE, SET_TYP, cloud_event};
 use crate::domain::stream::{Answer, Channel, classify};
 use crate::ports::{Clock, PostError, Sealer, TokenSigner, Transport, Unavailable};
@@ -40,6 +40,22 @@ pub struct Step {
     pub retried: u32,
     /// Given up.
     pub failed: u32,
+}
+
+/// Names the failed stage of a step and what failed, then stands for the unavailability (OP-67).
+fn fault<E: std::fmt::Debug>(stage: &'static str) -> impl FnOnce(E) -> Unavailable {
+    move |e| {
+        tracing::warn!(stage, error = ?e, "event courier fault");
+        Unavailable
+    }
+}
+
+/// Names the failed stage of a port that only says it is unavailable.
+fn at(stage: &'static str) -> impl FnOnce(Unavailable) -> Unavailable {
+    move |Unavailable| {
+        tracing::warn!(stage, "event courier fault");
+        Unavailable
+    }
 }
 
 /// The due queue → receiver courier.
@@ -90,10 +106,10 @@ where
     /// # Errors
     /// [`Unavailable`] when storage or the clock fails.
     pub async fn step(&self) -> Result<Step, Unavailable> {
-        let now = self.clock.now().map_err(down)?;
+        let now = self.clock.now().map_err(fault("clock"))?;
         let due = store::due(&self.db.reader, now, BATCH)
             .await
-            .map_err(down)?;
+            .map_err(fault("due"))?;
         let mut step = Step::default();
         for (d, id) in due {
             match self
@@ -117,7 +133,7 @@ where
                 Ok(s) if s.delivered > 0 || s.failed > 0 => Duration::ZERO,
                 Ok(_) => POLL_INTERVAL,
                 Err(Unavailable) => {
-                    tracing::warn!("event courier step failed");
+                    tracing::warn!("event courier step failed; the fault above names the stage");
                     Duration::from_millis(self.backoff.base_ms)
                 }
             };
@@ -137,10 +153,10 @@ where
     ) -> Result<Option<Mark<'static>>, Unavailable> {
         let mut t = TenantTx::begin(&self.db.app, tenant, realm)
             .await
-            .map_err(down)?;
-        let row = t.delivery(realm, sub, id).await.map_err(down)?;
-        let s = t.subscription(realm, sub).await.map_err(down)?;
-        t.commit().await.map_err(down)?;
+            .map_err(fault("begin"))?;
+        let row = t.delivery(realm, sub, id).await.map_err(fault("read"))?;
+        let s = t.subscription(realm, sub).await.map_err(fault("read"))?;
+        t.commit().await.map_err(fault("read"))?;
         let (Some(row), Some(s)) = (row, s) else {
             return Ok(None);
         };
@@ -155,14 +171,30 @@ where
                 status: None,
             }
         } else {
-            let sent = self.send(tenant, realm, &row, &s, now).await?;
+            // OP-149 m.4 at-least-once: a delivery that cannot be built or signed now is this
+            // delivery's transient failure, not the batch's; the others are still sent
+            let sent = self
+                .send(tenant, realm, &row, &s, now)
+                .await
+                .unwrap_or_else(|Unavailable| {
+                    tracing::warn!(
+                        realm = %uuid_text(realm.as_bytes()),
+                        subscription = %hex(&sub),
+                        channel = %s.channel,
+                        delivery = %id,
+                        "event delivery could not be built or signed; retried with backoff"
+                    );
+                    Sent::Unreachable
+                });
             self.judge(sent, row.attempts, now)
         };
         let mut t = TenantTx::begin(&self.db.app, tenant, realm)
             .await
-            .map_err(down)?;
-        t.mark_delivery(realm, sub, id, mark).await.map_err(down)?;
-        t.commit().await.map_err(down)?;
+            .map_err(fault("begin"))?;
+        t.mark_delivery(realm, sub, id, mark)
+            .await
+            .map_err(fault("mark"))?;
+        t.commit().await.map_err(fault("mark"))?;
         Ok(Some(mark))
     }
 
@@ -215,14 +247,18 @@ where
         };
         let (content_type, headers, body) = match Channel::from_name(&s.channel) {
             Some(Channel::Webhook) => {
-                let sealed = s.secret.as_ref().ok_or(Unavailable)?;
-                let raw = self.sealer.open(tenant, realm, &s.id, sealed)?;
-                let secret = WebhookSecret::from_bytes(raw.to_vec()).map_err(down)?;
-                let claims: Value = serde_json::from_slice(&row.payload).map_err(down)?;
-                let occurred = u64::try_from(row.occurred_ms).map_err(down)?;
-                let external = self.db.tenant(tenant)?;
-                let body =
-                    cloud_event(&claims, &external, realm.as_bytes(), occurred).map_err(down)?;
+                let sealed = s.secret.as_ref().ok_or(Unavailable).map_err(at("secret"))?;
+                let raw = self
+                    .sealer
+                    .open(tenant, realm, &s.id, sealed)
+                    .map_err(at("unseal"))?;
+                let secret = WebhookSecret::from_bytes(raw.to_vec()).map_err(fault("secret"))?;
+                let claims: Value =
+                    serde_json::from_slice(&row.payload).map_err(fault("payload"))?;
+                let occurred = u64::try_from(row.occurred_ms).map_err(fault("payload"))?;
+                let external = self.db.tenant(tenant).map_err(at("tenant-id"))?;
+                let body = cloud_event(&claims, &external, realm.as_bytes(), occurred)
+                    .map_err(fault("cloud-event"))?;
                 let ts = now / 1000;
                 let signature = secret.sign(&row.event_id, ts, &body);
                 (
@@ -236,13 +272,17 @@ where
                 )
             }
             Some(Channel::SsfPush) => {
-                let Some((_, alg)) = realm_signing(&self.db.app, tenant, realm).await? else {
+                let Some((_, alg)) = realm_signing(&self.db.app, tenant, realm)
+                    .await
+                    .map_err(at("realm"))?
+                else {
                     return Ok(Sent::Unreachable);
                 };
                 let token = self
                     .signer
                     .sign(realm, alg, SET_TYP, &row.payload, now)
-                    .await?;
+                    .await
+                    .map_err(at("sign"))?;
                 (
                     SET_CONTENT_TYPE,
                     vec![("Accept", String::from("application/json"))],
@@ -263,4 +303,24 @@ where
             },
         )
     }
+}
+
+fn hex(bytes: &[u8]) -> String {
+    use std::fmt::Write as _;
+    bytes.iter().fold(String::new(), |mut out, b| {
+        let _ = write!(out, "{b:02x}");
+        out
+    })
+}
+
+fn uuid_text(b: &[u8; 16]) -> String {
+    let h = hex(b);
+    format!(
+        "{}-{}-{}-{}-{}",
+        &h[..8],
+        &h[8..12],
+        &h[12..16],
+        &h[16..20],
+        &h[20..]
+    )
 }
