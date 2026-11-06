@@ -1,7 +1,6 @@
-//! Stage 6 contract entries that are fixed but not served yet (OP-150 m.2): Claim Ingest
-//! (CMP-8), the Token Status List endpoint (OP-150 m.3 (a), (s)) and the members the realm's
-//! introspection answer adds for authority tokens. Each path carries `x-suiss-served: false`
-//! until the lane that serves it flips it.
+//! Stage 6 contract entries (OP-150 m.2): Claim Ingest (CMP-8), the Token Status List endpoint
+//! (OP-150 m.3 (a), (s)) and the members the realm's introspection answer adds for authority
+//! tokens. Both paths are served (`x-suiss-served: true`).
 
 use serde_json::{Map, Value, json};
 

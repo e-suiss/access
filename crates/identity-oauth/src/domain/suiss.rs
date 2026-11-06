@@ -47,7 +47,7 @@ pub enum Endpoint {
     Exercise,
     /// `GET /access/v1/exercises/{exercise}/agency` (OP-149 m.11).
     ExerciseAgency,
-    /// `POST /access/v1/claims:ingest` (CMP-8, OP-150 m.2); not served yet.
+    /// `POST /access/v1/claims:ingest` (CMP-8, OP-150 m.2).
     ClaimIngest,
     /// `GET /access/v1/status-lists/{list}` (OP-150 m.3 (a), (s)).
     StatusList,
