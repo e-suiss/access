@@ -218,18 +218,21 @@ impl DeviceInstances for Plane {
         }
         Ok(Verdict::Refused {
             code: String::from("protocol"),
+            errors: Vec::new(),
         })
     }
 }
 
 /// The authority plane behind the Approval Surface: one `REQUIRE_ACTION` on intent `[0x44; 32]`
 /// with the render of a refund, at the tier the test sets; a contribution whose statement names
-/// that render is committed as `[0xe3; 32]`, another is "the request changed".
+/// that render is committed as `[0xe3; 32]`, another is "the request changed"; with `unbound`
+/// set, the Claim it finds is bound to another statement (`aas-binding`, OP-149 m.30 (b)).
 #[derive(Clone, Default)]
 struct Surface {
     tier: Arc<std::sync::atomic::AtomicU8>,
     gone: Arc<std::sync::atomic::AtomicBool>,
     shifted: Arc<std::sync::atomic::AtomicBool>,
+    unbound: Arc<std::sync::atomic::AtomicBool>,
     contributions: Arc<Mutex<Vec<Contribution>>>,
 }
 
@@ -310,6 +313,13 @@ impl Approvals for Surface {
         if act.render_digest != render_digest {
             return Ok(Verdict::Refused {
                 code: String::from("aas-render"),
+                errors: Vec::new(),
+            });
+        }
+        if self.unbound.load(Ordering::SeqCst) {
+            return Ok(Verdict::Refused {
+                code: String::from("aas-binding"),
+                errors: vec!["bound-intent"],
             });
         }
         let (domain, nonce) = (c.domain, c.nonce.clone());
@@ -2228,6 +2238,43 @@ async fn an_approval_runs_on_the_hosted_surface() {
     );
     assert!(cooling.json()["available_at"].is_string());
     assert_eq!(e.claims.0.lock().unwrap().len(), 1);
+
+    // SI-5, OP-149 m.30 (b): a contribution whose Claim the plane finds bound to another
+    // statement is refused with aas-binding; the problem names the part of the binding that
+    // was expected and not found, never a value of the request or of a Claim
+    e.surface.tier.store(1, Ordering::SeqCst);
+    e.surface.unbound.store(true, Ordering::SeqCst);
+    let pushed = coordinator
+        .post("/v1/approve/requests", Some(push(24)))
+        .await;
+    let uri = pushed.json()["request_uri"].as_str().unwrap().to_owned();
+    let start = json!({ "request": uri, "redirect_uri": redirect, "state": "st-1" });
+    let s = c.post("/v1/approve/flows", Some(start)).await.json();
+    let statement = b64url_decode(s["options"]["challenge"].as_str().unwrap()).unwrap();
+    let unbound = c
+        .post(
+            &format!("/v1/approve/flows/{}", s["flow"].as_str().unwrap()),
+            Some(finish(assertion_json(&mut key, &id, &user, &statement))),
+        )
+        .await;
+    assert_eq!(
+        unbound.status,
+        StatusCode::CONFLICT,
+        "{}",
+        String::from_utf8_lossy(&unbound.body)
+    );
+    assert_eq!(unbound.json()["code"], "approval-refused");
+    assert_eq!(unbound.json()["reason"], "aas-binding");
+    assert_eq!(
+        unbound.json()["errors"],
+        json!([{ "code": "bound-intent" }])
+    );
+    assert_eq!(
+        unbound.json()["type"],
+        "urn:suiss:access:problem:approval-refused"
+    );
+    assert_eq!(e.surface.contributions.lock().unwrap().len(), 1);
+    e.surface.unbound.store(false, Ordering::SeqCst);
 
     // nothing waits for an approval any more: the request changed
     e.surface.gone.store(true, Ordering::SeqCst);

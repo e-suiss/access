@@ -11,6 +11,7 @@ use std::time::Duration;
 
 use access_authority_core::CoreError;
 use access_authority_core::adapters::{Domains, PgReader, Setup};
+use access_authority_core::app::approval::BindingFacet;
 use access_authority_core::app::{Authority, Incoming, Response, Scope};
 use access_authority_core::domain::{ProofRef, Request};
 use access_authority_core::ports::{Binding, Keys, Salts};
@@ -1860,7 +1861,16 @@ async fn a_contribution_approves_once() {
 fn protocol(r: Result<Response, CoreError>) -> &'static str {
     match r {
         Err(CoreError::Protocol(code)) => code,
+        Err(e @ CoreError::AasBinding(_)) => e.reason().unwrap(),
         other => panic!("expected a protocol rejection, got {other:?}"),
+    }
+}
+
+/// The facets an `aas-binding` rejection names (OP-149 m.30 (b)).
+fn unbound(r: Result<Response, CoreError>) -> Vec<BindingFacet> {
+    match r {
+        Err(CoreError::AasBinding(facets)) => facets,
+        other => panic!("expected aas-binding, got {other:?}"),
     }
 }
 
@@ -1938,18 +1948,23 @@ async fn an_approval_must_fit_the_request_it_answers() {
         ],
     );
     assert_eq!(protocol(send(&mut core, r, ALICE_KEY).await), "aas-expiry");
-    // a statement nobody authenticated to
-    let unbound = approval_act(d, 20, digest, render, NOW - 1_000, NOW + 60_000);
+    // a statement nobody authenticated to: aas-binding, naming the whole binding expected
+    // (OP-149 m.30 (b))
+    let nobody = approval_act(d, 20, digest, render, NOW - 1_000, NOW + 60_000);
     let r = with_proofs(
         contribute(d, 20, digest),
-        vec![ProofRef::Aas(unbound.to_bytes().unwrap())],
+        vec![ProofRef::Aas(nobody.to_bytes().unwrap())],
     );
-    assert_eq!(protocol(send(&mut core, r, ALICE_KEY).await), "aas-binding");
-    // a Claim bound to a different statement than the one presented
+    assert_eq!(
+        unbound(send(&mut core, r, ALICE_KEY).await),
+        BindingFacet::ALL
+    );
+    // a Claim bound to a different statement than the one presented: only the binding to
+    // H(AAS) is named, the approver's Claim was found
     let r = with_proofs(
         contribute(d, 20, digest),
         vec![
-            ProofRef::Aas(unbound.to_bytes().unwrap()),
+            ProofRef::Aas(nobody.to_bytes().unwrap()),
             ProofRef::Claim(approval_claim(
                 d,
                 Digest([0xee; 32]),
@@ -1958,7 +1973,10 @@ async fn an_approval_must_fit_the_request_it_answers() {
             )),
         ],
     );
-    assert_eq!(protocol(send(&mut core, r, ALICE_KEY).await), "aas-binding");
+    assert_eq!(
+        unbound(send(&mut core, r, ALICE_KEY).await),
+        vec![BindingFacet::BoundIntent]
+    );
     // the same statement, bound and fresh: approved
     allowed(
         &send(

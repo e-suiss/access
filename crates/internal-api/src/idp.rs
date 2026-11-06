@@ -270,6 +270,9 @@ pub enum Verdict {
     Refused {
         /// Stable reason code.
         code: String,
+        /// Stable codes of what the refusal expected and did not find (RFC 9457 `errors[].code`,
+        /// OP-149 m.24 (b), m.30 (b)); empty unless the plane can tell.
+        errors: Vec<&'static str>,
     },
 }
 

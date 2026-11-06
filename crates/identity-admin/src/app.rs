@@ -405,10 +405,10 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             Verdict::NotAllowed { decision, position } => {
                 return Ok(Applied::NotAllowed { decision, position });
             }
-            Verdict::Refused { code } if code == "unavailable" => {
+            Verdict::Refused { code, .. } if code == "unavailable" => {
                 return Err(AdminError::Unavailable(code));
             }
-            Verdict::Refused { code } => return Err(AdminError::Refused(code)),
+            Verdict::Refused { code, .. } => return Err(AdminError::Refused(code)),
         };
         // EI-25: the decision is about this very intent, nonce and domain
         if committed.intent != prepared.digest

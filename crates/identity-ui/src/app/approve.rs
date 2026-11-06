@@ -893,21 +893,27 @@ fn committed(
                 "outcome": format!("{:?}", decision.outcome).to_lowercase(),
             }),
         )),
-        Ok(Verdict::Refused { code }) if code.starts_with("aas-render") => {
+        Ok(Verdict::Refused { code, .. }) if code.starts_with("aas-render") => {
             Err(Reply::problem(CHANGED))
         }
-        Ok(Verdict::Refused { code }) => {
-            tracing::info!(%code, "approval refused");
-            Err(Reply::json(
-                409,
-                json!({
-                    "type": "urn:suiss:access:problem:approval-refused",
-                    "status": 409,
-                    "code": "approval-refused",
-                    "title": "The approval was refused",
-                    "reason": code,
-                }),
-            ))
+        Ok(Verdict::Refused { code, errors }) => {
+            tracing::info!(%code, ?errors, "approval refused");
+            // OP-149 m.24 (b), m.30 (b): the reason and, when the plane can tell, what it
+            // expected; never a value of the request or of a Claim
+            let mut problem = json!({
+                "type": "urn:suiss:access:problem:approval-refused",
+                "status": 409,
+                "code": "approval-refused",
+                "title": "The approval was refused",
+                "reason": code,
+            });
+            if let (Some(members), false) = (problem.as_object_mut(), errors.is_empty()) {
+                members.insert(
+                    String::from("errors"),
+                    errors.iter().map(|code| json!({ "code": code })).collect(),
+                );
+            }
+            Err(Reply::json(409, problem))
         }
         Err(e) => {
             tracing::warn!(reason = %e.0, "contribution unavailable");

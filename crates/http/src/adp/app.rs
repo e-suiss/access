@@ -244,14 +244,18 @@ fn failed(e: CoreError, body: Body) -> Reply {
         CoreError::Sequencer(_) | CoreError::Store(_) | CoreError::Unavailable(_) => {
             Reply::Unavailable(unavailable_reason(&e))
         }
-        // OP-149 m.12
-        CoreError::Protocol(reason) => Reply::Protocol(
-            e.code(),
-            vec![FieldError {
-                pointer: pointer(body, reason),
-                code: reason,
-            }],
-        ),
+        // OP-149 m.12, m.30 (b): the reason first, then what the rejection expected
+        CoreError::Protocol(_) | CoreError::AasBinding(_) => {
+            let reason = e.reason().unwrap_or_default();
+            let errors = std::iter::once(reason)
+                .chain(e.expected())
+                .map(|code| FieldError {
+                    pointer: pointer(body, reason),
+                    code,
+                })
+                .collect();
+            Reply::Protocol(e.code(), errors)
+        }
         e => Reply::Protocol(e.code(), Vec::new()),
     }
 }

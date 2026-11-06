@@ -17,6 +17,7 @@ use access_kernel::combinator::{Decision, Outcome, Position, Unmet};
 use access_kernel::digest::Digest;
 use access_kernel::meta::{self, Actor, ContributionState, InstanceState, Payload, kind};
 use access_kernel::model::ProofKind;
+use access_kernel::requirement::Proof;
 use access_kernel::tier::Tier;
 use suiss_crypto::dcbor::{self, Limits};
 
@@ -47,6 +48,67 @@ pub const fn tier_of(code: u8) -> Option<Tier> {
         3 => Some(Tier::Ct3),
         _ => None,
     }
+}
+
+/// One part of the binding a `contribute` commit's `authentication` Claim must have (SI-5,
+/// OP-150 m.14 (c)): what an `aas-binding` refusal names (OP-149 m.30 (b)).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BindingFacet {
+    /// A Claim of class `authentication` among the request's proofs.
+    AuthenticationClaim,
+    /// About the approver's Party.
+    ApproverParty,
+    /// Not bound to another Instance than the one that signed the statement.
+    ApproverInstance,
+    /// `bound_intent` is H(AAS).
+    BoundIntent,
+}
+
+impl BindingFacet {
+    /// Every facet, in the order the binding is narrowed.
+    pub const ALL: [Self; 4] = [
+        Self::AuthenticationClaim,
+        Self::ApproverParty,
+        Self::ApproverInstance,
+        Self::BoundIntent,
+    ];
+
+    /// Stable code for problem details (RFC 9457 `errors[].code`).
+    #[must_use]
+    pub const fn code(self) -> &'static str {
+        match self {
+            Self::AuthenticationClaim => "authentication-claim",
+            Self::ApproverParty => "approver-party",
+            Self::ApproverInstance => "approver-instance",
+            Self::BoundIntent => "bound-intent",
+        }
+    }
+}
+
+/// The facets no proof of the request meets, narrowed in [`BindingFacet::ALL`] order: once no
+/// proof is left, the facets the plane cannot tell about any more are named too, so the list
+/// says what was expected and, as far as the proofs show, what did not match.
+fn unbound(proofs: &[Proof], actor: Actor, statement: Digest) -> Vec<BindingFacet> {
+    let class_name = Class::Authentication.name();
+    let mut left: Vec<&Proof> = proofs
+        .iter()
+        .filter(|p| p.kind == ProofKind::Claim)
+        .collect();
+    let mut facets = Vec::new();
+    for facet in BindingFacet::ALL {
+        left.retain(|p| match facet {
+            BindingFacet::AuthenticationClaim => p.class == class_name,
+            BindingFacet::ApproverParty => p.party == actor.party,
+            BindingFacet::ApproverInstance => {
+                p.binding.actor_instance.is_none_or(|i| i == actor.instance)
+            }
+            BindingFacet::BoundIntent => p.binding.intent_digest == Some(statement),
+        });
+        if left.is_empty() {
+            facets.push(facet);
+        }
+    }
+    facets
 }
 
 /// What the approver's act established, written to the contribution's state.
@@ -170,7 +232,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                     && p.class == class_name
                     && p.binding.intent_digest == Some(h)
             })
-            .ok_or(CoreError::Protocol("aas-binding"))?;
+            .ok_or_else(|| CoreError::AasBinding(unbound(&resolved.proofs, actor, h)))?;
         let term = assurance::authentication_term(tier, true);
         if !assurance::meets(&term.assurance, &bound.assurance)
             || !assurance::fresh(tier, bound.time, now)

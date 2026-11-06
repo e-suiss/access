@@ -60,6 +60,7 @@ pub fn pointer(body: Body, code: &str) -> Option<String> {
             "domain" | "nonce" | "payload" | "mode" | "basis" | "capacity" | "proofs" | "exercise"
             | "consistency_token" | "ais" | "intent" | "query" | "record" | "scope",
         ) => code,
+        (_, "aas-binding") => "proofs",
         (_, "intent-validity" | "window") => "intent/validity",
         (_, "action") => "intent/action",
         (_, "resource") => "intent/resources",

@@ -24,6 +24,11 @@ pub enum CoreError {
     /// The request is malformed.
     #[error("protocol error: {0}")]
     Protocol(&'static str),
+    /// A `contribute` commit whose statement no admitted `authentication` Claim is bound to
+    /// (SI-5, OP-150 m.14 (c)): `aas-binding`, naming the parts of the binding not found
+    /// (OP-149 m.30 (b)).
+    #[error("protocol error: aas-binding")]
+    AasBinding(Vec<app::approval::BindingFacet>),
     /// The AIS does not make the request the actor's.
     #[error("actor statement: {0}")]
     Ais(AisError),
@@ -55,13 +60,34 @@ impl CoreError {
     #[must_use]
     pub const fn code(&self) -> &'static str {
         match self {
-            Self::Protocol(_) => "protocol",
+            Self::Protocol(_) | Self::AasBinding(_) => "protocol",
             Self::Ais(e) => e.code(),
             Self::Rejected(_) => "rejected",
             Self::Nonce => "nonce-conflict",
             Self::Passes => "too-many-passes",
             Self::Sequencer(_) | Self::Store(_) | Self::Unavailable(_) => "unavailable",
             Self::Limited => "rate-limited",
+        }
+    }
+
+    /// The stable, non-secret reason of a protocol rejection (OP-149 m.12, m.24 (b)); `None`
+    /// for every other error.
+    #[must_use]
+    pub const fn reason(&self) -> Option<&'static str> {
+        match self {
+            Self::Protocol(reason) => Some(reason),
+            Self::AasBinding(_) => Some("aas-binding"),
+            _ => None,
+        }
+    }
+
+    /// The stable codes of what a rejection expected and did not find (RFC 9457 `errors`,
+    /// OP-149 m.24 (b)); empty unless the rejection can tell.
+    #[must_use]
+    pub fn expected(&self) -> Vec<&'static str> {
+        match self {
+            Self::AasBinding(facets) => facets.iter().map(|f| f.code()).collect(),
+            _ => Vec::new(),
         }
     }
 }

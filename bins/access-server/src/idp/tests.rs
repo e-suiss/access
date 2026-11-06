@@ -1130,7 +1130,8 @@ async fn a_party_terminates_its_own_instance_through_the_identity_plane() {
     assert_eq!(
         again,
         Verdict::Refused {
-            code: String::from("ais-mismatch")
+            code: String::from("ais-mismatch"),
+            errors: Vec::new(),
         },
         "the ended Instance signs nothing more"
     );

@@ -1333,7 +1333,7 @@ where
             .map_err(|e| BootstrapError::Unavailable(e.0))?
         {
             Verdict::Committed(c) => Ok(c.position),
-            Verdict::Refused { code } => Err(BootstrapError::Refused(code)),
+            Verdict::Refused { code, .. } => Err(BootstrapError::Refused(code)),
             Verdict::NotAllowed { decision, .. } => {
                 Err(BootstrapError::Refused(format!("{:?}", decision.outcome)))
             }

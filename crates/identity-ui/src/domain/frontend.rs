@@ -399,6 +399,20 @@ fn components() -> Value {
                 "title": { "type": "string" },
                 "status": { "type": "integer" },
                 "detail": { "type": "string" },
+                "code": { "type": "string", "description": "The stable code the type URI names." },
+                "reason": { "type": "string", "description": "A stable, non-secret reason that narrows the code (OP-149 m.24 (b))." },
+                "errors": {
+                    "type": "array",
+                    "description": "What the problem is about: a stable code each and, when the request body names it, a JSON Pointer; never a request value (OP-149 m.24 (b), m.30 (b)).",
+                    "items": {
+                        "type": "object",
+                        "required": ["code"],
+                        "properties": {
+                            "code": { "type": "string" },
+                            "pointer": { "type": "string" },
+                        },
+                    },
+                },
             },
         },
         "ProblemCode": problem_codes(),

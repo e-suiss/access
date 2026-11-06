@@ -145,12 +145,11 @@ impl<K, B: Binding, S: Salts, C> Plane<K, B, S, C> {
 }
 
 fn refused(e: &CoreError) -> Verdict {
-    // OP-149 m.12: a protocol rejection travels with its reason, as the ADP's does
+    // OP-149 m.12, m.30 (b): a protocol rejection travels with its reason and what it expected,
+    // as the ADP's does
     Verdict::Refused {
-        code: String::from(match e {
-            CoreError::Protocol(reason) => reason,
-            other => other.code(),
-        }),
+        code: String::from(e.reason().unwrap_or_else(|| e.code())),
+        errors: e.expected(),
     }
 }
 
@@ -191,6 +190,7 @@ where
                 Ok(_) => {
                     return Ok(Verdict::Refused {
                         code: String::from(ACTOR_BINDING),
+                        errors: Vec::new(),
                     });
                 }
                 Err(e) => return verdict(&e),
@@ -273,7 +273,7 @@ pub(crate) const BINDING_BUSY: &str = "actor-binding-busy";
 fn not_registered(v: Verdict) -> Result<RegistrationVerdict, Unavailable> {
     match v {
         Verdict::Committed(_) => Err(Unavailable(String::from("committed"))),
-        Verdict::Refused { code } => Ok(RegistrationVerdict::Refused { code }),
+        Verdict::Refused { code, .. } => Ok(RegistrationVerdict::Refused { code }),
         Verdict::NotAllowed { .. } => Ok(RegistrationVerdict::Refused {
             code: String::from("denied"),
         }),
@@ -297,6 +297,7 @@ where
         let Some(intent) = self_signed_intent(&payload, r.party, e.validity) else {
             return Ok(Verdict::Refused {
                 code: String::from("protocol"),
+                errors: Vec::new(),
             });
         };
         let request = Request {
@@ -407,6 +408,7 @@ where
         let Some(intent) = terminate_intent(t.instance, t.validity) else {
             return Ok(Verdict::Refused {
                 code: String::from("protocol"),
+                errors: Vec::new(),
             });
         };
         let request = Request {
@@ -454,6 +456,7 @@ where
         let Some(intent) = contribute_intent(c.target, &c.class, c.validity) else {
             return Ok(Verdict::Refused {
                 code: String::from("protocol"),
+                errors: Vec::new(),
             });
         };
         let request = Request {
