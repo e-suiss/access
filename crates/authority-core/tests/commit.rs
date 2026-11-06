@@ -1972,6 +1972,77 @@ async fn an_approval_must_fit_the_request_it_answers() {
     fold_check(&db.sequencer, d).await.unwrap();
 }
 
+// TI-RT7, OP-141 m.30 (e), OP-150 L6 (f): the realm issuer's `authentication` Claims about one
+// subject are one per sign-in, each in a line of its own; a recorded session-bound one with
+// another body digest is no fork of the statement-bound one, so the approval still finds the
+// Claim bound to H(AAS).
+#[tokio::test]
+async fn a_sign_in_claim_does_not_fork_the_approvals_authentication() {
+    let db = fresh().await.unwrap();
+    let approve = term(
+        ProofKind::Contribution,
+        "approve",
+        ProofBinding::IntentDigest,
+    );
+    let (mut core, d) = setup_with(&db, gated(&[approve])).await;
+    onboard(&mut core, d, ROOT, ROOT_KEY, (1, 2)).await;
+    onboard(&mut core, d, ALICE, ALICE_KEY, (3, 4)).await;
+    let shop = ExerciseBasis::Anchor(meta::object_id(&d, kind::ANCHOR, 1));
+    let target = shop_request(d, 9, Mode::Commit, shop);
+    let digest = access_kernel::intent::intent_digest(&target.intent).unwrap();
+    let render = render_of(&target);
+    let asked = send(&mut core, target, ROOT_KEY).await.unwrap();
+    assert_eq!(asked.decision.outcome, Outcome::RequireAction);
+    // the sign-ins before the approval: the same issuer, subject and class, other bodies, bound
+    // to the session's Instance, unordered against the approval's Claim
+    for (seed, at) in [(0xb1, NOW - 9_000), (0xb2, NOW - 3_000)] {
+        let signed_in = sign_claim(
+            &access_kernel::claim::Statement {
+                domain: d,
+                issuer: ALICE,
+                subject: ALICE,
+                class: "authentication".to_owned(),
+                value: Some(EqValue::Bytes(vec![seed; 32])),
+                issued_at: at,
+                validity: Window {
+                    from: at,
+                    until: at.saturating_add(12 * 3_600_000),
+                },
+                assurance: PASSKEY_UV
+                    .iter()
+                    .map(|(k, v)| ((*k).to_owned(), *v))
+                    .collect(),
+                bound_intent: None,
+                bound_instance: Some(alice_instance(d)),
+                bound_resource: None,
+                supersedes: None,
+            },
+            ALICE_KEY,
+        );
+        let sub = access_internal_api::claims::ClaimSubmission {
+            domain: d,
+            carrier: access_internal_api::claims::Carrier::Cose,
+            claim: signed_in,
+            body: None,
+            evidence: None,
+        };
+        assert!(matches!(
+            core.ingest(&sub, NOW).await.unwrap().verdict,
+            access_internal_api::claims::ClaimVerdict::Admitted { .. }
+        ));
+    }
+    allowed(
+        &send(
+            &mut core,
+            approved(d, 20, digest, render, &PASSKEY_UV, NOW - 5_000),
+            ALICE_KEY,
+        )
+        .await
+        .unwrap(),
+    );
+    fold_check(&db.sequencer, d).await.unwrap();
+}
+
 // §13.7.3 "Authenticator class", "Human presence", "Step-up freshness"; N-45, SEC10, SEC26,
 // IDP-8: an approval authenticated with a password or TOTP, without a present human, or longer
 // ago than the tier's ceiling is not an approval; the decision asks for the authentication

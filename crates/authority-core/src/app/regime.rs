@@ -28,10 +28,19 @@ const fn current(s: &Statement, now: u64) -> bool {
     s.validity.from <= now && now <= s.validity.until
 }
 
+/// Whether two unordered Claims of one issuer line say otherwise of each other: their values
+/// differ and are assertions about the subject. The value of a class with a body is the body's
+/// digest, which names one event each (a sign-in, a binding), so such Claims stand side by side
+/// (TI-RT7, OP-141 m.30 (e), OP-150 L6 (f)).
+fn contradicts(a: &Statement, b: &Statement) -> bool {
+    a.value != b.value && !Class::parse(&a.class).is_some_and(Class::has_body)
+}
+
 impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
     /// Whether Claim `id` asserts in its issuer line for a qualifying use: not superseded, and
-    /// no current, unsuperseded Claim of the same line says otherwise without an order between
-    /// them; when the order is not known the disqualifying side wins (TI-RT7, G36, §9.13 rule 6).
+    /// no current, unsuperseded Claim of the same line [`contradicts`] it without an order
+    /// between them; when the order is not known the disqualifying side wins (TI-RT7, G36,
+    /// §9.13 rule 6).
     pub(crate) async fn in_line(
         &self,
         snap: &mut Snapshot,
@@ -59,7 +68,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                 .filter(|o| {
                     o.ended.is_none()
                         && claim::same_line(s, &o.statement)
-                        && o.statement.value != s.value
+                        && contradicts(s, &o.statement)
                         && current(&o.statement, now)
                 })
             else {

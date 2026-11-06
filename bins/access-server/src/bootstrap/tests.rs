@@ -1410,7 +1410,9 @@ async fn the_local_client_approves_an_allowed_exercise() {
     use access_identity_ui::app::Devices;
     use access_identity_ui::app::Hosted;
     use access_local_client::approve::{Approve, approve};
+    use access_local_client::claims::{Compromise, declare};
     use access_local_client::http::{Http, Identity, leaf_der};
+    use access_local_client::login::{Credential, sign_in};
     use access_local_client::passkey::{Passkey, relying_party};
     use suiss_crypto::signer::SoftSigner;
 
@@ -1491,7 +1493,7 @@ async fn the_local_client_approves_an_allowed_exercise() {
                 signer: SignerKeys::new(w.identity_signer.clone()),
                 instances: w.plane.clone(),
                 approvals: w.plane.clone(),
-                claims: courier,
+                claims: Arc::clone(&courier),
                 pep: String::from(IDENTITY_PEP),
             },
         ))
@@ -1509,7 +1511,8 @@ async fn the_local_client_approves_an_allowed_exercise() {
                 domains: w.domains.clone(),
             },
             String::from("local"),
-        )));
+        )))
+        .merge(crate::ingest::routes(w.domains.clone(), w.db.app.clone()));
     let config = access_http::tls::server_config(
         tls.server_cert.as_bytes(),
         tls.server_key.as_bytes(),
@@ -1562,6 +1565,63 @@ async fn the_local_client_approves_an_allowed_exercise() {
         reason: "Close the main ledger for the period.",
         request: None,
     };
+    // the local deployment's sequence before the approval (OP-149 m.26 (b), (c), (e)): the
+    // sign-in with the password and the passkey, the sign-in with the passkey alone, the
+    // compromise declaration over the PEP certificate, and the realm issuer's courier taking
+    // their Claims to the authority plane, as the serving process's courier does every 2 s
+    let password = local_plan().test_user.unwrap().password;
+    sign_in(
+        &http,
+        &user.issuer,
+        &user.identifier,
+        Credential::Password(password.expose(), Some(&passkey)),
+    )
+    .await
+    .unwrap();
+    sign_in(
+        &http,
+        &user.issuer,
+        &user.identifier,
+        Credential::Passkey(&passkey),
+    )
+    .await
+    .unwrap();
+    let sample = first.sample.clone().unwrap();
+    let compromise = first.compromise.clone().unwrap();
+    let declared = declare(
+        &http,
+        &Compromise {
+            api_base: "https://access.test",
+            domain: Digest(
+                <[u8; 32]>::try_from(
+                    access_kernel::json::b64url_decode(&compromise.domain).unwrap(),
+                )
+                .unwrap(),
+            ),
+            issuer: id_of(&compromise.issuer),
+            party: id_of(&sample.subject),
+            occurred_at: None,
+            pep_leaf_der: &leaf,
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(declared["disposition"], "admit", "{declared}");
+    // the outbox reader shows a row once it is below the cluster-wide snapshot horizon, so the
+    // courier steps until both sign-ins' Claims are answered
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
+    let mut answered = 0;
+    loop {
+        answered += courier.step().await.unwrap().answered;
+        if answered >= 2 {
+            break;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "{answered} sign-in Claims answered after 20 s"
+        );
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
     let done = approve(&http, &request).await.unwrap();
     assert_eq!(done["receipt"]["verified"], true, "{done}");
     assert_eq!(done["render_digest_verified"], true, "{done}");
