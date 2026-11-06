@@ -1,7 +1,8 @@
-//! The headless login against an in-process Access (OP-149 m.26 (b), (e)): the realm
-//! authorization server and the hosted login's JSON surface over TLS from a test CA, a real
-//! PostgreSQL and a real identity signer; the client runs the whole flow as it does against a
-//! local deployment, with the password and with the software passkey.
+//! The headless login against an in-process Access (OP-149 m.26 (b), (e), m.32): the realm
+//! authorization server, the hosted login's JSON surface and the Frontend API over TLS from a
+//! test CA, a real PostgreSQL and a real identity signer; the client runs the whole flow as it
+//! does against a local deployment, with the password, with the software passkey and with the
+//! known device key that binds the session to its Instance.
 
 #![allow(
     clippy::unwrap_used,
@@ -21,18 +22,20 @@ use access_crypto::Secret;
 use access_crypto::envelope::SoftKek;
 use access_crypto::opaque_id::IdKey;
 use access_crypto::webauthn::DecoyKey;
-use access_http::login::router as login_router;
+use access_http::login::{me_router, router as login_router};
 use access_http::oauth::router as oauth_router;
 use access_http::tls::{serve, server_config};
-use access_identity_account::adapters::pg::PgAccounts;
+use access_identity_account::adapters::pg::{PgAccounts, PgTx};
 use access_identity_account::adapters::system::SystemEntropy;
 use access_identity_account::app::accounts::{
     PasswordServices, change_status, create, set_password,
 };
+use access_identity_account::app::claims::Issued;
 use access_identity_account::app::hasher::{Hasher, HasherConfig};
 use access_identity_account::app::local::LocalLimiter;
 use access_identity_account::app::login::LoginGate;
 use access_identity_account::app::{Actor, Realm};
+use access_identity_account::domain::claims::ClaimOrder;
 use access_identity_account::domain::identifier::{Identifier, IdentifierKind};
 use access_identity_account::domain::password::Argon2Params;
 use access_identity_account::domain::status::AccountStatus;
@@ -51,19 +54,28 @@ use access_identity_session::app::{Auth, Passkeys};
 use access_identity_session::domain::requirement::AuthPolicy;
 use access_identity_session::domain::session::SessionPolicy;
 use access_identity_ui::adapters::LogSignals;
-use access_identity_ui::app::Hosted;
-use access_identity_ui::ports::{Clock, Kits, Messages, RealmKit};
+use access_identity_ui::app::devices::{DeviceKey, bind_party, record_device_key};
+use access_identity_ui::app::{Devices, Hosted};
+use access_identity_ui::ports::{
+    ApprovalClaims, Approvals, ArtifactSigner, Clock, DeviceInstances, Kits, Messages, RealmKit,
+};
 use access_identity_webauthn::adapters::RealmDecoyKeys;
 use access_identity_webauthn::app::RegistrationOutcome;
 use access_identity_webauthn::domain::ceremony::{ClientExtensionResults, RegistrationResponse};
 use access_identity_webauthn::domain::ids::RealmId as WaRealm;
 use access_identity_webauthn::domain::policy::RealmPolicy;
 use access_identity_webauthn::domain::rp::{RelyingParty, RpId};
-use access_kernel::json::b64url_decode;
+use access_internal_api::approvals::{Contribution, Opening};
+use access_internal_api::idp::{Unavailable as PlaneUnavailable, Verdict};
+use access_internal_api::instances::{
+    IDENTITY_PEP, Registration, RegistrationVerdict, Termination,
+};
+use access_kernel::digest::Digest;
+use access_kernel::json::{b64url_decode, b64url_encode};
 use access_local_client::http::Http;
 use access_local_client::login::{Credential, Login, login};
 use access_local_client::passkey::Passkey;
-use access_store::identity::TenantTx;
+use access_store::identity::{RealmId, TenantId, TenantTx};
 use serde_json::Value;
 use suiss_crypto::signer::{Signer as _, SoftSigner};
 use support::{Cluster, NATIVE};
@@ -133,8 +145,59 @@ impl Keys for NoKeys {
         Ok(())
     }
 
-    async fn jwks(&self, _: access_store::identity::RealmId) -> Result<String, Unavailable> {
+    async fn jwks(&self, _: RealmId) -> Result<String, Unavailable> {
         Err(Unavailable)
+    }
+}
+
+/// The identity signer and the authority plane, not reached: a known device binds its session
+/// from the identity plane's own records (OP-149 m.32).
+struct Offline;
+
+fn offline() -> PlaneUnavailable {
+    PlaneUnavailable(String::from("offline"))
+}
+
+impl ArtifactSigner for Offline {
+    async fn sign_cose(
+        &self,
+        _: RealmId,
+        _: &str,
+        _: &[u8],
+        _: u64,
+    ) -> Result<Vec<u8>, Unavailable> {
+        Err(Unavailable)
+    }
+}
+
+impl DeviceInstances for Offline {
+    async fn register(&self, _: Registration) -> Result<RegistrationVerdict, PlaneUnavailable> {
+        Err(offline())
+    }
+
+    async fn terminate(&self, _: Termination) -> Result<Verdict, PlaneUnavailable> {
+        Err(offline())
+    }
+}
+
+impl Approvals for Offline {
+    async fn opening(&self, _: Digest, _: Digest) -> Result<Option<Opening>, PlaneUnavailable> {
+        Err(offline())
+    }
+
+    async fn contribute(&self, _: Contribution) -> Result<Verdict, PlaneUnavailable> {
+        Err(offline())
+    }
+}
+
+impl ApprovalClaims for Offline {
+    async fn issue(
+        &self,
+        _: TenantId,
+        _: RealmId,
+        _: &ClaimOrder,
+    ) -> Result<Issued, PlaneUnavailable> {
+        Err(offline())
     }
 }
 
@@ -315,11 +378,23 @@ async fn the_headless_client_runs_the_code_flow() {
             .unwrap();
     }
 
-    let app = oauth_router(OAuth::new(c.env())).merge(login_router(
-        Discovery::new(Dir(entry.clone()), NoKeys),
-        hosted,
-        None,
-    ));
+    let app = oauth_router(OAuth::new(c.env()))
+        .merge(login_router(
+            Discovery::new(Dir(entry.clone()), NoKeys),
+            hosted.clone(),
+            None,
+        ))
+        .merge(me_router(
+            Discovery::new(Dir(entry.clone()), NoKeys),
+            hosted,
+            Devices {
+                signer: Offline,
+                instances: Offline,
+                approvals: Offline,
+                claims: Offline,
+                pep: String::from(IDENTITY_PEP),
+            },
+        ));
     let (ca_pem, cert_pem, key_pem) = tls(&f.host);
     let config = server_config(cert_pem.as_bytes(), key_pem.as_bytes(), None).unwrap();
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -339,6 +414,7 @@ async fn the_headless_client_runs_the_code_flow() {
         credential: Credential::Password(PW, None),
         resource: None,
         scope: "openid",
+        device: None,
     };
     let tokens = login(&http, &l).await.unwrap();
     assert_eq!(tokens["token_type"], "DPoP");
@@ -469,6 +545,66 @@ async fn the_headless_client_runs_the_code_flow() {
     assert!(
         refused.contains("passkey") && refused.contains("401"),
         "{refused}"
+    );
+
+    // OP-149 m.32, m.28 (b), INV-13, §5.1 eki: the test user's device key, recorded by the
+    // bootstrap without a session, binds the new passkey session (AAL2) to its existing
+    // Instance through the real endpoints, and the client prints it; a key no device of the
+    // user holds is refused and no token is printed
+    let (device, _) = SoftSigner::generate_ed25519().unwrap();
+    let mut tx = PgTx(
+        TenantTx::begin(&c.db.app, kit.tenant, kit.realm)
+            .await
+            .unwrap(),
+    );
+    assert!(
+        bind_party(&mut tx, &subject, &[8; 16], &[0xd2; 40])
+            .await
+            .unwrap()
+    );
+    record_device_key(
+        &mut tx,
+        &DeviceKey {
+            subject,
+            key: device.public_key(),
+            instance: [9; 16],
+            session: None,
+        },
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    tx.0.commit().await.unwrap();
+    let known = login(
+        &http,
+        &Login {
+            credential: Credential::Passkey(&passkey),
+            device: Some(&device),
+            ..l
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(known["token_type"], "DPoP");
+    assert_eq!(known["instance"], b64url_encode(&[9; 16]));
+    assert_eq!(
+        claims(known["id_token"].as_str().unwrap())["sub"],
+        at["sub"]
+    );
+    let unknown = login(
+        &http,
+        &Login {
+            credential: Credential::Passkey(&passkey),
+            device: Some(&stranger),
+            ..l
+        },
+    )
+    .await
+    .unwrap_err()
+    .to_string();
+    assert!(
+        unknown.contains("invalid-party") && unknown.contains("400"),
+        "{unknown}"
     );
 
     let _ = stop.send(());

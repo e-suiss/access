@@ -180,21 +180,25 @@ jobs:
           $COMPOSE run --rm --no-deps -T bootstrap > "$RUNNER_TEMP/again.json"
           grep -q '"created": false' "$RUNNER_TEMP/again.json"
           ! grep -q '"created": true' "$RUNNER_TEMP/again.json"
-      # OP-149 m.26 (b), (c), (e): the headless sign-in with the password and with the software
-      # passkey, and a compromise declaration over the PEP certificate, each against the running
+      # OP-149 m.26 (b), (c), (e), m.32: the headless sign-in with the password and the software
+      # passkey, bound to the test user's known device Instance, the sign-in with the passkey
+      # alone, and a compromise declaration over the PEP certificate, each against the running
       # deployment
       - name: Local client
         run: |
           client_id="$(jq -r '.test_user.client_id' "$RUNNER_TEMP/again.json")"
           issuer="$(jq -r '.realms[] | select(.slug == "acme") | .issuer' "$RUNNER_TEMP/again.json")"
+          instance="$(jq -r '.test_user.instance' "$RUNNER_TEMP/again.json")"
           $COMPOSE run --rm --no-deps -T local-client login \
             --issuer "$issuer" --ca /var/lib/access/certs/ca.crt \
             --client-id "$client_id" --redirect-uri http://127.0.0.1/cb \
             --identifier test@acme.example --password-env BOOTSTRAP_TEST_PASSWORD \
             --passkey access/bootstrap/test-user-passkey \
+            --device-key access/bootstrap/test-user-device \
             --hsm-module /usr/lib/softhsm/libsofthsm2.so --hsm-token access-server \
             --hsm-pin-file /var/lib/access/secrets/hsm-access-server > "$RUNNER_TEMP/tokens.json"
           jq -e '.token_type == "DPoP" and (.access_token | length > 0) and (.id_token | length > 0)' "$RUNNER_TEMP/tokens.json"
+          jq -e --arg instance "$instance" '.instance == $instance' "$RUNNER_TEMP/tokens.json"
           $COMPOSE run --rm --no-deps -T local-client login \
             --issuer "$issuer" --ca /var/lib/access/certs/ca.crt \
             --client-id "$client_id" --redirect-uri http://127.0.0.1/cb \

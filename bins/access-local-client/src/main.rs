@@ -6,7 +6,8 @@
 //! ```text
 //! access-local-client login --issuer <realm issuer> --ca <ca.crt> --client-id <id>
 //!     --redirect-uri <uri> --identifier <login>
-//!     (--password-env <VAR> [--passkey <label>] | --passkey <label>) [--hsm-module <path> --hsm-token <label> --hsm-pin-file <path>]
+//!     (--password-env <VAR> [--passkey <label>] | --passkey <label>) [--device-key <label>]
+//!     [--hsm-module <path> --hsm-token <label> --hsm-pin-file <path>]
 //!     [--resource <client_id>] [--scope <scopes>] [--connect <ip:port>]
 //! access-local-client approve --issuer <realm issuer> --api <base> --ca <ca.crt>
 //!     --cert <pep.crt> --key <pep.key> --redirect-uri <uri> --identifier <login>
@@ -43,9 +44,11 @@ use access_local_client::login::{Credential, Login, login};
 use access_local_client::passkey::{Passkey, relying_party};
 use access_local_client::platform::{PlatformClient, StatusChange};
 use access_local_client::token::Token;
+use suiss_crypto::signer::Signer;
 
 const USAGE: &str = "usage: access-local-client <login | approve | compromise | stream-status | service-token> --<option> <value>...\n\
-  login:         --issuer --ca --client-id --redirect-uri --identifier (--password-env | --passkey --hsm-module --hsm-token --hsm-pin-file) [--resource] [--scope] [--connect]\n\
+  login:         --issuer --ca --client-id --redirect-uri --identifier (--password-env | --passkey --hsm-module --hsm-token --hsm-pin-file)\n\
+                 [--device-key] [--resource] [--scope] [--connect]\n\
   approve:       --issuer --api --ca --cert --key --redirect-uri --identifier --hsm-module --hsm-token --hsm-pin-file --device-key --passkey\n\
                  --domain --party --grant --grant-since --contribute-grant --contribute-since (--intent | --intent-json) [--instance] [--reason] [--request] [--connect]\n\
   compromise:    --api --ca --cert --key --domain --issuer-party --party [--occurred-at] [--connect]\n\
@@ -142,19 +145,23 @@ fn http(o: &Options, identity: Option<&Identity>) -> Result<Http, String> {
 }
 
 /// `login`: the code flow with the password, the passkey, or the password and the passkey as
-/// the second factor the realm asks for once the account holds one (OP-149 m.26 (b), (e)).
+/// the second factor the realm asks for once the account holds one (OP-149 m.26 (b), (e)); with
+/// `--device-key`, the new session is bound to the known device's Instance (OP-149 m.32).
 async fn login_command(o: &Options) -> Result<serde_json::Value, String> {
     let step = |e: ClientError| e.to_string();
     let issuer = o.required("issuer")?;
     let (rp_id, origin) = relying_party(issuer).map_err(step)?;
     let password;
-    let token;
     let key;
     let passkey;
-    let software = match o.optional("passkey") {
-        Some(label) => {
-            token = o.token()?;
-            key = token.signer(label).map_err(step)?;
+    let device;
+    let token = match (o.optional("passkey"), o.optional("device-key")) {
+        (None, None) => None,
+        _ => Some(o.token()?),
+    };
+    let software = match (o.optional("passkey"), &token) {
+        (Some(label), Some(t)) => {
+            key = t.signer(label).map_err(step)?;
             passkey = Passkey {
                 key: &key,
                 rp_id: &rp_id,
@@ -162,7 +169,14 @@ async fn login_command(o: &Options) -> Result<serde_json::Value, String> {
             };
             Some(&passkey)
         }
-        None => None,
+        _ => None,
+    };
+    let known: Option<&dyn Signer> = match (o.optional("device-key"), &token) {
+        (Some(label), Some(t)) => {
+            device = t.signer(label).map_err(step)?;
+            Some(&device)
+        }
+        _ => None,
     };
     let credential = match (o.optional("password-env"), software) {
         (Some(var), passkey) => {
@@ -186,6 +200,7 @@ async fn login_command(o: &Options) -> Result<serde_json::Value, String> {
             credential,
             resource: o.optional("resource"),
             scope: o.optional("scope").unwrap_or("openid"),
+            device: known,
         },
     )
     .await

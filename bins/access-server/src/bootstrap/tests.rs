@@ -1697,6 +1697,11 @@ async fn the_local_client_approves_an_allowed_exercise() {
     }
     let done = approve(&http, &request).await.unwrap();
     assert_eq!(done["receipt"]["verified"], true, "{done}");
+    // OP-149 m.32: the approval session was bound to the test user's device Instance
+    assert_eq!(
+        done["instance"],
+        serde_json::Value::from(user.instance.clone())
+    );
     assert_eq!(done["render_digest_verified"], true, "{done}");
     assert_eq!(
         access_kernel::json::b64url_decode(done["exercise"].as_str().unwrap())

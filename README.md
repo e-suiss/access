@@ -113,6 +113,8 @@ docker compose -f deploy/compose/access.yaml run --rm local-client login \
 
 With `--passkey access/bootstrap/test-user-passkey` in place of `--password-env`, the client signs in with the test user's software passkey instead (AAL2, phishing-resistant). The key stays in the server's token; the client reaches it through PKCS#11 with `--hsm-module /usr/lib/softhsm/libsofthsm2.so --hsm-token access-server --hsm-pin-file /var/lib/access/secrets/hsm-access-server`, which the `local-client` service has in reach.
 
+Add `--device-key access/bootstrap/test-user-device` (with the same `--hsm-*` flags) to sign in as a known device: after the sign-in the client proves the test user's device key over a challenge (`POST /v1/me/instances/challenges`, then `POST /v1/me/instances/bindings`) and the new session is bound to the device's existing Instance, the one `test_user.instance` names; no new Instance is opened. The output then carries `instance`, and an `auth_context` issued for that session names it. This needs an AAL2 session, so pair it with `--passkey` (alone, or as the second factor beside `--password-env`).
+
 Add `--resource <your platform client_id>` to get an access token addressed to your product: its `aud` is your `client_id`, the same value your events carry, and it stays bound to the client's DPoP key (`cnf.jkt`). Only a registered platform product client can be named; anything else is `invalid_target`. From a checkout, `cargo run -p access-local-client -- login … --connect 127.0.0.1:8443` reaches the published port with the issuer unchanged (the CA is `ca.crt` from the `certs` volume).
 
 ### Approve an Exercise without a browser

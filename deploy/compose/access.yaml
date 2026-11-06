@@ -231,6 +231,7 @@ services:
   #     --identifier test@acme.example --password-env BOOTSTRAP_TEST_PASSWORD [--resource <client_id>]
   #   ... login ... --passkey access/bootstrap/test-user-passkey --hsm-module /usr/lib/softhsm/libsofthsm2.so \
   #     --hsm-token access-server --hsm-pin-file /var/lib/access/secrets/hsm-access-server
+  #   ... login ... --passkey ... --device-key access/bootstrap/test-user-device   # binds the session to the device Instance
   #   docker compose -f deploy/compose/access.yaml run --rm local-client approve ...   # see the README
   #   docker compose -f deploy/compose/access.yaml run --rm local-client compromise \
   #     --api https://access-server:8443 --ca /var/lib/access/certs/ca.crt \

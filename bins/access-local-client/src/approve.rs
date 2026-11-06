@@ -1,5 +1,6 @@
 //! An approval on the hosted Approval Surface without a browser (OP-149 m.29 (b), m.9, §9.14.1
-//! A, §9.14.5 WYSIWYS): the test user signs in with the software passkey; as the requesting
+//! A, §9.14.5 WYSIWYS): the test user signs in with the software passkey and the session is
+//! bound to the device key's Instance (OP-149 m.32); as the requesting
 //! product, the client commits the intent with the PEP certificate and gets `REQUIRE_ACTION`,
 //! then pushes the typed authority request with the contribution its device Instance signed
 //! (`POST /v1/approve/requests`), opens the flow (`POST /v1/approve/flows`), checks the render
@@ -32,7 +33,7 @@ use crate::ClientError;
 use crate::adp::{self, Exercise, holding_json, pep_name};
 use crate::dpop::{now_ms, random_text};
 use crate::http::{Http, Response};
-use crate::login::{Credential, Jar, post_json, sign_in};
+use crate::login::{Credential, Jar, attach_device, post_json, sign_in};
 use crate::passkey::Passkey;
 
 /// The contribute class of an approval (§9.14.1).
@@ -439,9 +440,10 @@ async fn allowed_receipt(
     Ok((exercise_id, receipt))
 }
 
-/// Runs the approval and returns `{exercise, contribution, render_digest, receipt}`: the
-/// allowed Exercise with its verified receipt when this client exercised the intent, the
-/// contribution Exercise and the render digest either way.
+/// Runs the approval and returns `{instance, exercise, contribution, render_digest, receipt}`:
+/// the device Instance the approval session was bound to, the allowed Exercise with its
+/// verified receipt when this client exercised the intent, the contribution Exercise and the
+/// render digest either way.
 ///
 /// # Errors
 /// [`ClientError`]; a decision the surface or the ADP refuses with is
@@ -453,6 +455,8 @@ pub async fn approve(http: &Http, a: &Approve<'_>) -> Result<Value, ClientError>
     let now = now_ms();
     // the approver signs in with the passkey (AAL2) and keeps the session
     let mut jar = sign_in(http, a.issuer, a.identifier, Credential::Passkey(a.passkey)).await?;
+    // OP-149 m.32: the approval session carries the device's existing Instance
+    let instance = attach_device(http, a.issuer, &mut jar, a.device).await?;
     let (request, nonce) = opened(http, a, &intent, digest, now).await?;
     let request_uri = push(http, a, request, digest, now).await?;
     let state = random_text::<8>()?;
@@ -464,6 +468,7 @@ pub async fn approve(http: &Http, a: &Approve<'_>) -> Result<Value, ClientError>
     let my_digest = render::digest(&mine).map_err(|_| ClientError::Encode)?;
     let contribution = at(&finished, &["exercise"]).clone();
     let mut out = json!({
+        "instance": instance,
         "contribution": contribution,
         "render_digest": render_digest,
         "render_digest_verified": render_digest == b64url_encode(&my_digest.0),

@@ -8,9 +8,11 @@
 
 use std::fmt::Write as _;
 
+use access_internal_api::instances::{POP_CONTENT_TYPE, cose_key};
+use access_kernel::json::{b64url_decode, b64url_encode};
+use access_kernel::verify::key_scope::thumbprint;
 use serde_json::{Value, json};
-
-use access_kernel::json::b64url_decode;
+use suiss_crypto::signer::{Signer, sign_sign1};
 
 use crate::ClientError;
 use crate::dpop::{Es256Key, pkce, random_text};
@@ -43,6 +45,9 @@ pub struct Login<'a> {
     pub resource: Option<&'a str>,
     /// The scope; `openid` by default.
     pub scope: &'a str,
+    /// The user's known device key: the new session is bound to its Instance after the sign-in
+    /// (OP-149 m.32).
+    pub device: Option<&'a dyn Signer>,
 }
 
 /// A browser's cookies, name by name.
@@ -195,9 +200,64 @@ pub async fn login(http: &Http, l: &Login<'_>) -> Result<Value, ClientError> {
     let issuer = Url::parse(l.issuer)?;
     let run = Run::new()?;
     let return_to = authorize(http, l, &issuer, &run).await?;
-    let jar = sign_in(http, l.issuer, l.identifier, l.credential).await?;
+    let mut jar = sign_in(http, l.issuer, l.identifier, l.credential).await?;
+    let instance = match l.device {
+        Some(device) => Some(attach_device(http, l.issuer, &mut jar, device).await?),
+        None => None,
+    };
     let code = code(http, l, &issuer, &run, &return_to, &jar).await?;
-    exchange(http, l, &run, &code).await
+    let mut tokens = exchange(http, l, &run, &code).await?;
+    if let (Some(i), Some(m)) = (instance, tokens.as_object_mut()) {
+        m.insert(String::from("instance"), Value::from(i));
+    }
+    Ok(tokens)
+}
+
+/// Binds the signed-in session to the existing Instance of the user's known `device` key
+/// (OP-149 m.32, m.6): a challenge from `POST /v1/me/instances/challenges`, then the key's
+/// `COSE_Sign1` over it to `POST /v1/me/instances/bindings`; returns the Instance, base64url.
+///
+/// # Errors
+/// [`ClientError`]; a refused binding (`step-up-required`, `invalid-party`, …) is
+/// [`ClientError::Unexpected`] with what Access said.
+pub async fn attach_device(
+    http: &Http,
+    issuer: &str,
+    jar: &mut Jar,
+    device: &dyn Signer,
+) -> Result<String, ClientError> {
+    let challenge = post_json(
+        http,
+        &format!("{issuer}/v1/me/instances/challenges"),
+        jar,
+        None,
+    )
+    .await?;
+    if challenge.status != 201 {
+        return Err(unexpected("device challenge", &challenge));
+    }
+    let bytes = text(&challenge.json(), "challenge")
+        .and_then(|c| b64url_decode(&c).ok())
+        .filter(|c| c.len() == 32)
+        .ok_or_else(|| unexpected("device challenge", &challenge))?;
+    let key = device.public_key();
+    let pop = sign_sign1(device, thumbprint(&key), POP_CONTENT_TYPE, &bytes)
+        .map_err(|e| ClientError::Key(format!("device proof: {}", e.code())))?;
+    let bound = post_json(
+        http,
+        &format!("{issuer}/v1/me/instances/bindings"),
+        jar,
+        Some(json!({
+            "challenge": b64url_encode(&bytes),
+            "key": b64url_encode(&cose_key(&key)),
+            "pop": b64url_encode(&pop),
+        })),
+    )
+    .await?;
+    if bound.status != 201 {
+        return Err(unexpected("device binding", &bound));
+    }
+    text(&bound.json(), "instance").ok_or_else(|| unexpected("device binding", &bound))
 }
 
 /// RFC 6749 §4.1.1: without a session the browser is sent to the hosted login; the `return_to`
