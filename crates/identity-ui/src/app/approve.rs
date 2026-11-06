@@ -621,15 +621,7 @@ where
         if finished.await.is_err() {
             return unavailable();
         }
-        Reply::json(
-            200,
-            json!({
-                "redirect": approval_redirect(&body.redirect_uri, &exercise.0, &act.render_digest.0, &claim.0, &body.state),
-                "exercise": b64url_encode(&exercise.0),
-                "render_digest": b64url_encode(&act.render_digest.0),
-                "claim": b64url_encode(&claim.0),
-            }),
-        )
+        finished_reply(body, &exercise.0, &act.render_digest.0, &claim.0)
     }
 
     /// The started, unfinished flow `flow` of `session`: its row, H(AAS) and the statement.
@@ -831,6 +823,25 @@ fn cooled(tier: Tier, created_ms: u64, now: u64) -> Result<(), Reply> {
             }),
         )
     })
+}
+
+/// The answer of a finished approval (`ApprovalFinished`, OP-149 m.9, m.33 (c)): where the
+/// browser goes, the contribution Exercise, the render digest and the approver's Claim.
+fn finished_reply(
+    body: &ApprovalFinish,
+    exercise: &[u8; 32],
+    render: &[u8; 32],
+    claim: &[u8; 16],
+) -> Reply {
+    Reply::json(
+        200,
+        json!({
+            "redirect": approval_redirect(&body.redirect_uri, exercise, render, claim, &body.state),
+            "exercise": b64url_encode(exercise),
+            "render_digest": b64url_encode(render),
+            "claim": b64url_encode(claim),
+        }),
+    )
 }
 
 /// SI-5, §10.1.5, OP-149 m.33 (c): the `authentication` Claim bound to the statement and to the
