@@ -392,6 +392,92 @@ async fn local_fixtures_are_made_once_and_produce_events() {
     );
     assert_eq!(client.platform_product, None);
 
+    // OP-149 m.28 (b), m.16 (a), OP-150 m.12 (d): the user is bound to the Party its device key
+    // registered, the device key is recorded, the binding Claims are queued, and the user's
+    // pairwise sub resolves to that Party
+    {
+        use crate::product::PgSubjects;
+        use access_http::product::ports::{SubjectQuery, Subjects as _};
+        let party =
+            <[u8; 16]>::try_from(access_kernel::json::b64url_decode(&user.party).unwrap()).unwrap();
+        let instance =
+            <[u8; 16]>::try_from(access_kernel::json::b64url_decode(&user.instance).unwrap())
+                .unwrap();
+        let mut t = TenantTx::begin(&w.db.app, route.tenant, route.realm)
+            .await
+            .unwrap();
+        assert_eq!(
+            idp::subject_party(&mut t, &subject).await.unwrap(),
+            Some(party)
+        );
+        assert_eq!(
+            access_store::issuer::subject_instance(&mut t, &subject)
+                .await
+                .unwrap(),
+            Some(instance)
+        );
+        let sub = t
+            .pairwise(subject, client.client_uuid, &b64url_encode(&[1; 32]))
+            .await
+            .unwrap();
+        t.commit().await.unwrap();
+        let acme_domain = Digest(
+            <[u8; 32]>::try_from(access_kernel::json::b64url_decode(&acme.domain).unwrap())
+                .unwrap(),
+        );
+        let status = w
+            .domains
+            .lookup_parties(
+                acme_domain,
+                &[Id(party)],
+                access_authority_core::keys::AsOf::Head,
+                false,
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            status.lookup.parties[0].actor_kind,
+            access_kernel::meta::ActorKind::Human
+        );
+        let subjects = PgSubjects {
+            app: w.db.app.clone(),
+            domains: w.domains.clone(),
+        };
+        let resolved = subjects
+            .resolve(
+                *route.tenant.as_bytes(),
+                *route.realm.as_bytes(),
+                &user.client_id,
+                SubjectQuery::Subs(vec![sub.clone()]),
+            )
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(resolved.pairs, vec![(party, sub.clone())]);
+        let back = subjects
+            .resolve(
+                *route.tenant.as_bytes(),
+                *route.realm.as_bytes(),
+                &user.client_id,
+                SubjectQuery::Parties(vec![party]),
+            )
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(back.pairs, vec![(party, sub)]);
+        let has = |events: &[access_store::identity::OutboxEvent], kind: &str| {
+            events.iter().any(|e| e.kind == kind)
+        };
+        identity_events_until(
+            &w.db,
+            "claim.",
+            |q| has(q, "claim.identity_binding_person") && has(q, "claim.authenticator_binding"),
+            "binding claims",
+        )
+        .await;
+        w.domains.release().await;
+    }
+
     // OP-149 m.26 (c): the declarant's unsigned Claim over a PEP channel is admitted
     let compromise = first.compromise.clone().unwrap();
     assert!(compromise.created);

@@ -569,6 +569,11 @@ pub(crate) struct TestUserOut {
     pub(crate) client_id: String,
     /// Its registered redirect URI.
     pub(crate) redirect_uri: String,
+    /// The Party the user's device Instances belong to, base64url (OP-149 m.28 (b)); what
+    /// `subjects:resolve` answers for the user's pairwise `sub`.
+    pub(crate) party: String,
+    /// The user's device Instance in the realm's governing domain, base64url.
+    pub(crate) instance: String,
     /// Whether this run created the account.
     pub(crate) created: bool,
 }
@@ -724,6 +729,15 @@ fn sign(root: &HsmSigner, s: &Statement) -> Result<Vec<u8>, BootstrapError> {
     let payload = s.to_bytes().map_err(|_| BootstrapError::Encode)?;
     sign_sign1(root, thumbprint(&root.public_key()), CONTENT_TYPE, &payload)
         .map_err(|e| BootstrapError::Unavailable(String::from(e.code())))
+}
+
+/// A key's Instance in a domain, registered by its own Exercises or found registered.
+pub(crate) struct Onboarded {
+    /// The Instance.
+    pub(crate) instance: Id,
+    /// The key's self-signed `party_register` AIS: the evidence an identity binding names by
+    /// digest (OP-150 m.12 (d)).
+    pub(crate) register_ais: Vec<u8>,
 }
 
 /// The server time of a step and the validity of what it signs.
@@ -1065,21 +1079,36 @@ where
         root: &HsmSigner,
         party: Id,
     ) -> Result<(), BootstrapError> {
-        let challenge = root_challenge(root, domain)?;
-        if self.allowed(domain, &challenge).await? {
-            return Ok(());
-        }
-        self.lead(domain).await?;
+        self.register(tenant, realm, domain, root, party, [0; 16])
+            .await
+            .map(|_| ())
+    }
+
+    /// The Instance of `key` in `domain` as the device of `subject` (zero for a key that is
+    /// nobody's device): `party_register` when the Party is new, then `instance_create`, both
+    /// signed by that key under the bootstrap Grant (L0-META-7, OP-149 m.16 (a)). A recorded
+    /// ALLOW of a step is not repeated; the Instance is the same on every run, as its
+    /// challenge is.
+    async fn register(
+        &self,
+        tenant: TenantId,
+        realm: RealmId,
+        domain: Digest,
+        key: &HsmSigner,
+        party: Id,
+        subject: [u8; 16],
+    ) -> Result<Onboarded, BootstrapError> {
+        let challenge = root_challenge(key, domain)?;
         let w = Moment::at(server_time(self.app).await?);
         let mut r = Registration {
             tenant: *tenant.as_bytes(),
             domain,
             registrant: Registrant::Device {
                 realm: *realm.as_bytes(),
-                subject: [0; 16],
+                subject,
             },
             party,
-            key: root.public_key(),
+            key: key.public_key(),
             register: None,
             create: SelfSigned {
                 nonce: challenge.clone(),
@@ -1088,30 +1117,41 @@ where
             },
             pep: String::from(IDENTITY_PEP),
         };
+        let instance = r.instance().ok_or(BootstrapError::Encode)?;
         let signed = |nonce: &[u8], payload: &meta::Payload| -> Result<Vec<u8>, BootstrapError> {
             let intent =
                 self_signed_intent(payload, party, w.validity).ok_or(BootstrapError::Encode)?;
             let digest = intent_digest(&intent).map_err(|_| BootstrapError::Encode)?;
             sign(
-                root,
+                key,
                 &w.statement(domain, nonce, digest, bootstrap_basis(&domain)),
             )
         };
-        r.create.ais = signed(&challenge, &r.create_payload())?;
         let register = register_nonce(&challenge);
+        let register_ais = signed(&register, &r.register_payload())?;
+        if self.allowed(domain, &challenge).await? {
+            return Ok(Onboarded {
+                instance,
+                register_ais,
+            });
+        }
+        self.lead(domain).await?;
+        r.create.ais = signed(&challenge, &r.create_payload())?;
         if !self.allowed(domain, &register).await? {
-            let ais = signed(&register, &r.register_payload())?;
             r.register = Some(SelfSigned {
                 nonce: register,
                 validity: w.validity,
-                ais,
+                ais: register_ais.clone(),
             });
         }
         match Instances::register(self.plane, r)
             .await
             .map_err(|e| BootstrapError::Unavailable(e.0))?
         {
-            RegistrationVerdict::Registered(_) => Ok(()),
+            RegistrationVerdict::Registered(_) => Ok(Onboarded {
+                instance,
+                register_ais,
+            }),
             RegistrationVerdict::Refused { code } => Err(BootstrapError::Refused(code)),
         }
     }

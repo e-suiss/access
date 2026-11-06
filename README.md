@@ -96,7 +96,7 @@ The bootstrap prints, and keeps in the `bootstrap` volume as `bootstrap.json`:
 - `clients[]`: each registered platform product client and the `aud` its client assertions use
 - `root`: the Party that founded the realms
 - `sample`: what a real `POST /access/v1/eligibility:check` names to be answered `eligible: true`. The `acme` realm publishes a `work` catalog with the action `approve`, and its root grants that action over the whole `work` namespace to a sample subject. `sample.subject` is the check's `subject`; `domain`, `action`, `resource` and `basis` go into its `set` (`resource` in `intent.resources`, with an `intent.validity` of at most 24 hours around now, and `"capacity": "own"`)
-- `test_user`: the `acme` user `test@acme.example` (identifier, `usr_…` subject) with the password you chose, and the public client (`client_id`, `redirect_uri`) a sign-in uses: authorization code with PKCE and DPoP, no client secret
+- `test_user`: the `acme` user `test@acme.example` (identifier, `usr_…` subject) with the password you chose, and the public client (`client_id`, `redirect_uri`) a sign-in uses: authorization code with PKCE and DPoP, no client secret. The user also has a device Instance (`instance`) that binds them to a Party (`party`), registered with a device key kept in the bootstrap token the way `POST /v1/me/instances` does; `POST /access/v1/tenants/{tenant}/subjects:resolve` resolves the user's pairwise `sub` to that Party, and `GET /access/v1/parties/{party}` answers its status
 - `compromise`: the Party (`issuer`) whose unsigned `party_compromise` Claims the `acme` realm accepts over a PEP certificate, and the realm's `domain`
 
 ### Sign in without a browser

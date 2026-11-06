@@ -1,17 +1,18 @@
 //! What a product's end-to-end tests need from a local deployment besides the realms and
-//! clients (OP-149 m.26 (b), (c)): a test user with a password and a public client to sign in
-//! with, in a sample realm; the Acceptance under which a local declarant Party's unsigned
-//! `party_compromise` Claims are admitted there, so a product's PEP can produce
-//! `party.compromised` at Claim Ingest; and the `idp.client.update` and `idp.client.retire`
-//! changes of a platform client, which produce `api_client.updated` and `api_client.disabled`.
-//! Each goes through the paths production uses, and every step looks for its result first.
+//! clients (OP-149 m.26 (b), (c), m.28 (b)): a test user with a password, a public client to
+//! sign in with and a device Instance that binds the user to a Party, in a sample realm; the
+//! Acceptance under which a local declarant Party's unsigned `party_compromise` Claims are
+//! admitted there, so a product's PEP can produce `party.compromised` at Claim Ingest; and the
+//! `idp.client.update` and `idp.client.retire` changes of a platform client, which produce
+//! `api_client.updated` and `api_client.disabled`. Each goes through the paths production uses,
+//! and every step looks for its result first.
 
 use std::path::PathBuf;
 use std::sync::Arc;
 
 use access_crypto::opaque_id::IdKey;
 use access_identity_account::adapters::hibp::MirrorRanges;
-use access_identity_account::adapters::pg::PgAccounts;
+use access_identity_account::adapters::pg::{PgAccounts, PgTx};
 use access_identity_account::adapters::system::{SystemEntropy, cgroup_memory_budget, cores};
 use access_identity_account::app::accounts::{
     PasswordServices, change_status, create, set_password,
@@ -28,6 +29,7 @@ use access_identity_admin::domain::{AuthMethod, Change, Client, ClientId};
 use access_identity_admin::ports::{Decider, Governance, Instances, RealmKeys};
 use access_identity_events::adapters::RealmKek as _;
 use access_identity_events::domain::catalog::IdentityKind;
+use access_identity_ui::app::devices::{self, DeviceKey};
 use access_kernel::claim::{PARTY_COMPROMISE, PREDICATE_INPUT};
 use access_kernel::codec::Canonical;
 use access_kernel::digest::Digest;
@@ -35,6 +37,7 @@ use access_kernel::json::b64url_encode;
 use access_kernel::model::{Id, SubjectSelector};
 use access_store::identity::{RealmId, TenantId, TenantTx};
 use access_store::idp;
+use access_store::issuer::subject_instance;
 use access_store::tenancy::route_by_slug;
 use serde::Serialize;
 use suiss_crypto::dcbor::Value;
@@ -49,6 +52,9 @@ use crate::login::RealmKeks;
 
 /// The token label of the local compromise declarant's key (OP-149 m.26 (c)).
 pub(crate) const DECLARANT_LABEL: &str = "access/bootstrap/compromise-declarant";
+
+/// The token label of the test user's device key (OP-149 m.28 (b)).
+pub(crate) const TEST_DEVICE_LABEL: &str = "access/bootstrap/test-user-device";
 
 /// Who the bootstrap is in the account audit log (OP-10).
 const BOOTSTRAP: Actor<'static> = Actor {
@@ -221,6 +227,7 @@ where
         let client_id = self
             .public_client(admin, (tenant, realm), domain, root, u)
             .await?;
+        let (party, instance) = self.device_party((tenant, realm), domain, subject).await?;
         Ok(TestUserOut {
             realm: u.realm.clone(),
             issuer: String::new(),
@@ -228,8 +235,51 @@ where
             subject: scope.external(subject)?,
             client_id,
             redirect_uri: String::from(u.redirect_uri.as_str()),
+            party: b64url_encode(&party.0),
+            instance: b64url_encode(&instance.0),
             created,
         })
+    }
+
+    /// The test user's Party and device Instance in the realm's governing domain (OP-149 m.28
+    /// (b), m.16 (a), L0-META-7): a device key kept in the token signs its own `party_register`
+    /// and `instance_create`, and the identity plane binds the subject to that Party, queues the
+    /// `identity_binding_person` Claim and records the device key, as `POST /v1/me/instances`
+    /// does (OP-150 m.12 (d)). A subject with a Party and a device keeps them.
+    async fn device_party(
+        &self,
+        (tenant, realm): (TenantId, RealmId),
+        domain: Digest,
+        subject: [u8; 16],
+    ) -> Result<(Id, Id), BootstrapError> {
+        let key = token_key(self.hsm, TEST_DEVICE_LABEL)?;
+        let party = root_party(&key.public_key());
+        let mut t = TenantTx::begin(self.app, tenant, realm).await?;
+        let bound = idp::subject_party(&mut t, &subject).await?;
+        let instance = subject_instance(&mut t, &subject).await?;
+        t.commit().await?;
+        if let (Some(p), Some(i)) = (bound, instance) {
+            return Ok((Id(p), Id(i)));
+        }
+        if bound.is_some_and(|p| p != party.0) {
+            return Err(BootstrapError::Plan(String::from(
+                "test_user: the account is bound to a Party that is not the plan's device key's",
+            )));
+        }
+        let onboarded = self
+            .register(tenant, realm, domain, &key, party, subject)
+            .await?;
+        let mut tx = PgTx(TenantTx::begin(self.app, tenant, realm).await?);
+        devices::bind_party(&mut tx, &subject, &party.0, &onboarded.register_ais).await?;
+        let device = DeviceKey {
+            subject,
+            key: key.public_key(),
+            instance: onboarded.instance.0,
+            session: None,
+        };
+        devices::record_device_key(&mut tx, &device).await?;
+        tx.0.commit().await?;
+        Ok((party, onboarded.instance))
     }
 
     /// The active public client of the realm with the test user's redirect URI, registered by

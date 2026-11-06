@@ -23,7 +23,7 @@ use access_store::identity::TenantTx;
 use access_store::idp;
 use serde_json::json;
 
-use super::{Browser, Hosted, Reply, SESSION_REQUIRED, failed, signin};
+use super::{Browser, Hosted, Reply, SESSION_REQUIRED, devices, failed, signin};
 use crate::domain::frontend::{
     AuthContextRequest, InstanceRegistration, InstanceTermination, rfc3339, unix_ms,
 };
@@ -209,22 +209,15 @@ async fn bind_party(
     party: &[u8; 16],
     proof: &[u8],
 ) -> Result<(), Reply> {
-    use access_identity_account::app::claims::emit;
-    use access_identity_account::domain::claims::identity_binding;
-    use access_kernel::claim::body::BindingKind;
     let mut tx = access_identity_account::adapters::pg::PgTx(
         TenantTx::begin(db, kit.tenant, kit.realm)
             .await
             .map_err(|_| unavailable())?,
     );
-    if idp::bind_subject_party(&mut tx.0, subject, party)
+    if !devices::bind_party(&mut tx, subject, party, proof)
         .await
         .map_err(|_| unavailable())?
     {
-        let at = tx.0.server_time().await.map_err(|_| unavailable())?;
-        let order = identity_binding(*subject, BindingKind::Person, proof, at);
-        emit(&mut tx, &order).await.map_err(|_| unavailable())?;
-    } else {
         tracing::warn!("device party already bound");
     }
     tx.0.commit().await.map_err(|_| unavailable())
@@ -240,35 +233,29 @@ async fn device_registered(
     instance: [u8; 16],
 ) -> Result<(), Reply> {
     use access_identity_account::app::claims::emit;
-    use access_identity_account::domain::claims::{self, AuthFacts, Bind};
+    use access_identity_account::domain::claims::{AuthFacts, Bind, authentication};
     use access_kernel::verify::cose::PublicKey;
-    let (key, kty, alg, cose) = match &proven.key {
-        PublicKey::Ed25519(k) => (k.to_vec(), "OKP", "Ed25519", -8),
-        PublicKey::P256(k) => (k.clone(), "EC2", "ES256", -7),
-        PublicKey::MlDsa(..) => return Err(invalid()),
-    };
+    if matches!(proven.key, PublicKey::MlDsa(..)) {
+        return Err(invalid());
+    }
     let s = &proven.session;
     let mut tx = access_identity_account::adapters::pg::PgTx(
         TenantTx::begin(db, kit.tenant, kit.realm)
             .await
             .map_err(|_| unavailable())?,
     );
-    let row = access_store::issuer::NewDeviceKey {
+    let device = devices::DeviceKey {
         subject: s.subject,
-        public_key: &key,
-        key_type: kty,
-        algorithm: alg,
+        key: proven.key.clone(),
         instance,
         session: Some(s.id),
     };
-    let fresh = access_store::issuer::insert_device_key(&mut tx.0, &row)
+    if devices::record_device_key(&mut tx, &device)
         .await
         .map_err(|_| unavailable())?
-        .is_some();
-    if fresh {
-        let at = tx.0.server_time().await.map_err(|_| unavailable())?;
-        let binding = claims::device_key_binding(s.subject, &key, cose, instance, at);
-        let login = claims::authentication(AuthFacts {
+        .is_some()
+    {
+        let login = authentication(AuthFacts {
             subject: s.subject,
             method: access_kernel::claim::body::AuthMethod::DeviceKey,
             auth_time: s.auth_time_ms,
@@ -277,9 +264,7 @@ async fn device_registered(
             evidence: None,
             bind: Bind::Instance(instance),
         });
-        for order in [binding, login] {
-            emit(&mut tx, &order).await.map_err(|_| unavailable())?;
-        }
+        emit(&mut tx, &login).await.map_err(|_| unavailable())?;
     }
     tx.0.commit().await.map_err(|_| unavailable())
 }

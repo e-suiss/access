@@ -168,6 +168,30 @@ pub async fn insert_device_key(
     Ok(row.map(|d| *d.as_bytes()))
 }
 
+/// The Instance of `subject`'s first active device key (OP-149 m.28 (b)); `None` when the
+/// subject registered no device.
+///
+/// # Errors
+/// [`StoreError`].
+pub async fn subject_instance(
+    t: &mut TenantTx,
+    subject: &[u8; 16],
+) -> Result<Option<[u8; 16]>, StoreError> {
+    let (tenant, realm) = scope(t)?;
+    let row = sqlx::query_scalar!(
+        "SELECT instance_id FROM access.device_keys
+          WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND status = 'active'
+          ORDER BY created_at, device_id LIMIT 1",
+        tenant,
+        realm,
+        Uuid::from_bytes(*subject),
+    )
+    .fetch_optional(&mut *t.tx)
+    .await?;
+    row.map(|i| <[u8; 16]>::try_from(i.as_slice()).map_err(|_| StoreError::Corrupt))
+        .transpose()
+}
+
 /// Retires the subject's active device key of a terminated Instance (§10.1.3 `status`); `false`
 /// when there is none. The row stays (OP-73).
 ///

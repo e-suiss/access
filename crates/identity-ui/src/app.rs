@@ -13,6 +13,7 @@
 mod account;
 mod approve;
 mod credential;
+pub mod devices;
 mod me;
 
 pub use me::Devices;
