@@ -62,7 +62,7 @@ pub struct Render {
 
 fn hex(bytes: &[u8]) -> String {
     use core::fmt::Write as _;
-    let mut out = String::with_capacity(bytes.len().saturating_mul(2));
+    let mut out = String::new();
     for b in bytes {
         let _ = write!(out, "{b:02x}");
     }
@@ -161,7 +161,7 @@ pub fn of(
     locale: &str,
 ) -> Result<Render, dcbor::EncodeError> {
     let params_material = material(schema);
-    let mut fields = Vec::with_capacity(intent.params.len().saturating_add(4));
+    let mut fields = Vec::new();
     let mut action = intent.action.namespace.clone();
     action.push('/');
     action.push_str(&intent.action.name);
