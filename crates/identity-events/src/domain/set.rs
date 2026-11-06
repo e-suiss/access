@@ -20,8 +20,8 @@ pub const CLOUDEVENT_CONTENT_TYPE: &str = "application/cloudevents+json; charset
 pub const SOURCE_PREFIX: &str = "urn:suiss:access:realm:";
 
 /// The SET claims of `event` for one subscription: `iss` the realm issuer, `aud` the
-/// subscriber, `iat` when it was queued, `jti` the event id, `sub_id` an opaque subject
-/// identifier (SSF 1.0 §3) and one member of `events`.
+/// subscriber, `iat` when it was queued (stamped again at every send, [`stamp_issued`]), `jti`
+/// the event id, `sub_id` an opaque subject identifier (SSF 1.0 §3) and one member of `events`.
 #[must_use]
 pub fn set_claims(event: &Ready, iss: &str, aud: &str, iat_s: u64) -> Value {
     let mut events = Map::new();
@@ -34,6 +34,16 @@ pub fn set_claims(event: &Ready, iss: &str, aud: &str, iat_s: u64) -> Value {
         "sub_id": {"format": "opaque", "id": event.sub_id},
         "events": events,
     })
+}
+
+/// Stamps `iat` with the time the SET is sent (RFC 8417 §2.2, OP-149 m.34 (d)): a delivery tried
+/// again later carries the time of that attempt, so a receiver's freshness window does not refuse
+/// it; `jti` and `events` stay the same, so it deduplicates by `jti`. The stored payload is not
+/// rewritten, only the copy about to be signed.
+pub fn stamp_issued(claims: &mut Value, iat_s: u64) {
+    if let Some(m) = claims.as_object_mut() {
+        m.insert("iat".into(), iat_s.into());
+    }
 }
 
 /// Names the tenant the event happened in by its external `tnt_` id, for a platform product's

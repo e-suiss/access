@@ -633,6 +633,76 @@ async fn webhook_delivery_is_signed_retried_and_deduplicated() {
     for id in unique {
         assert_eq!(w.state(hook.id, id).await.0, "delivered");
     }
+    // OP-149 m.34 (d), RFC 8417 §2.2: the retry carries the time of its own attempt in iat;
+    // jti, the event and the CloudEvent's occurrence time are the same
+    let (first, retry): (Json, Json) = (
+        serde_json::from_slice(&got[0].body).unwrap(),
+        serde_json::from_slice(&got[2].body).unwrap(),
+    );
+    assert_eq!(first["data"]["iat"], T0 / 1000);
+    assert_eq!(retry["data"]["iat"], (T0 + 60_000) / 1000);
+    assert_eq!(first["data"]["jti"], retry["data"]["jti"]);
+    assert_eq!(first["data"]["events"], retry["data"]["events"]);
+    assert_eq!(first["time"], retry["time"]);
+}
+
+// OP-149 m.34 (d), RFC 8417 §2.2, RFC 8935, Work T-102: an SSF push tried again after the
+// receiver's freshness window is signed with iat of that attempt, so the receiver takes it and
+// deduplicates by the unchanged jti; the stored payload is not rewritten
+#[tokio::test]
+async fn a_push_retry_is_stamped_with_the_time_of_its_attempt() {
+    let w = World::new().await;
+    let receiver = Receiver::default();
+    receiver.script.lock().unwrap().push_back(503);
+    let port = receiver.start().await;
+    let push = w
+        .streams()
+        .create(
+            w.tenant,
+            w.realm,
+            &parse_stream(&stream_request(
+                "urn:ietf:rfc:8935",
+                Some("https://work.example/v1/inbound/events"),
+                &["api_client.created"],
+            ))
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    let id = w.api_client_created("cli_late").await;
+    let fanout = w.fanout();
+    assert_eq!(settle_identity(&fanout, 1).await, 1);
+
+    let courier = w.courier(Local(port));
+    let first = courier.step().await.unwrap();
+    assert_eq!((first.delivered, first.retried, first.failed), (0, 1, 0));
+    assert_eq!(w.state(push.id, &id).await.0, "pending");
+    w.advance(6 * 60_000);
+    let second = courier.step().await.unwrap();
+    assert_eq!((second.delivered, second.retried, second.failed), (1, 0, 0));
+    assert_eq!(w.state(push.id, &id).await.0, "delivered");
+
+    let got = receiver.got.lock().unwrap().clone();
+    assert_eq!(got.len(), 2);
+    let (h1, c1) = set_of(std::str::from_utf8(&got[0].body).unwrap());
+    let (h2, c2) = set_of(std::str::from_utf8(&got[1].body).unwrap());
+    assert_eq!(
+        (h1["typ"].as_str(), h2["typ"].as_str()),
+        (Some("secevent+jwt"), Some("secevent+jwt"))
+    );
+    assert_eq!(c1["iat"], T0 / 1000);
+    assert_eq!(c2["iat"], (T0 + 6 * 60_000) / 1000);
+    assert_eq!(c1["jti"], id);
+    assert_eq!(c2["jti"], id);
+    assert_eq!(c1["events"], c2["events"]);
+    assert_eq!(c1["aud"], c2["aud"]);
+    assert_eq!(c1["sub_id"], c2["sub_id"]);
+    // OP-73: the queued payload still says when it was queued
+    let mut t = TenantTx::begin(&w.db.app, w.tenant, w.realm).await.unwrap();
+    let row = t.delivery(w.realm, push.id, &id).await.unwrap().unwrap();
+    t.commit().await.unwrap();
+    let stored: Json = serde_json::from_slice(&row.payload).unwrap();
+    assert_eq!(stored["iat"], T0 / 1000);
 }
 
 // RFC 8936 §2.4, §2.5, OP-149 m.7, SI-9: a poll stream returns its pending SETs signed with
@@ -678,6 +748,8 @@ async fn poll_returns_and_settles_sets() {
         .unwrap();
     support::assert_valid("poll-response.schema.json", &answer);
     assert_eq!(answer["moreAvailable"], true);
+    // OP-149 m.34 (d): a SET polled later carries the time it is handed out
+    w.advance(6 * 60_000);
     let answer = streams
         .poll(&ClearSigner, &w.clock, w.tenant, w.realm, &token, b"{}")
         .await
@@ -690,6 +762,7 @@ async fn poll_returns_and_settles_sets() {
         let (h, claims) = set_of(t.as_str().unwrap());
         assert_eq!(h["typ"], "secevent+jwt");
         assert_eq!(claims["jti"], jti.as_str());
+        assert_eq!(claims["iat"], (T0 + 6 * 60_000) / 1000);
         let urn = support::assert_set(&claims);
         if urn.ends_with("party.compromised") {
             let e = &claims["events"][&urn];

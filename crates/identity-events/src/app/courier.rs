@@ -3,6 +3,8 @@
 //! - Webhook: the stored SET claims as the `data` of a structured `CloudEvent`, signed per
 //!   Standard Webhooks with the subscription's secret.
 //! - SSF push (RFC 8935): the SET signed with the realm's key when it is sent.
+//! - Either way the SET's `iat` is the time of this attempt (OP-149 m.34 (d)); `jti` and the
+//!   event stay, so a receiver deduplicates a retry by `jti`.
 //! - At least once: a delivery stays `pending` until a `2xx`; a transient failure is tried
 //!   again with backoff, per delivery, so one dead endpoint delays only its own events. After
 //!   [`MAX_ATTEMPTS`] it is `failed` as `unreachable`. A refusal that will not change (a final
@@ -17,7 +19,9 @@ use access_store::identity::{RealmId, TenantId, TenantTx};
 use serde_json::Value;
 
 use crate::app::{Db, realm_signing};
-use crate::domain::set::{CLOUDEVENT_CONTENT_TYPE, SET_CONTENT_TYPE, SET_TYP, cloud_event};
+use crate::domain::set::{
+    CLOUDEVENT_CONTENT_TYPE, SET_CONTENT_TYPE, SET_TYP, cloud_event, stamp_issued,
+};
 use crate::domain::stream::{Answer, Channel, classify};
 use crate::ports::{Clock, PostError, Sealer, TokenSigner, Transport, Unavailable};
 
@@ -245,6 +249,9 @@ where
         let Some(endpoint) = s.endpoint.as_deref() else {
             return Ok(Sent::Refused);
         };
+        // OP-149 m.34 (d)
+        let mut claims: Value = serde_json::from_slice(&row.payload).map_err(fault("payload"))?;
+        stamp_issued(&mut claims, now / 1000);
         let (content_type, headers, body) = match Channel::from_name(&s.channel) {
             Some(Channel::Webhook) => {
                 let sealed = s.secret.as_ref().ok_or(Unavailable).map_err(at("secret"))?;
@@ -253,8 +260,6 @@ where
                     .open(tenant, realm, &s.id, sealed)
                     .map_err(at("unseal"))?;
                 let secret = WebhookSecret::from_bytes(raw.to_vec()).map_err(fault("secret"))?;
-                let claims: Value =
-                    serde_json::from_slice(&row.payload).map_err(fault("payload"))?;
                 let occurred = u64::try_from(row.occurred_ms).map_err(fault("payload"))?;
                 let external = self.db.tenant(tenant).map_err(at("tenant-id"))?;
                 let body = cloud_event(&claims, &external, realm.as_bytes(), occurred)
@@ -278,9 +283,10 @@ where
                 else {
                     return Ok(Sent::Unreachable);
                 };
+                let payload = serde_json::to_vec(&claims).map_err(fault("payload"))?;
                 let token = self
                     .signer
-                    .sign(realm, alg, SET_TYP, &row.payload, now)
+                    .sign(realm, alg, SET_TYP, &payload, now)
                     .await
                     .map_err(at("sign"))?;
                 (

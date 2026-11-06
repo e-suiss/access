@@ -17,7 +17,7 @@ use zeroize::Zeroizing;
 
 use crate::app::{Db, down, realm_signing};
 use crate::domain::Invalid;
-use crate::domain::set::SET_TYP;
+use crate::domain::set::{SET_TYP, stamp_issued};
 use crate::domain::stream::{
     Channel, StreamRequest, parse_poll, poll_response, requested, stream_json,
 };
@@ -480,8 +480,8 @@ impl<K: Sealer, R: Random> Streams<K, R> {
     }
 
     /// RFC 8936 poll by the stream's bearer credential: settles what the receiver acknowledged
-    /// or reported, then returns up to `maxEvents` pending SETs, each signed now with the
-    /// realm's key.
+    /// or reported, then returns up to `maxEvents` pending SETs, each with `iat` now (OP-149
+    /// m.34 (d)) and signed now with the realm's key.
     ///
     /// # Errors
     /// [`StreamError`].
@@ -520,7 +520,10 @@ impl<K: Sealer, R: Random> Streams<K, R> {
             .iter()
             .take(usize::try_from(req.max_events).unwrap_or(0))
         {
-            let token = signer.sign(realm, alg, SET_TYP, &r.payload, now).await?;
+            let mut claims: Value = serde_json::from_slice(&r.payload).map_err(down)?;
+            stamp_issued(&mut claims, now / 1000);
+            let payload = serde_json::to_vec(&claims).map_err(down)?;
+            let token = signer.sign(realm, alg, SET_TYP, &payload, now).await?;
             sets.push((r.event_id.clone(), token));
         }
         Ok(poll_response(&sets, more))
