@@ -214,11 +214,107 @@ pub async fn retire_device_key(
     )
     .execute(&mut *t.tx)
     .await?;
+    if done.rows_affected() != 1 {
+        return Ok(false);
+    }
+    // OP-149 m.32, OP-150 m.14 (f)
+    sqlx::query!(
+        "UPDATE access.session_instances SET status = 'released', released_at = now()
+          WHERE tenant_id = $1 AND realm_id = $2 AND instance_id = $3 AND status = 'active'",
+        tenant,
+        realm,
+        instance.as_slice(),
+    )
+    .execute(&mut *t.tx)
+    .await?;
+    Ok(true)
+}
+
+/// A subject's active device key with given public material: the key row and its Instance
+/// (OP-149 m.32: a known device in a new session).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct KnownDevice {
+    /// The key row.
+    pub device: [u8; 16],
+    /// The Instance the key is.
+    pub instance: [u8; 16],
+}
+
+/// The subject's active device key whose raw public material is `public_key`; `None` for a key
+/// the subject never registered or retired, or another subject's.
+///
+/// # Errors
+/// [`StoreError`].
+pub async fn known_device(
+    t: &mut TenantTx,
+    subject: &[u8; 16],
+    public_key: &[u8],
+) -> Result<Option<KnownDevice>, StoreError> {
+    let (tenant, realm) = scope(t)?;
+    let row = sqlx::query!(
+        "SELECT device_id, instance_id FROM access.device_keys
+          WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND public_key = $4
+            AND status = 'active'
+          ORDER BY created_at, device_id LIMIT 1",
+        tenant,
+        realm,
+        Uuid::from_bytes(*subject),
+        public_key,
+    )
+    .fetch_optional(&mut *t.tx)
+    .await?;
+    row.map(|r| {
+        Ok(KnownDevice {
+            device: *r.device_id.as_bytes(),
+            instance: id16(&r.instance_id)?,
+        })
+    })
+    .transpose()
+}
+
+/// A session's binding to a known device's Instance (OP-149 m.32).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NewSessionInstance {
+    /// The session that proved the key.
+    pub session: [u8; 16],
+    /// The subject.
+    pub subject: [u8; 16],
+    /// The key row.
+    pub device: [u8; 16],
+    /// The Instance the key is.
+    pub instance: [u8; 16],
+}
+
+/// Binds the session to the Instance; `false` when the session already binds an active Instance
+/// this way (INV-13, OP-150 m.14 (f): one per session and realm). Nothing else changes (OP-73).
+///
+/// # Errors
+/// [`StoreError`].
+pub async fn bind_session_instance(
+    t: &mut TenantTx,
+    b: &NewSessionInstance,
+) -> Result<bool, StoreError> {
+    let (tenant, realm) = scope(t)?;
+    let done = sqlx::query!(
+        "INSERT INTO access.session_instances
+           (tenant_id, realm_id, session_id, subject_id, device_id, instance_id)
+         VALUES ($1, $2, $3, $4, $5, $6)
+         ON CONFLICT (tenant_id, realm_id, session_id) WHERE status = 'active' DO NOTHING",
+        tenant,
+        realm,
+        Uuid::from_bytes(b.session),
+        Uuid::from_bytes(b.subject),
+        Uuid::from_bytes(b.device),
+        b.instance.as_slice(),
+    )
+    .execute(&mut *t.tx)
+    .await?;
     Ok(done.rows_affected() == 1)
 }
 
-/// The active device Instance a session registered, the latest first (INV-13: at most one per
-/// device and domain).
+/// The active device Instance a session is bound to, the latest first (INV-13: at most one per
+/// session and realm): the one it registered, or the known device's Instance it proved later
+/// (OP-149 m.32).
 ///
 /// # Errors
 /// [`StoreError`].
@@ -228,9 +324,18 @@ pub async fn session_instance(
 ) -> Result<Option<[u8; 16]>, StoreError> {
     let (tenant, realm) = scope(t)?;
     let row = sqlx::query_scalar!(
-        "SELECT instance_id FROM access.device_keys
-          WHERE tenant_id = $1 AND realm_id = $2 AND session_id = $3 AND status = 'active'
-          ORDER BY created_at DESC, device_id DESC LIMIT 1",
+        r#"SELECT instance_id AS "instance_id!" FROM (
+             SELECT instance_id, created_at FROM access.device_keys
+              WHERE tenant_id = $1 AND realm_id = $2 AND session_id = $3 AND status = 'active'
+             UNION ALL
+             SELECT b.instance_id, b.created_at FROM access.session_instances b
+               JOIN access.device_keys k
+                 ON k.tenant_id = b.tenant_id AND k.realm_id = b.realm_id
+                AND k.device_id = b.device_id
+              WHERE b.tenant_id = $1 AND b.realm_id = $2 AND b.session_id = $3
+                AND b.status = 'active' AND k.status = 'active'
+           ) bound
+           ORDER BY created_at DESC LIMIT 1"#,
         tenant,
         realm,
         Uuid::from_bytes(*session),

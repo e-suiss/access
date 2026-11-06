@@ -1,0 +1,25 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT instance_id AS \"instance_id!\" FROM (\n             SELECT instance_id, created_at FROM access.device_keys\n              WHERE tenant_id = $1 AND realm_id = $2 AND session_id = $3 AND status = 'active'\n             UNION ALL\n             SELECT b.instance_id, b.created_at FROM access.session_instances b\n               JOIN access.device_keys k\n                 ON k.tenant_id = b.tenant_id AND k.realm_id = b.realm_id\n                AND k.device_id = b.device_id\n              WHERE b.tenant_id = $1 AND b.realm_id = $2 AND b.session_id = $3\n                AND b.status = 'active' AND k.status = 'active'\n           ) bound\n           ORDER BY created_at DESC LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "instance_id!",
+        "type_info": "Bytea",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "41040c6dfc9bef6797a089c5d4f435860b2bc30b50e2e86e593aea8c17aaf3f1"
+}
