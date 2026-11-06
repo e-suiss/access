@@ -54,6 +54,8 @@ type Api = PlatformApi<PgDirectory, NoJwks, TestPlane, NoSeal, OsRandom, AtNow>;
 
 struct Product {
     app: axum::Router,
+    /// The platform API behind `app`, the product routes' assertion verifier (OP-149 m.37).
+    api: Arc<Api>,
     key: EcdsaKeyPair,
     client: String,
     /// The seed of the Ed25519 service key its pairing Exercises are signed with.
@@ -263,7 +265,7 @@ async fn products(w: &World, named: &[(&str, u8)]) -> (Vec<Product>, TenantId, R
         ..w.admin()
     };
     let ids = Arc::new(IdKey::new(Secret::new([8; 32])));
-    let api: Api = PlatformApi {
+    let api: Arc<Api> = Arc::new(PlatformApi {
         app: w.db.app.clone(),
         router: w.db.router.clone(),
         directory: PgDirectory::new(w.db.router.clone()),
@@ -281,8 +283,8 @@ async fn products(w: &World, named: &[(&str, u8)]) -> (Vec<Product>, TenantId, R
         ids: ids.clone(),
         pep: String::from(PEP_NAME),
         clock: AtNow,
-    };
-    let app = access_http::platform::router(api, String::from("https://api.id.test"));
+    });
+    let app = access_http::platform::router(Arc::clone(&api), String::from("https://api.id.test"));
     let mut out = Vec::new();
     for (i, (name, seed)) in named.iter().enumerate() {
         let n = u8::try_from(i).unwrap();
@@ -312,6 +314,7 @@ async fn products(w: &World, named: &[(&str, u8)]) -> (Vec<Product>, TenantId, R
         written(&platform.apply(&p, ais).await.unwrap());
         out.push(Product {
             app: app.clone(),
+            api: Arc::clone(&api),
             key,
             client: String::from(c.id.as_str()),
             seed: *seed,
@@ -733,4 +736,113 @@ async fn a_third_party_product_holds_the_same_platform_role_as_work() {
         .collect();
     names.sort();
     assert_eq!(names, [third, "work"]);
+}
+
+// OP-149 m.37, m.19 (e), m.19 (g), m.5: over the real plane, a paired product reads its tenant's
+// snapshot and resolves its own Party in the tenant's realm with its client assertion, verified
+// by the same platform API as its pairing; the sector is the product itself; a replayed jti and
+// a bare request are refused; the agency route stays a PEP's
+#[tokio::test]
+async fn a_paired_product_reads_its_tenant_with_its_assertion() {
+    // MD-10, OP-141 m.22 (f)
+    let w = World::new().await;
+    let (p, _, _) = product(&w).await;
+    let (t2, r2, _) = w.realm("acme").await;
+    let tnt = p.tenant(t2);
+    let paired = p.pair(&tnt).await;
+    let party = paired["targets"][0]["party"].as_str().unwrap().to_owned();
+    let products = access_http::product::adapters::router(access_http::product::app::Service::new(
+        w.plane.domains.clone(),
+        crate::product::PgTenants::new(w.db.router.clone(), p.ids.clone()),
+        crate::product::PgSubjects {
+            app: w.db.app.clone(),
+            domains: w.plane.domains.clone(),
+        },
+        Arc::clone(&p.api),
+        String::from("eu-central"),
+        String::from("https://api.id.test"),
+    ));
+    let call = |bearer: Option<String>, method: &'static str, path: String, body: Option<Json>| {
+        let products = products.clone();
+        async move {
+            let mut req = Request::builder().method(method).uri(path);
+            if let Some(b) = bearer {
+                req = req.header("authorization", format!("Bearer {b}"));
+            }
+            if body.is_some() {
+                req = req.header("content-type", "application/json");
+            }
+            let body = body.map_or_else(Body::empty, |b| Body::from(b.to_string()));
+            let resp = products.oneshot(req.body(body).unwrap()).await.unwrap();
+            let status = resp.status();
+            let bytes = resp.into_body().collect().await.unwrap().to_bytes();
+            let v: Json = if bytes.is_empty() {
+                Json::Null
+            } else {
+                serde_json::from_slice(&bytes).unwrap()
+            };
+            (status, v)
+        }
+    };
+    let snapshot = format!("/access/v1/tenants/{tnt}/snapshot");
+    let (s, v) = call(None, "GET", snapshot.clone(), None).await;
+    assert_eq!(
+        (s, v["code"].as_str()),
+        (StatusCode::UNAUTHORIZED, Some("pep-unauthenticated"))
+    );
+    let once = p.assertion(ISSUER);
+    let (s, v) = call(Some(once.clone()), "GET", snapshot.clone(), None).await;
+    assert_eq!(s, StatusCode::OK, "{v}");
+    meets_schema(&v, "TenantSnapshot");
+    assert_eq!(v["tenant"], tnt.as_str());
+    let realm = access_identity_events::domain::catalog::uuid(r2.as_bytes());
+    assert_eq!(v["realms"][0]["id"], realm);
+    let (s, v) = call(Some(once), "GET", snapshot.clone(), None).await;
+    assert_eq!(
+        (s, v["code"].as_str()),
+        (StatusCode::UNAUTHORIZED, Some("client-unauthenticated")),
+        "a replayed jti"
+    );
+    let resolve = format!("/access/v1/tenants/{tnt}/subjects:resolve");
+    let ask = json!({ "realm": realm, "client_id": p.client, "parties": [party] });
+    let (s, v) = call(
+        Some(p.assertion(ISSUER)),
+        "POST",
+        resolve.clone(),
+        Some(ask.clone()),
+    )
+    .await;
+    assert_eq!(s, StatusCode::OK, "{v}");
+    meets_schema(&v, "Resolution");
+    assert_eq!(v["resolved"][0]["party"], party);
+    let sub = v["resolved"][0]["sub"].as_str().unwrap().to_owned();
+    assert_eq!(sub.len(), 43);
+    assert_eq!(v["unknown"], json!([]));
+    let back = json!({ "realm": realm, "client_id": p.client, "subs": [sub] });
+    let (s, v) = call(
+        Some(p.assertion(ISSUER)),
+        "POST",
+        resolve.clone(),
+        Some(back),
+    )
+    .await;
+    assert_eq!(s, StatusCode::OK, "{v}");
+    assert_eq!(v["resolved"][0]["party"], party, "assigned once");
+    let mut other = ask;
+    other["client_id"] = json!("cli_other");
+    let (s, v) = call(Some(p.assertion(ISSUER)), "POST", resolve, Some(other)).await;
+    assert_eq!(
+        (s, v["code"].as_str()),
+        (StatusCode::BAD_REQUEST, Some("client-mismatch"))
+    );
+    let agency = format!(
+        "/access/v1/exercises/{}/agency?domain=sha-256:{}",
+        b64url_encode(&[7; 32]),
+        b64url_encode(&[8; 32])
+    );
+    let (s, v) = call(Some(p.assertion(ISSUER)), "GET", agency, None).await;
+    assert_eq!(
+        (s, v["code"].as_str()),
+        (StatusCode::UNAUTHORIZED, Some("pep-unauthenticated"))
+    );
 }

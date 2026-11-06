@@ -1,4 +1,4 @@
-//! One product client call from request to reply (OP-149 m.4, m.5, m.28 (c)).
+//! One product client call from request to reply (OP-149 m.4, m.5, m.28 (c), m.37).
 
 use access_authority_core::CoreError;
 use access_authority_core::adapters::{KeyAnswer, PartyAnswer};
@@ -8,7 +8,9 @@ use access_kernel::model::Id;
 use serde_json::{Value, json};
 
 use super::domain::{self, BadRequest, TENANT_PAGE};
-use super::ports::{Exercises, KeyDirectory, Subjects, Tenants};
+use super::ports::{
+    AssertionRefused, Caller, ClientAssertions, Exercises, KeyDirectory, Sector, Subjects, Tenants,
+};
 
 /// The form of a key or Party lookup answer.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -41,6 +43,8 @@ pub enum Reply {
     Bad(&'static str),
     /// 401: no authenticated client.
     Unauthenticated,
+    /// 401: the client assertion sent did not authenticate a platform client (OP-149 m.37).
+    ClientUnauthenticated,
     /// 404 with a stable code.
     NotFound(&'static str),
     /// 503, with a stable, non-secret reason when there is one.
@@ -49,12 +53,26 @@ pub enum Reply {
     Limited,
 }
 
+/// What a request carries to name its caller (OP-149 m.37): the PEP the TLS layer named from
+/// its client certificate, the bearer client assertion, and the path called.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Credentials {
+    /// The PEP's `x5t#S256`, when a client certificate was presented.
+    pub pep: Option<String>,
+    /// The `Authorization: Bearer` value, when one was sent.
+    pub assertion: Option<String>,
+    /// The request path, the endpoint the assertion may name as its audience.
+    pub path: String,
+}
+
 /// The product client API of one deployment.
-pub struct Service<K, T, S> {
+pub struct Service<K, T, S, A> {
     keys: K,
     tenants: T,
     subjects: S,
+    assertions: A,
     region: String,
+    api_base: String,
 }
 
 fn failed(e: &CoreError) -> Reply {
@@ -66,17 +84,53 @@ fn failed(e: &CoreError) -> Reply {
     }
 }
 
-impl<K: KeyDirectory, T: Tenants, S> Service<K, T, S> {
-    /// A service over `keys`, `tenants` and `subjects` in `region`.
-    pub const fn new(keys: K, tenants: T, subjects: S, region: String) -> Self {
+impl<K, T, S, A> Service<K, T, S, A> {
+    /// A service over `keys`, `tenants`, `subjects` and the platform clients' `assertions` in
+    /// `region`, served under `api_base`.
+    pub const fn new(
+        keys: K,
+        tenants: T,
+        subjects: S,
+        assertions: A,
+        region: String,
+        api_base: String,
+    ) -> Self {
         Self {
             keys,
             tenants,
             subjects,
+            assertions,
             region,
+            api_base,
         }
     }
+}
 
+impl<K, T, S, A: ClientAssertions> Service<K, T, S, A> {
+    /// Who calls (OP-149 m.37): the PEP by its certificate, or the platform client whose
+    /// assertion verifies as on the platform routes (m.19 (e)). A request carrying both is
+    /// refused rather than guessed about; one carrying neither has no caller.
+    ///
+    /// # Errors
+    /// The [`Reply`] to send instead.
+    pub async fn caller(&self, c: Credentials) -> Result<Caller, Reply> {
+        match (c.pep, c.assertion) {
+            (Some(_), Some(_)) => Err(Reply::Bad("ambiguous-caller")),
+            (Some(pep), None) => Ok(Caller::Pep(pep)),
+            (None, Some(assertion)) => {
+                let endpoint = format!("{}{}", self.api_base, c.path);
+                match self.assertions.authenticate(&assertion, &endpoint).await {
+                    Ok(client) => Ok(Caller::Client(client)),
+                    Err(AssertionRefused::Unauthenticated) => Err(Reply::ClientUnauthenticated),
+                    Err(AssertionRefused::Unavailable) => Err(Reply::Unavailable(None)),
+                }
+            }
+            (None, None) => Err(Reply::Unauthenticated),
+        }
+    }
+}
+
+impl<K: KeyDirectory, T: Tenants, S, A> Service<K, T, S, A> {
     async fn lookup(
         &self,
         domain: Digest,
@@ -109,15 +163,12 @@ impl<K: KeyDirectory, T: Tenants, S> Service<K, T, S> {
     /// position is a 404.
     pub async fn key(
         &self,
-        client: Option<String>,
+        _caller: &Caller,
         kid: &str,
         domain: Option<&str>,
         as_of: Option<&str>,
         form: Form,
     ) -> Reply {
-        if client.is_none() {
-            return Reply::Unauthenticated;
-        }
         let Some(kid) = domain::kid(kid) else {
             return Reply::Bad("kid");
         };
@@ -137,10 +188,7 @@ impl<K: KeyDirectory, T: Tenants, S> Service<K, T, S> {
 
     /// `POST /access/v1/keys:batchGet` (OP-149 m.5): kids not held at the position are listed
     /// as `unknown`.
-    pub async fn keys(&self, client: Option<String>, body: &[u8], form: Form) -> Reply {
-        if client.is_none() {
-            return Reply::Unauthenticated;
-        }
+    pub async fn keys(&self, _caller: &Caller, body: &[u8], form: Form) -> Reply {
         let (domain, kids, as_of) = match domain::batch(body) {
             Ok(b) => b,
             Err(BadRequest(code)) => return Reply::Bad(code),
@@ -186,15 +234,12 @@ impl<K: KeyDirectory, T: Tenants, S> Service<K, T, S> {
     /// admitted at the position is a 404.
     pub async fn party(
         &self,
-        client: Option<String>,
+        _caller: &Caller,
         party: &str,
         domain: Option<&str>,
         as_of: Option<&str>,
         form: Form,
     ) -> Reply {
-        if client.is_none() {
-            return Reply::Unauthenticated;
-        }
         let Some(party) = domain::party_id(party) else {
             return Reply::Bad("party");
         };
@@ -214,10 +259,7 @@ impl<K: KeyDirectory, T: Tenants, S> Service<K, T, S> {
 
     /// `POST /access/v1/parties:batchGet` (OP-149 m.28 (c)): Parties not admitted at the
     /// position are listed as `unknown`.
-    pub async fn parties(&self, client: Option<String>, body: &[u8], form: Form) -> Reply {
-        if client.is_none() {
-            return Reply::Unauthenticated;
-        }
+    pub async fn parties(&self, _caller: &Caller, body: &[u8], form: Form) -> Reply {
         let (domain, parties, as_of) = match domain::party_batch(body) {
             Ok(b) => b,
             Err(BadRequest(code)) => return Reply::Bad(code),
@@ -229,10 +271,7 @@ impl<K: KeyDirectory, T: Tenants, S> Service<K, T, S> {
     }
 
     /// `GET /access/v1/tenants/{tenant}/snapshot` (OP-149 m.4, OP-147 m.4).
-    pub async fn snapshot(&self, client: Option<String>, tenant: &str) -> Reply {
-        if client.is_none() {
-            return Reply::Unauthenticated;
-        }
+    pub async fn snapshot(&self, _caller: &Caller, tenant: &str) -> Reply {
         let Some(id) = self.tenants.internal(tenant) else {
             return Reply::NotFound("tenant-unknown");
         };
@@ -245,10 +284,7 @@ impl<K: KeyDirectory, T: Tenants, S> Service<K, T, S> {
 
     /// `GET /access/v1/tenants?cursor=…` (OP-149 m.4): one page of snapshots in a stable
     /// order; `next_cursor` is absent on the last page.
-    pub async fn tenants(&self, client: Option<String>, cursor: Option<&str>) -> Reply {
-        if client.is_none() {
-            return Reply::Unauthenticated;
-        }
+    pub async fn tenants(&self, _caller: &Caller, cursor: Option<&str>) -> Reply {
         let after = match cursor.filter(|c| !c.is_empty()) {
             None => None,
             Some(c) => match self.tenants.internal(c) {
@@ -277,15 +313,14 @@ impl<K: KeyDirectory, T: Tenants, S> Service<K, T, S> {
     }
 }
 
-impl<K: KeyDirectory + Exercises, T: Tenants, S: Subjects> Service<K, T, S> {
+impl<K: KeyDirectory + Exercises, T: Tenants, S: Subjects, A> Service<K, T, S, A> {
     /// `POST /access/v1/tenants/{tenant}/subjects:resolve` (OP-149 A11): between the realm's
     /// `PartyID`s and the pairwise `sub` the named client sees, one direction per call; what does
     /// not resolve is listed as `unknown`. A Party's `sub` for the client is the one its tokens
-    /// carry, assigned now when the client has not seen the subject yet (MD-10).
-    pub async fn resolve(&self, client: Option<String>, tenant: &str, body: &[u8]) -> Reply {
-        if client.is_none() {
-            return Reply::Unauthenticated;
-        }
+    /// carry, assigned now when the client has not seen the subject yet (MD-10). A platform
+    /// client asking with its assertion is the sector itself, so the request must name it
+    /// (OP-149 m.37).
+    pub async fn resolve(&self, caller: &Caller, tenant: &str, body: &[u8]) -> Reply {
         let Some(id) = self.tenants.internal(tenant) else {
             return Reply::NotFound("tenant-unknown");
         };
@@ -293,9 +328,14 @@ impl<K: KeyDirectory + Exercises, T: Tenants, S: Subjects> Service<K, T, S> {
             Ok(r) => r,
             Err(BadRequest(code)) => return Reply::Bad(code),
         };
+        let sector = match caller {
+            Caller::Pep(_) => Sector::RealmClient(&req.client_id),
+            Caller::Client(c) if c.client_id == req.client_id => Sector::Platform(c),
+            Caller::Client(_) => return Reply::Bad("client-mismatch"),
+        };
         match self
             .subjects
-            .resolve(id, req.realm, &req.client_id, req.lookup.clone())
+            .resolve(id, req.realm, sector, req.lookup.clone())
             .await
         {
             Ok(Some(found)) => Reply::Json(domain::resolution_json(&req, &found)),
@@ -305,24 +345,19 @@ impl<K: KeyDirectory + Exercises, T: Tenants, S: Subjects> Service<K, T, S> {
     }
 
     /// `GET /access/v1/exercises/{id}?domain=…` (OP-149 m.9): an allowed Exercise, with the
-    /// receipt the decision point issued when kept; 404 for one the domain never allowed.
-    pub async fn exercise(
-        &self,
-        client: Option<String>,
-        exercise: &str,
-        domain: Option<&str>,
-    ) -> Reply {
-        if client.is_none() {
-            return Reply::Unauthenticated;
-        }
+    /// receipt the decision point issued when kept; 404 for one the domain never allowed. The
+    /// receipt is addressed to PEPs, so a platform client reads the record without it (OP-149
+    /// m.37).
+    pub async fn exercise(&self, caller: &Caller, exercise: &str, domain: Option<&str>) -> Reply {
         let Some(id) = domain::kid(exercise).map(Digest) else {
             return Reply::Bad("exercise");
         };
         let Some(domain) = domain.and_then(crate::adp::adapters::domain_id) else {
             return Reply::Bad("domain");
         };
+        let with_receipt = matches!(caller, Caller::Pep(_));
         match self.keys.exercise(domain, id).await {
-            Ok(Some(r)) => Reply::Json(domain::exercise_json(&domain, &r)),
+            Ok(Some(r)) => Reply::Json(domain::exercise_json(&domain, &r, with_receipt)),
             Ok(None) => Reply::NotFound("exercise-unknown"),
             Err(e) => failed(&e),
         }
@@ -331,14 +366,9 @@ impl<K: KeyDirectory + Exercises, T: Tenants, S: Subjects> Service<K, T, S> {
     /// `GET /access/v1/exercises/{id}/agency?domain=…` (OP-149 m.11): the chain the actor
     /// acted on behalf of, read from the receipt the decision point issued, with that receipt
     /// so the chain can be verified offline. An Exercise allowed before receipts were kept has
-    /// no chain to answer with.
-    pub async fn agency(
-        &self,
-        client: Option<String>,
-        exercise: &str,
-        domain: Option<&str>,
-    ) -> Reply {
-        if client.is_none() {
+    /// no chain to answer with. The receipt is a PEP's, so only a PEP reads it (OP-149 m.37).
+    pub async fn agency(&self, pep: Option<String>, exercise: &str, domain: Option<&str>) -> Reply {
+        if pep.is_none() {
             return Reply::Unauthenticated;
         }
         let Some(id) = domain::kid(exercise).map(Digest) else {

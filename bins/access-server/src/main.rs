@@ -953,8 +953,8 @@ async fn serve(
         SourcesClock::new(idp_sequencer),
         actors,
     );
-    // OP-149 m.4, m.16 (a), m.17 (e), (g)
-    let platform = platform::routes(
+    // OP-149 m.4, m.16 (a), m.17 (e), (g), m.37
+    let (platform, platform_api) = platform::routes(
         &platform_pools,
         platform_outbound,
         platform_keks,
@@ -966,16 +966,17 @@ async fn serve(
         authorization(config, oauth_inputs, idp_plane.clone(), cell_ids.clone())?.merge(ssf);
     // OP-149 m.6, m.8, m.9
     let me = frontend(config, tenants_pool.clone(), hosted, idp_plane, courier)?;
-    let adp = adp_router(
-        Service::new(domains.clone(), limits.max_body_bytes),
-        Discovery { issuer },
-    );
     let products = product::routes(
         config,
         domains.clone(),
         (tenants_pool, product_app),
         cell_ids,
+        platform_api,
     )?;
+    let adp = adp_router(
+        Service::new(domains.clone(), limits.max_body_bytes),
+        Discovery { issuer },
+    );
     let app = router(
         config.security_txt(),
         health(report),

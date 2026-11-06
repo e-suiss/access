@@ -36,15 +36,16 @@ pub const STREAM_STATUS_PATH: &str = "/access/v1/platform/streams/{id}/status";
 pub const MAX_BODY: usize = 128 * 1024;
 
 struct Shared<D, C, I, K, R, T> {
-    api: PlatformApi<D, C, I, K, R, T>,
+    api: Arc<PlatformApi<D, C, I, K, R, T>>,
     base: String,
 }
 
 type St<D, C, I, K, R, T> = State<Arc<Shared<D, C, I, K, R, T>>>;
 
-/// The platform routes; `api_base` is the deployment's base URL, which the assertion may also
-/// name as its endpoint audience.
-pub fn router<D, C, I, K, R, T>(api: PlatformApi<D, C, I, K, R, T>, api_base: String) -> Router
+/// The platform routes over `api`, which the product routes share as their assertion verifier
+/// (OP-149 m.37); `api_base` is the deployment's base URL, which the assertion may also name as
+/// its endpoint audience.
+pub fn router<D, C, I, K, R, T>(api: Arc<PlatformApi<D, C, I, K, R, T>>, api_base: String) -> Router
 where
     D: Directory + 'static,
     C: ClientKeys + 'static,
@@ -75,7 +76,7 @@ where
 }
 
 /// The bearer value, when `Authorization` is sent once.
-fn bearer(headers: &HeaderMap) -> Option<&str> {
+pub(crate) fn bearer(headers: &HeaderMap) -> Option<&str> {
     let mut all = headers.get_all(header::AUTHORIZATION).iter();
     let first = all.next()?;
     if all.next().is_some() {

@@ -356,6 +356,17 @@ fn path(name: &str, schema: &Value) -> Value {
     json!({ "name": name, "in": "path", "required": true, "schema": schema })
 }
 
+/// OP-149 m.37: the security of a route a platform client may also call with its assertion.
+pub(super) fn either_caller() -> Value {
+    json!([{ "client": [] }, { "platform_client": [] }])
+}
+
+/// The 401 of such a route.
+pub(super) const EITHER_401: (&str, &str) = (
+    "401",
+    "No client certificate and no valid platform client assertion; client-unauthenticated when an assertion was sent (OP-141 m.18 (b), OP-149 m.37).",
+);
+
 /// OP-149 m.28 (c): the Party status lookup routes, the key lookup's twins.
 fn party_paths(paths: &mut Map<String, Value>, common: &[(&str, &str); 4]) {
     paths.insert(
@@ -363,13 +374,14 @@ fn party_paths(paths: &mut Map<String, Value>, common: &[(&str, &str); 4]) {
         json!({ "get": {
             "operationId": "getParty",
             "summary": "One Party's status at a ledger position (OP-149 m.28 (c)): its actor kind, the record that admitted it and, once it has, the one that ended it.",
+            "security": either_caller(),
             "parameters": [
                 path("party", &r("PartyId")),
                 query("domain", true, "DomainId", "The authority domain."),
                 query("as_of", false, "AsOf", "Defaults to the head."),
             ],
             "responses": with(
-                problems(&[common[0], common[1], ("404", "The Party is not admitted at the position."), common[2], common[3]]),
+                problems(&[common[0], EITHER_401, ("404", "The Party is not admitted at the position."), common[2], common[3]]),
                 "200",
                 parties_ok("The Party."),
             ),
@@ -380,8 +392,37 @@ fn party_paths(paths: &mut Map<String, Value>, common: &[(&str, &str); 4]) {
         json!({ "post": {
             "operationId": "batchGetParties",
             "summary": "Up to 100 Parties' status at one ledger position (OP-149 m.28 (c)).",
+            "security": either_caller(),
             "requestBody": { "required": true, "content": { "application/json": { "schema": r("PartyBatchRequest") } } },
-            "responses": with(problems(common), "200", parties_ok("The Parties; the others are listed as `unknown`.")),
+            "responses": with(problems(&[common[0], EITHER_401, common[2], common[3]]), "200", parties_ok("The Parties; the others are listed as `unknown`.")),
+        }}),
+    );
+}
+
+/// OP-149 m.4: the tenant snapshot routes, which a platform client may also call (m.37).
+fn tenant_paths(paths: &mut Map<String, Value>, common: &[(&str, &str); 4]) {
+    paths.insert(
+        "/access/v1/tenants".into(),
+        json!({ "get": {
+            "operationId": "listTenants",
+            "summary": "Tenant snapshots, one page at a time (OP-149 m.4).",
+            "security": either_caller(),
+            "parameters": [{ "name": "cursor", "in": "query", "required": false, "schema": { "type": "string" } }],
+            "responses": with(problems(&[common[0], EITHER_401, common[2], common[3]]), "200", json_ok("One page.", "TenantPage")),
+        }}),
+    );
+    paths.insert(
+        "/access/v1/tenants/{tenant}/snapshot".into(),
+        json!({ "get": {
+            "operationId": "getTenantSnapshot",
+            "summary": "One tenant's snapshot (OP-149 m.4, OP-147 m.4).",
+            "security": either_caller(),
+            "parameters": [path("tenant", &json!({ "type": "string" }))],
+            "responses": with(
+                problems(&[EITHER_401, ("404", "No such tenant."), common[2], common[3]]),
+                "200",
+                json_ok("The snapshot.", "TenantSnapshot"),
+            ),
         }}),
     );
 }
@@ -409,13 +450,14 @@ pub fn openapi() -> Value {
         json!({ "get": {
             "operationId": "getKey",
             "summary": "One Instance key at a ledger position (OP-149 m.5).",
+            "security": either_caller(),
             "parameters": [
                 path("kid", &r("Kid")),
                 query("domain", true, "DomainId", "The authority domain."),
                 query("as_of", false, "AsOf", "Defaults to the head."),
             ],
             "responses": with(
-                problems(&[common[0], common[1], ("404", "The key is not held at the position."), common[2], common[3]]),
+                problems(&[common[0], EITHER_401, ("404", "The key is not held at the position."), common[2], common[3]]),
                 "200",
                 keys_ok("The key."),
             ),
@@ -426,8 +468,9 @@ pub fn openapi() -> Value {
         json!({ "post": {
             "operationId": "batchGetKeys",
             "summary": "Up to 100 Instance keys at one ledger position (OP-149 m.5).",
+            "security": either_caller(),
             "requestBody": { "required": true, "content": { "application/json": { "schema": r("KeyBatchRequest") } } },
-            "responses": with(problems(&common), "200", keys_ok("The keys; the others are listed as `unknown`.")),
+            "responses": with(problems(&[common[0], EITHER_401, common[2], common[3]]), "200", keys_ok("The keys; the others are listed as `unknown`.")),
         }}),
     );
     party_paths(&mut paths, &common);
@@ -440,28 +483,7 @@ pub fn openapi() -> Value {
             "responses": with(problems(&common), "200", json_ok("The answer.", "EligibilityResponse")),
         }}),
     );
-    paths.insert(
-        "/access/v1/tenants".into(),
-        json!({ "get": {
-            "operationId": "listTenants",
-            "summary": "Tenant snapshots, one page at a time (OP-149 m.4).",
-            "parameters": [{ "name": "cursor", "in": "query", "required": false, "schema": { "type": "string" } }],
-            "responses": with(problems(&common), "200", json_ok("One page.", "TenantPage")),
-        }}),
-    );
-    paths.insert(
-        "/access/v1/tenants/{tenant}/snapshot".into(),
-        json!({ "get": {
-            "operationId": "getTenantSnapshot",
-            "summary": "One tenant's snapshot (OP-149 m.4, OP-147 m.4).",
-            "parameters": [path("tenant", &json!({ "type": "string" }))],
-            "responses": with(
-                problems(&[common[1], ("404", "No such tenant."), common[2], common[3]]),
-                "200",
-                json_ok("The snapshot.", "TenantSnapshot"),
-            ),
-        }}),
-    );
+    tenant_paths(&mut paths, &common);
     paths.insert(
         "/.well-known/suiss-configuration".into(),
         json!({ "get": {

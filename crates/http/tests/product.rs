@@ -25,7 +25,8 @@ use access_http::adp::ports::Pdp;
 use access_http::product::adapters::router;
 use access_http::product::app::Service;
 use access_http::product::ports::{
-    Exercises, KeyDirectory, Realm, Resolved, SubjectQuery, Subjects, Tenant, Tenants, Unavailable,
+    AssertionRefused, ClientAssertions, Exercises, KeyDirectory, PlatformClient, Realm, Resolved,
+    Sector, SubjectQuery, Subjects, Tenant, Tenants, Unavailable,
 };
 use access_http::product::schema::openapi;
 use access_http::{Limits, harden};
@@ -308,10 +309,15 @@ impl Subjects for People {
         &self,
         tenant: [u8; 16],
         realm: [u8; 16],
-        client_id: &str,
+        sector: Sector<'_>,
         lookup: SubjectQuery,
     ) -> Result<Option<Resolved>, Unavailable> {
-        if tenant != [1; 16] || realm != REALM || client_id != "cli_relay" {
+        let known_sector = match sector {
+            Sector::RealmClient(client_id) => client_id == "cli_relay",
+            // OP-149 m.37: the platform client as its assertion authenticated it
+            Sector::Platform(c) => *c == relay(),
+        };
+        if tenant != [1; 16] || realm != REALM || !known_sector {
             return Ok(None);
         }
         let known = [2_u8, 4];
@@ -344,13 +350,57 @@ impl Subjects for People {
     }
 }
 
+/// The platform realm's issuer, the audience a product's assertion names.
+const PLATFORM_ISSUER: &str = "https://platform.id.example";
+/// Where the routes are served; an assertion may name the endpoint called instead.
+const API_BASE: &str = "https://access.example";
+
+/// The one platform product client the verifier knows.
+fn relay() -> PlatformClient {
+    PlatformClient {
+        tenant: [0xf0; 16],
+        realm: [0xf1; 16],
+        client_id: "cli_relay".to_owned(),
+        product: "relay".to_owned(),
+    }
+}
+
+/// Stands in for the platform API's RFC 7523 verification (OP-149 m.19 (e)) over assertions of
+/// the form `<client_id>|<aud>|<jti>`: the client must be the platform product `cli_relay`, the
+/// audience the platform realm's issuer or the endpoint called, and the `jti` unused before.
+struct Gate(std::sync::Mutex<std::collections::BTreeSet<String>>);
+
+impl ClientAssertions for Gate {
+    async fn authenticate(
+        &self,
+        assertion: &str,
+        endpoint: &str,
+    ) -> Result<PlatformClient, AssertionRefused> {
+        let mut parts = assertion.split('|');
+        let (Some(client), Some(aud), Some(jti), None) =
+            (parts.next(), parts.next(), parts.next(), parts.next())
+        else {
+            return Err(AssertionRefused::Unauthenticated);
+        };
+        if client != "cli_relay" || (aud != PLATFORM_ISSUER && aud != endpoint) {
+            return Err(AssertionRefused::Unauthenticated);
+        }
+        if !self.0.lock().unwrap().insert(jti.to_owned()) {
+            return Err(AssertionRefused::Unauthenticated);
+        }
+        Ok(relay())
+    }
+}
+
 fn app(client: bool) -> Router {
     let limits = Limits::default();
     let routes = router(Service::new(
         Ledger,
         Directory,
         People,
+        Gate(std::sync::Mutex::default()),
         "eu-central".to_owned(),
+        API_BASE.to_owned(),
     ));
     let routes = if client {
         routes.layer(axum::Extension(Pep("product-client".to_owned())))
@@ -358,6 +408,20 @@ fn app(client: bool) -> Router {
         routes
     };
     harden(routes, limits)
+}
+
+/// `req` bearing `assertion` (OP-149 m.37).
+fn bearing(mut req: Request<Body>, assertion: &str) -> Request<Body> {
+    req.headers_mut().insert(
+        header::AUTHORIZATION,
+        format!("Bearer {assertion}").parse().unwrap(),
+    );
+    req
+}
+
+/// A fresh assertion of the platform product for the platform realm's issuer.
+fn assertion(jti: &str) -> String {
+    format!("cli_relay|{PLATFORM_ISSUER}|{jti}")
 }
 
 async fn call(app: Router, req: Request<Body>) -> (StatusCode, HeaderMap, Vec<u8>) {
@@ -626,6 +690,184 @@ async fn a_client_certificate_is_required() {
             "urn:suiss:access:problem:pep-unauthenticated"
         );
     }
+}
+
+/// The product routes a platform client may call with its assertion (OP-149 m.37), each with
+/// its answer to a PEP.
+fn dual_requests() -> Vec<(&'static str, Request<Body>)> {
+    vec![
+        ("snapshot", {
+            Request::get("/access/v1/tenants/tnt_01/snapshot")
+                .body(Body::empty())
+                .unwrap()
+        }),
+        ("tenants", {
+            Request::get("/access/v1/tenants")
+                .body(Body::empty())
+                .unwrap()
+        }),
+        ("key-cose", get_key(ACTIVE, None, "")),
+        ("key-json", get_key(ENDED, Some("application/json"), "")),
+        (
+            "keys",
+            batch(&[ACTIVE, ENDED, [0x77; 32]], "application/json"),
+        ),
+        ("party", get_party(HUMAN, Some("application/json"), "")),
+        (
+            "parties",
+            party_batch(&[HUMAN, DEPARTED], "application/json"),
+        ),
+        ("resolve", resolve_request(&parties_request())),
+        ("exercise", get_exercise(FROM_STATE)),
+    ]
+}
+
+// OP-149 m.37, m.19 (e), m.5, m.28 (c), m.19 (g): a platform product's fresh assertion names the
+// caller on the snapshot, tenant list, key and Party lookups, subjects:resolve and the Exercise
+// read, with the same answers a PEP certificate gets; for subjects:resolve the asking client is
+// the sector; the assertion may name the endpoint called as its audience
+#[tokio::test]
+async fn a_platform_client_assertion_names_the_caller_like_a_certificate() {
+    for (i, ((name, as_pep), (_, as_client))) in
+        dual_requests().into_iter().zip(dual_requests()).enumerate()
+    {
+        let (s1, h1, b1) = call(app(true), as_pep).await;
+        let (s2, h2, b2) = call(app(false), bearing(as_client, &assertion(&format!("j{i}")))).await;
+        assert_eq!((s1, s2), (StatusCode::OK, StatusCode::OK), "{name}");
+        assert_eq!(b1, b2, "{name}");
+        assert_eq!(h1[header::CONTENT_TYPE], h2[header::CONTENT_TYPE], "{name}");
+        assert_eq!(h1.get(header::ETAG), h2.get(header::ETAG), "{name}");
+        assert_eq!(
+            h1.get(header::CACHE_CONTROL),
+            h2.get(header::CACHE_CONTROL),
+            "{name}"
+        );
+    }
+    let path = "/access/v1/tenants/tnt_01/snapshot";
+    let at_endpoint = format!("cli_relay|{API_BASE}{path}|endpoint");
+    let req = bearing(
+        Request::get(path).body(Body::empty()).unwrap(),
+        &at_endpoint,
+    );
+    let (status, _, body) = call(app(false), req).await;
+    assert_eq!(status, StatusCode::OK);
+    let v: Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(v["tenant"], "tnt_01");
+}
+
+// OP-149 m.37: the receipt is addressed to PEPs, so a platform client reads an allowed Exercise
+// without it, and the agency route, which is the receipt, stays a PEP's
+#[tokio::test]
+async fn a_platform_client_reads_an_exercise_without_its_receipt() {
+    let (status, _, body) = call(app(true), get_exercise(SIGNED)).await;
+    assert_eq!(status, StatusCode::OK);
+    let mut as_pep: Value = serde_json::from_slice(&body).unwrap();
+    assert!(as_pep["receipt"]["cose_sign1"].is_string());
+    let (status, _, body) = call(app(false), bearing(get_exercise(SIGNED), &assertion("x"))).await;
+    assert_eq!(status, StatusCode::OK);
+    let as_client: Value = serde_json::from_slice(&body).unwrap();
+    assert!(as_client.get("receipt").is_none());
+    as_pep.as_object_mut().unwrap().remove("receipt");
+    assert_eq!(as_client, as_pep);
+    let (status, _, body) = call(app(false), bearing(get_agency(AGENT), &assertion("y"))).await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+    assert_eq!(
+        problem_type(&body),
+        "urn:suiss:access:problem:pep-unauthenticated"
+    );
+}
+
+// OP-149 m.37, m.19 (e), m.20 (b), m.12: a replayed jti, an audience that is neither the platform
+// realm's issuer nor the endpoint, a client that is no platform product, or a malformed
+// Authorization header is 401 client-unauthenticated with WWW-Authenticate; a certificate and an
+// assertion together are 400 ambiguous-caller; the PEP-only routes answer an assertion as no
+// credential at all
+#[tokio::test]
+async fn an_assertion_is_refused_plainly() {
+    let snapshot = || {
+        Request::get("/access/v1/tenants/tnt_01/snapshot")
+            .body(Body::empty())
+            .unwrap()
+    };
+    let shared = app(false);
+    let (status, _, _) = call(shared.clone(), bearing(snapshot(), &assertion("once"))).await;
+    assert_eq!(status, StatusCode::OK);
+    let refused = [
+        ("replayed jti", shared.clone(), assertion("once")),
+        (
+            "wrong audience",
+            app(false),
+            String::from("cli_relay|https://acme.id.example|a"),
+        ),
+        (
+            "not a platform product",
+            app(false),
+            format!("cli_other|{PLATFORM_ISSUER}|b"),
+        ),
+        ("not a bearer", app(false), String::new()),
+    ];
+    for (why, app, token) in refused {
+        let mut req = snapshot();
+        let value = if token.is_empty() {
+            "Basic Zm9vOmJhcg==".to_owned()
+        } else {
+            format!("Bearer {token}")
+        };
+        req.headers_mut()
+            .insert(header::AUTHORIZATION, value.parse().unwrap());
+        let (status, headers, body) = call(app, req).await;
+        assert_eq!(status, StatusCode::UNAUTHORIZED, "{why}");
+        assert_eq!(
+            problem_type(&body),
+            "urn:suiss:access:problem:client-unauthenticated",
+            "{why}"
+        );
+        assert_eq!(
+            headers[header::WWW_AUTHENTICATE],
+            "Bearer error=\"invalid_token\"",
+            "{why}"
+        );
+    }
+    let (status, _, body) = call(app(true), bearing(snapshot(), &assertion("both"))).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(
+        problem_type(&body),
+        "urn:suiss:access:problem:ambiguous-caller"
+    );
+    // OP-149 m.37: with an assertion the sector is the asking client, so the request names it
+    let mut other = parties_request();
+    other["client_id"] = json!("cli_other");
+    let (status, _, body) = call(
+        app(false),
+        bearing(resolve_request(&other), &assertion("mismatch")),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(
+        problem_type(&body),
+        "urn:suiss:access:problem:client-mismatch"
+    );
+    // OP-149 m.37: Claim Ingest, the ADP and the agency route stay mTLS
+    let limits = Limits::default();
+    let adp = harden(
+        adp_router(
+            AdpService::new(Eligible, limits.max_body_bytes),
+            AdpDiscovery {
+                issuer: API_BASE.to_owned(),
+            },
+        ),
+        limits,
+    );
+    let check = Request::post("/access/v1/eligibility:check")
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(eligibility_request().to_string()))
+        .unwrap();
+    let (status, _, body) = call(adp, bearing(check, &assertion("adp"))).await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+    assert_eq!(
+        problem_type(&body),
+        "urn:suiss:access:problem:pep-unauthenticated"
+    );
 }
 
 // OP-149 m.5, CR-58: the canonical answer is the signed COSE_Sign1 with its excerpt; the
@@ -1376,6 +1618,34 @@ fn platform_examples_meet_the_contract() {
         doc["components"]["securitySchemes"]["platform_client"]["scheme"],
         "bearer"
     );
+    // OP-149 m.37: the routes a platform client may also call name both schemes; the receipt
+    // route, Claim Ingest and the ADP keep the client certificate alone
+    for (path, method) in [
+        ("/access/v1/tenants", "get"),
+        ("/access/v1/tenants/{tenant}/snapshot", "get"),
+        ("/access/v1/keys/{kid}", "get"),
+        ("/access/v1/keys:batchGet", "post"),
+        ("/access/v1/parties/{party}", "get"),
+        ("/access/v1/parties:batchGet", "post"),
+        ("/access/v1/tenants/{tenant}/subjects:resolve", "post"),
+        ("/access/v1/exercises/{id}", "get"),
+    ] {
+        assert_eq!(
+            doc["paths"][path][method]["security"],
+            json!([{ "client": [] }, { "platform_client": [] }]),
+            "{method} {path}"
+        );
+    }
+    for (path, method) in [
+        ("/access/v1/exercises/{id}/agency", "get"),
+        ("/access/v1/eligibility:check", "post"),
+    ] {
+        assert!(
+            doc["paths"][path][method].get("security").is_none(),
+            "{method} {path} inherits the client certificate"
+        );
+    }
+    assert_eq!(doc["security"], json!([{ "client": [] }]));
 }
 
 // OP-149 m.5, SAI-46, OP-149 m.12: while a domain's first operational key is in its publish

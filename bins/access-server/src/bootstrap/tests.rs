@@ -404,7 +404,7 @@ async fn local_fixtures_are_made_once_and_produce_events() {
     // pairwise sub resolves to that Party
     {
         use crate::product::PgSubjects;
-        use access_http::product::ports::{SubjectQuery, Subjects as _};
+        use access_http::product::ports::{Sector, SubjectQuery, Subjects as _};
         let party =
             <[u8; 16]>::try_from(access_kernel::json::b64url_decode(&user.party).unwrap()).unwrap();
         let instance =
@@ -454,7 +454,7 @@ async fn local_fixtures_are_made_once_and_produce_events() {
             .resolve(
                 *route.tenant.as_bytes(),
                 *route.realm.as_bytes(),
-                &user.client_id,
+                Sector::RealmClient(&user.client_id),
                 SubjectQuery::Subs(vec![sub.clone()]),
             )
             .await
@@ -465,7 +465,7 @@ async fn local_fixtures_are_made_once_and_produce_events() {
             .resolve(
                 *route.tenant.as_bytes(),
                 *route.realm.as_bytes(),
-                &user.client_id,
+                Sector::RealmClient(&user.client_id),
                 SubjectQuery::Parties(vec![party]),
             )
             .await
@@ -1589,7 +1589,22 @@ async fn approval_through_the_local_client(world: &str, step_up: Option<StepUp>)
     use access_http::adp::adapters::{Discovery, router as adp_router};
     use access_http::login::{me_router, router as login_router};
     use access_http::product::adapters::router as product_router;
+    use access_http::product::ports::{AssertionRefused, ClientAssertions, PlatformClient};
     use access_identity_account::adapters::system::{SystemClock, cgroup_memory_budget, cores};
+
+    /// This server has no platform clients: every assertion is refused.
+    struct NoAssertions;
+
+    impl ClientAssertions for NoAssertions {
+        fn authenticate(
+            &self,
+            _: &str,
+            _: &str,
+        ) -> impl std::future::Future<Output = Result<PlatformClient, AssertionRefused>> + Send
+        {
+            std::future::ready(Err(AssertionRefused::Unauthenticated))
+        }
+    }
     use access_identity_account::app::claims::Courier;
     use access_identity_account::app::hasher::{Hasher, HasherConfig};
     use access_identity_account::app::local::LocalLimiter;
@@ -1712,7 +1727,9 @@ async fn approval_through_the_local_client(world: &str, step_up: Option<StepUp>)
                 app: w.db.app.clone(),
                 domains: w.domains.clone(),
             },
+            NoAssertions,
             String::from("local"),
+            String::from("https://access.test"),
         )))
         .merge(crate::ingest::routes(w.domains.clone(), w.db.app.clone()));
     let config = access_http::tls::server_config(

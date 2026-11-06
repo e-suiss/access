@@ -1,7 +1,7 @@
 //! Subject resolution (OP-149 A11) and allowed Exercises (OP-149 m.9) against the real
 //! authority plane and identity store.
 
-use access_http::product::ports::{SubjectQuery, Subjects as _};
+use access_http::product::ports::{Sector, SubjectQuery, Subjects as _};
 
 use super::*;
 use crate::product::PgSubjects;
@@ -40,7 +40,14 @@ async fn parties_resolve_to_a_clients_pairwise_sub_and_back() {
         app: w.db.app.clone(),
         domains: w.plane.domains.clone(),
     };
-    let ask = |q| s.resolve(*t.as_bytes(), *r.as_bytes(), c.id.as_str(), q);
+    let ask = |q| {
+        s.resolve(
+            *t.as_bytes(),
+            *r.as_bytes(),
+            Sector::RealmClient(c.id.as_str()),
+            q,
+        )
+    };
     let found = ask(SubjectQuery::Parties(vec![ALICE.0, [4; 16]]))
         .await
         .unwrap()
@@ -71,7 +78,7 @@ async fn parties_resolve_to_a_clients_pairwise_sub_and_back() {
         s.resolve(
             *t.as_bytes(),
             *r.as_bytes(),
-            "cli_nobody",
+            Sector::RealmClient("cli_nobody"),
             SubjectQuery::Parties(vec![ALICE.0])
         )
         .await

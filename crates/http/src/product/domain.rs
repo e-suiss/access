@@ -403,12 +403,13 @@ pub fn resolution_json(req: &ResolveRequest, found: &super::ports::Resolved) -> 
     })
 }
 
-/// An allowed Exercise as JSON (OP-149 m.9): where its decision is, what it allowed and the
-/// receipt the decision point issued, when kept.
+/// An allowed Exercise as JSON (OP-149 m.9): where its decision is, what it allowed and, for a
+/// PEP (`with_receipt`), the receipt the decision point issued, when kept (OP-149 m.37).
 #[must_use]
 pub fn exercise_json(
     domain: &Digest,
     r: &access_authority_core::adapters::ExerciseRecord,
+    with_receipt: bool,
 ) -> Value {
     let mut m = Map::new();
     m.insert("exercise".into(), b64url_encode(&r.exercise.0).into());
@@ -419,7 +420,7 @@ pub fn exercise_json(
     if let Some(i) = r.instance {
         m.insert("instance".into(), b64url_encode(&i.0).into());
     }
-    if let Some(receipt) = receipt_json(r) {
+    if let Some(receipt) = receipt_json(r).filter(|_| with_receipt) {
         m.insert("receipt".into(), receipt);
     }
     Value::Object(m)

@@ -1,5 +1,5 @@
-//! What the product client API needs (OP-63): the domains' key and Party lookups and the
-//! tenant directory.
+//! What the product client API needs (OP-63): the domains' key and Party lookups, the tenant
+//! directory, the realms' subjects and the platform clients' assertions.
 
 use std::future::Future;
 use std::sync::Arc;
@@ -145,16 +145,82 @@ pub struct Resolved {
     pub consistency: String,
 }
 
+/// Whose pairwise `sub`s a resolution is about: its sector (MD-10).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Sector<'a> {
+    /// A client of the realm itself, the one the request names (OP-149 m.19 (g)).
+    RealmClient(&'a str),
+    /// The platform product client that asked with its assertion, registered in its own realm
+    /// (OP-149 m.37).
+    Platform(&'a PlatformClient),
+}
+
 /// Resolves between a realm's Parties and the pairwise `sub` a client of it sees (OP-149 A11,
 /// MD-10).
 pub trait Subjects: Send + Sync {
-    /// The pairs of `lookup` in `realm` of `tenant` for the client `client_id`, its pairwise
-    /// sector. `None` when the realm or an active client with that id is not there.
+    /// The pairs of `lookup` in `realm` of `tenant` for `sector`. `None` when the realm, or an
+    /// active client the sector names, is not there.
     fn resolve(
         &self,
         tenant: [u8; 16],
         realm: [u8; 16],
-        client_id: &str,
+        sector: Sector<'_>,
         lookup: SubjectQuery,
     ) -> impl Future<Output = Result<Option<Resolved>, Unavailable>> + Send;
+}
+
+/// An active `platform_product` client that authenticated with its RFC 7523 assertion (OP-149
+/// m.19 (e), m.37).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PlatformClient {
+    /// The platform tenant.
+    pub tenant: [u8; 16],
+    /// The client's realm.
+    pub realm: [u8; 16],
+    /// The `client_id`.
+    pub client_id: String,
+    /// The product name.
+    pub product: String,
+}
+
+/// Who calls a product route (OP-149 m.37).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Caller {
+    /// The PEP the TLS layer named by its client certificate's `x5t#S256` (OP-141 m.18 (b)).
+    Pep(String),
+    /// A platform client, by its assertion.
+    Client(PlatformClient),
+}
+
+/// Why an assertion did not authenticate a platform client.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
+pub enum AssertionRefused {
+    /// Not a fresh, valid assertion of an active platform product client.
+    #[error("client unauthenticated")]
+    Unauthenticated,
+    /// The directory, the client's keys or the replay store did not answer.
+    #[error("assertion verifier unavailable")]
+    Unavailable,
+}
+
+/// Verifies platform clients' RFC 7523 assertions as the platform routes do (OP-149 m.19 (e),
+/// m.20 (b)): ES256 with the client's registered P-256 key, `aud` the platform realm's issuer or
+/// `endpoint`, `exp` at most 5 minutes ahead, `jti` used once.
+pub trait ClientAssertions: Send + Sync {
+    /// The client `assertion` authenticates for a call to `endpoint`.
+    fn authenticate(
+        &self,
+        assertion: &str,
+        endpoint: &str,
+    ) -> impl Future<Output = Result<PlatformClient, AssertionRefused>> + Send;
+}
+
+impl<V: ClientAssertions> ClientAssertions for Arc<V> {
+    fn authenticate(
+        &self,
+        assertion: &str,
+        endpoint: &str,
+    ) -> impl Future<Output = Result<PlatformClient, AssertionRefused>> + Send {
+        (**self).authenticate(assertion, endpoint)
+    }
 }
