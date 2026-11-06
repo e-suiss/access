@@ -336,7 +336,7 @@ async fn the_headless_client_runs_the_code_flow() {
         client_id: &f.public,
         redirect_uri: NATIVE,
         identifier: WHO,
-        credential: Credential::Password(PW),
+        credential: Credential::Password(PW, None),
         resource: None,
         scope: "openid",
     };
@@ -383,7 +383,7 @@ async fn the_headless_client_runs_the_code_flow() {
     let refused = login(
         &http,
         &Login {
-            credential: Credential::Password("not the password at all"),
+            credential: Credential::Password("not the password at all", None),
             ..l
         },
     )

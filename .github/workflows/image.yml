@@ -190,7 +190,10 @@ jobs:
           $COMPOSE run --rm --no-deps -T local-client login \
             --issuer "$issuer" --ca /var/lib/access/certs/ca.crt \
             --client-id "$client_id" --redirect-uri http://127.0.0.1/cb \
-            --identifier test@acme.example --password-env BOOTSTRAP_TEST_PASSWORD > "$RUNNER_TEMP/tokens.json"
+            --identifier test@acme.example --password-env BOOTSTRAP_TEST_PASSWORD \
+            --passkey access/bootstrap/test-user-passkey \
+            --hsm-module /usr/lib/softhsm/libsofthsm2.so --hsm-token access-server \
+            --hsm-pin-file /var/lib/access/secrets/hsm-access-server > "$RUNNER_TEMP/tokens.json"
           jq -e '.token_type == "DPoP" and (.access_token | length > 0) and (.id_token | length > 0)' "$RUNNER_TEMP/tokens.json"
           $COMPOSE run --rm --no-deps -T local-client login \
             --issuer "$issuer" --ca /var/lib/access/certs/ca.crt \

@@ -20,8 +20,9 @@ use crate::passkey::Passkey;
 /// What the test user signs in with after the identifier.
 #[derive(Clone, Copy)]
 pub enum Credential<'a> {
-    /// The password (AAL1).
-    Password(&'a str),
+    /// The password (AAL1); with a passkey, it answers the second factor the realm asks for
+    /// once the account holds one (IDP-8).
+    Password(&'a str, Option<&'a Passkey<'a>>),
     /// The software passkey (AAL2, phishing-resistant).
     Passkey(&'a Passkey<'a>),
 }
@@ -277,30 +278,44 @@ pub async fn sign_in(
     if second.status != 200 || text(&second.json(), "step").as_deref() != Some("authenticate") {
         return Err(unexpected("identifier", &second));
     }
-    let (step, submission) = match credential {
-        Credential::Password(password) => (
+    let passkey_step = |step: &Response, passkey: &Passkey<'_>| -> Result<Value, ClientError> {
+        let challenge =
+            passkey_challenge(&step.json()).ok_or_else(|| unexpected("passkey options", step))?;
+        let assertion = passkey.assert(&challenge)?;
+        Ok(
+            json!({ "method": "passkey", "fields": { "passkey_credential": assertion.to_string() } }),
+        )
+    };
+    let (step, submission, second_factor) = match credential {
+        Credential::Password(password, passkey) => (
             "password",
             json!({ "method": "password", "fields": { "password": password } }),
+            passkey,
         ),
-        Credential::Passkey(passkey) => {
-            let challenge = passkey_challenge(&second.json())
-                .ok_or_else(|| unexpected("passkey options", &second))?;
-            let assertion = passkey.assert(&challenge)?;
-            (
-                "passkey",
-                json!({ "method": "passkey", "fields": { "passkey_credential": assertion.to_string() } }),
-            )
-        }
+        Credential::Passkey(passkey) => ("passkey", passkey_step(&second, passkey)?, None),
     };
-    let signed_in = post_json(
+    let mut answer = post_json(
         http,
         &action(&second, "identifier")?,
         &mut jar,
         Some(submission),
     )
     .await?;
-    if signed_in.status != 200 || text(&signed_in.json(), "step").as_deref() != Some("complete") {
-        return Err(unexpected(step, &signed_in));
+    if answer.status == 200
+        && text(&answer.json(), "step").as_deref() == Some("second_factor")
+        && let Some(passkey) = second_factor
+    {
+        let submission = passkey_step(&answer, passkey)?;
+        answer = post_json(
+            http,
+            &action(&answer, "second factor")?,
+            &mut jar,
+            Some(submission),
+        )
+        .await?;
+    }
+    if answer.status != 200 || text(&answer.json(), "step").as_deref() != Some("complete") {
+        return Err(unexpected(step, &answer));
     }
     Ok(jar)
 }

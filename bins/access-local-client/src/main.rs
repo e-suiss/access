@@ -6,7 +6,7 @@
 //! ```text
 //! access-local-client login --issuer <realm issuer> --ca <ca.crt> --client-id <id>
 //!     --redirect-uri <uri> --identifier <login>
-//!     (--password-env <VAR> | --passkey <label> --hsm-module <path> --hsm-token <label> --hsm-pin-file <path>)
+//!     (--password-env <VAR> [--passkey <label>] | --passkey <label>) [--hsm-module <path> --hsm-token <label> --hsm-pin-file <path>]
 //!     [--resource <client_id>] [--scope <scopes>] [--connect <ip:port>]
 //! access-local-client approve --issuer <realm issuer> --api <base> --ca <ca.crt>
 //!     --cert <pep.crt> --key <pep.key> --redirect-uri <uri> --identifier <login>
@@ -138,7 +138,8 @@ fn http(o: &Options, identity: Option<&Identity>) -> Result<Http, String> {
     Http::new(&ca, identity, o.connect()?).map_err(|e| e.to_string())
 }
 
-/// `login`: the code flow with the password or the passkey (OP-149 m.26 (b), (e)).
+/// `login`: the code flow with the password, the passkey, or the password and the passkey as
+/// the second factor the realm asks for once the account holds one (OP-149 m.26 (b), (e)).
 async fn login_command(o: &Options) -> Result<serde_json::Value, String> {
     let step = |e: ClientError| e.to_string();
     let issuer = o.required("issuer")?;
@@ -147,15 +148,8 @@ async fn login_command(o: &Options) -> Result<serde_json::Value, String> {
     let token;
     let key;
     let passkey;
-    let credential = match (o.optional("password-env"), o.optional("passkey")) {
-        (Some(var), None) => {
-            password = std::env::var(var)
-                .ok()
-                .filter(|p| !p.is_empty())
-                .ok_or_else(|| format!("{var} is not set"))?;
-            Credential::Password(&password)
-        }
-        (None, Some(label)) => {
+    let software = match o.optional("passkey") {
+        Some(label) => {
             token = o.token()?;
             key = token.signer(label).map_err(step)?;
             passkey = Passkey {
@@ -163,9 +157,20 @@ async fn login_command(o: &Options) -> Result<serde_json::Value, String> {
                 rp_id: &rp_id,
                 origin: &origin,
             };
-            Credential::Passkey(&passkey)
+            Some(&passkey)
         }
-        _ => return Err(String::from("exactly one of --password-env and --passkey")),
+        None => None,
+    };
+    let credential = match (o.optional("password-env"), software) {
+        (Some(var), passkey) => {
+            password = std::env::var(var)
+                .ok()
+                .filter(|p| !p.is_empty())
+                .ok_or_else(|| format!("{var} is not set"))?;
+            Credential::Password(&password, passkey)
+        }
+        (None, Some(passkey)) => Credential::Passkey(passkey),
+        (None, None) => return Err(String::from("--password-env or --passkey is required")),
     };
     let http = http(o, None)?;
     login(
