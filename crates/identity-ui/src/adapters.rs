@@ -14,7 +14,39 @@ use access_identity_webauthn::ports::SignalSink;
 use access_identity_oauth::adapters::SignerKeys;
 use access_identity_oauth::ports::Unavailable;
 
-use crate::ports::{ArtifactSigner, Messages};
+use access_identity_account::app::claims::{ClaimSigner, Courier, Issued};
+use access_identity_account::domain::claims::ClaimOrder;
+use access_internal_api::claims::ClaimIngest;
+use access_store::identity::{RealmId as StoreRealm, TenantId};
+
+use crate::ports::{ApprovalClaims, ArtifactSigner, Messages};
+
+impl<S, I, C> ApprovalClaims for Courier<S, I, C>
+where
+    S: ClaimSigner,
+    I: ClaimIngest,
+    C: access_identity_account::ports::Clock + Send + Sync,
+{
+    fn issue(
+        &self,
+        tenant: TenantId,
+        realm: StoreRealm,
+        order: &ClaimOrder,
+    ) -> impl Future<Output = Result<Issued, access_internal_api::idp::Unavailable>> + Send {
+        Self::issue(self, tenant, realm, order)
+    }
+}
+
+impl<T: ApprovalClaims> ApprovalClaims for std::sync::Arc<T> {
+    fn issue(
+        &self,
+        tenant: TenantId,
+        realm: StoreRealm,
+        order: &ClaimOrder,
+    ) -> impl Future<Output = Result<Issued, access_internal_api::idp::Unavailable>> + Send {
+        T::issue(self, tenant, realm, order)
+    }
+}
 
 impl ArtifactSigner for SignerKeys {
     fn sign_cose(

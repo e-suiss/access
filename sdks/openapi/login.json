@@ -1,85 +1,194 @@
 {
+  "openapi": "3.1.1",
+  "info": {
+    "title": "Access Frontend API: login node contract",
+    "version": "1",
+    "license": {
+      "name": "Apache-2.0",
+      "identifier": "Apache-2.0"
+    }
+  },
+  "paths": {
+    "/v1/login/flows": {
+      "post": {
+        "operationId": "createLoginFlow",
+        "summary": "Start a login flow; answers the identifier step (TN-96).",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "The identifier step.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginUi"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many flows from this network.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporarily unavailable (OP-36).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/login/flows/{flow}": {
+      "parameters": [
+        {
+          "name": "flow",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "$ref": "#/components/schemas/FlowId"
+          }
+        }
+      ],
+      "get": {
+        "operationId": "getLoginFlow",
+        "summary": "The flow's current step.",
+        "responses": {
+          "200": {
+            "description": "The current step.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginUi"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "The flow expired or was used up; start a new one.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "submitLoginFlow",
+        "summary": "Submit one method of the current step (TN-106: fields the step did not offer are refused).",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginSubmission"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The next step, or the same step with messages.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginUi"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The submission does not match the step.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The same step with the one neutral refusal, identical for every account (CR-40).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginUi"
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "The flow expired or was used up; start a new one.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "The same step with `login.throttled`; the same for every identifier.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginUi"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporarily unavailable (OP-36).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
   "components": {
     "schemas": {
-      "FieldName": {
-        "enum": [
-          "identifier",
-          "password",
-          "totp_code",
-          "recovery_code",
-          "passkey_credential",
-          "email_code"
-        ],
-        "type": "string"
-      },
-      "FlowId": {
-        "pattern": "^[A-Za-z0-9_-]{1,128}$",
-        "type": "string"
-      },
-      "LoginSubmission": {
-        "additionalProperties": false,
-        "properties": {
-          "fields": {
-            "additionalProperties": {
-              "type": "string"
-            },
-            "propertyNames": {
-              "$ref": "#/components/schemas/FieldName"
-            },
-            "type": "object"
-          },
-          "method": {
-            "$ref": "#/components/schemas/Method"
-          }
-        },
-        "required": [
-          "method"
-        ],
-        "type": "object"
-      },
       "LoginUi": {
+        "type": "object",
         "additionalProperties": false,
-        "properties": {
-          "action": {
-            "type": "string"
-          },
-          "flow": {
-            "$ref": "#/components/schemas/FlowId"
-          },
-          "messages": {
-            "items": {
-              "$ref": "#/components/schemas/Message"
-            },
-            "type": "array"
-          },
-          "nodes": {
-            "items": {
-              "$ref": "#/components/schemas/Node"
-            },
-            "type": "array"
-          },
-          "redirect_to": {
-            "type": "string"
-          },
-          "requirements": {
-            "items": {
-              "$ref": "#/components/schemas/RequirementStatus"
-            },
-            "type": "array"
-          },
-          "step": {
-            "enum": [
-              "identifier",
-              "authenticate",
-              "second_factor",
-              "complete"
-            ],
-            "type": "string"
-          },
-          "version": {
-            "const": 1
-          }
-        },
         "required": [
           "version",
           "flow",
@@ -89,37 +198,257 @@
           "nodes",
           "messages"
         ],
-        "type": "object"
-      },
-      "Message": {
-        "additionalProperties": false,
         "properties": {
-          "id": {
-            "$ref": "#/components/schemas/TextId"
+          "version": {
+            "const": 1
           },
-          "retry_after_s": {
-            "minimum": 0,
-            "type": "integer"
+          "flow": {
+            "$ref": "#/components/schemas/FlowId"
           },
-          "severity": {
+          "step": {
+            "type": "string",
             "enum": [
-              "info",
-              "error"
-            ],
+              "identifier",
+              "authenticate",
+              "second_factor",
+              "complete"
+            ]
+          },
+          "action": {
             "type": "string"
           },
-          "text": {
+          "requirements": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RequirementStatus"
+            }
+          },
+          "nodes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Node"
+            }
+          },
+          "messages": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Message"
+            }
+          },
+          "redirect_to": {
             "type": "string"
           }
-        },
+        }
+      },
+      "FlowId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9_-]{1,128}$"
+      },
+      "RequirementStatus": {
+        "type": "object",
+        "additionalProperties": false,
         "required": [
-          "id",
-          "text",
-          "severity"
+          "requirement",
+          "state"
         ],
-        "type": "object"
+        "properties": {
+          "requirement": {
+            "type": "string",
+            "enum": [
+              "identifier",
+              "first_factor",
+              "second_factor"
+            ]
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "missing",
+              "satisfied"
+            ]
+          }
+        }
+      },
+      "Node": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "type",
+              "name",
+              "method",
+              "kind",
+              "autocomplete",
+              "required",
+              "max_length",
+              "label"
+            ],
+            "properties": {
+              "type": {
+                "const": "input"
+              },
+              "name": {
+                "$ref": "#/components/schemas/FieldName"
+              },
+              "method": {
+                "$ref": "#/components/schemas/Method"
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "text",
+                  "password",
+                  "code"
+                ]
+              },
+              "autocomplete": {
+                "type": "string",
+                "enum": [
+                  "username webauthn",
+                  "username",
+                  "current-password",
+                  "one-time-code",
+                  "off"
+                ]
+              },
+              "required": {
+                "type": "boolean"
+              },
+              "max_length": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "label": {
+                "$ref": "#/components/schemas/Text"
+              },
+              "value": {
+                "type": "string"
+              },
+              "read_only": {
+                "type": "boolean"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "type",
+              "method",
+              "label"
+            ],
+            "properties": {
+              "type": {
+                "const": "submit"
+              },
+              "method": {
+                "$ref": "#/components/schemas/Method"
+              },
+              "label": {
+                "$ref": "#/components/schemas/Text"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "type",
+              "label",
+              "options"
+            ],
+            "properties": {
+              "type": {
+                "const": "passkey_get"
+              },
+              "label": {
+                "$ref": "#/components/schemas/Text"
+              },
+              "options": {
+                "$ref": "#/components/schemas/PasskeyOptions"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "type",
+              "field",
+              "options"
+            ],
+            "properties": {
+              "type": {
+                "const": "passkey_autofill"
+              },
+              "field": {
+                "$ref": "#/components/schemas/FieldName"
+              },
+              "options": {
+                "$ref": "#/components/schemas/PasskeyOptions"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "type",
+              "mediation",
+              "label",
+              "options"
+            ],
+            "properties": {
+              "type": {
+                "const": "passkey_create"
+              },
+              "mediation": {
+                "type": "string",
+                "enum": [
+                  "explicit",
+                  "conditional"
+                ]
+              },
+              "label": {
+                "$ref": "#/components/schemas/Text"
+              },
+              "options": {
+                "$ref": "#/components/schemas/PasskeyOptions"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "type",
+              "signal"
+            ],
+            "properties": {
+              "type": {
+                "const": "passkey_signal"
+              },
+              "signal": {
+                "$ref": "#/components/schemas/PasskeySignal"
+              }
+            }
+          }
+        ]
+      },
+      "FieldName": {
+        "type": "string",
+        "enum": [
+          "identifier",
+          "password",
+          "totp_code",
+          "recovery_code",
+          "passkey_credential",
+          "email_code"
+        ]
       },
       "Method": {
+        "type": "string",
         "enum": [
           "identifier",
           "password",
@@ -131,323 +460,10 @@
           "restart",
           "email_code",
           "magic_link"
-        ],
-        "type": "string"
-      },
-      "Node": {
-        "oneOf": [
-          {
-            "additionalProperties": false,
-            "properties": {
-              "autocomplete": {
-                "enum": [
-                  "username webauthn",
-                  "username",
-                  "current-password",
-                  "one-time-code",
-                  "off"
-                ],
-                "type": "string"
-              },
-              "kind": {
-                "enum": [
-                  "text",
-                  "password",
-                  "code"
-                ],
-                "type": "string"
-              },
-              "label": {
-                "$ref": "#/components/schemas/Text"
-              },
-              "max_length": {
-                "minimum": 1,
-                "type": "integer"
-              },
-              "method": {
-                "$ref": "#/components/schemas/Method"
-              },
-              "name": {
-                "$ref": "#/components/schemas/FieldName"
-              },
-              "read_only": {
-                "type": "boolean"
-              },
-              "required": {
-                "type": "boolean"
-              },
-              "type": {
-                "const": "input"
-              },
-              "value": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "type",
-              "name",
-              "method",
-              "kind",
-              "autocomplete",
-              "required",
-              "max_length",
-              "label"
-            ],
-            "type": "object"
-          },
-          {
-            "additionalProperties": false,
-            "properties": {
-              "label": {
-                "$ref": "#/components/schemas/Text"
-              },
-              "method": {
-                "$ref": "#/components/schemas/Method"
-              },
-              "type": {
-                "const": "submit"
-              }
-            },
-            "required": [
-              "type",
-              "method",
-              "label"
-            ],
-            "type": "object"
-          },
-          {
-            "additionalProperties": false,
-            "properties": {
-              "label": {
-                "$ref": "#/components/schemas/Text"
-              },
-              "options": {
-                "$ref": "#/components/schemas/PasskeyOptions"
-              },
-              "type": {
-                "const": "passkey_get"
-              }
-            },
-            "required": [
-              "type",
-              "label",
-              "options"
-            ],
-            "type": "object"
-          },
-          {
-            "additionalProperties": false,
-            "properties": {
-              "field": {
-                "$ref": "#/components/schemas/FieldName"
-              },
-              "options": {
-                "$ref": "#/components/schemas/PasskeyOptions"
-              },
-              "type": {
-                "const": "passkey_autofill"
-              }
-            },
-            "required": [
-              "type",
-              "field",
-              "options"
-            ],
-            "type": "object"
-          },
-          {
-            "additionalProperties": false,
-            "properties": {
-              "label": {
-                "$ref": "#/components/schemas/Text"
-              },
-              "mediation": {
-                "enum": [
-                  "explicit",
-                  "conditional"
-                ],
-                "type": "string"
-              },
-              "options": {
-                "$ref": "#/components/schemas/PasskeyOptions"
-              },
-              "type": {
-                "const": "passkey_create"
-              }
-            },
-            "required": [
-              "type",
-              "mediation",
-              "label",
-              "options"
-            ],
-            "type": "object"
-          },
-          {
-            "additionalProperties": false,
-            "properties": {
-              "signal": {
-                "$ref": "#/components/schemas/PasskeySignal"
-              },
-              "type": {
-                "const": "passkey_signal"
-              }
-            },
-            "required": [
-              "type",
-              "signal"
-            ],
-            "type": "object"
-          }
         ]
-      },
-      "PasskeyOptions": {
-        "description": "WebAuthn options in their JSON form (parseRequestOptionsFromJSON / parseCreationOptionsFromJSON).",
-        "type": "object"
-      },
-      "PasskeySignal": {
-        "oneOf": [
-          {
-            "additionalProperties": false,
-            "properties": {
-              "credential_id": {
-                "type": "string"
-              },
-              "kind": {
-                "const": "unknown_credential"
-              },
-              "rp_id": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "kind",
-              "rp_id",
-              "credential_id"
-            ],
-            "type": "object"
-          },
-          {
-            "additionalProperties": false,
-            "properties": {
-              "all_accepted_credential_ids": {
-                "items": {
-                  "type": "string"
-                },
-                "type": "array"
-              },
-              "kind": {
-                "const": "all_accepted_credentials"
-              },
-              "rp_id": {
-                "type": "string"
-              },
-              "user_id": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "kind",
-              "rp_id",
-              "user_id",
-              "all_accepted_credential_ids"
-            ],
-            "type": "object"
-          },
-          {
-            "additionalProperties": false,
-            "properties": {
-              "display_name": {
-                "type": "string"
-              },
-              "kind": {
-                "const": "current_user_details"
-              },
-              "name": {
-                "type": "string"
-              },
-              "rp_id": {
-                "type": "string"
-              },
-              "user_id": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "kind",
-              "rp_id",
-              "user_id",
-              "name",
-              "display_name"
-            ],
-            "type": "object"
-          }
-        ]
-      },
-      "Problem": {
-        "properties": {
-          "detail": {
-            "type": "string"
-          },
-          "status": {
-            "type": "integer"
-          },
-          "title": {
-            "type": "string"
-          },
-          "type": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "type",
-          "title",
-          "status"
-        ],
-        "type": "object"
-      },
-      "RequirementStatus": {
-        "additionalProperties": false,
-        "properties": {
-          "requirement": {
-            "enum": [
-              "identifier",
-              "first_factor",
-              "second_factor"
-            ],
-            "type": "string"
-          },
-          "state": {
-            "enum": [
-              "missing",
-              "satisfied"
-            ],
-            "type": "string"
-          }
-        },
-        "required": [
-          "requirement",
-          "state"
-        ],
-        "type": "object"
-      },
-      "Text": {
-        "additionalProperties": false,
-        "properties": {
-          "id": {
-            "$ref": "#/components/schemas/TextId"
-          },
-          "text": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "text"
-        ],
-        "type": "object"
       },
       "TextId": {
+        "type": "string",
         "enum": [
           "login.failed",
           "login.throttled",
@@ -471,193 +487,177 @@
           "action.email_code",
           "action.magic_link",
           "email.sent"
-        ],
-        "type": "string"
-      }
-    }
-  },
-  "info": {
-    "license": {
-      "identifier": "Apache-2.0",
-      "name": "Apache-2.0"
-    },
-    "title": "Access Frontend API: login node contract",
-    "version": "1"
-  },
-  "openapi": "3.1.1",
-  "paths": {
-    "/v1/login/flows": {
-      "post": {
-        "operationId": "createLoginFlow",
-        "parameters": [
-          {
-            "in": "header",
-            "name": "Idempotency-Key",
-            "required": true,
-            "schema": {
-              "maxLength": 255,
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "201": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/LoginUi"
-                }
-              }
-            },
-            "description": "The identifier step."
-          },
-          "429": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Too many flows from this network."
-          },
-          "503": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Temporarily unavailable (OP-36)."
-          }
-        },
-        "summary": "Start a login flow; answers the identifier step (TN-96)."
-      }
-    },
-    "/v1/login/flows/{flow}": {
-      "get": {
-        "operationId": "getLoginFlow",
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/LoginUi"
-                }
-              }
-            },
-            "description": "The current step."
-          },
-          "410": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "The flow expired or was used up; start a new one."
-          }
-        },
-        "summary": "The flow's current step."
+        ]
       },
-      "parameters": [
-        {
-          "in": "path",
-          "name": "flow",
-          "required": true,
-          "schema": {
-            "$ref": "#/components/schemas/FlowId"
+      "Text": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "text"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/TextId"
+          },
+          "text": {
+            "type": "string"
           }
         }
-      ],
-      "post": {
-        "operationId": "submitLoginFlow",
-        "parameters": [
+      },
+      "Message": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "text",
+          "severity"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/TextId"
+          },
+          "text": {
+            "type": "string"
+          },
+          "severity": {
+            "type": "string",
+            "enum": [
+              "info",
+              "error"
+            ]
+          },
+          "retry_after_s": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "PasskeyOptions": {
+        "type": "object",
+        "description": "WebAuthn options in their JSON form (parseRequestOptionsFromJSON / parseCreationOptionsFromJSON)."
+      },
+      "PasskeySignal": {
+        "oneOf": [
           {
-            "in": "header",
-            "name": "Idempotency-Key",
-            "required": true,
-            "schema": {
-              "maxLength": 255,
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "kind",
+              "rp_id",
+              "credential_id"
+            ],
+            "properties": {
+              "kind": {
+                "const": "unknown_credential"
+              },
+              "rp_id": {
+                "type": "string"
+              },
+              "credential_id": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "kind",
+              "rp_id",
+              "user_id",
+              "all_accepted_credential_ids"
+            ],
+            "properties": {
+              "kind": {
+                "const": "all_accepted_credentials"
+              },
+              "rp_id": {
+                "type": "string"
+              },
+              "user_id": {
+                "type": "string"
+              },
+              "all_accepted_credential_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "kind",
+              "rp_id",
+              "user_id",
+              "name",
+              "display_name"
+            ],
+            "properties": {
+              "kind": {
+                "const": "current_user_details"
+              },
+              "rp_id": {
+                "type": "string"
+              },
+              "user_id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "display_name": {
+                "type": "string"
+              }
+            }
+          }
+        ]
+      },
+      "LoginSubmission": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "method"
+        ],
+        "properties": {
+          "method": {
+            "$ref": "#/components/schemas/Method"
+          },
+          "fields": {
+            "type": "object",
+            "propertyNames": {
+              "$ref": "#/components/schemas/FieldName"
+            },
+            "additionalProperties": {
               "type": "string"
             }
           }
+        }
+      },
+      "Problem": {
+        "type": "object",
+        "required": [
+          "type",
+          "title",
+          "status"
         ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/LoginSubmission"
-              }
-            }
+        "properties": {
+          "type": {
+            "type": "string"
           },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/LoginUi"
-                }
-              }
-            },
-            "description": "The next step, or the same step with messages."
+          "title": {
+            "type": "string"
           },
-          "400": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "The submission does not match the step."
+          "status": {
+            "type": "integer"
           },
-          "401": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/LoginUi"
-                }
-              }
-            },
-            "description": "The same step with the one neutral refusal, identical for every account (CR-40)."
-          },
-          "410": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "The flow expired or was used up; start a new one."
-          },
-          "429": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/LoginUi"
-                }
-              }
-            },
-            "description": "The same step with `login.throttled`; the same for every identifier."
-          },
-          "503": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Temporarily unavailable (OP-36)."
+          "detail": {
+            "type": "string"
           }
-        },
-        "summary": "Submit one method of the current step (TN-106: fields the step did not offer are refused)."
+        }
       }
     }
   }

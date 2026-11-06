@@ -7,6 +7,8 @@ use std::sync::Arc;
 
 use access_crypto::opaque_id::IdKey;
 use access_identity_account::app::Realm;
+use access_identity_account::app::claims::Issued;
+use access_identity_account::domain::claims::ClaimOrder;
 use access_identity_account::notify::ports::Notifier;
 use access_identity_oauth::ports::{RealmEntry, Unavailable};
 use access_identity_session::domain::requirement::AuthPolicy;
@@ -14,8 +16,10 @@ use access_identity_session::domain::session::SessionPolicy;
 use access_identity_webauthn::adapters::RealmDecoyKeys;
 use access_identity_webauthn::domain::policy::RealmPolicy;
 use access_identity_webauthn::domain::rp::RelyingParty;
+use access_internal_api::approvals::{Contribution, Opening};
 use access_internal_api::idp::{Unavailable as InstancesUnavailable, Verdict};
 use access_internal_api::instances::{Registration, RegistrationVerdict, Termination};
+use access_kernel::digest::Digest;
 use access_store::identity::{RealmId, TenantId};
 use suiss_crypto::envelope::Kek;
 
@@ -111,4 +115,34 @@ pub trait DeviceInstances: Send + Sync {
         &self,
         termination: Termination,
     ) -> impl Future<Output = Result<Verdict, InstancesUnavailable>> + Send;
+}
+
+/// The authority plane behind the Approval Surface, reached only through `internal-api`
+/// (OP-62, §9.14.1 A, OP-150 L6).
+pub trait Approvals: Send + Sync {
+    /// What the latest `REQUIRE_ACTION` on `intent` in `domain` left for its approval: the
+    /// render the decision point kept and the tier; `None` when nothing waits.
+    fn opening(
+        &self,
+        domain: Digest,
+        intent: Digest,
+    ) -> impl Future<Output = Result<Option<Opening>, InstancesUnavailable>> + Send;
+
+    /// Commits the contribution as PEP, with the statement and the Claim as proofs.
+    fn contribute(
+        &self,
+        contribution: Contribution,
+    ) -> impl Future<Output = Result<Verdict, InstancesUnavailable>> + Send;
+}
+
+/// The realm's Claim courier, for the `authentication` Claim an approval needs at once (SI-5,
+/// §9.14.1 step 3, OP-150 L2 (b)).
+pub trait ApprovalClaims: Send + Sync {
+    /// Issues `order` now: placed, signed, ingested and recorded.
+    fn issue(
+        &self,
+        tenant: TenantId,
+        realm: RealmId,
+        order: &ClaimOrder,
+    ) -> impl Future<Output = Result<Issued, InstancesUnavailable>> + Send;
 }

@@ -7,9 +7,15 @@
     clippy::unwrap_used,
     clippy::panic,
     clippy::indexing_slicing,
+    clippy::too_many_lines,
     reason = "test code; the request-path lints (OP-3) do not apply"
 )]
 
+use access_identity_ui::domain::approval::{
+    APP_PATH, ApprovalFinish, ApprovalFinished, ApprovalPush, ApprovalPushed, ApprovalStart,
+    ApprovalStarted, BasisRef, ContributionEnvelope, FLOW_PATH, FLOWS_PATH, FieldView,
+    REQUESTS_PATH, RenderView,
+};
 use access_identity_ui::domain::frontend::{
     AUTH_CONTEXT_PATH, AuthContextIssued, AuthContextRequest, CHALLENGES_PATH, INSTANCE_PATH,
     INSTANCES_PATH, InstanceChallenge, InstanceRegistered, InstanceRegistration,
@@ -68,6 +74,10 @@ fn the_document_has_every_endpoint() {
         (INSTANCE_PATH, "delete"),
         (AUTH_CONTEXT_PATH, "post"),
         ("/v1/approve", "get"),
+        (REQUESTS_PATH, "post"),
+        (FLOWS_PATH, "post"),
+        (FLOW_PATH, "post"),
+        (APP_PATH, "get"),
     ] {
         assert!(paths[path].get(method).is_some(), "{method} {path}");
     }
@@ -167,4 +177,125 @@ fn committed_examples_match_the_code_and_the_schema() {
 fn unknown_fields_are_refused() {
     let extra = json!({ "key": "a", "pop": "b", "party": "c" });
     assert!(serde_json::from_value::<InstanceRegistration>(extra).is_err());
+}
+
+// OP-150 m.3 (r), OP-149 m.9, §9.14.1 A: the Approval Surface's examples meet the schemas and
+// read back unchanged
+#[test]
+fn approval_examples_match_the_code_and_the_schema() {
+    let doc = openapi();
+    example(
+        &doc,
+        "ApprovalPush",
+        "approval-push",
+        &ApprovalPush {
+            request: json!({
+                "requester": { "party": b64(0x01, 16), "instance": b64(0x02, 16) },
+                "action": { "namespace": "shop", "name": "refund", "major": 1, "schema": b64(0x01, 32) },
+                "resource": { "namespace": "shop", "path": ["orders", "o-1042"], "incarnation": 0 },
+                "params": { "amount": { "amount": { "value": 4200, "unit": "eur_cent" } } },
+                "capacity": "own",
+                "reason": "The customer reported that the parcel arrived damaged.",
+                "require_action": { "domain": b64(0x33, 32), "nonce": b64(0x0a, 16), "intent": b64(0x44, 32) },
+                "expires_at": 1_767_225_600_000u64,
+            }),
+            contribution: ContributionEnvelope {
+                nonce: b64(0x0b, 16),
+                class: None,
+                basis: BasisRef::Holding {
+                    grant: b64(0x05, 16),
+                    holder: b64(0x08, 16),
+                    since: 0,
+                },
+                valid_from: rfc3339(1_767_225_000_000),
+                valid_until: rfc3339(1_767_225_300_000),
+                ais: b64(0xd2, 180),
+            },
+        },
+    );
+    example(
+        &doc,
+        "ApprovalPushed",
+        "approval-pushed",
+        &ApprovalPushed {
+            request_uri: format!("urn:ietf:params:oauth:request_uri:{}", b64(0x1f, 32)),
+            digest: b64(0x2e, 32),
+            expires_at: rfc3339(1_767_225_600_000),
+        },
+    );
+    example(
+        &doc,
+        "ApprovalStart",
+        "approval-start",
+        &ApprovalStart {
+            request: format!("urn:ietf:params:oauth:request_uri:{}", b64(0x1f, 32)),
+            redirect_uri: String::from("https://shop.example/approved"),
+            state: String::from("st-1"),
+        },
+    );
+    example(
+        &doc,
+        "ApprovalStarted",
+        "approval-started",
+        &ApprovalStarted {
+            flow: b64(0x3c, 16),
+            render: RenderView {
+                fields: vec![
+                    FieldView {
+                        name: String::from("action"),
+                        text: String::from("shop/refund@1"),
+                        material: true,
+                    },
+                    FieldView {
+                        name: String::from("amount"),
+                        text: String::from("4200 eur_cent"),
+                        material: true,
+                    },
+                ],
+                reason: String::from("The customer reported that the parcel arrived damaged."),
+                tier: 1,
+                expires_at: rfc3339(1_767_225_900_000),
+            },
+            options: json!({
+                "challenge": b64(0x4d, 32),
+                "rpId": "acme.example",
+                "allowCredentials": [{ "type": "public-key", "id": b64(0x6e, 20), "transports": ["internal"] }],
+                "userVerification": "preferred",
+                "timeout": 300_000,
+            }),
+        },
+    );
+    example(
+        &doc,
+        "ApprovalFinish",
+        "approval-finish",
+        &ApprovalFinish {
+            credential: json!({
+                "id": b64(0x6e, 20), "rawId": b64(0x6e, 20), "type": "public-key",
+                "response": {
+                    "clientDataJSON": b64(0x7f, 120),
+                    "authenticatorData": b64(0x80, 37),
+                    "signature": b64(0x91, 64),
+                    "userHandle": b64(0xa2, 64),
+                },
+                "clientExtensionResults": {},
+            }),
+            redirect_uri: String::from("https://shop.example/approved"),
+            state: String::from("st-1"),
+        },
+    );
+    example(
+        &doc,
+        "ApprovalFinished",
+        "approval-finished",
+        &ApprovalFinished {
+            redirect: format!(
+                "https://shop.example/approved?exercise={}&render_digest={}&state=st-1",
+                b64(0xe3, 32),
+                b64(0xb4, 32)
+            ),
+            exercise: b64(0xe3, 32),
+            render_digest: b64(0xb4, 32),
+        },
+    );
 }

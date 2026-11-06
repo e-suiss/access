@@ -24,14 +24,19 @@ pub(crate) struct Running {
     renewing: tokio::task::JoinHandle<()>,
 }
 
+/// The realm issuer's courier of this process.
+pub(crate) type ClaimsCourier<L> =
+    Courier<SignerKeys, Ingest<Arc<L>, PgSubmissions, Trusted>, SystemClock>;
+
 /// Starts the lease renewal `renew` of `domains` and the courier over them, reading the identity
-/// outbox with the event pools' reader; both stop together.
+/// outbox with the event pools' reader; both stop together. The courier is also returned, for
+/// the approvals that need their Claim at once (SI-5, OP-150 L6).
 pub(crate) fn start<L, R, F>(
     signer: SignerKeys,
     pools: &EventPools,
     domains: Arc<L>,
     renew: R,
-) -> Running
+) -> (Running, Arc<ClaimsCourier<L>>)
 where
     L: Ledger + 'static,
     R: FnOnce(Arc<L>) -> F,
@@ -40,7 +45,7 @@ where
     let (app, reader) = (pools.app.clone(), pools.reader.clone());
     let renewing = tokio::spawn(renew(Arc::clone(&domains)));
     let clock = access_authority_sequencer::adapters::SourcesClock::new(app.clone());
-    let courier = Courier {
+    let courier = Arc::new(Courier {
         app: app.clone(),
         reader,
         signer,
@@ -50,14 +55,18 @@ where
             Trusted(tokio::sync::Mutex::new(clock)),
         ),
         clock: SystemClock,
-    };
+    });
     let (stop, stopped) = tokio::sync::watch::channel(false);
-    let task = tokio::spawn(async move { courier.run(INTERVAL, &stopped).await });
-    Running {
-        stop,
-        task,
-        renewing,
-    }
+    let running = Arc::clone(&courier);
+    let task = tokio::spawn(async move { running.run(INTERVAL, &stopped).await });
+    (
+        Running {
+            stop,
+            task,
+            renewing,
+        },
+        courier,
+    )
 }
 
 impl Running {

@@ -1005,3 +1005,39 @@ pub async fn derive(deriver: &Pool, domain: Digest) -> Result<u64, CoreError> {
 }
 
 mod ingest;
+
+/// What a decision point left for the approval of an intent (§9.14.1 step 1, OP-150 L6).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Asked {
+    /// The render digest.
+    pub render: Digest,
+    /// The render, dCBOR, when kept.
+    pub render_bytes: Option<Vec<u8>>,
+    /// The tier.
+    pub tier: access_kernel::tier::Tier,
+}
+
+impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K, B, S, C> {
+    /// The latest `REQUIRE_ACTION` on `intent` in `domain` with its render, read from the
+    /// store without the leader.
+    ///
+    /// # Errors
+    /// [`CoreError::Store`].
+    pub async fn asked(&self, domain: Digest, intent: &Digest) -> Result<Option<Asked>, CoreError> {
+        let scope = DomainId::from_bytes(domain.0);
+        let Some(row) =
+            access_store::authority::find_opening(&self.setup.app, &scope, &intent.0).await?
+        else {
+            return Ok(None);
+        };
+        let tier =
+            crate::app::approval::tier_of(row.tier).ok_or(CoreError::Store(StoreError::Corrupt))?;
+        let render_bytes =
+            access_store::claims::proof(&self.setup.app, &scope, &row.render_digest).await?;
+        Ok(Some(Asked {
+            render: Digest(row.render_digest),
+            render_bytes,
+            tier,
+        }))
+    }
+}

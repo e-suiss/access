@@ -1,0 +1,34 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.approval_requests\n           (tenant_id, realm_id, digest, request_uri, request, contribution, expires_ms)\n         VALUES ($1, $2, $3, $4, $5, $6, $7)\n         RETURNING request_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "request_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.approval_requests",
+            "name": "request_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Bytea",
+        "Text",
+        "Bytea",
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "0786dbda2ebdd6cffd647572920a6ee0453e454c84de98b689cd96d2c26c9765"
+}

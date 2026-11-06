@@ -12,12 +12,18 @@ use std::sync::Arc;
 use access_identity_oauth::app::Discovery;
 use access_identity_oauth::domain::request::Params;
 use access_identity_oauth::ports::{Directory, Keys};
-use access_identity_ui::app::{Devices, Hosted};
+use access_identity_ui::app::{Devices, Hosted, Reply};
+use access_identity_ui::domain::approval::{
+    APP_PATH, ApprovalFinish, ApprovalPush, ApprovalStart, FLOW_PATH, FLOWS_PATH, PAGE_JS,
+    REQUESTS_PATH,
+};
 use access_identity_ui::domain::frontend::{
     APPROVE_PATH, AUTH_CONTEXT_PATH, ApproveQuery, AuthContextRequest, CHALLENGES_PATH,
     INSTANCE_PATH, INSTANCES_PATH, InstanceRegistration, InstanceTermination,
 };
-use access_identity_ui::ports::{ArtifactSigner, Clock, DeviceInstances, Kits, Messages};
+use access_identity_ui::ports::{
+    ApprovalClaims, Approvals, ArtifactSigner, Clock, DeviceInstances, Kits, Messages,
+};
 use axum::body::Bytes;
 use axum::extract::{Path, State};
 use axum::http::{HeaderMap, StatusCode, Uri};
@@ -29,12 +35,12 @@ use serde::de::DeserializeOwned;
 use super::web::{Jar, json_only, problem, realm, same_origin, send};
 use super::{Peer, Shared, idempotency};
 
-struct Me<D, K, KI, C, M, A, I> {
+struct Me<D, K, KI, C, M, A, I, P, Q> {
     login: Shared<D, K, KI, C, M>,
-    devices: Devices<A, I>,
+    devices: Devices<A, I, P, Q>,
 }
 
-type St<D, K, KI, C, M, A, I> = State<Arc<Me<D, K, KI, C, M, A, I>>>;
+type St<D, K, KI, C, M, A, I, P, Q> = State<Arc<Me<D, K, KI, C, M, A, I, P, Q>>>;
 type Params0 = Path<HashMap<String, String>>;
 
 fn body<T: DeserializeOwned>(bytes: &[u8]) -> Result<T, Response> {
@@ -43,10 +49,10 @@ fn body<T: DeserializeOwned>(bytes: &[u8]) -> Result<T, Response> {
 }
 
 /// The product-facing routes, at the realm's host and under `/realms/{slug}`.
-pub fn router<D, K, KI, C, M, A, I>(
+pub fn router<D, K, KI, C, M, A, I, P, Q>(
     discovery: Discovery<D, K>,
     hosted: impl Into<Arc<Hosted<KI, C, M>>>,
-    devices: Devices<A, I>,
+    devices: Devices<A, I, P, Q>,
 ) -> Router
 where
     D: Directory + 'static,
@@ -56,6 +62,8 @@ where
     M: Messages + 'static,
     A: ArtifactSigner + 'static,
     I: DeviceInstances + 'static,
+    P: Approvals + 'static,
+    Q: ApprovalClaims + 'static,
 {
     let me = Arc::new(Me {
         login: Shared {
@@ -71,24 +79,41 @@ where
         writes = writes
             .route(
                 &format!("{prefix}{CHALLENGES_PATH}"),
-                post(challenge::<D, K, KI, C, M, A, I>),
+                post(challenge::<D, K, KI, C, M, A, I, P, Q>),
             )
             .route(
                 &format!("{prefix}{INSTANCES_PATH}"),
-                post(register::<D, K, KI, C, M, A, I>),
+                post(register::<D, K, KI, C, M, A, I, P, Q>),
             )
             .route(
                 &format!("{prefix}{INSTANCE_PATH}"),
-                axum::routing::delete(terminate::<D, K, KI, C, M, A, I>),
+                axum::routing::delete(terminate::<D, K, KI, C, M, A, I, P, Q>),
             )
             .route(
                 &format!("{prefix}{AUTH_CONTEXT_PATH}"),
-                post(auth_context::<D, K, KI, C, M, A, I>),
+                post(auth_context::<D, K, KI, C, M, A, I, P, Q>),
+            )
+            .route(
+                &format!("{prefix}{REQUESTS_PATH}"),
+                post(push_approval::<D, K, KI, C, M, A, I, P, Q>),
+            )
+            .route(
+                &format!("{prefix}{FLOWS_PATH}"),
+                post(start_approval::<D, K, KI, C, M, A, I, P, Q>),
+            )
+            .route(
+                &format!("{prefix}{FLOW_PATH}"),
+                post(finish_approval::<D, K, KI, C, M, A, I, P, Q>),
             );
-        reads = reads.route(
-            &format!("{prefix}{APPROVE_PATH}"),
-            get(approve::<D, K, KI, C, M, A, I>),
-        );
+        reads = reads
+            .route(
+                &format!("{prefix}{APPROVE_PATH}"),
+                get(approve::<D, K, KI, C, M, A, I, P, Q>),
+            )
+            .route(
+                &format!("{prefix}{APP_PATH}"),
+                get(approval_app::<D, K, KI, C, M, A, I, P, Q>),
+            );
     }
     let cache = Arc::new(idempotency::Cache::default());
     writes
@@ -106,8 +131,8 @@ macro_rules! handler {
         $name:ident($s:ident, $entry:ident, $jar:ident, $p:ident, $bytes:ident, $headers:ident, $uri:ident) $write:literal $body:block
     ) => {
         $(#[$doc])*
-        async fn $name<D, K, KI, C, M, A, I>(
-            State($s): St<D, K, KI, C, M, A, I>,
+        async fn $name<D, K, KI, C, M, A, I, P, Q>(
+            State($s): St<D, K, KI, C, M, A, I, P, Q>,
             Path($p): Params0,
             peer: Option<Extension<Peer>>,
             $uri: Uri,
@@ -122,6 +147,8 @@ macro_rules! handler {
             M: Messages,
             A: ArtifactSigner,
             I: DeviceInstances,
+            P: Approvals,
+            Q: ApprovalClaims,
         {
             let $entry = match realm(&$s.login, &$p, &$uri, &$headers).await {
                 Ok(e) => e,
@@ -200,5 +227,47 @@ handler! {
             state: field("state")?,
         };
         Ok(s.login.hosted.approve(&entry, &query).await)
+    }
+}
+
+handler! {
+    /// `POST /v1/approve/requests`: a coordinator's push; no session.
+    push_approval(s, entry, jar, p, bytes, headers, uri) true {
+        let _ = (&p, &uri, &jar);
+        json_only(&headers)?;
+        let req: ApprovalPush = body(&bytes)?;
+        Ok(s.login.hosted.push_approval(&entry, &req).await)
+    }
+}
+
+handler! {
+    /// `POST /v1/approve/flows`.
+    start_approval(s, entry, jar, p, bytes, headers, uri) true {
+        let _ = (&p, &uri);
+        json_only(&headers)?;
+        let req: ApprovalStart = body(&bytes)?;
+        Ok(s.login.hosted.start_approval(&s.devices, &entry, &jar.browser(), &req).await)
+    }
+}
+
+handler! {
+    /// `POST /v1/approve/flows/{flow}`: the redirect parameters come again with the assertion.
+    finish_approval(s, entry, jar, p, bytes, headers, uri) true {
+        let _ = &uri;
+        json_only(&headers)?;
+        let req: ApprovalFinish = body(&bytes)?;
+        let flow = p.get("flow").map_or("", String::as_str);
+        Ok(s.login
+            .hosted
+            .finish_approval(&s.devices, &entry, &jar.browser(), flow, &req)
+            .await)
+    }
+}
+
+handler! {
+    /// `GET /v1/approve/app.js`: the page's script.
+    approval_app(s, entry, jar, p, bytes, headers, uri) false {
+        let _ = (&s, &entry, &p, &bytes, &jar, &uri);
+        Ok::<_, Response>(Reply::script(PAGE_JS))
     }
 }

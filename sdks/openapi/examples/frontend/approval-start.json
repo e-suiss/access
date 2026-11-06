@@ -1,0 +1,5 @@
+{
+  "request": "urn:ietf:params:oauth:request_uri:Hx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8fHx8",
+  "redirect_uri": "https://shop.example/approved",
+  "state": "st-1"
+}

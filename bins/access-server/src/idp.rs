@@ -19,7 +19,10 @@ use access_crypto::webauthn::decoy_label;
 use access_identity_admin::domain::JoseAlg;
 use access_identity_admin::ports::{Decider, Governance, Instances, RealmKeys};
 use access_identity_oauth::adapters::SignerKeys;
-use access_identity_ui::ports::DeviceInstances;
+use access_identity_ui::ports::{Approvals, DeviceInstances};
+use access_internal_api::approvals::{
+    Contribution, Opening, contribute_intent, contribute_payload,
+};
 use access_internal_api::instances::{
     Registered, Registration, RegistrationVerdict, SelfSigned, Termination, bootstrap_basis,
     self_signed_intent, terminate_intent, terminate_payload,
@@ -384,6 +387,56 @@ where
             consistency: None,
         };
         self.commit(request, t.ais, t.pep).await
+    }
+}
+
+impl<K, B, S, C> Approvals for Plane<K, B, S, C>
+where
+    K: Keys + Send + Sync + 'static,
+    B: Binding + Clone + Send + Sync + 'static,
+    S: Salts + Clone + Send + Sync + 'static,
+    C: Clock + Clone + Send + Sync + 'static,
+{
+    async fn opening(
+        &self,
+        domain: Digest,
+        intent: Digest,
+    ) -> Result<Option<Opening>, Unavailable> {
+        // §9.14.1 step 1, §9.14.5: what the decision point kept for the approval
+        match self.domains.asked(domain, &intent).await {
+            Ok(Some(a)) => Ok(Some(Opening {
+                render_digest: a.render,
+                render: a.render_bytes,
+                tier: access_authority_core::app::approval::tier_code(a.tier),
+            })),
+            Ok(None) => Ok(None),
+            Err(e) => Err(Unavailable(e.to_string())),
+        }
+    }
+
+    async fn contribute(&self, c: Contribution) -> Result<Verdict, Unavailable> {
+        // §9.14.1 A step 4: the statement and the bound Claim are the proofs
+        let Some(intent) = contribute_intent(c.target, &c.class, c.validity) else {
+            return Ok(Verdict::Refused {
+                code: String::from("protocol"),
+            });
+        };
+        let request = Request {
+            domain: c.domain,
+            mode: Mode::Commit,
+            nonce: c.nonce,
+            intent,
+            payload: Some(contribute_payload(c.target, &c.class)),
+            basis: c.basis,
+            capacity: c.capacity,
+            proofs: vec![
+                access_authority_core::domain::ProofRef::Aas(c.aas),
+                access_authority_core::domain::ProofRef::ClaimRef(c.claim),
+            ],
+            exercise: None,
+            consistency: None,
+        };
+        self.commit(request, c.ais, c.pep).await
     }
 }
 

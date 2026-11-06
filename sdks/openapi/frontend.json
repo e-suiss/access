@@ -1,79 +1,687 @@
 {
+  "openapi": "3.1.1",
+  "info": {
+    "title": "Access Frontend API: device Instances, auth_context and approval",
+    "version": "1",
+    "license": {
+      "name": "Apache-2.0",
+      "identifier": "Apache-2.0"
+    }
+  },
+  "paths": {
+    "/v1/me/instances/challenges": {
+      "post": {
+        "operationId": "createInstanceChallenge",
+        "summary": "A single-use challenge for a device key, bound to this session, with the governing domain, basis and PEP the device's Exercises name (OP-149 m.6, m.16 (a)).",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "The challenge.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InstanceChallenge"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No live session (session-required).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporarily unavailable.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/me/instances": {
+      "post": {
+        "operationId": "registerInstance",
+        "summary": "Registers the device key as an Instance of the user's Party with the device's own instance_create, and party_register for a new Party (OP-149 m.6, m.16 (a), L0-META-7). Access binds the key to the session's Party and forwards the Exercises. The challenge is used up by any answer.",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InstanceRegistration"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The Instance and its kid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InstanceRegistered"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "invalid-challenge, invalid-instance-key, invalid-proof-of-possession, invalid-party or invalid-request.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No live session (session-required).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The session is below AAL2 or its last authentication or step-up is older than five minutes (OP-149 m.6); step up and retry.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The session already has an active device Instance (instance-exists; INV-13: one per session and realm), or the authority plane did not open the Instance (instance-not-registered).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporarily unavailable.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/me/instances/{instance}": {
+      "parameters": [
+        {
+          "name": "instance",
+          "in": "path",
+          "required": true,
+          "description": "InstanceID, base64url of its 16 bytes (ADP JSON encoding, OP-149 m.16 (f)).",
+          "schema": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{22}$"
+          }
+        }
+      ],
+      "delete": {
+        "operationId": "terminateInstance",
+        "summary": "Ends a device Instance with an instance_terminate the user's own Instance signed (OP-149 m.6, OP-146 m.4 (i)); Access forwards it as PEP.",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InstanceTermination"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Recorded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InstanceTerminated"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "invalid-request.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No live session (session-required).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The session is below AAL2 or its last authentication or step-up is older than five minutes (OP-149 m.6); step up and retry.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Denied or refused by the authority plane (instance-not-terminated).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporarily unavailable.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/me/auth-context": {
+      "post": {
+        "operationId": "issueAuthContext",
+        "summary": "The session's auth_context artifact, signed by the realm's identity signer key (OP-149 m.8).",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AuthContextRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The signed artifact and its digest.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthContextIssued"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "invalid-content or invalid-request.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No live session (session-required).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporarily unavailable.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/approve": {
+      "get": {
+        "operationId": "approve",
+        "summary": "The approval call (OP-149 m.9, OP-150 m.3 (r)): the hosted Approval Surface for a request pushed to POST /v1/approve/requests; the page shows the render the decision point produced, takes one passkey assertion over H(AAS) and sends the browser back to redirect_uri with exercise, render_digest and state; the result is confirmed with GET /access/v1/exercises/{id}.",
+        "parameters": [
+          {
+            "name": "request",
+            "in": "query",
+            "required": true,
+            "description": "The authority request's digest (base64url, 32 bytes) or a pushed request_uri (urn:ietf:params:oauth:request_uri:…).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "redirect_uri",
+            "in": "query",
+            "required": true,
+            "description": "Exactly a redirect URI an active client of the realm registered.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "required": true,
+            "description": "1 to 512 printable ASCII characters, echoed unchanged.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The hosted approval page (text/html), which opens the flow with POST /v1/approve/flows and, once approved, goes to redirect_uri?exercise=<base64url ExerciseID>&render_digest=<base64url>&state=<state>."
+          },
+          "400": {
+            "description": "invalid-approval-request, invalid-state or invalid-redirect-uri; the browser is not redirected.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "approval-request-unknown: nothing was pushed under this request, or it expired.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporarily unavailable.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/approve/requests": {
+      "post": {
+        "operationId": "pushApprovalRequest",
+        "summary": "A coordinator pushes a typed authority request that got REQUIRE_ACTION, with the approver's pre-signed contribution, for the realm's Approval Surface (OP-149 m.9, §9.14.1 A). Access keeps a copy until the request expires (72 h at most) and names it by request_uri and by the digest of the pushed bytes; the request stays the coordinator's (XI-7). No session is needed; the push binds nothing.",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApprovalPush"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Pushed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApprovalPushed"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "invalid-approval-request, invalid-contribution, invalid-expiry or invalid-request.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "The request or the contribution is larger than 64 KiB.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporarily unavailable.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/approve/flows": {
+      "post": {
+        "operationId": "startApproval",
+        "summary": "Opens the approval for the signed-in approver (§9.14.1 A step 2): checks the call as GET /v1/approve does, finds the pushed request, asks the authority plane for the render the decision point kept for the target (§9.14.5 WYSIWYS) and the tier, builds the Approval Act Statement with the approver's device Instance (the one whose key signed the contribution), and answers the render and the assertion options whose challenge is H(AAS).",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApprovalStart"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The render and the options.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApprovalStarted"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "invalid-approval-request, invalid-state, invalid-redirect-uri, invalid-request or approval-domain (the request's domain is not the realm's).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No live session (session-required).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "approver-instance: no device Instance of this user signed the contribution.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "approval-request-unknown: no such or an expired push.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "approval-started: the push was opened already; approval-request-changed: the authority plane keeps no REQUIRE_ACTION for the target.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporarily unavailable.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/approve/flows/{flow}": {
+      "parameters": [
+        {
+          "name": "flow",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "post": {
+        "operationId": "finishApproval",
+        "summary": "The approver's single assertion over H(AAS) (§9.14.1 A step 3, AP-6, §10.3.4 WYSIWYS): verified as a passkey assertion of the session's user; the authentication Claim bound to the statement is issued at once (SI-5) and the contribution is committed as PEP (step 4). From CT2 the credential must be older than 24 h (SEC18) and user-verified.",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApprovalFinish"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Committed; follow redirect.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApprovalFinished"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "invalid-request: the credential JSON does not decode.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No live session (session-required); assertion-rejected: the assertion does not verify.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "cooling: the sign-in method is younger than 24 h for a CT2+ approval (SEC18); the body's available_at says when.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "approval-request-unknown: no such flow for this session.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "approval-not-started, approval-finished, approval-request-changed (the request changed after you approved), approval-claim-not-admitted, approval-not-allowed (with outcome) or approval-refused (with reason).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporarily unavailable.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/approve/app.js": {
+      "get": {
+        "operationId": "approvalApp",
+        "summary": "The approval page's script.",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "text/javascript."
+          }
+        }
+      }
+    }
+  },
   "components": {
     "schemas": {
-      "AuthContextIssued": {
-        "additionalProperties": false,
-        "properties": {
-          "auth_context": {
-            "description": "Tagged COSE_Sign1 of the auth-context (conformance/cddl/auth-context.cddl) by the realm's identity signer key; content type application/access-auth-context+cbor.",
-            "pattern": "^[A-Za-z0-9_-]*$",
-            "type": "string"
-          },
-          "digest": {
-            "description": "SHA-256(\"suiss/auth-context/v1\" || 0x00 || payload), 32 bytes.",
-            "pattern": "^[A-Za-z0-9_-]*$",
-            "type": "string"
-          }
-        },
-        "required": [
-          "auth_context",
-          "digest"
-        ],
-        "type": "object"
-      },
-      "AuthContextRequest": {
-        "additionalProperties": false,
-        "properties": {
-          "content_digest": {
-            "description": "SHA-256 of the content, 32 bytes.",
-            "pattern": "^[A-Za-z0-9_-]*$",
-            "type": "string"
-          },
-          "content_type": {
-            "pattern": "^[a-z0-9!#$&^_.+-]{1,63}/[a-z0-9!#$&^_.+-]{1,63}$",
-            "type": "string"
-          }
-        },
-        "required": [
-          "content_type",
-          "content_digest"
-        ],
-        "type": "object"
-      },
       "InstanceChallenge": {
+        "type": "object",
         "additionalProperties": false,
-        "properties": {
-          "basis": {
-            "description": "GrantID of the Genesis bootstrap Grant, 16 bytes: both Exercises name the basis public with it (L0-META-7).",
-            "pattern": "^[A-Za-z0-9_-]*$",
-            "type": "string"
-          },
-          "challenge": {
-            "description": "32 bytes: the nonce of the device's instance_create; party_register uses it followed by the byte 0x01.",
-            "pattern": "^[A-Za-z0-9_-]*$",
-            "type": "string"
-          },
-          "domain": {
-            "description": "The realm's governing DomainID, 32 bytes.",
-            "pattern": "^[A-Za-z0-9_-]*$",
-            "type": "string"
-          },
-          "expires_at": {
-            "description": "When it stops being accepted.",
-            "format": "date-time",
-            "type": "string"
-          },
-          "party": {
-            "description": "The user's Party once its first device registered it; absent before.",
-            "pattern": "^[A-Za-z0-9_-]{22}$",
-            "type": "string"
-          },
-          "pep": {
-            "const": "access-identity",
-            "description": "The PEP name both AIS name.",
-            "type": "string"
-          }
-        },
         "required": [
           "challenge",
           "expires_at",
@@ -81,73 +689,42 @@
           "basis",
           "pep"
         ],
-        "type": "object"
-      },
-      "InstanceRegistered": {
-        "additionalProperties": false,
         "properties": {
-          "instance": {
-            "description": "InstanceID, base64url of its 16 bytes (ADP JSON encoding, OP-149 m.16 (f)).",
-            "pattern": "^[A-Za-z0-9_-]{22}$",
-            "type": "string"
-          },
-          "kid": {
-            "description": "RFC 7638 thumbprint of the key (CR-24).",
+          "challenge": {
+            "type": "string",
             "pattern": "^[A-Za-z0-9_-]*$",
-            "type": "string"
+            "description": "32 bytes: the nonce of the device's instance_create; party_register uses it followed by the byte 0x01."
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When it stops being accepted."
+          },
+          "domain": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]*$",
+            "description": "The realm's governing DomainID, 32 bytes."
+          },
+          "basis": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]*$",
+            "description": "GrantID of the Genesis bootstrap Grant, 16 bytes: both Exercises name the basis public with it (L0-META-7)."
+          },
+          "pep": {
+            "type": "string",
+            "const": "access-identity",
+            "description": "The PEP name both AIS name."
           },
           "party": {
-            "description": "The Party the Instance belongs to.",
+            "type": "string",
             "pattern": "^[A-Za-z0-9_-]{22}$",
-            "type": "string"
+            "description": "The user's Party once its first device registered it; absent before."
           }
-        },
-        "required": [
-          "instance",
-          "kid",
-          "party"
-        ],
-        "type": "object"
+        }
       },
       "InstanceRegistration": {
+        "type": "object",
         "additionalProperties": false,
-        "properties": {
-          "ais": {
-            "description": "AIS (tagged COSE_Sign1) by the device key over the access/instance_create intent on access.party:[hex(party)], nonce the challenge, mode commit, capacity own, the challenge's basis and pep (OP-149 m.16 (a)). Its signature is the proof of possession.",
-            "pattern": "^[A-Za-z0-9_-]*$",
-            "type": "string"
-          },
-          "challenge": {
-            "description": "The challenge this registration answers.",
-            "pattern": "^[A-Za-z0-9_-]*$",
-            "type": "string"
-          },
-          "key": {
-            "description": "COSE_Key (RFC 9052 §7): OKP Ed25519 or EC2 P-256.",
-            "pattern": "^[A-Za-z0-9_-]*$",
-            "type": "string"
-          },
-          "party": {
-            "description": "The user's Party, or a new one registered with register_ais.",
-            "pattern": "^[A-Za-z0-9_-]{22}$",
-            "type": "string"
-          },
-          "register_ais": {
-            "description": "AIS by the device key over the access/party_register intent (the Party roots itself, actor kind human), nonce the challenge followed by 0x01; required exactly when the user has no Party yet.",
-            "pattern": "^[A-Za-z0-9_-]*$",
-            "type": "string"
-          },
-          "valid_from": {
-            "description": "Intent validity start, millisecond precision at most.",
-            "format": "date-time",
-            "type": "string"
-          },
-          "valid_until": {
-            "description": "Intent validity end, millisecond precision at most.",
-            "format": "date-time",
-            "type": "string"
-          }
-        },
         "required": [
           "challenge",
           "party",
@@ -156,51 +733,73 @@
           "valid_until",
           "ais"
         ],
-        "type": "object"
-      },
-      "InstanceTerminated": {
-        "additionalProperties": false,
         "properties": {
-          "exercise": {
-            "description": "ExerciseID, 32 bytes (TN-110).",
+          "challenge": {
+            "type": "string",
             "pattern": "^[A-Za-z0-9_-]*$",
-            "type": "string"
-          }
-        },
-        "required": [
-          "exercise"
-        ],
-        "type": "object"
-      },
-      "InstanceTermination": {
-        "additionalProperties": false,
-        "properties": {
-          "ais": {
-            "description": "AIS (COSE_Sign1) by one of the user's own Instances over the access/instance_terminate intent, mode commit, capacity own, pep \"access-identity\".",
-            "pattern": "^[A-Za-z0-9_-]*$",
-            "type": "string"
+            "description": "The challenge this registration answers."
           },
-          "basis": {
-            "description": "The actor Party's self-anchor id, 16 bytes.",
-            "pattern": "^[A-Za-z0-9_-]*$",
-            "type": "string"
+          "party": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{22}$",
+            "description": "The user's Party, or a new one registered with register_ais."
           },
-          "nonce": {
-            "description": "Exercise nonce, 16 to 64 bytes.",
+          "key": {
+            "type": "string",
             "pattern": "^[A-Za-z0-9_-]*$",
-            "type": "string"
+            "description": "COSE_Key (RFC 9052 §7): OKP Ed25519 or EC2 P-256."
           },
           "valid_from": {
-            "description": "Intent validity start, millisecond precision at most.",
+            "type": "string",
             "format": "date-time",
-            "type": "string"
+            "description": "Intent validity start, millisecond precision at most."
           },
           "valid_until": {
-            "description": "Intent validity end, millisecond precision at most.",
+            "type": "string",
             "format": "date-time",
-            "type": "string"
+            "description": "Intent validity end, millisecond precision at most."
+          },
+          "ais": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]*$",
+            "description": "AIS (tagged COSE_Sign1) by the device key over the access/instance_create intent on access.party:[hex(party)], nonce the challenge, mode commit, capacity own, the challenge's basis and pep (OP-149 m.16 (a)). Its signature is the proof of possession."
+          },
+          "register_ais": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]*$",
+            "description": "AIS by the device key over the access/party_register intent (the Party roots itself, actor kind human), nonce the challenge followed by 0x01; required exactly when the user has no Party yet."
           }
-        },
+        }
+      },
+      "InstanceRegistered": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "instance",
+          "kid",
+          "party"
+        ],
+        "properties": {
+          "instance": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{22}$",
+            "description": "InstanceID, base64url of its 16 bytes (ADP JSON encoding, OP-149 m.16 (f))."
+          },
+          "kid": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]*$",
+            "description": "RFC 7638 thumbprint of the key (CR-24)."
+          },
+          "party": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{22}$",
+            "description": "The Party the Instance belongs to."
+          }
+        }
+      },
+      "InstanceTermination": {
+        "type": "object",
+        "additionalProperties": false,
         "required": [
           "nonce",
           "basis",
@@ -208,31 +807,111 @@
           "valid_until",
           "ais"
         ],
-        "type": "object"
+        "properties": {
+          "nonce": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]*$",
+            "description": "Exercise nonce, 16 to 64 bytes."
+          },
+          "basis": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]*$",
+            "description": "The actor Party's self-anchor id, 16 bytes."
+          },
+          "valid_from": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Intent validity start, millisecond precision at most."
+          },
+          "valid_until": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Intent validity end, millisecond precision at most."
+          },
+          "ais": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]*$",
+            "description": "AIS (COSE_Sign1) by one of the user's own Instances over the access/instance_terminate intent, mode commit, capacity own, pep \"access-identity\"."
+          }
+        }
+      },
+      "InstanceTerminated": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "exercise"
+        ],
+        "properties": {
+          "exercise": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]*$",
+            "description": "ExerciseID, 32 bytes (TN-110)."
+          }
+        }
+      },
+      "AuthContextRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "content_type",
+          "content_digest"
+        ],
+        "properties": {
+          "content_type": {
+            "type": "string",
+            "pattern": "^[a-z0-9!#$&^_.+-]{1,63}/[a-z0-9!#$&^_.+-]{1,63}$"
+          },
+          "content_digest": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]*$",
+            "description": "SHA-256 of the content, 32 bytes."
+          }
+        }
+      },
+      "AuthContextIssued": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "auth_context",
+          "digest"
+        ],
+        "properties": {
+          "auth_context": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]*$",
+            "description": "Tagged COSE_Sign1 of the auth-context (conformance/cddl/auth-context.cddl) by the realm's identity signer key; content type application/access-auth-context+cbor."
+          },
+          "digest": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]*$",
+            "description": "SHA-256(\"suiss/auth-context/v1\" || 0x00 || payload), 32 bytes."
+          }
+        }
       },
       "Problem": {
-        "properties": {
-          "detail": {
-            "type": "string"
-          },
-          "status": {
-            "type": "integer"
-          },
-          "title": {
-            "type": "string"
-          },
-          "type": {
-            "type": "string"
-          }
-        },
+        "type": "object",
         "required": [
           "type",
           "title",
           "status"
         ],
-        "type": "object"
+        "properties": {
+          "type": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "status": {
+            "type": "integer"
+          },
+          "detail": {
+            "type": "string"
+          }
+        }
       },
       "ProblemCode": {
+        "type": "string",
         "enum": [
           "session-required",
           "step-up-required",
@@ -243,6 +922,22 @@
           "instance-not-registered",
           "instance-exists",
           "instance-not-terminated",
+          "invalid-contribution",
+          "invalid-expiry",
+          "approval-domain",
+          "approval-request-unknown",
+          "approval-request-changed",
+          "approval-started",
+          "approval-not-started",
+          "approval-finished",
+          "approval-expired",
+          "approver-instance",
+          "approver-passkey",
+          "assertion-rejected",
+          "cooling",
+          "approval-claim-not-admitted",
+          "approval-not-allowed",
+          "approval-refused",
           "invalid-request",
           "invalid-content",
           "invalid-approval-request",
@@ -250,405 +945,274 @@
           "invalid-redirect-uri",
           "approval-surface-unavailable",
           "unavailable"
-        ],
-        "type": "string"
-      }
-    }
-  },
-  "info": {
-    "license": {
-      "identifier": "Apache-2.0",
-      "name": "Apache-2.0"
-    },
-    "title": "Access Frontend API: device Instances, auth_context and approval",
-    "version": "1"
-  },
-  "openapi": "3.1.1",
-  "paths": {
-    "/v1/approve": {
-      "get": {
-        "operationId": "approve",
-        "parameters": [
-          {
-            "description": "The authority request's digest (base64url, 32 bytes) or a pushed request_uri (urn:ietf:params:oauth:request_uri:…).",
-            "in": "query",
-            "name": "request",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "description": "Exactly a redirect URI an active client of the realm registered.",
-            "in": "query",
-            "name": "redirect_uri",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "description": "1 to 512 printable ASCII characters, echoed unchanged.",
-            "in": "query",
-            "name": "state",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "303": {
-            "description": "Back to redirect_uri?exercise=<base64url ExerciseID>&render_digest=<base64url>&state=<state>.",
-            "headers": {
-              "Location": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "400": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "invalid-approval-request, invalid-state or invalid-redirect-uri; the browser is not redirected."
-          },
-          "501": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "The Approval Surface is not served yet (approval-surface-unavailable)."
-          },
-          "503": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Temporarily unavailable."
-          }
-        },
-        "summary": "The approval call (OP-149 m.9): shows the authority request on the Approval Surface and sends the browser back to redirect_uri with exercise, render_digest and state; the result is confirmed with GET /access/v1/exercises/{id}."
-      }
-    },
-    "/v1/me/auth-context": {
-      "post": {
-        "operationId": "issueAuthContext",
-        "parameters": [
-          {
-            "in": "header",
-            "name": "Idempotency-Key",
-            "required": true,
-            "schema": {
-              "maxLength": 255,
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/AuthContextRequest"
-              }
-            }
-          },
-          "required": false
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AuthContextIssued"
-                }
-              }
-            },
-            "description": "The signed artifact and its digest."
-          },
-          "400": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "invalid-content or invalid-request."
-          },
-          "401": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "No live session (session-required)."
-          },
-          "503": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Temporarily unavailable."
-          }
-        },
-        "summary": "The session's auth_context artifact, signed by the realm's identity signer key (OP-149 m.8)."
-      }
-    },
-    "/v1/me/instances": {
-      "post": {
-        "operationId": "registerInstance",
-        "parameters": [
-          {
-            "in": "header",
-            "name": "Idempotency-Key",
-            "required": true,
-            "schema": {
-              "maxLength": 255,
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/InstanceRegistration"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/InstanceRegistered"
-                }
-              }
-            },
-            "description": "The Instance and its kid."
-          },
-          "400": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "invalid-challenge, invalid-instance-key, invalid-proof-of-possession, invalid-party or invalid-request."
-          },
-          "401": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "No live session (session-required)."
-          },
-          "403": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "The session is below AAL2 or its last authentication or step-up is older than five minutes (OP-149 m.6); step up and retry."
-          },
-          "409": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "The session already has an active device Instance (instance-exists; INV-13: one per session and realm), or the authority plane did not open the Instance (instance-not-registered)."
-          },
-          "503": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Temporarily unavailable."
-          }
-        },
-        "summary": "Registers the device key as an Instance of the user's Party with the device's own instance_create, and party_register for a new Party (OP-149 m.6, m.16 (a), L0-META-7). Access binds the key to the session's Party and forwards the Exercises. The challenge is used up by any answer."
-      }
-    },
-    "/v1/me/instances/challenges": {
-      "post": {
-        "operationId": "createInstanceChallenge",
-        "parameters": [
-          {
-            "in": "header",
-            "name": "Idempotency-Key",
-            "required": true,
-            "schema": {
-              "maxLength": 255,
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "201": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/InstanceChallenge"
-                }
-              }
-            },
-            "description": "The challenge."
-          },
-          "401": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "No live session (session-required)."
-          },
-          "503": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Temporarily unavailable."
-          }
-        },
-        "summary": "A single-use challenge for a device key, bound to this session, with the governing domain, basis and PEP the device's Exercises name (OP-149 m.6, m.16 (a))."
-      }
-    },
-    "/v1/me/instances/{instance}": {
-      "delete": {
-        "operationId": "terminateInstance",
-        "parameters": [
-          {
-            "in": "header",
-            "name": "Idempotency-Key",
-            "required": true,
-            "schema": {
-              "maxLength": 255,
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/InstanceTermination"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/InstanceTerminated"
-                }
-              }
-            },
-            "description": "Recorded."
-          },
-          "400": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "invalid-request."
-          },
-          "401": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "No live session (session-required)."
-          },
-          "403": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "The session is below AAL2 or its last authentication or step-up is older than five minutes (OP-149 m.6); step up and retry."
-          },
-          "409": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Denied or refused by the authority plane (instance-not-terminated)."
-          },
-          "503": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Problem"
-                }
-              }
-            },
-            "description": "Temporarily unavailable."
-          }
-        },
-        "summary": "Ends a device Instance with an instance_terminate the user's own Instance signed (OP-149 m.6, OP-146 m.4 (i)); Access forwards it as PEP."
+        ]
       },
-      "parameters": [
-        {
-          "description": "InstanceID, base64url of its 16 bytes (ADP JSON encoding, OP-149 m.16 (f)).",
-          "in": "path",
-          "name": "instance",
-          "required": true,
-          "schema": {
-            "pattern": "^[A-Za-z0-9_-]{22}$",
+      "BasisRef": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "grant",
+              "holder",
+              "since"
+            ],
+            "properties": {
+              "grant": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_-]*$",
+                "description": "GrantID over access/contribute the approver holds, 16 bytes (L0-META-30)."
+              },
+              "holder": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_-]*$",
+                "description": "The holder Party, 16 bytes."
+              },
+              "since": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "anchor"
+            ],
+            "properties": {
+              "anchor": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_-]*$",
+                "description": "The approver Party's own AnchorID, 16 bytes."
+              }
+            }
+          }
+        ]
+      },
+      "ContributionEnvelope": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "nonce",
+          "basis",
+          "valid_from",
+          "valid_until",
+          "ais"
+        ],
+        "properties": {
+          "nonce": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]*$",
+            "description": "The contribution's Exercise nonce, 16 to 64 bytes: the statement's exercise_ref."
+          },
+          "class": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]{0,62}$",
+            "description": "The contribute class; approve when absent."
+          },
+          "basis": {
+            "$ref": "#/components/schemas/BasisRef"
+          },
+          "valid_from": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Intent validity start."
+          },
+          "valid_until": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Intent validity end."
+          },
+          "ais": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]*$",
+            "description": "AIS (tagged COSE_Sign1) by the approver's device Instance key over the contribute intent of the request's target (internal-api approvals::contribute_intent), mode commit, capacity own, pep access-identity."
+          }
+        }
+      },
+      "ApprovalPush": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "request",
+          "contribution"
+        ],
+        "properties": {
+          "request": {
+            "type": "object",
+            "description": "The typed authority request (conformance/cddl/authority-request.schema.json) with its require_action."
+          },
+          "contribution": {
+            "$ref": "#/components/schemas/ContributionEnvelope"
+          }
+        }
+      },
+      "ApprovalPushed": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "request_uri",
+          "digest",
+          "expires_at"
+        ],
+        "properties": {
+          "request_uri": {
+            "type": "string",
+            "description": "urn:ietf:params:oauth:request_uri:… to open GET /v1/approve with."
+          },
+          "digest": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]*$",
+            "description": "Digest of the pushed request bytes under access/authority-request-bytes/v1, 32 bytes; request=<digest> opens it too."
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the surface stops showing it: the request's expires_at, at most 72 h from the push."
+          }
+        }
+      },
+      "ApprovalStart": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "request",
+          "redirect_uri",
+          "state"
+        ],
+        "properties": {
+          "request": {
+            "type": "string"
+          },
+          "redirect_uri": {
+            "type": "string"
+          },
+          "state": {
             "type": "string"
           }
         }
-      ]
+      },
+      "FieldView": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "text",
+          "material"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "material": {
+            "type": "boolean"
+          }
+        }
+      },
+      "RenderView": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "fields",
+          "reason",
+          "tier",
+          "expires_at"
+        ],
+        "properties": {
+          "fields": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FieldView"
+            },
+            "description": "The render the decision point produced from the accepted Action Schema (§9.13.3); the surface shows nothing else."
+          },
+          "reason": {
+            "type": "string"
+          },
+          "tier": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 3
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the statement expires: CT1 15 min, CT2/CT3 5 min after it was built (§13.7.3)."
+          }
+        }
+      },
+      "ApprovalStarted": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "flow",
+          "render",
+          "options"
+        ],
+        "properties": {
+          "flow": {
+            "type": "string"
+          },
+          "render": {
+            "$ref": "#/components/schemas/RenderView"
+          },
+          "options": {
+            "type": "object",
+            "description": "PublicKeyCredentialRequestOptionsJSON; the challenge is H(AAS) (§9.14.1 step 3). userVerification is required from CT2."
+          }
+        }
+      },
+      "ApprovalFinish": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "credential",
+          "redirect_uri",
+          "state"
+        ],
+        "properties": {
+          "credential": {
+            "description": "The PublicKeyCredential JSON of the assertion (toJSON()), as a string or an object."
+          },
+          "redirect_uri": {
+            "type": "string",
+            "description": "As GET /v1/approve; checked against the realm's clients again."
+          },
+          "state": {
+            "type": "string",
+            "description": "As GET /v1/approve."
+          }
+        }
+      },
+      "ApprovalFinished": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "redirect",
+          "exercise",
+          "render_digest"
+        ],
+        "properties": {
+          "redirect": {
+            "type": "string",
+            "description": "redirect_uri with exercise, render_digest and state (OP-149 m.9)."
+          },
+          "exercise": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]*$",
+            "description": "The contribution ExerciseID, 32 bytes."
+          },
+          "render_digest": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]*$",
+            "description": "The render digest, 32 bytes."
+          }
+        }
+      }
     }
   }
 }

@@ -118,6 +118,21 @@ fn api_headers(h: &mut HeaderMap) {
     );
 }
 
+/// A hosted page or script, with the hosted login's security headers (OP-146 m.12 (f)).
+fn hosted(
+    code: StatusCode,
+    body: &'static str,
+    content_type: &'static str,
+    cache: &'static str,
+) -> Response {
+    let mut r = (code, body).into_response();
+    let h = r.headers_mut();
+    h.insert(header::CONTENT_TYPE, HeaderValue::from_static(content_type));
+    h.insert(header::CACHE_CONTROL, HeaderValue::from_static(cache));
+    assets::secure(h);
+    r
+}
+
 fn json_response(code: StatusCode, body: Vec<u8>) -> Response {
     let mut r = (code, body).into_response();
     r.headers_mut().insert(
@@ -137,6 +152,8 @@ pub(super) async fn send(reply: Reply, headers: &HeaderMap) -> Response {
         Body::Ui(ui) => json_response(code, serde_json::to_vec(&ui).unwrap_or_default()),
         Body::Json(v) => json_response(code, serde_json::to_vec(&v).unwrap_or_default()),
         Body::Problem(p) => Problem::new(code, p.code, p.title).into_response(),
+        Body::Html(page) => hosted(code, page, "text/html; charset=utf-8", "no-store"),
+        Body::Script(source) => hosted(code, source, "text/javascript; charset=utf-8", "no-cache"),
         Body::Empty => code.into_response(),
     };
     let h = response.headers_mut();

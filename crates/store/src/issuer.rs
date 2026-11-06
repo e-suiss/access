@@ -216,6 +216,48 @@ pub async fn session_instance(
     row.as_deref().map(id16).transpose()
 }
 
+/// An active device key of a subject: the Instance it is and its public material.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DeviceKeyRow {
+    /// The Instance.
+    pub instance: [u8; 16],
+    /// The raw public key: 32 bytes for Ed25519, SEC1 for P-256.
+    pub public_key: Vec<u8>,
+    /// `OKP` or `EC2`.
+    pub key_type: String,
+}
+
+/// The subject's active device keys with their Instances (§9.14.1: the approver's Instance is
+/// the one whose key signed the contribution).
+///
+/// # Errors
+/// [`StoreError`].
+pub async fn subject_device_keys(
+    t: &mut TenantTx,
+    subject: &[u8; 16],
+) -> Result<Vec<DeviceKeyRow>, StoreError> {
+    let (tenant, realm) = scope(t)?;
+    let rows = sqlx::query!(
+        "SELECT instance_id, public_key, key_type FROM access.device_keys
+          WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND status = 'active'
+          ORDER BY created_at, device_id",
+        tenant,
+        realm,
+        Uuid::from_bytes(*subject),
+    )
+    .fetch_all(&mut *t.tx)
+    .await?;
+    rows.into_iter()
+        .map(|r| {
+            Ok(DeviceKeyRow {
+                instance: id16(&r.instance_id)?,
+                public_key: r.public_key,
+                key_type: r.key_type,
+            })
+        })
+        .collect()
+}
+
 /// The subject's active device Instances.
 ///
 /// # Errors

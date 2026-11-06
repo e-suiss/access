@@ -31,10 +31,12 @@ use access_identity_account::adapters::system::SystemEntropy;
 use access_identity_account::app::accounts::{
     PasswordServices, change_status, create, deactivate, set_password,
 };
+use access_identity_account::app::claims::Issued;
 use access_identity_account::app::hasher::{Hasher, HasherConfig};
 use access_identity_account::app::local::LocalLimiter;
 use access_identity_account::app::login::LoginGate;
 use access_identity_account::app::{Actor, Realm};
+use access_identity_account::domain::claims::ClaimOrder;
 use access_identity_account::domain::identifier::{Identifier, IdentifierKind};
 use access_identity_account::domain::password::Argon2Params;
 use access_identity_account::domain::status::AccountStatus;
@@ -50,11 +52,15 @@ use access_identity_oauth::ports::{Directory, Keys, RealmEntry, Unavailable};
 use access_identity_session::domain::requirement::AuthPolicy;
 use access_identity_session::domain::session::SessionPolicy;
 use access_identity_ui::app::{Devices, Hosted};
-use access_identity_ui::ports::{ArtifactSigner, Clock, DeviceInstances, Kits, Messages, RealmKit};
+use access_identity_ui::ports::{
+    ApprovalClaims, Approvals, ArtifactSigner, Clock, DeviceInstances, Kits, Messages, RealmKit,
+};
 use access_identity_webauthn::adapters::RealmDecoyKeys;
 use access_identity_webauthn::domain::ids::RealmId as WaRealm;
 use access_identity_webauthn::domain::policy::RealmPolicy;
 use access_identity_webauthn::domain::rp::{RelyingParty, RpId};
+use access_internal_api::approvals::{Contribution, Opening};
+use access_internal_api::claims::ClaimVerdict;
 use access_internal_api::idp::{Unavailable as PlaneUnavailable, Verdict};
 use access_internal_api::instances::{Registered, Registration, RegistrationVerdict, Termination};
 use access_kernel::json::{b64url_decode, b64url_encode};
@@ -216,6 +222,132 @@ impl DeviceInstances for Plane {
     }
 }
 
+/// The authority plane behind the Approval Surface: one `REQUIRE_ACTION` on intent `[0x44; 32]`
+/// with the render of a refund, at the tier the test sets; a contribution whose statement names
+/// that render is committed as `[0xe3; 32]`, another is "the request changed".
+#[derive(Clone, Default)]
+struct Surface {
+    tier: Arc<std::sync::atomic::AtomicU8>,
+    gone: Arc<std::sync::atomic::AtomicBool>,
+    shifted: Arc<std::sync::atomic::AtomicBool>,
+    contributions: Arc<Mutex<Vec<Contribution>>>,
+}
+
+const TARGET: access_kernel::digest::Digest = access_kernel::digest::Digest([0x44; 32]);
+
+fn refund_render(shifted: bool) -> (access_kernel::digest::Digest, Vec<u8>) {
+    use access_kernel::intent::{ContextRefs, IntentEnvelope, ParamValue};
+    use access_kernel::model::{ActionRef, ResourceRef, Window};
+    use access_kernel::schema::{ActionSchema, EffectClass};
+    let schema = ActionSchema {
+        name: "refund".into(),
+        major: 1,
+        effect: EffectClass::Irreversible,
+        reserved: false,
+        consumption_bearing: false,
+        params: BTreeMap::from([("amount".to_owned(), "amount".to_owned())]),
+        resource_types: std::collections::BTreeSet::new(),
+        render: Some("Refund {amount} on {resource}".into()),
+    };
+    let intent = IntentEnvelope {
+        action: ActionRef {
+            namespace: "shop".into(),
+            name: "refund".into(),
+            major: 1,
+            schema: access_kernel::schema::action_digest(&schema),
+        },
+        resources: vec![ResourceRef {
+            namespace: "shop".into(),
+            path: vec!["orders".into(), "o-1042".into()],
+            incarnation: 0,
+        }],
+        params: BTreeMap::from([(
+            "amount".to_owned(),
+            ParamValue::Amount {
+                value: if shifted { 4300 } else { 4200 },
+                unit: "eur".into(),
+            },
+        )]),
+        opaque: BTreeMap::new(),
+        recipient: None,
+        purpose: None,
+        context: ContextRefs::default(),
+        validity: Window {
+            from: 0,
+            until: 1_000_000,
+        },
+    };
+    let r = access_kernel::render::of(Some(&schema), &intent, "en").unwrap();
+    (
+        access_kernel::render::digest(&r).unwrap(),
+        access_kernel::render::encode(&r).unwrap(),
+    )
+}
+
+impl Approvals for Surface {
+    async fn opening(
+        &self,
+        _: access_kernel::digest::Digest,
+        intent: access_kernel::digest::Digest,
+    ) -> Result<Option<Opening>, PlaneUnavailable> {
+        if self.gone.load(Ordering::SeqCst) || intent != TARGET {
+            return Ok(None);
+        }
+        let (render_digest, render) = refund_render(self.shifted.load(Ordering::SeqCst));
+        Ok(Some(Opening {
+            render_digest,
+            render: Some(render),
+            tier: self.tier.load(Ordering::SeqCst),
+        }))
+    }
+
+    async fn contribute(&self, c: Contribution) -> Result<Verdict, PlaneUnavailable> {
+        use access_kernel::codec::Canonical as _;
+        let value =
+            suiss_crypto::dcbor::decode(&c.aas, suiss_crypto::dcbor::Limits::CEILING).unwrap();
+        let act = access_kernel::aas::ApprovalAct::from_value(&value).unwrap();
+        let (render_digest, _) = refund_render(self.shifted.load(Ordering::SeqCst));
+        if act.render_digest != render_digest {
+            return Ok(Verdict::Refused {
+                code: String::from("aas-render"),
+            });
+        }
+        let (domain, nonce) = (c.domain, c.nonce.clone());
+        self.contributions.lock().unwrap().push(c);
+        Ok(Verdict::Committed(access_internal_api::idp::Committed {
+            domain,
+            nonce,
+            position: 11,
+            intent: TARGET,
+            exercise: access_kernel::digest::Digest([0xe3; 32]),
+            replayed: false,
+        }))
+    }
+}
+
+/// The realm's Claim courier: every order is admitted as Claim `[0xc1; 16]`.
+#[derive(Clone, Default)]
+struct Claims(Arc<Mutex<Vec<ClaimOrder>>>);
+
+impl ApprovalClaims for Claims {
+    async fn issue(
+        &self,
+        _: TenantId,
+        _: RealmId,
+        order: &ClaimOrder,
+    ) -> Result<Issued, PlaneUnavailable> {
+        self.0.lock().unwrap().push(order.clone());
+        Ok(Issued::Answered {
+            claim: [0xc1; 16],
+            verdict: ClaimVerdict::Admitted {
+                claim: Id([0xc1; 16]),
+                position: 9,
+                replayed: false,
+            },
+        })
+    }
+}
+
 struct Kit(Arc<RealmKit>);
 
 impl Kits for Kit {
@@ -232,6 +364,7 @@ struct Env {
     db: TestDb,
     tenant: TenantId,
     realm: RealmId,
+    domain: DomainId,
     kit: Arc<RealmKit>,
     clock: TestClock,
     outbox: Outbox,
@@ -239,6 +372,8 @@ struct Env {
     hasher: Arc<Hasher>,
     peers: AtomicU64,
     signer: ArtifactKey,
+    surface: Surface,
+    claims: Claims,
 }
 
 fn kit(tenant: TenantId, realm: RealmId, seed: u8, auth: AuthPolicy) -> RealmKit {
@@ -330,6 +465,9 @@ async fn env_with(seed: u8, slug: &str, auth: AuthPolicy, live: bool) -> Env {
     });
     let assets = Assets::load(&fixture()).unwrap();
     let signer = ArtifactKey(Arc::new(SoftSigner::generate_ed25519().unwrap().0));
+    let surface = Surface::default();
+    surface.tier.store(1, Ordering::SeqCst);
+    let claims = Claims::default();
     let app = router(
         Discovery::new(Dir(entry.clone()), NoKeys),
         hosted.clone(),
@@ -341,6 +479,8 @@ async fn env_with(seed: u8, slug: &str, auth: AuthPolicy, live: bool) -> Env {
         Devices {
             signer: signer.clone(),
             instances: Plane,
+            approvals: surface.clone(),
+            claims: claims.clone(),
             pep: String::from("access-identity"),
         },
     ));
@@ -348,6 +488,7 @@ async fn env_with(seed: u8, slug: &str, auth: AuthPolicy, live: bool) -> Env {
         db,
         tenant,
         realm,
+        domain: d,
         kit,
         clock,
         outbox,
@@ -355,6 +496,8 @@ async fn env_with(seed: u8, slug: &str, auth: AuthPolicy, live: bool) -> Env {
         hasher: Arc::new(Hasher::new(config)),
         peers: AtomicU64::new(0),
         signer,
+        surface,
+        claims,
     }
 }
 
@@ -382,6 +525,108 @@ impl Env {
                 .unwrap();
         }
         s
+    }
+
+    /// A client of the realm with `redirect` registered, under an idp.client.register ALLOW
+    /// recorded in the governing domain (EI-25).
+    async fn client(&self, redirect: &str) {
+        use access_store::authority::{
+            CommitBatch, HeadRow, NonceRow, acquire_lease, commit_batch,
+        };
+        use access_store::idp::{ClientRow, Decision, bind, insert_client};
+        let (lease, head) = acquire_lease(
+            &self.db.sequencer,
+            &self.domain,
+            "t",
+            std::time::Duration::from_secs(10),
+        )
+        .await
+        .unwrap();
+        let pos = head.pos + 1;
+        let leaf = [0x5c; 32];
+        let batch = CommitBatch {
+            epoch: lease.epoch,
+            after: head.pos,
+            records: vec![LogRecord {
+                pos,
+                kind: "decision",
+                recorded_at: 2,
+                leaf_hash: leaf,
+                envelope: vec![0xa1, 1],
+            }],
+            head: HeadRow {
+                pos,
+                epoch: lease.epoch,
+                leaf_hash: leaf,
+                recorded_at: 2,
+                frontier: vec![leaf],
+            },
+            nonces: vec![NonceRow {
+                nonce: vec![1; 16],
+                actor: vec![1],
+                intent_digest: [9; 32],
+                decision_pos: pos,
+                outcome: String::from("allow"),
+                render_digest: None,
+                tier: None,
+            }],
+            outbox: vec![],
+            proofs: vec![],
+            reads: vec![],
+            writes: vec![],
+            draws: vec![],
+            single_use: vec![],
+            effects: vec![],
+        };
+        commit_batch(
+            &self.db.sequencer,
+            &self.domain,
+            *self.tenant.as_bytes(),
+            &batch,
+        )
+        .await
+        .unwrap();
+        let mut tx = TenantTx::begin(&self.db.app, self.tenant, self.realm)
+            .await
+            .unwrap();
+        let bound = bind(
+            &mut tx,
+            &Decision {
+                domain: &self.domain,
+                position: pos,
+                nonce: &[1; 16],
+                intent: [9; 32],
+                change: [5; 32],
+                action: "idp.client.register",
+            },
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        insert_client(
+            &mut tx,
+            &bound,
+            &ClientRow {
+                client_uuid: [0x5c; 16],
+                client_id: format!("cli_{}4a", "0".repeat(24)),
+                display_name: "Shop".into(),
+                auth_method: "none".into(),
+                jwks_uri: None,
+                redirect_uris: vec![redirect.to_owned()],
+                active: true,
+                secret_hash: None,
+                post_logout_redirect_uris: vec![],
+                backchannel_logout_uri: None,
+                jwks: None,
+                platform_product: None,
+                service_key: None,
+                event_receiver: None,
+                require_par: false,
+            },
+        )
+        .await
+        .unwrap();
+        tx.commit().await.unwrap();
     }
 
     fn browser(&self, name: &str) -> Web {
@@ -1625,4 +1870,324 @@ async fn product_endpoints_follow_the_frontend_contract() {
         ))
         .await;
     assert_eq!(no_state.status, StatusCode::BAD_REQUEST);
+}
+
+/// Registers a passkey from `b`'s signed-in session; returns the authenticator, its id and the
+/// user handle.
+async fn register_passkey(b: &mut Web, who: &str) -> (Authenticator, String, String) {
+    let reg = b
+        .post("/v1/account/passkeys", Some(json!({ "name": who })))
+        .await;
+    assert_eq!(reg.status, StatusCode::CREATED);
+    let r = reg.json();
+    let challenge = b64url_decode(r["options"]["challenge"].as_str().unwrap()).unwrap();
+    let user = r["options"]["user"]["id"].as_str().unwrap().to_owned();
+    let mut key = Authenticator::new(Key::es256());
+    let (cdj, att) = key.register(RP_ID, ORIGIN, &challenge);
+    let id = b64url_encode(&key.credential_id);
+    let credential = json!({
+        "id": id, "rawId": id, "type": "public-key",
+        "response": {
+            "clientDataJSON": b64url_encode(&cdj),
+            "attestationObject": b64url_encode(&att),
+            "transports": ["internal"],
+        },
+        "clientExtensionResults": {},
+    });
+    let path = format!(
+        "/v1/account/passkeys/{}",
+        r["registration"].as_str().unwrap()
+    );
+    let done = b
+        .post(&path, Some(json!({ "credential": credential })))
+        .await;
+    assert_eq!(done.status, StatusCode::CREATED);
+    (key, id, user)
+}
+
+fn assertion_json(key: &mut Authenticator, id: &str, user: &str, challenge: &[u8]) -> Value {
+    let (cdj, ad, sig) = key.assert(RP_ID, ORIGIN, challenge);
+    json!({
+        "id": id, "rawId": id, "type": "public-key",
+        "response": {
+            "clientDataJSON": b64url_encode(&cdj),
+            "authenticatorData": b64url_encode(&ad),
+            "signature": b64url_encode(&sig),
+            "userHandle": user,
+        },
+        "clientExtensionResults": {},
+    })
+}
+
+// OP-150 m.3 (r), OP-149 m.9, §9.14.1 A, §9.14.5 WYSIWYS, SI-5, §13.7.3, SEC18: the hosted
+// Approval Surface end to end. A coordinator pushes the request with the approver's pre-signed
+// contribution; the page shows the render the decision point kept; one passkey assertion over
+// H(AAS) issues the bound authentication Claim at once and commits the contribution; the
+// browser goes back with exercise and render_digest. A statement over another render approves
+// nothing; from CT2 a passkey younger than 24 h cools.
+#[tokio::test]
+async fn an_approval_runs_on_the_hosted_surface() {
+    use access_identity_account::domain::claims::Bind;
+    use access_kernel::verify::key_scope::thumbprint;
+    let e = env(45, "lg-ap", AuthPolicy::DEFAULT).await;
+    e.account("ann@example.com").await;
+    let redirect = "https://shop.example/approved";
+    e.client(redirect).await;
+    let mut b = e.browser("b");
+    assert_eq!(b.sign_in("ann@example.com").await.step(), "complete");
+    let (mut key, id, user) = register_passkey(&mut b, "ann@example.com").await;
+    // the approver signs in with the passkey (AAL2) and registers a device Instance
+    let mut c = e.browser("c");
+    let first = c.start().await;
+    let options = passkey_node(&first);
+    let challenge = b64url_decode(options["challenge"].as_str().unwrap()).unwrap();
+    let signed = c
+        .submit(
+            &first,
+            "passkey",
+            json!({ "passkey_credential": assertion_json(&mut key, &id, &user, &challenge).to_string() }),
+        )
+        .await;
+    assert_eq!(signed.step(), "complete");
+    let (device, _) = SoftSigner::generate_ed25519().unwrap();
+    let ch = c.post("/v1/me/instances/challenges", None).await;
+    assert_eq!(ch.status, StatusCode::CREATED);
+    let registered = c
+        .post(
+            "/v1/me/instances",
+            Some(json!({
+                "challenge": ch.json()["challenge"],
+                "party": b64url_encode(&[8; 16]),
+                "key": b64url_encode(&access_identity_session::domain::device::cose_key(&device.public_key())),
+                "valid_from": "2026-01-01T00:00:00Z",
+                "valid_until": "2026-01-01T00:05:00Z",
+                "ais": b64url_encode(&[0xd2; 40]),
+                "register_ais": b64url_encode(&[0xd2; 40]),
+            })),
+        )
+        .await;
+    assert_eq!(registered.status, StatusCode::CREATED);
+
+    // §9.14.1 A step 4 prepared: the device signs the contribution's AIS; the coordinator pushes
+    let kid = thumbprint(&device.public_key());
+    let ais = sign_sign1(&device, kid, "application/access-ais+cbor", b"contribute").unwrap();
+    let push = |nonce: u8| {
+        json!({
+            "request": {
+                "requester": { "party": b64url_encode(&[1; 16]), "instance": b64url_encode(&[2; 16]) },
+                "action": { "namespace": "shop", "name": "refund", "major": 1, "schema": b64url_encode(&[1; 32]) },
+                "resource": { "namespace": "shop", "path": ["orders", "o-1042"], "incarnation": 0 },
+                "params": { "amount": { "amount": { "value": 4200, "unit": "eur" } } },
+                "capacity": "own",
+                "reason": "The customer reported that the parcel arrived damaged.",
+                "require_action": {
+                    "domain": b64url_encode(&[45; 32]),
+                    "nonce": b64url_encode(&[nonce; 16]),
+                    "intent": b64url_encode(&[0x44; 32]),
+                },
+                "expires_at": e.clock.now_ms() + 3_600_000,
+            },
+            "contribution": {
+                "nonce": b64url_encode(&[nonce; 16]),
+                "basis": { "grant": b64url_encode(&[1; 16]), "holder": b64url_encode(&[8; 16]), "since": 0 },
+                "valid_from": "2026-01-01T00:00:00Z",
+                "valid_until": "2026-01-01T00:05:00Z",
+                "ais": b64url_encode(&ais),
+            },
+        })
+    };
+    let mut coordinator = e.browser("work");
+    let pushed = coordinator
+        .post("/v1/approve/requests", Some(push(20)))
+        .await;
+    assert_eq!(
+        pushed.status,
+        StatusCode::CREATED,
+        "{}",
+        String::from_utf8_lossy(&pushed.body)
+    );
+    let uri = pushed.json()["request_uri"].as_str().unwrap().to_owned();
+    assert!(uri.starts_with("urn:ietf:params:oauth:request_uri:"));
+    let digest = pushed.json()["digest"].as_str().unwrap().to_owned();
+    let call = |request: &str| {
+        format!(
+            "/v1/approve?request={request}&redirect_uri=https%3A%2F%2Fshop.example%2Fapproved&state=st-1"
+        )
+    };
+
+    // the page: for the pushed request only, with the hosted security headers
+    let page = c.get(&call(&uri)).await;
+    assert_eq!(page.status, StatusCode::OK);
+    assert!(
+        page.headers[header::CONTENT_TYPE]
+            .to_str()
+            .unwrap()
+            .starts_with("text/html")
+    );
+    assert!(page.headers.contains_key("content-security-policy"));
+    assert!(String::from_utf8_lossy(&page.body).contains("/v1/approve/app.js"));
+    assert_eq!(c.get(&call(&digest)).await.status, StatusCode::OK);
+    let unknown = c.get(&call(&b64url_encode(&[0x77; 32]))).await;
+    assert_eq!(unknown.status, StatusCode::NOT_FOUND);
+    assert_eq!(unknown.json()["code"], "approval-request-unknown");
+    let script = c.get("/v1/approve/app.js").await;
+    assert_eq!(script.status, StatusCode::OK);
+    assert!(
+        script.headers[header::CONTENT_TYPE]
+            .to_str()
+            .unwrap()
+            .starts_with("text/javascript")
+    );
+
+    // step 2: the flow opens with the decision point's render and options over H(AAS)
+    let start = json!({ "request": uri, "redirect_uri": redirect, "state": "st-1" });
+    let mut anon = e.browser("anon");
+    assert_eq!(
+        anon.post("/v1/approve/flows", Some(start.clone()))
+            .await
+            .status,
+        StatusCode::UNAUTHORIZED
+    );
+    let started = c.post("/v1/approve/flows", Some(start.clone())).await;
+    assert_eq!(
+        started.status,
+        StatusCode::CREATED,
+        "{}",
+        String::from_utf8_lossy(&started.body)
+    );
+    let s = started.json();
+    let fields = s["render"]["fields"].as_array().unwrap();
+    assert!(
+        fields
+            .iter()
+            .any(|f| f["name"] == "amount" && f["text"] == "4200 eur" && f["material"] == true)
+    );
+    assert_eq!(s["render"]["tier"], 1);
+    assert_eq!(
+        s["render"]["reason"],
+        "The customer reported that the parcel arrived damaged."
+    );
+    let statement = b64url_decode(s["options"]["challenge"].as_str().unwrap()).unwrap();
+    assert_eq!(statement.len(), 32);
+    assert_ne!(s["options"]["userVerification"], "required");
+    let flow = s["flow"].as_str().unwrap().to_owned();
+    let again = c.post("/v1/approve/flows", Some(start)).await;
+    assert_eq!(again.status, StatusCode::CONFLICT);
+    assert_eq!(again.json()["code"], "approval-started");
+
+    // steps 3 and 4: one assertion over H(AAS); the bound Claim is issued, the contribution
+    // committed, the browser sent back
+    let finish = |credential: Value| json!({ "credential": credential, "redirect_uri": redirect, "state": "st-1" });
+    let done = c
+        .post(
+            &format!("/v1/approve/flows/{flow}"),
+            Some(finish(assertion_json(&mut key, &id, &user, &statement))),
+        )
+        .await;
+    assert_eq!(
+        done.status,
+        StatusCode::OK,
+        "{}",
+        String::from_utf8_lossy(&done.body)
+    );
+    let location = done.json()["redirect"].as_str().unwrap().to_owned();
+    assert!(location.starts_with("https://shop.example/approved?exercise="));
+    assert!(location.contains(&format!("exercise={}", b64url_encode(&[0xe3; 32]))));
+    assert!(location.contains("&render_digest="));
+    assert!(location.ends_with("&state=st-1"));
+    let orders = e.claims.0.lock().unwrap().clone();
+    assert_eq!(orders.len(), 1);
+    assert_eq!(orders[0].class, "authentication");
+    assert_eq!(
+        orders[0].bind,
+        Bind::Statement(<[u8; 32]>::try_from(statement.as_slice()).unwrap())
+    );
+    assert_eq!(orders[0].assurance.get("phishing_resistant"), Some(&1));
+    assert_eq!(orders[0].assurance.get("human_presence"), Some(&1));
+    let contributions = e.surface.contributions.lock().unwrap().clone();
+    assert_eq!(contributions.len(), 1);
+    assert_eq!(contributions[0].claim, Id([0xc1; 16]));
+    assert_eq!(contributions[0].ais, ais);
+    assert_eq!(contributions[0].nonce, vec![20; 16]);
+    assert_eq!(contributions[0].class, "approve");
+    assert_eq!(contributions[0].pep, "access-identity");
+    let (render_digest, _) = refund_render(false);
+    assert!(location.contains(&b64url_encode(&render_digest.0)));
+    // once: the statement was used
+    let twice = c
+        .post(
+            &format!("/v1/approve/flows/{flow}"),
+            Some(finish(assertion_json(&mut key, &id, &user, &statement))),
+        )
+        .await;
+    assert_eq!(twice.status, StatusCode::CONFLICT);
+    assert_eq!(twice.json()["code"], "approval-finished");
+
+    // §9.14.2, XI-7: the request changed between the statement and the commit
+    let pushed = coordinator
+        .post("/v1/approve/requests", Some(push(21)))
+        .await;
+    let uri = pushed.json()["request_uri"].as_str().unwrap().to_owned();
+    let start = json!({ "request": uri, "redirect_uri": redirect, "state": "st-1" });
+    let s = c.post("/v1/approve/flows", Some(start)).await.json();
+    let statement = b64url_decode(s["options"]["challenge"].as_str().unwrap()).unwrap();
+    e.surface.shifted.store(true, Ordering::SeqCst);
+    let changed = c
+        .post(
+            &format!("/v1/approve/flows/{}", s["flow"].as_str().unwrap()),
+            Some(finish(assertion_json(&mut key, &id, &user, &statement))),
+        )
+        .await;
+    assert_eq!(changed.status, StatusCode::CONFLICT);
+    assert_eq!(changed.json()["code"], "approval-request-changed");
+    assert_eq!(e.surface.contributions.lock().unwrap().len(), 1);
+    e.surface.shifted.store(false, Ordering::SeqCst);
+
+    // §13.7.3, SEC18: a CT2 approval demands UV and a method older than 24 h
+    e.surface.tier.store(2, Ordering::SeqCst);
+    let pushed = coordinator
+        .post("/v1/approve/requests", Some(push(22)))
+        .await;
+    let uri = pushed.json()["request_uri"].as_str().unwrap().to_owned();
+    let start = json!({ "request": uri, "redirect_uri": redirect, "state": "st-1" });
+    let s = c.post("/v1/approve/flows", Some(start)).await.json();
+    assert_eq!(s["render"]["tier"], 2);
+    assert_eq!(s["options"]["userVerification"], "required");
+    let statement = b64url_decode(s["options"]["challenge"].as_str().unwrap()).unwrap();
+    let cooling = c
+        .post(
+            &format!("/v1/approve/flows/{}", s["flow"].as_str().unwrap()),
+            Some(finish(assertion_json(&mut key, &id, &user, &statement))),
+        )
+        .await;
+    assert_eq!(
+        cooling.status,
+        StatusCode::FORBIDDEN,
+        "{}",
+        String::from_utf8_lossy(&cooling.body)
+    );
+    assert_eq!(cooling.json()["code"], "cooling");
+    assert!(
+        cooling.json()["title"]
+            .as_str()
+            .unwrap()
+            .starts_with("Needs: a sign-in method added more than 24 h ago")
+    );
+    assert!(cooling.json()["available_at"].is_string());
+    assert_eq!(e.claims.0.lock().unwrap().len(), 1);
+
+    // nothing waits for an approval any more: the request changed
+    e.surface.gone.store(true, Ordering::SeqCst);
+    let pushed = coordinator
+        .post("/v1/approve/requests", Some(push(23)))
+        .await;
+    let uri = pushed.json()["request_uri"].as_str().unwrap().to_owned();
+    let gone = c
+        .post(
+            "/v1/approve/flows",
+            Some(json!({ "request": uri, "redirect_uri": redirect, "state": "st-1" })),
+        )
+        .await;
+    assert_eq!(gone.status, StatusCode::CONFLICT);
+    assert_eq!(gone.json()["code"], "approval-request-changed");
 }

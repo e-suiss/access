@@ -1,0 +1,16 @@
+{
+  "credential": {
+    "id": "bm5ubm5ubm5ubm5ubm5ubm5ubm4",
+    "rawId": "bm5ubm5ubm5ubm5ubm5ubm5ubm4",
+    "type": "public-key",
+    "response": {
+      "clientDataJSON": "f39_f39_f39_f39_f39_f39_f39_f39_f39_f39_f39_f39_f39_f39_f39_f39_f39_f39_f39_f39_f39_f39_f39_f39_f39_f39_f39_f39_f39_f39_f39_f39_f39_f39_f39_f39_f39_f39_f39_f39_",
+      "authenticatorData": "gICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgA",
+      "signature": "kZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkQ",
+      "userHandle": "oqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKioqKiog"
+    },
+    "clientExtensionResults": {}
+  },
+  "redirect_uri": "https://shop.example/approved",
+  "state": "st-1"
+}

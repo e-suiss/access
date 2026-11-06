@@ -1,0 +1,49 @@
+{
+  "request": {
+    "requester": {
+      "party": "AQEBAQEBAQEBAQEBAQEBAQ",
+      "instance": "AgICAgICAgICAgICAgICAg"
+    },
+    "action": {
+      "namespace": "shop",
+      "name": "refund",
+      "major": 1,
+      "schema": "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE"
+    },
+    "resource": {
+      "namespace": "shop",
+      "path": [
+        "orders",
+        "o-1042"
+      ],
+      "incarnation": 0
+    },
+    "params": {
+      "amount": {
+        "amount": {
+          "value": 4200,
+          "unit": "eur_cent"
+        }
+      }
+    },
+    "capacity": "own",
+    "reason": "The customer reported that the parcel arrived damaged.",
+    "require_action": {
+      "domain": "MzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzMzM",
+      "nonce": "CgoKCgoKCgoKCgoKCgoKCg",
+      "intent": "REREREREREREREREREREREREREREREREREREREREREQ"
+    },
+    "expires_at": 1767225600000
+  },
+  "contribution": {
+    "nonce": "CwsLCwsLCwsLCwsLCwsLCw",
+    "basis": {
+      "grant": "BQUFBQUFBQUFBQUFBQUFBQ",
+      "holder": "CAgICAgICAgICAgICAgICA",
+      "since": 0
+    },
+    "valid_from": "2025-12-31T23:50:00Z",
+    "valid_until": "2025-12-31T23:55:00Z",
+    "ais": "0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS0tLS"
+  }
+}

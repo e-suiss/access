@@ -180,3 +180,17 @@ fn parameter_values_render_canonically() {
         "a/b@3"
     );
 }
+
+// §9.14.5 WYSIWYS: the render round-trips through its bytes, so the surface shows exactly what
+// the decision point rendered
+#[test]
+fn a_render_round_trips_through_its_bytes() {
+    let s = schema(EffectClass::Irreversible, Some("Refund {amount}"));
+    let r = of(Some(&s), &intent(), DEFAULT_LOCALE).unwrap();
+    let bytes = encode(&r).unwrap();
+    let back = decode(&bytes).unwrap();
+    assert_eq!(back, r);
+    assert_eq!(digest(&back).unwrap(), digest(&r).unwrap());
+    assert!(decode(&bytes[..bytes.len() / 2]).is_err());
+    assert!(decode(b"\xa0").is_err());
+}

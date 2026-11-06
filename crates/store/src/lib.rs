@@ -2,6 +2,7 @@
 //! All SQL of the workspace lives in this crate.
 
 pub mod accounts;
+pub mod approvals;
 pub mod audit;
 pub mod authority;
 pub mod backchannel;

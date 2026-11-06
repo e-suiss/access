@@ -25,17 +25,20 @@ use serde_json::json;
 
 use super::{Browser, Hosted, Reply, SESSION_REQUIRED, failed, signin};
 use crate::domain::frontend::{
-    ApproveQuery, ApproveRejection, AuthContextRequest, InstanceRegistration, InstanceTermination,
-    approval_request, rfc3339, unix_ms,
+    AuthContextRequest, InstanceRegistration, InstanceTermination, rfc3339, unix_ms,
 };
 use crate::ports::{ArtifactSigner, DeviceInstances, Kits, Messages, RealmKit};
 
 /// The ports the product-facing endpoints add to the hosted login.
-pub struct Devices<A, I> {
+pub struct Devices<A, I, P, Q> {
     /// The identity signer.
     pub signer: A,
     /// The authority plane's device Instances.
     pub instances: I,
+    /// The authority plane behind the Approval Surface (OP-150 L6).
+    pub approvals: P,
+    /// The realm's Claim courier, for approvals (SI-5).
+    pub claims: Q,
     /// The identity plane's PEP name in the governing domain.
     pub pep: String,
 }
@@ -67,7 +70,7 @@ fn invalid() -> Reply {
     Reply::problem(INVALID)
 }
 
-fn unavailable() -> Reply {
+pub(super) fn unavailable() -> Reply {
     Reply::problem(UNAVAILABLE)
 }
 
@@ -309,7 +312,7 @@ async fn device_retired(
 }
 
 /// The realm's governing domain.
-async fn governing(db: &access_store::Pool, kit: &RealmKit) -> Result<Digest, Reply> {
+pub(super) async fn governing(db: &access_store::Pool, kit: &RealmKit) -> Result<Digest, Reply> {
     let mut t = TenantTx::begin(db, kit.tenant, kit.realm)
         .await
         .map_err(|_| unavailable())?;
@@ -328,9 +331,9 @@ where
     /// `POST /v1/me/instances/challenges` (OP-149 m.6, m.16 (a)): the challenge, and what the
     /// device's Exercises name: the governing domain, the bootstrap basis, the PEP and the
     /// user's Party once there is one.
-    pub async fn instance_challenge<A, I>(
+    pub async fn instance_challenge<A, I, P, Q>(
         &self,
-        devices: &Devices<A, I>,
+        devices: &Devices<A, I, P, Q>,
         entry: &RealmEntry,
         b: &Browser<'_>,
     ) -> Reply {
@@ -375,9 +378,9 @@ where
     /// first; the Party must be the user's, or a new one the device registers when the user has
     /// none; then the device's own Exercises go to the authority plane through `internal-api`,
     /// which binds the key to that Party for their commit (L0-META-7).
-    pub async fn register_instance<A, I: DeviceInstances>(
+    pub async fn register_instance<A, I: DeviceInstances, P, Q>(
         &self,
-        devices: &Devices<A, I>,
+        devices: &Devices<A, I, P, Q>,
         entry: &RealmEntry,
         b: &Browser<'_>,
         body: &InstanceRegistration,
@@ -481,9 +484,9 @@ where
     /// `DELETE /v1/me/instances/{instance}` (OP-149 m.6, OP-146 m.4 (i)): the user's own
     /// Instance signed the termination; Access checks the session's step-up and forwards it as
     /// PEP.
-    pub async fn terminate_instance<A, I: DeviceInstances>(
+    pub async fn terminate_instance<A, I: DeviceInstances, P, Q>(
         &self,
-        devices: &Devices<A, I>,
+        devices: &Devices<A, I, P, Q>,
         entry: &RealmEntry,
         b: &Browser<'_>,
         instance: &str,
@@ -554,9 +557,9 @@ where
 
     /// `POST /v1/me/auth-context` (OP-149 m.8): the artifact of this session, bound to the
     /// content when given, signed by the realm's identity signer key.
-    pub async fn auth_context<A: ArtifactSigner, I>(
+    pub async fn auth_context<A: ArtifactSigner, I, P, Q>(
         &self,
-        devices: &Devices<A, I>,
+        devices: &Devices<A, I, P, Q>,
         entry: &RealmEntry,
         b: &Browser<'_>,
         body: Option<&AuthContextRequest>,
@@ -601,39 +604,6 @@ where
                     "auth_context": b64url_encode(&sign1),
                     "digest": b64url_encode(&digest.0),
                 }),
-            ),
-            Err(_) => unavailable(),
-        }
-    }
-
-    /// `GET /v1/approve` (OP-149 m.9): the call contract and its checks. `redirect_uri` must be
-    /// exactly one an active client of the realm registered, and nothing redirects before that
-    /// holds. The Approval Surface itself is a later feature: a valid call gets
-    /// `approval-surface-unavailable`.
-    pub async fn approve(&self, entry: &RealmEntry, query: &ApproveQuery) -> Reply {
-        let kit = match self.kit(entry).await {
-            Ok(k) => k,
-            Err(r) => return r,
-        };
-        if let Err(e) = approval_request(query) {
-            return problem(400, e.code(), "The approval call is not valid");
-        }
-        let clients = async {
-            let mut t = TenantTx::begin(&self.db, kit.tenant, kit.realm).await?;
-            let list = idp::clients_with_redirect(&mut t, &query.redirect_uri).await?;
-            t.commit().await?;
-            Ok::<_, access_store::StoreError>(list)
-        };
-        match clients.await {
-            Ok(list) if list.is_empty() => problem(
-                400,
-                ApproveRejection::RedirectUri.code(),
-                "The approval call is not valid",
-            ),
-            Ok(_) => problem(
-                501,
-                "approval-surface-unavailable",
-                "Approvals are not available yet",
             ),
             Err(_) => unavailable(),
         }

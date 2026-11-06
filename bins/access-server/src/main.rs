@@ -671,12 +671,17 @@ type HostedLogin = Arc<Hosted<login::HsmKits, SystemClock, Outbox>>;
 
 /// The Frontend API for products (OP-149 m.6, m.8, m.9) beside the hosted login: artifacts
 /// signed by the identity signer, device Instances through the authority plane.
-fn frontend<I: DeviceInstances + 'static>(
+fn frontend<I, Q>(
     config: &Config,
     router: Pool,
     hosted: HostedLogin,
-    instances: I,
-) -> Result<axum::Router, String> {
+    plane: I,
+    claims: Q,
+) -> Result<axum::Router, String>
+where
+    I: DeviceInstances + access_identity_ui::ports::Approvals + Clone + 'static,
+    Q: access_identity_ui::ports::ApprovalClaims + 'static,
+{
     let identity = config.identity.as_ref().ok_or("no identity section")?;
     Ok(me_router(
         RealmDiscovery::new(
@@ -686,7 +691,9 @@ fn frontend<I: DeviceInstances + 'static>(
         hosted,
         Devices {
             signer: SignerKeys::new(identity.signer.clone()),
-            instances,
+            instances: plane.clone(),
+            approvals: plane,
+            claims,
             pep: String::from(IDENTITY_PEP),
         },
     ))
@@ -929,7 +936,7 @@ async fn serve(
         api_base: issuer.clone(),
     }));
     // OP-150 L2, CMP-8
-    let renewing = claims::start(signer(), &platform_pools, domains.clone(), renew);
+    let (renewing, courier) = claims::start(signer(), &platform_pools, domains.clone(), renew);
     let _publishing = status::spawn(&domains, &product_app, &sequencer, config.signer.as_ref());
     // OP-62, MD-14, TN-111: the identity plane's idp.* write path and realm Genesis
     let idp_plane = idp::Plane::new(
@@ -949,7 +956,7 @@ async fn serve(
     // OP-150 m.2: authority tokens are the authority plane's projection.issue decisions
     let authorize = authorization(config, oauth_inputs, idp_plane.clone())?.merge(ssf);
     // OP-149 m.6, m.8, m.9
-    let me = frontend(config, tenants_pool.clone(), hosted, idp_plane)?;
+    let me = frontend(config, tenants_pool.clone(), hosted, idp_plane, courier)?;
     let adp = adp_router(
         Service::new(domains.clone(), limits.max_body_bytes),
         Discovery { issuer },

@@ -61,20 +61,20 @@
         "text": "Sign in with a passkey"
       },
       "options": {
+        "challenge": "c2lnbi1pbi1jaGFsbGVuZ2UtZXhhbXBsZS0wMDAwMDA",
+        "rpId": "acme.localhost",
         "allowCredentials": [
           {
+            "type": "public-key",
             "id": "Y3JlZC1hZGEtMDE",
             "transports": [
               "internal",
               "hybrid"
-            ],
-            "type": "public-key"
+            ]
           }
         ],
-        "challenge": "c2lnbi1pbi1jaGFsbGVuZ2UtZXhhbXBsZS0wMDAwMDA",
-        "rpId": "acme.localhost",
-        "timeout": 300000,
-        "userVerification": "preferred"
+        "userVerification": "preferred",
+        "timeout": 300000
       }
     },
     {

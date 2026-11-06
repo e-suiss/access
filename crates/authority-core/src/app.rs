@@ -724,6 +724,30 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         }
     }
 
+    /// The frame one evaluation runs in: the intent digest, the Exercise and the position the
+    /// decision record will have, with the actor, the proofs and the overlays.
+    fn frame<'a>(
+        &'a self,
+        (intent_digest, exercise, pos): (Digest, Digest, u64),
+        actor: Option<Actor>,
+        now: u64,
+        resolved: &'a Proofs,
+        compromised: Option<&'static str>,
+    ) -> Frame<'a> {
+        Frame {
+            intent_digest,
+            exercise,
+            pos,
+            actor,
+            now,
+            catalog: &self.catalog,
+            proofs: &resolved.proofs,
+            held: resolved.held,
+            policies: &self.policies,
+            compromised,
+        }
+    }
+
     /// Runs the evaluation over a snapshot, fetching state and counters as it asks for them
     /// (§17.1.1 steps 7–8).
     async fn passes(
@@ -1145,20 +1169,15 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                 .map_err(|_| CoreError::Protocol("proofs"))?
                 .saturating_add(u64::from(!open))
                 .saturating_add(1);
-            let frame = Frame {
-                intent_digest: digest,
-                exercise,
-                pos: head.saturating_add(records),
+            let frame = self.frame(
+                (digest, exercise, head.saturating_add(records)),
                 actor,
                 now,
-                catalog: &self.catalog,
-                proofs: &resolved.proofs,
-                held: resolved.held,
-                policies: &self.policies,
+                &resolved,
                 compromised,
-            };
+            );
             let (mut evaluation, snapshot) = self.passes(req, &frame).await?;
-            let (tier, render) = rendered(req, &evaluation)?;
+            let (tier, render, render_bytes) = rendered(req, &evaluation)?;
             self.tiered(req, &mut evaluation, open, now).await?;
             self.approval(req, actor, &resolved, &mut evaluation, &exercise, now)
                 .await?;
@@ -1188,6 +1207,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                 exercise,
                 artifacts: receipt.iter().chain(pap.iter()).map(|r| r.0).collect(),
                 render,
+                render_bytes,
                 tier,
             };
             let derived = self.derived(req, &resolved, exercise, now).await?;
@@ -1411,21 +1431,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         if !effects.is_empty() {
             decision.push(("effects", effects_value(&effects)));
         }
-        let draws: Vec<Draw> = evaluation
-            .draws
-            .iter()
-            .map(|(key, limit, draw, _)| Draw {
-                key: key.clone(),
-                limit: *limit,
-                draw: *draw,
-            })
-            // OP-141 m.28 (g)
-            .chain(evaluation.releases.iter().map(|(key, amount)| Draw {
-                key: meta::released_key(key),
-                limit: u64::MAX >> 1,
-                draw: *amount,
-            }))
-            .collect();
+        let draws = draws_of(evaluation);
         // OP-141 m.36 (a)
         if let Some(c) = consumption_value(&draws, &single_use) {
             decision.push(("consumption", c));
@@ -1449,7 +1455,15 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             } else {
                 Vec::new()
             },
-            proofs: foreign.map(|(d, b)| vec![(d.0, b)]).unwrap_or_default(),
+            // OP-143 m.13 (g); §9.14.5: the render a REQUIRE_ACTION showed, kept by its digest
+            proofs: foreign
+                .map(|(d, b)| (d.0, b))
+                .into_iter()
+                .chain(
+                    (outcome == "require_action")
+                        .then(|| (shape.render.0, shape.render_bytes.clone())),
+                )
+                .collect(),
             reads,
             writes: effects.iter().map(|(k, _)| k.clone()).collect(),
             draws,
@@ -1457,6 +1471,25 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         });
         Ok(items)
     }
+}
+
+/// The counter draws of a decision record: its budget draws and, for a release, the released
+/// counters (OP-141 m.28 (g)).
+fn draws_of(evaluation: &Evaluation) -> Vec<Draw> {
+    evaluation
+        .draws
+        .iter()
+        .map(|(key, limit, draw, _)| Draw {
+            key: key.clone(),
+            limit: *limit,
+            draw: *draw,
+        })
+        .chain(evaluation.releases.iter().map(|(key, amount)| Draw {
+            key: meta::released_key(key),
+            limit: u64::MAX >> 1,
+            draw: *amount,
+        }))
+        .collect()
 }
 
 /// The effects every ALLOW adds: the contributions it relied on are consumed (OP-141 m.19
@@ -1544,7 +1577,7 @@ fn exercise_draws(evaluation: &Evaluation) -> Vec<meta::ExerciseDraw> {
 fn rendered(
     req: &Request,
     evaluation: &Evaluation,
-) -> Result<(access_kernel::tier::Tier, Digest), CoreError> {
+) -> Result<(access_kernel::tier::Tier, Digest, Vec<u8>), CoreError> {
     let tier = access_kernel::tier::of(
         &req.intent,
         req.payload.as_ref(),
@@ -1556,9 +1589,12 @@ fn rendered(
         &req.intent,
         access_kernel::render::DEFAULT_LOCALE,
     )
-    .and_then(|r| access_kernel::render::digest(&r))
     .map_err(|_| CoreError::Protocol("render"))?;
-    Ok((tier, render))
+    let bytes =
+        access_kernel::render::encode(&render).map_err(|_| CoreError::Protocol("render"))?;
+    let digest =
+        Digest(suiss_crypto::digest::context_digest(access_kernel::render::CONTEXT, &bytes).0);
+    Ok((tier, digest, bytes))
 }
 
 /// Whom the rate limits count: the actor Instance, else the PEP (OP-141 m.23 (a)).
@@ -1617,8 +1653,9 @@ struct Shape<'a> {
     exercise: Digest,
     artifacts: Vec<Digest>,
     /// The intent's render digest and tier, kept with the nonce for its approval (§9.14.1,
-    /// OP-150 L6).
+    /// OP-150 L6), and the render itself for the surface to show (§9.14.5).
     render: Digest,
+    render_bytes: Vec<u8>,
     tier: access_kernel::tier::Tier,
 }
 

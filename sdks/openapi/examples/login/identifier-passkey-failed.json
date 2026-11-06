@@ -43,11 +43,11 @@
       "type": "passkey_autofill",
       "field": "identifier",
       "options": {
-        "allowCredentials": [],
         "challenge": "c2lnbi1pbi1jaGFsbGVuZ2UtZXhhbXBsZS0wMDAwMDA",
         "rpId": "acme.localhost",
-        "timeout": 300000,
-        "userVerification": "preferred"
+        "allowCredentials": [],
+        "userVerification": "preferred",
+        "timeout": 300000
       }
     },
     {
@@ -57,11 +57,11 @@
         "text": "Sign in with a passkey"
       },
       "options": {
-        "allowCredentials": [],
         "challenge": "c2lnbi1pbi1jaGFsbGVuZ2UtZXhhbXBsZS0wMDAwMDA",
         "rpId": "acme.localhost",
-        "timeout": 300000,
-        "userVerification": "preferred"
+        "allowCredentials": [],
+        "userVerification": "preferred",
+        "timeout": 300000
       }
     },
     {

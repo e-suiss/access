@@ -289,6 +289,44 @@ fn time_field(description: &str) -> Value {
     json!({ "type": "string", "format": "date-time", "description": description })
 }
 
+/// The stable problem codes of this contract.
+fn problem_codes() -> Value {
+    string_enum(&[
+        "session-required",
+        "step-up-required",
+        "invalid-challenge",
+        "invalid-instance-key",
+        "invalid-proof-of-possession",
+        "invalid-party",
+        "instance-not-registered",
+        "instance-exists",
+        "instance-not-terminated",
+        "invalid-contribution",
+        "invalid-expiry",
+        "approval-domain",
+        "approval-request-unknown",
+        "approval-request-changed",
+        "approval-started",
+        "approval-not-started",
+        "approval-finished",
+        "approval-expired",
+        "approver-instance",
+        "approver-passkey",
+        "assertion-rejected",
+        "cooling",
+        "approval-claim-not-admitted",
+        "approval-not-allowed",
+        "approval-refused",
+        "invalid-request",
+        "invalid-content",
+        "invalid-approval-request",
+        "invalid-state",
+        "invalid-redirect-uri",
+        "approval-surface-unavailable",
+        "unavailable",
+    ])
+}
+
 fn components() -> Value {
     json!({
         "InstanceChallenge": object(
@@ -363,24 +401,7 @@ fn components() -> Value {
                 "detail": { "type": "string" },
             },
         },
-        "ProblemCode": string_enum(&[
-            "session-required",
-            "step-up-required",
-            "invalid-challenge",
-            "invalid-instance-key",
-            "invalid-proof-of-possession",
-            "invalid-party",
-            "instance-not-registered",
-            "instance-exists",
-            "instance-not-terminated",
-            "invalid-request",
-            "invalid-content",
-            "invalid-approval-request",
-            "invalid-state",
-            "invalid-redirect-uri",
-            "approval-surface-unavailable",
-            "unavailable",
-        ]),
+        "ProblemCode": problem_codes(),
     })
 }
 
@@ -491,6 +512,16 @@ pub fn openapi() -> Value {
         }}),
     );
     paths.insert(APPROVE_PATH.to_owned(), approve());
+    super::approval::paths(&mut paths);
+    let mut schemas = components();
+    if let (Some(all), Some(extra)) = (
+        schemas.as_object_mut(),
+        super::approval::components().as_object(),
+    ) {
+        for (k, v) in extra {
+            all.insert(k.clone(), v.clone());
+        }
+    }
     json!({
         "openapi": "3.1.1",
         "info": {
@@ -499,7 +530,7 @@ pub fn openapi() -> Value {
             "license": { "name": "Apache-2.0", "identifier": "Apache-2.0" },
         },
         "paths": paths,
-        "components": { "schemas": components() },
+        "components": { "schemas": schemas },
     })
 }
 
@@ -515,19 +546,16 @@ fn approve() -> Value {
     };
     json!({ "get": {
             "operationId": "approve",
-            "summary": "The approval call (OP-149 m.9): shows the authority request on the Approval Surface and sends the browser back to redirect_uri with exercise, render_digest and state; the result is confirmed with GET /access/v1/exercises/{id}.",
+            "summary": "The approval call (OP-149 m.9, OP-150 m.3 (r)): the hosted Approval Surface for a request pushed to POST /v1/approve/requests; the page shows the render the decision point produced, takes one passkey assertion over H(AAS) and sends the browser back to redirect_uri with exercise, render_digest and state; the result is confirmed with GET /access/v1/exercises/{id}.",
             "parameters": [
                 q("request", "The authority request's digest (base64url, 32 bytes) or a pushed request_uri (urn:ietf:params:oauth:request_uri:…)."),
                 q("redirect_uri", "Exactly a redirect URI an active client of the realm registered."),
                 q("state", "1 to 512 printable ASCII characters, echoed unchanged."),
             ],
             "responses": {
-                "303": {
-                    "description": "Back to redirect_uri?exercise=<base64url ExerciseID>&render_digest=<base64url>&state=<state>.",
-                    "headers": { "Location": { "schema": { "type": "string" } } },
-                },
+                "200": { "description": "The hosted approval page (text/html), which opens the flow with POST /v1/approve/flows and, once approved, goes to redirect_uri?exercise=<base64url ExerciseID>&render_digest=<base64url>&state=<state>." },
                 "400": problem("invalid-approval-request, invalid-state or invalid-redirect-uri; the browser is not redirected."),
-                "501": problem("The Approval Surface is not served yet (approval-surface-unavailable)."),
+                "404": problem("approval-request-unknown: nothing was pushed under this request, or it expired."),
                 "503": problem("Temporarily unavailable."),
             },
     }})

@@ -12,6 +12,7 @@ use alloc::vec::Vec;
 use suiss_crypto::dcbor::{self, Limits, Value};
 use suiss_crypto::digest::context_digest;
 
+use crate::codec::{Fields, ModelError, text};
 use crate::digest::Digest;
 use crate::intent::{IntentEnvelope, ParamValue, intent_digest};
 use crate::model::{EqValue, PurposeRef, ResourceRef};
@@ -243,12 +244,62 @@ fn value(r: &Render) -> Value {
     Value::Map(entries)
 }
 
+/// The render as deterministic CBOR: what a decision point keeps for the Approval Surface to
+/// show, under `render_digest` (§9.14.5 WYSIWYS).
+///
+/// # Errors
+/// The render cannot be encoded.
+pub fn encode(r: &Render) -> Result<Vec<u8>, dcbor::EncodeError> {
+    dcbor::encode(&value(r), Limits::CEILING)
+}
+
+/// A render from its [`encode`]d bytes.
+///
+/// # Errors
+/// [`ModelError`] for anything that is not a render.
+pub fn decode(bytes: &[u8]) -> Result<Render, ModelError> {
+    let v = dcbor::decode(bytes, Limits::CEILING).map_err(ModelError::Cbor)?;
+    let mut f = Fields::of(&v)?;
+    let schema = Digest::from_value(f.req("schema")?).ok_or(ModelError::Shape)?;
+    let intent = Digest::from_value(f.req("intent")?).ok_or(ModelError::Shape)?;
+    let locale = String::from(text(f.req("locale")?)?);
+    let Value::Array(items) = f.req("fields")? else {
+        return Err(ModelError::Shape);
+    };
+    let mut fields = Vec::with_capacity(items.len());
+    for item in items {
+        let Value::Array(parts) = item else {
+            return Err(ModelError::Shape);
+        };
+        let [Value::Text(name), Value::Text(t), Value::Bool(material)] = parts.as_slice() else {
+            return Err(ModelError::Shape);
+        };
+        fields.push(Field {
+            name: name.clone(),
+            text: t.clone(),
+            material: *material,
+        });
+    }
+    let template = f
+        .opt("template")
+        .map(|t| text(t).map(String::from))
+        .transpose()?;
+    f.done()?;
+    Ok(Render {
+        schema,
+        intent,
+        locale,
+        template,
+        fields,
+    })
+}
+
 /// `render_digest`: the digest of the render under `access/render/v1`.
 ///
 /// # Errors
 /// The render cannot be encoded.
 pub fn digest(r: &Render) -> Result<Digest, dcbor::EncodeError> {
-    let bytes = dcbor::encode(&value(r), Limits::CEILING)?;
+    let bytes = encode(r)?;
     Ok(Digest(context_digest(CONTEXT, &bytes).0))
 }
 

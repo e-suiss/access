@@ -1,0 +1,35 @@
+{
+  "flow": "PDw8PDw8PDw8PDw8PDw8PA",
+  "render": {
+    "fields": [
+      {
+        "name": "action",
+        "text": "shop/refund@1",
+        "material": true
+      },
+      {
+        "name": "amount",
+        "text": "4200 eur_cent",
+        "material": true
+      }
+    ],
+    "reason": "The customer reported that the parcel arrived damaged.",
+    "tier": 1,
+    "expires_at": "2026-01-01T00:05:00Z"
+  },
+  "options": {
+    "challenge": "TU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU1NTU0",
+    "rpId": "acme.example",
+    "allowCredentials": [
+      {
+        "type": "public-key",
+        "id": "bm5ubm5ubm5ubm5ubm5ubm5ubm4",
+        "transports": [
+          "internal"
+        ]
+      }
+    ],
+    "userVerification": "preferred",
+    "timeout": 300000
+  }
+}

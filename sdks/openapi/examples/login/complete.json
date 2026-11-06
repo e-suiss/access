@@ -47,37 +47,37 @@
         "text": "Create a passkey"
       },
       "options": {
-        "attestation": "none",
-        "authenticatorSelection": {
-          "residentKey": "required",
-          "userVerification": "preferred"
-        },
-        "challenge": "c2lnbi1pbi1jaGFsbGVuZ2UtZXhhbXBsZS0wMDAwMDA",
-        "excludeCredentials": [],
-        "extensions": {
-          "credProps": true
-        },
-        "hints": [],
-        "pubKeyCredParams": [
-          {
-            "alg": -7,
-            "type": "public-key"
-          },
-          {
-            "alg": -8,
-            "type": "public-key"
-          }
-        ],
         "rp": {
           "id": "acme.localhost",
           "name": "Acme"
         },
-        "timeout": 300000,
         "user": {
-          "displayName": "Ada",
           "id": "dXNlci1oYW5kbGUtZXhhbXBsZS0wMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMA",
-          "name": "ada@example.org"
-        }
+          "name": "ada@example.org",
+          "displayName": "Ada"
+        },
+        "challenge": "c2lnbi1pbi1jaGFsbGVuZ2UtZXhhbXBsZS0wMDAwMDA",
+        "pubKeyCredParams": [
+          {
+            "type": "public-key",
+            "alg": -7
+          },
+          {
+            "type": "public-key",
+            "alg": -8
+          }
+        ],
+        "timeout": 300000,
+        "excludeCredentials": [],
+        "authenticatorSelection": {
+          "residentKey": "required",
+          "userVerification": "preferred"
+        },
+        "attestation": "none",
+        "extensions": {
+          "credProps": true
+        },
+        "hints": []
       }
     }
   ],

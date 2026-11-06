@@ -1,0 +1,162 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT request_id, digest, request_uri, request, contribution, expires_ms, session_id,\n                statement, aas, started_ms, finished_ms, exercise\n           FROM access.approval_requests\n          WHERE tenant_id = $1 AND realm_id = $2 AND request_uri = $3\n          ORDER BY created_at DESC LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "request_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.approval_requests",
+            "name": "request_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "digest",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.approval_requests",
+            "name": "digest"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "request_uri",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.approval_requests",
+            "name": "request_uri"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "request",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.approval_requests",
+            "name": "request"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "contribution",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.approval_requests",
+            "name": "contribution"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "expires_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.approval_requests",
+            "name": "expires_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "session_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.approval_requests",
+            "name": "session_id"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "statement",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.approval_requests",
+            "name": "statement"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "aas",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.approval_requests",
+            "name": "aas"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "started_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.approval_requests",
+            "name": "started_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "finished_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.approval_requests",
+            "name": "finished_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "exercise",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.approval_requests",
+            "name": "exercise"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "863205d00a8e82d745980a0217c7c9e981d18ee0cc70c4f90e0d1e69bbd7c7dc"
+}

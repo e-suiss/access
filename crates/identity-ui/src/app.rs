@@ -11,6 +11,7 @@
 )]
 
 mod account;
+mod approve;
 mod credential;
 mod me;
 
@@ -84,6 +85,10 @@ pub enum Body {
     Problem(Problem),
     /// A JSON document.
     Json(Value),
+    /// A hosted page (`text/html`), served with the hosted login's security headers.
+    Html(&'static str),
+    /// A hosted page's script (`text/javascript`).
+    Script(&'static str),
     /// Nothing.
     Empty,
 }
@@ -128,6 +133,16 @@ impl Reply {
 
     fn json(status: u16, value: Value) -> Self {
         Self::new(status, Body::Json(value))
+    }
+
+    fn html(page: &'static str) -> Self {
+        Self::new(200, Body::Html(page))
+    }
+
+    /// A hosted script.
+    #[must_use]
+    pub fn script(source: &'static str) -> Self {
+        Self::new(200, Body::Script(source))
     }
 
     fn cookie(mut self, c: Option<String>) -> Self {
