@@ -172,6 +172,20 @@ impl Reader for PgReader {
     async fn nonce_opened(&self, nonce: &[u8]) -> Result<Option<u64>, CoreError> {
         Ok(access_store::authority::nonce_opened(&self.pool, &self.domain, nonce).await?)
     }
+
+    async fn opening(&self, intent: &Digest) -> Result<Option<crate::ports::Opening>, CoreError> {
+        let Some(row) =
+            access_store::authority::find_opening(&self.pool, &self.domain, &intent.0).await?
+        else {
+            return Ok(None);
+        };
+        let tier = crate::app::approval::tier_of(row.tier)
+            .ok_or(CoreError::Store(access_store::StoreError::Corrupt))?;
+        Ok(Some(crate::ports::Opening {
+            render: Digest(row.render_digest),
+            tier,
+        }))
+    }
 }
 
 /// Salts from the operating system's random source (OP-106 m.15, OP-141 m.18 (e)).

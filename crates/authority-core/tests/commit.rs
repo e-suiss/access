@@ -20,6 +20,7 @@ use access_authority_sequencer::app::Leader;
 use access_authority_sequencer::ports::Clock;
 use access_crypto::event_id::EventKey;
 use access_crypto::secret::Secret;
+use access_kernel::aas::{Act, ApprovalAct};
 use access_kernel::ais::{CONTENT_TYPE, Statement};
 use access_kernel::codec::Canonical;
 use access_kernel::combinator::{Capacity, Mode, Outcome};
@@ -397,6 +398,30 @@ fn incoming(request: Request, seed: u8) -> Incoming {
 
 async fn send(core: &mut Core, request: Request, seed: u8) -> Result<Response, CoreError> {
     core.exercise(&incoming(request, seed), NOW).await
+}
+
+/// Sends `request` at trusted time `now`, its AIS issued then.
+async fn send_at(
+    core: &mut Core,
+    request: Request,
+    seed: u8,
+    now: u64,
+) -> Result<Response, CoreError> {
+    let mut inc = incoming(request, seed);
+    let digest = access_kernel::intent::intent_digest(&inc.request.intent).unwrap();
+    let statement = Statement {
+        domain: inc.request.domain,
+        nonce: inc.request.nonce.clone(),
+        intent: digest,
+        mode: inc.request.mode,
+        pep: PEP.to_owned(),
+        capacity: inc.request.capacity,
+        basis: inc.request.basis,
+        iat: now,
+        exercise: inc.request.exercise,
+    };
+    inc.ais = Some(sign(&statement, seed));
+    core.exercise(&inc, now).await
 }
 
 fn allowed(r: &Response) {
@@ -792,10 +817,14 @@ fn gated_with(terms: &[RequirementTerm], quota: u64) -> BTreeMap<String, Opened>
             Value::Map(vec![(Value::text("resource"), selector("shop").to_value())]),
         ),
         (Value::text("root"), sole(ROOT)),
-        (
-            Value::text("root_terms"),
-            set(terms.iter().map(Canonical::to_value).collect()),
-        ),
+        (Value::text("root_terms"), {
+            let mut keyed: Vec<(Vec<u8>, Value)> = terms
+                .iter()
+                .map(|t| (t.to_bytes().unwrap(), t.to_value()))
+                .collect();
+            keyed.sort_by(|a, b| a.0.cmp(&b.0));
+            set(keyed.into_iter().map(|(_, v)| v).collect())
+        }),
     ]);
     g.insert("anchors".to_owned(), opened(set(vec![shop])));
     let Some(Value::Array(mut grants)) = g.get("grants").map(|o| o.value.clone()) else {
@@ -838,7 +867,28 @@ fn gated_with(terms: &[RequirementTerm], quota: u64) -> BTreeMap<String, Opened>
             ]),
         ),
     ]);
-    add_acceptances(&mut g, vec![acceptance]);
+    // OP-150 L6: ALICE also issues `authentication` Claims about herself, for her approvals
+    let authentication = Value::Map(vec![
+        (Value::text("issuer"), ALICE.to_value()),
+        (Value::text("use"), Value::text("predicate-input")),
+        (
+            Value::text("classes"),
+            set(vec![Value::text("authentication")]),
+        ),
+        (Value::text("subject"), SubjectSelector::Public.to_value()),
+        (
+            Value::text("validity"),
+            set(vec![Value::Unsigned(0), Value::Unsigned(1_000_000)]),
+        ),
+        (
+            Value::text("quota"),
+            Value::Map(vec![
+                (Value::text("count"), Value::Unsigned(100)),
+                (Value::text("window_s"), Value::Unsigned(3_600)),
+            ]),
+        ),
+    ]);
+    add_acceptances(&mut g, vec![acceptance, authentication]);
     g
 }
 
@@ -870,23 +920,29 @@ fn claim_after(
     issued_at: u64,
     supersedes: Option<Id>,
 ) -> Vec<u8> {
-    let st = access_kernel::claim::Statement {
-        domain: d,
-        issuer,
-        subject: ROOT,
-        class: class.to_owned(),
-        value: Some(EqValue::Bool(true)),
-        issued_at,
-        validity: Window {
-            from: 0,
-            until: 1_000_000,
+    sign_claim(
+        &access_kernel::claim::Statement {
+            domain: d,
+            issuer,
+            subject: ROOT,
+            class: class.to_owned(),
+            value: Some(EqValue::Bool(true)),
+            issued_at,
+            validity: Window {
+                from: 0,
+                until: 1_000_000,
+            },
+            assurance: BTreeMap::new(),
+            bound_intent: None,
+            bound_instance: None,
+            bound_resource: None,
+            supersedes,
         },
-        assurance: BTreeMap::new(),
-        bound_intent: None,
-        bound_instance: None,
-        bound_resource: None,
-        supersedes,
-    };
+        seed,
+    )
+}
+
+fn sign_claim(st: &access_kernel::claim::Statement, seed: u8) -> Vec<u8> {
     let with = signing(seed);
     let prot = dcbor::encode(
         &Value::Map(vec![
@@ -1557,8 +1613,137 @@ fn contribute(d: Digest, nonce: u8, target: Digest) -> Request {
     r
 }
 
-// OP-141 m.19 (e)–(h), L0-META-30: an approval is a contribution bound to the intent; it meets
-// the requirement once and is consumed
+/// ALICE's Instance, opened by `onboard(.., (3, 4))`.
+fn alice_instance(d: Digest) -> Id {
+    meta::object_id(&meta::exercise_id(&d, &[4; 16]).unwrap(), kind::INSTANCE, 0)
+}
+
+/// The render digest of a `shop` request as the decision point computes it (§9.13.3, XI-8).
+fn render_of(req: &Request) -> Digest {
+    let r = access_kernel::render::of(
+        Some(&schema_of(&req.intent.action.name)),
+        &req.intent,
+        access_kernel::render::DEFAULT_LOCALE,
+    )
+    .unwrap();
+    access_kernel::render::digest(&r).unwrap()
+}
+
+/// The Approval Act Statement of ALICE's contribution `nonce` to `target` (§9.14.1 A step 2).
+fn approval_act(
+    d: Digest,
+    nonce: u8,
+    target: Digest,
+    render: Digest,
+    issued_at: u64,
+    expires_at: u64,
+) -> ApprovalAct {
+    ApprovalAct {
+        act: Act::Contribution("approve".to_owned()),
+        instance: alice_instance(d),
+        party: ALICE,
+        capacity: Capacity::Own,
+        target,
+        domain: d,
+        nonce: vec![nonce; 16],
+        work_gate: None,
+        surface_profile: "suiss-approval-surface".to_owned(),
+        surface_version: 1,
+        render_digest: render,
+        material_fields: ["action".to_owned(), "resource".to_owned()]
+            .into_iter()
+            .collect(),
+        issued_at,
+        expires_at,
+    }
+}
+
+/// The `authentication` Claim ALICE's realm issuer (here ALICE herself) issued for the assertion
+/// over H(AAS) (§9.14.1 A step 3, §10.1.5): bound to the statement, with its assurance.
+fn approval_claim(
+    d: Digest,
+    statement: Digest,
+    assurance: &[(&str, u64)],
+    auth_time: u64,
+) -> Vec<u8> {
+    sign_claim(
+        &access_kernel::claim::Statement {
+            domain: d,
+            issuer: ALICE,
+            subject: ALICE,
+            class: "authentication".to_owned(),
+            value: Some(EqValue::Bytes(vec![0xaa; 32])),
+            issued_at: auth_time,
+            validity: Window {
+                from: auth_time,
+                until: auth_time.saturating_add(12 * 3_600_000),
+            },
+            assurance: assurance
+                .iter()
+                .map(|(k, v)| ((*k).to_owned(), *v))
+                .collect(),
+            bound_intent: Some(statement),
+            bound_instance: None,
+            bound_resource: None,
+            supersedes: None,
+        },
+        ALICE_KEY,
+    )
+}
+
+const PASSKEY_UV: [(&str, u64); 6] = [
+    ("aal", 2),
+    ("phishing_resistant", 1),
+    ("uv", 1),
+    ("human_presence", 1),
+    ("hardware_bound", 0),
+    ("non_custodial", 0),
+];
+
+/// ALICE's approval of `target` (its render `render`) on contribution `nonce`: the statement and
+/// the Claim bound to it, with `assurance` at `auth_time`.
+fn approved(
+    d: Digest,
+    nonce: u8,
+    target: Digest,
+    render: Digest,
+    assurance: &[(&str, u64)],
+    auth_time: u64,
+) -> Request {
+    approved_at(d, nonce, target, render, assurance, auth_time, NOW)
+}
+
+/// [`approved`] with the statement issued at `now`.
+fn approved_at(
+    d: Digest,
+    nonce: u8,
+    target: Digest,
+    render: Digest,
+    assurance: &[(&str, u64)],
+    auth_time: u64,
+    now: u64,
+) -> Request {
+    let act = approval_act(
+        d,
+        nonce,
+        target,
+        render,
+        now.saturating_sub(1_000),
+        now.saturating_add(60_000),
+    );
+    let h = access_kernel::aas::digest(&act).unwrap();
+    with_proofs(
+        contribute(d, nonce, target),
+        vec![
+            ProofRef::Aas(act.to_bytes().unwrap()),
+            ProofRef::Claim(approval_claim(d, h, assurance, auth_time)),
+        ],
+    )
+}
+
+// OP-141 m.19 (e)–(h), L0-META-30, §9.14.1 A: an approval is a contribution bound to the intent,
+// made with the approver's statement and the authentication bound to it; it meets the
+// requirement once and is consumed
 #[tokio::test]
 async fn a_contribution_approves_once() {
     // G12, G13, SI-5, SI-17, EI-18, XI-19
@@ -1574,15 +1759,31 @@ async fn a_contribution_approves_once() {
     let shop = ExerciseBasis::Anchor(meta::object_id(&d, kind::ANCHOR, 1));
     let target = shop_request(d, 9, Mode::Commit, shop);
     let digest = access_kernel::intent::intent_digest(&target.intent).unwrap();
+    let render = render_of(&target);
 
     let asked = send(&mut core, target.clone(), ROOT_KEY).await.unwrap();
     assert_eq!(asked.decision.outcome, Outcome::RequireAction);
 
-    let given = send(&mut core, contribute(d, 20, digest), ALICE_KEY)
-        .await
-        .unwrap();
+    let given = send(
+        &mut core,
+        approved(d, 20, digest, render, &PASSKEY_UV, NOW - 5_000),
+        ALICE_KEY,
+    )
+    .await
+    .unwrap();
     allowed(&given);
     let approval = given.exercise.unwrap();
+    // SI-5, §13.7.3: the contribution carries H(AAS) and the bound Claim's assurance
+    let state = state_of(&db, d, &meta::exercise_key(kind::CONTRIBUTION, &approval))
+        .await
+        .map(|b| {
+            meta::ContributionState::from_value(&dcbor::decode(&b, Limits::CEILING).unwrap())
+                .unwrap()
+        })
+        .unwrap();
+    assert!(state.statement.is_some());
+    assert_eq!(state.assurance.get("human_presence"), Some(&1));
+    assert_eq!(state.auth_time, Some(NOW - 5_000));
 
     let done = send(
         &mut core,
@@ -1607,9 +1808,13 @@ async fn a_contribution_approves_once() {
     assert_eq!(reused.decision.outcome, Outcome::RequireAction);
 
     // SEC11: a contribution from an Instance that has since ended approves nothing
-    let again = send(&mut core, contribute(d, 22, digest), ALICE_KEY)
-        .await
-        .unwrap();
+    let again = send(
+        &mut core,
+        approved(d, 22, digest, render, &PASSKEY_UV, NOW - 5_000),
+        ALICE_KEY,
+    )
+    .await
+    .unwrap();
     allowed(&again);
     let alice = meta::object_id(&meta::exercise_id(&d, &[4; 16]).unwrap(), kind::INSTANCE, 0);
     let end = Payload::InstanceTerminate { instance: alice };
@@ -1631,7 +1836,7 @@ async fn a_contribution_approves_once() {
         .await
         .unwrap(),
     );
-    let stale = send(
+    let ended_approval = send(
         &mut core,
         with_proofs(
             shop_request(d, 11, Mode::Commit, shop),
@@ -1641,13 +1846,286 @@ async fn a_contribution_approves_once() {
     )
     .await
     .unwrap();
-    assert_eq!(stale.decision.outcome, Outcome::RequireAction);
+    assert_eq!(ended_approval.decision.outcome, Outcome::RequireAction);
 
     // L0-META-30: without a Grant over the class, a contribution is denied
     let mut other = contribute(d, 21, digest);
     other.basis = ExerciseBasis::Anchor(meta::object_id(&d, kind::ANCHOR, 1));
     let denied = send(&mut core, other, ROOT_KEY).await.unwrap();
     assert_ne!(denied.decision.outcome, Outcome::Allow);
+    fold_check(&db.sequencer, d).await.unwrap();
+}
+
+fn protocol(r: Result<Response, CoreError>) -> &'static str {
+    match r {
+        Err(CoreError::Protocol(code)) => code,
+        other => panic!("expected a protocol rejection, got {other:?}"),
+    }
+}
+
+// §9.14.1 A step 4, §9.14.2, L2-AAS-3, L2-AAS-4, §13.7.3 "AAS expires_at": a contribute without
+// its statement, with a statement over another render ("The request changed after you
+// approved…"), another target, another nonce or beyond the tier's expiry ceiling, or without
+// the authentication bound to H(AAS), is refused before any decision
+#[tokio::test]
+async fn an_approval_must_fit_the_request_it_answers() {
+    // XI-7, SI-5
+    let db = fresh().await.unwrap();
+    let approve = term(
+        ProofKind::Contribution,
+        "approve",
+        ProofBinding::IntentDigest,
+    );
+    let (mut core, d) = setup_with(&db, gated(&[approve])).await;
+    onboard(&mut core, d, ROOT, ROOT_KEY, (1, 2)).await;
+    onboard(&mut core, d, ALICE, ALICE_KEY, (3, 4)).await;
+    let shop = ExerciseBasis::Anchor(meta::object_id(&d, kind::ANCHOR, 1));
+    let target = shop_request(d, 9, Mode::Commit, shop);
+    let digest = access_kernel::intent::intent_digest(&target.intent).unwrap();
+    let render = render_of(&target);
+    let asked = send(&mut core, target.clone(), ROOT_KEY).await.unwrap();
+    assert_eq!(asked.decision.outcome, Outcome::RequireAction);
+
+    // no statement at all
+    assert_eq!(
+        protocol(send(&mut core, contribute(d, 20, digest), ALICE_KEY).await),
+        "aas"
+    );
+    // a statement over a render the decision point never produced: the request changed
+    let changed = approval_act(d, 20, digest, Digest([0xcc; 32]), NOW - 1_000, NOW + 60_000);
+    let h = access_kernel::aas::digest(&changed).unwrap();
+    let r = with_proofs(
+        contribute(d, 20, digest),
+        vec![
+            ProofRef::Aas(changed.to_bytes().unwrap()),
+            ProofRef::Claim(approval_claim(d, h, &PASSKEY_UV, NOW - 5_000)),
+        ],
+    );
+    assert_eq!(protocol(send(&mut core, r, ALICE_KEY).await), "aas-render");
+    // a target no REQUIRE_ACTION ever opened
+    let nowhere = Digest([0xdd; 32]);
+    assert_eq!(
+        protocol(
+            send(
+                &mut core,
+                approved(d, 20, nowhere, render, &PASSKEY_UV, NOW - 5_000),
+                ALICE_KEY
+            )
+            .await
+        ),
+        "aas-target"
+    );
+    // the statement names another contribution nonce
+    let other = approval_act(d, 21, digest, render, NOW - 1_000, NOW + 60_000);
+    let h = access_kernel::aas::digest(&other).unwrap();
+    let r = with_proofs(
+        contribute(d, 20, digest),
+        vec![
+            ProofRef::Aas(other.to_bytes().unwrap()),
+            ProofRef::Claim(approval_claim(d, h, &PASSKEY_UV, NOW - 5_000)),
+        ],
+    );
+    assert_eq!(protocol(send(&mut core, r, ALICE_KEY).await), "aas-nonce");
+    // a statement valid longer than the tier allows (CT1: 15 minutes)
+    let long = approval_act(d, 20, digest, render, NOW - 1_000, NOW + 16 * 60_000);
+    let h = access_kernel::aas::digest(&long).unwrap();
+    let r = with_proofs(
+        contribute(d, 20, digest),
+        vec![
+            ProofRef::Aas(long.to_bytes().unwrap()),
+            ProofRef::Claim(approval_claim(d, h, &PASSKEY_UV, NOW - 5_000)),
+        ],
+    );
+    assert_eq!(protocol(send(&mut core, r, ALICE_KEY).await), "aas-expiry");
+    // a statement nobody authenticated to
+    let unbound = approval_act(d, 20, digest, render, NOW - 1_000, NOW + 60_000);
+    let r = with_proofs(
+        contribute(d, 20, digest),
+        vec![ProofRef::Aas(unbound.to_bytes().unwrap())],
+    );
+    assert_eq!(protocol(send(&mut core, r, ALICE_KEY).await), "aas-binding");
+    // a Claim bound to a different statement than the one presented
+    let r = with_proofs(
+        contribute(d, 20, digest),
+        vec![
+            ProofRef::Aas(unbound.to_bytes().unwrap()),
+            ProofRef::Claim(approval_claim(
+                d,
+                Digest([0xee; 32]),
+                &PASSKEY_UV,
+                NOW - 5_000,
+            )),
+        ],
+    );
+    assert_eq!(protocol(send(&mut core, r, ALICE_KEY).await), "aas-binding");
+    // the same statement, bound and fresh: approved
+    allowed(
+        &send(
+            &mut core,
+            approved(d, 20, digest, render, &PASSKEY_UV, NOW - 5_000),
+            ALICE_KEY,
+        )
+        .await
+        .unwrap(),
+    );
+    fold_check(&db.sequencer, d).await.unwrap();
+}
+
+// §13.7.3 "Authenticator class", "Human presence", "Step-up freshness"; N-45, SEC10, SEC26,
+// IDP-8: an approval authenticated with a password or TOTP, without a present human, or longer
+// ago than the tier's ceiling is not an approval; the decision asks for the authentication
+// term, it grants nothing (X29)
+#[tokio::test]
+async fn a_weak_or_stale_approval_asks_for_the_tiers_authentication() {
+    let db = fresh().await.unwrap();
+    let approve = term(
+        ProofKind::Contribution,
+        "approve",
+        ProofBinding::IntentDigest,
+    );
+    let (mut core, d) = setup_with(&db, gated(&[approve])).await;
+    onboard(&mut core, d, ROOT, ROOT_KEY, (1, 2)).await;
+    onboard(&mut core, d, ALICE, ALICE_KEY, (3, 4)).await;
+    let shop = ExerciseBasis::Anchor(meta::object_id(&d, kind::ANCHOR, 1));
+    let target = shop_request(d, 9, Mode::Commit, shop);
+    let digest = access_kernel::intent::intent_digest(&target.intent).unwrap();
+    let render = render_of(&target);
+    let asked = send(&mut core, target.clone(), ROOT_KEY).await.unwrap();
+    assert_eq!(asked.decision.outcome, Outcome::RequireAction);
+
+    let password = [("aal", 1), ("phishing_resistant", 0), ("human_presence", 0)];
+    let totp = [("aal", 2), ("phishing_resistant", 0), ("human_presence", 0)];
+    let absent = [("aal", 2), ("phishing_resistant", 1), ("human_presence", 0)];
+    let later = NOW + 15 * 60_000 + 1;
+    let mut nonce = 20;
+    for (levels, auth_time, now) in [
+        (&password[..], NOW - 5_000, NOW),
+        (&totp[..], NOW - 5_000, NOW),
+        (&absent[..], NOW - 5_000, NOW),
+        (&PASSKEY_UV[..], NOW, later),
+    ] {
+        let r = send_at(
+            &mut core,
+            approved_at(d, nonce, digest, render, levels, auth_time, now),
+            ALICE_KEY,
+            now,
+        )
+        .await
+        .unwrap();
+        assert_eq!(r.decision.outcome, Outcome::RequireAction, "{levels:?}");
+        assert!(r.exercise.is_none());
+        let unmet = &r.decision.unmet[0];
+        assert_eq!(unmet.term.class, "authentication");
+        assert_eq!(unmet.term.proof_kind, ProofKind::Claim);
+        assert_eq!(unmet.term.freshness_ms, Some(15 * 60_000));
+        assert_eq!(unmet.term.assurance.get("phishing_resistant"), Some(&1));
+        assert_eq!(unmet.term.assurance.get("human_presence"), Some(&1));
+        assert!(unmet.satisfiable_by_actor);
+        nonce += 1;
+    }
+    // a fresh phishing-resistant assertion from a present human, within 15 minutes: approved
+    let edge = NOW + 15 * 60_000;
+    let fresh_enough = send_at(
+        &mut core,
+        approved_at(d, nonce, digest, render, &PASSKEY_UV, NOW, edge),
+        ALICE_KEY,
+        edge,
+    )
+    .await
+    .unwrap();
+    allowed(&fresh_enough);
+    fold_check(&db.sequencer, d).await.unwrap();
+}
+
+// SI-5, §6.6, §13.7.3: a contribution term that asks for assurance is met by the approver's
+// H(AAS)-bound authentication: human presence travels with the contribution, a floor the
+// approval did not reach does not
+#[tokio::test]
+async fn a_contribution_carries_the_approvers_assurance() {
+    let db = fresh().await.unwrap();
+    let mut present = term(
+        ProofKind::Contribution,
+        "approve",
+        ProofBinding::IntentDigest,
+    );
+    present.assurance.insert("human_presence".to_owned(), 1);
+    let mut hardware = term(
+        ProofKind::Contribution,
+        "approve",
+        ProofBinding::IntentDigest,
+    );
+    hardware.assurance.insert("hardware_bound".to_owned(), 1);
+    let (mut core, d) = setup_with(&db, gated(&[present, hardware])).await;
+    onboard(&mut core, d, ROOT, ROOT_KEY, (1, 2)).await;
+    onboard(&mut core, d, ALICE, ALICE_KEY, (3, 4)).await;
+    let shop = ExerciseBasis::Anchor(meta::object_id(&d, kind::ANCHOR, 1));
+    let target = shop_request(d, 9, Mode::Commit, shop);
+    let digest = access_kernel::intent::intent_digest(&target.intent).unwrap();
+    let render = render_of(&target);
+    let asked = send(&mut core, target.clone(), ROOT_KEY).await.unwrap();
+    assert_eq!(asked.decision.outcome, Outcome::RequireAction);
+    assert_eq!(asked.decision.unmet.len(), 2);
+
+    // a synced passkey: present human, not hardware-bound
+    let synced = send(
+        &mut core,
+        approved(d, 20, digest, render, &PASSKEY_UV, NOW - 5_000),
+        ALICE_KEY,
+    )
+    .await
+    .unwrap();
+    allowed(&synced);
+    let partly = send(
+        &mut core,
+        with_proofs(
+            target.clone(),
+            vec![ProofRef::Contribution(synced.exercise.unwrap())],
+        ),
+        ROOT_KEY,
+    )
+    .await
+    .unwrap();
+    assert_eq!(partly.decision.outcome, Outcome::RequireAction);
+    assert_eq!(partly.decision.unmet.len(), 1);
+    assert_eq!(
+        partly.decision.unmet[0]
+            .term
+            .assurance
+            .get("hardware_bound"),
+        Some(&1)
+    );
+
+    // a device-bound passkey with UV: both terms
+    let device = [
+        ("aal", 3),
+        ("phishing_resistant", 1),
+        ("uv", 1),
+        ("human_presence", 1),
+        ("hardware_bound", 1),
+        ("non_custodial", 1),
+    ];
+    let bound = send(
+        &mut core,
+        approved(d, 21, digest, render, &device, NOW - 5_000),
+        ALICE_KEY,
+    )
+    .await
+    .unwrap();
+    allowed(&bound);
+    let done = send(
+        &mut core,
+        with_proofs(
+            target,
+            vec![
+                ProofRef::Contribution(synced.exercise.unwrap()),
+                ProofRef::Contribution(bound.exercise.unwrap()),
+            ],
+        ),
+        ROOT_KEY,
+    )
+    .await
+    .unwrap();
+    allowed(&done);
     fold_check(&db.sequencer, d).await.unwrap();
 }
 

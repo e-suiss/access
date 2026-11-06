@@ -194,11 +194,7 @@ fn genesis(acceptances: Vec<Value>) -> BTreeMap<String, Opened> {
             &["party_register", "instance_create"],
             "access.party",
         ),
-        grant(
-            &SubjectSelector::Party(ALICE),
-            &["contribute"],
-            "access.contribution",
-        ),
+        grant(&SubjectSelector::Party(ALICE), &["read"], "access.party"),
     ];
     let mut keyed: Vec<(Vec<u8>, Value)> = acceptances
         .into_iter()
@@ -867,8 +863,8 @@ async fn add_key(
     (r.decision.outcome, subcode)
 }
 
-/// ALICE, by key `seed`, contributes an approval under her Grant, at `now`: a
-/// meta-action of an existing Instance.
+/// ALICE, by key `seed`, reads under her Grant, at `now`: an Exercise of an existing Instance
+/// that needs no approval (OP-141 m.39 (a)).
 async fn act(
     core: &mut Core,
     d: Digest,
@@ -876,21 +872,20 @@ async fn act(
     nonce: u8,
     now: u64,
 ) -> (Outcome, Option<String>) {
-    let payload = Payload::Contribute {
-        target: Digest([nonce; 32]),
-        class: "approve".to_owned(),
-    };
     let basis = ExerciseBasis::Holding(HoldingRef {
         grant: meta::object_id(&d, kind::GRANT, 1),
         holder: ALICE,
         since: 0,
     });
-    let mut r = request(d, nonce, basis, payload);
-    r.intent.resources = vec![ResourceRef {
-        namespace: "access.contribution".to_owned(),
-        path: vec!["approve".to_owned()],
-        incarnation: 0,
-    }];
+    let mut r = request(
+        d,
+        nonce,
+        basis,
+        Payload::InstanceTerminate { instance: ALICE },
+    );
+    r.intent.action = action("read");
+    r.intent.opaque = BTreeMap::new();
+    r.payload = None;
     let r = send_at(core, r, seed, now).await.unwrap();
     let subcode = r.decision.blockers.first().and_then(|b| b.subcode.clone());
     (r.decision.outcome, subcode)

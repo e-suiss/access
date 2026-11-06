@@ -71,6 +71,21 @@ pub trait Reader {
         &self,
         holder: &Id,
     ) -> impl Future<Output = Result<Vec<Digest>, CoreError>> + Send;
+    /// What the latest `require_action` on `intent` left for its approval (§9.14.1 step 1,
+    /// OP-150 L6): the render digest the decision point computed and the tier.
+    fn opening(
+        &self,
+        intent: &Digest,
+    ) -> impl Future<Output = Result<Option<Opening>, CoreError>> + Send;
+}
+
+/// What a decision point recorded when it asked for an approval (§9.14.1, §13.7.3).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Opening {
+    /// The render digest of the intent (§9.13.3, XI-8).
+    pub render: Digest,
+    /// The intent's consequence tier.
+    pub tier: access_kernel::tier::Tier,
 }
 
 /// Confirms who a new key belongs to before it is an Instance: the actor-binding of

@@ -306,12 +306,14 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                         continue;
                     }
                     let id = first16(e);
+                    // SI-5, §13.7.3: the approver's H(AAS)-bound authentication is what the
+                    // contribution proves
                     out.proofs.push(Proof {
                         id,
                         kind: ProofKind::Contribution,
                         class: c.class.clone(),
                         position: c.since,
-                        time: 0,
+                        time: c.auth_time.unwrap_or(0),
                         party: c.party,
                         instance: c.instance,
                         issuer: c.party,
@@ -320,13 +322,13 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                             intent_digest: Some(c.target),
                             resource: None,
                         },
-                        assurance: BTreeMap::new(),
+                        assurance: c.assurance.clone(),
                         consumed: false,
                     });
                     out.contributions.insert(id, (k, c));
                 }
-                // OP-143 m.13 (d)
-                ProofRef::ForeignPap { .. } => {}
+                // §9.14.1 (the statement is checked after the evaluation), OP-143 m.13 (d)
+                ProofRef::Aas(_) | ProofRef::ForeignPap { .. } => {}
             }
         }
         out.held = self.held(&mut snap, &req.basis, party, now).await?;

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT nonce, actor, intent_digest, decision_pos, outcome FROM access.authority_nonce\n          WHERE domain_id = $1 AND nonce = $2 ORDER BY decision_pos DESC LIMIT 1",
+  "query": "SELECT nonce, actor, intent_digest, decision_pos, outcome, render_digest, tier\n           FROM access.authority_nonce\n          WHERE domain_id = $1 AND nonce = $2 ORDER BY decision_pos DESC LIMIT 1",
   "describe": {
     "columns": [
       {
@@ -57,6 +57,28 @@
             "name": "outcome"
           }
         }
+      },
+      {
+        "ordinal": 5,
+        "name": "render_digest",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.authority_nonce",
+            "name": "render_digest"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "tier",
+        "type_info": "Int2",
+        "origin": {
+          "Table": {
+            "table": "access.authority_nonce",
+            "name": "tier"
+          }
+        }
       }
     ],
     "parameters": {
@@ -70,8 +92,10 @@
       false,
       false,
       false,
-      false
+      false,
+      true,
+      true
     ]
   },
-  "hash": "766bf1fed60288649c6337e9193ed311773e8e42e73aec76962468393358cc7d"
+  "hash": "7e201a232dced8e971e39a580cfb350b3bcb6ca864343a22dbdf3b7160d8a0e3"
 }

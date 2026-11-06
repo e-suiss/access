@@ -202,6 +202,10 @@ pub enum ProofRef {
     ClaimRef(access_kernel::model::Id),
     /// The `ExerciseID` of an allowed `contribute`.
     Contribution(Digest),
+    /// The Approval Act Statement of a `contribute` (§9.14.1 step 4): a tagged `COSE_Sign1`
+    /// under the approver Instance's key, or the bare dCBOR statement an H(AAS)-bound
+    /// `authentication` Claim vouches for.
+    Aas(Vec<u8>),
     /// A foreign domain's PAP with what verifies it (OP-143 m.13 (c)).
     ForeignPap {
         /// The foreign domain's binding-signed Domain Metadata.

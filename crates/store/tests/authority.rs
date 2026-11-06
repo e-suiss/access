@@ -66,6 +66,8 @@ fn batch(epoch: u64, after: &HeadRow, seed: u8) -> CommitBatch {
             actor: vec![1],
             intent_digest: [9; 32],
             decision_pos: pos,
+            render_digest: None,
+            tier: None,
         }],
         outbox: vec![OutboxRow {
             pos,

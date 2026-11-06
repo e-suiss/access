@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.authority_nonce\n               (domain_id, tenant_id, nonce, actor, intent_digest, decision_pos, outcome, render_digest, tier)\n             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Uuid",
+        "Bytea",
+        "Bytea",
+        "Bytea",
+        "Int8",
+        "Text",
+        "Bytea",
+        "Int2"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "385a85464ea6e57537703e4bd6caf5a462ec5238f110621876240d31da4a7d54"
+}

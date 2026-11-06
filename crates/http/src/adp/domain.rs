@@ -364,6 +364,7 @@ fn proofs(v: &Json) -> R<Vec<ProofRef>> {
             ("claim", c) => Ok(ProofRef::Claim(bytes(c, "proofs")?)),
             ("claim_ref", c) => Ok(ProofRef::ClaimRef(id(c)?)),
             ("contribution", c) => Ok(ProofRef::Contribution(digest(c)?)),
+            ("aas", c) => Ok(ProofRef::Aas(bytes(c, "proofs")?)),
             ("foreign_pap", c) => foreign_pap(c),
             _ => Err(AdpError("unknown-member")),
         })

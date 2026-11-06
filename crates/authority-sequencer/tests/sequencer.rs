@@ -69,6 +69,8 @@ fn item(tag: &str, nonce: Option<(u8, u8)>) -> Item {
             actor: vec![1],
             intent_digest: [d; 32],
             outcome: String::from("deny"),
+            render_digest: None,
+            tier: None,
         }),
         events: vec![vec![0xa0]],
         proofs: vec![([9; 32], vec![1, 2, 3])],

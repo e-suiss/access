@@ -73,7 +73,7 @@ fn a_request_decodes_into_the_core_terms() {
 #[test]
 fn proofs_and_the_continued_exercise_decode() {
     let extra = format!(
-        r#", "proofs": [{{"claim": "{c}"}}, {{"claim_ref": "{r}"}}, {{"contribution": "{e}"}}, {{"foreign_pap": {{"metadata": "{c}", "pap": "{r}", "excerpt": "{e}", "presentation": "{c}"}}}}], "exercise": "{e}""#,
+        r#", "proofs": [{{"claim": "{c}"}}, {{"claim_ref": "{r}"}}, {{"contribution": "{e}"}}, {{"aas": "{c}"}}, {{"foreign_pap": {{"metadata": "{c}", "pap": "{r}", "excerpt": "{e}", "presentation": "{c}"}}}}], "exercise": "{e}""#,
         c = b64(&[9, 9]),
         r = b64(&[8; 16]),
         e = b64(&[7; 32]),
@@ -85,6 +85,7 @@ fn proofs_and_the_continued_exercise_decode() {
             ProofRef::Claim(vec![9, 9]),
             ProofRef::ClaimRef(Id([8; 16])),
             ProofRef::Contribution(Digest([7; 32])),
+            ProofRef::Aas(vec![9, 9]),
             ProofRef::ForeignPap {
                 metadata: vec![9, 9],
                 pap: vec![8; 16],

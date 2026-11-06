@@ -70,6 +70,8 @@ async fn domain(db: &TestDb, t: TenantId, seed: u8, allows: u8) -> DomainId {
                 intent_digest: INTENT,
                 decision_pos: pos,
                 outcome: String::from(outcome),
+                render_digest: None,
+                tier: None,
             }],
             outbox: vec![],
             proofs: vec![],

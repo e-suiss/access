@@ -1158,7 +1158,10 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                 compromised,
             };
             let (mut evaluation, snapshot) = self.passes(req, &frame).await?;
+            let (tier, render) = rendered(req, &evaluation)?;
             self.tiered(req, &mut evaluation, open, now).await?;
+            self.approval(req, actor, &resolved, &mut evaluation, &exercise, now)
+                .await?;
             self.throttled(&mut evaluation, actor, open, now).await?;
             self.stale_holding(req, actor, &mut evaluation, now).await?;
             if req.mode == Mode::Check {
@@ -1184,6 +1187,8 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                 pos: frame.pos,
                 exercise,
                 artifacts: receipt.iter().chain(pap.iter()).map(|r| r.0).collect(),
+                render,
+                tier,
             };
             let derived = self.derived(req, &resolved, exercise, now).await?;
             let items = self.items(inc, &shape, &evaluation, &snapshot, &resolved, &derived)?;
@@ -1435,6 +1440,8 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                 actor: shape.actor_ref.to_vec(),
                 intent_digest: digest.0,
                 outcome: String::from(outcome),
+                render_digest: Some(shape.render.0),
+                tier: Some(approval::tier_code(shape.tier)),
             }),
             // OP-130 m.9, OP-149 m.7: only a committed ALLOW changes state
             events: if allowed {
@@ -1532,6 +1539,28 @@ fn exercise_draws(evaluation: &Evaluation) -> Vec<meta::ExerciseDraw> {
     d
 }
 
+/// The intent's consequence tier and its render digest from the accepted Action Schema
+/// (§13.7.1, §9.13.3, XI-8): what the nonce keeps for the approval of a `REQUIRE_ACTION`.
+fn rendered(
+    req: &Request,
+    evaluation: &Evaluation,
+) -> Result<(access_kernel::tier::Tier, Digest), CoreError> {
+    let tier = access_kernel::tier::of(
+        &req.intent,
+        req.payload.as_ref(),
+        evaluation.expansion,
+        evaluation.action.as_deref(),
+    );
+    let render = access_kernel::render::of(
+        evaluation.action.as_deref(),
+        &req.intent,
+        access_kernel::render::DEFAULT_LOCALE,
+    )
+    .and_then(|r| access_kernel::render::digest(&r))
+    .map_err(|_| CoreError::Protocol("render"))?;
+    Ok((tier, render))
+}
+
 /// Whom the rate limits count: the actor Instance, else the PEP (OP-141 m.23 (a)).
 pub(crate) fn who(inc: &Incoming, actor: Option<Actor>) -> Who {
     actor.map_or_else(|| Who::Pep(inc.pep.clone()), |a| Who::Instance(a.instance))
@@ -1587,11 +1616,16 @@ struct Shape<'a> {
     pos: u64,
     exercise: Digest,
     artifacts: Vec<Digest>,
+    /// The intent's render digest and tier, kept with the nonce for its approval (§9.14.1,
+    /// OP-150 L6).
+    render: Digest,
+    tier: access_kernel::tier::Tier,
 }
 
 /// Namespace of a contribution's resource (L0-META-30).
 pub const CONTRIBUTION_NAMESPACE: &str = "access.contribution";
 
+pub mod approval;
 mod binding;
 mod events;
 mod ingest;

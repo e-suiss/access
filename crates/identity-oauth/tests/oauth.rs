@@ -262,6 +262,8 @@ async fn domain(db: &TestDb, t: TenantId, allows: u8) -> DomainId {
                 intent_digest: [9; 32],
                 decision_pos: pos,
                 outcome: String::from("allow"),
+                render_digest: None,
+                tier: None,
             }],
             outbox: vec![],
             proofs: vec![],

@@ -50,6 +50,21 @@ pub struct NonceRow {
     pub decision_pos: u64,
     /// That decision's outcome: `allow`, `deny` or `require_action` (OP-141 m.9).
     pub outcome: String,
+    /// The render digest the decision point computed for the intent (§9.13.3, OP-150 L6).
+    pub render_digest: Option<[u8; 32]>,
+    /// The consequence tier of the intent, 0 to 3 (§13.7.1).
+    pub tier: Option<u8>,
+}
+
+/// What a `REQUIRE_ACTION` left for the approval of its intent (§9.14.1, OP-150 L6).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct OpeningRow {
+    /// The render digest of the intent.
+    pub render_digest: [u8; 32],
+    /// Its consequence tier.
+    pub tier: u8,
+    /// Position of the decision record.
+    pub decision_pos: u64,
 }
 
 /// One outbox event, written with the record it derives from (OP-130 m.9).
@@ -458,8 +473,9 @@ async fn side_rows(
     let id = id.as_slice();
     for n in &batch.nonces {
         sqlx::query!(
-            "INSERT INTO access.authority_nonce (domain_id, tenant_id, nonce, actor, intent_digest, decision_pos, outcome)
-             VALUES ($1, $2, $3, $4, $5, $6, $7)",
+            "INSERT INTO access.authority_nonce
+               (domain_id, tenant_id, nonce, actor, intent_digest, decision_pos, outcome, render_digest, tier)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
             id,
             tenant,
             n.nonce.as_slice(),
@@ -467,6 +483,8 @@ async fn side_rows(
             n.intent_digest.as_slice(),
             signed(n.decision_pos)?,
             n.outcome.as_str(),
+            n.render_digest.as_ref().map(<[u8; 32]>::as_slice),
+            n.tier.map(i16::from),
         )
         .execute(&mut *t.tx)
         .await?;
@@ -833,7 +851,8 @@ pub async fn find_nonce(
 ) -> Result<Option<NonceRow>, StoreError> {
     let mut t = DomainTx::begin(pool, domain).await?;
     let row = sqlx::query!(
-        "SELECT nonce, actor, intent_digest, decision_pos, outcome FROM access.authority_nonce
+        "SELECT nonce, actor, intent_digest, decision_pos, outcome, render_digest, tier
+           FROM access.authority_nonce
           WHERE domain_id = $1 AND nonce = $2 ORDER BY decision_pos DESC LIMIT 1",
         domain.as_bytes().as_slice(),
         nonce,
@@ -848,6 +867,48 @@ pub async fn find_nonce(
             intent_digest: hash(r.intent_digest)?,
             decision_pos: unsigned(r.decision_pos)?,
             outcome: r.outcome,
+            render_digest: r.render_digest.map(hash).transpose()?,
+            tier: r.tier.map(tier_of).transpose()?,
+        })
+    })
+    .transpose()
+}
+
+fn tier_of(t: i16) -> Result<u8, StoreError> {
+    u8::try_from(t)
+        .ok()
+        .filter(|t| *t <= 3)
+        .ok_or(StoreError::Corrupt)
+}
+
+/// The latest `require_action` recorded for `intent` that carries a render digest: what an
+/// approval of that intent is checked against (§9.14.1 step 1, OP-150 L6).
+///
+/// # Errors
+/// [`StoreError`].
+pub async fn find_opening(
+    pool: &PgPool,
+    domain: &DomainId,
+    intent: &[u8; 32],
+) -> Result<Option<OpeningRow>, StoreError> {
+    let mut t = DomainTx::begin(pool, domain).await?;
+    let row = sqlx::query!(
+        r#"SELECT render_digest AS "render_digest!", tier AS "tier!", decision_pos
+             FROM access.authority_nonce
+            WHERE domain_id = $1 AND intent_digest = $2 AND outcome = 'require_action'
+              AND render_digest IS NOT NULL AND tier IS NOT NULL
+            ORDER BY decision_pos DESC LIMIT 1"#,
+        domain.as_bytes().as_slice(),
+        intent.as_slice(),
+    )
+    .fetch_optional(&mut *t.tx)
+    .await?;
+    t.commit().await?;
+    row.map(|r| {
+        Ok(OpeningRow {
+            render_digest: hash(r.render_digest)?,
+            tier: tier_of(r.tier)?,
+            decision_pos: unsigned(r.decision_pos)?,
         })
     })
     .transpose()

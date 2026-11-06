@@ -38,6 +38,10 @@ pub struct NonceUse {
     pub intent_digest: [u8; 32],
     /// Outcome of the decision that uses it: `allow`, `deny` or `require_action`.
     pub outcome: String,
+    /// The render digest the decision point computed for the intent (§9.13.3, OP-150 L6).
+    pub render_digest: Option<[u8; 32]>,
+    /// The intent's consequence tier, 0 to 3.
+    pub tier: Option<u8>,
 }
 
 /// One record to append with what it writes alongside.
@@ -279,6 +283,8 @@ pub fn rows(
                 intent_digest: n.intent_digest,
                 decision_pos: pos,
                 outcome: n.outcome.clone(),
+                render_digest: n.render_digest,
+                tier: n.tier,
             });
         }
         for (idx, event) in item.events.iter().enumerate() {
