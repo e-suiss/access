@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # OP-66, OP-69: a throwaway PostgreSQL cluster under target/pg for store tests, same settings as CI
+# except max_connections: several worktrees share this one cluster
 set -euo pipefail
 
 dir="target/pg"
@@ -15,7 +16,7 @@ case "${1:-}" in
       "$bin/initdb" -D "$dir/data" -U postgres --pwfile="$dir/pwfile" --auth=scram-sha-256 --data-checksums -E UTF8 --locale=C >/dev/null
     fi
     if ! "$bin/pg_ctl" -D "$dir/data" status >/dev/null 2>&1; then
-      "$bin/pg_ctl" -D "$dir/data" -l "$dir/log" -w -o "-p $port -k $PWD/$dir -c listen_addresses=127.0.0.1" start >/dev/null
+      "$bin/pg_ctl" -D "$dir/data" -l "$dir/log" -w -o "-p $port -k $PWD/$dir -c listen_addresses=127.0.0.1 -c max_connections=400" start >/dev/null
     fi
     echo "postgres://postgres:$password@127.0.0.1:$port/postgres"
     ;;
