@@ -229,7 +229,7 @@ fn a_token_over_8_kib_is_refused_before_anything_else() {
     assert!(m.seen.borrow().is_empty());
 }
 
-// §9.11.2, §13.11 EP-4, MD-6, MD-7, U36: JWKS within key_epoch, default 1 h, ceiling 24 h
+// §9.11.2, §13.11 EP-4, MD-6, MD-7, U36, U39: JWKS within key_epoch, default 1 h, ceiling 24 h
 #[test]
 fn the_jwks_serves_within_the_key_epoch_and_every_fetch_fault_is_deny() {
     let token = TokenSpec::intent_token().signed();
@@ -357,8 +357,9 @@ fn a_set_stale_unreadable_or_missing_status_list_is_deny() {
     );
 }
 
-// §13.7.9, §9.9.3 rule 5, §13.4 G48, MD-7, MD-8, OP-150 m.3 (g): strict introspects every
-// request, fast lives within 5 minutes, neither skips the signature
+// §13.7.9, §9.9.3 rule 5, §13.4 G48, HL-22, U39, MD-7, MD-8, OP-150 m.3 (g): strict introspects
+// every request, fast lives within 5 minutes and never learns of a revocation before its
+// horizon, neither skips the signature
 #[test]
 fn the_strict_profile_introspects_every_request_and_the_fast_profile_bounds_the_horizon() {
     let token = TokenSpec::intent_token().signed();

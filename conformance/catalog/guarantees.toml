@@ -1206,7 +1206,7 @@ family = "U"
 section = "13.4"
 status = "canonical"
 class = "UDC"
-stage = 6
+stage = 9
 title = "MCP list cache causes no cross-tenant disclosure"
 tests = []
 
@@ -1216,7 +1216,7 @@ family = "U"
 section = "13.4"
 status = "canonical"
 class = "UDC"
-stage = 6
+stage = 9
 title = "subscriptions/listen stream carries no events past horizon"
 tests = []
 

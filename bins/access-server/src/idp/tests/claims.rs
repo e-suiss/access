@@ -91,10 +91,11 @@ fn held(i: &Issued) -> Option<Quarantine> {
     }
 }
 
-// OP-150 L2, OP-144, §10.1.4 rule 3, §10.1.7, L2-CLM-1, L2-CLM-3, E18, INV-2: creating a realm
-// fixes its issuer Party, names it in the Genesis and opens its Claim issuer key's Instance in the
-// governing domain; the issuer's authentication and authenticator_binding Claims are admitted
-// for actor-binding there, its other classes wait for an explicit Acceptance, and a repeat opens
+// OP-150 L2, OP-144, §10.1.4 rule 3, §10.1.7, L2-CLM-1, L2-CLM-3, E18, INV-2, INV-12, CI-2,
+// IDI-3: creating a realm fixes its issuer Party, names it in the Genesis and opens its Claim
+// issuer key's Instance in the governing domain; the issuer's authentication and
+// authenticator_binding Claims are admitted for actor-binding there, its other classes wait for an
+// explicit Acceptance, a status Claim only narrows, a risk signal gates nothing, and a repeat opens
 // nothing new
 #[tokio::test]
 async fn the_realm_issuer_claims_are_accepted_for_actor_binding() {

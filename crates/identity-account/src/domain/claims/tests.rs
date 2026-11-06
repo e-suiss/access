@@ -191,11 +191,8 @@ fn identity_binding_carries_the_proof_digest_only() {
     }
 }
 
-// IDP-2, K04: adding and removing an authenticator are lines of authenticator_binding Claims
-// about the Party; a removal supersedes the last Claim and holds for no time, and neither binds a
-// new Instance
-// §7.1, §12.0.3, X36, OP-150 L6: a session's authentications form one line; signing out ends
-// it with a Claim that holds for no time, and nothing else
+// §7.1, §12.0.3, X36, XI-23, OP-150 L6: a session's authentications form one line; signing out
+// ends it with a Claim that holds for no time, and nothing else
 #[test]
 fn sign_out_ends_the_sessions_authentication_line() {
     let session = [0x5e; 16];
@@ -215,6 +212,9 @@ fn sign_out_ends_the_sessions_authentication_line() {
     assert_eq!(back, ended);
 }
 
+// IDP-2, K04, IDI-3: adding and removing an authenticator are lines of authenticator_binding
+// Claims about the Party; a removal supersedes the last Claim and holds for no time, and neither
+// binds a new Instance
 #[test]
 fn removal_ends_the_authenticator_line() {
     let added = passkey();
@@ -230,6 +230,54 @@ fn removal_ends_the_authenticator_line() {
     assert_eq!((s.validity.from, s.validity.until), (300, 300));
     assert_eq!(s.bound_instance, None);
     assert_eq!(added.prepare(&p).unwrap().statement.bound_instance, None);
+}
+
+// §10.1.3 IDI-3, §7.6 TN-O4: an attestation is a posture signal, never an Instance or a key
+// binding; only a verified statement is compliant, none or self attestation says nothing, and a
+// risk signal is a scalar Claim that binds nothing and holds for a day
+#[test]
+fn attestation_is_a_posture_signal_only() {
+    assert_eq!(
+        attestation_verdict(AttestationResult::Verified),
+        Verdict::Compliant
+    );
+    assert_eq!(
+        attestation_verdict(AttestationResult::Failed),
+        Verdict::Noncompliant
+    );
+    assert_eq!(
+        attestation_verdict(AttestationResult::None),
+        Verdict::Unknown
+    );
+    assert_eq!(
+        attestation_verdict(AttestationResult::SelfAttested),
+        Verdict::Unknown
+    );
+    for (order, class) in [
+        (
+            posture(
+                SUBJECT,
+                Verdict::Compliant,
+                "webauthn-attestation",
+                Some(Digest([2; 32])),
+                Bind::None,
+                100,
+            ),
+            "posture_device",
+        ),
+        (
+            risk(SUBJECT, RiskSignal::NewDevice, Bind::None, 100),
+            "risk_signal",
+        ),
+    ] {
+        assert_eq!(order.class, class);
+        assert_eq!(order.ttl_ms, SIGNAL_TTL_MS);
+        assert_eq!(order.line, None);
+        assert!(!order.retract);
+        let p = order.prepare(&placement(150)).unwrap();
+        assert_eq!(p.statement.bound_instance, None);
+        assert!(p.body.is_none());
+    }
 }
 
 // TN-49, §12.3.1: a status Claim is the scalar status, open-ended, on the subject's status line

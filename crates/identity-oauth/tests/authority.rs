@@ -216,9 +216,9 @@ fn error(r: &Reply) -> String {
     }
 }
 
-// §9.9, P17, PI-11, §9.9.3 rules 1-3, §11.21.2, CMP-15.1, TN-27: client credentials is the
-// confidential client's own projection.issue; the token is the authority plane's, DPoP-bound
-// to the Exercise's own key, for one resource, with no refresh token
+// §9.9, P17, PI-11, AGI-3, §9.9.3 rules 1-3, §11.21.2, CMP-15.1, TN-27: client credentials is
+// the confidential client's own projection.issue; the token is the authority plane's,
+// DPoP-bound to the Exercise's own key, for one resource, with no refresh token
 #[tokio::test]
 async fn client_credentials_is_a_projection_issue_decision() {
     // IDP-11, AG-8, P48

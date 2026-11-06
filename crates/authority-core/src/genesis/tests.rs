@@ -175,8 +175,9 @@ fn a_genesis_publishes_the_founders_further_catalogs() {
     assert!(realm(&o, &mut Fixed).is_err());
 }
 
-// §10.1.4 rule 3, E18, OP-142, first-party neutrality (§9.13.2): a domain is born accepting its
-// realm's issuer for actor-binding only; predicate input and subject selection are not implied
+// §10.1.4 rule 3, E18, OP-142, INV-12, G45, PI-13, first-party neutrality (§9.13.2): a domain is
+// born accepting its realm's issuer for actor-binding only; predicate input and subject selection
+// are not implied
 #[test]
 fn the_realm_issuer_is_accepted_for_actor_binding_only() {
     let d = Digest([7; 32]);

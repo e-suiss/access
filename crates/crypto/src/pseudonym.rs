@@ -77,7 +77,7 @@ impl PseudonymKey {
 mod tests {
     use super::*;
 
-    // P52, OP-143 m.15 (d): stable per key, different across keys and parties
+    // P52, OP-143 m.15 (d), INV-38, G52: stable per key, different across keys and parties
     #[test]
     fn pseudonyms_are_pairwise() {
         let a = PseudonymKey::new(Secret::new([1; 32]));

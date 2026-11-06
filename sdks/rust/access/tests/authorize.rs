@@ -191,7 +191,7 @@ fn without_trusted_time_nothing_is_authorized() {
     assert!(port.seen.borrow().is_none(), "nothing was asked");
 }
 
-// L2-RCP-3, §9.8: one intent, one PEP, one Exercise
+// L2-RCP-3, §9.8, G18: one intent, one PEP, one Exercise
 #[test]
 fn a_receipt_for_another_intent_audience_or_nonce_is_denied() {
     let other_intent = receipt_for(nonce().as_bytes(), PEP, &Digest([8; 32]));
@@ -217,7 +217,7 @@ fn a_receipt_for_another_intent_audience_or_nonce_is_denied() {
     );
 }
 
-// §9.9.2, §13.4 U8, E17: the upstream receipt is a causal reference, never authority
+// §9.9.2, §13.4 U8, E17, EI-17: the upstream receipt is a causal reference, never authority
 #[test]
 fn an_upstream_receipt_is_only_a_causal_reference_for_a_downstream_pep() {
     let upstream = run(healthy()).unwrap();
@@ -289,8 +289,8 @@ fn statement(nonce: &[u8], pep: &str, intent: &Digest) -> Actor {
     ))
 }
 
-// §9.5 k.2, k.3, §8.17.10.3, E17, X21, PI-7: the actor is the Instance that signed; the PEP
-// forwards the statement and cannot bind it to another request
+// §9.5 k.2, k.3, §8.17.10.3, E17, EI-17, X21, PI-7: the actor is the Instance that signed; the
+// PEP forwards the statement and cannot bind it to another request
 #[test]
 fn the_actor_statement_is_forwarded_as_signed_and_must_be_this_requests() {
     let (i, n, b) = (intent(), nonce(), basis());

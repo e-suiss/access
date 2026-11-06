@@ -578,6 +578,21 @@ fn fuel_scenarios() -> Vec<(&'static str, World)> {
     out
 }
 
+// INV-35 (b), E14, §7.9.10.4: a reincarnated resource is a new resource; the Grant over the old
+// incarnation does not carry over
+#[test]
+fn a_grant_over_one_incarnation_never_covers_another() {
+    let resource = |incarnation: u64| {
+        let mut w = World::new();
+        for h in w.hops_mut() {
+            h.authority.authority.resource = ResourceSelector::Exact(rref(&["o1"], incarnation));
+        }
+        w.run().map(|d| d.outcome)
+    };
+    assert_eq!(resource(0), Ok(Outcome::Allow));
+    assert_eq!(resource(1), Ok(Outcome::Deny));
+}
+
 /// Decision scenarios added for rule coverage.
 pub(super) fn scenarios() -> Vec<(&'static str, World)> {
     let mut out = bound_scenarios();

@@ -82,6 +82,9 @@ pub(crate) struct Config {
     /// Whole families required from a stage regardless of Ek B citations.
     #[serde(default)]
     pub(crate) stage_overrides: Vec<StageOverride>,
+    /// Single rules whose stage a spec decision moved away from their first Ek B citation.
+    #[serde(default)]
+    pub(crate) rule_overrides: Vec<RuleOverride>,
 }
 
 /// A family-wide stage decided outside the Ek B text (recorded with its reason).
@@ -89,6 +92,15 @@ pub(crate) struct Config {
 #[serde(deny_unknown_fields)]
 pub(crate) struct StageOverride {
     pub(crate) family: String,
+    pub(crate) stage: u8,
+    pub(crate) reason: String,
+}
+
+/// One rule's stage decided outside the Ek B text (recorded with its reason).
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct RuleOverride {
+    pub(crate) id: String,
     pub(crate) stage: u8,
     pub(crate) reason: String,
 }
@@ -356,11 +368,15 @@ fn merge(
         .collect()
 }
 
-/// Lowers `stage` to each family override (never raises it); retired rows stay unstaged.
-fn apply_overrides(rules: &mut [Rule], overrides: &[StageOverride]) {
+/// Lowers `stage` to each family override (never raises it), then sets the stage of each rule
+/// override; retired rows stay unstaged.
+fn apply_overrides(rules: &mut [Rule], families: &[StageOverride], singles: &[RuleOverride]) {
     for r in rules.iter_mut().filter(|r| r.status != "retired") {
-        for o in overrides.iter().filter(|o| o.family == r.family) {
+        for o in families.iter().filter(|o| o.family == r.family) {
             r.stage = Some(r.stage.map_or(o.stage, |s| s.min(o.stage)));
+        }
+        if let Some(o) = singles.iter().find(|o| o.id == r.id) {
+            r.stage = Some(o.stage);
         }
     }
 }
@@ -477,7 +493,7 @@ pub(crate) fn generate(root: &Path) -> Result<(), String> {
     let mut all_spec = spec.rules.clone();
     all_spec.extend(cited);
     let mut rules = merge(&all_spec, &existing, &spec.stages, &found, &link_ok);
-    apply_overrides(&mut rules, &config.stage_overrides);
+    apply_overrides(&mut rules, &config.stage_overrides, &config.rule_overrides);
 
     let dir = root.join(DIR);
     std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
@@ -619,6 +635,34 @@ fn title_problem(title: &str) -> Option<String> {
     (words > MAX_TITLE_WORDS).then(|| format!("title has {words} words (max {MAX_TITLE_WORDS})"))
 }
 
+/// Each rule override names a catalogued rule, a stage and a reason, and the committed catalog
+/// already holds the stage it names.
+fn rule_override_violations(catalog: &Catalog, config: &Config) -> Vec<Violation> {
+    let mut out = Vec::new();
+    for o in &config.rule_overrides {
+        let row = catalog.rules.iter().find(|r| r.id == o.id);
+        let message = if o.reason.trim().is_empty() || o.stage > 14 || row.is_none() {
+            Some(format!(
+                "rule override for {:?} needs a catalogued ID, a stage 0–14 and a reason",
+                o.id
+            ))
+        } else if row.is_some_and(|r| r.status != "retired" && r.stage != Some(o.stage)) {
+            Some(format!(
+                "rule override moves {} to stage {} but the catalog holds stage {}; regenerate",
+                o.id,
+                o.stage,
+                row.and_then(|r| r.stage).unwrap_or(0)
+            ))
+        } else {
+            None
+        };
+        if let Some(m) = message {
+            out.push(violation("OP-81", CONFIG_FILE, m));
+        }
+    }
+    out
+}
+
 /// Pure format validation, separated for tests.
 pub(crate) fn format_violations(catalog: &Catalog, config: &Config) -> Vec<Violation> {
     let mut out = Vec::new();
@@ -694,6 +738,7 @@ pub(crate) fn format_violations(catalog: &Catalog, config: &Config) -> Vec<Viola
             ));
         }
     }
+    out.extend(rule_override_violations(catalog, config));
     for f in &config.enforced_families {
         if !RULE_FILES.iter().any(|(_, fs)| fs.contains(&f.as_str())) && f != "AB" {
             out.push(violation(
@@ -973,6 +1018,7 @@ mod tests {
             enforced_families: vec!["INV".into(), "N".into()],
             test_roots: vec![],
             stage_overrides: vec![],
+            rule_overrides: vec![],
         }
     }
 
@@ -1150,9 +1196,72 @@ mod tests {
             stage: 0,
             reason: "test".into(),
         };
-        apply_overrides(&mut rules, &[o]);
+        apply_overrides(&mut rules, &[o], &[]);
         let stages: Vec<_> = rules.iter().map(|r| r.stage).collect();
         assert_eq!(stages, [Some(0), Some(0), None, None]);
+    }
+
+    #[test]
+    fn rule_stage_override_sets_one_rules_stage_and_must_match_the_catalog() {
+        let mut cited = rule("INV-2", "x");
+        cited.stage = Some(6);
+        let mut other = rule("INV-3", "x");
+        other.stage = Some(6);
+        let mut retired = rule("INV-4", "x");
+        retired.status = "retired".into();
+        let mut rules = [cited, other, retired];
+        let o = RuleOverride {
+            id: "INV-2".into(),
+            stage: 9,
+            reason: "test".into(),
+        };
+        let gone = RuleOverride {
+            id: "INV-4".into(),
+            stage: 9,
+            reason: "test".into(),
+        };
+        apply_overrides(&mut rules, &[], &[o, gone]);
+        let stages: Vec<_> = rules.iter().map(|r| r.stage).collect();
+        assert_eq!(stages, [Some(9), Some(6), None]);
+
+        let mut c = config(6);
+        c.rule_overrides = vec![
+            RuleOverride {
+                id: "INV-2".into(),
+                stage: 9,
+                reason: "test".into(),
+            },
+            RuleOverride {
+                id: "INV-3".into(),
+                stage: 9,
+                reason: "test".into(),
+            },
+            RuleOverride {
+                id: "INV-9".into(),
+                stage: 9,
+                reason: "test".into(),
+            },
+            RuleOverride {
+                id: "INV-4".into(),
+                stage: 9,
+                reason: String::new(),
+            },
+        ];
+        let catalog = Catalog {
+            rules: rules.into(),
+            ..Catalog::default()
+        };
+        let msgs: Vec<String> = format_violations(&catalog, &c)
+            .into_iter()
+            .map(|v| v.message)
+            .collect();
+        assert_eq!(msgs.len(), 3, "{msgs:?}");
+        assert!(
+            msgs.iter()
+                .any(|m| m.contains("INV-3") && m.contains("regenerate"))
+        );
+        assert!(msgs.iter().any(|m| m.contains("INV-9")));
+        assert!(msgs.iter().any(|m| m.contains("INV-4")));
     }
 
     #[test]

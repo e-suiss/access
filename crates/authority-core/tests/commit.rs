@@ -4155,14 +4155,14 @@ fn blocked(r: &Response) -> (access_kernel::combinator::BlockerClass, String) {
     (b.class, b.subcode.clone().unwrap_or_default())
 }
 
-// OP-143 m.13, §9.15A.2–4, §9.12.4, PI-3, INV-17, INV-21, 2337–2339, 2455, 2494: a PAP of the
-// home domain lets its holder hold a bridging Grant in another domain while a foreign-authority
-// Acceptance pins the home domain's binding key; a consumption-bearing action spends the slice
-// the home domain drew, never more; the home domain's revocation reaches the target through the
-// PAP's status entry, and without a fresh list the foreign status is unknown and denied; an
-// identity issuer is no authority issuer; under unpinned binding keys, without the PAP, outside
-// the ceiling, under another holder key, outside the class, with stale metadata and after the
-// Acceptance is revoked, it is denied
+// OP-143 m.13, §9.15A.2–4, §9.12.4, PI-3, INV-17, INV-21, G52, 2337–2339, 2455, 2494: a PAP of
+// the home domain lets its holder hold a bridging Grant in another domain while a
+// foreign-authority Acceptance pins the home domain's binding key; a consumption-bearing action
+// spends the slice the home domain drew, never more; the home domain's revocation reaches the
+// target through the PAP's status entry, and without a fresh list the foreign status is unknown
+// and denied; an identity issuer is no authority issuer; under unpinned binding keys, without the
+// PAP, outside the ceiling, under another holder key, outside the class, with stale metadata and
+// after the Acceptance is revoked, it is denied
 #[tokio::test]
 #[allow(
     clippy::too_many_lines,
@@ -5111,9 +5111,10 @@ async fn head_of(db: &TestDb, d: Digest) -> u64 {
         .pos
 }
 
-// §9.9, P17, PI-11, §9.9.3 rules 1, 2, 3, 7, TN-14, TN-27: every authority token is the ALLOW of
-// its holder's projection.issue; the at+jwt is signed by the domain's operational key, holder
-// bound, for one resource server, its authority only in RAR, its exp the contract's horizon
+// §9.9, P17, PI-11, INV-38, §9.9.3 rules 1, 2, 3, 7, TN-14, TN-27: every authority token is the
+// ALLOW of its holder's projection.issue; the at+jwt is signed by the domain's operational key,
+// holder bound, for one resource server, its authority only in RAR, its exp the contract's
+// horizon
 #[tokio::test]
 async fn an_authority_token_is_a_projection_issue_decision() {
     use access_authority_core::adapters::{Projected, TokenAuthority};

@@ -1,6 +1,6 @@
 # OP-81, SAI-1, SA-59, INV-2
 
-current_stage = 5
+current_stage = 6
 
 enforced_families = [
   "CI", "INV", "EI", "XI", "PI", "SI", "TI", "TI-RT", "SAI", "IDI", "AGI", "TNI", "OPI",
@@ -14,3 +14,13 @@ test_roots = ["crates", "bins", "xtask", "sdks"]
 family = "N"
 stage = 0
 reason = "OP-96: every N-1…N-59 row needs an honest-wording test from stage 0 (Ek B stage 0, NG/PU item)"
+
+[[rule_overrides]]
+id = "U63"
+stage = 9
+reason = "OP-150 m.13 (h): the MCP list cache rules are not in the Stage 6 PEP SDK; the Ek B Stage 6 PEP SDK item cites U63 for the conformance vectors, the rule itself is the Stage 9 K09 item (MCP list cache cacheScope isolation)"
+
+[[rule_overrides]]
+id = "U64"
+stage = 9
+reason = "OP-150 m.13 (h): the MCP subscriptions/listen horizon rule is not in the Stage 6 PEP SDK; the Ek B Stage 6 PEP SDK item cites U64 for the conformance vectors, the rule itself is the Stage 9 K09 item (MCP subscriptions/listen horizon limit)"

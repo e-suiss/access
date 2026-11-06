@@ -424,7 +424,7 @@ fn thumbprint_matches_rfc_8037() {
     );
 }
 
-// CR-58 m.3, SAI-40
+// CR-58 m.3, m.6, SAI-40, SI-11: a superseded binding is refused on its own say-so
 #[test]
 fn metadata_round_trips_and_is_signed_by_a_trusted_binding() {
     let case = Case::new();

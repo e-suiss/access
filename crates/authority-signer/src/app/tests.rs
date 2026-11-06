@@ -124,8 +124,8 @@ fn an_artefact_verifies_through_metadata_and_excerpt() {
     );
 }
 
-// §9.9.3 rule 7, PI-11, CR-19: an access token is an `at+jwt` by the operational key under
-// usage `token`; it must be holder-bound and must not outlive the key's publication
+// §9.9.3 rule 7, PI-11, G18, AGI-3, CR-19: an access token is an `at+jwt` by the operational key
+// under usage `token`; it must be holder-bound and must not outlive the key's publication
 #[test]
 fn a_token_is_holder_bound_and_within_the_key_publication() {
     // CR-24, MD-7

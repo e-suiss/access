@@ -607,7 +607,7 @@ fn passkey(d: Digest, issuer: Id, seed: u8) -> ClaimSubmission {
     sub
 }
 
-// P21, §9.13.1 rules 2 and 4, E18: an authenticator binding needs the domain's actor-binding
+// P21, §9.13.1 rules 2 and 4, E18, U26: an authenticator binding needs the domain's actor-binding
 // Acceptance and the subject's designation of its issuer; without a key-state the Acceptance
 // alone decides, and a key-state that drops the issuer holds its later Claims
 #[tokio::test]
@@ -687,9 +687,9 @@ fn id_token(sub: &str, seed: u8) -> Vec<u8> {
     format!("{input}.{}", b64url_encode(&sig.to_bytes())).into_bytes()
 }
 
-// B7, P-ID-2, E18, §9.13 (pinned key set), §10.1.1: an upstream ID token verified under the
-// Acceptance's pinned key set becomes an authentication Claim of the IdP, only for a Party an
-// identity binding holds; another key or an unbound Party is refused
+// B7, P-ID-2, E18, INV-12, G45, IDI-9, §9.13 (pinned key set), §10.1.1: an upstream ID token
+// verified under the Acceptance's pinned key set becomes an authentication Claim of the IdP, only
+// for a Party an identity binding holds; another key or an unbound Party is refused
 #[tokio::test]
 async fn an_external_idp_enters_through_its_pinned_acceptance() {
     let db = fresh().await.unwrap();
@@ -921,7 +921,7 @@ fn status(d: Digest, party: Id, value: &str, issued_at: u64, supersedes: Option<
     }
 }
 
-// TN-49, TN-50, SEC12, X36, E5, TI-RT7, G36: a narrowing account status denies the Party's
+// TN-49, TN-50, SEC12, X36, E5, CI-2, TI-RT7, G36: a narrowing account status denies the Party's
 // Instances from its ingest on, as a restriction; a newer status in the issuer line lifts it,
 // and one without an order keeps it (the disqualifying side wins)
 #[tokio::test]

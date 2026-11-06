@@ -57,8 +57,9 @@ fn id_token(extra: &str) -> String {
     )
 }
 
-// §10.1.2 OIDC row, OP-150 m.3 (i), E26: an upstream ID token becomes an authentication Claim
-// with the verified iss, acr and amr, the subject pair digested and nothing else
+// §10.1.2 OIDC row, OP-150 m.3 (i), E26, INV-12, G45, IDI-9: an upstream ID token becomes an
+// authentication Claim with the verified iss, acr and amr, the subject pair digested and nothing
+// else
 #[test]
 fn an_id_token_maps_to_an_authentication_claim() {
     let p = pinned(3);

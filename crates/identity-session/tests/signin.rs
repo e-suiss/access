@@ -453,7 +453,7 @@ async fn identifier_first_does_not_tell_whether_the_account_exists() {
     assert!(matches!(other, Step::Rejected(Refusal { problem, .. }) if problem == REJECTED));
 }
 
-// TN-36, CR-38, TN-103, G57, EP-2, §10.1.6
+// TN-36, CR-38, TN-103, G57, EP-2, XI-23, §10.1.6
 #[tokio::test]
 async fn a_password_opens_a_session_and_sign_out_ends_it() {
     let e = env(2, "is-b").await;
@@ -1253,11 +1253,12 @@ fn risk_names(orders: &[access_identity_account::domain::claims::ClaimOrder]) ->
         .collect()
 }
 
-// F17, TN-103, §10.1.2, §10.1.5, §10.1.6, TN-63, §10.2.4, IDI-5, IDP-2, §7.6, OP-150 L2: a
-// login queues its authentication Claim, bound to the session, with the assurance vector; a
-// browser without a device marker, a second passkey of another AAGUID and a counter that did not
-// advance queue risk signals, and none of them stops the sign-in; a passkey's binding names its
-// identity credential row, carries only digests, binds no Instance, and its removal ends the line
+// F17, TN-103, §10.1.2, §10.1.5, §10.1.6, TN-63, §10.2.4, IDI-3, IDI-5, IDP-2, CI-2, §7.6,
+// OP-150 L2: a login queues its authentication Claim, bound to the session, with the assurance
+// vector; a browser without a device marker, a second passkey of another AAGUID and a counter that
+// did not advance queue risk signals, and none of them stops the sign-in; a passkey's binding
+// names its identity credential row, carries only digests, binds no Instance, and its removal ends
+// the line
 #[tokio::test]
 async fn sign_in_queues_its_claims_and_signals_never_gate() {
     use access_identity_account::app::accounts::{PASSKEY, remove_credential};

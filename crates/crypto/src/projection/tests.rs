@@ -249,7 +249,7 @@ fn pap_sd_jwt_verifies_in_the_kernel() {
     }
 }
 
-// MD-10, L0-ENC-21: parties are pseudonyms, digests are tagged
+// MD-10, INV-38, L0-ENC-21: parties are pseudonyms, digests are tagged
 #[test]
 fn pap_claims_map_the_pap() {
     let [p256, _] = signers();
