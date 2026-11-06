@@ -270,10 +270,14 @@ fn local_plan() -> Plan {
 }
 
 /// The identity outbox events of `kind`, at least `n` of them, within a bounded wait.
-async fn identity_events(
+/// The queued identity events of `kind` once `done` holds for them; the outbox reader only
+/// shows rows below the cluster-wide snapshot horizon, so concurrent test databases delay
+/// visibility and their order.
+async fn identity_events_until(
     db: &TestDb,
     kind: &str,
-    n: usize,
+    done: impl Fn(&[access_store::identity::OutboxEvent]) -> bool,
+    what: &str,
 ) -> Vec<access_store::identity::OutboxEvent> {
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
     loop {
@@ -287,12 +291,12 @@ async fn identity_events(
         .into_iter()
         .filter(|e| e.kind.starts_with(kind))
         .collect();
-        if queued.len() >= n {
+        if done(&queued) {
             return queued;
         }
         assert!(
             std::time::Instant::now() < deadline,
-            "{} of {n} {kind} after 20 s",
+            "{} {kind}, not yet {what} after 20 s",
             queued.len()
         );
         tokio::time::sleep(std::time::Duration::from_millis(20)).await;
@@ -518,10 +522,17 @@ async fn local_fixtures_are_made_once_and_produce_events() {
             .active
     );
     t.commit().await.unwrap();
-    let events = identity_events(&w.db, "event.api_client.", 3).await;
-    let kinds: Vec<&str> = events.iter().map(|e| e.kind.as_str()).collect();
-    assert!(kinds.contains(&"event.api_client.updated"), "{kinds:?}");
-    assert!(kinds.contains(&"event.api_client.disabled"), "{kinds:?}");
+    let has = |events: &[access_store::identity::OutboxEvent], kind: &str| {
+        events.iter().any(|e| e.kind == kind)
+    };
+    let events = identity_events_until(
+        &w.db,
+        "event.api_client.",
+        |q| has(q, "event.api_client.updated") && has(q, "event.api_client.disabled"),
+        "updated and disabled",
+    )
+    .await;
+    assert!(has(&events, "event.api_client.created"));
     // a retired client has no active row to change
     assert!(
         bootstrap
