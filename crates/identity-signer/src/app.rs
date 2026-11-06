@@ -1,5 +1,5 @@
 //! The key set of one realm: it follows the rotation schedule, keeps the JWKS current and signs
-//! tokens with the key that may sign now (CR-23, CR-25, CR-27, SAI-46).
+//! tokens with the key that may sign now (CR-23, CR-25, CR-27, CR-59, SAI-46).
 
 use access_crypto::jose::{JwsAlg, sign_compact};
 use access_kernel::verify::key_scope::thumbprint;
@@ -74,8 +74,9 @@ fn content_type_ok(t: &str) -> bool {
 
 const EMPTY_JWKS: &str = r#"{"keys":[]}"#;
 
-/// Plan passes per round: rotate and generate, publish what was generated, settle.
-const PASSES: usize = 3;
+/// Plan passes per round: rotate and generate, publish what was generated, activate a founding
+/// key and generate its backup (CR-59), publish that.
+const PASSES: usize = 4;
 
 impl Keyring {
     /// An empty key set whose new keys use `alg`: ES256 by default, Ed25519 when the realm
@@ -232,6 +233,7 @@ impl Keyring {
             valid_from,
             valid_until,
             jitter_permille,
+            founding,
         } = *step
         else {
             return true;
@@ -257,6 +259,7 @@ impl Keyring {
                 activated_at: None,
                 jitter_permille,
                 signatures: 0,
+                founding,
             },
             alg: self.alg,
             key,

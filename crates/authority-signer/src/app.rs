@@ -1,6 +1,6 @@
 //! The keyring of one domain: it follows the rotation schedule, keeps the binding-signed
 //! metadata and excerpts current, and signs with the key that may sign now (CR-23, CR-25,
-//! CR-27, SAI-46).
+//! CR-27, CR-59, SAI-46).
 
 use access_kernel::codec::Canonical;
 use access_kernel::verify::key_scope::{
@@ -67,6 +67,10 @@ pub struct Keyring {
     genesis: Option<Vec<u8>>,
 }
 
+/// Plan passes per round: rotate and generate, publish what was generated, activate a founding
+/// key and generate its backup (CR-59), publish that.
+const PASSES: usize = 4;
+
 impl Keyring {
     /// A keyring under `binding`, with no operational key yet.
     #[must_use]
@@ -97,7 +101,8 @@ impl Keyring {
     }
 
     /// Brings the keys to the schedule at `now` and re-signs the metadata when the published
-    /// set changed; `draw` is a random value for the jitter of a new key.
+    /// set changed; `draw` is a random value for the jitter of a new key. A key generated in a
+    /// round is published in the same round, and a founding key signs from that round (CR-59).
     ///
     /// # Errors
     /// [`SignerError`] when the binding key cannot sign; the keys stay as they were.
@@ -109,63 +114,72 @@ impl Keyring {
     ) -> Result<Round, SignerError> {
         let mut round = Round::default();
         let mut published_changed = self.metadata.is_none();
-        for step in rotation::plan(&self.records(), &self.policy, now, draw) {
-            match &step {
-                Step::Generate {
-                    valid_from,
-                    valid_until,
-                    jitter_permille,
-                } => {
-                    let Ok(generated) = factory.generate(self.template.operational_alg) else {
-                        round.outage = true;
-                        continue;
-                    };
-                    let signer = generated.signer;
-                    let key = signer.public_key();
-                    let record = Key {
-                        kid: thumbprint(&key),
-                        state: State::Pending,
-                        published_at: None,
-                        valid_from: *valid_from,
-                        valid_until: *valid_until,
-                        activated_at: None,
-                        jitter_permille: *jitter_permille,
-                        signatures: 0,
-                    };
-                    let declared = declaration(&record, signer.algorithm(), key);
-                    self.entries.push(Entry {
-                        record,
-                        declared,
-                        signer: Some(signer),
-                        sealed: Some(generated.sealed),
-                        excerpt: None,
-                    });
-                }
-                Step::Publish(kid) => {
-                    let excerpt = KeyExcerpt {
-                        domain: self.template.domain,
-                        key: self.declared(kid)?,
-                    };
-                    let bytes = excerpt.to_bytes().map_err(|_| SignerError::Encode)?;
-                    let signed = self.binding_sign(EXCERPT_CONTENT_TYPE, &bytes)?;
-                    if let Some(e) = self.entries.iter_mut().find(|e| e.record.kid == *kid) {
-                        e.excerpt = Some(signed);
+        for _ in 0..PASSES {
+            let mut progressed = false;
+            for step in rotation::plan(&self.records(), &self.policy, now, draw) {
+                match &step {
+                    Step::Generate {
+                        valid_from,
+                        valid_until,
+                        jitter_permille,
+                        founding,
+                    } => {
+                        let Ok(generated) = factory.generate(self.template.operational_alg) else {
+                            round.outage = true;
+                            continue;
+                        };
+                        let signer = generated.signer;
+                        let key = signer.public_key();
+                        let record = Key {
+                            kid: thumbprint(&key),
+                            state: State::Pending,
+                            published_at: None,
+                            valid_from: *valid_from,
+                            valid_until: *valid_until,
+                            activated_at: None,
+                            jitter_permille: *jitter_permille,
+                            signatures: 0,
+                            founding: *founding,
+                        };
+                        let declared = declaration(&record, signer.algorithm(), key);
+                        self.entries.push(Entry {
+                            record,
+                            declared,
+                            signer: Some(signer),
+                            sealed: Some(generated.sealed),
+                            excerpt: None,
+                        });
                     }
-                    published_changed = true;
+                    Step::Publish(kid) => {
+                        let excerpt = KeyExcerpt {
+                            domain: self.template.domain,
+                            key: self.declared(kid)?,
+                        };
+                        let bytes = excerpt.to_bytes().map_err(|_| SignerError::Encode)?;
+                        let signed = self.binding_sign(EXCERPT_CONTENT_TYPE, &bytes)?;
+                        if let Some(e) = self.entries.iter_mut().find(|e| e.record.kid == *kid) {
+                            e.excerpt = Some(signed);
+                        }
+                        published_changed = true;
+                    }
+                    Step::Drop(_) => published_changed = true,
+                    Step::Activate(_) | Step::Retire(_) => {}
                 }
-                Step::Drop(_) => published_changed = true,
-                Step::Activate(_) | Step::Retire(_) => {}
-            }
-            let mut records = self.records();
-            rotation::apply(&mut records, &step, now);
-            for (e, r) in self.entries.iter_mut().zip(records) {
-                e.record = r;
-                if e.record.state == State::Dropped {
-                    e.signer = None;
-                    e.sealed = None;
+                let mut records = self.records();
+                rotation::apply(&mut records, &step, now);
+                for (e, r) in self.entries.iter_mut().zip(records) {
+                    e.record = r;
+                    if e.record.state == State::Dropped {
+                        e.signer = None;
+                        e.sealed = None;
+                    }
                 }
+                round.applied.push(step);
+                progressed = true;
             }
-            round.applied.push(step);
+            if !progressed {
+                break;
+            }
         }
         if published_changed {
             self.metadata = Some(self.sign_metadata(now)?);

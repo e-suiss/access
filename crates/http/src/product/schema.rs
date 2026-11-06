@@ -48,7 +48,7 @@ fn key_components() -> Value {
                 "status": { "type": "integer" },
                 "code": text("Stable error code (OP-65)."),
                 "detail": text("Detail."),
-                "reason": text("A stable, non-secret reason narrowing `code`, such as `signer-no-key` on a 503 while a new domain's first operational key is in its publish lead (SAI-46)."),
+                "reason": text("A stable, non-secret reason narrowing `code`, such as `signer-no-key` on a 503 while no operational key of the domain may sign (SAI-46, CR-23)."),
                 "errors": {
                     "type": "array",
                     "description": "The parts of the request a protocol problem is about (RFC 9457 §3); never request values.",

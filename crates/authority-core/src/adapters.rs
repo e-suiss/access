@@ -894,9 +894,9 @@ const SIGNER_CODES: [&str; 9] = [
     "signer-token-horizon",
 ];
 
-/// The stable reason of a signer's refusal (OP-149 m.5): a domain's first operational key
-/// signs only `T_publish_lead` after it is published (SAI-46), and until then the signer
-/// answers `signer-no-key`.
+/// The stable reason of a signer's refusal (OP-149 m.5): an operational key signs only
+/// `T_publish_lead` after it is published (SAI-46; the founding key at once, CR-59), and
+/// without one the signer answers `signer-no-key`.
 pub(crate) fn signer_reason(code: &str) -> &'static str {
     SIGNER_CODES
         .into_iter()

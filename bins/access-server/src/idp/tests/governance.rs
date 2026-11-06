@@ -172,6 +172,46 @@ async fn claim_mappers_stay_inside_the_profile() {
     );
 }
 
+// CR-59, SAI-46, CR-25, OP-146 m.16 (m): a realm created through the admin path signs a token
+// with its founding key the moment it is open, with no schedule round and no clock advance; the
+// JWKS already lists that key first and a published backup, which waits the full lead
+#[tokio::test]
+async fn a_new_realm_signs_tokens_at_once() {
+    let w = World::new().await;
+    let (_, realm, _) = w.realm("fresh").await;
+    let signer_realm = SignerRealm(*realm.as_bytes());
+    let SignerResponse::Signed { kid, token } = w.keys.ask(SignerRequest::Sign {
+        realm: signer_realm,
+        typ: String::from("at+jwt"),
+        payload: br#"{"sub":"u1"}"#.to_vec(),
+        at: 0,
+    }) else {
+        panic!("the new realm signed nothing");
+    };
+    assert_eq!(token.split('.').count(), 3);
+    let listed = kids(&w, realm);
+    assert_eq!(listed.len(), 2);
+    assert_eq!(listed[0], kid);
+    let early = LEAD - MINUTE;
+    w.keys.at(early);
+    assert_eq!(
+        w.keys.ask(SignerRequest::Rotate {
+            realm: signer_realm,
+            retire: kid,
+        }),
+        SignerResponse::Error(String::from("signer-no-backup"))
+    );
+    w.keys.at(LEAD);
+    assert!(matches!(
+        w.keys.ask(SignerRequest::Rotate {
+            realm: signer_realm,
+            retire: kid,
+        }),
+        SignerResponse::Rekeyed(_)
+    ));
+    assert_ne!(kids(&w, realm)[0], kid);
+}
+
 // §13.2, §13.7.1, §13.7.7, SEC9, MD-7: a compromised realm key is dropped by a narrowing
 // idp.realm.key_drop Exercise; it leaves the JWKS at once, the drop records the issuer cutoff
 // 24 hours before the compromise, a retry changes nothing, and a key the realm does not

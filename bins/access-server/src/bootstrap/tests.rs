@@ -734,12 +734,11 @@ async fn admin_realm_creation_opens_the_domain_keys() {
     w.domains.release().await;
 }
 
-// OP-149 m.5, SAI-46, CR-25, OP-146 m.16 (m): a realm created through the admin path opens its
-// domain's keyring at Genesis, so the publish lead of its first operational key runs from then
-// and signed key lookups are answered once it is due; before, the answer is a 503 naming why
+// OP-149 m.5, SAI-46, CR-25, CR-59, OP-146 m.16 (m): a realm created through the admin path
+// opens its domain's keyring at Genesis, where its founding operational key signs at once, so
+// signed key lookups are answered from the realm's creation on, with no schedule round between
 #[tokio::test]
-async fn admin_realms_sign_key_lookups_once_the_first_key_is_due() {
-    use access_authority_core::CoreError;
+async fn admin_realms_sign_key_lookups_from_genesis() {
     use access_authority_core::keys::AsOf;
     let (w, signer) = World::open("bootstrap-key-lookup", true).await;
     let signer = signer.unwrap();
@@ -778,14 +777,13 @@ async fn admin_realms_sign_key_lookups_once_the_first_key_is_due() {
         .onboard(fresh_tenant, fresh.realm, fresh.domain, &root, party)
         .await
         .unwrap();
-    let early = w
+    let at_once = w
         .domains
         .lookup_keys(fresh.domain, &[kid], AsOf::Head, true)
-        .await;
-    assert!(
-        matches!(early, Err(CoreError::Unavailable("signer-no-key"))),
-        "{early:?}"
-    );
+        .await
+        .unwrap();
+    let (sign1, excerpt) = at_once.signed.unwrap();
+    assert!(!sign1.is_empty() && !excerpt.is_empty());
     w.domains.release().await;
 }
 

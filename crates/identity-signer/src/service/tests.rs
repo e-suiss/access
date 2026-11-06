@@ -107,14 +107,111 @@ fn another_alg_applies_to_the_next_keys() {
     assert!(rotated);
 }
 
-// SAI-46, CR-25: nothing is signed before the lead has passed, then the active key signs
+// CR-59, SAI-46, CR-25: a realm signs with its founding key the moment it is opened; the
+// backup published beside it waits the full lead before a rotation may bring it in, after
+// which it signs and the founding key retires
 #[test]
-fn signing_waits_for_the_publish_lead() {
+fn the_founding_key_signs_at_once_and_the_next_waits_for_the_lead() {
     let mut s = Service::start(factory(), MemVault::default(), Policy::REALM).unwrap();
+    assert_eq!(
+        s.handle(
+            Request::Open {
+                realm: A,
+                alg: JwsAlg::Ed25519,
+            },
+            0,
+            0,
+        ),
+        Response::Opened
+    );
+    let sign = |at| Request::Sign {
+        realm: A,
+        typ: String::from("JWT"),
+        payload: b"{}".to_vec(),
+        at,
+    };
+    let Response::Signed { kid: founding, .. } = s.handle(sign(0), 0, 0) else {
+        panic!("not signed at once");
+    };
+    let keys = s.rings[&A].1.keys();
+    assert!(keys.iter().any(|k| k.kid == founding && k.founding));
+    assert_eq!(keys.iter().filter(|k| k.founding).count(), 1);
+    let lead = Policy::REALM.publish_lead_ms;
+    let early = lead - 60_000;
+    assert_eq!(s.tick(early, 0), Vec::<Realm>::new());
+    let rotate = Request::Rotate {
+        realm: A,
+        retire: founding,
+    };
+    assert_eq!(
+        s.handle(rotate.clone(), early, 0),
+        Response::Error(String::from("signer-no-backup"))
+    );
+    assert!(matches!(
+        s.handle(sign(early), early, 0),
+        Response::Signed { kid, .. } if kid == founding
+    ));
+    assert_eq!(s.tick(lead, 0), Vec::<Realm>::new());
+    assert!(matches!(s.handle(rotate, lead, 0), Response::Rekeyed(_)));
+    let Response::Signed { kid: next, .. } = s.handle(sign(lead), lead, 0) else {
+        panic!("not signed after the rotation");
+    };
+    assert_ne!(next, founding);
+    let keys = s.rings[&A].1.keys();
+    let second = keys.iter().find(|k| k.kid == next).unwrap();
+    assert!(!second.founding && second.published_at.unwrap() + lead <= lead);
+    assert_eq!(
+        keys.iter().find(|k| k.kid == founding).unwrap().state,
+        State::Retiring
+    );
+    assert_eq!(
+        s.handle(sign(lead + MAX_SKEW_MS + 1), lead, 0),
+        Response::Error(String::from("signer-time"))
+    );
+}
+
+/// `bytes` with every `founding` entry of every key removed: a realm as a vault written before
+/// CR-59 kept it.
+fn without_founding(bytes: &[u8]) -> Vec<u8> {
+    let Value::Map(top) = dcbor::decode(bytes, Limits::CEILING).unwrap() else {
+        panic!("not a map");
+    };
+    let top = top
+        .into_iter()
+        .map(|(k, v)| match (&k, v) {
+            (Value::Text(name), Value::Array(keys)) if name == "keys" => {
+                let keys = keys
+                    .into_iter()
+                    .map(|key| {
+                        let Value::Map(fields) = key else {
+                            panic!("not a map");
+                        };
+                        Value::Map(
+                            fields
+                                .into_iter()
+                                .filter(|(f, _)| !matches!(f, Value::Text(t) if t == "founding"))
+                                .collect(),
+                        )
+                    })
+                    .collect();
+                (k, Value::Array(keys))
+            }
+            (_, v) => (k, v),
+        })
+        .collect();
+    dcbor::encode(&Value::Map(top), Limits::CEILING).unwrap()
+}
+
+// CR-59, CR-23: a vault written before the founding key was recorded restores with no founding
+// key, so its keys keep the full lead; one written now restores the founding key as it was
+#[test]
+fn an_older_vault_restores_without_a_founding_key() {
+    let vault = MemVault::default();
+    let mut s = Service::start(factory(), vault.clone(), Policy::REALM).unwrap();
     let _ = s.handle(
         Request::Open {
             realm: A,
-            alg: JwsAlg::Ed25519,
+            alg: JwsAlg::Es256,
         },
         0,
         0,
@@ -125,20 +222,32 @@ fn signing_waits_for_the_publish_lead() {
         payload: b"{}".to_vec(),
         at,
     };
+    let current = vault.0.lock().unwrap()[&A].clone();
+    let older = MemVault::default();
+    older
+        .0
+        .lock()
+        .unwrap()
+        .insert(A, without_founding(&current));
+    let mut restored = Service::start(factory(), older, Policy::REALM).unwrap();
+    let keys = restored.rings[&A].1.keys();
+    assert_eq!(keys.len(), 2);
+    assert!(keys.iter().all(|k| !k.founding));
     assert_eq!(
-        s.handle(sign(0), 0, 0),
+        restored.handle(sign(0), 0, 0),
         Response::Error(String::from("signer-no-key"))
     );
-    let later = Policy::REALM.publish_lead_ms + 60_000;
-    assert_eq!(s.tick(later, 0), Vec::<Realm>::new());
+    let lead = Policy::REALM.publish_lead_ms;
     assert!(matches!(
-        s.handle(sign(later), later, 0),
+        restored.handle(sign(lead), lead, 0),
         Response::Signed { .. }
     ));
-    assert_eq!(
-        s.handle(sign(later + MAX_SKEW_MS + 1), later, 0),
-        Response::Error(String::from("signer-time"))
-    );
+    let mut again = Service::start(factory(), vault, Policy::REALM).unwrap();
+    assert_eq!(again.rings[&A].1.keys(), s.rings[&A].1.keys());
+    assert!(matches!(
+        again.handle(sign(0), 0, 0),
+        Response::Signed { .. }
+    ));
 }
 
 // CR-23, OP-143 m.9 (e): a restarted signer restores every realm from its vault

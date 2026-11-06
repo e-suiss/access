@@ -240,11 +240,20 @@ fn the_service_signs_checkpoints_of_its_domain() {
     );
 }
 
-// CR-23, G42: before an operational key may sign, no checkpoint is signed
+// CR-23, G42: without an operational key that may sign (a key-generation outage from Genesis
+// on), no checkpoint is signed
 #[test]
 fn no_key_no_checkpoint() {
     let (_, doc) = SoftSigner::generate_ed25519().unwrap();
-    let mut s = Service::start(Soft, Binding(doc), Mem::default(), Policy::AUTHORITY, 0).unwrap();
+    let down = std::rc::Rc::new(std::cell::Cell::new(true));
+    let mut s = Service::start(
+        Flaky(down),
+        Binding(doc),
+        Mem::default(),
+        Policy::AUTHORITY,
+        0,
+    )
+    .unwrap();
     s.handle(Request::Open(Box::new(template())), 0);
     let origin = crate::domain::origin(&Digest([7; 32]));
     let body = format!(
@@ -262,6 +271,98 @@ fn no_key_no_checkpoint() {
         ),
         Response::Error(String::from("signer-no-key"))
     );
+}
+
+// CR-59, SAI-46, OP-143 m.4: `open` brings the domain's founding key to signing in the same
+// call, so an artefact is signed right after Genesis; a vault written before the founding key
+// was recorded restores with none, so its first key keeps the full lead
+#[test]
+fn the_founding_key_signs_on_open_and_an_older_vault_has_none() {
+    let (binding, doc) = SoftSigner::generate_ed25519().unwrap();
+    let vault = Mem::default();
+    let mut s = Service::start(
+        Soft,
+        Binding(doc.clone()),
+        vault.clone(),
+        Policy::AUTHORITY,
+        0,
+    )
+    .unwrap();
+    assert_eq!(
+        s.handle(Request::Open(Box::new(template())), 0),
+        Response::Opened
+    );
+    let Response::Signed { sign1, excerpt } = s.handle(sign(0), 0) else {
+        panic!("not signed at Genesis");
+    };
+    let Response::Metadata(m) = s.handle(Request::Metadata(Digest([7; 32])), 0) else {
+        panic!("metadata");
+    };
+    let metadata = verify_metadata(&PureBackend, &m, &trusted(&binding)).unwrap();
+    let key = operational_key(
+        &PureBackend,
+        &metadata,
+        &Digest([7; 32]),
+        &excerpt,
+        KeyUsage::Receipt,
+        0,
+    )
+    .unwrap();
+    verify_sign1(&PureBackend, &sign1, &key.key_set(), CT).unwrap();
+    let keys = s.rings[&Digest([7; 32])].1.saved();
+    assert_eq!(keys.iter().filter(|k| k.record.founding).count(), 1);
+
+    let current = vault.0.borrow()[&Digest([7; 32])].clone();
+    let older = Mem::default();
+    older
+        .0
+        .borrow_mut()
+        .insert(Digest([7; 32]), without_founding(&current));
+    let mut restored = Service::start(Soft, Binding(doc), older, Policy::AUTHORITY, 0).unwrap();
+    let keys = restored.rings[&Digest([7; 32])].1.saved();
+    assert_eq!(keys.len(), 2);
+    assert!(keys.iter().all(|k| !k.record.founding));
+    assert_eq!(
+        restored.handle(sign(0), 0),
+        Response::Error(String::from("signer-no-key"))
+    );
+    let lead = Policy::AUTHORITY.publish_lead_ms;
+    assert!(matches!(
+        restored.handle(sign(lead), lead),
+        Response::Signed { .. }
+    ));
+}
+
+/// `bytes` with every `founding` entry of every key removed: a domain as a vault written before
+/// CR-59 kept it.
+fn without_founding(bytes: &[u8]) -> Vec<u8> {
+    let Value::Map(top) = dcbor::decode(bytes, Limits::CEILING).unwrap() else {
+        panic!("not a map");
+    };
+    let top = top
+        .into_iter()
+        .map(|(k, v)| match (&k, v) {
+            (Value::Text(name), Value::Array(keys)) if name == "keys" => {
+                let keys = keys
+                    .into_iter()
+                    .map(|key| {
+                        let Value::Map(fields) = key else {
+                            panic!("not a map");
+                        };
+                        Value::Map(
+                            fields
+                                .into_iter()
+                                .filter(|(f, _)| !matches!(f, Value::Text(t) if t == "founding"))
+                                .collect(),
+                        )
+                    })
+                    .collect();
+                (k, Value::Array(keys))
+            }
+            (_, v) => (k, v),
+        })
+        .collect();
+    dcbor::encode(&Value::Map(top), Limits::CEILING).unwrap()
 }
 
 // T20, OP-143 m.1 E4: `open` has the binding key sign the Genesis statement once; a restart

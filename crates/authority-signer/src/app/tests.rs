@@ -169,18 +169,45 @@ fn a_token_is_holder_bound_and_within_the_key_publication() {
     assert_eq!(SignerError::TokenHorizon.code(), "signer-token-horizon");
 }
 
-// CR-25, SAI-46: nothing is signed before a key has been published for the lead
+// CR-59, CR-25, SAI-46: the founding key signs at Genesis, in the round that publishes it,
+// and its artefact verifies through the metadata; the backup published beside it is the only
+// other key and does not sign before its full lead, after which it takes over
 #[test]
-fn nothing_signs_before_the_lead() {
+fn the_founding_key_signs_at_genesis_and_the_next_waits_for_the_lead() {
     // SAI-46, G61
     let mut ring = keyring();
     let mut factory = Factory { down: false };
+    ring.tick(&mut factory, 0, 0).unwrap();
+    let at_genesis = ring
+        .sign(KeyUsage::Receipt, RECEIPT, b"receipt", 0)
+        .unwrap();
+    verify(&ring, &at_genesis, 0).unwrap();
+    let records = ring.records();
+    assert_eq!(records.len(), 2);
+    let founding = records.iter().find(|k| k.kid == at_genesis.kid).unwrap();
+    assert!(founding.founding && founding.valid_from == 0);
+    let second = records.iter().find(|k| !k.founding).unwrap();
+    assert_eq!(second.state, State::Published);
+    assert_eq!(second.valid_from, Policy::AUTHORITY.publish_lead_ms);
     let early = Policy::AUTHORITY.publish_lead_ms - MINUTE;
-    advance(&mut ring, &mut factory, 0, early);
-    assert_eq!(
-        ring.sign(KeyUsage::Receipt, RECEIPT, b"receipt", early),
-        Err(SignerError::NoKey)
+    advance(&mut ring, &mut factory, MINUTE, early);
+    let still = ring
+        .sign(KeyUsage::Receipt, RECEIPT, b"receipt", early)
+        .unwrap();
+    assert_eq!(still.kid, at_genesis.kid);
+    assert!(
+        ring.records()
+            .iter()
+            .all(|k| k.founding || k.state == State::Published)
     );
+    let lead = Policy::AUTHORITY.publish_lead_ms;
+    ring.tick(&mut factory, lead, 0).unwrap();
+    let next = ring
+        .sign(KeyUsage::Receipt, RECEIPT, b"receipt", lead)
+        .unwrap();
+    assert_eq!(next.kid, second.kid);
+    verify(&ring, &next, lead).unwrap();
+    assert_eq!(ring.records().iter().filter(|k| k.founding).count(), 1);
 }
 
 // CR-27: across rotations every artefact verifies against the metadata current when it is

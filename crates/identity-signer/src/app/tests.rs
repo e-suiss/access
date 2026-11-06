@@ -158,22 +158,51 @@ fn tokens_verify_against_the_jwks() {
     }
 }
 
-// CR-25, SAI-46: nothing is signed before a key has been published for the lead
+// CR-59, CR-25, SAI-46, CR-23: the founding key signs before the lead has passed, published
+// beside its backup; the backup neither signs nor rotates in before its lead, so once the
+// founding key is dropped nothing is signed until the lead passes, then the backup signs
 #[test]
-fn nothing_signs_before_the_lead() {
+fn the_founding_key_signs_before_the_lead_and_the_second_does_not() {
     let mut ring = Keyring::new(JwsAlg::Es256, Policy::REALM).unwrap();
     let mut factory = Factory { down: false };
-    advance(&mut ring, &mut factory, 0, LEAD - MINUTE, MINUTE);
-    assert_eq!(kids(ring.jwks()).len(), 1);
+    let early = LEAD - MINUTE;
+    advance(&mut ring, &mut factory, 0, early, MINUTE);
+    assert_eq!(kids(ring.jwks()).len(), 2);
+    let founding = ring.sign(TYP, b"{}", early).unwrap();
+    verify(ring.jwks(), &founding.token).unwrap();
+    let records = ring.keys();
+    let first = records.iter().find(|k| k.kid == founding.kid).unwrap();
+    assert!(first.founding);
+    assert_eq!(first.valid_from, 0);
     assert_eq!(
-        ring.sign(TYP, b"{}", LEAD - MINUTE),
-        Err(SignerError::NoKey)
+        records.iter().filter(|k| k.founding).count(),
+        1,
+        "{records:?}"
+    );
+    let second = records.iter().find(|k| !k.founding).unwrap();
+    assert_eq!((second.state, second.valid_from), (State::Published, LEAD));
+    assert_eq!(
+        ring.rotate(&mut factory, &founding.kid, early, 1)
+            .map(|_| ()),
+        Err(SignerError::NoBackup)
+    );
+    ring.drop_key(&mut factory, &founding.kid, early, 2)
+        .unwrap();
+    assert_eq!(ring.sign(TYP, b"{}", early), Err(SignerError::NoKey));
+    advance(&mut ring, &mut factory, early, LEAD, MINUTE);
+    let next = ring.sign(TYP, b"{}", LEAD).unwrap();
+    assert_eq!(next.kid, second.kid);
+    verify(ring.jwks(), &next.token).unwrap();
+    assert!(
+        ring.keys()
+            .iter()
+            .all(|k| k.founding == (k.kid == founding.kid))
     );
 }
 
-// CR-25, CR-27, SAI-46, MD-6: over 400 days the realm always signs once its first key is
-// ready; every signing key was in the JWKS for at least the lead; the JWKS always holds the
-// active key and a published backup
+// CR-25, CR-27, CR-59, SAI-46, MD-6: over 400 days the realm signs from the minute it is
+// opened; every signing key but the founding one was in the JWKS for at least the lead; the
+// JWKS always holds the active key and a published backup
 #[test]
 fn rotation_runs_without_gaps() {
     let mut ring = Keyring::new(JwsAlg::Es256, Policy::REALM).unwrap();
@@ -187,22 +216,26 @@ fn rotation_runs_without_gaps() {
         for kid in &listed {
             first_seen.entry(kid.clone()).or_insert(now);
         }
-        if now >= LEAD {
-            let signed = ring.sign(TYP, br#"{"n":1}"#, now).unwrap();
-            let kid = b64url_encode(&signed.kid);
-            assert!(listed.contains(&kid));
+        let signed = ring.sign(TYP, br#"{"n":1}"#, now).unwrap();
+        let kid = b64url_encode(&signed.kid);
+        assert!(listed.contains(&kid));
+        let records = ring.keys();
+        let record = records.iter().find(|k| k.kid == signed.kid).unwrap();
+        if record.founding {
+            assert_eq!(first_seen[&kid], 0);
+        } else {
             assert!(first_seen[&kid] + LEAD <= now, "{kid} used early at {now}");
-            signing_kids.insert(kid);
-            if now % (10 * DAY) == 0 {
-                verify(ring.jwks(), &signed.token).unwrap();
-            }
-            let records = ring.keys();
-            let count = |s: State| records.iter().filter(|k| k.state == s).count();
-            assert_eq!(count(State::Active), 1, "at {now}");
-            assert!(count(State::Published) >= 1, "at {now}");
-            assert_eq!(count(State::Pending), 0, "at {now}");
-            assert!(listed.len() <= 4, "{} keys at {now}", listed.len());
         }
+        signing_kids.insert(kid);
+        if now % (10 * DAY) == 0 {
+            verify(ring.jwks(), &signed.token).unwrap();
+        }
+        let count = |s: State| records.iter().filter(|k| k.state == s).count();
+        assert_eq!(count(State::Active), 1, "at {now}");
+        assert!(count(State::Published) >= 1, "at {now}");
+        assert_eq!(count(State::Pending), 0, "at {now}");
+        assert_eq!(records.iter().filter(|k| k.founding).count(), 1, "at {now}");
+        assert!(listed.len() <= 4, "{} keys at {now}", listed.len());
         now += HOUR;
     }
     // CR-19: 90 days ±20 % per key
@@ -334,24 +367,26 @@ fn artifacts_are_cose_signed_with_the_jwks_key() {
     }
 }
 
-// TN-118, MD-6, CR-25, SAI-46: a decided rotation makes the published backup past its lead
-// sign at once; the old key retires and still verifies its tokens; without such a backup
+// TN-118, MD-6, CR-25, CR-59, SAI-46: a decided rotation makes the published backup past its
+// lead sign at once; the old key retires and still verifies its tokens; without such a backup
 // nothing changes
 #[test]
 fn a_decided_rotation_uses_the_ready_backup() {
     let mut ring = Keyring::new(JwsAlg::Es256, Policy::REALM).unwrap();
     let mut factory = Factory { down: false };
-    advance(&mut ring, &mut factory, 0, LEAD, MINUTE);
-    let first = ring.sign(TYP, b"{}", LEAD).unwrap().kid;
+    let early = LEAD - MINUTE;
+    advance(&mut ring, &mut factory, 0, early, MINUTE);
+    let first = ring.sign(TYP, b"{}", early).unwrap().kid;
     let before = ring.keys();
     assert_eq!(
-        ring.rotate(&mut factory, &first, LEAD, 1).map(|_| ()),
+        ring.rotate(&mut factory, &first, early, 1).map(|_| ()),
         Err(SignerError::NoBackup)
     );
     assert_eq!(ring.keys(), before);
-    let now = 2 * LEAD + MINUTE;
-    advance(&mut ring, &mut factory, LEAD, now, MINUTE);
+    let now = LEAD;
+    advance(&mut ring, &mut factory, early, now, MINUTE);
     let old = ring.sign(TYP, br#"{"n":1}"#, now).unwrap();
+    assert_eq!(old.kid, first);
     let round = ring.rotate(&mut factory, &old.kid, now, 7).unwrap();
     assert!(
         round
@@ -388,29 +423,30 @@ fn a_decided_rotation_uses_the_ready_backup() {
 fn an_emergency_drop_ends_a_key_at_once() {
     let mut ring = Keyring::new(JwsAlg::Es256, Policy::REALM).unwrap();
     let mut factory = Factory { down: false };
-    advance(&mut ring, &mut factory, 0, LEAD, MINUTE);
-    let stolen = ring.sign(TYP, br#"{"n":1}"#, LEAD).unwrap();
+    let early = LEAD - MINUTE;
+    advance(&mut ring, &mut factory, 0, early, MINUTE);
+    let stolen = ring.sign(TYP, br#"{"n":1}"#, early).unwrap();
     assert!(verify(ring.jwks(), &stolen.token).is_ok());
-    ring.drop_key(&mut factory, &stolen.kid, LEAD, 3).unwrap();
+    ring.drop_key(&mut factory, &stolen.kid, early, 3).unwrap();
     assert!(!kids(ring.jwks()).contains(&b64url_encode(&stolen.kid)));
     assert!(verify(ring.jwks(), &stolen.token).is_err());
-    assert_eq!(ring.sign(TYP, b"{}", LEAD), Err(SignerError::NoKey));
+    assert_eq!(ring.sign(TYP, b"{}", early), Err(SignerError::NoKey));
     assert!(
         ring.saved()
             .iter()
             .any(|s| s.record.kid == stolen.kid && s.sealed.is_none())
     );
     assert_eq!(
-        ring.drop_key(&mut factory, &stolen.kid, LEAD, 3)
+        ring.drop_key(&mut factory, &stolen.kid, early, 3)
             .map(|r| r.applied),
         Ok(Vec::new())
     );
     assert_eq!(
-        ring.drop_key(&mut factory, &[0; 32], LEAD, 3).map(|_| ()),
+        ring.drop_key(&mut factory, &[0; 32], early, 3).map(|_| ()),
         Err(SignerError::UnknownKey)
     );
-    let later = 2 * LEAD + MINUTE;
-    advance(&mut ring, &mut factory, LEAD, later, MINUTE);
+    let later = LEAD + MINUTE;
+    advance(&mut ring, &mut factory, early, later, MINUTE);
     let next = ring.sign(TYP, br#"{"n":2}"#, later).unwrap();
     assert_ne!(next.kid, stolen.kid);
     assert!(verify(ring.jwks(), &next.token).is_ok());

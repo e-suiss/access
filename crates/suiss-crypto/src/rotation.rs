@@ -1,5 +1,6 @@
-//! Signing key rotation (CR-25, CR-26, CR-27): the key state machine, publish-before-use and the
-//! schedule. Pure and deterministic; the caller brings the clock, the randomness and the keys.
+//! Signing key rotation (CR-25, CR-26, CR-27, CR-59): the key state machine, publish-before-use
+//! and the schedule. Pure and deterministic; the caller brings the clock, the randomness and the
+//! keys.
 
 use alloc::vec::Vec;
 
@@ -83,6 +84,9 @@ pub struct Key {
     pub jitter_permille: i32,
     /// Signatures made.
     pub signatures: u64,
+    /// The first key of a set that had never been published: it signs as soon as it is
+    /// published, without the lead, since no cache of an earlier publication exists (CR-59).
+    pub founding: bool,
 }
 
 /// What the schedule asks for.
@@ -96,6 +100,8 @@ pub enum Step {
         valid_until: u64,
         /// Its jitter.
         jitter_permille: i32,
+        /// Whether it is the set's founding key (CR-59).
+        founding: bool,
     },
     /// Publish a pending key.
     Publish([u8; 32]),
@@ -130,14 +136,14 @@ impl Step {
     }
 }
 
-/// Whether `key` may sign at `now`: active, published at least the lead before, inside its
-/// window and under its signature limit (SAI-46).
+/// Whether `key` may sign at `now`: active, published at least the lead before (at all, for
+/// the founding key, CR-59), inside its window and under its signature limit (SAI-46).
 #[must_use]
 pub fn usable(key: &Key, policy: &Policy, now: u64) -> bool {
     key.state == State::Active
         && key
             .published_at
-            .is_some_and(|p| p.saturating_add(policy.publish_lead_ms) <= now)
+            .is_some_and(|p| key.founding || p.saturating_add(policy.publish_lead_ms) <= now)
         && key.valid_from <= now
         && now <= key.valid_until
         && key.signatures < policy.max_signatures
@@ -198,10 +204,12 @@ pub fn jitter(policy: &Policy, draw: u64) -> i32 {
 }
 
 /// The steps that bring `keys` to the schedule at `now`; `draw` is a random value for the
-/// jitter of a key to generate.
+/// jitter of a key to generate. A set none of whose keys was ever published gets a founding
+/// key, which signs as soon as it is published (CR-59); every later key waits for the lead.
 #[must_use]
 pub fn plan(keys: &[Key], policy: &Policy, now: u64, draw: u64) -> Vec<Step> {
     let mut steps = Vec::new();
+    let founding = keys.iter().all(|k| k.published_at.is_none());
     for k in keys.iter().filter(|k| k.state == State::Pending) {
         steps.push(Step::Publish(k.kid));
     }
@@ -218,7 +226,7 @@ pub fn plan(keys: &[Key], policy: &Policy, now: u64, draw: u64) -> Vec<Step> {
     });
     let ready = backup.filter(|b| {
         b.published_at
-            .is_some_and(|p| p.saturating_add(policy.publish_lead_ms) <= now)
+            .is_some_and(|p| b.founding || p.saturating_add(policy.publish_lead_ms) <= now)
             && b.valid_from <= now
     });
     let mut activated = None;
@@ -238,11 +246,16 @@ pub fn plan(keys: &[Key], policy: &Policy, now: u64, draw: u64) -> Vec<Step> {
             && Some(k.kid) != activated
     });
     if !has_backup {
-        let valid_from = now.saturating_add(policy.publish_lead_ms);
+        let valid_from = if founding {
+            now
+        } else {
+            now.saturating_add(policy.publish_lead_ms)
+        };
         steps.push(Step::Generate {
             valid_from,
             valid_until: valid_from.saturating_add(policy.window_ms),
             jitter_permille: jitter(policy, draw),
+            founding,
         });
     }
     for k in keys {
