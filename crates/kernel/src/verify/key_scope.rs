@@ -41,9 +41,11 @@ pub enum KeyUsage {
     StatusList,
     /// Instance key lookup answers (OP-149 m.5).
     KeyLookup,
+    /// Party status lookup answers (OP-149 m.28 (c)).
+    PartyLookup,
 }
 
-pub(crate) const USAGES: [(&str, KeyUsage); 7] = [
+pub(crate) const USAGES: [(&str, KeyUsage); 8] = [
     ("receipt", KeyUsage::Receipt),
     ("pap", KeyUsage::Pap),
     ("token", KeyUsage::Token),
@@ -51,6 +53,7 @@ pub(crate) const USAGES: [(&str, KeyUsage); 7] = [
     ("set", KeyUsage::Set),
     ("status-list", KeyUsage::StatusList),
     ("key-lookup", KeyUsage::KeyLookup),
+    ("party-lookup", KeyUsage::PartyLookup),
 ];
 
 /// Operational key declaration (T20).

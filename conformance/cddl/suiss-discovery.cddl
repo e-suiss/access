@@ -12,6 +12,9 @@ suiss-endpoints = {
   ? adp: https-url,
   ? key_lookup: https-url,
   ? key_batch: https-url,
+  ; OP-149 m.28 (c): the Party status lookup, the key lookup's twin.
+  ? party_lookup: https-url,
+  ? party_batch: https-url,
   ? eligibility: https-url,
   ? tenant_snapshot: https-url,
   ? auth_context: https-url,
@@ -32,6 +35,6 @@ suiss-endpoints = {
 }
 
 ; An absolute https URL in printable ASCII. A path variable is an RFC 6570 level 1 template
-; expression, for example {kid} in key_lookup, {tenant} in tenant_snapshot and {exercise} in exercise and exercise_agency,
-; {list} in status_list.
+; expression, for example {kid} in key_lookup, {party} in party_lookup, {tenant} in tenant_snapshot,
+; {exercise} in exercise and exercise_agency, {list} in status_list.
 https-url = tstr .regexp "https://[!-~]{1,2040}"

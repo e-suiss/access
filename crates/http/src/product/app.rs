@@ -1,18 +1,19 @@
-//! One product client call from request to reply (OP-149 m.4, m.5).
+//! One product client call from request to reply (OP-149 m.4, m.5, m.28 (c)).
 
 use access_authority_core::CoreError;
-use access_authority_core::adapters::KeyAnswer;
+use access_authority_core::adapters::{KeyAnswer, PartyAnswer};
 use access_authority_core::keys::AsOf;
 use access_kernel::digest::Digest;
+use access_kernel::model::Id;
 use serde_json::{Value, json};
 
 use super::domain::{self, BadRequest, TENANT_PAGE};
 use super::ports::{Exercises, KeyDirectory, Subjects, Tenants};
 
-/// The form of a key lookup answer.
+/// The form of a key or Party lookup answer.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Form {
-    /// The canonical `COSE_Sign1` under usage `key-lookup`.
+    /// The canonical `COSE_Sign1` under usage `key-lookup` or `party-lookup`.
     Cose,
     /// The same content as JSON, unsigned, with the consistency token.
     Json,
@@ -23,7 +24,7 @@ pub enum Form {
 pub enum Reply {
     /// 200 with a JSON body.
     Json(Value),
-    /// 200 with a key lookup answer.
+    /// 200 with a signed lookup answer: keys (OP-149 m.5) or Parties (m.28 (c)).
     Keys {
         /// The body: JSON, or the `COSE_Sign1` bytes.
         body: Vec<u8>,
@@ -145,6 +146,83 @@ impl<K: KeyDirectory, T: Tenants, S> Service<K, T, S> {
         };
         match self.lookup(domain, kids, as_of, form).await {
             Ok(a) => Self::keys_reply(&a, form),
+            Err(r) => r,
+        }
+    }
+
+    async fn party_lookup(
+        &self,
+        domain: Digest,
+        parties: Vec<Id>,
+        as_of: AsOf,
+        form: Form,
+    ) -> Result<PartyAnswer, Reply> {
+        self.keys
+            .parties(domain, parties, as_of, form == Form::Cose)
+            .await
+            .map_err(|e| failed(&e))
+    }
+
+    fn parties_reply(answer: &PartyAnswer, form: Form) -> Reply {
+        let (body, excerpt) = match (&answer.signed, form) {
+            (Some((sign1, excerpt)), Form::Cose) => (sign1.clone(), Some(excerpt.clone())),
+            (None, Form::Cose) => return Reply::Unavailable(Some("signer")),
+            (_, Form::Json) => (
+                domain::party_lookup_json(answer).to_string().into_bytes(),
+                None,
+            ),
+        };
+        Reply::Keys {
+            body,
+            form,
+            excerpt,
+            position: answer.lookup.pos,
+            cache: domain::party_cache_control(answer),
+        }
+    }
+
+    /// `GET /access/v1/parties/{party}?domain=…&as_of=…` (OP-149 m.28 (c)): a Party not
+    /// admitted at the position is a 404.
+    pub async fn party(
+        &self,
+        client: Option<String>,
+        party: &str,
+        domain: Option<&str>,
+        as_of: Option<&str>,
+        form: Form,
+    ) -> Reply {
+        if client.is_none() {
+            return Reply::Unauthenticated;
+        }
+        let Some(party) = domain::party_id(party) else {
+            return Reply::Bad("party");
+        };
+        let Some(domain) = domain.and_then(crate::adp::adapters::domain_id) else {
+            return Reply::Bad("domain");
+        };
+        let as_of = match domain::as_of(as_of) {
+            Ok(a) => a,
+            Err(BadRequest(code)) => return Reply::Bad(code),
+        };
+        match self.party_lookup(domain, vec![party], as_of, form).await {
+            Ok(a) if a.lookup.parties.is_empty() => Reply::NotFound("party-unknown"),
+            Ok(a) => Self::parties_reply(&a, form),
+            Err(r) => r,
+        }
+    }
+
+    /// `POST /access/v1/parties:batchGet` (OP-149 m.28 (c)): Parties not admitted at the
+    /// position are listed as `unknown`.
+    pub async fn parties(&self, client: Option<String>, body: &[u8], form: Form) -> Reply {
+        if client.is_none() {
+            return Reply::Unauthenticated;
+        }
+        let (domain, parties, as_of) = match domain::party_batch(body) {
+            Ok(b) => b,
+            Err(BadRequest(code)) => return Reply::Bad(code),
+        };
+        match self.party_lookup(domain, parties, as_of, form).await {
+            Ok(a) => Self::parties_reply(&a, form),
             Err(r) => r,
         }
     }

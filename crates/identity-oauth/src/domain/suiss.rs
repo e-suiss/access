@@ -27,6 +27,10 @@ pub enum Endpoint {
     KeyLookup,
     /// `POST /access/v1/keys:batchGet`.
     KeyBatch,
+    /// `GET /access/v1/parties/{party}` (OP-149 m.28 (c)).
+    PartyLookup,
+    /// `POST /access/v1/parties:batchGet` (OP-149 m.28 (c)).
+    PartyBatch,
     /// `POST /access/v1/eligibility:check`.
     Eligibility,
     /// `GET /access/v1/tenants/{tenant}/snapshot`.
@@ -67,6 +71,8 @@ impl Endpoint {
             Self::Adp => "adp",
             Self::KeyLookup => "key_lookup",
             Self::KeyBatch => "key_batch",
+            Self::PartyLookup => "party_lookup",
+            Self::PartyBatch => "party_batch",
             Self::Eligibility => "eligibility",
             Self::TenantSnapshot => "tenant_snapshot",
             Self::AuthContext => "auth_context",
@@ -92,6 +98,8 @@ impl Endpoint {
             Self::Adp => "/.well-known/authzen-configuration",
             Self::KeyLookup => "/access/v1/keys/{kid}",
             Self::KeyBatch => "/access/v1/keys:batchGet",
+            Self::PartyLookup => "/access/v1/parties/{party}",
+            Self::PartyBatch => "/access/v1/parties:batchGet",
             Self::Eligibility => "/access/v1/eligibility:check",
             Self::TenantSnapshot => "/access/v1/tenants/{tenant}/snapshot",
             Self::AuthContext => "/v1/me/auth-context",
@@ -129,6 +137,8 @@ pub const SERVED: &[Endpoint] = &[
     Endpoint::Adp,
     Endpoint::KeyLookup,
     Endpoint::KeyBatch,
+    Endpoint::PartyLookup,
+    Endpoint::PartyBatch,
     Endpoint::Eligibility,
     Endpoint::TenantSnapshot,
     Endpoint::AuthContext,

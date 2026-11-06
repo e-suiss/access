@@ -1,11 +1,13 @@
-//! The product client API's JSON (OP-149 m.4, m.5, OP-65): requests into terms and answers out.
-//! Positions travel as decimal strings and times as RFC 3339 UTC (OP-65 rule 4).
+//! The product client API's JSON (OP-149 m.4, m.5, m.28 (c), OP-65): requests into terms and
+//! answers out. Positions travel as decimal strings and times as RFC 3339 UTC (OP-65 rule 4).
 
-use access_authority_core::adapters::KeyAnswer;
+use access_authority_core::adapters::{KeyAnswer, PartyAnswer};
 use access_authority_core::keys::{self, AsOf, KeyEntry, KeyState, Point};
+use access_authority_core::parties::{self, PartyEntry};
 use access_identity_events::domain::catalog::uuid;
 use access_kernel::digest::Digest;
 use access_kernel::json::{b64url_decode, b64url_encode};
+use access_kernel::model::Id;
 use serde_json::{Map, Value, json};
 use suiss_crypto::dcbor::{self, Limits};
 use time::OffsetDateTime;
@@ -165,6 +167,92 @@ pub fn lookup_json(a: &KeyAnswer) -> Value {
 pub fn cache_control(a: &KeyAnswer) -> &'static str {
     let l = &a.lookup;
     if l.unknown.is_empty() && l.keys.iter().all(|k| k.state == KeyState::Ended) {
+        ENDED_CACHE
+    } else {
+        ACTIVE_MAX_AGE
+    }
+}
+
+/// A `PartyID` in its ADP text form: the unpadded base64url of its 16 bytes (OP-149 m.16 (f)).
+#[must_use]
+pub fn party_id(text: &str) -> Option<Id> {
+    let bytes = b64url_decode(text).ok()?;
+    let id = <[u8; 16]>::try_from(bytes).ok()?;
+    (b64url_encode(&id) == text).then_some(Id(id))
+}
+
+/// The Party batch body `{domain, parties, as_of?}`: 1 to [`parties::MAX_PARTIES`] distinct
+/// Parties (OP-149 m.28 (c)).
+///
+/// # Errors
+/// [`BadRequest`].
+pub fn party_batch(body: &[u8]) -> Result<(Digest, Vec<Id>, AsOf), BadRequest> {
+    let Ok(Value::Object(mut m)) = serde_json::from_slice::<Value>(body) else {
+        return Err(BadRequest("json"));
+    };
+    let domain = m
+        .remove("domain")
+        .and_then(|d| d.as_str().and_then(crate::adp::adapters::domain_id))
+        .ok_or(BadRequest("domain"))?;
+    let Some(Value::Array(list)) = m.remove("parties") else {
+        return Err(BadRequest("parties"));
+    };
+    if list.is_empty() || list.len() > parties::MAX_PARTIES {
+        return Err(BadRequest("parties"));
+    }
+    let mut ids = Vec::with_capacity(list.len());
+    for p in &list {
+        let p = p.as_str().and_then(party_id).ok_or(BadRequest("parties"))?;
+        if ids.contains(&p) {
+            return Err(BadRequest("parties"));
+        }
+        ids.push(p);
+    }
+    let at = match m.remove("as_of") {
+        None => AsOf::Head,
+        Some(Value::String(s)) => as_of(Some(&s))?,
+        Some(_) => return Err(BadRequest("as_of")),
+    };
+    if !m.is_empty() {
+        return Err(BadRequest("unknown-member"));
+    }
+    Ok((domain, ids, at))
+}
+
+/// One Party as JSON (OP-149 m.28 (c)).
+#[must_use]
+pub fn party_json(e: &PartyEntry) -> Value {
+    let mut m = Map::new();
+    m.insert("party".into(), b64url_encode(&e.party.0).into());
+    m.insert("actor_kind".into(), e.actor_kind.name().into());
+    m.insert("since".into(), point(e.since));
+    if let Some(p) = e.ended {
+        m.insert("ended".into(), point(p));
+    }
+    Value::Object(m)
+}
+
+/// The JSON form of a Party lookup: the signed payload's content, unsigned, with the
+/// consistency token (OP-149 m.28 (c)).
+#[must_use]
+pub fn party_lookup_json(a: &PartyAnswer) -> Value {
+    let l = &a.lookup;
+    json!({
+        "domain": domain_text(&l.domain),
+        "position": l.pos.to_string(),
+        "iat": rfc3339(l.iat),
+        "parties": l.parties.iter().map(party_json).collect::<Vec<_>>(),
+        "unknown": l.unknown.iter().map(|p| b64url_encode(&p.0)).collect::<Vec<_>>(),
+        "consistency_token": a.consistency,
+    })
+}
+
+/// `Cache-Control` of a Party lookup: immutable once every Party asked for has ended, else
+/// short (as the key lookup, OP-149 m.5).
+#[must_use]
+pub fn party_cache_control(a: &PartyAnswer) -> &'static str {
+    let l = &a.lookup;
+    if l.unknown.is_empty() && l.parties.iter().all(|p| p.ended.is_some()) {
         ENDED_CACHE
     } else {
         ACTIVE_MAX_AGE

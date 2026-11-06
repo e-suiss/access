@@ -412,6 +412,7 @@ key-set = {
 }
 
 key-usage = "receipt" / "pap" / "token" / "checkpoint" / "set" / "status-list" / "key-lookup"
+          / "party-lookup"
 
 operational-key = {
   kid: key-id,

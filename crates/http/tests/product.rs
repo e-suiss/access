@@ -15,9 +15,10 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use access_authority_core::CoreError;
-use access_authority_core::adapters::{ExerciseRecord, KeyAnswer};
+use access_authority_core::adapters::{ExerciseRecord, KeyAnswer, PartyAnswer};
 use access_authority_core::app::{Compromise, Incoming, Response};
 use access_authority_core::keys::{AsOf, KeyEntry, KeyState, Lookup, Point};
+use access_authority_core::parties::{self, PartyEntry};
 use access_http::adp::adapters::{Discovery as AdpDiscovery, Pep, router as adp_router};
 use access_http::adp::app::Service as AdpService;
 use access_http::adp::ports::Pdp;
@@ -52,6 +53,32 @@ const PENDING: [u8; 32] = [0xa4; 32];
 const SIGN1: [u8; 4] = [0xd2, 0x84, 0x40, 0xa0];
 const EXCERPT: [u8; 2] = [0xd2, 0x84];
 const T0: u64 = 1_793_786_400_000;
+/// A live human Party of the domain.
+const HUMAN: Id = Id([0xb1; 16]);
+/// A system Party that departed.
+const DEPARTED: Id = Id([0xb2; 16]);
+
+fn party_entry(party: Id) -> Option<PartyEntry> {
+    let since = Point { pos: 4, at: T0 };
+    match party {
+        HUMAN => Some(PartyEntry {
+            party,
+            actor_kind: ActorKind::Human,
+            since,
+            ended: None,
+        }),
+        DEPARTED => Some(PartyEntry {
+            party,
+            actor_kind: ActorKind::System,
+            since,
+            ended: Some(Point {
+                pos: 8,
+                at: T0.saturating_add(60_000),
+            }),
+        }),
+        _ => None,
+    }
+}
 
 fn entry(kid: [u8; 32]) -> Option<KeyEntry> {
     let since = Point { pos: 4, at: T0 };
@@ -93,10 +120,38 @@ fn entry(kid: [u8; 32]) -> Option<KeyEntry> {
     }
 }
 
-/// Knows three keys of one domain at position 9.
+/// Knows three keys and two Parties of one domain at position 9.
 struct Ledger;
 
 impl KeyDirectory for Ledger {
+    async fn parties(
+        &self,
+        domain: Digest,
+        parties: Vec<Id>,
+        as_of: AsOf,
+        sign: bool,
+    ) -> Result<PartyAnswer, CoreError> {
+        if domain != DOMAIN {
+            return Err(CoreError::Unavailable("unknown-domain"));
+        }
+        if as_of == AsOf::Position(99) {
+            return Err(CoreError::Unavailable("consistency"));
+        }
+        let (known, unknown): (Vec<_>, Vec<_>) =
+            parties.iter().partition(|p| party_entry(**p).is_some());
+        Ok(PartyAnswer {
+            lookup: parties::Lookup {
+                domain,
+                pos: 9,
+                iat: T0.saturating_add(180_000),
+                parties: known.iter().filter_map(|p| party_entry(*p)).collect(),
+                unknown,
+            },
+            consistency: "ct-9".to_owned(),
+            signed: sign.then(|| (SIGN1.to_vec(), EXCERPT.to_vec())),
+        })
+    }
+
     async fn lookup(
         &self,
         domain: Digest,
@@ -340,6 +395,29 @@ fn batch(kids: &[[u8; 32]], accept: &str) -> Request<Body> {
         .unwrap()
 }
 
+fn get_party(party: Id, accept: Option<&str>, extra: &str) -> Request<Body> {
+    let mut r = Request::get(format!(
+        "/access/v1/parties/{}?domain={}{extra}",
+        b64url_encode(&party.0),
+        domain_text()
+    ));
+    if let Some(a) = accept {
+        r = r.header(header::ACCEPT, a);
+    }
+    r.body(Body::empty()).unwrap()
+}
+
+fn party_batch(parties: &[Id], accept: &str) -> Request<Body> {
+    let parties: Vec<String> = parties.iter().map(|p| b64url_encode(&p.0)).collect();
+    Request::post("/access/v1/parties:batchGet")
+        .header(header::ACCEPT, accept)
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(
+            json!({ "domain": domain_text(), "parties": parties }).to_string(),
+        ))
+        .unwrap()
+}
+
 fn problem_type(body: &[u8]) -> String {
     let v: Value = serde_json::from_slice(body).unwrap();
     v["type"].as_str().unwrap().to_owned()
@@ -527,6 +605,8 @@ async fn a_client_certificate_is_required() {
         resolve_request(&parties_request()),
         get_exercise(SIGNED),
         get_agency(AGENT),
+        get_party(HUMAN, None, ""),
+        party_batch(&[HUMAN], "application/json"),
     ] {
         let (status, _, body) = call(app(false), req).await;
         assert_eq!(status, StatusCode::UNAUTHORIZED);
@@ -654,6 +734,134 @@ async fn a_batch_answers_up_to_a_hundred_kids() {
     let (status, _, body) = call(app(true), batch(&many, "application/json")).await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
     assert_eq!(problem_type(&body), "urn:suiss:access:problem:kids");
+}
+
+// OP-149 m.28 (c), m.8, CR-58: a Party's status is answered like a key: the canonical form is
+// the COSE_Sign1 under usage `party-lookup` with its excerpt, the ETag is the ledger position,
+// a live Party is cached briefly, a departed one is immutable, and JSON carries the same
+// content unsigned with the consistency token
+#[tokio::test]
+async fn a_party_status_is_answered_like_a_key() {
+    for accept in [None, Some("application/cose"), Some("*/*")] {
+        let (status, headers, body) = call(app(true), get_party(HUMAN, accept, "")).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(
+            headers[header::CONTENT_TYPE],
+            "application/cose; cose-type=\"cose-sign1\""
+        );
+        assert_eq!(body, SIGN1);
+        assert_eq!(headers["access-key-excerpt"], b64url_encode(&EXCERPT));
+        assert_eq!(headers[header::ETAG], "\"9\"");
+        assert_eq!(headers[header::CACHE_CONTROL], "max-age=60");
+        assert_eq!(headers[header::VARY], "Accept");
+    }
+    let (status, headers, body) =
+        call(app(true), get_party(HUMAN, Some("application/json"), "")).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(headers[header::CONTENT_TYPE], "application/json");
+    assert!(headers.get("access-key-excerpt").is_none());
+    let v: Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(v["consistency_token"], "ct-9");
+    assert_eq!(v["position"], "9");
+    assert_eq!(v["domain"], domain_text());
+    let p = &v["parties"][0];
+    assert_eq!(p["party"], b64url_encode(&HUMAN.0));
+    assert_eq!(p["actor_kind"], "human");
+    assert_eq!(p["since"]["position"], "4");
+    assert_eq!(p["since"]["time"], "2026-11-04T10:00:00Z");
+    assert!(p.get("ended").is_none());
+    let (status, headers, body) =
+        call(app(true), get_party(DEPARTED, Some("application/json"), "")).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        headers[header::CACHE_CONTROL],
+        "max-age=31536000, immutable"
+    );
+    let v: Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(v["parties"][0]["actor_kind"], "system");
+    assert_eq!(v["parties"][0]["ended"]["position"], "8");
+    assert_eq!(v["parties"][0]["ended"]["time"], "2026-11-04T10:01:00Z");
+}
+
+// OP-149 m.28 (c): an unknown Party is a 404, a malformed Party or domain a 400, a position
+// past the head the key lookup's 503, and a domain the PEP may not read the key lookup's refusal
+#[tokio::test]
+async fn party_lookups_are_refused_like_key_lookups() {
+    let (status, _, body) = call(app(true), get_party(Id([0xff; 16]), None, "")).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert_eq!(
+        problem_type(&body),
+        "urn:suiss:access:problem:party-unknown"
+    );
+    let short = Request::get(format!("/access/v1/parties/abc?domain={}", domain_text()))
+        .body(Body::empty())
+        .unwrap();
+    let (status, _, body) = call(app(true), short).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(problem_type(&body), "urn:suiss:access:problem:party");
+    let no_domain = Request::get(format!("/access/v1/parties/{}", b64url_encode(&HUMAN.0)))
+        .body(Body::empty())
+        .unwrap();
+    assert_eq!(call(app(true), no_domain).await.0, StatusCode::BAD_REQUEST);
+    let (status, _, body) = call(app(true), get_party(HUMAN, None, "&as_of=99")).await;
+    assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
+    let v: Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(v["reason"], "consistency");
+    let other = format!("sha-256:{}", b64url_encode(&[2; 32]));
+    let elsewhere = |path: String| Request::get(path).body(Body::empty()).unwrap();
+    let key = elsewhere(format!(
+        "/access/v1/keys/{}?domain={other}",
+        b64url_encode(&ACTIVE)
+    ));
+    let party = elsewhere(format!(
+        "/access/v1/parties/{}?domain={other}",
+        b64url_encode(&HUMAN.0)
+    ));
+    let (key_status, _, key_body) = call(app(true), key).await;
+    let (party_status, _, party_body) = call(app(true), party).await;
+    assert_eq!(
+        (key_status, party_status),
+        (StatusCode::SERVICE_UNAVAILABLE, key_status)
+    );
+    let (k, p): (Value, Value) = (
+        serde_json::from_slice(&key_body).unwrap(),
+        serde_json::from_slice(&party_body).unwrap(),
+    );
+    assert_eq!(
+        (k["code"].clone(), k["reason"].clone()),
+        (p["code"].clone(), p["reason"].clone())
+    );
+    assert_eq!(p["reason"], "unknown-domain");
+}
+
+// OP-149 m.28 (c): a batch answers up to 100 Parties at one position, lists the unknown ones
+// and refuses a repeated or malformed entry
+#[tokio::test]
+async fn a_batch_answers_up_to_a_hundred_parties() {
+    let (status, headers, body) = call(
+        app(true),
+        party_batch(&[HUMAN, DEPARTED, Id([0xff; 16])], "application/json"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(headers[header::CACHE_CONTROL], "max-age=60");
+    let v: Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(v["parties"].as_array().unwrap().len(), 2);
+    assert_eq!(v["unknown"], json!([b64url_encode(&[0xff; 16])]));
+    let (status, headers, body) =
+        call(app(true), party_batch(&[DEPARTED], "application/cose")).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        headers[header::CACHE_CONTROL],
+        "max-age=31536000, immutable"
+    );
+    assert_eq!(body, SIGN1);
+    let many: Vec<Id> = (0..=100u8).map(|i| Id([i; 16])).collect();
+    let (status, _, body) = call(app(true), party_batch(&many, "application/json")).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(problem_type(&body), "urn:suiss:access:problem:parties");
+    let (status, _, _) = call(app(true), party_batch(&[HUMAN, HUMAN], "application/json")).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
 }
 
 // OP-149 m.4: tenant snapshots one by one and by cursor
@@ -858,6 +1066,14 @@ async fn committed_examples_match_the_code_and_the_schema() {
         "as_of": "2026-11-04T10:00:00Z",
     });
     assert!(access_http::product::domain::batch(batch_request.to_string().as_bytes()).is_ok());
+    let party_request = json!({
+        "domain": domain_text(),
+        "parties": [b64url_encode(&HUMAN.0), b64url_encode(&DEPARTED.0), b64url_encode(&[0xff; 16])],
+        "as_of": "2026-11-04T10:00:00Z",
+    });
+    assert!(
+        access_http::product::domain::party_batch(party_request.to_string().as_bytes()).is_ok()
+    );
     assert!(
         access_http::adp::domain::decode_eligibility(
             eligibility_request().to_string().as_bytes(),
@@ -882,6 +1098,26 @@ async fn committed_examples_match_the_code_and_the_schema() {
             body_of({
                 let mut r = batch(&[ACTIVE, COMPROMISED, [0xff; 32]], "application/json");
                 *r.body_mut() = Body::from(batch_request.to_string());
+                r
+            })
+            .await,
+        ),
+        (
+            "party-lookup",
+            "PartyLookup",
+            body_of(get_party(DEPARTED, Some("application/json"), "")).await,
+        ),
+        (
+            "party-batch-request",
+            "PartyBatchRequest",
+            party_request.clone(),
+        ),
+        (
+            "party-batch",
+            "PartyLookup",
+            body_of({
+                let mut r = party_batch(&[HUMAN, DEPARTED, Id([0xff; 16])], "application/json");
+                *r.body_mut() = Body::from(party_request.to_string());
                 r
             })
             .await,
@@ -1008,6 +1244,11 @@ fn errors(doc: &Value, schema: &Value, value: &Value, at: &str) -> Vec<String> {
             }
             "^[A-Za-z0-9_-]{43}$" => {
                 s.len() == 43
+                    && s.bytes()
+                        .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
+            }
+            "^[A-Za-z0-9_-]{22}$" => {
+                s.len() == 22
                     && s.bytes()
                         .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
             }

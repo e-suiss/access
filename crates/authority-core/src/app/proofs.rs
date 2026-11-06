@@ -442,18 +442,26 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             .then_some("party-compromise"))
     }
 
+    /// The state of `party` as the domain holds it now (OP-149 m.28 (c)): its actor kind, the
+    /// position that admitted it and the one that ended it. `None` for an unknown Party.
+    ///
+    /// # Errors
+    /// [`CoreError::Store`].
+    pub async fn party_state(&self, party: &Id) -> Result<Option<PartyState>, CoreError> {
+        let mut snap = Snapshot::default();
+        Ok(self
+            .get(&mut snap, &meta::key(kind::PARTY, party))
+            .await?
+            .and_then(|v| PartyState::from_value(&v).ok()))
+    }
+
     /// The actor kind `party_register` recorded for `party` (OP-149 m.8); nothing changes it, so
     /// it holds at every position the Party is admitted at. `None` for an unknown Party.
     ///
     /// # Errors
     /// [`CoreError::Store`].
     pub async fn actor_kind(&self, party: &Id) -> Result<Option<ActorKind>, CoreError> {
-        let mut snap = Snapshot::default();
-        Ok(self
-            .get(&mut snap, &meta::key(kind::PARTY, party))
-            .await?
-            .and_then(|v| PartyState::from_value(&v).ok())
-            .map(|p| p.actor_kind))
+        Ok(self.party_state(party).await?.map(|p| p.actor_kind))
     }
 
     /// The accepted, current `party_compromise` Claims about `party` that assert in their

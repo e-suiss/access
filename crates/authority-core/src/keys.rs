@@ -226,11 +226,11 @@ pub fn cose_key(key: &PublicKey) -> Value {
     Value::Map(entries)
 }
 
-fn text(k: &str, v: Value) -> (Value, Value) {
+pub(crate) fn text(k: &str, v: Value) -> (Value, Value) {
     (Value::text(k), v)
 }
 
-fn point(p: Point) -> Value {
+pub(crate) fn point(p: Point) -> Value {
     Value::Map(vec![
         text("pos", Value::Unsigned(p.pos)),
         text("at", Value::Unsigned(p.at)),

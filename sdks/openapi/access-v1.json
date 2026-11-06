@@ -232,6 +232,224 @@
         }
       }
     },
+    "/access/v1/parties/{party}": {
+      "get": {
+        "operationId": "getParty",
+        "summary": "One Party's status at a ledger position (OP-149 m.28 (c)): its actor kind, the record that admitted it and, once it has, the one that ended it.",
+        "parameters": [
+          {
+            "name": "party",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/PartyId"
+            }
+          },
+          {
+            "name": "domain",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/DomainId"
+            },
+            "description": "The authority domain."
+          },
+          {
+            "name": "as_of",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/AsOf"
+            },
+            "description": "Defaults to the head."
+          }
+        ],
+        "responses": {
+          "400": {
+            "description": "The request is refused; nothing is read.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No client certificate (OP-141 m.18 (b)).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The Party is not admitted at the position.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Over a rate limit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporarily unavailable; retry.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "The Party.",
+            "headers": {
+              "ETag": {
+                "description": "The ledger position, quoted.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "`max-age=60`, or `max-age=31536000, immutable` once every Party has ended.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "access-key-excerpt": {
+                "description": "With `application/cose`: the binding-signed excerpt of the signing key, base64url (CR-58 m.1).",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/cose; cose-type=\"cose-sign1\"": {
+                "schema": {
+                  "type": "string",
+                  "contentMediaType": "application/cose"
+                },
+                "description": "Canonical: COSE_Sign1 under usage `party-lookup` over `conformance/cddl/party-lookup.cddl`."
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PartyLookup"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/access/v1/parties:batchGet": {
+      "post": {
+        "operationId": "batchGetParties",
+        "summary": "Up to 100 Parties' status at one ledger position (OP-149 m.28 (c)).",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PartyBatchRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "400": {
+            "description": "The request is refused; nothing is read.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No client certificate (OP-141 m.18 (b)).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Over a rate limit.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporarily unavailable; retry.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "The Parties; the others are listed as `unknown`.",
+            "headers": {
+              "ETag": {
+                "description": "The ledger position, quoted.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "Cache-Control": {
+                "description": "`max-age=60`, or `max-age=31536000, immutable` once every Party has ended.",
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "access-key-excerpt": {
+                "description": "With `application/cose`: the binding-signed excerpt of the signing key, base64url (CR-58 m.1).",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "content": {
+              "application/cose; cose-type=\"cose-sign1\"": {
+                "schema": {
+                  "type": "string",
+                  "contentMediaType": "application/cose"
+                },
+                "description": "Canonical: COSE_Sign1 under usage `party-lookup` over `conformance/cddl/party-lookup.cddl`."
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PartyLookup"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/access/v1/eligibility:check": {
       "post": {
         "operationId": "checkEligibility",
@@ -1742,6 +1960,106 @@
         "type": "string",
         "description": "A ledger position in decimal, or an RFC 3339 time."
       },
+      "PartyId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9_-]{22}$",
+        "description": "PartyID, unpadded base64url of its 16 bytes (OP-149 m.16 (f))."
+      },
+      "PartyEntry": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "party",
+          "actor_kind",
+          "since"
+        ],
+        "properties": {
+          "party": {
+            "$ref": "#/components/schemas/PartyId"
+          },
+          "actor_kind": {
+            "type": "string",
+            "enum": [
+              "human",
+              "agent",
+              "system",
+              "machine",
+              "organization"
+            ],
+            "description": "The kind the Party's `party_register` recorded; nothing changes it (OP-149 m.8)."
+          },
+          "since": {
+            "$ref": "#/components/schemas/LedgerPoint"
+          },
+          "ended": {
+            "$ref": "#/components/schemas/LedgerPoint"
+          }
+        }
+      },
+      "PartyLookup": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "domain",
+          "position",
+          "iat",
+          "parties",
+          "unknown",
+          "consistency_token"
+        ],
+        "properties": {
+          "domain": {
+            "$ref": "#/components/schemas/DomainId"
+          },
+          "position": {
+            "$ref": "#/components/schemas/Position"
+          },
+          "iat": {
+            "$ref": "#/components/schemas/Time"
+          },
+          "parties": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PartyEntry"
+            }
+          },
+          "unknown": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PartyId"
+            }
+          },
+          "consistency_token": {
+            "type": "string",
+            "description": "Opaque; the head the answer was read at."
+          }
+        }
+      },
+      "PartyBatchRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "domain",
+          "parties"
+        ],
+        "properties": {
+          "domain": {
+            "$ref": "#/components/schemas/DomainId"
+          },
+          "parties": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PartyId"
+            },
+            "minItems": 1,
+            "maxItems": 100,
+            "uniqueItems": true
+          },
+          "as_of": {
+            "$ref": "#/components/schemas/AsOf"
+          }
+        }
+      },
       "EligibilityRequest": {
         "type": "object",
         "additionalProperties": false,
@@ -1946,6 +2264,12 @@
                 "type": "string"
               },
               "key_batch": {
+                "type": "string"
+              },
+              "party_lookup": {
+                "type": "string"
+              },
+              "party_batch": {
                 "type": "string"
               },
               "eligibility": {

@@ -31,9 +31,9 @@ use suiss_crypto::pkcs11::KeyStore;
 
 use crate::CoreError;
 use crate::app::{Authority, Compromise, Incoming, Response};
-use crate::keys;
 use crate::ports::{Binding, Keys, Reader, Row, Salts};
 use crate::query::{Hit, Query, page_after, page_body};
+use crate::{keys, parties};
 
 mod binding;
 mod projection;
@@ -694,15 +694,7 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
             Err(e) => return Err(e),
         }
         let head = led.core.head();
-        let pos = match as_of {
-            keys::AsOf::Head => head,
-            keys::AsOf::Position(p) if p <= head => p,
-            keys::AsOf::Position(_) => return Err(CoreError::Unavailable("consistency")),
-            keys::AsOf::Time(t) => position_at(&self.setup.app, &id, t)
-                .await?
-                .ok_or(CoreError::Protocol("as_of"))?
-                .min(head),
-        };
+        let pos = self.position(&id, head, as_of).await?;
         if cursor(&self.setup.app, &id).await? < pos {
             return Err(CoreError::Unavailable("index"));
         }
@@ -754,6 +746,101 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
             (false, _) => None,
         };
         Ok(KeyAnswer {
+            lookup,
+            consistency,
+            signed,
+        })
+    }
+
+    /// The ledger position a lookup at `as_of` reads, given the leader's `head`.
+    async fn position(
+        &self,
+        id: &DomainId,
+        head: u64,
+        as_of: keys::AsOf,
+    ) -> Result<u64, CoreError> {
+        Ok(match as_of {
+            keys::AsOf::Head => head,
+            keys::AsOf::Position(p) if p <= head => p,
+            keys::AsOf::Position(_) => return Err(CoreError::Unavailable("consistency")),
+            keys::AsOf::Time(t) => position_at(&self.setup.app, id, t)
+                .await?
+                .ok_or(CoreError::Protocol("as_of"))?
+                .min(head),
+        })
+    }
+
+    /// The Parties `parties` of `domain` at `as_of` (OP-149 m.28 (c)): each Party's state as
+    /// the leader holds it, read back to the position asked, with the trusted times of the
+    /// records that admitted and ended it; with `sign` the payload is signed under usage
+    /// `party-lookup`. Nothing is recorded.
+    ///
+    /// # Errors
+    /// [`CoreError::Protocol`] for more than [`parties::MAX_PARTIES`] Parties or a time before
+    /// the domain's Genesis; [`CoreError::Unavailable`] for a position past the head.
+    pub async fn lookup_parties(
+        &self,
+        domain: Digest,
+        parties: &[Id],
+        as_of: keys::AsOf,
+        sign: bool,
+    ) -> Result<PartyAnswer, CoreError> {
+        if parties.is_empty() || parties.len() > parties::MAX_PARTIES {
+            return Err(CoreError::Protocol("parties"));
+        }
+        let mut guard = self.leading(domain).await?;
+        let Some(led) = guard.as_mut() else {
+            return Err(CoreError::Unavailable("leader"));
+        };
+        let now = led
+            .clock
+            .now()
+            .await
+            .map_err(|_| CoreError::Unavailable("time"))?;
+        let id = DomainId::from_bytes(domain.0);
+        let head = led.core.head();
+        let pos = self.position(&id, head, as_of).await?;
+        let mut lookup = parties::Lookup {
+            domain,
+            pos,
+            iat: now,
+            parties: Vec::with_capacity(parties.len()),
+            unknown: Vec::new(),
+        };
+        for party in parties {
+            let found = match led.core.party_state(party).await? {
+                Some(state) if state.since <= pos => {
+                    let since_at = recorded_at(&self.setup.app, &id, state.since).await?;
+                    let ended_at = match state.ended.as_ref().filter(|e| e.at <= pos) {
+                        Some(e) => Some(recorded_at(&self.setup.app, &id, e.at).await?),
+                        None => None,
+                    };
+                    parties::entry(*party, &state, pos, since_at, ended_at)
+                }
+                _ => None,
+            };
+            match found {
+                Some(e) => lookup.parties.push(e),
+                None => lookup.unknown.push(*party),
+            }
+        }
+        let consistency = led
+            .tokens
+            .seal(&domain.0, CONSISTENCY, &head.to_be_bytes())
+            .map_err(|_| CoreError::Unavailable("token-key"))?;
+        let signed = match (sign, &self.setup.signer) {
+            (true, Some(path)) => {
+                let payload = parties::payload(&lookup);
+                Some(
+                    sign_artefact(path, led, domain, Artefact::PartyLookup, payload, now)
+                        .await
+                        .map_err(CoreError::Unavailable)?,
+                )
+            }
+            (true, None) => return Err(CoreError::Unavailable("signer")),
+            (false, _) => None,
+        };
+        Ok(PartyAnswer {
             lookup,
             consistency,
             signed,
@@ -920,12 +1007,34 @@ pub struct KeyAnswer {
     pub signed: Option<(Vec<u8>, Vec<u8>)>,
 }
 
+/// A Party status lookup answer (OP-149 m.28 (c)).
+#[derive(Clone, Debug)]
+pub struct PartyAnswer {
+    /// The Parties at the answer's position.
+    pub lookup: parties::Lookup,
+    /// The head it was answered at, as an opaque token (OP-141 m.22 (f)).
+    pub consistency: String,
+    /// The signed `party-lookup` payload and its key excerpt, when asked for.
+    pub signed: Option<(Vec<u8>, Vec<u8>)>,
+}
+
+/// The trusted time the record at `pos` of `domain` was committed at.
+async fn recorded_at(app: &Pool, domain: &DomainId, pos: u64) -> Result<u64, CoreError> {
+    read_log(app, domain, pos, pos)
+        .await?
+        .into_iter()
+        .next()
+        .map(|r| r.recorded_at)
+        .ok_or(CoreError::Store(StoreError::Corrupt))
+}
+
 /// What a decision point asks the signer to sign.
 #[derive(Clone, Copy)]
 enum Artefact {
     Receipt,
     Pap,
     KeyLookup,
+    PartyLookup,
 }
 
 /// The signer's stable error codes; a code not listed reads as `signer-error`.
@@ -985,6 +1094,7 @@ async fn sign_artefact<B: Binding, S: Salts, C>(
         Artefact::Receipt => (KeyUsage::Receipt, access_kernel::receipt::CONTENT_TYPE),
         Artefact::Pap => (KeyUsage::Pap, access_kernel::pap::CONTENT_TYPE),
         Artefact::KeyLookup => (KeyUsage::KeyLookup, keys::CONTENT_TYPE),
+        Artefact::PartyLookup => (KeyUsage::PartyLookup, parties::CONTENT_TYPE),
     };
     let sign = SignRequest::Sign {
         domain,

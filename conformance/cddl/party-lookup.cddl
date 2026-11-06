@@ -1,0 +1,26 @@
+; Party status lookup answer (OP-149 m.28 (c)); the key lookup's twin (key-lookup.cddl).
+;
+; Payload of a COSE_Sign1 signed by a domain operational key with usage "party-lookup", content
+; type "application/access-party-lookup+cbor". The `application/json` answer carries the same
+; content unsigned, with positions as decimal strings, times as RFC 3339, binaries as unpadded
+; base64url, and a `consistency_token`.
+; `digest`, `id`, `trusted-time` and `actor-kind` are the rules of kernel.cddl; `ledger-point`
+; is the rule of key-lookup.cddl.
+
+party-lookup = {
+  domain: digest,
+  pos: uint,
+  iat: trusted-time,
+  parties: [* party-lookup-entry],
+  unknown: [* id],
+}
+
+; `actor_kind` is the kind the Party's `party_register` recorded (OP-149 m.8); nothing changes it.
+; `since` is the record that admitted the Party; `ended` the record that ended it (`party_depart`
+; or termination), present once it has, at the position answered.
+party-lookup-entry = {
+  party: id,
+  actor_kind: actor-kind,
+  since: ledger-point,
+  ? ended: ledger-point,
+}

@@ -1,14 +1,15 @@
 //! The product client contract as an `OpenAPI` 3.1 document (JSON Schema 2020-12 components),
 //! generated from code and committed as `sdks/openapi/access-v1.json` (OP-65, TN-112, OP-149):
 //! the Suiss discovery document (m.3), tenant snapshots (m.4), Instance key lookup (m.5),
-//! the eligibility check (m.10), the problem types (m.12), subject resolution (A11), allowed
-//! Exercises (m.9) and the platform product routes:
+//! Party status lookup (m.28 (c)), the eligibility check (m.10), the problem types (m.12),
+//! subject resolution (A11), allowed Exercises (m.9) and the platform product routes:
 //! pairing (m.4, m.16 (a)) and the platform client's event streams (m.17 (e), (g)), and the
 //! Stage 6 entries not served yet (OP-150 m.2).
 
 use serde_json::{Map, Value, json};
 
 use access_authority_core::keys::MAX_KIDS;
+use access_authority_core::parties::MAX_PARTIES;
 
 use super::adapters::{COSE_CONTENT_TYPE, EXCERPT_HEADER};
 use super::domain::{ACTIVE_MAX_AGE, ENDED_CACHE};
@@ -119,6 +120,45 @@ fn key_components() -> Value {
     })
 }
 
+/// The Party status lookup (OP-149 m.28 (c)), the key lookup's twin.
+fn party_components() -> Value {
+    json!({
+        "PartyId": { "type": "string", "pattern": "^[A-Za-z0-9_-]{22}$", "description": "PartyID, unpadded base64url of its 16 bytes (OP-149 m.16 (f))." },
+        "PartyEntry": object(
+            &json!({
+                "party": r("PartyId"),
+                "actor_kind": {
+                    "type": "string",
+                    "enum": ["human", "agent", "system", "machine", "organization"],
+                    "description": "The kind the Party's `party_register` recorded; nothing changes it (OP-149 m.8).",
+                },
+                "since": r("LedgerPoint"),
+                "ended": r("LedgerPoint"),
+            }),
+            &["party", "actor_kind", "since"],
+        ),
+        "PartyLookup": object(
+            &json!({
+                "domain": r("DomainId"),
+                "position": r("Position"),
+                "iat": r("Time"),
+                "parties": { "type": "array", "items": r("PartyEntry") },
+                "unknown": { "type": "array", "items": r("PartyId") },
+                "consistency_token": text("Opaque; the head the answer was read at."),
+            }),
+            &["domain", "position", "iat", "parties", "unknown", "consistency_token"],
+        ),
+        "PartyBatchRequest": object(
+            &json!({
+                "domain": r("DomainId"),
+                "parties": { "type": "array", "items": r("PartyId"), "minItems": 1, "maxItems": MAX_PARTIES, "uniqueItems": true },
+                "as_of": r("AsOf"),
+            }),
+            &["domain", "parties"],
+        ),
+    })
+}
+
 mod platform;
 mod records;
 mod stage6;
@@ -126,6 +166,7 @@ mod stage6;
 fn components() -> Value {
     let mut all = key_components();
     for more in [
+        party_components(),
         other_components(),
         records::components(),
         platform::components(),
@@ -212,6 +253,8 @@ fn other_components() -> Value {
                         "adp": { "type": "string" },
                         "key_lookup": { "type": "string" },
                         "key_batch": { "type": "string" },
+                        "party_lookup": { "type": "string" },
+                        "party_batch": { "type": "string" },
                         "eligibility": { "type": "string" },
                         "tenant_snapshot": { "type": "string" },
                         "auth_context": { "type": "string" },
@@ -253,13 +296,15 @@ fn problems(codes: &[(&str, &str)]) -> Map<String, Value> {
         .collect()
 }
 
-fn keys_ok(description: &str) -> Value {
+/// A signed lookup answer: `what` has ended for the immutable cache, `usage` and `cddl` name
+/// the canonical form, `schema` the JSON one.
+fn signed_ok(description: &str, (what, usage, cddl, schema): (&str, &str, &str, &str)) -> Value {
     json!({
         "description": description,
         "headers": {
             "ETag": { "description": "The ledger position, quoted.", "schema": { "type": "string" } },
             "Cache-Control": {
-                "description": format!("`{ACTIVE_MAX_AGE}`, or `{ENDED_CACHE}` once every key has ended."),
+                "description": format!("`{ACTIVE_MAX_AGE}`, or `{ENDED_CACHE}` once every {what} has ended."),
                 "schema": { "type": "string" },
             },
             EXCERPT_HEADER.as_str(): {
@@ -270,11 +315,25 @@ fn keys_ok(description: &str) -> Value {
         "content": {
             COSE_CONTENT_TYPE: {
                 "schema": { "type": "string", "contentMediaType": "application/cose" },
-                "description": "Canonical: COSE_Sign1 under usage `key-lookup` over `conformance/cddl/key-lookup.cddl`.",
+                "description": format!("Canonical: COSE_Sign1 under usage `{usage}` over `conformance/cddl/{cddl}`."),
             },
-            "application/json": { "schema": r("KeyLookup") },
+            "application/json": { "schema": r(schema) },
         },
     })
+}
+
+fn keys_ok(description: &str) -> Value {
+    signed_ok(
+        description,
+        ("key", "key-lookup", "key-lookup.cddl", "KeyLookup"),
+    )
+}
+
+fn parties_ok(description: &str) -> Value {
+    signed_ok(
+        description,
+        ("Party", "party-lookup", "party-lookup.cddl", "PartyLookup"),
+    )
 }
 
 fn json_ok(description: &str, schema: &str) -> Value {
@@ -295,6 +354,36 @@ fn query(name: &str, required: bool, schema: &str, description: &str) -> Value {
 
 fn path(name: &str, schema: &Value) -> Value {
     json!({ "name": name, "in": "path", "required": true, "schema": schema })
+}
+
+/// OP-149 m.28 (c): the Party status lookup routes, the key lookup's twins.
+fn party_paths(paths: &mut Map<String, Value>, common: &[(&str, &str); 4]) {
+    paths.insert(
+        "/access/v1/parties/{party}".into(),
+        json!({ "get": {
+            "operationId": "getParty",
+            "summary": "One Party's status at a ledger position (OP-149 m.28 (c)): its actor kind, the record that admitted it and, once it has, the one that ended it.",
+            "parameters": [
+                path("party", &r("PartyId")),
+                query("domain", true, "DomainId", "The authority domain."),
+                query("as_of", false, "AsOf", "Defaults to the head."),
+            ],
+            "responses": with(
+                problems(&[common[0], common[1], ("404", "The Party is not admitted at the position."), common[2], common[3]]),
+                "200",
+                parties_ok("The Party."),
+            ),
+        }}),
+    );
+    paths.insert(
+        "/access/v1/parties:batchGet".into(),
+        json!({ "post": {
+            "operationId": "batchGetParties",
+            "summary": "Up to 100 Parties' status at one ledger position (OP-149 m.28 (c)).",
+            "requestBody": { "required": true, "content": { "application/json": { "schema": r("PartyBatchRequest") } } },
+            "responses": with(problems(common), "200", parties_ok("The Parties; the others are listed as `unknown`.")),
+        }}),
+    );
 }
 
 /// CR-22: the provider declarations document (OP-150).
@@ -341,6 +430,7 @@ pub fn openapi() -> Value {
             "responses": with(problems(&common), "200", keys_ok("The keys; the others are listed as `unknown`.")),
         }}),
     );
+    party_paths(&mut paths, &common);
     paths.insert(
         "/access/v1/eligibility:check".into(),
         json!({ "post": {

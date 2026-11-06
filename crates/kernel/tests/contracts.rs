@@ -181,6 +181,13 @@ fn key_lookup_examples_meet_the_cddl() {
     check_examples("key-lookup.json");
 }
 
+// OP-149 m.28 (c), m.8: the Party status lookup examples meet their CDDL; a Party is named by a
+// full id with a kind from the closed set and the record that admitted it
+#[test]
+fn party_lookup_examples_meet_the_cddl() {
+    check_examples("party-lookup.json");
+}
+
 // E43, TI-20, OP-141 m.38: the decision explanation examples meet explanation.cddl and its JSON
 // Schema in every reader's view; no_objection is not an outcome and an empty list is not a list
 #[test]

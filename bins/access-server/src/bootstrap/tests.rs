@@ -897,6 +897,93 @@ async fn admin_realms_sign_key_lookups_from_genesis() {
     w.domains.release().await;
 }
 
+// OP-149 m.28 (c), m.8, L0-META-7: a realm answers the status of the Parties its ledger admitted,
+// signed under `party-lookup` by the founding operational key from Genesis on: the root's kind
+// and the `party_register` record's position and trusted time; a Party not admitted at the
+// position is unknown, and a position past the head is not answered
+#[tokio::test]
+async fn admin_realms_answer_party_lookups() {
+    use access_authority_core::keys::AsOf;
+    use access_kernel::meta::ActorKind;
+    let (w, signer) = World::open("bootstrap-party-lookup", true).await;
+    let signer = signer.unwrap();
+    let (tenant, created) = w.admin_realm("parties").await;
+    let root = root_key(&w.keys).unwrap();
+    let party = root_party(&root.public_key());
+    let declared = DeclaredTargets::default();
+    let bootstrap = Bootstrap {
+        app: &w.db.app,
+        router: &w.db.router,
+        plane: &w.plane,
+        realm_keys: &w.keyring,
+        hsm: &w.keys,
+        base: &w.base,
+        declared: &declared,
+    };
+    schedule(&signer);
+    let before = w
+        .domains
+        .lookup_parties(created.domain, &[party], AsOf::Head, false)
+        .await
+        .unwrap();
+    assert_eq!(before.lookup.parties, Vec::new());
+    assert_eq!(before.lookup.unknown, vec![party]);
+    bootstrap
+        .onboard(tenant, created.realm, created.domain, &root, party)
+        .await
+        .unwrap();
+    let answer = w
+        .domains
+        .lookup_parties(created.domain, &[party, Id([0x42; 16])], AsOf::Head, true)
+        .await
+        .unwrap();
+    let (sign1, excerpt) = answer.signed.clone().unwrap();
+    assert!(!sign1.is_empty() && !excerpt.is_empty());
+    assert_eq!(answer.lookup.unknown, vec![Id([0x42; 16])]);
+    let [entry] = answer.lookup.parties.as_slice() else {
+        panic!("{:?}", answer.lookup.parties);
+    };
+    assert_eq!((entry.party, entry.actor_kind), (party, ActorKind::Human));
+    assert!(entry.ended.is_none());
+    let register = register_nonce(&root_challenge(&root, created.domain).unwrap());
+    let recorded = find_nonce(
+        &w.db.app,
+        &DomainId::from_bytes(created.domain.0),
+        &register,
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    assert_eq!(entry.since.pos, recorded.decision_pos);
+    let log = access_store::authority::read_log(
+        &w.db.app,
+        &DomainId::from_bytes(created.domain.0),
+        entry.since.pos,
+        entry.since.pos,
+    )
+    .await
+    .unwrap();
+    assert_eq!(entry.since.at, log[0].recorded_at);
+    let earlier = w
+        .domains
+        .lookup_parties(
+            created.domain,
+            &[party],
+            AsOf::Position(entry.since.pos - 1),
+            false,
+        )
+        .await
+        .unwrap();
+    assert_eq!(earlier.lookup.unknown, vec![party]);
+    assert!(matches!(
+        w.domains
+            .lookup_parties(created.domain, &[party], AsOf::Position(1_000), false)
+            .await,
+        Err(access_authority_core::CoreError::Unavailable("consistency"))
+    ));
+    w.domains.release().await;
+}
+
 /// The plan of the local deployment's Work sample.
 fn sample_plan() -> Plan {
     Plan {

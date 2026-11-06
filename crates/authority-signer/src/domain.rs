@@ -12,7 +12,7 @@ use suiss_crypto::cose::{Algorithm, PublicKey};
 use suiss_crypto::rotation::Key;
 
 /// Every usage an operational key signs by default (CR-58 m.2, OP-143 m.3).
-pub const USAGES: [KeyUsage; 7] = [
+pub const USAGES: [KeyUsage; 8] = [
     KeyUsage::Receipt,
     KeyUsage::Pap,
     KeyUsage::Token,
@@ -20,6 +20,7 @@ pub const USAGES: [KeyUsage; 7] = [
     KeyUsage::Set,
     KeyUsage::StatusList,
     KeyUsage::KeyLookup,
+    KeyUsage::PartyLookup,
 ];
 
 /// The fixed part of a domain's metadata.

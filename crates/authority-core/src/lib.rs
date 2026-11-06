@@ -5,6 +5,7 @@ pub mod app;
 pub mod domain;
 pub mod genesis;
 pub mod keys;
+pub mod parties;
 pub mod ports;
 pub mod query;
 pub mod rate;

@@ -1,14 +1,16 @@
-//! What the product client API needs (OP-63): the domains' key lookup and the tenant directory.
+//! What the product client API needs (OP-63): the domains' key and Party lookups and the
+//! tenant directory.
 
 use std::future::Future;
 use std::sync::Arc;
 
 use access_authority_core::CoreError;
-use access_authority_core::adapters::{ExerciseRecord, KeyAnswer};
+use access_authority_core::adapters::{ExerciseRecord, KeyAnswer, PartyAnswer};
 use access_authority_core::keys::AsOf;
 use access_kernel::digest::Digest;
+use access_kernel::model::Id;
 
-/// Answers key lookups on a domain (OP-149 m.5).
+/// Answers key lookups (OP-149 m.5) and Party status lookups (m.28 (c)) on a domain.
 pub trait KeyDirectory: Send + Sync {
     /// The keys `kids` of `domain` at `as_of`; with `sign` the answer is signed.
     fn lookup(
@@ -18,6 +20,15 @@ pub trait KeyDirectory: Send + Sync {
         as_of: AsOf,
         sign: bool,
     ) -> impl Future<Output = Result<KeyAnswer, CoreError>> + Send;
+
+    /// The Parties `parties` of `domain` at `as_of`; with `sign` the answer is signed.
+    fn parties(
+        &self,
+        domain: Digest,
+        parties: Vec<Id>,
+        as_of: AsOf,
+        sign: bool,
+    ) -> impl Future<Output = Result<PartyAnswer, CoreError>> + Send;
 }
 
 impl<K: KeyDirectory> KeyDirectory for Arc<K> {
@@ -29,6 +40,16 @@ impl<K: KeyDirectory> KeyDirectory for Arc<K> {
         sign: bool,
     ) -> impl Future<Output = Result<KeyAnswer, CoreError>> + Send {
         (**self).lookup(domain, kids, as_of, sign)
+    }
+
+    fn parties(
+        &self,
+        domain: Digest,
+        parties: Vec<Id>,
+        as_of: AsOf,
+        sign: bool,
+    ) -> impl Future<Output = Result<PartyAnswer, CoreError>> + Send {
+        (**self).parties(domain, parties, as_of, sign)
     }
 }
 
