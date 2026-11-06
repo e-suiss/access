@@ -221,4 +221,68 @@ impl TenantTx {
         .rows_affected();
         Ok(done == 1)
     }
+
+    /// The pairwise `sub` the client `sector` reads of the platform Party `party` in this realm
+    /// (OP-149 m.31 (a), MD-10): the stored one, else `candidate`, stored now; `None` when
+    /// `party` is not a platform client's Party here.
+    ///
+    /// # Errors
+    /// [`StoreError`].
+    pub async fn platform_party_pairwise(
+        &mut self,
+        party: &[u8; 16],
+        sector: [u8; 16],
+        candidate: &str,
+    ) -> Result<Option<String>, StoreError> {
+        let (tenant, realm) = scope(self)?;
+        sqlx::query!(
+            "INSERT INTO access.platform_party_subjects (tenant_id, realm_id, party_id, sector, value)
+             SELECT $1, $2, $3, $4, $5
+              WHERE EXISTS (SELECT 1 FROM access.platform_party
+                             WHERE tenant_id = $1 AND realm_id = $2 AND party_id = $3)
+             ON CONFLICT (tenant_id, realm_id, party_id, sector) DO NOTHING",
+            tenant,
+            realm,
+            party.as_slice(),
+            Uuid::from_bytes(sector),
+            candidate,
+        )
+        .execute(&mut *self.tx)
+        .await?;
+        Ok(sqlx::query_scalar!(
+            "SELECT value FROM access.platform_party_subjects
+              WHERE tenant_id = $1 AND realm_id = $2 AND party_id = $3 AND sector = $4",
+            tenant,
+            realm,
+            party.as_slice(),
+            Uuid::from_bytes(sector),
+        )
+        .fetch_optional(&mut *self.tx)
+        .await?)
+    }
+
+    /// The platform Party whose pairwise `sub` for `sector` is `value` (OP-149 m.31 (a), A11).
+    ///
+    /// # Errors
+    /// [`StoreError`].
+    pub async fn platform_party_by_pairwise(
+        &mut self,
+        sector: [u8; 16],
+        value: &str,
+    ) -> Result<Option<[u8; 16]>, StoreError> {
+        let (tenant, realm) = scope(self)?;
+        let party = sqlx::query_scalar!(
+            "SELECT party_id FROM access.platform_party_subjects
+              WHERE tenant_id = $1 AND realm_id = $2 AND sector = $3 AND value = $4",
+            tenant,
+            realm,
+            Uuid::from_bytes(sector),
+            value,
+        )
+        .fetch_optional(&mut *self.tx)
+        .await?;
+        party
+            .map(|p| <[u8; 16]>::try_from(p).map_err(|_| StoreError::Corrupt))
+            .transpose()
+    }
 }

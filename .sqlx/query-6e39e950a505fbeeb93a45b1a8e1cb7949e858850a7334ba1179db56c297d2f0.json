@@ -1,0 +1,31 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT party_id FROM access.platform_party_subjects\n              WHERE tenant_id = $1 AND realm_id = $2 AND sector = $3 AND value = $4",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "party_id",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.platform_party_subjects",
+            "name": "party_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "6e39e950a505fbeeb93a45b1a8e1cb7949e858850a7334ba1179db56c297d2f0"
+}
