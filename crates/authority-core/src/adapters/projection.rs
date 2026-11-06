@@ -32,7 +32,6 @@ use super::{Domains, Guard, Led, open_keyring, signer_reason};
 use crate::CoreError;
 use crate::app::{Incoming, Response};
 use crate::ports::{Binding, Keys, Salts};
-use crate::status::adapters::open_family;
 
 /// Longest horizon of an exact-intent token, from its decision (§9.9.1, §9.9.3 rule 4).
 pub const INTENT_HORIZON_MS: u64 = 5 * 60 * 1000;
@@ -191,7 +190,13 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
         if let Some(code) = self.refusal(&mut guard, order).await? {
             return Ok(Projected::Refused(code));
         }
-        let r = self.decide_led(&mut guard, &order.incoming, None).await?;
+        let opening = super::Opening {
+            client: Some(&order.client_id),
+            family: order.family,
+        };
+        let r = self
+            .decide_led(&mut guard, &order.incoming, None, opening)
+            .await?;
         if r.decision.outcome != Outcome::Allow {
             return Ok(Projected::Decided(Box::new(r)));
         }
@@ -275,8 +280,9 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
     }
 
     /// The family of an allowed projection with its Token Status List entry: the refreshed one,
-    /// held by the same Instance, or a new one named by the first 16 bytes of its `ExerciseID`
-    /// (P50), opened with the next entry of the domain's newest list (OP-150 m.3 (a)).
+    /// held by the same Instance, or the one named by the first 16 bytes of its `ExerciseID`
+    /// (P50) that the decision opened before deciding, with the entry the PAP's contract names
+    /// (OP-150 m.3 (a), m.10 (a)).
     async fn family_of(
         &self,
         order: &TokenOrder,
@@ -285,35 +291,21 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
     ) -> Result<Result<([u8; 16], Option<StatusRef>), &'static str>, CoreError> {
         let domain = order.incoming.request.domain;
         let id = DomainId::from_bytes(domain.0);
-        if let Some(f) = order.family {
-            let row = read_family(&self.setup.app, &id, &f)
-                .await?
-                .ok_or(CoreError::Protocol("family"))?;
-            return Ok(if row.holder == pap.holder.instance.0 {
-                Ok((f, status_ref(row.status)))
-            } else {
-                Err("family-mismatch")
-            });
-        }
-        let mut f = [0; 16];
-        f.copy_from_slice(exercise.0.get(..16).ok_or(CoreError::Protocol("family"))?);
-        let family = Family {
-            family: f,
-            client_id: order.client_id.clone(),
-            holder: pap.holder.instance.0,
-            root_exercise: exercise.0,
-            status: None,
-            revoked_pos: None,
+        let f = if let Some(f) = order.family {
+            f
+        } else {
+            let mut f = [0; 16];
+            f.copy_from_slice(exercise.0.get(..16).ok_or(CoreError::Protocol("family"))?);
+            f
         };
-        let entry = match open_family(&self.setup.sequencer, &self.setup.api_base, domain, &family)
+        let row = read_family(&self.setup.app, &id, &f)
             .await?
-        {
-            Some(entry) => Some(entry),
-            None => read_family(&self.setup.app, &id, &f)
-                .await?
-                .and_then(|row| row.status),
-        };
-        Ok(Ok((f, status_ref(entry))))
+            .ok_or(CoreError::Protocol("family"))?;
+        Ok(if row.holder == pap.holder.instance.0 {
+            Ok((f, status_ref(row.status)))
+        } else {
+            Err("family-mismatch")
+        })
     }
 
     /// The signed token of an allowed projection, or the stable code that stopped it: no

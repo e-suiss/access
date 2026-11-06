@@ -56,6 +56,7 @@ pub(crate) fn order(r: TokenProjectionRequest) -> Result<TokenOrder, &'static st
             ais: Some(r.ais),
             pep: r.pep,
             explain: false,
+            status: None,
         },
         issuer: r.issuer,
         client_id: r.client_id,

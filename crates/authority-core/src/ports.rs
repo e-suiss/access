@@ -15,6 +15,9 @@ use crate::CoreError;
 /// One fetched state key: its value, `None` when absent, and its version.
 pub type Row = (Vec<u8>, Option<Value>, u64);
 
+/// A recorded Verifier Profile: its body digest and its body (§9.12.1).
+pub type Profile = ([u8; 32], Vec<u8>);
+
 /// Reads the state and the nonce table (the `StateView` read side).
 pub trait Reader {
     /// Current values and versions of `keys`; an absent key comes back as `(key, None, 0)`.
@@ -71,6 +74,48 @@ pub trait Reader {
         &self,
         holder: &Id,
     ) -> impl Future<Output = Result<Vec<Digest>, CoreError>> + Send;
+    /// The accepted Verifier Profile of the verifier `audience` names, current at `now`: the
+    /// body digest a contract names in `verifier_profile_ref` and the body (§9.12.1, PI-12);
+    /// none by default.
+    fn verifier_profile(
+        &self,
+        audience: &str,
+        now: u64,
+    ) -> impl Future<Output = Result<Option<Profile>, CoreError>> + Send {
+        let _ = (audience, now);
+        std::future::ready(Ok(None))
+    }
+    /// How many offline-class projections of `holder` are open at `now` (§13.7.4); 0 by
+    /// default.
+    fn open_offline(
+        &self,
+        holder: &Id,
+        now: u64,
+    ) -> impl Future<Output = Result<u64, CoreError>> + Send {
+        let _ = (holder, now);
+        std::future::ready(Ok(0))
+    }
+    /// How many projections `holder` was issued since `since_ms` on one of `namespaces`
+    /// (§13.7.4); 0 by default.
+    fn issued_since(
+        &self,
+        holder: &Id,
+        since_ms: u64,
+        namespaces: &[String],
+    ) -> impl Future<Output = Result<u64, CoreError>> + Send {
+        let _ = (holder, since_ms, namespaces);
+        std::future::ready(Ok(0))
+    }
+    /// Whether `audience` left a `checkpointed-offline` projection unreported past its deadline
+    /// at `now` (§13.7.2, SEC14); `false` by default.
+    fn unreported_overdue(
+        &self,
+        audience: &str,
+        now: u64,
+    ) -> impl Future<Output = Result<bool, CoreError>> + Send {
+        let _ = (audience, now);
+        std::future::ready(Ok(false))
+    }
     /// What the latest `require_action` on `intent` left for its approval (§9.14.1 step 1,
     /// OP-150 L6): the render digest the decision point computed and the tier.
     fn opening(

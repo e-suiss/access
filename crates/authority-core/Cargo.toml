@@ -26,6 +26,8 @@ tokio = { workspace = true, features = ["rt", "sync", "time"] }
 
 [dev-dependencies]
 access-crypto = { workspace = true, features = ["testing"] }
+# OP-150 L8: the Reference Verifier's SDK accepts what the core issues, byte for byte
+access-verifier = { workspace = true, features = ["testing"] }
 suiss-crypto = { workspace = true, features = ["pkcs11", "aead", "testing"] }
 access-store = { workspace = true, features = ["testing"] }
 ed25519-dalek = { workspace = true }

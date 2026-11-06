@@ -11,11 +11,14 @@ use access_authority_sequencer::ports::Clock;
 use access_crypto::event_id::{EventKey, label};
 use access_crypto::token::TokenKey;
 use access_kernel::codec::Canonical as _;
+use access_kernel::combinator::{Mode, Outcome};
 use access_kernel::digest::Digest;
 use access_kernel::fold;
-use access_kernel::meta::{self, ActorKind, GrantState};
+use access_kernel::meta::{self, ActorKind, GrantState, Payload};
 use access_kernel::model::{Id, ResourceSelector, SubjectSelector, TrustedTime};
+use access_kernel::pap::Pap;
 use access_kernel::record::{Opened, RecordEnvelope};
+use access_kernel::status::StatusRef;
 use access_kernel::verify::cose::PublicKey;
 use access_store::authority::position_at;
 use access_store::authority::read_log;
@@ -24,23 +27,29 @@ use access_store::authority::{
     receipt, request_lease_handoff, state_of, state_prefix,
 };
 use access_store::derived::{GrantRow, KeyChange, advance_with, cursor, keys_of};
+use access_store::offline::{ContractRow, insert_contract};
+use access_store::projections::{Family, family as read_family};
 use access_store::scope::DomainId;
 use access_store::{Pool, StoreError};
 use suiss_crypto::dcbor::{self, Limits, Value};
 use suiss_crypto::pkcs11::KeyStore;
 
 use crate::CoreError;
+use crate::app::projection::{class_word, namespaces, variant_word};
 use crate::app::{Authority, Compromise, Incoming, Response};
 use crate::ports::{Binding, Keys, Reader, Row, Salts};
 use crate::query::{Hit, Query, page_after, page_body};
+use crate::status::adapters::open_family;
 use crate::{keys, parties};
 
 mod binding;
 mod projection;
+mod reconcile;
 pub use projection::{
     BOUNDS_HORIZON_MS, CONTRACT_LABEL, FAMILY_CLAIM, INTENT_HORIZON_MS, Projected, STATUS_CLAIM,
     Token, TokenAuthority, TokenOrder,
 };
+pub use reconcile::Reconciled;
 
 /// Reads one domain's state and nonces through the application role.
 #[derive(Clone)]
@@ -106,6 +115,45 @@ impl Reader for PgReader {
                 .map(|f| Digest(f.root_exercise))
                 .collect(),
         )
+    }
+
+    async fn verifier_profile(
+        &self,
+        audience: &str,
+        now: u64,
+    ) -> Result<Option<([u8; 32], Vec<u8>)>, CoreError> {
+        Ok(access_store::offline::profile_for(&self.pool, &self.domain, audience, now).await?)
+    }
+
+    async fn open_offline(&self, holder: &Id, now: u64) -> Result<u64, CoreError> {
+        Ok(access_store::offline::open_offline(&self.pool, &self.domain, &holder.0, now).await?)
+    }
+
+    async fn issued_since(
+        &self,
+        holder: &Id,
+        since_ms: u64,
+        namespaces: &[String],
+    ) -> Result<u64, CoreError> {
+        Ok(access_store::offline::issued_since(
+            &self.pool,
+            &self.domain,
+            &holder.0,
+            since_ms,
+            namespaces,
+        )
+        .await?)
+    }
+
+    async fn unreported_overdue(&self, audience: &str, now: u64) -> Result<bool, CoreError> {
+        Ok(access_store::offline::unreported_overdue(
+            &self.pool,
+            &self.domain,
+            audience,
+            now,
+            access_kernel::validity::ceiling::REPORT_GRACE_MS,
+        )
+        .await?)
     }
 
     async fn recorded_at(&self, pos: u64) -> Result<Option<u64>, CoreError> {
@@ -285,6 +333,22 @@ struct Led<B: Binding, S: Salts, C> {
     signer_open: bool,
 }
 
+/// How a `projection.issue` commit opens its family (OP-150 m.10 (a)): for the OAuth client of a
+/// token, else the PEP; in the refreshed family, else a new one.
+#[derive(Clone, Copy, Debug, Default)]
+struct Opening<'a> {
+    client: Option<&'a str>,
+    family: Option<[u8; 16]>,
+}
+
+/// The family a `projection.issue` commit was given before its decision.
+#[derive(Clone, Debug)]
+struct PapFamily {
+    family: [u8; 16],
+    status: StatusRef,
+    opened: bool,
+}
+
 type Slot<B, S, C> = Arc<tokio::sync::Mutex<Option<Led<B, S, C>>>>;
 type Guard<B, S, C> = tokio::sync::OwnedMutexGuard<Option<Led<B, S, C>>>;
 
@@ -449,7 +513,102 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
 
     async fn decide(&self, inc: &Incoming, subject: Option<Id>) -> Result<Response, CoreError> {
         let mut guard = self.leading(inc.request.domain).await?;
-        self.decide_led(&mut guard, inc, subject).await
+        self.decide_led(&mut guard, inc, subject, Opening::default())
+            .await
+    }
+
+    /// The projection family a `projection.issue` commit belongs to, opened before the decision
+    /// (OP-150 m.10 (a), §11.20): the refreshed family, or a new one named by the first 16 bytes
+    /// of the `ExerciseID`, held by the Instance whose key signed the AIS, for the OAuth client of
+    /// a token or else the PEP, with the next entry of the domain's newest Token Status List.
+    /// The PAP's contract names the entry, so it is committed with the PAP digest. `None` for any
+    /// other request, or when no Instance holds the key (the decision denies that itself).
+    async fn pap_family(
+        &self,
+        led: &mut Led<B, S, C>,
+        inc: &Incoming,
+        opening: Opening<'_>,
+    ) -> Result<Option<PapFamily>, CoreError> {
+        let req = &inc.request;
+        if req.mode != Mode::Commit || !matches!(req.payload, Some(Payload::ProjectionIssue { .. }))
+        {
+            return Ok(None);
+        }
+        let Some(holder) = led.core.holder_of(inc).await? else {
+            return Ok(None);
+        };
+        let domain = req.domain;
+        let id = DomainId::from_bytes(domain.0);
+        let exercise =
+            meta::exercise_id(&domain, &req.nonce).map_err(|_| CoreError::Protocol("nonce"))?;
+        let mut f = [0; 16];
+        f.copy_from_slice(exercise.0.get(..16).ok_or(CoreError::Protocol("family"))?);
+        let family = opening.family.unwrap_or(f);
+        let fresh = Family {
+            family,
+            client_id: opening.client.unwrap_or(&inc.pep).to_owned(),
+            holder: holder.0,
+            root_exercise: exercise.0,
+            status: None,
+            revoked_pos: None,
+        };
+        let (status, opened) = if opening.family.is_some() {
+            (
+                read_family(&self.setup.app, &id, &family)
+                    .await?
+                    .and_then(|row| row.status),
+                false,
+            )
+        } else {
+            match open_family(&self.setup.sequencer, &self.setup.api_base, domain, &fresh).await? {
+                Some(entry) => (Some(entry), true),
+                None => (
+                    read_family(&self.setup.app, &id, &family)
+                        .await?
+                        .filter(|row| row.holder == holder.0)
+                        .and_then(|row| row.status),
+                    false,
+                ),
+            }
+        };
+        Ok(status.map(|(uri, idx)| PapFamily {
+            family,
+            status: StatusRef { idx, uri },
+            opened,
+        }))
+    }
+
+    /// Keeps the contract of an allowed projection beside its record (§9.12, §9.12.2,
+    /// §13.7.4): what the issuance limits, the report deadline and the reconciliation read.
+    async fn keep_contract(&self, inc: &Incoming, r: &Response) -> Result<(), CoreError> {
+        let (Some(pos), Some(payload), false) = (r.record, &r.pap, r.replayed) else {
+            return Ok(());
+        };
+        if r.decision.outcome != Outcome::Allow {
+            return Ok(());
+        }
+        let pap = Pap::from_bytes(payload).map_err(|_| CoreError::Protocol("pap"))?;
+        let contract = pap
+            .validity
+            .to_bytes()
+            .map_err(|_| CoreError::Protocol("validity"))?;
+        let row = ContractRow {
+            exercise: pap.projection_exercise.0,
+            pos,
+            holder: pap.holder.instance.0,
+            pep: inc.pep.clone(),
+            class: String::from(class_word(pap.validity.class)),
+            variant: String::from(variant_word(pap.validity.variant)),
+            iat_ms: pap.iat,
+            horizon_ms: pap.validity.horizon,
+            audiences: pap.validity.audience.iter().cloned().collect(),
+            namespaces: namespaces(&pap.bounds),
+            slice: !pap.validity.offline_slice.is_empty(),
+            contract_digest: suiss_crypto::digest::context_digest(CONTRACT_LABEL, &contract).0,
+            contract,
+        };
+        let id = DomainId::from_bytes(inc.request.domain.0);
+        Ok(insert_contract(&self.setup.sequencer, &id, &row).await?)
     }
 
     /// [`Domains::decide`] on the leader in `guard`, which the caller holds across whatever
@@ -459,11 +618,21 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
         guard: &mut Guard<B, S, C>,
         inc: &Incoming,
         subject: Option<Id>,
+        opening: Opening<'_>,
     ) -> Result<Response, CoreError> {
         let domain = inc.request.domain;
         let Some(led) = guard.as_mut() else {
             return Err(CoreError::Unavailable("leader"));
         };
+        // OP-150 m.10 (a): the family and its entry exist before the PAP that names them
+        let family = self.pap_family(led, inc, opening).await?;
+        let with_status: Option<Box<Incoming>> = family.as_ref().map(|f| {
+            Box::new(Incoming {
+                status: Some(f.status.clone()),
+                ..inc.clone()
+            })
+        });
+        let inc = with_status.as_deref().unwrap_or(inc);
         // OP-141 m.22 (f): a reader ahead of this head gets no answer
         if let Some(t) = &inc.request.consistency {
             let seen = led
@@ -495,33 +664,8 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
                     .map_err(|_| CoreError::Unavailable("token-key"))?,
             );
         }
-        // §9.8, L2-RCP-2: signed after the commit; without a signer the receipt waits
-        if let (Ok(r), Some(path)) = (&mut result, &self.setup.signer)
-            && let Some(payload) = r.receipt.clone()
-        {
-            r.signed_receipt = sign_artefact(path, led, domain, Artefact::Receipt, payload, now)
-                .await
-                .ok();
-        }
-        // OP-149 m.9: kept for GET /access/v1/exercises/{id}; without it the answer comes from state
-        if let Ok(r) = &result
-            && let (Some(payload), Some(exercise), Some(pos)) = (&r.receipt, r.exercise, r.record)
-        {
-            let row = ReceiptRow {
-                exercise: exercise.0,
-                pos,
-                payload: payload.clone(),
-                signed: r.signed_receipt.clone(),
-            };
-            let _ =
-                keep_receipt(&self.setup.sequencer, &DomainId::from_bytes(domain.0), &row).await;
-        }
-        if let (Ok(r), Some(path)) = (&mut result, &self.setup.signer)
-            && let Some(payload) = r.pap.clone()
-        {
-            r.signed_pap = sign_artefact(path, led, domain, Artefact::Pap, payload, now)
-                .await
-                .ok();
+        if let Ok(r) = &mut result {
+            self.sign_artefacts(led, domain, r, now).await;
         }
         if let Ok(r) = &mut result
             && let Some(pos) = r.record
@@ -552,10 +696,87 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
                 }
             }
         }
+        self.settle_projection(led, inc, family.as_ref(), &mut result)
+            .await;
         if matches!(result, Err(CoreError::Sequencer(_) | CoreError::Store(_))) {
             **guard = None;
         }
         result
+    }
+
+    /// The receipt and the PAP of a decision, signed after the commit (§9.8, L2-RCP-2, L2-PAP-2);
+    /// without a signer they wait unsigned. The receipt is kept for `GET
+    /// /access/v1/exercises/{id}` (OP-149 m.9); without it the answer comes from state.
+    async fn sign_artefacts(
+        &self,
+        led: &mut Led<B, S, C>,
+        domain: Digest,
+        r: &mut Response,
+        now: u64,
+    ) {
+        if let Some(path) = &self.setup.signer
+            && let Some(payload) = r.receipt.clone()
+        {
+            r.signed_receipt = sign_artefact(path, led, domain, Artefact::Receipt, payload, now)
+                .await
+                .ok();
+        }
+        if let (Some(payload), Some(exercise), Some(pos)) = (&r.receipt, r.exercise, r.record) {
+            let row = ReceiptRow {
+                exercise: exercise.0,
+                pos,
+                payload: payload.clone(),
+                signed: r.signed_receipt.clone(),
+            };
+            let _ =
+                keep_receipt(&self.setup.sequencer, &DomainId::from_bytes(domain.0), &row).await;
+        }
+        if let Some(path) = &self.setup.signer
+            && let Some(payload) = r.pap.clone()
+        {
+            r.signed_pap = sign_artefact(path, led, domain, Artefact::Pap, payload, now)
+                .await
+                .ok();
+        }
+    }
+
+    /// After a `projection.issue` decision: the contract of an allowed one is kept with its
+    /// record (§9.12, §13.7.4); a family opened for a decision that did not allow holds no
+    /// projection, so its entry is set at once and nothing can ever be presented against it
+    /// (OP-73: the row stays). A store failure replaces the result.
+    async fn settle_projection(
+        &self,
+        led: &Led<B, S, C>,
+        inc: &Incoming,
+        family: Option<&PapFamily>,
+        result: &mut Result<Response, CoreError>,
+    ) {
+        if let Ok(r) = &*result
+            && let Err(e) = self.keep_contract(inc, r).await
+        {
+            *result = Err(e);
+        }
+        let Some(f) = family.filter(|f| f.opened) else {
+            return;
+        };
+        if matches!(&*result, Ok(r) if r.decision.outcome == Outcome::Allow && !r.replayed) {
+            return;
+        }
+        let head = led.core.head().max(1);
+        let pos = match &*result {
+            Ok(r) => r.record.unwrap_or(head),
+            Err(_) => head,
+        };
+        if let Err(e) = access_store::projections::revoke_family(
+            &self.setup.sequencer,
+            &DomainId::from_bytes(inc.request.domain.0),
+            &f.family,
+            pos,
+        )
+        .await
+        {
+            *result = Err(e.into());
+        }
     }
 
     /// The slot of `domain` with its leader, taking the lease first if needed.

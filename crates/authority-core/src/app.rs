@@ -78,6 +78,10 @@ pub struct Incoming {
     pub pep: String,
     /// Whether the request is an explanation, counted apart from `check` (OP-141 m.23).
     pub explain: bool,
+    /// The Token Status List entry the decision point opened for a `projection.issue` commit
+    /// before deciding it (OP-150 m.10 (a), §11.20): the PAP's contract names it, so the entry
+    /// is committed with the PAP digest. `None` for every other request.
+    pub status: Option<access_kernel::status::StatusRef>,
 }
 
 const BOOTSTRAP: [&str; 2] = ["party_register", "instance_create"];
@@ -956,10 +960,9 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             instance: actor.instance,
             key,
         };
-        let digest_of = |label: &str, v: &Value| -> Result<Digest, CoreError> {
-            let b = dcbor::encode(v, Limits::CEILING).map_err(|_| CoreError::Protocol("pap"))?;
-            Ok(Digest(suiss_crypto::digest::context_digest(label, &b).0))
-        };
+        // §9.12.1, PI-12: the contract is issued against the audience's profile
+        let (verifier_profile_ref, clock_source) =
+            self.contract_profile(audience, fixed.now).await?;
         let validity = ValidityContract {
             issuing_exercise: fixed.exercise,
             basis_ref: dcbor::encode(
@@ -984,14 +987,12 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             revalidation: Revalidation::default(),
             offline_slice: slice,
             local_requirements: local.clone(),
-            verifier_profile_ref: digest_of(
-                "access/verifier-profile/v1",
-                &Value::Array(audience.iter().map(|a| Value::text(a)).collect()),
-            )?,
-            clock_source: String::from("trusted"),
+            verifier_profile_ref,
+            clock_source,
             clock_skew_ms: access_kernel::ais::SKEW_MS,
             must_understand: BTreeSet::new(),
-            status: None,
+            // OP-150 m.10 (a): the entry the decision point opened for this projection
+            status: inc.status.clone(),
         };
         let pap = access_kernel::pap::Pap {
             domain: self.domain,
@@ -1113,6 +1114,24 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         self.run(inc, now, None).await
     }
 
+    /// The live Instance whose key signed the AIS of `inc`; `None` for an anonymous request or
+    /// a key no Instance holds. The decision itself still establishes the actor; this only names
+    /// the holder a projection family is opened for before the decision (OP-150 m.10 (a)).
+    ///
+    /// # Errors
+    /// [`CoreError::Protocol`] for an AIS without a readable key id.
+    pub async fn holder_of(&self, inc: &Incoming) -> Result<Option<Id>, CoreError> {
+        let Some(sign1) = &inc.ais else {
+            return Ok(None);
+        };
+        let kid = kid_of(sign1)?;
+        let mut snap = Snapshot::default();
+        Ok(self
+            .instance_of(&mut snap, &kid)
+            .await?
+            .map(|(instance, _, _)| instance))
+    }
+
     /// The actor and its rate-limit bucket: from the AIS, or for an eligibility check its
     /// `subject` with the PEP's bucket (OP-141 m.23, OP-149 m.10).
     async fn requester(
@@ -1135,6 +1154,21 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                 Who::Pep(inc.pep.clone()),
             ),
         })
+    }
+
+    /// The rules of the requester's side laid over the decision, in order: the requester
+    /// throttle, the stale-holding softening and the projection issuance policy.
+    async fn requester_rules(
+        &self,
+        req: &Request,
+        evaluation: &mut Evaluation,
+        actor: Option<Actor>,
+        open: bool,
+        now: u64,
+    ) -> Result<(), CoreError> {
+        self.throttled(evaluation, actor, open, now).await?;
+        self.stale_holding(req, actor, evaluation, now).await?;
+        self.projection_policy(req, evaluation, actor, now).await
     }
 
     /// The commit path; an eligibility check names its `subject`.
@@ -1182,8 +1216,8 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             self.tiered(req, &mut evaluation, open, now).await?;
             self.approval(req, actor, &resolved, &mut evaluation, &exercise, now)
                 .await?;
-            self.throttled(&mut evaluation, actor, open, now).await?;
-            self.stale_holding(req, actor, &mut evaluation, now).await?;
+            self.requester_rules(req, &mut evaluation, actor, open, now)
+                .await?;
             if req.mode == Mode::Check {
                 return Ok(answer(evaluation.decision, None, None, false));
             }
@@ -1667,7 +1701,7 @@ pub mod approval;
 mod binding;
 mod events;
 mod ingest;
-mod projection;
+pub mod projection;
 mod proofs;
 mod regime;
 mod roles;

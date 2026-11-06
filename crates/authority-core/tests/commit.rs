@@ -393,6 +393,7 @@ fn incoming(request: Request, seed: u8) -> Incoming {
         request,
         pep: PEP.to_owned(),
         explain: false,
+        status: None,
     }
 }
 
@@ -3742,79 +3743,52 @@ async fn a_receipt_names_the_agency_chain_of_a_mandated_agent() {
 #[tokio::test]
 async fn an_offline_slice_is_drawn_in_advance() {
     use access_kernel::combinator::BlockerClass;
-    use access_kernel::model::{BudgetDimension, BudgetTerm, BudgetWindow};
-    use access_kernel::validity::{ProfileClass, ProfileVariant};
+    use access_kernel::validity::ProfileVariant;
     let db = fresh().await.unwrap();
-    let (mut core, d) = setup(&db).await;
-    onboard(&mut core, d, ROOT, ROOT_KEY, (1, 2)).await;
-    onboard(&mut core, d, ALICE, ALICE_KEY, (3, 4)).await;
-    let shop = meta::object_id(&d, kind::ANCHOR, 1);
-    let mut granted = authority(vec![action("shop", "read")], selector("shop"));
-    granted.constraints.budget = BTreeSet::from([BudgetTerm {
-        dimension: BudgetDimension::Count,
-        capacity: 5,
-        window: BudgetWindow::Total,
-    }]);
-    granted.constraints.validity.until = NOW + 86_400_000;
-    let grant = Payload::GrantIssue(GrantContent {
-        basis: GrantBasis::Anchor(shop),
-        holder: SubjectSelector::Party(ALICE),
-        authority: granted,
-        agency: BTreeSet::from([Capacity::Own]),
-        named: None,
-    });
-    let mut issue = meta_request(d, 5, ExerciseBasis::Anchor(shop), grant);
-    issue.intent.resources = vec![ResourceRef {
-        namespace: "shop".to_owned(),
-        path: vec![],
-        incarnation: 0,
-    }];
-    let p = issue.payload.clone().unwrap();
-    issue.intent.opaque = BTreeMap::from([("payload".to_owned(), p.digest().unwrap())]);
-    let issued = send(&mut core, issue, ROOT_KEY).await.unwrap();
-    allowed(&issued);
-    let holding = ExerciseBasis::Holding(HoldingRef {
-        grant: meta::object_id(&issued.exercise.unwrap(), kind::GRANT, 0),
-        holder: ALICE,
-        since: issued.record.unwrap(),
-    });
+    let d = create_genesis(&db.sequencer, TENANT, genesis_offline(), 1_000)
+        .await
+        .unwrap();
+    let a = moving_process(&db, d, Movable::at(NOW));
+    onboard_process(&a, d, ROOT, ROOT_KEY, (1, 2)).await;
+    onboard_process(&a, d, ALICE, ALICE_KEY, (3, 4)).await;
+    let holding = grant_alice(&a, d, 5, vec![action("shop", "read")], 5).await;
+    // §9.12.1: the verifier declared a tamper-evident counter, so it may hold a slice
+    let body = access_kernel::claim::body::Body::VerifierProfile(verifier_profile(ROBOT, true));
+    admitted(
+        &a.ingest(&body_claim(d, "verifier_profile", &body, NOW))
+            .await
+            .unwrap()
+            .verdict,
+    );
     let project = |count| {
-        let mut bounds = authority(vec![action("shop", "read")], selector("shop"));
-        bounds.constraints.validity = Window {
-            from: NOW,
-            until: NOW + 3_600_000,
-        };
-        Payload::ProjectionIssue {
-            bounds,
-            audience: BTreeSet::from(["verifier.example".to_owned()]),
-            class: ProfileClass::Intermittent,
-            variant: ProfileVariant::BoundedStaleness,
-            max_staleness_ms: Some(60_000),
-            offline_slice: Some(meta::SliceRequest {
-                count: Some(count),
-                amounts: BTreeMap::new(),
-            }),
-        }
+        projection(
+            vec![action("shop", "read")],
+            &[ROBOT],
+            ProfileVariant::BoundedStaleness,
+            (NOW, NOW + 3_600_000),
+            Some(60_000),
+            Some(count),
+        )
     };
-    let first = send(
-        &mut core,
-        meta_request(d, 6, holding, project(3)),
-        ALICE_KEY,
-    )
-    .await
-    .unwrap();
+    let first = a
+        .exercise(&incoming(
+            meta_request(d, 6, holding, project(3)),
+            ALICE_KEY,
+        ))
+        .await
+        .unwrap();
     allowed(&first);
     let pap = access_kernel::pap::Pap::from_bytes(&first.pap.unwrap()).unwrap();
     let entry = pap.validity.offline_slice.iter().next().unwrap();
     assert_eq!((entry.amount, entry.unit.as_str()), (3, "count"));
     // 2 of 5 remain: a second slice of 3 is denied, a slice of 2 is allowed
-    let over = send(
-        &mut core,
-        meta_request(d, 7, holding, project(3)),
-        ALICE_KEY,
-    )
-    .await
-    .unwrap();
+    let over = a
+        .exercise(&incoming(
+            meta_request(d, 7, holding, project(3)),
+            ALICE_KEY,
+        ))
+        .await
+        .unwrap();
     assert_eq!(over.decision.outcome, Outcome::Deny);
     assert!(
         over.decision
@@ -3823,11 +3797,10 @@ async fn an_offline_slice_is_drawn_in_advance() {
             .any(|b| b.class == BlockerClass::BudgetExhausted)
     );
     allowed(
-        &send(
-            &mut core,
+        &a.exercise(&incoming(
             meta_request(d, 8, holding, project(2)),
             ALICE_KEY,
-        )
+        ))
         .await
         .unwrap(),
     );
@@ -3982,15 +3955,18 @@ fn incoming_at(request: Request, seed: u8, iat: u64) -> Incoming {
         request,
         pep: PEP.to_owned(),
         explain: false,
+        status: None,
     }
 }
 
-/// What a holder brings from its home domain: the signed PAP, its excerpt and the home
-/// domain's metadata.
+/// What a holder brings from its home domain: the signed PAP, its excerpt, the home domain's
+/// metadata and, when it fetched one, the home domain's status list with its key excerpt.
+#[derive(Clone)]
 struct Home {
     pap: Vec<u8>,
     excerpt: Vec<u8>,
     metadata: Vec<u8>,
+    status: Option<(Vec<u8>, Vec<u8>)>,
 }
 
 impl Home {
@@ -4012,20 +3988,55 @@ impl Home {
                 access_kernel::pap::PRESENTATION_CONTENT_TYPE,
                 &p.to_bytes().unwrap(),
             ),
+            status: self.status.clone(),
         });
         request
     }
 }
 
-/// In the home domain `d`, ROOT grants Alice `shop.read` and `shop.buy` and Alice projects them
-/// to the domain `to` without a slice.
+/// The home domain's newest published status list with the excerpt of the key that signed it,
+/// as a holder fetches it before crossing the border (§9.15A.3).
+async fn home_status(
+    db: &TestDb,
+    d: Digest,
+    socket: &std::path::Path,
+) -> Option<(Vec<u8>, Vec<u8>)> {
+    use access_authority_core::status::adapters::{PgLists, SignerSocket};
+    use access_authority_core::status::{Publisher, list_uri};
+    Publisher::new(
+        PgLists {
+            app: db.app.clone(),
+            sequencer: db.sequencer.clone(),
+        },
+        SignerSocket(socket.to_path_buf()),
+    )
+    .publish(d, NOW)
+    .await
+    .unwrap();
+    let p =
+        access_store::status::latest(&db.app, &DomainId::from_bytes(d.0), &list_uri(API, &d, 0))
+            .await
+            .unwrap()
+            .unwrap();
+    Some((p.token, p.excerpt.unwrap()))
+}
+
+/// In the home domain `d`, where the domain `to` declared its Verifier Profile, ROOT grants
+/// Alice `shop.read` and `shop.buy` with a count budget and Alice projects them to `to` twice,
+/// each with a slice of two; each PAP comes with the home domain's status list.
+#[allow(
+    clippy::too_many_lines,
+    reason = "one home domain from registration to two signed PAPs and their status list"
+)]
 async fn home_pap(
     a: &Domains<Listed, Bound, Counter, Fixed>,
+    db: &TestDb,
     d: Digest,
     to: Digest,
     socket: &std::path::Path,
     service: &SignerService,
-) -> Home {
+) -> (Home, Home) {
+    use access_kernel::model::{BudgetDimension, BudgetTerm, BudgetWindow};
     use access_kernel::validity::{ProfileClass, ProfileVariant};
     let public_basis = ExerciseBasis::Public(meta::object_id(&d, kind::GRANT, 0));
     let steps = [
@@ -4050,8 +4061,22 @@ async fn home_pap(
             .unwrap(),
         );
     }
+    // §9.12.1, PI-12: the target domain is the verifier; its profile is accepted at home
+    let audience = access_kernel::foreign::domain_text(&to);
+    let body = access_kernel::claim::body::Body::VerifierProfile(verifier_profile(&audience, true));
+    admitted(
+        &a.ingest(&body_claim(d, "verifier_profile", &body, NOW))
+            .await
+            .unwrap()
+            .verdict,
+    );
     let shop = meta::object_id(&d, kind::ANCHOR, 1);
     let mut granted = authority(vec![action("shop", "read"), buy()], selector("shop"));
+    granted.constraints.budget = BTreeSet::from([BudgetTerm {
+        dimension: BudgetDimension::Count,
+        capacity: 50,
+        window: BudgetWindow::Total,
+    }]);
     granted.constraints.validity.until = NOW + 86_400_000;
     let issue = Payload::GrantIssue(GrantContent {
         basis: GrantBasis::Anchor(shop),
@@ -4073,25 +4098,35 @@ async fn home_pap(
         holder: ALICE,
         since: issued.record.unwrap(),
     });
-    let mut bounds = authority(vec![action("shop", "read"), buy()], selector("shop"));
-    bounds.constraints.validity = Window {
-        from: NOW,
-        until: NOW + 7_200_000,
-    };
-    let project = Payload::ProjectionIssue {
-        bounds,
-        audience: BTreeSet::from([access_kernel::foreign::domain_text(&to)]),
-        class: ProfileClass::Offline,
-        variant: ProfileVariant::CheckpointedOffline,
-        max_staleness_ms: None,
-        offline_slice: None,
-    };
-    let projected = a
-        .exercise(&incoming(meta_request(d, 6, holding, project), ALICE_KEY))
-        .await
-        .unwrap();
-    allowed(&projected);
-    let (pap, excerpt) = projected.signed_pap.unwrap();
+    let mut paps = Vec::new();
+    for nonce in [6, 7] {
+        let mut bounds = authority(vec![action("shop", "read"), buy()], selector("shop"));
+        bounds.constraints.validity = Window {
+            from: NOW,
+            until: NOW + 7_200_000,
+        };
+        // §9.15A.3: the home budget is drawn at home, as the slice the PAP carries
+        let project = Payload::ProjectionIssue {
+            bounds,
+            audience: BTreeSet::from([audience.clone()]),
+            class: ProfileClass::Offline,
+            variant: ProfileVariant::CheckpointedOffline,
+            max_staleness_ms: None,
+            offline_slice: Some(meta::SliceRequest {
+                count: Some(2),
+                amounts: BTreeMap::new(),
+            }),
+        };
+        let projected = a
+            .exercise(&incoming(
+                meta_request(d, nonce, holding, project),
+                ALICE_KEY,
+            ))
+            .await
+            .unwrap();
+        allowed(&projected);
+        paps.push(projected.signed_pap.unwrap());
+    }
     service.lock().unwrap().tick(NOW, 1);
     let access_authority_signer::protocol::Response::Metadata(metadata) =
         access_authority_signer::adapters::call(
@@ -4103,11 +4138,15 @@ async fn home_pap(
     else {
         panic!("metadata");
     };
-    Home {
+    let status = home_status(db, d, socket).await;
+    let home = |(pap, excerpt): (Vec<u8>, Vec<u8>)| Home {
         pap,
         excerpt,
-        metadata,
-    }
+        metadata: metadata.clone(),
+        status: status.clone(),
+    };
+    let twin = home(paps.pop().unwrap());
+    (home(paps.pop().unwrap()), twin)
 }
 
 fn blocked(r: &Response) -> (access_kernel::combinator::BlockerClass, String) {
@@ -4116,11 +4155,14 @@ fn blocked(r: &Response) -> (access_kernel::combinator::BlockerClass, String) {
     (b.class, b.subcode.clone().unwrap_or_default())
 }
 
-// OP-143 m.13, §9.15A.2–4, PI-3, INV-17: a PAP of the home domain lets its holder hold a
-// bridging Grant in another domain while a foreign-authority Acceptance pins the home domain's
-// binding key; under unpinned binding keys, without the PAP, outside the ceiling, under
-// another holder key, for a consumption-bearing action, outside the class, with stale metadata
-// and after the Acceptance is revoked, it is denied
+// OP-143 m.13, §9.15A.2–4, §9.12.4, PI-3, INV-17, INV-21, 2337–2339, 2455, 2494: a PAP of the
+// home domain lets its holder hold a bridging Grant in another domain while a foreign-authority
+// Acceptance pins the home domain's binding key; a consumption-bearing action spends the slice
+// the home domain drew, never more; the home domain's revocation reaches the target through the
+// PAP's status entry, and without a fresh list the foreign status is unknown and denied; an
+// identity issuer is no authority issuer; under unpinned binding keys, without the PAP, outside
+// the ceiling, under another holder key, outside the class, with stale metadata and after the
+// Acceptance is revoked, it is denied
 #[tokio::test]
 #[allow(
     clippy::too_many_lines,
@@ -4131,7 +4173,7 @@ async fn a_foreign_pap_holds_a_bridging_grant() {
     use access_authority_signer::ports::Bindings as _;
     use access_kernel::combinator::BlockerClass;
     let db = fresh().await.unwrap();
-    let a = create_genesis(&db.sequencer, TENANT, genesis(), 1_000)
+    let a = create_genesis(&db.sequencer, TENANT, genesis_offline(), 1_000)
         .await
         .unwrap();
     let b = create_genesis(&db.sequencer, TENANT, genesis_with_buy(), 2_000)
@@ -4141,7 +4183,7 @@ async fn a_foreign_pap_holds_a_bridging_grant() {
     let (socket, service) = start_signer("foreign");
     let home_process = signing_process(&db, a, &socket);
     onboard_signed(&home_process, a, &service).await;
-    let home = home_pap(&home_process, a, b, &socket, &service).await;
+    let (home, twin) = home_pap(&home_process, &db, a, b, &socket, &service).await;
 
     let log = PgLog::new(db.sequencer.clone(), b, TENANT, "t".to_owned(), TTL);
     let leader = Leader::acquire(log, b, EventKey::new(Secret::new([5; 32])))
@@ -4244,6 +4286,47 @@ async fn a_foreign_pap_holds_a_bridging_grant() {
         .unwrap(),
     );
 
+    // 2455, L26, OP-143 m.13 (a): an identity issuer (a Party) cannot be a foreign authority
+    // issuer, and a Party's `predicate-input` Acceptance opens no bridge
+    let party_issuer = Value::Map(vec![(
+        Value::text("acceptance_establish"),
+        Value::Map(vec![
+            (Value::text("issuer"), ROOT.to_value()),
+            (Value::text("use"), Value::text("foreign-authority")),
+            (
+                Value::text("classes"),
+                Value::Array(vec![Value::text("shop")]),
+            ),
+            (Value::text("subject"), SubjectSelector::Public.to_value()),
+            (
+                Value::text("validity"),
+                Value::Array(vec![Value::Unsigned(0), Value::Unsigned(u64::MAX)]),
+            ),
+        ]),
+    )]);
+    assert!(Payload::from_value(&party_issuer).is_err());
+    allowed(
+        &send(
+            &mut core,
+            meta_request(b, 13, meta_basis, {
+                let v = claim_acceptance(ALICE, &["shop"]);
+                Payload::from_value(&Value::Map(vec![(Value::text("acceptance_establish"), v)]))
+                    .unwrap()
+            }),
+            ROOT_KEY,
+        )
+        .await
+        .unwrap(),
+    );
+    assert_eq!(
+        refusal(
+            &mut core,
+            home.present(read(30, ALICE), ALICE_KEY, NOW),
+            ALICE_KEY
+        )
+        .await,
+        named(BlockerClass::SourceNotAccepted, "foreign-not-accepted"),
+    );
     let binding_key = SoftBinding.binding(&a).unwrap().public_key();
     let accepted = send(
         &mut core,
@@ -4258,6 +4341,19 @@ async fn a_foreign_pap_holds_a_bridging_grant() {
     .await
     .unwrap();
     allowed(&accepted);
+    // 2494, §9.12.4: the PAP names a status entry; without the home domain's list the foreign
+    // status is unknown and nothing is allowed on the PAP alone
+    let mut blind = home.clone();
+    blind.status = None;
+    assert_eq!(
+        refusal(
+            &mut core,
+            blind.present(read(31, ALICE), ALICE_KEY, NOW),
+            ALICE_KEY
+        )
+        .await,
+        named(BlockerClass::ForeignStatusUnavailable, "foreign-status"),
+    );
     allowed(
         &send(
             &mut core,
@@ -4291,13 +4387,6 @@ async fn a_foreign_pap_holds_a_bridging_grant() {
         .await,
         named(BlockerClass::NoCoveringAuthority, "foreign-holder-key"),
     );
-    let mut purchase = read(26, ALICE);
-    purchase.intent.action = buy();
-    assert_eq!(
-        refusal(&mut core, home.present(purchase, ALICE_KEY, NOW), ALICE_KEY).await,
-        named(BlockerClass::BudgetExhausted, "foreign-consumption"),
-    );
-
     let billing = send(&mut core, bridge("billing", 11), ROOT_KEY)
         .await
         .unwrap();
@@ -4315,6 +4404,76 @@ async fn a_foreign_pap_holds_a_bridging_grant() {
     assert_eq!(
         refusal(&mut core, home.present(request, ALICE_KEY, NOW), ALICE_KEY).await,
         named(BlockerClass::NoCoveringAuthority, "foreign-class"),
+    );
+    // §9.15A.3, INV-21: the consumption-bearing action spends the slice the home domain drew;
+    // the read above took one of two, the purchase the other, and the third use is denied
+    let mut purchase = read(26, ALICE);
+    purchase.intent.action = buy();
+    let bought = send(&mut core, home.present(purchase, ALICE_KEY, NOW), ALICE_KEY)
+        .await
+        .unwrap();
+    allowed(&bought);
+    assert_eq!(
+        refusal(
+            &mut core,
+            home.present(read(32, ALICE), ALICE_KEY, NOW),
+            ALICE_KEY
+        )
+        .await,
+        named(BlockerClass::NoCoveringAuthority, "pap-slice"),
+    );
+    // 2339, §9.15A.3: the home domain's revocation reaches this domain through the status
+    // list; the list the holder fetched before it is the declared window, no more
+    allowed(
+        &send(
+            &mut core,
+            twin.present(read(33, ALICE), ALICE_KEY, NOW),
+            ALICE_KEY,
+        )
+        .await
+        .unwrap(),
+    );
+    let twin_pap = access_verifier::offline::peek(&twin.pap).unwrap();
+    assert!(
+        home_process
+            .revoke_family(a, family_of(&twin_pap.projection_exercise))
+            .await
+            .unwrap()
+    );
+    allowed(
+        &home_process
+            .exercise(&incoming(
+                shop_request(
+                    a,
+                    40,
+                    Mode::Commit,
+                    ExerciseBasis::Anchor(meta::object_id(&a, kind::ANCHOR, 1)),
+                ),
+                ROOT_KEY,
+            ))
+            .await
+            .unwrap(),
+    );
+    let mut revoked = twin.clone();
+    revoked.status = home_status(&db, a, &socket).await;
+    assert_ne!(revoked.status, twin.status);
+    assert_eq!(
+        refusal(
+            &mut core,
+            revoked.present(read(34, ALICE), ALICE_KEY, NOW),
+            ALICE_KEY
+        )
+        .await,
+        named(BlockerClass::NoCoveringAuthority, "foreign-revoked"),
+    );
+    allowed(
+        &send(
+            &mut core,
+            twin.present(read(35, ALICE), ALICE_KEY, NOW),
+            ALICE_KEY,
+        )
+        .await
+        .unwrap(),
     );
 
     let later = NOW + 3_600_001;
@@ -4449,6 +4608,7 @@ async fn an_eligibility_check_records_nothing() {
         ais: None,
         pep: PEP.to_owned(),
         explain: false,
+        status: None,
     };
     let root = a.eligible(&inc, ROOT).await.unwrap();
     allowed(&root);
@@ -5808,4 +5968,1027 @@ async fn ending_a_holder_revokes_its_families_with_one_event_each() {
     assert_eq!(t.as_of, pos);
     assert!(lookup(&t, &raw, &entry(&uri, 0)).unwrap());
     assert!(lookup(&t, &raw, &entry(&uri, 1)).unwrap());
+}
+
+// ---------------------------------------------------------------- offline and cross-domain (OP-150 L8)
+
+/// The verifier a robot or edge device presents itself as (§9.12.1).
+const ROBOT: &str = "robot.example";
+
+/// A clock the test moves (OP-129 m.1).
+#[derive(Clone)]
+struct Movable(std::sync::Arc<std::sync::atomic::AtomicU64>);
+
+impl Movable {
+    fn at(now: u64) -> Self {
+        Self(std::sync::Arc::new(std::sync::atomic::AtomicU64::new(now)))
+    }
+
+    fn set(&self, now: u64) {
+        self.0.store(now, std::sync::atomic::Ordering::Relaxed);
+    }
+}
+
+impl Clock for Movable {
+    fn now(&mut self) -> impl Future<Output = Result<u64, SequencerError>> + Send {
+        std::future::ready(Ok(self.0.load(std::sync::atomic::Ordering::Relaxed)))
+    }
+}
+
+/// A process leading `d` without a signer, on a clock the test moves.
+fn moving_process(
+    db: &TestDb,
+    d: Digest,
+    clock: Movable,
+) -> Domains<Listed, Bound, Counter, Movable> {
+    Domains::new(Setup {
+        sequencer: db.sequencer.clone(),
+        app: db.app.clone(),
+        keys: Listed(vec![d]),
+        holder: "l8".to_owned(),
+        ttl: TTL,
+        binding: binding(),
+        salts: Counter(0),
+        clock,
+        deriver: db.deriver.clone(),
+        signer: None,
+        api_base: API.to_owned(),
+    })
+}
+
+/// A `predicate-input` Acceptance of `issuer` for `classes`, for every subject, forever.
+fn claim_acceptance(issuer: Id, classes: &[&str]) -> Value {
+    Value::Map(vec![
+        (Value::text("issuer"), issuer.to_value()),
+        (Value::text("use"), Value::text("predicate-input")),
+        (
+            Value::text("classes"),
+            Value::Array(classes.iter().map(|c| Value::text(c)).collect()),
+        ),
+        (Value::text("subject"), SubjectSelector::Public.to_value()),
+        (
+            Value::text("validity"),
+            Value::Array(vec![Value::Unsigned(0), Value::Unsigned(u64::MAX)]),
+        ),
+    ])
+}
+
+/// A Genesis whose `shop` SPP publishes `read`, the consumption-bearing `buy` and the
+/// irreversible `ship`, and that accepts ROOT's Verifier Profiles and Offline Exercise Reports.
+fn genesis_offline() -> BTreeMap<String, Opened> {
+    let mut g = genesis();
+    let mut spp = shop_spp();
+    spp.actions.push(buy_schema());
+    spp.actions.push(ship_schema());
+    let mut schemas = shop_schemas();
+    if let Value::Map(m) = &mut schemas {
+        for (k, v) in m.iter_mut() {
+            if *k == Value::text("spp") {
+                *v = spp.to_value();
+            }
+        }
+    }
+    g.remove("acceptances");
+    add_acceptances(
+        &mut g,
+        vec![
+            schemas,
+            claim_acceptance(ROOT, &["verifier_profile", "offline_exercise_report"]),
+        ],
+    );
+    g
+}
+
+/// The Verifier Profile of `audience` (§9.12.1): every variant but `checkpoint-continuation`,
+/// a tamper-evident counter, offline reports and the secure clock class; with `hardware`, an
+/// attestation too (§13.7.2).
+fn verifier_profile(audience: &str, hardware: bool) -> access_kernel::claim::body::VerifierProfile {
+    use access_kernel::claim::body::{VerifierId, VerifierProfile};
+    use access_kernel::validity::ProfileVariant as V;
+    VerifierProfile {
+        verifier: VerifierId::Workload(audience.to_owned()),
+        profiles: BTreeMap::from([
+            (V::CheckpointedOffline, BTreeMap::new()),
+            (V::BoundedStaleness, BTreeMap::new()),
+            (V::RevalidateOnReconnect, BTreeMap::new()),
+            (V::OnlineStrict, BTreeMap::new()),
+        ]),
+        versions: access_kernel::verify::key_scope::SpecVersions::default(),
+        clock_source: access_verifier::caps::SECURE_CLOCK_CLASS.to_owned(),
+        clock_skew_ms: 60_000,
+        tamper_evident_counter: true,
+        offline_report: true,
+        content_position_check: false,
+        status_access: BTreeSet::new(),
+        refresh_interval_ms: None,
+        attestation: hardware.then_some(Digest([30; 32])),
+        cap_horizon: BTreeMap::new(),
+        slice_max: BTreeMap::new(),
+        conformance: BTreeSet::new(),
+    }
+}
+
+/// ROOT's Claim of `class` with `body`, signed by ROOT's key, submitted with the body.
+fn body_claim(
+    d: Digest,
+    class: &str,
+    body: &access_kernel::claim::body::Body,
+    issued_at: u64,
+) -> access_internal_api::claims::ClaimSubmission {
+    let v = body.to_value();
+    let digest = access_kernel::claim::body::body_digest(
+        access_kernel::claim::body::Class::parse(class).unwrap(),
+        &v,
+    )
+    .unwrap();
+    report_claim(
+        d,
+        class,
+        digest,
+        dcbor::encode(&v, Limits::CEILING).unwrap(),
+        issued_at,
+    )
+}
+
+/// ROOT's Claim of `class` whose value is `digest` and whose body is `body`.
+fn report_claim(
+    d: Digest,
+    class: &str,
+    digest: [u8; 32],
+    body: Vec<u8>,
+    issued_at: u64,
+) -> access_internal_api::claims::ClaimSubmission {
+    let st = access_kernel::claim::Statement {
+        domain: d,
+        issuer: ROOT,
+        subject: ROOT,
+        class: class.to_owned(),
+        value: Some(EqValue::Bytes(digest.to_vec())),
+        issued_at,
+        validity: Window {
+            from: 0,
+            until: 1 << 50,
+        },
+        assurance: BTreeMap::new(),
+        bound_intent: None,
+        bound_instance: None,
+        bound_resource: None,
+        supersedes: None,
+    };
+    access_internal_api::claims::ClaimSubmission {
+        domain: d,
+        carrier: access_internal_api::claims::Carrier::Cose,
+        claim: sign1(
+            ROOT_KEY,
+            access_kernel::claim::CONTENT_TYPE,
+            &st.to_bytes().unwrap(),
+        ),
+        body: Some(body),
+        evidence: None,
+    }
+}
+
+fn admitted(v: &access_internal_api::claims::ClaimVerdict) {
+    assert!(
+        matches!(
+            v,
+            access_internal_api::claims::ClaimVerdict::Admitted { .. }
+        ),
+        "{v:?}"
+    );
+}
+
+/// Registers `party` with the key `seed` through the process `a`.
+async fn onboard_process<C: Clock + Clone>(
+    a: &Domains<Listed, Bound, Counter, C>,
+    d: Digest,
+    party: Id,
+    seed: u8,
+    nonces: (u8, u8),
+) {
+    let public_basis = ExerciseBasis::Public(meta::object_id(&d, kind::GRANT, 0));
+    let steps = [
+        Payload::PartyRegister {
+            party,
+            root: Root::Sole(party),
+            actor_kind: ActorKind::Human,
+        },
+        Payload::InstanceCreate {
+            party,
+            key: public(seed),
+            mandate: None,
+        },
+    ];
+    for (nonce, payload) in [nonces.0, nonces.1].into_iter().zip(steps) {
+        allowed(
+            &a.exercise(&incoming(
+                meta_request(d, nonce, public_basis, payload),
+                seed,
+            ))
+            .await
+            .unwrap(),
+        );
+    }
+}
+
+/// ROOT grants ALICE `actions` on `shop` with a count budget of `count` for three days; the
+/// holding ALICE exercises it by.
+async fn grant_alice<C: Clock + Clone>(
+    a: &Domains<Listed, Bound, Counter, C>,
+    d: Digest,
+    nonce: u8,
+    actions: Vec<ActionRef>,
+    count: u64,
+) -> ExerciseBasis {
+    use access_kernel::model::{BudgetDimension, BudgetTerm, BudgetWindow};
+    let shop = meta::object_id(&d, kind::ANCHOR, 1);
+    let mut granted = authority(actions, selector("shop"));
+    granted.constraints.budget = BTreeSet::from([BudgetTerm {
+        dimension: BudgetDimension::Count,
+        capacity: count,
+        window: BudgetWindow::Total,
+    }]);
+    granted.constraints.validity.until = NOW + 72 * 3_600_000;
+    let issue = Payload::GrantIssue(GrantContent {
+        basis: GrantBasis::Anchor(shop),
+        holder: SubjectSelector::Party(ALICE),
+        authority: granted,
+        agency: BTreeSet::from([Capacity::Own]),
+        named: None,
+    });
+    let issued = a
+        .exercise(&incoming(
+            meta_request(d, nonce, ExerciseBasis::Anchor(shop), issue),
+            ROOT_KEY,
+        ))
+        .await
+        .unwrap();
+    allowed(&issued);
+    ExerciseBasis::Holding(HoldingRef {
+        grant: meta::object_id(&issued.exercise.unwrap(), kind::GRANT, 0),
+        holder: ALICE,
+        since: issued.record.unwrap(),
+    })
+}
+
+/// A `projection.issue` payload of `actions` to `audience` under `variant`, from `from` to
+/// `horizon`.
+fn projection(
+    actions: Vec<ActionRef>,
+    audience: &[&str],
+    variant: access_kernel::validity::ProfileVariant,
+    (from, horizon): (u64, u64),
+    max_staleness_ms: Option<u64>,
+    slice: Option<u64>,
+) -> Payload {
+    let mut bounds = authority(actions, selector("shop"));
+    bounds.constraints.validity = Window {
+        from,
+        until: horizon,
+    };
+    Payload::ProjectionIssue {
+        bounds,
+        audience: audience.iter().map(|a| (*a).to_owned()).collect(),
+        class: variant.class(),
+        variant,
+        max_staleness_ms,
+        offline_slice: slice.map(|count| meta::SliceRequest {
+            count: Some(count),
+            amounts: BTreeMap::new(),
+        }),
+    }
+}
+
+/// Domain Metadata the verifier holds, witnessed at `now` (TI-RT5).
+fn witnessed(
+    metadata: access_kernel::verify::key_scope::DomainMetadata,
+    now: u64,
+) -> access_verifier::metadata::MetadataView {
+    use suiss_crypto::note::{self, Verifier};
+    const LOG: &str = "access.example/log";
+    const WITNESS: &str = "witness.example/w1";
+    let (log_key, witness_key) = (signing(40), signing(41));
+    let log = Verifier::ed25519(LOG, log_key.verifying_key().to_bytes()).unwrap();
+    let witness = Verifier::cosigner(WITNESS, witness_key.verifying_key().to_bytes()).unwrap();
+    let body = format!("{LOG}\n7\n{}\n", note::base64_encode(&[7; 32]));
+    let mut sig = log.id().to_be_bytes().to_vec();
+    sig.extend(log_key.sign(body.as_bytes()).to_bytes());
+    let mut checkpoint = format!("{body}\n\u{2014} {LOG} {}\n", note::base64_encode(&sig));
+    let ts = now / 1_000;
+    let mut sig = witness.id().to_be_bytes().to_vec();
+    sig.extend(ts.to_be_bytes());
+    sig.extend(
+        witness_key
+            .sign(&note::cosigned_message(ts, &body))
+            .to_bytes(),
+    );
+    checkpoint = format!(
+        "{checkpoint}\u{2014} {WITNESS} {}\n",
+        note::base64_encode(&sig)
+    );
+    let mut view = access_verifier::metadata::MetadataView::new(metadata);
+    view.witness(&checkpoint, LOG, &log, &[witness]).unwrap();
+    view
+}
+
+/// The holder's presentation of `pap` for `intent` to `audience`, signed by `seed`.
+fn presentation(
+    pap: &[u8],
+    intent: &IntentEnvelope,
+    audience: &str,
+    nonce: &[u8],
+    seed: u8,
+    iat: u64,
+) -> Vec<u8> {
+    let p = access_kernel::pap::Presentation {
+        pap: access_kernel::pap::pap_digest(pap),
+        intent: access_kernel::intent::intent_digest(intent).unwrap(),
+        audience: audience.to_owned(),
+        nonce: nonce.to_vec(),
+        iat,
+    };
+    sign1(
+        seed,
+        access_kernel::pap::PRESENTATION_CONTENT_TYPE,
+        &p.to_bytes().unwrap(),
+    )
+}
+
+/// The `access/validity/v1` digest of a PAP's contract (OP-150 m.7 (a)).
+fn contract_digest(pap: &access_kernel::pap::Pap) -> Digest {
+    Digest(
+        suiss_crypto::digest::context_digest(
+            access_authority_core::adapters::CONTRACT_LABEL,
+            &pap.validity.to_bytes().unwrap(),
+        )
+        .0,
+    )
+}
+
+fn policy_denied(r: &Response, code: &str) {
+    assert_eq!(
+        blocked(r),
+        (
+            access_kernel::combinator::BlockerClass::Restricted,
+            code.to_owned()
+        ),
+        "{r:?}"
+    );
+}
+
+/// The first 16 bytes of an `ExerciseID`: its projection family (P50).
+fn family_of(exercise: &Digest) -> [u8; 16] {
+    let mut f = [0; 16];
+    f.copy_from_slice(&exercise.0[..16]);
+    f
+}
+
+// L2-PAP-1 to L2-PAP-3, L2-RPT-1 to L2-RPT-3, §9.10, §9.12, §9.12.1, §9.12.2, §7.9.4.1, §13.7.2,
+// PI-12, INV-21, OP-150 m.7 (a), m.10 (a): the PAP the core signs for a verifier that declared
+// its profile is accepted by the Reference Verifier's SDK byte for byte, within the horizon and
+// the slice drawn at issuance; the contract names its Token Status List entry and the profile;
+// the verifier's chained report comes back as a Claim through Claim Ingest, is bound to the
+// projection and its contract, counts its entries inside and outside the contract and changes
+// nothing of what remains of the budget; a family opened for a denied projection is closed
+#[tokio::test]
+#[allow(
+    clippy::too_many_lines,
+    reason = "one domain, one verifier device and one projection from issuance to reconciliation"
+)]
+async fn a_core_pap_is_accepted_and_reported_by_the_verifier_sdk() {
+    use access_authority_core::app::projection::policy;
+    use access_kernel::report::{LocalOutcome, Report};
+    use access_kernel::validity::ProfileVariant;
+    use access_verifier::counter::CounterId;
+    use access_verifier::offline::{Identity, OfflineVerifier, Use, Verdict, peek};
+    use access_verifier::profile::LocalProfile;
+    use access_verifier::testing::{EmulatedClock, EmulatedCounter};
+    use access_verifier::time::{ClockGuard, DEFAULT_TOLERANCE_MS};
+    let db = fresh().await.unwrap();
+    let d = create_genesis(&db.sequencer, TENANT, genesis_offline(), 1_000)
+        .await
+        .unwrap();
+    let (socket, service) = start_signer("sdk-pap");
+    let a = signing_process(&db, d, &socket);
+    onboard_signed(&a, d, &service).await;
+    onboard_process(&a, d, ALICE, ALICE_KEY, (3, 4)).await;
+    let holding = grant_alice(&a, d, 5, vec![action("shop", "read")], 50).await;
+    let hour = 3_600_000;
+    let offline = |slice| {
+        projection(
+            vec![action("shop", "read")],
+            &[ROBOT],
+            ProfileVariant::CheckpointedOffline,
+            (NOW, NOW + hour),
+            None,
+            Some(slice),
+        )
+    };
+    // §9.12.1: without the verifier's profile no offline contract is issued
+    policy_denied(
+        &a.exercise(&incoming(
+            meta_request(d, 6, holding, offline(2)),
+            ALICE_KEY,
+        ))
+        .await
+        .unwrap(),
+        policy::VERIFIER_PROFILE,
+    );
+    let body = access_kernel::claim::body::Body::VerifierProfile(verifier_profile(ROBOT, true));
+    admitted(
+        &a.ingest(&body_claim(d, "verifier_profile", &body, NOW))
+            .await
+            .unwrap()
+            .verdict,
+    );
+    // §13.7.2: a slice over a tenth of the lineage term is denied; its family is closed
+    policy_denied(
+        &a.exercise(&incoming(
+            meta_request(d, 7, holding, offline(6)),
+            ALICE_KEY,
+        ))
+        .await
+        .unwrap(),
+        policy::SLICE_SHARE,
+    );
+    let uri = access_authority_core::status::list_uri(API, &d, 0);
+    let r = a
+        .exercise(&incoming(
+            meta_request(d, 8, holding, offline(2)),
+            ALICE_KEY,
+        ))
+        .await
+        .unwrap();
+    allowed(&r);
+    let (pap_sign1, excerpt) = r.signed_pap.clone().expect("signed PAP");
+    let pap = peek(&pap_sign1).unwrap();
+    let profile = LocalProfile::new(verifier_profile(ROBOT, true)).unwrap();
+    assert_eq!(pap.validity.verifier_profile_ref, *profile.digest());
+    assert_eq!(
+        pap.validity.clock_source,
+        access_verifier::caps::SECURE_CLOCK_CLASS
+    );
+    // OP-150 m.10 (a): the third entry of the list; the two denied projections took the first
+    // two and their families are revoked at the decisions that denied them
+    assert_eq!(pap.validity.status, Some(entry(&uri, 2)));
+    let row = a
+        .family(d, family_of(&pap.projection_exercise))
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        (row.holder, row.client_id.as_str()),
+        (pap.holder.instance.0, PEP)
+    );
+    assert_eq!(row.revoked_pos, None);
+    let dead = a
+        .family(d, family_of(&meta::exercise_id(&d, &[7; 16]).unwrap()))
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(dead.status, Some((uri.clone(), 1)));
+    assert!(dead.revoked_pos.is_some());
+
+    // the Reference Verifier's SDK, as the robot runs it
+    let mut device = OfflineVerifier::new(
+        Identity {
+            audience: ROBOT.to_owned(),
+            instance: None,
+            domain: d,
+            profile,
+            catalog: access_kernel::algebra::Catalog::default(),
+            understood: BTreeSet::new(),
+        },
+        witnessed(signer_metadata(&socket, d).await, NOW),
+        EmulatedClock::new(NOW),
+        ClockGuard::new(DEFAULT_TOLERANCE_MS),
+    );
+    for (i, s) in pap.validity.offline_slice.iter().enumerate() {
+        device
+            .provision(
+                pap.projection_exercise,
+                s.budget_term,
+                s.amount,
+                EmulatedCounter::new(CounterId([u8::try_from(i).unwrap() + 1; 16])),
+            )
+            .unwrap();
+    }
+    let read = shop_request(d, 9, Mode::Commit, holding).intent;
+    let nonce = [5; 16];
+    let proof = presentation(&pap_sign1, &read, ROBOT, &nonce, ALICE_KEY, NOW);
+    let schema = schema_of("read");
+    let use_ = Use {
+        pap: &pap_sign1,
+        excerpt: &excerpt,
+        presentation: &proof,
+        intent: &read,
+        nonce: &nonce,
+        satisfied: &BTreeSet::new(),
+        schema: Some(&schema),
+        content_position: None,
+    };
+    let Verdict::Allow(first) = device.verify(&use_) else {
+        panic!("{:?}", device.verify(&use_));
+    };
+    assert_eq!(first.seq, 0);
+    assert_eq!(first.drawn.iter().map(|s| s.amount).sum::<u64>(), 1);
+    assert!(matches!(device.verify(&use_), Verdict::Allow(_)));
+    // the slice of two is spent: the third use is a local DENY, chained like the others
+    let Verdict::Deny(denied) = device.verify(&use_) else {
+        panic!("slice");
+    };
+    assert_eq!(denied.code(), "pap-slice");
+
+    // §9.12.2: the report is a Claim; it binds to the projection and its contract
+    let cut = device.report(&pap.projection_exercise).unwrap().unwrap();
+    assert_eq!(cut.report.contract, contract_digest(&pap));
+    assert_eq!(cut.report.entries.len(), 3);
+    admitted(
+        &a.ingest(&report_claim(
+            d,
+            "offline_exercise_report",
+            cut.value,
+            cut.body.clone(),
+            NOW,
+        ))
+        .await
+        .unwrap()
+        .verdict,
+    );
+    let rec = a.reconciliation(d, pap.projection_exercise).await.unwrap();
+    assert_eq!(rec.len(), 1);
+    assert!(rec[0].bound && rec[0].continuous && !rec[0].late, "{rec:?}");
+    assert_eq!((rec[0].in_contract, rec[0].out_of_contract), (3, 0));
+    // §9.12.2, 2546: the report changed nothing of what remains; 48 of 50 are left
+    let intermittent = |slice| {
+        projection(
+            vec![action("shop", "read")],
+            &[ROBOT],
+            ProfileVariant::BoundedStaleness,
+            (NOW, NOW + hour),
+            Some(60_000),
+            Some(slice),
+        )
+    };
+    let over = a
+        .exercise(&incoming(
+            meta_request(d, 10, holding, intermittent(49)),
+            ALICE_KEY,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(
+        blocked(&over).0,
+        access_kernel::combinator::BlockerClass::BudgetExhausted
+    );
+    allowed(
+        &a.exercise(&incoming(
+            meta_request(d, 11, holding, intermittent(48)),
+            ALICE_KEY,
+        ))
+        .await
+        .unwrap(),
+    );
+
+    // §7.9.14, 2727: past the horizon the device denies; the use is chained and reported as
+    // out of contract, continuing the chain
+    device.clock().advance(2 * hour);
+    let late = presentation(&pap_sign1, &read, ROBOT, &nonce, ALICE_KEY, NOW + 2 * hour);
+    let Verdict::Deny(expired) = device.verify(&Use {
+        presentation: &late,
+        ..use_
+    }) else {
+        panic!("horizon");
+    };
+    assert_eq!(expired.code(), "pap-validity");
+    let second = device.report(&pap.projection_exercise).unwrap().unwrap();
+    assert_eq!(second.report.first_seq, 3);
+    admitted(
+        &a.ingest(&report_claim(
+            d,
+            "offline_exercise_report",
+            second.value,
+            second.body.clone(),
+            NOW,
+        ))
+        .await
+        .unwrap()
+        .verdict,
+    );
+    // L2-RPT-2: a report that skips the chain is recorded as a gap, never as a continuation
+    let gap = Report {
+        verifier_profile: cut.report.verifier_profile,
+        verifier_instance: None,
+        exercise: pap.projection_exercise,
+        contract: cut.report.contract,
+        period: Window {
+            from: NOW,
+            until: NOW,
+        },
+        previous: Some(Digest([9; 32])),
+        first_seq: 40,
+        entries: Vec::new(),
+        head: Digest([9; 32]),
+        slice_unused: BTreeSet::new(),
+        profile_version: 1,
+    };
+    let gap_value = access_kernel::claim::body::body_digest(
+        access_kernel::claim::body::Class::OfflineExerciseReport,
+        &gap.to_value(),
+    )
+    .unwrap();
+    admitted(
+        &a.ingest(&report_claim(
+            d,
+            "offline_exercise_report",
+            gap_value,
+            gap.to_bytes().unwrap(),
+            NOW,
+        ))
+        .await
+        .unwrap()
+        .verdict,
+    );
+    let rec = a.reconciliation(d, pap.projection_exercise).await.unwrap();
+    assert_eq!(rec.len(), 3);
+    assert!(rec[1].bound && rec[1].continuous);
+    assert_eq!((rec[1].in_contract, rec[1].out_of_contract), (0, 1));
+    assert!(rec[2].bound && !rec[2].continuous);
+    assert!(
+        second
+            .report
+            .entries
+            .iter()
+            .all(|e| e.outcome == LocalOutcome::Deny)
+    );
+    fold_check(&db.sequencer, d).await.unwrap();
+}
+
+// §13.7.2, §9.12, §9.12.1, PI-12, SEC13, 2506, 2517, 2533, 2537, 2539, 2547: the issuance
+// policy admits a contract only where the variant, tier and ceilings allow it, the audience's
+// profile covers it and a slice goes to one verifier; CT2 and CT3 get no intermittent or offline
+// projection; consumption leaves the online class only against a slice
+#[tokio::test]
+#[allow(
+    clippy::too_many_lines,
+    reason = "every rule of the issuance policy against one domain"
+)]
+async fn the_issuance_policy_admits_only_what_the_ceilings_and_profile_allow() {
+    use access_authority_core::app::projection::policy;
+    use access_kernel::validity::{ProfileClass, ProfileVariant as V};
+    let db = fresh().await.unwrap();
+    let d = create_genesis(&db.sequencer, TENANT, genesis_offline(), 1_000)
+        .await
+        .unwrap();
+    let a = moving_process(&db, d, Movable::at(NOW));
+    onboard_process(&a, d, ROOT, ROOT_KEY, (1, 2)).await;
+    onboard_process(&a, d, ALICE, ALICE_KEY, (3, 4)).await;
+    let holding = grant_alice(&a, d, 5, vec![action("shop", "read"), buy(), ship()], 50).await;
+    let hour = 3_600_000;
+    let read = || vec![action("shop", "read")];
+    let nonce = std::cell::Cell::new(10_u8);
+    let issue = async |payload: Payload| {
+        let n = nonce.get();
+        nonce.set(n + 1);
+        a.exercise(&incoming(meta_request(d, n, holding, payload), ALICE_KEY))
+            .await
+            .unwrap()
+    };
+    let bounded = |horizon, delta| {
+        projection(
+            read(),
+            &[ROBOT],
+            V::BoundedStaleness,
+            (NOW, NOW + horizon),
+            delta,
+            None,
+        )
+    };
+    // §9.12.1: no profile, no intermittent contract; an online one still issues against the
+    // audience digest
+    policy_denied(
+        &issue(bounded(hour, Some(60_000))).await,
+        policy::VERIFIER_PROFILE,
+    );
+    let online = issue(projection(
+        read(),
+        &[ROBOT],
+        V::OnlineStrict,
+        (NOW, NOW + hour),
+        None,
+        None,
+    ))
+    .await;
+    allowed(&online);
+    for (audience, hardware) in [(ROBOT, true), ("plain.example", false)] {
+        let body =
+            access_kernel::claim::body::Body::VerifierProfile(verifier_profile(audience, hardware));
+        admitted(
+            &a.ingest(&body_claim(d, "verifier_profile", &body, NOW))
+                .await
+                .unwrap()
+                .verdict,
+        );
+    }
+    allowed(&issue(bounded(hour, Some(60_000))).await);
+    // §13.7.2 bounded-staleness at CT1: Δ ≤ 5 min and present, horizon ≤ 8 h
+    policy_denied(&issue(bounded(hour, None)).await, policy::PARAMETER);
+    policy_denied(
+        &issue(bounded(hour, Some(6 * 60_000))).await,
+        policy::PARAMETER,
+    );
+    policy_denied(
+        &issue(bounded(9 * hour, Some(60_000))).await,
+        policy::HORIZON,
+    );
+    // Δ belongs to bounded-staleness only; a variant outside its class is refused
+    policy_denied(
+        &issue(projection(
+            read(),
+            &[ROBOT],
+            V::RevalidateOnReconnect,
+            (NOW, NOW + hour),
+            Some(60_000),
+            None,
+        ))
+        .await,
+        policy::PARAMETER,
+    );
+    let Payload::ProjectionIssue { bounds, .. } = bounded(hour, Some(60_000)) else {
+        panic!("projection payload");
+    };
+    policy_denied(
+        &issue(Payload::ProjectionIssue {
+            bounds,
+            audience: BTreeSet::from([ROBOT.to_owned()]),
+            class: ProfileClass::Offline,
+            variant: V::BoundedStaleness,
+            max_staleness_ms: Some(60_000),
+            offline_slice: None,
+        })
+        .await,
+        policy::PROFILE,
+    );
+    // §13.7.2: CT2 (irreversible) has no intermittent projection; a checkpoint interval
+    // cannot be declared yet, so no continuation contract
+    policy_denied(
+        &issue(projection(
+            vec![ship()],
+            &[ROBOT],
+            V::BoundedStaleness,
+            (NOW, NOW + hour),
+            Some(60_000),
+            None,
+        ))
+        .await,
+        policy::CLASS_CAP,
+    );
+    policy_denied(
+        &issue(projection(
+            read(),
+            &[ROBOT],
+            V::CheckpointContinuation,
+            (NOW, NOW + hour),
+            None,
+            None,
+        ))
+        .await,
+        policy::PARAMETER,
+    );
+    // 2506, 2517, 2537: consumption off line needs a slice; the CT1 offline variant needs the
+    // hardware triple; a slice goes to one verifier whose profile holds a counter
+    let offline = |actions, audience: &[&str], slice| {
+        projection(
+            actions,
+            audience,
+            V::CheckpointedOffline,
+            (NOW, NOW + hour),
+            None,
+            slice,
+        )
+    };
+    policy_denied(
+        &issue(offline(vec![buy()], &[ROBOT], None)).await,
+        policy::SLICE_REQUIRED,
+    );
+    policy_denied(
+        &issue(offline(read(), &["plain.example"], None)).await,
+        policy::HARDWARE,
+    );
+    policy_denied(
+        &issue(offline(read(), &[ROBOT, "plain.example"], Some(1))).await,
+        policy::VERIFIER_PROFILE,
+    );
+    policy_denied(
+        &issue(offline(read(), &[ROBOT, "nobody.example"], Some(1))).await,
+        policy::VERIFIER_PROFILE,
+    );
+    allowed(&issue(offline(vec![buy()], &[ROBOT], Some(5))).await);
+    policy_denied(
+        &issue(offline(vec![buy()], &[ROBOT], Some(6))).await,
+        policy::SLICE_SHARE,
+    );
+    // the contract of an admitted online projection names the audience's profile once it exists
+    let online = issue(projection(
+        read(),
+        &[ROBOT],
+        V::OnlineStrict,
+        (NOW, NOW + hour),
+        None,
+        None,
+    ))
+    .await;
+    allowed(&online);
+    let pap = access_kernel::pap::Pap::from_bytes(&online.pap.unwrap()).unwrap();
+    assert_eq!(
+        pap.validity.verifier_profile_ref,
+        *access_verifier::profile::LocalProfile::new(verifier_profile(ROBOT, true))
+            .unwrap()
+            .digest()
+    );
+    fold_check(&db.sequencer, d).await.unwrap();
+}
+
+// §13.7.4, SEC14, 2591, 2556: `projection.issue` is limited to 30 an hour per Instance and
+// action class and to 3 open offline PAPs per Instance, each a recorded `restricted` DENY with a
+// stable subcode; a verifier that did not report a `checkpointed-offline` projection within
+// horizon + 24 h gets no new contract until it does
+#[tokio::test]
+#[allow(
+    clippy::too_many_lines,
+    reason = "three limits against one domain and clock"
+)]
+async fn projection_issuance_limits_are_decisions() {
+    use access_authority_core::app::projection::policy;
+    use access_kernel::combinator::Remediation;
+    use access_kernel::report::Report;
+    use access_kernel::validity::ProfileVariant as V;
+    let db = fresh().await.unwrap();
+    let d = create_genesis(&db.sequencer, TENANT, genesis_offline(), 1_000)
+        .await
+        .unwrap();
+    let clock = Movable::at(NOW);
+    let a = moving_process(&db, d, clock.clone());
+    onboard_process(&a, d, ROOT, ROOT_KEY, (1, 2)).await;
+    onboard_process(&a, d, ALICE, ALICE_KEY, (3, 4)).await;
+    let holding = grant_alice(&a, d, 5, vec![action("shop", "read")], 50).await;
+    let hour = 3_600_000;
+    for audience in [ROBOT, "lone.example"] {
+        let body =
+            access_kernel::claim::body::Body::VerifierProfile(verifier_profile(audience, true));
+        admitted(
+            &a.ingest(&body_claim(d, "verifier_profile", &body, NOW))
+                .await
+                .unwrap()
+                .verdict,
+        );
+    }
+    let read = || vec![action("shop", "read")];
+    let offline = |audience: &str, from: u64| {
+        projection(
+            read(),
+            &[audience],
+            V::CheckpointedOffline,
+            (from, from + hour),
+            None,
+            None,
+        )
+    };
+    let at = async |nonce: u8, payload: Payload, now: u64| {
+        let mut request = meta_request(d, nonce, holding, payload);
+        request.intent.validity = Window {
+            from: now,
+            until: now + hour,
+        };
+        a.exercise(&incoming_at(request, ALICE_KEY, now))
+            .await
+            .unwrap()
+    };
+    // 3 open offline PAPs, the fourth is denied
+    let lone = at(10, offline("lone.example", NOW), NOW).await;
+    allowed(&lone);
+    allowed(&at(11, offline(ROBOT, NOW), NOW).await);
+    allowed(&at(12, offline(ROBOT, NOW), NOW).await);
+    policy_denied(
+        &at(13, offline(ROBOT, NOW), NOW).await,
+        policy::OPEN_OFFLINE,
+    );
+    // 30 an hour per Instance and action class: the three above count; 27 more online ones pass
+    let online = |from: u64| {
+        projection(
+            read(),
+            &[ROBOT],
+            V::OnlineStrict,
+            (from, from + hour),
+            None,
+            None,
+        )
+    };
+    for nonce in 14..41 {
+        allowed(&at(nonce, online(NOW), NOW).await);
+    }
+    let over = at(41, online(NOW), NOW).await;
+    policy_denied(&over, policy::RATE);
+    assert_eq!(
+        over.decision.blockers[0].remediation,
+        Remediation::WaitUntil(NOW + hour)
+    );
+    // an hour later the window has moved on
+    let later = NOW + hour + 1;
+    clock.set(later);
+    allowed(&at(42, online(later), later).await);
+    // SEC14: past horizon + 24 h without a report, the lone verifier gets no new contract while
+    // a verifier that owes none still does; once the lone one reports, it does again
+    let overdue = NOW + hour + 24 * hour + 1;
+    clock.set(overdue);
+    policy_denied(
+        &at(
+            43,
+            projection(
+                read(),
+                &["lone.example"],
+                V::OnlineStrict,
+                (overdue, overdue + hour),
+                None,
+                None,
+            ),
+            overdue,
+        )
+        .await,
+        policy::UNREPORTED,
+    );
+    allowed(
+        &at(
+            44,
+            projection(
+                read(),
+                &["fresh.example"],
+                V::OnlineStrict,
+                (overdue, overdue + hour),
+                None,
+                None,
+            ),
+            overdue,
+        )
+        .await,
+    );
+    let pap = access_kernel::pap::Pap::from_bytes(&lone.pap.unwrap()).unwrap();
+    let contract = contract_digest(&pap);
+    let report = Report {
+        verifier_profile: *access_verifier::profile::LocalProfile::new(verifier_profile(
+            "lone.example",
+            true,
+        ))
+        .unwrap()
+        .digest(),
+        verifier_instance: None,
+        exercise: pap.projection_exercise,
+        contract,
+        period: Window {
+            from: NOW,
+            until: NOW + hour,
+        },
+        previous: None,
+        first_seq: 0,
+        entries: Vec::new(),
+        head: access_kernel::report::seed(&pap.projection_exercise, &contract).unwrap(),
+        slice_unused: BTreeSet::new(),
+        profile_version: 1,
+    };
+    let value = access_kernel::claim::body::body_digest(
+        access_kernel::claim::body::Class::OfflineExerciseReport,
+        &report.to_value(),
+    )
+    .unwrap();
+    admitted(
+        &a.ingest(&report_claim(
+            d,
+            "offline_exercise_report",
+            value,
+            report.to_bytes().unwrap(),
+            overdue,
+        ))
+        .await
+        .unwrap()
+        .verdict,
+    );
+    let rec = a.reconciliation(d, pap.projection_exercise).await.unwrap();
+    assert_eq!(rec.len(), 1);
+    assert!(rec[0].bound && rec[0].continuous && rec[0].late, "{rec:?}");
+    allowed(
+        &at(
+            45,
+            projection(
+                read(),
+                &["lone.example"],
+                V::OnlineStrict,
+                (overdue, overdue + hour),
+                None,
+                None,
+            ),
+            overdue,
+        )
+        .await,
+    );
+    fold_check(&db.sequencer, d).await.unwrap();
 }

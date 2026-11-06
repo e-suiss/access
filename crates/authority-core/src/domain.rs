@@ -216,6 +216,10 @@ pub enum ProofRef {
         excerpt: Vec<u8>,
         /// The holder's presentation for this request.
         presentation: Vec<u8>,
+        /// The foreign domain's Token Status List that holds the PAP's entry, as the holder
+        /// fetched it, with the excerpt of the `status-list` key that signed it (§9.15A.3,
+        /// §9.12.4): the home domain's revocation reaches this domain through it.
+        status: Option<(Vec<u8>, Vec<u8>)>,
     },
 }
 
@@ -808,7 +812,7 @@ fn budgets(
 
 /// The lineage budget terms an offline slice draws from, root first, with their demand:
 /// `(grant, term index, term, demand)` (OP-143 m.12).
-fn slice_terms(
+pub(crate) fn slice_terms(
     view: &Snapshot,
     grant: &access_kernel::model::Id,
     slice: &meta::SliceRequest,
@@ -942,10 +946,176 @@ fn foreign_deny(class: BlockerClass, subcode: &str, resolver: Resolver) -> Decis
     d
 }
 
+/// Largest inflated foreign status list, in bytes (OP-150 m.7 (g)).
+const MAX_FOREIGN_LIST_BYTES: usize = 4 * 1024 * 1024;
+
+/// The counter of what this domain has drawn from one offline slice term of a foreign PAP:
+/// `dCBOR(["foreign-slice", ExerciseID, budget_term])` (§9.15A.3, INV-21). The home domain
+/// drew the slice when it issued the projection; this domain only spends it, never more.
+#[must_use]
+pub fn foreign_slice_key(exercise: &Digest, budget_term: &Digest) -> Vec<u8> {
+    suiss_crypto::dcbor::encode(
+        &Value::Array(vec![
+            Value::text("foreign-slice"),
+            exercise.to_value(),
+            budget_term.to_value(),
+        ]),
+        suiss_crypto::dcbor::Limits::CEILING,
+    )
+    .unwrap_or_default()
+}
+
+/// What a verified foreign PAP lets the request do: the PAP bytes for the record and the
+/// slice draws its consumption makes here.
+struct Bridged {
+    pap: Vec<u8>,
+    draws: Vec<DrawSpec>,
+}
+
+/// The PAP payload as the holder claims it, read before verification: only to name the slice
+/// counters to fetch, never to decide.
+fn claimed_pap(sign1: &[u8]) -> Option<access_kernel::pap::Pap> {
+    let payload = access_kernel::verify::cose::parse_sign1(sign1)
+        .ok()?
+        .payload?;
+    access_kernel::pap::Pap::from_bytes(&payload).ok()
+}
+
+/// The home domain's revocation at this domain (§9.15A.3, §9.12.4, 2494): a PAP whose contract
+/// names a status entry is used only with a fresh list of the home domain, signed by its
+/// `status-list` key, in which the entry is not set. No list, a stale list or an unreadable one
+/// is `foreign-status`: the foreign status is unknown and the use is denied, never allowed on
+/// the strength of the PAP alone. A set entry is `foreign-revoked`.
+fn foreign_status(
+    pap: &access_kernel::pap::Pap,
+    metadata: &access_kernel::verify::key_scope::DomainMetadata,
+    status: Option<&(Vec<u8>, Vec<u8>)>,
+    now: u64,
+) -> Result<(), &'static str> {
+    use access_kernel::status::{CWT_CONTENT_TYPE, ListToken, lookup};
+    use access_kernel::verify::PureBackend;
+    use access_kernel::verify::cose::{parse_sign1, verify_sign1};
+    use access_kernel::verify::key_scope::{KeyUsage, operational_key};
+    let Some(reference) = &pap.validity.status else {
+        return Ok(());
+    };
+    let (sign1, excerpt) = status.ok_or("foreign-status")?;
+    let payload = parse_sign1(sign1)
+        .ok()
+        .and_then(|s| s.payload)
+        .ok_or("foreign-status")?;
+    let claimed = ListToken::from_bytes(&payload).map_err(|_| "foreign-status")?;
+    let iat = claimed.iat.checked_mul(1_000).ok_or("foreign-status")?;
+    let key = operational_key(
+        &PureBackend,
+        metadata,
+        &metadata.domain,
+        excerpt,
+        KeyUsage::StatusList,
+        iat,
+    )
+    .map_err(|_| "foreign-status")?;
+    let verified = verify_sign1(&PureBackend, sign1, &key.key_set(), CWT_CONTENT_TYPE)
+        .map_err(|_| "foreign-status")?;
+    let token = ListToken::from_bytes(&verified.payload).map_err(|_| "foreign-status")?;
+    let iat = token.iat.checked_mul(1_000).ok_or("foreign-status")?;
+    // TI-RT5: the list is as old as the metadata may be, at most
+    if iat.saturating_add(access_kernel::foreign::FRESHNESS_MS) < now {
+        return Err("foreign-status");
+    }
+    let bits =
+        miniz_oxide::inflate::decompress_to_vec_zlib_with_limit(&token.lst, MAX_FOREIGN_LIST_BYTES)
+            .map_err(|_| "foreign-status")?;
+    match lookup(&token, &bits, reference) {
+        Ok(false) => Ok(()),
+        Ok(true) => Err("foreign-revoked"),
+        Err(_) => Err("foreign-status"),
+    }
+}
+
+/// The draws one use of `intent` makes on the slice terms of the foreign `pap` here, each
+/// bounded by the slice amount (§9.15A.3); `None` when the intent's demand does not fit a term.
+fn slice_draws(pap: &access_kernel::pap::Pap, intent: &IntentEnvelope) -> Option<Vec<DrawSpec>> {
+    let mut draws = Vec::new();
+    for s in &pap.validity.offline_slice {
+        let demand = access_kernel::pap::demand(&s.unit, intent)?;
+        if demand == 0 {
+            continue;
+        }
+        let unit = (s.unit != "count").then(|| s.unit.clone());
+        draws.push((
+            foreign_slice_key(&pap.projection_exercise, &s.budget_term),
+            s.amount,
+            demand,
+            unit,
+        ));
+    }
+    Some(draws)
+}
+
+/// One foreign PAP proof against the open gates for `used` (OP-143 m.13 (d)–(f), §9.15A.3):
+/// the PAP bytes and the slice draws when a gate admits it, else the last gate's refusal.
+fn bridge_proof(
+    proof: &ProofRef,
+    gates: &[access_kernel::foreign::ForeignGate],
+    used: &access_kernel::foreign::Use<'_>,
+    consumption: bool,
+) -> Result<Bridged, &'static str> {
+    use access_kernel::foreign::{self, Presented};
+    let ProofRef::ForeignPap {
+        metadata,
+        pap,
+        excerpt,
+        presentation,
+        status,
+    } = proof
+    else {
+        return Err("foreign-pap-missing");
+    };
+    let presented = Presented {
+        metadata,
+        pap,
+        excerpt,
+        presentation,
+    };
+    let mut refusal = "foreign-pap-missing";
+    for g in gates {
+        let (verified, metadata) =
+            match foreign::verify(&access_kernel::verify::PureBackend, g, &presented, used) {
+                Ok(v) => v,
+                Err(e) => {
+                    refusal = e.code();
+                    continue;
+                }
+            };
+        if let Err(code) = foreign_status(&verified, &metadata, status.as_ref(), used.now) {
+            refusal = code;
+            continue;
+        }
+        // OP-143 m.13 (f), §9.15A.3: the home budget is drawn at home, as the slice
+        if consumption && verified.validity.offline_slice.is_empty() {
+            refusal = "foreign-consumption";
+            continue;
+        }
+        let Some(draws) = slice_draws(&verified, used.intent) else {
+            refusal = "pap-slice";
+            continue;
+        };
+        return Ok(Bridged {
+            pap: pap.clone(),
+            draws,
+        });
+    }
+    Err(refusal)
+}
+
 /// Whether the actor holds a bridging Grant whose holder is `ForeignAuthority(domain, class)`:
 /// a live `foreign-authority` Acceptance covers the class, and a foreign PAP of the request
-/// verifies under it for this intent (OP-143 m.13 (d)–(f), (h)). `Ok(None)` while a key is still
-/// to be fetched; the PAP bytes on success; the DENY otherwise.
+/// verifies under it for this intent (OP-143 m.13 (d)–(f), (h)). A consumption-bearing action
+/// is covered only by a PAP that carries the home domain's offline slice, and what this domain
+/// has drawn from the slice is counted here (§9.15A.3, INV-21). `Ok(None)` while a key or a
+/// counter is still to be fetched; the PAP bytes and the slice draws on success; the DENY
+/// otherwise.
 fn bridge(
     req: &Request,
     view: &Snapshot,
@@ -954,8 +1124,8 @@ fn bridge(
     catalog: &Catalog,
     schema: Option<&ActionSchema>,
     (domain, class): (&Digest, &str),
-) -> Result<Option<Vec<u8>>, Decision> {
-    use access_kernel::foreign::{self, ForeignGate, Presented, Use};
+) -> Result<Option<Bridged>, Decision> {
+    use access_kernel::foreign::{self, ForeignGate, Use};
     let Some(actor) = actor else {
         return Err(foreign_deny(
             BlockerClass::NoCoveringAuthority,
@@ -963,14 +1133,7 @@ fn bridge(
             Resolver::Actor,
         ));
     };
-    // OP-143 m.13 (f)
-    if schema.is_some_and(|s| s.consumption_bearing) {
-        return Err(foreign_deny(
-            BlockerClass::BudgetExhausted,
-            "foreign-consumption",
-            Resolver::Actor,
-        ));
-    }
+    let consumption = schema.is_some_and(|s| s.consumption_bearing);
     let key = read::<InstanceState>(view, kind::INSTANCE, &actor.instance)
         .filter(|i| i.ended.is_none())
         .map(|i| i.key);
@@ -1002,45 +1165,47 @@ fn bridge(
             Resolver::Actor,
         ));
     };
-    let used = Use {
-        domain: &req.domain,
-        intent: &req.intent,
-        nonce: &req.nonce,
-        now,
-        catalog,
-        actor_key: &actor_key,
-        class,
-    };
     let mut refusal = "foreign-pap-missing";
     for p in &req.proofs {
-        let ProofRef::ForeignPap {
-            metadata,
-            pap,
-            excerpt,
-            presentation,
-        } = p
-        else {
+        let ProofRef::ForeignPap { pap, .. } = p else {
             continue;
         };
         if foreign::claimed_domain(pap).as_ref() != Some(domain) {
             continue;
         }
-        let presented = Presented {
-            metadata,
-            pap,
-            excerpt,
-            presentation,
-        };
-        for g in &gates {
-            match foreign::verify(&access_kernel::verify::PureBackend, g, &presented, &used) {
-                Ok(_) => return Ok(Some(pap.clone())),
-                Err(e) => refusal = e.code(),
+        // §9.15A.3: what is left of the home slice here, one counter per term
+        let mut remaining = BTreeMap::new();
+        if let Some(claimed) = claimed_pap(pap) {
+            for s in &claimed.validity.offline_slice {
+                let used = view.counter(&foreign_slice_key(
+                    &claimed.projection_exercise,
+                    &s.budget_term,
+                ));
+                remaining.insert(s.budget_term, s.amount.saturating_sub(used));
             }
+        }
+        if !view.missing_counters().is_empty() {
+            return Ok(None);
+        }
+        let used = Use {
+            domain: &req.domain,
+            intent: &req.intent,
+            nonce: &req.nonce,
+            now,
+            catalog,
+            actor_key: &actor_key,
+            class,
+            remaining: &remaining,
+        };
+        match bridge_proof(p, &gates, &used, consumption) {
+            Ok(b) => return Ok(Some(b)),
+            Err(code) => refusal = code,
         }
     }
     let class = match refusal {
-        "foreign-stale" => BlockerClass::ForeignStatusUnavailable,
+        "foreign-stale" | "foreign-status" => BlockerClass::ForeignStatusUnavailable,
         "foreign-pap-missing" => BlockerClass::SourceNotAccepted,
+        "foreign-consumption" => BlockerClass::BudgetExhausted,
         _ => BlockerClass::NoCoveringAuthority,
     };
     Err(foreign_deny(class, refusal, Resolver::Actor))
@@ -1204,8 +1369,17 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
             schema.as_deref(),
             (domain, class),
         ) {
-            Ok(None) => return Pass::Need(snapshot.missing()),
-            Ok(Some(pap)) => foreign_pap = Some(pap),
+            Ok(None) => {
+                let missing_counters = snapshot.missing_counters();
+                if !missing_counters.is_empty() {
+                    return Pass::NeedCounters(missing_counters);
+                }
+                return Pass::Need(snapshot.missing());
+            }
+            Ok(Some(b)) => {
+                foreign_pap = Some(b.pap);
+                draws.extend(b.draws);
+            }
             Err(decision) => {
                 return Pass::Done(Evaluation {
                     decision,
@@ -1359,11 +1533,12 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
                 .and_then(|_| lineage_hops(snapshot, &g))
                 .map(|hops| (hops, Some(g))),
         };
-        // OP-141 m.26: every hop's budget is drawn by this intent's demand
+        // OP-141 m.26: every hop's budget is drawn by this intent's demand, beside what a
+        // foreign slice drew (§9.15A.3)
         let hops = match hops {
             Some(((mut hops, capacities), Some(g))) => {
                 match budgets(snapshot, &g, &req.intent, now, &mut hops) {
-                    Some(Ok(d)) => draws = d,
+                    Some(Ok(d)) => draws.extend(d),
                     Some(Err(r)) => return Pass::Rejected(r),
                     None => {}
                 }

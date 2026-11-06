@@ -394,6 +394,7 @@ async fn send_at(
         request,
         pep: PEP.to_owned(),
         explain: false,
+        status: None,
     };
     core.exercise(&inc, now).await
 }

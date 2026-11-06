@@ -7,7 +7,10 @@ use access_authority_sequencer::ports::Clock;
 use access_internal_api::claims::{ClaimSubmission, ClaimVerdict, Quarantine};
 use access_internal_api::idp::Unavailable;
 use access_kernel::claim;
+use access_kernel::digest::Digest;
+use access_kernel::model::Id;
 use access_store::claims::{self as table, QuarantineRow};
+use access_store::offline::{ProfileRow, ReconciliationRow, insert_profile, reconciliations};
 use access_store::scope::DomainId;
 
 use crate::CoreError;
@@ -86,10 +89,97 @@ where
                 }
             }
         }
+        // §9.12.1, §7.9.4.1: an admitted Verifier Profile is kept by the verifier it names; an
+        // admitted Offline Exercise Report is bound to its projection and reconciled
+        if let Ok(done) = &result
+            && let ClaimVerdict::Admitted {
+                position,
+                claim,
+                replayed: false,
+            } = &done.verdict
+            && let Some(body) = &sub.body
+        {
+            let kept = match done.class.as_str() {
+                "verifier_profile" => {
+                    self.keep_profile(sub.domain, (*position, *claim), body, done.until)
+                        .await
+                }
+                "offline_exercise_report" => super::reconcile::reconcile(
+                    (&self.setup.sequencer, &self.setup.app),
+                    sub.domain,
+                    (*position, *claim),
+                    body,
+                    now,
+                )
+                .await
+                .map(|_| ()),
+                _ => Ok(()),
+            };
+            if let Err(e) = kept {
+                result = Err(e);
+            }
+        }
         if matches!(result, Err(CoreError::Sequencer(_) | CoreError::Store(_))) {
             *guard = None;
         }
         result
+    }
+
+    /// Keeps an admitted Verifier Profile body under the verifier it names, with the Claim's
+    /// validity end (§9.12.1): what `projection.issue` reads the audience's profile from.
+    async fn keep_profile(
+        &self,
+        domain: Digest,
+        (pos, claim): (u64, Id),
+        body: &[u8],
+        until: u64,
+    ) -> Result<(), CoreError> {
+        use access_kernel::claim::body::{Body, Class, VerifierId, body_digest};
+        use suiss_crypto::dcbor::{self, Limits};
+        let value = dcbor::decode(body, Limits::CEILING)
+            .map_err(|_| CoreError::Protocol("verifier-profile"))?;
+        let Body::VerifierProfile(p) = Body::from_value(Class::VerifierProfile, &value)
+            .map_err(|_| CoreError::Protocol("verifier-profile"))?
+        else {
+            return Err(CoreError::Protocol("verifier-profile"));
+        };
+        let verifier = match &p.verifier {
+            VerifierId::Workload(w) => w.clone(),
+            VerifierId::Instance(i) => access_kernel::json::b64url_encode(&i.0),
+        };
+        let digest = body_digest(Class::VerifierProfile, &value)
+            .map_err(|_| CoreError::Protocol("verifier-profile"))?;
+        Ok(insert_profile(
+            &self.setup.sequencer,
+            &DomainId::from_bytes(domain.0),
+            &ProfileRow {
+                pos,
+                digest,
+                claim: claim.0,
+                body: body.to_vec(),
+                verifier: Some(verifier),
+                valid_until_ms: Some(until),
+            },
+        )
+        .await?)
+    }
+
+    /// What the Offline Exercise Reports of the projection `exercise` came to, in record order
+    /// (§7.9.4.1): the reconciliation view of the Exercise.
+    ///
+    /// # Errors
+    /// [`CoreError::Store`].
+    pub async fn reconciliation(
+        &self,
+        domain: Digest,
+        exercise: Digest,
+    ) -> Result<Vec<ReconciliationRow>, CoreError> {
+        Ok(reconciliations(
+            &self.setup.app,
+            &DomainId::from_bytes(domain.0),
+            &exercise.0,
+        )
+        .await?)
     }
 
     async fn index(&self, sub: &ClaimSubmission, done: &Ingested) -> Result<(), CoreError> {

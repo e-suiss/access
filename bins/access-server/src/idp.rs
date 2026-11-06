@@ -234,6 +234,7 @@ where
             ais: Some(ais),
             pep,
             explain: false,
+            status: None,
         };
         let r = match self.domains.exercise(&inc).await {
             Ok(r) => r,

@@ -372,14 +372,26 @@ fn proofs(v: &Json) -> R<Vec<ProofRef>> {
 }
 
 /// A foreign PAP with its domain's metadata, its key excerpt and the holder's presentation
-/// (OP-143 m.13 (c)).
+/// (OP-143 m.13 (c)), and the home domain's status list with its key excerpt when the PAP
+/// names a status entry (§9.15A.3).
 fn foreign_pap(v: &Json) -> R<ProofRef> {
     let mut o = Obj::of(v, "proofs")?;
+    let status = match o.opt("status") {
+        None => None,
+        Some(s) => {
+            let mut s = Obj::of(s, "proofs")?;
+            let list = bytes(s.req("list", "proofs")?, "proofs")?;
+            let excerpt = bytes(s.req("excerpt", "proofs")?, "proofs")?;
+            s.done()?;
+            Some((list, excerpt))
+        }
+    };
     let p = ProofRef::ForeignPap {
         metadata: bytes(o.req("metadata", "proofs")?, "proofs")?,
         pap: bytes(o.req("pap", "proofs")?, "proofs")?,
         excerpt: bytes(o.req("excerpt", "proofs")?, "proofs")?,
         presentation: bytes(o.req("presentation", "proofs")?, "proofs")?,
+        status,
     };
     o.done()?;
     Ok(p)

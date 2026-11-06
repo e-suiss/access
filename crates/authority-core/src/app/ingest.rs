@@ -36,6 +36,24 @@ pub struct Ingested {
     /// The holder Instances an admitted compromise declaration ended (§9.9.3 k.6): their live
     /// projection families are revoked at the record once it is in.
     pub ended: Vec<Id>,
+    /// The end of the Claim's validity, milliseconds; 0 for a refused submission.
+    pub until: u64,
+}
+
+impl Ingested {
+    /// A submission that does not verify: rejected with its reason, nothing recorded.
+    fn refused(r: Refusal) -> Self {
+        Self {
+            verdict: ClaimVerdict::Rejected {
+                code: String::from(r.0),
+            },
+            issuer: Id([0; 16]),
+            class: String::new(),
+            quota: None,
+            ended: Vec::new(),
+            until: 0,
+        }
+    }
 }
 
 /// A verified submission: what it says, who signed it and its body.
@@ -76,21 +94,12 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         let mut snap = Snapshot::default();
         let v = match self.carried(&mut snap, sub, now).await? {
             Ok(v) => v,
-            Err(r) => {
-                return Ok(Ingested {
-                    verdict: ClaimVerdict::Rejected {
-                        code: String::from(r.0),
-                    },
-                    issuer: Id([0; 16]),
-                    class: String::new(),
-                    quota: None,
-                    ended: Vec::new(),
-                });
-            }
+            Err(r) => return Ok(Ingested::refused(r)),
         };
         let id = claim::claim_id(&sub.claim);
         let issuer = v.statement.issuer;
         let class = v.statement.class.clone();
+        let until = v.statement.validity.until;
         // L2-CLM-4: an admitted Claim is recorded once
         if let Some(state) = self
             .get(&mut snap, &meta::key(kind::CLAIM, &id))
@@ -107,6 +116,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                 class,
                 quota: None,
                 ended: Vec::new(),
+                until,
             });
         }
         for _ in 0..MAX_RETRIES {
@@ -157,6 +167,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                         class,
                         quota,
                         ended,
+                        until,
                     });
                 }
                 Err(e) if e.is_retry() => {}

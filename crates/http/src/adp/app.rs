@@ -121,6 +121,7 @@ impl<P: Pdp> Service<P> {
                 ais: decoded.ais,
                 pep,
                 explain: true,
+                status: None,
             };
             return match self.pdp.explain_recorded(inc, record, scope).await {
                 Ok(r) => {
@@ -164,6 +165,7 @@ impl<P: Pdp> Service<P> {
             ais: None,
             pep,
             explain: false,
+            status: None,
         };
         match self.pdp.eligible(inc, subject).await {
             Ok(r) => Reply::Decision(serde_json::json!({
@@ -189,6 +191,7 @@ impl<P: Pdp> Service<P> {
             ais: decoded.ais,
             pep,
             explain: false,
+            status: None,
         };
         match self.pdp.search(inc, query, page).await {
             Ok((hits, next)) => Reply::Decision(encode_search(&hits, next.as_deref())),
@@ -203,6 +206,7 @@ impl<P: Pdp> Service<P> {
             ais: decoded.ais,
             pep,
             explain,
+            status: None,
         };
         match self.pdp.evaluate(inc).await {
             Ok(r) => Reply::Decision(encode(&r, mode)),

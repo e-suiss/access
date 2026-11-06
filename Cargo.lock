@@ -15,6 +15,7 @@ dependencies = [
  "access-telemetry",
  "ed25519-dalek",
  "esuiss-access-kernel",
+ "esuiss-access-verifier",
  "esuiss-crypto",
  "esuiss-restriction",
  "miniz_oxide",
