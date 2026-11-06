@@ -216,7 +216,8 @@ jobs:
         run: |
           now="$(date +%s)000"
           intent="$(jq -c --argjson now "$now" '.test_user.allowed | {
-            action: .action, resources: [.resource],
+            action: .action,
+            resources: [{ namespace: .resource.namespace, path: [(.resource.path_prefix + "local-smoke")] }],
             params: { ledger: { eq: "main" }, declaration: { eq: { bytes: "0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dE" } } },
             validity: { from: ($now - 60000), until: ($now + 600000) } }' "$RUNNER_TEMP/again.json")"
           read -r issuer domain party instance grant since cgrant csince < <(jq -r '.test_user as $u | [

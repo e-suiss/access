@@ -50,8 +50,8 @@ use access_kernel::meta::{
 };
 use access_kernel::model::{
     ActionRef, ActionSet, AuthoritySet, Binding, CanonicalAuthority, ConstraintSet, Consumption,
-    DelegationTerms, Id, Independence, ProofKind, RequirementTerm, ResourceSelector, Structural,
-    SubjectSelector, Window,
+    DelegationTerms, Id, Independence, ProofKind, RequirementTerm, ResourceRef, ResourceSelector,
+    Structural, SubjectSelector, Window,
 };
 use access_kernel::schema::{ActionSchema, EffectClass, Spp};
 use access_kernel::verify::cose::PublicKey;
@@ -82,8 +82,9 @@ const ROOT_CHALLENGE_LABEL: &[u8] = b"access-bootstrap/root-instance:1";
 const SAMPLE_GRANT_LABEL: &[u8] = b"access-bootstrap/sample-grant:1";
 
 /// What the root signs to derive the nonce of the test user's Grant of the allowed action
-/// (OP-149 m.29 (b)).
-const ALLOWED_GRANT_LABEL: &[u8] = b"access-bootstrap/allowed-grant:1";
+/// (OP-149 m.29 (b), m.30 (a)); the Grant's bounds are part of it, so a Grant of another shape
+/// is another Grant.
+const ALLOWED_GRANT_LABEL: &[u8] = b"access-bootstrap/allowed-grant:2";
 
 /// What the root signs to derive the nonce of the test user's Grant to contribute approvals.
 const CONTRIBUTE_GRANT_LABEL: &[u8] = b"access-bootstrap/contribute-grant:1";
@@ -93,6 +94,13 @@ const APPROVE_CLASS: &str = "approve";
 
 /// The typed parameters of the allowed action: a ledger name and a declaration digest.
 const ALLOWED_PARAMS: [(&str, &str); 2] = [("declaration", "bytes"), ("ledger", "text")];
+
+/// The resource namespace the allowed Grant covers unless the plan names one (OP-149 m.30 (a)).
+const DEFAULT_RESOURCE_NAMESPACE: &str = "work.ledger";
+
+/// What the first path element of an allowed resource starts with unless the plan names it
+/// (OP-149 m.30 (a); Work E-45 item 5).
+const DEFAULT_RESOURCE_PATH_PREFIX: &str = "led_";
 
 /// The resource path a sample eligibility check names.
 const SAMPLE_PATH: &str = "sample";
@@ -231,6 +239,8 @@ struct SampleFile {
     namespace: String,
     action: String,
     allowed: Option<String>,
+    resource_namespace: Option<String>,
+    resource_path_prefix: Option<String>,
 }
 
 /// A sample catalog and Grant for a product's eligibility checks (OP-149 m.10): the realm's
@@ -238,6 +248,8 @@ struct SampleFile {
 /// to the sample subject. With `allowed`, the Genesis also publishes that exact-intent action
 /// (CT1, a ledger and a declaration digest), and the root grants it to the test user's Party
 /// under an approval requirement, with the Grant to contribute that approval (OP-149 m.29 (b)).
+/// That Grant covers the resources of `resource_namespace` whose first path element starts
+/// with `resource_path_prefix` (OP-149 m.30 (a)).
 #[derive(Clone, Debug)]
 pub(crate) struct SamplePlan {
     /// The slug of one of the plan's sample tenants.
@@ -248,6 +260,10 @@ pub(crate) struct SamplePlan {
     pub(crate) action: String,
     /// The allowed action's name, when the test user gets one.
     pub(crate) allowed: Option<String>,
+    /// The resource namespace of the allowed Grant, such as `work.ledger`.
+    pub(crate) resource_namespace: String,
+    /// What the first path element of an allowed resource starts with, such as `led_`.
+    pub(crate) resource_path_prefix: String,
 }
 
 /// An authority over `actions` on the whole `namespace`, for good, with `requirements`.
@@ -316,6 +332,62 @@ fn approval_term() -> RequirementTerm {
 }
 
 impl SamplePlan {
+    /// The plan's `[sample]` section, checked: the realm is one of `tenants`, the catalog entry
+    /// is valid and outside the planes' namespaces (OP-141 m.35 (a)), the allowed action has a
+    /// test user in the same realm (OP-149 m.29 (b)), and a resource of the allowed shape is a
+    /// valid Kernel resource outside the planes' namespaces (OP-149 m.30 (a)).
+    fn from_file(
+        s: SampleFile,
+        tenants: &[String],
+        test_user: Option<&TestUserFile>,
+    ) -> Result<Self, BootstrapError> {
+        if !tenants.contains(&s.realm) {
+            return Err(BootstrapError::Plan(format!(
+                "sample realm {} is not one of the plan's tenants",
+                s.realm
+            )));
+        }
+        let sample = Self {
+            realm: s.realm,
+            namespace: s.namespace,
+            action: s.action,
+            allowed: s.allowed,
+            resource_namespace: s
+                .resource_namespace
+                .unwrap_or_else(|| String::from(DEFAULT_RESOURCE_NAMESPACE)),
+            resource_path_prefix: s
+                .resource_path_prefix
+                .unwrap_or_else(|| String::from(DEFAULT_RESOURCE_PATH_PREFIX)),
+        };
+        let catalog = sample.catalog(Id([0; 16]));
+        if Spp::from_value(&catalog.to_value()).as_ref() != Ok(&catalog)
+            || sample.namespace == meta::NAMESPACE
+            || sample.namespace.starts_with("idp.")
+            || sample.allowed.as_deref() == Some(sample.action.as_str())
+        {
+            return Err(BootstrapError::Plan(String::from(
+                "the sample namespace or action is not a valid catalog entry",
+            )));
+        }
+        if sample.allowed.is_some() && test_user.is_none_or(|u| u.realm != sample.realm) {
+            return Err(BootstrapError::Plan(String::from(
+                "sample.allowed needs a test_user in the sample realm",
+            )));
+        }
+        let resource = sample.allowed_resource("x");
+        if ResourceRef::from_value(&resource.to_value()).as_ref() != Ok(&resource)
+            || sample.resource_path_prefix.is_empty()
+            || sample.resource_namespace == meta::NAMESPACE
+            || sample.resource_namespace == "idp"
+            || sample.resource_namespace.starts_with("idp.")
+        {
+            return Err(BootstrapError::Plan(String::from(
+                "the sample resource namespace or path prefix is not a valid resource",
+            )));
+        }
+        Ok(sample)
+    }
+
     /// The Action Schema of `name`: version 1, reversible (CT1), with `params`.
     fn schema_of(name: &str, params: &[(&str, &str)]) -> ActionSchema {
         ActionSchema {
@@ -391,17 +463,37 @@ impl SamplePlan {
         )
     }
 
-    /// The Grant of the allowed action to `holder`, met only with an approval.
+    /// The Grant of the allowed action to `holder` over the allowed resources, met only with an
+    /// approval. A structural selector matches path prefixes at segment boundaries (OP-109
+    /// m.2), so the Grant covers the whole resource namespace; the path prefix is what the
+    /// summary tells products to write (OP-149 m.30 (a)).
     fn allowed_grant(&self, domain: &Digest, holder: Id) -> Option<GrantContent> {
         Some(grant_of(
             domain,
             holder,
             authority(
                 BTreeSet::from([self.allowed_ref()?]),
-                &self.namespace,
+                &self.resource_namespace,
                 BTreeSet::from([approval_term()]),
             ),
         ))
+    }
+
+    /// A resource an Exercise of the allowed action may name: `rest` after the allowed prefix.
+    fn allowed_resource(&self, rest: &str) -> ResourceRef {
+        ResourceRef {
+            namespace: self.resource_namespace.clone(),
+            path: vec![format!("{}{rest}", self.resource_path_prefix)],
+            incarnation: 0,
+        }
+    }
+
+    /// What the summary says the allowed Grant covers (OP-149 m.30 (a)).
+    fn allowed_resource_json(&self) -> serde_json::Value {
+        serde_json::json!({
+            "namespace": self.resource_namespace,
+            "path_prefix": self.resource_path_prefix,
+        })
     }
 
     /// The Grant to contribute `approve` approvals to `holder` (L0-META-30).
@@ -528,43 +620,11 @@ impl Plan {
         }
         let sample = match file.sample {
             None => None,
-            Some(s) => {
-                if !file.tenants.contains(&s.realm) {
-                    return Err(BootstrapError::Plan(format!(
-                        "sample realm {} is not one of the plan's tenants",
-                        s.realm
-                    )));
-                }
-                let sample = SamplePlan {
-                    realm: s.realm,
-                    namespace: s.namespace,
-                    action: s.action,
-                    allowed: s.allowed,
-                };
-                // OP-141 m.35 (a)
-                let catalog = sample.catalog(Id([0; 16]));
-                if Spp::from_value(&catalog.to_value()).as_ref() != Ok(&catalog)
-                    || sample.namespace == meta::NAMESPACE
-                    || sample.namespace.starts_with("idp.")
-                    || sample.allowed.as_deref() == Some(sample.action.as_str())
-                {
-                    return Err(BootstrapError::Plan(String::from(
-                        "the sample namespace or action is not a valid catalog entry",
-                    )));
-                }
-                // OP-149 m.29 (b)
-                if sample.allowed.is_some()
-                    && file
-                        .test_user
-                        .as_ref()
-                        .is_none_or(|u| u.realm != sample.realm)
-                {
-                    return Err(BootstrapError::Plan(String::from(
-                        "sample.allowed needs a test_user in the sample realm",
-                    )));
-                }
-                Some(sample)
-            }
+            Some(s) => Some(SamplePlan::from_file(
+                s,
+                &file.tenants,
+                file.test_user.as_ref(),
+            )?),
         };
         let test_user = match file.test_user {
             None => None,
@@ -714,15 +774,17 @@ pub(crate) struct TestUserOut {
 }
 
 /// What a product's Exercise of the allowed action names (OP-149 m.29 (b)), in the ADP JSON
-/// encoding: the action, a resource the Grant covers, the typed parameters, the test user's
-/// holding as `basis`, and the holding its approval is contributed under.
+/// encoding: the action, the shape of the resources the Grant covers, the typed parameters, the
+/// test user's holding as `basis`, and the holding its approval is contributed under.
 #[derive(Clone, Debug, Serialize)]
 pub(crate) struct AllowedOut {
     /// The governing domain, base64url.
     pub(crate) domain: String,
     /// The allowed action: `intent.action`.
     pub(crate) action: serde_json::Value,
-    /// A resource the Grant covers: an entry of `intent.resources`.
+    /// The resources the Grant covers: their `namespace` and the `path_prefix` their first path
+    /// element starts with; an entry of `intent.resources` is
+    /// `{namespace, path: ["<path_prefix>…", …]}` (OP-149 m.30 (a)).
     pub(crate) resource: serde_json::Value,
     /// The action's typed parameters, name to type.
     pub(crate) params: serde_json::Value,
@@ -1171,6 +1233,7 @@ where
         label.extend_from_slice(&domain.0);
         label.extend_from_slice(&party.0);
         label.extend_from_slice(&action.schema.0);
+        label.extend_from_slice(&meta::bounds_digest(&grant.authority).0);
         let holding = self.granted(domain, root, &label, grant, party).await?;
         let mut label = CONTRIBUTE_GRANT_LABEL.to_vec();
         label.extend_from_slice(&domain.0);
@@ -1187,7 +1250,7 @@ where
         Ok(AllowedOut {
             domain: b64url_encode(&domain.0),
             action: action_json(&action),
-            resource: resource_json(&s.namespace),
+            resource: s.allowed_resource_json(),
             params: serde_json::Value::Object(
                 ALLOWED_PARAMS
                     .iter()

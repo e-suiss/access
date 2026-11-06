@@ -1119,6 +1119,8 @@ fn sample_plan() -> Plan {
             namespace: String::from("work"),
             action: String::from("approve"),
             allowed: None,
+            resource_namespace: String::from("work.ledger"),
+            resource_path_prefix: String::from("led_"),
         }),
         ..plan()
     }
@@ -1290,7 +1292,31 @@ fn a_sample_names_a_tenant_and_a_valid_action() {
     assert!(plan("access", "acme", "access").is_err());
     assert!(plan("idp", "acme", "idp.client").is_err());
     assert!(plan("upper", "acme", "Work").is_err());
-    assert!(plan("ok", "acme", "work").unwrap().sample.is_some());
+    let ok = plan("ok", "acme", "work").unwrap().sample.unwrap();
+    // OP-149 m.30 (a): the allowed resources default to Work's ledgers
+    assert_eq!(ok.resource_namespace, "work.ledger");
+    assert_eq!(ok.resource_path_prefix, "led_");
+    let resource = |name: &str, namespace: &str, prefix: &str| {
+        let path = dir.join(format!("{name}.toml"));
+        std::fs::write(
+            &path,
+            format!(
+                "platform = 'platform'\ntenants = ['acme']\n[sample]\nrealm = 'acme'\nnamespace = 'work'\naction = 'approve'\nresource_namespace = '{namespace}'\nresource_path_prefix = '{prefix}'\n"
+            ),
+        )
+        .unwrap();
+        Plan::load(&path)
+    };
+    let named = resource("named", "shop.orders", "ord-")
+        .unwrap()
+        .sample
+        .unwrap();
+    assert_eq!(named.resource_namespace, "shop.orders");
+    assert_eq!(named.resource_path_prefix, "ord-");
+    assert!(resource("meta", "access", "led_").is_err());
+    assert!(resource("idp", "idp.client", "led_").is_err());
+    assert!(resource("upper-ns", "Work.ledger", "led_").is_err());
+    assert!(resource("empty-prefix", "work.ledger", "").is_err());
 }
 
 // OP-149 m.26 (b), TI-9: the test user names one of the plan's tenants and takes its password
@@ -1347,6 +1373,8 @@ fn approve_plan() -> Plan {
             namespace: String::from("work"),
             action: String::from("approve"),
             allowed: Some(String::from("commit")),
+            resource_namespace: String::from("work.ledger"),
+            resource_path_prefix: String::from("led_"),
         }),
         ..local_plan()
     }
@@ -1405,11 +1433,17 @@ fn holding_of(basis: &serde_json::Value) -> HoldingRef {
     }
 }
 
-/// An intent of the allowed action over `ledger`, as a product writes it for the ADP.
+/// An intent of the allowed action over `ledger`, as a product writes it for the ADP: the
+/// resource is `ledger` under the summary's path prefix (OP-149 m.30 (a)).
 fn commit_intent(allowed: &serde_json::Value, ledger: &str, now: u64) -> serde_json::Value {
+    let resource = &allowed["resource"];
+    let prefix = resource["path_prefix"].as_str().unwrap();
     serde_json::json!({
         "action": allowed["action"],
-        "resources": [allowed["resource"]],
+        "resources": [{
+            "namespace": resource["namespace"],
+            "path": [format!("{prefix}{ledger}")],
+        }],
         "params": {
             "ledger": { "eq": ledger },
             "declaration": { "eq": { "bytes": b64url_encode(&[0xd1; 32]) } },
@@ -1472,6 +1506,9 @@ async fn the_local_client_approves_an_allowed_exercise() {
     let allowed = serde_json::to_value(user.allowed.clone().unwrap()).unwrap();
     assert_eq!(allowed["action"]["name"], "commit");
     assert_eq!(allowed["params"]["ledger"], "text");
+    // OP-149 m.30 (a): the covered resources are Work's ledgers
+    assert_eq!(allowed["resource"]["namespace"], "work.ledger");
+    assert_eq!(allowed["resource"]["path_prefix"], "led_");
     assert_eq!(allowed["contribution"]["class"], "approve");
     assert_eq!(
         allowed["basis"]["holding"]["holder"],
