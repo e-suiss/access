@@ -1744,6 +1744,12 @@ pub struct ContributionState {
     pub since: u64,
     /// Position of the decision that consumed it.
     pub consumed: Option<u64>,
+    /// H(AAS) of the statement the approver's act signed (§9.14.1, SI-5).
+    pub statement: Option<Digest>,
+    /// Assurance of the `authentication` Claim bound to that statement (§13.7.3).
+    pub assurance: BTreeMap<String, u64>,
+    /// `auth_time` of that Claim; the contribution's freshness when it is a proof.
+    pub auth_time: Option<u64>,
 }
 
 impl Canonical for ContributionState {
@@ -1755,11 +1761,22 @@ impl Canonical for ContributionState {
             ("instance", Some(self.instance.to_value())),
             ("since", Some(Value::Unsigned(self.since))),
             ("consumed", self.consumed.map(Value::Unsigned)),
+            (
+                "statement",
+                self.statement.as_ref().map(Canonical::to_value),
+            ),
+            (
+                "assurance",
+                crate::codec::map_value(&self.assurance, |v| Value::Unsigned(*v)),
+            ),
+            ("auth_time", self.auth_time.map(Value::Unsigned)),
         ])
     }
 
     fn from_value(v: &Value) -> Result<Self, ModelError> {
         let mut f = Fields::of(v)?;
+        let assurance = crate::codec::assurance(f.opt("assurance"))?;
+        crate::requirement::check_assurance(&assurance)?;
         let s = Self {
             target: Digest::from_value(f.req("target")?).ok_or(ModelError::Shape)?,
             class: crate::codec::ident(f.req("class")?)?,
@@ -1767,6 +1784,12 @@ impl Canonical for ContributionState {
             instance: id(f.req("instance")?)?,
             since: uint(f.req("since")?)?,
             consumed: f.opt("consumed").map(uint).transpose()?,
+            statement: f
+                .opt("statement")
+                .map(|d| Digest::from_value(d).ok_or(ModelError::Shape))
+                .transpose()?,
+            assurance,
+            auth_time: f.opt("auth_time").map(uint).transpose()?,
         };
         f.done()?;
         Ok(s)
@@ -3007,6 +3030,9 @@ pub fn apply(ctx: &Context<'_>, payload: &Payload, view: &dyn View) -> Result<Ou
                         instance: actor.instance,
                         since: ctx.pos,
                         consumed: None,
+                        statement: None,
+                        assurance: BTreeMap::new(),
+                        auth_time: None,
                     }
                     .to_value(),
                 ),

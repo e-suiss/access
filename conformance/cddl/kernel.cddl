@@ -808,6 +808,12 @@ contribution-state = {
   instance: instance-ref,
   since: uint,
   ? consumed: uint,
+  ; H(AAS) of the statement the approver's act signed (§9.14.1, SI-5), and the assurance and
+  ; auth_time of the `authentication` Claim bound to it (§13.7.3): what the contribution carries
+  ; as a proof.
+  ? statement: digest,
+  ? assurance: assurance,
+  ? auth_time: trusted-time,
 }
 
 ; ---------------------------------------------------------------- decision receipt (L2-RCP-1)
