@@ -121,10 +121,30 @@ async fn find(
     Ok(row.filter(|r| r.expires_ms > now))
 }
 
+/// Whether `redirect_uri` is exactly a return address a client registered (RFC 6749 §3.1.2): a
+/// client of this realm, or a platform product's client in the platform realm, which needs no
+/// registration in the tenant realm (OP-149 m.33 (d)).
+async fn registered_redirect(
+    t: &mut TenantTx,
+    products: &access_store::Pool,
+    redirect_uri: &str,
+) -> Result<bool, access_store::StoreError> {
+    if !idp::clients_with_redirect(t, redirect_uri)
+        .await?
+        .is_empty()
+    {
+        return Ok(true);
+    }
+    Ok(!idp::platform_clients_with_redirect(products, redirect_uri)
+        .await?
+        .is_empty())
+}
+
 /// The call's checks shared by the page and the flow: parameters, a registered redirect URI, a
 /// kept request.
 async fn call(
     db: &access_store::Pool,
+    products: &access_store::Pool,
     kit: &RealmKit,
     query: &ApproveQuery,
     now: u64,
@@ -134,10 +154,10 @@ async fn call(
     let mut t = TenantTx::begin(db, kit.tenant, kit.realm)
         .await
         .map_err(|_| unavailable())?;
-    let clients = idp::clients_with_redirect(&mut t, &query.redirect_uri)
+    if !registered_redirect(&mut t, products, &query.redirect_uri)
         .await
-        .map_err(|_| unavailable())?;
-    if clients.is_empty() {
+        .map_err(|_| unavailable())?
+    {
         return Err(problem(
             400,
             ApproveRejection::RedirectUri.code(),
@@ -254,7 +274,7 @@ where
             Ok(k) => k,
             Err(r) => return r,
         };
-        match call(&self.db, &kit, query, self.clock.now_ms()).await {
+        match call(&self.db, &self.products, &kit, query, self.clock.now_ms()).await {
             Ok(_) => Reply::html(PAGE_HTML),
             Err(r) => r,
         }
@@ -280,7 +300,7 @@ where
             redirect_uri: body.redirect_uri.clone(),
             state: body.state.clone(),
         };
-        let row = match call(&self.db, &kit, &query, now).await {
+        let row = match call(&self.db, &self.products, &kit, &query, now).await {
             Ok(r) => r,
             Err(r) => return r,
         };
@@ -528,7 +548,7 @@ where
             redirect_uri: body.redirect_uri.clone(),
             state: body.state.clone(),
         };
-        if let Err(r) = call(&self.db, &kit, &query, now).await {
+        if let Err(r) = call(&self.db, &self.products, &kit, &query, now).await {
             return r;
         }
         let (Ok(act_value), Ok(contribution)) = (

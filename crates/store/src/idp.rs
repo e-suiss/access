@@ -426,6 +426,27 @@ pub async fn platform_client_product(
     }))
 }
 
+/// The active platform product clients, in whichever tenant they are registered, with
+/// `redirect_uri` among their registered redirect URIs, exactly (RFC 6749 §3.1.2), as the
+/// outbox reader sees them (OP-149 m.33 (d)): the products whose approval return address this
+/// is; empty for any other address.
+///
+/// # Errors
+/// [`StoreError`].
+pub async fn platform_clients_with_redirect(
+    reader: &sqlx::PgPool,
+    redirect_uri: &str,
+) -> Result<Vec<String>, StoreError> {
+    Ok(sqlx::query_scalar!(
+        "SELECT client_id FROM access.idp_clients
+          WHERE platform_product IS NOT NULL AND status = 'active' AND $1 = ANY (redirect_uris)
+          ORDER BY client_id",
+        redirect_uri,
+    )
+    .fetch_all(reader)
+    .await?)
+}
+
 /// The active clients of the realm that registered `redirect_uri` exactly (IDP-7).
 ///
 /// # Errors

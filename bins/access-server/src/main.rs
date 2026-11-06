@@ -705,6 +705,7 @@ fn login(
     config: &Config,
     router: Pool,
     app: Pool,
+    products: Pool,
     keks: login::RealmKeks,
     assets: Option<Assets>,
 ) -> Result<(axum::Router, HostedLogin), String> {
@@ -717,6 +718,7 @@ fn login(
     let hosted = Arc::new(Hosted {
         kits: login::HsmKits::new(keks, router, lifetimes),
         db: app,
+        products,
         clock: SystemClock,
         messages: Outbox,
         gate: LoginGate::new(
@@ -911,12 +913,14 @@ async fn serve(
         app,
         deriver,
         router: router_pool,
+        outbox_reader,
         ..
     } = all;
     let (sign_in, hosted) = login(
         config,
         router_pool.clone(),
         app.clone(),
+        outbox_reader,
         keks,
         prepared.assets,
     )?;

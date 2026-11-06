@@ -115,6 +115,7 @@ fn app(c: &Cluster) -> Router {
     let hosted = Hosted {
         kits,
         db: env.pool.clone(),
+        products: c.db.reader.clone(),
         clock: SystemClock,
         messages: Outbox,
         gate: LoginGate::new(LocalLimiter::default(), ThrottlePolicy::DEFAULT, 0),

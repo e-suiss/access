@@ -230,6 +230,10 @@ pub struct Hosted<K, C, M> {
     pub kits: K,
     /// The `access_app` pool.
     pub db: Pool,
+    /// The outbox reader pool, which sees the platform product clients across tenants: the
+    /// Approval Surface accepts a product's registered return address from any realm with it
+    /// (OP-149 m.26 (a), m.33 (d)).
+    pub products: Pool,
     /// Trusted time.
     pub clock: C,
     /// The Relay seam.

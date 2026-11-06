@@ -1575,6 +1575,7 @@ async fn approval_through_the_local_client(world: &str, step_up: Option<StepUp>)
     let hosted = Arc::new(Hosted {
         kits: HsmKits::new(keks, w.db.router.clone(), SessionPolicy::DEFAULT),
         db: w.db.app.clone(),
+        products: w.db.reader.clone(),
         clock: SystemClock,
         messages: Outbox,
         gate: LoginGate::new(LocalLimiter::default(), ThrottlePolicy::DEFAULT, 0),

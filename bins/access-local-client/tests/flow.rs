@@ -343,6 +343,7 @@ async fn the_headless_client_runs_the_code_flow() {
     let hosted = Arc::new(Hosted {
         kits: Kit(kit.clone()),
         db: c.db.app.clone(),
+        products: c.db.reader.clone(),
         clock: Live,
         messages: Silent,
         gate: LoginGate::new(LocalLimiter::default(), ThrottlePolicy::DEFAULT, 0),

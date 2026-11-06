@@ -467,6 +467,7 @@ async fn env_with(seed: u8, slug: &str, auth: AuthPolicy, live: bool) -> Env {
     let hosted = Arc::new(Hosted {
         kits: Kit(kit.clone()),
         db: db.app.clone(),
+        products: db.reader.clone(),
         clock: clock.clone(),
         messages: outbox.clone(),
         gate: LoginGate::new(LocalLimiter::default(), ThrottlePolicy::DEFAULT, 0),
@@ -540,13 +541,63 @@ impl Env {
     /// A client of the realm with `redirect` registered, under an idp.client.register ALLOW
     /// recorded in the governing domain (EI-25).
     async fn client(&self, redirect: &str) {
+        self.register_client(
+            (self.tenant, self.realm, self.domain),
+            [0x5c; 16],
+            format!("cli_{}4a", "0".repeat(24)),
+            redirect,
+            None,
+        )
+        .await;
+    }
+
+    /// A platform product client registered in another tenant's realm, the platform realm,
+    /// with `redirect` as its return address (OP-149 m.4, m.33 (d)).
+    async fn platform_client(&self, redirect: &str) {
+        let tenant = create_tenant(&self.db.app, "pool-default").await.unwrap();
+        let d = DomainId::from_bytes([0xd0; 32]);
+        let g = LogRecord {
+            pos: 0,
+            kind: "genesis",
+            recorded_at: 1,
+            leaf_hash: [0xd0; 32],
+            envelope: vec![0xa0],
+        };
+        create_domain(&self.db.sequencer, &d, *tenant.as_bytes(), &g, &[])
+            .await
+            .unwrap();
+        let mut tx = TenantTx::begin_tenant(&self.db.app, tenant).await.unwrap();
+        let realm = create_realm(&mut tx, &d, "platform", "pool-default")
+            .await
+            .unwrap();
+        tx.commit().await.unwrap();
+        self.register_client(
+            (tenant, realm, d),
+            [0x7a; 16],
+            format!("cli_{}7a", "0".repeat(24)),
+            redirect,
+            Some("work"),
+        )
+        .await;
+    }
+
+    /// Registers a client in `(tenant, realm, domain)` under an idp.client.register ALLOW
+    /// recorded in that governing domain.
+    async fn register_client(
+        &self,
+        (tenant, realm, domain): (TenantId, RealmId, DomainId),
+        client_uuid: [u8; 16],
+        client_id: String,
+        redirect: &str,
+        platform_product: Option<&str>,
+    ) {
         use access_store::authority::{
             CommitBatch, HeadRow, NonceRow, acquire_lease, commit_batch,
         };
         use access_store::idp::{ClientRow, Decision, bind, insert_client};
         let (lease, head) = acquire_lease(
             &self.db.sequencer,
-            &self.domain,
+            &domain,
             "t",
             std::time::Duration::from_secs(10),
         )
@@ -588,21 +639,14 @@ impl Env {
             single_use: vec![],
             effects: vec![],
         };
-        commit_batch(
-            &self.db.sequencer,
-            &self.domain,
-            *self.tenant.as_bytes(),
-            &batch,
-        )
-        .await
-        .unwrap();
-        let mut tx = TenantTx::begin(&self.db.app, self.tenant, self.realm)
+        commit_batch(&self.db.sequencer, &domain, *tenant.as_bytes(), &batch)
             .await
             .unwrap();
+        let mut tx = TenantTx::begin(&self.db.app, tenant, realm).await.unwrap();
         let bound = bind(
             &mut tx,
             &Decision {
-                domain: &self.domain,
+                domain: &domain,
                 position: pos,
                 nonce: &[1; 16],
                 intent: [9; 32],
@@ -617,19 +661,27 @@ impl Env {
             &mut tx,
             &bound,
             &ClientRow {
-                client_uuid: [0x5c; 16],
-                client_id: format!("cli_{}4a", "0".repeat(24)),
+                client_uuid,
+                client_id,
                 display_name: "Shop".into(),
-                auth_method: "none".into(),
+                auth_method: if platform_product.is_some() {
+                    "private_key_jwt".into()
+                } else {
+                    "none".into()
+                },
                 jwks_uri: None,
                 redirect_uris: vec![redirect.to_owned()],
                 active: true,
                 secret_hash: None,
                 post_logout_redirect_uris: vec![],
                 backchannel_logout_uri: None,
-                jwks: None,
-                platform_product: None,
-                service_key: None,
+                jwks: platform_product.map(|_| {
+                    String::from(
+                        r#"{"keys":[{"kty":"OKP","crv":"Ed25519","x":"EREREREREREREREREREREREREREREREREREREREREREREQ"}]}"#,
+                    )
+                }),
+                platform_product: platform_product.map(String::from),
+                service_key: platform_product.map(|_| vec![0xa4, 1, 1, 0x20, 6]),
                 event_receiver: None,
                 require_par: false,
             },
@@ -2128,6 +2180,86 @@ async fn product_endpoints_follow_the_frontend_contract() {
         ))
         .await;
     assert_eq!(no_state.status, StatusCode::BAD_REQUEST);
+}
+
+// OP-149 m.33 (d), RFC 6749 §3.1.2: a product is registered in the platform realm only; the
+// Approval Surface of a tenant realm accepts the product's registered return address exactly,
+// with no registration in the tenant realm, and refuses an address no client registered, a
+// different path on the product's origin included
+#[tokio::test]
+async fn a_products_platform_registration_is_its_approval_return_address() {
+    use access_kernel::verify::key_scope::thumbprint;
+    let e = env(46, "lg-pr", AuthPolicy::DEFAULT).await;
+    e.platform_client("https://work.example/v1/access/approval")
+        .await;
+    let (device, _) = SoftSigner::generate_ed25519().unwrap();
+    let ais = sign_sign1(
+        &device,
+        thumbprint(&device.public_key()),
+        "application/access-ais+cbor",
+        b"contribute",
+    )
+    .unwrap();
+    let mut coordinator = e.browser("work");
+    let pushed = coordinator
+        .post(
+            "/v1/approve/requests",
+            Some(json!({
+                "request": {
+                    "requester": { "party": b64url_encode(&[1; 16]) },
+                    "action": { "namespace": "work", "name": "commit", "major": 1, "schema": b64url_encode(&[1; 32]) },
+                    "resource": { "namespace": "work.ledger", "path": ["led_main"], "incarnation": 0 },
+                    "params": { "ledger": { "eq": "main" } },
+                    "capacity": "own",
+                    "reason": "Close the main ledger for the period.",
+                    "require_action": {
+                        "domain": b64url_encode(&[46; 32]),
+                        "nonce": b64url_encode(&[30; 16]),
+                        "intent": b64url_encode(&[0x44; 32]),
+                    },
+                    "expires_at": e.clock.now_ms() + 3_600_000,
+                },
+                "contribution": {
+                    "nonce": b64url_encode(&[30; 16]),
+                    "basis": { "grant": b64url_encode(&[1; 16]), "holder": b64url_encode(&[8; 16]), "since": 0 },
+                    "valid_from": "2026-01-01T00:00:00Z",
+                    "valid_until": "2026-01-01T00:05:00Z",
+                    "ais": b64url_encode(&ais),
+                },
+            })),
+        )
+        .await;
+    assert_eq!(
+        pushed.status,
+        StatusCode::CREATED,
+        "{}",
+        String::from_utf8_lossy(&pushed.body)
+    );
+    let digest = pushed.json()["digest"].as_str().unwrap().to_owned();
+    let mut b = e.browser("b");
+    let call =
+        |redirect: &str| format!("/v1/approve?request={digest}&redirect_uri={redirect}&state=s1");
+    let accepted = b
+        .get(&call("https%3A%2F%2Fwork.example%2Fv1%2Faccess%2Fapproval"))
+        .await;
+    assert_eq!(
+        accepted.status,
+        StatusCode::OK,
+        "{}",
+        String::from_utf8_lossy(&accepted.body)
+    );
+    for other in [
+        "https%3A%2F%2Fwork.example%2Fv1%2Faccess%2Fapproval%2F",
+        "https%3A%2F%2Fwork.example%2Fv1%2Faccess%2Fapproval%3Fx%3D1",
+        "https%3A%2F%2Fwork.example%2Fother",
+        "http%3A%2F%2Fwork.example%2Fv1%2Faccess%2Fapproval",
+        "https%3A%2F%2Fnope.example%2Fcb",
+    ] {
+        let refused = b.get(&call(other)).await;
+        assert_eq!(refused.status, StatusCode::BAD_REQUEST, "{other}");
+        assert_eq!(refused.json()["code"], "invalid-redirect-uri", "{other}");
+        assert!(refused.headers.get(header::LOCATION).is_none());
+    }
 }
 
 /// Registers a passkey from `b`'s signed-in session; returns the authenticator, its id and the
