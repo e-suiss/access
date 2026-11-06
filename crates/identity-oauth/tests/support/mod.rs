@@ -28,6 +28,7 @@ use access_crypto::Secret;
 use access_crypto::dpop::{MAX_STALE_MS, NonceKey, NoncePolicy, NonceRing, Role};
 use access_crypto::jose::JwsAlg;
 use access_crypto::oauth::secret_digest;
+use access_crypto::opaque_id::IdKey;
 use access_identity_oauth::adapters::dpop::PgReplayCache;
 use access_identity_oauth::adapters::oauth::{HostedPages, OsRandom, PgOAuth};
 use access_identity_oauth::adapters::{PgDirectory, SignerKeys};
@@ -185,6 +186,12 @@ pub struct TestEnv {
     pub rings: Arc<HashMap<RealmId, Rings>>,
     pub profile: DpopProfile,
     pub plane: Scripted,
+    pub ids: IdKey,
+}
+
+/// The test cell's id key (OP-137): one fixed key, so `tnt_` ids are stable across clones.
+pub fn id_key() -> IdKey {
+    IdKey::new(Secret::new([0x1d; 32]))
 }
 
 impl Clone for TestEnv {
@@ -201,6 +208,7 @@ impl Clone for TestEnv {
             rings: self.rings.clone(),
             profile: self.profile.clone(),
             plane: self.plane.clone(),
+            ids: id_key(),
         }
     }
 }
@@ -215,6 +223,7 @@ impl Env for TestEnv {
     type Directory = PgDirectory;
     type Replay = PgReplayCache;
     type Projections = Scripted;
+    type Tenants = IdKey;
 
     fn db(&self) -> &PgOAuth {
         &self.db
@@ -252,6 +261,9 @@ impl Env for TestEnv {
     }
     fn projections(&self) -> &Scripted {
         &self.plane
+    }
+    fn tenant_ids(&self) -> &IdKey {
+        &self.ids
     }
 }
 
@@ -588,6 +600,7 @@ impl Cluster {
             rings: Arc::new(rings),
             profile: DpopProfile::default(),
             plane: Scripted::default(),
+            ids: id_key(),
         };
         let oauth = OAuth::new(env);
         let mut realms = Vec::new();

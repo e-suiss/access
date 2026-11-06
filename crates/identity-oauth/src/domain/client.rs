@@ -48,6 +48,8 @@ pub struct Client {
     pub backchannel_logout_uri: Option<String>,
     /// Whether its authorization requests are accepted only from `/par` (RFC 9126 §6).
     pub require_par: bool,
+    /// The platform product the client pairs, when it is one (OP-149 m.4, OP-150 m.3 (m)).
+    pub platform_product: Option<String>,
 }
 
 impl Client {
@@ -81,6 +83,7 @@ impl Client {
             post_logout_redirect_uris: row.post_logout_redirect_uris,
             backchannel_logout_uri: row.backchannel_logout_uri,
             require_par: row.require_par,
+            platform_product: row.platform_product,
         })
     }
 

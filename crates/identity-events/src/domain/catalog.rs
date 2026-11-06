@@ -13,9 +13,7 @@ use crate::domain::Invalid;
 /// Prefix of every event type URN.
 pub const URN_PREFIX: &str = "urn:suiss:access:event:";
 
-/// Type prefix of a tenant's opaque external id (OP-137, OP-149 m.15 (i)): every product-facing
-/// surface names a tenant `tnt_…`, the events as the tenant snapshot does.
-pub const TENANT_PREFIX: &str = "tnt";
+pub use access_identity_oauth::ports::oauth::TENANT_PREFIX;
 
 /// Prefix of the identity outbox kinds this crate reads.
 pub const OUTBOX_PREFIX: &str = "event.";

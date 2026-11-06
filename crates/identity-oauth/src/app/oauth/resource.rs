@@ -1,6 +1,7 @@
 //! The realm's own resource and token management: `/userinfo` (OIDC Core §5.3, MD-10),
 //! `/revoke` (RFC 7009) and `/introspect` (RFC 7662, MD-8). Access tokens are read back by
-//! signature and then held against their grant on the primary (Δ = 0).
+//! signature and then held against their grant on the primary (Δ = 0); a product's service
+//! token (OP-149 m.31 (a)) has no grant and is held against both products' registrations.
 
 use access_crypto::AwsLcBackend;
 use access_crypto::dpop::Role;
@@ -24,13 +25,17 @@ use access_internal_api::projections::Projections as _;
 
 use crate::ports::oauth::{OAuthTx, TokenSigner};
 
-/// A verified access token of this realm.
+/// A verified access token of this realm: a grant's protocol-scope token (`sid`) or a product's
+/// service token (`access_tenant`, OP-149 m.31 (a)).
 pub(crate) struct AccessToken {
     pub(crate) sub: String,
     /// Its one audience: the realm, or a registered platform product (OP-149 m.26 (a)).
     pub(crate) aud: String,
     pub(crate) client_id: String,
-    pub(crate) sid: [u8; 16],
+    /// The grant's `sid`; a service token has none.
+    pub(crate) sid: Option<[u8; 16]>,
+    /// The caller's `tnt_` tenant of a service token.
+    pub(crate) access_tenant: Option<String>,
     pub(crate) jkt: Jkt,
     pub(crate) scope: String,
     pub(crate) exp: i64,
@@ -95,16 +100,20 @@ impl<E: Env> OAuth<E> {
             .and_then(|cnf| cnf.get("jkt"))
             .and_then(Json::as_str)
             .and_then(|j| Jkt::parse(j).ok());
-        let (Some(sub), Some(client_id), Some(sid), Some(jkt)) =
-            (text(&c, "sub"), text(&c, "client_id"), sid, jkt)
+        let access_tenant = text(&c, "access_tenant");
+        let (Some(sub), Some(client_id), Some(jkt)) = (text(&c, "sub"), text(&c, "client_id"), jkt)
         else {
             return Ok(None);
         };
+        if sid.is_none() == access_tenant.is_none() {
+            return Ok(None);
+        }
         Ok(Some(AccessToken {
             sub,
             aud,
             client_id,
             sid,
+            access_tenant,
             jkt,
             scope: text(&c, "scope").unwrap_or_default(),
             exp: c.get("exp").and_then(Json::as_int).unwrap_or(0),
@@ -177,10 +186,11 @@ impl<E: Env> OAuth<E> {
         };
         let now = self.now()?;
         // RFC 9068 §4, AG-8: the realm serves only tokens addressed to it
-        let Some(at) = self
+        let Some((at, sid)) = self
             .access_token(realm, token, now, true)
             .await?
             .filter(|at| at.aud == realm.issuer.as_str())
+            .and_then(|at| at.sid.map(|sid| (at, sid)))
         else {
             return Ok(unauthorized("invalid_token"));
         };
@@ -211,7 +221,7 @@ impl<E: Env> OAuth<E> {
             }
         };
         let mut tx = self.begin(realm).await?;
-        let live = self.live_grant(&mut tx, &at.sid, now).await?;
+        let live = self.live_grant(&mut tx, &sid, now).await?;
         tx.commit().await?;
         if live.is_none() {
             return Ok(unauthorized("invalid_token"));
@@ -219,12 +229,26 @@ impl<E: Env> OAuth<E> {
         Ok(Reply::json(200, &json!({ "sub": at.sub })).with_nonce(Some(nonce)))
     }
 
-    async fn token_grant(
+    /// The token `token` names when it is not a refresh token: an access token of this realm,
+    /// read without its times.
+    async fn presented(
         &self,
-        tx: &mut <E::Db as crate::ports::oauth::OAuthDb>::Tx,
         realm: &Realm,
         token: &str,
         now: u64,
+    ) -> Result<Option<AccessToken>, Unavailable> {
+        if decode32(token).is_some() {
+            return Ok(None);
+        }
+        self.access_token(realm, token, now, false).await
+    }
+
+    /// The grant behind a refresh token or a grant's access token `at`.
+    async fn token_grant(
+        &self,
+        tx: &mut <E::Db as crate::ports::oauth::OAuthDb>::Tx,
+        token: &str,
+        at: Option<AccessToken>,
     ) -> Result<Option<(GrantRow, Option<AccessToken>)>, Unavailable> {
         if let Some(raw) = decode32(token) {
             let Some(row) = tx.refresh(&refresh_digest(&raw)).await? else {
@@ -235,10 +259,10 @@ impl<E: Env> OAuth<E> {
             }
             return Ok(tx.grant(row.grant).await?.map(|g| (g, None)));
         }
-        let Some(at) = self.access_token(realm, token, now, false).await? else {
+        let Some(sid) = at.as_ref().and_then(|at| at.sid) else {
             return Ok(None);
         };
-        Ok(tx.grant_by_sid(&at.sid).await?.map(|g| (g, Some(at))))
+        Ok(tx.grant_by_sid(&sid).await?.map(|g| (g, at)))
     }
 
     /// `POST /revoke` (RFC 7009): revoking a refresh or access token revokes its grant, a
@@ -291,7 +315,8 @@ impl<E: Env> OAuth<E> {
             self.revoke_authority(realm, &client, token).await?;
             return Ok(Reply::json(200, &json!({})));
         }
-        if let Some((grant, _)) = self.token_grant(&mut tx, realm, token, now).await?
+        let at = self.presented(realm, token, now).await?;
+        if let Some((grant, _)) = self.token_grant(&mut tx, token, at).await?
             && grant.client == client.uuid
         {
             tx.revoke_grant(grant.id, super::signed(now), "revoked")
@@ -359,7 +384,16 @@ impl<E: Env> OAuth<E> {
             tx.commit().await?;
             return self.introspect_authority(realm, &client, token).await;
         }
-        let Some((grant, at)) = self.token_grant(&mut tx, realm, token, now).await? else {
+        let at = self.presented(realm, token, now).await?;
+        if let Some(at) = at.as_ref().filter(|at| at.sid.is_none()) {
+            // OP-149 m.31 (a): a service token has no grant
+            let reply = self
+                .introspect_service(&mut tx, realm, &client, at, now)
+                .await?;
+            tx.commit().await?;
+            return Ok(reply);
+        }
+        let Some((grant, at)) = self.token_grant(&mut tx, token, at).await? else {
             tx.commit().await?;
             return Ok(active_false());
         };

@@ -240,6 +240,22 @@ impl OAuthTx for PgOAuthTx {
         Ok(g.map(|g| *g.domain.as_bytes()))
     }
 
+    async fn platform_party(&mut self, client_id: &str) -> Result<Option<[u8; 16]>, Unavailable> {
+        self.0.platform_party(client_id).await.map_err(down)
+    }
+
+    async fn platform_party_pairwise(
+        &mut self,
+        party: &[u8; 16],
+        sector: [u8; 16],
+        candidate: &str,
+    ) -> Result<Option<String>, Unavailable> {
+        self.0
+            .platform_party_pairwise(party, sector, candidate)
+            .await
+            .map_err(down)
+    }
+
     async fn audit(
         &mut self,
         event_type: &str,

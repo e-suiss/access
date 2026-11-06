@@ -122,6 +122,8 @@ impl<D: Consistency> Subjects for PgSubjects<D> {
             .await
             .map_err(down)?;
         let mut pairs = Vec::new();
+        // OP-149 m.31 (a): a platform product's service Party resolves like a user's, to the
+        // pairwise value its service tokens carry
         match lookup {
             SubjectQuery::Parties(parties) => {
                 for party in parties {
@@ -131,16 +133,28 @@ impl<D: Consistency> Subjects for PgSubjects<D> {
                             .await
                             .map_err(down)?;
                         pairs.push((party, sub));
+                    } else if let Some(sub) = t
+                        .platform_party_pairwise(&party, sector, &candidate()?)
+                        .await
+                        .map_err(down)?
+                    {
+                        pairs.push((party, sub));
                     }
                 }
             }
             SubjectQuery::Subs(subs) => {
                 for sub in subs {
-                    let Some(subject) = t.pairwise_subject(sector, &sub).await.map_err(down)?
-                    else {
-                        continue;
-                    };
-                    if let Some(party) = idp::subject_party(&mut t, &subject).await.map_err(down)? {
+                    if let Some(subject) = t.pairwise_subject(sector, &sub).await.map_err(down)? {
+                        if let Some(party) =
+                            idp::subject_party(&mut t, &subject).await.map_err(down)?
+                        {
+                            pairs.push((party, sub));
+                        }
+                    } else if let Some(party) = t
+                        .platform_party_by_pairwise(sector, &sub)
+                        .await
+                        .map_err(down)?
+                    {
                         pairs.push((party, sub));
                     }
                 }

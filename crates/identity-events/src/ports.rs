@@ -3,35 +3,13 @@
 
 use std::future::Future;
 
-use access_crypto::opaque_id::IdKey;
 use access_store::events::SealedKey;
 use access_store::identity::{RealmId, TenantId};
 use zeroize::Zeroizing;
 
 pub use access_identity_oauth::ports::Unavailable;
 pub use access_identity_oauth::ports::dpop::Clock;
-pub use access_identity_oauth::ports::oauth::{Random, TokenSigner};
-
-/// Names tenants outside by their opaque `tnt_` id (OP-137, OP-149 m.15 (i)).
-pub trait TenantIds: Send + Sync {
-    /// The external id of `tenant`; `None` when the cell's id key cannot be used.
-    fn external(&self, tenant: &[u8; 16]) -> Option<String>;
-
-    /// The tenant an external id names; `None` for text that is not a `tnt_` id.
-    fn internal(&self, text: &str) -> Option<[u8; 16]>;
-}
-
-impl TenantIds for IdKey {
-    fn external(&self, tenant: &[u8; 16]) -> Option<String> {
-        self.encode(crate::domain::catalog::TENANT_PREFIX, *tenant)
-            .ok()
-    }
-
-    fn internal(&self, text: &str) -> Option<[u8; 16]> {
-        self.decode(crate::domain::catalog::TENANT_PREFIX, text)
-            .ok()
-    }
-}
+pub use access_identity_oauth::ports::oauth::{Random, TenantIds, TokenSigner};
 
 /// A receiver's HTTP answer.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

@@ -755,6 +755,7 @@ fn authorization<P>(
     config: &Config,
     (app, router, reader, nonce_keys, outbound): OAuthInputs,
     projections: P,
+    tenant_ids: Arc<ids::CellIds>,
 ) -> Result<axum::Router, String>
 where
     P: access_internal_api::projections::Projections + 'static,
@@ -770,6 +771,7 @@ where
         nonces: oauth::HsmNonces::new(nonce_keys),
         dpop: DpopProfile::default(),
         projections,
+        tenant_ids,
     };
     Ok(oauth_router(OAuth::new(env)))
 }
@@ -956,7 +958,8 @@ async fn serve(
         issuer.clone(),
     );
     // OP-150 m.2: authority tokens are the authority plane's projection.issue decisions
-    let authorize = authorization(config, oauth_inputs, idp_plane.clone())?.merge(ssf);
+    let authorize =
+        authorization(config, oauth_inputs, idp_plane.clone(), cell_ids.clone())?.merge(ssf);
     // OP-149 m.6, m.8, m.9
     let me = frontend(config, tenants_pool.clone(), hosted, idp_plane, courier)?;
     let adp = adp_router(

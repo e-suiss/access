@@ -6,6 +6,7 @@
 use std::future::Future;
 
 use access_crypto::jose::JwsAlg;
+use access_crypto::opaque_id::IdKey;
 use access_store::backchannel::LogoutUndelivered;
 use access_store::identity::{Cursor, OutboxEvent, RealmId, TenantId};
 use access_store::idp::ClientRow;
@@ -160,6 +161,20 @@ pub trait OAuthTx: Send {
     ) -> impl Future<Output = Result<(), Unavailable>> + Send;
     /// The realm's governing authority domain (TN-4, OP-149 m.22 (g)).
     fn governing(&mut self) -> impl Future<Output = Result<Option<[u8; 32]>, Unavailable>> + Send;
+    /// The service Party the platform client `client_id` holds in this realm, once it paired
+    /// (OP-149 m.4, m.16 (a)).
+    fn platform_party(
+        &mut self,
+        client_id: &str,
+    ) -> impl Future<Output = Result<Option<[u8; 16]>, Unavailable>> + Send;
+    /// The pairwise value the client `sector` reads of the platform Party `party`, stored on
+    /// first use (OP-149 m.31 (a), MD-10); `None` when `party` is not a platform Party here.
+    fn platform_party_pairwise(
+        &mut self,
+        party: &[u8; 16],
+        sector: [u8; 16],
+        candidate: &str,
+    ) -> impl Future<Output = Result<Option<String>, Unavailable>> + Send;
     /// Writes an identity audit row in this transaction (OP-10, OP-39): identifiers only.
     fn audit(
         &mut self,
@@ -188,6 +203,39 @@ pub trait OAuthDb: Send + Sync {
         &self,
         client_id: &str,
     ) -> impl Future<Output = Result<Option<String>, Unavailable>> + Send;
+}
+
+/// Type prefix of a tenant's opaque external id (OP-137, OP-149 m.15 (i)): every product-facing
+/// surface names a tenant `tnt_…`, tokens and events as the tenant snapshot does.
+pub const TENANT_PREFIX: &str = "tnt";
+
+/// Names tenants outside by their opaque `tnt_` id (OP-137, OP-149 m.15 (i), m.19 (a)).
+pub trait TenantIds: Send + Sync {
+    /// The external id of `tenant`; `None` when the cell's id key cannot be used.
+    fn external(&self, tenant: &[u8; 16]) -> Option<String>;
+
+    /// The tenant an external id names; `None` for text that is not a `tnt_` id.
+    fn internal(&self, text: &str) -> Option<[u8; 16]>;
+}
+
+impl TenantIds for IdKey {
+    fn external(&self, tenant: &[u8; 16]) -> Option<String> {
+        self.encode(TENANT_PREFIX, *tenant).ok()
+    }
+
+    fn internal(&self, text: &str) -> Option<[u8; 16]> {
+        self.decode(TENANT_PREFIX, text).ok()
+    }
+}
+
+impl<T: TenantIds + ?Sized> TenantIds for std::sync::Arc<T> {
+    fn external(&self, tenant: &[u8; 16]) -> Option<String> {
+        (**self).external(tenant)
+    }
+
+    fn internal(&self, text: &str) -> Option<[u8; 16]> {
+        (**self).internal(text)
+    }
 }
 
 /// The identity signer, for the realm's identity assertions (CMP-22b, TN-14).

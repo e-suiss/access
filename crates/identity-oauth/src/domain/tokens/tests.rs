@@ -170,3 +170,41 @@ fn identity_assertions_have_their_profile() {
     assert!(lt["events"].get(LOGOUT_EVENT).is_some());
     assert!(!lt.contains_key("nonce"));
 }
+
+// OP-149 m.31 (a), E39, MD-7, AG-8, TN-27, RFC 9068 §2.2: a product's service token names the
+// other product as its one audience, the caller, its tenant and the caller's pairwise service
+// Party; it is cnf-bound, lives at most 5 minutes and carries nothing an authority token does
+#[test]
+fn a_service_token_is_an_identity_assertion_without_authority() {
+    let issuer = Issuer::parse("https://platform.id.test").unwrap();
+    let f = ServiceFacts {
+        issuer: &issuer,
+        audience: "cli_relay",
+        client_id: "cli_work",
+        sub: "pw-work",
+        tenant: "tnt_platform",
+        now_ms: NOW,
+    };
+    let st = claims(&service_token_claims(&f, "j", "k"));
+    assert_eq!(st["iss"], "https://platform.id.test");
+    assert_eq!(st["aud"], "cli_relay");
+    assert_eq!(st["client_id"], "cli_work");
+    assert_eq!(st["sub"], "pw-work");
+    assert_eq!(st["access_tenant"], "tnt_platform");
+    assert_eq!(st["cnf"]["jkt"], "k");
+    assert_eq!(st["jti"], "j");
+    assert!(st["exp"].as_u64().unwrap() - st["iat"].as_u64().unwrap() <= 300);
+    for absent in [
+        "scope",
+        "sid",
+        "rev",
+        "auth_time",
+        "acr",
+        "authorization_details",
+        "access_contract",
+        "family",
+        "status",
+    ] {
+        assert!(!st.contains_key(absent), "{absent}");
+    }
+}

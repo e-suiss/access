@@ -77,6 +77,7 @@ pub(crate) struct ServerEnv<P> {
     pub(crate) nonces: HsmNonces,
     pub(crate) dpop: DpopProfile,
     pub(crate) projections: P,
+    pub(crate) tenant_ids: Arc<crate::ids::CellIds>,
 }
 
 impl<P: Projections + 'static> Env for ServerEnv<P> {
@@ -89,6 +90,7 @@ impl<P: Projections + 'static> Env for ServerEnv<P> {
     type Directory = PgDirectory;
     type Replay = PgReplayCache;
     type Projections = P;
+    type Tenants = Arc<crate::ids::CellIds>;
 
     fn db(&self) -> &PgOAuth {
         &self.db
@@ -132,5 +134,9 @@ impl<P: Projections + 'static> Env for ServerEnv<P> {
 
     fn projections(&self) -> &P {
         &self.projections
+    }
+
+    fn tenant_ids(&self) -> &Arc<crate::ids::CellIds> {
+        &self.tenant_ids
     }
 }

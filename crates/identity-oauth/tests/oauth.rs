@@ -24,6 +24,7 @@ use access_crypto::Secret;
 use access_crypto::dpop::{MAX_STALE_MS, NonceKey, NoncePolicy, NonceRing, Role};
 use access_crypto::jose::JwsAlg;
 use access_crypto::oauth::secret_digest;
+use access_crypto::opaque_id::IdKey;
 use access_identity_account::notify::delivery::Backoff;
 use access_identity_oauth::adapters::dpop::PgReplayCache;
 use access_identity_oauth::adapters::oauth::{HostedPages, OsRandom, PgLogoutQueue, PgOAuth};
@@ -35,7 +36,9 @@ use access_identity_oauth::domain::issuer::{IssuerStyle, RealmBase};
 use access_identity_oauth::domain::request::Params;
 use access_identity_oauth::ports::Unavailable;
 use access_identity_oauth::ports::dpop::{Clock, ClockUnavailable};
-use access_identity_oauth::ports::oauth::{ClientKeys, LogoutDelivery, PostFailure};
+use access_identity_oauth::ports::oauth::{
+    ClientKeys, LogoutDelivery, PostFailure, TokenSigner as _,
+};
 use access_identity_session::domain::assurance::{Factor, vector};
 use access_identity_session::domain::session::cookie_digest;
 use access_identity_signer::adapters::{DirVault, SealedFactory, now_ms, serve};
@@ -117,6 +120,7 @@ struct TestEnv {
     as_ring: Arc<NonceRing>,
     rs_ring: Arc<NonceRing>,
     profile: DpopProfile,
+    ids: IdKey,
 }
 
 impl Env for TestEnv {
@@ -129,6 +133,7 @@ impl Env for TestEnv {
     type Directory = PgDirectory;
     type Replay = PgReplayCache;
     type Projections = access_internal_api::projections::Unserved;
+    type Tenants = IdKey;
 
     fn db(&self) -> &PgOAuth {
         &self.db
@@ -165,6 +170,9 @@ impl Env for TestEnv {
     }
     fn projections(&self) -> &access_internal_api::projections::Unserved {
         &access_internal_api::projections::Unserved
+    }
+    fn tenant_ids(&self) -> &IdKey {
+        &self.ids
     }
 }
 
@@ -414,6 +422,7 @@ async fn world() -> World {
         as_ring: ring(Role::AuthorizationServer, 1),
         rs_ring: ring(Role::ResourceServer, 2),
         profile: DpopProfile::default(),
+        ids: IdKey::new(Secret::new([0x1d; 32])),
     };
     let oauth = OAuth::new(env);
     let realm = oauth.realm(HOST, None).await.unwrap().unwrap();
@@ -1734,4 +1743,237 @@ async fn a_session_end_notifies_clients() {
         claims(&sent[0].1)["sid"],
         claims(t["id_token"].as_str().unwrap())["sid"]
     );
+}
+
+/// A `private_key_jwt` assertion of the platform product `client_id`; PRODUCT and THIRD publish
+/// the keyed client's JWKS.
+fn product_assertion(w: &World, client_id: &str, aud: &str) -> String {
+    let jti = b64url_encode(&access_crypto::random::bytes::<16>().unwrap());
+    sign(
+        &w.client_key,
+        r#"{"alg":"ES256","typ":"JWT"}"#,
+        &format!(
+            r#"{{"iss":"{client_id}","sub":"{client_id}","aud":"{aud}","exp":{},"iat":{},"jti":"{jti}"}}"#,
+            now() / 1000 + 60,
+            now() / 1000
+        ),
+    )
+}
+
+/// Binds the service Party a product's pairing with this realm would have bound (OP-149 m.4).
+async fn pair(w: &World, client_id: &str, party: [u8; 16]) {
+    let mut tx = TenantTx::begin(&w.db.app, w.realm.tenant, w.realm.realm)
+        .await
+        .unwrap();
+    assert!(tx.bind_platform_party(client_id, &party).await.unwrap());
+    tx.commit().await.unwrap();
+}
+
+/// `client_credentials` as the platform product `client_id`, with its assertion and a proof.
+async fn service(w: &World, client_id: &str, pairs: &[(&str, &str)]) -> Reply {
+    let a = product_assertion(w, client_id, ISSUER);
+    let mut all = vec![
+        ("grant_type", "client_credentials"),
+        ("client_assertion_type", ASSERTION_TYPE),
+        ("client_assertion", a.as_str()),
+    ];
+    all.extend_from_slice(pairs);
+    w.token(&all, None).await
+}
+
+/// RFC 7662 as the product `client_id`.
+async fn introspect_as(w: &World, client_id: &str, token: &str) -> Value {
+    let a = product_assertion(w, client_id, ISSUER);
+    let p = Params::new(vec![
+        ("token".into(), token.into()),
+        ("client_assertion_type".into(), ASSERTION_TYPE.into()),
+        ("client_assertion".into(), a),
+    ])
+    .unwrap();
+    body(&w.oauth.introspect(&w.realm, &p, None).await, 200)
+}
+
+// OP-149 m.31 (a), m.26 (a), E39, MD-7, MD-10, AG-8, TN-27, RFC 8707 §2.2, RFC 9068: a
+// platform product naming another platform product as its resource gets an identity-assertion
+// service token: one audience (the other product), the caller, its tenant, the pairwise value
+// the audience reads of the caller's service Party, cnf-bound, at most 5 minutes, and nothing an
+// authority token carries; only products call products, never themselves; the target or the
+// caller introspects it; the realm's userinfo refuses it
+#[tokio::test]
+async fn a_platform_product_gets_a_service_token_for_another_product() {
+    // OP-150 m.3 (m), IDP-11, RFC 7523, RFC 9068 §4
+    let w = world().await;
+    let (party_a, party_b) = ([0xa1; 16], [0xb2; 16]);
+
+    // no Party here yet: the product has not paired with this realm
+    assert_eq!(
+        error(&service(&w, PRODUCT, &[("resource", THIRD)]).await),
+        "unauthorized_client"
+    );
+    pair(&w, PRODUCT, party_a).await;
+    pair(&w, THIRD, party_b).await;
+
+    let t = body(&service(&w, PRODUCT, &[("resource", THIRD)]).await, 200);
+    assert_eq!(t["token_type"], "DPoP");
+    assert_eq!(t["expires_in"], 300);
+    for absent in [
+        "refresh_token",
+        "scope",
+        "authorization_details",
+        "id_token",
+    ] {
+        assert!(t.get(absent).is_none(), "{absent}");
+    }
+    let token = t["access_token"].as_str().unwrap();
+    let header: Value =
+        serde_json::from_slice(&b64url_decode(token.split('.').next().unwrap()).unwrap()).unwrap();
+    assert_eq!(header["typ"], "at+jwt");
+    // the realm's own key signed it
+    let jwks = w.oauth.env().signer.jwks(w.realm.realm).await.unwrap();
+    let keys = access_identity_oauth::domain::jwt::realm_key_set(jwks.as_bytes()).unwrap();
+    access_kernel::verify::jws::verify_compact(
+        &access_crypto::AwsLcBackend,
+        token,
+        &keys,
+        "at+jwt",
+        access_kernel::verify::jws::Origin::Native,
+    )
+    .unwrap();
+    let c = claims(token);
+    let tenant = IdKey::new(Secret::new([0x1d; 32]))
+        .encode("tnt", *w.realm.tenant.as_bytes())
+        .unwrap();
+    assert_eq!(c["iss"], ISSUER);
+    assert_eq!(c["aud"], THIRD);
+    assert_eq!(c["client_id"], PRODUCT);
+    assert_eq!(c["access_tenant"], tenant);
+    assert_eq!(c["cnf"]["jkt"], w.jkt());
+    assert!(c["exp"].as_u64().unwrap() - c["iat"].as_u64().unwrap() <= 300);
+    assert!(c["jti"].as_str().unwrap().len() >= 16);
+    let sub = c["sub"].as_str().unwrap().to_owned();
+    assert_eq!(sub.len(), 43);
+    for absent in [
+        "scope",
+        "sid",
+        "rev",
+        "auth_time",
+        "acr",
+        "authorization_details",
+        "access_contract",
+        "family",
+        "status",
+    ] {
+        assert!(c.get(absent).is_none(), "{absent}");
+    }
+
+    // MD-10: the sub is stable for this pair, resolves back to the caller's Party for the
+    // target's sector (OP-149 m.19 (g)), and is not what the caller reads of the target
+    let again = body(&service(&w, PRODUCT, &[("resource", THIRD)]).await, 200);
+    assert_eq!(claims(again["access_token"].as_str().unwrap())["sub"], sub);
+    let mut tx = TenantTx::begin(&w.db.app, w.realm.tenant, w.realm.realm)
+        .await
+        .unwrap();
+    assert_eq!(
+        tx.platform_party_by_pairwise([6; 16], &sub).await.unwrap(),
+        Some(party_a)
+    );
+    assert_eq!(
+        tx.platform_party_by_pairwise([5; 16], &sub).await.unwrap(),
+        None
+    );
+    tx.commit().await.unwrap();
+    let back = body(&service(&w, THIRD, &[("resource", PRODUCT)]).await, 200);
+    let back = claims(back["access_token"].as_str().unwrap());
+    assert_eq!(back["aud"], PRODUCT);
+    assert_eq!(back["client_id"], THIRD);
+    assert_ne!(back["sub"], sub);
+
+    // RFC 8707 §2, AG-8: never itself, never a non-product client, never an unknown value
+    for (caller, resource) in [
+        (PRODUCT, PRODUCT),
+        (PRODUCT, KEYED),
+        (PRODUCT, CONFIDENTIAL),
+        (PRODUCT, "cli_0000000000000000000000000z"),
+        (PRODUCT, "https://api.example"),
+        // only platform products call products
+        (KEYED, THIRD),
+    ] {
+        assert_eq!(
+            error(&service(&w, caller, &[("resource", resource)]).await),
+            "invalid_target",
+            "{caller} -> {resource}"
+        );
+    }
+    assert_eq!(
+        error(
+            &w.token(
+                &[("grant_type", "client_credentials"), ("resource", THIRD)],
+                Some(&basic(CONFIDENTIAL, SECRET)),
+            )
+            .await
+        ),
+        "invalid_target"
+    );
+    // the realm itself and no resource stay the projection path's refusals
+    for pairs in [vec![("resource", ISSUER)], vec![]] {
+        assert_eq!(
+            error(&service(&w, PRODUCT, &pairs).await),
+            "invalid_target",
+            "{pairs:?}"
+        );
+    }
+    // TN-27: no proof, no token
+    let a = product_assertion(&w, PRODUCT, ISSUER);
+    let p = Params::new(vec![
+        ("grant_type".into(), "client_credentials".into()),
+        ("client_assertion_type".into(), ASSERTION_TYPE.into()),
+        ("client_assertion".into(), a),
+        ("resource".into(), THIRD.into()),
+    ])
+    .unwrap();
+    assert_eq!(
+        error(
+            &w.oauth
+                .token(
+                    &w.realm,
+                    &p,
+                    TokenHttp {
+                        authorization: None,
+                        dpop: &[],
+                    },
+                )
+                .await
+        ),
+        "invalid_dpop_proof"
+    );
+
+    // RFC 7662, MD-8: the target reads it, so does the caller; another client learns nothing
+    for asking in [THIRD, PRODUCT] {
+        let i = introspect_as(&w, asking, token).await;
+        assert_eq!(i["active"], true, "{asking}");
+        assert_eq!(i["aud"], THIRD);
+        assert_eq!(i["client_id"], PRODUCT);
+        assert_eq!(i["access_tenant"], tenant);
+        assert_eq!(i["sub"], sub);
+        assert_eq!(i["cnf"]["jkt"], w.jkt());
+        assert_eq!(i["token_type"], "DPoP");
+        assert_eq!((&i["exp"], &i["iat"]), (&c["exp"], &c["iat"]));
+        assert!(i.get("authorization_details").is_none());
+        assert!(i.get("scope").is_none());
+    }
+    assert_eq!(w.introspect(token).await["active"], false);
+    // RFC 9068 §4, AG-8: the realm is not this token's audience
+    assert!(matches!(
+        w.userinfo(token).await,
+        Reply::Json { status: 401, .. }
+    ));
+    // RFC 7009 §2.2: there is no grant to revoke; the answer is 200 without effect
+    let p = Params::new(vec![("token".into(), token.into())]).unwrap();
+    assert!(matches!(
+        w.oauth
+            .revoke(&w.realm, &p, Some(&basic(CONFIDENTIAL, SECRET)))
+            .await,
+        Reply::Json { status: 200, .. }
+    ));
+    assert_eq!(introspect_as(&w, THIRD, token).await["active"], true);
 }

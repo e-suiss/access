@@ -9,6 +9,7 @@ mod authority;
 mod authorize;
 mod logout;
 mod resource;
+mod service;
 mod token;
 
 use std::sync::Arc;
@@ -37,7 +38,9 @@ use crate::domain::tokens::{
     id_token_claims,
 };
 use crate::ports::dpop::{Clock, ReplayCache};
-use crate::ports::oauth::{ClientKeys, LoginPages, OAuthDb, OAuthTx, Random, TokenSigner};
+use crate::ports::oauth::{
+    ClientKeys, LoginPages, OAuthDb, OAuthTx, Random, TenantIds, TokenSigner,
+};
 use crate::ports::{Directory, RealmEntry, Unavailable};
 
 pub use crate::app::oauth::authorize::REQUEST_CONTEXT;
@@ -72,6 +75,8 @@ pub trait Env: Send + Sync + 'static {
     type Replay: ReplayCache + Send + Sync;
     /// The authority plane's token projections (OP-150 m.2).
     type Projections: Projections;
+    /// The cell's opaque tenant ids (OP-149 m.15 (i), m.19 (a)).
+    type Tenants: TenantIds;
 
     /// The realm rows.
     fn db(&self) -> &Self::Db;
@@ -95,6 +100,8 @@ pub trait Env: Send + Sync + 'static {
     fn dpop(&self) -> &DpopProfile;
     /// The authority plane's token projections.
     fn projections(&self) -> &Self::Projections;
+    /// The cell's opaque tenant ids.
+    fn tenant_ids(&self) -> &Self::Tenants;
 }
 
 /// What an endpoint answers; the HTTP layer only renders it.

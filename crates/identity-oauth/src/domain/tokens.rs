@@ -199,6 +199,46 @@ pub fn access_token_claims(f: &TokenFacts<'_>, scope: &str, jti: &str, jkt: &str
     .into_bytes()
 }
 
+/// Service token lifetime (OP-149 m.31 (a): at most 5 minutes, PD).
+pub const SERVICE_TTL_MS: u64 = 5 * 60 * 1000;
+
+/// The facts behind one platform product's service token for another (OP-149 m.31 (a)).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ServiceFacts<'a> {
+    /// The realm issuer.
+    pub issuer: &'a Issuer,
+    /// The `client_id` of the product the token is for: its one `aud` (AG-8).
+    pub audience: &'a str,
+    /// The calling product's `client_id`.
+    pub client_id: &'a str,
+    /// The pairwise `sub` the audience reads of the caller's service Party (MD-10).
+    pub sub: &'a str,
+    /// The caller's tenant, `tnt_…` (OP-149 m.19 (a)).
+    pub tenant: &'a str,
+    /// Issue time, Unix milliseconds.
+    pub now_ms: u64,
+}
+
+/// The claims of a product's identity-assertion service token (RFC 9068 §2.2, OP-149 m.31 (a),
+/// §9 class (ii), E39): who is calling and for whom, bound by `cnf.jkt` (TN-27); no `scope`,
+/// no `authorization_details`, no contract, no family, no session: it carries no authority.
+#[must_use]
+pub fn service_token_claims(f: &ServiceFacts<'_>, jti: &str, jkt: &str) -> Vec<u8> {
+    json!({
+        "iss": f.issuer.as_str(),
+        "sub": f.sub,
+        "aud": f.audience,
+        "client_id": f.client_id,
+        "access_tenant": f.tenant,
+        "iat": secs(f.now_ms),
+        "exp": secs(f.now_ms.saturating_add(SERVICE_TTL_MS)),
+        "jti": jti,
+        "cnf": { "jkt": jkt },
+    })
+    .to_string()
+    .into_bytes()
+}
+
 /// The logout token claims (OIDC Back-Channel Logout §2.4): `events`, `sid` and `sub`, never a
 /// `nonce`.
 #[must_use]

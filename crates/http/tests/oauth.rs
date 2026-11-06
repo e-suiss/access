@@ -11,7 +11,9 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use access_crypto::Secret;
 use access_crypto::dpop::{NonceRing, Role};
+use access_crypto::opaque_id::IdKey;
 use access_http::oauth::router;
 use access_identity_oauth::adapters::SignerKeys;
 use access_identity_oauth::adapters::oauth::{HostedPages, OsRandom, PgOAuthTx};
@@ -94,6 +96,7 @@ impl ReplayCache for NoCache {
 struct Down {
     signer: SignerKeys,
     profile: DpopProfile,
+    ids: IdKey,
 }
 
 impl Env for Down {
@@ -106,6 +109,7 @@ impl Env for Down {
     type Directory = Rows;
     type Replay = NoCache;
     type Projections = access_internal_api::projections::Unserved;
+    type Tenants = IdKey;
 
     fn db(&self) -> &NoDb {
         &NoDb
@@ -140,12 +144,16 @@ impl Env for Down {
     fn projections(&self) -> &access_internal_api::projections::Unserved {
         &access_internal_api::projections::Unserved
     }
+    fn tenant_ids(&self) -> &IdKey {
+        &self.ids
+    }
 }
 
 fn app() -> axum::Router {
     router(OAuth::new(Down {
         signer: SignerKeys::new(PathBuf::from("/nonexistent/s.sock")),
         profile: DpopProfile::default(),
+        ids: IdKey::new(Secret::new([0x1d; 32])),
     }))
 }
 
