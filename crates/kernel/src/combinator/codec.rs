@@ -759,12 +759,12 @@ fn remediation_of(v: &Value) -> Result<Remediation, ModelError> {
     }
 }
 
-fn blocker_of(v: &Value) -> Result<Blocker, ModelError> {
+fn explained_blocker_of(v: &Value) -> Result<ExplainedBlocker, ModelError> {
     let mut f = Fields::of(v)?;
-    let b = Blocker {
+    let b = ExplainedBlocker {
         class: word(f.req("class")?, &CLASSES)?,
         subcode: f.opt("subcode").map(text).transpose()?.map(String::from),
-        position: position_of(f.req("position")?)?,
+        position: f.opt("position").map(position_of).transpose()?,
         resolver: resolver_of(f.req("resolver")?)?,
         remediation: remediation_of(f.req("remediation")?)?,
     };
@@ -797,20 +797,188 @@ fn listed<T>(
     )
 }
 
-/// The decision of its canonical form ([`decision_value`]), the explanation format Suiss products
-/// share (E43): blockers, unmet terms and the proofs relied on are non-empty when present and in
-/// the order of their canonical encodings (OP-114 m.2, m.3), without repeats.
+/// A non-empty array without repeats whose order a disclosure filter kept from the unfiltered
+/// encodings (explanation.cddl), so it is not checked against the filtered ones.
+fn filtered<T>(
+    v: Option<&Value>,
+    each: impl Fn(&Value) -> Result<T, ModelError>,
+) -> Result<Vec<T>, ModelError> {
+    let Some(Value::Array(items)) = v else {
+        return v.map_or(Ok(Vec::new()), |_| Err(ModelError::Shape));
+    };
+    if items.is_empty() {
+        return Err(ModelError::Range);
+    }
+    let mut seen: BTreeSet<Vec<u8>> = BTreeSet::new();
+    for item in items {
+        let bytes = suiss_crypto::dcbor::encode(item, suiss_crypto::dcbor::Limits::CEILING)
+            .map_err(|_| ModelError::Range)?;
+        if !seen.insert(bytes) {
+            return Err(ModelError::SetOrder);
+        }
+    }
+    items.iter().map(each).collect()
+}
+
+/// One blocker as a reader's explanation shows it (`explanation.cddl` `explained-blocker`,
+/// OP-141 m.38): the audit view is the Kernel [`Blocker`]; the viewer's has no `subcode` on a
+/// `restricted` blocker; the requester's has no `subcode` and a `position` only when it is a
+/// lineage hop.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct ExplainedBlocker {
+    /// Class.
+    pub class: BlockerClass,
+    /// Namespaced subcode, when the view keeps it.
+    pub subcode: Option<String>,
+    /// Position, when the view keeps it.
+    pub position: Option<Position>,
+    /// Resolver.
+    pub resolver: Resolver,
+    /// Remediation.
+    pub remediation: Remediation,
+}
+
+impl From<Blocker> for ExplainedBlocker {
+    fn from(b: Blocker) -> Self {
+        Self {
+            class: b.class,
+            subcode: b.subcode,
+            position: Some(b.position),
+            resolver: b.resolver,
+            remediation: b.remediation,
+        }
+    }
+}
+
+impl ExplainedBlocker {
+    /// The Kernel blocker this is, when the view kept its position (the audit and viewer
+    /// scopes).
+    #[must_use]
+    pub fn blocker(&self) -> Option<Blocker> {
+        Some(Blocker {
+            class: self.class,
+            subcode: self.subcode.clone(),
+            position: self.position?,
+            resolver: self.resolver,
+            remediation: self.remediation,
+        })
+    }
+}
+
+/// A decision as a reader's explanation shows it (E43, OP-141 m.38, OP-149 m.25 (a)): the one
+/// format of `explanation.cddl` in each of its scopes, `requester`, `viewer` and `audit`. The
+/// audit scope is exactly the Kernel [`Decision`]; the narrower scopes drop members of their
+/// blockers, which [`ExplainedBlocker`] keeps as options.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Explanation {
+    /// Outcome.
+    pub outcome: Outcome,
+    /// Blockers (DENY).
+    pub blockers: Vec<ExplainedBlocker>,
+    /// Unmet requirements.
+    pub unmet: Vec<Unmet>,
+    /// Proofs relied on, if allowed.
+    pub relied_on: Vec<Id>,
+}
+
+impl From<Decision> for Explanation {
+    fn from(d: Decision) -> Self {
+        Self {
+            outcome: d.outcome,
+            blockers: d.blockers.into_iter().map(Into::into).collect(),
+            unmet: d.unmet,
+            relied_on: d.relied_on,
+        }
+    }
+}
+
+impl Explanation {
+    /// The Kernel decision this explanation is, when every blocker kept its position; `None`
+    /// for a requester's view of a blocker outside the lineage.
+    #[must_use]
+    pub fn decision(&self) -> Option<Decision> {
+        Some(Decision {
+            outcome: self.outcome,
+            blockers: self
+                .blockers
+                .iter()
+                .map(ExplainedBlocker::blocker)
+                .collect::<Option<Vec<_>>>()?,
+            unmet: self.unmet.clone(),
+            relied_on: self.relied_on.clone(),
+        })
+    }
+}
+
+fn explained_blocker(b: &ExplainedBlocker) -> Value {
+    map([
+        ("class", Some(word_of(b.class, &CLASSES))),
+        ("subcode", b.subcode.as_deref().map(Value::text)),
+        ("position", b.position.map(position)),
+        ("resolver", Some(resolver(b.resolver))),
+        ("remediation", Some(remediation(b.remediation))),
+    ])
+}
+
+/// The canonical form of an explanation; for the audit scope, the bytes of [`decision_value`].
+#[must_use]
+pub fn explanation_value(e: &Explanation) -> Value {
+    let outcome = match e.outcome {
+        Outcome::Allow => "allow",
+        Outcome::Deny => "deny",
+        Outcome::RequireAction => "require_action",
+    };
+    map([
+        ("outcome", Some(Value::text(outcome))),
+        (
+            "blockers",
+            (!e.blockers.is_empty())
+                .then(|| Value::Array(e.blockers.iter().map(explained_blocker).collect())),
+        ),
+        (
+            "unmet",
+            (!e.unmet.is_empty()).then(|| Value::Array(e.unmet.iter().map(unmet).collect())),
+        ),
+        (
+            "relied_on",
+            (!e.relied_on.is_empty())
+                .then(|| Value::Array(e.relied_on.iter().map(Canonical::to_value).collect())),
+        ),
+    ])
+}
+
+/// The explanation of its canonical form ([`explanation_value`]), in any of its scopes (OP-141
+/// m.38, OP-149 m.25 (a)): blockers, unmet terms and the proofs relied on are non-empty when
+/// present and in the order of their canonical encodings (OP-114 m.2, m.3), without repeats.
 ///
 /// # Errors
-/// [`ModelError`] for anything [`decision_value`] does not produce.
-pub fn decision_from_value(v: &Value) -> Result<Decision, ModelError> {
+/// [`ModelError`] for anything outside `explanation.cddl`.
+pub fn explanation_from_value(v: &Value) -> Result<Explanation, ModelError> {
     let mut f = Fields::of(v)?;
-    let d = Decision {
+    let e = Explanation {
         outcome: word(f.req("outcome")?, &OUTCOMES)?,
-        blockers: listed(f.opt("blockers"), blocker_of)?,
+        blockers: filtered(f.opt("blockers"), explained_blocker_of)?,
         unmet: listed(f.opt("unmet"), unmet_of)?,
         relied_on: listed(f.opt("relied_on"), Id::from_value)?,
     };
     f.done()?;
+    Ok(e)
+}
+
+/// The decision of its canonical form ([`decision_value`]): the audit scope of the explanation
+/// format Suiss products share (E43), every blocker with its position. A narrower scope decodes
+/// with [`explanation_from_value`].
+///
+/// # Errors
+/// [`ModelError`] for anything [`decision_value`] does not produce: [`ModelError::Missing`] for a
+/// blocker without a position, [`ModelError::SetOrder`] for blockers out of canonical order.
+pub fn decision_from_value(v: &Value) -> Result<Decision, ModelError> {
+    let d = explanation_from_value(v)?
+        .decision()
+        .ok_or(ModelError::Missing)?;
+    let mut f = Fields::of(v)?;
+    if let Some(b) = f.opt("blockers") {
+        set_items(b, true)?;
+    }
     Ok(d)
 }

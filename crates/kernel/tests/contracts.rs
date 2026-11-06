@@ -33,7 +33,10 @@ mod schema;
 
 use std::path::PathBuf;
 
-use access_kernel::combinator::codec::{decision_from_value, decision_value};
+use access_kernel::codec::ModelError;
+use access_kernel::combinator::codec::{
+    Explanation, decision_from_value, decision_value, explanation_from_value, explanation_value,
+};
 use access_kernel::meta::ActorKind;
 use serde_json::Value as Json;
 use suiss_crypto::dcbor::{self, Limits, Value};
@@ -261,23 +264,53 @@ fn assurance_ranges_are_the_kernels_in_both_contracts() {
     assert!(!schema.errors(&empty).is_empty(), "an empty assurance map");
 }
 
-// E43, OP-114 m.2, OP-114 m.3: the Kernel's Decision is the explanation format; every unfiltered
-// example decodes into it and encodes back byte for byte, the requester's filtered view is no
-// Kernel decision, and an invalid one is not decoded
+// E43, OP-114 m.2, OP-114 m.3, OP-141 m.38, OP-149 m.25 (a), m.33 (a): the Kernel's Decision is
+// the explanation format; every valid example, in whichever scope, decodes into an Explanation
+// and encodes back byte for byte; the audit scope is the Kernel decision and round-trips through
+// it, the viewer's keeps every position and is one too, the requester's view of a blocker
+// outside the lineage is no Kernel decision; an invalid example is not decoded
 #[test]
 fn explanation_examples_round_trip_through_the_kernel_decision() {
     let doc: Json = serde_json::from_str(&read("cddl/examples/explanation.json")).unwrap();
     let k = kernel();
     let mut whole = 0;
+    let mut scoped = 0;
     for case in doc["cases"].as_array().unwrap() {
         let id = case["id"].as_str().unwrap();
         let bytes = dcbor::encode(&edn::parse(case["edn"].as_str().unwrap()), LIMITS).unwrap();
         let value = dcbor::decode(&bytes, LIMITS).unwrap();
+        let explained = explanation_from_value(&value);
         let decoded = decision_from_value(&value);
-        let filtered = matches!(id, "deny-viewer" | "deny-requester");
-        match (case["valid"].as_bool().unwrap(), filtered) {
-            (true, false) => {
-                let d = decoded.unwrap_or_else(|e| panic!("{id}: {e:?}"));
+        if !case["valid"].as_bool().unwrap() {
+            assert!(explained.is_err(), "{id}");
+            assert!(decoded.is_err(), "{id}");
+            continue;
+        }
+        let e = explained.unwrap_or_else(|err| panic!("{id}: {err:?}"));
+        assert_eq!(
+            dcbor::encode(&explanation_value(&e), LIMITS).unwrap(),
+            bytes,
+            "{id}"
+        );
+        match id {
+            "deny-requester" => {
+                assert!(k.validate("decision", &value).is_err(), "{id}");
+                assert_eq!(e.decision(), None, "{id}");
+                assert_eq!(decoded.unwrap_err(), ModelError::Missing, "{id}");
+                scoped += 1;
+            }
+            // the filter dropped a subcode, so the blockers are no longer in the order of
+            // their own encodings: a Kernel decision in content, not in bytes
+            "deny-viewer" => {
+                let d = e.decision().unwrap_or_else(|| panic!("{id}"));
+                assert_eq!(Explanation::from(d), e, "{id}");
+                assert_eq!(decoded.unwrap_err(), ModelError::SetOrder, "{id}");
+                scoped += 1;
+            }
+            _ => {
+                let d = decoded.unwrap_or_else(|err| panic!("{id}: {err:?}"));
+                assert_eq!(e.decision().as_ref(), Some(&d), "{id}");
+                assert_eq!(Explanation::from(d.clone()), e, "{id}");
                 assert_eq!(
                     dcbor::encode(&decision_value(&d), LIMITS).unwrap(),
                     bytes,
@@ -286,18 +319,14 @@ fn explanation_examples_round_trip_through_the_kernel_decision() {
                 k.validate("decision", &value).unwrap();
                 whole += 1;
             }
-            (true, true) if id == "deny-requester" => {
-                assert!(k.validate("decision", &value).is_err(), "{id}");
-            }
-            (true, true) => {}
-            (false, _) => assert!(decoded.is_err(), "{id}"),
         }
     }
     assert!(whole >= 4);
+    assert_eq!(scoped, 2);
 }
 
-// E43, OP-111 m.1: every decision in the Kernel's vectors decodes into a Decision, encodes back
-// byte for byte and is an explanation
+// E43, OP-111 m.1, OP-149 m.33 (a): every decision in the Kernel's vectors decodes into a
+// Decision and into an Explanation, encodes back byte for byte from each and is an explanation
 #[test]
 fn decision_vectors_are_explanations() {
     let k = kernel();
@@ -312,6 +341,13 @@ fn decision_vectors_are_explanations() {
             let d = decision_from_value(&value)
                 .unwrap_or_else(|err| panic!("{file} {}: {err:?}", case["id"]));
             assert_eq!(hex(&dcbor::encode(&decision_value(&d), LIMITS).unwrap()), h);
+            let x = explanation_from_value(&value)
+                .unwrap_or_else(|err| panic!("{file} {}: {err:?}", case["id"]));
+            assert_eq!(
+                hex(&dcbor::encode(&explanation_value(&x), LIMITS).unwrap()),
+                h
+            );
+            assert_eq!(x.decision().as_ref(), Some(&d));
             k.validate("decision", &value).unwrap();
             e.validate("explanation", &value).unwrap();
             seen += 1;
