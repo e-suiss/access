@@ -8,6 +8,7 @@ pub mod jwt;
 pub mod login;
 pub mod metadata;
 pub mod request;
+pub mod scope;
 pub mod suiss;
 pub mod tokens;
 

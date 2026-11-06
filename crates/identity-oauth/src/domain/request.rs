@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use crate::domain::client::Client;
 use crate::domain::dpop::{Jkt, authorization_request_jkt};
 use crate::domain::issuer::{Issuer, form_encode, with_iss};
+use crate::domain::scope;
 
 /// `openid`: an ID token is issued (OIDC Core §3.1.2.1).
 pub const OPENID: &str = "openid";
@@ -248,6 +249,28 @@ pub fn stage_one<'a>(
     Ok(redirect)
 }
 
+/// The requested scopes: protocol scopes this realm serves. A resource scope is refused first
+/// (§2.2.2 #2, L24, S-1): resource access is asked for as `authorization_details`.
+fn scopes(params: &Params) -> Result<Vec<String>, AuthError> {
+    let scope: Vec<String> = params
+        .get("scope")
+        .unwrap_or_default()
+        .split(' ')
+        .filter(|s| !s.is_empty())
+        .map(String::from)
+        .collect();
+    if scope
+        .iter()
+        .any(|s| scope::classify(s) == scope::ScopeClass::Resource)
+    {
+        return Err(AuthError::new("invalid_scope", scope::RESOURCE_SCOPE));
+    }
+    if scope.iter().any(|s| !SCOPES.contains(&s.as_str())) {
+        return Err(AuthError::new("invalid_scope", "unknown scope"));
+    }
+    Ok(scope)
+}
+
 /// Stage two: everything after the redirect URI is known good (RFC 6749 §4.1.1, RFC 7636,
 /// RFC 8707, RFC 9449 §10, OIDC Core §3.1.2.1). `issuer` is the only resource Stage 5 tokens
 /// can name (OP-146 m.5 (c)).
@@ -298,16 +321,7 @@ pub fn stage_two(
         .get("code_challenge")
         .and_then(challenge)
         .ok_or(AuthError::invalid_request("code_challenge is required"))?;
-    let scope: Vec<String> = params
-        .get("scope")
-        .unwrap_or_default()
-        .split(' ')
-        .filter(|s| !s.is_empty())
-        .map(String::from)
-        .collect();
-    if scope.iter().any(|s| !SCOPES.contains(&s.as_str())) {
-        return Err(AuthError::new("invalid_scope", "unknown scope"));
-    }
+    let scope = scopes(params)?;
     let mut prompts = params
         .get("prompt")
         .unwrap_or_default()

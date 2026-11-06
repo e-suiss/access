@@ -22,6 +22,7 @@ use crate::domain::dpop::{
 };
 use crate::domain::metadata::Endpoint;
 use crate::domain::request::Params;
+use crate::domain::scope;
 use crate::domain::tokens::{CodeDetails, GrantDetails};
 use crate::ports::Unavailable;
 use crate::ports::oauth::OAuthTx;
@@ -367,17 +368,26 @@ impl<E: Env> OAuth<E> {
                 .await?;
             return Ok(Reply::json(200, &body));
         }
-        if let Some(scope) = params.get("scope")
-            && scope
-                .split(' ')
-                .filter(|s| !s.is_empty())
-                .any(|s| !details.scope.split(' ').any(|g| g == s))
-        {
-            return Ok(Reply::oauth_error(
-                400,
-                "invalid_scope",
-                "the scope exceeds the grant",
-            ));
+        if let Some(scope) = params.get("scope") {
+            let mut asked = scope.split(' ').filter(|s| !s.is_empty());
+            // §2.2.2 #2, L24, S-1
+            if asked
+                .clone()
+                .any(|s| scope::classify(s) == scope::ScopeClass::Resource)
+            {
+                return Ok(Reply::oauth_error(
+                    400,
+                    "invalid_scope",
+                    scope::RESOURCE_SCOPE,
+                ));
+            }
+            if asked.any(|s| !details.scope.split(' ').any(|g| g == s)) {
+                return Ok(Reply::oauth_error(
+                    400,
+                    "invalid_scope",
+                    "the scope exceeds the grant",
+                ));
+            }
         }
         if !tx.rotate_refresh(&hash, signed(now)).await? {
             return Ok(invalid_grant());

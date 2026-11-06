@@ -101,6 +101,18 @@ fn only_the_code_flow_with_s256_is_accepted() {
     assert!(run(&[("scope", "")]).is_ok_and(|r| !r.openid()));
 }
 
+// §2.2.2 #2, §7.1, L24, S-1, S-2: a resource scope never reaches a token; resource access is
+// asked for as authorization_details and decided as grant.issue + projection.issue
+#[test]
+fn a_resource_scope_is_not_a_protocol_scope() {
+    let resource = run(&[("scope", "openid orders:write")]).unwrap_err();
+    assert_eq!(resource.error, "invalid_scope");
+    assert_eq!(resource.description, crate::domain::scope::RESOURCE_SCOPE);
+    let unserved = run(&[("scope", "openid profile")]).unwrap_err();
+    assert_eq!(unserved.error, "invalid_scope");
+    assert_ne!(unserved.description, crate::domain::scope::RESOURCE_SCOPE);
+}
+
 // §10.4.6, RFC 9470, RFC 8707, RFC 9449 §10: prompt, max_age, acr_values, resource and dpop_jkt
 #[test]
 fn oidc_and_extension_parameters() {

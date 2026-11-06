@@ -449,6 +449,23 @@ async fn refresh_reuse_races_and_escalation() {
         )
         .await;
     assert_eq!(error(&wider), "invalid_scope");
+    // §2.2.2 #2, §7.1, L24, S-1, S-2
+    let resource = a
+        .token(
+            &[
+                ("grant_type", "refresh_token"),
+                ("client_id", &a.f.public),
+                ("refresh_token", r),
+                ("scope", "openid orders:write"),
+            ],
+            None,
+        )
+        .await;
+    assert_eq!(error(&resource), "invalid_scope");
+    assert_eq!(
+        body(&resource, 400)["error_description"],
+        access_identity_oauth::domain::scope::RESOURCE_SCOPE
+    );
     let same = body(
         &a.token(
             &[
