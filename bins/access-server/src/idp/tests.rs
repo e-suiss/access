@@ -374,6 +374,7 @@ impl World {
                 root: Root::Sole(ROOT),
                 ct3_delay_s: None,
                 schemas: Vec::new(),
+                acceptances: Vec::new(),
             })
             .await
             .unwrap();
@@ -652,6 +653,7 @@ async fn realm_creation_opens_genesis_and_fixes_the_issuer() {
             root: Root::Sole(ROOT),
             ct3_delay_s: None,
             schemas: Vec::new(),
+            acceptances: Vec::new(),
         })
         .await;
     assert!(taken.is_err());
