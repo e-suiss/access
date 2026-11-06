@@ -16,7 +16,6 @@ path = "src/main.rs"
 access-crypto = { workspace = true }
 access-kernel = { workspace = true }
 suiss-crypto = { workspace = true }
-aws-lc-rs = { workspace = true }
 httparse = { workspace = true, features = ["std"] }
 rustls = { workspace = true, features = ["aws_lc_rs", "std"] }
 rustls-pki-types = { workspace = true, features = ["std"] }
@@ -27,6 +26,7 @@ tokio-rustls = { workspace = true, features = ["aws_lc_rs"] }
 
 [dev-dependencies]
 access-crypto = { workspace = true, features = ["testing"] }
+aws-lc-rs = { workspace = true }
 access-http = { workspace = true }
 access-identity-account = { workspace = true }
 access-identity-oauth = { workspace = true }

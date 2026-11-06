@@ -5,9 +5,9 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use access_kernel::json::{b64url_decode, b64url_encode};
-use aws_lc_rs::rand::SystemRandom;
-use aws_lc_rs::signature::{ECDSA_P256_SHA256_FIXED_SIGNING, EcdsaKeyPair, KeyPair as _};
 use serde_json::{Value, json};
+use suiss_crypto::secret::Secret;
+use suiss_crypto::signer::{Signer as _, SoftSigner};
 
 use crate::ClientError;
 
@@ -29,9 +29,9 @@ pub fn random_text<const N: usize>() -> Result<String, ClientError> {
         .map_err(|_| ClientError::Key(String::from("random source")))
 }
 
-/// A P-256 signing key with its public JWK.
+/// A P-256 signing key with its public JWK, on the shared software signer (CR-13, CR-54).
 pub struct Es256Key {
-    pair: EcdsaKeyPair,
+    pair: SoftSigner,
 }
 
 impl Es256Key {
@@ -40,8 +40,8 @@ impl Es256Key {
     /// # Errors
     /// [`ClientError::Key`].
     pub fn generate() -> Result<Self, ClientError> {
-        EcdsaKeyPair::generate(&ECDSA_P256_SHA256_FIXED_SIGNING)
-            .map(|pair| Self { pair })
+        SoftSigner::generate_p256()
+            .map(|(pair, _)| Self { pair })
             .map_err(|_| ClientError::Key(String::from("key generation")))
     }
 
@@ -69,7 +69,7 @@ impl Es256Key {
         let mut sec1 = vec![0x04];
         sec1.extend_from_slice(&x);
         sec1.extend_from_slice(&y);
-        EcdsaKeyPair::from_private_key_and_public_key(&ECDSA_P256_SHA256_FIXED_SIGNING, &d, &sec1)
+        SoftSigner::p256_from_parts(&Secret::new(d), &sec1)
             .map(|pair| Self { pair })
             .map_err(|_| bad("the key does not verify"))
     }
@@ -77,7 +77,8 @@ impl Es256Key {
     /// The public JWK.
     #[must_use]
     pub fn jwk(&self) -> Value {
-        let p = self.pair.public_key().as_ref();
+        let p = self.sec1();
+        let p = p.as_slice();
         json!({
             "kty": "EC",
             "crv": "P-256",
@@ -89,9 +90,16 @@ impl Es256Key {
     /// The RFC 7638 thumbprint of the public key, base64url: `dpop_jkt` and `cnf.jkt`.
     #[must_use]
     pub fn jkt(&self) -> String {
-        let key =
-            access_kernel::verify::cose::PublicKey::P256(self.pair.public_key().as_ref().to_vec());
+        let key = access_kernel::verify::cose::PublicKey::P256(self.sec1());
         b64url_encode(&access_kernel::verify::key_scope::thumbprint(&key))
+    }
+
+    /// The uncompressed SEC1 public point.
+    fn sec1(&self) -> Vec<u8> {
+        match self.pair.public_key() {
+            suiss_crypto::cose::PublicKey::P256(p) => p,
+            _ => Vec::new(),
+        }
     }
 
     /// A compact ES256 JWS over `payload` with `header`.
@@ -106,9 +114,9 @@ impl Es256Key {
         );
         let signature = self
             .pair
-            .sign(&SystemRandom::new(), input.as_bytes())
+            .sign(input.as_bytes())
             .map_err(|_| ClientError::Key(String::from("signing")))?;
-        Ok(format!("{input}.{}", b64url_encode(signature.as_ref())))
+        Ok(format!("{input}.{}", b64url_encode(&signature)))
     }
 
     /// A DPoP proof for `htm htu` (RFC 9449 §4.2), with the server's `nonce` when it gave one

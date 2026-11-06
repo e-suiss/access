@@ -146,6 +146,23 @@ impl SoftSigner {
             pair: Pair::P256(pair),
         })
     }
+
+    /// An ECDSA P-256 key from its private scalar `d` and uncompressed SEC1 public point, as a
+    /// private JWK carries them (RFC 7518 §6.2.2); the pair must verify.
+    ///
+    /// # Errors
+    /// [`SignError::Key`].
+    pub fn p256_from_parts(d: &Secret<Vec<u8>>, sec1: &[u8]) -> Result<Self, SignError> {
+        let pair = EcdsaKeyPair::from_private_key_and_public_key(
+            &ECDSA_P256_SHA256_FIXED_SIGNING,
+            d.expose(),
+            sec1,
+        )
+        .map_err(|_| SignError::Key)?;
+        Ok(Self {
+            pair: Pair::P256(pair),
+        })
+    }
 }
 
 impl Signer for SoftSigner {
