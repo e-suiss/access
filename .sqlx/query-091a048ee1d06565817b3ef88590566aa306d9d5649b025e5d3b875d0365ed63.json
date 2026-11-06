@@ -1,0 +1,173 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT exercise_id, pos, holder_id, pep, class, variant, iat_ms, horizon_ms, audiences,\n                namespaces, slice, contract_digest, contract\n           FROM access.projection_contract WHERE domain_id = $1 AND exercise_id = $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "exercise_id",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.projection_contract",
+            "name": "exercise_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "pos",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.projection_contract",
+            "name": "pos"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "holder_id",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.projection_contract",
+            "name": "holder_id"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "pep",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.projection_contract",
+            "name": "pep"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "class",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.projection_contract",
+            "name": "class"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "variant",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.projection_contract",
+            "name": "variant"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "iat_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.projection_contract",
+            "name": "iat_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "horizon_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.projection_contract",
+            "name": "horizon_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "audiences",
+        "type_info": "TextArray",
+        "origin": {
+          "Table": {
+            "table": "access.projection_contract",
+            "name": "audiences"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "namespaces",
+        "type_info": "TextArray",
+        "origin": {
+          "Table": {
+            "table": "access.projection_contract",
+            "name": "namespaces"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "slice",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "access.projection_contract",
+            "name": "slice"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "contract_digest",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.projection_contract",
+            "name": "contract_digest"
+          }
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "contract",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.projection_contract",
+            "name": "contract"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "091a048ee1d06565817b3ef88590566aa306d9d5649b025e5d3b875d0365ed63"
+}

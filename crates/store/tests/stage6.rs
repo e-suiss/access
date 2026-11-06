@@ -19,7 +19,11 @@ use access_store::claims::{
     quota_notified, quota_reached,
 };
 use access_store::identity::TenantTx;
-use access_store::offline::{ReportRow, insert_profile, insert_report, last_report, profile};
+use access_store::offline::{
+    ContractRow, ProfileRow, ReconciliationRow, ReportRow, contract_of, insert_contract,
+    insert_profile, insert_reconciliation, insert_report, issued_since, last_report, open_offline,
+    profile, profile_for, reconciliations, reports, unreported_overdue,
+};
 use access_store::projections::{Family, family, open_family, revoke_family};
 use access_store::realm_binding::{Role, bind, domains, retire};
 use access_store::scope::DomainId;
@@ -263,10 +267,14 @@ async fn reports_and_profiles_are_recorded() {
     insert_profile(
         &db.sequencer,
         &d,
-        3,
-        &[6; 32],
-        &[2; 16],
-        &[0xa1, 0x01, 0x02],
+        &ProfileRow {
+            pos: 3,
+            digest: [6; 32],
+            claim: [2; 16],
+            body: vec![0xa1, 0x01, 0x02],
+            verifier: Some("verifier.example".to_owned()),
+            valid_until_ms: Some(5_000),
+        },
     )
     .await
     .unwrap();
@@ -275,6 +283,126 @@ async fn reports_and_profiles_are_recorded() {
         Some(vec![0xa1, 0x01, 0x02])
     );
     assert_eq!(profile(&db.app, &d, &[7; 32]).await.unwrap(), None);
+    // §9.12.1: the audience's newest profile, while its Claim is valid
+    assert_eq!(
+        profile_for(&db.app, &d, "verifier.example", 4_000)
+            .await
+            .unwrap(),
+        Some(([6; 32], vec![0xa1, 0x01, 0x02]))
+    );
+    assert_eq!(
+        profile_for(&db.app, &d, "verifier.example", 6_000)
+            .await
+            .unwrap(),
+        None
+    );
+    assert_eq!(reports(&db.app, &d, &[8; 32]).await.unwrap().len(), 2);
+}
+
+// §9.12, §13.7.4, SEC14, OP-73: a projection's contract is kept once; the issuance limits and
+// the report deadline are read from it; a reconciliation is appended and never changed
+#[tokio::test]
+async fn contracts_and_reconciliations_are_appended() {
+    let db = fresh().await.unwrap();
+    let d = domain(&db, TENANT, 7).await;
+    let contract = ContractRow {
+        exercise: [8; 32],
+        pos: 1,
+        holder: [1; 16],
+        pep: "pep.example".to_owned(),
+        class: "offline".to_owned(),
+        variant: "checkpointed-offline".to_owned(),
+        iat_ms: 1_000,
+        horizon_ms: 4_000,
+        audiences: vec!["robot.example".to_owned()],
+        namespaces: vec!["shop".to_owned()],
+        slice: true,
+        contract_digest: [5; 32],
+        contract: vec![0xa0],
+    };
+    insert_contract(&db.sequencer, &d, &contract).await.unwrap();
+    insert_contract(&db.sequencer, &d, &contract).await.unwrap();
+    assert_eq!(
+        contract_of(&db.app, &d, &[8; 32]).await.unwrap(),
+        Some(contract.clone())
+    );
+    assert_eq!(open_offline(&db.app, &d, &[1; 16], 3_000).await.unwrap(), 1);
+    assert_eq!(open_offline(&db.app, &d, &[1; 16], 4_000).await.unwrap(), 0);
+    assert_eq!(
+        issued_since(&db.app, &d, &[1; 16], 500, &["shop".to_owned()])
+            .await
+            .unwrap(),
+        1
+    );
+    assert_eq!(
+        issued_since(&db.app, &d, &[1; 16], 500, &["pay".to_owned()])
+            .await
+            .unwrap(),
+        0
+    );
+    assert!(
+        !unreported_overdue(&db.app, &d, "robot.example", 4_500, 1_000)
+            .await
+            .unwrap()
+    );
+    assert!(
+        unreported_overdue(&db.app, &d, "robot.example", 5_001, 1_000)
+            .await
+            .unwrap()
+    );
+    insert_report(
+        &db.sequencer,
+        &d,
+        &ReportRow {
+            pos: 2,
+            claim: [1; 16],
+            exercise: [8; 32],
+            previous: None,
+            first_seq: 0,
+            next_seq: 1,
+            head: [9; 32],
+            period_from_ms: 0,
+            period_until_ms: 10,
+            body: vec![0xa0],
+        },
+    )
+    .await
+    .unwrap();
+    assert!(
+        !unreported_overdue(&db.app, &d, "robot.example", 5_001, 1_000)
+            .await
+            .unwrap()
+    );
+    let r = ReconciliationRow {
+        pos: 2,
+        claim: [1; 16],
+        exercise: [8; 32],
+        bound: true,
+        continuous: true,
+        late: false,
+        in_contract: 1,
+        out_of_contract: 0,
+        slice_unused: vec![0x80],
+    };
+    insert_reconciliation(&db.sequencer, &d, &r).await.unwrap();
+    assert_eq!(
+        reconciliations(&db.app, &d, &[8; 32]).await.unwrap(),
+        vec![r]
+    );
+    assert!(
+        as_owner(
+            &db,
+            &d,
+            "UPDATE access.offline_reconciliation SET late = true"
+        )
+        .await
+        .is_some()
+    );
+    assert!(
+        as_owner(&db, &d, "DELETE FROM access.projection_contract")
+            .await
+            .is_some()
+    );
 }
 
 // OP-150 m.3 (a), T24, §9.9.3 k.6: status lists are published with the position they reflect;

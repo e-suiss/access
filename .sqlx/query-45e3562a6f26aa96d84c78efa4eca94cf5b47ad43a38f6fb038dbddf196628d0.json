@@ -1,0 +1,42 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT profile_digest, body FROM access.verifier_profile\n          WHERE domain_id = $1 AND verifier = $2 AND valid_until_ms >= $3\n          ORDER BY pos DESC LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "profile_digest",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.verifier_profile",
+            "name": "profile_digest"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "body",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.verifier_profile",
+            "name": "body"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "45e3562a6f26aa96d84c78efa4eca94cf5b47ad43a38f6fb038dbddf196628d0"
+}

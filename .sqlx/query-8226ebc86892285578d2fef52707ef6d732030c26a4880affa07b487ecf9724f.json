@@ -1,0 +1,25 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT count(*) AS \"n!\" FROM access.projection_contract c\n          WHERE c.domain_id = $1 AND c.holder_id = $2 AND c.class = 'offline'\n            AND c.horizon_ms > $3\n            AND NOT EXISTS (SELECT 1 FROM access.projection_family f\n                             WHERE f.domain_id = c.domain_id\n                               AND f.family_id = substring(c.exercise_id from 1 for 16)\n                               AND f.revoked_at IS NOT NULL)",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "n!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "8226ebc86892285578d2fef52707ef6d732030c26a4880affa07b487ecf9724f"
+}
