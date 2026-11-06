@@ -75,22 +75,29 @@ pub(crate) async fn tick(
     Ok(out)
 }
 
+/// One tick at the wall clock, its failure logged: today's partitions are opened before the
+/// couriers and the listener start, so the first Claim or flow of a fresh deployment finds its
+/// day (OP-146 m.5 (f)).
+pub(crate) async fn open_now(app: &Pool, archive: &Pool, worker: &str) {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .ok()
+        .and_then(|d| u64::try_from(d.as_millis()).ok());
+    let Some(now) = now else {
+        tracing::error!("system clock before the Unix epoch; partitions not opened");
+        return;
+    };
+    if let Err(error) = tick(app, archive, worker, now).await {
+        tracing::warn!(%error, "partition job failed");
+    }
+}
+
 /// Ticks every [`INTERVAL`] until the task is aborted.
 pub(crate) async fn run(app: Pool, archive: Pool, worker: String) {
     let mut every = tokio::time::interval(INTERVAL);
     loop {
         every.tick().await;
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .ok()
-            .and_then(|d| u64::try_from(d.as_millis()).ok());
-        let Some(now) = now else {
-            tracing::error!("system clock before the Unix epoch; partitions not opened");
-            continue;
-        };
-        if let Err(error) = tick(&app, &archive, &worker, now).await {
-            tracing::warn!(%error, "partition job failed");
-        }
+        open_now(&app, &archive, &worker).await;
     }
 }
 

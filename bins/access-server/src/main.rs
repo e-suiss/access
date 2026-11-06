@@ -887,6 +887,8 @@ async fn serve(
     // OP-137, OP-149 m.15 (i), m.22 (g)
     ids::open_root(&all.app, &prepared.identity_keys).await?;
     let cell_ids = Arc::new(ids::CellIds::new(prepared.identity_keys.clone()));
+    // OP-146 m.5 (f): today's day partitions exist before anything writes to them
+    jobs::open_now(&all.app, &all.archive, &holder()?).await;
     let background = Background::start(
         config,
         &all,
