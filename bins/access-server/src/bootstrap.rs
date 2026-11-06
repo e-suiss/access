@@ -577,7 +577,45 @@ struct ProductFile {
     client_key: PathBuf,
     service_key: PathBuf,
     event_receiver: Option<String>,
-    redirect_uri: String,
+    redirect_uri: Option<String>,
+    redirect_uris: Option<Vec<String>>,
+}
+
+impl ProductFile {
+    /// The product's return addresses (OP-149 m.35): `redirect_uris`, or the one `redirect_uri`
+    /// of an older plan; exactly one of the two keys, at least one address, no repeats, each
+    /// `https` or a loopback `http` (RFC 8252).
+    fn redirect_uris(&self) -> Result<Vec<RedirectUri>, BootstrapError> {
+        let listed = match (&self.redirect_uri, &self.redirect_uris) {
+            (Some(one), None) => std::slice::from_ref(one),
+            (None, Some(list)) => list.as_slice(),
+            _ => {
+                return Err(BootstrapError::Plan(format!(
+                    "product {} names exactly one of redirect_uri and redirect_uris",
+                    self.product
+                )));
+            }
+        };
+        if listed.is_empty() {
+            return Err(BootstrapError::Plan(format!(
+                "product {} needs at least one redirect URI",
+                self.product
+            )));
+        }
+        let mut uris = Vec::with_capacity(listed.len());
+        for uri in listed {
+            let parsed =
+                RedirectUri::parse(uri).map_err(|e| BootstrapError::Plan(e.to_string()))?;
+            if uris.contains(&parsed) {
+                return Err(BootstrapError::Plan(format!(
+                    "product {} repeats the redirect URI {uri}",
+                    self.product
+                )));
+            }
+            uris.push(parsed);
+        }
+        Ok(uris)
+    }
 }
 
 /// A platform product client to register.
@@ -590,7 +628,9 @@ pub(crate) struct ProductPlan {
     /// Its service Instance key in each paired tenant (OP-149 m.4).
     pub(crate) service_key: PublicKey,
     pub(crate) event_receiver: Option<String>,
-    pub(crate) redirect_uri: RedirectUri,
+    /// Its return addresses, exactly as the Approval Surface and the authorization server
+    /// match them (RFC 6749 §3.1.2; OP-149 m.33 (d), m.35).
+    pub(crate) redirect_uris: Vec<RedirectUri>,
 }
 
 /// What the bootstrap creates.
@@ -667,14 +707,14 @@ impl Plan {
                     PlatformProduct::GRAMMAR
                 ))
             })?;
+            let redirect_uris = p.redirect_uris()?;
             products.push(ProductPlan {
                 display_name: p.display_name.unwrap_or_else(|| product.name().to_owned()),
                 product,
                 client_key: jwk(&p.client_key)?,
                 service_key: jwk(&p.service_key)?,
                 event_receiver: p.event_receiver,
-                redirect_uri: RedirectUri::parse(&p.redirect_uri)
-                    .map_err(|e| BootstrapError::Plan(e.to_string()))?,
+                redirect_uris,
             });
         }
         let sample = match file.sample {
@@ -732,7 +772,7 @@ impl ProductPlan {
             auth: AuthMethod::PrivateKeyJwtKey {
                 key: self.client_key.clone(),
             },
-            redirect_uris: vec![self.redirect_uri.clone()],
+            redirect_uris: self.redirect_uris.clone(),
             post_logout_redirect_uris: Vec::new(),
             backchannel_logout_uri: None,
             platform: Some(Platform {
@@ -771,6 +811,11 @@ pub(crate) struct ClientOut {
     pub(crate) client_id: String,
     /// The `aud` of its client assertions: the platform realm's issuer (OP-149 m.19 (e)).
     pub(crate) audience: String,
+    /// Its registered return addresses, as the plan names them (OP-149 m.35); the Approval
+    /// Surface of every realm matches a pushed request's `redirect_uri` against them exactly.
+    pub(crate) redirect_uris: Vec<String>,
+    /// The first of them, for readers of older summaries.
+    pub(crate) redirect_uri: String,
     /// Whether this run registered it.
     pub(crate) created: bool,
 }
@@ -1237,10 +1282,17 @@ where
                 let (client_id, created) = self
                     .client(&admin, (tenant, realm), domain, root, p)
                     .await?;
+                let redirect_uris: Vec<String> = p
+                    .redirect_uris
+                    .iter()
+                    .map(|u| String::from(u.as_str()))
+                    .collect();
                 clients.push(ClientOut {
                     product: p.product.name().to_owned(),
                     client_id,
                     audience: issuer.clone(),
+                    redirect_uri: redirect_uris.first().cloned().unwrap_or_default(),
+                    redirect_uris,
                     created,
                 });
             }
@@ -1589,8 +1641,8 @@ where
         Ok((id, true))
     }
 
-    /// The active platform client of `p` in the realm: the one with its redirect URI, product
-    /// and client key.
+    /// The active platform client of `p` in the realm: the one with any of its redirect URIs,
+    /// its product and its client key.
     async fn find_product_client(
         &self,
         (tenant, realm): (TenantId, RealmId),
@@ -1599,14 +1651,16 @@ where
         let kid = b64url_encode(&thumbprint(&p.client_key));
         let mut t = TenantTx::begin(self.app, tenant, realm).await?;
         let mut found = None;
-        for id in idp::clients_with_redirect(&mut t, p.redirect_uri.as_str()).await? {
-            if let Some(row) = idp::client(&mut t, &id).await?
-                && row.active
-                && row.platform_product.as_deref() == Some(p.product.name())
-                && row.jwks.as_deref().is_some_and(|j| j.contains(&kid))
-            {
-                found = Some(row.client_id);
-                break;
+        'uris: for uri in &p.redirect_uris {
+            for id in idp::clients_with_redirect(&mut t, uri.as_str()).await? {
+                if let Some(row) = idp::client(&mut t, &id).await?
+                    && row.active
+                    && row.platform_product.as_deref() == Some(p.product.name())
+                    && row.jwks.as_deref().is_some_and(|j| j.contains(&kid))
+                {
+                    found = Some(row.client_id);
+                    break 'uris;
+                }
             }
         }
         t.commit().await?;

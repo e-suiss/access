@@ -271,7 +271,10 @@ fn plan() -> Plan {
                     .to_bytes(),
             ),
             event_receiver: Some(String::from("https://work.test/ssf")),
-            redirect_uri: RedirectUri::parse("https://work.test/cb").unwrap(),
+            redirect_uris: vec![
+                RedirectUri::parse("https://work.test/cb").unwrap(),
+                RedirectUri::parse("http://127.0.0.1:8190/v1/access/approval").unwrap(),
+            ],
         }],
         sample: None,
         test_user: None,
@@ -779,6 +782,15 @@ async fn the_bootstrap_is_idempotent() {
     assert_eq!(first.clients.len(), 1);
     assert!(first.clients[0].created);
     assert_eq!(first.clients[0].audience, platform.issuer);
+    // OP-149 m.35: the summary names the product's return addresses, the first one twice
+    assert_eq!(
+        first.clients[0].redirect_uris,
+        [
+            "https://work.test/cb",
+            "http://127.0.0.1:8190/v1/access/approval"
+        ]
+    );
+    assert_eq!(first.clients[0].redirect_uri, "https://work.test/cb");
 
     let second = w.run(&plan).await;
     assert!(second.realms.iter().all(|r| !r.created));
@@ -833,6 +845,14 @@ async fn the_bootstrap_is_idempotent() {
     assert_eq!(row.auth_method, "private_key_jwt");
     assert_eq!(row.platform_product.as_deref(), Some("work"));
     assert_eq!(row.event_receiver.as_deref(), Some("https://work.test/ssf"));
+    // OP-149 m.35: the registration carries the whole list
+    assert_eq!(
+        row.redirect_uris,
+        [
+            "https://work.test/cb",
+            "http://127.0.0.1:8190/v1/access/approval"
+        ]
+    );
 }
 
 // OP-149 m.4: a product client is registered only in the platform tenant's realm, never in a
@@ -930,6 +950,69 @@ fn a_plan_registers_any_product_name() {
     for bad in ["Work", "acme_ledger", "a", "urn:suiss:work"] {
         assert!(plan("bad", bad).is_err(), "{bad}");
     }
+    // OP-149 m.35, RFC 6749 §3.1.2, RFC 8252: a product registers a list of return addresses,
+    // https or loopback http, without repeats; the one redirect_uri of an older plan is a list of
+    // one, and a plan names one of the two keys
+    let uris = |name: &str, keys: &str| {
+        let path = dir.join(format!("{name}.toml"));
+        std::fs::write(
+            &path,
+            format!(
+                "platform = 'platform'\ntenants = ['acme']\n[[products]]\nproduct = 'work'\nclient_key = '{k}'\nservice_key = '{k}'\n{keys}\n",
+                k = key.display()
+            ),
+        )
+        .unwrap();
+        Plan::load(&path).map(|p| {
+            p.products[0]
+                .redirect_uris
+                .iter()
+                .map(|u| u.as_str().to_owned())
+                .collect::<Vec<_>>()
+        })
+    };
+    assert_eq!(
+        uris(
+            "list",
+            "redirect_uris = ['https://work.localhost/v1/access/approval', 'http://127.0.0.1:8190/v1/access/approval']"
+        )
+        .unwrap(),
+        [
+            "https://work.localhost/v1/access/approval",
+            "http://127.0.0.1:8190/v1/access/approval"
+        ]
+    );
+    assert_eq!(
+        uris(
+            "one",
+            "redirect_uri = 'https://work.localhost/v1/access/approval'"
+        )
+        .unwrap(),
+        ["https://work.localhost/v1/access/approval"]
+    );
+    assert!(uris("none", "").is_err());
+    assert!(uris("empty", "redirect_uris = []").is_err());
+    assert!(
+        uris(
+            "both",
+            "redirect_uri = 'https://a.example/cb'\nredirect_uris = ['https://b.example/cb']"
+        )
+        .is_err()
+    );
+    assert!(
+        uris(
+            "repeat",
+            "redirect_uris = ['https://a.example/cb', 'https://a.example/cb']"
+        )
+        .is_err()
+    );
+    assert!(
+        uris(
+            "plain-http",
+            "redirect_uris = ['https://a.example/cb', 'http://work.example/v1/access/approval']"
+        )
+        .is_err()
+    );
 }
 
 // OP-149 m.22 (g), OP-141 m.18 (d), m.22 (d), TN-111: a realm created through the admin path
@@ -1326,7 +1409,7 @@ fn a_sample_names_a_tenant_and_a_valid_action() {
         std::fs::write(
             &path,
             format!(
-                "platform = 'platform'\ntenants = ['acme']\n[sample]\nrealm = 'acme'\nnamespace = 'work'\naction = 'approve'\n{allowed}step_up = '{step_up}'\n[test_user]\nrealm = 'acme'\nidentifier = 'test@acme.example'\npassword = 'correct horse battery staple'\n"
+                "platform = 'platform'\ntenants = ['acme']\n[sample]\nrealm = 'acme'\nnamespace = 'work'\naction = 'approve'\n{allowed}step_up = '{step_up}'\n[test_user]\nrealm = 'acme'\nidentifier = 'test@acme.example'\nredirect_uri = 'http://127.0.0.1/cb'\npassword = 'correct horse battery staple'\n"
             ),
         )
         .unwrap();

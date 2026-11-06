@@ -75,4 +75,10 @@ service_key = "/etc/access/products/work-service.jwk"
 #   ACCESS_DELIVERY_TARGETS='[{url="https://work-server:8443/v1/inbound/events", ca_file="/var/lib/access/certs/ca.crt"}]'
 # Without the declaration the bootstrap refuses it (invalid-event-receiver).
 # event_receiver = "https://work-server:8443/v1/inbound/events"
-redirect_uri = "https://work.localhost/v1/access/approval"
+# OP-149 m.33 (d), m.35: the product's return addresses. The Approval Surface of every realm
+# accepts a pushed request's redirect_uri exactly when it is one of these (RFC 6749 §3.1.2);
+# the product is registered once, here in the platform realm, and tenant realms need no
+# registration of their own. Each address is https, or http on the loopback host (RFC 8252).
+# An older plan's single `redirect_uri = "..."` is still read as a list of one; a plan names
+# one of the two keys. The summary lists them as `clients[].redirect_uris`.
+redirect_uris = ["https://work.localhost/v1/access/approval", "http://127.0.0.1:8190/v1/access/approval"]

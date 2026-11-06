@@ -545,15 +545,15 @@ impl Env {
             (self.tenant, self.realm, self.domain),
             [0x5c; 16],
             format!("cli_{}4a", "0".repeat(24)),
-            redirect,
+            &[redirect],
             None,
         )
         .await;
     }
 
     /// A platform product client registered in another tenant's realm, the platform realm,
-    /// with `redirect` as its return address (OP-149 m.4, m.33 (d)).
-    async fn platform_client(&self, redirect: &str) {
+    /// with `redirects` as its return addresses (OP-149 m.4, m.33 (d), m.35).
+    async fn platform_client(&self, redirects: &[&str]) {
         let tenant = create_tenant(&self.db.app, "pool-default").await.unwrap();
         let d = DomainId::from_bytes([0xd0; 32]);
         let g = LogRecord {
@@ -575,7 +575,7 @@ impl Env {
             (tenant, realm, d),
             [0x7a; 16],
             format!("cli_{}7a", "0".repeat(24)),
-            redirect,
+            redirects,
             Some("work"),
         )
         .await;
@@ -588,7 +588,7 @@ impl Env {
         (tenant, realm, domain): (TenantId, RealmId, DomainId),
         client_uuid: [u8; 16],
         client_id: String,
-        redirect: &str,
+        redirects: &[&str],
         platform_product: Option<&str>,
     ) {
         use access_store::authority::{
@@ -670,7 +670,7 @@ impl Env {
                     "none".into()
                 },
                 jwks_uri: None,
-                redirect_uris: vec![redirect.to_owned()],
+                redirect_uris: redirects.iter().map(|r| (*r).to_owned()).collect(),
                 active: true,
                 secret_hash: None,
                 post_logout_redirect_uris: vec![],
@@ -2182,16 +2182,20 @@ async fn product_endpoints_follow_the_frontend_contract() {
     assert_eq!(no_state.status, StatusCode::BAD_REQUEST);
 }
 
-// OP-149 m.33 (d), RFC 6749 §3.1.2: a product is registered in the platform realm only; the
-// Approval Surface of a tenant realm accepts the product's registered return address exactly,
-// with no registration in the tenant realm, and refuses an address no client registered, a
-// different path on the product's origin included
+// OP-149 m.33 (d), m.35, RFC 6749 §3.1.2, RFC 8252: a product is registered in the platform
+// realm only, with a list of return addresses; the Approval Surface of a tenant realm accepts
+// each of them exactly, the loopback one included, with no registration in the tenant realm,
+// and refuses an address no client registered, a different path on the product's origin and a
+// plain-http address included
 #[tokio::test]
 async fn a_products_platform_registration_is_its_approval_return_address() {
     use access_kernel::verify::key_scope::thumbprint;
     let e = env(46, "lg-pr", AuthPolicy::DEFAULT).await;
-    e.platform_client("https://work.example/v1/access/approval")
-        .await;
+    e.platform_client(&[
+        "https://work.example/v1/access/approval",
+        "http://127.0.0.1:8190/v1/access/approval",
+    ])
+    .await;
     let (device, _) = SoftSigner::generate_ed25519().unwrap();
     let ais = sign_sign1(
         &device,
@@ -2239,19 +2243,24 @@ async fn a_products_platform_registration_is_its_approval_return_address() {
     let mut b = e.browser("b");
     let call =
         |redirect: &str| format!("/v1/approve?request={digest}&redirect_uri={redirect}&state=s1");
-    let accepted = b
-        .get(&call("https%3A%2F%2Fwork.example%2Fv1%2Faccess%2Fapproval"))
-        .await;
-    assert_eq!(
-        accepted.status,
-        StatusCode::OK,
-        "{}",
-        String::from_utf8_lossy(&accepted.body)
-    );
+    for registered in [
+        "https%3A%2F%2Fwork.example%2Fv1%2Faccess%2Fapproval",
+        "http%3A%2F%2F127.0.0.1%3A8190%2Fv1%2Faccess%2Fapproval",
+    ] {
+        let accepted = b.get(&call(registered)).await;
+        assert_eq!(
+            accepted.status,
+            StatusCode::OK,
+            "{registered}: {}",
+            String::from_utf8_lossy(&accepted.body)
+        );
+    }
     for other in [
         "https%3A%2F%2Fwork.example%2Fv1%2Faccess%2Fapproval%2F",
         "https%3A%2F%2Fwork.example%2Fv1%2Faccess%2Fapproval%3Fx%3D1",
         "https%3A%2F%2Fwork.example%2Fother",
+        "https%3A%2F%2Fwork.example%2Fv1%2Faccess%2Fapproval%2Fthird",
+        "http%3A%2F%2F127.0.0.1%3A8191%2Fv1%2Faccess%2Fapproval",
         "http%3A%2F%2Fwork.example%2Fv1%2Faccess%2Fapproval",
         "https%3A%2F%2Fnope.example%2Fcb",
     ] {
