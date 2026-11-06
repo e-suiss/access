@@ -2426,13 +2426,20 @@ async fn an_approval_runs_on_the_hosted_surface() {
     assert!(location.starts_with("https://shop.example/approved?exercise="));
     assert!(location.contains(&format!("exercise={}", b64url_encode(&[0xe3; 32]))));
     assert!(location.contains("&render_digest="));
+    // OP-149 m.33 (c): the approver's Claim goes back too, for a step-up term the same actor
+    // meets with this approval
+    assert!(location.contains(&format!("&claim={}", b64url_encode(&[0xc1; 16]))));
     assert!(location.ends_with("&state=st-1"));
+    assert_eq!(done.json()["claim"], b64url_encode(&[0xc1; 16]));
     let orders = e.claims.0.lock().unwrap().clone();
     assert_eq!(orders.len(), 1);
     assert_eq!(orders[0].class, "authentication");
     assert_eq!(
         orders[0].bind,
-        Bind::Statement(<[u8; 32]>::try_from(statement.as_slice()).unwrap())
+        Bind::Statement {
+            statement: <[u8; 32]>::try_from(statement.as_slice()).unwrap(),
+            instance: [9; 16],
+        }
     );
     assert_eq!(orders[0].assurance.get("phishing_resistant"), Some(&1));
     assert_eq!(orders[0].assurance.get("human_presence"), Some(&1));

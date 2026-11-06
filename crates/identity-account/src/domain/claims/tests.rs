@@ -65,7 +65,10 @@ fn login(bind: Bind) -> ClaimOrder {
 fn all() -> Vec<ClaimOrder> {
     vec![
         login(Bind::Session([8; 16])),
-        login(Bind::Statement([9; 32])),
+        login(Bind::Statement {
+            statement: [9; 32],
+            instance: [3; 16],
+        }),
         passkey(),
         device_key_binding(SUBJECT, &PUBLIC_KEY, -8, [6; 16], 100),
         authenticator_removed(SUBJECT, AuthenticatorKind::Passkey, &SIBLING, 100),
@@ -141,10 +144,15 @@ fn bindings_reach_the_envelope() {
         .unwrap()
         .statement;
     assert_eq!(s.bound_instance, None);
-    let p = login(Bind::Statement([9; 32]))
-        .prepare(&placement(150))
-        .unwrap();
+    let p = login(Bind::Statement {
+        statement: [9; 32],
+        instance: [3; 16],
+    })
+    .prepare(&placement(150))
+    .unwrap();
     assert_eq!(p.statement.bound_intent, Some(Digest([9; 32])));
+    // OP-149 m.33 (c): the approval's Claim is bound to the approver's Instance too
+    assert_eq!(p.statement.bound_instance, Some(Id([3; 16])));
     let body = check(&p.statement, p.body.as_deref()).unwrap();
     assert!(matches!(
         body,
@@ -199,7 +207,14 @@ fn sign_out_ends_the_sessions_authentication_line() {
     let signed = login(Bind::Session(session));
     assert_eq!(signed.line, Some(authentication_line(&session)));
     assert_eq!(login(Bind::Instance([6; 16])).line, None);
-    assert_eq!(login(Bind::Statement([7; 32])).line, None);
+    assert_eq!(
+        login(Bind::Statement {
+            statement: [7; 32],
+            instance: [3; 16],
+        })
+        .line,
+        None
+    );
     let ended = authentication_ended(SUBJECT, session, 900);
     assert!(ended.retract);
     assert_eq!(ended.class, "authentication");

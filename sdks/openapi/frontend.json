@@ -409,7 +409,7 @@
     "/v1/approve": {
       "get": {
         "operationId": "approve",
-        "summary": "The approval call (OP-149 m.9, OP-150 m.3 (r)): the hosted Approval Surface for a request pushed to POST /v1/approve/requests; the page shows the render the decision point produced, takes one passkey assertion over H(AAS) and sends the browser back to redirect_uri with exercise, render_digest and state; the result is confirmed with GET /access/v1/exercises/{id}.",
+        "summary": "The approval call (OP-149 m.9, OP-150 m.3 (r)): the hosted Approval Surface for a request pushed to POST /v1/approve/requests; the page shows the render the decision point produced, takes one passkey assertion over H(AAS) and sends the browser back to redirect_uri with exercise, render_digest, claim and state; the result is confirmed with GET /access/v1/exercises/{id}.",
         "parameters": [
           {
             "name": "request",
@@ -424,7 +424,7 @@
             "name": "redirect_uri",
             "in": "query",
             "required": true,
-            "description": "Exactly a redirect URI an active client of the realm registered.",
+            "description": "Exactly a redirect URI an active client of the realm registered, or one an active platform product client registered in the platform realm (OP-149 m.33 (d); RFC 6749 §3.1.2 exact match).",
             "schema": {
               "type": "string"
             }
@@ -441,7 +441,7 @@
         ],
         "responses": {
           "200": {
-            "description": "The hosted approval page (text/html), which opens the flow with POST /v1/approve/flows and, once approved, goes to redirect_uri?exercise=<base64url ExerciseID>&render_digest=<base64url>&state=<state>."
+            "description": "The hosted approval page (text/html), which opens the flow with POST /v1/approve/flows and, once approved, goes to redirect_uri?exercise=<base64url ExerciseID>&render_digest=<base64url>&claim=<base64url ClaimID>&state=<state>."
           },
           "400": {
             "description": "invalid-approval-request, invalid-state or invalid-redirect-uri; the browser is not redirected.",
@@ -1335,12 +1335,13 @@
         "required": [
           "redirect",
           "exercise",
-          "render_digest"
+          "render_digest",
+          "claim"
         ],
         "properties": {
           "redirect": {
             "type": "string",
-            "description": "redirect_uri with exercise, render_digest and state (OP-149 m.9)."
+            "description": "redirect_uri with exercise, render_digest, claim and state (OP-149 m.9, m.33 (c))."
           },
           "exercise": {
             "type": "string",
@@ -1351,6 +1352,11 @@
             "type": "string",
             "pattern": "^[A-Za-z0-9_-]*$",
             "description": "The render digest, 32 bytes."
+          },
+          "claim": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]*$",
+            "description": "The approver's authentication ClaimID, 16 bytes: bound to H(AAS) and to the approver's Instance; passed as claim_ref when the REQUIRE_ACTION also left an authentication term unmet (OP-149 m.33 (c))."
           }
         }
       }

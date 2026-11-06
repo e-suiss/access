@@ -302,12 +302,14 @@ fn approval_examples_match_the_code_and_the_schema() {
         "approval-finished",
         &ApprovalFinished {
             redirect: format!(
-                "https://shop.example/approved?exercise={}&render_digest={}&state=st-1",
+                "https://shop.example/approved?exercise={}&render_digest={}&claim={}&state=st-1",
                 b64(0xe3, 32),
-                b64(0xb4, 32)
+                b64(0xb4, 32),
+                b64(0xc1, 16)
             ),
             exercise: b64(0xe3, 32),
             render_digest: b64(0xb4, 32),
+            claim: b64(0xc1, 16),
         },
     );
 }

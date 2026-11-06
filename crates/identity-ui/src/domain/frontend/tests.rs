@@ -42,19 +42,33 @@ fn approval_parameters_are_checked() {
     }
 }
 
-// OP-149 m.9: the browser goes back with exercise, render_digest and the state unchanged
+// OP-149 m.9, m.33 (c): the browser goes back with exercise, render_digest, the approver's
+// Claim and the state unchanged
 #[test]
 fn the_redirect_carries_exercise_render_digest_and_state() {
-    let to = approval_redirect("https://work.suiss.example/cb", &[1; 32], &[2; 32], "a b&c");
+    let to = approval_redirect(
+        "https://work.suiss.example/cb",
+        &[1; 32],
+        &[2; 32],
+        &[3; 16],
+        "a b&c",
+    );
     assert_eq!(
         to,
         format!(
-            "https://work.suiss.example/cb?exercise={}&render_digest={}&state=a%20b%26c",
+            "https://work.suiss.example/cb?exercise={}&render_digest={}&claim={}&state=a%20b%26c",
             b64url_encode(&[1; 32]),
-            b64url_encode(&[2; 32])
+            b64url_encode(&[2; 32]),
+            b64url_encode(&[3; 16])
         )
     );
-    let kept = approval_redirect("https://work.suiss.example/cb?x=1", &[1; 32], &[2; 32], "s");
+    let kept = approval_redirect(
+        "https://work.suiss.example/cb?x=1",
+        &[1; 32],
+        &[2; 32],
+        &[3; 16],
+        "s",
+    );
     assert!(kept.starts_with("https://work.suiss.example/cb?x=1&exercise="));
 }
 

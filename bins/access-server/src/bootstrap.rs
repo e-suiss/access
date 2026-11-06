@@ -39,6 +39,7 @@ use access_internal_api::instances::{
     core_action, register_nonce, self_signed_intent,
 };
 use access_kernel::ais::{CONTENT_TYPE, Statement};
+use access_kernel::assurance;
 use access_kernel::claim::body::Class;
 use access_kernel::codec::Canonical;
 use access_kernel::combinator::{Capacity, Mode};
@@ -54,6 +55,7 @@ use access_kernel::model::{
     Structural, SubjectSelector, Window,
 };
 use access_kernel::schema::{ActionSchema, EffectClass, Spp};
+use access_kernel::tier::Tier;
 use access_kernel::verify::cose::PublicKey;
 use access_kernel::verify::key_scope::thumbprint;
 use access_store::authority::{find_nonce, server_time};
@@ -241,6 +243,44 @@ struct SampleFile {
     allowed: Option<String>,
     resource_namespace: Option<String>,
     resource_path_prefix: Option<String>,
+    step_up: Option<String>,
+}
+
+/// The step-up the allowed Grant asks for beside the approval (OP-149 m.33 (c), §13.7.3,
+/// §8.17.5.4): an `authentication` Claim of this level, fresh within the CT1 ceiling and bound
+/// to the actor's Instance.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum StepUp {
+    /// AAL2 by a phishing-resistant authenticator: the test user's passkey.
+    Aal2,
+}
+
+impl StepUp {
+    /// The plan's word for it.
+    pub(crate) const fn word(self) -> &'static str {
+        match self {
+            Self::Aal2 => "aal2",
+        }
+    }
+
+    fn parse(word: &str) -> Option<Self> {
+        match word {
+            "aal2" => Some(Self::Aal2),
+            _ => None,
+        }
+    }
+
+    /// The `authentication` requirement of this step-up: the Kernel's CT1 term (phishing-resistant,
+    /// fresh within 15 minutes, bound to the actor Instance) at this AAL.
+    fn term(self) -> RequirementTerm {
+        let mut term = assurance::authentication_term(Tier::Ct1, false);
+        match self {
+            Self::Aal2 => {
+                term.assurance.insert(String::from("aal"), 2);
+            }
+        }
+        term
+    }
 }
 
 /// A sample catalog and Grant for a product's eligibility checks (OP-149 m.10): the realm's
@@ -249,7 +289,8 @@ struct SampleFile {
 /// (CT1, a ledger and a declaration digest), and the root grants it to the test user's Party
 /// under an approval requirement, with the Grant to contribute that approval (OP-149 m.29 (b)).
 /// That Grant covers the resources of `resource_namespace` whose first path element starts
-/// with `resource_path_prefix` (OP-149 m.30 (a)).
+/// with `resource_path_prefix` (OP-149 m.30 (a)). With `step_up`, the Grant also asks for the
+/// actor's fresh authentication at that level (OP-149 m.33 (c)).
 #[derive(Clone, Debug)]
 pub(crate) struct SamplePlan {
     /// The slug of one of the plan's sample tenants.
@@ -264,6 +305,8 @@ pub(crate) struct SamplePlan {
     pub(crate) resource_namespace: String,
     /// What the first path element of an allowed resource starts with, such as `led_`.
     pub(crate) resource_path_prefix: String,
+    /// The step-up the allowed Grant asks for beside the approval.
+    pub(crate) step_up: Option<StepUp>,
 }
 
 /// An authority over `actions` on the whole `namespace`, for good, with `requirements`.
@@ -347,6 +390,17 @@ impl SamplePlan {
                 s.realm
             )));
         }
+        let step_up = match s.step_up.as_deref() {
+            None => None,
+            Some(word) => Some(StepUp::parse(word).ok_or_else(|| {
+                BootstrapError::Plan(format!("sample.step_up {word} is not a known level"))
+            })?),
+        };
+        if step_up.is_some() && s.allowed.is_none() {
+            return Err(BootstrapError::Plan(String::from(
+                "sample.step_up needs sample.allowed",
+            )));
+        }
         let sample = Self {
             realm: s.realm,
             namespace: s.namespace,
@@ -358,6 +412,7 @@ impl SamplePlan {
             resource_path_prefix: s
                 .resource_path_prefix
                 .unwrap_or_else(|| String::from(DEFAULT_RESOURCE_PATH_PREFIX)),
+            step_up,
         };
         let catalog = sample.catalog(Id([0; 16]));
         if Spp::from_value(&catalog.to_value()).as_ref() != Ok(&catalog)
@@ -464,17 +519,21 @@ impl SamplePlan {
     }
 
     /// The Grant of the allowed action to `holder` over the allowed resources, met only with an
-    /// approval. A structural selector matches path prefixes at segment boundaries (OP-109
-    /// m.2), so the Grant covers the whole resource namespace; the path prefix is what the
-    /// summary tells products to write (OP-149 m.30 (a)).
+    /// approval and, when the plan asks for a step-up, the actor's fresh authentication at that
+    /// level (OP-149 m.33 (c)). A structural selector matches path prefixes at segment
+    /// boundaries (OP-109 m.2), so the Grant covers the whole resource namespace; the path
+    /// prefix is what the summary tells products to write (OP-149 m.30 (a)).
     fn allowed_grant(&self, domain: &Digest, holder: Id) -> Option<GrantContent> {
+        let requirements = std::iter::once(approval_term())
+            .chain(self.step_up.map(StepUp::term))
+            .collect();
         Some(grant_of(
             domain,
             holder,
             authority(
                 BTreeSet::from([self.allowed_ref()?]),
                 &self.resource_namespace,
-                BTreeSet::from([approval_term()]),
+                requirements,
             ),
         ))
     }
@@ -792,6 +851,11 @@ pub(crate) struct AllowedOut {
     pub(crate) basis: serde_json::Value,
     /// The approval the Exercise needs: its class and the Party's basis for contributing it.
     pub(crate) contribution: ContributionOut,
+    /// The step-up the Exercise needs beside the approval, when the plan asks for one: the
+    /// first commit's `REQUIRE_ACTION` then also leaves an `authentication` term unmet, and the
+    /// approval's Claim meets it (OP-149 m.33 (c)).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) step_up: Option<&'static str>,
 }
 
 /// The approval a product's Exercise of the allowed action waits for.
@@ -1262,6 +1326,7 @@ where
                 class: APPROVE_CLASS,
                 basis: holding_json(&contribute),
             },
+            step_up: s.step_up.map(StepUp::word),
         })
     }
 

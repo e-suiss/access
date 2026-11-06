@@ -55,8 +55,15 @@ pub enum Bind {
     Instance([u8; 16]),
     /// The device Instance the session registered, if any, resolved when the Claim is issued.
     Session([u8; 16]),
-    /// An approved statement, H(AAS) (§9.14.1).
-    Statement([u8; 32]),
+    /// An approved statement, H(AAS), and the approver's device Instance (§9.14.1, §13.7.3): the
+    /// Claim meets the approval's binding and an actor-Instance term of the same actor (OP-149
+    /// m.33 (c)).
+    Statement {
+        /// H(AAS).
+        statement: [u8; 32],
+        /// The approving Instance, the one named in the statement.
+        instance: [u8; 16],
+    },
 }
 
 /// A risk signal of the identity plane (§7.6, §12.3.2 TN-63, §10.2.4).
@@ -212,7 +219,7 @@ pub fn authentication_line(session: &[u8; 16]) -> [u8; 32] {
 #[must_use]
 pub fn authentication(f: AuthFacts) -> ClaimOrder {
     let statement = match f.bind {
-        Bind::Statement(d) => Some(Digest(d)),
+        Bind::Statement { statement, .. } => Some(Digest(statement)),
         _ => None,
     };
     let line = match f.bind {
@@ -567,7 +574,10 @@ impl ClaimOrder {
             Bind::None => (None, None),
             Bind::Instance(i) => (Some(Id(i)), None),
             Bind::Session(_) => (p.instance, None),
-            Bind::Statement(d) => (None, Some(Digest(d))),
+            Bind::Statement {
+                statement,
+                instance,
+            } => (Some(Id(instance)), Some(Digest(statement))),
         };
         Ok(Prepared {
             statement: Statement {
@@ -610,7 +620,10 @@ impl ClaimOrder {
             Bind::None => None,
             Bind::Instance(i) => Some(("instance", i.to_vec())),
             Bind::Session(s) => Some(("session", s.to_vec())),
-            Bind::Statement(d) => Some(("statement", d.to_vec())),
+            Bind::Statement {
+                statement,
+                instance,
+            } => Some(("statement", [&statement[..], &instance[..]].concat())),
         };
         let mut entries = vec![
             (Value::text("subject"), Value::Bytes(self.subject.to_vec())),
@@ -718,7 +731,13 @@ fn bind_of(value: Option<&Value>) -> Result<Bind, BadOrder> {
     Ok(match tag.as_str() {
         "instance" => Bind::Instance(raw.as_slice().try_into().map_err(|_| BadOrder)?),
         "session" => Bind::Session(raw.as_slice().try_into().map_err(|_| BadOrder)?),
-        "statement" => Bind::Statement(raw.as_slice().try_into().map_err(|_| BadOrder)?),
+        "statement" => {
+            let (statement, instance) = raw.split_at_checked(32).ok_or(BadOrder)?;
+            Bind::Statement {
+                statement: statement.try_into().map_err(|_| BadOrder)?,
+                instance: instance.try_into().map_err(|_| BadOrder)?,
+            }
+        }
         _ => return Err(BadOrder),
     })
 }

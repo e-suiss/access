@@ -557,11 +557,20 @@ where
         if let Err(r) = cooled(tier, verified.created_ms, now) {
             return r;
         }
-        let claim =
-            match issue_claim(devices, &kit, session.subject, statement, &verified, now).await {
-                Ok(c) => c,
-                Err(r) => return r,
-            };
+        let claim = match issue_claim(
+            devices,
+            &kit,
+            session.subject,
+            statement,
+            act.instance,
+            &verified,
+            now,
+        )
+        .await
+        {
+            Ok(c) => c,
+            Err(r) => return r,
+        };
         // §9.14.1 step 4: the contribution, with the statement and the Claim as proofs
         let verdict = devices
             .approvals
@@ -595,9 +604,10 @@ where
         Reply::json(
             200,
             json!({
-                "redirect": approval_redirect(&body.redirect_uri, &exercise.0, &act.render_digest.0, &body.state),
+                "redirect": approval_redirect(&body.redirect_uri, &exercise.0, &act.render_digest.0, &claim.0, &body.state),
                 "exercise": b64url_encode(&exercise.0),
                 "render_digest": b64url_encode(&act.render_digest.0),
+                "claim": b64url_encode(&claim.0),
             }),
         )
     }
@@ -803,13 +813,15 @@ fn cooled(tier: Tier, created_ms: u64, now: u64) -> Result<(), Reply> {
     })
 }
 
-/// SI-5, §10.1.5: the `authentication` Claim bound to the statement, issued now through the
-/// realm's courier; only an admitted Claim is a proof.
+/// SI-5, §10.1.5, OP-149 m.33 (c): the `authentication` Claim bound to the statement and to the
+/// approver's Instance, issued now through the realm's courier; only an admitted Claim is a
+/// proof.
 async fn issue_claim<A, I, P, Q: ApprovalClaims>(
     devices: &Devices<A, I, P, Q>,
     kit: &RealmKit,
     subject: [u8; 16],
     statement: [u8; 32],
+    instance: Id,
     verified: &Verified,
     now: u64,
 ) -> Result<Id, Reply> {
@@ -820,7 +832,10 @@ async fn issue_claim<A, I, P, Q: ApprovalClaims>(
         assurance: verified.levels.clone(),
         webauthn: Some(verified.detail),
         evidence: Some(verified.evidence),
-        bind: Bind::Statement(statement),
+        bind: Bind::Statement {
+            statement,
+            instance: instance.0,
+        },
     });
     match devices.claims.issue(kit.tenant, kit.realm, &order).await {
         Ok(Issued::Answered {

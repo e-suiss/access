@@ -1121,6 +1121,7 @@ fn sample_plan() -> Plan {
             allowed: None,
             resource_namespace: String::from("work.ledger"),
             resource_path_prefix: String::from("led_"),
+            step_up: None,
         }),
         ..plan()
     }
@@ -1317,6 +1318,30 @@ fn a_sample_names_a_tenant_and_a_valid_action() {
     assert!(resource("idp", "idp.client", "led_").is_err());
     assert!(resource("upper-ns", "Work.ledger", "led_").is_err());
     assert!(resource("empty-prefix", "work.ledger", "").is_err());
+    // OP-149 m.33 (c): the step-up is absent by default, "aal2" is its one level, and it needs
+    // an allowed action to attach to
+    assert_eq!(ok.step_up, None);
+    let stepped = |name: &str, allowed: &str, step_up: &str| {
+        let path = dir.join(format!("{name}.toml"));
+        std::fs::write(
+            &path,
+            format!(
+                "platform = 'platform'\ntenants = ['acme']\n[sample]\nrealm = 'acme'\nnamespace = 'work'\naction = 'approve'\n{allowed}step_up = '{step_up}'\n[test_user]\nrealm = 'acme'\nidentifier = 'test@acme.example'\npassword = 'correct horse battery staple'\n"
+            ),
+        )
+        .unwrap();
+        Plan::load(&path)
+    };
+    assert_eq!(
+        stepped("aal2", "allowed = 'commit'\n", "aal2")
+            .unwrap()
+            .sample
+            .unwrap()
+            .step_up,
+        Some(StepUp::Aal2)
+    );
+    assert!(stepped("aal3", "allowed = 'commit'\n", "aal3").is_err());
+    assert!(stepped("no-allowed", "", "aal2").is_err());
 }
 
 // OP-149 m.26 (b), TI-9: the test user names one of the plan's tenants and takes its password
@@ -1366,7 +1391,7 @@ fn a_test_user_takes_its_password_from_one_named_place() {
 
 /// The plan with the allowed Exercise of OP-149 m.29 (b): the test user may `work:commit` under
 /// an approval it contributes itself.
-fn approve_plan() -> Plan {
+fn approve_plan(step_up: Option<StepUp>) -> Plan {
     Plan {
         sample: Some(SamplePlan {
             realm: String::from("acme"),
@@ -1375,6 +1400,7 @@ fn approve_plan() -> Plan {
             allowed: Some(String::from("commit")),
             resource_namespace: String::from("work.ledger"),
             resource_path_prefix: String::from("led_"),
+            step_up,
         }),
         ..local_plan()
     }
@@ -1463,6 +1489,20 @@ fn commit_intent(allowed: &serde_json::Value, ledger: &str, now: u64) -> serde_j
 // it.
 #[tokio::test]
 async fn the_local_client_approves_an_allowed_exercise() {
+    approval_through_the_local_client("bootstrap-approve", None).await;
+}
+
+// OP-149 m.33 (c), §13.7.3, §8.17.5.4: with `step_up = "aal2"` the allowed Grant also asks for
+// the actor's fresh AAL2 authentication bound to their Instance, so the first commit leaves an
+// authentication term unmet beside the approval (Work's step-up); the one passkey assertion on
+// the surface issues a Claim bound to H(AAS) and to the approver's Instance, and the second
+// commit, with the contribution and that Claim, is allowed
+#[tokio::test]
+async fn the_local_client_approves_an_allowed_exercise_with_a_step_up() {
+    approval_through_the_local_client("bootstrap-approve-step-up", Some(StepUp::Aal2)).await;
+}
+
+async fn approval_through_the_local_client(world: &str, step_up: Option<StepUp>) {
     use access_http::adp::adapters::{Discovery, router as adp_router};
     use access_http::login::{me_router, router as login_router};
     use access_http::product::adapters::router as product_router;
@@ -1489,9 +1529,9 @@ async fn the_local_client_approves_an_allowed_exercise() {
     use crate::login::{HsmKits, RealmKeks};
     use crate::product::{PgSubjects, PgTenants};
 
-    let (w, signer) = World::open("bootstrap-approve", true).await;
+    let (w, signer) = World::open(world, true).await;
     let signer = signer.unwrap();
-    let plan = approve_plan();
+    let plan = approve_plan(step_up);
     schedule(&signer);
     schedule(&signer);
     let first = w.run(&plan).await;
@@ -1510,6 +1550,11 @@ async fn the_local_client_approves_an_allowed_exercise() {
     assert_eq!(allowed["resource"]["namespace"], "work.ledger");
     assert_eq!(allowed["resource"]["path_prefix"], "led_");
     assert_eq!(allowed["contribution"]["class"], "approve");
+    // OP-149 m.33 (c): the summary names the step-up exactly when the plan asks for one
+    assert_eq!(
+        allowed.get("step_up").and_then(serde_json::Value::as_str),
+        step_up.map(StepUp::word)
+    );
     assert_eq!(
         allowed["basis"]["holding"]["holder"],
         serde_json::Value::from(user.party.clone())
@@ -1708,6 +1753,15 @@ async fn the_local_client_approves_an_allowed_exercise() {
             .unwrap()
             .len(),
         32
+    );
+    // OP-149 m.33 (c): the first commit asked for the step-up exactly when the plan did, and
+    // the approver's Claim came back from the surface either way
+    assert_eq!(done["step_up"], step_up.is_some(), "{done}");
+    assert_eq!(
+        access_kernel::json::b64url_decode(done["claim"].as_str().unwrap())
+            .unwrap()
+            .len(),
+        16
     );
     assert_eq!(done["receipt"]["exercise"], done["exercise"]);
     assert_ne!(done["contribution"], done["exercise"]);

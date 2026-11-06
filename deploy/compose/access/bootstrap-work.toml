@@ -15,6 +15,13 @@ issuer_style = "path"
 # OP-149 m.30 (a): the allowed Grant covers the resources of `resource_namespace` whose first
 # path element starts with `resource_path_prefix` (Work E-45 item 5); the summary reports both
 # as `test_user.allowed.resource`, and an intent names `{namespace, path: ["led_…"]}`.
+# OP-149 m.33 (c): with `step_up`, the allowed Grant also asks for the test user's fresh AAL2
+# authentication bound to their device Instance (§13.7.3 CT1: phishing-resistant, within 15
+# minutes), so the first commit leaves an `authentication` term unmet beside the approval
+# (Work's `next: step_up`) and the one passkey assertion on the Approval Surface meets both;
+# the summary says `test_user.allowed.step_up`, and the approval's redirect carries the Claim
+# the product passes back as `claim_ref`. The only level is "aal2". The Grant is derived from
+# its bounds, so an existing realm gets a second Grant when this changes (OP-73).
 [sample]
 realm = "acme"
 namespace = "work"
@@ -22,6 +29,7 @@ action = "approve"
 allowed = "commit"
 resource_namespace = "work.ledger"
 resource_path_prefix = "led_"
+step_up = "aal2"
 
 # OP-149 m.26 (b), (e): a test user in acme with a password (AAL1), a software passkey (AAL2;
 # its key is `access/bootstrap/test-user-passkey` in the server's token, beside the device key

@@ -251,20 +251,22 @@ fn percent(s: &str) -> String {
     out
 }
 
-/// Where a completed approval sends the browser: `redirect_uri` with `exercise` and
-/// `render_digest` (base64url) and the echoed `state` (OP-149 m.9).
+/// Where a completed approval sends the browser: `redirect_uri` with `exercise`,
+/// `render_digest` and `claim` (base64url) and the echoed `state` (OP-149 m.9, m.33 (c)).
 #[must_use]
 pub fn approval_redirect(
     redirect_uri: &str,
     exercise: &[u8; 32],
     render_digest: &[u8; 32],
+    claim: &[u8; 16],
     state: &str,
 ) -> String {
     let sep = if redirect_uri.contains('?') { '&' } else { '?' };
     format!(
-        "{redirect_uri}{sep}exercise={}&render_digest={}&state={}",
+        "{redirect_uri}{sep}exercise={}&render_digest={}&claim={}&state={}",
         b64url_encode(exercise),
         b64url_encode(render_digest),
+        b64url_encode(claim),
         percent(state)
     )
 }
@@ -608,14 +610,14 @@ fn approve() -> Value {
     };
     json!({ "get": {
             "operationId": "approve",
-            "summary": "The approval call (OP-149 m.9, OP-150 m.3 (r)): the hosted Approval Surface for a request pushed to POST /v1/approve/requests; the page shows the render the decision point produced, takes one passkey assertion over H(AAS) and sends the browser back to redirect_uri with exercise, render_digest and state; the result is confirmed with GET /access/v1/exercises/{id}.",
+            "summary": "The approval call (OP-149 m.9, OP-150 m.3 (r)): the hosted Approval Surface for a request pushed to POST /v1/approve/requests; the page shows the render the decision point produced, takes one passkey assertion over H(AAS) and sends the browser back to redirect_uri with exercise, render_digest, claim and state; the result is confirmed with GET /access/v1/exercises/{id}.",
             "parameters": [
                 q("request", "The authority request's digest (base64url, 32 bytes) or a pushed request_uri (urn:ietf:params:oauth:request_uri:…)."),
-                q("redirect_uri", "Exactly a redirect URI an active client of the realm registered."),
+                q("redirect_uri", "Exactly a redirect URI an active client of the realm registered, or one an active platform product client registered in the platform realm (OP-149 m.33 (d); RFC 6749 §3.1.2 exact match)."),
                 q("state", "1 to 512 printable ASCII characters, echoed unchanged."),
             ],
             "responses": {
-                "200": { "description": "The hosted approval page (text/html), which opens the flow with POST /v1/approve/flows and, once approved, goes to redirect_uri?exercise=<base64url ExerciseID>&render_digest=<base64url>&state=<state>." },
+                "200": { "description": "The hosted approval page (text/html), which opens the flow with POST /v1/approve/flows and, once approved, goes to redirect_uri?exercise=<base64url ExerciseID>&render_digest=<base64url>&claim=<base64url ClaimID>&state=<state>." },
                 "400": problem("invalid-approval-request, invalid-state or invalid-redirect-uri; the browser is not redirected."),
                 "404": problem("approval-request-unknown: nothing was pushed under this request, or it expired."),
                 "503": problem("Temporarily unavailable."),

@@ -172,12 +172,17 @@ pub struct ApprovalFinish {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ApprovalFinished {
-    /// Where the browser goes: `redirect_uri` with `exercise`, `render_digest` and `state`.
+    /// Where the browser goes: `redirect_uri` with `exercise`, `render_digest`, `claim` and
+    /// `state`.
     pub redirect: String,
     /// The contribution `ExerciseID`, base64url.
     pub exercise: String,
     /// The render digest, base64url.
     pub render_digest: String,
+    /// The approver's `authentication` Claim, base64url `ClaimID`: bound to H(AAS) and to the
+    /// approver's Instance, so the product passes it as `claim_ref` when its `REQUIRE_ACTION`
+    /// also left an `authentication` term unmet (OP-149 m.33 (c), §13.7.3).
+    pub claim: String,
 }
 
 /// What the surface reads from a pushed request.
@@ -504,11 +509,12 @@ pub fn components() -> Value {
         ),
         "ApprovalFinished": object(
             &json!({
-                "redirect": { "type": "string", "description": "redirect_uri with exercise, render_digest and state (OP-149 m.9)." },
+                "redirect": { "type": "string", "description": "redirect_uri with exercise, render_digest, claim and state (OP-149 m.9, m.33 (c))." },
                 "exercise": b64_schema("The contribution ExerciseID, 32 bytes."),
                 "render_digest": b64_schema("The render digest, 32 bytes."),
+                "claim": b64_schema("The approver's authentication ClaimID, 16 bytes: bound to H(AAS) and to the approver's Instance; passed as claim_ref when the REQUIRE_ACTION also left an authentication term unmet (OP-149 m.33 (c))."),
             }),
-            &["redirect", "exercise", "render_digest"],
+            &["redirect", "exercise", "render_digest", "claim"],
         ),
     })
 }

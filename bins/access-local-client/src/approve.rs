@@ -280,6 +280,27 @@ fn text_at(v: &Value, path: &[&str]) -> Option<String> {
     at(v, path).as_str().map(String::from)
 }
 
+/// This client's own `REQUIRE_ACTION` as the product's PEP: its nonce, and whether the decision
+/// also left an `authentication` term unmet, the step-up the approval's Claim meets (§8.17.5.4,
+/// OP-149 m.33 (c)).
+struct Opening {
+    nonce: [u8; 16],
+    step_up: bool,
+}
+
+/// Whether the `REQUIRE_ACTION` explanation leaves an `authentication` Claim term unmet
+/// (explanation.cddl `unmet-term`): Work's `next: step_up`.
+fn asks_step_up(decision: &Value) -> bool {
+    at(decision, &["context", "unmet"])
+        .as_array()
+        .is_some_and(|unmet| {
+            unmet.iter().any(|u| {
+                *at(u, &["term", "proof_kind"]) == "claim"
+                    && *at(u, &["term", "class"]) == "authentication"
+            })
+        })
+}
+
 /// The `REQUIRE_ACTION` the approval answers (§9.14.1 step 1): the request a product built, or
 /// this client's own commit of the intent as the product's PEP.
 async fn opened(
@@ -288,7 +309,7 @@ async fn opened(
     intent: &IntentEnvelope,
     digest: Digest,
     now: u64,
-) -> Result<(Value, Option<[u8; 16]>), ClientError> {
+) -> Result<(Value, Option<Opening>), ClientError> {
     if let Some(given) = a.request {
         let ra = at(given, &["require_action"]);
         if digest_of(at(ra, &["intent"]), "request")? != digest
@@ -311,7 +332,11 @@ async fn opened(
             body: asked.to_string(),
         });
     }
-    Ok((authority_request(a, &nonce, digest, now), Some(nonce)))
+    let opening = Opening {
+        nonce,
+        step_up: asks_step_up(&asked),
+    };
+    Ok((authority_request(a, &nonce, digest, now), Some(opening)))
 }
 
 /// `POST /v1/approve/requests` (OP-149 m.9): the request with the contribution the device
@@ -406,17 +431,22 @@ async fn finish(
 }
 
 /// §9.14.1 step 5: the product commits again with the contribution as its proof, and the
-/// ALLOW's receipt is verified; returns the Exercise and the verified receipt.
+/// approver's `authentication` Claim too when the opening asked for a step-up (OP-149 m.33 (c)),
+/// and the ALLOW's receipt is verified; returns the Exercise and the verified receipt.
 async fn allowed_receipt(
     http: &Http,
     a: &Approve<'_>,
     intent: &IntentEnvelope,
     digest: Digest,
-    nonce: &[u8; 16],
+    opening: &Opening,
     contribution: &Value,
+    claim: &Value,
 ) -> Result<(String, Value), ClientError> {
-    let proof = json!({ "contribution": contribution });
-    let allowed = adp::commit(http, &exercise(a, intent, nonce, vec![proof])).await?;
+    let mut proofs = vec![json!({ "contribution": contribution })];
+    if opening.step_up {
+        proofs.push(json!({ "claim_ref": claim }));
+    }
+    let allowed = adp::commit(http, &exercise(a, intent, &opening.nonce, proofs)).await?;
     if at(&allowed, &["decision"]) != &Value::Bool(true) {
         return Err(ClientError::Unexpected {
             step: "exercise (approved)",
@@ -440,10 +470,11 @@ async fn allowed_receipt(
     Ok((exercise_id, receipt))
 }
 
-/// Runs the approval and returns `{instance, exercise, contribution, render_digest, receipt}`:
-/// the device Instance the approval session was bound to, the allowed Exercise with its
-/// verified receipt when this client exercised the intent, the contribution Exercise and the
-/// render digest either way.
+/// Runs the approval and returns `{instance, exercise, contribution, claim, step_up,
+/// render_digest, receipt}`: the device Instance the approval session was bound to, the allowed
+/// Exercise with its verified receipt when this client exercised the intent, the contribution
+/// Exercise, the approver's `authentication` Claim and the render digest either way, and whether
+/// the opening asked for a step-up that the Claim met (OP-149 m.33 (c)).
 ///
 /// # Errors
 /// [`ClientError`]; a decision the surface or the ADP refuses with is
@@ -457,25 +488,30 @@ pub async fn approve(http: &Http, a: &Approve<'_>) -> Result<Value, ClientError>
     let mut jar = sign_in(http, a.issuer, a.identifier, Credential::Passkey(a.passkey)).await?;
     // OP-149 m.32: the approval session carries the device's existing Instance
     let instance = attach_device(http, a.issuer, &mut jar, a.device).await?;
-    let (request, nonce) = opened(http, a, &intent, digest, now).await?;
+    let (request, opening) = opened(http, a, &intent, digest, now).await?;
     let request_uri = push(http, a, request, digest, now).await?;
     let state = random_text::<8>()?;
     let mine =
         render::of(None, &intent, render::DEFAULT_LOCALE).map_err(|_| ClientError::Encode)?;
     let started = start(http, a, &mut jar, &request_uri, &state, &mine).await?;
+    // §8.17.5.4, §13.7.3: the one passkey assertion over H(AAS) is the approval and, bound to
+    // the approver's Instance, the step-up of the same actor
     let finished = finish(http, a, &mut jar, &started, &state).await?;
     let render_digest = at(&finished, &["render_digest"]).clone();
     let my_digest = render::digest(&mine).map_err(|_| ClientError::Encode)?;
     let contribution = at(&finished, &["exercise"]).clone();
+    let claim = at(&finished, &["claim"]).clone();
     let mut out = json!({
         "instance": instance,
         "contribution": contribution,
+        "claim": claim,
+        "step_up": opening.as_ref().is_some_and(|o| o.step_up),
         "render_digest": render_digest,
         "render_digest_verified": render_digest == b64url_encode(&my_digest.0),
     });
-    if let Some(nonce) = nonce {
+    if let Some(opening) = opening {
         let (exercise_id, receipt) =
-            allowed_receipt(http, a, &intent, digest, &nonce, &contribution).await?;
+            allowed_receipt(http, a, &intent, digest, &opening, &contribution, &claim).await?;
         if let Some(o) = out.as_object_mut() {
             o.insert(String::from("exercise"), Value::from(exercise_id));
             o.insert(String::from("receipt"), receipt);
@@ -557,5 +593,19 @@ mod tests {
             rfc3339(1_700_000_000_123).unwrap(),
             "2023-11-14T22:13:20.123Z"
         );
+    }
+
+    // OP-149 m.33 (c), §8.17.5.4: an unmet authentication Claim term in the REQUIRE_ACTION is
+    // the step-up the approval also meets; an approval term alone is not
+    #[test]
+    fn a_step_up_is_an_unmet_authentication_term() {
+        let approval = json!({ "term": { "proof_kind": "contribution", "class": "approve", "binding": "intent_digest" }, "missing": 1, "position": "anchor", "satisfiable_by_actor": true });
+        let authentication = json!({ "term": { "proof_kind": "claim", "class": "authentication", "binding": "actor_instance", "freshness_ms": 900000, "assurance": { "aal": 2, "phishing_resistant": 1 } }, "missing": 1, "position": "anchor", "satisfiable_by_actor": true });
+        let decision = |unmet: Vec<Value>| json!({ "decision": false, "context": { "outcome": "require_action", "unmet": unmet } });
+        assert!(!asks_step_up(&decision(vec![approval.clone()])));
+        assert!(asks_step_up(&decision(vec![approval, authentication])));
+        assert!(!asks_step_up(
+            &json!({ "decision": true, "context": { "outcome": "allow" } })
+        ));
     }
 }
