@@ -297,11 +297,13 @@ mod tests {
         .find(|p| p.is_file())
         .unwrap();
         let label = format!("kek-init-{}", std::process::id());
-        let out = std::process::Command::new("softhsm2-util")
-            .args(["--init-token", "--free", "--label", &label])
-            .args(["--pin", "1234-test-only", "--so-pin", "5678-test-only"])
-            .output()
-            .unwrap();
+        let out = suiss_crypto::pkcs11::token_tests::init_softhsm_token(
+            None,
+            &label,
+            "1234-test-only",
+            "5678-test-only",
+        )
+        .unwrap();
         assert!(out.status.success(), "{out:?}");
         Box::leak(Box::new(
             KeyStore::open(

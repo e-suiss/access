@@ -1,5 +1,4 @@
 use std::path::PathBuf;
-use std::process::Command;
 use std::sync::OnceLock;
 
 use super::*;
@@ -38,19 +37,8 @@ fn store() -> &'static KeyStore {
             std::env::var_os("SOFTHSM2_CONF").is_some(),
             "run the PKCS#11 tests through `just test`, which sets SOFTHSM2_CONF (OP-69)"
         );
-        let out = Command::new("softhsm2-util")
-            .args([
-                "--init-token",
-                "--free",
-                "--label",
-                &token(),
-                "--pin",
-                PIN,
-                "--so-pin",
-                "5678-test-only",
-            ])
-            .output()
-            .unwrap();
+        let out =
+            super::token_tests::init_softhsm_token(None, &token(), PIN, "5678-test-only").unwrap();
         assert!(out.status.success(), "{out:?}");
         KeyStore::open(&module(), &token(), &Secret::new(String::from(PIN))).unwrap()
     })

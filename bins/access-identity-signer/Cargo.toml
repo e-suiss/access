@@ -25,6 +25,7 @@ tokio = { workspace = true, features = ["macros", "net", "rt-multi-thread", "tim
 tracing = { workspace = true, features = ["std"] }
 
 [dev-dependencies]
+suiss-crypto = { workspace = true, features = ["pkcs11", "testing"] }
 toml = { workspace = true, features = ["std", "parse", "serde"] }
 
 [lints]

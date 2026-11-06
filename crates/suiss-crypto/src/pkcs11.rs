@@ -605,3 +605,6 @@ impl Kek for HsmKek {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(any(test, feature = "testing"))]
+pub mod token_tests;

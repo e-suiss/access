@@ -20,5 +20,8 @@ thiserror = { workspace = true, features = ["std"] }
 tokio = { workspace = true, features = ["macros", "net", "rt-multi-thread", "time"] }
 tracing = { workspace = true, features = ["std"] }
 
+[dev-dependencies]
+suiss-crypto = { workspace = true, features = ["pkcs11", "testing"] }
+
 [lints]
 workspace = true

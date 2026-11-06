@@ -41,12 +41,13 @@ fn token(dir: &std::path::Path) -> (String, PathBuf) {
     )
     .expect("softhsm config");
     let label = format!("server-lockdown-{}", std::process::id());
-    let out = Command::new("softhsm2-util")
-        .env("SOFTHSM2_CONF", &conf)
-        .args(["--init-token", "--free", "--label", &label, "--pin", PIN])
-        .args(["--so-pin", "5678-test-only"])
-        .output()
-        .expect("softhsm2-util");
+    let out = suiss_crypto::pkcs11::token_tests::init_softhsm_token(
+        Some(&conf),
+        &label,
+        PIN,
+        "5678-test-only",
+    )
+    .expect("softhsm2-util");
     assert!(out.status.success(), "{out:?}");
     (label, conf)
 }
