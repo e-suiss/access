@@ -14,7 +14,7 @@
 #[path = "../../../crates/identity-oauth/tests/support/mod.rs"]
 mod support;
 
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use access_crypto::Secret;
 use access_crypto::envelope::SoftKek;
@@ -354,5 +354,4 @@ async fn the_headless_client_runs_the_code_flow() {
 
     let _ = stop.send(());
     let _ = served.await;
-    drop(Mutex::new(()));
 }

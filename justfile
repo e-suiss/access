@@ -441,7 +441,7 @@ vet:
     cargo vet --locked
 
 # OP-76, OP-102, OP-139
-published := "-p esuiss-crypto -p esuiss-ledger -p esuiss-retention -p esuiss-restriction -p esuiss-sandbox -p esuiss-access-kernel -p esuiss-access-verify"
+published := "-p esuiss-crypto -p esuiss-ledger -p esuiss-retention -p esuiss-restriction -p esuiss-sandbox -p esuiss-access-kernel -p esuiss-access-verifier -p esuiss-access-sdk -p esuiss-access-verify"
 
 # OP-140 m.3: copy the shared vectors into the suiss-crypto package and list their SHA-256
 shared-vectors:
