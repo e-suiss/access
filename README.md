@@ -166,6 +166,19 @@ docker compose -f deploy/compose/access.yaml run --rm local-client stream-status
 
 A retired client is retired for good; the next `bootstrap` run registers a new one. The stream status route is `GET`/`POST /access/v1/platform/streams/{id}/status`, with the same rules as a stream's own `/ssf/status`; `disabled` ends the stream. Events that happened before a stream was opened are not delivered to it.
 
+### Call another product
+
+A platform product that needs to call another platform product (Work calling Relay, say) asks the platform realm's token endpoint for a service token: `grant_type=client_credentials`, its RFC 7523 client assertion, a DPoP proof, and `resource=<the other product's client_id>` (RFC 8707), with no `authorization_details`. The answer is an `at+jwt` whose `aud` is the other product's `client_id`, `client_id` the caller, `access_tenant` the caller's `tnt_…` tenant, `sub` the pairwise id the other product reads of the caller's service Party (the same value `subjects:resolve` gives it for that Party), `cnf.jkt` the proof key, valid for at most five minutes. It says who is calling and nothing more: it carries no `authorization_details`, no scope and no authority. The product it is for verifies it against the realm's JWKS, checks `aud`, `cnf` and `exp`, or asks `/introspect` with its own client assertion. The caller must have paired with the platform realm first, so it holds a service Party there; naming itself, a client that is not a platform product, or anything else is `invalid_target`. A request with `authorization_details` is the authority path, unchanged.
+
+```sh
+docker compose -f deploy/compose/access.yaml run --rm local-client service-token \
+  --issuer https://access-server:8443/realms/platform --ca /var/lib/access/certs/ca.crt \
+  --client-id <clients[].client_id of work> --client-key /etc/access/products/work-client.private.jwk \
+  --resource <clients[].client_id of relay>
+```
+
+The client signs the assertion and the DPoP proof with the same product key, so `cnf.jkt` is that key's thumbprint; it prints the token response with `dpop_jkt`.
+
 Signed answers start a while after a domain is created. A new domain's first signing key is published before it may sign (65 minutes in the default schedule), and no flag shortens that. Until then, `application/cose` key lookups answer `503` with `"reason": "signer-no-key"`, and decisions carry no signed receipt. The `application/json` form of a key lookup works from the start. A `503` from `/access/v1` always carries a stable `reason`, and a `400` names the part of the body it refused in `errors[]` (`pointer`, `code`).
 
 To register a product's platform client, put its public keys as JWK files in a directory and run the bootstrap with the product plan:

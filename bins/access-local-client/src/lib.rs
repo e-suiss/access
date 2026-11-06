@@ -3,8 +3,9 @@
 //! authorization code flow with PKCE and DPoP through the Frontend API's JSON login, with a
 //! password or the test user's software passkey, optionally naming a platform product as the
 //! token's RFC 8707 resource; an approval on the hosted Approval Surface; a `party_compromise`
-//! Claim handed to Claim Ingest with a product's PEP certificate; and a platform client's
-//! stream status. TLS is verified against the local CA, always; `http://` is refused.
+//! Claim handed to Claim Ingest with a product's PEP certificate; a platform client's stream
+//! status; and a platform product's service token for another product (OP-149 m.31 (a)). TLS
+//! is verified against the local CA, always; `http://` is refused.
 
 pub mod adp;
 pub mod approve;

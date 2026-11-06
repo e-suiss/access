@@ -21,6 +21,8 @@
 //! access-local-client stream-status --api <base> --issuer <platform issuer> --ca <ca.crt>
 //!     --client-id <id> --client-key <private.jwk> --stream <id> [--status <enabled|paused|disabled>
 //!     [--reason <text>]] [--connect <ip:port>]
+//! access-local-client service-token --issuer <platform issuer> --ca <ca.crt> --client-id <id>
+//!     --client-key <private.jwk> --resource <the other product's client_id> [--connect <ip:port>]
 //! ```
 
 use std::collections::BTreeMap;
@@ -42,12 +44,13 @@ use access_local_client::passkey::{Passkey, relying_party};
 use access_local_client::platform::{PlatformClient, StatusChange};
 use access_local_client::token::Token;
 
-const USAGE: &str = "usage: access-local-client <login | approve | compromise | stream-status> --<option> <value>...\n\
+const USAGE: &str = "usage: access-local-client <login | approve | compromise | stream-status | service-token> --<option> <value>...\n\
   login:         --issuer --ca --client-id --redirect-uri --identifier (--password-env | --passkey --hsm-module --hsm-token --hsm-pin-file) [--resource] [--scope] [--connect]\n\
   approve:       --issuer --api --ca --cert --key --redirect-uri --identifier --hsm-module --hsm-token --hsm-pin-file --device-key --passkey\n\
                  --domain --party --grant --grant-since --contribute-grant --contribute-since (--intent | --intent-json) [--instance] [--reason] [--request] [--connect]\n\
   compromise:    --api --ca --cert --key --domain --issuer-party --party [--occurred-at] [--connect]\n\
-  stream-status: --api --issuer --ca --client-id --client-key --stream [--status [--reason]] [--connect]";
+  stream-status: --api --issuer --ca --client-id --client-key --stream [--status [--reason]] [--connect]\n\
+  service-token: --issuer --ca --client-id --client-key --resource [--connect]";
 
 /// `--name value` pairs.
 struct Options(BTreeMap<String, String>);
@@ -303,6 +306,23 @@ async fn run(command: &str, o: &Options) -> Result<serde_json::Value, String> {
             });
             client
                 .stream_status(&http, o.required("stream")?, change.as_ref())
+                .await
+                .map_err(step)
+        }
+        "service-token" => {
+            let jwk = String::from_utf8(o.file("client-key")?)
+                .map_err(|_| "--client-key is not a text file")?;
+            let key = Es256Key::from_private_jwk(&jwk).map_err(step)?;
+            let http = http(o, None)?;
+            let issuer = o.required("issuer")?;
+            let client = PlatformClient {
+                api_base: issuer,
+                issuer,
+                client_id: o.required("client-id")?,
+                key: &key,
+            };
+            client
+                .service_token(&http, o.required("resource")?)
                 .await
                 .map_err(step)
         }

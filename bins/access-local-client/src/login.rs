@@ -84,7 +84,7 @@ fn form_encode(s: &str, out: &mut String) {
     }
 }
 
-fn form(pairs: &[(&str, &str)]) -> String {
+pub(crate) fn form(pairs: &[(&str, &str)]) -> String {
     let mut out = String::new();
     for (k, v) in pairs {
         if !out.is_empty() {
