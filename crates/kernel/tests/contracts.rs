@@ -406,16 +406,19 @@ fn decision_vectors_are_explanations() {
                 continue;
             };
             let value = decoded(h);
-            let d = decision_from_value(&value)
-                .unwrap_or_else(|err| panic!("{file} {}: {err:?}", case["id"]));
-            assert_eq!(hex(&dcbor::encode(&decision_value(&d), LIMITS).unwrap()), h);
-            let x = explanation_from_value(&value)
+            let decision = decision_from_value(&value)
                 .unwrap_or_else(|err| panic!("{file} {}: {err:?}", case["id"]));
             assert_eq!(
-                hex(&dcbor::encode(&explanation_value(&x), LIMITS).unwrap()),
+                hex(&dcbor::encode(&decision_value(&decision), LIMITS).unwrap()),
                 h
             );
-            assert_eq!(x.decision().as_ref(), Some(&d));
+            let explained = explanation_from_value(&value)
+                .unwrap_or_else(|err| panic!("{file} {}: {err:?}", case["id"]));
+            assert_eq!(
+                hex(&dcbor::encode(&explanation_value(&explained), LIMITS).unwrap()),
+                h
+            );
+            assert_eq!(explained.decision().as_ref(), Some(&decision));
             k.validate("decision", &value).unwrap();
             e.validate("explanation", &value).unwrap();
             seen += 1;
