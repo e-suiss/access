@@ -1,5 +1,7 @@
 //! Validity contract (§9.12, OP-108 m.1, m.2).
 
+pub mod ceiling;
+
 use alloc::collections::BTreeSet;
 use alloc::string::String;
 use alloc::vec::Vec;

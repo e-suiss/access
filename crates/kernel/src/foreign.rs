@@ -15,7 +15,7 @@ use crate::model::{AuthoritySet, TrustedTime, Window};
 use crate::pap::{self, Expected, Pap, PapError};
 use crate::verify::Backend;
 use crate::verify::cose::{KeySet, PublicKey};
-use crate::verify::key_scope::{BindingKey, KeyScopeError, verify_metadata};
+use crate::verify::key_scope::{BindingKey, DomainMetadata, KeyScopeError, verify_metadata};
 
 /// The use of an Acceptance whose issuer is a foreign domain.
 pub const USE: &str = "foreign-authority";
@@ -247,13 +247,19 @@ pub struct Use<'a> {
     pub actor_key: &'a PublicKey,
     /// The class the bridging Grant names.
     pub class: &'a str,
+    /// What remains of each offline slice of the PAP at this domain, by budget-term digest: the
+    /// slice amount less what earlier uses here drew (§9.15A.3, INV-21). A term not kept is not
+    /// usable.
+    pub remaining: &'a BTreeMap<Digest, u64>,
 }
 
 /// Verifies a foreign PAP for one use under a `foreign-authority` gate, in the order of
 /// OP-143 m.13 (d): metadata under the pinned binding keys, its freshness, L2-PAP-3 with this
 /// domain as audience and the request nonce, the holder key, the class and the cutoff. The
-/// verifying domain keeps no slice and checks no local requirement: a PAP that carries either
-/// is refused by L2-PAP-3.
+/// verifying domain checks no local requirement, so a PAP that carries one is refused by
+/// L2-PAP-3; the home domain's offline slice is honoured against `remaining`, what this domain
+/// has left of it (§9.15A.3, INV-21). The verified PAP comes back with the verified metadata,
+/// for the status and key checks that follow.
 ///
 /// # Errors
 /// [`ForeignError`], the first step that fails.
@@ -262,7 +268,7 @@ pub fn verify(
     gate: &ForeignGate,
     presented: &Presented<'_>,
     used: &Use<'_>,
-) -> Result<Pap, ForeignError> {
+) -> Result<(Pap, DomainMetadata), ForeignError> {
     // OP-143 m.13 (d)
     let mut metadata = verify_metadata(backend, presented.metadata, &gate.issuer.trusted())
         .map_err(ForeignError::Metadata)?;
@@ -293,7 +299,7 @@ pub fn verify(
             now: used.now,
             catalog: used.catalog,
             satisfied: &BTreeSet::new(),
-            remaining: &BTreeMap::new(),
+            remaining: used.remaining,
             metadata_fresh: true,
             understood: &BTreeSet::new(),
             last_refresh: None,
@@ -312,7 +318,7 @@ pub fn verify(
     if gate.issued_until.is_some_and(|u| pap.iat > u) {
         return Err(ForeignError::Cutoff);
     }
-    Ok(pap)
+    Ok((pap, metadata))
 }
 
 /// The PAP payload's domain, read before verification to pick the gate.

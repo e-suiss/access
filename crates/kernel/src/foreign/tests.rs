@@ -266,8 +266,10 @@ impl Case {
                 catalog: &Catalog::default(),
                 actor_key: &self.actor_key,
                 class: self.class,
+                remaining: &BTreeMap::new(),
             },
         )
+        .map(|(p, _)| p)
         .map_err(ForeignError::code)
     }
 }
