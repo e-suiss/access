@@ -490,7 +490,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
         p: &Proposal,
         exercise: &Digest,
     ) -> Result<(), AdminError> {
-        let product = |c: &Client| c.platform.as_ref().map(|p| p.product);
+        let product = |c: &Client| c.platform.as_ref().map(|p| p.product.clone());
         let (kind, client_id, platform_product) = match &p.change {
             Change::ClientRegister(c) => {
                 (IdentityKind::ApiClientCreated, c.id.as_str(), product(c))
@@ -518,7 +518,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                 realm: p.realm.as_bytes(),
                 client_id,
                 exercise: &exercise.0,
-                platform_product,
+                platform_product: platform_product.as_ref(),
                 at,
             },
         );

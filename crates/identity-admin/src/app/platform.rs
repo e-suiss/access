@@ -608,7 +608,7 @@ where
                 tenant: *tenant.as_bytes(),
                 domain,
                 registrant: Registrant::Service {
-                    product: caller.product,
+                    product: caller.product.clone(),
                     client: caller.client_id.clone(),
                 },
                 party: Id(row.party),

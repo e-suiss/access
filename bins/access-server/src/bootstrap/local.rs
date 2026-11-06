@@ -130,7 +130,7 @@ pub(crate) enum ProductChange {
 /// What a platform client change committed.
 #[derive(Clone, Debug, Serialize)]
 pub(crate) struct ChangeOut {
-    pub(crate) product: &'static str,
+    pub(crate) product: String,
     pub(crate) client_id: String,
     /// The `idp.*` action committed.
     pub(crate) action: String,
@@ -577,7 +577,7 @@ where
             }
         };
         Ok(ChangeOut {
-            product: p.product.name(),
+            product: p.product.name().to_owned(),
             client_id,
             action,
             event: event.name(),

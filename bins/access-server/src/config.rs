@@ -76,7 +76,7 @@ pub(crate) struct Suiss {
     pub(crate) relay: String,
     /// The management API's base URL.
     pub(crate) management_api: String,
-    /// Product name (`work`, `relay`, `one`) to base URL.
+    /// Product name to base URL.
     #[serde(default)]
     pub(crate) products: BTreeMap<String, String>,
 }

@@ -29,11 +29,8 @@
     },
     "platform_product": {
       "type": "string",
-      "enum": [
-        "work",
-        "relay",
-        "one"
-      ]
+      "pattern": "^[a-z][a-z0-9-]{1,31}$",
+      "description": "The product name the operator gave this platform client (OP-149 m.4, OP-150 m.3 (m)): any registered product, first or third party."
     },
     "at": {
       "$ref": "#/$defs/ms"

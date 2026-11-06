@@ -262,7 +262,7 @@ fn plan() -> Plan {
         tenants: vec![String::from("acme")],
         style: Style::Path,
         products: vec![ProductPlan {
-            product: PlatformProduct::Work,
+            product: PlatformProduct::parse("work").unwrap(),
             display_name: String::from("Suiss Work"),
             client_key: client_key(),
             service_key: PublicKey::Ed25519(
@@ -894,6 +894,42 @@ fn plans_refuse_unknown_settings() {
     std::fs::write(&bad, "platform = \"platform\"\nskip_signatures = true\n").unwrap();
     assert!(Plan::load(&bad).is_err());
     assert!(Plan::load(&dir.join("missing.toml")).is_err());
+}
+
+// OP-150 m.3 (m), MUST-NEVER-13, XI-18: a plan registers any product name within the grammar as
+// a platform product; Suiss's own names are not a list the plan is checked against, and the
+// default display name is the product's own
+#[test]
+fn a_plan_registers_any_product_name() {
+    // OP-149 m.4, OP-69
+    let dir = std::env::temp_dir().join(format!("abs-product-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let key = dir.join("key.jwk");
+    std::fs::write(
+        &key,
+        r#"{"kty":"OKP","crv":"Ed25519","x":"11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo"}"#,
+    )
+    .unwrap();
+    let plan = |name: &str, product: &str| {
+        let path = dir.join(format!("{name}.toml"));
+        std::fs::write(
+            &path,
+            format!(
+                "platform = 'platform'\ntenants = ['acme']\n[[products]]\nproduct = '{product}'\nclient_key = '{k}'\nservice_key = '{k}'\nredirect_uri = 'https://product.example/cb'\n",
+                k = key.display()
+            ),
+        )
+        .unwrap();
+        Plan::load(&path)
+    };
+    for ok in ["work", "relay", "one", "acme-ledger"] {
+        let p = plan(ok, ok).unwrap();
+        assert_eq!(p.products[0].product.name(), ok);
+        assert_eq!(p.products[0].display_name, ok);
+    }
+    for bad in ["Work", "acme_ledger", "a", "urn:suiss:work"] {
+        assert!(plan("bad", bad).is_err(), "{bad}");
+    }
 }
 
 // OP-149 m.22 (g), OP-141 m.18 (d), m.22 (d), TN-111: a realm created through the admin path

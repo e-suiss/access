@@ -37,35 +37,41 @@ pub const BOOTSTRAP_GRANT: u64 = 0;
 /// challenge itself (OP-149 m.16 (a)).
 pub const REGISTER_NONCE_SUFFIX: u8 = 0x01;
 
-/// A Suiss product that pairs with Access as a platform client (OP-149 m.4).
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum PlatformProduct {
-    /// Suiss Work.
-    Work,
-    /// Suiss Relay.
-    Relay,
-    /// Suiss One.
-    One,
-}
+/// The product name a `platform_product` client carries (OP-149 m.4, OP-150 m.3 (m)): a role the
+/// operator gives any registered product, first or third party alike. The name is the operator's
+/// choice within [`Self::GRAMMAR`]; no name is known to the code or treated apart (MUST-NEVER-13,
+/// XI-18).
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct PlatformProduct(String);
 
 impl PlatformProduct {
-    /// Every product.
-    pub const ALL: [Self; 3] = [Self::Work, Self::Relay, Self::One];
+    /// The name grammar: a lowercase ASCII letter, then 1 to 31 lowercase letters, digits or
+    /// hyphens (OP-150 m.3 (m)).
+    pub const GRAMMAR: &'static str = "^[a-z][a-z0-9-]{1,31}$";
+
+    /// The longest name.
+    pub const MAX_LEN: usize = 32;
+
+    /// The product with this wire name, if the name fits the grammar.
+    #[must_use]
+    pub fn parse(name: &str) -> Option<Self> {
+        let mut chars = name.chars();
+        let first = chars.next()?;
+        let rest = chars.all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-');
+        (first.is_ascii_lowercase() && rest && (2..=Self::MAX_LEN).contains(&name.len()))
+            .then(|| Self(String::from(name)))
+    }
 
     /// The wire name.
     #[must_use]
-    pub const fn name(self) -> &'static str {
-        match self {
-            Self::Work => "work",
-            Self::Relay => "relay",
-            Self::One => "one",
-        }
+    pub fn name(&self) -> &str {
+        &self.0
     }
+}
 
-    /// The product with this wire name.
-    #[must_use]
-    pub fn parse(name: &str) -> Option<Self> {
-        Self::ALL.into_iter().find(|p| p.name() == name)
+impl core::fmt::Display for PlatformProduct {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str(&self.0)
     }
 }
 
@@ -316,4 +322,42 @@ pub fn terminate_intent(instance: Id, validity: Window) -> Option<IntentEnvelope
         context: ContextRefs::default(),
         validity,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // OP-150 m.3 (m), MUST-NEVER-13, XI-18: a platform product is any name within the grammar;
+    // the first-party names are ordinary members of it and no name is refused or favoured for
+    // who owns it
+    #[test]
+    fn a_platform_product_is_any_registered_name() {
+        // OP-149 m.4, PI-13
+        let longest = "p".repeat(PlatformProduct::MAX_LEN);
+        let too_long = "p".repeat(PlatformProduct::MAX_LEN + 1);
+        for ok in ["work", "relay", "one", "acme-ledger", "a0", "x-", &longest] {
+            let p = PlatformProduct::parse(ok).unwrap();
+            assert_eq!(p.name(), ok);
+            assert_eq!(p.to_string(), ok);
+        }
+        for bad in [
+            "",
+            "a",
+            "Work",
+            "-work",
+            "0work",
+            "work_v2",
+            "work.example",
+            "urn:suiss:work",
+            "wörk",
+            &too_long,
+        ] {
+            assert_eq!(PlatformProduct::parse(bad), None, "{bad}");
+        }
+        assert_ne!(
+            PlatformProduct::parse("work"),
+            PlatformProduct::parse("acme-ledger")
+        );
+    }
 }

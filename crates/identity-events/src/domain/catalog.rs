@@ -162,7 +162,7 @@ pub struct ClientChange<'a> {
     /// The `ExerciseID` that allowed it.
     pub exercise: &'a [u8; 32],
     /// The matched product, when the client is a platform client.
-    pub platform_product: Option<PlatformProduct>,
+    pub platform_product: Option<&'a PlatformProduct>,
     /// When, Unix ms.
     pub at: u64,
 }

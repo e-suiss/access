@@ -509,13 +509,16 @@ impl Plan {
             .map_err(|e| BootstrapError::Plan(e.to_string()))?;
         let mut products = Vec::new();
         for p in file.products {
-            let product = PlatformProduct::parse(&p.product)
-                .ok_or_else(|| BootstrapError::Plan(format!("unknown product {}", p.product)))?;
+            let product = PlatformProduct::parse(&p.product).ok_or_else(|| {
+                BootstrapError::Plan(format!(
+                    "product name {} does not match {}",
+                    p.product,
+                    PlatformProduct::GRAMMAR
+                ))
+            })?;
             products.push(ProductPlan {
+                display_name: p.display_name.unwrap_or_else(|| product.name().to_owned()),
                 product,
-                display_name: p
-                    .display_name
-                    .unwrap_or_else(|| format!("Suiss {}", p.product)),
                 client_key: jwk(&p.client_key)?,
                 service_key: jwk(&p.service_key)?,
                 event_receiver: p.event_receiver,
@@ -614,7 +617,7 @@ impl ProductPlan {
             post_logout_redirect_uris: Vec::new(),
             backchannel_logout_uri: None,
             platform: Some(Platform {
-                product: self.product,
+                product: self.product.clone(),
                 service_key: self.service_key.clone(),
                 event_receiver: self.event_receiver.clone(),
             }),
@@ -645,7 +648,7 @@ pub(crate) struct RealmOut {
 /// A platform client the bootstrap made sure of.
 #[derive(Clone, Debug, Serialize)]
 pub(crate) struct ClientOut {
-    pub(crate) product: &'static str,
+    pub(crate) product: String,
     pub(crate) client_id: String,
     /// The `aud` of its client assertions: the platform realm's issuer (OP-149 m.19 (e)).
     pub(crate) audience: String,
@@ -1109,7 +1112,7 @@ where
                     .client(&admin, (tenant, realm), domain, root, p)
                     .await?;
                 clients.push(ClientOut {
-                    product: p.product.name(),
+                    product: p.product.name().to_owned(),
                     client_id,
                     audience: issuer.clone(),
                     created,

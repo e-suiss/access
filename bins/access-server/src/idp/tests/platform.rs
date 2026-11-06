@@ -56,6 +56,8 @@ struct Product {
     app: axum::Router,
     key: EcdsaKeyPair,
     client: String,
+    /// The seed of the Ed25519 service key its pairing Exercises are signed with.
+    seed: u8,
     ids: Arc<IdKey>,
     jti: std::sync::atomic::AtomicU64,
 }
@@ -126,8 +128,13 @@ impl Product {
         self.ids.external(t.as_bytes()).unwrap()
     }
 
-    /// What the product's service key signs for one unpaired target of a challenge answer.
+    /// What the service key `SERVICE_SEED` signs for one unpaired target of a challenge answer.
     fn signed(target: &Json) -> Json {
+        Self::signed_with(SERVICE_SEED, target)
+    }
+
+    /// What the service key `seed` signs for one unpaired target of a challenge answer.
+    fn signed_with(seed: u8, target: &Json) -> Json {
         let d = |k: &str| b64url_decode(target[k].as_str().unwrap()).unwrap();
         let domain = Digest(<[u8; 32]>::try_from(d("domain")).unwrap());
         let ais = |part: &Json| {
@@ -147,7 +154,7 @@ impl Product {
                 iat: NOW,
                 exercise: None,
             };
-            b64url_encode(&sign(&s, SERVICE_SEED))
+            b64url_encode(&sign(&s, seed))
         };
         let mut out = json!({
             "realm": target["realm"],
@@ -175,7 +182,7 @@ impl Product {
             .unwrap()
             .iter()
             .filter(|t| t["status"] == "unpaired")
-            .map(Self::signed)
+            .map(|t| Self::signed_with(self.seed, t))
             .collect();
         let (s, v) = self
             .call(
@@ -239,39 +246,22 @@ fn meets_schema(value: &Json, name: &str) {
     );
 }
 
-/// The platform realm, a platform client with an ES256 client key, service key
+/// The platform realm, the Work platform client with an ES256 client key, service key
 /// `SERVICE_SEED` and an event receiver, and the platform API over the real authority plane.
 async fn product(w: &World) -> (Product, TenantId, RealmId) {
+    let (mut ps, pt, pr) = products(w, &[("work", SERVICE_SEED)]).await;
+    (ps.remove(0), pt, pr)
+}
+
+/// The platform realm and one platform client per `(product name, service key seed)`, each with
+/// its own ES256 client key and an event receiver, over the real authority plane.
+async fn products(w: &World, named: &[(&str, u8)]) -> (Vec<Product>, TenantId, RealmId) {
     let (pt, pr, pd) = w.realm("platform").await;
     onboard(&w.plane, pd, ROOT, ROOT_KEY).await;
     let platform = Admin {
         platform_tenant: Some(pt),
         ..w.admin()
     };
-    let key = EcdsaKeyPair::generate(&ECDSA_P256_SHA256_FIXED_SIGNING).unwrap();
-    let c = Client {
-        auth: AuthMethod::PrivateKeyJwtKey {
-            key: PublicKey::P256(key.public_key().as_ref().to_vec()),
-        },
-        ..platform_client(
-            w.admin().new_client_id().await.unwrap(),
-            PlatformProduct::Work,
-            SERVICE_SEED - 1,
-        )
-    };
-    let p = proposal(
-        (pt, pr),
-        Change::ClientRegister(c.clone()),
-        3,
-        idp_anchor(pd),
-        1,
-    );
-    let prepared = platform.prepare(&p).await.unwrap();
-    let ais = sign(
-        &statement(prepared.domain, &p.nonce, prepared.digest, p.basis),
-        ROOT_KEY,
-    );
-    written(&platform.apply(&p, ais).await.unwrap());
     let ids = Arc::new(IdKey::new(Secret::new([8; 32])));
     let api: Api = PlatformApi {
         app: w.db.app.clone(),
@@ -292,14 +282,44 @@ async fn product(w: &World) -> (Product, TenantId, RealmId) {
         pep: String::from(PEP_NAME),
         clock: AtNow,
     };
-    let product = Product {
-        app: access_http::platform::router(api, String::from("https://api.id.test")),
-        key,
-        client: String::from(c.id.as_str()),
-        ids,
-        jti: std::sync::atomic::AtomicU64::new(0),
-    };
-    (product, pt, pr)
+    let app = access_http::platform::router(api, String::from("https://api.id.test"));
+    let mut out = Vec::new();
+    for (i, (name, seed)) in named.iter().enumerate() {
+        let n = u8::try_from(i).unwrap();
+        let key = EcdsaKeyPair::generate(&ECDSA_P256_SHA256_FIXED_SIGNING).unwrap();
+        let c = Client {
+            auth: AuthMethod::PrivateKeyJwtKey {
+                key: PublicKey::P256(key.public_key().as_ref().to_vec()),
+            },
+            ..platform_client(
+                w.admin().new_client_id().await.unwrap(),
+                PlatformProduct::parse(name).unwrap(),
+                seed - 1,
+            )
+        };
+        let p = proposal(
+            (pt, pr),
+            Change::ClientRegister(c.clone()),
+            3 + n,
+            idp_anchor(pd),
+            1,
+        );
+        let prepared = platform.prepare(&p).await.unwrap();
+        let ais = sign(
+            &statement(prepared.domain, &p.nonce, prepared.digest, p.basis),
+            ROOT_KEY,
+        );
+        written(&platform.apply(&p, ais).await.unwrap());
+        out.push(Product {
+            app: app.clone(),
+            key,
+            client: String::from(c.id.as_str()),
+            seed: *seed,
+            ids: ids.clone(),
+            jti: std::sync::atomic::AtomicU64::new(0),
+        });
+    }
+    (out, pt, pr)
 }
 
 // OP-149 m.4, m.16 (a), L0-META-7: a platform product pairs with a tenant's realm by signing
@@ -579,4 +599,138 @@ async fn pairing_opens_one_push_stream_the_client_manages() {
     let (t4, _, _) = w.realm("gamma").await;
     let third = p.pair(&p.tenant(t4)).await;
     assert_ne!(third["event_stream"], first["event_stream"]);
+}
+
+// OP-150 m.3 (m), MUST-NEVER-13, XI-18, PI-13: platform_product is a role the operator gives any
+// registered product. A third party's product walks the same routes as Suiss Work and gets the
+// same answers: it is registered under the same CT2 rule, pairs under the same bootstrap basis
+// and PEP with no Acceptance or anchor of its own, opens and manages its streams, carries its
+// name in the api_client events, and meets the same refusals; Work can do nothing it cannot
+#[tokio::test]
+async fn a_third_party_product_holds_the_same_platform_role_as_work() {
+    // OP-149 m.4, m.17 (e), m.19 (d), (e), (f), CT2, §9.13.2
+    let w = World::new().await;
+    let third = "acme-ledger";
+    let (ps, pt, _) = products(&w, &[("work", SERVICE_SEED), (third, SERVICE_SEED + 2)]).await;
+    let (t2, r2, d2) = w.realm("acme").await;
+    let tnt = ps[0].tenant(t2);
+    let challenges = format!("/access/v1/tenants/{tnt}/pairing/challenges");
+    let ExerciseBasis::Public(grant) = bootstrap_basis(&d2) else {
+        panic!("basis");
+    };
+
+    // CT2: outside the platform tenant the third party is refused exactly as Work is
+    for name in ["work", third] {
+        let c = platform_client(
+            w.admin().new_client_id().await.unwrap(),
+            PlatformProduct::parse(name).unwrap(),
+            60,
+        );
+        let p = proposal((t2, r2), Change::ClientRegister(c), 9, idp_anchor(d2), 1);
+        assert!(
+            matches!(
+                Admin {
+                    platform_tenant: Some(pt),
+                    ..w.admin()
+                }
+                .prepare(&p)
+                .await,
+                Err(AdminError::Invalid(Invalid::PlatformTenant))
+            ),
+            "{name}"
+        );
+    }
+
+    let mut outcomes: Vec<Vec<(StatusCode, Option<String>)>> = Vec::new();
+    let mut streams = Vec::new();
+    for p in &ps {
+        let mut seen = Vec::new();
+        let mut note = |s: StatusCode, v: &Json| {
+            seen.push((s, v["code"].as_str().map(String::from)));
+        };
+        let (s, v) = p.call_as("POST", &challenges, None, None).await;
+        note(s, &v);
+        let other = p.assertion("https://acme.id.test");
+        let (s, v) = p.call_as("POST", &challenges, Some(&other), None).await;
+        note(s, &v);
+        let once = p.assertion(ISSUER);
+        let (s, v) = p.call_as("POST", &challenges, Some(&once), None).await;
+        note(s, &v);
+        assert_eq!(s, StatusCode::CREATED, "{v}");
+        let t = &v["targets"][0];
+        assert_eq!(t["status"], "unpaired");
+        assert_eq!(t["domain"], b64url_encode(&d2.0));
+        assert_eq!(t["pep"], PEP_NAME);
+        assert_eq!(t["basis"], b64url_encode(&grant.0));
+        assert_eq!(t["kid"], b64url_encode(&thumbprint(&public(p.seed))));
+        let (s, v) = p.call_as("POST", &challenges, Some(&once), None).await;
+        note(s, &v);
+        let paired = p.pair(&tnt).await;
+        assert_eq!(paired["targets"][0]["status"], "paired", "{paired}");
+        assert_eq!(paired["targets"][0]["kid"], t["kid"]);
+        let stream = paired["event_stream"].as_str().unwrap().to_owned();
+        let (s, v) = p.call("GET", "/access/v1/platform/streams", None).await;
+        note(s, &v);
+        let listed = v["streams"].as_array().unwrap();
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0]["aud"], p.client.as_str());
+        let push = json!({
+            "delivery": {"method": "urn:ietf:rfc:8935", "endpoint_url": "https://work.suiss.example/ssf"},
+            "aud": p.client.as_str(),
+            "events_requested": ["urn:suiss:access:event:party.disabled"],
+        });
+        let (s, v) = p
+            .call("POST", "/access/v1/platform/streams", Some(&push))
+            .await;
+        note(s, &v);
+        let (s, v) = p
+            .call(
+                "POST",
+                "/access/v1/tenants/tnt_0123456789abcdefghjkmnpqrs/pairing/challenges",
+                None,
+            )
+            .await;
+        note(s, &v);
+        let (s, v) = p
+            .call(
+                "DELETE",
+                "/access/v1/platform/streams/01010101-0101-4101-8101-010101010101",
+                None,
+            )
+            .await;
+        note(s, &v);
+        streams.push(stream);
+        outcomes.push(seen);
+    }
+    assert_eq!(outcomes[0], outcomes[1]);
+    assert_eq!(outcomes[0][0].1.as_deref(), Some("client-unauthenticated"));
+    assert_eq!(outcomes[0][3].0, StatusCode::UNAUTHORIZED, "a replayed jti");
+    assert_eq!(outcomes[0][5].1.as_deref(), Some("stream-exists"));
+    assert_eq!(outcomes[0][6].1.as_deref(), Some("tenant-unknown"));
+    assert_eq!(outcomes[0][7].0, StatusCode::NOT_FOUND);
+    assert_ne!(streams[0], streams[1]);
+
+    // neither product reaches the other's stream
+    for (p, other) in [(&ps[0], &streams[1]), (&ps[1], &streams[0])] {
+        let (s, _) = p
+            .call("GET", &format!("/access/v1/platform/streams/{other}"), None)
+            .await;
+        assert_eq!(s, StatusCode::NOT_FOUND);
+    }
+
+    // OP-149 m.17a: each registration event names its own product
+    let created = identity_events(&w.db, "event.api_client.", 2).await;
+    let mut names: Vec<String> = created
+        .iter()
+        .map(|e| {
+            access_identity_events::domain::catalog::IdentityEvent::from_outbox(&e.kind, &e.payload)
+                .unwrap()
+                .payload["platform_product"]
+                .as_str()
+                .unwrap()
+                .to_owned()
+        })
+        .collect();
+    names.sort();
+    assert_eq!(names, [third, "work"]);
 }

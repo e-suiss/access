@@ -149,7 +149,7 @@ fn the_event_receiver_is_an_https_url_in_the_change() {
     let mut c = Client {
         auth: AuthMethod::PrivateKeyJwtKey { key: p256() },
         platform: Some(Platform {
-            product: PlatformProduct::Work,
+            product: PlatformProduct::parse("work").unwrap(),
             service_key: key,
             event_receiver: Some(String::from("https://work.example/ssf")),
         }),
@@ -189,7 +189,7 @@ fn a_private_event_receiver_must_be_declared() {
     let mut c = Client {
         auth: AuthMethod::PrivateKeyJwtKey { key: p256() },
         platform: Some(Platform {
-            product: PlatformProduct::Work,
+            product: PlatformProduct::parse("work").unwrap(),
             service_key: p256(),
             event_receiver: Some(String::from(url)),
         }),
@@ -338,4 +338,48 @@ fn key_changes_and_deletion_are_declared() {
         compromised_at: None,
     };
     assert_ne!(drop.digest().unwrap(), other.digest().unwrap());
+}
+
+// OP-150 m.3 (m), MUST-NEVER-13, XI-18, PI-13: platform_product is a role; a third party's
+// product is checked by the same rules as Suiss Work, with the same refusals, and the name is
+// part of the authorized change, not a switch the code reads
+#[test]
+fn a_third_party_platform_product_is_checked_like_a_first_party_one() {
+    // OP-149 m.4, CT2
+    let platform = |name: &str, auth: AuthMethod| Client {
+        auth,
+        platform: Some(Platform {
+            product: PlatformProduct::parse(name).unwrap(),
+            service_key: p256(),
+            event_receiver: Some(String::from("https://product.example/ssf")),
+        }),
+        ..client(&["https://product.example/cb"])
+    };
+    let mut digests = Vec::new();
+    for name in ["work", "acme-ledger"] {
+        let ok = platform(name, AuthMethod::PrivateKeyJwtKey { key: p256() });
+        assert_eq!(ok.check(&DeclaredTargets::default()), Ok(()), "{name}");
+        assert_eq!(
+            Change::ClientRegister(ok.clone()).action(),
+            IdpAction::ClientRegister
+        );
+        digests.push(Change::ClientRegister(ok).digest().unwrap());
+        for auth in [AuthMethod::None, AuthMethod::ClientSecretBasic] {
+            assert_eq!(
+                platform(name, auth).check(&DeclaredTargets::default()),
+                Err(Invalid::PlatformAuth),
+                "{name}"
+            );
+        }
+        let mut bad = platform(name, AuthMethod::PrivateKeyJwtKey { key: p256() });
+        if let Some(p) = bad.platform.as_mut() {
+            p.event_receiver = Some(String::from("http://product.example/ssf"));
+        }
+        assert_eq!(
+            bad.check(&DeclaredTargets::default()),
+            Err(Invalid::EventReceiver),
+            "{name}"
+        );
+    }
+    assert_ne!(digests[0], digests[1]);
 }

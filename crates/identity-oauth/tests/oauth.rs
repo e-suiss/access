@@ -77,6 +77,8 @@ const PUSHED: &str = "cli_0000000000000000000000000d";
 /// A registered platform product client (OP-149 m.4): the one RFC 8707 resource besides the
 /// realm (OP-149 m.26 (a)).
 const PRODUCT: &str = "cli_0000000000000000000000000e";
+/// A third party's product registered with the same `platform_product` role (OP-150 m.3 (m)).
+const THIRD: &str = "cli_0000000000000000000000000f";
 const SECRET: &str = "shop-secret-shop-secret-shop-secret-shop-se";
 
 struct SysClock;
@@ -339,7 +341,7 @@ async fn world() -> World {
         open_dpop_replay_day(&db.archive, d).await.unwrap();
     }
     let t = create_tenant(&db.app, "pool-default").await.unwrap();
-    let d = domain(&db, t, 5).await;
+    let d = domain(&db, t, 6).await;
     let mut tx = TenantTx::begin_tenant(&db.app, t).await.unwrap();
     let r = create_realm(&mut tx, &d, "acme", "pool-default")
         .await
@@ -360,6 +362,7 @@ async fn world() -> World {
         (KEYED, "private_key_jwt"),
         (PUSHED, "client_secret_basic"),
         (PRODUCT, "private_key_jwt"),
+        (THIRD, "private_key_jwt"),
     ]
     .into_iter()
     .enumerate()
@@ -383,8 +386,9 @@ async fn world() -> World {
             require_par: id == PUSHED,
             ..client(n, id, method)
         };
-        if id == PRODUCT {
-            row.platform_product = Some(String::from("work"));
+        if id == PRODUCT || id == THIRD {
+            let name = if id == PRODUCT { "work" } else { "acme-ledger" };
+            row.platform_product = Some(String::from(name));
             row.service_key = Some(vec![0xa0]);
         }
         insert_client(&mut tx, &b, &row).await.unwrap();
@@ -845,6 +849,70 @@ async fn a_platform_product_client_is_a_resource() {
     }
     let realm = location(&w.authorize(&[("resource", ISSUER)], Some(&w.cookie)).await);
     assert!(realm.contains("code="), "{realm}");
+}
+
+// OP-150 m.3 (m), MUST-NEVER-13, XI-18: a third party's product registered with the
+// platform_product role is an RFC 8707 resource exactly as Suiss Work is; the token's aud is
+// its client_id, the realm's userinfo refuses it, and a grant for one product never answers
+// for the other
+#[tokio::test]
+async fn a_third_party_product_is_a_resource_like_a_first_party_one() {
+    // OP-149 m.26 (a), (f), RFC 8707 §2.2, RFC 9068 §4, PI-13
+    let w = world().await;
+    let mut tokens = Vec::new();
+    for product in [PRODUCT, THIRD] {
+        let to = location(&w.authorize(&[("resource", product)], Some(&w.cookie)).await);
+        let code = query(&to, "code");
+        let other = if product == PRODUCT { THIRD } else { PRODUCT };
+        assert_eq!(
+            error(
+                &w.token(
+                    &[
+                        ("grant_type", "authorization_code"),
+                        ("client_id", PUBLIC),
+                        ("code", &code),
+                        ("redirect_uri", CB),
+                        ("code_verifier", VERIFIER),
+                        ("resource", other),
+                    ],
+                    None,
+                )
+                .await
+            ),
+            "invalid_target"
+        );
+        let t = body(
+            &w.token(
+                &[
+                    ("grant_type", "authorization_code"),
+                    ("client_id", PUBLIC),
+                    ("code", &code),
+                    ("redirect_uri", CB),
+                    ("code_verifier", VERIFIER),
+                    ("resource", product),
+                ],
+                None,
+            )
+            .await,
+            200,
+        );
+        let access = t["access_token"].as_str().unwrap().to_owned();
+        let at = claims(&access);
+        assert_eq!(at["aud"], product);
+        assert_eq!(at["iss"], ISSUER);
+        assert_eq!(at["cnf"]["jkt"], w.jkt());
+        assert!(matches!(
+            w.userinfo(&access).await,
+            Reply::Json { status: 401, .. }
+        ));
+        tokens.push(at);
+    }
+    let shape = |c: &Value| {
+        let mut keys: Vec<&String> = c.as_object().unwrap().keys().collect();
+        keys.sort();
+        keys.into_iter().cloned().collect::<Vec<_>>()
+    };
+    assert_eq!(shape(&tokens[0]), shape(&tokens[1]));
 }
 
 // IDP-7, CR-39, RFC 9449 §10, TN-27, §10.4.1: the exchange checks the exact redirect URI, the

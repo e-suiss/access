@@ -185,7 +185,9 @@ fn built_events_meet_the_contracts() {
     for (i, kind) in Kind::ALL.into_iter().enumerate() {
         built.push(authority_ready(&sample(kind), &[i as u8; 32]));
     }
-    let change = |kind| {
+    // OP-150 m.3 (m), MUST-NEVER-13: the product name in api_client.* is any registered
+    // product's, first or third party
+    let change = |kind, product: &str| {
         IdentityEvent::api_client(
             kind,
             [1; 32],
@@ -194,15 +196,15 @@ fn built_events_meet_the_contracts() {
                 realm: &[2; 16],
                 client_id: "cli_abc",
                 exercise: &[3; 32],
-                platform_product: Some(PlatformProduct::Work),
+                platform_product: Some(&PlatformProduct::parse(product).unwrap()),
                 at: 5,
             },
         )
     };
     for e in [
-        change(IdentityKind::ApiClientCreated),
-        change(IdentityKind::ApiClientUpdated),
-        change(IdentityKind::ApiClientDisabled),
+        change(IdentityKind::ApiClientCreated, "work"),
+        change(IdentityKind::ApiClientUpdated, "acme-ledger"),
+        change(IdentityKind::ApiClientDisabled, "work"),
         IdentityEvent::tenant_created([2; 32], TENANT, "pool-default", 5),
         IdentityEvent::organization(
             IdentityKind::OrganizationCreated,

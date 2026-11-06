@@ -987,7 +987,7 @@ async fn a_platform_client_is_registered_in_the_platform_tenant() {
     onboard(&w.plane, pd, ROOT, ROOT_KEY).await;
     let c = platform_client(
         w.admin().new_client_id().await.unwrap(),
-        PlatformProduct::Work,
+        PlatformProduct::parse("work").unwrap(),
         40,
     );
     let p = proposal(
@@ -1185,7 +1185,7 @@ async fn a_platform_subscription_receives_every_tenant() {
     };
     let c = platform_client(
         w.admin().new_client_id().await.unwrap(),
-        PlatformProduct::Work,
+        PlatformProduct::parse("work").unwrap(),
         40,
     );
     let p = proposal(
