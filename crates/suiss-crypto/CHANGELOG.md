@@ -2,8 +2,16 @@
 
 ## Unreleased
 
+## 0.3.0
+
+### Changed
+
+- **Breaking.** `rotation::Key` and `rotation::Step::Generate` gain `founding`: the first key of a key set that has never been published signs as soon as it is published; every later key keeps the full `publish_lead` (CR-59, pending Adem's confirmation; SAI-46 unchanged for every key after the first).
+- `rotation::usable` and `rotation::plan` honour the founding key.
+
 ### Added
 
+- `SoftSigner::p256_from_parts`: an ECDSA P-256 key from a private JWK's `d`, `x` and `y`.
 - `rotation::overdue`: how long the active key has stayed past its rotation time with no backup to rotate to, for a rotation delay alarm during a key-generation outage.
 - `rotation::Step::name` and `Step::kid`, for audit events of key transitions.
 

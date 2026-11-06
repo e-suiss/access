@@ -4,7 +4,7 @@ version = 4
 
 [[package]]
 name = "access-authority-core"
-version = "0.2.6"
+version = "0.3.0"
 dependencies = [
  "access-authority-ingest",
  "access-authority-sequencer",
@@ -26,7 +26,7 @@ dependencies = [
 
 [[package]]
 name = "access-authority-ingest"
-version = "0.2.6"
+version = "0.3.0"
 dependencies = [
  "access-internal-api",
  "ed25519-dalek",
@@ -37,7 +37,7 @@ dependencies = [
 
 [[package]]
 name = "access-authority-sequencer"
-version = "0.2.6"
+version = "0.3.0"
 dependencies = [
  "access-authority-signer",
  "access-crypto",
@@ -51,7 +51,7 @@ dependencies = [
 
 [[package]]
 name = "access-authority-signer"
-version = "0.2.6"
+version = "0.3.0"
 dependencies = [
  "access-crypto",
  "esuiss-access-kernel",
@@ -62,7 +62,7 @@ dependencies = [
 
 [[package]]
 name = "access-crypto"
-version = "0.2.6"
+version = "0.3.0"
 dependencies = [
  "aws-lc-rs",
  "esuiss-access-kernel",
@@ -78,7 +78,7 @@ dependencies = [
 
 [[package]]
 name = "access-http"
-version = "0.2.6"
+version = "0.3.0"
 dependencies = [
  "access-authority-core",
  "access-authority-sequencer",
@@ -116,7 +116,7 @@ dependencies = [
 
 [[package]]
 name = "access-identity-account"
-version = "0.2.6"
+version = "0.3.0"
 dependencies = [
  "access-crypto",
  "access-internal-api",
@@ -139,7 +139,7 @@ dependencies = [
 
 [[package]]
 name = "access-identity-admin"
-version = "0.2.6"
+version = "0.3.0"
 dependencies = [
  "access-crypto",
  "access-identity-account",
@@ -157,7 +157,7 @@ dependencies = [
 
 [[package]]
 name = "access-identity-audit"
-version = "0.2.6"
+version = "0.3.0"
 dependencies = [
  "access-crypto",
  "access-identity-signer",
@@ -171,7 +171,7 @@ dependencies = [
 
 [[package]]
 name = "access-identity-events"
-version = "0.2.6"
+version = "0.3.0"
 dependencies = [
  "access-crypto",
  "access-identity-account",
@@ -189,7 +189,7 @@ dependencies = [
 
 [[package]]
 name = "access-identity-oauth"
-version = "0.2.6"
+version = "0.3.0"
 dependencies = [
  "access-crypto",
  "access-identity-account",
@@ -214,7 +214,7 @@ dependencies = [
 
 [[package]]
 name = "access-identity-session"
-version = "0.2.6"
+version = "0.3.0"
 dependencies = [
  "access-crypto",
  "access-identity-account",
@@ -233,7 +233,7 @@ dependencies = [
 
 [[package]]
 name = "access-identity-signer"
-version = "0.2.6"
+version = "0.3.0"
 dependencies = [
  "access-crypto",
  "access-internal-api",
@@ -245,7 +245,7 @@ dependencies = [
 
 [[package]]
 name = "access-identity-signer-bin"
-version = "0.2.6"
+version = "0.3.0"
 dependencies = [
  "access-crypto",
  "access-identity-signer",
@@ -262,7 +262,7 @@ dependencies = [
 
 [[package]]
 name = "access-identity-ui"
-version = "0.2.6"
+version = "0.3.0"
 dependencies = [
  "access-crypto",
  "access-identity-account",
@@ -283,7 +283,7 @@ dependencies = [
 
 [[package]]
 name = "access-identity-webauthn"
-version = "0.2.6"
+version = "0.3.0"
 dependencies = [
  "access-crypto",
  "access-parse",
@@ -302,7 +302,7 @@ dependencies = [
 
 [[package]]
 name = "access-internal-api"
-version = "0.2.6"
+version = "0.3.0"
 dependencies = [
  "esuiss-access-kernel",
  "esuiss-crypto",
@@ -311,7 +311,7 @@ dependencies = [
 
 [[package]]
 name = "access-kernel-uniffi"
-version = "0.2.6"
+version = "0.3.0"
 dependencies = [
  "esuiss-access-kernel",
  "thiserror",
@@ -320,7 +320,7 @@ dependencies = [
 
 [[package]]
 name = "access-kernel-wasm"
-version = "0.2.6"
+version = "0.3.0"
 dependencies = [
  "esuiss-access-kernel",
  "wasm-bindgen",
@@ -328,7 +328,7 @@ dependencies = [
 
 [[package]]
 name = "access-local-client"
-version = "0.2.6"
+version = "0.3.0"
 dependencies = [
  "access-crypto",
  "access-http",
@@ -357,7 +357,7 @@ dependencies = [
 
 [[package]]
 name = "access-parse"
-version = "0.2.6"
+version = "0.3.0"
 dependencies = [
  "proptest",
  "thiserror",
@@ -365,7 +365,7 @@ dependencies = [
 
 [[package]]
 name = "access-pep-conformance"
-version = "0.2.6"
+version = "0.3.0"
 dependencies = [
  "access-crypto",
  "axum",
@@ -382,7 +382,7 @@ dependencies = [
 
 [[package]]
 name = "access-server"
-version = "0.2.6"
+version = "0.3.0"
 dependencies = [
  "access-authority-core",
  "access-authority-ingest",
@@ -423,7 +423,7 @@ dependencies = [
 
 [[package]]
 name = "access-signer"
-version = "0.2.6"
+version = "0.3.0"
 dependencies = [
  "access-authority-signer",
  "access-crypto",
@@ -439,7 +439,7 @@ dependencies = [
 
 [[package]]
 name = "access-store"
-version = "0.2.6"
+version = "0.3.0"
 dependencies = [
  "access-store",
  "sqlx",
@@ -449,7 +449,7 @@ dependencies = [
 
 [[package]]
 name = "access-telemetry"
-version = "0.2.6"
+version = "0.3.0"
 dependencies = [
  "access-crypto",
  "tracing",
@@ -1638,7 +1638,7 @@ dependencies = [
 
 [[package]]
 name = "esuiss-access-kernel"
-version = "0.2.6"
+version = "0.3.0"
 dependencies = [
  "curve25519-dalek",
  "divan",
@@ -1655,7 +1655,7 @@ dependencies = [
 
 [[package]]
 name = "esuiss-access-sdk"
-version = "0.2.6"
+version = "0.3.0"
 dependencies = [
  "ed25519-dalek",
  "esuiss-access-kernel",
@@ -1666,7 +1666,7 @@ dependencies = [
 
 [[package]]
 name = "esuiss-access-verifier"
-version = "0.2.6"
+version = "0.3.0"
 dependencies = [
  "ed25519-dalek",
  "esuiss-access-kernel",
@@ -1678,7 +1678,7 @@ dependencies = [
 
 [[package]]
 name = "esuiss-access-verify"
-version = "0.2.6"
+version = "0.3.0"
 dependencies = [
  "ed25519-dalek",
  "esuiss-access-kernel",
@@ -1690,7 +1690,7 @@ dependencies = [
 
 [[package]]
 name = "esuiss-crypto"
-version = "0.2.6"
+version = "0.3.0"
 dependencies = [
  "aws-lc-rs",
  "cryptoki",
@@ -1710,7 +1710,7 @@ dependencies = [
 
 [[package]]
 name = "esuiss-ledger"
-version = "0.2.6"
+version = "0.3.0"
 dependencies = [
  "esuiss-crypto",
  "proptest",
@@ -1720,7 +1720,7 @@ dependencies = [
 
 [[package]]
 name = "esuiss-restriction"
-version = "0.2.6"
+version = "0.3.0"
 dependencies = [
  "cedar-policy",
  "proptest",
@@ -1730,7 +1730,7 @@ dependencies = [
 
 [[package]]
 name = "esuiss-restriction-analysis"
-version = "0.2.6"
+version = "0.3.0"
 dependencies = [
  "cedar-policy",
  "cedar-policy-symcc",
@@ -1744,7 +1744,7 @@ dependencies = [
 
 [[package]]
 name = "esuiss-retention"
-version = "0.2.6"
+version = "0.3.0"
 dependencies = [
  "proptest",
  "serde",
@@ -1754,7 +1754,7 @@ dependencies = [
 
 [[package]]
 name = "esuiss-sandbox"
-version = "0.2.6"
+version = "0.3.0"
 dependencies = [
  "landlock",
  "libc",
@@ -4921,7 +4921,7 @@ dependencies = [
 
 [[package]]
 name = "xtask"
-version = "0.2.6"
+version = "0.3.0"
 dependencies = [
  "serde",
  "serde_json",

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.0
+
+No changes; released with `esuiss-access-kernel` 0.3.0.
+
 ## 0.2.6
 
 No changes; released with `esuiss-access-kernel` and published from CI with trusted publishing.
