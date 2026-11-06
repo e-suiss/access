@@ -186,7 +186,7 @@ impl ArtifactSigner for ArtifactKey {
     }
 }
 
-/// The authority plane: opens every device Instance as `[9; 16]`, ends none.
+/// The authority plane: opens every device Instance as `[9; 16]` and ends only that one.
 struct Plane;
 
 impl DeviceInstances for Plane {
@@ -199,7 +199,17 @@ impl DeviceInstances for Plane {
         }))
     }
 
-    async fn terminate(&self, _: Termination) -> Result<Verdict, PlaneUnavailable> {
+    async fn terminate(&self, t: Termination) -> Result<Verdict, PlaneUnavailable> {
+        if t.instance == Id([9; 16]) {
+            return Ok(Verdict::Committed(access_internal_api::idp::Committed {
+                domain: t.domain,
+                nonce: t.nonce,
+                position: 7,
+                intent: access_kernel::digest::Digest([0xe1; 32]),
+                exercise: access_kernel::digest::Digest([0xe2; 32]),
+                replayed: false,
+            }));
+        }
         Ok(Verdict::Refused {
             code: String::from("protocol"),
         })
@@ -971,13 +981,13 @@ async fn a_passkey_registered_from_a_session_signs_in() {
         .submit(&first, "passkey", json!({ "passkey_credential": "{}" }))
         .await;
     assert_eq!(replayed.status, StatusCode::GONE);
-    devices_bind_the_session_party(&mut c).await;
+    devices_bind_the_session_party(&e, &mut c).await;
 }
 
 /// OP-149 m.16 (a), L0-META-7: a stepped-up session's first device registers a new Party with
 /// its own `party_register`; the identity plane binds the session's subject to that Party, names
 /// it in later challenges and forwards later registrations for that Party only.
-async fn devices_bind_the_session_party(c: &mut Web) {
+async fn devices_bind_the_session_party(e: &Env, c: &mut Web) {
     let party = b64url_encode(&[8; 16]);
     let mut register = async |party: &str, new: bool| {
         let ch = c.post("/v1/me/instances/challenges", None).await;
@@ -1017,6 +1027,106 @@ async fn devices_bind_the_session_party(c: &mut Web) {
     assert_eq!(other.json()["code"], "invalid-party");
     let (_, next) = register(&party, false).await;
     assert_eq!(next.status, StatusCode::CREATED);
+    device_key_claims(e, c).await;
+}
+
+/// The queued Claim orders once `ready` holds for them; the outbox shows a row only once every
+/// older transaction in the cluster has ended.
+async fn claim_orders(
+    e: &Env,
+    ready: impl Fn(&[access_identity_account::domain::claims::ClaimOrder]) -> bool,
+) -> Vec<access_identity_account::domain::claims::ClaimOrder> {
+    use access_identity_account::domain::claims::{ClaimOrder, OUTBOX_PREFIX};
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
+    loop {
+        let orders: Vec<ClaimOrder> = access_store::identity::poll(
+            &e.db.reader,
+            access_store::identity::Cursor::default(),
+            1000,
+        )
+        .await
+        .unwrap()
+        .into_iter()
+        .filter(|o| o.kind.starts_with(OUTBOX_PREFIX))
+        .map(|o| ClaimOrder::from_bytes(&o.payload).unwrap())
+        .collect();
+        if ready(&orders) {
+            return orders;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "claim orders: {:?}",
+            orders.iter().map(|o| &o.class).collect::<Vec<_>>()
+        );
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+}
+
+/// §10.1.3 device key registration, §10.1.5, IDP-2, K16, OP-150 L2: the registered key is recorded
+/// once for its Instance, and queues its `authenticator_binding` and the session's
+/// `authentication`, both bound to that Instance, with the key only by digest; the first
+/// registration's `party_register` binds the subject to its Party as `identity_binding_person`,
+/// by digest; the user's termination of the Instance retires the key and ends its binding line.
+async fn device_key_claims(e: &Env, c: &mut Web) {
+    use access_identity_account::domain::claims::{Bind, ClaimOrder, Content};
+    use access_kernel::claim::body::{AuthMethod, AuthenticatorKind, Body};
+    let on_instance = |o: &&ClaimOrder| o.bind == Bind::Instance([9; 16]);
+    let orders = claim_orders(e, |o| o.iter().filter(on_instance).count() >= 2).await;
+    let bound: Vec<&ClaimOrder> = orders.iter().filter(on_instance).collect();
+    assert_eq!(bound.len(), 2, "one key, one Instance, recorded once");
+    assert!(bound.iter().any(|o| matches!(
+        &o.content,
+        Content::Body { body: Body::AuthenticatorBinding(b), .. } if b.kind == AuthenticatorKind::DeviceKey
+    )));
+    assert!(bound.iter().any(|o| matches!(
+        &o.content,
+        Content::Body { body: Body::Authentication(a), .. } if a.method == AuthMethod::DeviceKey
+    )));
+    let bindings: Vec<&ClaimOrder> = orders
+        .iter()
+        .filter(|o| o.class == "identity_binding_person")
+        .collect();
+    assert_eq!(bindings.len(), 1, "one Party, bound once");
+    assert!(matches!(
+        &bindings[0].content,
+        Content::Body {
+            body: Body::IdentityBinding(_),
+            disclose: true
+        }
+    ));
+    assert!(bindings[0].line.is_some() && bindings[0].bind == Bind::None);
+
+    let termination = json!({
+        "nonce": b64url_encode(&[1; 16]),
+        "basis": b64url_encode(&[2; 16]),
+        "valid_from": "2026-01-01T00:00:00Z",
+        "valid_until": "2026-01-01T00:05:00Z",
+        "ais": b64url_encode(&[0xd2; 8]),
+    });
+    let ended = c
+        .send(
+            "DELETE",
+            &format!("/v1/me/instances/{}", b64url_encode(&[9; 16])),
+            Some(termination),
+            Some("del-9"),
+        )
+        .await;
+    assert_eq!(ended.status, StatusCode::OK);
+    let removed = |o: &ClaimOrder| {
+        o.retract
+            && matches!(
+                &o.content,
+                Content::Body { body: Body::AuthenticatorBinding(b), .. } if b.kind == AuthenticatorKind::DeviceKey
+            )
+    };
+    let orders = claim_orders(e, |o| o.iter().any(removed)).await;
+    let removal = orders.iter().find(|o| removed(o)).unwrap();
+    let binding = bound
+        .iter()
+        .find(|o| o.class == "authenticator_binding")
+        .unwrap();
+    assert_eq!(removal.line, binding.line);
+    assert_eq!(removal.bind, Bind::None);
 }
 
 // §10.2.2, TN-102, OP-146 m.14 (h): a magic link is previewed without being consumed and

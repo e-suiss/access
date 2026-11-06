@@ -179,24 +179,116 @@ async fn bound_party(
     Ok(p)
 }
 
-/// Records the Party the subject's first device registered.
+/// Records the Party the subject's first device registered and queues the
+/// `identity_binding_person` Claim that binds the subject to it (§10.1.3 IDP-2, §10.1.5): its
+/// proof, the Party's own `party_register`, enters by digest only.
 async fn bind_party(
     db: &access_store::Pool,
     kit: &RealmKit,
     subject: &[u8; 16],
     party: &[u8; 16],
+    proof: &[u8],
 ) -> Result<(), Reply> {
-    let mut t = TenantTx::begin(db, kit.tenant, kit.realm)
-        .await
-        .map_err(|_| unavailable())?;
-    if !idp::bind_subject_party(&mut t, subject, party)
+    use access_identity_account::app::claims::emit;
+    use access_identity_account::domain::claims::identity_binding;
+    use access_kernel::claim::body::BindingKind;
+    let mut tx = access_identity_account::adapters::pg::PgTx(
+        TenantTx::begin(db, kit.tenant, kit.realm)
+            .await
+            .map_err(|_| unavailable())?,
+    );
+    if idp::bind_subject_party(&mut tx.0, subject, party)
         .await
         .map_err(|_| unavailable())?
     {
+        let at = tx.0.server_time().await.map_err(|_| unavailable())?;
+        let order = identity_binding(*subject, BindingKind::Person, proof, at);
+        emit(&mut tx, &order).await.map_err(|_| unavailable())?;
+    } else {
         tracing::warn!("device party already bound");
     }
-    t.commit().await.map_err(|_| unavailable())?;
-    Ok(())
+    tx.0.commit().await.map_err(|_| unavailable())
+}
+
+/// Records a registered device key (§10.1.3 "Cihaz anahtarı kaydı") and queues its Claims: the
+/// `authenticator_binding` of the key, bound to its Instance, and the `authentication` of the
+/// session that proved the key, now bound to that Instance (§10.1.5, OP-150 L2).
+async fn device_registered(
+    db: &access_store::Pool,
+    kit: &RealmKit,
+    proven: &access_identity_session::app::devices::ProvenKey,
+    instance: [u8; 16],
+) -> Result<(), Reply> {
+    use access_identity_account::app::claims::emit;
+    use access_identity_account::domain::claims::{self, AuthFacts, Bind};
+    use access_kernel::verify::cose::PublicKey;
+    let (key, kty, alg, cose) = match &proven.key {
+        PublicKey::Ed25519(k) => (k.to_vec(), "OKP", "Ed25519", -8),
+        PublicKey::P256(k) => (k.clone(), "EC2", "ES256", -7),
+        PublicKey::MlDsa(..) => return Err(invalid()),
+    };
+    let s = &proven.session;
+    let mut tx = access_identity_account::adapters::pg::PgTx(
+        TenantTx::begin(db, kit.tenant, kit.realm)
+            .await
+            .map_err(|_| unavailable())?,
+    );
+    let row = access_store::issuer::NewDeviceKey {
+        subject: s.subject,
+        public_key: &key,
+        key_type: kty,
+        algorithm: alg,
+        instance,
+        session: Some(s.id),
+    };
+    let fresh = access_store::issuer::insert_device_key(&mut tx.0, &row)
+        .await
+        .map_err(|_| unavailable())?
+        .is_some();
+    if fresh {
+        let at = tx.0.server_time().await.map_err(|_| unavailable())?;
+        let binding = claims::device_key_binding(s.subject, &key, cose, instance, at);
+        let login = claims::authentication(AuthFacts {
+            subject: s.subject,
+            method: access_kernel::claim::body::AuthMethod::DeviceKey,
+            auth_time: s.auth_time_ms,
+            assurance: access_identity_session::app::claims::levels(&s.assurance),
+            webauthn: None,
+            evidence: None,
+            bind: Bind::Instance(instance),
+        });
+        for order in [binding, login] {
+            emit(&mut tx, &order).await.map_err(|_| unavailable())?;
+        }
+    }
+    tx.0.commit().await.map_err(|_| unavailable())
+}
+
+/// Retires the device key of a terminated Instance (§10.1.3 `status`) and ends its binding line
+/// (IDP-2); the Instance itself was ended by `instance.terminate`.
+async fn device_retired(
+    db: &access_store::Pool,
+    kit: &RealmKit,
+    subject: [u8; 16],
+    instance: [u8; 16],
+) -> Result<(), Reply> {
+    use access_identity_account::app::claims::emit;
+    use access_identity_account::domain::claims::authenticator_removed;
+    use access_kernel::claim::body::AuthenticatorKind;
+    let mut tx = access_identity_account::adapters::pg::PgTx(
+        TenantTx::begin(db, kit.tenant, kit.realm)
+            .await
+            .map_err(|_| unavailable())?,
+    );
+    if access_store::issuer::retire_device_key(&mut tx.0, &subject, &instance)
+        .await
+        .map_err(|_| unavailable())?
+    {
+        let at = tx.0.server_time().await.map_err(|_| unavailable())?;
+        let order = authenticator_removed(subject, AuthenticatorKind::DeviceKey, &instance, at);
+        emit(&mut tx, &order).await.map_err(|_| unavailable())?;
+    }
+    tx.0.commit().await.map_err(|_| unavailable())
 }
 
 /// The realm's governing domain.
@@ -327,11 +419,11 @@ where
                     subject,
                 },
                 party: Id(party),
-                key: proven.key,
-                register: register_ais.map(|ais| SelfSigned {
+                key: proven.key.clone(),
+                register: register_ais.as_ref().map(|ais| SelfSigned {
                     nonce: register_nonce(&challenge),
                     validity,
-                    ais,
+                    ais: ais.clone(),
                 }),
                 create: SelfSigned {
                     nonce: challenge.to_vec(),
@@ -341,10 +433,17 @@ where
                 pep: devices.pep.clone(),
             })
             .await;
-        if let (Ok(RegistrationVerdict::Registered(_)), None) = (&verdict, bound)
-            && let Err(r) = bind_party(&self.db, &kit, &subject, &party).await
+        if let (Ok(RegistrationVerdict::Registered(_)), None, Some(proof)) =
+            (&verdict, bound, &register_ais)
+            && let Err(r) = bind_party(&self.db, &kit, &subject, &party, proof).await
         {
             return r;
+        }
+        // §10.1.3 device key, OP-150 L2
+        if let Ok(RegistrationVerdict::Registered(r)) = &verdict
+            && let Err(reply) = device_registered(&self.db, &kit, &proven, r.instance.0).await
+        {
+            return reply;
         }
         registered(verdict)
     }
@@ -385,11 +484,11 @@ where
         if from > until {
             return invalid();
         }
-        match auth.stepped_up_session(cookie).await {
-            Ok(Ok(_)) => {}
+        let session = match auth.stepped_up_session(cookie).await {
+            Ok(Ok(s)) => s,
             Ok(Err(r)) => return refused(&r),
             Err(e) => return failed(&e),
-        }
+        };
         let domain = match governing(&self.db, &kit).await {
             Ok(d) => d,
             Err(r) => return r,
@@ -408,6 +507,10 @@ where
             .await;
         match verdict {
             Ok(Verdict::Committed(c)) => {
+                // IDP-2, §10.1.3, OP-150 L2
+                if let Err(r) = device_retired(&self.db, &kit, session.subject, instance).await {
+                    return r;
+                }
                 Reply::json(200, json!({ "exercise": b64url_encode(&c.exercise.0) }))
             }
             Ok(Verdict::NotAllowed { .. } | Verdict::Refused { .. }) => problem(
