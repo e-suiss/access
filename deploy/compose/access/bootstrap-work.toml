@@ -11,6 +11,33 @@ realm = "acme"
 namespace = "work"
 action = "approve"
 
+# OP-149 m.26 (b): a test user in acme with a password (AAL1) and a public client (PKCE and
+# DPoP, no secret) a headless login signs in with; `access-local-client login` runs that flow,
+# naming Work's client_id as `--resource` to get a token whose `aud` is Work (OP-149 m.26 (a)).
+# The password comes from the environment variable named here, never from this file:
+#   ACCESS_LOCAL_TEST_PASSWORD=... docker compose -f deploy/compose/access.yaml up -d
+# The bootstrap prints the user as `test_user` (identifier, subject, client_id, redirect_uri).
+# Without a local mirror of the breach ranges (`breach_ranges_dir`) the password is not checked
+# against one; the bootstrap says so.
+[test_user]
+realm = "acme"
+identifier = "test@acme.example"
+password_env = "BOOTSTRAP_TEST_PASSWORD"
+client_display_name = "Local test client"
+redirect_uri = "http://127.0.0.1/cb"
+
+# OP-149 m.26 (c): acme accepts unsigned `party_compromise` Claims from a local declarant Party,
+# so Work's PEP can hand one to `POST /access/v1/claims:ingest` with its PEP certificate and
+# receive `party.compromised` on its stream. The bootstrap prints the declarant as
+# `compromise.issuer`; `access-local-client compromise` sends the Claim.
+# The other local event producers (OP-149 m.26 (c)):
+#   access-server client-update <this plan> work "Suiss Work (renamed)"   -> api_client.updated
+#   access-server client-retire <this plan> work                          -> api_client.disabled
+#   access-local-client stream-status ... --status paused                 -> the stream's status
+# A retired client is gone for good; the next bootstrap run registers a new one.
+[compromise]
+realm = "acme"
+
 [[products]]
 product = "work"
 display_name = "Suiss Work"

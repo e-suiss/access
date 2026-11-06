@@ -46,6 +46,12 @@ pub(crate) fn kek_label(realm: &[u8; 16]) -> String {
     out
 }
 
+/// The id of a realm's KEK as sealed rows record it (`kek_id`): `access:realm-kek:<RealmID
+/// hex>`, the label in the alphabet the tables' checks allow.
+pub(crate) fn kek_id(realm: &[u8; 16]) -> String {
+    kek_label(realm).replace('/', ":")
+}
+
 /// A token KEK behind a lock: a PKCS#11 session serves one caller at a time.
 struct LockedKek {
     id: String,
@@ -113,7 +119,7 @@ impl RealmKeks {
         let label = kek_label(realm);
         let kek = Arc::new(LockedKek {
             inner: Mutex::new(self.keys.kek(&label).map_err(|e| e.to_string())?),
-            id: label,
+            id: kek_id(realm),
         });
         loaded.insert(*realm, kek.clone());
         Ok(kek)

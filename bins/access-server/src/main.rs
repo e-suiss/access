@@ -302,8 +302,8 @@ fn local(config: &Config, plan: &Path, job: Job) -> Result<serde_json::Value, St
 
 /// Runs a plan job; its result goes to standard output as JSON.
 fn local_main(config: &Config, plan: &Path, job: Job) -> ExitCode {
-    let result =
-        local(config, plan, job).and_then(|s| serde_json::to_string_pretty(&s).map_err(|e| e.to_string()));
+    let result = local(config, plan, job)
+        .and_then(|s| serde_json::to_string_pretty(&s).map_err(|e| e.to_string()));
     match result {
         Ok(json) => {
             #[allow(clippy::print_stdout)]
@@ -368,7 +368,10 @@ async fn seed(
         declared: &declared,
     };
     let result = match job {
-        Job::Bootstrap => bootstrap.run(plan).await.map_err(|e| e.to_string()).and_then(json),
+        Job::Bootstrap => Box::pin(bootstrap.run(plan))
+            .await
+            .map_err(|e| e.to_string())
+            .and_then(json),
         Job::ClientUpdate {
             product,
             display_name,
@@ -724,12 +727,26 @@ fn login(
     Ok((login_router(discovery, hosted.clone(), assets), hosted))
 }
 
+/// What the realm authorization server is built over: the application, router and outbox reader
+/// pools, the HSM's nonce keys and the outbound client.
+type OAuthInputs = (Pool, Pool, Pool, Arc<KeyStore>, Outbound);
+
+fn oauth_inputs(pools: &Pools, prepared: &Prepared) -> OAuthInputs {
+    (
+        pools.app.clone(),
+        pools.router.clone(),
+        pools.outbox_reader.clone(),
+        prepared.identity_keys.clone(),
+        prepared.outbound.clone(),
+    )
+}
+
 /// The realm authorization server (OP-146 I7) over the application pool, the identity signer,
 /// clients' endpoints, the HSM's DPoP nonce keys and the authority plane's token projections
 /// (OP-150 m.2).
 fn authorization<P>(
     config: &Config,
-    (app, router, reader, nonce_keys, outbound): (Pool, Pool, Pool, Arc<KeyStore>, Outbound),
+    (app, router, reader, nonce_keys, outbound): OAuthInputs,
     projections: P,
 ) -> Result<axum::Router, String>
 where
@@ -858,6 +875,7 @@ async fn serve(
     report: &LockdownReport,
 ) -> Result<(), String> {
     let all = pools(config, &prepared).await?;
+    let oauth_inputs = oauth_inputs(&all, &prepared);
     let keks = login::RealmKeks::new(prepared.login_keys);
     // OP-137, OP-149 m.15 (i), m.22 (g)
     ids::open_root(&all.app, &prepared.identity_keys).await?;
@@ -873,13 +891,6 @@ async fn serve(
     let signer = || SignerKeys::new(identity_section.signer.clone());
     let (platform_outbound, platform_keks) = (prepared.outbound.clone(), keks.clone());
     let platform_pools = event_pools(&all, &cell_ids, prepared.outbound.declared());
-    let oauth_inputs = (
-        all.app.clone(),
-        all.router.clone(),
-        all.outbox_reader.clone(),
-        prepared.identity_keys.clone(),
-        prepared.outbound,
-    );
     // OP-149 m.7
     let ssf = events::ssf(&platform_pools, signer(), keks.clone());
     // OP-146 m.16 (m)
@@ -1041,7 +1052,7 @@ async fn shutdown_signal() {
 mod commands {
     use std::ffi::OsString;
 
-    use super::{Command, command};
+    use super::{Command, Job, command};
 
     fn args(a: &[&str]) -> Vec<OsString> {
         a.iter().map(OsString::from).collect()
@@ -1058,13 +1069,32 @@ mod commands {
         ));
         assert!(matches!(
             command(&args(&["bootstrap", "/etc/access/bootstrap.toml"])),
-            Some(Command::Bootstrap(p)) if p.ends_with("bootstrap.toml")
+            Some(Command::Local(p, Job::Bootstrap)) if p.ends_with("bootstrap.toml")
+        ));
+        // OP-149 m.26 (c)
+        assert!(matches!(
+            command(&args(&["client-update", "/etc/access/bootstrap-work.toml", "work", "Suiss Work 2"])),
+            Some(Command::Local(p, Job::ClientUpdate { product, display_name }))
+                if p.ends_with("bootstrap-work.toml") && product == "work" && display_name == "Suiss Work 2"
+        ));
+        assert!(matches!(
+            command(&args(&["client-retire", "/etc/access/bootstrap-work.toml", "work"])),
+            Some(Command::Local(p, Job::ClientRetire { product }))
+                if p.ends_with("bootstrap-work.toml") && product == "work"
         ));
         for bad in [
             &["bootstrap"][..],
             &["migrate", "--force"],
             &["serve"],
             &["--dev"],
+            &["client-update", "/etc/access/bootstrap-work.toml", "work"],
+            &["client-retire", "/etc/access/bootstrap-work.toml"],
+            &[
+                "client-retire",
+                "/etc/access/bootstrap-work.toml",
+                "work",
+                "--now",
+            ],
         ] {
             assert!(command(&args(bad)).is_none(), "{bad:?}");
         }

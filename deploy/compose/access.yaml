@@ -2,8 +2,9 @@
 # Same binaries and checks as production; SoftHSM is the local PKCS#11 token and a local CA
 # issues every certificate. Nothing here is a development mode.
 #
-#   docker compose -f deploy/compose/access.yaml up -d
+#   ACCESS_LOCAL_TEST_PASSWORD=... docker compose -f deploy/compose/access.yaml up -d
 #   docker compose -f deploy/compose/access.yaml run --rm bootstrap   # print the ids again
+#   docker compose -f deploy/compose/access.yaml run --rm local-client login ...   # a real sign-in
 
 name: access-local
 
@@ -161,8 +162,11 @@ services:
       timeout: 3s
       retries: 30
 
-  # OP-149 m.21: the platform tenant, sample tenants and product clients; prints their ids and
-  # keeps them in the bootstrap volume (bootstrap.json)
+  # OP-149 m.21, m.26: the platform tenant, sample tenants, product clients and the test fixtures
+  # (test user, compromise declarant); prints their ids and keeps them in the bootstrap volume
+  # (bootstrap.json). The same service runs the one-shot client changes:
+  #   docker compose -f deploy/compose/access.yaml run --rm bootstrap \
+  #     access-server client-update /etc/access/local/bootstrap-work.toml work "Suiss Work 2"
   bootstrap:
     <<: *access
     entrypoint: ["sh", "-c"]
@@ -176,6 +180,8 @@ services:
       ACCESS_DELIVERY_TARGETS: ${ACCESS_DELIVERY_TARGETS:-[]}
       # not ACCESS_*: that prefix is the server configuration
       BOOTSTRAP_PLAN: ${ACCESS_BOOTSTRAP_PLAN:-/etc/access/local/bootstrap.toml}
+      # OP-149 m.26 (b), TI-9: the test user's password, chosen by you; there is no default
+      BOOTSTRAP_TEST_PASSWORD: ${ACCESS_LOCAL_TEST_PASSWORD:?set ACCESS_LOCAL_TEST_PASSWORD, the password of the bootstrap's test user}
     volumes:
       - certs:/var/lib/access/certs:ro
       - secrets:/var/lib/access/secrets:ro
@@ -215,6 +221,31 @@ services:
       interval: 2s
       timeout: 3s
       retries: 30
+
+  # OP-149 m.26 (b), (c): the headless client, on demand (`profiles: [tools]`), with the local
+  # CA, the PEP certificate and bootstrap.json in reach:
+  #   docker compose -f deploy/compose/access.yaml run --rm local-client login \
+  #     --issuer https://access-server:8443/realms/acme --ca /var/lib/access/certs/ca.crt \
+  #     --client-id <test_user.client_id> --redirect-uri http://127.0.0.1/cb \
+  #     --identifier test@acme.example --password-env BOOTSTRAP_TEST_PASSWORD [--resource <client_id>]
+  #   docker compose -f deploy/compose/access.yaml run --rm local-client compromise \
+  #     --api https://access-server:8443 --ca /var/lib/access/certs/ca.crt \
+  #     --cert /var/lib/access/certs/pep.crt --key /var/lib/access/certs/pep.key \
+  #     --domain <compromise.domain> --issuer-party <compromise.issuer> --party <a Party>
+  local-client:
+    <<: *access
+    profiles: ["tools"]
+    entrypoint: ["access-local-client"]
+    environment:
+      BOOTSTRAP_TEST_PASSWORD: ${ACCESS_LOCAL_TEST_PASSWORD:-}
+    volumes:
+      - certs:/var/lib/access/certs:ro
+      - bootstrap:/var/lib/access/bootstrap:ro
+      - product-tls:/var/lib/access/product-tls:ro
+      - ${ACCESS_PRODUCT_KEYS:-./access/products}:/etc/access/products:ro
+    depends_on:
+      access-server:
+        condition: service_healthy
 
 networks:
   default:

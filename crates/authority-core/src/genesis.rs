@@ -220,6 +220,14 @@ pub fn realm(
     if order.slug.is_empty() {
         return Err(CoreError::Protocol("genesis-slug"));
     }
+    // L0-META-5, L2-CLM-3: an Acceptance the Kernel cannot read as a gate opens no domain
+    if order
+        .acceptances
+        .iter()
+        .any(|a| access_kernel::claim::Gate::of(a).is_err())
+    {
+        return Err(CoreError::Protocol("genesis-acceptance"));
+    }
     let root = root_value(&order.root);
     // MD-5a, TN-1
     let idp = Value::Map(vec![
@@ -243,6 +251,7 @@ pub fn realm(
                 .map(|ns| schemas(ns, founder))
                 .chain(order.schemas.iter().map(|p| published(p, founder)))
                 .chain(order.issuer.map(realm_issuer))
+                .chain(order.acceptances.iter().cloned())
                 .collect())?,
         ),
         (

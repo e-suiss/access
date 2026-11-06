@@ -39,6 +39,7 @@ fn order(root: Root) -> GenesisOrder {
         ct3_delay_s: None,
         schemas: Vec::new(),
         issuer: None,
+        acceptances: Vec::new(),
     }
 }
 

@@ -291,6 +291,10 @@ pub struct GenesisOrder {
     /// The realm's identity Claim issuer Party, when it has one: the domain is born accepting
     /// it for `actor-binding` only (§10.1.4 rule 3, OP-142).
     pub issuer: Option<access_kernel::model::Id>,
+    /// Further Acceptances the founder establishes at Genesis, each an `acceptance-content`
+    /// (L0-META-5, L2-CLM-3); a local deployment's declarant is accepted this way (OP-149
+    /// m.26 (c)).
+    pub acceptances: Vec<suiss_crypto::dcbor::Value>,
 }
 
 /// The domain a Genesis opened.

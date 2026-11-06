@@ -121,6 +121,8 @@ jobs:
       # OP-149 m.23: a declared delivery target and its product certificate
       ACCESS_LOCAL_PRODUCT_HOSTS: work-server
       ACCESS_DELIVERY_TARGETS: '[{url="https://work-server:8443/v1/inbound/events", ca_file="/var/lib/access/certs/ca.crt"}]'
+      # OP-149 m.26 (b): the bootstrap's test user; this job's own, not a secret
+      ACCESS_LOCAL_TEST_PASSWORD: local-smoke-test-user-password
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -178,6 +180,25 @@ jobs:
           $COMPOSE run --rm --no-deps -T bootstrap > "$RUNNER_TEMP/again.json"
           grep -q '"created": false' "$RUNNER_TEMP/again.json"
           ! grep -q '"created": true' "$RUNNER_TEMP/again.json"
+      # OP-149 m.26 (b), (c): the headless sign-in and a compromise declaration over the PEP
+      # certificate, each against the running deployment
+      - name: Local client
+        run: |
+          client_id="$(jq -r '.test_user.client_id' "$RUNNER_TEMP/again.json")"
+          issuer="$(jq -r '.realms[] | select(.slug == "acme") | .issuer' "$RUNNER_TEMP/again.json")"
+          $COMPOSE run --rm --no-deps -T local-client login \
+            --issuer "$issuer" --ca /var/lib/access/certs/ca.crt \
+            --client-id "$client_id" --redirect-uri http://127.0.0.1/cb \
+            --identifier test@acme.example --password-env BOOTSTRAP_TEST_PASSWORD > "$RUNNER_TEMP/tokens.json"
+          jq -e '.token_type == "DPoP" and (.access_token | length > 0) and (.id_token | length > 0)' "$RUNNER_TEMP/tokens.json"
+          domain="$(jq -r '.compromise.domain' "$RUNNER_TEMP/again.json")"
+          declarant="$(jq -r '.compromise.issuer' "$RUNNER_TEMP/again.json")"
+          party="$(jq -r '.sample.subject' "$RUNNER_TEMP/again.json")"
+          $COMPOSE run --rm --no-deps -T local-client compromise \
+            --api https://access-server:8443 --ca /var/lib/access/certs/ca.crt \
+            --cert /var/lib/access/certs/pep.crt --key /var/lib/access/certs/pep.key \
+            --domain "$domain" --issuer-party "$declarant" --party "$party" > "$RUNNER_TEMP/claim.json"
+          jq -e '.disposition == "admit"' "$RUNNER_TEMP/claim.json"
       - name: Logs
         if: failure()
         run: $COMPOSE logs --no-color

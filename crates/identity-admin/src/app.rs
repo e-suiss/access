@@ -53,6 +53,9 @@ pub struct NewRealm<'a> {
     pub ct3_delay_s: Option<u64>,
     /// Further catalogs its Genesis publishes, by the founding root (OP-141 m.35 (c)).
     pub schemas: Vec<Spp>,
+    /// Further Acceptances its Genesis establishes, each an `acceptance-content` (L0-META-5,
+    /// OP-149 m.26 (c)).
+    pub acceptances: Vec<suiss_crypto::dcbor::Value>,
 }
 
 /// A created realm.
@@ -196,6 +199,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                 ct3_delay_s: r.ct3_delay_s,
                 schemas: r.schemas.clone(),
                 issuer: Some(access_kernel::model::Id(claim_issuer)),
+                acceptances: r.acceptances.clone(),
             })
             .await
             .map_err(|e| AdminError::Unavailable(e.0))?;

@@ -32,13 +32,10 @@ use access_kernel::claim::{PARTY_COMPROMISE, PREDICATE_INPUT};
 use access_kernel::codec::Canonical;
 use access_kernel::digest::Digest;
 use access_kernel::json::b64url_encode;
-use access_kernel::meta::Payload;
 use access_kernel::model::{Id, SubjectSelector};
-use access_store::authority::find_nonce;
 use access_store::identity::{RealmId, TenantId, TenantTx};
-use access_store::scope::DomainId;
-use access_store::tenancy::route_by_slug;
 use access_store::idp;
+use access_store::tenancy::route_by_slug;
 use serde::Serialize;
 use suiss_crypto::dcbor::Value;
 use suiss_crypto::pkcs11::HsmSigner;
@@ -52,9 +49,6 @@ use crate::login::RealmKeks;
 
 /// The token label of the local compromise declarant's key (OP-149 m.26 (c)).
 pub(crate) const DECLARANT_LABEL: &str = "access/bootstrap/compromise-declarant";
-
-/// What the root signs to derive the nonce of the declarant's `acceptance_establish`.
-const ACCEPTANCE_LABEL: &[u8] = b"access-bootstrap/compromise-acceptance:1";
 
 /// Who the bootstrap is in the account audit log (OP-10).
 const BOOTSTRAP: Actor<'static> = Actor {
@@ -72,16 +66,14 @@ enum Corpus {
 
 impl Corpus {
     fn of(dir: Option<PathBuf>) -> Self {
-        match dir {
-            Some(d) => Self::Mirror(MirrorRanges::new(d)),
-            None => {
-                tracing::warn!(
-                    "test_user: no breach_ranges_dir in the plan; the test password is not \
-                     checked against a breach corpus"
-                );
-                Self::Absent
-            }
+        if let Some(d) = dir {
+            return Self::Mirror(MirrorRanges::new(d));
         }
+        tracing::warn!(
+            "test_user: no breach_ranges_dir in the plan; the test password is not checked \
+             against a breach corpus"
+        );
+        Self::Absent
     }
 }
 
@@ -121,9 +113,50 @@ pub(crate) struct ChangeOut {
     pub(crate) position: u64,
 }
 
+/// A `staged` account with `identifier`, the plan's password as its credential (§10.2.1), moved
+/// to `active` along TN-49.
+async fn create_account(
+    accounts: &PgAccounts,
+    scope: &Realm<'_>,
+    identifier: &Identifier,
+    u: &TestUserPlan,
+) -> Result<[u8; 16], BootstrapError> {
+    let subject = create(
+        accounts,
+        scope,
+        std::slice::from_ref(identifier),
+        &BOOTSTRAP,
+    )
+    .await?;
+    let hasher = Hasher::new(HasherConfig::sized(
+        Argon2Params::CANONICAL,
+        cores(),
+        cgroup_memory_budget(),
+    ));
+    let corpus = Corpus::of(u.breach_ranges_dir.clone());
+    let services = PasswordServices {
+        hasher: &hasher,
+        ranges: &corpus,
+        entropy: &SystemEntropy,
+    };
+    set_password(
+        accounts,
+        scope,
+        &services,
+        subject,
+        u.password.expose(),
+        &BOOTSTRAP,
+    )
+    .await?;
+    for to in [AccountStatus::PendingUserAction, AccountStatus::Active] {
+        change_status(accounts, scope, subject, to, &BOOTSTRAP).await?;
+    }
+    Ok(subject)
+}
+
 /// The `acceptance-content` under which `issuer`'s `party_compromise` Claims are predicate
-/// input about any subject, for good (L2-CLM-3).
-fn acceptance(issuer: Id) -> Value {
+/// input about any subject, for good (L2-CLM-3); a sample realm's Genesis establishes it.
+pub(super) fn acceptance(issuer: Id) -> Value {
     Value::Map(vec![
         (Value::text("issuer"), issuer.to_value()),
         (Value::text("use"), Value::text(PREDICATE_INPUT)),
@@ -177,36 +210,13 @@ where
         let mut tx = accounts.begin(tenant, realm).await?;
         let existing = tx.subject_by_identifier(identifier.value()).await?;
         tx.commit().await?;
-        let (subject, created) = match existing {
-            Some(s) => (s, false),
-            None => {
-                let s = create(&accounts, &scope, std::slice::from_ref(&identifier), &BOOTSTRAP)
-                    .await?;
-                let hasher = Hasher::new(HasherConfig::sized(
-                    Argon2Params::CANONICAL,
-                    cores(),
-                    cgroup_memory_budget(),
-                ));
-                let corpus = Corpus::of(u.breach_ranges_dir.clone());
-                let services = PasswordServices {
-                    hasher: &hasher,
-                    ranges: &corpus,
-                    entropy: &SystemEntropy,
-                };
-                set_password(
-                    &accounts,
-                    &scope,
-                    &services,
-                    s,
-                    u.password.expose(),
-                    &BOOTSTRAP,
-                )
-                .await?;
-                for to in [AccountStatus::PendingUserAction, AccountStatus::Active] {
-                    change_status(&accounts, &scope, s, to, &BOOTSTRAP).await?;
-                }
-                (s, true)
-            }
+        let (subject, created) = if let Some(s) = existing {
+            (s, false)
+        } else {
+            (
+                create_account(&accounts, &scope, &identifier, u).await?,
+                true,
+            )
         };
         let client_id = self
             .public_client(admin, (tenant, realm), domain, root, u)
@@ -270,45 +280,33 @@ where
         Ok(id)
     }
 
-    /// The local declarant's Party in the realm's domain and the Acceptance of its
-    /// `party_compromise` Claims as predicate input, established by the root once
-    /// (OP-149 m.26 (c), L2-CLM-3, L2-CLM-5).
+    /// The local declarant's key, made in the token once, and its Party (OP-149 m.26 (c)).
+    pub(super) fn declarant(&self) -> Result<(HsmSigner, Id), BootstrapError> {
+        let key = token_key(self.hsm, DECLARANT_LABEL)?;
+        let issuer = root_party(&key.public_key());
+        Ok((key, issuer))
+    }
+
+    /// The local declarant's Instance in the realm's domain, whose Genesis accepted its
+    /// `party_compromise` Claims as predicate input (OP-149 m.26 (c), L2-CLM-3, L2-CLM-5).
+    /// An Acceptance is a Genesis fact: a realm created without one keeps none, so the summary
+    /// says whether this run created the realm.
     pub(super) async fn compromise(
         &self,
         c: &CompromisePlan,
         (tenant, realm): (TenantId, RealmId),
         domain: Digest,
-        root: &HsmSigner,
+        key: &HsmSigner,
+        issuer: Id,
+        created: bool,
     ) -> Result<CompromiseOut, BootstrapError> {
-        let key = token_key(self.hsm, DECLARANT_LABEL)?;
-        let issuer = root_party(&key.public_key());
-        self.onboard(tenant, realm, domain, &key, issuer).await?;
-        let mut label = ACCEPTANCE_LABEL.to_vec();
-        label.extend_from_slice(&domain.0);
-        label.extend_from_slice(&issuer.0);
-        let signature = root
-            .sign(&label)
-            .map_err(|e| BootstrapError::Unavailable(String::from(e.code())))?;
-        let nonce = suiss_crypto::digest::sha256(&signature).to_vec();
-        let established = find_nonce(self.app, &DomainId::from_bytes(domain.0), &nonce)
-            .await?
-            .is_some_and(|n| n.outcome == "allow");
-        if !established {
-            self.commit_meta(
-                domain,
-                root,
-                &nonce,
-                Payload::AcceptanceEstablish(acceptance(issuer)),
-                issuer,
-            )
-            .await?;
-        }
+        self.onboard(tenant, realm, domain, key, issuer).await?;
         Ok(CompromiseOut {
             realm: c.realm.clone(),
             domain: b64url_encode(&domain.0),
             issuer: b64url_encode(&issuer.0),
             class: PARTY_COMPROMISE,
-            created: !established,
+            created,
         })
     }
 

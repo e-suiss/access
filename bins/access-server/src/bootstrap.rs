@@ -360,8 +360,9 @@ fn test_password(file: &TestUserFile) -> Result<Secret<String>, BootstrapError> 
     let plan = |what: &str| BootstrapError::Plan(format!("test_user: {what}"));
     let raw = match (&file.password, &file.password_env) {
         (Some(p), None) => p.clone(),
-        (None, Some(var)) => std::env::var(var)
-            .map_err(|_| plan(&format!("password_env {var} is not set")))?,
+        (None, Some(var)) => {
+            std::env::var(var).map_err(|_| plan(&format!("password_env {var} is not set")))?
+        }
         _ => return Err(plan("exactly one of password and password_env is required")),
     };
     if raw.is_empty() {
@@ -668,6 +669,28 @@ fn root_party(key: &PublicKey) -> Id {
     Id(id)
 }
 
+/// The summary's line for a realm.
+fn realm_out(
+    ids: &IdKey,
+    (tenant, realm, domain): (TenantId, RealmId, Digest),
+    slug: &str,
+    issuer: String,
+    (platform, created): (bool, bool),
+) -> Result<RealmOut, BootstrapError> {
+    Ok(RealmOut {
+        tenant: ids
+            .encode(TENANT_PREFIX, *tenant.as_bytes())
+            .map_err(AdminError::from)?,
+        realm: uuid(realm.as_bytes()),
+        slug: String::from(slug),
+        discovery: format!("{issuer}/.well-known/suiss-configuration"),
+        issuer,
+        domain: b64url_encode(&domain.0),
+        platform,
+        created,
+    })
+}
+
 /// A UUID's hyphenated text.
 pub(crate) fn uuid(b: &[u8; 16]) -> String {
     let mut s = String::with_capacity(36);
@@ -762,6 +785,11 @@ where
         let mut sample = None;
         let mut test_user = None;
         let mut compromise = None;
+        // OP-149 m.26 (c): the declarant is accepted at the realm's Genesis
+        let declarant = match &plan.compromise {
+            Some(_) => Some(self.declarant()?),
+            None => None,
+        };
         for (slug, is_platform) in slugs {
             let admin = self.admin(&ids, None);
             let catalog = plan
@@ -769,8 +797,17 @@ where
                 .as_ref()
                 .filter(|s| !is_platform && s.realm == *slug);
             let schemas = catalog.map(|s| vec![s.catalog(party)]).unwrap_or_default();
-            let (tenant, realm, domain, created) =
-                self.realm(&admin, slug, style, party, schemas).await?;
+            let accepted = plan
+                .compromise
+                .as_ref()
+                .filter(|c| !is_platform && c.realm == *slug)
+                .zip(declarant.as_ref());
+            let acceptances = accepted
+                .map(|(_, (_, issuer))| vec![local::acceptance(*issuer)])
+                .unwrap_or_default();
+            let (tenant, realm, domain, created) = self
+                .realm(&admin, slug, style, party, schemas, acceptances)
+                .await?;
             self.onboard(tenant, realm, domain, &root, party).await?;
             if let Some(s) = catalog {
                 sample = Some(self.sample(s, (tenant, realm), domain, &root).await?);
@@ -791,21 +828,19 @@ where
                     ..out
                 });
             }
-            if let Some(c) = plan.compromise.as_ref().filter(|c| c.realm == *slug) {
-                compromise = Some(self.compromise(c, (tenant, realm), domain, &root).await?);
+            if let Some((c, (key, issuer))) = accepted {
+                compromise = Some(
+                    self.compromise(c, (tenant, realm), domain, key, *issuer, created)
+                        .await?,
+                );
             }
-            realms.push(RealmOut {
-                tenant: ids
-                    .encode(TENANT_PREFIX, *tenant.as_bytes())
-                    .map_err(AdminError::from)?,
-                realm: uuid(realm.as_bytes()),
-                slug: slug.clone(),
-                discovery: format!("{}/.well-known/suiss-configuration", route.issuer),
-                issuer: route.issuer,
-                domain: b64url_encode(&domain.0),
-                platform: is_platform,
-                created,
-            });
+            realms.push(realm_out(
+                &ids,
+                (tenant, realm, domain),
+                slug,
+                route.issuer,
+                (is_platform, created),
+            )?);
         }
         let mut clients = Vec::new();
         if let Some((tenant, realm, domain, issuer)) = platform {
@@ -902,7 +937,8 @@ where
         nonce: &[u8],
     ) -> Result<u64, BootstrapError> {
         let payload = Payload::GrantIssue(s.grant(&domain, subject));
-        self.commit_meta(domain, root, nonce, payload, subject).await
+        self.commit_meta(domain, root, nonce, payload, subject)
+            .await
     }
 
     /// Commits the meta-action `payload` about `party` on the meta-anchor, signed by the root;
@@ -969,6 +1005,7 @@ where
         style: IssuerStyle,
         root: Id,
         schemas: Vec<Spp>,
+        acceptances: Vec<suiss_crypto::dcbor::Value>,
     ) -> Result<(TenantId, RealmId, Digest, bool), BootstrapError> {
         if let Some(route) = route_by_slug(self.router, slug).await? {
             let mut t = TenantTx::begin(self.app, route.tenant, route.realm).await?;
@@ -992,6 +1029,7 @@ where
                 root: Root::Sole(root),
                 ct3_delay_s: None,
                 schemas,
+                acceptances,
             })
             .await?;
         Ok((tenant, created.realm, created.domain, true))
