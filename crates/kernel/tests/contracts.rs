@@ -192,6 +192,68 @@ fn explanation_cddl() -> Cddl {
     Cddl::new(&[&read("cddl/kernel.cddl"), &read("cddl/explanation.cddl")])
 }
 
+/// A `require_action` explanation whose one unmet term asks for `dim` at `level`, as CBOR and
+/// as JSON.
+fn assurance_explanation(dim: &str, level: u64) -> (Value, Json) {
+    let edn = format!(
+        "{{\"outcome\": \"require_action\", \"unmet\": [{{\"term\": {{\"proof_kind\": \
+         \"authentication\", \"class\": \"step_up\", \"assurance\": {{\"{dim}\": {level}}}}}, \
+         \"missing\": 1, \"position\": \"instance\", \"satisfiable_by_actor\": true}}]}}"
+    );
+    let value = value_sorted(&edn::parse(&edn));
+    let json = serde_json::json!({
+        "outcome": "require_action",
+        "unmet": [{
+            "term": { "proof_kind": "authentication", "class": "step_up", "assurance": { dim: level } },
+            "missing": 1,
+            "position": "instance",
+            "satisfiable_by_actor": true,
+        }],
+    });
+    (value, json)
+}
+
+// OP-149 m.28 (e), OP-118 m.3: the assurance ranges of explanation.cddl and the JSON Schema are
+// the Kernel's, dimension by dimension and one past each bound, and the Kernel decodes exactly
+// what both contracts accept; a dimension the Kernel does not know is refused by all three
+#[test]
+fn assurance_ranges_are_the_kernels_in_both_contracts() {
+    use access_kernel::requirement::{ASSURANCE_DIMENSIONS, check_assurance};
+    let cddl = explanation_cddl();
+    let doc: Json = serde_json::from_str(&read("cddl/explanation.schema.json")).unwrap();
+    let schema = Schema::new(&doc);
+    let mut cases = Vec::new();
+    for (dim, low, high) in ASSURANCE_DIMENSIONS {
+        for level in low.saturating_sub(1)..=high + 1 {
+            cases.push((dim, level));
+        }
+    }
+    cases.push(("strength", 1));
+    let mut accepted = 0;
+    for (dim, level) in cases {
+        let kernel = check_assurance(&std::collections::BTreeMap::from([(
+            String::from(dim),
+            level,
+        )]))
+        .is_ok();
+        let (value, json) = assurance_explanation(dim, level);
+        let decoded = decision_from_value(&value).is_ok();
+        let by_cddl = cddl.validate("explanation", &value).is_ok();
+        let by_schema = schema.errors(&json).is_empty();
+        assert_eq!(
+            (decoded, by_cddl, by_schema),
+            (kernel, kernel, kernel),
+            "{dim} = {level}: (kernel decode, CDDL, JSON Schema) against the Kernel's rule"
+        );
+        accepted += usize::from(kernel);
+    }
+    assert_eq!(accepted, 2 * 3 + 7 * 2);
+    let (_, empty) = assurance_explanation("aal", 1);
+    let mut empty = empty;
+    empty["unmet"][0]["term"]["assurance"] = serde_json::json!({});
+    assert!(!schema.errors(&empty).is_empty(), "an empty assurance map");
+}
+
 // E43, OP-114 m.2, OP-114 m.3: the Kernel's Decision is the explanation format; every unfiltered
 // example decodes into it and encodes back byte for byte, the requester's filtered view is no
 // Kernel decision, and an invalid one is not decoded

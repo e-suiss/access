@@ -119,6 +119,12 @@ impl<'a> Schema<'a> {
                     out.push(format!("{at}: missing {req}"));
                 }
             }
+            if s.get("minProperties")
+                .and_then(Json::as_u64)
+                .is_some_and(|min| (obj.len() as u64) < min)
+            {
+                out.push(format!("{at}: too few members"));
+            }
             let props = s.get("properties").and_then(Json::as_object);
             for (k, v) in obj {
                 if let Some(names) = s.get("propertyNames") {

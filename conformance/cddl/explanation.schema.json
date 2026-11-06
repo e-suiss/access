@@ -128,15 +128,23 @@
       }
     },
     "assurance": {
+      "description": "The closed assurance dimensions of §10.1.6 (OP-118 m.3), each with the Kernel's range: levels 1..3, flags 0..1 (kernel.cddl `assurance`).",
       "type": "object",
-      "propertyNames": {
-        "type": "string",
-        "enum": [
-          "aal", "loa_eidas", "phishing_resistant", "hardware_bound", "non_custodial", "uv", "human_presence",
-          "app_controlled_factor", "synced"
-        ]
-      },
-      "additionalProperties": { "type": "integer", "minimum": 0, "maximum": 3 }
-    }
+      "minProperties": 1,
+      "additionalProperties": false,
+      "properties": {
+        "aal": { "$ref": "#/$defs/assurance_level" },
+        "loa_eidas": { "$ref": "#/$defs/assurance_level" },
+        "phishing_resistant": { "$ref": "#/$defs/assurance_flag" },
+        "hardware_bound": { "$ref": "#/$defs/assurance_flag" },
+        "non_custodial": { "$ref": "#/$defs/assurance_flag" },
+        "uv": { "$ref": "#/$defs/assurance_flag" },
+        "human_presence": { "$ref": "#/$defs/assurance_flag" },
+        "app_controlled_factor": { "$ref": "#/$defs/assurance_flag" },
+        "synced": { "$ref": "#/$defs/assurance_flag" }
+      }
+    },
+    "assurance_level": { "type": "integer", "minimum": 1, "maximum": 3 },
+    "assurance_flag": { "type": "integer", "minimum": 0, "maximum": 1 }
   }
 }
