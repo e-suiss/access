@@ -600,7 +600,7 @@ mod tests {
     #[test]
     fn a_step_up_is_an_unmet_authentication_term() {
         let approval = json!({ "term": { "proof_kind": "contribution", "class": "approve", "binding": "intent_digest" }, "missing": 1, "position": "anchor", "satisfiable_by_actor": true });
-        let authentication = json!({ "term": { "proof_kind": "claim", "class": "authentication", "binding": "actor_instance", "freshness_ms": 900000, "assurance": { "aal": 2, "phishing_resistant": 1 } }, "missing": 1, "position": "anchor", "satisfiable_by_actor": true });
+        let authentication = json!({ "term": { "proof_kind": "claim", "class": "authentication", "binding": "actor_instance", "freshness_ms": 900_000, "assurance": { "aal": 2, "phishing_resistant": 1 } }, "missing": 1, "position": "anchor", "satisfiable_by_actor": true });
         let decision = |unmet: Vec<Value>| json!({ "decision": false, "context": { "outcome": "require_action", "unmet": unmet } });
         assert!(!asks_step_up(&decision(vec![approval.clone()])));
         assert!(asks_step_up(&decision(vec![approval, authentication])));
