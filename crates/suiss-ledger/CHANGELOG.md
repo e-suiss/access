@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.1
+
+No changes; released with `esuiss-access-kernel` 0.3.1 (explanation scopes and the contribute intent in the Kernel).
+
 ## 0.3.0
 
 No changes; released with `esuiss-access-kernel` 0.3.0.
