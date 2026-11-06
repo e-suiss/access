@@ -295,6 +295,10 @@ pub struct GenesisOrder {
     /// (L0-META-5, L2-CLM-3); a local deployment's declarant is accepted this way (OP-149
     /// m.26 (c)).
     pub acceptances: Vec<suiss_crypto::dcbor::Value>,
+    /// Classes of the realm issuer's Claims the domain is born accepting as predicate input
+    /// too (§10.1.4 rule 3, L2-CLM-3): what a hosted approval's `authentication` Claim proves
+    /// with (SI-5, OP-149 m.29 (b)). Empty keeps `actor-binding` alone.
+    pub issuer_predicate_input: Vec<String>,
 }
 
 /// The domain a Genesis opened.

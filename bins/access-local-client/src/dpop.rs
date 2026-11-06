@@ -19,6 +19,14 @@ pub fn now_s() -> u64 {
         .map_or(0, |d| d.as_secs())
 }
 
+/// Milliseconds since the Unix epoch, by the local clock.
+#[must_use]
+pub fn now_ms() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |d| u64::try_from(d.as_millis()).unwrap_or(u64::MAX))
+}
+
 /// `N` random bytes, base64url.
 ///
 /// # Errors

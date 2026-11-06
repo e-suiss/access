@@ -1,12 +1,20 @@
 //! `access-local-client`: the headless client of a local Access deployment (OP-149 m.26 (b),
-//! (c)). Each command runs the real protocol against a running Access over TLS verified against
-//! the local CA, and prints the result as JSON. Secrets come from files and environment
-//! variables, never from arguments.
+//! (c), (e), m.29 (b)). Each command runs the real protocol against a running Access over TLS
+//! verified against the local CA, and prints the result as JSON. Secrets come from files,
+//! environment variables and the PKCS#11 token, never from arguments.
 //!
 //! ```text
 //! access-local-client login --issuer <realm issuer> --ca <ca.crt> --client-id <id>
-//!     --redirect-uri <uri> --identifier <login> --password-env <VAR> [--resource <client_id>]
-//!     [--scope <scopes>] [--connect <ip:port>]
+//!     --redirect-uri <uri> --identifier <login>
+//!     (--password-env <VAR> | --passkey <label> --hsm-module <path> --hsm-token <label> --hsm-pin-file <path>)
+//!     [--resource <client_id>] [--scope <scopes>] [--connect <ip:port>]
+//! access-local-client approve --issuer <realm issuer> --api <base> --ca <ca.crt>
+//!     --cert <pep.crt> --key <pep.key> --redirect-uri <uri> --identifier <login>
+//!     --hsm-module <path> --hsm-token <label> --hsm-pin-file <path>
+//!     --device-key <label> --passkey <label> --domain <b64url> --party <b64url>
+//!     --grant <b64url> --grant-since <position> --contribute-grant <b64url>
+//!     --contribute-since <position> (--intent <envelope.json> | --intent-json <json>)
+//!     [--instance <b64url>] [--reason <text>] [--request <pushed-request.json>] [--connect <ip:port>]
 //! access-local-client compromise --api <base> --ca <ca.crt> --cert <pep.crt> --key <pep.key>
 //!     --domain <b64url> --issuer-party <b64url> --party <b64url> [--occurred-at <ms>]
 //!     [--connect <ip:port>]
@@ -17,20 +25,27 @@
 
 use std::collections::BTreeMap;
 use std::net::SocketAddr;
+use std::path::Path;
 use std::process::ExitCode;
 
 use access_kernel::digest::Digest;
 use access_kernel::json::b64url_decode;
 use access_kernel::model::Id;
 use access_local_client::ClientError;
+use access_local_client::approve::{Approve, approve};
 use access_local_client::claims::{Compromise, declare};
 use access_local_client::dpop::Es256Key;
 use access_local_client::http::{Http, Identity, leaf_der};
-use access_local_client::login::{Login, login};
+use access_local_client::intent::holding;
+use access_local_client::login::{Credential, Login, login};
+use access_local_client::passkey::{Passkey, relying_party};
 use access_local_client::platform::{PlatformClient, StatusChange};
+use access_local_client::token::Token;
 
-const USAGE: &str = "usage: access-local-client <login | compromise | stream-status> --<option> <value>...\n\
-  login:         --issuer --ca --client-id --redirect-uri --identifier --password-env [--resource] [--scope] [--connect]\n\
+const USAGE: &str = "usage: access-local-client <login | approve | compromise | stream-status> --<option> <value>...\n\
+  login:         --issuer --ca --client-id --redirect-uri --identifier (--password-env | --passkey --hsm-module --hsm-token --hsm-pin-file) [--resource] [--scope] [--connect]\n\
+  approve:       --issuer --api --ca --cert --key --redirect-uri --identifier --hsm-module --hsm-token --hsm-pin-file --device-key --passkey\n\
+                 --domain --party --grant --grant-since --contribute-grant --contribute-since (--intent | --intent-json) [--instance] [--reason] [--request] [--connect]\n\
   compromise:    --api --ca --cert --key --domain --issuer-party --party [--occurred-at] [--connect]\n\
   stream-status: --api --issuer --ca --client-id --client-key --stream [--status [--reason]] [--connect]";
 
@@ -79,6 +94,10 @@ impl Options {
         std::fs::read(path).map_err(|e| format!("{path}: {e}"))
     }
 
+    fn json(&self, name: &str) -> Result<serde_json::Value, String> {
+        serde_json::from_slice(&self.file(name)?).map_err(|e| format!("--{name}: {e}"))
+    }
+
     fn id16(&self, name: &str) -> Result<Id, String> {
         let text = self.required(name)?;
         b64url_decode(text)
@@ -87,6 +106,31 @@ impl Options {
             .map(Id)
             .ok_or_else(|| format!("--{name} is not a base64url 16-byte id"))
     }
+
+    fn digest(&self, name: &str) -> Result<Digest, String> {
+        let text = self.required(name)?;
+        b64url_decode(text)
+            .ok()
+            .and_then(|b| <[u8; 32]>::try_from(b).ok())
+            .map(Digest)
+            .ok_or_else(|| format!("--{name} is not a base64url 32-byte digest"))
+    }
+
+    fn position(&self, name: &str) -> Result<u64, String> {
+        self.required(name)?
+            .parse()
+            .map_err(|_| format!("--{name} is not a position"))
+    }
+
+    /// The token the test user's keys live in (OP-149 m.26 (e), m.28 (b)).
+    fn token(&self) -> Result<Token, String> {
+        Token::open(
+            Path::new(self.required("hsm-module")?),
+            self.required("hsm-token")?,
+            Path::new(self.required("hsm-pin-file")?),
+        )
+        .map_err(|e| e.to_string())
+    }
 }
 
 fn http(o: &Options, identity: Option<&Identity>) -> Result<Http, String> {
@@ -94,31 +138,121 @@ fn http(o: &Options, identity: Option<&Identity>) -> Result<Http, String> {
     Http::new(&ca, identity, o.connect()?).map_err(|e| e.to_string())
 }
 
-async fn run(command: &str, o: &Options) -> Result<serde_json::Value, String> {
+/// `login`: the code flow with the password or the passkey (OP-149 m.26 (b), (e)).
+async fn login_command(o: &Options) -> Result<serde_json::Value, String> {
     let step = |e: ClientError| e.to_string();
-    match command {
-        "login" => {
-            let var = o.required("password-env")?;
-            let password = std::env::var(var)
+    let issuer = o.required("issuer")?;
+    let (rp_id, origin) = relying_party(issuer).map_err(step)?;
+    let password;
+    let token;
+    let key;
+    let passkey;
+    let credential = match (o.optional("password-env"), o.optional("passkey")) {
+        (Some(var), None) => {
+            password = std::env::var(var)
                 .ok()
                 .filter(|p| !p.is_empty())
                 .ok_or_else(|| format!("{var} is not set"))?;
-            let http = http(o, None)?;
-            login(
-                &http,
-                &Login {
-                    issuer: o.required("issuer")?,
-                    client_id: o.required("client-id")?,
-                    redirect_uri: o.required("redirect-uri")?,
-                    identifier: o.required("identifier")?,
-                    password: &password,
-                    resource: o.optional("resource"),
-                    scope: o.optional("scope").unwrap_or("openid"),
-                },
-            )
-            .await
-            .map_err(step)
+            Credential::Password(&password)
         }
+        (None, Some(label)) => {
+            token = o.token()?;
+            key = token.signer(label).map_err(step)?;
+            passkey = Passkey {
+                key: &key,
+                rp_id: &rp_id,
+                origin: &origin,
+            };
+            Credential::Passkey(&passkey)
+        }
+        _ => return Err(String::from("exactly one of --password-env and --passkey")),
+    };
+    let http = http(o, None)?;
+    login(
+        &http,
+        &Login {
+            issuer,
+            client_id: o.required("client-id")?,
+            redirect_uri: o.required("redirect-uri")?,
+            identifier: o.required("identifier")?,
+            credential,
+            resource: o.optional("resource"),
+            scope: o.optional("scope").unwrap_or("openid"),
+        },
+    )
+    .await
+    .map_err(step)
+}
+
+/// `approve`: an allowed Exercise through the hosted Approval Surface (OP-149 m.29 (b)).
+async fn approve_command(o: &Options) -> Result<serde_json::Value, String> {
+    let step = |e: ClientError| e.to_string();
+    let identity = Identity {
+        chain_pem: o.file("cert")?,
+        key_pem: o.file("key")?,
+    };
+    let leaf = leaf_der(&identity.chain_pem).map_err(step)?;
+    let http = http(o, Some(&identity))?;
+    let issuer = o.required("issuer")?;
+    let (rp_id, origin) = relying_party(issuer).map_err(step)?;
+    let token = o.token()?;
+    let device = token.signer(o.required("device-key")?).map_err(step)?;
+    let key = token.signer(o.required("passkey")?).map_err(step)?;
+    let passkey = Passkey {
+        key: &key,
+        rp_id: &rp_id,
+        origin: &origin,
+    };
+    let party = o.id16("party")?;
+    let intent = match (o.optional("intent"), o.optional("intent-json")) {
+        (Some(_), None) => o.json("intent")?,
+        (None, Some(text)) => {
+            serde_json::from_str(text).map_err(|e| format!("--intent-json: {e}"))?
+        }
+        _ => return Err(String::from("exactly one of --intent and --intent-json")),
+    };
+    let request = o
+        .optional("request")
+        .map(|_| o.json("request"))
+        .transpose()?;
+    approve(
+        &http,
+        &Approve {
+            issuer,
+            api_base: o.required("api")?,
+            redirect_uri: o.required("redirect-uri")?,
+            identifier: o.required("identifier")?,
+            passkey: &passkey,
+            device: &device,
+            pep_leaf_der: &leaf,
+            domain: o.digest("domain")?,
+            party,
+            instance: o
+                .optional("instance")
+                .map(|_| o.id16("instance"))
+                .transpose()?,
+            intent: &intent,
+            basis: holding(o.id16("grant")?, party, o.position("grant-since")?),
+            contribution: holding(
+                o.id16("contribute-grant")?,
+                party,
+                o.position("contribute-since")?,
+            ),
+            reason: o
+                .optional("reason")
+                .unwrap_or("Local end-to-end test of an allowed Exercise."),
+            request: request.as_ref(),
+        },
+    )
+    .await
+    .map_err(step)
+}
+
+async fn run(command: &str, o: &Options) -> Result<serde_json::Value, String> {
+    let step = |e: ClientError| e.to_string();
+    match command {
+        "login" => login_command(o).await,
+        "approve" => approve_command(o).await,
         "compromise" => {
             let identity = Identity {
                 chain_pem: o.file("cert")?,
@@ -126,11 +260,6 @@ async fn run(command: &str, o: &Options) -> Result<serde_json::Value, String> {
             };
             let leaf = leaf_der(&identity.chain_pem).map_err(step)?;
             let http = http(o, Some(&identity))?;
-            let domain = b64url_decode(o.required("domain")?)
-                .ok()
-                .and_then(|b| <[u8; 32]>::try_from(b).ok())
-                .map(Digest)
-                .ok_or("--domain is not a base64url 32-byte digest")?;
             let occurred_at = o
                 .optional("occurred-at")
                 .map(|t| {
@@ -142,7 +271,7 @@ async fn run(command: &str, o: &Options) -> Result<serde_json::Value, String> {
                 &http,
                 &Compromise {
                     api_base: o.required("api")?,
-                    domain,
+                    domain: o.digest("domain")?,
                     issuer: o.id16("issuer-party")?,
                     party: o.id16("party")?,
                     occurred_at,

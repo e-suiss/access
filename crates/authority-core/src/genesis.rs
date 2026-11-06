@@ -199,6 +199,27 @@ fn realm_issuer(issuer: Id) -> Value {
     ])
 }
 
+/// The realm issuer's Acceptance for `classes` as predicate input (§10.1.4 rule 3, L2-CLM-3,
+/// SI-5): what its `authentication` Claims prove with in an approval.
+fn realm_issuer_predicates(issuer: Id, classes: &[String]) -> Value {
+    Value::Map(vec![
+        (Value::text("issuer"), issuer.to_value()),
+        (
+            Value::text("use"),
+            Value::text(access_kernel::claim::PREDICATE_INPUT),
+        ),
+        (
+            Value::text("classes"),
+            Value::Array(classes.iter().map(|c| Value::text(c)).collect()),
+        ),
+        (Value::text("subject"), SubjectSelector::Public.to_value()),
+        (
+            Value::text("validity"),
+            Value::Array(vec![Value::Unsigned(0), Value::Unsigned(u64::MAX)]),
+        ),
+    ])
+}
+
 /// The Genesis fields of a realm's new governing domain.
 ///
 /// # Errors
@@ -251,6 +272,12 @@ pub fn realm(
                 .map(|ns| schemas(ns, founder))
                 .chain(order.schemas.iter().map(|p| published(p, founder)))
                 .chain(order.issuer.map(realm_issuer))
+                .chain(
+                    order
+                        .issuer
+                        .filter(|_| !order.issuer_predicate_input.is_empty())
+                        .map(|i| realm_issuer_predicates(i, &order.issuer_predicate_input)),
+                )
                 .chain(order.acceptances.iter().cloned())
                 .collect())?,
         ),

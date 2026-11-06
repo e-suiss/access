@@ -56,6 +56,9 @@ pub struct NewRealm<'a> {
     /// Further Acceptances its Genesis establishes, each an `acceptance-content` (L0-META-5,
     /// OP-149 m.26 (c)).
     pub acceptances: Vec<suiss_crypto::dcbor::Value>,
+    /// Classes of the realm issuer's Claims its Genesis accepts as predicate input too, for
+    /// hosted approvals (SI-5, OP-149 m.29 (b)).
+    pub issuer_predicate_input: Vec<String>,
 }
 
 /// A created realm.
@@ -200,6 +203,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                 schemas: r.schemas.clone(),
                 issuer: Some(access_kernel::model::Id(claim_issuer)),
                 acceptances: r.acceptances.clone(),
+                issuer_predicate_input: r.issuer_predicate_input.clone(),
             })
             .await
             .map_err(|e| AdminError::Unavailable(e.0))?;

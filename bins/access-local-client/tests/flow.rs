@@ -1,6 +1,7 @@
-//! The headless login against an in-process Access (OP-149 m.26 (b)): the realm authorization
-//! server and the hosted login's JSON surface over TLS from a test CA, a real PostgreSQL and a
-//! real identity signer; the client runs the whole flow as it does against a local deployment.
+//! The headless login against an in-process Access (OP-149 m.26 (b), (e)): the realm
+//! authorization server and the hosted login's JSON surface over TLS from a test CA, a real
+//! PostgreSQL and a real identity signer; the client runs the whole flow as it does against a
+//! local deployment, with the password and with the software passkey.
 
 #![allow(
     clippy::unwrap_used,
@@ -44,19 +45,27 @@ use access_identity_account::ports::{BreachRanges, RangeUnavailable};
 use access_identity_oauth::app::Discovery;
 use access_identity_oauth::app::oauth::OAuth;
 use access_identity_oauth::ports::{Directory, Keys, RealmEntry, Unavailable};
+use access_identity_session::adapters::OsRandom;
+use access_identity_session::adapters::passkeys::PgPasskeys;
+use access_identity_session::app::{Auth, Passkeys};
 use access_identity_session::domain::requirement::AuthPolicy;
 use access_identity_session::domain::session::SessionPolicy;
+use access_identity_ui::adapters::LogSignals;
 use access_identity_ui::app::Hosted;
 use access_identity_ui::ports::{Clock, Kits, Messages, RealmKit};
 use access_identity_webauthn::adapters::RealmDecoyKeys;
+use access_identity_webauthn::app::RegistrationOutcome;
+use access_identity_webauthn::domain::ceremony::{ClientExtensionResults, RegistrationResponse};
 use access_identity_webauthn::domain::ids::RealmId as WaRealm;
 use access_identity_webauthn::domain::policy::RealmPolicy;
 use access_identity_webauthn::domain::rp::{RelyingParty, RpId};
 use access_kernel::json::b64url_decode;
 use access_local_client::http::Http;
-use access_local_client::login::{Login, login};
+use access_local_client::login::{Credential, Login, login};
+use access_local_client::passkey::Passkey;
 use access_store::identity::TenantTx;
 use serde_json::Value;
+use suiss_crypto::signer::{Signer as _, SoftSigner};
 use support::{Cluster, NATIVE};
 
 const PW: &str = "correct horse battery staple";
@@ -182,6 +191,70 @@ fn tls(host: &str) -> (String, String, String) {
     (ca_pem, cert.pem(), key.serialize_pem())
 }
 
+/// Registers the software passkey of `key` for `subject` the way the bootstrap does (OP-149
+/// m.26 (e)): the realm's own registration ceremony, finished through the hosted path's step.
+async fn register_passkey(
+    pool: &access_store::Pool,
+    kit: &RealmKit,
+    subject: [u8; 16],
+    key: &SoftSigner,
+    issuer: &str,
+) {
+    let access_kernel::verify::cose::PublicKey::Ed25519(public) = key.public_key() else {
+        panic!("not ed25519");
+    };
+    let authenticator =
+        access_identity_webauthn::domain::software::SoftwareAuthenticator::ed25519(public);
+    let db = PgAccounts(pool.clone());
+    let registry = PgPasskeys {
+        pool,
+        tenant: kit.tenant,
+        kek: &*kit.kek,
+        ids: &kit.ids,
+    };
+    let gate = LoginGate::new(LocalLimiter::default(), ThrottlePolicy::DEFAULT, 0);
+    let hasher = Hasher::new(HasherConfig::sized(Argon2Params::CANONICAL, 4, None));
+    let link_base = format!("{issuer}/login/link#");
+    let auth = Auth {
+        db: &db,
+        realm: kit.realm(),
+        policy: kit.auth,
+        lifetimes: kit.lifetimes,
+        clock: &Live,
+        random: &OsRandom,
+        notifier: &Dropping,
+        link_base: &link_base,
+        gate: &gate,
+        hasher: &hasher,
+        passkeys: Passkeys {
+            registry: &registry,
+            signals: &LogSignals,
+            decoys: &kit.decoys,
+            rp: &kit.rp,
+            policy: &kit.webauthn,
+        },
+    };
+    let start = auth.start_passkey(subject, WHO, WHO).await.unwrap();
+    let (rp_id, origin) = access_local_client::passkey::relying_party(issuer).unwrap();
+    let reg = authenticator.registration(&rp_id, &origin, &start.state.challenge);
+    let outcome = auth
+        .register_passkey(
+            subject,
+            &start.state,
+            &RegistrationResponse {
+                raw_id: &reg.id,
+                client_data_json: &reg.client_data_json,
+                attestation_object: &reg.attestation_object,
+                transports: &[String::from("internal")],
+                extensions: ClientExtensionResults::default(),
+            },
+            "test",
+        )
+        .await
+        .unwrap();
+    assert!(matches!(outcome, RegistrationOutcome::Registered(_)));
+}
+
 fn claims(jwt: &str) -> Value {
     let payload = jwt.split('.').nth(1).unwrap();
     serde_json::from_slice(&b64url_decode(payload).unwrap()).unwrap()
@@ -263,7 +336,7 @@ async fn the_headless_client_runs_the_code_flow() {
         client_id: &f.public,
         redirect_uri: NATIVE,
         identifier: WHO,
-        password: PW,
+        credential: Credential::Password(PW),
         resource: None,
         scope: "openid",
     };
@@ -310,7 +383,7 @@ async fn the_headless_client_runs_the_code_flow() {
     let refused = login(
         &http,
         &Login {
-            password: "not the password at all",
+            credential: Credential::Password("not the password at all"),
             ..l
         },
     )
@@ -351,6 +424,52 @@ async fn the_headless_client_runs_the_code_flow() {
     let untrusted = Http::new(other.as_bytes(), None, Some(addr)).unwrap();
     let tls_error = login(&untrusted, &l).await.unwrap_err().to_string();
     assert!(tls_error.starts_with("tls"), "{tls_error}");
+
+    // OP-149 m.26 (e), §10.2.4: the software passkey, registered through the step the hosted
+    // registration finishes with, signs the user in identifier-first (AAL2, no userHandle
+    // needed); another key under the same relying party is refused, never a token
+    let (key, _) = SoftSigner::generate_ed25519().unwrap();
+    register_passkey(&c.db.app, &kit, subject, &key, &issuer).await;
+    let (rp_id, origin) = access_local_client::passkey::relying_party(&issuer).unwrap();
+    let passkey = Passkey {
+        key: &key,
+        rp_id: &rp_id,
+        origin: &origin,
+    };
+    let with_passkey = login(
+        &http,
+        &Login {
+            credential: Credential::Passkey(&passkey),
+            ..l
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(with_passkey["token_type"], "DPoP");
+    assert_eq!(
+        claims(with_passkey["id_token"].as_str().unwrap())["sub"],
+        at["sub"]
+    );
+    let (stranger, _) = SoftSigner::generate_ed25519().unwrap();
+    let forged = Passkey {
+        key: &stranger,
+        rp_id: &rp_id,
+        origin: &origin,
+    };
+    let refused = login(
+        &http,
+        &Login {
+            credential: Credential::Passkey(&forged),
+            ..l
+        },
+    )
+    .await
+    .unwrap_err()
+    .to_string();
+    assert!(
+        refused.contains("passkey") && refused.contains("401"),
+        "{refused}"
+    );
 
     let _ = stop.send(());
     let _ = served.await;

@@ -349,6 +349,7 @@ dependencies = [
  "rustls-pki-types",
  "serde_json",
  "thiserror",
+ "time",
  "tokio",
  "tokio-rustls",
 ]
@@ -397,6 +398,7 @@ dependencies = [
  "access-identity-ui",
  "access-identity-webauthn",
  "access-internal-api",
+ "access-local-client",
  "access-store",
  "access-telemetry",
  "aws-lc-rs",

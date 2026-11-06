@@ -23,6 +23,10 @@ pub const INSTANCE_NAMESPACE: &str = "access.instance";
 /// The intent parameter that carries the meta payload's digest.
 pub const PAYLOAD_PARAM: &str = "payload";
 
+/// The PEP name the identity plane commits as in a realm's governing domain: device
+/// registrations, terminations, `idp.*` changes and approvals name it (OP-149 m.16 (a), m.9).
+pub const IDENTITY_PEP: &str = "access-identity";
+
 /// The resource namespace a self-signed registration intent names its Party in.
 pub const PARTY_NAMESPACE: &str = "access.party";
 

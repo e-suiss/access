@@ -1,6 +1,7 @@
 //! What a product's end-to-end tests need from a local deployment besides the realms and
-//! clients (OP-149 m.26 (b), (c), m.28 (b)): a test user with a password, a public client to
-//! sign in with and a device Instance that binds the user to a Party, in a sample realm; the
+//! clients (OP-149 m.26 (b), (c), (e), m.28 (b)): a test user with a password and a software
+//! passkey, a public client to sign in with and a device Instance that binds the user to a
+//! Party, in a sample realm; the
 //! Acceptance under which a local declarant Party's unsigned `party_compromise` Claims are
 //! admitted there, so a product's PEP can produce `party.compromised` at Claim Ingest; and the
 //! `idp.client.update` and `idp.client.retire` changes of a platform client, which produce
@@ -13,15 +14,20 @@ use std::sync::Arc;
 use access_crypto::opaque_id::IdKey;
 use access_identity_account::adapters::hibp::MirrorRanges;
 use access_identity_account::adapters::pg::{PgAccounts, PgTx};
-use access_identity_account::adapters::system::{SystemEntropy, cgroup_memory_budget, cores};
+use access_identity_account::adapters::system::{
+    SystemClock, SystemEntropy, cgroup_memory_budget, cores,
+};
 use access_identity_account::app::accounts::{
     PasswordServices, change_status, create, set_password,
 };
 use access_identity_account::app::hasher::{Hasher, HasherConfig};
+use access_identity_account::app::local::LocalLimiter;
+use access_identity_account::app::login::LoginGate;
 use access_identity_account::app::{Actor, Realm};
 use access_identity_account::domain::identifier::{Identifier, IdentifierKind};
 use access_identity_account::domain::password::Argon2Params;
 use access_identity_account::domain::status::AccountStatus;
+use access_identity_account::domain::throttle::ThrottlePolicy;
 use access_identity_account::ports::{AccountDb, AccountTx, BreachRanges, RangeUnavailable};
 use access_identity_admin::AdminError;
 use access_identity_admin::app::{Admin, Applied};
@@ -29,12 +35,26 @@ use access_identity_admin::domain::{AuthMethod, Change, Client, ClientId};
 use access_identity_admin::ports::{Decider, Governance, Instances, RealmKeys};
 use access_identity_events::adapters::RealmKek as _;
 use access_identity_events::domain::catalog::IdentityKind;
+use access_identity_oauth::domain::issuer::Issuer;
+use access_identity_oauth::ports::RealmEntry;
+use access_identity_session::adapters::OsRandom;
+use access_identity_session::adapters::passkeys::PgPasskeys;
+use access_identity_session::app::{Auth, Passkeys};
+use access_identity_session::domain::session::SessionPolicy;
+use access_identity_ui::adapters::{LogSignals, Outbox};
 use access_identity_ui::app::devices::{self, DeviceKey};
+use access_identity_ui::ports::{Kits as _, Messages as _, RealmKit};
+use access_identity_webauthn::app::RegistrationOutcome;
+use access_identity_webauthn::domain::ceremony::{ClientExtensionResults, RegistrationResponse};
+use access_identity_webauthn::domain::ids::UserHandle;
+use access_identity_webauthn::domain::software::SoftwareAuthenticator;
+use access_identity_webauthn::ports::CredentialRegistry as _;
 use access_kernel::claim::{PARTY_COMPROMISE, PREDICATE_INPUT};
 use access_kernel::codec::Canonical;
 use access_kernel::digest::Digest;
 use access_kernel::json::b64url_encode;
 use access_kernel::model::{Id, SubjectSelector};
+use access_kernel::verify::cose::PublicKey;
 use access_store::identity::{RealmId, TenantId, TenantTx};
 use access_store::idp;
 use access_store::issuer::subject_instance;
@@ -48,13 +68,16 @@ use super::{
     Bootstrap, BootstrapError, CompromiseOut, CompromisePlan, MetaExercises, Plan, TestUserOut,
     TestUserPlan, cell_ids, root_key, root_party, token_key,
 };
-use crate::login::RealmKeks;
+use crate::login::{HsmKits, RealmKeks};
 
 /// The token label of the local compromise declarant's key (OP-149 m.26 (c)).
 pub(crate) const DECLARANT_LABEL: &str = "access/bootstrap/compromise-declarant";
 
 /// The token label of the test user's device key (OP-149 m.28 (b)).
 pub(crate) const TEST_DEVICE_LABEL: &str = "access/bootstrap/test-user-device";
+
+/// The token label of the test user's software passkey (OP-149 m.26 (e)).
+pub(crate) const TEST_PASSKEY_LABEL: &str = "access/bootstrap/test-user-passkey";
 
 /// Who the bootstrap is in the account audit log (OP-10).
 const BOOTSTRAP: Actor<'static> = Actor {
@@ -183,9 +206,9 @@ where
     P: Decider + Governance + Instances + MetaExercises,
     K: RealmKeys,
 {
-    /// The test user of `u` in the realm, active with a password credential (AAL1), and the
-    /// public client a headless login signs in with (OP-149 m.26 (b)). An account holding the
-    /// identifier is found, not made again.
+    /// The test user of `u` in the realm, active with a password credential (AAL1) and a
+    /// software passkey (AAL2), the public client a headless login signs in with (OP-149 m.26
+    /// (b), (e)), and its Party. An account holding the identifier is found, not made again.
     pub(super) async fn test_user(
         &self,
         admin: &Admin<'_, P, P, K>,
@@ -194,7 +217,7 @@ where
         domain: Digest,
         root: &HsmSigner,
         u: &TestUserPlan,
-    ) -> Result<TestUserOut, BootstrapError> {
+    ) -> Result<(TestUserOut, Id), BootstrapError> {
         let kind = if u.identifier.contains('@') {
             IdentifierKind::Email
         } else {
@@ -228,17 +251,152 @@ where
             .public_client(admin, (tenant, realm), domain, root, u)
             .await?;
         let (party, instance) = self.device_party((tenant, realm), domain, subject).await?;
-        Ok(TestUserOut {
-            realm: u.realm.clone(),
-            issuer: String::new(),
-            identifier: String::from(identifier.value()),
-            subject: scope.external(subject)?,
-            client_id,
-            redirect_uri: String::from(u.redirect_uri.as_str()),
-            party: b64url_encode(&party.0),
-            instance: b64url_encode(&instance.0),
-            created,
-        })
+        let passkey = self.passkey(&u.realm, subject, identifier.value()).await?;
+        Ok((
+            TestUserOut {
+                realm: u.realm.clone(),
+                issuer: String::new(),
+                identifier: String::from(identifier.value()),
+                subject: scope.external(subject)?,
+                client_id,
+                redirect_uri: String::from(u.redirect_uri.as_str()),
+                party: b64url_encode(&party.0),
+                instance: b64url_encode(&instance.0),
+                passkey: b64url_encode(&passkey),
+                allowed: None,
+                created,
+            },
+            party,
+        ))
+    }
+
+    /// Whether `subject` holds the live passkey `credential_id` in the realm.
+    async fn has_passkey(
+        &self,
+        kit: &RealmKit,
+        registry: &PgPasskeys<'_>,
+        subject: [u8; 16],
+        credential_id: &[u8],
+    ) -> Result<bool, BootstrapError> {
+        let mut t = TenantTx::begin(self.app, kit.tenant, kit.realm).await?;
+        let handle = t.user_handle(subject).await?;
+        t.commit().await?;
+        let Some(h) = handle else {
+            return Ok(false);
+        };
+        Ok(registry
+            .list(kit.rp.realm, &UserHandle::from_bytes(h))
+            .await
+            .map_err(|e| BootstrapError::Unavailable(e.to_string()))?
+            .iter()
+            .any(|r| r.id.as_bytes() == credential_id))
+    }
+
+    /// The test user's software passkey (OP-149 m.26 (e)): an Ed25519 key kept in the token
+    /// answers the realm's own registration ceremony, through the step the hosted
+    /// `POST /v1/account/passkeys/{registration}` finishes with (§10.2.4, OP-150 L2), so the
+    /// passkey is a device-bound, user-verified credential of the account like any other. A
+    /// registered passkey of that key is found, not made again. Returns the credential id.
+    async fn passkey(
+        &self,
+        slug: &str,
+        subject: [u8; 16],
+        identifier: &str,
+    ) -> Result<[u8; 32], BootstrapError> {
+        let key = token_key(self.hsm, TEST_PASSKEY_LABEL)?;
+        let PublicKey::Ed25519(public) = key.public_key() else {
+            return Err(BootstrapError::Encode);
+        };
+        let authenticator = SoftwareAuthenticator::ed25519(public);
+        let route = route_by_slug(self.router, slug)
+            .await?
+            .ok_or(AdminError::NoRealm)?;
+        let issuer = Issuer::parse(&route.issuer)
+            .map_err(|e| BootstrapError::Plan(format!("test_user: realm issuer: {e}")))?;
+        let entry = RealmEntry {
+            tenant: route.tenant,
+            realm: route.realm,
+            slug: route.slug.clone(),
+            issuer,
+        };
+        let kits = HsmKits::new(
+            RealmKeks::new(Arc::clone(self.hsm)),
+            self.router.clone(),
+            SessionPolicy::DEFAULT,
+        );
+        let kit = kits
+            .kit(&entry)
+            .await
+            .map_err(|_| BootstrapError::Unavailable(String::from("realm keys")))?;
+        let registry = PgPasskeys {
+            pool: self.app,
+            tenant: kit.tenant,
+            kek: &*kit.kek,
+            ids: &kit.ids,
+        };
+        if self
+            .has_passkey(&kit, &registry, subject, &authenticator.credential_id)
+            .await?
+        {
+            return Ok(authenticator.credential_id);
+        }
+        let db = PgAccounts(self.app.clone());
+        let realm = kit.realm();
+        let notifier = Outbox.notifier(&realm);
+        let link_base = format!("{}/login/link#", kit.issuer);
+        let gate = LoginGate::new(LocalLimiter::default(), ThrottlePolicy::DEFAULT, 0);
+        let hasher = Hasher::new(HasherConfig::sized(
+            Argon2Params::CANONICAL,
+            cores(),
+            cgroup_memory_budget(),
+        ));
+        let auth = Auth {
+            db: &db,
+            realm: kit.realm(),
+            policy: kit.auth,
+            lifetimes: kit.lifetimes,
+            clock: &SystemClock,
+            random: &OsRandom,
+            notifier: &notifier,
+            link_base: &link_base,
+            gate: &gate,
+            hasher: &hasher,
+            passkeys: Passkeys {
+                registry: &registry,
+                signals: &LogSignals,
+                decoys: &kit.decoys,
+                rp: &kit.rp,
+                policy: &kit.webauthn,
+            },
+        };
+        let start = auth
+            .start_passkey(subject, identifier, identifier)
+            .await
+            .map_err(|e| BootstrapError::Unavailable(e.to_string()))?;
+        let origin = format!("https://{}", entry.issuer.authority());
+        let reg =
+            authenticator.registration(kit.rp.rp_id.as_str(), &origin, &start.state.challenge);
+        let outcome = auth
+            .register_passkey(
+                subject,
+                &start.state,
+                &RegistrationResponse {
+                    raw_id: &reg.id,
+                    client_data_json: &reg.client_data_json,
+                    attestation_object: &reg.attestation_object,
+                    transports: &[String::from("internal")],
+                    extensions: ClientExtensionResults::default(),
+                },
+                BOOTSTRAP.correlation,
+            )
+            .await
+            .map_err(|e| BootstrapError::Unavailable(e.to_string()))?;
+        match outcome {
+            RegistrationOutcome::Registered(_) => Ok(authenticator.credential_id),
+            RegistrationOutcome::Rejected(r) => {
+                Err(BootstrapError::Refused(format!("test_user passkey: {r}")))
+            }
+        }
     }
 
     /// The test user's Party and device Instance in the realm's governing domain (OP-149 m.28

@@ -40,6 +40,7 @@ fn order(root: Root) -> GenesisOrder {
         schemas: Vec::new(),
         issuer: None,
         acceptances: Vec::new(),
+        issuer_predicate_input: Vec::new(),
     }
 }
 

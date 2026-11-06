@@ -116,6 +116,7 @@ struct World {
     base: RealmBase,
     module: PathBuf,
     label: String,
+    identity_signer: PathBuf,
 }
 
 type TestDomains = Domains<KeyStore, ActorBindings, OsSalts, SourcesClock>;
@@ -171,7 +172,8 @@ impl World {
         let (domains, plane) = process(&db, open(), "bootstrap-test", signer);
         let keys = Arc::new(open());
         Box::leak(Box::new(keys.clone()));
-        let keyring = RealmKeyring::new(SignerKeys::new(identity_signer(name)), keys.clone());
+        let identity_signer = identity_signer(name);
+        let keyring = RealmKeyring::new(SignerKeys::new(identity_signer.clone()), keys.clone());
         let world = Self {
             db,
             plane,
@@ -181,6 +183,7 @@ impl World {
             base: RealmBase::parse("https://access.test").unwrap(),
             module,
             label,
+            identity_signer,
         };
         (world, service)
     }
@@ -222,6 +225,7 @@ impl World {
                 ct3_delay_s: None,
                 schemas: Vec::new(),
                 acceptances: Vec::new(),
+                issuer_predicate_input: Vec::new(),
             })
             .await
             .unwrap();
@@ -920,6 +924,7 @@ async fn admin_realm_creation_opens_the_domain_keys() {
             ct3_delay_s: None,
             schemas: Vec::new(),
             acceptances: Vec::new(),
+            issuer_predicate_input: Vec::new(),
         })
         .await
         .unwrap();
@@ -1077,6 +1082,7 @@ fn sample_plan() -> Plan {
             realm: String::from("acme"),
             namespace: String::from("work"),
             action: String::from("approve"),
+            allowed: None,
         }),
         ..plan()
     }
@@ -1293,5 +1299,355 @@ fn a_test_user_takes_its_password_from_one_named_place() {
             "password = 'x'\nredirect_uri = 'http://evil.example/cb'"
         )
         .is_err()
+    );
+}
+
+/// The plan with the allowed Exercise of OP-149 m.29 (b): the test user may `work:commit` under
+/// an approval it contributes itself.
+fn approve_plan() -> Plan {
+    Plan {
+        sample: Some(SamplePlan {
+            realm: String::from("acme"),
+            namespace: String::from("work"),
+            action: String::from("approve"),
+            allowed: Some(String::from("commit")),
+        }),
+        ..local_plan()
+    }
+}
+
+/// A test CA with a server leaf for `host` and a PEP client leaf, PEM.
+struct TestTls {
+    ca: String,
+    server_cert: String,
+    server_key: String,
+    pep_cert: String,
+    pep_key: String,
+}
+
+fn test_tls(host: &str) -> TestTls {
+    let mut ca = rcgen::CertificateParams::new(Vec::<String>::new()).unwrap();
+    ca.is_ca = rcgen::IsCa::Ca(rcgen::BasicConstraints::Unconstrained);
+    ca.key_usages = vec![
+        rcgen::KeyUsagePurpose::KeyCertSign,
+        rcgen::KeyUsagePurpose::DigitalSignature,
+    ];
+    let ca_key = rcgen::KeyPair::generate().unwrap();
+    let ca_pem = ca.self_signed(&ca_key).unwrap().pem();
+    let issuer = rcgen::Issuer::new(ca, ca_key);
+    let mut server = rcgen::CertificateParams::new(vec![host.to_owned()]).unwrap();
+    server.extended_key_usages = vec![rcgen::ExtendedKeyUsagePurpose::ServerAuth];
+    let server_key = rcgen::KeyPair::generate().unwrap();
+    let server_cert = server.signed_by(&server_key, &issuer).unwrap();
+    let mut pep = rcgen::CertificateParams::new(Vec::<String>::new()).unwrap();
+    pep.extended_key_usages = vec![rcgen::ExtendedKeyUsagePurpose::ClientAuth];
+    pep.distinguished_name
+        .push(rcgen::DnType::CommonName, "work-pep");
+    let pep_key = rcgen::KeyPair::generate().unwrap();
+    let pep_cert = pep.signed_by(&pep_key, &issuer).unwrap();
+    TestTls {
+        ca: ca_pem,
+        server_cert: server_cert.pem(),
+        server_key: server_key.serialize_pem(),
+        pep_cert: pep_cert.pem(),
+        pep_key: pep_key.serialize_pem(),
+    }
+}
+
+/// A 16-byte id from the summary's base64url.
+fn id_of(text: &str) -> Id {
+    Id(<[u8; 16]>::try_from(access_kernel::json::b64url_decode(text).unwrap()).unwrap())
+}
+
+/// A holding from the summary's `basis`.
+fn holding_of(basis: &serde_json::Value) -> HoldingRef {
+    let h = &basis["holding"];
+    HoldingRef {
+        grant: id_of(h["grant"].as_str().unwrap()),
+        holder: id_of(h["holder"].as_str().unwrap()),
+        since: h["since"].as_u64().unwrap(),
+    }
+}
+
+/// An intent of the allowed action over `ledger`, as a product writes it for the ADP.
+fn commit_intent(allowed: &serde_json::Value, ledger: &str, now: u64) -> serde_json::Value {
+    serde_json::json!({
+        "action": allowed["action"],
+        "resources": [allowed["resource"]],
+        "params": {
+            "ledger": { "eq": ledger },
+            "declaration": { "eq": { "bytes": b64url_encode(&[0xd1; 32]) } },
+        },
+        "validity": { "from": now.saturating_sub(60_000), "until": now.saturating_add(600_000) },
+    })
+}
+
+// OP-149 m.29 (b), m.26 (e), m.9, §9.14.1 A, §9.14.5, §9.8, §13.7.3: the bootstrap publishes
+// the allowed action beside the sample one and grants it to the test user's Party under an
+// approval requirement, with the Grant to contribute that approval; the headless client then
+// signs in with the software passkey, gets REQUIRE_ACTION for a commit as the product's PEP,
+// pushes the request with the contribution its device signed, approves it on the real surface
+// with one assertion over H(AAS), commits again and verifies the receipt the ALLOW carries
+// against the domain's published metadata. A request for an intent nothing waits for is "the
+// request changed"; another key is no passkey of the user. A second bootstrap run finds all of
+// it.
+#[tokio::test]
+async fn the_local_client_approves_an_allowed_exercise() {
+    use access_http::adp::adapters::{Discovery, router as adp_router};
+    use access_http::login::{me_router, router as login_router};
+    use access_http::product::adapters::router as product_router;
+    use access_identity_account::adapters::system::{SystemClock, cgroup_memory_budget, cores};
+    use access_identity_account::app::claims::Courier;
+    use access_identity_account::app::hasher::{Hasher, HasherConfig};
+    use access_identity_account::app::local::LocalLimiter;
+    use access_identity_account::app::login::LoginGate;
+    use access_identity_account::domain::password::Argon2Params;
+    use access_identity_account::domain::throttle::ThrottlePolicy;
+    use access_identity_oauth::adapters::PgDirectory;
+    use access_identity_oauth::app::Discovery as RealmDiscovery;
+    use access_identity_session::domain::session::SessionPolicy;
+    use access_identity_ui::adapters::Outbox;
+    use access_identity_ui::app::Devices;
+    use access_identity_ui::app::Hosted;
+    use access_local_client::approve::{Approve, approve};
+    use access_local_client::http::{Http, Identity, leaf_der};
+    use access_local_client::passkey::{Passkey, relying_party};
+    use suiss_crypto::signer::SoftSigner;
+
+    use crate::login::{HsmKits, RealmKeks};
+    use crate::product::{PgSubjects, PgTenants};
+
+    let (w, signer) = World::open("bootstrap-approve", true).await;
+    let signer = signer.unwrap();
+    let plan = approve_plan();
+    schedule(&signer);
+    schedule(&signer);
+    let first = w.run(&plan).await;
+    schedule(&signer);
+    schedule(&signer);
+    // OP-146 m.5 (f): the day partitions the serving process opens
+    let today = i32::try_from(server_time(&w.db.app).await.unwrap() / 86_400_000).unwrap();
+    for o in access_store::ephemeral::open_days(&w.db.archive, today, 1).await {
+        o.result.unwrap();
+    }
+    let user = first.test_user.clone().unwrap();
+    let allowed = serde_json::to_value(user.allowed.clone().unwrap()).unwrap();
+    assert_eq!(allowed["action"]["name"], "commit");
+    assert_eq!(allowed["params"]["ledger"], "text");
+    assert_eq!(allowed["contribution"]["class"], "approve");
+    assert_eq!(
+        allowed["basis"]["holding"]["holder"],
+        serde_json::Value::from(user.party.clone())
+    );
+    assert_eq!(
+        access_kernel::json::b64url_decode(&user.passkey)
+            .unwrap()
+            .len(),
+        32
+    );
+    let acme = first.realms.iter().find(|r| r.slug == "acme").unwrap();
+    assert_eq!(allowed["domain"], acme.domain.as_str());
+
+    // the server, in this process: the hosted login and Frontend API over the bootstrap's
+    // plane, the ADP and the product routes, TLS from a test CA with the PEP's client CA
+    let tls = test_tls("access.test");
+    let keks = RealmKeks::new(Arc::clone(&w.keys));
+    let hosted = Arc::new(Hosted {
+        kits: HsmKits::new(keks, w.db.router.clone(), SessionPolicy::DEFAULT),
+        db: w.db.app.clone(),
+        clock: SystemClock,
+        messages: Outbox,
+        gate: LoginGate::new(LocalLimiter::default(), ThrottlePolicy::DEFAULT, 0),
+        hasher: Hasher::new(HasherConfig::sized(
+            Argon2Params::CANONICAL,
+            cores(),
+            cgroup_memory_budget(),
+        )),
+        redirect_to: String::from("/"),
+    });
+    let discovery = || {
+        RealmDiscovery::new(
+            PgDirectory::new(w.db.router.clone()),
+            SignerKeys::new(w.identity_signer.clone()),
+        )
+    };
+    let courier = Arc::new(Courier {
+        app: w.db.app.clone(),
+        reader: w.db.reader.clone(),
+        signer: SignerKeys::new(w.identity_signer.clone()),
+        ingest: access_authority_ingest::app::Ingest::new(
+            w.domains.clone(),
+            crate::ingest::PgSubmissions(w.db.app.clone()),
+            crate::ingest::Trusted(tokio::sync::Mutex::new(SourcesClock::new(w.db.app.clone()))),
+        ),
+        clock: SystemClock,
+    });
+    let ids = Arc::new(crate::ids::CellIds::new(Arc::clone(&w.keys)));
+    let app = login_router(discovery(), hosted.clone(), None)
+        .merge(me_router(
+            discovery(),
+            hosted,
+            Devices {
+                signer: SignerKeys::new(w.identity_signer.clone()),
+                instances: w.plane.clone(),
+                approvals: w.plane.clone(),
+                claims: courier,
+                pep: String::from(IDENTITY_PEP),
+            },
+        ))
+        .merge(adp_router(
+            access_http::adp::app::Service::new(w.domains.clone(), 64 * 1024),
+            Discovery {
+                issuer: String::from("https://access.test"),
+            },
+        ))
+        .merge(product_router(access_http::product::app::Service::new(
+            w.domains.clone(),
+            PgTenants::new(w.db.router.clone(), ids),
+            PgSubjects {
+                app: w.db.app.clone(),
+                domains: w.domains.clone(),
+            },
+            String::from("local"),
+        )));
+    let config = access_http::tls::server_config(
+        tls.server_cert.as_bytes(),
+        tls.server_key.as_bytes(),
+        Some(tls.ca.as_bytes()),
+    )
+    .unwrap();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let (stop, stopped) = tokio::sync::oneshot::channel::<()>();
+    let served = tokio::spawn(access_http::tls::serve(listener, config, app, async {
+        let _ = stopped.await;
+    }));
+
+    // the client, with the test user's keys from the token and the PEP certificate
+    let pin = Secret::new(String::from(PIN));
+    let token = KeyStore::open(&w.module, &w.label, &pin).unwrap();
+    let device = token.signer(local::TEST_DEVICE_LABEL).unwrap();
+    let passkey_key = token.signer(local::TEST_PASSKEY_LABEL).unwrap();
+    let identity = Identity {
+        chain_pem: tls.pep_cert.clone().into_bytes(),
+        key_pem: tls.pep_key.clone().into_bytes(),
+    };
+    let leaf = leaf_der(&identity.chain_pem).unwrap();
+    let http = Http::new(tls.ca.as_bytes(), Some(&identity), Some(addr)).unwrap();
+    let (rp_id, origin) = relying_party(&user.issuer).unwrap();
+    let passkey = Passkey {
+        key: &passkey_key,
+        rp_id: &rp_id,
+        origin: &origin,
+    };
+    let domain = Digest(
+        <[u8; 32]>::try_from(access_kernel::json::b64url_decode(&acme.domain).unwrap()).unwrap(),
+    );
+    let now = server_time(&w.db.app).await.unwrap();
+    let intent = commit_intent(&allowed, "main", now);
+    let request = Approve {
+        issuer: &user.issuer,
+        api_base: "https://access.test",
+        redirect_uri: &user.redirect_uri,
+        identifier: &user.identifier,
+        passkey: &passkey,
+        device: &device,
+        pep_leaf_der: &leaf,
+        domain,
+        party: id_of(&user.party),
+        instance: Some(id_of(&user.instance)),
+        intent: &intent,
+        basis: holding_of(&allowed["basis"]),
+        contribution: holding_of(&allowed["contribution"]["basis"]),
+        reason: "Close the main ledger for the period.",
+        request: None,
+    };
+    let done = approve(&http, &request).await.unwrap();
+    assert_eq!(done["receipt"]["verified"], true, "{done}");
+    assert_eq!(done["render_digest_verified"], true, "{done}");
+    assert_eq!(
+        access_kernel::json::b64url_decode(done["exercise"].as_str().unwrap())
+            .unwrap()
+            .len(),
+        32
+    );
+    assert_eq!(done["receipt"]["exercise"], done["exercise"]);
+    assert_ne!(done["contribution"], done["exercise"]);
+    // the receipt names this PEP by its leaf
+    assert_eq!(
+        done["receipt"]["audience"],
+        access_local_client::adp::pep_name(&leaf)
+    );
+
+    // §9.14.2, XI-7: a request for an intent no decision point asked about is "the request
+    // changed"; nothing is approved
+    let other = commit_intent(&allowed, "other", now);
+    let other_digest =
+        access_kernel::intent::intent_digest(&access_local_client::intent::parse(&other).unwrap())
+            .unwrap();
+    let pushed = serde_json::json!({
+        "requester": { "party": user.party },
+        "action": other["action"],
+        "resource": other["resources"][0],
+        "params": other["params"],
+        "capacity": "own",
+        "reason": "Nothing waits for this one.",
+        "require_action": {
+            "domain": acme.domain,
+            "nonce": b64url_encode(&[0x77; 16]),
+            "intent": b64url_encode(&other_digest.0),
+        },
+        "expires_at": now + 3_600_000,
+    });
+    let changed = approve(
+        &http,
+        &Approve {
+            intent: &other,
+            request: Some(&pushed),
+            ..request
+        },
+    )
+    .await
+    .unwrap_err()
+    .to_string();
+    assert!(
+        changed.contains("approval-request-changed") && changed.contains("409"),
+        "{changed}"
+    );
+
+    // §10.2.4, CR-40: another key is no passkey of the user; the sign-in refuses it
+    let (stranger, _) = SoftSigner::generate_ed25519().unwrap();
+    let forged = Passkey {
+        key: &stranger,
+        rp_id: &rp_id,
+        origin: &origin,
+    };
+    let refused = approve(
+        &http,
+        &Approve {
+            passkey: &forged,
+            ..request
+        },
+    )
+    .await
+    .unwrap_err()
+    .to_string();
+    assert!(
+        refused.contains("passkey") && refused.contains("401"),
+        "{refused}"
+    );
+
+    let _ = stop.send(());
+    let _ = served.await;
+    w.domains.release().await;
+
+    // a second run finds the passkey and both Grants
+    let second = w.run(&plan).await;
+    let again = second.test_user.unwrap();
+    assert!(!again.created);
+    assert_eq!(again.passkey, user.passkey);
+    assert_eq!(
+        serde_json::to_value(again.allowed.unwrap()).unwrap(),
+        allowed
     );
 }

@@ -5,17 +5,27 @@ tenants = ["acme"]
 issuer_style = "path"
 
 # OP-149 m.10: acme's Genesis publishes the Work catalog with this action, and its root grants it
-# to a sample subject; the bootstrap prints what an eligibility check names as `sample`
+# to a sample subject; the bootstrap prints what an eligibility check names as `sample`.
+# OP-149 m.29 (b): `allowed` is a second action of the catalog (CT1; parameters `ledger`, a
+# text, and `declaration`, a digest) that the root grants to the test user's Party under an
+# approval requirement, with the Grant to contribute that approval; the bootstrap prints what
+# an Exercise of it names as `test_user.allowed`, and `access-local-client approve` runs one
+# through the hosted Approval Surface. The catalog is a Genesis fact: changing `allowed` on an
+# existing realm needs a fresh volume.
 [sample]
 realm = "acme"
 namespace = "work"
 action = "approve"
+allowed = "commit"
 
-# OP-149 m.26 (b): a test user in acme with a password (AAL1) and a public client (PKCE and
-# DPoP, no secret) a headless login signs in with; `access-local-client login` runs that flow.
+# OP-149 m.26 (b), (e): a test user in acme with a password (AAL1), a software passkey (AAL2;
+# its key is `access/bootstrap/test-user-passkey` in the server's token, beside the device key
+# `access/bootstrap/test-user-device`) and a public client (PKCE and DPoP, no secret) a
+# headless login signs in with; `access-local-client login` runs that flow with either factor.
 # The password comes from the environment variable named here, never from this file:
 #   ACCESS_LOCAL_TEST_PASSWORD=... docker compose -f deploy/compose/access.yaml up -d
-# The bootstrap prints the user as `test_user` (identifier, subject, client_id, redirect_uri).
+# The bootstrap prints the user as `test_user` (identifier, subject, client_id, redirect_uri,
+# party, instance, passkey, allowed).
 # Without a local mirror of the breach ranges (`breach_ranges_dir`) the password is not checked
 # against one; the bootstrap says so.
 [test_user]

@@ -145,8 +145,12 @@ impl<K, B: Binding, S: Salts, C> Plane<K, B, S, C> {
 }
 
 fn refused(e: &CoreError) -> Verdict {
+    // OP-149 m.12: a protocol rejection travels with its reason, as the ADP's does
     Verdict::Refused {
-        code: String::from(e.code()),
+        code: String::from(match e {
+            CoreError::Protocol(reason) => reason,
+            other => other.code(),
+        }),
     }
 }
 

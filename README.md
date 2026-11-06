@@ -96,12 +96,13 @@ The bootstrap prints, and keeps in the `bootstrap` volume as `bootstrap.json`:
 - `clients[]`: each registered platform product client and the `aud` its client assertions use
 - `root`: the Party that founded the realms
 - `sample`: what a real `POST /access/v1/eligibility:check` names to be answered `eligible: true`. The `acme` realm publishes a `work` catalog with the action `approve`, and its root grants that action over the whole `work` namespace to a sample subject. `sample.subject` is the check's `subject`; `domain`, `action`, `resource` and `basis` go into its `set` (`resource` in `intent.resources`, with an `intent.validity` of at most 24 hours around now, and `"capacity": "own"`)
-- `test_user`: the `acme` user `test@acme.example` (identifier, `usr_…` subject) with the password you chose, and the public client (`client_id`, `redirect_uri`) a sign-in uses: authorization code with PKCE and DPoP, no client secret. The user also has a device Instance (`instance`) that binds them to a Party (`party`), registered with a device key kept in the bootstrap token the way `POST /v1/me/instances` does; `POST /access/v1/tenants/{tenant}/subjects:resolve` resolves the user's pairwise `sub` to that Party, and `GET /access/v1/parties/{party}` answers its status
+- `test_user`: the `acme` user `test@acme.example` (identifier, `usr_…` subject) with the password you chose, a software passkey (`passkey`, its credential id; the key is `access/bootstrap/test-user-passkey` in the server's token, registered through the realm's own WebAuthn ceremony as a device-bound, user-verified credential) and the public client (`client_id`, `redirect_uri`) a sign-in uses: authorization code with PKCE and DPoP, no client secret. The user also has a device Instance (`instance`) that binds them to a Party (`party`), registered with a device key kept in the bootstrap token the way `POST /v1/me/instances` does; `POST /access/v1/tenants/{tenant}/subjects:resolve` resolves the user's pairwise `sub` to that Party, and `GET /access/v1/parties/{party}` answers its status
+- `test_user.allowed`: what an Exercise the user is allowed to make names. The `work` catalog also publishes `commit` (parameters `ledger`, a text, and `declaration`, a digest), granted to the user's Party under an approval requirement: the first `commit` is answered `REQUIRE_ACTION`, and one `approve` contribution by the same user on the hosted Approval Surface turns it into an `ALLOW` with a signed receipt. `action`, `resource` and `params` go into the intent, `basis` is the user's holding, and `contribution.basis` is the holding the approval is contributed under
 - `compromise`: the Party (`issuer`) whose unsigned `party_compromise` Claims the `acme` realm accepts over a PEP certificate, and the realm's `domain`
 
 ### Sign in without a browser
 
-`access-local-client` runs the real sign-in against the running Access and prints the tokens: the JSON steps of the hosted login (identifier, password), then `/authorize` and `/token` with PKCE and a DPoP proof. It verifies TLS against the local CA and refuses plain `http://`.
+`access-local-client` runs the real sign-in against the running Access and prints the tokens: the JSON steps of the hosted login (identifier, then the password or a passkey assertion), then `/authorize` and `/token` with PKCE and a DPoP proof. It verifies TLS against the local CA and refuses plain `http://`.
 
 ```sh
 docker compose -f deploy/compose/access.yaml run --rm local-client login \
@@ -110,7 +111,33 @@ docker compose -f deploy/compose/access.yaml run --rm local-client login \
   --identifier test@acme.example --password-env BOOTSTRAP_TEST_PASSWORD
 ```
 
+With `--passkey access/bootstrap/test-user-passkey` in place of `--password-env`, the client signs in with the test user's software passkey instead (AAL2, phishing-resistant). The key stays in the server's token; the client reaches it through PKCS#11 with `--hsm-module /usr/lib/softhsm/libsofthsm2.so --hsm-token access-server --hsm-pin-file /var/lib/access/secrets/hsm-access-server`, which the `local-client` service has in reach.
+
 Add `--resource <your platform client_id>` to get an access token addressed to your product: its `aud` is your `client_id`, the same value your events carry, and it stays bound to the client's DPoP key (`cnf.jkt`). Only a registered platform product client can be named; anything else is `invalid_target`. From a checkout, `cargo run -p access-local-client -- login … --connect 127.0.0.1:8443` reaches the published port with the issuer unchanged (the CA is `ca.crt` from the `certs` volume).
+
+### Approve an Exercise without a browser
+
+`access-local-client approve` runs one allowed Exercise end to end, the way a product and its user would: it signs the test user in with the passkey; as the product's PEP (`--cert`, `--key`) it commits the intent at `POST /access/v1/evaluation` with an AIS the user's device key signs and gets `REQUIRE_ACTION`; it pushes the typed authority request with the contribution the device pre-signed to `POST /v1/approve/requests`, opens the flow at `POST /v1/approve/flows`, checks that the render the decision point kept is the render of the intent it sent, answers the challenge (H(AAS)) with the passkey at `POST /v1/approve/flows/{flow}`, commits the intent again with the contribution as its proof and verifies the receipt the `ALLOW` carries against the domain's published metadata. It prints `exercise`, `contribution`, `render_digest` and the verified `receipt`.
+
+```sh
+# the intent, from test_user.allowed; the parameters are the schema's
+intent='{"action": <allowed.action>, "resources": [<allowed.resource>],
+  "params": {"ledger": {"eq": "main"}, "declaration": {"eq": {"bytes": "<32 bytes, base64url>"}}},
+  "validity": {"from": <now - 60 s, ms>, "until": <now + 10 min, ms>}}'
+docker compose -f deploy/compose/access.yaml run --rm local-client approve \
+  --issuer https://access-server:8443/realms/acme --api https://access-server:8443 \
+  --ca /var/lib/access/certs/ca.crt --cert /var/lib/access/certs/pep.crt --key /var/lib/access/certs/pep.key \
+  --redirect-uri http://127.0.0.1/cb --identifier test@acme.example \
+  --hsm-module /usr/lib/softhsm/libsofthsm2.so --hsm-token access-server \
+  --hsm-pin-file /var/lib/access/secrets/hsm-access-server \
+  --device-key access/bootstrap/test-user-device --passkey access/bootstrap/test-user-passkey \
+  --domain <allowed.domain> --party <test_user.party> --instance <test_user.instance> \
+  --grant <allowed.basis.holding.grant> --grant-since <allowed.basis.holding.since> \
+  --contribute-grant <allowed.contribution.basis.holding.grant> --contribute-since <allowed.contribution.basis.holding.since> \
+  --intent-json "$intent"
+```
+
+`--intent <file>` reads the intent from a file instead. With `--request <file>`, a typed authority request your product already built for its own `REQUIRE_ACTION` (`require_action` naming the same intent), the client only pushes and approves it and prints the contribution; the product then commits again with that contribution as its proof. A request for an intent nothing waits for is `approval-request-changed`; a key that is not the user's passkey is refused at sign-in.
 
 ### Produce events on purpose
 

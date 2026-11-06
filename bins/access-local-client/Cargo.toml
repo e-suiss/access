@@ -1,6 +1,6 @@
 [package]
 name = "access-local-client"
-description = "Headless client for a local Access deployment: the authorization code flow with PKCE and DPoP, a product's compromise declaration and its platform stream status (OP-149 m.26)."
+description = "Headless client for a local Access deployment: the authorization code flow with PKCE and DPoP, a passkey sign-in, an approval on the hosted surface, a product's compromise declaration and its platform stream status (OP-149 m.26, m.29)."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -14,8 +14,11 @@ path = "src/main.rs"
 
 [dependencies]
 access-crypto = { workspace = true }
+access-identity-webauthn = { workspace = true }
+access-internal-api = { workspace = true }
 access-kernel = { workspace = true }
-suiss-crypto = { workspace = true }
+suiss-crypto = { workspace = true, features = ["pkcs11"] }
+time = { workspace = true, features = ["std", "formatting", "parsing"] }
 httparse = { workspace = true, features = ["std"] }
 rustls = { workspace = true, features = ["aws_lc_rs", "std"] }
 rustls-pki-types = { workspace = true, features = ["std"] }
@@ -38,7 +41,7 @@ access-internal-api = { workspace = true }
 access-store = { workspace = true, features = ["testing"] }
 axum = { workspace = true, features = ["http1", "tokio"] }
 rcgen = { workspace = true, features = ["aws_lc_rs", "pem"] }
-suiss-crypto = { workspace = true, features = ["signer", "aead", "testing"] }
+suiss-crypto = { workspace = true, features = ["signer", "aead", "pkcs11", "testing"] }
 
 [lints]
 workspace = true

@@ -1,17 +1,30 @@
 //! The authorization code flow of a public client (RFC 6749 §4.1, RFC 7636, RFC 9449, RFC 9207,
 //! OP-149 m.26 (b)) without a browser: `/authorize` stores the request and sends the browser to
 //! the hosted login; this client runs the login's JSON steps instead (start the flow, identify,
-//! password), returns to `/authorize` with the session cookie, and exchanges the code at
-//! `/token` with the PKCE verifier and a DPoP proof. Optionally the request names a platform
-//! product as the token's RFC 8707 resource (OP-149 m.26 (a)).
+//! then the password or a passkey assertion, OP-149 m.26 (e)), returns to `/authorize` with the
+//! session cookie, and exchanges the code at `/token` with the PKCE verifier and a DPoP proof.
+//! Optionally the request names a platform product as the token's RFC 8707 resource (OP-149
+//! m.26 (a)).
 
 use std::fmt::Write as _;
 
 use serde_json::{Value, json};
 
+use access_kernel::json::b64url_decode;
+
 use crate::ClientError;
 use crate::dpop::{Es256Key, pkce, random_text};
 use crate::http::{Http, Response, Url};
+use crate::passkey::Passkey;
+
+/// What the test user signs in with after the identifier.
+#[derive(Clone, Copy)]
+pub enum Credential<'a> {
+    /// The password (AAL1).
+    Password(&'a str),
+    /// The software passkey (AAL2, phishing-resistant).
+    Passkey(&'a Passkey<'a>),
+}
 
 /// What a sign-in needs.
 pub struct Login<'a> {
@@ -23,8 +36,8 @@ pub struct Login<'a> {
     pub redirect_uri: &'a str,
     /// The login identifier.
     pub identifier: &'a str,
-    /// The password.
-    pub password: &'a str,
+    /// The first factor.
+    pub credential: Credential<'a>,
     /// The `client_id` of the platform product the token is for, when it is for one.
     pub resource: Option<&'a str>,
     /// The scope; `openid` by default.
@@ -33,10 +46,11 @@ pub struct Login<'a> {
 
 /// A browser's cookies, name by name.
 #[derive(Default)]
-struct Jar(Vec<(String, String)>);
+pub struct Jar(Vec<(String, String)>);
 
 impl Jar {
-    fn take(&mut self, r: &Response) {
+    /// Takes the answer's `Set-Cookie` headers.
+    pub fn take(&mut self, r: &Response) {
         for c in r.all("set-cookie") {
             let Some((name, value)) = c.split(';').next().and_then(|nv| nv.split_once('=')) else {
                 continue;
@@ -48,7 +62,9 @@ impl Jar {
         }
     }
 
-    fn header(&self) -> String {
+    /// The `Cookie` header.
+    #[must_use]
+    pub fn header(&self) -> String {
         self.0
             .iter()
             .map(|(n, v)| format!("{n}={v}"))
@@ -178,7 +194,7 @@ pub async fn login(http: &Http, l: &Login<'_>) -> Result<Value, ClientError> {
     let issuer = Url::parse(l.issuer)?;
     let run = Run::new()?;
     let return_to = authorize(http, l, &issuer, &run).await?;
-    let jar = sign_in(http, l).await?;
+    let jar = sign_in(http, l.issuer, l.identifier, l.credential).await?;
     let code = code(http, l, &issuer, &run, &return_to, &jar).await?;
     exchange(http, l, &run, &code).await
 }
@@ -215,42 +231,76 @@ async fn authorize(
         .ok_or_else(|| unexpected("authorize", &first))
 }
 
-/// The hosted login's JSON steps (TN-96, TN-132): start, identify, password; each step's
-/// `action` is a path under the realm, as the login page uses it. The jar comes back with the
-/// session cookie.
-async fn sign_in(http: &Http, l: &Login<'_>) -> Result<Jar, ClientError> {
+/// The passkey challenge the authenticate step offers (TN-96): the `passkey_get` node's
+/// request options.
+fn passkey_challenge(step: &Value) -> Option<Vec<u8>> {
+    step.get("nodes")?
+        .as_array()?
+        .iter()
+        .find(|n| n.get("type").and_then(Value::as_str) == Some("passkey_get"))?
+        .get("options")?
+        .get("challenge")?
+        .as_str()
+        .and_then(|c| b64url_decode(c).ok())
+}
+
+/// The hosted login's JSON steps (TN-96, TN-132): start, identify, then the password or a
+/// passkey assertion over the step's challenge; each step's `action` is a path under the
+/// realm, as the login page uses it. The jar comes back with the session cookie.
+///
+/// # Errors
+/// [`ClientError`]; a refused factor is [`ClientError::Unexpected`] with what Access said.
+pub async fn sign_in(
+    http: &Http,
+    issuer: &str,
+    identifier: &str,
+    credential: Credential<'_>,
+) -> Result<Jar, ClientError> {
     let mut jar = Jar::default();
     let action = |r: &Response, step: &'static str| -> Result<String, ClientError> {
         text(&r.json(), "action")
-            .map(|a| format!("{}{a}", l.issuer))
+            .map(|a| format!("{issuer}{a}"))
             .ok_or_else(|| unexpected(step, r))
     };
-    let flows = format!("{}/v1/login/flows", l.issuer);
+    let flows = format!("{issuer}/v1/login/flows");
     let started = post_json(http, &flows, &mut jar, None).await?;
     if started.status != 201 {
         return Err(unexpected("login flow", &started));
     }
-    let identified = post_json(
+    let second = post_json(
         http,
         &action(&started, "login flow")?,
         &mut jar,
-        Some(json!({ "method": "identifier", "fields": { "identifier": l.identifier } })),
+        Some(json!({ "method": "identifier", "fields": { "identifier": identifier } })),
     )
     .await?;
-    if identified.status != 200
-        || text(&identified.json(), "step").as_deref() != Some("authenticate")
-    {
-        return Err(unexpected("identifier", &identified));
+    if second.status != 200 || text(&second.json(), "step").as_deref() != Some("authenticate") {
+        return Err(unexpected("identifier", &second));
     }
+    let (step, submission) = match credential {
+        Credential::Password(password) => (
+            "password",
+            json!({ "method": "password", "fields": { "password": password } }),
+        ),
+        Credential::Passkey(passkey) => {
+            let challenge = passkey_challenge(&second.json())
+                .ok_or_else(|| unexpected("passkey options", &second))?;
+            let assertion = passkey.assert(&challenge)?;
+            (
+                "passkey",
+                json!({ "method": "passkey", "fields": { "passkey_credential": assertion.to_string() } }),
+            )
+        }
+    };
     let signed_in = post_json(
         http,
-        &action(&identified, "identifier")?,
+        &action(&second, "identifier")?,
         &mut jar,
-        Some(json!({ "method": "password", "fields": { "password": l.password } })),
+        Some(submission),
     )
     .await?;
     if signed_in.status != 200 || text(&signed_in.json(), "step").as_deref() != Some("complete") {
-        return Err(unexpected("password", &signed_in));
+        return Err(unexpected(step, &signed_in));
     }
     Ok(jar)
 }
@@ -333,7 +383,10 @@ async fn exchange(http: &Http, l: &Login<'_>, run: &Run, code: &str) -> Result<V
 
 /// `POST url` with `body` as JSON, a fresh `Idempotency-Key` and the jar's cookies; the
 /// answer's cookies go into the jar.
-async fn post_json(
+///
+/// # Errors
+/// [`ClientError`].
+pub async fn post_json(
     http: &Http,
     url: &str,
     jar: &mut Jar,

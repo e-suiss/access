@@ -27,7 +27,7 @@ pub const APPROVE_PATH: &str = "/v1/approve";
 
 /// The PEP name the identity plane forwards a termination as: the `pep` an AIS over
 /// `access/instance_terminate` names.
-pub const IDENTITY_PEP: &str = "access-identity";
+pub const IDENTITY_PEP: &str = access_internal_api::instances::IDENTITY_PEP;
 
 /// Longest `state` accepted, in bytes.
 pub const MAX_STATE: usize = 512;

@@ -60,6 +60,15 @@ pub struct TotpConfirmed {
     pub session_epoch: i64,
 }
 
+/// A passkey registration started outside a browser flow (OP-149 m.26 (e)).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PasskeyStart {
+    /// The ceremony state the registration is finished against.
+    pub state: RegistrationState,
+    /// `PublicKeyCredentialCreationOptionsJSON`.
+    pub options: Value,
+}
+
 /// A started passkey registration.
 #[derive(Clone, Debug, PartialEq)]
 pub struct PasskeyRegistration {
@@ -374,6 +383,69 @@ where
         Ok(Ok(codes))
     }
 
+    /// The subject's WebAuthn `user.id`: its random 64-byte handle, made on first use (§12.3.6
+    /// invariant 10).
+    async fn user_handle(
+        &self,
+        tx: &mut D::Tx,
+        subject: [u8; 16],
+    ) -> Result<[u8; 64], SessionError> {
+        if let Some(h) = tx.user_handle(subject).await? {
+            return Ok(h);
+        }
+        let mut h = [0; UserHandle::LEN];
+        self.random.fill(&mut h)?;
+        if !tx.insert_user_handle(subject, &h).await? {
+            return Err(SessionError::Conflict);
+        }
+        Ok(h)
+    }
+
+    /// The creation options of a new passkey for the handle (§10.2.4).
+    async fn creation(
+        &self,
+        handle: [u8; 64],
+        name: &str,
+        display_name: &str,
+    ) -> Result<PasskeyStart, SessionError> {
+        let user = UserHandle::from_bytes(handle);
+        let start = self
+            .webauthn()
+            .start_registration(
+                self.passkeys.rp,
+                self.passkeys.policy,
+                &UserEntity {
+                    handle: &user,
+                    name,
+                    display_name,
+                },
+                false,
+                None,
+            )
+            .await?;
+        Ok(PasskeyStart {
+            state: start.state,
+            options: start.options,
+        })
+    }
+
+    /// Starts a passkey registration for `subject` outside a browser flow (OP-149 m.26 (e)):
+    /// the same ceremony as [`Self::begin_passkey`], its state kept by the caller.
+    ///
+    /// # Errors
+    /// [`SessionError`].
+    pub async fn start_passkey(
+        &self,
+        subject: [u8; 16],
+        name: &str,
+        display_name: &str,
+    ) -> Result<PasskeyStart, SessionError> {
+        let mut tx = self.begin().await?;
+        let handle = self.user_handle(&mut tx, subject).await?;
+        tx.commit().await?;
+        self.creation(handle, name, display_name).await
+    }
+
     /// Starts a passkey registration for the session's subject (§10.2.4). The subject gets
     /// its random 64-byte `user.id` on first use (§12.3.6 invariant 10).
     ///
@@ -395,32 +467,8 @@ where
             }
         };
         let subject = session.subject;
-        let existing = tx.user_handle(subject).await?;
-        let handle = if let Some(h) = existing {
-            h
-        } else {
-            let mut h = [0; UserHandle::LEN];
-            self.random.fill(&mut h)?;
-            if !tx.insert_user_handle(subject, &h).await? {
-                return Err(SessionError::Conflict);
-            }
-            h
-        };
-        let user = UserHandle::from_bytes(handle);
-        let start = self
-            .webauthn()
-            .start_registration(
-                self.passkeys.rp,
-                self.passkeys.policy,
-                &UserEntity {
-                    handle: &user,
-                    name,
-                    display_name,
-                },
-                false,
-                None,
-            )
-            .await?;
+        let handle = self.user_handle(&mut tx, subject).await?;
+        let start = self.creation(handle, name, display_name).await?;
         let mut state = FlowState::new(
             Purpose::RegisterPasskey {
                 session: session.id,
@@ -486,12 +534,32 @@ where
             expires_at: reg.expires_at_s,
             prf_salt: reg.prf_salt.map(PrfSalt),
         };
+        Ok(Ok(self
+            .register_passkey(session.subject, &state, response, correlation)
+            .await?))
+    }
+
+    /// Registers the passkey `response` answers `state` with, for `subject` (§10.2.4, OP-150
+    /// L2): the credential is verified and stored, its binding Claims are queued and the
+    /// registration is audited. The hosted registration and a local bootstrap share this step
+    /// (OP-149 m.26 (e)).
+    ///
+    /// # Errors
+    /// [`SessionError`]; a refused credential is [`RegistrationOutcome::Rejected`].
+    pub async fn register_passkey(
+        &self,
+        subject: [u8; 16],
+        state: &RegistrationState,
+        response: &RegistrationResponse<'_>,
+        correlation: &str,
+    ) -> Result<RegistrationOutcome, SessionError> {
+        let now = self.now();
         let outcome = self
             .webauthn()
             .finish_registration(
                 self.passkeys.rp,
                 self.passkeys.policy,
-                &state,
+                state,
                 response,
                 None,
             )
@@ -503,17 +571,10 @@ where
             let mut tx = self.begin().await?;
             // IDP-2, TN-63, OP-150 L2
             if let Some(sibling) = tx.passkey_credential(record.id.as_bytes()).await? {
-                super::claims::passkey_registered(
-                    &mut tx,
-                    session.subject,
-                    sibling,
-                    record,
-                    &others,
-                    now,
-                )
-                .await?;
+                super::claims::passkey_registered(&mut tx, subject, sibling, record, &others, now)
+                    .await?;
             }
-            let target = self.external(session.subject)?;
+            let target = self.external(subject)?;
             audit(
                 &mut tx,
                 "credential.passkey.registered",
@@ -524,6 +585,6 @@ where
             .await?;
             tx.commit().await?;
         }
-        Ok(Ok(outcome))
+        Ok(outcome)
     }
 }

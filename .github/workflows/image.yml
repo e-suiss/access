@@ -180,8 +180,9 @@ jobs:
           $COMPOSE run --rm --no-deps -T bootstrap > "$RUNNER_TEMP/again.json"
           grep -q '"created": false' "$RUNNER_TEMP/again.json"
           ! grep -q '"created": true' "$RUNNER_TEMP/again.json"
-      # OP-149 m.26 (b), (c): the headless sign-in and a compromise declaration over the PEP
-      # certificate, each against the running deployment
+      # OP-149 m.26 (b), (c), (e): the headless sign-in with the password and with the software
+      # passkey, and a compromise declaration over the PEP certificate, each against the running
+      # deployment
       - name: Local client
         run: |
           client_id="$(jq -r '.test_user.client_id' "$RUNNER_TEMP/again.json")"
@@ -191,6 +192,13 @@ jobs:
             --client-id "$client_id" --redirect-uri http://127.0.0.1/cb \
             --identifier test@acme.example --password-env BOOTSTRAP_TEST_PASSWORD > "$RUNNER_TEMP/tokens.json"
           jq -e '.token_type == "DPoP" and (.access_token | length > 0) and (.id_token | length > 0)' "$RUNNER_TEMP/tokens.json"
+          $COMPOSE run --rm --no-deps -T local-client login \
+            --issuer "$issuer" --ca /var/lib/access/certs/ca.crt \
+            --client-id "$client_id" --redirect-uri http://127.0.0.1/cb \
+            --identifier test@acme.example --passkey access/bootstrap/test-user-passkey \
+            --hsm-module /usr/lib/softhsm/libsofthsm2.so --hsm-token access-server \
+            --hsm-pin-file /var/lib/access/secrets/hsm-access-server > "$RUNNER_TEMP/passkey-tokens.json"
+          jq -e '.token_type == "DPoP" and (.access_token | length > 0)' "$RUNNER_TEMP/passkey-tokens.json"
           domain="$(jq -r '.compromise.domain' "$RUNNER_TEMP/again.json")"
           declarant="$(jq -r '.compromise.issuer' "$RUNNER_TEMP/again.json")"
           party="$(jq -r '.sample.subject' "$RUNNER_TEMP/again.json")"
@@ -199,6 +207,30 @@ jobs:
             --cert /var/lib/access/certs/pep.crt --key /var/lib/access/certs/pep.key \
             --domain "$domain" --issuer-party "$declarant" --party "$party" > "$RUNNER_TEMP/claim.json"
           jq -e '.disposition == "admit"' "$RUNNER_TEMP/claim.json"
+      # OP-149 m.29 (b): an allowed Exercise end to end on the hosted Approval Surface, as the
+      # product's PEP; the receipt verifies against the domain's published metadata
+      - name: Local approval
+        run: |
+          now="$(date +%s)000"
+          intent="$(jq -c --argjson now "$now" '.test_user.allowed | {
+            action: .action, resources: [.resource],
+            params: { ledger: { eq: "main" }, declaration: { eq: { bytes: "0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dHR0dE" } } },
+            validity: { from: ($now - 60000), until: ($now + 600000) } }' "$RUNNER_TEMP/again.json")"
+          read -r issuer domain party instance grant since cgrant csince < <(jq -r '.test_user as $u | [
+            (.realms[] | select(.slug == "acme") | .issuer), $u.allowed.domain, $u.party, $u.instance,
+            $u.allowed.basis.holding.grant, $u.allowed.basis.holding.since,
+            $u.allowed.contribution.basis.holding.grant, $u.allowed.contribution.basis.holding.since] | @tsv' "$RUNNER_TEMP/again.json")
+          $COMPOSE run --rm --no-deps -T local-client approve \
+            --issuer "$issuer" --api https://access-server:8443 --ca /var/lib/access/certs/ca.crt \
+            --cert /var/lib/access/certs/pep.crt --key /var/lib/access/certs/pep.key \
+            --redirect-uri http://127.0.0.1/cb --identifier test@acme.example \
+            --hsm-module /usr/lib/softhsm/libsofthsm2.so --hsm-token access-server \
+            --hsm-pin-file /var/lib/access/secrets/hsm-access-server \
+            --device-key access/bootstrap/test-user-device --passkey access/bootstrap/test-user-passkey \
+            --domain "$domain" --party "$party" --instance "$instance" \
+            --grant "$grant" --grant-since "$since" --contribute-grant "$cgrant" --contribute-since "$csince" \
+            --intent-json "$intent" > "$RUNNER_TEMP/approved.json"
+          jq -e '.receipt.verified == true and .render_digest_verified == true and (.exercise | length > 0)' "$RUNNER_TEMP/approved.json"
       - name: Logs
         if: failure()
         run: $COMPOSE logs --no-color

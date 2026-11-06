@@ -32,21 +32,26 @@ use access_identity_oauth::adapters::outbound::DeclaredTargets;
 use access_identity_oauth::domain::issuer::{IssuerStyle, RealmBase};
 use access_identity_oauth::domain::jwt::parse_jwks;
 use access_identity_ui::domain::frontend::IDENTITY_PEP;
+use access_internal_api::approvals::CONTRIBUTION_NAMESPACE;
 use access_internal_api::idp::{Unavailable, Verdict};
 use access_internal_api::instances::{
     PlatformProduct, Registrant, Registration, RegistrationVerdict, SelfSigned, bootstrap_basis,
-    register_nonce, self_signed_intent,
+    core_action, register_nonce, self_signed_intent,
 };
 use access_kernel::ais::{CONTENT_TYPE, Statement};
+use access_kernel::claim::body::Class;
 use access_kernel::codec::Canonical;
 use access_kernel::combinator::{Capacity, Mode};
 use access_kernel::digest::Digest;
 use access_kernel::intent::intent_digest;
 use access_kernel::json::b64url_encode;
-use access_kernel::meta::{self, ExerciseBasis, GrantBasis, GrantContent, Payload, Root, kind};
+use access_kernel::meta::{
+    self, ExerciseBasis, GrantBasis, GrantContent, HoldingRef, Payload, Root, kind,
+};
 use access_kernel::model::{
-    ActionRef, ActionSet, AuthoritySet, CanonicalAuthority, ConstraintSet, DelegationTerms, Id,
-    ResourceSelector, Structural, SubjectSelector, Window,
+    ActionRef, ActionSet, AuthoritySet, Binding, CanonicalAuthority, ConstraintSet, Consumption,
+    DelegationTerms, Id, Independence, ProofKind, RequirementTerm, ResourceSelector, Structural,
+    SubjectSelector, Window,
 };
 use access_kernel::schema::{ActionSchema, EffectClass, Spp};
 use access_kernel::verify::cose::PublicKey;
@@ -75,6 +80,19 @@ const ROOT_CHALLENGE_LABEL: &[u8] = b"access-bootstrap/root-instance:1";
 
 /// What the root signs to derive the nonce of the sample Grant's `grant_issue`.
 const SAMPLE_GRANT_LABEL: &[u8] = b"access-bootstrap/sample-grant:1";
+
+/// What the root signs to derive the nonce of the test user's Grant of the allowed action
+/// (OP-149 m.29 (b)).
+const ALLOWED_GRANT_LABEL: &[u8] = b"access-bootstrap/allowed-grant:1";
+
+/// What the root signs to derive the nonce of the test user's Grant to contribute approvals.
+const CONTRIBUTE_GRANT_LABEL: &[u8] = b"access-bootstrap/contribute-grant:1";
+
+/// The contribution class an approval of the allowed action is (§9.14.1, L0-META-30).
+const APPROVE_CLASS: &str = "approve";
+
+/// The typed parameters of the allowed action: a ledger name and a declaration digest.
+const ALLOWED_PARAMS: [(&str, &str); 2] = [("declaration", "bytes"), ("ledger", "text")];
 
 /// The resource path a sample eligibility check names.
 const SAMPLE_PATH: &str = "sample";
@@ -212,11 +230,14 @@ struct SampleFile {
     realm: String,
     namespace: String,
     action: String,
+    allowed: Option<String>,
 }
 
 /// A sample catalog and Grant for a product's eligibility checks (OP-149 m.10): the realm's
 /// Genesis publishes `action` in `namespace`, and its root grants it over the whole namespace
-/// to the sample subject.
+/// to the sample subject. With `allowed`, the Genesis also publishes that exact-intent action
+/// (CT1, a ledger and a declaration digest), and the root grants it to the test user's Party
+/// under an approval requirement, with the Grant to contribute that approval (OP-149 m.29 (b)).
 #[derive(Clone, Debug)]
 pub(crate) struct SamplePlan {
     /// The slug of one of the plan's sample tenants.
@@ -225,21 +246,103 @@ pub(crate) struct SamplePlan {
     pub(crate) namespace: String,
     /// The action's name.
     pub(crate) action: String,
+    /// The allowed action's name, when the test user gets one.
+    pub(crate) allowed: Option<String>,
+}
+
+/// An authority over `actions` on the whole `namespace`, for good, with `requirements`.
+fn authority(
+    actions: BTreeSet<ActionRef>,
+    namespace: &str,
+    requirements: BTreeSet<RequirementTerm>,
+) -> CanonicalAuthority {
+    CanonicalAuthority {
+        authority: AuthoritySet {
+            actions: ActionSet {
+                exact: actions,
+                prefix: BTreeSet::new(),
+            },
+            resource: ResourceSelector::Structural(Structural {
+                namespace: String::from(namespace),
+                prefix: Vec::new(),
+                kind: None,
+                attrs: BTreeMap::new(),
+            }),
+            params: BTreeMap::new(),
+            recipient: None,
+            purpose: None,
+        },
+        constraints: ConstraintSet {
+            validity: Window {
+                from: 0,
+                until: u64::MAX,
+            },
+            conditions: BTreeSet::new(),
+            budget: BTreeSet::new(),
+        },
+        delegation: DelegationTerms {
+            depth: 0,
+            downstream_holder_class: None,
+        },
+        requirements,
+    }
+}
+
+/// A Grant of `authority` to `holder` on the meta-anchor, in its own capacity.
+fn grant_of(domain: &Digest, holder: Id, authority: CanonicalAuthority) -> GrantContent {
+    GrantContent {
+        basis: GrantBasis::Anchor(meta::meta_anchor(domain)),
+        holder: SubjectSelector::Party(holder),
+        authority,
+        agency: BTreeSet::from([Capacity::Own]),
+        named: None,
+    }
+}
+
+/// The requirement an Exercise of the allowed action meets with one `approve` contribution
+/// bound to its intent (§9.14.1, OP-141 m.19).
+fn approval_term() -> RequirementTerm {
+    RequirementTerm {
+        proof_kind: ProofKind::Contribution,
+        class: String::from(APPROVE_CLASS),
+        count: 1,
+        binding: Binding::IntentDigest,
+        freshness_ms: None,
+        independence: Independence::None,
+        consumption: Consumption::Reusable,
+        source: None,
+        assurance: BTreeMap::new(),
+    }
 }
 
 impl SamplePlan {
-    /// The Action Schema of the sample action: version 1, reversible, no parameters.
-    fn schema(&self) -> ActionSchema {
+    /// The Action Schema of `name`: version 1, reversible (CT1), with `params`.
+    fn schema_of(name: &str, params: &[(&str, &str)]) -> ActionSchema {
         ActionSchema {
-            name: self.action.clone(),
+            name: String::from(name),
             major: 1,
             effect: EffectClass::Reversible,
             reserved: false,
             consumption_bearing: false,
-            params: BTreeMap::new(),
+            params: params
+                .iter()
+                .map(|(k, v)| (String::from(*k), String::from(*v)))
+                .collect(),
             resource_types: BTreeSet::new(),
             render: None,
         }
+    }
+
+    /// The Action Schema of the sample action: version 1, reversible, no parameters.
+    fn schema(&self) -> ActionSchema {
+        Self::schema_of(&self.action, &[])
+    }
+
+    /// The Action Schema of the allowed action.
+    fn allowed_schema(&self) -> Option<ActionSchema> {
+        self.allowed
+            .as_deref()
+            .map(|name| Self::schema_of(name, &ALLOWED_PARAMS))
     }
 
     /// The catalog `publisher` publishes in the realm's Genesis.
@@ -248,60 +351,70 @@ impl SamplePlan {
             publisher,
             namespace: self.namespace.clone(),
             catalog_version: 1,
-            actions: vec![self.schema()],
+            actions: std::iter::once(self.schema())
+                .chain(self.allowed_schema())
+                .collect(),
             retirements: BTreeSet::new(),
             core_spec_min: None,
         }
     }
 
-    /// The sample action's reference.
-    fn action_ref(&self) -> ActionRef {
+    fn reference(&self, schema: &ActionSchema) -> ActionRef {
         ActionRef {
             namespace: self.namespace.clone(),
-            name: self.action.clone(),
+            name: schema.name.clone(),
             major: 1,
-            schema: access_kernel::schema::action_digest(&self.schema()),
+            schema: access_kernel::schema::action_digest(schema),
         }
+    }
+
+    /// The sample action's reference.
+    fn action_ref(&self) -> ActionRef {
+        self.reference(&self.schema())
+    }
+
+    /// The allowed action's reference.
+    fn allowed_ref(&self) -> Option<ActionRef> {
+        self.allowed_schema().map(|s| self.reference(&s))
     }
 
     /// The Grant of the action over the whole namespace to `holder`, on the meta-anchor.
     fn grant(&self, domain: &Digest, holder: Id) -> GrantContent {
-        GrantContent {
-            basis: GrantBasis::Anchor(meta::meta_anchor(domain)),
-            holder: SubjectSelector::Party(holder),
-            authority: CanonicalAuthority {
-                authority: AuthoritySet {
-                    actions: ActionSet {
-                        exact: BTreeSet::from([self.action_ref()]),
-                        prefix: BTreeSet::new(),
-                    },
-                    resource: ResourceSelector::Structural(Structural {
-                        namespace: self.namespace.clone(),
-                        prefix: Vec::new(),
-                        kind: None,
-                        attrs: BTreeMap::new(),
-                    }),
-                    params: BTreeMap::new(),
-                    recipient: None,
-                    purpose: None,
-                },
-                constraints: ConstraintSet {
-                    validity: Window {
-                        from: 0,
-                        until: u64::MAX,
-                    },
-                    conditions: BTreeSet::new(),
-                    budget: BTreeSet::new(),
-                },
-                delegation: DelegationTerms {
-                    depth: 0,
-                    downstream_holder_class: None,
-                },
-                requirements: BTreeSet::new(),
-            },
-            agency: BTreeSet::from([Capacity::Own]),
-            named: None,
-        }
+        grant_of(
+            domain,
+            holder,
+            authority(
+                BTreeSet::from([self.action_ref()]),
+                &self.namespace,
+                BTreeSet::new(),
+            ),
+        )
+    }
+
+    /// The Grant of the allowed action to `holder`, met only with an approval.
+    fn allowed_grant(&self, domain: &Digest, holder: Id) -> Option<GrantContent> {
+        Some(grant_of(
+            domain,
+            holder,
+            authority(
+                BTreeSet::from([self.allowed_ref()?]),
+                &self.namespace,
+                BTreeSet::from([approval_term()]),
+            ),
+        ))
+    }
+
+    /// The Grant to contribute `approve` approvals to `holder` (L0-META-30).
+    fn contribute_grant(domain: &Digest, holder: Id) -> GrantContent {
+        grant_of(
+            domain,
+            holder,
+            authority(
+                BTreeSet::from([core_action("contribute")]),
+                CONTRIBUTION_NAMESPACE,
+                BTreeSet::new(),
+            ),
+        )
     }
 }
 
@@ -423,15 +536,28 @@ impl Plan {
                     realm: s.realm,
                     namespace: s.namespace,
                     action: s.action,
+                    allowed: s.allowed,
                 };
                 // OP-141 m.35 (a)
                 let catalog = sample.catalog(Id([0; 16]));
                 if Spp::from_value(&catalog.to_value()).as_ref() != Ok(&catalog)
                     || sample.namespace == meta::NAMESPACE
                     || sample.namespace.starts_with("idp.")
+                    || sample.allowed.as_deref() == Some(sample.action.as_str())
                 {
                     return Err(BootstrapError::Plan(String::from(
                         "the sample namespace or action is not a valid catalog entry",
+                    )));
+                }
+                // OP-149 m.29 (b)
+                if sample.allowed.is_some()
+                    && file
+                        .test_user
+                        .as_ref()
+                        .is_none_or(|u| u.realm != sample.realm)
+                {
+                    return Err(BootstrapError::Plan(String::from(
+                        "sample.allowed needs a test_user in the sample realm",
                     )));
                 }
                 Some(sample)
@@ -574,8 +700,42 @@ pub(crate) struct TestUserOut {
     pub(crate) party: String,
     /// The user's device Instance in the realm's governing domain, base64url.
     pub(crate) instance: String,
+    /// The credential id of the user's software passkey, base64url (OP-149 m.26 (e)).
+    pub(crate) passkey: String,
+    /// The allowed Exercise the user's Party holds, when the sample names one (OP-149 m.29
+    /// (b)).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) allowed: Option<AllowedOut>,
     /// Whether this run created the account.
     pub(crate) created: bool,
+}
+
+/// What a product's Exercise of the allowed action names (OP-149 m.29 (b)), in the ADP JSON
+/// encoding: the action, a resource the Grant covers, the typed parameters, the test user's
+/// holding as `basis`, and the holding its approval is contributed under.
+#[derive(Clone, Debug, Serialize)]
+pub(crate) struct AllowedOut {
+    /// The governing domain, base64url.
+    pub(crate) domain: String,
+    /// The allowed action: `intent.action`.
+    pub(crate) action: serde_json::Value,
+    /// A resource the Grant covers: an entry of `intent.resources`.
+    pub(crate) resource: serde_json::Value,
+    /// The action's typed parameters, name to type.
+    pub(crate) params: serde_json::Value,
+    /// The Party's holding of the Grant: `basis`.
+    pub(crate) basis: serde_json::Value,
+    /// The approval the Exercise needs: its class and the Party's basis for contributing it.
+    pub(crate) contribution: ContributionOut,
+}
+
+/// The approval a product's Exercise of the allowed action waits for.
+#[derive(Clone, Debug, Serialize)]
+pub(crate) struct ContributionOut {
+    /// The contribute class.
+    pub(crate) class: &'static str,
+    /// The Party's holding of the Grant over `access/contribute`: the contribution's `basis`.
+    pub(crate) basis: serde_json::Value,
 }
 
 /// What an unsigned `party_compromise` Claim names to be admitted in the sample realm
@@ -676,6 +836,62 @@ fn root_party(key: &PublicKey) -> Id {
     let mut id = [0; 16];
     id.copy_from_slice(t.get(..16).unwrap_or(&[0; 16]));
     Id(id)
+}
+
+/// The issuer style of the plan as the admin forms it.
+const fn issuer_style(style: Style) -> IssuerStyle {
+    match style {
+        Style::Subdomain => IssuerStyle::Subdomain,
+        Style::Path => IssuerStyle::Path,
+    }
+}
+
+/// What a sample realm's Genesis accepts beyond the catalogs: the local declarant's
+/// `party_compromise` Claims (OP-149 m.26 (c)) and, with an allowed action, the realm issuer's
+/// `authentication` Claims as predicate input, which a hosted approval proves with (OP-149 m.29
+/// (b), SI-5).
+fn genesis_acceptances(
+    catalog: Option<&SamplePlan>,
+    declarant: Option<Id>,
+) -> (Vec<suiss_crypto::dcbor::Value>, Vec<String>) {
+    (
+        declarant
+            .map(|issuer| vec![local::acceptance(issuer)])
+            .unwrap_or_default(),
+        catalog
+            .filter(|s| s.allowed.is_some())
+            .map(|_| vec![Class::Authentication.name()])
+            .unwrap_or_default(),
+    )
+}
+
+/// An action reference in the ADP JSON encoding.
+fn action_json(action: &ActionRef) -> serde_json::Value {
+    serde_json::json!({
+        "namespace": action.namespace,
+        "name": action.name,
+        "major": action.major,
+        "schema": b64url_encode(&action.schema.0),
+    })
+}
+
+/// The sample resource of `namespace` in the ADP JSON encoding.
+fn resource_json(namespace: &str) -> serde_json::Value {
+    serde_json::json!({
+        "namespace": namespace,
+        "path": [SAMPLE_PATH],
+    })
+}
+
+/// A holding basis in the ADP JSON encoding.
+fn holding_json(h: &HoldingRef) -> serde_json::Value {
+    serde_json::json!({
+        "holding": {
+            "grant": b64url_encode(&h.grant.0),
+            "holder": b64url_encode(&h.holder.0),
+            "since": h.since,
+        }
+    })
 }
 
 /// The summary's line for a realm.
@@ -792,10 +1008,7 @@ where
         let root = root_key(self.hsm)?;
         let key = root.public_key();
         let party = root_party(&key);
-        let style = match plan.style {
-            Style::Subdomain => IssuerStyle::Subdomain,
-            Style::Path => IssuerStyle::Path,
-        };
+        let style = issuer_style(plan.style);
         let mut realms = Vec::new();
         let slugs =
             std::iter::once((&plan.platform, true)).chain(plan.tenants.iter().map(|s| (s, false)));
@@ -814,17 +1027,20 @@ where
                 .sample
                 .as_ref()
                 .filter(|s| !is_platform && s.realm == *slug);
-            let schemas = catalog.map(|s| vec![s.catalog(party)]).unwrap_or_default();
             let accepted = plan
                 .compromise
                 .as_ref()
                 .filter(|c| !is_platform && c.realm == *slug)
                 .zip(declarant.as_ref());
-            let acceptances = accepted
-                .map(|(_, (_, issuer))| vec![local::acceptance(*issuer)])
-                .unwrap_or_default();
             let (tenant, realm, domain, created) = self
-                .realm(&admin, slug, style, party, schemas, acceptances)
+                .realm(
+                    &admin,
+                    slug,
+                    style,
+                    party,
+                    catalog.map(|s| vec![s.catalog(party)]).unwrap_or_default(),
+                    genesis_acceptances(catalog, accepted.map(|(_, (_, issuer))| *issuer)),
+                )
                 .await?;
             self.onboard(tenant, realm, domain, &root, party).await?;
             if let Some(s) = catalog {
@@ -836,15 +1052,17 @@ where
             if is_platform {
                 platform = Some((tenant, realm, domain, route.issuer.clone()));
             }
-            // OP-149 m.26 (b), (c)
+            // OP-149 m.26 (b), (c), m.29 (b)
             if let Some(u) = plan.test_user.as_ref().filter(|u| u.realm == *slug) {
-                let out = self
+                let (mut out, party) = self
                     .test_user(&admin, &ids, (tenant, realm), domain, &root, u)
                     .await?;
-                test_user = Some(TestUserOut {
-                    issuer: route.issuer.clone(),
-                    ..out
-                });
+                out.issuer = route.issuer.clone();
+                out.allowed = match catalog.filter(|s| s.allowed.is_some()) {
+                    Some(s) => Some(self.allowed_exercise(s, domain, party, &root).await?),
+                    None => None,
+                };
+                test_user = Some(out);
             }
             if let Some((c, (key, issuer))) = accepted {
                 compromise = Some(
@@ -860,21 +1078,7 @@ where
                 (is_platform, created),
             )?);
         }
-        let mut clients = Vec::new();
-        if let Some((tenant, realm, domain, issuer)) = platform {
-            let admin = self.admin(&ids, Some(tenant));
-            for p in &plan.products {
-                let (client_id, created) = self
-                    .client(&admin, (tenant, realm), domain, &root, p)
-                    .await?;
-                clients.push(ClientOut {
-                    product: p.product.name(),
-                    client_id,
-                    audience: issuer.clone(),
-                    created,
-                });
-            }
-        }
+        let clients = self.clients(plan, &ids, &root, platform).await?;
         Ok(Summary {
             v: 1,
             root: RootOut {
@@ -887,6 +1091,32 @@ where
             test_user,
             compromise,
         })
+    }
+
+    /// The platform clients of the plan's products in the platform realm (OP-149 m.4).
+    async fn clients(
+        &self,
+        plan: &Plan,
+        ids: &IdKey,
+        root: &HsmSigner,
+        platform: Option<(TenantId, RealmId, Digest, String)>,
+    ) -> Result<Vec<ClientOut>, BootstrapError> {
+        let mut clients = Vec::new();
+        if let Some((tenant, realm, domain, issuer)) = platform {
+            let admin = self.admin(ids, Some(tenant));
+            for p in &plan.products {
+                let (client_id, created) = self
+                    .client(&admin, (tenant, realm), domain, root, p)
+                    .await?;
+                clients.push(ClientOut {
+                    product: p.product.name(),
+                    client_id,
+                    audience: issuer.clone(),
+                    created,
+                });
+            }
+        }
+        Ok(clients)
     }
 
     /// The sample subject in the sample realm and its Grant of the sample action, issued by a
@@ -907,8 +1137,82 @@ where
         label.extend_from_slice(&domain.0);
         label.extend_from_slice(&subject.0);
         label.extend_from_slice(&action.schema.0);
+        let holding = self
+            .granted(domain, root, &label, s.grant(&domain, subject), subject)
+            .await?;
+        Ok(SampleOut {
+            realm: s.realm.clone(),
+            domain: b64url_encode(&domain.0),
+            subject: b64url_encode(&subject.0),
+            action: action_json(&action),
+            resource: resource_json(&s.namespace),
+            basis: holding_json(&holding),
+        })
+    }
+
+    /// The test user's Grant of the allowed action and its Grant to contribute the approval the
+    /// action needs, each issued by a `grant_issue` Exercise the root signs when its nonce has no
+    /// ALLOW yet (OP-149 m.29 (b)); the summary names both holdings.
+    async fn allowed_exercise(
+        &self,
+        s: &SamplePlan,
+        domain: Digest,
+        party: Id,
+        root: &HsmSigner,
+    ) -> Result<AllowedOut, BootstrapError> {
+        let action = s.allowed_ref().ok_or(BootstrapError::Encode)?;
+        let grant = s
+            .allowed_grant(&domain, party)
+            .ok_or(BootstrapError::Encode)?;
+        let mut label = ALLOWED_GRANT_LABEL.to_vec();
+        label.extend_from_slice(&domain.0);
+        label.extend_from_slice(&party.0);
+        label.extend_from_slice(&action.schema.0);
+        let holding = self.granted(domain, root, &label, grant, party).await?;
+        let mut label = CONTRIBUTE_GRANT_LABEL.to_vec();
+        label.extend_from_slice(&domain.0);
+        label.extend_from_slice(&party.0);
+        let contribute = self
+            .granted(
+                domain,
+                root,
+                &label,
+                SamplePlan::contribute_grant(&domain, party),
+                party,
+            )
+            .await?;
+        Ok(AllowedOut {
+            domain: b64url_encode(&domain.0),
+            action: action_json(&action),
+            resource: resource_json(&s.namespace),
+            params: serde_json::Value::Object(
+                ALLOWED_PARAMS
+                    .iter()
+                    .map(|(k, v)| (String::from(*k), serde_json::Value::from(*v)))
+                    .collect(),
+            ),
+            basis: holding_json(&holding),
+            contribution: ContributionOut {
+                class: APPROVE_CLASS,
+                basis: holding_json(&contribute),
+            },
+        })
+    }
+
+    /// The holding of the Grant `content` issued to `party` by a `grant_issue` on the
+    /// meta-anchor, signed by the root under the nonce derived from `label`; committed when
+    /// that nonce has no ALLOW yet. Ed25519 signing is deterministic (RFC 8032), so every run
+    /// derives the same nonce, and nobody without the root key can predict it.
+    async fn granted(
+        &self,
+        domain: Digest,
+        root: &HsmSigner,
+        label: &[u8],
+        content: GrantContent,
+        party: Id,
+    ) -> Result<HoldingRef, BootstrapError> {
         let signature = root
-            .sign(&label)
+            .sign(label)
             .map_err(|e| BootstrapError::Unavailable(String::from(e.code())))?;
         let nonce = suiss_crypto::digest::sha256(&signature).to_vec();
         let found = find_nonce(self.app, &DomainId::from_bytes(domain.0), &nonce)
@@ -916,47 +1220,17 @@ where
             .filter(|n| n.outcome == "allow");
         let since = match found {
             Some(row) => row.decision_pos,
-            None => self.issue(s, domain, subject, root, &nonce).await?,
+            None => {
+                self.commit_meta(domain, root, &nonce, Payload::GrantIssue(content), party)
+                    .await?
+            }
         };
         let exercise = meta::exercise_id(&domain, &nonce).map_err(|_| BootstrapError::Encode)?;
-        let grant = meta::object_id(&exercise, kind::GRANT, 0);
-        Ok(SampleOut {
-            realm: s.realm.clone(),
-            domain: b64url_encode(&domain.0),
-            subject: b64url_encode(&subject.0),
-            action: serde_json::json!({
-                "namespace": action.namespace,
-                "name": action.name,
-                "major": action.major,
-                "schema": b64url_encode(&action.schema.0),
-            }),
-            resource: serde_json::json!({
-                "namespace": s.namespace,
-                "path": [SAMPLE_PATH],
-            }),
-            basis: serde_json::json!({
-                "holding": {
-                    "grant": b64url_encode(&grant.0),
-                    "holder": b64url_encode(&subject.0),
-                    "since": since,
-                }
-            }),
+        Ok(HoldingRef {
+            grant: meta::object_id(&exercise, kind::GRANT, 0),
+            holder: party,
+            since,
         })
-    }
-
-    /// Commits the sample Grant's `grant_issue` on the meta-anchor, signed by the root; returns
-    /// its record's position.
-    async fn issue(
-        &self,
-        s: &SamplePlan,
-        domain: Digest,
-        subject: Id,
-        root: &HsmSigner,
-        nonce: &[u8],
-    ) -> Result<u64, BootstrapError> {
-        let payload = Payload::GrantIssue(s.grant(&domain, subject));
-        self.commit_meta(domain, root, nonce, payload, subject)
-            .await
     }
 
     /// Commits the meta-action `payload` about `party` on the meta-anchor, signed by the root;
@@ -1032,7 +1306,7 @@ where
         style: IssuerStyle,
         root: Id,
         schemas: Vec<Spp>,
-        acceptances: Vec<suiss_crypto::dcbor::Value>,
+        (acceptances, issuer_predicate_input): (Vec<suiss_crypto::dcbor::Value>, Vec<String>),
     ) -> Result<(TenantId, RealmId, Digest, bool), BootstrapError> {
         if let Some(route) = route_by_slug(self.router, slug).await? {
             let mut t = TenantTx::begin(self.app, route.tenant, route.realm).await?;
@@ -1057,6 +1331,7 @@ where
                 ct3_delay_s: None,
                 schemas,
                 acceptances,
+                issuer_predicate_input,
             })
             .await?;
         Ok((tenant, created.realm, created.domain, true))

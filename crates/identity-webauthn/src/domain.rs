@@ -15,5 +15,6 @@ pub mod policy;
 pub mod prf;
 pub mod rejection;
 pub mod rp;
+pub mod software;
 
 pub use rejection::Rejection;

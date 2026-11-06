@@ -771,7 +771,10 @@ async fn still_asked<A, I, P: Approvals, Q>(
             tier_of(o.tier).ok_or_else(unavailable)?
         }
         Ok(_) => return Err(Reply::problem(CHANGED)),
-        Err(_) => return Err(unavailable()),
+        Err(e) => {
+            tracing::warn!(reason = %e.0, "approval opening unavailable");
+            return Err(unavailable());
+        }
     };
     if now > act.expires_at {
         return Err(problem(
@@ -836,7 +839,10 @@ async fn issue_claim<A, I, P, Q: ApprovalClaims>(
             tracing::warn!(why, "approval claim not placed");
             Err(unavailable())
         }
-        Err(_) => Err(unavailable()),
+        Err(e) => {
+            tracing::warn!(reason = %e.0, "approval claim unavailable");
+            Err(unavailable())
+        }
     }
 }
 
@@ -903,7 +909,10 @@ fn committed(
                 }),
             ))
         }
-        Err(_) => Err(unavailable()),
+        Err(e) => {
+            tracing::warn!(reason = %e.0, "contribution unavailable");
+            Err(unavailable())
+        }
     }
 }
 

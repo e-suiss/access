@@ -375,6 +375,7 @@ impl World {
                 ct3_delay_s: None,
                 schemas: Vec::new(),
                 acceptances: Vec::new(),
+                issuer_predicate_input: Vec::new(),
             })
             .await
             .unwrap();
@@ -654,6 +655,7 @@ async fn realm_creation_opens_genesis_and_fixes_the_issuer() {
             ct3_delay_s: None,
             schemas: Vec::new(),
             acceptances: Vec::new(),
+            issuer_predicate_input: Vec::new(),
         })
         .await;
     assert!(taken.is_err());
@@ -837,7 +839,7 @@ async fn an_rp_id_change_is_a_ct3_exercise() {
     );
     assert!(matches!(
         exercise(&w, &long_retire, ROOT_KEY).await,
-        Err(access_identity_admin::AdminError::Refused(code)) if code == "protocol"
+        Err(access_identity_admin::AdminError::Refused(code)) if code == "intent-validity"
     ));
     let rp = proposal(
         (tenant, realm),

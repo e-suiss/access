@@ -222,12 +222,16 @@ services:
       timeout: 3s
       retries: 30
 
-  # OP-149 m.26 (b), (c): the headless client, on demand (`profiles: [tools]`), with the local
-  # CA, the PEP certificate and bootstrap.json in reach:
+  # OP-149 m.26 (b), (c), (e), m.29 (b): the headless client, on demand (`profiles: [tools]`),
+  # with the local CA, the PEP certificate, bootstrap.json and the server's token (the test
+  # user's device key and software passkey live there; the keys never leave it) in reach:
   #   docker compose -f deploy/compose/access.yaml run --rm local-client login \
   #     --issuer https://access-server:8443/realms/acme --ca /var/lib/access/certs/ca.crt \
   #     --client-id <test_user.client_id> --redirect-uri http://127.0.0.1/cb \
   #     --identifier test@acme.example --password-env BOOTSTRAP_TEST_PASSWORD [--resource <client_id>]
+  #   ... login ... --passkey access/bootstrap/test-user-passkey --hsm-module /usr/lib/softhsm/libsofthsm2.so \
+  #     --hsm-token access-server --hsm-pin-file /var/lib/access/secrets/hsm-access-server
+  #   docker compose -f deploy/compose/access.yaml run --rm local-client approve ...   # see the README
   #   docker compose -f deploy/compose/access.yaml run --rm local-client compromise \
   #     --api https://access-server:8443 --ca /var/lib/access/certs/ca.crt \
   #     --cert /var/lib/access/certs/pep.crt --key /var/lib/access/certs/pep.key \
@@ -240,6 +244,8 @@ services:
       BOOTSTRAP_TEST_PASSWORD: ${ACCESS_LOCAL_TEST_PASSWORD:-}
     volumes:
       - certs:/var/lib/access/certs:ro
+      - secrets:/var/lib/access/secrets:ro
+      - softhsm:/var/lib/softhsm/tokens
       - bootstrap:/var/lib/access/bootstrap:ro
       - product-tls:/var/lib/access/product-tls:ro
       - ${ACCESS_PRODUCT_KEYS:-./access/products}:/etc/access/products:ro
