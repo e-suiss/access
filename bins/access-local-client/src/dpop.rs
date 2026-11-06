@@ -16,8 +16,7 @@ use crate::ClientError;
 pub fn now_s() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0)
+        .map_or(0, |d| d.as_secs())
 }
 
 /// `N` random bytes, base64url.
@@ -90,9 +89,8 @@ impl Es256Key {
     /// The RFC 7638 thumbprint of the public key, base64url: `dpop_jkt` and `cnf.jkt`.
     #[must_use]
     pub fn jkt(&self) -> String {
-        let key = access_kernel::verify::cose::PublicKey::P256(
-            self.pair.public_key().as_ref().to_vec(),
-        );
+        let key =
+            access_kernel::verify::cose::PublicKey::P256(self.pair.public_key().as_ref().to_vec());
         b64url_encode(&access_kernel::verify::key_scope::thumbprint(&key))
     }
 

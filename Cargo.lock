@@ -326,6 +326,34 @@ dependencies = [
 ]
 
 [[package]]
+name = "access-local-client"
+version = "0.2.6"
+dependencies = [
+ "access-crypto",
+ "access-http",
+ "access-identity-account",
+ "access-identity-oauth",
+ "access-identity-session",
+ "access-identity-signer",
+ "access-identity-ui",
+ "access-identity-webauthn",
+ "access-internal-api",
+ "access-store",
+ "aws-lc-rs",
+ "axum",
+ "esuiss-access-kernel",
+ "esuiss-crypto",
+ "httparse",
+ "rcgen",
+ "rustls",
+ "rustls-pki-types",
+ "serde_json",
+ "thiserror",
+ "tokio",
+ "tokio-rustls",
+]
+
+[[package]]
 name = "access-parse"
 version = "0.2.6"
 dependencies = [

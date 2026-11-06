@@ -5,6 +5,8 @@
 //! `/token` with the PKCE verifier and a DPoP proof. Optionally the request names a platform
 //! product as the token's RFC 8707 resource (OP-149 m.26 (a)).
 
+use std::fmt::Write as _;
+
 use serde_json::{Value, json};
 
 use crate::ClientError;
@@ -60,7 +62,7 @@ fn form_encode(s: &str, out: &mut String) {
         if b.is_ascii_alphanumeric() || matches!(b, b'-' | b'.' | b'_' | b'~') {
             out.push(char::from(b));
         } else {
-            out.push_str(&format!("%{b:02X}"));
+            let _ = write!(out, "%{b:02X}");
         }
     }
 }
@@ -120,6 +122,52 @@ fn unexpected(step: &'static str, r: &Response) -> ClientError {
     }
 }
 
+/// The text member `key` of a JSON answer.
+fn text(v: &Value, key: &str) -> Option<String> {
+    v.get(key).and_then(Value::as_str).map(String::from)
+}
+
+/// The `Location` of a `303`, with an OAuth `error` in its query reported as such.
+fn redirect(step: &'static str, r: &Response) -> Result<String, ClientError> {
+    let location = r.header("location").map(String::from);
+    let Some(location) = location.filter(|_| r.status == 303) else {
+        return Err(unexpected(step, r));
+    };
+    if let Some(error) = query(&location, "error") {
+        return Err(ClientError::Unexpected {
+            step,
+            status: r.status,
+            body: format!(
+                "{error}: {}",
+                query(&location, "error_description").unwrap_or_default()
+            ),
+        });
+    }
+    Ok(location)
+}
+
+/// One run's request state: the DPoP key, the PKCE pair and the request's `state`.
+struct Run {
+    key: Es256Key,
+    verifier: String,
+    challenge: String,
+    state: String,
+    nonce: String,
+}
+
+impl Run {
+    fn new() -> Result<Self, ClientError> {
+        let (verifier, challenge) = pkce()?;
+        Ok(Self {
+            key: Es256Key::generate()?,
+            verifier,
+            challenge,
+            state: random_text::<16>()?,
+            nonce: random_text::<16>()?,
+        })
+    }
+}
+
 /// Runs the flow and returns the token response with the DPoP key's thumbprint under
 /// `dpop_jkt`.
 ///
@@ -128,121 +176,123 @@ fn unexpected(step: &'static str, r: &Response) -> ClientError {
 /// [`ClientError::Unexpected`] with what Access said.
 pub async fn login(http: &Http, l: &Login<'_>) -> Result<Value, ClientError> {
     let issuer = Url::parse(l.issuer)?;
-    let origin = issuer.origin();
-    let key = Es256Key::generate()?;
-    let (verifier, challenge) = pkce()?;
-    let state = random_text::<16>()?;
-    let nonce = random_text::<16>()?;
-    let jkt = key.jkt();
+    let run = Run::new()?;
+    let return_to = authorize(http, l, &issuer, &run).await?;
+    let jar = sign_in(http, l).await?;
+    let code = code(http, l, &issuer, &run, &return_to, &jar).await?;
+    exchange(http, l, &run, &code).await
+}
+
+/// RFC 6749 §4.1.1: without a session the browser is sent to the hosted login; the `return_to`
+/// it carries names only this realm's stored request (X41).
+async fn authorize(
+    http: &Http,
+    l: &Login<'_>,
+    issuer: &Url,
+    run: &Run,
+) -> Result<String, ClientError> {
+    let jkt = run.key.jkt();
     let mut pairs = vec![
         ("client_id", l.client_id),
         ("redirect_uri", l.redirect_uri),
         ("response_type", "code"),
         ("scope", l.scope),
-        ("code_challenge", challenge.as_str()),
+        ("code_challenge", run.challenge.as_str()),
         ("code_challenge_method", "S256"),
-        ("state", state.as_str()),
-        ("nonce", nonce.as_str()),
+        ("state", run.state.as_str()),
+        ("nonce", run.nonce.as_str()),
         ("dpop_jkt", jkt.as_str()),
     ];
     if let Some(r) = l.resource {
         pairs.push(("resource", r));
     }
-    let authorize = format!("{}/authorize?{}", l.issuer, form(&pairs));
+    let url = format!("{}/authorize?{}", l.issuer, form(&pairs));
+    let first = http.request("GET", &url, &[], None).await?;
+    let to_login = redirect("authorize", &first)?;
+    let prefix = format!("{}/authorize?", issuer.path.trim_end_matches('/'));
+    query(&to_login, "return_to")
+        .filter(|r| r.starts_with(&prefix))
+        .ok_or_else(|| unexpected("authorize", &first))
+}
+
+/// The hosted login's JSON steps (TN-96, TN-132): start, identify, password; each step's
+/// `action` is a path under the realm, as the login page uses it. The jar comes back with the
+/// session cookie.
+async fn sign_in(http: &Http, l: &Login<'_>) -> Result<Jar, ClientError> {
     let mut jar = Jar::default();
-
-    // RFC 6749 §4.1.1: without a session the browser is sent to the hosted login
-    let first = http.request("GET", &authorize, &[], None).await?;
-    let to_login = first.header("location").map(String::from);
-    let Some(to_login) = to_login.filter(|_| first.status == 303) else {
-        return Err(unexpected("authorize", &first));
+    let action = |r: &Response, step: &'static str| -> Result<String, ClientError> {
+        text(&r.json(), "action")
+            .map(|a| format!("{}{a}", l.issuer))
+            .ok_or_else(|| unexpected(step, r))
     };
-    if let Some(error) = query(&to_login, "error") {
-        return Err(ClientError::Unexpected {
-            step: "authorize",
-            status: first.status,
-            body: format!(
-                "{error}: {}",
-                query(&to_login, "error_description").unwrap_or_default()
-            ),
-        });
-    }
-    let return_to = query(&to_login, "return_to")
-        .filter(|r| r.starts_with(&format!("{}/authorize?", issuer.path.split('?').next().unwrap_or(""))))
-        .ok_or_else(|| unexpected("authorize", &first))?;
-
-    // the hosted login's JSON steps (TN-96, TN-132): start, identify, password
     let flows = format!("{}/v1/login/flows", l.issuer);
     let started = post_json(http, &flows, &mut jar, None).await?;
     if started.status != 201 {
         return Err(unexpected("login flow", &started));
     }
-    let action = started.json()["action"]
-        .as_str()
-        .map(|a| format!("{origin}{a}"))
-        .ok_or_else(|| unexpected("login flow", &started))?;
     let identified = post_json(
         http,
-        &action,
+        &action(&started, "login flow")?,
         &mut jar,
         Some(json!({ "method": "identifier", "fields": { "identifier": l.identifier } })),
     )
     .await?;
-    if identified.status != 200 || identified.json()["step"] != "authenticate" {
+    if identified.status != 200
+        || text(&identified.json(), "step").as_deref() != Some("authenticate")
+    {
         return Err(unexpected("identifier", &identified));
     }
     let signed_in = post_json(
         http,
-        &action,
+        &action(&identified, "identifier")?,
         &mut jar,
         Some(json!({ "method": "password", "fields": { "password": l.password } })),
     )
     .await?;
-    if signed_in.status != 200 || signed_in.json()["step"] != "complete" {
-        return Err(ClientError::Unexpected {
-            step: "password",
-            status: signed_in.status,
-            body: signed_in.json()["messages"].to_string(),
-        });
+    if signed_in.status != 200 || text(&signed_in.json(), "step").as_deref() != Some("complete") {
+        return Err(unexpected("password", &signed_in));
     }
+    Ok(jar)
+}
 
-    // back to /authorize with the session: the code comes with state and iss (RFC 9207)
+/// Back to `/authorize` with the session: the code comes with `state` and `iss` (RFC 9207).
+async fn code(
+    http: &Http,
+    l: &Login<'_>,
+    issuer: &Url,
+    run: &Run,
+    return_to: &str,
+    jar: &Jar,
+) -> Result<String, ClientError> {
     let cookies = jar.header();
     let back = http
         .request(
             "GET",
-            &format!("{origin}{return_to}"),
+            &format!("{}{return_to}", issuer.origin()),
             &[("Cookie", cookies.as_str())],
             None,
         )
         .await?;
-    let redirected = back.header("location").map(String::from);
-    let Some(redirected) = redirected.filter(|_| back.status == 303) else {
-        return Err(unexpected("authorize (signed in)", &back));
-    };
-    if let Some(error) = query(&redirected, "error") {
-        return Err(ClientError::Unexpected {
-            step: "authorize (signed in)",
-            status: back.status,
-            body: error,
-        });
-    }
+    let redirected = redirect("authorize (signed in)", &back)?;
     if !redirected.starts_with(l.redirect_uri)
-        || query(&redirected, "state").as_deref() != Some(state.as_str())
+        || query(&redirected, "state").as_deref() != Some(run.state.as_str())
         || query(&redirected, "iss").as_deref() != Some(l.issuer)
     {
         return Err(unexpected("redirect", &back));
     }
-    let code = query(&redirected, "code").ok_or_else(|| unexpected("redirect", &back))?;
+    query(&redirected, "code").ok_or_else(|| unexpected("redirect", &back))
+}
 
-    // RFC 6749 §4.1.3, RFC 9449 §5: the exchange, once with the server's DPoP nonce
+/// RFC 6749 §4.1.3, RFC 9449 §5: the exchange, once more with the server's DPoP nonce when it
+/// asks for one.
+async fn exchange(http: &Http, l: &Login<'_>, run: &Run, code: &str) -> Result<Value, ClientError> {
     let token_url = format!("{}/token", l.issuer);
     let mut pairs = vec![
         ("grant_type", "authorization_code"),
         ("client_id", l.client_id),
-        ("code", code.as_str()),
+        ("code", code),
         ("redirect_uri", l.redirect_uri),
-        ("code_verifier", verifier.as_str()),
+        ("code_verifier", run.verifier.as_str()),
     ];
     if let Some(r) = l.resource {
         pairs.push(("resource", r));
@@ -250,7 +300,7 @@ pub async fn login(http: &Http, l: &Login<'_>) -> Result<Value, ClientError> {
     let body = form(&pairs);
     let mut nonce = None;
     for _ in 0..2 {
-        let proof = key.proof("POST", &token_url, nonce.as_deref(), None)?;
+        let proof = run.key.proof("POST", &token_url, nonce.as_deref(), None)?;
         let r = http
             .request(
                 "POST",
@@ -262,12 +312,15 @@ pub async fn login(http: &Http, l: &Login<'_>) -> Result<Value, ClientError> {
         if r.status == 200 {
             let mut tokens = r.json();
             if let Some(m) = tokens.as_object_mut() {
-                m.insert("dpop_jkt".into(), jkt.into());
+                m.insert("dpop_jkt".into(), run.key.jkt().into());
             }
             return Ok(tokens);
         }
         let fresh = r.header("dpop-nonce").map(String::from);
-        if r.json()["error"] == "use_dpop_nonce" && fresh.is_some() && nonce.is_none() {
+        if text(&r.json(), "error").as_deref() == Some("use_dpop_nonce")
+            && fresh.is_some()
+            && nonce.is_none()
+        {
             nonce = fresh;
             continue;
         }
@@ -340,5 +393,16 @@ mod tests {
             body: Vec::new(),
         });
         assert_eq!(jar.header(), "__Host-a=1");
+        // RFC 6749 §4.1.2.1: an error in the redirect is reported, not followed
+        let r = Response {
+            status: 303,
+            headers: vec![(
+                "location".into(),
+                "https://cb/x?error=invalid_target&error_description=unknown%20resource".into(),
+            )],
+            body: Vec::new(),
+        };
+        let e = redirect("authorize", &r).unwrap_err().to_string();
+        assert!(e.contains("invalid_target: unknown resource"), "{e}");
     }
 }

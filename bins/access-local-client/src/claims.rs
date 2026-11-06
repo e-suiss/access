@@ -109,7 +109,7 @@ pub async fn declare(http: &Http, c: &Compromise<'_>) -> Result<Value, ClientErr
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, reason = "test code")]
+    #![allow(clippy::unwrap_used, clippy::indexing_slicing, reason = "test code")]
 
     use super::*;
 
@@ -130,7 +130,10 @@ mod tests {
         let channel = Channel::Pep(suiss_crypto::digest::sha256(&leaf));
         let u = access_kernel::claim::unsigned(&bytes, &Digest([1; 32]), &channel).unwrap();
         assert_eq!(u.statement.class, PARTY_COMPROMISE);
-        assert_eq!((u.statement.issuer, u.statement.subject), (Id([2; 16]), Id([3; 16])));
+        assert_eq!(
+            (u.statement.issuer, u.statement.subject),
+            (Id([2; 16]), Id([3; 16]))
+        );
         assert_eq!(u.statement.value, Some(EqValue::Int(5_000)));
         assert_eq!(u.statement.issued_at, 9_000);
         assert!(access_kernel::claim::unsigned(&bytes, &Digest([9; 32]), &channel).is_err());

@@ -20,14 +20,17 @@ FROM chef AS builder
 COPY --from=planner /src/recipe.json recipe.json
 RUN cargo chef cook --release --locked \
       --package access-server --package access-signer --package access-identity-signer-bin \
+      --package access-local-client \
       --recipe-path recipe.json
 COPY . .
 RUN cargo build --release --locked \
-      --package access-server --package access-signer --package access-identity-signer-bin
+      --package access-server --package access-signer --package access-identity-signer-bin \
+      --package access-local-client
 
 # OP-69, CR-28: the same binaries with SoftHSM as the local PKCS#11 token, provisioning for a
-# local deployment (deploy/compose/access.yaml), and the database administrator's setup. Not a
-# production image: production runs the distroless image below against a real HSM.
+# local deployment (deploy/compose/access.yaml), the database administrator's setup and the
+# headless client of OP-149 m.26 (b), (c). Not a production image: production runs the
+# distroless image below against a real HSM, with the three server binaries only (m.22 (b)).
 FROM ${LOCAL_IMAGE} AS local
 RUN apt-get update \
  && apt-get install -y --no-install-recommends softhsm2 openssl ca-certificates curl \
@@ -42,7 +45,8 @@ RUN apt-get update \
  && chmod 0755 /var/lib/softhsm \
  && install -d -m 0755 /etc/access/local /usr/share/access/postgres
 COPY --from=builder /src/target/release/access-server /src/target/release/access-signer \
-     /src/target/release/access-identity-signer /usr/local/bin/
+     /src/target/release/access-identity-signer /src/target/release/access-local-client \
+     /usr/local/bin/
 COPY --chmod=0755 deploy/compose/access/init.sh /usr/local/bin/access-local-init
 COPY --chmod=0644 deploy/compose/access/*.toml deploy/compose/access/softhsm2.conf /etc/access/local/
 COPY --chmod=0644 crates/store/bootstrap/roles.sql crates/store/bootstrap/database.sql /usr/share/access/postgres/

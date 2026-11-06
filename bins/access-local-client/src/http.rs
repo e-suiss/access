@@ -3,6 +3,7 @@
 //! may be reached at another address (`connect_to`), the way `curl --resolve` does, so a flow
 //! against `https://access-server:8443` runs from outside the compose network too.
 
+use std::fmt::Write as _;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
@@ -169,10 +170,13 @@ impl Http {
         connect_to: Option<SocketAddr>,
     ) -> Result<Self, ClientError> {
         let mut roots = RootCertStore::empty();
-        let (added, _) = roots
-            .add_parsable_certificates(CertificateDer::pem_slice_iter(ca_pem).filter_map(Result::ok));
+        let (added, _) = roots.add_parsable_certificates(
+            CertificateDer::pem_slice_iter(ca_pem).filter_map(Result::ok),
+        );
         if added == 0 {
-            return Err(ClientError::Tls(String::from("no certificate in the CA file")));
+            return Err(ClientError::Tls(String::from(
+                "no certificate in the CA file",
+            )));
         }
         let provider = Arc::new(rustls::crypto::aws_lc_rs::default_provider());
         let builder = ClientConfig::builder_with_provider(provider)
@@ -216,7 +220,9 @@ impl Http {
         );
         for (name, value) in headers {
             if !header_ok(name, value) {
-                return Err(ClientError::Http(format!("header {name} cannot be carried")));
+                return Err(ClientError::Http(format!(
+                    "header {name} cannot be carried"
+                )));
             }
             head.push_str(name);
             head.push_str(": ");
@@ -224,10 +230,11 @@ impl Http {
             head.push_str("\r\n");
         }
         if let Some((content_type, bytes)) = body {
-            head.push_str(&format!(
+            let _ = write!(
+                head,
                 "Content-Type: {content_type}\r\nContent-Length: {}\r\n",
                 bytes.len()
-            ));
+            );
         }
         head.push_str("\r\n");
         let mut request = head.into_bytes();
@@ -279,18 +286,18 @@ fn header_ok(name: &str, value: &str) -> bool {
 /// [`ClientError::Http`].
 pub fn parse(raw: &[u8]) -> Result<Response, ClientError> {
     let mut slots = [httparse::EMPTY_HEADER; 64];
-    let mut resp = httparse::Response::new(&mut slots);
-    let head = match resp.parse(raw) {
+    let mut parsed = httparse::Response::new(&mut slots);
+    let head = match parsed.parse(raw) {
         Ok(httparse::Status::Complete(n)) => n,
         Ok(httparse::Status::Partial) => {
             return Err(ClientError::Http(String::from("answer cut short")));
         }
         Err(e) => return Err(ClientError::Http(e.to_string())),
     };
-    let status = resp
+    let status = parsed
         .code
         .ok_or_else(|| ClientError::Http(String::from("no status")))?;
-    let headers: Vec<(String, String)> = resp
+    let headers: Vec<(String, String)> = parsed
         .headers
         .iter()
         .map(|h| {
@@ -351,7 +358,7 @@ fn dechunk(mut raw: &[u8]) -> Result<Vec<u8>, ClientError> {
 
 #[cfg(test)]
 mod tests {
-    #![allow(clippy::unwrap_used, reason = "test code")]
+    #![allow(clippy::unwrap_used, clippy::indexing_slicing, reason = "test code")]
 
     use super::*;
 

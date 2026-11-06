@@ -84,11 +84,11 @@ SDKs are planned for TypeScript/Node, Python, Go, Java, .NET, Elixir, PHP and Ru
 To build a product against a real Access, start the published image with Docker Compose. Nothing runs in a "development mode": the same binaries and checks as production, with SoftHSM as the PKCS#11 token and a local certificate authority for TLS.
 
 ```sh
-docker compose -f deploy/compose/access.yaml up -d
+ACCESS_LOCAL_TEST_PASSWORD='choose one' docker compose -f deploy/compose/access.yaml up -d
 docker compose -f deploy/compose/access.yaml logs bootstrap   # tenant, realm and client ids
 ```
 
-This starts PostgreSQL (TLS only), the authority and identity signers, applies the migrations (`access-server migrate`) and runs `access-server bootstrap`, which creates the platform tenant with its realm and a sample `acme` tenant. Access listens on `https://access-server:8443` inside the `access-local` network and on `127.0.0.1:8443` on your machine.
+This starts PostgreSQL (TLS only), the authority and identity signers, applies the migrations (`access-server migrate`) and runs `access-server bootstrap`, which creates the platform tenant with its realm, a sample `acme` tenant and a test user in it. Access listens on `https://access-server:8443` inside the `access-local` network and on `127.0.0.1:8443` on your machine. `ACCESS_LOCAL_TEST_PASSWORD` is the test user's password; there is no default, you choose it.
 
 The bootstrap prints, and keeps in the `bootstrap` volume as `bootstrap.json`:
 
@@ -96,12 +96,54 @@ The bootstrap prints, and keeps in the `bootstrap` volume as `bootstrap.json`:
 - `clients[]`: each registered platform product client and the `aud` its client assertions use
 - `root`: the Party that founded the realms
 - `sample`: what a real `POST /access/v1/eligibility:check` names to be answered `eligible: true`. The `acme` realm publishes a `work` catalog with the action `approve`, and its root grants that action over the whole `work` namespace to a sample subject. `sample.subject` is the check's `subject`; `domain`, `action`, `resource` and `basis` go into its `set` (`resource` in `intent.resources`, with an `intent.validity` of at most 24 hours around now, and `"capacity": "own"`)
+- `test_user`: the `acme` user `test@acme.example` (identifier, `usr_…` subject) with the password you chose, and the public client (`client_id`, `redirect_uri`) a sign-in uses: authorization code with PKCE and DPoP, no client secret
+- `compromise`: the Party (`issuer`) whose unsigned `party_compromise` Claims the `acme` realm accepts over a PEP certificate, and the realm's `domain`
+
+### Sign in without a browser
+
+`access-local-client` runs the real sign-in against the running Access and prints the tokens: the JSON steps of the hosted login (identifier, password), then `/authorize` and `/token` with PKCE and a DPoP proof. It verifies TLS against the local CA and refuses plain `http://`.
+
+```sh
+docker compose -f deploy/compose/access.yaml run --rm local-client login \
+  --issuer https://access-server:8443/realms/acme --ca /var/lib/access/certs/ca.crt \
+  --client-id <test_user.client_id> --redirect-uri http://127.0.0.1/cb \
+  --identifier test@acme.example --password-env BOOTSTRAP_TEST_PASSWORD
+```
+
+Add `--resource <your platform client_id>` to get an access token addressed to your product: its `aud` is your `client_id`, the same value your events carry, and it stays bound to the client's DPoP key (`cnf.jkt`). Only a registered platform product client can be named; anything else is `invalid_target`. From a checkout, `cargo run -p access-local-client -- login … --connect 127.0.0.1:8443` reaches the published port with the issuer unchanged (the CA is `ca.crt` from the `certs` volume).
+
+### Produce events on purpose
+
+Your product's end-to-end tests can make Access emit the events it subscribes to:
+
+```sh
+# api_client.updated and api_client.disabled: change or retire the platform client of a product
+docker compose -f deploy/compose/access.yaml run --rm bootstrap \
+  access-server client-update /etc/access/local/bootstrap-work.toml work "Suiss Work (renamed)"
+docker compose -f deploy/compose/access.yaml run --rm bootstrap \
+  access-server client-retire /etc/access/local/bootstrap-work.toml work
+
+# party.compromised: a compromise declaration over the PEP certificate for a Party of acme
+docker compose -f deploy/compose/access.yaml run --rm local-client compromise \
+  --api https://access-server:8443 --ca /var/lib/access/certs/ca.crt \
+  --cert /var/lib/access/certs/pep.crt --key /var/lib/access/certs/pep.key \
+  --domain <compromise.domain> --issuer-party <compromise.issuer> --party <sample.subject>
+
+# a stream's status (enabled, paused, disabled), as a platform client, with its own client key
+docker compose -f deploy/compose/access.yaml run --rm local-client stream-status \
+  --api https://access-server:8443 --issuer https://access-server:8443/realms/platform \
+  --ca /var/lib/access/certs/ca.crt --client-id <clients[].client_id> \
+  --client-key /etc/access/products/work-client.private.jwk --stream <stream id> --status paused
+```
+
+A retired client is retired for good; the next `bootstrap` run registers a new one. The stream status route is `GET`/`POST /access/v1/platform/streams/{id}/status`, with the same rules as a stream's own `/ssf/status`; `disabled` ends the stream. Events that happened before a stream was opened are not delivered to it.
 
 Signed answers start a while after a domain is created. A new domain's first signing key is published before it may sign (65 minutes in the default schedule), and no flag shortens that. Until then, `application/cose` key lookups answer `503` with `"reason": "signer-no-key"`, and decisions carry no signed receipt. The `application/json` form of a key lookup works from the start. A `503` from `/access/v1` always carries a stable `reason`, and a `400` names the part of the body it refused in `errors[]` (`pointer`, `code`).
 
 To register a product's platform client, put its public keys as JWK files in a directory and run the bootstrap with the product plan:
 
 ```sh
+ACCESS_LOCAL_TEST_PASSWORD='choose one' \
 ACCESS_PRODUCT_KEYS=./my-keys \
 ACCESS_BOOTSTRAP_PLAN=/etc/access/local/bootstrap-work.toml \
   docker compose -f deploy/compose/access.yaml up -d
@@ -129,6 +171,7 @@ For each `<name>.csr` (lowercase letters, digits and hyphens; an EC P-256 key), 
 Access pushes events (SSF push, webhooks) only to public addresses on port 443, unless the operator declares the exact endpoint URL. The declaration is an ordinary server setting, the same in every deployment and empty by default; TLS to a declared endpoint is always verified, and redirects are not followed. To push to a product on the `access-local` network:
 
 ```sh
+ACCESS_LOCAL_TEST_PASSWORD='choose one' \
 ACCESS_LOCAL_PRODUCT_HOSTS=work-server \
 ACCESS_DELIVERY_TARGETS='[{url="https://work-server:8443/v1/inbound/events", ca_file="/var/lib/access/certs/ca.crt"}]' \
 ACCESS_PRODUCT_KEYS=./my-keys \

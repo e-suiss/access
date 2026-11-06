@@ -67,7 +67,10 @@ impl Options {
 
     fn connect(&self) -> Result<Option<SocketAddr>, String> {
         self.optional("connect")
-            .map(|c| c.parse().map_err(|_| format!("--connect {c} is not ip:port")))
+            .map(|c| {
+                c.parse()
+                    .map_err(|_| format!("--connect {c} is not ip:port"))
+            })
             .transpose()
     }
 
@@ -130,7 +133,10 @@ async fn run(command: &str, o: &Options) -> Result<serde_json::Value, String> {
                 .ok_or("--domain is not a base64url 32-byte digest")?;
             let occurred_at = o
                 .optional("occurred-at")
-                .map(|t| t.parse::<u64>().map_err(|_| "--occurred-at is not a number"))
+                .map(|t| {
+                    t.parse::<u64>()
+                        .map_err(|_| "--occurred-at is not a number")
+                })
                 .transpose()?;
             declare(
                 &http,
