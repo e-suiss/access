@@ -96,6 +96,8 @@ pub struct AuthContext {
     pub step_up_time: Option<u64>,
     /// [`ais_digest`] of the session's assurance.
     pub ais_digest: Digest,
+    /// The device Instance the session is bound to, when it registered one (OP-149 m.30 (c)).
+    pub instance: Option<[u8; 16]>,
     /// The content it is bound to.
     pub content: Option<Content>,
 }
@@ -168,7 +170,7 @@ pub fn ais_digest(v: &AssuranceVector) -> Result<Digest, EncodeError> {
 }
 
 impl AuthContext {
-    /// The artifact of a session.
+    /// The artifact of a session, bound to the device `instance` it registered, if any.
     ///
     /// # Errors
     /// [`EncodeError`].
@@ -177,6 +179,7 @@ impl AuthContext {
         session: &[u8; 16],
         assurance: &AssuranceVector,
         step_up_time: Option<u64>,
+        instance: Option<[u8; 16]>,
         content: Option<Content>,
     ) -> Result<Self, EncodeError> {
         Ok(Self {
@@ -187,6 +190,7 @@ impl AuthContext {
             auth_time: assurance.auth_time_ms,
             step_up_time,
             ais_digest: ais_digest(assurance)?,
+            instance,
             content,
         })
     }
@@ -213,6 +217,9 @@ impl AuthContext {
         ];
         if let Some(t) = self.step_up_time {
             m.push((Value::text("step_up_time"), Value::Unsigned(t)));
+        }
+        if let Some(i) = self.instance {
+            m.push((Value::text("instance"), Value::Bytes(i.to_vec())));
         }
         if let Some(c) = &self.content {
             m.push((Value::text("content_type"), Value::text(&c.content_type)));

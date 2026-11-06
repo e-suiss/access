@@ -15,6 +15,7 @@ auth-context = {
   auth_time: uint,                    ; Unix milliseconds of the session's latest authentication
   ? step_up_time: uint,               ; Unix milliseconds of the session's latest step-up
   ais_digest: digest,                 ; SHA-256("suiss/auth-context/ais/v1" || 0x00 || dCBOR(ais))
+  ? instance: id,                     ; the device Instance the session is bound to, when it registered one (OP-149 m.30 (c))
   ? content_type: media-type,         ; present exactly when content_digest is
   ? content_digest: digest,           ; SHA-256 of the content the caller binds
 }
@@ -34,5 +35,8 @@ assurance-flag = "app_controlled_factor" / "hardware_bound" / "human_presence" /
 media-type = tstr .regexp "[a-z0-9!#$&^_.+-]{1,63}/[a-z0-9!#$&^_.+-]{1,63}"
 
 digest = [-16, bstr .size 32]
+
+; InstanceID (kernel.cddl `id`)
+id = bstr .size 16
 
 https-url = tstr .regexp "https://[!-~]{1,2040}"

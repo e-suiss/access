@@ -570,10 +570,15 @@ where
                 }
             }
         };
-        let artifact = match auth.auth_context(cookie, &kit.issuer, content).await {
+        let (mut artifact, session) = match auth.auth_context(cookie, &kit.issuer, content).await {
             Ok(Ok(a)) => a,
             Ok(Err(status)) => return ended(&status),
             Err(e) => return failed(&e),
+        };
+        // OP-149 m.30 (c): the device Instance the session is bound to, when it registered one
+        artifact.instance = match session_instance(&self.db, &kit, &session).await {
+            Ok(i) => i,
+            Err(r) => return r,
         };
         let (Ok(payload), Ok(digest)) = (artifact.encode(), artifact.digest()) else {
             return unavailable();

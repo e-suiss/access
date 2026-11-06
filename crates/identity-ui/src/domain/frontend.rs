@@ -386,7 +386,7 @@ fn components() -> Value {
         ),
         "AuthContextIssued": object(
             &json!({
-                "auth_context": b64("Tagged COSE_Sign1 of the auth-context (conformance/cddl/auth-context.cddl) by the realm's identity signer key; content type application/access-auth-context+cbor."),
+                "auth_context": b64("Tagged COSE_Sign1 of the auth-context (conformance/cddl/auth-context.cddl) by the realm's identity signer key; content type application/access-auth-context+cbor. The payload names the device Instance the session is bound to as `instance` when it registered one (OP-149 m.30 (c))."),
                 "digest": b64("SHA-256(\"suiss/auth-context/v1\" || 0x00 || payload), 32 bytes."),
             }),
             &["auth_context", "digest"],

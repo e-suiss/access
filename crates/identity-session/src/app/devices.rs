@@ -189,7 +189,9 @@ where
     }
 
     /// The `auth_context` artifact of a live session (OP-149 m.8), bound to `content` when
-    /// given. `Err` carries the status of a session that is not live.
+    /// given, with the session's id: the identity plane names the device Instance the session
+    /// registered from its own records (OP-149 m.30 (c)). `Err` carries the status of a
+    /// session that is not live.
     ///
     /// # Errors
     /// [`SessionError`].
@@ -198,7 +200,7 @@ where
         cookie: &str,
         issuer: &str,
         content: Option<Content>,
-    ) -> Result<Result<AuthContext, SessionStatus>, SessionError> {
+    ) -> Result<Result<(AuthContext, [u8; 16]), SessionStatus>, SessionError> {
         let now = self.now();
         let mut tx = self.begin().await?;
         let row = match self.live_session(&mut tx, cookie, now).await? {
@@ -211,8 +213,8 @@ where
         tx.touch_session(row.id, i64_of(now)?).await?;
         tx.commit().await?;
         let v = view(&row)?;
-        AuthContext::of(issuer, &v.id, &v.assurance, v.step_up_ms, content)
-            .map(Ok)
+        AuthContext::of(issuer, &v.id, &v.assurance, v.step_up_ms, None, content)
+            .map(|a| Ok((a, v.id)))
             .map_err(|_| SessionError::Corrupt)
     }
 }

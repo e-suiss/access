@@ -1741,14 +1741,41 @@ async fn enumeration_timing_parity_nightly() {
 
 // OP-149 m.6, m.8, m.9, m.16 (a), G57: the product endpoints need a live session; a challenge
 // names what the device's own Exercises sign; registering a device needs AAL2 and a fresh
+/// The payload of a signed `auth_context` the realm key issued (OP-149 m.8): verified, its
+/// digest checked, decoded to its map entries.
+fn auth_context_fields(
+    e: &Env,
+    issued: &Value,
+) -> Vec<(suiss_crypto::dcbor::Value, suiss_crypto::dcbor::Value)> {
+    use access_identity_session::domain::auth_context::{CONTENT_TYPE, DIGEST_LABEL};
+    use suiss_crypto::cose::{Algorithm, KeySet, verify_sign1};
+    use suiss_crypto::dcbor::{self, Limits};
+    use suiss_crypto::digest::context_digest;
+
+    let sign1 = b64url_decode(issued["auth_context"].as_str().unwrap()).unwrap();
+    let key = e.signer.0.public_key();
+    let mut keys = KeySet::default();
+    keys.insert(access_kernel::verify::key_scope::thumbprint(&key), key)
+        .unwrap();
+    keys.allowed.insert(Algorithm::Ed25519);
+    let verified =
+        verify_sign1(&suiss_crypto::sig::PureBackend, &sign1, &keys, CONTENT_TYPE).unwrap();
+    assert_eq!(
+        b64url_decode(issued["digest"].as_str().unwrap()).unwrap(),
+        context_digest(DIGEST_LABEL, &verified.payload).0
+    );
+    let dcbor::Value::Map(fields) = dcbor::decode(&verified.payload, Limits::CEILING).unwrap()
+    else {
+        panic!("not a map");
+    };
+    fields
+}
+
 // step-up; auth_context is the session's artifact signed by the realm key; an approval call never
 // redirects to an unregistered URI
 #[tokio::test]
 async fn product_endpoints_follow_the_frontend_contract() {
-    use access_identity_session::domain::auth_context::{CONTENT_TYPE, DIGEST_LABEL};
-    use suiss_crypto::cose::{Algorithm, KeySet, verify_sign1};
-    use suiss_crypto::dcbor::{self, Limits, Value as Cbor};
-    use suiss_crypto::digest::context_digest;
+    use suiss_crypto::dcbor::Value as Cbor;
 
     let e = env(41, "lg-me", AuthPolicy::DEFAULT).await;
     e.account("alice@example.com").await;
@@ -1833,26 +1860,14 @@ async fn product_endpoints_follow_the_frontend_contract() {
 
     let issued = b.post("/v1/me/auth-context", None).await;
     assert_eq!(issued.status, StatusCode::OK);
-    let sign1 = b64url_decode(issued.json()["auth_context"].as_str().unwrap()).unwrap();
-    let key = e.signer.0.public_key();
-    let mut keys = KeySet::default();
-    keys.insert(access_kernel::verify::key_scope::thumbprint(&key), key)
-        .unwrap();
-    keys.allowed.insert(Algorithm::Ed25519);
-    let verified =
-        verify_sign1(&suiss_crypto::sig::PureBackend, &sign1, &keys, CONTENT_TYPE).unwrap();
-    assert_eq!(
-        b64url_decode(issued.json()["digest"].as_str().unwrap()).unwrap(),
-        context_digest(DIGEST_LABEL, &verified.payload).0
-    );
-    let Cbor::Map(fields) = dcbor::decode(&verified.payload, Limits::CEILING).unwrap() else {
-        panic!("not a map");
-    };
+    let fields = auth_context_fields(&e, &issued.json());
     let aal = fields
         .iter()
         .find(|(k, _)| *k == Cbor::text("aal"))
         .map(|(_, v)| v.clone());
     assert_eq!(aal, Some(Cbor::text("aal1")));
+    // OP-149 m.30 (c): a session without a device Instance names none
+    assert!(fields.iter().all(|(k, _)| *k != Cbor::text("instance")));
     let bound = b
         .post(
             "/v1/me/auth-context",
@@ -2030,6 +2045,17 @@ async fn an_approval_runs_on_the_hosted_surface() {
         )
         .await;
     assert_eq!(registered.status, StatusCode::CREATED);
+    // OP-149 m.30 (c): the session's auth_context now names the Instance it is bound to
+    let issued = c.post("/v1/me/auth-context", None).await;
+    assert_eq!(issued.status, StatusCode::OK);
+    let instance = auth_context_fields(&e, &issued.json())
+        .into_iter()
+        .find(|(k, _)| *k == suiss_crypto::dcbor::Value::text("instance"))
+        .map(|(_, v)| v);
+    assert_eq!(
+        instance,
+        Some(suiss_crypto::dcbor::Value::Bytes(vec![9; 16]))
+    );
 
     // §9.14.1 A step 4 prepared: the device signs the contribution's AIS; the coordinator pushes
     let kid = thumbprint(&device.public_key());

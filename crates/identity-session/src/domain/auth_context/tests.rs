@@ -19,7 +19,7 @@ fn passkey() -> AssuranceVector {
 // OP-149 m.8: the session is named only by a domain-separated digest
 #[test]
 fn the_session_id_never_appears() {
-    let a = AuthContext::of(ISSUER, &SESSION, &passkey(), None, None).unwrap();
+    let a = AuthContext::of(ISSUER, &SESSION, &passkey(), None, None, None).unwrap();
     let bytes = a.encode().unwrap();
     assert!(!bytes.windows(16).any(|w| w == SESSION));
     assert_eq!(a.session_ref, context_digest(SESSION_LABEL, &SESSION));
@@ -35,6 +35,7 @@ fn encoding_and_digest_are_deterministic() {
         &SESSION,
         &passkey(),
         Some(1_767_225_060_000),
+        None,
         Some(content),
     )
     .unwrap();
@@ -72,8 +73,36 @@ fn encoding_and_digest_are_deterministic() {
     ] {
         assert!(names.iter().any(|n| n == field), "{field}");
     }
-    let bare = AuthContext::of(ISSUER, &SESSION, &passkey(), None, None).unwrap();
+    let bare = AuthContext::of(ISSUER, &SESSION, &passkey(), None, None, None).unwrap();
     assert_ne!(bare.digest().unwrap(), a.digest().unwrap());
+}
+
+// OP-149 m.30 (c): a session bound to a device Instance names it; the field, the encoding and
+// the digest move with it, and a session without one has no `instance` member
+#[test]
+fn the_instance_is_carried_when_the_session_has_one() {
+    const INSTANCE: [u8; 16] = [3; 16];
+    let bare = AuthContext::of(ISSUER, &SESSION, &passkey(), None, None, None).unwrap();
+    let bound = AuthContext::of(ISSUER, &SESSION, &passkey(), None, Some(INSTANCE), None).unwrap();
+    let member = |a: &AuthContext| {
+        let Value::Map(entries) = a.to_value() else {
+            panic!()
+        };
+        entries
+            .into_iter()
+            .find(|(k, _)| *k == Value::text("instance"))
+            .map(|(_, v)| v)
+    };
+    assert_eq!(member(&bare), None);
+    assert_eq!(member(&bound), Some(Value::Bytes(INSTANCE.to_vec())));
+    assert_ne!(bare.encode().unwrap(), bound.encode().unwrap());
+    assert_ne!(bare.digest().unwrap(), bound.digest().unwrap());
+    assert_eq!(
+        bound.digest().unwrap(),
+        context_digest(DIGEST_LABEL, &bound.encode().unwrap())
+    );
+    let other = AuthContext::of(ISSUER, &SESSION, &passkey(), None, Some([4; 16]), None).unwrap();
+    assert_ne!(other.digest().unwrap(), bound.digest().unwrap());
 }
 
 // §10.1.6, OP-149 m.8: flags are the set flags of the vector, bytewise ascending

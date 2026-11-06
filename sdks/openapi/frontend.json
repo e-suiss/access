@@ -879,7 +879,7 @@
           "auth_context": {
             "type": "string",
             "pattern": "^[A-Za-z0-9_-]*$",
-            "description": "Tagged COSE_Sign1 of the auth-context (conformance/cddl/auth-context.cddl) by the realm's identity signer key; content type application/access-auth-context+cbor."
+            "description": "Tagged COSE_Sign1 of the auth-context (conformance/cddl/auth-context.cddl) by the realm's identity signer key; content type application/access-auth-context+cbor. The payload names the device Instance the session is bound to as `instance` when it registered one (OP-149 m.30 (c))."
           },
           "digest": {
             "type": "string",

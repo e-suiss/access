@@ -1049,13 +1049,17 @@ async fn device_instances_need_a_fresh_step_up(e: &Env, cookie: &str) {
         claim(&c.challenge, &key).await,
         Err(DeviceRefusal::Challenge)
     );
-    let context = e
+    let (context, session) = e
         .with(async |a| a.auth_context(cookie, ISSUER, None).await)
         .await
         .unwrap()
         .unwrap();
     assert_eq!(context.step_up_time, Some(e.clock.now_ms()));
     assert_eq!(context.aal, Aal::Aal3);
+    // OP-149 m.30 (c): the session the identity plane looks the Instance up for is this one;
+    // the plane fills it in, so the artifact itself names none yet
+    assert_eq!(session, proven.session.id);
+    assert_eq!(context.instance, None);
 
     e.advance(5 * 60 * 1000 + 1);
     let c = e
@@ -1093,7 +1097,7 @@ async fn a_password_session_cannot_register_a_device() {
             .map(|_| ()),
         Err(DeviceRefusal::Assurance(Assurance::TooWeak))
     );
-    let context = e
+    let (context, _) = e
         .with(async |a| {
             a.auth_context(&cookie, "https://acme.suiss.example", None)
                 .await

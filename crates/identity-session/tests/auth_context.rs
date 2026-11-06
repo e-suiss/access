@@ -43,6 +43,7 @@ fn the_code_produces_the_committed_examples() {
         &[1; 16],
         &assurance,
         Some(T + 60_000),
+        None,
         Some(content),
     )
     .unwrap();
@@ -53,7 +54,19 @@ fn the_code_produces_the_committed_examples() {
         &assurance,
         None,
         None,
+        None,
     )
     .unwrap();
     assert_eq!(bare.encode().unwrap(), committed("session-only"));
+    // OP-149 m.30 (c)
+    let bound = AuthContext::of(
+        "https://acme.suiss.example",
+        &[1; 16],
+        &assurance,
+        None,
+        Some([3; 16]),
+        None,
+    )
+    .unwrap();
+    assert_eq!(bound.encode().unwrap(), committed("session-with-instance"));
 }
