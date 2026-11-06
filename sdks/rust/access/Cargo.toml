@@ -1,6 +1,6 @@
 [package]
 name = "esuiss-access-sdk"
-description = "Access SDK for Rust: the PEP side of an Access decision, fail-closed (CMP-17, OP-150)."
+description = "Access SDK for Rust: the PEP and resource server side of an Access decision, fail-closed (CMP-17, OP-150)."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -11,8 +11,15 @@ repository.workspace = true
 name = "access_sdk"
 
 [dependencies]
+# OP-150 m.3 (c)
 access-kernel = { workspace = true }
 suiss-crypto = { workspace = true, features = ["verify"] }
+thiserror = { workspace = true }
+# OP-150 m.6 (d)
+miniz_oxide = { workspace = true }
+
+[dev-dependencies]
+ed25519-dalek = { workspace = true }
 
 [lints]
 workspace = true

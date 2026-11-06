@@ -1624,8 +1624,11 @@ dependencies = [
 name = "esuiss-access-sdk"
 version = "0.2.6"
 dependencies = [
+ "ed25519-dalek",
  "esuiss-access-kernel",
  "esuiss-crypto",
+ "miniz_oxide",
+ "thiserror",
 ]
 
 [[package]]
