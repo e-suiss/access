@@ -64,7 +64,7 @@ pub enum BasisRef {
 }
 
 /// The contribution the approver's device pre-signed (§9.14.1 A step 4): its AIS over
-/// `access_internal_api::approvals::contribute_intent` of the request's target.
+/// `access_kernel::contribution::contribute_intent` of the request's target.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ContributionEnvelope {
@@ -442,7 +442,7 @@ pub fn components() -> Value {
                 "basis": r("BasisRef"),
                 "valid_from": time_field("Intent validity start."),
                 "valid_until": time_field("Intent validity end."),
-                "ais": b64_schema("AIS (tagged COSE_Sign1) by the approver's device Instance key over the contribute intent of the request's target (internal-api approvals::contribute_intent), mode commit, capacity own, pep access-identity."),
+                "ais": b64_schema("AIS (tagged COSE_Sign1) by the approver's device Instance key over the contribute intent of the request's target (Kernel contribution::contribute_intent; the committed example is conformance/cddl/examples/contribute-intent.json), mode commit, capacity own, pep access-identity."),
             }),
             &["nonce", "basis", "valid_from", "valid_until", "ais"],
         ),

@@ -11,9 +11,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use access_internal_api::idp::{GenesisOrder, NAMESPACES, RESOURCE_NAMESPACE, spp};
 use access_kernel::codec::Canonical;
 use access_kernel::combinator::Capacity;
+pub use access_kernel::meta::core_action;
 use access_kernel::meta::{self, Root};
 use access_kernel::model::{
-    ActionRef, ActionSet, AuthoritySet, CanonicalAuthority, ConstraintSet, DelegationTerms, Id,
+    ActionSet, AuthoritySet, CanonicalAuthority, ConstraintSet, DelegationTerms, Id,
     ResourceSelector, Structural, SubjectSelector, Window,
 };
 use access_kernel::record::Opened;
@@ -75,27 +76,6 @@ fn structural(namespace: &str, prefix: Vec<String>) -> ResourceSelector {
         kind: None,
         attrs: BTreeMap::new(),
     })
-}
-
-/// The reference of a core meta-action in Genesis Grants and in the intents that use them.
-#[must_use]
-pub fn core_action(name: &str) -> ActionRef {
-    let schema = access_kernel::schema::ActionSchema {
-        name: String::from(name),
-        major: 1,
-        effect: access_kernel::schema::EffectClass::Reversible,
-        reserved: false,
-        consumption_bearing: false,
-        params: BTreeMap::new(),
-        resource_types: BTreeSet::new(),
-        render: None,
-    };
-    ActionRef {
-        namespace: String::from(meta::NAMESPACE),
-        name: String::from(name),
-        major: 1,
-        schema: access_kernel::schema::action_digest(&schema),
-    }
 }
 
 /// L0-META-7: anyone may register a Party and create its Instances; actor-binding decides who

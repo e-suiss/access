@@ -41,6 +41,53 @@ Every outcome that is not a verified ALLOW is a `Denied` value, never an `Ok`:
 
 `Profile::Strict` introspects every request; `Profile::Fast` accepts a JWT whose horizon is at most 5 minutes with its status list. Neither skips the signature, audience, confirmation, contract or status checks. The profile is a type, not a flag.
 
+## Pushing a request with a pre-signed contribution
+
+When Access answers `REQUIRE_ACTION` with an unmet `approve` contribution, your product pushes the typed authority request to the realm's Approval Surface (`POST /v1/approve/requests`, the `approval_requests` endpoint of the realm's `/.well-known/suiss-configuration`; OP-149 m.9, m.29 (b)) together with the contribution the approver's device has already signed. The contribution is one more Exercise, and its intent is fixed by the Kernel so that the device, the surface and the authority plane sign and check the same bytes:
+
+```rust
+use access_kernel::ais::Statement;
+use access_kernel::combinator::{Capacity, Mode};
+use access_kernel::contribution::contribute_intent;
+use access_kernel::intent::intent_digest;
+use access_kernel::meta::ExerciseBasis;
+use access_kernel::model::Window;
+
+// `target` is the intent digest the REQUIRE_ACTION names (`require_action.intent`);
+// `holding` is the approver Party's holding of its Grant over `access/contribute`.
+let intent = contribute_intent(target, "approve", Window { from, until }).ok_or(Encode)?;
+let statement = Statement {
+    domain,
+    nonce: nonce.to_vec(),            // 16 random bytes; the AAS `exercise_ref`
+    intent: intent_digest(&intent)?,
+    mode: Mode::Commit,
+    pep: String::from("access-identity"),
+    capacity: Capacity::Own,
+    basis: ExerciseBasis::Holding(holding),
+    iat: now_ms,
+    exercise: None,
+};
+// the approver's device Instance key signs the statement as a tagged COSE_Sign1 (the AIS)
+```
+
+`contribute_intent(target, class, validity)` is `access/contribute` on `access.contribution:[class]`, incarnation 0, with the `contribute` payload digest in `opaque["payload"]` and nothing else (L0-META-30). `conformance/cddl/examples/contribute-intent.json` holds the committed bytes for one target, and `kernel.cddl` `intent-envelope` is its schema. The push body is:
+
+```json
+{
+  "request": { "...": "the typed authority request (authority-request.cddl)" },
+  "contribution": {
+    "nonce": "<base64url, the statement's nonce>",
+    "class": "approve",
+    "basis": { "grant": "<GrantID>", "holder": "<PartyID>", "since": 0 },
+    "valid_from": "<RFC 3339, the intent's validity.from>",
+    "valid_until": "<RFC 3339, the intent's validity.until>",
+    "ais": "<base64url COSE_Sign1 over the statement>"
+  }
+}
+```
+
+The surface builds the Approval Act Statement from the render the decision point kept and the approver's Instance, takes one passkey assertion over H(AAS) and commits exactly this intent as PEP; the browser comes back to your `redirect_uri` with `exercise` (the contribution's ExerciseID), `render_digest`, `claim` (the approver's `authentication` Claim, bound to H(AAS) and to the approver's Instance) and `state`. Your product then commits the original intent again with `{"contribution": "<exercise>"}` among its proofs, and `{"claim_ref": "<claim>"}` too when the `REQUIRE_ACTION` also left an `authentication` term unmet (a step-up, §13.7.3).
+
 ## Conformance
 
 The repository's `access-pep-conformance` harness runs this SDK as an adapter against every fault case, and must see no effect on any of them.

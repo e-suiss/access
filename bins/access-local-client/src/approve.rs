@@ -9,11 +9,11 @@
 //! and verifies the receipt the ALLOW carries (§9.8). Given a request a product already built,
 //! the client only approves it.
 
-use access_internal_api::approvals::contribute_intent;
 use access_internal_api::instances::IDENTITY_PEP;
 use access_kernel::ais::Statement;
 use access_kernel::codec::Canonical as _;
 use access_kernel::combinator::{Capacity, Mode};
+use access_kernel::contribution::contribute_intent;
 use access_kernel::digest::Digest;
 use access_kernel::intent::{IntentEnvelope, intent_digest};
 use access_kernel::json::{b64url_decode, b64url_encode};

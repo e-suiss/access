@@ -1694,8 +1694,7 @@ struct Shape<'a> {
     tier: access_kernel::tier::Tier,
 }
 
-/// Namespace of a contribution's resource (L0-META-30).
-pub const CONTRIBUTION_NAMESPACE: &str = "access.contribution";
+pub use access_kernel::contribution::NAMESPACE as CONTRIBUTION_NAMESPACE;
 
 pub mod approval;
 mod binding;

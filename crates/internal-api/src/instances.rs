@@ -12,17 +12,14 @@ use std::collections::BTreeMap;
 
 use access_kernel::digest::Digest;
 use access_kernel::intent::{ContextRefs, IntentEnvelope};
-use access_kernel::meta::{self, ActorKind, ExerciseBasis, NAMESPACE, Payload, kind};
-use access_kernel::model::{ActionRef, Id, ResourceRef, Window};
-use access_kernel::schema::{ActionSchema, EffectClass, action_digest};
+use access_kernel::meta::{self, ActorKind, ExerciseBasis, Payload, kind};
+pub use access_kernel::meta::{PAYLOAD_PARAM, core_action};
+use access_kernel::model::{Id, ResourceRef, Window};
 use access_kernel::verify::cose::PublicKey;
 use suiss_crypto::dcbor::{self, Value};
 
 /// The resource namespace an `instance_terminate` intent names its Instance in.
 pub const INSTANCE_NAMESPACE: &str = "access.instance";
-
-/// The intent parameter that carries the meta payload's digest.
-pub const PAYLOAD_PARAM: &str = "payload";
 
 /// The PEP name the identity plane commits as in a realm's governing domain: device
 /// registrations, terminations, `idp.*` changes and approvals name it (OP-149 m.16 (a), m.9).
@@ -297,27 +294,6 @@ pub struct Termination {
     pub ais: Vec<u8>,
     /// The identity plane as PEP.
     pub pep: String,
-}
-
-/// The reference of a core meta-action (L0-META-1): the `access` namespace, major 1.
-#[must_use]
-pub fn core_action(name: &str) -> ActionRef {
-    let schema = ActionSchema {
-        name: String::from(name),
-        major: 1,
-        effect: EffectClass::Reversible,
-        reserved: false,
-        consumption_bearing: false,
-        params: BTreeMap::new(),
-        resource_types: std::collections::BTreeSet::new(),
-        render: None,
-    };
-    ActionRef {
-        namespace: String::from(NAMESPACE),
-        name: String::from(name),
-        major: 1,
-        schema: action_digest(&schema),
-    }
 }
 
 /// The meta payload of a termination.

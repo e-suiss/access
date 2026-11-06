@@ -164,6 +164,74 @@ fn token_exercise_examples_meet_the_cddl() {
     check_examples("token-exercise.json");
 }
 
+// L0-META-30, §9.14.1 A step 4, OP-149 m.9, m.29 (b), m.33 (b): the contribute intent an
+// approver's device pre-signs is an intent-envelope of kernel.cddl, and the committed example is
+// byte for byte what the Kernel's contribute_intent builds for its target and class, with the
+// intent digest the AIS names; an envelope without the payload digest is no contribution
+#[test]
+fn contribute_intent_example_is_the_kernels() {
+    use access_kernel::codec::Canonical;
+    use access_kernel::contribution::contribute_intent;
+    use access_kernel::digest::Digest;
+    use access_kernel::intent::intent_digest;
+    use access_kernel::model::Window;
+
+    check_examples("contribute-intent.json");
+    let path = "cddl/examples/contribute-intent.json";
+    let mut doc: Json = serde_json::from_str(&read(path)).unwrap();
+    let validity = Window {
+        from: 1_767_225_540_000,
+        until: 1_767_226_200_000,
+    };
+    let mut built = 0;
+    let mut changed = false;
+    for case in doc["cases"].as_array_mut().unwrap() {
+        let id = case["id"].as_str().unwrap().to_owned();
+        let edn = edn::parse(case["edn"].as_str().unwrap());
+        let Some(target) = case.get("target").and_then(Json::as_str) else {
+            let envelope = access_kernel::intent::IntentEnvelope::from_value(&edn);
+            if case["valid"].as_bool().unwrap() {
+                let e = envelope.unwrap_or_else(|err| panic!("{id}: {err:?}"));
+                assert!(
+                    e.opaque.is_empty(),
+                    "{id}: no contribution without its payload"
+                );
+            }
+            continue;
+        };
+        let target = Digest(<[u8; 32]>::try_from(unhex(target)).unwrap());
+        let class = case["class"].as_str().unwrap();
+        let intent = contribute_intent(target, class, validity).unwrap();
+        let bytes = dcbor::encode(&intent.to_value(), LIMITS).unwrap();
+        assert_eq!(
+            hex(&bytes),
+            case["cbor"].as_str().unwrap(),
+            "{id}: the Kernel builds {}",
+            hex(&bytes)
+        );
+        assert_eq!(
+            access_kernel::intent::IntentEnvelope::from_value(&edn).unwrap(),
+            intent,
+            "{id}"
+        );
+        let digest = hex(&intent_digest(&intent).unwrap().0);
+        if case["intent_digest"].as_str() != Some(digest.as_str()) {
+            if std::env::var_os("ACCESS_UPDATE_VECTORS").is_some() {
+                case["intent_digest"] = Json::String(digest);
+                changed = true;
+            } else {
+                panic!("{id}: intent_digest is {digest}; run with ACCESS_UPDATE_VECTORS=1");
+            }
+        }
+        built += 1;
+    }
+    assert_eq!(built, 1);
+    if changed {
+        let text = serde_json::to_string_pretty(&doc).unwrap() + "\n";
+        std::fs::write(conformance().join(path), text).unwrap();
+    }
+}
+
 // OP-149 m.3, CR-58 m.3: the discovery endpoint map is deterministic CBOR of https URLs
 #[test]
 fn suiss_discovery_examples_meet_the_cddl() {

@@ -1,20 +1,17 @@
 //! The approval behind a `contribute` Exercise between the planes (OP-62, §9.14.1 A, OP-150
 //! L6): what a `REQUIRE_ACTION` left for the Approval Surface, and the contribution the surface
 //! commits once the approver's single act is done. The identity plane shows the render the
-//! decision point produced, never one of its own (§9.14.5 WYSIWYS, XI-8).
-
-use std::collections::BTreeMap;
+//! decision point produced, never one of its own (§9.14.5 WYSIWYS, XI-8). The contribute intent
+//! itself is the Kernel's (`access_kernel::contribution`, OP-149 m.33 (b)), so an approver's
+//! device pre-signs the same bytes the plane commits.
 
 use access_kernel::combinator::Capacity;
+pub use access_kernel::contribution::{
+    NAMESPACE as CONTRIBUTION_NAMESPACE, contribute_intent, contribute_payload,
+};
 use access_kernel::digest::Digest;
-use access_kernel::intent::{ContextRefs, IntentEnvelope};
-use access_kernel::meta::{ExerciseBasis, Payload};
-use access_kernel::model::{Id, ResourceRef, Window};
-
-use crate::instances::{PAYLOAD_PARAM, core_action};
-
-/// The resource namespace a contribution names its class in (L0-META-30).
-pub const CONTRIBUTION_NAMESPACE: &str = "access.contribution";
+use access_kernel::meta::ExerciseBasis;
+use access_kernel::model::{Id, Window};
 
 /// What the decision point recorded when it asked for an approval of an intent (§9.14.1 step
 /// 1, §13.7.3).
@@ -55,62 +52,4 @@ pub struct Contribution {
     pub claim: Id,
     /// The identity plane as PEP.
     pub pep: String,
-}
-
-/// The `contribute` payload for `target`.
-#[must_use]
-pub fn contribute_payload(target: Digest, class: &str) -> Payload {
-    Payload::Contribute {
-        target,
-        class: String::from(class),
-    }
-}
-
-/// The intent an approver Instance signs for a contribution of `class` to `target` over
-/// `validity` (L0-META-30): `access/contribute` on `access.contribution:[class]` with the
-/// payload digest in `opaque["payload"]`.
-///
-/// `None` when the payload cannot be encoded.
-#[must_use]
-pub fn contribute_intent(target: Digest, class: &str, validity: Window) -> Option<IntentEnvelope> {
-    let digest = contribute_payload(target, class).digest().ok()?;
-    Some(IntentEnvelope {
-        action: core_action("contribute"),
-        resources: vec![ResourceRef {
-            namespace: String::from(CONTRIBUTION_NAMESPACE),
-            path: vec![String::from(class)],
-            incarnation: 0,
-        }],
-        params: BTreeMap::new(),
-        opaque: BTreeMap::from([(String::from(PAYLOAD_PARAM), digest)]),
-        recipient: None,
-        purpose: None,
-        context: ContextRefs::default(),
-        validity,
-    })
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    // L0-META-30, §9.14.1: the contribute intent is a function of the target, the class and the
-    // validity, so the approver's device and the identity plane sign and check the same digest
-    #[test]
-    fn the_contribute_intent_is_deterministic() {
-        let w = Window { from: 1, until: 2 };
-        let a = contribute_intent(Digest([4; 32]), "approve", w).unwrap();
-        let b = contribute_intent(Digest([4; 32]), "approve", w).unwrap();
-        assert_eq!(a, b);
-        assert_eq!(a.action.name, "contribute");
-        assert_eq!(a.resources[0].namespace, CONTRIBUTION_NAMESPACE);
-        assert_eq!(a.resources[0].path, ["approve"]);
-        assert_eq!(
-            a.opaque["payload"],
-            contribute_payload(Digest([4; 32]), "approve")
-                .digest()
-                .unwrap()
-        );
-        assert_ne!(contribute_intent(Digest([5; 32]), "approve", w).unwrap(), a);
-    }
 }

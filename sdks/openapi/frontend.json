@@ -1168,7 +1168,7 @@
           "ais": {
             "type": "string",
             "pattern": "^[A-Za-z0-9_-]*$",
-            "description": "AIS (tagged COSE_Sign1) by the approver's device Instance key over the contribute intent of the request's target (internal-api approvals::contribute_intent), mode commit, capacity own, pep access-identity."
+            "description": "AIS (tagged COSE_Sign1) by the approver's device Instance key over the contribute intent of the request's target (Kernel contribution::contribute_intent; the committed example is conformance/cddl/examples/contribute-intent.json), mode commit, capacity own, pep access-identity."
           }
         }
       },

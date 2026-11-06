@@ -17,9 +17,10 @@ use crate::combinator::Capacity;
 use crate::digest::Digest;
 use crate::fold::Effect;
 use crate::model::{
-    AuthoritySet, CanonicalAuthority, ConstraintSet, EqValue, Id, RequirementTerm,
+    ActionRef, AuthoritySet, CanonicalAuthority, ConstraintSet, EqValue, Id, RequirementTerm,
     ResourceSelector, SubjectSelector, Window,
 };
+use crate::schema::{ActionSchema, EffectClass, action_digest};
 use crate::validity::{CLASSES, ProfileClass, ProfileVariant, VARIANTS, word, word_of};
 use crate::verify::cose::PublicKey;
 use suiss_crypto::digest::context_digest as context_label;
@@ -27,8 +28,34 @@ use suiss_crypto::digest::context_digest as context_label;
 /// Namespace of the core meta-actions.
 pub const NAMESPACE: &str = "access";
 
+/// The intent `opaque` member that carries the meta payload's digest (OP-141 m.13).
+pub const PAYLOAD_PARAM: &str = "payload";
+
 /// Longest lineage walked (OP-108 m.10).
 pub const MAX_LINEAGE: usize = 16;
+
+/// The reference of the core meta-action `name` (L0-META-1): the `access` namespace, major 1,
+/// the schema of a reversible action without parameters, so every plane and product pins the
+/// same digest.
+#[must_use]
+pub fn core_action(name: &str) -> ActionRef {
+    let schema = ActionSchema {
+        name: String::from(name),
+        major: 1,
+        effect: EffectClass::Reversible,
+        reserved: false,
+        consumption_bearing: false,
+        params: BTreeMap::new(),
+        resource_types: BTreeSet::new(),
+        render: None,
+    };
+    ActionRef {
+        namespace: String::from(NAMESPACE),
+        name: String::from(name),
+        major: 1,
+        schema: action_digest(&schema),
+    }
+}
 
 /// A root value (C9).
 #[derive(Clone, Debug, PartialEq, Eq)]
