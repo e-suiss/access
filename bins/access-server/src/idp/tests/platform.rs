@@ -555,7 +555,10 @@ async fn pairing_opens_one_push_stream_the_client_manages() {
     let (s, _) = p.call("DELETE", &path, None).await;
     assert_eq!(s, StatusCode::NOT_FOUND);
     let (s, v) = p.call("GET", &status, None).await;
-    assert_eq!((s, v["status"].as_str()), (StatusCode::OK, Some("disabled")));
+    assert_eq!(
+        (s, v["status"].as_str()),
+        (StatusCode::OK, Some("disabled"))
+    );
     let (s, _) = p
         .call(
             "POST",

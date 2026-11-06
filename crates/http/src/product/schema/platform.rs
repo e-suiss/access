@@ -21,16 +21,56 @@ pub(super) fn scheme() -> Value {
     })
 }
 
+/// A canonical UUID member.
+fn uuid(d: &str) -> Value {
+    json!({
+        "type": "string",
+        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+        "description": d,
+    })
+}
+
+/// The stream schemas (OP-149 m.17 (g), m.26 (c)).
+fn stream_components() -> Value {
+    json!({
+        "PlatformStream": {
+            "type": "object",
+            "description": "An SSF 1.0 §8.1.1 stream configuration with `status`; its schema is `sdks/openapi/events/stream.schema.json`. At creation a webhook stream also carries its `secret` and a poll stream its `access_token`, shown once.",
+        },
+        "PlatformStreams": object(
+            &json!({ "streams": { "type": "array", "items": r("PlatformStream") } }),
+            &["streams"],
+        ),
+        "StreamStatus": object(
+            &json!({
+                "stream_id": uuid("The stream."),
+                "status": { "type": "string", "enum": ["enabled", "paused", "disabled"], "description": "SSF 1.0 §8.1.2: `disabled` has ended the stream; its row stays (OP-73)." },
+            }),
+            &["stream_id", "status"],
+        ),
+        "StreamStatusUpdate": object(
+            &json!({
+                "stream_id": uuid("The stream; the same as the path."),
+                "status": { "type": "string", "enum": ["enabled", "paused", "disabled"], "description": "The new status (SSF 1.0 §8.1.2.2). `disabled` ends the stream for good." },
+                "reason": { "type": "string", "maxLength": 256, "description": "Why, free text." },
+            }),
+            &["stream_id", "status"],
+        ),
+    })
+}
+
 pub(super) fn components() -> Value {
+    let mut all = pairing_components();
+    if let (Value::Object(a), Value::Object(s)) = (&mut all, stream_components()) {
+        a.extend(s);
+    }
+    all
+}
+
+/// The pairing schemas (OP-149 m.4, m.16 (a)).
+fn pairing_components() -> Value {
     let b64 =
         |d: &str| json!({ "type": "string", "pattern": "^[A-Za-z0-9_-]+$", "description": d });
-    let uuid = |d: &str| {
-        json!({
-            "type": "string",
-            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
-            "description": d,
-        })
-    };
     let exercise = |what: &str| {
         object(
             &json!({
@@ -104,30 +144,40 @@ pub(super) fn components() -> Value {
             }),
             &["tenant", "targets"],
         ),
-        "PlatformStream": {
-            "type": "object",
-            "description": "An SSF 1.0 §8.1.1 stream configuration with `status`; its schema is `sdks/openapi/events/stream.schema.json`. At creation a webhook stream also carries its `secret` and a poll stream its `access_token`, shown once.",
-        },
-        "PlatformStreams": object(
-            &json!({ "streams": { "type": "array", "items": r("PlatformStream") } }),
-            &["streams"],
-        ),
-        "StreamStatus": object(
-            &json!({
-                "stream_id": uuid("The stream."),
-                "status": { "type": "string", "enum": ["enabled", "paused", "disabled"], "description": "SSF 1.0 §8.1.2: `disabled` has ended the stream; its row stays (OP-73)." },
-            }),
-            &["stream_id", "status"],
-        ),
-        "StreamStatusUpdate": object(
-            &json!({
-                "stream_id": uuid("The stream; the same as the path."),
-                "status": { "type": "string", "enum": ["enabled", "paused", "disabled"], "description": "The new status (SSF 1.0 §8.1.2.2). `disabled` ends the stream for good." },
-                "reason": { "type": "string", "maxLength": 256, "description": "Why, free text." },
-            }),
-            &["stream_id", "status"],
-        ),
     })
+}
+
+/// `GET`/`POST /access/v1/platform/streams/{id}/status` (SSF 1.0 §8.1.2, OP-149 m.26 (c)).
+fn stream_status_path(paths: &mut Map<String, Value>, id: &Value) {
+    let auth = (
+        "401",
+        "No valid client assertion of an active platform client.",
+    );
+    let down = ("503", "Temporarily unavailable; retry.");
+    paths.insert(
+        "/access/v1/platform/streams/{id}/status".into(),
+        json!({
+            "get": {
+                "operationId": "getPlatformStreamStatus",
+                "summary": "The status of a stream the platform client owns (SSF 1.0 §8.1.2.1, OP-149 m.26 (c)).",
+                "security": security(),
+                "parameters": [id.clone()],
+                "responses": with(problems(&[auth, ("404", "no-such-stream."), down]), "200", json_ok("The status.", "StreamStatus")),
+            },
+            "post": {
+                "operationId": "setPlatformStreamStatus",
+                "summary": "Sets the status of a live stream the platform client owns, with the rules of the stream's own /ssf/status (SSF 1.0 §8.1.2.2, OP-149 m.26 (c)): enabled, paused, or disabled, which ends it for good (OP-73).",
+                "security": security(),
+                "parameters": [id.clone()],
+                "requestBody": { "required": true, "content": { "application/json": { "schema": r("StreamStatusUpdate") } } },
+                "responses": with(
+                    problems(&[("400", "status, stream_id or reason is not valid, or the body is not JSON."), auth, ("404", "no-such-stream: not the client's, or already disabled."), down]),
+                    "200",
+                    json_ok("The new status.", "StreamStatus"),
+                ),
+            },
+        }),
+    );
 }
 
 pub(super) fn paths(paths: &mut Map<String, Value>) {
@@ -212,28 +262,5 @@ pub(super) fn paths(paths: &mut Map<String, Value>) {
             },
         }),
     );
-    paths.insert(
-        "/access/v1/platform/streams/{id}/status".into(),
-        json!({
-            "get": {
-                "operationId": "getPlatformStreamStatus",
-                "summary": "The status of a stream the platform client owns (SSF 1.0 §8.1.2.1, OP-149 m.26 (c)).",
-                "security": security(),
-                "parameters": [id.clone()],
-                "responses": with(problems(&[auth, ("404", "no-such-stream."), down]), "200", json_ok("The status.", "StreamStatus")),
-            },
-            "post": {
-                "operationId": "setPlatformStreamStatus",
-                "summary": "Sets the status of a live stream the platform client owns, with the rules of the stream's own /ssf/status (SSF 1.0 §8.1.2.2, OP-149 m.26 (c)): enabled, paused, or disabled, which ends it for good (OP-73).",
-                "security": security(),
-                "parameters": [id],
-                "requestBody": { "required": true, "content": { "application/json": { "schema": r("StreamStatusUpdate") } } },
-                "responses": with(
-                    problems(&[("400", "status, stream_id or reason is not valid, or the body is not JSON."), auth, ("404", "no-such-stream: not the client's, or already disabled."), down]),
-                    "200",
-                    json_ok("The new status.", "StreamStatus"),
-                ),
-            },
-        }),
-    );
+    stream_status_path(paths, &id);
 }
