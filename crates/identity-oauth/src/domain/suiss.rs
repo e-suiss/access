@@ -51,6 +51,12 @@ pub enum Endpoint {
     ClaimIngest,
     /// `GET /access/v1/status-lists/{list}` (OP-150 m.3 (a), (s)).
     StatusList,
+    /// `GET /v1/approve` on the realm: the Approval Surface (OP-150 m.14 (d), OP-149 m.29 (a)).
+    Approval,
+    /// `POST /v1/approve/requests` on the realm (OP-150 m.14 (d), OP-149 m.29 (a)).
+    ApprovalRequests,
+    /// `POST /par` on the realm (RFC 9126, OP-149 m.21 (c), m.29 (a)).
+    PushedAuthorizationRequest,
 }
 
 impl Endpoint {
@@ -73,6 +79,9 @@ impl Endpoint {
             Self::ExerciseAgency => "exercise_agency",
             Self::ClaimIngest => "claim_ingest",
             Self::StatusList => "status_list",
+            Self::Approval => "approval",
+            Self::ApprovalRequests => "approval_requests",
+            Self::PushedAuthorizationRequest => "pushed_authorization_request",
         }
     }
 
@@ -95,13 +104,23 @@ impl Endpoint {
             Self::ExerciseAgency => "/access/v1/exercises/{exercise}/agency",
             Self::ClaimIngest => "/access/v1/claims:ingest",
             Self::StatusList => "/access/v1/status-lists/{list}",
+            Self::Approval => "/v1/approve",
+            Self::ApprovalRequests => "/v1/approve/requests",
+            Self::PushedAuthorizationRequest => "/par",
         }
     }
 
     /// Whether the endpoint is the realm's own (Frontend API), not the deployment's.
     #[must_use]
     pub const fn on_realm(self) -> bool {
-        matches!(self, Self::AuthContext | Self::Instances)
+        matches!(
+            self,
+            Self::AuthContext
+                | Self::Instances
+                | Self::Approval
+                | Self::ApprovalRequests
+                | Self::PushedAuthorizationRequest
+        )
     }
 }
 
@@ -122,6 +141,9 @@ pub const SERVED: &[Endpoint] = &[
     Endpoint::ExerciseAgency,
     Endpoint::ClaimIngest,
     Endpoint::StatusList,
+    Endpoint::Approval,
+    Endpoint::ApprovalRequests,
+    Endpoint::PushedAuthorizationRequest,
 ];
 
 /// Well-known suffix of the realm's SSF transmitter metadata (SSF 1.0 §7.1).

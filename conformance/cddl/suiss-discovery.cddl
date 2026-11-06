@@ -25,6 +25,10 @@ suiss-endpoints = {
   ; OP-150 m.2: Claim Ingest and the Token Status List, once served.
   ? claim_ingest: https-url,
   ? status_list: https-url,
+  ; OP-149 m.29 (a): the Approval Surface and PAR on the realm.
+  ? approval: https-url,
+  ? approval_requests: https-url,
+  ? pushed_authorization_request: https-url,
 }
 
 ; An absolute https URL in printable ASCII. A path variable is an RFC 6570 level 1 template

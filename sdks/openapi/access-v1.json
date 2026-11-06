@@ -1983,6 +1983,15 @@
               },
               "status_list": {
                 "type": "string"
+              },
+              "approval": {
+                "type": "string"
+              },
+              "approval_requests": {
+                "type": "string"
+              },
+              "pushed_authorization_request": {
+                "type": "string"
               }
             }
           }
