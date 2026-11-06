@@ -327,19 +327,70 @@ pub async fn live_families(
     t.commit().await?;
     rows.into_iter()
         .map(|r| {
-            let status = match (r.status_uri, r.status_idx) {
-                (Some(uri), Some(idx)) => Some((uri, unsigned(idx)?)),
-                (None, None) => None,
-                _ => return Err(StoreError::Corrupt),
-            };
-            Ok(crate::projections::Family {
-                family: fixed(&r.family_id)?,
-                client_id: r.client_id,
-                holder: fixed(&r.holder_id)?,
-                root_exercise: fixed(&r.root_exercise)?,
-                status,
-                revoked_pos: None,
-            })
+            family_row(
+                (&r.family_id, r.client_id, &r.holder_id, &r.root_exercise),
+                (r.status_uri, r.status_idx),
+                None,
+            )
         })
         .collect()
+}
+
+fn family_row(
+    (family, client_id, holder, root): (&[u8], String, &[u8], &[u8]),
+    status: (Option<String>, Option<i64>),
+    revoked_pos: Option<i64>,
+) -> Result<crate::projections::Family, StoreError> {
+    let status = match status {
+        (Some(uri), Some(idx)) => Some((uri, unsigned(idx)?)),
+        (None, None) => None,
+        _ => return Err(StoreError::Corrupt),
+    };
+    Ok(crate::projections::Family {
+        family: fixed(family)?,
+        client_id,
+        holder: fixed(holder)?,
+        root_exercise: fixed(root)?,
+        status,
+        revoked_pos: revoked_pos.map(unsigned).transpose()?,
+    })
+}
+
+/// Revokes every live family of `holder` at `pos` in one statement (sequencer role), setting
+/// their entries (§9.9.3 k.6, P50): the families it revoked, by id. A family another path
+/// revoked first is not among them, and a revoked family stays revoked.
+///
+/// # Errors
+/// [`StoreError`].
+pub async fn revoke_holder_families(
+    sequencer: &PgPool,
+    domain: &DomainId,
+    holder: &[u8; 16],
+    pos: u64,
+) -> Result<Vec<crate::projections::Family>, StoreError> {
+    let mut t = DomainTx::begin(sequencer, domain).await?;
+    let rows = sqlx::query!(
+        "UPDATE access.projection_family SET revoked_at = now(), revoked_pos = $3
+          WHERE domain_id = $1 AND holder_id = $2 AND revoked_at IS NULL
+          RETURNING family_id, client_id, holder_id, root_exercise, status_uri, status_idx,
+                    revoked_pos",
+        domain.as_bytes().as_slice(),
+        holder.as_slice(),
+        signed(pos)?,
+    )
+    .fetch_all(&mut *t.tx)
+    .await?;
+    t.commit().await?;
+    let mut out = rows
+        .into_iter()
+        .map(|r| {
+            family_row(
+                (&r.family_id, r.client_id, &r.holder_id, &r.root_exercise),
+                (r.status_uri, r.status_idx),
+                r.revoked_pos,
+            )
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    out.sort_by_key(|f| f.family);
+    Ok(out)
 }

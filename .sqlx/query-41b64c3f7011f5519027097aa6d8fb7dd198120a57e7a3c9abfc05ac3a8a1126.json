@@ -1,0 +1,102 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.projection_family SET revoked_at = now(), revoked_pos = $3\n          WHERE domain_id = $1 AND holder_id = $2 AND revoked_at IS NULL\n          RETURNING family_id, client_id, holder_id, root_exercise, status_uri, status_idx,\n                    revoked_pos",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "family_id",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.projection_family",
+            "name": "family_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "client_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.projection_family",
+            "name": "client_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "holder_id",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.projection_family",
+            "name": "holder_id"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "root_exercise",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.projection_family",
+            "name": "root_exercise"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "status_uri",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.projection_family",
+            "name": "status_uri"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "status_idx",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.projection_family",
+            "name": "status_idx"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "revoked_pos",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.projection_family",
+            "name": "revoked_pos"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "41b64c3f7011f5519027097aa6d8fb7dd198120a57e7a3c9abfc05ac3a8a1126"
+}
