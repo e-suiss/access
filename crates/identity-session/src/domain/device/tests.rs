@@ -3,7 +3,8 @@
     reason = "simulated clocks in test code"
 )]
 
-use suiss_crypto::signer::{Signer, SoftSigner};
+use suiss_crypto::dcbor::{self, Value};
+use suiss_crypto::signer::{Signer, SoftSigner, sign_sign1};
 
 use super::*;
 
@@ -89,4 +90,38 @@ fn other_keys_are_refused() {
     assert_eq!(instance_key(&off_curve), Err(KeyRejection::Key));
     assert_eq!(instance_key(&[0xa0]), Err(KeyRejection::Key));
     assert_eq!(instance_key(b"not cbor"), Err(KeyRejection::Key));
+}
+
+// OP-149 m.32, m.6, CR-9: a known device's proof is its key's COSE_Sign1 over the challenge
+// under the pop content type; another key, another challenge, an AIS content type or a kid
+// that is not the key's thumbprint proves nothing
+#[test]
+fn a_known_device_proves_its_key_over_the_challenge() {
+    let challenge = [0x5a; 32];
+    for signer in [ed25519(), p256()] {
+        let key = signer.public_key();
+        let pop = sign_sign1(&signer, kid(&key), POP_CONTENT_TYPE, &challenge).unwrap();
+        assert_eq!(verify_pop(&key, &pop, &challenge), Ok(()));
+        assert_eq!(verify_pop(&key, &pop, &[0x5b; 32]), Err(KeyRejection::Pop));
+        let other = ed25519();
+        let forged = sign_sign1(&other, kid(&key), POP_CONTENT_TYPE, &challenge).unwrap();
+        assert_eq!(
+            verify_pop(&key, &forged, &challenge),
+            Err(KeyRejection::Pop)
+        );
+        let ais = sign_sign1(
+            &signer,
+            kid(&key),
+            access_kernel::ais::CONTENT_TYPE,
+            &challenge,
+        )
+        .unwrap();
+        assert_eq!(verify_pop(&key, &ais, &challenge), Err(KeyRejection::Pop));
+        let unnamed = sign_sign1(&signer, [7; 32], POP_CONTENT_TYPE, &challenge).unwrap();
+        assert_eq!(
+            verify_pop(&key, &unnamed, &challenge),
+            Err(KeyRejection::Pop)
+        );
+        assert_eq!(verify_pop(&key, b"", &challenge), Err(KeyRejection::Pop));
+    }
 }

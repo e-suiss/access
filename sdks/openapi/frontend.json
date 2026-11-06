@@ -147,6 +147,95 @@
         }
       }
     },
+    "/v1/me/instances/bindings": {
+      "post": {
+        "operationId": "bindInstance",
+        "summary": "Binds this session to the existing Instance of a device key the user registered before, proven once more over a challenge (OP-149 m.32, m.6; INV-13). No Instance is opened and nothing about the key changes; the session's auth_context then names that Instance. The challenge is used up by any answer.",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InstanceBinding"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The Instance the session is now bound to, its kid and Party.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InstanceRegistered"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "invalid-challenge, invalid-instance-key, invalid-proof-of-possession, invalid-party (no active device of this user holds the key) or invalid-request.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No live session (session-required).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The session is below AAL2 or its last authentication or step-up is older than five minutes (OP-149 m.6); step up and retry.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The session already binds an active device Instance (instance-exists; INV-13: one per session and realm).",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporarily unavailable.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/me/instances/{instance}": {
       "parameters": [
         {
@@ -768,6 +857,32 @@
             "type": "string",
             "pattern": "^[A-Za-z0-9_-]*$",
             "description": "AIS by the device key over the access/party_register intent (the Party roots itself, actor kind human), nonce the challenge followed by 0x01; required exactly when the user has no Party yet."
+          }
+        }
+      },
+      "InstanceBinding": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "challenge",
+          "key",
+          "pop"
+        ],
+        "properties": {
+          "challenge": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]*$",
+            "description": "The challenge this proof answers."
+          },
+          "key": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]*$",
+            "description": "COSE_Key (RFC 9052 §7): OKP Ed25519 or EC2 P-256, as registered."
+          },
+          "pop": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]*$",
+            "description": "Tagged COSE_Sign1 by the device key, kid its RFC 7638 thumbprint, content type application/access-instance-pop, payload the 32 challenge bytes (OP-149 m.32, m.6)."
           }
         }
       },

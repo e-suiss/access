@@ -18,6 +18,8 @@ pub const CONTRACT_VERSION: u64 = 1;
 pub const CHALLENGES_PATH: &str = "/v1/me/instances/challenges";
 /// `POST`: registers a device Instance.
 pub const INSTANCES_PATH: &str = "/v1/me/instances";
+/// `POST`: binds the session to a known device's Instance (OP-149 m.32).
+pub const BINDINGS_PATH: &str = "/v1/me/instances/bindings";
 /// `DELETE`: ends a device Instance.
 pub const INSTANCE_PATH: &str = "/v1/me/instances/{instance}";
 /// `POST`: the session's `auth_context`.
@@ -84,7 +86,23 @@ pub struct InstanceRegistration {
     pub register_ais: Option<String>,
 }
 
-/// A registered device Instance.
+/// `POST /v1/me/instances/bindings` (OP-149 m.32, m.6): a known device proves its key again in
+/// a later session and the session is bound to the key's existing Instance; no Instance is
+/// opened. The session needs the step-up a registration needs.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct InstanceBinding {
+    /// The challenge this proof answers, base64url.
+    pub challenge: String,
+    /// The device key as a `COSE_Key`, base64url: Ed25519 or P-256.
+    pub key: String,
+    /// The proof of possession, base64url: a tagged `COSE_Sign1` by the device key, `kid` its
+    /// RFC 7638 thumbprint, content type `application/access-instance-pop`, payload the 32
+    /// challenge bytes.
+    pub pop: String,
+}
+
+/// A registered device Instance, or the one a session was bound to (OP-149 m.32).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct InstanceRegistered {
@@ -352,6 +370,14 @@ fn components() -> Value {
             }),
             &["challenge", "party", "key", "valid_from", "valid_until", "ais"],
         ),
+        "InstanceBinding": object(
+            &json!({
+                "challenge": b64("The challenge this proof answers."),
+                "key": b64("COSE_Key (RFC 9052 §7): OKP Ed25519 or EC2 P-256, as registered."),
+                "pop": b64("Tagged COSE_Sign1 by the device key, kid its RFC 7638 thumbprint, content type application/access-instance-pop, payload the 32 challenge bytes (OP-149 m.32, m.6)."),
+            }),
+            &["challenge", "key", "pop"],
+        ),
         "InstanceRegistered": object(
             &json!({
                 "instance": { "type": "string", "pattern": "^[A-Za-z0-9_-]{22}$", "description": "InstanceID, base64url of its 16 bytes (ADP JSON encoding, OP-149 m.16 (f))." },
@@ -449,11 +475,8 @@ fn body(schema: &str, required: bool) -> Value {
     })
 }
 
-/// The `OpenAPI` document of this contract.
-#[must_use]
-pub fn openapi() -> Value {
-    let step_up = "The session is below AAL2 or its last authentication or step-up is older than five minutes (OP-149 m.6); step up and retry.";
-    let mut paths = Map::new();
+/// The device Instance paths: the challenge, the registration and the binding.
+fn instance_paths(paths: &mut Map<String, Value>, step_up: &str) {
     paths.insert(
         CHALLENGES_PATH.to_owned(),
         json!({ "post": {
@@ -484,6 +507,31 @@ pub fn openapi() -> Value {
             },
         }}),
     );
+    paths.insert(
+        BINDINGS_PATH.to_owned(),
+        json!({ "post": {
+            "operationId": "bindInstance",
+            "summary": "Binds this session to the existing Instance of a device key the user registered before, proven once more over a challenge (OP-149 m.32, m.6; INV-13). No Instance is opened and nothing about the key changes; the session's auth_context then names that Instance. The challenge is used up by any answer.",
+            "parameters": [idempotency()],
+            "requestBody": body("InstanceBinding", true),
+            "responses": {
+                "201": json_response("The Instance the session is now bound to, its kid and Party.", "InstanceRegistered"),
+                "400": problem("invalid-challenge, invalid-instance-key, invalid-proof-of-possession, invalid-party (no active device of this user holds the key) or invalid-request."),
+                "401": problem("No live session (session-required)."),
+                "403": problem(step_up),
+                "409": problem("The session already binds an active device Instance (instance-exists; INV-13: one per session and realm)."),
+                "503": problem("Temporarily unavailable."),
+            },
+        }}),
+    );
+}
+
+/// The `OpenAPI` document of this contract.
+#[must_use]
+pub fn openapi() -> Value {
+    let step_up = "The session is below AAL2 or its last authentication or step-up is older than five minutes (OP-149 m.6); step up and retry.";
+    let mut paths = Map::new();
+    instance_paths(&mut paths, step_up);
     paths.insert(
         INSTANCE_PATH.to_owned(),
         json!({

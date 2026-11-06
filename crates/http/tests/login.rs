@@ -1495,6 +1495,239 @@ async fn device_key_claims(e: &Env, c: &mut Web) {
     assert_eq!(removal.bind, Bind::None);
 }
 
+/// A browser signed in with the passkey `key` (AAL2).
+async fn passkey_session(
+    e: &Env,
+    name: &str,
+    key: &mut Authenticator,
+    id: &str,
+    user: &str,
+) -> Web {
+    let mut w = e.browser(name);
+    let first = w.start().await;
+    let options = passkey_node(&first);
+    let challenge = b64url_decode(options["challenge"].as_str().unwrap()).unwrap();
+    let signed = w
+        .submit(
+            &first,
+            "passkey",
+            json!({ "passkey_credential": assertion_json(key, id, user, &challenge).to_string() }),
+        )
+        .await;
+    assert_eq!(
+        signed.step(),
+        "complete",
+        "{}",
+        String::from_utf8_lossy(&signed.body)
+    );
+    w
+}
+
+/// `POST /v1/me/instances`: a new device `key` of Party `[8; 16]`, registering the Party too
+/// when `new`.
+async fn register_device(w: &mut Web, key: &SoftSigner, new: bool) -> Answer {
+    let ch = w.post("/v1/me/instances/challenges", None).await;
+    assert_eq!(ch.status, StatusCode::CREATED);
+    let mut body = json!({
+        "challenge": ch.json()["challenge"],
+        "party": b64url_encode(&[8; 16]),
+        "key": b64url_encode(&access_identity_session::domain::device::cose_key(&key.public_key())),
+        "valid_from": "2026-01-01T00:00:00Z",
+        "valid_until": "2026-01-01T00:05:00Z",
+        "ais": b64url_encode(&[0xd2; 40]),
+    });
+    if new {
+        body["register_ais"] = json!(b64url_encode(&[0xd2; 40]));
+    }
+    w.post("/v1/me/instances", Some(body)).await
+}
+
+/// `POST /v1/me/instances/bindings` (OP-149 m.32): `key` presented, the proof over the
+/// challenge signed by `signer`.
+async fn bind_device(w: &mut Web, key: &SoftSigner, signer: &SoftSigner) -> Answer {
+    use access_identity_session::domain::device::{POP_CONTENT_TYPE, cose_key, kid};
+    let ch = w.post("/v1/me/instances/challenges", None).await;
+    assert_eq!(ch.status, StatusCode::CREATED);
+    let challenge = b64url_decode(ch.json()["challenge"].as_str().unwrap()).unwrap();
+    let public = key.public_key();
+    let pop = sign_sign1(signer, kid(&public), POP_CONTENT_TYPE, &challenge).unwrap();
+    w.post(
+        "/v1/me/instances/bindings",
+        Some(json!({
+            "challenge": ch.json()["challenge"],
+            "key": b64url_encode(&cose_key(&public)),
+            "pop": b64url_encode(&pop),
+        })),
+    )
+    .await
+}
+
+/// The `instance` the session's `auth_context` names, if any (OP-149 m.30 (c)).
+async fn auth_context_instance(e: &Env, w: &mut Web) -> Option<Vec<u8>> {
+    let issued = w.post("/v1/me/auth-context", None).await;
+    assert_eq!(issued.status, StatusCode::OK);
+    auth_context_fields(e, &issued.json())
+        .into_iter()
+        .find(|(k, _)| *k == suiss_crypto::dcbor::Value::text("instance"))
+        .and_then(|(_, v)| match v {
+            suiss_crypto::dcbor::Value::Bytes(b) => Some(b),
+            _ => None,
+        })
+}
+
+// OP-149 m.32, m.6, m.16 (a), INV-13, §5.1 eki, OP-150 m.14 (f), m.12 (e), (f): a known device
+// key proven in a later session binds that session to the key's existing Instance; no Instance
+// is opened and the key row is untouched; the session's auth_context names it and its
+// authentication Claim is bound to it. A session binds one Instance (a second binding or
+// registration is instance-exists); a key no active device of this user holds, another
+// subject's key and a proof by another key are refused. A device the bootstrap recorded without
+// a session binds the same way. The Instance's termination releases every session bound to it.
+#[tokio::test]
+async fn a_known_device_binds_a_later_session() {
+    use access_identity_account::adapters::pg::PgTx;
+    use access_identity_account::domain::claims::{Bind, ClaimOrder, Content};
+    use access_identity_ui::app::devices::{DeviceKey, bind_party, record_device_key};
+    use access_kernel::claim::body::{AuthMethod, Body};
+    use access_kernel::verify::key_scope::thumbprint;
+    let e = env(46, "lg-kd", AuthPolicy::DEFAULT).await;
+    e.account("ann@example.com").await;
+    let mut b = e.browser("b");
+    assert_eq!(b.sign_in("ann@example.com").await.step(), "complete");
+    let (mut key, id, user) = register_passkey(&mut b, "ann@example.com").await;
+    let mut c = passkey_session(&e, "c", &mut key, &id, &user).await;
+    let (device, _) = SoftSigner::generate_ed25519().unwrap();
+    let registered = register_device(&mut c, &device, true).await;
+    assert_eq!(registered.status, StatusCode::CREATED);
+    assert_eq!(registered.json()["instance"], b64url_encode(&[9; 16]));
+
+    // a later session proves the same key: the same Instance, nothing registered
+    let mut d = passkey_session(&e, "d", &mut key, &id, &user).await;
+    assert_eq!(auth_context_instance(&e, &mut d).await, None);
+    let bound = bind_device(&mut d, &device, &device).await;
+    assert_eq!(
+        bound.status,
+        StatusCode::CREATED,
+        "{}",
+        String::from_utf8_lossy(&bound.body)
+    );
+    assert_eq!(bound.json()["instance"], b64url_encode(&[9; 16]));
+    assert_eq!(bound.json()["party"], b64url_encode(&[8; 16]));
+    assert_eq!(
+        bound.json()["kid"],
+        b64url_encode(&thumbprint(&device.public_key()))
+    );
+    assert_eq!(auth_context_instance(&e, &mut d).await, Some(vec![9; 16]));
+    assert_eq!(auth_context_instance(&e, &mut c).await, Some(vec![9; 16]));
+    // INV-13: one Instance per session; neither a second binding nor a registration
+    assert_eq!(
+        bind_device(&mut d, &device, &device).await.json()["code"],
+        "instance-exists"
+    );
+    let (other, _) = SoftSigner::generate_ed25519().unwrap();
+    let second = register_device(&mut d, &other, false).await;
+    assert_eq!(second.status, StatusCode::CONFLICT);
+    assert_eq!(second.json()["code"], "instance-exists");
+    // a key no device of this user holds, and a proof by another key
+    let mut f = passkey_session(&e, "f", &mut key, &id, &user).await;
+    let unknown = bind_device(&mut f, &other, &other).await;
+    assert_eq!(unknown.status, StatusCode::BAD_REQUEST);
+    assert_eq!(unknown.json()["code"], "invalid-party");
+    let forged = bind_device(&mut f, &device, &other).await;
+    assert_eq!(forged.status, StatusCode::BAD_REQUEST);
+    assert_eq!(forged.json()["code"], "invalid-proof-of-possession");
+    assert_eq!(auth_context_instance(&e, &mut f).await, None);
+
+    // another subject's session with ann's key; bob's own device, recorded by the bootstrap
+    // without a session (OP-149 m.28 (b)), binds his session
+    let bob = e.account("bob@example.com").await;
+    let mut g = e.browser("g");
+    assert_eq!(g.sign_in("bob@example.com").await.step(), "complete");
+    let (mut bob_key, bob_id, bob_user) =
+        register_passkey_with(&mut g, "bob@example.com", 0xc2).await;
+    let (bob_device, _) = SoftSigner::generate_ed25519().unwrap();
+    let mut tx = PgTx(TenantTx::begin(&e.db.app, e.tenant, e.realm).await.unwrap());
+    assert!(
+        bind_party(&mut tx, &bob, &[6; 16], &[0xd2; 40])
+            .await
+            .unwrap()
+    );
+    let recorded = record_device_key(
+        &mut tx,
+        &DeviceKey {
+            subject: bob,
+            key: bob_device.public_key(),
+            instance: [7; 16],
+            session: None,
+        },
+    )
+    .await
+    .unwrap();
+    assert!(recorded.is_some());
+    tx.0.commit().await.unwrap();
+    let mut h = passkey_session(&e, "h", &mut bob_key, &bob_id, &bob_user).await;
+    let anns = bind_device(&mut h, &device, &device).await;
+    assert_eq!(anns.status, StatusCode::BAD_REQUEST);
+    assert_eq!(anns.json()["code"], "invalid-party");
+    let own = bind_device(&mut h, &bob_device, &bob_device).await;
+    assert_eq!(own.status, StatusCode::CREATED);
+    assert_eq!(own.json()["instance"], b64url_encode(&[7; 16]));
+    assert_eq!(own.json()["party"], b64url_encode(&[6; 16]));
+    assert_eq!(auth_context_instance(&e, &mut h).await, Some(vec![7; 16]));
+
+    // OP-150 m.12 (f): each bound session's authentication Claim is bound to its Instance
+    let login_on = |instance: [u8; 16]| {
+        move |o: &&ClaimOrder| {
+            o.bind == Bind::Instance(instance)
+                && matches!(
+                    &o.content,
+                    Content::Body { body: Body::Authentication(a), .. } if a.method == AuthMethod::DeviceKey
+                )
+        }
+    };
+    let orders = claim_orders(&e, |o| {
+        o.iter().filter(login_on([9; 16])).count() >= 2
+            && o.iter().filter(login_on([7; 16])).count() >= 1
+    })
+    .await;
+    assert_eq!(
+        orders.iter().filter(login_on([9; 16])).count(),
+        2,
+        "the registration's and the binding's"
+    );
+    assert_eq!(
+        orders
+            .iter()
+            .filter(|o| o.class == "authenticator_binding" && o.bind == Bind::Instance([9; 16]))
+            .count(),
+        1,
+        "the key was recorded once"
+    );
+
+    // OP-150 m.12 (e), m.14 (f): the termination retires the key and releases the sessions
+    // bound to its Instance
+    let ended = c
+        .send(
+            "DELETE",
+            &format!("/v1/me/instances/{}", b64url_encode(&[9; 16])),
+            Some(json!({
+                "nonce": b64url_encode(&[1; 16]),
+                "basis": b64url_encode(&[2; 16]),
+                "valid_from": "2026-01-01T00:00:00Z",
+                "valid_until": "2026-01-01T00:05:00Z",
+                "ais": b64url_encode(&[0xd2; 8]),
+            })),
+            Some("del-kd"),
+        )
+        .await;
+    assert_eq!(ended.status, StatusCode::OK);
+    assert_eq!(auth_context_instance(&e, &mut d).await, None);
+    assert_eq!(auth_context_instance(&e, &mut c).await, None);
+    assert_eq!(auth_context_instance(&e, &mut h).await, Some(vec![7; 16]));
+    // the retired key is no longer a known device
+    let retired = bind_device(&mut f, &device, &device).await;
+    assert_eq!(retired.json()["code"], "invalid-party");
+}
+
 // §10.2.2, TN-102, OP-146 m.14 (h): a magic link is previewed without being consumed and
 // confirmed by POST; another browser must confirm explicitly; only the starting browser gets
 // the session. An e-mail code signs in once.
@@ -1953,6 +2186,15 @@ async fn a_passkey_is_the_second_factor_after_the_password() {
 }
 
 async fn register_passkey(b: &mut Web, who: &str) -> (Authenticator, String, String) {
+    register_passkey_with(b, who, 0xc1).await
+}
+
+/// Registers a passkey whose credential id is 32 bytes of `credential`.
+async fn register_passkey_with(
+    b: &mut Web,
+    who: &str,
+    credential: u8,
+) -> (Authenticator, String, String) {
     let reg = b
         .post("/v1/account/passkeys", Some(json!({ "name": who })))
         .await;
@@ -1961,6 +2203,7 @@ async fn register_passkey(b: &mut Web, who: &str) -> (Authenticator, String, Str
     let challenge = b64url_decode(r["options"]["challenge"].as_str().unwrap()).unwrap();
     let user = r["options"]["user"]["id"].as_str().unwrap().to_owned();
     let mut key = Authenticator::new(Key::es256());
+    key.credential_id = vec![credential; 32];
     let (cdj, att) = key.register(RP_ID, ORIGIN, &challenge);
     let id = b64url_encode(&key.credential_id);
     let credential = json!({

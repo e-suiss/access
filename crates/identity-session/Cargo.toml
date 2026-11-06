@@ -12,6 +12,7 @@ publish = false
 access-crypto = { workspace = true }
 access-identity-account = { workspace = true }
 access-identity-webauthn = { workspace = true }
+access-internal-api = { workspace = true }
 access-kernel = { workspace = true }
 access-parse = { workspace = true }
 access-store = { workspace = true }

@@ -219,6 +219,7 @@ dependencies = [
  "access-crypto",
  "access-identity-account",
  "access-identity-webauthn",
+ "access-internal-api",
  "access-parse",
  "access-store",
  "aws-lc-rs",

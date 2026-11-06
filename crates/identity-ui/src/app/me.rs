@@ -1,13 +1,14 @@
-//! The Frontend API for products (OP-149 m.6, m.8, m.9): device Instances from a stepped-up
-//! session, the signed `auth_context` artifact and the approval call. A session that is not live
-//! gets `401` and nothing else happens (G57).
+//! The Frontend API for products (OP-149 m.6, m.8, m.9, m.32): device Instances from a
+//! stepped-up session, a later session's binding to a known device's Instance, the signed
+//! `auth_context` artifact and the approval call. A session that is not live gets `401` and
+//! nothing else happens (G57).
 
 use access_identity_account::domain::login::Problem;
 use access_identity_oauth::ports::RealmEntry;
 use access_identity_session::app::devices::DeviceRefusal;
 use access_identity_session::app::sessions::SessionStatus;
 use access_identity_session::domain::auth_context::{CONTENT_TYPE, Content};
-use access_identity_session::domain::device::{Assurance, KeyRejection};
+use access_identity_session::domain::device::{Assurance, KeyRejection, verify_pop};
 use access_identity_session::domain::session::{SESSION_COOKIE, clear_cookie};
 use access_identity_session::ports::Clock;
 use access_internal_api::idp::Verdict;
@@ -25,7 +26,8 @@ use serde_json::json;
 
 use super::{Browser, Hosted, Reply, SESSION_REQUIRED, devices, failed, signin};
 use crate::domain::frontend::{
-    AuthContextRequest, InstanceRegistration, InstanceTermination, rfc3339, unix_ms,
+    AuthContextRequest, InstanceBinding, InstanceRegistration, InstanceTermination, rfc3339,
+    unix_ms,
 };
 use crate::ports::{ArtifactSigner, DeviceInstances, Kits, Messages, RealmKit};
 
@@ -269,6 +271,36 @@ async fn device_registered(
     tx.0.commit().await.map_err(|_| unavailable())
 }
 
+/// Binds the session that proved a known device key to that key's Instance (OP-149 m.32,
+/// INV-13) and queues the session's `authentication` Claim bound to it, as a registration does
+/// (OP-150 m.12 (f)); nothing else is written (OP-73).
+async fn device_bound(
+    db: &access_store::Pool,
+    kit: &RealmKit,
+    proven: &access_identity_session::app::devices::ProvenKey,
+) -> Result<Result<[u8; 16], devices::NotBound>, Reply> {
+    let s = &proven.session;
+    let mut tx = access_identity_account::adapters::pg::PgTx(
+        TenantTx::begin(db, kit.tenant, kit.realm)
+            .await
+            .map_err(|_| unavailable())?,
+    );
+    let bound = devices::bind_known_device(
+        &mut tx,
+        &devices::ProvenDevice {
+            subject: s.subject,
+            session: s.id,
+            key: &proven.key,
+            auth_time: s.auth_time_ms,
+            assurance: access_identity_session::app::claims::levels(&s.assurance),
+        },
+    )
+    .await
+    .map_err(|_| unavailable())?;
+    tx.0.commit().await.map_err(|_| unavailable())?;
+    Ok(bound)
+}
+
 /// Retires the device key of a terminated Instance (§10.1.3 `status`) and ends its binding line
 /// (IDP-2); the Instance itself was ended by `instance.terminate`.
 async fn device_retired(
@@ -464,6 +496,77 @@ where
             return reply;
         }
         registered(verdict)
+    }
+
+    /// `POST /v1/me/instances/bindings` (OP-149 m.32, m.6, INV-13, §5.1 eki): the session's
+    /// step-up and its challenge first, then the key's own signature over the challenge; a key
+    /// that is an active device of this user binds the session to the key's existing Instance.
+    /// No Instance is opened, nothing goes to the authority plane and the key row is untouched
+    /// (OP-73); a session that already binds an Instance keeps it.
+    pub async fn bind_instance(
+        &self,
+        entry: &RealmEntry,
+        b: &Browser<'_>,
+        body: &InstanceBinding,
+    ) -> Reply {
+        let kit = match self.kit(entry).await {
+            Ok(k) => k,
+            Err(r) => return r,
+        };
+        signin!(self, kit, auth);
+        let Some(cookie) = b.session else {
+            return session_required();
+        };
+        let (Some(key), Some(challenge), Some(pop)) = (
+            bytes(&body.key, 1, 256),
+            bytes(&body.challenge, 32, 32).and_then(|c| <[u8; 32]>::try_from(c).ok()),
+            bytes(&body.pop, 1, 8192),
+        ) else {
+            return invalid();
+        };
+        let proven = match auth
+            .claim_instance_challenge(cookie, &key, &challenge, b.correlation)
+            .await
+        {
+            Ok(Ok(p)) => p,
+            Ok(Err(r)) => return refused(&r),
+            Err(e) => return failed(&e),
+        };
+        if let Err(k) = verify_pop(&proven.key, &pop, &challenge) {
+            return refused(&DeviceRefusal::Key(k));
+        }
+        let party = match bound_party(&self.db, &kit, &proven.session.subject).await {
+            Ok(Some(p)) => p,
+            Ok(None) => {
+                return problem(
+                    400,
+                    "invalid-party",
+                    "No device of this user holds that key",
+                );
+            }
+            Err(r) => return r,
+        };
+        match device_bound(&self.db, &kit, &proven).await {
+            Ok(Ok(instance)) => Reply::json(
+                201,
+                json!({
+                    "instance": b64url_encode(&instance),
+                    "kid": b64url_encode(&proven.kid),
+                    "party": b64url_encode(&party),
+                }),
+            ),
+            Ok(Err(devices::NotBound::UnknownKey)) => problem(
+                400,
+                "invalid-party",
+                "No device of this user holds that key",
+            ),
+            Ok(Err(devices::NotBound::SessionBound)) => problem(
+                409,
+                "instance-exists",
+                "This sign-in already has a device; remove it first",
+            ),
+            Err(r) => r,
+        }
     }
 
     /// `DELETE /v1/me/instances/{instance}` (OP-149 m.6, OP-146 m.4 (i)): the user's own

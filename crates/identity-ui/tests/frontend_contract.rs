@@ -17,9 +17,9 @@ use access_identity_ui::domain::approval::{
     REQUESTS_PATH, RenderView,
 };
 use access_identity_ui::domain::frontend::{
-    AUTH_CONTEXT_PATH, AuthContextIssued, AuthContextRequest, CHALLENGES_PATH, INSTANCE_PATH,
-    INSTANCES_PATH, InstanceChallenge, InstanceRegistered, InstanceRegistration,
-    InstanceTerminated, InstanceTermination, openapi, rfc3339,
+    AUTH_CONTEXT_PATH, AuthContextIssued, AuthContextRequest, BINDINGS_PATH, CHALLENGES_PATH,
+    INSTANCE_PATH, INSTANCES_PATH, InstanceBinding, InstanceChallenge, InstanceRegistered,
+    InstanceRegistration, InstanceTerminated, InstanceTermination, openapi, rfc3339,
 };
 use access_kernel::json::b64url_encode;
 use serde::Serialize;
@@ -71,6 +71,7 @@ fn the_document_has_every_endpoint() {
     for (path, method) in [
         (CHALLENGES_PATH, "post"),
         (INSTANCES_PATH, "post"),
+        (BINDINGS_PATH, "post"),
         (INSTANCE_PATH, "delete"),
         (AUTH_CONTEXT_PATH, "post"),
         ("/v1/approve", "get"),
@@ -120,6 +121,17 @@ fn committed_examples_match_the_code_and_the_schema() {
             valid_until: rfc3339(1_767_225_300_000),
             ais: b64(0xd2, 200),
             register_ais: Some(b64(0xd2, 190)),
+        },
+    );
+    // OP-149 m.32
+    example(
+        &doc,
+        "InstanceBinding",
+        "instance-binding",
+        &InstanceBinding {
+            challenge: b64(0x11, 32),
+            key: b64(0xa4, 77),
+            pop: b64(0xd2, 120),
         },
     );
     example(

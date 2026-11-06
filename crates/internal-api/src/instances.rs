@@ -16,6 +16,7 @@ use access_kernel::meta::{self, ActorKind, ExerciseBasis, NAMESPACE, Payload, ki
 use access_kernel::model::{ActionRef, Id, ResourceRef, Window};
 use access_kernel::schema::{ActionSchema, EffectClass, action_digest};
 use access_kernel::verify::cose::PublicKey;
+use suiss_crypto::dcbor::{self, Value};
 
 /// The resource namespace an `instance_terminate` intent names its Instance in.
 pub const INSTANCE_NAMESPACE: &str = "access.instance";
@@ -36,6 +37,11 @@ pub const BOOTSTRAP_GRANT: u64 = 0;
 /// Appended to a challenge to form the `party_register` nonce; `instance_create` uses the
 /// challenge itself (OP-149 m.16 (a)).
 pub const REGISTER_NONCE_SUFFIX: u8 = 0x01;
+
+/// The content type of a known device key's proof of possession in a later session (OP-149
+/// m.32, m.6): a tagged `COSE_Sign1` by the key, `kid` its thumbprint, over the 32 challenge
+/// bytes as the payload. No Exercise is signed, so the type keeps it apart from an AIS.
+pub const POP_CONTENT_TYPE: &str = "application/access-instance-pop";
 
 /// The product name a `platform_product` client carries (OP-149 m.4, OP-150 m.3 (m)): a role the
 /// operator gives any registered product, first or third party alike. The name is the operator's
@@ -191,6 +197,33 @@ pub fn register_nonce(challenge: &[u8]) -> Vec<u8> {
     let mut n = challenge.to_vec();
     n.push(REGISTER_NONCE_SUFFIX);
     n
+}
+
+/// The key's `COSE_Key` (RFC 9052 §7) in deterministic CBOR, without `alg`: how a device
+/// presents its key and how Access hands one back (OP-149 m.6, m.14 (a)).
+#[must_use]
+pub fn cose_key(key: &PublicKey) -> Vec<u8> {
+    let v = match key {
+        PublicKey::Ed25519(x) => Value::Map(vec![
+            (Value::Unsigned(1), Value::Unsigned(1)),
+            (Value::int(-1), Value::Unsigned(6)),
+            (Value::int(-2), Value::Bytes(x.to_vec())),
+        ]),
+        PublicKey::P256(sec1) => {
+            let (x, y) = sec1
+                .get(1..)
+                .and_then(|xy| xy.split_at_checked(32))
+                .unwrap_or_default();
+            Value::Map(vec![
+                (Value::Unsigned(1), Value::Unsigned(2)),
+                (Value::int(-1), Value::Unsigned(1)),
+                (Value::int(-2), Value::Bytes(x.to_vec())),
+                (Value::int(-3), Value::Bytes(y.to_vec())),
+            ])
+        }
+        PublicKey::MlDsa(..) => Value::Map(Vec::new()),
+    };
+    dcbor::encode(&v, dcbor::Limits::CEILING).unwrap_or_default()
 }
 
 /// The intent the new key signs for `payload` (`party_register` or `instance_create`) of
