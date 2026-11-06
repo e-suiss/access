@@ -1,0 +1,11 @@
+{
+  "id": "jwt-oversized",
+  "rules": [
+    "OP-150 m.3 (s)",
+    "§9.9.6"
+  ],
+  "description": "A token padded past the 8 KiB ceiling.",
+  "mode": "jwt",
+  "token": "oversized",
+  "expect": "deny"
+}

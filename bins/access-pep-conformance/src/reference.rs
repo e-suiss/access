@@ -3,14 +3,18 @@
 //! ([`Leaky`]) which the harness must flag. Both speak the adapter protocol through
 //! [`drive`] over a blocking transport, or through any transport a test supplies.
 
+use std::collections::BTreeSet;
 use std::io::{BufRead, Read, Write};
 use std::net::{TcpStream, ToSocketAddrs};
+use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 use access_kernel::codec::Canonical;
 use access_kernel::digest::Digest;
 use access_kernel::json::b64url_decode;
 use access_kernel::receipt::{Expected, verify};
+use access_kernel::verify::cose::Algorithm;
+use access_kernel::verify::dpop::{ProofRules, parse_jkt, verify_proof};
 use access_kernel::verify::key_scope::DomainMetadata;
 use access_kernel::verify::{PureBackend, ed25519};
 use serde_json::{Value, json};
@@ -193,20 +197,59 @@ fn status_bit(list: &Value, idx: u64) -> Option<bool> {
 #[derive(Debug)]
 pub struct Reference {
     msg: CaseMessage,
+    attempt: u32,
     at: u8,
     jwks: Value,
     status_index: u64,
 }
 
+/// Proofs and exact-intent tokens this process has already accepted (TN-30, §9.9.1).
+static SEEN: Mutex<BTreeSet<String>> = Mutex::new(BTreeSet::new());
+
+fn first_time(key: String) -> Option<bool> {
+    SEEN.lock().ok().map(|mut seen| seen.insert(key))
+}
+
 impl Reference {
-    /// A machine for one case.
+    /// A machine for one presentation of a case.
     #[must_use]
-    pub const fn new(msg: CaseMessage) -> Self {
+    pub const fn new(msg: CaseMessage, attempt: u32) -> Self {
         Self {
             msg,
+            attempt,
             at: 0,
             jwks: Value::Null,
             status_index: 0,
+        }
+    }
+
+    /// The `DPoP` proof of this presentation, checked against the token's `cnf.jkt` with the
+    /// Kernel and recorded against replay (IDP-11, TN-30).
+    fn proof(&self, token: &str, claims: &Value) -> Result<(), String> {
+        let proof = usize::try_from(self.attempt)
+            .ok()
+            .and_then(|i| self.msg.request.proofs.get(i))
+            .ok_or_else(|| String::from("no DPoP proof"))?;
+        let jkt = at(at(claims, "cnf"), "jkt")
+            .as_str()
+            .and_then(|j| parse_jkt(j).ok())
+            .ok_or_else(|| String::from("token without cnf.jkt"))?;
+        let allowed = BTreeSet::from([Algorithm::Ed25519]);
+        let rules = ProofRules {
+            method: &self.msg.request.method,
+            uri: &self.msg.request.uri,
+            allowed: &allowed,
+            now: self.msg.now,
+            lifetime_ms: 5_000,
+            skew_ms: 5_000,
+            access_token: Some(token),
+            bound_jkt: Some(&jkt),
+        };
+        let p = verify_proof(&PureBackend, proof, &rules).map_err(|e| format!("dpop: {e}"))?;
+        match first_time(format!("dpop:{}:{}:{}", p.htm, p.htu, p.jti)) {
+            Some(true) => Ok(()),
+            Some(false) => Err(String::from("dpop proof replayed")),
+            None => Err(String::from("replay store unavailable")),
         }
     }
 
@@ -272,6 +315,10 @@ impl Reference {
 
     fn token_claims(&mut self) -> Step {
         let token = self.msg.request.token.clone().unwrap_or_default();
+        // OP-150 m.3 (s)
+        if token.len() > 8 * 1024 {
+            return Step::Deny(String::from("token too large"));
+        }
         let claims = match verify_jws(&token, "at+jwt", &self.jwks) {
             Ok(c) => c,
             Err(e) => return Step::Deny(e),
@@ -288,6 +335,23 @@ impl Reference {
                 .is_none_or(|iat| iat > now.saturating_add(60))
         {
             return Step::Deny(String::from("token outside its validity"));
+        }
+        if let Err(e) = self.proof(&token, &claims) {
+            return Step::Deny(e);
+        }
+        let kind = at(&claims, "authorization_details")
+            .as_array()
+            .and_then(|d| d.first())
+            .map(|d| at(d, "kind").clone());
+        if kind == Some(json!("intent")) {
+            match at(&claims, "jti")
+                .as_str()
+                .and_then(|jti| first_time(format!("intent:{jti}")))
+            {
+                Some(true) => {}
+                Some(false) => return Step::Deny(String::from("exact-intent token used before")),
+                None => return Step::Error(String::from("replay store unavailable")),
+            }
         }
         let reference = &at(at(&claims, "status"), "status_list");
         let (Some(idx), Some(uri)) = (at(reference, "idx").as_u64(), at(reference, "uri").as_str())
@@ -358,9 +422,9 @@ pub struct Leaky {
 }
 
 impl Leaky {
-    /// A machine for one case.
+    /// A machine for one presentation of a case.
     #[must_use]
-    pub const fn new(msg: CaseMessage) -> Self {
+    pub const fn new(msg: CaseMessage, _attempt: u32) -> Self {
         Self { msg, at: 0 }
     }
 }
@@ -499,11 +563,12 @@ fn try_fetch(request: &Fetch, until: Instant) -> Result<Fetched, String> {
     })
 }
 
-/// Runs a machine to its end with `fetch`, performing the effect at the resource when the
-/// machine allows.
-pub fn drive(
+/// Runs the case to its end with `fetch`: one machine per presentation, `repeat` times,
+/// performing the effect at the resource when a machine allows. The result is `allow` when
+/// any presentation performed the effect; the resource's count decides the verdict.
+pub fn drive<M: Machine>(
     msg: &CaseMessage,
-    machine: &mut impl Machine,
+    new: impl Fn(CaseMessage, u32) -> M,
     mut fetch: impl FnMut(&Fetch) -> Fetched,
 ) -> CaseResult {
     let result = |outcome, detail: String| CaseResult {
@@ -511,34 +576,49 @@ pub fn drive(
         outcome,
         detail: Some(detail),
     };
-    let mut fetched = None;
-    loop {
-        match machine.step(fetched.take()) {
-            Step::Fetch(request) => fetched = Some(fetch(&request)),
-            Step::Effect => {
-                let effect = Fetch {
-                    method: "POST",
-                    url: msg.upstream.effect.clone(),
-                    body: Some(("application/json", json!({ "case": msg.case }).to_string())),
-                };
-                return match fetch(&effect) {
-                    Fetched::Response {
-                        status: 200..=299, ..
-                    } => result(Outcome::Allow, String::from("effect performed")),
-                    other => result(Outcome::Error, format!("effect failed: {other:?}")),
-                };
+    let mut last = (Outcome::Error, String::from("no presentation"));
+    let mut effects = 0_u32;
+    for attempt in 0..msg.request.repeat.max(1) {
+        let mut machine = new(msg.clone(), attempt);
+        let mut fetched = None;
+        last = loop {
+            match machine.step(fetched.take()) {
+                Step::Fetch(request) => fetched = Some(fetch(&request)),
+                Step::Effect => {
+                    let effect = Fetch {
+                        method: "POST",
+                        url: msg.upstream.effect.clone(),
+                        body: Some(("application/json", json!({ "case": msg.case }).to_string())),
+                    };
+                    break match fetch(&effect) {
+                        Fetched::Response {
+                            status: 200..=299, ..
+                        } => {
+                            effects = effects.saturating_add(1);
+                            (Outcome::Allow, String::from("effect performed"))
+                        }
+                        other => (Outcome::Error, format!("effect failed: {other:?}")),
+                    };
+                }
+                Step::Deny(why) => break (Outcome::Deny, why),
+                Step::Error(why) => break (Outcome::Error, why),
             }
-            Step::Deny(why) => return result(Outcome::Deny, why),
-            Step::Error(why) => return result(Outcome::Error, why),
-        }
+        };
     }
+    if effects > 0 {
+        return result(
+            Outcome::Allow,
+            format!("{effects} effect(s) performed; last: {}", last.1),
+        );
+    }
+    result(last.0, last.1)
 }
 
 /// Serves the adapter protocol on stdin and stdout with blocking HTTP.
 ///
 /// # Errors
 /// I/O errors on stdin or stdout.
-pub fn serve<M: Machine>(name: &str, new: fn(CaseMessage) -> M) -> std::io::Result<()> {
+pub fn serve<M: Machine>(name: &str, new: fn(CaseMessage, u32) -> M) -> std::io::Result<()> {
     let stdin = std::io::stdin();
     let mut stdout = std::io::stdout();
     for line in stdin.lock().lines() {
@@ -553,8 +633,7 @@ pub fn serve<M: Machine>(name: &str, new: fn(CaseMessage) -> M) -> std::io::Resu
                 let budget = Duration::from_millis(msg.deadline_ms);
                 let after = |start: Instant| start.checked_add(budget).unwrap_or(start);
                 let until = after(Instant::now());
-                let mut machine = new(msg.clone());
-                FromSut::Result(drive(&msg, &mut machine, |f| {
+                FromSut::Result(drive(&msg, new, |f| {
                     let until = if f.url == msg.upstream.effect {
                         after(Instant::now())
                     } else {

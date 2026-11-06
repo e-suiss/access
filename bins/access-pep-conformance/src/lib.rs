@@ -7,6 +7,7 @@ pub mod fixture;
 pub mod protocol;
 pub mod reference;
 pub mod run;
+pub mod sdk;
 pub mod sut;
 pub mod upstream;
 pub mod verdict;

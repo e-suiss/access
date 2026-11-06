@@ -365,7 +365,9 @@ impl Denied {
     pub const fn is_decision(&self) -> bool {
         matches!(
             self,
-            Self::Inactive
+            Self::TooLarge
+                | Self::Confirmation(_)
+                | Self::Inactive
                 | Self::Revoked
                 | Self::FamilyEnded
                 | Self::Reused

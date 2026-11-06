@@ -34,13 +34,22 @@ fn the_runner_passes_the_reference_and_flags_the_leaky_control() {
     let ok = runner(env!("CARGO_BIN_EXE_pep-reference"));
     let text = String::from_utf8_lossy(&ok.stdout);
     assert_eq!(ok.status.code(), Some(0), "{text}");
-    assert!(text.contains("19/19 passed, 0 leaked"), "{text}");
+    assert!(text.contains("26/26 passed, 0 leaked"), "{text}");
 
     let leaky = runner(env!("CARGO_BIN_EXE_pep-reference-leaky"));
     let text = String::from_utf8_lossy(&leaky.stdout);
     assert_eq!(leaky.status.code(), Some(1), "{text}");
-    assert!(text.contains("13 leaked an effect"), "{text}");
+    assert!(text.contains("19 leaked an effect"), "{text}");
     assert!(text.contains("LEAK      adp-timeout"), "{text}");
+}
+
+// OP-150 m.2 L10, CMP-17, X21, TI-9: the Rust PEP SDK passes every case
+#[test]
+fn the_runner_passes_the_sdk_adapter() {
+    let ok = runner(env!("CARGO_BIN_EXE_pep-sdk"));
+    let text = String::from_utf8_lossy(&ok.stdout);
+    assert_eq!(ok.status.code(), Some(0), "{text}");
+    assert!(text.contains("26/26 passed, 0 leaked"), "{text}");
 }
 
 // CMP-17

@@ -337,8 +337,10 @@ dependencies = [
 name = "access-pep-conformance"
 version = "0.2.6"
 dependencies = [
+ "access-crypto",
  "axum",
  "esuiss-access-kernel",
+ "esuiss-access-sdk",
  "esuiss-crypto",
  "http-body-util",
  "serde",

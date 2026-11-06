@@ -1,0 +1,16 @@
+{
+  "id": "jwt-dpop-replay",
+  "rules": [
+    "§10.4.3 m.3",
+    "§10.4.3 m.5",
+    "§13.4 U55",
+    "TN-30",
+    "IDP-11"
+  ],
+  "description": "The same DPoP proof presented twice with a bounds token: the second presentation adds no effect.",
+  "mode": "jwt",
+  "kind": "bounds",
+  "dpop": "replayed",
+  "repeat": 2,
+  "expect": "effect"
+}

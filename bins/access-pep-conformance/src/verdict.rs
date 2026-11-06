@@ -41,6 +41,9 @@ pub fn judge(expect: Expect, outcome: Option<Outcome>, effects: u32) -> Verdict 
         Outcome::Error => "error",
     });
     match expect {
+        Expect::Effect if effects > 1 => Verdict::Leak {
+            reason: format!("{effects} effects performed; a repeated presentation leaked"),
+        },
         Expect::Effect => match (outcome, effects) {
             (Some(Outcome::Allow), 1) => Verdict::Pass,
             _ => Verdict::Fail {
@@ -128,7 +131,6 @@ mod tests {
         );
         for (outcome, effects) in [
             (Some(Outcome::Allow), 0),
-            (Some(Outcome::Allow), 2),
             (Some(Outcome::Deny), 0),
             (None, 1),
         ] {
@@ -137,5 +139,10 @@ mod tests {
                 Verdict::Fail { .. }
             ));
         }
+        // §9.9.1 count = 1, §13.4 U55: a repeated presentation must not add an effect
+        assert!(matches!(
+            judge(Expect::Effect, Some(Outcome::Allow), 2),
+            Verdict::Leak { .. }
+        ));
     }
 }

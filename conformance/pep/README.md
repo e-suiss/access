@@ -6,7 +6,7 @@ into an effect. It is language independent: the PEP under test is wrapped in a s
 that speaks JSON lines on stdin and stdout.
 
 ```sh
-just pep-conformance                       # self-test: reference passes, negative control is flagged
+just pep-conformance                       # self-test: reference and the Rust SDK pass, negative control is flagged
 just pep-conformance "node my-adapter.js"  # your adapter
 ```
 
@@ -22,12 +22,17 @@ Exit status: `0` every case passed, `1` at least one case failed, `2` the run it
 
 ## How a run works
 
-1. The runner starts fake upstreams on `127.0.0.1`: an ADP (AuthZEN evaluation), an OAuth
-   introspection endpoint, a JWKS, a Token Status List and the protected resource.
+1. The runner generates a domain for the run (binding key, operational keys for receipts,
+   tokens and status lists, the holder key tokens are bound to) and starts fake upstreams on
+   `127.0.0.1`: an ADP (AuthZEN evaluation), an OAuth introspection endpoint, a JWKS, a Token
+   Status List and the protected resource. Receipts are signed per request for the nonce the
+   PEP sent; tokens are real `at+jwt` projections with `cnf`, `authorization_details`,
+   `access_contract`, `family` and `status`.
 2. It starts the adapter with `sh -c "<command>"` and exchanges one line per case.
-3. For each case the adapter makes its PEP enforce one request against that case's upstreams.
-   If the PEP allows, the adapter performs the effect by calling the resource. The resource
-   counts effects, so the verdict does not depend on what the adapter claims.
+3. For each case the adapter makes its PEP enforce one request against that case's upstreams,
+   `repeat` times when the case says so. If the PEP allows, the adapter performs the effect by
+   calling the resource. The resource counts effects, so the verdict does not depend on what
+   the adapter claims.
 
 ## Cases
 
@@ -41,6 +46,10 @@ Exit status: `0` every case passed, `1` at least one case failed, `2` the run it
 | `mode` | `decision` (ADP with signed receipt), `introspection` (opaque token, RFC 7662) or `jwt` (JWT access token with JWKS and Token Status List) |
 | `audience`, `intent` | Override the PEP audience or the intent digest (hex of its CBOR) |
 | `adp`, `introspection`, `jwks`, `status_list` | How that upstream answers; healthy when absent |
+| `kind` | `intent` (default) or `bounds`: the token's RAR kind (`introspection`, `jwt`) |
+| `dpop` | `fresh` (default), `replayed` (the same proof every time), `missing` (a bearer presentation) or `other-key` (a proof not of the token's `cnf.jkt`) |
+| `token` | `oversized` (padded past 8 KiB) or `other-audience` (issued for another resource server) |
+| `repeat` | How many times the same token is presented (default 1); the effect may happen at most once |
 | `expect` | `effect`, `deny` or `no-effect` |
 
 Upstream answers (`kind`):
@@ -59,7 +68,7 @@ Expected effects:
 
 | `expect` | Passes when |
 |---|---|
-| `effect` | The adapter answers `allow` and the resource saw exactly one effect. One control case per mode makes sure the adapter really talks to the upstreams. |
+| `effect` | The adapter answers `allow` and the resource saw exactly one effect. One control case per mode makes sure the adapter really talks to the upstreams. With `repeat`, a second effect is a leak: a replayed proof or a reused exact-intent token got through. |
 | `deny` | The adapter answers `deny` and the resource saw no effect. Used for negative evidence: a DENY decision, a missing or mismatched receipt, an inactive or revoked token. |
 | `no-effect` | The adapter answers `deny` or `error` and the resource saw no effect. Used for unknown states: 5xx, timeouts, malformed bodies, stale status lists. |
 
@@ -100,17 +109,25 @@ Each case:
 | `request.intent` | The intent digest (hex CBOR) the effect applies; a receipt must be bound to it |
 | `request.evaluation` | The AuthZEN evaluation body to send to `upstream.adp` |
 | `request.token` | The access token in `introspection` and `jwt` modes. A JWT carries `status.status_list.{idx,uri}`; the status list is fetched from that `uri`. |
+| `request.method`, `request.uri` | The request the token is presented with, as the resource server sees it: what the `DPoP` proof's `htm` and `htu` must match |
+| `request.proofs` | The `DPoP` proofs, one per presentation, in order; empty when the request carries none |
+| `request.repeat` | How many times to present the token (default 1); each presentation uses the proof at its index |
 
 What the PEP does per mode:
 
-- `decision`: `POST upstream.adp` with `request.evaluation`. Allow only on `decision: true`
-  with `context.receipt` (`sign1`, `excerpt`, base64url) that verifies with the Kernel against
-  the pinned Domain Metadata for this domain, audience, intent and `now`.
+- `decision`: `POST upstream.adp` with `request.evaluation`, whose `context.nonce` is the
+  request nonce. Allow only on `decision: true` with `context.receipt` (`sign1`, `excerpt`,
+  base64url) that verifies with the Kernel against the pinned Domain Metadata for this
+  domain, audience, intent and `now`, and names the Exercise of that nonce.
 - `introspection`: `POST upstream.introspection` (`application/x-www-form-urlencoded`,
-  `token=…`). Allow only on `active: true`, `aud` naming the PEP and `exp` after `now`.
-- `jwt`: `GET upstream.jwks`, verify the token (`alg` `Ed25519`, `typ` `at+jwt`, `iss`, `aud`,
-  `exp`, `iat`), then `GET` the status list (`typ` `statuslist+jwt`, signed by the same key),
-  which must not be expired, and check the token's bit.
+  `token=…`). Allow only on `active: true`, `aud` naming the PEP and `exp` after `now`; a
+  resource server SDK also checks `cnf` against the `DPoP` proof and reads
+  `authorization_details` and `as_of`.
+- `jwt`: `GET upstream.jwks`, verify the token (`alg` `Ed25519`, `kid` the key's thumbprint,
+  `typ` `at+jwt`, `iss`, one `aud`, `exp`, `iat`, `cnf.jkt` = the proof's key, 8 KiB ceiling),
+  check the `DPoP` proof of this presentation against replay, refuse a second presentation of
+  an exact-intent token, then `GET` the status list (`typ` `statuslist+jwt`, signed by the
+  same key), which must not be expired, and check the token's bit.
 
 The effect is `POST upstream.effect`. Then the adapter answers:
 
@@ -123,11 +140,14 @@ for the report. After the last case the runner sends `{"type":"bye"}` and stops 
 
 ## Self-test
 
-The runner ships two adapters built on the same sans-I/O PEP core:
+The runner ships three adapters:
 
-- `pep-reference` fails closed and passes every case.
+- `pep-reference` is a small fail-closed PEP and passes every case.
+- `pep-sdk` is the Rust PEP SDK (`esuiss-access-sdk`) with its ports bound to blocking HTTP;
+  it passes every case.
 - `pep-reference-leaky` is a negative control: it treats upstream faults as permission,
-  ignores receipts and ignores status list freshness. The runner must flag it.
+  ignores receipts, proofs and status list freshness. The runner must flag it.
 
-`just pep-conformance` with no argument runs both. The crate's tests run the same cases in
-process with paused time, so timeouts end exactly at the deadline.
+`just pep-conformance` with no argument runs all three. The crate's tests run the reference
+cases in process with paused time, so timeouts end exactly at the deadline, and the three
+adapters as child processes.

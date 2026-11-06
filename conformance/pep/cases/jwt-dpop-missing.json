@@ -1,0 +1,14 @@
+{
+  "id": "jwt-dpop-missing",
+  "rules": [
+    "§9.9.3 k.2",
+    "§12.2.1",
+    "PI-11",
+    "TN-27",
+    "IDP-11"
+  ],
+  "description": "A bearer presentation of a DPoP-bound token: no proof at all.",
+  "mode": "jwt",
+  "dpop": "missing",
+  "expect": "deny"
+}

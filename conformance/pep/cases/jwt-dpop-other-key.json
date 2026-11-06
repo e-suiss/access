@@ -1,0 +1,13 @@
+{
+  "id": "jwt-dpop-other-key",
+  "rules": [
+    "§10.4.3 m.1",
+    "IDP-11",
+    "PI-11",
+    "L2-JOS-3"
+  ],
+  "description": "A DPoP proof signed by a key that is not the token's cnf.jkt.",
+  "mode": "jwt",
+  "dpop": "other-key",
+  "expect": "deny"
+}

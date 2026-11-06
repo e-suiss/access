@@ -1,0 +1,12 @@
+{
+  "id": "jwt-other-audience",
+  "rules": [
+    "§9.9.3 k.1",
+    "AG-8",
+    "L2-JOS-2"
+  ],
+  "description": "A token issued for another resource server.",
+  "mode": "jwt",
+  "token": "other-audience",
+  "expect": "deny"
+}

@@ -57,14 +57,12 @@ fn args() -> Result<Args, String> {
 
 async fn conformance(args: Args) -> Result<bool, String> {
     let cases = load(&args.cases).map_err(|e| e.to_string())?;
-    let fixture = Fixture::load().map_err(|e| e.to_string())?;
+    let fixture = Fixture::generate().map_err(|e| e.to_string())?;
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
         .await
         .map_err(|e| e.to_string())?;
     let addr = listener.local_addr().map_err(|e| e.to_string())?;
-    let upstream = Arc::new(
-        Upstream::new(&format!("http://{addr}"), &cases, fixture).map_err(|e| e.to_string())?,
-    );
+    let upstream = Arc::new(Upstream::new(&format!("http://{addr}"), &cases, fixture));
     let app = Arc::clone(&upstream).router();
     tokio::spawn(async move { axum::serve(listener, app).await });
     let mut sut = Subprocess::start(&args.sut, Duration::from_secs(10))

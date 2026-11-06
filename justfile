@@ -368,6 +368,7 @@ pep-conformance sut="":
       exec "$bin/access-pep-conformance" --sut {{quote(sut)}}
     fi
     "$bin/access-pep-conformance" --sut "$bin/pep-reference"
+    "$bin/access-pep-conformance" --sut "$bin/pep-sdk"
     status=0
     "$bin/access-pep-conformance" --sut "$bin/pep-reference-leaky" || status=$?
     if [[ "$status" -ne 1 ]]; then

@@ -22,8 +22,15 @@ path = "src/bin/pep_reference.rs"
 name = "pep-reference-leaky"
 path = "src/bin/pep_reference_leaky.rs"
 
+# OP-150 m.2 L10: the Rust PEP SDK under the harness
+[[bin]]
+name = "pep-sdk"
+path = "src/bin/pep_sdk.rs"
+
 [dependencies]
+access-crypto = { workspace = true }
 access-kernel = { workspace = true }
+access-sdk = { workspace = true }
 suiss-crypto = { workspace = true, features = ["signer"] }
 axum = { workspace = true, features = ["http1", "tokio", "json"] }
 serde = { workspace = true, features = ["derive", "std"] }

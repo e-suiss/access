@@ -1,0 +1,12 @@
+{
+  "id": "jwt-bounds-healthy",
+  "rules": [
+    "§9.9.1",
+    "L2-JOS-4",
+    "CMP-17"
+  ],
+  "description": "Healthy upstreams with a bounds token naming the action: the control for the bounds path.",
+  "mode": "jwt",
+  "kind": "bounds",
+  "expect": "effect"
+}

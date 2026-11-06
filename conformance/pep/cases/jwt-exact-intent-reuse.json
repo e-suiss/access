@@ -1,0 +1,12 @@
+{
+  "id": "jwt-exact-intent-reuse",
+  "rules": [
+    "§9.9.1",
+    "INV-21",
+    "OP-150 m.9 (j)"
+  ],
+  "description": "An exact-intent token presented twice with fresh proofs: count = 1, the second presentation adds no effect.",
+  "mode": "jwt",
+  "repeat": 2,
+  "expect": "effect"
+}

@@ -72,6 +72,42 @@ pub enum Reply {
     },
 }
 
+/// The RAR kind of the token in `introspection` and `jwt` modes (§9.9.1).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum TokenKind {
+    /// Exact-intent token, `count = 1`.
+    #[default]
+    Intent,
+    /// Bounds token.
+    Bounds,
+}
+
+/// How the `DPoP` proofs of a case are made (§10.4.3, IDP-11).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum Dpop {
+    /// One fresh proof per presentation, signed by the holder key.
+    #[default]
+    Fresh,
+    /// The same proof for every presentation.
+    Replayed,
+    /// No proof at all: a bearer presentation.
+    Missing,
+    /// Proofs signed by a key that is not the one the token is bound to.
+    OtherKey,
+}
+
+/// A fault built into the token itself.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum TokenFault {
+    /// Padded past 8 KiB (OP-150 m.3 (s)).
+    Oversized,
+    /// The token's `aud` is another resource server (§9.9.3 rule 1).
+    OtherAudience,
+}
+
 /// One fault scenario.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -102,6 +138,18 @@ pub struct Case {
     /// Status list answer; healthy when absent.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub status_list: Option<Reply>,
+    /// The token's RAR kind; exact-intent when absent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<TokenKind>,
+    /// How the `DPoP` proofs are made; fresh when absent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dpop: Option<Dpop>,
+    /// A fault built into the token.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub token: Option<TokenFault>,
+    /// How many times the token is presented; once when absent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub repeat: Option<u32>,
     /// The expected effect.
     pub expect: Expect,
 }
@@ -150,6 +198,16 @@ impl Case {
         };
         if !used || (self.mode != Mode::Jwt && self.status_list.is_some()) {
             return Err("an upstream the mode does not call is configured");
+        }
+        let token_options = self.kind.is_some()
+            || self.dpop.is_some()
+            || self.token.is_some()
+            || self.repeat.is_some();
+        if self.mode == Mode::Decision && token_options {
+            return Err("a token option on a decision case");
+        }
+        if self.repeat == Some(0) {
+            return Err("repeat must be at least 1");
         }
         Ok(())
     }

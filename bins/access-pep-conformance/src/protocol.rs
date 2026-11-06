@@ -61,6 +61,30 @@ pub struct Request {
     /// The access token in `introspection` and `jwt` modes.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub token: Option<String>,
+    /// The method of the request the token is presented with.
+    #[serde(default = "default_method")]
+    pub method: String,
+    /// The URI of the request the token is presented with, as the resource server sees it.
+    #[serde(default = "default_uri")]
+    pub uri: String,
+    /// The `DPoP` proofs, one per presentation; empty when the request carries none.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub proofs: Vec<String>,
+    /// How many times the same token is presented; the effect is allowed at most once.
+    #[serde(default = "one")]
+    pub repeat: u32,
+}
+
+fn default_method() -> String {
+    String::from("POST")
+}
+
+fn default_uri() -> String {
+    String::from("https://rs.example/doors/1")
+}
+
+const fn one() -> u32 {
+    1
 }
 
 /// One case as the adapter sees it.
