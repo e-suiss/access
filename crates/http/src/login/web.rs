@@ -192,6 +192,45 @@ pub(super) async fn realm<D: Directory, K: Keys, KI, C, M>(
     }
 }
 
+/// The Frontend API is same-origin only (OP-150 m.3 (r), §14.5, CSRF): a state-changing request
+/// that names an `Origin` must name the realm host over `https`, and one that names a
+/// `Sec-Fetch-Site` must be `same-origin` or `none` (a direct navigation or a product's own
+/// client). No CORS is ever granted, so a browser on another origin never gets past its
+/// preflight; this check refuses what a browser sends without one. Cookies are `__Host-`,
+/// `Secure`, `HttpOnly`, `SameSite=Lax` (`domain::session::set_cookie`).
+pub(super) fn same_origin(headers: &HeaderMap) -> Result<(), Response> {
+    let host = headers
+        .get(header::HOST)
+        .and_then(|h| h.to_str().ok())
+        .unwrap_or_default();
+    let cross = || {
+        problem(
+            StatusCode::FORBIDDEN,
+            "cross-site",
+            "The request did not come from this site",
+        )
+    };
+    if let Some(origin) = headers.get(header::ORIGIN) {
+        let ok = origin
+            .to_str()
+            .ok()
+            .and_then(|o| o.strip_prefix("https://"))
+            .is_some_and(|o| !o.is_empty() && o.eq_ignore_ascii_case(host));
+        if !ok {
+            return Err(cross());
+        }
+    }
+    if let Some(site) = headers.get("sec-fetch-site") {
+        let ok = site
+            .to_str()
+            .is_ok_and(|s| s == "same-origin" || s == "none");
+        if !ok {
+            return Err(cross());
+        }
+    }
+    Ok(())
+}
+
 /// A state-changing request carries JSON, so a cross-site form cannot send it without a
 /// preflight this surface never answers.
 pub(super) fn json_only(headers: &HeaderMap) -> Result<(), Response> {
@@ -255,7 +294,7 @@ macro_rules! handler {
                 Ok(e) => e,
                 Err(r) => return r,
             };
-            if $write && let Err(r) = json_only(&$headers) {
+            if $write && let Err(r) = same_origin(&$headers).and_then(|()| json_only(&$headers)) {
                 return r;
             }
             let jar = Jar::of(&$headers, peer);

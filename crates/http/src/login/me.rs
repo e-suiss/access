@@ -26,7 +26,7 @@ use axum::routing::{get, post};
 use axum::{Extension, Router};
 use serde::de::DeserializeOwned;
 
-use super::web::{Jar, json_only, problem, realm, send};
+use super::web::{Jar, json_only, problem, realm, same_origin, send};
 use super::{Peer, Shared, idempotency};
 
 struct Me<D, K, KI, C, M, A, I> {
@@ -127,6 +127,9 @@ macro_rules! handler {
                 Ok(e) => e,
                 Err(r) => return r,
             };
+            if $write && let Err(r) = same_origin(&$headers) {
+                return r;
+            }
             if $write && !$bytes.is_empty() && let Err(r) = json_only(&$headers) {
                 return r;
             }

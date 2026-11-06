@@ -241,6 +241,7 @@
           "invalid-proof-of-possession",
           "invalid-party",
           "instance-not-registered",
+          "instance-exists",
           "instance-not-terminated",
           "invalid-request",
           "invalid-content",
@@ -483,7 +484,7 @@
                 }
               }
             },
-            "description": "The authority plane did not open the Instance (instance-not-registered)."
+            "description": "The session already has an active device Instance (instance-exists; INV-13: one per session and realm), or the authority plane did not open the Instance (instance-not-registered)."
           },
           "503": {
             "content": {

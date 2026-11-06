@@ -163,6 +163,23 @@ fn parsed(body: &InstanceRegistration) -> Option<Parsed> {
     })
 }
 
+/// The active device Instance `session` registered, if any (INV-13, §7.1, §12.12/7: at most one
+/// per session and realm).
+async fn session_instance(
+    db: &access_store::Pool,
+    kit: &RealmKit,
+    session: &[u8; 16],
+) -> Result<Option<[u8; 16]>, Reply> {
+    let mut t = TenantTx::begin(db, kit.tenant, kit.realm)
+        .await
+        .map_err(|_| unavailable())?;
+    let i = access_store::issuer::session_instance(&mut t, session)
+        .await
+        .map_err(|_| unavailable())?;
+    t.commit().await.map_err(|_| unavailable())?;
+    Ok(i)
+}
+
 /// The Party the subject's device Instances belong to (OP-149 m.16 (a)).
 async fn bound_party(
     db: &access_store::Pool,
@@ -408,6 +425,19 @@ where
         };
         if !fits {
             return problem(400, "invalid-party", "The Party is not this user's");
+        }
+        // INV-13, §7.1, §12.12/7: one human Instance per session and realm; renewing the
+        // session is not a new Instance
+        match session_instance(&self.db, &kit, &proven.session.id).await {
+            Ok(None) => {}
+            Ok(Some(_)) => {
+                return problem(
+                    409,
+                    "instance-exists",
+                    "This sign-in already has a device; remove it first",
+                );
+            }
+            Err(r) => return r,
         }
         let verdict = devices
             .instances

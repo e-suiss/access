@@ -7,6 +7,8 @@ use access_store::sessions::{NewFlow, SessionRow};
 
 use super::signin::{Started, StepOptions};
 use super::{Auth, audit, decode32, encode, i64_of, partition, u64_of};
+use access_identity_account::app::claims::emit;
+use access_identity_account::domain::claims::authentication_ended;
 use access_identity_account::ports::AccountTx;
 
 use super::Notifier;
@@ -126,9 +128,11 @@ where
         Ok(status)
     }
 
-    /// Signs this browser out (§12.0.3): the session ends and issues nothing more (G57). The
-    /// returned `Set-Cookie` clears the cookie. Ending the Instances behind it is Stage 6
-    /// cleanup (OP-146 m.4 (i)); security rests on the session ending here.
+    /// Signs this browser out (§12.0.3, §8.5 S10, X36): the session ends and issues nothing
+    /// more (G57), and its `authentication` line ends with it, so the Instances it bound meet no
+    /// freshness term from this session (§7.1). Other sessions, Instances and delegations are
+    /// untouched; the Instances themselves end only by their own `instance.terminate`. The
+    /// returned `Set-Cookie` clears the cookie.
     ///
     /// # Errors
     /// [`SessionError`].
@@ -141,6 +145,7 @@ where
         {
             let target = self.external(row.subject)?;
             audit(&mut tx, "session.signed_out", &target, &target, correlation).await?;
+            emit(&mut tx, &authentication_ended(row.subject, row.id, now)).await?;
         }
         tx.commit().await?;
         Ok(clear_cookie(SESSION_COOKIE))
@@ -157,7 +162,9 @@ where
         actor: &str,
         correlation: &str,
     ) -> Result<i64, SessionError> {
+        let now = self.now();
         let mut tx = self.begin().await?;
+        let live = tx.live_sessions(subject).await?;
         let epoch = tx
             .end_sessions(subject)
             .await?
@@ -173,6 +180,9 @@ where
             correlation,
         )
         .await?;
+        for row in live {
+            emit(&mut tx, &authentication_ended(subject, row.id, now)).await?;
+        }
         tx.commit().await?;
         Ok(epoch)
     }

@@ -194,6 +194,27 @@ fn identity_binding_carries_the_proof_digest_only() {
 // IDP-2, K04: adding and removing an authenticator are lines of authenticator_binding Claims
 // about the Party; a removal supersedes the last Claim and holds for no time, and neither binds a
 // new Instance
+// §7.1, §12.0.3, X36, OP-150 L6: a session's authentications form one line; signing out ends
+// it with a Claim that holds for no time, and nothing else
+#[test]
+fn sign_out_ends_the_sessions_authentication_line() {
+    let session = [0x5e; 16];
+    let signed = login(Bind::Session(session));
+    assert_eq!(signed.line, Some(authentication_line(&session)));
+    assert_eq!(login(Bind::Instance([6; 16])).line, None);
+    assert_eq!(login(Bind::Statement([7; 32])).line, None);
+    let ended = authentication_ended(SUBJECT, session, 900);
+    assert!(ended.retract);
+    assert_eq!(ended.class, "authentication");
+    assert_eq!(ended.line, signed.line);
+    assert_eq!(ended.bind, Bind::Session(session));
+    let p = ended.prepare(&placement(1_000)).unwrap();
+    assert_eq!(p.statement.validity.from, p.statement.validity.until);
+    assert!(p.body.is_none());
+    let back = ClaimOrder::from_bytes(&ended.to_bytes().unwrap()).unwrap();
+    assert_eq!(back, ended);
+}
+
 #[test]
 fn removal_ends_the_authenticator_line() {
     let added = passkey();

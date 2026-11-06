@@ -9,6 +9,7 @@ pub mod login;
 pub mod metadata;
 pub mod request;
 pub mod scope;
+pub mod step_up;
 pub mod suiss;
 pub mod tokens;
 

@@ -199,12 +199,24 @@ pub struct AuthFacts {
     pub bind: Bind,
 }
 
+/// The line of a session's `authentication` Claims: a step-up supersedes the login, and the
+/// sign-out ends the line (§7.1, §12.0.3, OP-150 L6).
+#[must_use]
+pub fn authentication_line(session: &[u8; 16]) -> [u8; 32] {
+    line(&[b"authentication", session])
+}
+
 /// The `authentication` Claim of a login, a step-up or an approval (§10.1.5, F17, TN-103). Bound
-/// to an approved statement, the body carries H(AAS) too.
+/// to an approved statement, the body carries H(AAS) too. Bound to a session, it is in that
+/// session's line.
 #[must_use]
 pub fn authentication(f: AuthFacts) -> ClaimOrder {
     let statement = match f.bind {
         Bind::Statement(d) => Some(Digest(d)),
+        _ => None,
+    };
+    let line = match f.bind {
+        Bind::Session(s) => Some(authentication_line(&s)),
         _ => None,
     };
     ClaimOrder {
@@ -225,8 +237,27 @@ pub fn authentication(f: AuthFacts) -> ClaimOrder {
         },
         assurance: f.assurance,
         bind: f.bind,
-        line: None,
+        line,
         retract: false,
+    }
+}
+
+/// The order that ends a session's `authentication` line when the session ends (§12.0.3,
+/// §7.1 "actor-binding tazeliği", OP-150 L6): its last Claim is superseded by one that holds
+/// for no time, so the Instances the session bound meet no freshness term from it. Nothing else
+/// is touched: other sessions, Instances and delegations stay (X36).
+#[must_use]
+pub fn authentication_ended(subject: [u8; 16], session: [u8; 16], at: u64) -> ClaimOrder {
+    ClaimOrder {
+        subject,
+        class: Class::Authentication.name(),
+        at,
+        ttl_ms: 0,
+        content: Content::Scalar(EqValue::Bytes(vec![0; 32])),
+        assurance: BTreeMap::new(),
+        bind: Bind::Session(session),
+        line: Some(authentication_line(&session)),
+        retract: true,
     }
 }
 

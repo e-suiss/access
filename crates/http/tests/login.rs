@@ -469,11 +469,25 @@ impl Web {
         body: Option<Value>,
         key: Option<&str>,
     ) -> Answer {
+        self.send_with(method, path, body, key, &[]).await
+    }
+
+    async fn send_with(
+        &mut self,
+        method: &str,
+        path: &str,
+        body: Option<Value>,
+        key: Option<&str>,
+        extra: &[(&str, &str)],
+    ) -> Answer {
         let mut req = Request::builder()
             .method(method)
             .uri(path)
             .header(header::HOST, &self.host)
             .header("x-request-id", "req-1");
+        for (name, value) in extra {
+            req = req.header(*name, *value);
+        }
         if !self.jar.is_empty() {
             let cookies: Vec<String> = self.jar.iter().map(|(k, v)| format!("{k}={v}")).collect();
             req = req.header(header::COOKIE, cookies.join("; "));
@@ -1025,9 +1039,106 @@ async fn devices_bind_the_session_party(e: &Env, c: &mut Web) {
     assert_eq!(again.json()["code"], "invalid-party");
     let (_, other) = register(&b64url_encode(&[6; 16]), false).await;
     assert_eq!(other.json()["code"], "invalid-party");
+    // INV-13, §7.1, §12.12/7: the session already binds an active Instance; a new key is not a
+    // renewal of it
     let (_, next) = register(&party, false).await;
-    assert_eq!(next.status, StatusCode::CREATED);
+    assert_eq!(next.status, StatusCode::CONFLICT);
+    assert_eq!(next.json()["code"], "instance-exists");
     device_key_claims(e, c).await;
+}
+
+// OP-150 m.3 (r), §14.5, CSRF: the Frontend API is same-origin only. A state-changing request
+// from another origin or site is refused before anything runs; no CORS is granted, so a
+// preflight gets nothing; the cookies are __Host-, Secure, HttpOnly and SameSite
+#[tokio::test]
+async fn the_frontend_api_is_same_origin_only() {
+    let e = env(43, "lg-so", AuthPolicy::DEFAULT).await;
+    e.account("alice@example.com").await;
+    let mut b = e.browser("b");
+    let signed = b.sign_in("alice@example.com").await;
+    assert_eq!(signed.status, StatusCode::OK);
+    let set: Vec<String> = signed
+        .headers
+        .get_all(header::SET_COOKIE)
+        .iter()
+        .map(|v| v.to_str().unwrap().to_owned())
+        .collect();
+    let session = set
+        .iter()
+        .find(|c| c.starts_with("__Host-access-session="))
+        .unwrap();
+    for attr in ["Secure", "HttpOnly", "SameSite=Lax", "Path=/"] {
+        assert!(session.contains(attr), "{session}");
+    }
+    assert!(!session.contains("Domain="));
+
+    for (name, value) in [
+        ("origin", "https://evil.example"),
+        ("origin", "http://acme.example"),
+        ("origin", "null"),
+        ("sec-fetch-site", "cross-site"),
+        ("sec-fetch-site", "same-site"),
+    ] {
+        let key = b.key();
+        for path in [
+            "/v1/sessions/current/sign-out",
+            "/v1/account/totp",
+            "/v1/me/auth-context",
+            "/v1/me/instances/challenges",
+        ] {
+            let r = b
+                .send_with("POST", path, None, Some(&key), &[(name, value)])
+                .await;
+            assert_eq!(r.status, StatusCode::FORBIDDEN, "{name}: {value} {path}");
+            assert_eq!(r.json()["code"], "cross-site");
+            assert!(r.headers.get("access-control-allow-origin").is_none());
+        }
+    }
+    // the session survived every refusal
+    assert_eq!(b.get("/v1/sessions/current").await.status, StatusCode::OK);
+    // a same-origin request names the realm host over https, or a direct navigation
+    for extra in [
+        [("origin", "https://acme.example")],
+        [("sec-fetch-site", "same-origin")],
+        [("sec-fetch-site", "none")],
+    ] {
+        let key = b.key();
+        let r = b
+            .send_with("POST", "/v1/me/auth-context", None, Some(&key), &extra)
+            .await;
+        assert_eq!(r.status, StatusCode::OK, "{extra:?}");
+    }
+    // no CORS: a preflight is answered by nobody and no response names another origin
+    let key = b.key();
+    let preflight = b
+        .send_with(
+            "OPTIONS",
+            "/v1/me/auth-context",
+            None,
+            Some(&key),
+            &[
+                ("origin", "https://evil.example"),
+                ("access-control-request-method", "POST"),
+            ],
+        )
+        .await;
+    assert!(preflight.status.is_client_error(), "{}", preflight.status);
+    assert!(
+        preflight
+            .headers
+            .get("access-control-allow-origin")
+            .is_none()
+    );
+    let page = b
+        .send_with(
+            "GET",
+            "/v1/sessions/current",
+            None,
+            None,
+            &[("origin", "https://evil.example")],
+        )
+        .await;
+    assert!(page.headers.get("access-control-allow-origin").is_none());
 }
 
 /// The queued Claim orders once `ready` holds for them; the outbox shows a row only once every

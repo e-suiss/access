@@ -31,6 +31,7 @@ use access_identity_account::app::hasher::{Hasher, HasherConfig};
 use access_identity_account::app::local::LocalLimiter;
 use access_identity_account::app::login::LoginGate;
 use access_identity_account::app::{Actor, Realm};
+use access_identity_account::domain::claims::{Bind, authentication_line};
 use access_identity_account::domain::identifier::{Identifier, IdentifierKind};
 use access_identity_account::domain::login::REJECTED;
 use access_identity_account::domain::password::Argon2Params;
@@ -485,6 +486,21 @@ async fn a_password_opens_a_session_and_sign_out_ends_it() {
         SessionStatus::Invalid(SessionCheck::Ended)
     );
     assert_eq!(status(&e, "not-a-cookie").await, SessionStatus::Unknown);
+    // §12.0.3, §7.1, X36, OP-150 L6: the sign-out ends the session's authentication line and
+    // nothing else; the login's Claim and the retraction share the line
+    let orders = claim_orders(&e, |o| o.iter().any(|x| x.retract)).await;
+    let line = authentication_line(&s.session);
+    let signed = orders
+        .iter()
+        .find(|o| !o.retract && o.class == "authentication")
+        .unwrap();
+    assert_eq!(signed.line, Some(line));
+    let ended = orders.iter().find(|o| o.retract).unwrap();
+    assert_eq!(ended.class, "authentication");
+    assert_eq!(ended.line, Some(line));
+    assert_eq!(ended.bind, Bind::Session(s.session));
+    assert_eq!(ended.subject, alice);
+    assert_eq!(orders.iter().filter(|o| o.retract).count(), 1);
 }
 
 // TN-36
