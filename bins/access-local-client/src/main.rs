@@ -22,9 +22,13 @@
 //! access-local-client stream-status --api <base> --issuer <platform issuer> --ca <ca.crt>
 //!     --client-id <id> --client-key <private.jwk> --stream <id> [--status <enabled|paused|disabled>
 //!     [--reason <text>]] [--connect <ip:port>]
-//! access-local-client service-token --issuer <platform issuer> --ca <ca.crt> --client-id <id>
-//!     --client-key <private.jwk> --resource <the other product's client_id> [--connect <ip:port>]
+//! access-local-client service-token --issuer <the caller's realm issuer> --ca <ca.crt>
+//!     --client-id <id> --client-key <private.jwk> --resource <the product's client_id>
+//!     [--connect <ip:port>]
 //! ```
+//!
+//! `service-token` serves a platform product (OP-149 m.31 (a)) and a tenant realm's
+//! `private_key_jwt` API client (m.34 (b)) alike: the issuer is the caller's realm.
 
 use std::collections::BTreeMap;
 use std::net::SocketAddr;

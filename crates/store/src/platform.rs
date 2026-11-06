@@ -261,6 +261,68 @@ impl TenantTx {
         .await?)
     }
 
+    /// The pairwise `sub` the client `sector` reads of the realm's client `client` (OP-149
+    /// m.34 (b), MD-10): the stored one, else `candidate`, stored now; `None` when `client` is not
+    /// a client of this realm.
+    ///
+    /// # Errors
+    /// [`StoreError`].
+    pub async fn client_pairwise(
+        &mut self,
+        client: [u8; 16],
+        sector: [u8; 16],
+        candidate: &str,
+    ) -> Result<Option<String>, StoreError> {
+        let (tenant, realm) = scope(self)?;
+        sqlx::query!(
+            "INSERT INTO access.client_subjects (tenant_id, realm_id, client_uuid, sector, value)
+             SELECT $1, $2, $3, $4, $5
+              WHERE EXISTS (SELECT 1 FROM access.idp_clients
+                             WHERE tenant_id = $1 AND realm_id = $2 AND client_uuid = $3)
+             ON CONFLICT (tenant_id, realm_id, client_uuid, sector) DO NOTHING",
+            tenant,
+            realm,
+            Uuid::from_bytes(client),
+            Uuid::from_bytes(sector),
+            candidate,
+        )
+        .execute(&mut *self.tx)
+        .await?;
+        Ok(sqlx::query_scalar!(
+            "SELECT value FROM access.client_subjects
+              WHERE tenant_id = $1 AND realm_id = $2 AND client_uuid = $3 AND sector = $4",
+            tenant,
+            realm,
+            Uuid::from_bytes(client),
+            Uuid::from_bytes(sector),
+        )
+        .fetch_optional(&mut *self.tx)
+        .await?)
+    }
+
+    /// The realm's client whose pairwise `sub` for `sector` is `value` (OP-149 m.34 (b), A11).
+    ///
+    /// # Errors
+    /// [`StoreError`].
+    pub async fn client_by_pairwise(
+        &mut self,
+        sector: [u8; 16],
+        value: &str,
+    ) -> Result<Option<[u8; 16]>, StoreError> {
+        let (tenant, realm) = scope(self)?;
+        Ok(sqlx::query_scalar!(
+            "SELECT client_uuid FROM access.client_subjects
+              WHERE tenant_id = $1 AND realm_id = $2 AND sector = $3 AND value = $4",
+            tenant,
+            realm,
+            Uuid::from_bytes(sector),
+            value,
+        )
+        .fetch_optional(&mut *self.tx)
+        .await?
+        .map(|u| *u.as_bytes()))
+    }
+
     /// The platform Party whose pairwise `sub` for `sector` is `value` (OP-149 m.31 (a), A11).
     ///
     /// # Errors

@@ -79,7 +79,10 @@ impl OAuthDb for NoDb {
         Err(Unavailable)
     }
 
-    async fn platform_product(&self, _: &str) -> Result<Option<String>, Unavailable> {
+    async fn platform_product(
+        &self,
+        _: &str,
+    ) -> Result<Option<access_store::idp::PlatformClient>, Unavailable> {
         Err(Unavailable)
     }
 }

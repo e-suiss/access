@@ -367,11 +367,18 @@ pub fn resolve_request(body: &[u8]) -> Result<ResolveRequest, BadRequest> {
 #[must_use]
 pub fn resolution_json(req: &ResolveRequest, found: &super::ports::Resolved) -> Value {
     use super::ports::SubjectQuery;
-    let pairs: Vec<Value> = found
+    let mut pairs: Vec<Value> = found
         .pairs
         .iter()
         .map(|(p, s)| json!({ "party": b64url_encode(p), "sub": s }))
         .collect();
+    // OP-149 m.34 (b): a client without a Party resolves to its client_id
+    pairs.extend(
+        found
+            .clients
+            .iter()
+            .map(|(c, s)| json!({ "client_id": c, "sub": s })),
+    );
     let unknown: Vec<Value> = match &req.lookup {
         SubjectQuery::Parties(list) => list
             .iter()
@@ -380,7 +387,10 @@ pub fn resolution_json(req: &ResolveRequest, found: &super::ports::Resolved) -> 
             .collect(),
         SubjectQuery::Subs(list) => list
             .iter()
-            .filter(|s| !found.pairs.iter().any(|(_, t)| t == *s))
+            .filter(|s| {
+                !found.pairs.iter().any(|(_, t)| t == *s)
+                    && !found.clients.iter().any(|(_, t)| t == *s)
+            })
             .map(|s| Value::from(s.as_str()))
             .collect(),
     };

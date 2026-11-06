@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT client_uuid, platform_product FROM access.idp_clients\n          WHERE client_id = $1 AND platform_product IS NOT NULL AND status = 'active'",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "client_uuid",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.idp_clients",
+            "name": "client_uuid"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "platform_product",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.idp_clients",
+            "name": "platform_product"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      true
+    ]
+  },
+  "hash": "d222f94c295f46c820e84d61ab528e82cc35a154d8031a65534b20b0080eccf1"
+}

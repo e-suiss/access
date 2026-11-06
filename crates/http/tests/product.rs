@@ -315,6 +315,7 @@ impl Subjects for People {
             return Ok(None);
         }
         let known = [2_u8, 4];
+        let mut clients = Vec::new();
         let pairs = match lookup {
             SubjectQuery::Parties(list) => list
                 .into_iter()
@@ -324,6 +325,10 @@ impl Subjects for People {
             SubjectQuery::Subs(list) => list
                 .into_iter()
                 .filter_map(|s| {
+                    if s == sub_of(7) {
+                        clients.push((String::from("cli_seven"), s));
+                        return None;
+                    }
                     known
                         .iter()
                         .find(|n| sub_of(**n) == s)
@@ -333,6 +338,7 @@ impl Subjects for People {
         };
         Ok(Some(Resolved {
             pairs,
+            clients,
             consistency: "ct-7".to_owned(),
         }))
     }
@@ -472,16 +478,20 @@ async fn subjects_resolve_both_ways() {
     );
     assert_eq!(v["unknown"], json!([b64url_encode(&[3; 16])]));
     assert_eq!(v["consistency_token"], "ct-7");
+    // OP-149 m.34 (b): a sub that is a Party-less client's pseudonym names the client
     let back = json!({
         "realm": "a1a1a1a1-a1a1-a1a1-a1a1-a1a1a1a1a1a1",
         "client_id": "cli_relay",
-        "subs": [sub_of(4), sub_of(9)],
+        "subs": [sub_of(4), sub_of(9), sub_of(7)],
     });
     let (_, _, body) = call(app(true), resolve_request(&back)).await;
     let v: Value = serde_json::from_slice(&body).unwrap();
     assert_eq!(
         v["resolved"],
-        json!([{ "party": b64url_encode(&[4; 16]), "sub": sub_of(4) }])
+        json!([
+            { "party": b64url_encode(&[4; 16]), "sub": sub_of(4) },
+            { "client_id": "cli_seven", "sub": sub_of(7) },
+        ])
     );
     assert_eq!(v["unknown"], json!([sub_of(9)]));
     let many: Vec<String> = (0..101_u8).map(|n| b64url_encode(&[n; 16])).collect();

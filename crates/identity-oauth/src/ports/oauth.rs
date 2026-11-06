@@ -9,7 +9,7 @@ use access_crypto::jose::JwsAlg;
 use access_crypto::opaque_id::IdKey;
 use access_store::backchannel::LogoutUndelivered;
 use access_store::identity::{Cursor, OutboxEvent, RealmId, TenantId};
-use access_store::idp::ClientRow;
+use access_store::idp::{ClientRow, PlatformClient};
 use access_store::oauth::{
     CodeRow, GrantRow, NewCode, NewGrant, NewRequest, RefreshRow, RequestRow,
 };
@@ -175,6 +175,14 @@ pub trait OAuthTx: Send {
         sector: [u8; 16],
         candidate: &str,
     ) -> impl Future<Output = Result<Option<String>, Unavailable>> + Send;
+    /// The pairwise value the client `sector` reads of this realm's client `client`, stored on
+    /// first use (OP-149 m.34 (b), MD-10); `None` when `client` is not a client here.
+    fn client_pairwise(
+        &mut self,
+        client: [u8; 16],
+        sector: [u8; 16],
+        candidate: &str,
+    ) -> impl Future<Output = Result<Option<String>, Unavailable>> + Send;
     /// Writes an identity audit row in this transaction (OP-10, OP-39): identifiers only.
     fn audit(
         &mut self,
@@ -197,12 +205,12 @@ pub trait OAuthDb: Send + Sync {
         tenant: TenantId,
         realm: RealmId,
     ) -> impl Future<Output = Result<Self::Tx, Unavailable>> + Send;
-    /// The product of the active platform product client `client_id`, in whichever tenant it
-    /// is registered (OP-149 m.26 (a)); `None` for any other client id.
+    /// The active platform product client `client_id`, in whichever tenant it is registered
+    /// (OP-149 m.26 (a), m.34 (b)); `None` for any other client id.
     fn platform_product(
         &self,
         client_id: &str,
-    ) -> impl Future<Output = Result<Option<String>, Unavailable>> + Send;
+    ) -> impl Future<Output = Result<Option<PlatformClient>, Unavailable>> + Send;
 }
 
 /// Type prefix of a tenant's opaque external id (OP-137, OP-149 m.15 (i)): every product-facing

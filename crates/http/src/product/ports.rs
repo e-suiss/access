@@ -136,8 +136,11 @@ pub enum SubjectQuery {
 /// The pairs a resolution found, read at or after `consistency`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Resolved {
-    /// `(party, sub)` for every entry that resolved.
+    /// `(party, sub)` for every entry that resolved to a Party.
     pub pairs: Vec<([u8; 16], String)>,
+    /// `(client_id, sub)` for every `sub` that is the pairwise pseudonym of a client of the realm
+    /// without a Party: the `sub` of its service tokens (OP-149 m.34 (b)).
+    pub clients: Vec<(String, String)>,
     /// The governing domain's head before the read, as an opaque token (OP-141 m.22 (f)).
     pub consistency: String,
 }

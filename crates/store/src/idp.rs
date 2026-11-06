@@ -391,23 +391,39 @@ pub async fn client(t: &mut TenantTx, client_id: &str) -> Result<Option<ClientRo
     .transpose()
 }
 
-/// The product of the active platform product client `client_id`, in whichever tenant it is
-/// registered, as the outbox reader sees it (OP-149 m.26 (a)); `None` for any other client id.
+/// An active platform product client as the authorization server of any realm sees it (OP-149
+/// m.26 (a), (f), m.34 (b)): its internal id, the pairwise sector of the `sub`s it reads, and its
+/// product.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PlatformClient {
+    /// Internal id.
+    pub client_uuid: [u8; 16],
+    /// The product (`work`, `relay`, …).
+    pub product: String,
+}
+
+/// The active platform product client `client_id`, in whichever tenant it is registered, as the
+/// outbox reader sees it (OP-149 m.26 (a)); `None` for any other client id.
 ///
 /// # Errors
 /// [`StoreError`].
 pub async fn platform_client_product(
     reader: &sqlx::PgPool,
     client_id: &str,
-) -> Result<Option<String>, StoreError> {
+) -> Result<Option<PlatformClient>, StoreError> {
     let row = sqlx::query!(
-        "SELECT platform_product FROM access.idp_clients
+        "SELECT client_uuid, platform_product FROM access.idp_clients
           WHERE client_id = $1 AND platform_product IS NOT NULL AND status = 'active'",
         client_id,
     )
     .fetch_optional(reader)
     .await?;
-    Ok(row.and_then(|r| r.platform_product))
+    Ok(row.and_then(|r| {
+        r.platform_product.map(|product| PlatformClient {
+            client_uuid: *r.client_uuid.as_bytes(),
+            product,
+        })
+    }))
 }
 
 /// The active clients of the realm that registered `redirect_uri` exactly (IDP-7).

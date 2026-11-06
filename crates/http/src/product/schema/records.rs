@@ -25,7 +25,12 @@ pub(super) fn components() -> Value {
                 "client_id": text("The client."),
                 "resolved": {
                     "type": "array",
-                    "items": object(&json!({ "party": b64("PartyID."), "sub": b64("The pairwise `sub` the client sees.") }), &["party", "sub"]),
+                    "items": object(&json!({
+                        "party": b64("PartyID, for a subject with a Party."),
+                        "client_id": text("For a `sub` that is the pairwise pseudonym of a client of the realm without a Party (the `sub` of its service tokens), that client."),
+                        "sub": b64("The pairwise `sub` the client sees."),
+                    }), &["sub"]),
+                    "description": "Each entry carries `sub` and exactly one of `party` and `client_id`.",
                 },
                 "unknown": { "type": "array", "items": { "type": "string" }, "description": "The entries asked for that did not resolve, as given." },
                 "consistency_token": text("Opaque; the governing domain's head before the read."),

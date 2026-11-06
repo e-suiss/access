@@ -8,7 +8,7 @@ use access_identity_signer::service::UNKNOWN_REALM;
 use access_store::Pool;
 use access_store::backchannel::LogoutUndelivered;
 use access_store::identity::{self, Cursor, OutboxEvent, RealmId, TenantId, TenantTx};
-use access_store::idp::{self, ClientRow};
+use access_store::idp::{self, ClientRow, PlatformClient};
 use access_store::oauth::{
     CodeRow, GrantRow, NewCode, NewGrant, NewRequest, RefreshRow, RequestRow,
 };
@@ -64,7 +64,10 @@ impl OAuthDb for PgOAuth {
             .map_err(down)
     }
 
-    async fn platform_product(&self, client_id: &str) -> Result<Option<String>, Unavailable> {
+    async fn platform_product(
+        &self,
+        client_id: &str,
+    ) -> Result<Option<PlatformClient>, Unavailable> {
         let Some(reader) = &self.reader else {
             return Ok(None);
         };
@@ -252,6 +255,18 @@ impl OAuthTx for PgOAuthTx {
     ) -> Result<Option<String>, Unavailable> {
         self.0
             .platform_party_pairwise(party, sector, candidate)
+            .await
+            .map_err(down)
+    }
+
+    async fn client_pairwise(
+        &mut self,
+        client: [u8; 16],
+        sector: [u8; 16],
+        candidate: &str,
+    ) -> Result<Option<String>, Unavailable> {
+        self.0
+            .client_pairwise(client, sector, candidate)
             .await
             .map_err(down)
     }

@@ -91,8 +91,8 @@ impl PlatformClient<'_> {
         }
     }
 
-    /// `POST {issuer}/token` with `grant_type=client_credentials` and `resource` the other
-    /// product's `client_id` (RFC 8707, OP-149 m.31 (a)): the identity-assertion service token,
+    /// `POST {issuer}/token` with `grant_type=client_credentials` and `resource` the product's
+    /// `client_id` (RFC 8707, OP-149 m.31 (a), m.34 (b)): the identity-assertion service token,
     /// DPoP-bound to the client key itself, once more with the server's nonce when it asks for
     /// one. The answer carries `dpop_jkt`, the key the token is bound to.
     ///

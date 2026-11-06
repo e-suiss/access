@@ -122,6 +122,7 @@ impl<D: Consistency> Subjects for PgSubjects<D> {
             .await
             .map_err(down)?;
         let mut pairs = Vec::new();
+        let mut clients = Vec::new();
         // OP-149 m.31 (a): a platform product's service Party resolves like a user's, to the
         // pairwise value its service tokens carry
         match lookup {
@@ -156,12 +157,22 @@ impl<D: Consistency> Subjects for PgSubjects<D> {
                         .map_err(down)?
                     {
                         pairs.push((party, sub));
+                    } else if let Some(uuid) =
+                        t.client_by_pairwise(sector, &sub).await.map_err(down)?
+                        && let Some(c) = idp::client_by_uuid(&mut t, uuid).await.map_err(down)?
+                    {
+                        // OP-149 m.34 (b)
+                        clients.push((c.client_id, sub));
                     }
                 }
             }
         }
         t.commit().await.map_err(down)?;
-        Ok(Some(Resolved { pairs, consistency }))
+        Ok(Some(Resolved {
+            pairs,
+            clients,
+            consistency,
+        }))
     }
 }
 

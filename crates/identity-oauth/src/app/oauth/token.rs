@@ -2,8 +2,8 @@
 //! exchange, refresh rotation and client credentials. Every token request carries a DPoP proof:
 //! there is no bearer access token (TN-27). A request for authority (RFC 9396
 //! `authorization_details`) is a `projection.issue` decision of the authority plane (§9.9);
-//! client credentials exist for it and, between platform products, for the identity-assertion
-//! service token (OP-149 m.31 (a)). ROPC and implicit do not exist; device code is a later
+//! client credentials exist for it and, towards a platform product, for the identity-assertion
+//! service token (OP-149 m.31 (a), m.34 (b)). ROPC and implicit do not exist; device code is a later
 //! stage (OP-146 m.6). A refused request is written to the identity audit log (OP-39).
 
 use access_crypto::dpop::Role;
@@ -181,7 +181,7 @@ impl<E: Env> OAuth<E> {
             }
         };
         if grant_type == Some("client_credentials") {
-            // OP-149 m.31 (a): a product naming another product gets a service token
+            // OP-149 m.31 (a), m.34 (b): a client naming a product gets a service token
             let reply = match self.service_target(realm, &client, params).await? {
                 Some(Ok(target)) => {
                     self.service_token(realm, &client, &target, proof.jkt, now)

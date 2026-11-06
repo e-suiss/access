@@ -287,6 +287,15 @@ impl<E: Env> OAuth<E> {
         self.env.db().begin(realm.tenant, realm.realm).await
     }
 
+    /// The realm's tenant by its opaque `tnt_` id, as every product-facing surface names it
+    /// (OP-149 m.19 (a)); nothing when the cell's id key cannot be used (G50).
+    pub(crate) fn tenant_name(&self, realm: &Realm) -> Result<String, Unavailable> {
+        self.env
+            .tenant_ids()
+            .external(realm.tenant.as_bytes())
+            .ok_or(Unavailable)
+    }
+
     /// The registered platform product client a request's `resource` names, when it names one
     /// (RFC 8707, OP-149 m.26 (a)); the realm issuer names none.
     pub(crate) async fn product_resource(
@@ -429,9 +438,15 @@ impl<E: Env> OAuth<E> {
             .await?;
         let sub = self.pairwise(tx, grant.subject, client.uuid).await?;
         let sid = b64url_encode(&grant.sid);
+        let tenant = if details.resource.is_some() {
+            Some(self.tenant_name(realm)?)
+        } else {
+            None
+        };
         let facts = TokenFacts {
             issuer: &realm.issuer,
             audience: details.audience(&realm.issuer),
+            tenant: tenant.as_deref(),
             client_id: &client.id,
             sub: &sub,
             sid: &sid,
@@ -497,6 +512,7 @@ impl<E: Env> OAuth<E> {
         let facts = TokenFacts {
             issuer: &realm.issuer,
             audience: details.audience(&realm.issuer),
+            tenant: None,
             client_id: &client.id,
             sub: &sub,
             sid: &sid,

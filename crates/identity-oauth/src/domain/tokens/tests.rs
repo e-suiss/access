@@ -112,6 +112,7 @@ fn identity_assertions_have_their_profile() {
     let f = TokenFacts {
         issuer: &issuer,
         audience: issuer.as_str(),
+        tenant: None,
         client_id: "cli_x",
         sub: "pw",
         sid: "sid",
@@ -131,15 +132,19 @@ fn identity_assertions_have_their_profile() {
     let at = claims(&access_token_claims(&f, "openid", "j", "k"));
     assert_eq!(at["aud"], "https://acme.id.test");
     assert_eq!(at["cnf"]["jkt"], "k");
-    // OP-149 m.26 (a): a grant that named a platform product as its resource addresses the
-    // token to that client; cnf stays
+    assert!(!at.contains_key("access_tenant"));
+    // OP-149 m.26 (a), m.34 (a): a grant that named a platform product as its resource
+    // addresses the token to that client and names the tenant; cnf and sid stay
     let product = TokenFacts {
         audience: "cli_work",
+        tenant: Some("tnt_acme"),
         ..f.clone()
     };
     let at_product = claims(&access_token_claims(&product, "openid", "j", "k"));
     assert_eq!(at_product["aud"], "cli_work");
     assert_eq!(at_product["iss"], "https://acme.id.test");
+    assert_eq!(at_product["access_tenant"], "tnt_acme");
+    assert_eq!(at_product["sid"], "sid");
     assert_eq!(at_product["cnf"]["jkt"], "k");
     let details = GrantDetails {
         scope: String::from("openid"),

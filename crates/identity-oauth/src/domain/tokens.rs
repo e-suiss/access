@@ -133,6 +133,9 @@ pub struct TokenFacts<'a> {
     /// The `aud` of the access token: the realm issuer, or the platform product client the
     /// grant named as its RFC 8707 resource (OP-149 m.26 (a)).
     pub audience: &'a str,
+    /// The realm's tenant, `tnt_…`, when the audience is a product: every product-facing
+    /// surface names the tenant (OP-149 m.19 (a), m.34 (a)); `None` for the realm's own token.
+    pub tenant: Option<&'a str>,
     /// The client.
     pub client_id: &'a str,
     /// The pairwise subject (MD-10).
@@ -177,10 +180,11 @@ pub fn id_token_claims(f: &TokenFacts<'_>, nonce: Option<&str>) -> Vec<u8> {
 
 /// The protocol-scope access token claims (RFC 9068 §2.2): one audience, the realm itself or
 /// the registered platform product the grant named as its resource (OP-149 m.26 (a)); always
-/// bound by `cnf.jkt` (TN-27, PI-11).
+/// bound by `cnf.jkt` (TN-27, PI-11). A product's token also names the tenant in
+/// `access_tenant` (OP-149 m.34 (a)); the realm's own does not.
 #[must_use]
 pub fn access_token_claims(f: &TokenFacts<'_>, scope: &str, jti: &str, jkt: &str) -> Vec<u8> {
-    json!({
+    let mut claims = json!({
         "iss": f.issuer.as_str(),
         "sub": f.sub,
         "aud": f.audience,
@@ -194,24 +198,27 @@ pub fn access_token_claims(f: &TokenFacts<'_>, scope: &str, jti: &str, jkt: &str
         "auth_time": secs(f.auth_time_ms),
         "acr": acr(f.aal),
         "cnf": { "jkt": jkt },
-    })
-    .to_string()
-    .into_bytes()
+    });
+    if let (Some(tenant), Value::Object(m)) = (f.tenant, &mut claims) {
+        m.insert("access_tenant".into(), tenant.into());
+    }
+    claims.to_string().into_bytes()
 }
 
 /// Service token lifetime (OP-149 m.31 (a): at most 5 minutes, PD).
 pub const SERVICE_TTL_MS: u64 = 5 * 60 * 1000;
 
-/// The facts behind one platform product's service token for another (OP-149 m.31 (a)).
+/// The facts behind a client's service token for a platform product (OP-149 m.31 (a), m.34 (b)).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ServiceFacts<'a> {
-    /// The realm issuer.
+    /// The realm issuer: the caller's realm.
     pub issuer: &'a Issuer,
     /// The `client_id` of the product the token is for: its one `aud` (AG-8).
     pub audience: &'a str,
-    /// The calling product's `client_id`.
+    /// The caller's `client_id`: a platform product or a tenant realm's confidential client.
     pub client_id: &'a str,
-    /// The pairwise `sub` the audience reads of the caller's service Party (MD-10).
+    /// The pairwise `sub` the audience reads of the caller: of its service Party when it has
+    /// one, else of the client itself (MD-10, OP-149 m.34 (b)).
     pub sub: &'a str,
     /// The caller's tenant, `tnt_…` (OP-149 m.19 (a)).
     pub tenant: &'a str,
@@ -219,9 +226,10 @@ pub struct ServiceFacts<'a> {
     pub now_ms: u64,
 }
 
-/// The claims of a product's identity-assertion service token (RFC 9068 §2.2, OP-149 m.31 (a),
-/// §9 class (ii), E39): who is calling and for whom, bound by `cnf.jkt` (TN-27); no `scope`,
-/// no `authorization_details`, no contract, no family, no session: it carries no authority.
+/// The claims of an identity-assertion service token (RFC 9068 §2.2, OP-149 m.31 (a),
+/// m.34 (b), §9 class (ii), E39): who is calling and for whom, bound by `cnf.jkt` (TN-27); no
+/// `scope`, no `authorization_details`, no contract, no family, no session: it carries no
+/// authority.
 #[must_use]
 pub fn service_token_claims(f: &ServiceFacts<'_>, jti: &str, jkt: &str) -> Vec<u8> {
     json!({

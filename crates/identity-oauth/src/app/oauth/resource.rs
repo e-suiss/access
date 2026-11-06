@@ -25,8 +25,8 @@ use access_internal_api::projections::Projections as _;
 
 use crate::ports::oauth::{OAuthTx, TokenSigner};
 
-/// A verified access token of this realm: a grant's protocol-scope token (`sid`) or a product's
-/// service token (`access_tenant`, OP-149 m.31 (a)).
+/// A verified access token of this realm: a grant's protocol-scope token (`sid`) or a client's
+/// service token for a product (no `sid`, `access_tenant`; OP-149 m.31 (a), m.34 (b)).
 pub(crate) struct AccessToken {
     pub(crate) sub: String,
     /// Its one audience: the realm, or a registered platform product (OP-149 m.26 (a)).
@@ -34,7 +34,8 @@ pub(crate) struct AccessToken {
     pub(crate) client_id: String,
     /// The grant's `sid`; a service token has none.
     pub(crate) sid: Option<[u8; 16]>,
-    /// The caller's `tnt_` tenant of a service token.
+    /// The `tnt_` tenant: of a service token always, of a grant's token when its audience is a
+    /// product (OP-149 m.34 (a)).
     pub(crate) access_tenant: Option<String>,
     pub(crate) jkt: Jkt,
     pub(crate) scope: String,
@@ -105,7 +106,7 @@ impl<E: Env> OAuth<E> {
         else {
             return Ok(None);
         };
-        if sid.is_none() == access_tenant.is_none() {
+        if sid.is_none() && access_tenant.is_none() {
             return Ok(None);
         }
         Ok(Some(AccessToken {
@@ -425,11 +426,23 @@ impl<E: Env> OAuth<E> {
             if at.client_id != client.id || expired || at.aud != details.audience(&realm.issuer) {
                 return Ok(active_false());
             }
+            // OP-149 m.34 (a): a product's token names this realm's tenant, the realm's own none
+            let tenant = if details.resource.is_some() {
+                Some(self.tenant_name(realm)?)
+            } else {
+                None
+            };
+            if at.access_tenant != tenant {
+                return Ok(active_false());
+            }
             m.insert("token_type".into(), "DPoP".into());
             m.insert("scope".into(), at.scope.into());
             m.insert("exp".into(), at.exp.into());
             m.insert("iat".into(), at.iat.into());
             m.insert("aud".into(), at.aud.into());
+            if let Some(t) = tenant {
+                m.insert("access_tenant".into(), t.into());
+            }
             m.insert("cnf".into(), json!({ "jkt": at.jkt.text() }));
             if at.sub != sub {
                 return Ok(active_false());

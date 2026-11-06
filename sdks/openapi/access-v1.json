@@ -2387,14 +2387,17 @@
               "type": "object",
               "additionalProperties": false,
               "required": [
-                "party",
                 "sub"
               ],
               "properties": {
                 "party": {
                   "type": "string",
                   "pattern": "^[A-Za-z0-9_-]+$",
-                  "description": "PartyID."
+                  "description": "PartyID, for a subject with a Party."
+                },
+                "client_id": {
+                  "type": "string",
+                  "description": "For a `sub` that is the pairwise pseudonym of a client of the realm without a Party (the `sub` of its service tokens), that client."
                 },
                 "sub": {
                   "type": "string",
@@ -2402,7 +2405,8 @@
                   "description": "The pairwise `sub` the client sees."
                 }
               }
-            }
+            },
+            "description": "Each entry carries `sub` and exactly one of `party` and `client_id`."
           },
           "unknown": {
             "type": "array",
