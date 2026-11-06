@@ -150,6 +150,28 @@ fn refused(e: &CoreError) -> Verdict {
     }
 }
 
+/// The authority plane could not serve the request; the stable reason travels with it, so a
+/// one-shot job can say why (OP-149 m.28 (a)).
+fn unavailable(e: &CoreError) -> Unavailable {
+    Unavailable(String::from(match e {
+        CoreError::Unavailable(reason) => reason,
+        CoreError::Store(_) => "store",
+        CoreError::Sequencer(_) => "sequencer",
+        other => other.code(),
+    }))
+}
+
+/// A core error as the identity plane's verdict: a refusal with the core's stable code, or
+/// `Err` when the plane could not serve the request at all.
+fn verdict(e: &CoreError) -> Result<Verdict, Unavailable> {
+    match e {
+        CoreError::Unavailable(_) | CoreError::Store(_) | CoreError::Sequencer(_) => {
+            Err(unavailable(e))
+        }
+        other => Ok(refused(other)),
+    }
+}
+
 impl<K, B, S, C> Decider for Plane<K, B, S, C>
 where
     K: Keys + Send + Sync + 'static,
@@ -167,7 +189,7 @@ where
                         code: String::from(ACTOR_BINDING),
                     });
                 }
-                Err(e) => return Ok(refused(&e)),
+                Err(e) => return verdict(&e),
             }
         }
         let request = Request {
@@ -211,7 +233,7 @@ where
         };
         let r = match self.domains.exercise(&inc).await {
             Ok(r) => r,
-            Err(e) => return Ok(refused(&e)),
+            Err(e) => return verdict(&e),
         };
         if r.decision.outcome != Outcome::Allow {
             return Ok(Verdict::NotAllowed {
@@ -353,6 +375,14 @@ where
         pep: String,
     ) -> Result<Verdict, Unavailable> {
         self.commit(request, ais, pep).await
+    }
+
+    async fn lead(&self, domain: Digest) -> Result<(), Unavailable> {
+        // OP-149 m.28 (a)
+        self.domains
+            .take_over(domain)
+            .await
+            .map_err(|e| unavailable(&e))
     }
 }
 

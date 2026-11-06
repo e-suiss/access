@@ -609,7 +609,7 @@ pub(crate) struct Summary {
 }
 
 /// Meta-actions the bootstrap's keys sign, committed by the authority plane with the identity
-/// plane as PEP (EI-25).
+/// plane as PEP (EI-25), on a domain this process leads.
 pub(crate) trait MetaExercises: Send + Sync {
     /// Commits `request` with the actor's `ais` as `pep`.
     fn meta(
@@ -618,6 +618,10 @@ pub(crate) trait MetaExercises: Send + Sync {
         ais: Vec<u8>,
         pep: String,
     ) -> impl Future<Output = Result<Verdict, Unavailable>> + Send;
+
+    /// Leads `domain` in this process before a commit (OP-149 m.28 (a)): a `serve` process
+    /// holding its lease is asked to hand it over, and this waits for the release.
+    fn lead(&self, domain: Digest) -> impl Future<Output = Result<(), Unavailable>> + Send;
 }
 
 /// The ports and stores the bootstrap runs over.
@@ -951,6 +955,7 @@ where
         payload: Payload,
         party: Id,
     ) -> Result<u64, BootstrapError> {
+        self.lead(domain).await?;
         let w = Moment::at(server_time(self.app).await?);
         let intent =
             self_signed_intent(&payload, party, w.validity).ok_or(BootstrapError::Encode)?;
@@ -979,6 +984,14 @@ where
                 Err(BootstrapError::Refused(format!("{:?}", decision.outcome)))
             }
         }
+    }
+
+    /// Leads `domain` in this process before a commit (OP-149 m.28 (a)); a `serve` process
+    /// holding its lease hands it over.
+    async fn lead(&self, domain: Digest) -> Result<(), BootstrapError> {
+        MetaExercises::lead(self.plane, domain)
+            .await
+            .map_err(|e| BootstrapError::Unavailable(e.0))
     }
 
     fn admin<'b>(&'b self, ids: &'b IdKey, platform: Option<TenantId>) -> Admin<'b, P, P, K> {
@@ -1056,6 +1069,7 @@ where
         if self.allowed(domain, &challenge).await? {
             return Ok(());
         }
+        self.lead(domain).await?;
         let w = Moment::at(server_time(self.app).await?);
         let mut r = Registration {
             tenant: *tenant.as_bytes(),
@@ -1178,6 +1192,7 @@ where
             subject: None,
         };
         let prepared = admin.prepare(&proposal).await?;
+        self.lead(prepared.domain).await?;
         let ais = sign(
             root,
             &w.statement(

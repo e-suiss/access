@@ -14,8 +14,8 @@ use access_kernel::model::TrustedTime;
 use access_kernel::record::{Header, Opened, RecordEnvelope, RecordKind, check_link};
 use access_store::Pool;
 use access_store::authority::{
-    CommitBatch, HeadRow, Lease, LogRecord, NonceRow, acquire_lease, commit_batch, create_domain,
-    find_nonce, read_head, read_log, release_lease, renew_lease, server_time,
+    CommitBatch, HeadRow, Lease, LogRecord, NonceRow, Renewal, acquire_lease, commit_batch,
+    create_domain, find_nonce, read_head, read_log, release_lease, renew_lease, server_time,
 };
 use access_store::scope::DomainId;
 use suiss_ledger::time::{TimeError, TrustedClock};
@@ -57,7 +57,7 @@ impl DomainLog for PgLog {
         Ok(acquire_lease(&self.pool, &self.domain, &self.holder, self.ttl).await?)
     }
 
-    async fn renew(&self, lease: Lease) -> Result<(), SequencerError> {
+    async fn renew(&self, lease: Lease) -> Result<Renewal, SequencerError> {
         Ok(renew_lease(&self.pool, &self.domain, &self.holder, lease, self.ttl).await?)
     }
 

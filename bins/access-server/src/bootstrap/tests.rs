@@ -110,10 +110,45 @@ fn identity_signer(name: &str) -> PathBuf {
 struct World {
     db: TestDb,
     plane: TestPlane,
-    domains: Arc<Domains<KeyStore, ActorBindings, OsSalts, SourcesClock>>,
+    domains: Arc<TestDomains>,
     keys: Arc<KeyStore>,
     keyring: RealmKeyring,
     base: RealmBase,
+    module: PathBuf,
+    label: String,
+}
+
+type TestDomains = Domains<KeyStore, ActorBindings, OsSalts, SourcesClock>;
+
+/// One process's authority plane over `db`: its own lease holder name and actor bindings.
+fn process(
+    db: &TestDb,
+    keys: KeyStore,
+    holder: &str,
+    signer: Option<PathBuf>,
+) -> (Arc<TestDomains>, TestPlane) {
+    let actors = ActorBindings::default();
+    let domains = Arc::new(Domains::new(Setup {
+        sequencer: db.sequencer.clone(),
+        app: db.app.clone(),
+        keys,
+        holder: String::from(holder),
+        ttl: LEASE_TTL,
+        binding: actors.clone(),
+        salts: OsSalts,
+        clock: SourcesClock::new(db.sequencer.clone()),
+        deriver: db.deriver.clone(),
+        signer,
+        api_base: String::from("https://access.test"),
+    }));
+    let plane = Plane::new(
+        domains.clone(),
+        db.app.clone(),
+        SourcesClock::new(db.sequencer.clone()),
+        actors,
+    );
+    Box::leak(Box::new(domains.clone()));
+    (domains, plane)
 }
 
 impl World {
@@ -133,27 +168,7 @@ impl World {
         } else {
             (None, None)
         };
-        let actors = ActorBindings::default();
-        let domains = Arc::new(Domains::new(Setup {
-            sequencer: db.sequencer.clone(),
-            app: db.app.clone(),
-            keys: open(),
-            holder: String::from("bootstrap-test"),
-            ttl: LEASE_TTL,
-            binding: actors.clone(),
-            salts: OsSalts,
-            clock: SourcesClock::new(db.sequencer.clone()),
-            deriver: db.deriver.clone(),
-            signer,
-            api_base: String::from("https://access.test"),
-        }));
-        let plane = Plane::new(
-            domains.clone(),
-            db.app.clone(),
-            SourcesClock::new(db.sequencer.clone()),
-            actors,
-        );
-        Box::leak(Box::new(domains.clone()));
+        let (domains, plane) = process(&db, open(), "bootstrap-test", signer);
         let keys = Arc::new(open());
         Box::leak(Box::new(keys.clone()));
         let keyring = RealmKeyring::new(SignerKeys::new(identity_signer(name)), keys.clone());
@@ -164,8 +179,17 @@ impl World {
             keys,
             keyring,
             base: RealmBase::parse("https://access.test").unwrap(),
+            module,
+            label,
         };
         (world, service)
+    }
+
+    /// Another process over the same database and token, as `serve` beside a one-shot job.
+    fn other_process(&self, holder: &str) -> (Arc<TestDomains>, TestPlane) {
+        let pin = Secret::new(String::from(PIN));
+        let keys = KeyStore::open(&self.module, &self.label, &pin).unwrap();
+        process(&self.db, keys, holder, None)
     }
 
     /// A new tenant's realm `slug` with the bootstrap root as founder, created through the
@@ -541,6 +565,92 @@ async fn local_fixtures_are_made_once_and_produce_events() {
             .is_err()
     );
     w.domains.release().await;
+}
+
+// OP-149 m.28 (a), OP-31, TI-2: a one-shot client change commits while another process, as
+// `serve`, leads the platform domain and renews its lease. The lease is not taken from the live
+// leader: it hands the domain over at its next renewal, the one-shot leads it for its commit,
+// and the leader leads again on its next request. A commit without the handoff is unavailable
+// with the reason `lease-held`
+#[tokio::test]
+async fn a_one_shot_change_commits_while_another_process_leads() {
+    use access_authority_core::CoreError;
+    use access_internal_api::instances::{terminate_intent, terminate_payload};
+
+    let w = World::new("bootstrap-handoff").await;
+    let plan = plan();
+    let first = w.run(&plan).await;
+    let platform = first.realms.iter().find(|r| r.platform).unwrap();
+    let domain = Digest(
+        <[u8; 32]>::try_from(access_kernel::json::b64url_decode(&platform.domain).unwrap())
+            .unwrap(),
+    );
+    let (serve, _serve_plane) = w.other_process("serve");
+    serve.consistency(domain).await.unwrap();
+    let renewing = {
+        let serve = Arc::clone(&serve);
+        tokio::spawn(async move {
+            loop {
+                tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                serve.renew().await;
+            }
+        })
+    };
+    assert!(matches!(
+        w.domains.consistency(domain).await,
+        Err(CoreError::Unavailable("lease-held"))
+    ));
+    let instance = Id([7; 16]);
+    let validity = Window {
+        from: 0,
+        until: u64::MAX,
+    };
+    let request = Request {
+        domain,
+        mode: Mode::Commit,
+        nonce: vec![9; 16],
+        intent: terminate_intent(instance, validity).unwrap(),
+        payload: Some(terminate_payload(instance)),
+        basis: bootstrap_basis(&domain),
+        capacity: Capacity::Own,
+        proofs: Vec::new(),
+        exercise: None,
+        consistency: None,
+    };
+    let refused = MetaExercises::meta(&w.plane, request, vec![0xd2], String::from(IDENTITY_PEP))
+        .await
+        .unwrap_err();
+    assert_eq!(refused.0, "lease-held");
+
+    let bootstrap = Bootstrap {
+        app: &w.db.app,
+        router: &w.db.router,
+        plane: &w.plane,
+        realm_keys: &w.keyring,
+        hsm: &w.keys,
+        base: &w.base,
+        declared: &DeclaredTargets::default(),
+    };
+    let updated = bootstrap
+        .change_product_client(
+            &plan,
+            "work",
+            local::ProductChange::Update {
+                display_name: String::from("Suiss Work 2"),
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(updated.event, "api_client.updated");
+    assert_eq!(updated.client_id, first.clients[0].client_id);
+    assert!(matches!(
+        serve.consistency(domain).await,
+        Err(CoreError::Unavailable("lease-held"))
+    ));
+    w.domains.release().await;
+    serve.consistency(domain).await.unwrap();
+    renewing.abort();
+    serve.release().await;
 }
 
 // OP-69, OP-149 m.21, TN-111, L0-META-7, OP-149 m.4, MD-14, EI-25, OP-137: the bootstrap creates

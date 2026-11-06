@@ -20,8 +20,8 @@ use access_kernel::verify::cose::PublicKey;
 use access_store::authority::position_at;
 use access_store::authority::read_log;
 use access_store::authority::{
-    NonceRow, ReceiptRow, StateRow, counter, domain_tenant, find_nonce, keep_receipt, receipt,
-    state_of, state_prefix,
+    NonceRow, ReceiptRow, Renewal, StateRow, counter, domain_tenant, find_nonce, keep_receipt,
+    receipt, request_lease_handoff, state_of, state_prefix,
 };
 use access_store::derived::{GrantRow, KeyChange, advance_with, cursor, keys_of};
 use access_store::scope::DomainId;
@@ -293,6 +293,13 @@ pub const SEARCH_DEADLINE: Duration = Duration::from_secs(1);
 
 /// How long a metadata request waits for the signer (PD).
 pub const SIGNER_DEADLINE: Duration = Duration::from_secs(2);
+
+/// How many lease lengths a one-shot job waits for a leader to hand a domain over (OP-149
+/// m.28 (a), PD); a leader renews every third of a lease.
+pub const HANDOFF_WAIT: u32 = 2;
+
+/// How often a waiting one-shot job tries the lease again (PD).
+const HANDOFF_POLL: Duration = Duration::from_millis(250);
 
 /// Kind of the page token (OP-141 m.22 (b)).
 const PAGE_TOKEN: &str = "page";
@@ -568,6 +575,37 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
         Ok(guard)
     }
 
+    /// Leads `domain` here for a one-shot job (OP-149 m.28 (a)): when another process holds
+    /// its lease, that leader is asked to hand it over and this waits for the release, up to
+    /// [`HANDOFF_WAIT`] lease lengths. The lease itself is never taken from a live leader;
+    /// the leader releases it at its next renewal and leads again on its next request.
+    ///
+    /// # Errors
+    /// [`CoreError::Unavailable`] with `lease-held` when the leader did not hand over in time;
+    /// [`CoreError`] for anything else that stops the domain being led here.
+    pub async fn take_over(&self, domain: Digest) -> Result<(), CoreError> {
+        let deadline = tokio::time::Instant::now()
+            .checked_add(self.setup.ttl.saturating_mul(HANDOFF_WAIT))
+            .ok_or(CoreError::Unavailable("time"))?;
+        let mut asked = false;
+        loop {
+            match self.leading(domain).await {
+                Ok(_) => return Ok(()),
+                Err(CoreError::Unavailable("lease-held")) => {}
+                Err(e) => return Err(e),
+            }
+            if !asked {
+                let id = DomainId::from_bytes(domain.0);
+                asked =
+                    request_lease_handoff(&self.setup.sequencer, &id, &self.setup.holder).await?;
+            }
+            if tokio::time::Instant::now() >= deadline {
+                return Err(CoreError::Unavailable("lease-held"));
+            }
+            tokio::time::sleep(HANDOFF_POLL).await;
+        }
+    }
+
     /// One page of `query` on the request's domain; the page token is opaque (OP-141 m.22
     /// (b), (d)).
     ///
@@ -799,14 +837,23 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
         failed
     }
 
-    /// Extends every held lease; a domain whose lease is lost is dropped (OP-130 m.6).
+    /// Extends every held lease; a domain whose lease is lost is dropped (OP-130 m.6), and one
+    /// another process asked for is released to it (OP-149 m.28 (a)) and led again on the next
+    /// request here.
     pub async fn renew(&self) {
         for slot in self.slots() {
             let mut guard = slot.lock().await;
-            if let Some(led) = guard.as_ref()
-                && led.core.renew().await.is_err()
-            {
-                *guard = None;
+            let Some(led) = guard.as_ref() else {
+                continue;
+            };
+            match led.core.renew().await {
+                Ok(Renewal::Extended) => {}
+                Ok(Renewal::HandoffRequested) => {
+                    if let Some(led) = guard.take() {
+                        let _ = led.core.release().await;
+                    }
+                }
+                Err(_) => *guard = None,
             }
         }
     }

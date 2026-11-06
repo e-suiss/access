@@ -12,9 +12,9 @@ use std::time::Duration;
 
 use access_store::StoreError;
 use access_store::authority::{
-    CommitBatch, Draw, HeadRow, LogRecord, NonceRow, OutboxRow, ProofRow, acquire_lease,
+    CommitBatch, Draw, HeadRow, LogRecord, NonceRow, OutboxRow, ProofRow, Renewal, acquire_lease,
     commit_batch, counter, create_domain, domain_tenant, find_nonce, read_head, read_log,
-    release_lease, renew_lease, state_prefix, versions,
+    release_lease, renew_lease, request_lease_handoff, state_prefix, versions,
 };
 use access_store::scope::DomainId;
 use access_store::testing::{TestDb, fresh};
@@ -171,6 +171,77 @@ async fn new_leader_fences_the_old_one() {
     ));
     assert_eq!(read_head(&db.app, &d).await.unwrap().pos, 0);
     commit_batch(&db.sequencer, &d, TENANT, &batch(new.epoch, &head, 5))
+        .await
+        .unwrap();
+}
+
+// OP-149 m.28 (a), OP-31: a live lease is never taken; the asking holder is told to the leader
+// at its renewal, and once the leader releases, the asker has the first claim for one lease
+// length while a third holder still waits; the next acquisition clears the request
+#[tokio::test]
+async fn a_lease_is_handed_over_on_request() {
+    let db = fresh().await.unwrap();
+    let d = domain(&db, 6).await;
+    let (lease, _) = acquire_lease(&db.sequencer, &d, "serve", TTL)
+        .await
+        .unwrap();
+    assert!(
+        !request_lease_handoff(&db.sequencer, &d, "serve")
+            .await
+            .unwrap()
+    );
+    assert_eq!(
+        renew_lease(&db.sequencer, &d, "serve", lease, TTL)
+            .await
+            .unwrap(),
+        Renewal::Extended
+    );
+    assert!(
+        request_lease_handoff(&db.sequencer, &d, "one-shot")
+            .await
+            .unwrap()
+    );
+    assert!(
+        !request_lease_handoff(&db.sequencer, &d, "third")
+            .await
+            .unwrap()
+    );
+    assert!(
+        request_lease_handoff(&db.sequencer, &d, "one-shot")
+            .await
+            .unwrap()
+    );
+    assert!(matches!(
+        acquire_lease(&db.sequencer, &d, "one-shot", TTL).await,
+        Err(StoreError::LeaseHeld)
+    ));
+    assert_eq!(
+        renew_lease(&db.sequencer, &d, "serve", lease, TTL)
+            .await
+            .unwrap(),
+        Renewal::HandoffRequested
+    );
+    release_lease(&db.sequencer, &d, "serve", lease)
+        .await
+        .unwrap();
+    assert!(matches!(
+        acquire_lease(&db.sequencer, &d, "third", TTL).await,
+        Err(StoreError::LeaseHeld)
+    ));
+    let (taken, _) = acquire_lease(&db.sequencer, &d, "one-shot", TTL)
+        .await
+        .unwrap();
+    assert!(taken.epoch > lease.epoch);
+    assert_eq!(
+        renew_lease(&db.sequencer, &d, "one-shot", taken, TTL)
+            .await
+            .unwrap(),
+        Renewal::Extended
+    );
+    release_lease(&db.sequencer, &d, "one-shot", taken)
+        .await
+        .unwrap();
+    acquire_lease(&db.sequencer, &d, "third", TTL)
         .await
         .unwrap();
 }

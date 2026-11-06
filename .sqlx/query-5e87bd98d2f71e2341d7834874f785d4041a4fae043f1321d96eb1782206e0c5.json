@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.sequencer_lease SET handoff_to = $2, handoff_requested_at = now()\n          WHERE domain_id = $1 AND released_at IS NULL AND expires_at >= now()\n            AND holder <> $2 AND (handoff_to IS NULL OR handoff_to = $2)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "5e87bd98d2f71e2341d7834874f785d4041a4fae043f1321d96eb1782206e0c5"
+}

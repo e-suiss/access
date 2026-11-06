@@ -4,7 +4,7 @@ use access_crypto::event_id::EventKey;
 use access_kernel::digest::Digest;
 use access_kernel::model::TrustedTime;
 use access_kernel::record::RecordKind;
-use access_store::authority::Lease;
+use access_store::authority::{Lease, Renewal};
 use suiss_ledger::sequencer::{Head, Sequencer};
 
 use crate::SequencerError;
@@ -54,11 +54,12 @@ impl<L: DomainLog> Leader<L> {
         self.lease.epoch
     }
 
-    /// Extends the lease.
+    /// Extends the lease; [`Renewal::HandoffRequested`] asks the caller to release it
+    /// (OP-149 m.28 (a)).
     ///
     /// # Errors
     /// [`SequencerError::Store`] with `LeaseLost`; the caller must stop.
-    pub async fn renew(&self) -> Result<(), SequencerError> {
+    pub async fn renew(&self) -> Result<Renewal, SequencerError> {
         self.log.renew(self.lease).await
     }
 

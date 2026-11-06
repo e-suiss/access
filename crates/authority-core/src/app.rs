@@ -22,7 +22,7 @@ use access_kernel::meta::{self, Actor, ExerciseState, InstanceState, Payload, ki
 use access_kernel::model::{AuthoritySet, Id, RequirementTerm, ResourceRef, SubjectSelector};
 use access_kernel::record::{Opened, RecordEnvelope, RecordKind};
 use access_kernel::verify::cose;
-use access_store::authority::Draw;
+use access_store::authority::{Draw, Renewal};
 use suiss_crypto::dcbor::{self, Limits, Value};
 
 use crate::CoreError;
@@ -525,11 +525,12 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         self.leader.head().pos
     }
 
-    /// Extends the leader's lease.
+    /// Extends the leader's lease; [`Renewal::HandoffRequested`] means another process asked
+    /// for the domain and this core should be released (OP-149 m.28 (a)).
     ///
     /// # Errors
     /// [`CoreError::Sequencer`]; the core must then be dropped.
-    pub async fn renew(&self) -> Result<(), CoreError> {
+    pub async fn renew(&self) -> Result<Renewal, CoreError> {
         Ok(self.leader.renew().await?)
     }
 

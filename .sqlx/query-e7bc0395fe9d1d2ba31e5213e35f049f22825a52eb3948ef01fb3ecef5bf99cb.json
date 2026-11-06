@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.sequencer_lease SET expires_at = now() + $4::bigint * interval '1 millisecond'\n          WHERE domain_id = $1 AND holder = $2 AND epoch = $3 AND released_at IS NULL AND expires_at >= now()\n          RETURNING (handoff_to IS NOT NULL) AS \"asked!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "asked!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Text",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "e7bc0395fe9d1d2ba31e5213e35f049f22825a52eb3948ef01fb3ecef5bf99cb"
+}

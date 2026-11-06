@@ -266,10 +266,12 @@ pub async fn domain_tenant(
 }
 
 /// Acquires the domain's sequencer lease under a new epoch and fences the head with it, so a
-/// previous leader's next head compare-and-set fails (TI-2, OP-31).
+/// previous leader's next head compare-and-set fails (TI-2, OP-31). A lease given up on a
+/// handoff request is the asking holder's for one lease length (OP-149 m.28 (a)).
 ///
 /// # Errors
-/// [`StoreError::LeaseHeld`] while another holder's lease is live.
+/// [`StoreError::LeaseHeld`] while another holder's lease is live, or another holder has the
+/// first claim on it.
 pub async fn acquire_lease(
     sequencer: &PgPool,
     domain: &DomainId,
@@ -285,9 +287,12 @@ pub async fn acquire_lease(
            FROM access.domain_head WHERE domain_id = $1
          ON CONFLICT (domain_id) DO UPDATE
            SET holder = EXCLUDED.holder, epoch = GREATEST(sequencer_lease.epoch, EXCLUDED.epoch - 1) + 1,
-               acquired_at = EXCLUDED.acquired_at, expires_at = EXCLUDED.expires_at, released_at = NULL
-           WHERE sequencer_lease.expires_at < now() OR sequencer_lease.released_at IS NOT NULL
-              OR sequencer_lease.holder = EXCLUDED.holder
+               acquired_at = EXCLUDED.acquired_at, expires_at = EXCLUDED.expires_at, released_at = NULL,
+               handoff_to = NULL, handoff_requested_at = NULL
+           WHERE (sequencer_lease.expires_at < now() OR sequencer_lease.released_at IS NOT NULL
+                  OR sequencer_lease.holder = EXCLUDED.holder)
+             AND (sequencer_lease.handoff_to IS NULL OR sequencer_lease.handoff_to = EXCLUDED.holder
+                  OR sequencer_lease.handoff_requested_at + $3::bigint * interval '1 millisecond' < now())
          RETURNING epoch",
         id,
         holder,
@@ -313,6 +318,16 @@ pub async fn acquire_lease(
     ))
 }
 
+/// What a renewal found besides the lease still being the holder's.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Renewal {
+    /// Extended; nothing asked.
+    Extended,
+    /// Extended, and another holder asked for the lease (OP-149 m.28 (a)): the leader releases
+    /// it after this batch.
+    HandoffRequested,
+}
+
 /// Extends a held lease.
 ///
 /// # Errors
@@ -323,23 +338,52 @@ pub async fn renew_lease(
     holder: &str,
     lease: Lease,
     ttl: Duration,
-) -> Result<(), StoreError> {
+) -> Result<Renewal, StoreError> {
     let mut t = DomainTx::begin(sequencer, domain).await?;
-    let rows = sqlx::query!(
-        "UPDATE access.sequencer_lease SET expires_at = now() + $4::bigint * interval '1 millisecond'
-          WHERE domain_id = $1 AND holder = $2 AND epoch = $3 AND released_at IS NULL AND expires_at >= now()",
+    let asked = sqlx::query_scalar!(
+        r#"UPDATE access.sequencer_lease SET expires_at = now() + $4::bigint * interval '1 millisecond'
+          WHERE domain_id = $1 AND holder = $2 AND epoch = $3 AND released_at IS NULL AND expires_at >= now()
+          RETURNING (handoff_to IS NOT NULL) AS "asked!""#,
         domain.as_bytes().as_slice(),
         holder,
         signed(lease.epoch)?,
         millis(ttl)?,
     )
+    .fetch_optional(&mut *t.tx)
+    .await?
+    .ok_or(StoreError::LeaseLost)?;
+    t.commit().await?;
+    Ok(if asked {
+        Renewal::HandoffRequested
+    } else {
+        Renewal::Extended
+    })
+}
+
+/// Asks the live leader of `domain` to hand its lease over to `holder` (OP-149 m.28 (a)); the
+/// leader sees the request at its next renewal. `false` when no other holder has a live lease,
+/// or another holder asked first.
+///
+/// # Errors
+/// [`StoreError`].
+pub async fn request_lease_handoff(
+    sequencer: &PgPool,
+    domain: &DomainId,
+    holder: &str,
+) -> Result<bool, StoreError> {
+    let mut t = DomainTx::begin(sequencer, domain).await?;
+    let rows = sqlx::query!(
+        "UPDATE access.sequencer_lease SET handoff_to = $2, handoff_requested_at = now()
+          WHERE domain_id = $1 AND released_at IS NULL AND expires_at >= now()
+            AND holder <> $2 AND (handoff_to IS NULL OR handoff_to = $2)",
+        domain.as_bytes().as_slice(),
+        holder,
+    )
     .execute(&mut *t.tx)
     .await?
     .rows_affected();
-    if rows != 1 {
-        return Err(StoreError::LeaseLost);
-    }
-    t.commit().await
+    t.commit().await?;
+    Ok(rows == 1)
 }
 
 /// Releases a held lease so a new leader need not wait for expiry (OP-31).

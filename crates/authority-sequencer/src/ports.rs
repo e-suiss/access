@@ -3,7 +3,7 @@
 
 use std::future::Future;
 
-use access_store::authority::{CommitBatch, HeadRow, Lease, LogRecord, NonceRow};
+use access_store::authority::{CommitBatch, HeadRow, Lease, LogRecord, NonceRow, Renewal};
 
 use crate::SequencerError;
 
@@ -11,8 +11,8 @@ use crate::SequencerError;
 pub trait DomainLog {
     /// Takes the lease under a new epoch that fences the head; returns the stored head.
     fn acquire(&self) -> impl Future<Output = Result<(Lease, HeadRow), SequencerError>> + Send;
-    /// Extends the lease.
-    fn renew(&self, lease: Lease) -> impl Future<Output = Result<(), SequencerError>> + Send;
+    /// Extends the lease, and says whether another holder asked for it (OP-149 m.28 (a)).
+    fn renew(&self, lease: Lease) -> impl Future<Output = Result<Renewal, SequencerError>> + Send;
     /// Gives the lease up.
     fn release(&self, lease: Lease) -> impl Future<Output = Result<(), SequencerError>> + Send;
     /// The record at `pos`.

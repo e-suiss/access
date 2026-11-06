@@ -16,7 +16,7 @@ use access_kernel::codec::Canonical;
 use access_kernel::digest::Digest;
 use access_kernel::record::{Header, Opened, RecordEnvelope, RecordKind};
 use access_store::StoreError;
-use access_store::authority::{CommitBatch, HeadRow, Lease, LogRecord, NonceRow};
+use access_store::authority::{CommitBatch, HeadRow, Lease, LogRecord, NonceRow, Renewal};
 use suiss_crypto::dcbor::Value;
 
 use super::Leader;
@@ -88,8 +88,8 @@ impl DomainLog for MemLog {
         Ok((Lease { epoch: head.epoch }, head.clone()))
     }
 
-    async fn renew(&self, _: Lease) -> Result<(), SequencerError> {
-        Ok(())
+    async fn renew(&self, _: Lease) -> Result<Renewal, SequencerError> {
+        Ok(Renewal::Extended)
     }
 
     async fn release(&self, _: Lease) -> Result<(), SequencerError> {
@@ -183,7 +183,7 @@ async fn a_new_epoch_fences_the_previous_leader() {
         async fn acquire(&self) -> Result<(Lease, HeadRow), SequencerError> {
             self.0.acquire().await
         }
-        async fn renew(&self, l: Lease) -> Result<(), SequencerError> {
+        async fn renew(&self, l: Lease) -> Result<Renewal, SequencerError> {
             self.0.renew(l).await
         }
         async fn release(&self, l: Lease) -> Result<(), SequencerError> {
