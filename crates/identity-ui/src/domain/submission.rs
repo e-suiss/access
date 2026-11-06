@@ -258,7 +258,9 @@ mod tests {
             SecondFactors {
                 totp: true,
                 recovery_code: false,
+                passkey: false,
             },
+            None,
             &[],
         );
         assert!(

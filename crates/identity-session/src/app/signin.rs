@@ -422,6 +422,11 @@ where
                     user,
                 }
             }
+            // IDP-8: after the first factor the subject is proven; the passkey is its second
+            (None, Some(_)) if authenticated => Identified::Identifier {
+                normalized: "",
+                user,
+            },
             (_, None) => Identified::Discoverable,
             _ => return Ok(Err(neutral(0))),
         };

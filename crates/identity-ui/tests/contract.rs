@@ -75,6 +75,7 @@ fn examples() -> Vec<(&'static str, Ui)> {
     let mfa = SecondFactors {
         totp: true,
         recovery_code: true,
+        passkey: false,
     };
     vec![
         ("identifier", identifier.clone()),
@@ -96,10 +97,13 @@ fn examples() -> Vec<(&'static str, Ui)> {
                 .with_message(Message::error(TextId::TooManyAttempts).retry_after(30))
                 .unwrap(),
         ),
-        ("second-factor", Ui::second_factor(flow(), mfa, &POLICY)),
+        (
+            "second-factor",
+            Ui::second_factor(flow(), mfa, None, &POLICY),
+        ),
         (
             "second-factor-failed",
-            Ui::second_factor(flow(), mfa, &POLICY)
+            Ui::second_factor(flow(), mfa, None, &POLICY)
                 .with_message(Message::error(TextId::SecondFactorFailed))
                 .unwrap(),
         ),

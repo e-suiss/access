@@ -298,7 +298,7 @@ fn shape(kit: &RealmKit, flow: &FlowId, current: &Current) -> Option<Ui> {
             Ui::authenticate(flow.clone(), id, blank, &reqs).with_email(email(kit))
         }
         Current::Email(wait) => Ui::email_sent(flow.clone(), *wait, &reqs),
-        Current::Second(offered) => Ui::second_factor(flow.clone(), *offered, &reqs),
+        Current::Second(offered) => Ui::second_factor(flow.clone(), *offered, Some(blank), &reqs),
         Current::Done(_) => return None,
     })
 }
@@ -522,6 +522,7 @@ where
             } => Current::Second(SecondFactors {
                 totp: e.totp,
                 recovery_code: e.recovery_codes,
+                passkey: e.passkeys,
             }),
             Outcome::Suspended {
                 method: MethodClass::MagicLink,
@@ -579,7 +580,14 @@ where
                 Ui::authenticate(flow.clone(), &id, passkey, &reqs).with_email(email(kit))
             }
             Current::Email(wait) => Ui::email_sent(flow.clone(), wait, &reqs),
-            Current::Second(offered) => Ui::second_factor(flow.clone(), offered, &reqs),
+            Current::Second(offered) => {
+                let passkey = if offered.passkey {
+                    Some(fresh(None).await?)
+                } else {
+                    None
+                };
+                Ui::second_factor(flow.clone(), offered, passkey, &reqs)
+            }
         };
         Ok(Reply::ui(status, ui))
     }
@@ -638,17 +646,29 @@ where
         match outcome {
             Outcome::Continue {
                 enrolled: Some(e), ..
-            } => Ok(Reply::ui(
-                200,
-                Ui::second_factor(
-                    flow.clone(),
-                    SecondFactors {
-                        totp: e.totp,
-                        recovery_code: e.recovery_codes,
-                    },
-                    &reqs,
-                ),
-            )),
+            } => {
+                let offered = SecondFactors {
+                    totp: e.totp,
+                    recovery_code: e.recovery_codes,
+                    passkey: e.passkeys,
+                };
+                let passkey = if e.passkeys {
+                    match auth
+                        .passkey_options(fref, None)
+                        .await
+                        .map_err(|e| failed(&e))?
+                    {
+                        Ok(v) => Some(options(v)?),
+                        Err(_) => return Err(Reply::problem(FLOW_GONE)),
+                    }
+                } else {
+                    None
+                };
+                Ok(Reply::ui(
+                    200,
+                    Ui::second_factor(flow.clone(), offered, passkey, &reqs),
+                ))
+            }
             Outcome::Continue { enrolled: None, .. } => {
                 let current = self.current(auth, kit, b, fref).await?;
                 self.render(auth, kit, flow, fref, current, 200).await

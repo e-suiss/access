@@ -1874,6 +1874,59 @@ async fn product_endpoints_follow_the_frontend_contract() {
 
 /// Registers a passkey from `b`'s signed-in session; returns the authenticator, its id and the
 /// user handle.
+// IDP-8, §10.2 AAL2 table, TN-96: an account with a password and a passkey signs in with the
+// password and then the passkey as its second factor; the second step offers the assertion
+// request, and a stranger's key is refused with the honest message
+#[tokio::test]
+async fn a_passkey_is_the_second_factor_after_the_password() {
+    let e = env(0x51, "lg-2f", AuthPolicy::DEFAULT).await;
+    e.account("dora@example.com").await;
+    let mut b = e.browser("b");
+    assert_eq!(b.sign_in("dora@example.com").await.step(), "complete");
+    let (mut key, id, user) = register_passkey(&mut b, "dora@example.com").await;
+
+    let mut c = e.browser("c");
+    let second = c.sign_in("dora@example.com").await;
+    assert_eq!(
+        second.step(),
+        "second_factor",
+        "{} {}",
+        second.status,
+        String::from_utf8_lossy(&second.body)
+    );
+    let options = passkey_node(&second);
+    let challenge = b64url_decode(options["challenge"].as_str().unwrap()).unwrap();
+    let mut stranger = Authenticator::new(Key::es256());
+    let stranger_id = b64url_encode(&stranger.credential_id);
+    let bad = assertion_json(&mut stranger, &stranger_id, &user, &challenge);
+    let refused = c
+        .submit(
+            &second,
+            "passkey",
+            json!({ "passkey_credential": bad.to_string() }),
+        )
+        .await;
+    assert_eq!(refused.status, StatusCode::UNAUTHORIZED);
+    assert_eq!(refused.step(), "second_factor");
+    let options = passkey_node(&refused);
+    let challenge = b64url_decode(options["challenge"].as_str().unwrap()).unwrap();
+    let good = assertion_json(&mut key, &id, &user, &challenge);
+    let done = c
+        .submit(
+            &refused,
+            "passkey",
+            json!({ "passkey_credential": good.to_string() }),
+        )
+        .await;
+    assert_eq!(
+        done.step(),
+        "complete",
+        "{}",
+        String::from_utf8_lossy(&done.body)
+    );
+    assert_eq!(c.get("/v1/sessions/current").await.status, StatusCode::OK);
+}
+
 async fn register_passkey(b: &mut Web, who: &str) -> (Authenticator, String, String) {
     let reg = b
         .post("/v1/account/passkeys", Some(json!({ "name": who })))

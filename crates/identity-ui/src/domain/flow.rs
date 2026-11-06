@@ -147,6 +147,8 @@ pub struct SecondFactors {
     pub totp: bool,
     /// Recovery code.
     pub recovery_code: bool,
+    /// A passkey: possession and UV after the password (IDP-8, §10.2 AAL2 table).
+    pub passkey: bool,
 }
 
 /// Which e-mail first steps the realm offers (TN-102). Realm policy, never the account.
@@ -360,10 +362,24 @@ impl Ui {
         ui
     }
 
-    /// MFA, after the first factor.
+    /// MFA, after the first factor; `passkey` is the assertion request when the account holds a
+    /// passkey, so a password-and-passkey account is never stuck here (IDP-8).
     #[must_use]
-    pub fn second_factor(flow: FlowId, offered: SecondFactors, policy: &[Requirement]) -> Self {
+    pub fn second_factor(
+        flow: FlowId,
+        offered: SecondFactors,
+        passkey: Option<PasskeyOptions>,
+        policy: &[Requirement],
+    ) -> Self {
         let mut nodes = Vec::new();
+        if offered.passkey
+            && let Some(options) = passkey
+        {
+            nodes.push(Node::PasskeyGet {
+                label: TextId::PasskeySignIn.into(),
+                options,
+            });
+        }
         if offered.totp {
             nodes.push(Node::input(
                 FieldName::TotpCode,
@@ -546,7 +562,7 @@ mod tests {
             Err(ContractError::Message(TextId::PasskeyNotRegistered))
         );
         assert!(
-            Ui::second_factor(flow(), SecondFactors::default(), &[])
+            Ui::second_factor(flow(), SecondFactors::default(), None, &[])
                 .with_message(Message::error(TextId::SecondFactorFailed))
                 .is_ok()
         );
@@ -554,6 +570,25 @@ mod tests {
             ui.with_message(Message::error(TextId::TooManyAttempts).retry_after(3))
                 .is_ok()
         );
+    }
+
+    // IDP-8, §10.2 AAL2 table: an account whose only second factor is a passkey is offered it
+    // after the password; without one the step offers only what is enrolled
+    #[test]
+    fn a_passkey_is_offered_as_the_second_factor() {
+        let offered = SecondFactors {
+            totp: false,
+            recovery_code: false,
+            passkey: true,
+        };
+        let ui = Ui::second_factor(flow(), offered, Some(options(&[])), &[]);
+        assert!(
+            ui.nodes
+                .iter()
+                .any(|n| matches!(n, Node::PasskeyGet { .. }))
+        );
+        let none = Ui::second_factor(flow(), SecondFactors::default(), Some(options(&[])), &[]);
+        assert_eq!(none.nodes, []);
     }
 
     // TN-97
@@ -617,8 +652,10 @@ mod tests {
                 flow(),
                 SecondFactors {
                     totp: true,
-                    recovery_code: true
+                    recovery_code: true,
+                    passkey: false,
                 },
+                None,
                 &policy
             )),
             [
