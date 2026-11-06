@@ -77,9 +77,27 @@ pub enum AuthenticationOutcome {
         assurance: Assurance,
         /// Signals raised.
         signals: Vec<Signal>,
+        /// What the assertion showed.
+        facts: AssertionFacts,
     },
     /// Refused.
     Rejected(Rejection),
+}
+
+/// What a verified assertion showed, for the WebAuthn details of its `authentication` Claim
+/// (§10.1.2): flags, counter and the AAGUID hint. User presence is always proven.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct AssertionFacts {
+    /// The AAGUID recorded at registration; a hint only.
+    pub aaguid: [u8; 16],
+    /// The counter stored after the assertion.
+    pub sign_count: u32,
+    /// UV.
+    pub user_verified: bool,
+    /// BE.
+    pub backup_eligible: bool,
+    /// BS.
+    pub backup_state: bool,
 }
 
 /// The WebAuthn relying party over its ports.
@@ -294,6 +312,13 @@ where
         Ok(AuthenticationOutcome::Authenticated {
             user: stored.user,
             credential: id,
+            facts: AssertionFacts {
+                aaguid: stored.aaguid.0,
+                sign_count: verified.sign_count,
+                user_verified: verified.assurance.user_verified,
+                backup_eligible: stored.backup_eligible,
+                backup_state: verified.backup_state,
+            },
             assurance: verified.assurance,
             signals: verified.signals,
         })

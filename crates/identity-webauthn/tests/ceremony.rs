@@ -122,7 +122,7 @@ fn rejected(o: &AuthenticationOutcome) -> Option<Rejection> {
     }
 }
 
-// IDP-5, IDP-8, OP-146 m.3, §10.2.4
+// IDP-5, IDP-8, OP-146 m.3, §10.2.4, §10.1.2, OP-150 L2
 #[tokio::test]
 async fn es256_device_bound_passkey_registers_and_authenticates_at_aal3() {
     let s = service();
@@ -137,12 +137,17 @@ async fn es256_device_bound_passkey_registers_and_authenticates_at_aal3() {
         user,
         assurance,
         signals,
+        facts,
         ..
     } = authenticate(&s, &policy, &mut a).await
     else {
         panic!("not authenticated");
     };
     assert_eq!(user, ALICE);
+    assert_eq!(
+        (facts.aaguid, facts.sign_count, facts.backup_eligible),
+        (record.aaguid.0, 1, false)
+    );
     assert_eq!(assurance.binding, Binding::DeviceBound);
     assert_eq!((assurance.aal, assurance.ct), (Aal::Aal3, CtCeiling::Ct3));
     assert_eq!(signals, []);

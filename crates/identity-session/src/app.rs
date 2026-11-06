@@ -2,6 +2,7 @@
 //! and the epoch cache. Before authentication every refusal that could tell whether an
 //! account exists has one answer (CR-40, X34, TN-82); after it, the answer is honest.
 
+pub mod claims;
 pub mod devices;
 pub mod epochs;
 pub mod mfa;

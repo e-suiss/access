@@ -155,6 +155,27 @@ pub struct Factor {
     pub credential: Option<[u8; 16]>,
     /// When the step completed, Unix milliseconds.
     pub at_ms: u64,
+    /// What a passkey's assertion showed, for its `authentication` Claim (§10.1.2).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub webauthn: Option<PasskeyDetail>,
+}
+
+/// What a passkey assertion showed (§10.1.2 WebAuthn row): the AAGUID hint, the counter, the
+/// flags and the digest of the assertion as received. Never the credential id or a key.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PasskeyDetail {
+    /// AAGUID.
+    pub aaguid: [u8; 16],
+    /// Signature counter.
+    pub sign_count: u32,
+    /// UV.
+    pub uv: bool,
+    /// BE.
+    pub be: bool,
+    /// BS.
+    pub bs: bool,
+    /// Digest of authenticator data, client data and signature.
+    pub evidence: [u8; 32],
 }
 
 impl Factor {
@@ -171,6 +192,7 @@ impl Factor {
             app_controlled: false,
             credential: None,
             at_ms,
+            webauthn: None,
         }
     }
 

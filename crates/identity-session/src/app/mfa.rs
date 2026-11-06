@@ -496,8 +496,23 @@ where
                 None,
             )
             .await?;
-        if matches!(outcome, RegistrationOutcome::Registered(_)) {
+        if let RegistrationOutcome::Registered(record) = &outcome {
+            let others =
+                CredentialRegistry::list(self.passkeys.registry, record.realm, &record.user)
+                    .await?;
             let mut tx = self.begin().await?;
+            // IDP-2, TN-63, OP-150 L2
+            if let Some(sibling) = tx.passkey_credential(record.id.as_bytes()).await? {
+                super::claims::passkey_registered(
+                    &mut tx,
+                    session.subject,
+                    sibling,
+                    record,
+                    &others,
+                    now,
+                )
+                .await?;
+            }
             let target = self.external(session.subject)?;
             audit(
                 &mut tx,

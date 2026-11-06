@@ -461,13 +461,14 @@ where
             .webauthn()
             .finish_authentication(self.passkeys.rp, self.passkeys.policy, &state, response)
             .await?;
-        let (user, credential, assurance) = match outcome {
+        let (user, credential, assurance, signals, facts) = match outcome {
             AuthenticationOutcome::Authenticated {
                 user,
                 credential,
                 assurance,
-                ..
-            } => (user, credential, assurance),
+                signals,
+                facts,
+            } => (user, credential, assurance, signals, facts),
             AuthenticationOutcome::Rejected(r) if authenticated => {
                 return Ok(refuse(access_identity_account::domain::login::Problem {
                     status: 401,
@@ -497,13 +498,16 @@ where
             Ok(l) => l,
             Err(e) => return Ok(gone(e)),
         };
-        let factor = Factor::passkey(
+        let mut factor = Factor::passkey(
             sibling,
             assurance.binding == Binding::Synced,
             assurance.user_verified,
             assurance.session_login_only,
             now,
         );
+        // §10.1.2, TN-63, OP-150 L2
+        factor.webauthn = Some(super::claims::detail(&facts, response));
+        super::claims::passkey_signals(&mut tx, subject, &signals, now).await?;
         if l.state.record(subject, factor).is_err() {
             return Ok(if authenticated {
                 refuse(STEP_NOT_ALLOWED)
@@ -1189,6 +1193,9 @@ where
                 return Ok(refuse(STEP_NOT_ALLOWED));
             }
         };
+        // F17, TN-103, OP-150 L2
+        let unknown_device = self.policy.remember_device_days.is_some() && !marker;
+        super::claims::signed_in(&mut tx, &l.state, &signed, unknown_device).await?;
         save(&mut tx, &l, "done", Resume::Clear).await?;
         tx.commit().await?;
         Ok(Step::SignedIn(Box::new(signed)))

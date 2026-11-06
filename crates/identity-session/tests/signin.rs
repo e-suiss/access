@@ -1192,3 +1192,148 @@ async fn the_epoch_cache_fails_closed_and_learns_revocations() {
     e.db.app.close().await;
     assert!(epochs.current(&db, alice, 1, now + 10_000).await.is_err());
 }
+
+/// The queued Claim orders once `ready` holds for them; the outbox shows a row only once every
+/// older transaction in the cluster has ended.
+async fn claim_orders(
+    e: &Env,
+    ready: impl Fn(&[access_identity_account::domain::claims::ClaimOrder]) -> bool,
+) -> Vec<access_identity_account::domain::claims::ClaimOrder> {
+    use access_identity_account::domain::claims::{ClaimOrder, OUTBOX_PREFIX};
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
+    loop {
+        let orders: Vec<ClaimOrder> = access_store::identity::poll(
+            &e.db.reader,
+            access_store::identity::Cursor::default(),
+            1000,
+        )
+        .await
+        .unwrap()
+        .into_iter()
+        .filter(|o| o.kind.starts_with(OUTBOX_PREFIX))
+        .map(|o| ClaimOrder::from_bytes(&o.payload).unwrap())
+        .collect();
+        if ready(&orders) {
+            return orders;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "claim orders: {:?}",
+            orders.iter().map(|o| &o.class).collect::<Vec<_>>()
+        );
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+}
+
+fn risk_names(orders: &[access_identity_account::domain::claims::ClaimOrder]) -> Vec<String> {
+    use access_identity_account::domain::claims::{Content, RISK_SIGNAL};
+    orders
+        .iter()
+        .filter(|o| o.class == RISK_SIGNAL)
+        .filter_map(|o| match &o.content {
+            Content::Scalar(access_kernel::model::EqValue::Text(t)) => Some(t.clone()),
+            _ => None,
+        })
+        .collect()
+}
+
+// F17, TN-103, §10.1.2, §10.1.5, §10.1.6, TN-63, §10.2.4, IDI-5, IDP-2, §7.6, OP-150 L2: a
+// login queues its authentication Claim, bound to the session, with the assurance vector; a
+// browser without a device marker, a second passkey of another AAGUID and a counter that did not
+// advance queue risk signals, and none of them stops the sign-in; a passkey's binding names its
+// identity credential row, carries only digests, binds no Instance, and its removal ends the line
+#[tokio::test]
+async fn sign_in_queues_its_claims_and_signals_never_gate() {
+    use access_identity_account::app::accounts::{PASSKEY, remove_credential};
+    use access_identity_account::domain::claims::{Bind, Content};
+    use access_identity_account::ports::{AccountDb, AccountTx};
+    use access_kernel::claim::body::{AuthMethod, Body};
+
+    let e = env(0x41, "is-claims").await;
+    let alice = e.account("alice@example.com").await;
+    let cookie = sign_in(&e, "alice@example.com").await;
+    let orders = claim_orders(&e, |o| o.len() >= 3).await;
+    let login = orders.iter().find(|o| o.class == "authentication").unwrap();
+    assert_eq!(login.subject, alice);
+    assert!(matches!(login.bind, Bind::Session(_)));
+    assert_eq!(login.assurance.get("aal"), Some(&1));
+    assert!(matches!(
+        &login.content,
+        Content::Body { body: Body::Authentication(a), disclose: true } if a.method == AuthMethod::Password
+    ));
+    assert_eq!(risk_names(&orders), ["new_device"]);
+    assert!(orders.iter().any(|o| o.class == "account_status"));
+
+    let mut key = Authenticator::new(Key::es256());
+    let handle = register_passkey(&e, &cookie, &mut key).await;
+    let mut other = Authenticator::new(Key::es256());
+    other.aaguid = [0x22; 16];
+    other.credential_id = vec![0xc2; 32];
+    register_passkey(&e, &cookie, &mut other).await;
+    let orders = claim_orders(&e, |o| o.len() >= 6).await;
+    let bindings: Vec<_> = orders
+        .iter()
+        .filter(|o| o.class == "authenticator_binding")
+        .collect();
+    assert_eq!(bindings.len(), 2);
+    assert!(
+        bindings
+            .iter()
+            .all(|b| b.bind == Bind::None && b.line.is_some())
+    );
+    assert!(risk_names(&orders).contains(&String::from("aaguid_change")));
+
+    let flow = start(&e, Some("alice@example.com"), None).await;
+    let first = e
+        .with(async |a| {
+            a.identify(&Identify {
+                identifier: Some("alice@example.com"),
+                ..Identify::default()
+            })
+            .await
+        })
+        .await
+        .unwrap();
+    drop(flow);
+    let f1 = (first.handle.clone(), first.device.clone());
+    signed_in(assert_passkey(&e, &f1, &first.options.passkey, &mut key, &handle).await);
+    key.counter = 0;
+    let again = e
+        .with(async |a| {
+            a.identify(&Identify {
+                identifier: Some("alice@example.com"),
+                ..Identify::default()
+            })
+            .await
+        })
+        .await
+        .unwrap();
+    let f2 = (again.handle.clone(), again.device.clone());
+    let (_, s) =
+        signed_in(assert_passkey(&e, &f2, &again.options.passkey, &mut key, &handle).await);
+    assert_eq!(s.result.methods, [MethodClass::Passkey]);
+    let orders = claim_orders(&e, |o| o.len() >= 9).await;
+    assert!(risk_names(&orders).contains(&String::from("sign_count_regression")));
+    let passkey_login = orders
+        .iter()
+        .rev()
+        .find(|o| o.class == "authentication")
+        .unwrap();
+    assert!(matches!(
+        &passkey_login.content,
+        Content::Body { body: Body::Authentication(a), .. }
+            if a.method == AuthMethod::Webauthn && a.webauthn.is_some_and(|w| w.aaguid == [0x11; 16]) && a.evidence.is_some()
+    ));
+
+    let pg = PgAccounts(e.db.app.clone());
+    let mut tx = pg.begin(e.tenant, e.realm).await.unwrap();
+    let rows = tx.credentials(alice, PASSKEY).await.unwrap();
+    tx.commit().await.unwrap();
+    remove_credential(&pg, &e.realm(), alice, rows[0].id, &ADMIN)
+        .await
+        .unwrap();
+    let orders = claim_orders(&e, |o| o.iter().any(|x| x.retract)).await;
+    let removal = orders.iter().find(|o| o.retract).unwrap();
+    assert_eq!(removal.class, "authenticator_binding");
+    assert!(bindings.iter().any(|b| b.line == removal.line));
+}

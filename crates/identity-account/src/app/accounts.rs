@@ -17,6 +17,9 @@ use crate::ports::{AccountDb, AccountTx, BreachRanges, Entropy};
 /// The password credential kind.
 pub const PASSWORD: &str = "password";
 
+/// The credential kind of a passkey's identity credential row.
+pub const PASSKEY: &str = "webauthn";
+
 /// The stored status, typed.
 fn status_of(raw: &str) -> Result<AccountStatus, AccountError> {
     AccountStatus::parse(raw).ok_or(AccountError::Corrupt)
@@ -256,10 +259,29 @@ pub async fn remove_credential<D: AccountDb>(
     who: &Actor<'_>,
 ) -> Result<(), AccountError> {
     let mut tx = db.begin(realm.tenant, realm.realm).await?;
+    let passkey = tx
+        .credentials(subject, PASSKEY)
+        .await?
+        .iter()
+        .any(|c| c.id == credential);
     match tx.revoke(subject, credential).await? {
         Revoke::Done => {}
         Revoke::Missing => return Err(AccountError::NotFound),
         Revoke::LastMethod => return Err(AccountError::LastMethod),
+    }
+    // IDP-2, OP-150 L2: the passkey's binding line ends; no Instance changes
+    if passkey {
+        let at = tx.server_time().await?;
+        crate::app::claims::emit(
+            &mut tx,
+            &crate::domain::claims::authenticator_removed(
+                subject,
+                access_kernel::claim::body::AuthenticatorKind::Passkey,
+                &credential,
+                at,
+            ),
+        )
+        .await?;
     }
     audit(
         &mut tx,
