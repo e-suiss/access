@@ -1112,6 +1112,8 @@ fn platform_examples_meet_the_contract() {
         ("/access/v1/platform/streams", "get"),
         ("/access/v1/platform/streams/{id}", "get"),
         ("/access/v1/platform/streams/{id}", "delete"),
+        ("/access/v1/platform/streams/{id}/status", "get"),
+        ("/access/v1/platform/streams/{id}/status", "post"),
     ] {
         assert_eq!(
             doc["paths"][path][method]["security"],

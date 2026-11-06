@@ -130,6 +130,9 @@ pub fn needs_login(
 pub struct TokenFacts<'a> {
     /// The realm issuer.
     pub issuer: &'a Issuer,
+    /// The `aud` of the access token: the realm issuer, or the platform product client the
+    /// grant named as its RFC 8707 resource (OP-149 m.26 (a)).
+    pub audience: &'a str,
     /// The client.
     pub client_id: &'a str,
     /// The pairwise subject (MD-10).
@@ -172,14 +175,15 @@ pub fn id_token_claims(f: &TokenFacts<'_>, nonce: Option<&str>) -> Vec<u8> {
     Value::Object(m).to_string().into_bytes()
 }
 
-/// The protocol-scope access token claims (RFC 9068 §2.2): audience the realm itself, the
-/// only resource Stage 5 serves; always bound by `cnf.jkt` (TN-27, PI-11).
+/// The protocol-scope access token claims (RFC 9068 §2.2): one audience, the realm itself or
+/// the registered platform product the grant named as its resource (OP-149 m.26 (a)); always
+/// bound by `cnf.jkt` (TN-27, PI-11).
 #[must_use]
 pub fn access_token_claims(f: &TokenFacts<'_>, scope: &str, jti: &str, jkt: &str) -> Vec<u8> {
     json!({
         "iss": f.issuer.as_str(),
         "sub": f.sub,
-        "aud": f.issuer.as_str(),
+        "aud": f.audience,
         "client_id": f.client_id,
         "iat": secs(f.now_ms),
         "exp": secs(f.now_ms.saturating_add(ACCESS_TTL_MS)),
@@ -240,6 +244,18 @@ pub struct GrantDetails {
     /// The `ExerciseID` of the family's first token.
     #[serde(default)]
     pub projection: Option<[u8; 32]>,
+    /// The registered platform product client the protocol-scope access token is addressed
+    /// to, when the request named it as its RFC 8707 resource (OP-149 m.26 (a)).
+    #[serde(default)]
+    pub resource: Option<String>,
+}
+
+impl GrantDetails {
+    /// The `aud` of the grant's protocol-scope access tokens: its resource, else `issuer`.
+    #[must_use]
+    pub fn audience<'a>(&'a self, issuer: &'a Issuer) -> &'a str {
+        self.resource.as_deref().unwrap_or(issuer.as_str())
+    }
 }
 
 /// What a code carries to the token endpoint.

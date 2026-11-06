@@ -1,0 +1,382 @@
+//! What a product's end-to-end tests need from a local deployment besides the realms and
+//! clients (OP-149 m.26 (b), (c)): a test user with a password and a public client to sign in
+//! with, in a sample realm; the Acceptance under which a local declarant Party's unsigned
+//! `party_compromise` Claims are admitted there, so a product's PEP can produce
+//! `party.compromised` at Claim Ingest; and the `idp.client.update` and `idp.client.retire`
+//! changes of a platform client, which produce `api_client.updated` and `api_client.disabled`.
+//! Each goes through the paths production uses, and every step looks for its result first.
+
+use std::path::PathBuf;
+use std::sync::Arc;
+
+use access_crypto::opaque_id::IdKey;
+use access_identity_account::adapters::hibp::MirrorRanges;
+use access_identity_account::adapters::pg::PgAccounts;
+use access_identity_account::adapters::system::{SystemEntropy, cgroup_memory_budget, cores};
+use access_identity_account::app::accounts::{
+    PasswordServices, change_status, create, set_password,
+};
+use access_identity_account::app::hasher::{Hasher, HasherConfig};
+use access_identity_account::app::{Actor, Realm};
+use access_identity_account::domain::identifier::{Identifier, IdentifierKind};
+use access_identity_account::domain::password::Argon2Params;
+use access_identity_account::domain::status::AccountStatus;
+use access_identity_account::ports::{AccountDb, AccountTx, BreachRanges, RangeUnavailable};
+use access_identity_admin::AdminError;
+use access_identity_admin::app::{Admin, Applied};
+use access_identity_admin::domain::{AuthMethod, Change, Client, ClientId};
+use access_identity_admin::ports::{Decider, Governance, Instances, RealmKeys};
+use access_identity_events::adapters::RealmKek as _;
+use access_identity_events::domain::catalog::IdentityKind;
+use access_kernel::claim::{PARTY_COMPROMISE, PREDICATE_INPUT};
+use access_kernel::codec::Canonical;
+use access_kernel::digest::Digest;
+use access_kernel::json::b64url_encode;
+use access_kernel::meta::Payload;
+use access_kernel::model::{Id, SubjectSelector};
+use access_store::authority::find_nonce;
+use access_store::identity::{RealmId, TenantId, TenantTx};
+use access_store::scope::DomainId;
+use access_store::tenancy::route_by_slug;
+use access_store::idp;
+use serde::Serialize;
+use suiss_crypto::dcbor::Value;
+use suiss_crypto::pkcs11::HsmSigner;
+use suiss_crypto::signer::Signer as _;
+
+use super::{
+    Bootstrap, BootstrapError, CompromiseOut, CompromisePlan, MetaExercises, Plan, TestUserOut,
+    TestUserPlan, cell_ids, root_key, root_party, token_key,
+};
+use crate::login::RealmKeks;
+
+/// The token label of the local compromise declarant's key (OP-149 m.26 (c)).
+pub(crate) const DECLARANT_LABEL: &str = "access/bootstrap/compromise-declarant";
+
+/// What the root signs to derive the nonce of the declarant's `acceptance_establish`.
+const ACCEPTANCE_LABEL: &[u8] = b"access-bootstrap/compromise-acceptance:1";
+
+/// Who the bootstrap is in the account audit log (OP-10).
+const BOOTSTRAP: Actor<'static> = Actor {
+    actor: "access-bootstrap",
+    correlation: "bootstrap",
+};
+
+/// The breach corpus the test user's password is checked against (IDP-3): the deployment's
+/// local mirror when the plan names one; without one there is nothing to check against, and
+/// the bootstrap says so.
+enum Corpus {
+    Mirror(MirrorRanges),
+    Absent,
+}
+
+impl Corpus {
+    fn of(dir: Option<PathBuf>) -> Self {
+        match dir {
+            Some(d) => Self::Mirror(MirrorRanges::new(d)),
+            None => {
+                tracing::warn!(
+                    "test_user: no breach_ranges_dir in the plan; the test password is not \
+                     checked against a breach corpus"
+                );
+                Self::Absent
+            }
+        }
+    }
+}
+
+impl BreachRanges for Corpus {
+    async fn range(&self, prefix: &str) -> Result<String, RangeUnavailable> {
+        match self {
+            Self::Mirror(m) => m.range(prefix).await,
+            Self::Absent => Ok(String::new()),
+        }
+    }
+}
+
+/// The change a one-shot command makes to a platform client (OP-149 m.26 (c)).
+#[derive(Clone, Debug)]
+pub(crate) enum ProductChange {
+    /// `idp.client.update` with a new display name.
+    Update {
+        /// The new display name.
+        display_name: String,
+    },
+    /// `idp.client.retire`.
+    Retire,
+}
+
+/// What a platform client change committed.
+#[derive(Clone, Debug, Serialize)]
+pub(crate) struct ChangeOut {
+    pub(crate) product: &'static str,
+    pub(crate) client_id: String,
+    /// The `idp.*` action committed.
+    pub(crate) action: String,
+    /// The event the change queued for the platform client's streams.
+    pub(crate) event: &'static str,
+    /// The `ExerciseID`, base64url.
+    pub(crate) exercise: String,
+    /// Position of the decision record.
+    pub(crate) position: u64,
+}
+
+/// The `acceptance-content` under which `issuer`'s `party_compromise` Claims are predicate
+/// input about any subject, for good (L2-CLM-3).
+fn acceptance(issuer: Id) -> Value {
+    Value::Map(vec![
+        (Value::text("issuer"), issuer.to_value()),
+        (Value::text("use"), Value::text(PREDICATE_INPUT)),
+        (
+            Value::text("classes"),
+            Value::Array(vec![Value::text(PARTY_COMPROMISE)]),
+        ),
+        (Value::text("subject"), SubjectSelector::Public.to_value()),
+        (
+            Value::text("validity"),
+            Value::Array(vec![Value::Unsigned(0), Value::Unsigned(u64::MAX)]),
+        ),
+    ])
+}
+
+impl<P, K> Bootstrap<'_, P, K>
+where
+    P: Decider + Governance + Instances + MetaExercises,
+    K: RealmKeys,
+{
+    /// The test user of `u` in the realm, active with a password credential (AAL1), and the
+    /// public client a headless login signs in with (OP-149 m.26 (b)). An account holding the
+    /// identifier is found, not made again.
+    pub(super) async fn test_user(
+        &self,
+        admin: &Admin<'_, P, P, K>,
+        ids: &IdKey,
+        (tenant, realm): (TenantId, RealmId),
+        domain: Digest,
+        root: &HsmSigner,
+        u: &TestUserPlan,
+    ) -> Result<TestUserOut, BootstrapError> {
+        let kind = if u.identifier.contains('@') {
+            IdentifierKind::Email
+        } else {
+            IdentifierKind::Username
+        };
+        let identifier = Identifier::new(kind, &u.identifier)
+            .map_err(|e| BootstrapError::Plan(format!("test_user identifier: {e}")))?;
+        let keks = RealmKeks::new(Arc::clone(self.hsm));
+        let kek = keks
+            .kek(tenant, realm)
+            .ok_or_else(|| BootstrapError::Unavailable(String::from("realm KEK")))?;
+        let scope = Realm {
+            tenant,
+            realm,
+            kek: &*kek,
+            ids,
+        };
+        let accounts = PgAccounts(self.app.clone());
+        let mut tx = accounts.begin(tenant, realm).await?;
+        let existing = tx.subject_by_identifier(identifier.value()).await?;
+        tx.commit().await?;
+        let (subject, created) = match existing {
+            Some(s) => (s, false),
+            None => {
+                let s = create(&accounts, &scope, std::slice::from_ref(&identifier), &BOOTSTRAP)
+                    .await?;
+                let hasher = Hasher::new(HasherConfig::sized(
+                    Argon2Params::CANONICAL,
+                    cores(),
+                    cgroup_memory_budget(),
+                ));
+                let corpus = Corpus::of(u.breach_ranges_dir.clone());
+                let services = PasswordServices {
+                    hasher: &hasher,
+                    ranges: &corpus,
+                    entropy: &SystemEntropy,
+                };
+                set_password(
+                    &accounts,
+                    &scope,
+                    &services,
+                    s,
+                    u.password.expose(),
+                    &BOOTSTRAP,
+                )
+                .await?;
+                for to in [AccountStatus::PendingUserAction, AccountStatus::Active] {
+                    change_status(&accounts, &scope, s, to, &BOOTSTRAP).await?;
+                }
+                (s, true)
+            }
+        };
+        let client_id = self
+            .public_client(admin, (tenant, realm), domain, root, u)
+            .await?;
+        Ok(TestUserOut {
+            realm: u.realm.clone(),
+            issuer: String::new(),
+            identifier: String::from(identifier.value()),
+            subject: scope.external(subject)?,
+            client_id,
+            redirect_uri: String::from(u.redirect_uri.as_str()),
+            created,
+        })
+    }
+
+    /// The active public client of the realm with the test user's redirect URI, registered by
+    /// an `idp.client.register` Exercise the root signs when there is none.
+    async fn public_client(
+        &self,
+        admin: &Admin<'_, P, P, K>,
+        (tenant, realm): (TenantId, RealmId),
+        domain: Digest,
+        root: &HsmSigner,
+        u: &TestUserPlan,
+    ) -> Result<String, BootstrapError> {
+        let mut t = TenantTx::begin(self.app, tenant, realm).await?;
+        let mut found = None;
+        for id in idp::clients_with_redirect(&mut t, u.redirect_uri.as_str()).await? {
+            if let Some(row) = idp::client(&mut t, &id).await?
+                && row.active
+                && row.auth_method == AuthMethod::None.name()
+                && row.platform_product.is_none()
+            {
+                found = Some(row.client_id);
+                break;
+            }
+        }
+        t.commit().await?;
+        if let Some(id) = found {
+            return Ok(id);
+        }
+        let client = Client {
+            id: admin.new_client_id().await?,
+            display_name: u.client_display_name.clone(),
+            auth: AuthMethod::None,
+            redirect_uris: vec![u.redirect_uri.clone()],
+            post_logout_redirect_uris: Vec::new(),
+            backchannel_logout_uri: None,
+            require_par: false,
+            platform: None,
+        };
+        let id = String::from(client.id.as_str());
+        self.change(
+            admin,
+            (tenant, realm),
+            domain,
+            root,
+            Change::ClientRegister(client),
+        )
+        .await?;
+        Ok(id)
+    }
+
+    /// The local declarant's Party in the realm's domain and the Acceptance of its
+    /// `party_compromise` Claims as predicate input, established by the root once
+    /// (OP-149 m.26 (c), L2-CLM-3, L2-CLM-5).
+    pub(super) async fn compromise(
+        &self,
+        c: &CompromisePlan,
+        (tenant, realm): (TenantId, RealmId),
+        domain: Digest,
+        root: &HsmSigner,
+    ) -> Result<CompromiseOut, BootstrapError> {
+        let key = token_key(self.hsm, DECLARANT_LABEL)?;
+        let issuer = root_party(&key.public_key());
+        self.onboard(tenant, realm, domain, &key, issuer).await?;
+        let mut label = ACCEPTANCE_LABEL.to_vec();
+        label.extend_from_slice(&domain.0);
+        label.extend_from_slice(&issuer.0);
+        let signature = root
+            .sign(&label)
+            .map_err(|e| BootstrapError::Unavailable(String::from(e.code())))?;
+        let nonce = suiss_crypto::digest::sha256(&signature).to_vec();
+        let established = find_nonce(self.app, &DomainId::from_bytes(domain.0), &nonce)
+            .await?
+            .is_some_and(|n| n.outcome == "allow");
+        if !established {
+            self.commit_meta(
+                domain,
+                root,
+                &nonce,
+                Payload::AcceptanceEstablish(acceptance(issuer)),
+                issuer,
+            )
+            .await?;
+        }
+        Ok(CompromiseOut {
+            realm: c.realm.clone(),
+            domain: b64url_encode(&domain.0),
+            issuer: b64url_encode(&issuer.0),
+            class: PARTY_COMPROMISE,
+            created: !established,
+        })
+    }
+
+    /// Commits `change` to the platform client of `product` in the platform realm as an
+    /// `idp.client.update` or `idp.client.retire` Exercise the root signs (OP-149 m.26 (c),
+    /// MD-14, EI-25); its event is queued with the write.
+    ///
+    /// # Errors
+    /// [`BootstrapError`]; a product the plan does not name, or one without an active client,
+    /// is a plan error.
+    pub(crate) async fn change_product_client(
+        &self,
+        plan: &Plan,
+        product: &str,
+        change: ProductChange,
+    ) -> Result<ChangeOut, BootstrapError> {
+        let p = plan
+            .products
+            .iter()
+            .find(|p| p.product.name() == product)
+            .ok_or_else(|| BootstrapError::Plan(format!("the plan names no product {product}")))?;
+        let route = route_by_slug(self.router, &plan.platform)
+            .await?
+            .ok_or(AdminError::NoRealm)?;
+        let mut t = TenantTx::begin(self.app, route.tenant, route.realm).await?;
+        let g = idp::governance(&mut t).await?.ok_or(AdminError::NoRealm)?;
+        t.commit().await?;
+        let domain = Digest(*g.domain.as_bytes());
+        let ids = cell_ids(self.app, self.hsm).await?;
+        let admin = self.admin(&ids, Some(route.tenant));
+        let root = root_key(self.hsm)?;
+        let client_id = self
+            .find_product_client((route.tenant, route.realm), p)
+            .await?
+            .ok_or_else(|| {
+                BootstrapError::Plan(format!("{product} has no active platform client"))
+            })?;
+        let id = ClientId::parse(&client_id).map_err(AdminError::from)?;
+        let (change, event) = match change {
+            ProductChange::Update { display_name } => (
+                Change::ClientUpdate(Client {
+                    display_name,
+                    ..p.client(id)
+                }),
+                IdentityKind::ApiClientUpdated,
+            ),
+            ProductChange::Retire => (Change::ClientRetire(id), IdentityKind::ApiClientDisabled),
+        };
+        let action = change.action().label();
+        let applied = self
+            .change(&admin, (route.tenant, route.realm), domain, &root, change)
+            .await?;
+        let (exercise, position) = match applied {
+            Applied::Written {
+                exercise, position, ..
+            }
+            | Applied::AlreadyWritten { exercise, position } => (exercise, position),
+            Applied::NotAllowed { decision, .. } => {
+                return Err(BootstrapError::Refused(format!("{:?}", decision.outcome)));
+            }
+        };
+        Ok(ChangeOut {
+            product: p.product.name(),
+            client_id,
+            action,
+            event: event.name(),
+            exercise: b64url_encode(&exercise.0),
+            position,
+        })
+    }
+}

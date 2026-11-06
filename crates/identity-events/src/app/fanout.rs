@@ -209,8 +209,9 @@ impl<C: Clock + Send + Sync> Fanout<C> {
     }
 
     /// One delivery per live subscription of `tenant` that asked for the event's type, and per
-    /// live platform product subscription of another tenant (OP-149 m.17 (e)); the latter's
-    /// SET names the event's tenant.
+    /// live platform product subscription of another tenant (OP-149 m.17 (e)). Every SET of a
+    /// platform product's subscription names the event's tenant in `access_tenant`, its own
+    /// tenant's events included (OP-149 m.26 (d)).
     async fn queue(&self, tenant: TenantId, ready: &Ready) -> Result<u32, Unavailable> {
         let now = self.clock.now().map_err(down)?;
         let urn = urn(ready.name);
@@ -256,7 +257,7 @@ impl<C: Clock + Send + Sync> Fanout<C> {
                 .map_err(down)?;
             for s in subs {
                 let mut claims = set_claims(ready, issuer.as_str(), &s.audience, now / 1000);
-                if owner != tenant {
+                if owner != tenant || s.platform_product.is_some() {
                     set_tenant(&mut claims, &self.db.tenant(tenant)?);
                 }
                 let payload = serde_json::to_vec(&claims).map_err(down)?;

@@ -179,6 +179,7 @@ pub struct TestEnv {
     pub keys: StaticKeys,
     pub directory: PgDirectory,
     pub pool: Pool,
+    pub reader: Pool,
     pub router: Pool,
     pub socket: PathBuf,
     pub rings: Arc<HashMap<RealmId, Rings>>,
@@ -189,11 +190,12 @@ pub struct TestEnv {
 impl Clone for TestEnv {
     fn clone(&self) -> Self {
         Self {
-            db: PgOAuth::new(self.pool.clone()),
+            db: PgOAuth::with_reader(self.pool.clone(), self.reader.clone()),
             signer: SignerKeys::new(self.socket.clone()),
             keys: self.keys.clone(),
             directory: PgDirectory::new(self.router.clone()),
             pool: self.pool.clone(),
+            reader: self.reader.clone(),
             router: self.router.clone(),
             socket: self.socket.clone(),
             rings: self.rings.clone(),
@@ -573,11 +575,12 @@ impl Cluster {
             })
             .collect();
         let env = TestEnv {
-            db: PgOAuth::new(db.app.clone()),
+            db: PgOAuth::with_reader(db.app.clone(), db.reader.clone()),
             signer: SignerKeys::new(socket.clone()),
             keys,
             directory: PgDirectory::new(db.router.clone()),
             pool: db.app.clone(),
+            reader: db.reader.clone(),
             router: db.router.clone(),
             socket,
             rings: Arc::new(rings),

@@ -76,6 +76,10 @@ impl OAuthDb for NoDb {
     async fn begin(&self, _: TenantId, _: RealmId) -> Result<PgOAuthTx, Unavailable> {
         Err(Unavailable)
     }
+
+    async fn platform_product(&self, _: &str) -> Result<Option<String>, Unavailable> {
+        Err(Unavailable)
+    }
 }
 
 struct NoCache;

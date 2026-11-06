@@ -5,13 +5,18 @@
 //! (L0-META-7), and a platform client is an `idp.client.register` Exercise that root signs
 //! (MD-14, EI-25). A sample realm can publish a product's catalog in its Genesis, and its root
 //! then grants a sample subject one action by a `grant_issue` Exercise, so a product can run a
-//! real eligibility check (OP-149 m.10). Every step looks for its result first, so a second run
-//! changes nothing.
+//! real eligibility check (OP-149 m.10). A sample realm can also get a test user with a
+//! password and a public client to sign in with, and a Party whose unsigned `party_compromise`
+//! Claims the realm accepts, for a product's end-to-end tests (OP-149 m.26 (b), (c)). Every
+//! step looks for its result first, so a second run changes nothing.
+
+pub(crate) mod local;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 use std::future::Future;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use access_authority_core::domain::Request;
 use access_authority_core::genesis::IDP_ANCHOR;
@@ -93,6 +98,8 @@ pub(crate) enum BootstrapError {
     Admin(#[from] AdminError),
     #[error(transparent)]
     Store(#[from] StoreError),
+    #[error("account: {0}")]
+    Account(#[from] access_identity_account::AccountError),
     #[error("hsm: {0}")]
     Hsm(#[from] HsmError),
     #[error("the authority plane refused: {0}")]
@@ -126,6 +133,77 @@ struct PlanFile {
     #[serde(default)]
     products: Vec<ProductFile>,
     sample: Option<SampleFile>,
+    test_user: Option<TestUserFile>,
+    compromise: Option<CompromiseFile>,
+}
+
+/// `[test_user]` as written: the password is never in the plan file itself unless the operator
+/// wrote it there; `password_env` names the variable it is read from (OP-149 m.26 (b)).
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct TestUserFile {
+    realm: String,
+    identifier: String,
+    password: Option<String>,
+    password_env: Option<String>,
+    client_display_name: Option<String>,
+    redirect_uri: String,
+    breach_ranges_dir: Option<PathBuf>,
+}
+
+impl core::fmt::Debug for TestUserFile {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("TestUserFile")
+            .field("realm", &self.realm)
+            .field("identifier", &self.identifier)
+            .field("password", &self.password.as_ref().map(|_| "<redacted>"))
+            .field("password_env", &self.password_env)
+            .field("redirect_uri", &self.redirect_uri)
+            .finish_non_exhaustive()
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct CompromiseFile {
+    realm: String,
+}
+
+/// A test user with a password in a sample realm, and the public client (PKCE and DPoP, no
+/// secret) a headless login signs in with (OP-149 m.26 (b)).
+#[derive(Clone)]
+pub(crate) struct TestUserPlan {
+    /// The slug of one of the plan's sample tenants.
+    pub(crate) realm: String,
+    /// The login identifier: an e-mail address or a user name.
+    pub(crate) identifier: String,
+    /// The password, from the plan or the environment variable it named.
+    pub(crate) password: Secret<String>,
+    /// The display name of the public client.
+    pub(crate) client_display_name: String,
+    /// The public client's one redirect URI.
+    pub(crate) redirect_uri: RedirectUri,
+    /// A local mirror of the breach ranges, when the deployment has one (IDP-3).
+    pub(crate) breach_ranges_dir: Option<PathBuf>,
+}
+
+impl core::fmt::Debug for TestUserPlan {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("TestUserPlan")
+            .field("realm", &self.realm)
+            .field("identifier", &self.identifier)
+            .field("client_display_name", &self.client_display_name)
+            .field("redirect_uri", &self.redirect_uri)
+            .finish_non_exhaustive()
+    }
+}
+
+/// A sample realm that accepts unsigned `party_compromise` Claims from a local declarant
+/// Party, so a product's PEP can produce `party.compromised` (OP-149 m.26 (c)).
+#[derive(Clone, Debug)]
+pub(crate) struct CompromisePlan {
+    /// The slug of one of the plan's sample tenants.
+    pub(crate) realm: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -261,6 +339,35 @@ pub(crate) struct Plan {
     pub(crate) style: Style,
     pub(crate) products: Vec<ProductPlan>,
     pub(crate) sample: Option<SamplePlan>,
+    pub(crate) test_user: Option<TestUserPlan>,
+    pub(crate) compromise: Option<CompromisePlan>,
+}
+
+/// One of the plan's sample tenants, or a plan error naming the section.
+fn sample_tenant(tenants: &[String], section: &str, realm: &str) -> Result<(), BootstrapError> {
+    if tenants.iter().any(|t| t == realm) {
+        Ok(())
+    } else {
+        Err(BootstrapError::Plan(format!(
+            "{section} realm {realm} is not one of the plan's tenants"
+        )))
+    }
+}
+
+/// The test user's password: the plan's literal, or the environment variable the plan names
+/// (OP-149 m.26 (b)); never a default.
+fn test_password(file: &TestUserFile) -> Result<Secret<String>, BootstrapError> {
+    let plan = |what: &str| BootstrapError::Plan(format!("test_user: {what}"));
+    let raw = match (&file.password, &file.password_env) {
+        (Some(p), None) => p.clone(),
+        (None, Some(var)) => std::env::var(var)
+            .map_err(|_| plan(&format!("password_env {var} is not set")))?,
+        _ => return Err(plan("exactly one of password and password_env is required")),
+    };
+    if raw.is_empty() {
+        return Err(plan("the password is empty"));
+    }
+    Ok(Secret::new(raw))
 }
 
 /// One public key from a file holding a JWK or a one-key JWKS.
@@ -329,12 +436,39 @@ impl Plan {
                 Some(sample)
             }
         };
+        let test_user = match file.test_user {
+            None => None,
+            Some(u) => {
+                sample_tenant(&file.tenants, "test_user", &u.realm)?;
+                let password = test_password(&u)?;
+                Some(TestUserPlan {
+                    realm: u.realm,
+                    identifier: u.identifier,
+                    password,
+                    client_display_name: u
+                        .client_display_name
+                        .unwrap_or_else(|| String::from("Local test client")),
+                    redirect_uri: RedirectUri::parse(&u.redirect_uri)
+                        .map_err(|e| BootstrapError::Plan(e.to_string()))?,
+                    breach_ranges_dir: u.breach_ranges_dir,
+                })
+            }
+        };
+        let compromise = match file.compromise {
+            None => None,
+            Some(c) => {
+                sample_tenant(&file.tenants, "compromise", &c.realm)?;
+                Some(CompromisePlan { realm: c.realm })
+            }
+        };
         Ok(Self {
             platform: file.platform,
             tenants: file.tenants,
             style: file.issuer_style,
             products,
             sample,
+            test_user,
+            compromise,
         })
     }
 }
@@ -419,6 +553,41 @@ pub(crate) struct SampleOut {
     pub(crate) basis: serde_json::Value,
 }
 
+/// The test user and the public client a headless login uses (OP-149 m.26 (b)).
+#[derive(Clone, Debug, Serialize)]
+pub(crate) struct TestUserOut {
+    /// The realm's slug.
+    pub(crate) realm: String,
+    /// The realm's issuer: `/authorize` and `/token` hang under it.
+    pub(crate) issuer: String,
+    /// The login identifier.
+    pub(crate) identifier: String,
+    /// The subject's external id (`usr_…`).
+    pub(crate) subject: String,
+    /// The public client's `client_id`.
+    pub(crate) client_id: String,
+    /// Its registered redirect URI.
+    pub(crate) redirect_uri: String,
+    /// Whether this run created the account.
+    pub(crate) created: bool,
+}
+
+/// What an unsigned `party_compromise` Claim names to be admitted in the sample realm
+/// (OP-149 m.26 (c)): the issuer Party the realm accepts, over the PEP channel.
+#[derive(Clone, Debug, Serialize)]
+pub(crate) struct CompromiseOut {
+    /// The realm's slug.
+    pub(crate) realm: String,
+    /// Its governing domain, base64url.
+    pub(crate) domain: String,
+    /// The accepted issuer Party, base64url.
+    pub(crate) issuer: String,
+    /// The accepted class.
+    pub(crate) class: &'static str,
+    /// Whether this run established the Acceptance.
+    pub(crate) created: bool,
+}
+
 /// What a product needs from the bootstrap.
 #[derive(Clone, Debug, Serialize)]
 pub(crate) struct Summary {
@@ -430,6 +599,12 @@ pub(crate) struct Summary {
     /// Present when the plan names a sample.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) sample: Option<SampleOut>,
+    /// Present when the plan names a test user.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) test_user: Option<TestUserOut>,
+    /// Present when the plan names a compromise declarant.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) compromise: Option<CompromiseOut>,
 }
 
 /// Meta-actions the bootstrap's keys sign, committed by the authority plane with the identity
@@ -454,8 +629,8 @@ pub(crate) struct Bootstrap<'a, P, K> {
     pub(crate) plane: &'a P,
     /// Realms' keys outside the database.
     pub(crate) realm_keys: &'a K,
-    /// The server's token: the root key and the cell's opaque-id root.
-    pub(crate) hsm: &'a KeyStore,
+    /// The server's token: the root key, the cell's opaque-id root and the realms' KEKs.
+    pub(crate) hsm: &'a Arc<KeyStore>,
     /// Where realm issuers are formed.
     pub(crate) base: &'a RealmBase,
     /// The operator's declared delivery targets (OP-149 m.23).
@@ -585,6 +760,8 @@ where
             std::iter::once((&plan.platform, true)).chain(plan.tenants.iter().map(|s| (s, false)));
         let mut platform = None;
         let mut sample = None;
+        let mut test_user = None;
+        let mut compromise = None;
         for (slug, is_platform) in slugs {
             let admin = self.admin(&ids, None);
             let catalog = plan
@@ -603,6 +780,19 @@ where
                 .ok_or(AdminError::NoRealm)?;
             if is_platform {
                 platform = Some((tenant, realm, domain, route.issuer.clone()));
+            }
+            // OP-149 m.26 (b), (c)
+            if let Some(u) = plan.test_user.as_ref().filter(|u| u.realm == *slug) {
+                let out = self
+                    .test_user(&admin, &ids, (tenant, realm), domain, &root, u)
+                    .await?;
+                test_user = Some(TestUserOut {
+                    issuer: route.issuer.clone(),
+                    ..out
+                });
+            }
+            if let Some(c) = plan.compromise.as_ref().filter(|c| c.realm == *slug) {
+                compromise = Some(self.compromise(c, (tenant, realm), domain, &root).await?);
             }
             realms.push(RealmOut {
                 tenant: ids
@@ -641,6 +831,8 @@ where
             realms,
             clients,
             sample,
+            test_user,
+            compromise,
         })
     }
 
@@ -709,10 +901,23 @@ where
         root: &HsmSigner,
         nonce: &[u8],
     ) -> Result<u64, BootstrapError> {
-        let w = Moment::at(server_time(self.app).await?);
         let payload = Payload::GrantIssue(s.grant(&domain, subject));
+        self.commit_meta(domain, root, nonce, payload, subject).await
+    }
+
+    /// Commits the meta-action `payload` about `party` on the meta-anchor, signed by the root;
+    /// returns its record's position.
+    async fn commit_meta(
+        &self,
+        domain: Digest,
+        root: &HsmSigner,
+        nonce: &[u8],
+        payload: Payload,
+        party: Id,
+    ) -> Result<u64, BootstrapError> {
+        let w = Moment::at(server_time(self.app).await?);
         let intent =
-            self_signed_intent(&payload, subject, w.validity).ok_or(BootstrapError::Encode)?;
+            self_signed_intent(&payload, party, w.validity).ok_or(BootstrapError::Encode)?;
         let digest = intent_digest(&intent).map_err(|_| BootstrapError::Encode)?;
         let basis = ExerciseBasis::Anchor(meta::meta_anchor(&domain));
         let ais = sign(root, &w.statement(domain, nonce, digest, basis))?;
@@ -870,6 +1075,29 @@ where
         root: &HsmSigner,
         p: &ProductPlan,
     ) -> Result<(String, bool), BootstrapError> {
+        if let Some(id) = self.find_product_client((tenant, realm), p).await? {
+            return Ok((id, false));
+        }
+        let client = p.client(admin.new_client_id().await?);
+        let id = String::from(client.id.as_str());
+        self.change(
+            admin,
+            (tenant, realm),
+            domain,
+            root,
+            Change::ClientRegister(client),
+        )
+        .await?;
+        Ok((id, true))
+    }
+
+    /// The active platform client of `p` in the realm: the one with its redirect URI, product
+    /// and client key.
+    async fn find_product_client(
+        &self,
+        (tenant, realm): (TenantId, RealmId),
+        p: &ProductPlan,
+    ) -> Result<Option<String>, BootstrapError> {
         let kid = b64url_encode(&thumbprint(&p.client_key));
         let mut t = TenantTx::begin(self.app, tenant, realm).await?;
         let mut found = None;
@@ -884,11 +1112,19 @@ where
             }
         }
         t.commit().await?;
-        if let Some(id) = found {
-            return Ok((id, false));
-        }
-        let client = p.client(admin.new_client_id().await?);
-        let id = String::from(client.id.as_str());
+        Ok(found)
+    }
+
+    /// Commits the `idp.*` change `change` in the realm as an Exercise the root signs on the
+    /// realm's `idp` Anchor (MD-14, EI-25); a fresh nonce every time.
+    async fn change(
+        &self,
+        admin: &Admin<'_, P, P, K>,
+        (tenant, realm): (TenantId, RealmId),
+        domain: Digest,
+        root: &HsmSigner,
+        change: Change,
+    ) -> Result<Applied, BootstrapError> {
         let w = Moment::at(server_time(self.app).await?);
         let nonce = access_crypto::random::bytes::<16>()
             .map_err(|_| BootstrapError::Unavailable(String::from("rng")))?
@@ -896,7 +1132,7 @@ where
         let proposal = Proposal {
             tenant,
             realm,
-            change: Change::ClientRegister(client),
+            change,
             nonce,
             validity: w.validity,
             basis: ExerciseBasis::Anchor(meta::object_id(&domain, kind::ANCHOR, IDP_ANCHOR)),
@@ -914,10 +1150,10 @@ where
             ),
         )?;
         match Box::pin(admin.apply(&proposal, ais)).await? {
-            Applied::Written { .. } | Applied::AlreadyWritten { .. } => Ok((id, true)),
             Applied::NotAllowed { decision, .. } => {
                 Err(BootstrapError::Refused(format!("{:?}", decision.outcome)))
             }
+            applied => Ok(applied),
         }
     }
 }

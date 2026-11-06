@@ -77,6 +77,43 @@ impl<K: Sealer, R: Random> Streams<K, R> {
         Ok(status_json(&update.stream_id, &update.status))
     }
 
+    /// The status of the stream `id` the platform client `client_id` owns (SSF 1.0 §8.1.2.1,
+    /// OP-149 m.26 (c)).
+    ///
+    /// # Errors
+    /// [`StreamError::NotFound`] for a stream it does not own.
+    pub async fn status_owned(
+        &self,
+        tenant: TenantId,
+        realm: RealmId,
+        client_id: &str,
+        id: [u8; 16],
+    ) -> Result<serde_json::Value, StreamError> {
+        let s = self.owned_row(tenant, realm, client_id, id).await?;
+        Ok(status_json(&uuid(&s.id), status_of(&s)))
+    }
+
+    /// Sets the status of the stream `id` the platform client `client_id` owns, with the rules
+    /// of a stream's own `/ssf/status` (SSF 1.0 §8.1.2.2, OP-149 m.26 (c)): `disabled` ends it
+    /// and the row stays (OP-73).
+    ///
+    /// # Errors
+    /// [`StreamError`]; a stream it does not own, or one already disabled, is not found.
+    pub async fn set_status_owned(
+        &self,
+        tenant: TenantId,
+        realm: RealmId,
+        client_id: &str,
+        id: [u8; 16],
+        update: &StatusUpdate,
+    ) -> Result<serde_json::Value, StreamError> {
+        let s = self.owned_row(tenant, realm, client_id, id).await?;
+        if s.disabled {
+            return Err(StreamError::NotFound);
+        }
+        self.set_status(tenant, realm, &s, update).await
+    }
+
     /// Queues a verification SET on the stream `s` at `now` (SSF 1.0 §8.1.4): its subject is the
     /// stream and it echoes the request's `state`. A webhook stream has no SSF verification.
     ///

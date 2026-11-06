@@ -44,6 +44,20 @@ fn binding(e: BindingError) -> Reply {
     Reply::oauth_error(400, e.error(), "the DPoP key does not match the grant")
 }
 
+/// RFC 8707 §2.2, OP-149 m.26 (a): a `resource` sent to the token endpoint for a protocol-scope
+/// grant must be the one the authorization request named, the realm itself when it named
+/// none; an authority grant's resource is read with its details instead.
+fn resource_matches(params: &Params, details: &GrantDetails, realm: &Realm) -> bool {
+    details.authority.is_some()
+        || params
+            .get("resource")
+            .is_none_or(|r| r == details.audience(&realm.issuer))
+}
+
+fn invalid_target() -> Reply {
+    Reply::oauth_error(400, "invalid_target", "not the authorized resource")
+}
+
 /// A request value as an audit field: identifiers only (OP-10); anything else is `-`.
 fn audit_text(v: Option<&str>, max: usize) -> &str {
     v.filter(|s| {
@@ -227,6 +241,9 @@ impl<E: Env> OAuth<E> {
         if let Err(e) = check_code_exchange(details.dpop_jkt.map(Jkt), Some(jkt)) {
             return Ok(binding(e));
         }
+        if !resource_matches(params, &details.grant, realm) {
+            return Ok(invalid_target());
+        }
         // G57
         let Some(session) = tx
             .session(row.session)
@@ -346,6 +363,9 @@ impl<E: Env> OAuth<E> {
         }
         if let Err(e) = check_refresh(grant.dpop_jkt.map(Jkt), Some(jkt)) {
             return Ok(binding(e));
+        }
+        if !resource_matches(params, &details, realm) {
+            return Ok(invalid_target());
         }
         if let (Some(a), Some(family)) = (&details.authority, details.family) {
             // §9.9.3 rule 6, L19: every refresh is a new decision of the family

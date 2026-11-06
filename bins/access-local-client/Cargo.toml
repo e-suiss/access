@@ -1,0 +1,44 @@
+[package]
+name = "access-local-client"
+description = "Headless client for a local Access deployment: the authorization code flow with PKCE and DPoP, a product's compromise declaration and its platform stream status (OP-149 m.26)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[[bin]]
+name = "access-local-client"
+path = "src/main.rs"
+
+[dependencies]
+access-crypto = { workspace = true }
+access-kernel = { workspace = true }
+suiss-crypto = { workspace = true }
+aws-lc-rs = { workspace = true }
+httparse = { workspace = true, features = ["std"] }
+rustls = { workspace = true, features = ["aws_lc_rs", "std"] }
+rustls-pki-types = { workspace = true, features = ["std"] }
+serde_json = { workspace = true, features = ["std"] }
+thiserror = { workspace = true, features = ["std"] }
+tokio = { workspace = true, features = ["macros", "net", "rt-multi-thread", "io-util", "time"] }
+tokio-rustls = { workspace = true, features = ["aws_lc_rs"] }
+
+[dev-dependencies]
+access-crypto = { workspace = true, features = ["testing"] }
+access-http = { workspace = true }
+access-identity-account = { workspace = true }
+access-identity-oauth = { workspace = true }
+access-identity-session = { workspace = true }
+access-identity-signer = { path = "../../crates/identity-signer" }
+access-identity-ui = { workspace = true }
+access-identity-webauthn = { workspace = true }
+access-internal-api = { workspace = true }
+access-store = { workspace = true, features = ["testing"] }
+axum = { workspace = true, features = ["http1", "tokio"] }
+rcgen = { workspace = true, features = ["aws_lc_rs", "pem"] }
+suiss-crypto = { workspace = true, features = ["signer", "aead", "testing"] }
+
+[lints]
+workspace = true

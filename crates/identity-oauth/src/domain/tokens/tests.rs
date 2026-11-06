@@ -17,6 +17,7 @@ fn req(prompt: Prompt, max_age_s: Option<u64>, acr: &[&str]) -> AuthRequest {
         acr_values: acr.iter().map(|a| String::from(*a)).collect(),
         dpop_jkt: None,
         authority: None,
+        resource: None,
     }
 }
 
@@ -110,6 +111,7 @@ fn identity_assertions_have_their_profile() {
     let issuer = Issuer::parse("https://acme.id.test").unwrap();
     let f = TokenFacts {
         issuer: &issuer,
+        audience: issuer.as_str(),
         client_id: "cli_x",
         sub: "pw",
         sid: "sid",
@@ -129,6 +131,32 @@ fn identity_assertions_have_their_profile() {
     let at = claims(&access_token_claims(&f, "openid", "j", "k"));
     assert_eq!(at["aud"], "https://acme.id.test");
     assert_eq!(at["cnf"]["jkt"], "k");
+    // OP-149 m.26 (a): a grant that named a platform product as its resource addresses the
+    // token to that client; cnf stays
+    let product = TokenFacts {
+        audience: "cli_work",
+        ..f.clone()
+    };
+    let at_product = claims(&access_token_claims(&product, "openid", "j", "k"));
+    assert_eq!(at_product["aud"], "cli_work");
+    assert_eq!(at_product["iss"], "https://acme.id.test");
+    assert_eq!(at_product["cnf"]["jkt"], "k");
+    let details = GrantDetails {
+        scope: String::from("openid"),
+        auth_time_ms: NOW,
+        aal: Aal::Aal1,
+        openid: true,
+        authority: None,
+        family: None,
+        projection: None,
+        resource: None,
+    };
+    assert_eq!(details.audience(&issuer), issuer.as_str());
+    let named = GrantDetails {
+        resource: Some(String::from("cli_work")),
+        ..details
+    };
+    assert_eq!(named.audience(&issuer), "cli_work");
     // OP-21, CMP-15.2: the session epoch the token was issued under
     assert_eq!((at["rev"].as_i64(), id["rev"].as_i64()), (Some(3), Some(3)));
     assert_eq!(

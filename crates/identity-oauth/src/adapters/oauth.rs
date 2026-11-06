@@ -21,17 +21,29 @@ use crate::domain::tokens::LoginReason;
 use crate::ports::oauth::{LoginPages, LogoutQueue, OAuthDb, OAuthTx, Random, TokenSigner};
 use crate::ports::{Keys, Unavailable};
 
-/// The realm rows over the application pool.
+/// The realm rows over the application pool; platform product clients of every tenant over
+/// the outbox reader (OP-149 m.26 (a)).
 #[derive(Clone)]
 pub struct PgOAuth {
     pool: Pool,
+    reader: Option<Pool>,
 }
 
 impl PgOAuth {
-    /// Over the application pool.
+    /// Over the application pool alone: no client is a resource.
     #[must_use]
     pub const fn new(pool: Pool) -> Self {
-        Self { pool }
+        Self { pool, reader: None }
+    }
+
+    /// Over the application pool and the outbox reader, which finds platform product clients
+    /// across tenants (OP-149 m.26 (a)).
+    #[must_use]
+    pub const fn with_reader(pool: Pool, reader: Pool) -> Self {
+        Self {
+            pool,
+            reader: Some(reader),
+        }
     }
 }
 
@@ -49,6 +61,15 @@ impl OAuthDb for PgOAuth {
         TenantTx::begin(&self.pool, tenant, realm)
             .await
             .map(PgOAuthTx)
+            .map_err(down)
+    }
+
+    async fn platform_product(&self, client_id: &str) -> Result<Option<String>, Unavailable> {
+        let Some(reader) = &self.reader else {
+            return Ok(None);
+        };
+        idp::platform_client_product(reader, client_id)
+            .await
             .map_err(down)
     }
 }

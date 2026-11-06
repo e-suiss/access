@@ -111,7 +111,8 @@ impl<E: Env> OAuth<E> {
                 &realm.issuer,
             ))));
         }
-        match stage_two(params, &client, redirect, &realm.issuer) {
+        let product = self.product_resource(realm, params).await?;
+        match stage_two(params, &client, redirect, &realm.issuer, product.as_deref()) {
             Ok(request) => Ok(Ok(Loaded {
                 client,
                 request,
@@ -206,6 +207,7 @@ impl<E: Env> OAuth<E> {
                 authority: req.authority.clone(),
                 family: None,
                 projection: None,
+                resource: req.resource.clone(),
             },
         };
         let encoded = serde_json::to_vec(&details).map_err(|_| Unavailable)?;
@@ -299,10 +301,12 @@ impl<E: Env> OAuth<E> {
                 "redirect_uri is not registered",
             ));
         };
-        let mut request = match stage_two(params, &client, redirect, &realm.issuer) {
-            Ok(r) => r,
-            Err(e) => return Ok(Reply::oauth_error(400, e.error, e.description)),
-        };
+        let product = self.product_resource(realm, params).await?;
+        let mut request =
+            match stage_two(params, &client, redirect, &realm.issuer, product.as_deref()) {
+                Ok(r) => r,
+                Err(e) => return Ok(Reply::oauth_error(400, e.error, e.description)),
+            };
         // RFC 9449 §10.1
         let mut nonce = None;
         if !dpop.is_empty() {

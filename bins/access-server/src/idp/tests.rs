@@ -1157,9 +1157,10 @@ impl access_identity_events::ports::Sealer for NoSeal {
     }
 }
 
-// OP-149 m.17 (e), m.4: a stream owned by a platform product client receives the events of
-// every tenant, tenant.created among them, each SET naming the tenant it happened in; a tenant's
-// own stream receives only its tenant's events, and only a platform client may own such a stream
+// OP-149 m.17 (e), m.26 (d), m.4: a stream owned by a platform product client receives the
+// events of every tenant, tenant.created among them, each SET naming the tenant it happened in
+// (the platform tenant's own too); a tenant's own stream receives only its tenant's events
+// without the claim, and only a platform client may own such a stream
 #[tokio::test]
 async fn a_platform_subscription_receives_every_tenant() {
     // OP-131, TN-1, OP-132 m.3
@@ -1276,9 +1277,12 @@ async fn a_platform_subscription_receives_every_tenant() {
     assert_eq!(claims["aud"], "work");
     assert!(claims["events"].get(urn("tenant.created")).is_some());
     let claims: serde_json::Value = serde_json::from_slice(&home.payload).unwrap();
-    assert!(claims.get("access_tenant").is_none());
+    assert_eq!(claims["access_tenant"], uuid(pt));
+    assert_eq!(claims["events"][urn("tenant.created")]["tenant"], uuid(pt));
     let mut t = TenantTx::begin(&w.db.app, t2, r2).await.unwrap();
-    assert!(t.delivery(r2, own.id, acme_event).await.unwrap().is_some());
+    let mine = t.delivery(r2, own.id, acme_event).await.unwrap().unwrap();
+    let claims: serde_json::Value = serde_json::from_slice(&mine.payload).unwrap();
+    assert!(claims.get("access_tenant").is_none());
     assert!(
         t.delivery(r2, own.id, platform_event)
             .await

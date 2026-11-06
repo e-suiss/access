@@ -72,6 +72,10 @@ pub struct AuthRequest {
     /// `projection.issue` (§9.9).
     #[serde(default)]
     pub authority: Option<AuthorityAsk>,
+    /// The RFC 8707 resource of the protocol-scope access token: the `client_id` of a
+    /// registered platform product client (OP-149 m.26 (a)); the realm itself when absent.
+    #[serde(default)]
+    pub resource: Option<String>,
 }
 
 /// The authority an authorization request asks for: the one resource server and the RFC 9396
@@ -272,8 +276,9 @@ fn scopes(params: &Params) -> Result<Vec<String>, AuthError> {
 }
 
 /// Stage two: everything after the redirect URI is known good (RFC 6749 §4.1.1, RFC 7636,
-/// RFC 8707, RFC 9449 §10, OIDC Core §3.1.2.1). `issuer` is the only resource Stage 5 tokens
-/// can name (OP-146 m.5 (c)).
+/// RFC 8707, RFC 9449 §10, OIDC Core §3.1.2.1). A protocol-scope token names `issuer` or, as
+/// `resource`, a registered platform product client: `product` is that client's `client_id`
+/// when the request's `resource` names one (OP-146 m.5 (c), OP-149 m.26 (a)).
 ///
 /// # Errors
 /// [`AuthError`].
@@ -282,6 +287,7 @@ pub fn stage_two(
     client: &Client,
     redirect_uri: &str,
     issuer: &Issuer,
+    product: Option<&str>,
 ) -> Result<AuthRequest, AuthError> {
     // IDP-7, TN-34
     match params.get("response_type") {
@@ -352,7 +358,7 @@ pub fn stage_two(
     let dpop_jkt = authorization_request_jkt(params.get("dpop_jkt"))
         .map_err(|_| AuthError::invalid_request("dpop_jkt is malformed"))?
         .map(|j| j.0);
-    let authority = authority_ask(params, issuer)?;
+    let (authority, resource) = authority_ask(params, issuer, product)?;
     let state = params.get("state").map(String::from);
     let nonce = params.get("nonce").map(String::from);
     if state.as_ref().is_some_and(|s| s.len() > MAX_STATE)
@@ -372,19 +378,28 @@ pub fn stage_two(
         acr_values,
         dpop_jkt,
         authority,
+        resource,
     })
 }
 
 /// The authority an authorization request asks for (RFC 9396, §9.9, AG-8): one resource server,
-/// never a default one, and valid details; without details the only resource is the realm.
-fn authority_ask(params: &Params, issuer: &Issuer) -> Result<Option<AuthorityAsk>, AuthError> {
+/// never a default one, and valid details. Without details the resource is the realm, or a
+/// registered platform product client (`product`) the protocol-scope token is then addressed
+/// to (RFC 8707, OP-149 m.26 (a)); anything else is `invalid_target`.
+fn authority_ask(
+    params: &Params,
+    issuer: &Issuer,
+    product: Option<&str>,
+) -> Result<(Option<AuthorityAsk>, Option<String>), AuthError> {
     let resource = params.get("resource");
     let Some(details) = params.get(crate::domain::authority::DETAILS_PARAM) else {
         // RFC 8707, AG-8
-        if resource.is_some_and(|r| r != issuer.as_str()) {
-            return Err(AuthError::new("invalid_target", "unknown resource"));
-        }
-        return Ok(None);
+        return match resource {
+            None => Ok((None, None)),
+            Some(r) if r == issuer.as_str() => Ok((None, None)),
+            Some(r) if product == Some(r) => Ok((None, Some(String::from(r)))),
+            Some(_) => Err(AuthError::new("invalid_target", "unknown resource")),
+        };
     };
     let Some(resource) = resource.filter(|r| *r != issuer.as_str()) else {
         return Err(AuthError::new(
@@ -398,10 +413,13 @@ fn authority_ask(params: &Params, issuer: &Issuer) -> Result<Option<AuthorityAsk
             "the authorization details are not valid",
         ));
     }
-    Ok(Some(AuthorityAsk {
-        resource: String::from(resource),
-        details: String::from(details),
-    }))
+    Ok((
+        Some(AuthorityAsk {
+            resource: String::from(resource),
+            details: String::from(details),
+        }),
+        None,
+    ))
 }
 
 /// The authorization error response: `redirect_uri` with `error`, `error_description`,

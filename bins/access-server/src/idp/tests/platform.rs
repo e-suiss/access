@@ -510,11 +510,59 @@ async fn pairing_opens_one_push_stream_the_client_manages() {
     let path = format!("/access/v1/platform/streams/{id}");
     let (s, v) = p.call("GET", &path, None).await;
     assert_eq!((s, v["status"].as_str()), (StatusCode::OK, Some("enabled")));
+    // SSF 1.0 §8.1.2, OP-149 m.26 (c): the status route with the rules of /ssf/status
+    let status = format!("{path}/status");
+    let (s, v) = p.call("GET", &status, None).await;
+    assert_eq!(s, StatusCode::OK, "{v}");
+    meets_schema(&v, "StreamStatus");
+    assert_eq!(v, json!({ "stream_id": id, "status": "enabled" }));
+    let (s, v) = p
+        .call(
+            "POST",
+            &status,
+            Some(&json!({ "stream_id": id, "status": "paused", "reason": "maintenance" })),
+        )
+        .await;
+    assert_eq!((s, v["status"].as_str()), (StatusCode::OK, Some("paused")));
+    let (_, v) = p.call("GET", &path, None).await;
+    assert_eq!(v["status"], "paused");
+    for (body, want) in [
+        (json!({ "stream_id": id, "status": "on" }), "status"),
+        (
+            json!({ "stream_id": "01010101-0101-4101-8101-010101010101", "status": "enabled" }),
+            "stream_id",
+        ),
+    ] {
+        let (s, v) = p.call("POST", &status, Some(&body)).await;
+        assert_eq!(
+            (s, v["code"].as_str()),
+            (StatusCode::BAD_REQUEST, Some(want)),
+            "{body}"
+        );
+    }
+    let (s, v) = p
+        .call(
+            "POST",
+            &status,
+            Some(&json!({ "stream_id": id, "status": "enabled" })),
+        )
+        .await;
+    assert_eq!((s, v["status"].as_str()), (StatusCode::OK, Some("enabled")));
     let (s, _) = p.call("DELETE", &path, None).await;
     assert_eq!(s, StatusCode::NO_CONTENT);
     let (_, v) = p.call("GET", &path, None).await;
     assert_eq!(v["status"], "disabled");
     let (s, _) = p.call("DELETE", &path, None).await;
+    assert_eq!(s, StatusCode::NOT_FOUND);
+    let (s, v) = p.call("GET", &status, None).await;
+    assert_eq!((s, v["status"].as_str()), (StatusCode::OK, Some("disabled")));
+    let (s, _) = p
+        .call(
+            "POST",
+            &status,
+            Some(&json!({ "stream_id": id, "status": "enabled" })),
+        )
+        .await;
     assert_eq!(s, StatusCode::NOT_FOUND);
     let (s, _) = p
         .call(

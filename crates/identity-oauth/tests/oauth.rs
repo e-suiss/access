@@ -74,6 +74,9 @@ const CONFIDENTIAL: &str = "cli_0000000000000000000000000b";
 const KEYED: &str = "cli_0000000000000000000000000c";
 const KEYED_JWKS: &str = "https://shop.example/jwks.json";
 const PUSHED: &str = "cli_0000000000000000000000000d";
+/// A registered platform product client (OP-149 m.4): the one RFC 8707 resource besides the
+/// realm (OP-149 m.26 (a)).
+const PRODUCT: &str = "cli_0000000000000000000000000e";
 const SECRET: &str = "shop-secret-shop-secret-shop-secret-shop-se";
 
 struct SysClock;
@@ -334,7 +337,7 @@ async fn world() -> World {
         open_dpop_replay_day(&db.archive, d).await.unwrap();
     }
     let t = create_tenant(&db.app, "pool-default").await.unwrap();
-    let d = domain(&db, t, 4).await;
+    let d = domain(&db, t, 5).await;
     let mut tx = TenantTx::begin_tenant(&db.app, t).await.unwrap();
     let r = create_realm(&mut tx, &d, "acme", "pool-default")
         .await
@@ -354,6 +357,7 @@ async fn world() -> World {
         (CONFIDENTIAL, "client_secret_basic"),
         (KEYED, "private_key_jwt"),
         (PUSHED, "client_secret_basic"),
+        (PRODUCT, "private_key_jwt"),
     ]
     .into_iter()
     .enumerate()
@@ -373,10 +377,14 @@ async fn world() -> World {
         .await
         .unwrap()
         .unwrap();
-        let row = ClientRow {
+        let mut row = ClientRow {
             require_par: id == PUSHED,
             ..client(n, id, method)
         };
+        if id == PRODUCT {
+            row.platform_product = Some(String::from("work"));
+            row.service_key = Some(vec![0xa0]);
+        }
         insert_client(&mut tx, &b, &row).await.unwrap();
     }
     let subject = tx
@@ -392,7 +400,7 @@ async fn world() -> World {
         format!(r#"{{"keys":[{}]}}"#, ec_jwk(&client_key)).into_bytes(),
     );
     let env = TestEnv {
-        db: PgOAuth::new(db.app.clone()),
+        db: PgOAuth::with_reader(db.app.clone(), db.reader.clone()),
         signer: SignerKeys::new(socket.clone()),
         keys: keys.clone(),
         directory: PgDirectory::new(db.router.clone()),
@@ -717,6 +725,124 @@ async fn code_flow_with_pkce_and_dpop() {
         200,
     );
     assert_ne!(claims(other["id_token"].as_str().unwrap())["sub"], sub);
+}
+
+// OP-149 m.26 (a), RFC 8707, TN-27, PI-11, AG-8: a registered platform product client is the
+// one resource a protocol-scope token may name besides the realm; the token's aud is then that
+// client_id, cnf stays, the refresh keeps the audience, introspection reports it, the realm's
+// own userinfo refuses the token, and any other resource is invalid_target
+#[tokio::test]
+async fn a_platform_product_client_is_a_resource() {
+    let w = world().await;
+    let to = location(&w.authorize(&[("resource", PRODUCT)], Some(&w.cookie)).await);
+    let code = query(&to, "code");
+    // RFC 8707 §2.2: the token request may repeat the resource, never name another
+    assert_eq!(
+        error(
+            &w.token(
+                &[
+                    ("grant_type", "authorization_code"),
+                    ("client_id", PUBLIC),
+                    ("code", &code),
+                    ("redirect_uri", CB),
+                    ("code_verifier", VERIFIER),
+                    ("resource", ISSUER),
+                ],
+                None,
+            )
+            .await
+        ),
+        "invalid_target"
+    );
+    let tokens = body(
+        &w.token(
+            &[
+                ("grant_type", "authorization_code"),
+                ("client_id", PUBLIC),
+                ("code", &code),
+                ("redirect_uri", CB),
+                ("code_verifier", VERIFIER),
+                ("resource", PRODUCT),
+            ],
+            None,
+        )
+        .await,
+        200,
+    );
+    let access = tokens["access_token"].as_str().unwrap();
+    let at = claims(access);
+    assert_eq!(at["aud"], PRODUCT);
+    assert_eq!(at["iss"], ISSUER);
+    assert_eq!(at["client_id"], PUBLIC);
+    assert_eq!(at["cnf"]["jkt"], w.jkt());
+    assert_eq!(claims(tokens["id_token"].as_str().unwrap())["aud"], PUBLIC);
+    // RFC 9068 §4: the realm is not this token's audience
+    assert!(matches!(
+        w.userinfo(access).await,
+        Reply::Json { status: 401, .. }
+    ));
+    let refresh = tokens["refresh_token"].as_str().unwrap();
+    assert_eq!(
+        error(
+            &w.token(
+                &[
+                    ("grant_type", "refresh_token"),
+                    ("client_id", PUBLIC),
+                    ("refresh_token", refresh),
+                    ("resource", "cli_0000000000000000000000000z"),
+                ],
+                None,
+            )
+            .await
+        ),
+        "invalid_target"
+    );
+    let again = body(&w.refresh(refresh).await, 200);
+    assert_eq!(
+        claims(again["access_token"].as_str().unwrap())["aud"],
+        PRODUCT
+    );
+
+    // introspection by a confidential client of its own token names the audience
+    let code = w
+        .authorize(
+            &[("client_id", CONFIDENTIAL), ("resource", PRODUCT)],
+            Some(&w.cookie),
+        )
+        .await;
+    let code = query(&location(&code), "code");
+    let t = body(
+        &w.token(
+            &[
+                ("grant_type", "authorization_code"),
+                ("code", &code),
+                ("redirect_uri", CB),
+                ("code_verifier", VERIFIER),
+            ],
+            Some(&basic(CONFIDENTIAL, SECRET)),
+        )
+        .await,
+        200,
+    );
+    let a = w.introspect(t["access_token"].as_str().unwrap()).await;
+    assert_eq!(
+        (a["active"].as_bool(), a["aud"].as_str()),
+        (Some(true), Some(PRODUCT))
+    );
+    let plain = w.introspect(access).await;
+    assert_eq!(plain["active"], false);
+
+    // only a registered platform product client is a resource
+    for other in [
+        KEYED,
+        "cli_0000000000000000000000000z",
+        "https://api.example",
+    ] {
+        let r = location(&w.authorize(&[("resource", other)], Some(&w.cookie)).await);
+        assert_eq!(query(&r, "error"), "invalid_target", "{other}");
+    }
+    let realm = location(&w.authorize(&[("resource", ISSUER)], Some(&w.cookie)).await);
+    assert!(realm.contains("code="), "{realm}");
 }
 
 // IDP-7, CR-39, RFC 9449 §10, TN-27, §10.4.1: the exchange checks the exact redirect URI, the
@@ -1234,6 +1360,7 @@ async fn par_required_per_client_and_expiry() {
         acr_values: Vec::new(),
         dpop_jkt: None,
         authority: None,
+        resource: None,
     };
     let params = serde_json::to_vec(&request).unwrap();
     let at = now();

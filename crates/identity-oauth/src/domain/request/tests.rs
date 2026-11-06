@@ -49,10 +49,53 @@ fn params(extra: &[(&str, &str)]) -> Params {
 }
 
 fn run(extra: &[(&str, &str)]) -> Result<AuthRequest, AuthError> {
+    run_with(extra, None)
+}
+
+fn run_with(extra: &[(&str, &str)], product: Option<&str>) -> Result<AuthRequest, AuthError> {
     let p = params(extra);
     let c = client();
     let r = stage_one(&p, Some(&c)).unwrap();
-    stage_two(&p, &c, r, &issuer())
+    stage_two(&p, &c, r, &issuer(), product)
+}
+
+// OP-149 m.26 (a), RFC 8707, AG-8: a registered platform product client is a resource, and
+// the request keeps it for the token's audience; the realm itself names none, anything else
+// is invalid_target; with authorization_details the resource server rules stay as they were
+#[test]
+fn a_registered_product_is_the_only_other_resource() {
+    let named = run_with(&[("resource", "cli_work")], Some("cli_work")).unwrap();
+    assert_eq!(named.resource.as_deref(), Some("cli_work"));
+    assert!(named.authority.is_none());
+    assert!(run_with(&[], Some("cli_work")).unwrap().resource.is_none());
+    assert!(
+        run_with(&[("resource", "https://acme.id.test")], Some("cli_work"))
+            .unwrap()
+            .resource
+            .is_none()
+    );
+    assert_eq!(
+        run_with(&[("resource", "cli_other")], Some("cli_work"))
+            .unwrap_err()
+            .error,
+        "invalid_target"
+    );
+    assert_eq!(
+        run_with(&[("resource", "cli_work")], None)
+            .unwrap_err()
+            .error,
+        "invalid_target"
+    );
+    let details = r#"[{"type":"work:approve:1","kind":"bounds","schema":"sha-256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"}]"#;
+    let rar = run_with(
+        &[("resource", "cli_work"), ("authorization_details", details)],
+        Some("cli_work"),
+    );
+    assert!(
+        rar.as_ref()
+            .is_ok_and(|r| r.resource.is_none() && r.authority.is_some()),
+        "{rar:?}"
+    );
 }
 
 // IDP-7, TN-34, TN-101, §10.4.1, RFC 9700: code flow with S256 only; implicit, hybrid and

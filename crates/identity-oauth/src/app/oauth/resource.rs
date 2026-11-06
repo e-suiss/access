@@ -27,6 +27,8 @@ use crate::ports::oauth::{OAuthTx, TokenSigner};
 /// A verified access token of this realm.
 pub(crate) struct AccessToken {
     pub(crate) sub: String,
+    /// Its one audience: the realm, or a registered platform product (OP-149 m.26 (a)).
+    pub(crate) aud: String,
     pub(crate) client_id: String,
     pub(crate) sid: [u8; 16],
     pub(crate) jkt: Jkt,
@@ -45,7 +47,8 @@ fn active_false() -> Reply {
 
 impl<E: Env> OAuth<E> {
     /// Reads back an access token of this realm: signature with the realm's keys, `typ`
-    /// `at+jwt`, `iss`, `aud` and times (RFC 9068 §4); `Ok(None)` when it is not one.
+    /// `at+jwt`, `iss`, its one string `aud` and times (RFC 9068 §4); `Ok(None)` when it is not
+    /// one. The caller holds `aud` against the resource it serves (AG-8, §9.9.3 k.1).
     pub(crate) async fn access_token(
         &self,
         realm: &Realm,
@@ -60,26 +63,30 @@ impl<E: Env> OAuth<E> {
         let Ok(v) = verify_compact(&AwsLcBackend, token, &keys, ACCESS_TYP, Origin::Native) else {
             return Ok(None);
         };
+        let Ok(parsed) =
+            access_kernel::json::parse(&v.payload, access_kernel::verify::jws::MAX_PAYLOAD)
+        else {
+            return Ok(None);
+        };
+        let Some(Json::Str(aud)) = parsed.get("aud") else {
+            return Ok(None);
+        };
+        let aud = aud.clone();
         let rules = ClaimRules {
             issuer: realm.issuer.as_str(),
-            audience: realm.issuer.as_str(),
+            audience: &aud,
             now,
             skew_ms: SKEW_MS,
         };
         let claims = if check_time {
             check_claims(&v.payload, &rules).ok()
         } else {
-            access_kernel::json::parse(&v.payload, access_kernel::verify::jws::MAX_PAYLOAD)
-                .ok()
+            Some(parsed)
                 .filter(|c| c.get("iss").and_then(Json::as_str) == Some(realm.issuer.as_str()))
         };
         let Some(c) = claims else {
             return Ok(None);
         };
-        // AG-8, §9.9.3 k.1
-        if !matches!(c.get("aud"), Some(Json::Str(a)) if a == realm.issuer.as_str()) {
-            return Ok(None);
-        }
         let sid = text(&c, "sid")
             .and_then(|s| b64url_decode(&s).ok())
             .and_then(|s| <[u8; 16]>::try_from(s).ok());
@@ -95,6 +102,7 @@ impl<E: Env> OAuth<E> {
         };
         Ok(Some(AccessToken {
             sub,
+            aud,
             client_id,
             sid,
             jkt,
@@ -168,7 +176,12 @@ impl<E: Env> OAuth<E> {
             return Ok(unauthorized("invalid_token"));
         };
         let now = self.now()?;
-        let Some(at) = self.access_token(realm, token, now, true).await? else {
+        // RFC 9068 §4, AG-8: the realm serves only tokens addressed to it
+        let Some(at) = self
+            .access_token(realm, token, now, true)
+            .await?
+            .filter(|at| at.aud == realm.issuer.as_str())
+        else {
             return Ok(unauthorized("invalid_token"));
         };
         let uri = realm.issuer.endpoint(Endpoint::Userinfo.path());
@@ -374,14 +387,15 @@ impl<E: Env> OAuth<E> {
         };
         if let Some(at) = at {
             let expired = u64::try_from(at.exp).map_or(true, |e| e.saturating_mul(1000) <= now);
-            if at.client_id != client.id || expired {
+            // OP-149 m.26 (a): the audience is the grant's resource, else the realm
+            if at.client_id != client.id || expired || at.aud != details.audience(&realm.issuer) {
                 return Ok(active_false());
             }
             m.insert("token_type".into(), "DPoP".into());
             m.insert("scope".into(), at.scope.into());
             m.insert("exp".into(), at.exp.into());
             m.insert("iat".into(), at.iat.into());
-            m.insert("aud".into(), realm.issuer.as_str().into());
+            m.insert("aud".into(), at.aud.into());
             m.insert("cnf".into(), json!({ "jkt": at.jkt.text() }));
             if at.sub != sub {
                 return Ok(active_false());

@@ -29,6 +29,8 @@ pub const PAIRING_PATH: &str = "/access/v1/tenants/{tenant}/pairing";
 pub const STREAMS_PATH: &str = "/access/v1/platform/streams";
 /// `GET` reads, `DELETE` disables one of them.
 pub const STREAM_PATH: &str = "/access/v1/platform/streams/{id}";
+/// `GET` reads, `POST` sets one's status (SSF 1.0 §8.1.2, OP-149 m.26 (c)).
+pub const STREAM_STATUS_PATH: &str = "/access/v1/platform/streams/{id}/status";
 
 /// Largest request body.
 pub const MAX_BODY: usize = 128 * 1024;
@@ -61,6 +63,10 @@ where
         .route(
             STREAM_PATH,
             get(read_stream::<D, C, I, K, R, T>).delete(close_stream::<D, C, I, K, R, T>),
+        )
+        .route(
+            STREAM_STATUS_PATH,
+            get(stream_status::<D, C, I, K, R, T>).post(set_stream_status::<D, C, I, K, R, T>),
         )
         .with_state(Arc::new(Shared {
             api,
@@ -242,6 +248,50 @@ where
     let r = async {
         let c = caller(&s, &headers, &uri).await?;
         s.api.stream(&c, &id).await
+    };
+    reply(StatusCode::OK, r.await)
+}
+
+async fn stream_status<D, C, I, K, R, T>(
+    State(s): St<D, C, I, K, R, T>,
+    Path(id): Path<String>,
+    uri: Uri,
+    headers: HeaderMap,
+) -> Response
+where
+    D: Directory,
+    C: ClientKeys,
+    I: Instances,
+    K: Sealer,
+    R: Random,
+    T: Clock + Send + Sync,
+{
+    let r = async {
+        let c = caller(&s, &headers, &uri).await?;
+        s.api.stream_status(&c, &id).await
+    };
+    reply(StatusCode::OK, r.await)
+}
+
+async fn set_stream_status<D, C, I, K, R, T>(
+    State(s): St<D, C, I, K, R, T>,
+    Path(id): Path<String>,
+    uri: Uri,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Response
+where
+    D: Directory,
+    C: ClientKeys,
+    I: Instances,
+    K: Sealer,
+    R: Random,
+    T: Clock + Send + Sync,
+{
+    let r = async {
+        too_large(&body)?;
+        let c = caller(&s, &headers, &uri).await?;
+        s.api.set_stream_status(&c, &id, &body).await
     };
     reply(StatusCode::OK, r.await)
 }

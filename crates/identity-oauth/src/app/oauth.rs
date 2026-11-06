@@ -280,6 +280,27 @@ impl<E: Env> OAuth<E> {
         self.env.db().begin(realm.tenant, realm.realm).await
     }
 
+    /// The registered platform product client a request's `resource` names, when it names one
+    /// (RFC 8707, OP-149 m.26 (a)); the realm issuer names none.
+    pub(crate) async fn product_resource(
+        &self,
+        realm: &Realm,
+        params: &Params,
+    ) -> Result<Option<String>, Unavailable> {
+        let Some(resource) = params
+            .get("resource")
+            .filter(|r| *r != realm.issuer.as_str())
+        else {
+            return Ok(None);
+        };
+        Ok(self
+            .env
+            .db()
+            .platform_product(resource)
+            .await?
+            .map(|_| String::from(resource)))
+    }
+
     /// RFC 6749 §2.3, RFC 7523 §3, §10.4.5: the request's client, authenticated by its
     /// registered method. A `private_key_jwt` assertion is checked against the client's keys
     /// with `aud` the issuer or this endpoint, and its `jti` is recorded once.
@@ -403,6 +424,7 @@ impl<E: Env> OAuth<E> {
         let sid = b64url_encode(&grant.sid);
         let facts = TokenFacts {
             issuer: &realm.issuer,
+            audience: details.audience(&realm.issuer),
             client_id: &client.id,
             sub: &sub,
             sid: &sid,
@@ -467,6 +489,7 @@ impl<E: Env> OAuth<E> {
         let sid = b64url_encode(&grant.sid);
         let facts = TokenFacts {
             issuer: &realm.issuer,
+            audience: details.audience(&realm.issuer),
             client_id: &client.id,
             sub: &sub,
             sid: &sid,

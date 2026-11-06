@@ -1,11 +1,14 @@
 //! Access server (OP-2). Thin by design: it reads configuration, installs
 //! telemetry and composes crates; business logic lives in `crates/` (OP-62).
 //!
-//! Two one-shot commands share the configuration and the lockdown: `access-server migrate`
-//! runs the schema migrations as the migration role (OP-55), and `access-server bootstrap
-//! <plan.toml>` creates the platform tenant, sample tenants and platform clients a local
-//! deployment starts from (OP-69, OP-149 m.21). A command's standard output is its result, so
-//! its logs go to standard error.
+//! The one-shot commands share the configuration and the lockdown: `access-server migrate`
+//! runs the schema migrations as the migration role (OP-55); `access-server bootstrap
+//! <plan.toml>` creates the platform tenant, sample tenants, platform clients and test fixtures
+//! a local deployment starts from (OP-69, OP-149 m.21, m.26); `access-server client-update
+//! <plan.toml> <product> <display name>` and `access-server client-retire <plan.toml> <product>`
+//! commit an `idp.client.update` or `idp.client.retire` of a platform client, so a product sees
+//! `api_client.updated` and `api_client.disabled` (OP-149 m.26 (c)). A command's standard
+//! output is its result, so its logs go to standard error.
 
 mod bootstrap;
 mod claims;
@@ -120,15 +123,45 @@ enum Command {
     Serve,
     /// `migrate`: apply the schema migrations and exit (OP-55).
     Migrate,
+    /// A one-shot job over a local deployment's plan (OP-69, OP-149 m.26 (c)).
+    Local(PathBuf, Job),
+}
+
+/// A one-shot job over the bootstrap plan.
+enum Job {
     /// `bootstrap <plan.toml>`: make sure of a local deployment's tenants and exit (OP-69).
-    Bootstrap(PathBuf),
+    Bootstrap,
+    /// `client-update <plan.toml> <product> <display name>`: `idp.client.update`.
+    ClientUpdate {
+        product: String,
+        display_name: String,
+    },
+    /// `client-retire <plan.toml> <product>`: `idp.client.retire`.
+    ClientRetire { product: String },
+}
+
+fn text(arg: &OsString) -> Option<String> {
+    arg.to_str().map(String::from)
 }
 
 fn command(args: &[OsString]) -> Option<Command> {
     match args {
         [] => Some(Command::Serve),
         [c] if c == "migrate" => Some(Command::Migrate),
-        [c, plan] if c == "bootstrap" => Some(Command::Bootstrap(PathBuf::from(plan))),
+        [c, plan] if c == "bootstrap" => Some(Command::Local(PathBuf::from(plan), Job::Bootstrap)),
+        [c, plan, product, name] if c == "client-update" => Some(Command::Local(
+            PathBuf::from(plan),
+            Job::ClientUpdate {
+                product: text(product)?,
+                display_name: text(name)?,
+            },
+        )),
+        [c, plan, product] if c == "client-retire" => Some(Command::Local(
+            PathBuf::from(plan),
+            Job::ClientRetire {
+                product: text(product)?,
+            },
+        )),
         _ => None,
     }
 }
@@ -138,7 +171,10 @@ fn main() -> ExitCode {
     let Some(command) = command(&args) else {
         #[allow(clippy::print_stderr)]
         {
-            eprintln!("usage: access-server [migrate | bootstrap <plan.toml>]");
+            eprintln!(
+                "usage: access-server [migrate | bootstrap <plan.toml> | client-update <plan.toml> \
+                 <product> <display name> | client-retire <plan.toml> <product>]"
+            );
         }
         return ExitCode::FAILURE;
     };
@@ -155,7 +191,7 @@ fn main() -> ExitCode {
 
     let logged = match command {
         Command::Serve => access_telemetry::init(&config.log),
-        Command::Migrate | Command::Bootstrap(_) => {
+        Command::Migrate | Command::Local(..) => {
             access_telemetry::init_with_writer(&config.log, std::io::stderr)
         }
     };
@@ -170,7 +206,7 @@ fn main() -> ExitCode {
     match command {
         Command::Serve => serve_main(&config),
         Command::Migrate => migrate_main(&config),
-        Command::Bootstrap(plan) => bootstrap_main(&config, &plan),
+        Command::Local(plan, job) => local_main(&config, &plan, job),
     }
 }
 
@@ -255,19 +291,20 @@ fn migrate_main(config: &Config) -> ExitCode {
     }
 }
 
-/// OP-69, OP-149 m.21: the bootstrap over the same pools, token and signers as the server.
-fn bootstrap(config: &Config, plan: &Path) -> Result<bootstrap::Summary, String> {
+/// OP-69, OP-149 m.21, m.26 (c): a plan job over the same pools, token and signers as the
+/// server.
+fn local(config: &Config, plan: &Path, job: Job) -> Result<serde_json::Value, String> {
     let plan = bootstrap::Plan::load(plan).map_err(|e| e.to_string())?;
     let prepared = prepare(config, tls_config(config)?)?;
     let runtime = locked(config)?;
-    runtime.block_on(seed(config, prepared, &plan))
+    runtime.block_on(seed(config, prepared, &plan, job))
 }
 
-/// Runs the bootstrap; its summary goes to standard output as JSON.
-fn bootstrap_main(config: &Config, plan: &Path) -> ExitCode {
-    let summary = bootstrap(config, plan)
-        .and_then(|s| serde_json::to_string_pretty(&s).map_err(|e| e.to_string()));
-    match summary {
+/// Runs a plan job; its result goes to standard output as JSON.
+fn local_main(config: &Config, plan: &Path, job: Job) -> ExitCode {
+    let result =
+        local(config, plan, job).and_then(|s| serde_json::to_string_pretty(&s).map_err(|e| e.to_string()));
+    match result {
         Ok(json) => {
             #[allow(clippy::print_stdout)]
             {
@@ -276,18 +313,23 @@ fn bootstrap_main(config: &Config, plan: &Path) -> ExitCode {
             ExitCode::SUCCESS
         }
         Err(error) => {
-            tracing::error!(%error, "bootstrap failed");
+            tracing::error!(%error, "the plan job failed");
             ExitCode::FAILURE
         }
     }
 }
 
-/// The bootstrap over this process's pools, token and signers.
+fn json<T: serde::Serialize>(value: T) -> Result<serde_json::Value, String> {
+    serde_json::to_value(value).map_err(|e| e.to_string())
+}
+
+/// A plan job over this process's pools, token and signers.
 async fn seed(
     config: &Config,
     prepared: Prepared,
     plan: &bootstrap::Plan,
-) -> Result<bootstrap::Summary, String> {
+    job: Job,
+) -> Result<serde_json::Value, String> {
     let all = pools(config, &prepared).await?;
     let identity = config.identity.as_ref().ok_or("no identity section")?;
     let base = RealmBase::parse(&identity.realm_base).map_err(|e| e.to_string())?;
@@ -316,7 +358,7 @@ async fn seed(
         prepared.identity_keys.clone(),
     );
     let declared = prepared.outbound.declared();
-    let summary = bootstrap::Bootstrap {
+    let bootstrap = bootstrap::Bootstrap {
         app: &all.app,
         router: &all.router,
         plane: &plane,
@@ -324,12 +366,30 @@ async fn seed(
         hsm: &prepared.identity_keys,
         base: &base,
         declared: &declared,
-    }
-    .run(plan)
-    .await;
+    };
+    let result = match job {
+        Job::Bootstrap => bootstrap.run(plan).await.map_err(|e| e.to_string()).and_then(json),
+        Job::ClientUpdate {
+            product,
+            display_name,
+        } => bootstrap
+            .change_product_client(
+                plan,
+                &product,
+                bootstrap::local::ProductChange::Update { display_name },
+            )
+            .await
+            .map_err(|e| e.to_string())
+            .and_then(json),
+        Job::ClientRetire { product } => bootstrap
+            .change_product_client(plan, &product, bootstrap::local::ProductChange::Retire)
+            .await
+            .map_err(|e| e.to_string())
+            .and_then(json),
+    };
     // OP-31
     domains.release().await;
-    summary.map_err(|e| e.to_string())
+    result
 }
 
 fn serve_main(config: &Config) -> ExitCode {
@@ -669,7 +729,7 @@ fn login(
 /// (OP-150 m.2).
 fn authorization<P>(
     config: &Config,
-    (app, router, nonce_keys, outbound): (Pool, Pool, Arc<KeyStore>, Outbound),
+    (app, router, reader, nonce_keys, outbound): (Pool, Pool, Pool, Arc<KeyStore>, Outbound),
     projections: P,
 ) -> Result<axum::Router, String>
 where
@@ -677,7 +737,8 @@ where
 {
     let identity = config.identity.as_ref().ok_or("no identity section")?;
     let env = oauth::ServerEnv {
-        db: PgOAuth::new(app.clone()),
+        // OP-149 m.26 (a)
+        db: PgOAuth::with_reader(app.clone(), reader),
         signer: SignerKeys::new(identity.signer.clone()),
         client_keys: HttpClientKeys::new(outbound, CachePolicy::default()),
         directory: PgDirectory::new(router),
@@ -815,6 +876,7 @@ async fn serve(
     let oauth_inputs = (
         all.app.clone(),
         all.router.clone(),
+        all.outbox_reader.clone(),
         prepared.identity_keys.clone(),
         prepared.outbound,
     );

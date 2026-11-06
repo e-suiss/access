@@ -1159,6 +1159,152 @@
         }
       }
     },
+    "/access/v1/platform/streams/{id}/status": {
+      "get": {
+        "operationId": "getPlatformStreamStatus",
+        "summary": "The status of a stream the platform client owns (SSF 1.0 §8.1.2.1, OP-149 m.26 (c)).",
+        "security": [
+          {
+            "platform_client": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+            }
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "No valid client assertion of an active platform client.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "no-such-stream.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporarily unavailable; retry.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "The status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StreamStatus"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "setPlatformStreamStatus",
+        "summary": "Sets the status of a live stream the platform client owns, with the rules of the stream's own /ssf/status (SSF 1.0 §8.1.2.2, OP-149 m.26 (c)): enabled, paused, or disabled, which ends it for good (OP-73).",
+        "security": [
+          {
+            "platform_client": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StreamStatusUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "400": {
+            "description": "status, stream_id or reason is not valid, or the body is not JSON.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid client assertion of an active platform client.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "no-such-stream: not the client's, or already disabled.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporarily unavailable; retry.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "The new status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StreamStatus"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/access/v1/claims:ingest": {
       "post": {
         "operationId": "ingestClaim",
@@ -2345,6 +2491,59 @@
             "items": {
               "$ref": "#/components/schemas/PlatformStream"
             }
+          }
+        }
+      },
+      "StreamStatus": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "stream_id",
+          "status"
+        ],
+        "properties": {
+          "stream_id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "description": "The stream."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "enabled",
+              "paused",
+              "disabled"
+            ],
+            "description": "SSF 1.0 §8.1.2: `disabled` has ended the stream; its row stays (OP-73)."
+          }
+        }
+      },
+      "StreamStatusUpdate": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "stream_id",
+          "status"
+        ],
+        "properties": {
+          "stream_id": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+            "description": "The stream; the same as the path."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "enabled",
+              "paused",
+              "disabled"
+            ],
+            "description": "The new status (SSF 1.0 §8.1.2.2). `disabled` ends the stream for good."
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 256,
+            "description": "Why, free text."
           }
         }
       },

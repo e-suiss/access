@@ -182,6 +182,12 @@ pub trait OAuthDb: Send + Sync {
         tenant: TenantId,
         realm: RealmId,
     ) -> impl Future<Output = Result<Self::Tx, Unavailable>> + Send;
+    /// The product of the active platform product client `client_id`, in whichever tenant it
+    /// is registered (OP-149 m.26 (a)); `None` for any other client id.
+    fn platform_product(
+        &self,
+        client_id: &str,
+    ) -> impl Future<Output = Result<Option<String>, Unavailable>> + Send;
 }
 
 /// The identity signer, for the realm's identity assertions (CMP-22b, TN-14).

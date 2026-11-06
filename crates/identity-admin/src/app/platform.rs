@@ -13,6 +13,7 @@
 use std::collections::BTreeSet;
 
 use access_identity_events::app::streams::{StreamError, Streams};
+use access_identity_events::domain::control::parse_status;
 use access_identity_events::domain::stream::parse_stream;
 use access_identity_events::ports::{Clock, Random, Sealer, TenantIds};
 use access_identity_oauth::app::resolve;
@@ -714,6 +715,48 @@ where
         Ok(self
             .streams
             .disable_owned(caller.tenant, caller.realm, &caller.client_id, id)
+            .await?)
+    }
+
+    /// `GET /access/v1/platform/streams/{id}/status` (SSF 1.0 §8.1.2.1, OP-149 m.26 (c)): the
+    /// status of a stream the client owns.
+    ///
+    /// # Errors
+    /// [`PlatformError`].
+    pub async fn stream_status(&self, caller: &Caller, id: &str) -> Result<Value, PlatformError> {
+        let id = parse_uuid(id).ok_or(PlatformError::NotFound("no-such-stream"))?;
+        Ok(self
+            .streams
+            .status_owned(caller.tenant, caller.realm, &caller.client_id, id)
+            .await?)
+    }
+
+    /// `POST /access/v1/platform/streams/{id}/status` (SSF 1.0 §8.1.2.2, OP-149 m.26 (c)): sets
+    /// the status of a stream the client owns, with the rules of a stream's own `/ssf/status`;
+    /// the body's `stream_id` must be the path's.
+    ///
+    /// # Errors
+    /// [`PlatformError`].
+    pub async fn set_stream_status(
+        &self,
+        caller: &Caller,
+        id: &str,
+        body: &[u8],
+    ) -> Result<Value, PlatformError> {
+        let parsed = parse_uuid(id).ok_or(PlatformError::NotFound("no-such-stream"))?;
+        let update = parse_status(body).map_err(|e| PlatformError::Invalid(e.0))?;
+        if update.stream_id != id {
+            return Err(PlatformError::Invalid("stream_id"));
+        }
+        Ok(self
+            .streams
+            .set_status_owned(
+                caller.tenant,
+                caller.realm,
+                &caller.client_id,
+                parsed,
+                &update,
+            )
             .await?)
     }
 }
