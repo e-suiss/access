@@ -51,6 +51,8 @@ export interface Instance {
   readonly kid: Uint8Array;
   readonly domain: Uint8Array;
   readonly basis: Uint8Array;
+  /** The public basis Grant id the statement's basis names, unpadded base64url. */
+  readonly publicBasis: string;
   readonly pep: string;
 }
 
@@ -111,11 +113,11 @@ function lowS(sig: Uint8Array): Uint8Array {
   return out;
 }
 
-function nonce(): Uint8Array {
+export function nonce(): Uint8Array {
   return crypto.getRandomValues(new Uint8Array(16));
 }
 
-async function sign(key: CryptoKey, k: Kernel, kid: Uint8Array, statement: Uint8Array) {
+export async function sign(key: CryptoKey, k: Kernel, kid: Uint8Array, statement: Uint8Array) {
   const protectedHeader = k.aisProtected(ESP256, kid);
   const tbs = Uint8Array.from(k.coseToBeSigned(protectedHeader, statement));
   const raw = new Uint8Array(
@@ -124,11 +126,11 @@ async function sign(key: CryptoKey, k: Kernel, kid: Uint8Array, statement: Uint8
   return b64url(k.coseSign1(protectedHeader, statement, lowS(raw)));
 }
 
-function decodedIntent(k: Kernel, envelope: Uint8Array): DecodedIntent {
+export function decodedIntent(k: Kernel, envelope: Uint8Array): DecodedIntent {
   return JSON.parse(k.describeIntent(envelope)) as DecodedIntent;
 }
 
-function decodedStatement(k: Kernel, statement: Uint8Array): DecodedStatement {
+export function decodedStatement(k: Kernel, statement: Uint8Array): DecodedStatement {
   return JSON.parse(k.describeStatement(statement)) as DecodedStatement;
 }
 
@@ -211,6 +213,7 @@ export async function register(
     kid,
     domain,
     basis,
+    publicBasis: c.basis,
     pep,
   };
   await tx("readwrite", (s) => s.put(instance));
@@ -233,12 +236,22 @@ export async function readIntent(method: string, target: string): Promise<Uint8A
  * `check` mode over this very request. Reads are not consent, so no signature screen opens.
  */
 export async function adminRead(instance: Instance, path: string): Promise<Response> {
+  return call(`/proxy/admin/${path}`, {
+    headers: { "x-access-ais": await readProof(instance, "GET", `/admin/v1/${path}`) },
+  });
+}
+
+/** The read proof for `method target`: a `check` AIS over the read intent (OP-151 m.12 (c)). */
+export async function readProof(
+  instance: Instance,
+  method: string,
+  target: string,
+): Promise<string> {
   const k = await loadKernel();
-  const target = `/admin/v1/${path}`;
   const statement = k.aisStatement(
     instance.domain,
     nonce(),
-    await readIntent("GET", target),
+    await readIntent(method, target),
     "check",
     instance.pep,
     new Uint8Array(),
@@ -246,8 +259,7 @@ export async function adminRead(instance: Instance, path: string): Promise<Respo
     BigInt(Date.now()),
     new Uint8Array(),
   );
-  const ais = await sign(instance.key, k, instance.kid, statement);
-  return call(`/proxy/admin/${path}`, { headers: { "x-access-ais": ais } });
+  return sign(instance.key, k, instance.kid, statement);
 }
 
 /**
@@ -262,6 +274,7 @@ export async function adminWrite(
   path: string,
   envelope: Uint8Array,
   body: unknown,
+  pep: string = instance.pep,
 ): Promise<Response> {
   const k = await loadKernel();
   const n = nonce();
@@ -271,7 +284,7 @@ export async function adminWrite(
     n,
     intent,
     "commit",
-    instance.pep,
+    pep,
     new Uint8Array(),
     instance.basis,
     BigInt(Date.now()),

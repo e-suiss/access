@@ -6,9 +6,16 @@ import { useCallback, useEffect, useState, type MouseEvent, type ReactElement } 
 import { t, type Key } from "./i18n/index.js";
 import { json, Problem, type SessionInfo } from "./lib/api.js";
 import { find, type Instance } from "./lib/instance.js";
-import { type Section, visibleSections } from "./lib/sections.js";
+import {
+  type Screen,
+  SCREENS,
+  type Section,
+  visibleScreens,
+  visibleSections,
+} from "./lib/sections.js";
 import { Authority } from "./screens/Authority.js";
 import { About, Profile, Sessions } from "./screens/Own.js";
+import { SectionPage } from "./screens/Section.js";
 import { SignIn } from "./screens/SignIn.js";
 import { useSignatureScreen } from "./SignatureDialog.js";
 
@@ -26,9 +33,20 @@ const ROUTES: readonly Route[] = [
   "audit",
 ];
 
-function routeOf(path: string): Route {
+interface Where {
+  readonly route: Route;
+  readonly screen: Screen | undefined;
+}
+
+function routeOf(path: string): Where {
   const r = path.startsWith(BASE) ? path.slice(BASE.length).replace(/\/$/, "") : "";
-  return (ROUTES as readonly string[]).includes(r) ? (r as Route) : "";
+  const [head = "", sub] = r.split("/", 2);
+  if (!(ROUTES as readonly string[]).includes(head)) return { route: "", screen: undefined };
+  const route = head as Route;
+  const screens: readonly string[] =
+    route === "admin" || route === "developer" || route === "audit" ? SCREENS[route] : [];
+  const screen = sub !== undefined && screens.includes(sub) ? (sub as Screen) : undefined;
+  return { route, screen };
 }
 
 type State =
@@ -49,21 +67,11 @@ const NAV: readonly { readonly route: Route; readonly key: Key }[] = [
 
 const SECTIONS: ReadonlySet<Route> = new Set<Route>(["admin", "developer", "audit"]);
 
-function SectionPage({ section }: { readonly section: Section }): ReactElement {
-  const key: Key =
-    section === "admin" ? "navAdmin" : section === "developer" ? "navDeveloper" : "navAudit";
-  return (
-    <main id="main" tabIndex={-1}>
-      <h1>{t(key)}</h1>
-    </main>
-  );
-}
-
 export function App(): ReactElement {
   const [state, setState] = useState<State>({ status: "loading" });
-  const [route, setRoute] = useState<Route>(() => routeOf(location.pathname));
+  const [where, setWhere] = useState<Where>(() => routeOf(location.pathname));
   const [instance, setInstance] = useState<Instance | undefined>(undefined);
-  const [sections, setSections] = useState<ReadonlySet<Section>>(new Set());
+  const [screens, setScreens] = useState<ReadonlySet<Screen>>(new Set());
   const [confirm, signatureScreen] = useSignatureScreen();
 
   const loadSession = useCallback(() => {
@@ -85,7 +93,7 @@ export function App(): ReactElement {
 
   useEffect(() => {
     const pop = () => {
-      setRoute(routeOf(location.pathname));
+      setWhere(routeOf(location.pathname));
     };
     addEventListener("popstate", pop);
     return () => {
@@ -109,18 +117,18 @@ export function App(): ReactElement {
   useEffect(() => {
     if (session === undefined || instance === undefined) return;
     let active = true;
-    void visibleSections(session.account, session.realm).then((s) => {
-      if (active) setSections(s);
+    void visibleScreens(session.account, session.realm).then((s) => {
+      if (active) setScreens(s);
     });
     return () => {
       active = false;
     };
   }, [session, instance]);
 
-  const go = (r: Route) => (e: MouseEvent<HTMLAnchorElement>) => {
+  const go = (r: string) => (e: MouseEvent<HTMLAnchorElement>) => {
     e.preventDefault();
     history.pushState(null, "", `${BASE}${r}`);
-    setRoute(r);
+    setWhere(routeOf(`${BASE}${r}`));
   };
 
   const signOut = () => {
@@ -152,7 +160,9 @@ export function App(): ReactElement {
   if (state.status === "signed-out") return <SignIn reason={state.reason} />;
 
   const s = state.session;
-  const visible: ReadonlySet<Section> = instance === undefined ? new Set() : sections;
+  const shownScreens: ReadonlySet<Screen> = instance === undefined ? new Set() : screens;
+  const visible: ReadonlySet<Section> = visibleSections(shownScreens);
+  const route = where.route;
   const shown = NAV.filter((n) => !SECTIONS.has(n.route) || visible.has(n.route as Section));
   const current: Route = SECTIONS.has(route) && !visible.has(route as Section) ? "" : route;
 
@@ -160,8 +170,18 @@ export function App(): ReactElement {
   if (current === "profile") page = <Profile session={s} />;
   else if (current === "sessions") page = <Sessions onEnded={loadSession} />;
   else if (current === "about") page = <About />;
-  else if (current === "admin" || current === "developer" || current === "audit")
-    page = <SectionPage section={current} />;
+  else if (
+    (current === "admin" || current === "developer" || current === "audit") &&
+    instance !== undefined
+  )
+    page = (
+      <SectionPage
+        section={current}
+        screen={where.screen}
+        ctx={{ session: s, instance, confirm, screens: shownScreens }}
+        go={go}
+      />
+    );
   else
     page = (
       <Authority
