@@ -2,6 +2,7 @@
 
 pub mod adp;
 pub mod api;
+pub mod audit;
 pub mod declarations;
 pub mod ingest;
 pub mod internal;

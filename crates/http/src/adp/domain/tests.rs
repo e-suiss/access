@@ -190,6 +190,7 @@ fn response(outcome: Outcome) -> Response {
         pap: None,
         signed_pap: None,
         ended: Vec::new(),
+        explained: None,
     }
 }
 
@@ -338,4 +339,85 @@ fn the_adp_explains_in_the_published_format() {
             "{id}"
         );
     }
+}
+
+// §9.7.1: `page.total` is given only when the first page is the whole visible result, so it
+// never counts records outside the reader's disclosure scope; otherwise `has_more` says more
+// follows, and an empty visible result looks the same whatever exists
+#[test]
+fn page_total_counts_only_a_complete_visible_result() {
+    assert_eq!(
+        page(2, None, true),
+        serde_json::json!({ "next_token": "", "total": 2 })
+    );
+    assert_eq!(
+        page(0, None, true),
+        serde_json::json!({ "next_token": "", "total": 0 })
+    );
+    let more = page(100, Some("t"), true);
+    assert_eq!(more["has_more"], true);
+    assert!(more.get("total").is_none());
+    let last = page(3, None, false);
+    assert_eq!(last["has_more"], false);
+    assert!(last.get("total").is_none());
+    let out = encode_search(&[Hit::Public], None, true);
+    assert_eq!(out["page"]["total"], 1);
+}
+
+fn sample_explained() -> access_authority_core::app::audit::Explained {
+    use access_authority_core::app::audit::{AuditDetail, BasisRef, LineageHop};
+    access_authority_core::app::audit::Explained {
+        lineage: vec![
+            LineageHop {
+                hop: 0,
+                grant: Named::Pseudonym([1; 16]),
+                holder: Some(Named::Pseudonym([2; 16])),
+            },
+            LineageHop {
+                hop: 1,
+                grant: Named::Clear(Id([3; 16])),
+                holder: Some(Named::Clear(Id([4; 16]))),
+            },
+        ],
+        audit: Some(AuditDetail {
+            basis: BasisRef {
+                domain: Digest([5; 32]),
+                position_q_minus_1: 11,
+                version_vector_digest: Digest([6; 32]),
+            },
+            evaluated_at: 9,
+            reads: vec![(vec![1, 2], 3)],
+            reason_admin: Vec::new(),
+            cited: vec![Id([7; 16])],
+            consumption: None,
+        }),
+    }
+}
+
+// §9.6.1, P41, E26, §17.1.1: `reason_admin` (with `basis_ref` expanded) exists only at audit
+// scope; the viewer gets the lineage with its pseudonyms; the requester gets neither
+#[test]
+fn reason_admin_exists_only_at_audit_scope() {
+    let mut r = response(Outcome::Allow);
+    r.explained = Some(Box::new(sample_explained()));
+    let audit = encode_for(&r, Mode::Commit, Scope::Audit);
+    let admin = &audit["context"]["reason_admin"];
+    assert_eq!(admin["basis_ref"]["position_q_minus_1"], 11);
+    assert_eq!(admin["basis_ref"]["domain"], b64(&[5; 32]));
+    assert_eq!(admin["basis_ref"]["version_vector_digest"], b64(&[6; 32]));
+    assert_eq!(admin["state_basis"]["reads"][0]["version"], 3);
+    assert_eq!(admin["cited"][0], b64(&[7; 16]));
+    let viewer = encode_for(&r, Mode::Commit, Scope::Viewer);
+    assert!(viewer["context"].get("reason_admin").is_none());
+    assert_eq!(
+        viewer["context"]["lineage"][0]["holder"]["pseudonym"],
+        b64(&[2; 16])
+    );
+    assert_eq!(
+        viewer["context"]["lineage"][1]["holder"]["id"],
+        b64(&[4; 16])
+    );
+    let requester = encode_for(&r, Mode::Commit, Scope::Requester);
+    assert!(requester["context"].get("reason_admin").is_none());
+    assert!(requester["context"].get("lineage").is_none());
 }

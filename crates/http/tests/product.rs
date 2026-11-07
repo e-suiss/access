@@ -1173,6 +1173,7 @@ impl Pdp for Eligible {
             pap: None,
             signed_pap: None,
             ended: Vec::new(),
+            explained: None,
         })
     }
 }

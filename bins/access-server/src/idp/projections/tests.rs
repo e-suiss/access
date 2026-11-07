@@ -74,6 +74,7 @@ fn response(outcome: Outcome) -> Response {
         pap: None,
         signed_pap: None,
         ended: Vec::new(),
+        explained: None,
     }
 }
 

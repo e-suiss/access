@@ -3,6 +3,7 @@
 use std::collections::BTreeMap;
 
 use access_authority_core::app::MAX_PROOFS;
+use access_authority_core::app::audit::{Explained, Named, reason_user};
 use access_authority_core::app::{Response, Scope};
 use access_authority_core::domain::{ProofRef, Request};
 use access_authority_core::query::{Hit, Query};
@@ -596,9 +597,21 @@ pub fn decode_search(
     Ok((decoded, query, page))
 }
 
-/// One search page as `AuthZEN` results (L1-ADP-16).
+/// The `page` member of a search answer (§9.7.1): `total` only when this first page is the
+/// whole visible result, so it counts nothing outside the reader's disclosure scope and its
+/// presence never depends on records the reader cannot see; otherwise `has_more`.
 #[must_use]
-pub fn encode_search(hits: &[Hit], next: Option<&str>) -> Out {
+pub fn page(visible: usize, next: Option<&str>, first: bool) -> Out {
+    match next {
+        None if first => serde_json::json!({ "next_token": "", "total": visible }),
+        None => serde_json::json!({ "next_token": "", "has_more": false }),
+        Some(t) => serde_json::json!({ "next_token": t, "has_more": true }),
+    }
+}
+
+/// One search page as `AuthZEN` results (L1-ADP-16); `first` when no page token was given.
+#[must_use]
+pub fn encode_search(hits: &[Hit], next: Option<&str>, first: bool) -> Out {
     let results: Vec<Out> = hits
         .iter()
         .map(|h| match h {
@@ -613,7 +626,7 @@ pub fn encode_search(hits: &[Hit], next: Option<&str>) -> Out {
         .collect();
     serde_json::json!({
         "results": results,
-        "page": { "next_token": next.unwrap_or("") },
+        "page": page(results.len(), next, first),
         "context": { "advisory": true },
     })
 }
@@ -708,6 +721,84 @@ fn viewer_view(blocker: &mut Out) {
     }
 }
 
+fn identity(n: &Named) -> Out {
+    match n {
+        Named::Clear(id) => serde_json::json!({ "id": b64url_encode(&id.0) }),
+        Named::Pseudonym(p) => serde_json::json!({ "pseudonym": b64url_encode(p) }),
+    }
+}
+
+/// The lineage for a viewer or auditor (§13.7.5) and, at audit scope only, `reason_admin`
+/// (§9.6.1, §17.1.1): `basis_ref` expanded, the `StateBasis`, the P41 rows, the cited proofs and
+/// the consumption. Below audit scope the member does not exist; its presence is a disclosure.
+fn explained(context: &mut Map<String, Out>, e: &Explained, scope: Scope) {
+    if scope == Scope::Requester {
+        return;
+    }
+    let lineage: Vec<Out> = e
+        .lineage
+        .iter()
+        .map(|h| {
+            let mut m = Map::new();
+            m.insert(String::from("hop"), Out::from(h.hop));
+            m.insert(String::from("grant"), identity(&h.grant));
+            if let Some(holder) = &h.holder {
+                m.insert(String::from("holder"), identity(holder));
+            }
+            Out::Object(m)
+        })
+        .collect();
+    context.insert(String::from("lineage"), Out::Array(lineage));
+    let (Scope::Audit, Some(a)) = (scope, &e.audit) else {
+        return;
+    };
+    let reads: Vec<Out> = a
+        .reads
+        .iter()
+        .map(|(k, v)| serde_json::json!({ "key": b64url_encode(k), "version": v }))
+        .collect();
+    let reasons: Vec<Out> = a
+        .reason_admin
+        .iter()
+        .map(|r| {
+            let mut m = Map::new();
+            m.insert(String::from("category"), Out::from(r.category));
+            m.insert(String::from("code"), Out::from(r.user));
+            if let Some(s) = &r.subcode {
+                m.insert(String::from("subcode"), Out::from(s.as_str()));
+            }
+            Out::Object(m)
+        })
+        .collect();
+    let mut admin = Map::new();
+    admin.insert(
+        String::from("basis_ref"),
+        serde_json::json!({
+            "domain": b64url_encode(&a.basis.domain.0),
+            "position_q_minus_1": a.basis.position_q_minus_1,
+            "version_vector_digest": b64url_encode(&a.basis.version_vector_digest.0),
+        }),
+    );
+    admin.insert(
+        String::from("state_basis"),
+        serde_json::json!({ "evaluated_at": a.evaluated_at, "reads": reads }),
+    );
+    admin.insert(String::from("reasons"), Out::Array(reasons));
+    admin.insert(
+        String::from("cited"),
+        Out::Array(
+            a.cited
+                .iter()
+                .map(|c| Out::from(b64url_encode(&c.0)))
+                .collect(),
+        ),
+    );
+    if let Some(c) = &a.consumption {
+        admin.insert(String::from("consumption"), json_of(c));
+    }
+    context.insert(String::from("reason_admin"), Out::Object(admin));
+}
+
 /// Encodes a decision for the requester (L1-ADP-10); the disclosure filter is its last stage
 /// (TI-20).
 #[must_use]
@@ -728,6 +819,14 @@ pub fn encode_for(response: &Response, mode: Mode, scope: Scope) -> Out {
             Scope::Viewer => blockers.iter_mut().for_each(viewer_view),
             Scope::Audit => {}
         }
+    }
+    // P41, §9.6.1: `reason_user` is the requester scope's closed codes
+    let user = reason_user(&response.decision);
+    if !user.is_empty() {
+        context.insert(String::from("reason_user"), Out::from(user));
+    }
+    if let Some(e) = &response.explained {
+        explained(&mut context, e, scope);
     }
     if mode == Mode::Check {
         context.insert(String::from("advisory"), Out::Bool(true));

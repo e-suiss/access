@@ -65,6 +65,9 @@ pub struct Response {
     /// The holder Instances this commit ended (§9.9.3 k.6, P50): their live projection
     /// families are revoked at `record` once it is in. Empty for a replay.
     pub ended: Vec<Id>,
+    /// What an explanation of a recorded decision shows a viewer or an auditor beyond the
+    /// requester's view (§9.6.1, §13.7.5); `None` for every other answer.
+    pub explained: Option<Box<audit::Explained>>,
 }
 
 /// One request with what came with it on the wire.
@@ -163,6 +166,19 @@ pub struct Authority<L: DomainLog, R: Reader, B: Binding, S: Salts> {
     catalog: Catalog,
     past: Option<Past>,
     pseudonyms: Option<access_crypto::pseudonym::PseudonymKey>,
+}
+
+/// The rebuilt decision of an explanation as a trace event (§9.7.1, §9.16.3): operator
+/// telemetry under the subscriber's sampling, never a record; counts only, no content.
+fn trace_rebuilt(scope: Scope, decision: &Decision) {
+    tracing::debug!(
+        target: "access::explain",
+        scope = ?scope,
+        outcome = ?decision.outcome,
+        blockers = decision.blockers.len(),
+        unmet = decision.unmet.len(),
+        "decision rebuilt",
+    );
 }
 
 /// Whose view an explanation of a recorded decision is (OP-141 m.38).
@@ -389,6 +405,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             return Err(CoreError::Limited);
         }
         let actor_ref = actor.map_or_else(|| b"anonymous".to_vec(), |a| a.instance.0.to_vec());
+        let viewer = actor.map(|a| a.party);
         let nonce = self.reader.nonce(&req.nonce).await?;
         if nonce.as_ref().is_none_or(|n| n.intent_digest != digest.0) {
             return Err(CoreError::Protocol("explain-record"));
@@ -440,21 +457,64 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             .is_some_and(|p| p < record);
         self.past = Some(past);
         let rebuilt = self.rebuild(req, actor, digest, record, at, opened).await;
-        self.past = None;
+        let past = self
+            .past
+            .take()
+            .ok_or(CoreError::Protocol("explain-record"))?;
         let evaluation = rebuilt?;
+        trace_rebuilt(scope, &evaluation.decision);
         // X25: a rebuilt outcome that differs is a determinism event, not an explanation
         if evaluation.decision.outcome != recorded {
             return Err(CoreError::Protocol("explain-mismatch"));
         }
+        let explained = match (scope, viewer) {
+            (Scope::Requester, _) | (_, None) => None,
+            (Scope::Viewer | Scope::Audit, Some(viewer)) => Some(Box::new(self.explained(
+                &past,
+                req,
+                (&viewer, scope),
+                log.last(),
+                &evaluation.decision,
+            )?)),
+        };
         let exercise =
             meta::exercise_id(&req.domain, &req.nonce).map_err(|_| CoreError::Protocol("nonce"))?;
         let allowed = recorded == Outcome::Allow;
-        Ok(answer(
+        let mut response = answer(
             evaluation.decision,
             allowed.then_some(req.exercise.unwrap_or(exercise)),
             Some(record),
             false,
-        ))
+        );
+        response.explained = explained;
+        Ok(response)
+    }
+
+    /// What `viewer` sees of the recorded decision `record` beyond the requester's view at
+    /// `scope` (§9.6.1, §13.7.5), from the state `past` just before it.
+    fn explained(
+        &self,
+        past: &Past,
+        req: &Request,
+        (viewer, scope): (&Id, Scope),
+        record: Option<&Vec<u8>>,
+        decision: &Decision,
+    ) -> Result<audit::Explained, CoreError> {
+        let bad = || CoreError::Protocol("explain-record");
+        let record = RecordEnvelope::from_bytes(record.ok_or_else(bad)?).map_err(|_| bad())?;
+        let is_audit = scope == Scope::Audit;
+        Ok(audit::Explained {
+            lineage: audit::viewed_lineage(
+                &past.state,
+                &req.basis,
+                viewer,
+                is_audit,
+                self.pseudonyms.as_ref(),
+            )?,
+            audit: is_audit
+                .then(|| audit::audit_detail(self.domain, &record, decision))
+                .transpose()?,
+        })
     }
 
     /// Whether `party` may audit the domain: the meta-anchor's root, or the holder of a live
@@ -657,6 +717,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             pap: None,
             signed_pap: None,
             ended: Vec::new(),
+            explained: None,
         })))
     }
 
@@ -1655,6 +1716,7 @@ const fn answer(
         pap: None,
         signed_pap: None,
         ended: Vec::new(),
+        explained: None,
     }
 }
 
@@ -1697,8 +1759,10 @@ struct Shape<'a> {
 pub use access_kernel::contribution::NAMESPACE as CONTRIBUTION_NAMESPACE;
 
 pub mod approval;
+pub mod audit;
 mod binding;
 mod events;
+pub mod export;
 mod ingest;
 pub mod projection;
 mod proofs;

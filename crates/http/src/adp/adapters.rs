@@ -59,6 +59,7 @@ pub fn router<P: Pdp + 'static>(service: Service<P>, discovery: Discovery) -> Ro
         .route("/access/v1/explain", post(explain::<P>))
         .route("/access/v1/search/{kind}", post(search::<P>))
         .route("/access/v1/eligibility:check", post(eligibility::<P>))
+        .route(crate::audit::EXPORT_PATH, post(audit_export::<P>))
         .route(
             "/.well-known/authzen-configuration",
             get(configuration::<P>),
@@ -140,7 +141,18 @@ async fn search<P: Pdp>(
     respond(reply, &headers)
 }
 
-fn respond(reply: Reply, headers: &HeaderMap) -> Response {
+async fn audit_export<P: Pdp>(
+    State(shared): State<Arc<Shared<P>>>,
+    pep: Option<axum::Extension<Pep>>,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Response {
+    let result =
+        crate::audit::export(&shared.service, &body, pep.map(|axum::Extension(Pep(p))| p)).await;
+    crate::audit::respond(result, &headers)
+}
+
+pub(crate) fn respond(reply: Reply, headers: &HeaderMap) -> Response {
     let mut response = match reply {
         Reply::Decision(v) => (
             StatusCode::OK,
@@ -330,5 +342,13 @@ where
 
     async fn metadata(&self, domain: Digest) -> Option<Vec<u8>> {
         Domains::metadata(self, domain).await
+    }
+
+    async fn export(&self, inc: Incoming) -> Result<Vec<u8>, CoreError> {
+        Domains::export(self, &inc)
+            .await?
+            .package
+            .to_bytes()
+            .map_err(|_| CoreError::Unavailable("export"))
     }
 }

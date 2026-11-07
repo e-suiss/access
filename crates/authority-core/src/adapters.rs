@@ -42,9 +42,13 @@ use crate::query::{Hit, Query, page_after, page_body};
 use crate::status::adapters::open_family;
 use crate::{keys, parties};
 
+mod audit;
 mod binding;
 mod projection;
 mod reconcile;
+pub use audit::{
+    AUDIT_EVENT_EXPORT, AUDIT_EVENT_READ, AUDIT_EVENT_REJECTED, audit_text, is_rejection, txn,
+};
 pub use projection::{
     BOUNDS_HORIZON_MS, CONTRACT_LABEL, FAMILY_CLAIM, INTENT_HORIZON_MS, Projected, STATUS_CLAIM,
     Token, TokenAuthority, TokenOrder,
@@ -468,10 +472,7 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
     }
 
     /// Explains the recorded decision at `record` on its domain's leader (OP-141 m.36).
-    ///
-    /// # Errors
-    /// As [`Authority::explain_recorded`].
-    pub async fn explain_recorded(
+    async fn explain_led(
         &self,
         inc: &Incoming,
         record: u64,
@@ -499,7 +500,8 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
     /// # Errors
     /// [`CoreError`]; [`CoreError::Unavailable`] when the domain cannot be led here.
     pub async fn exercise(&self, inc: &Incoming) -> Result<Response, CoreError> {
-        self.decide(inc, None).await
+        let result = self.decide(inc, None).await;
+        self.audited(inc, "evaluation", result).await
     }
 
     /// The single-subject eligibility check of `inc` for `subject` on its domain's leader: a
@@ -508,7 +510,8 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
     /// # Errors
     /// As [`Authority::eligible`].
     pub async fn eligible(&self, inc: &Incoming, subject: Id) -> Result<Response, CoreError> {
-        self.decide(inc, Some(subject)).await
+        let result = self.decide(inc, Some(subject)).await;
+        self.audited(inc, "eligibility", result).await
     }
 
     async fn decide(&self, inc: &Incoming, subject: Option<Id>) -> Result<Response, CoreError> {
@@ -833,6 +836,16 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
     /// # Errors
     /// [`CoreError`]; [`CoreError::Protocol`] for a page token that is not this domain's.
     pub async fn search(
+        &self,
+        inc: &Incoming,
+        query: &Query,
+        page: Option<&str>,
+    ) -> Result<(Vec<Hit>, Option<String>), CoreError> {
+        let result = self.search_led(inc, query, page).await;
+        self.audited(inc, "search", result).await
+    }
+
+    async fn search_led(
         &self,
         inc: &Incoming,
         query: &Query,

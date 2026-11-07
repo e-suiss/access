@@ -1,6 +1,9 @@
 //! The pure part of the commit path (§17.1.1 steps 4–8, OP-63): a snapshot of the state that
 //! records what it served, and the decision for one request over it.
 
+pub mod export;
+pub mod reasons;
+
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 

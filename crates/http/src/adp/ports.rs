@@ -54,6 +54,13 @@ pub trait Pdp: Send + Sync {
         let _ = domain;
         std::future::ready(None)
     }
+
+    /// The Record Export Package bytes of the allowed `access.audit.export` Exercise `inc`
+    /// names (AP-14), audited before they leave (U53, OP-44); none by default.
+    fn export(&self, inc: Incoming) -> impl Future<Output = Result<Vec<u8>, CoreError>> + Send {
+        let _ = inc;
+        std::future::ready(Err(CoreError::Protocol("export")))
+    }
 }
 
 /// Results and the next page token.
@@ -92,5 +99,9 @@ impl<P: Pdp> Pdp for Arc<P> {
 
     fn metadata(&self, domain: Digest) -> impl Future<Output = Option<Vec<u8>>> + Send {
         (**self).metadata(domain)
+    }
+
+    fn export(&self, inc: Incoming) -> impl Future<Output = Result<Vec<u8>, CoreError>> + Send {
+        (**self).export(inc)
     }
 }

@@ -47,6 +47,7 @@ fn scripted(s: &Scripted, inc: Incoming) -> Result<Response, CoreError> {
         pap: None,
         signed_pap: None,
         ended: Vec::new(),
+        explained: None,
     })
 }
 

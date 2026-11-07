@@ -41,6 +41,16 @@ impl<P: Pdp> Service<P> {
         Self { pdp, max_body }
     }
 
+    /// The decision point.
+    pub(crate) const fn pdp(&self) -> &P {
+        &self.pdp
+    }
+
+    /// The largest body accepted, in bytes.
+    pub(crate) const fn max_body(&self) -> usize {
+        self.max_body
+    }
+
     /// The binding-signed Domain Metadata of `domain`, if the signer has it (§9.15.1).
     pub async fn metadata(&self, domain: access_kernel::digest::Digest) -> Option<Vec<u8>> {
         self.pdp.metadata(domain).await
@@ -193,8 +203,9 @@ impl<P: Pdp> Service<P> {
             explain: false,
             status: None,
         };
+        let first = page.is_none();
         match self.pdp.search(inc, query, page).await {
-            Ok((hits, next)) => Reply::Decision(encode_search(&hits, next.as_deref())),
+            Ok((hits, next)) => Reply::Decision(encode_search(&hits, next.as_deref(), first)),
             Err(e) => failed(e, Body::Context),
         }
     }
@@ -216,7 +227,7 @@ impl<P: Pdp> Service<P> {
 }
 
 /// A body the decoder refused, with where in `body` the refused part is when known.
-fn bad(e: AdpError, body: Body) -> Reply {
+pub(crate) fn bad(e: AdpError, body: Body) -> Reply {
     Reply::Protocol(
         e.0,
         vec![FieldError {
@@ -237,7 +248,7 @@ pub const fn unavailable_reason(e: &CoreError) -> Option<&'static str> {
     }
 }
 
-fn failed(e: CoreError, body: Body) -> Reply {
+pub(crate) fn failed(e: CoreError, body: Body) -> Reply {
     match e {
         CoreError::Nonce => Reply::Conflict,
         CoreError::Limited => Reply::Limited,

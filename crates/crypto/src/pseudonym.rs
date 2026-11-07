@@ -13,6 +13,7 @@ use crate::dit::DitGuard;
 use crate::secret::Secret;
 
 const CONTEXT: &[u8] = b"access/party-ref/v1\0";
+const VIEWER_CONTEXT: &[u8] = b"access/viewer-ref/v1\0";
 
 /// The token label of a domain's pseudonym key: `access/pseudonym/<DomainID hex>`.
 #[must_use]
@@ -55,15 +56,32 @@ impl PseudonymKey {
     pub fn party_ref(&self, party: &[u8; 16]) -> Result<[u8; 16], HsmError> {
         let mut message = CONTEXT.to_vec();
         message.extend_from_slice(party);
+        self.truncated(&message)
+    }
+
+    /// The pseudonym of `id` as `viewer` sees it in an explanation (§13.7.5, SEC29, TI-RT10):
+    /// the first 16 bytes of `HMAC-SHA-256(K_d, "access/viewer-ref/v1" ‖ 0x00 ‖ viewer ‖ id)`,
+    /// stable for one viewer and unlinkable across viewers.
+    ///
+    /// # Errors
+    /// [`HsmError`] when the token refuses.
+    pub fn viewer_ref(&self, viewer: &[u8; 16], id: &[u8; 16]) -> Result<[u8; 16], HsmError> {
+        let mut message = VIEWER_CONTEXT.to_vec();
+        message.extend_from_slice(viewer);
+        message.extend_from_slice(id);
+        self.truncated(&message)
+    }
+
+    fn truncated(&self, message: &[u8]) -> Result<[u8; 16], HsmError> {
         let full = match &self.0 {
-            Key::Token(mac) => mac.mac(&message)?,
+            Key::Token(mac) => mac.mac(message)?,
             #[cfg(any(test, feature = "testing"))]
             Key::Memory(key) => {
                 // CR-39 m.6
                 let _dit = DitGuard::new();
                 let key = hmac::Key::new(hmac::HMAC_SHA256, key.expose());
                 let mut out = [0; 32];
-                out.copy_from_slice(hmac::sign(&key, &message).as_ref());
+                out.copy_from_slice(hmac::sign(&key, message).as_ref());
                 out
             }
         };
@@ -88,5 +106,27 @@ mod tests {
         assert_ne!(a.party_ref(&p).unwrap(), a.party_ref(&[8; 16]).unwrap());
         assert_ne!(a.party_ref(&p).unwrap(), p);
         assert_eq!(label(&[0xab; 32]).len(), "access/pseudonym/".len() + 64);
+    }
+
+    // §13.7.5, SEC29, TI-RT10: a viewer's pseudonym of an identity is stable for that viewer,
+    // differs across viewers and from the projection pseudonym
+    #[test]
+    fn viewer_pseudonyms_are_per_viewer() {
+        let k = PseudonymKey::new(Secret::new([1; 32]));
+        let id = [7; 16];
+        let (alice, bob) = ([2; 16], [3; 16]);
+        assert_eq!(
+            k.viewer_ref(&alice, &id).unwrap(),
+            k.viewer_ref(&alice, &id).unwrap()
+        );
+        assert_ne!(
+            k.viewer_ref(&alice, &id).unwrap(),
+            k.viewer_ref(&bob, &id).unwrap()
+        );
+        assert_ne!(
+            k.viewer_ref(&alice, &id).unwrap(),
+            k.party_ref(&id).unwrap()
+        );
+        assert_ne!(k.viewer_ref(&alice, &id).unwrap(), id);
     }
 }

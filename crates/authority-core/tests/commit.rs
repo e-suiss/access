@@ -4694,7 +4694,7 @@ async fn an_eligibility_check_records_nothing() {
     let a = process(&db, "a", vec![d]);
     onboard_both(&a, d, ActorKind::Human).await;
     let id = DomainId::from_bytes(d.0);
-    let head = access_store::authority::read_head(&db.app, &id)
+    let head = access_store::authority::read_head(&db.sequencer, &id)
         .await
         .unwrap();
     let shop = meta::object_id(&d, kind::ANCHOR, 1);
@@ -4712,7 +4712,7 @@ async fn an_eligibility_check_records_nothing() {
     let alice = a.eligible(&inc, ALICE).await.unwrap();
     assert_ne!(alice.decision.outcome, Outcome::Allow);
     assert_eq!(
-        access_store::authority::read_head(&db.app, &id)
+        access_store::authority::read_head(&db.sequencer, &id)
             .await
             .unwrap(),
         head
@@ -7087,4 +7087,374 @@ async fn projection_issuance_limits_are_decisions() {
         .await,
     );
     fold_check(&db.sequencer, d).await.unwrap();
+}
+
+// ---------------------------------------------------------------- M11 (OP-151 m.2): audit
+
+/// The rows of the operational audit stream of event `event`.
+async fn operational(db: &TestDb, event: &str) -> Vec<access_store::operational::OperationalRow> {
+    access_store::operational::operational_rows(&db.checkpointer, 10_000)
+        .await
+        .unwrap()
+        .into_iter()
+        .filter(|r| r.event_type == event)
+        .collect()
+}
+
+/// The export intent of `nonce` from position 0 with `disclosure`.
+fn export_request(d: Digest, nonce: u8, basis: ExerciseBasis, disclosure: &str) -> Request {
+    let mut intent = intent(
+        action("access", "audit.export"),
+        ("access.audit", "export"),
+        None,
+    );
+    intent.params = BTreeMap::from([
+        (
+            "disclosure".to_owned(),
+            access_kernel::intent::ParamValue::Enum(disclosure.to_owned()),
+        ),
+        (
+            "from".to_owned(),
+            access_kernel::intent::ParamValue::Count(0),
+        ),
+    ]);
+    Request {
+        domain: d,
+        mode: Mode::Commit,
+        nonce: vec![nonce; 16],
+        intent,
+        payload: None,
+        basis,
+        capacity: Capacity::Own,
+        proofs: Vec::new(),
+        exercise: None,
+        consistency: None,
+    }
+}
+
+type Led = Domains<Listed, Bound, Counter, Fixed>;
+
+/// A domain led by one process, with ROOT, ALICE and BOB onboarded, ALICE holding a `shop`
+/// Grant and having used it once; returns the holding and the position of that decision.
+async fn audited_domain(db: &TestDb) -> (Led, Digest, ExerciseBasis, u64) {
+    let d = create_genesis(&db.sequencer, TENANT, genesis(), 1_000)
+        .await
+        .unwrap();
+    let a = process(db, "a", vec![d]);
+    let public_basis = ExerciseBasis::Public(meta::object_id(&d, kind::GRANT, 0));
+    for (party, seed, (first, second)) in [
+        (ROOT, ROOT_KEY, (1, 2)),
+        (ALICE, ALICE_KEY, (3, 4)),
+        (BOB, BOB_KEY, (7, 8)),
+    ] {
+        for (nonce, payload) in [
+            (
+                first,
+                Payload::PartyRegister {
+                    party,
+                    root: Root::Sole(party),
+                    actor_kind: ActorKind::Human,
+                },
+            ),
+            (
+                second,
+                Payload::InstanceCreate {
+                    party,
+                    key: public(seed),
+                    mandate: None,
+                },
+            ),
+        ] {
+            let inc = incoming(meta_request(d, nonce, public_basis, payload), seed);
+            allowed(&a.exercise(&inc).await.unwrap());
+        }
+    }
+    let shop = meta::object_id(&d, kind::ANCHOR, 1);
+    let issue = Payload::GrantIssue(GrantContent {
+        basis: GrantBasis::Anchor(shop),
+        holder: SubjectSelector::Party(ALICE),
+        authority: authority(vec![action("shop", "read")], selector("shop")),
+        agency: BTreeSet::from([Capacity::Own]),
+        named: None,
+    });
+    let issued = a
+        .exercise(&incoming(
+            meta_request(d, 5, ExerciseBasis::Anchor(shop), issue),
+            ROOT_KEY,
+        ))
+        .await
+        .unwrap();
+    allowed(&issued);
+    let holding = ExerciseBasis::Holding(HoldingRef {
+        grant: meta::object_id(&issued.exercise.unwrap(), kind::GRANT, 0),
+        holder: ALICE,
+        since: issued.record.unwrap(),
+    });
+    let used = a
+        .exercise(&incoming(
+            shop_request(d, 20, Mode::Commit, holding),
+            ALICE_KEY,
+        ))
+        .await
+        .unwrap();
+    allowed(&used);
+    (a, d, holding, used.record.unwrap())
+}
+
+// U53, OP-44, PI-4, §17.6.11: audit is never sampled: N audit-depth reads are N rows of the
+// operational stream, written before each answer; a viewer-depth read is not an audit read
+#[tokio::test]
+async fn u53_op_44_every_audit_read_is_one_row() {
+    let db = fresh().await.unwrap();
+    let (a, d, holding, record) = audited_domain(&db).await;
+    let n = 3;
+    for _ in 0..n {
+        let inc = incoming(shop_request(d, 20, Mode::Commit, holding), ROOT_KEY);
+        let r = a
+            .explain_recorded(&inc, record, Scope::Audit)
+            .await
+            .unwrap();
+        allowed(&r);
+    }
+    let inc = incoming(shop_request(d, 20, Mode::Commit, holding), ROOT_KEY);
+    a.explain_recorded(&inc, record, Scope::Viewer)
+        .await
+        .unwrap();
+    let reads = operational(&db, "audit.read").await;
+    assert_eq!(reads.len(), n);
+    assert!(reads.iter().all(|r| r.target == format!("record:{record}")
+        && r.tenant == Some(TENANT)
+        && r.domain == Some(d.0)
+        && r.occurred_at_ms == NOW));
+    // OP-41: the common txn is the request's nonce, as the record carries it
+    assert_eq!(
+        reads[0].correlation,
+        access_kernel::json::b64url_encode(&[20; 16])
+    );
+}
+
+// §9.6, §9.6.1, §17.1.1, OP-148: at audit scope the answer opens `basis_ref` into the domain,
+// q − 1 and the version vector digest, with the StateBasis and `reason_admin`; at viewer scope
+// there is no `reason_admin` at all
+#[tokio::test]
+async fn audit_answers_expand_basis_ref_and_state_basis() {
+    let db = fresh().await.unwrap();
+    let (a, d, holding, record) = audited_domain(&db).await;
+    let inc = incoming(shop_request(d, 20, Mode::Commit, holding), ROOT_KEY);
+    let audit = a
+        .explain_recorded(&inc, record, Scope::Audit)
+        .await
+        .unwrap();
+    let detail = audit.explained.as_ref().unwrap().audit.as_ref().unwrap();
+    assert_eq!(detail.basis.domain, d);
+    assert_eq!(detail.basis.position_q_minus_1, record - 1);
+    let versions = Value::Map(vec![
+        (Value::text("core"), Value::Unsigned(1)),
+        (Value::text("meta_schema"), Value::Unsigned(1)),
+    ]);
+    assert_eq!(
+        detail.basis.version_vector_digest,
+        suiss_crypto::digest::context_digest(
+            "access/versions/v1",
+            &dcbor::encode(&versions, Limits::CEILING).unwrap()
+        )
+    );
+    assert_ne!(detail.reads.len(), 0);
+    assert_eq!(detail.evaluated_at, NOW);
+    let lineage = &audit.explained.as_ref().unwrap().lineage;
+    assert_eq!(lineage.len(), 1);
+    assert_eq!(
+        lineage[0].holder,
+        Some(access_authority_core::app::audit::Named::Clear(ALICE))
+    );
+    let viewer = a
+        .explain_recorded(&inc, record, Scope::Viewer)
+        .await
+        .unwrap();
+    assert!(viewer.explained.as_ref().unwrap().audit.is_none());
+    let alice = incoming(shop_request(d, 20, Mode::Commit, holding), ALICE_KEY);
+    let own = a
+        .explain_recorded(&alice, record, Scope::Requester)
+        .await
+        .unwrap();
+    assert!(own.explained.is_none());
+}
+
+// AP-14, INV-27, PI-6, PI-4, U53: an export is an allowed `access.audit.export` Exercise; its
+// package names that Exercise, re-folds to the checkpoint root and, full from Genesis, folds
+// into state; every export is one row; a redacted one declares digest-level replay
+#[tokio::test]
+#[allow(
+    clippy::too_many_lines,
+    reason = "one scenario from the first export to the refused one"
+)]
+#[allow(
+    clippy::many_single_char_names,
+    reason = "the package, its root and its parts"
+)]
+async fn ap_14_an_export_is_an_audited_exercise_that_verifies_itself() {
+    use access_authority_core::domain::export::{Coverage, Package, verify};
+    let db = fresh().await.unwrap();
+    let (a, d, _, _) = audited_domain(&db).await;
+    let meta_anchor = meta::meta_anchor(&d);
+    // ROOT roots the meta-anchor and so audits the domain (OP-141 m.38 (d))
+    let audit_basis = ExerciseBasis::Anchor(meta_anchor);
+    // without committing the export first there is nothing to export
+    let early = incoming(export_request(d, 31, audit_basis, "full"), ROOT_KEY);
+    assert!(matches!(
+        a.export(&early).await,
+        Err(CoreError::Protocol("export-exercise"))
+    ));
+    let committed = a.exercise(&early).await.unwrap();
+    allowed(&committed);
+    let exported = a.export(&early).await.unwrap();
+    let p = &exported.package;
+    assert_eq!(p.export_exercise, committed.exercise.unwrap());
+    assert_eq!(p.replay_coverage, Coverage::Full);
+    assert_eq!(p.range.0, 0);
+    let v = verify(p).unwrap();
+    assert!(v.folded);
+    let bytes = p.to_bytes().unwrap();
+    assert_eq!(&Package::from_bytes(&bytes).unwrap(), p);
+    // the same request exported again is one more row, never sampled
+    a.export(&early).await.unwrap();
+    let rows = operational(&db, "audit.export").await;
+    assert_eq!(rows.len(), 2);
+    assert!(rows[0].reason == "full" && rows[0].target.starts_with("records:0-"));
+    // a redacted export: commitments only, digest-level replay
+    let redacted = incoming(export_request(d, 32, audit_basis, "redacted"), ROOT_KEY);
+    allowed(&a.exercise(&redacted).await.unwrap());
+    let r = a.export(&redacted).await.unwrap().package;
+    assert_eq!(r.replay_coverage, Coverage::Digest);
+    assert!(
+        r.records
+            .iter()
+            .all(|rec| rec.opened.keys().all(|k| k == "versions"))
+    );
+    assert_eq!(verify(&r).unwrap().size, r.range.1 + 1);
+    // BOB roots nothing: his export intent is not allowed and there is no package
+    let bob = incoming(export_request(d, 33, audit_basis, "full"), BOB_KEY);
+    assert_ne!(
+        a.exercise(&bob).await.map(|r| r.decision.outcome).ok(),
+        Some(Outcome::Allow)
+    );
+    assert!(matches!(
+        a.export(&bob).await,
+        Err(CoreError::Protocol("export-exercise"))
+    ));
+    assert_eq!(operational(&db, "audit.export").await.len(), 3);
+}
+
+// OP-39, OP-44, carry-over of OP-142: a protocol rejection makes no record but is one row of
+// the operational stream, unsampled: a statement for another nonce, and a nonce replayed for
+// another intent
+#[tokio::test]
+async fn protocol_rejections_go_to_the_operational_stream() {
+    let db = fresh().await.unwrap();
+    let (a, d, holding, _) = audited_domain(&db).await;
+    let id = DomainId::from_bytes(d.0);
+    let head = access_store::authority::read_head(&db.sequencer, &id)
+        .await
+        .unwrap()
+        .pos;
+    let mut forged = incoming(shop_request(d, 40, Mode::Commit, holding), ALICE_KEY);
+    forged.ais = incoming(shop_request(d, 41, Mode::Commit, holding), ALICE_KEY).ais;
+    assert!(matches!(a.exercise(&forged).await, Err(CoreError::Ais(_))));
+    let mut other = shop_request(d, 20, Mode::Commit, holding);
+    other.intent.resources[0].path = vec!["item-2".to_owned()];
+    assert!(a.exercise(&incoming(other, ALICE_KEY)).await.is_err());
+    let rows = operational(&db, "authority.protocol.rejected").await;
+    assert_eq!(rows.len(), 2, "{rows:?}");
+    assert!(
+        rows.iter()
+            .all(|r| r.actor == PEP && r.target == "evaluation")
+    );
+    assert!(rows.iter().all(|r| !r.reason.is_empty()));
+    assert_eq!(
+        access_store::authority::read_head(&db.sequencer, &id)
+            .await
+            .unwrap()
+            .pos,
+        head
+    );
+}
+
+/// A subscriber that counts the explain trace events it sees.
+#[derive(Default)]
+struct Traces(std::sync::atomic::AtomicUsize);
+
+impl tracing::Subscriber for Traces {
+    fn enabled(&self, _: &tracing::Metadata<'_>) -> bool {
+        true
+    }
+    fn new_span(&self, _: &tracing::span::Attributes<'_>) -> tracing::span::Id {
+        tracing::span::Id::from_u64(1)
+    }
+    fn record(&self, _: &tracing::span::Id, _: &tracing::span::Record<'_>) {}
+    fn record_follows_from(&self, _: &tracing::span::Id, _: &tracing::span::Id) {}
+    fn event(&self, e: &tracing::Event<'_>) {
+        if e.metadata().target() == "access::explain" {
+            self.0.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        }
+    }
+    fn enter(&self, _: &tracing::span::Id) {}
+    fn exit(&self, _: &tracing::span::Id) {}
+}
+
+/// The domain's record envelopes, in order.
+async fn records(db: &TestDb, d: Digest) -> Vec<Vec<u8>> {
+    let id = DomainId::from_bytes(d.0);
+    let head = access_store::authority::read_head(&db.sequencer, &id)
+        .await
+        .unwrap()
+        .pos;
+    access_store::authority::read_log(&db.sequencer, &id, 0, head)
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|r| r.envelope)
+        .collect()
+}
+
+// §9.7.1, §9.16.3, C30: explain traces are operator telemetry, sampled at will and never the
+// record: the same commits with every trace on and explanations in between, and with no trace
+// at all, leave byte-identical records
+#[tokio::test]
+async fn traces_never_reach_the_record() {
+    let traced_db = fresh().await.unwrap();
+    let counted = std::sync::Arc::new(Traces::default());
+    let traced = {
+        let _on = tracing::subscriber::set_default(counted.clone());
+        let (a, d, holding, record) = audited_domain(&traced_db).await;
+        for scope in [Scope::Requester, Scope::Viewer, Scope::Audit] {
+            let seed = if scope == Scope::Requester {
+                ALICE_KEY
+            } else {
+                ROOT_KEY
+            };
+            let inc = incoming(shop_request(d, 20, Mode::Commit, holding), seed);
+            a.explain_recorded(&inc, record, scope).await.unwrap();
+        }
+        let after = a
+            .exercise(&incoming(
+                shop_request(d, 21, Mode::Commit, holding),
+                ALICE_KEY,
+            ))
+            .await
+            .unwrap();
+        allowed(&after);
+        records(&traced_db, d).await
+    };
+    assert!(counted.0.load(std::sync::atomic::Ordering::Relaxed) >= 3);
+    let quiet_db = fresh().await.unwrap();
+    let (a, d, holding, _) = audited_domain(&quiet_db).await;
+    allowed(
+        &a.exercise(&incoming(
+            shop_request(d, 21, Mode::Commit, holding),
+            ALICE_KEY,
+        ))
+        .await
+        .unwrap(),
+    );
+    assert_eq!(traced, records(&quiet_db, d).await);
 }
