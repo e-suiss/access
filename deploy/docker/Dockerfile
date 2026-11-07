@@ -10,7 +10,8 @@ WORKDIR /src
 ENV RUSTUP_TOOLCHAIN=1.99.0 \
     CARGO_TERM_COLOR=never \
     RUSTFLAGS="--remap-path-prefix=/src=/access --remap-path-prefix=/usr/local/cargo=/cargo"
-RUN cargo install --locked cargo-chef --version 0.1.78
+RUN cargo install --locked cargo-chef --version 0.1.78 \
+ && cargo install --locked cargo-auditable --version 0.7.6
 
 FROM chef AS planner
 COPY . .
@@ -23,9 +24,12 @@ RUN cargo chef cook --release --locked \
       --package access-local-client --package access-cli \
       --recipe-path recipe.json
 COPY . .
-RUN cargo build --release --locked \
+# F-5, SA-23, §14.5: dependency metadata embedded in every binary, and the hardening flags asserted
+RUN cargo auditable build --release --locked \
       --package access-server --package access-signer --package access-identity-signer-bin \
-      --package access-local-client --package access-cli
+      --package access-local-client --package access-cli \
+ && scripts/checksec.sh target/release/access-server target/release/access-signer \
+      target/release/access-identity-signer target/release/access-local-client target/release/access-cli
 
 # OP-69, CR-28: the same binaries with SoftHSM as the local PKCS#11 token, provisioning for a
 # local deployment (deploy/compose/access.yaml), the database administrator's setup and the
