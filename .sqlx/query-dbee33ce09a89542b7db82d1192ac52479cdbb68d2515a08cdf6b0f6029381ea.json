@@ -1,0 +1,89 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT fingerprint, publisher, namespace, catalog_version, package, published_ms\n           FROM access.schema_publication WHERE namespace = $1\n          ORDER BY catalog_version DESC, fingerprint LIMIT $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "fingerprint",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.schema_publication",
+            "name": "fingerprint"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "publisher",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.schema_publication",
+            "name": "publisher"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "namespace",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.schema_publication",
+            "name": "namespace"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "catalog_version",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.schema_publication",
+            "name": "catalog_version"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "package",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.schema_publication",
+            "name": "package"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "published_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.schema_publication",
+            "name": "published_ms"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "dbee33ce09a89542b7db82d1192ac52479cdbb68d2515a08cdf6b0f6029381ea"
+}

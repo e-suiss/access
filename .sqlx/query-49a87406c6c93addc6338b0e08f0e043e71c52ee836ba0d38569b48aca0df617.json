@@ -1,0 +1,66 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT c.exercise_id, c.holder_id, c.class, c.horizon_ms\n           FROM access.projection_contract c\n          WHERE c.domain_id = $1 AND c.horizon_ms > $2\n            AND NOT EXISTS (SELECT 1 FROM access.projection_family f\n                             WHERE f.domain_id = c.domain_id\n                               AND f.family_id = substring(c.exercise_id from 1 for 16)\n                               AND f.revoked_at IS NOT NULL)\n          ORDER BY c.exercise_id LIMIT $3",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "exercise_id",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.projection_contract",
+            "name": "exercise_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "holder_id",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.projection_contract",
+            "name": "holder_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "class",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.projection_contract",
+            "name": "class"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "horizon_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.projection_contract",
+            "name": "horizon_ms"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "49a87406c6c93addc6338b0e08f0e043e71c52ee836ba0d38569b48aca0df617"
+}

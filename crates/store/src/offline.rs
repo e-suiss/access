@@ -394,6 +394,61 @@ pub async fn open_offline(
     unsigned(n)
 }
 
+/// Most contracts one exposure read returns (§5.4).
+pub const MAX_OPEN: i64 = 1_000;
+
+/// One projection contract still open at a time: who holds it, its class and its horizon.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct OpenContract {
+    /// The projection's `ExerciseID`.
+    pub exercise: [u8; 32],
+    /// The holder Instance.
+    pub holder: [u8; 16],
+    /// Profile class word.
+    pub class: String,
+    /// The contract's horizon, milliseconds.
+    pub horizon_ms: u64,
+}
+
+/// The projections whose horizon is after `at` and whose family is not revoked, in
+/// `ExerciseID` order, at most [`MAX_OPEN`] (§5.4 revocation impact, staleness exposure).
+///
+/// # Errors
+/// [`StoreError`].
+pub async fn open_at(
+    pool: &PgPool,
+    domain: &DomainId,
+    at: u64,
+) -> Result<Vec<OpenContract>, StoreError> {
+    let mut t = DomainTx::begin(pool, domain).await?;
+    let rows = sqlx::query!(
+        "SELECT c.exercise_id, c.holder_id, c.class, c.horizon_ms
+           FROM access.projection_contract c
+          WHERE c.domain_id = $1 AND c.horizon_ms > $2
+            AND NOT EXISTS (SELECT 1 FROM access.projection_family f
+                             WHERE f.domain_id = c.domain_id
+                               AND f.family_id = substring(c.exercise_id from 1 for 16)
+                               AND f.revoked_at IS NOT NULL)
+          ORDER BY c.exercise_id LIMIT $3",
+        domain.as_bytes().as_slice(),
+        signed(at)?,
+        MAX_OPEN,
+    )
+    .fetch_all(&mut *t.tx)
+    .await?;
+    t.commit().await?;
+    rows.into_iter()
+        .map(|r| {
+            Ok(OpenContract {
+                exercise: bytes(&r.exercise_id)?,
+                holder: bytes(&r.holder_id)?,
+                class: r.class,
+                horizon_ms: unsigned(r.horizon_ms)?,
+            })
+        })
+        .collect()
+}
+
 /// How many projections `holder` was issued since `since_ms` whose bounds touch one of
 /// `namespaces` (§13.7.4 "`projection.issue` per Instance × action class").
 ///

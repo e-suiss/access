@@ -30,6 +30,7 @@ pub mod operational;
 pub mod passkeys;
 pub mod platform;
 pub mod projections;
+pub mod publications;
 pub mod realm_binding;
 pub mod relay;
 pub mod scope;

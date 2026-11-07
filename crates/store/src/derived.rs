@@ -303,6 +303,33 @@ pub async fn grants_in(
     rows.iter().map(|g| id16(g)).collect()
 }
 
+/// The Grants the index holds as live, at most `limit`, in id order after `after` (§5.4
+/// orphan tuple counter).
+///
+/// # Errors
+/// [`StoreError::Db`].
+pub async fn live_grants(
+    pool: &PgPool,
+    domain: &DomainId,
+    after: Option<[u8; 16]>,
+    limit: u32,
+) -> Result<Vec<[u8; 16]>, StoreError> {
+    let after = after.unwrap_or([0; 16]);
+    let mut t = DomainTx::begin(pool, domain).await?;
+    let rows = sqlx::query_scalar!(
+        "SELECT grant_id FROM access_derived.grant_index
+          WHERE domain_id = $1 AND NOT ended AND grant_id > $2
+          ORDER BY grant_id LIMIT $3",
+        domain.as_bytes().as_slice(),
+        after.as_slice(),
+        i64::from(limit),
+    )
+    .fetch_all(&mut *t.tx)
+    .await?;
+    t.commit().await?;
+    rows.iter().map(|g| id16(g)).collect()
+}
+
 /// The live Grants `party` may hold: held by it, by `Public`, or by a predicate, at most
 /// `limit`, in id order after `after`.
 ///
