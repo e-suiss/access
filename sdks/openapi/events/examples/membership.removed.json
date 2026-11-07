@@ -13,6 +13,7 @@
     "aud": "019a0000-0000-7000-8000-0000000000c3",
     "iat": 1793750400,
     "jti": "AQGxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "txn": "AQGxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
     "sub_id": {
       "format": "opaque",
       "id": "usr_0b5yq2mtzk6x4hd1e8fg3wa7rc"
