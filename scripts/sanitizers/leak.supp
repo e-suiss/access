@@ -1,0 +1,10 @@
+# SA-23, §14.5: LeakSanitizer reports of memory a test leaks on purpose, each with its reason.
+#
+# Test helpers that hand out 'static data by leaking it; the memory lives as long as the test
+# process, which is the point.
+leak:access_parse::cbor::tests::dec
+leak:access_server::bootstrap::tests
+#
+# The PKCS#11 token handle is never dropped: unloading SoftHSM after it used OpenSSL crashes the
+# test process at exit on some hosts (bins/access-server/src/ids/tests.rs).
+leak:access_server::ids::tests::open

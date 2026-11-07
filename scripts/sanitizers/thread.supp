@@ -1,0 +1,9 @@
+# SA-23, §14.5: ThreadSanitizer reports that are not races in this code base, each with its reason.
+#
+# tokio's I/O driver hands each socket's ScheduledIo to the kernel with epoll_ctl and gets it back
+# from epoll_wait on the driver thread. ThreadSanitizer does not see that kernel round trip as a
+# happens-before edge, so every socket a test opens (PostgreSQL, HTTP) shows a race between the
+# registration and the driver's readiness update.
+race:tokio::runtime::io::scheduled_io
+race:tokio::runtime::io::driver
+race:tokio::runtime::io::registration_set

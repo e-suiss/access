@@ -1030,7 +1030,7 @@ async fn own_sessions_list_and_revoke() {
     let id = other["id"].as_str().unwrap();
     let path = format!("/console/api/sessions/{id}/revoke");
     let (r, _) = h
-        .send(a.post(Box::leak(path.into_boxed_str()), ""), CLIENT)
+        .send(a.post(&path, ""), CLIENT)
         .await;
     assert_eq!(r.status(), StatusCode::NO_CONTENT);
     let (r, _) = h.send(b.get("/console/api/session"), CLIENT).await;
@@ -1056,7 +1056,7 @@ async fn own_sessions_list_and_revoke() {
     let id = current["id"].as_str().unwrap();
     let path = format!("/console/api/sessions/{id}/revoke");
     let (r, _) = h
-        .send(a.post(Box::leak(path.into_boxed_str()), ""), CLIENT)
+        .send(a.post(&path, ""), CLIENT)
         .await;
     assert_eq!(r.status(), StatusCode::NO_CONTENT);
     assert!(set_cookie_line(&r, CONSOLE_COOKIE).contains("Max-Age=0"));

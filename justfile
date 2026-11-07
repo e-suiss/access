@@ -569,12 +569,17 @@ bench-ffi iters="5000":
 mutants *args:
     cargo mutants --package esuiss-access-kernel --test-tool nextest {{args}}
 
-# SA-23, §14.5, OP-127 m.1
+# SA-23, §14.5, OP-127 m.1: every test binary runs (--no-fail-fast); reports that are not defects are
+# suppressed with their reasons in scripts/sanitizers/; frame pointers give the leak reports whole stacks
 sanitize kind:
-    SOFTHSM2_CONF="$(scripts/softhsm-local.sh)" RUSTFLAGS="-Zsanitizer={{kind}}" RUSTDOCFLAGS="-Zsanitizer={{kind}}" \
-      cargo +{{sanitizer_nightly}} test --locked -Zbuild-std --target x86_64-unknown-linux-gnu --workspace --exclude esuiss-sandbox --lib --tests
-    RUSTFLAGS="-Zsanitizer={{kind}}" RUSTDOCFLAGS="-Zsanitizer={{kind}}" \
-      cargo +{{sanitizer_nightly}} test --locked -Zbuild-std --target x86_64-unknown-linux-gnu -p esuiss-sandbox --lib
+    #!/usr/bin/env bash
+    set -euo pipefail
+    supp="{{justfile_directory()}}/scripts/sanitizers"
+    export TSAN_OPTIONS="suppressions=$supp/thread.supp" LSAN_OPTIONS="suppressions=$supp/leak.supp"
+    export RUSTFLAGS="-Zsanitizer={{kind}} -Cforce-frame-pointers=yes" RUSTDOCFLAGS="-Zsanitizer={{kind}}"
+    SOFTHSM2_CONF="$(scripts/softhsm-local.sh)" \
+      cargo +{{sanitizer_nightly}} test --locked -Zbuild-std --target x86_64-unknown-linux-gnu --workspace --exclude esuiss-sandbox --lib --tests --no-fail-fast
+    cargo +{{sanitizer_nightly}} test --locked -Zbuild-std --target x86_64-unknown-linux-gnu -p esuiss-sandbox --lib --no-fail-fast
 
 # SA-23, §14.5
 checksec +binaries:
