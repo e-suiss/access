@@ -1,5 +1,5 @@
 //! Architecture and code rules (OP-62, OP-63, OP-64, OP-66, OP-73, TI-9, R-2,
-//! SA-21, CR-3, CR-11, CR-13, SA-32, U48, TI-10, INV-26, INV-36, §9.7A.7, OP-150 (e)). Each check lives in a `rules_*` module.
+//! SA-21, CR-3, CR-11, CR-13, SA-32, U48, TI-10, INV-26, INV-36, §9.7A.7, OP-150 (e), TN-113). Each check lives in a `rules_*` module.
 
 #[path = "rules_crypto.rs"]
 mod crypto;
@@ -13,6 +13,8 @@ pub(crate) mod files;
 pub(crate) mod lex;
 #[path = "rules_limits.rs"]
 mod limits;
+#[path = "rules_manifest.rs"]
+mod manifest;
 #[path = "rules_profile.rs"]
 mod profile;
 #[path = "rules_restriction.rs"]
@@ -132,6 +134,10 @@ pub(crate) fn checks() -> Vec<Check> {
         Check {
             name: "shared-vectors",
             run: vectors::check,
+        },
+        Check {
+            name: "endpoint-manifest",
+            run: manifest::check,
         },
     ]
 }
