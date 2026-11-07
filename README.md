@@ -88,7 +88,7 @@ ACCESS_LOCAL_TEST_PASSWORD='choose one' docker compose -f deploy/compose/access.
 docker compose -f deploy/compose/access.yaml logs bootstrap   # tenant, realm and client ids
 ```
 
-This starts PostgreSQL (TLS only), the authority and identity signers, applies the migrations (`access-server migrate`) and runs `access-server bootstrap`, which creates the platform tenant with its realm, a sample `acme` tenant and a test user in it. Access listens on `https://access-server:8443` inside the `access-local` network and on `127.0.0.1:8443` on your machine. `ACCESS_LOCAL_TEST_PASSWORD` is the test user's password; there is no default, you choose it.
+This starts PostgreSQL (TLS only), the authority and identity signers, applies the migrations (`access-server migrate`) and runs `access-server bootstrap`, which creates the platform tenant with its realm, a sample `acme` tenant and a test user in it. Access listens on `https://access-server:8443` inside the `access-local` network and on `127.0.0.1:8443` on your machine. The management API (`/admin/v1/realms/{slug}/…`, `/admin/v1/platform/…`, contract in `sdks/openapi/admin-v1.json`) has its own listener on port 9443 (`127.0.0.1:9443`); `/livez`, `/readyz`, `/healthz` and `/metrics` are on the internal port 9090 only. `ACCESS_LOCAL_TEST_PASSWORD` is the test user's password; there is no default, you choose it.
 
 The bootstrap prints, and keeps in the `bootstrap` volume as `bootstrap.json`:
 
