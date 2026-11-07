@@ -270,6 +270,7 @@ fn schemas() -> Value {
             "type": "object",
             "additionalProperties": false,
             "description": "A new tenant; the draft assigns its `tenant_id`.",
+            "examples": [{ "placement": "pool-default" }],
             "properties": {
                 "tenant_id": text("Assigned by the draft; send it back unchanged."),
                 "placement": text("Its placement; `pool-default` when omitted (OP-40)."),
@@ -282,6 +283,10 @@ fn schemas() -> Value {
             "additionalProperties": false,
             "required": ["slug", "root"],
             "description": "A new realm and the Genesis of its governing domain (TN-111, §5.16). A sole root needs `acknowledge_no_recovery: true` (TN-60, §13.7.7).",
+            "examples": [
+                { "slug": "shop", "issuer_style": "subdomain", "root": { "joint": { "k": 2, "parties": ["AQEBAQEBAQEBAQEBAQEBAQ", "AgICAgICAgICAgICAgICAg"] } } },
+                { "slug": "lab", "root": { "sole": "AQEBAQEBAQEBAQEBAQEBAQ" }, "acknowledge_no_recovery": true },
+            ],
             "properties": {
                 "slug": text("The immutable slug (TN-16)."),
                 "issuer_style": { "type": "string", "enum": ["subdomain", "path"], "default": "subdomain" },
@@ -297,6 +302,7 @@ fn schemas() -> Value {
             "type": "object",
             "additionalProperties": false,
             "description": "What the new governing domain's Genesis declares (TN-111, §13.7.7): its digest (the DomainID), its root's shape, and whether it can be recovered.",
+            "examples": [{ "digest": "BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc", "root": { "kind": "joint", "k": 2, "n": 2 }, "recovery": "not_available", "recovery_reason": "no-recover-entry" }],
             "properties": {
                 "digest": { "type": "string", "pattern": "^[A-Za-z0-9_-]{43}$" },
                 "root": {
