@@ -228,6 +228,7 @@ impl World {
                 schemas: Vec::new(),
                 acceptances: Vec::new(),
                 issuer_predicate_input: Vec::new(),
+                provisioned_by: None,
             })
             .await
             .unwrap();
@@ -1050,6 +1051,7 @@ async fn admin_realm_creation_opens_the_domain_keys() {
             schemas: Vec::new(),
             acceptances: Vec::new(),
             issuer_predicate_input: Vec::new(),
+            provisioned_by: None,
         })
         .await
         .unwrap();
@@ -2157,6 +2159,216 @@ mod provision {
         .unwrap();
         assert_eq!(listed.len(), 1);
         assert_eq!(listed[0].slug, "shop-sandbox");
+        w.domains.release().await;
+    }
+
+    /// The platform-admin surface of this process, governed by the platform realm.
+    fn surface(w: &World) -> crate::admin::realm::Realms<TestPlane> {
+        crate::admin::realm::Realms {
+            app: w.db.app.clone(),
+            reads: w.db.app.clone(),
+            router: w.db.router.clone(),
+            ids: Arc::new(crate::ids::CellIds::new(w.keys.clone())),
+            plane: w.plane.clone(),
+            base: w.base.clone(),
+            keys: Arc::new(RealmKeyring::new(
+                SignerKeys::new(w.identity_signer.clone()),
+                w.keys.clone(),
+            )),
+            declared: DeclaredTargets::default(),
+            platform: Some(String::from("platform")),
+            outbound: access_identity_oauth::adapters::outbound::Outbound::disabled(
+                std::time::Duration::from_secs(5),
+            ),
+            vault: access_identity_events::adapters::KekSealer(crate::login::RealmKeks::new(
+                w.keys.clone(),
+            )),
+            geo: Arc::new(access_identity_risk::adapters::NoGeoSource),
+        }
+    }
+
+    /// A sandbox creation of `body` for the platform surface's commit, signed by the platform
+    /// root: the intent is built here, never drafted (no `prepare_provision`).
+    async fn signed_write(
+        w: &World,
+        (operation, tenant): (&'static str, &str),
+        mut body: serde_json::Value,
+        nonce: [u8; 16],
+    ) -> (
+        access_http::api::ports::PlatformWrite,
+        access_http::api::domain::caller::WriteCaller,
+    ) {
+        use access_http::api::ports::PlatformWrite;
+        let root = root_key(&w.keys).unwrap();
+        let now = server_time(&w.db.app).await.unwrap();
+        body["validity"] = access_identity_admin::app::rest::default_validity(now);
+        let route = route_by_slug(&w.db.router, "platform")
+            .await
+            .unwrap()
+            .unwrap();
+        let mut t = TenantTx::begin(&w.db.app, route.tenant, route.realm)
+            .await
+            .unwrap();
+        let g = idp::governance(&mut t).await.unwrap().unwrap();
+        t.commit().await.unwrap();
+        let domain = Digest(*g.domain.as_bytes());
+        let validity = access_identity_admin::app::rest::validity(&body).unwrap();
+        let ids = cell_ids(&w.db.app, &w.keys).await.unwrap();
+        let tenant = TenantId::from_bytes(
+            ids.decode(
+                access_identity_events::domain::catalog::TENANT_PREFIX,
+                tenant,
+            )
+            .unwrap(),
+        );
+        let joint = Root::Joint {
+            parties: [root_party(&root.public_key()), Id([0x42; 16])]
+                .into_iter()
+                .collect(),
+            k: 2,
+        };
+        let slug = body["slug"].as_str().unwrap().to_owned();
+        let change = PlatformChange::Sandbox(realm(tenant, &slug, joint, false));
+        let intent = change.intent(&g.slug, validity).unwrap();
+        let digest = access_kernel::intent::intent_digest(&intent).unwrap();
+        MetaExercises::lead(&w.plane, domain).await.unwrap();
+        let basis = ExerciseBasis::Anchor(meta::object_id(&domain, kind::ANCHOR, IDP_ANCHOR));
+        let statement = Moment::at(now).statement(domain, &nonce, digest, basis);
+        let ais = sign(&root, &statement).unwrap();
+        let caller = access_http::api::domain::caller::WriteCaller {
+            kid: thumbprint(&root.public_key()),
+            statement,
+            ais,
+        };
+        let write = PlatformWrite {
+            domain,
+            operation,
+            tenant: Some(
+                ids.encode(
+                    access_identity_events::domain::catalog::TENANT_PREFIX,
+                    *tenant.as_bytes(),
+                )
+                .unwrap(),
+            ),
+            body,
+            now_ms: now,
+        };
+        (write, caller)
+    }
+
+    async fn commit_write(
+        surface: &crate::admin::realm::Realms<TestPlane>,
+        (write, caller): (
+            access_http::api::ports::PlatformWrite,
+            access_http::api::domain::caller::WriteCaller,
+        ),
+    ) -> access_http::api::ports::Written {
+        use access_http::api::ports::PlatformResources as _;
+        surface.commit(write, caller).await.unwrap()
+    }
+
+    // TN-110, TN-16, INV-32, OP-151 m.3 (m): a sandbox creation committed straight through the
+    // platform surface, with no draft, on the slug of a production realm is refused once the
+    // decision is bound: the production domain is never marked a sandbox. A retry of a
+    // committed creation finishes the realm its own Exercise opened, and nothing else
+    #[tokio::test]
+    async fn a_commit_without_a_draft_never_turns_a_taken_slug_into_a_sandbox() {
+        use access_http::api::ports::Written;
+        let w = World::new("provision-commit").await;
+        w.run(&plan()).await;
+        let ids = cell_ids(&w.db.app, &w.keys).await.unwrap();
+        let declared = DeclaredTargets::default();
+        let bootstrap = Bootstrap {
+            app: &w.db.app,
+            router: &w.db.router,
+            plane: &w.plane,
+            realm_keys: &w.keyring,
+            hsm: &w.keys,
+            base: &w.base,
+            declared: &declared,
+            console: None,
+        };
+        let admin = bootstrap.admin(&ids, None);
+        let route = route_by_slug(&w.db.router, "platform")
+            .await
+            .unwrap()
+            .unwrap();
+        let platform = Platform {
+            tenant: route.tenant,
+            realm: route.realm,
+            router: &w.db.router,
+        };
+        let founder = root_party(&root_key(&w.keys).unwrap().public_key());
+        let tenant = TenantId::from_bytes(idp::new_uuid(&w.db.app).await.unwrap());
+        let change = PlatformChange::Tenant {
+            tenant: *tenant.as_bytes(),
+            placement: String::from(PLACEMENT),
+        };
+        assert!(matches!(
+            provision(&w, &admin, &platform, &change, [1; 16]).await,
+            Ok(Provisioned::Done { .. })
+        ));
+        let joint = Root::Joint {
+            parties: [founder, Id([0x42; 16])].into_iter().collect(),
+            k: 2,
+        };
+        let shop = PlatformChange::Realm(realm(tenant, "shop", joint, false));
+        let Ok(Provisioned::Done {
+            created: Created::Realm { domain, .. },
+            ..
+        }) = provision(&w, &admin, &platform, &shop, [2; 16]).await
+        else {
+            panic!("realm creation not allowed");
+        };
+
+        let surface = surface(&w);
+        let tenant_text = ids
+            .encode(
+                access_identity_events::domain::catalog::TENANT_PREFIX,
+                *tenant.as_bytes(),
+            )
+            .unwrap();
+        let joint_body = serde_json::json!({
+            "joint": {
+                "k": 2,
+                "parties": [b64url_encode(&founder.0), b64url_encode(&[0x42; 16])],
+            }
+        });
+        let signed = signed_write(
+            &w,
+            ("createSandboxDomain", &tenant_text),
+            serde_json::json!({ "slug": "shop", "root": joint_body, "issuer_style": "path", "placement": PLACEMENT }),
+            [3; 16],
+        )
+        .await;
+        let taken = commit_write(&surface, signed).await;
+        assert!(
+            matches!(taken, Written::Rejected(c) if c == &access_http::problem::codes::platform::SLUG_TAKEN),
+            "{taken:?}"
+        );
+        assert!(
+            sandbox::budget(&w.db.router, &domain.0)
+                .await
+                .unwrap()
+                .is_none()
+        );
+
+        // a retry of a committed creation finishes its own realm and answers alike
+        let signed = signed_write(
+            &w,
+            ("createSandboxDomain", &tenant_text),
+            serde_json::json!({ "slug": "shop-play", "root": joint_body, "issuer_style": "path", "placement": PLACEMENT }),
+            [4; 16],
+        )
+        .await;
+        let first = commit_write(&surface, signed.clone()).await;
+        let again = commit_write(&surface, signed).await;
+        let (Written::Committed { exercise_id: a, .. }, Written::Committed { exercise_id: b, .. }) =
+            (first, again)
+        else {
+            panic!("sandbox creation not committed");
+        };
+        assert_eq!(a, b);
         w.domains.release().await;
     }
 }

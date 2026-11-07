@@ -1530,6 +1530,7 @@ where
                 schemas,
                 acceptances,
                 issuer_predicate_input,
+                provisioned_by: None,
             })
             .await?;
         Ok((tenant, created.realm, created.domain, true))

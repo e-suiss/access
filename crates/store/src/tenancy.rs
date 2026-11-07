@@ -72,6 +72,42 @@ pub async fn create_realm(
     Ok(RealmId::from_bytes(*id.as_bytes()))
 }
 
+/// Records that the `idp.platform.*` Exercise `exercise` opened the transaction's realm (TN-110,
+/// EI-25), in the transaction that creates it.
+///
+/// # Errors
+/// [`StoreError`].
+pub async fn record_provision(t: &mut TenantTx, exercise: &[u8; 32]) -> Result<(), StoreError> {
+    let realm = t.realm().ok_or(StoreError::Range)?;
+    sqlx::query!(
+        "INSERT INTO access.realm_provisions (tenant_id, realm_id, exercise_id) VALUES ($1, $2, $3)",
+        Uuid::from_bytes(*t.tenant.as_bytes()),
+        Uuid::from_bytes(*realm.as_bytes()),
+        exercise.as_slice(),
+    )
+    .execute(&mut *t.tx)
+    .await?;
+    Ok(())
+}
+
+/// The `idp.platform.*` Exercise that opened the transaction's realm; `None` for a realm no
+/// provisioning Exercise opened.
+///
+/// # Errors
+/// [`StoreError`].
+pub async fn provisioned_by(t: &mut TenantTx) -> Result<Option<[u8; 32]>, StoreError> {
+    let realm = t.realm().ok_or(StoreError::Range)?;
+    let row = sqlx::query_scalar!(
+        "SELECT exercise_id FROM access.realm_provisions WHERE tenant_id = $1 AND realm_id = $2",
+        Uuid::from_bytes(*t.tenant.as_bytes()),
+        Uuid::from_bytes(*realm.as_bytes()),
+    )
+    .fetch_optional(&mut *t.tx)
+    .await?;
+    row.map(|e| <[u8; 32]>::try_from(e.as_slice()).map_err(|_| StoreError::Corrupt))
+        .transpose()
+}
+
 /// How many realms the tenant has ever had, deleted ones included.
 ///
 /// # Errors

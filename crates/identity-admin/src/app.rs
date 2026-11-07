@@ -78,6 +78,9 @@ pub struct NewRealm<'a> {
     /// Classes of the realm issuer's Claims its Genesis accepts as predicate input too, for
     /// hosted approvals (SI-5, OP-149 m.29 (b)).
     pub issuer_predicate_input: Vec<String>,
+    /// The `idp.platform.*` Exercise that opens it, recorded with it (TN-110, EI-25); `None`
+    /// for a realm the local plan opens.
+    pub provisioned_by: Option<Digest>,
 }
 
 /// A created realm.
@@ -233,6 +236,9 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
         let mut t = TenantTx::begin_tenant(self.app, r.tenant).await?;
         let realm = tenancy::create_realm(&mut t, &domain, r.slug, r.placement).await?;
         t.enter_realm(realm).await?;
+        if let Some(exercise) = &r.provisioned_by {
+            tenancy::record_provision(&mut t, &exercise.0).await?;
+        }
         access_store::issuer::set_realm_issuer(&mut t, &claim_issuer).await?;
         if r.style == IssuerStyle::Subdomain {
             tenancy::add_hostname(&mut t, host_of(issuer.authority()), HostKind::Subdomain).await?;

@@ -140,6 +140,20 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             .map(|r| r.tenant))
     }
 
+    /// Whether `change` fits the platform's current state: a realm's tenant is active and its
+    /// slug is free (TN-16, INV-32).
+    async fn fits(p: &Platform<'_>, change: &PlatformChange) -> Result<(), ProvisionError> {
+        if let PlatformChange::Realm(o) | PlatformChange::Sandbox(o) = change {
+            if !Self::tenant_active(p, TenantId::from_bytes(o.tenant)).await? {
+                return Err(ProvisionInvalid::NoTenant.into());
+            }
+            if Self::slug_owner(p, &o.slug).await?.is_some() {
+                return Err(ProvisionInvalid::SlugTaken.into());
+            }
+        }
+        Ok(())
+    }
+
     /// The intent the caller signs for `change`, once it fits the platform's current state
     /// (TN-110, EI-25).
     ///
@@ -152,14 +166,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
         validity: Window,
     ) -> Result<Prepared, ProvisionError> {
         change.check()?;
-        if let PlatformChange::Realm(o) | PlatformChange::Sandbox(o) = change {
-            if !Self::tenant_active(p, TenantId::from_bytes(o.tenant)).await? {
-                return Err(ProvisionInvalid::NoTenant.into());
-            }
-            if Self::slug_owner(p, &o.slug).await?.is_some() {
-                return Err(ProvisionInvalid::SlugTaken.into());
-            }
-        }
+        Self::fits(p, change).await?;
         let (domain, slug) = self.platform_governing(p).await?;
         let intent = change
             .intent(&slug, validity)
@@ -226,7 +233,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
         let change = order.change.digest().map_err(|_| AdminError::Encode)?;
         let label = order.change.action().label();
         let mut t = TenantTx::begin(self.app, p.tenant, p.realm).await?;
-        let _bound = idp::bind(
+        let bound = idp::bind(
             &mut t,
             &Bind {
                 domain: &domain,
@@ -238,8 +245,16 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             },
         )
         .await?;
+        // TN-110, TN-16: the first application of a decision fits the state it changes; only a
+        // retry of a bound one finds its own realm
+        if bound.is_some()
+            && let Err(e) = Self::fits(p, order.change).await
+        {
+            t.rollback().await?;
+            return Err(e);
+        }
         t.commit().await?;
-        let created = Box::pin(self.create(p, order.change)).await?;
+        let created = Box::pin(self.create(p, order.change, &committed.exercise)).await?;
         Ok(Provisioned::Done {
             exercise: committed.exercise,
             position: committed.position,
@@ -252,6 +267,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
         &self,
         p: &Platform<'_>,
         change: &PlatformChange,
+        exercise: &Digest,
     ) -> Result<Created, ProvisionError> {
         match change {
             PlatformChange::Tenant { tenant, placement } => {
@@ -260,7 +276,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                 Ok(Created::Tenant(id))
             }
             PlatformChange::Realm(o) | PlatformChange::Sandbox(o) => {
-                Box::pin(self.open_realm(p, o, budget_of(change))).await
+                Box::pin(self.open_realm(p, o, budget_of(change), exercise)).await
             }
         }
     }
@@ -270,13 +286,19 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
         p: &Platform<'_>,
         o: &RealmOrder,
         budget: Option<Budget>,
+        exercise: &Digest,
     ) -> Result<Created, ProvisionError> {
         let tenant = TenantId::from_bytes(o.tenant);
         let (realm, domain, issuer) = match tenancy::route_by_slug(p.router, &o.slug).await? {
             Some(route) if route.tenant == tenant => {
                 let mut tx = TenantTx::begin(self.app, tenant, route.realm).await?;
                 let gov = idp::governance(&mut tx).await?.ok_or(AdminError::NoRealm)?;
+                let opener = tenancy::provisioned_by(&mut tx).await?;
                 tx.commit().await?;
+                // TN-16, INV-32: a retry finishes only the realm its own Exercise opened
+                if opener != Some(exercise.0) {
+                    return Err(ProvisionInvalid::SlugTaken.into());
+                }
                 self.open_keys(tenant, route.realm).await?;
                 (route.realm, Digest(*gov.domain.as_bytes()), route.issuer)
             }
@@ -296,6 +318,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                         schemas: Vec::new(),
                         acceptances: Vec::new(),
                         issuer_predicate_input: Vec::new(),
+                        provisioned_by: Some(*exercise),
                     })
                     .await?;
                 (

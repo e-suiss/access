@@ -398,6 +398,7 @@ impl World {
                 schemas: Vec::new(),
                 acceptances: Vec::new(),
                 issuer_predicate_input: Vec::new(),
+                provisioned_by: None,
             })
             .await
             .unwrap();
@@ -679,6 +680,7 @@ async fn realm_creation_opens_genesis_and_fixes_the_issuer() {
             schemas: Vec::new(),
             acceptances: Vec::new(),
             issuer_predicate_input: Vec::new(),
+            provisioned_by: None,
         })
         .await;
     assert!(taken.is_err());

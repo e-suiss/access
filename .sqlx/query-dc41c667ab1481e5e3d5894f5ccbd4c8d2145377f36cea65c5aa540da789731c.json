@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.realm_provisions (tenant_id, realm_id, exercise_id) VALUES ($1, $2, $3)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "dc41c667ab1481e5e3d5894f5ccbd4c8d2145377f36cea65c5aa540da789731c"
+}
