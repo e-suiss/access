@@ -367,12 +367,26 @@ test("unknown outcomes say so", async ({ page, bff }) => {
   await expect(c).not.toContainText(/failed/i);
 });
 
-// OP-151 m.8 (b): the export is a signed Exercise; nothing leaves without the signature screen
+// OP-151 m.8 (b), m.19 (d): the export is a signed `audit_export` Exercise; nothing leaves
+// without the signature screen, the commit goes first and the package is the same request again
 test("an export is never sent without a decoded, signed intent", async ({ page, bff }) => {
   await open(page, bff, "/console/audit/export");
   await page.getByLabel("From position").fill("1");
   await page.getByLabel("To position").fill("10");
   await page.getByRole("button", { name: "Review export" }).click();
-  await expect(page.getByRole("alert")).toBeVisible();
+  const dialog = page.getByRole("dialog", { name: "Review and sign" });
+  await expect(dialog).toContainText("access.audit_export v1");
+  await expect(dialog).toContainText("access.audit:[acme]");
+  await dialog.getByRole("button", { name: "Cancel" }).click();
+  expect(bff.commits).toEqual([]);
   expect(bff.seen.some((s) => s.path.startsWith("/proxy/adp/audit"))).toBe(false);
+  await page.getByRole("button", { name: "Review export" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Sign" }).click();
+  await expect(page.getByRole("status")).toContainText("Export recorded as");
+  await expect(page.getByRole("link", { name: "Save the export package" })).toBeVisible();
+  expect(bff.commits).toHaveLength(1);
+  const order = bff.seen
+    .map((s) => s.path)
+    .filter((p) => p === "/proxy/adp/evaluation" || p === "/proxy/adp/audit/export");
+  expect(order).toEqual(["/proxy/adp/evaluation", "/proxy/adp/audit/export"]);
 });

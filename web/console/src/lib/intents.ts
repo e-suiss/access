@@ -3,8 +3,14 @@
 // only when what was decoded is exactly what was asked for.
 import { loadKernel } from "@esuiss/access";
 
-import { fromB64url, json } from "./api.js";
-import { type DecodedIntent, decodedIntent, NotSigned } from "./instance.js";
+import { API, fromB64url, json } from "./api.js";
+import {
+  type DecodedIntent,
+  decodedIntent,
+  type Instance,
+  NotSigned,
+  readProof,
+} from "./instance.js";
 
 /** An action and its resources, as a screen asks for them. */
 export interface Wanted {
@@ -46,11 +52,20 @@ export function matches(w: Wanted, d: DecodedIntent): boolean {
 }
 
 /**
- * Drafts `w` through the BFF (`POST /console/api/intents`) and checks the drafted bytes with
- * the Kernel; a draft that decodes to anything else is refused before it is signed or sent.
+ * Drafts `w` through the BFF (`POST /console/api/intents`, a read with a read proof, OP-151
+ * m.19 (a)) and checks the drafted bytes with the Kernel; a draft that decodes to anything else
+ * is refused before it is signed or sent.
  */
-export async function draft(w: Wanted, mode: "check" | "commit"): Promise<Drafted> {
-  const d = await json<Draft>("/intents", { method: "POST", body: { ...w, mode } });
+export async function draft(
+  instance: Instance,
+  w: Wanted,
+  mode: "check" | "commit",
+): Promise<Drafted> {
+  const d = await json<Draft>("/intents", {
+    method: "POST",
+    body: { ...w, mode },
+    headers: { "x-access-ais": await readProof(instance, "POST", `${API}/intents`) },
+  });
   const k = await loadKernel();
   const envelope = fromB64url(d.envelope);
   const decoded = decodedIntent(k, envelope);

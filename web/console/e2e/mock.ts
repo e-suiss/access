@@ -152,6 +152,8 @@ export interface Seen {
 export class ConsoleMock {
   readonly sessions = new Map<string, Session>();
   readonly seen: Seen[] = [];
+  /** The nonces of the commits forwarded, in order. */
+  readonly commits: string[] = [];
   /** What the eligibility check answers for a registered Instance's account. */
   eligible = new Set<string>();
   /** Make the session store fail (Ek B 2973). */
@@ -349,6 +351,12 @@ export class ConsoleMock {
       return reply(201, { instance: s.kid });
     }
     if (path === "/intents") {
+      // OP-151 m.19 (a): a draft is a read, by a read proof over the draft route
+      const st = await this.statement(s, headers["x-access-ais"], "check");
+      if (st === undefined) return problem(403, "read-proof-rejected");
+      if (st.intent !== readIntent("POST", "/console/api/intents")) {
+        return problem(403, "read-proof-rejected");
+      }
       const w = body() as unknown as Wanted;
       const asked = this.tamper ? { ...w, action: { ...w.action, name: "grant_issue" } } : w;
       const d = envelopeOf(asked);
@@ -412,6 +420,29 @@ export class ConsoleMock {
       const answer = this.admin.get(rest);
       if (answer === undefined) return problem(404, "not_found");
       return reply(200, answer);
+    }
+    // OP-151 m.19: a commit goes on only with the session's own commit AIS
+    if (path === "/proxy/adp/evaluation" || path === "/proxy/adp/audit/export") {
+      const ctx = (body()["context"] ?? {}) as Record<string, unknown>;
+      const ais = typeof ctx["ais"] === "string" ? ctx["ais"] : undefined;
+      if (ctx["mode"] !== "commit" || (await this.statement(s, ais, "commit")) === undefined) {
+        return problem(403, "commit-ais-rejected");
+      }
+      const nonce = String(ctx["nonce"]);
+      if (path === "/proxy/adp/evaluation") {
+        this.commits.push(nonce);
+        return reply(200, {
+          decision: true,
+          context: { exercise: Buffer.alloc(32, this.commits.length).toString("base64url") },
+        });
+      }
+      if (!this.commits.includes(nonce)) return problem(400, "export-exercise");
+      this.seen.push({ method: r.method(), path, ais: false, status: 200 });
+      return route.fulfill({
+        status: 200,
+        contentType: "application/cbor-seq",
+        body: Buffer.from([0x80]),
+      });
     }
     if (path === "/proxy/adp/eligibility:check") {
       const intent = (body()["set"] as { intent?: Wanted } | undefined)?.intent;

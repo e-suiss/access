@@ -117,7 +117,7 @@ export function App(): ReactElement {
   useEffect(() => {
     if (session === undefined || instance === undefined) return;
     let active = true;
-    void visibleScreens(session.account, session.realm).then((s) => {
+    void visibleScreens(instance, session.realm).then((s) => {
       if (active) setScreens(s);
     });
     return () => {

@@ -30,8 +30,8 @@ use suiss_crypto::digest::sha256;
 use suiss_crypto::secret::Secret;
 
 use super::domain::{
-    ADMIN_FORWARDED, ADP_FORWARDED, AIS_HEADER, Gate, ProofError, RETURNED, admin_path, adp_read,
-    gate, pick, read_intent, secure, unsafe_method, verify_read_proof,
+    ADMIN_FORWARDED, ADP_FORWARDED, AIS_HEADER, Gate, ProofError, RETURNED, admin_path, adp_commit,
+    adp_read, gate, pick, read_intent, secure, unsafe_method, verify_commit, verify_read_proof,
 };
 use super::ports::{
     ConsoleEnv, ConsoleSession, ConsoleSessions, DeviceAnswer, Devices, DpopKeys, Forward,
@@ -140,6 +140,12 @@ pub mod problems {
         Problem::new(StatusCode::FORBIDDEN, "read-proof-rejected", "Forbidden")
     }
 
+    /// A forwarded commit is not one the session's device Instance signed (TN-110, MD-14).
+    #[must_use]
+    pub fn commit_rejected() -> Problem {
+        Problem::new(StatusCode::FORBIDDEN, "commit-ais-rejected", "Forbidden")
+    }
+
     /// No read token may be issued to the session.
     #[must_use]
     pub fn read_not_granted() -> Problem {
@@ -150,6 +156,12 @@ pub mod problems {
     #[must_use]
     pub fn sign_in_failed() -> Problem {
         Problem::new(StatusCode::BAD_REQUEST, "sign-in-failed", "Bad Request")
+    }
+
+    /// The draft asked for is not one the console may have (OP-151 m.19 (a)).
+    #[must_use]
+    pub fn draft(e: crate::console::drafts::DraftError) -> Problem {
+        Problem::new(StatusCode::BAD_REQUEST, e.code(), "Bad Request")
     }
 
     /// DBSC is not available yet (TN-33).
@@ -699,6 +711,7 @@ fn forwarded(f: Forwarded) -> Response {
         f.body,
     )
         .into_response();
+    r.headers_mut().remove(header::CONTENT_TYPE);
     for (name, value) in pick(&f.headers, &RETURNED) {
         r.headers_mut().append(name, value);
     }
@@ -851,10 +864,12 @@ async fn admin_proxy<E: ConsoleEnv>(
     }
 }
 
-/// `POST /console/api/proxy/adp/{rest}` → `/access/v1/{rest}` for explain, search and the
-/// eligibility check (TN-128): the body goes on as the browser wrote it, with the AIS it carries
-/// or none. The BFF adds no credential of its own, so a request without the browser's AIS is
-/// the anonymous reader's and sees Public only.
+/// `POST /console/api/proxy/adp/{rest}` → `/access/v1/{rest}` (TN-128): explain, search and
+/// the eligibility check go on as the browser wrote them, with the AIS they carry or none; the
+/// BFF adds no credential of its own, so a request without the browser's AIS is the anonymous
+/// reader's and sees Public only. `evaluation` and `audit/export` go on only as a `commit` whose
+/// AIS the session's device Instance signed (TN-110, OP-151 m.19): the single write path is ADP
+/// `commit` with the browser's statement, and the BFF never signs.
 async fn adp_proxy<E: ConsoleEnv>(
     State(c): St<E>,
     peer: Option<Extension<Peer>>,
@@ -862,18 +877,31 @@ async fn adp_proxy<E: ConsoleEnv>(
 ) -> Response {
     let (parts, body) = request.into_parts();
     let (method, headers, uri) = (&parts.method, &parts.headers, &parts.uri);
-    if let Err(r) = authed(&c, method, headers, peer.as_ref()).await {
-        return r;
-    }
+    let live = match authed(&c, method, headers, peer.as_ref()).await {
+        Ok(l) => l,
+        Err(r) => return r,
+    };
     let Some(rest) = uri.path().strip_prefix("/console/api/proxy/adp/") else {
         return not_found();
     };
-    if !adp_read(rest) || uri.query().is_some() {
+    let commit = adp_commit(rest);
+    if !(adp_read(rest) || commit) || uri.query().is_some() {
         return not_found();
     }
     let Ok(body) = axum::body::to_bytes(body, c.limits.max_body_bytes).await else {
         return codes::BODY_TOO_LARGE.problem().into_response();
     };
+    if commit {
+        let Ok(now) = c.env.clock().now_ms() else {
+            return unavailable();
+        };
+        let instance = live.session.instance.as_ref().map(|i| (&i.kid, &i.key));
+        match verify_commit(&body, instance, &live.session.who.domain, now) {
+            Ok(_) => {}
+            Err(ProofError::NoInstance) => return problems::instance_required().into_response(),
+            Err(ProofError::Rejected) => return problems::commit_rejected().into_response(),
+        }
+    }
     let forward = Forward {
         method: Method::POST,
         path_and_query: format!("/access/v1/{rest}"),
@@ -883,6 +911,49 @@ async fn adp_proxy<E: ConsoleEnv>(
     match c.env.upstream().adp(forward).await {
         Ok(f) => forwarded(f),
         Err(Unavailable) => unavailable(),
+    }
+}
+
+/// The path of the intent draft route.
+pub const INTENTS_PATH: &str = "/console/api/intents";
+
+/// `POST /console/api/intents` (OP-151 m.19 (a), PI-7): drafts the intent a screen asks for,
+/// `{action, resources, params?, mode}` → `{intent, envelope}`, for the session's realm. A read
+/// that changes nothing, so it is gated like one: the live session, the CSRF token and a read
+/// proof by the session's device Instance over this very request (OP-151 m.12 (c)).
+async fn intents<E: ConsoleEnv>(
+    State(c): St<E>,
+    method: Method,
+    headers: HeaderMap,
+    peer: Option<Extension<Peer>>,
+    body: Bytes,
+) -> Response {
+    let live = match authed(&c, &method, &headers, peer.as_ref()).await {
+        Ok(l) => l,
+        Err(r) => return r,
+    };
+    let ais = match single_ais(&headers) {
+        Ok(a) => a,
+        Err(r) => return r,
+    };
+    let Ok(now) = c.env.clock().now_ms() else {
+        return unavailable();
+    };
+    let instance = live.session.instance.as_ref().map(|i| (&i.kid, &i.key));
+    match verify_read_proof(
+        &ais,
+        instance,
+        &live.session.who.domain,
+        &read_intent(&Method::POST, INTENTS_PATH),
+        now,
+    ) {
+        Ok(_) => {}
+        Err(ProofError::NoInstance) => return problems::instance_required().into_response(),
+        Err(ProofError::Rejected) => return problems::proof_rejected().into_response(),
+    }
+    match super::drafts::draft(&body, &live.session.who.realm, now) {
+        Ok(d) => json_reply(StatusCode::OK, &d.answer()),
+        Err(e) => problems::draft(e).into_response(),
     }
 }
 
@@ -920,6 +991,7 @@ pub fn router<E: ConsoleEnv>(console: &Arc<Console<E>>) -> Router {
         .route("/console/api/sign-out", post(sign_out::<E>))
         .route("/console/api/instances/challenge", post(challenge::<E>))
         .route("/console/api/instances", post(register::<E>))
+        .route(INTENTS_PATH, post(intents::<E>))
         .route("/console/api/proxy/admin/{*rest}", any(admin_proxy::<E>))
         .route("/console/api/proxy/adp/{*rest}", post(adp_proxy::<E>))
         .route("/console/api/dbsc/{*rest}", any(dbsc))

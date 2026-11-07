@@ -166,18 +166,12 @@ pub enum ProofError {
     Rejected,
 }
 
-/// A read proof (TN-128, OP-151 m.3 (e)): the browser's AIS, signed with the session's device
-/// Instance key, in `check` mode (CT0), for the session's domain, over [`read_intent`] of this
-/// request, signed within [`SKEW_MS`] of now. Only then does the BFF attach the session's read
-/// token: a cookie without the browser's key reads nothing.
-///
-/// # Errors
-/// [`ProofError`].
-pub fn verify_read_proof(
+/// The statement `sign1` carries, verified with the session's device Instance key, signed
+/// within [`SKEW_MS`] of now and for the session's domain.
+fn session_statement(
     sign1: &[u8],
     instance: Option<(&[u8; 32], &PublicKey)>,
     domain: &Digest,
-    intent: &Digest,
     now_ms: u64,
 ) -> Result<Statement, ProofError> {
     let (kid, key) = instance.ok_or(ProofError::NoInstance)?;
@@ -195,7 +189,68 @@ pub fn verify_read_proof(
         dcbor::decode(&verified.payload, Limits::CEILING).map_err(|_| ProofError::Rejected)?;
     let s = Statement::from_value(&value).map_err(|_| ProofError::Rejected)?;
     let fresh = s.iat <= now_ms.saturating_add(SKEW_MS) && now_ms <= s.iat.saturating_add(SKEW_MS);
-    if s.mode != Mode::Check || s.domain != *domain || s.intent != *intent || !fresh {
+    if s.domain != *domain || !fresh {
+        return Err(ProofError::Rejected);
+    }
+    Ok(s)
+}
+
+/// A read proof (TN-128, OP-151 m.3 (e)): the browser's AIS, signed with the session's device
+/// Instance key, in `check` mode (CT0), for the session's domain, over [`read_intent`] of this
+/// request, signed within [`SKEW_MS`] of now. Only then does the BFF attach the session's read
+/// token: a cookie without the browser's key reads nothing.
+///
+/// # Errors
+/// [`ProofError`].
+pub fn verify_read_proof(
+    sign1: &[u8],
+    instance: Option<(&[u8; 32], &PublicKey)>,
+    domain: &Digest,
+    intent: &Digest,
+    now_ms: u64,
+) -> Result<Statement, ProofError> {
+    let s = session_statement(sign1, instance, domain, now_ms)?;
+    if s.mode != Mode::Check || s.intent != *intent {
+        return Err(ProofError::Rejected);
+    }
+    Ok(s)
+}
+
+/// The ADP writes the console may forward (TN-110, TN-128, OP-151 m.19): one `evaluation` and
+/// the export of an allowed `access.audit_export` Exercise, each a `commit` the browser signed.
+#[must_use]
+pub fn adp_commit(rest: &str) -> bool {
+    rest == "evaluation" || rest == "audit/export"
+}
+
+/// A forwarded commit (TN-110, TN-128, MD-14): the body's `context` is in `commit` mode for the
+/// session's domain and carries an AIS signed with the session's device Instance key, in
+/// `commit` mode, for that domain, within [`SKEW_MS`] of now. The BFF never signs; the authority
+/// plane still verifies the statement against the intent, nonce and PEP.
+///
+/// # Errors
+/// [`ProofError`].
+pub fn verify_commit(
+    body: &[u8],
+    instance: Option<(&[u8; 32], &PublicKey)>,
+    domain: &Digest,
+    now_ms: u64,
+) -> Result<Statement, ProofError> {
+    if instance.is_none() {
+        return Err(ProofError::NoInstance);
+    }
+    let root: serde_json::Value = serde_json::from_slice(body).map_err(|_| ProofError::Rejected)?;
+    let context = root.get("context").ok_or(ProofError::Rejected)?;
+    let text = |name: &str| context.get(name).and_then(serde_json::Value::as_str);
+    let ais = text("ais")
+        .and_then(|a| access_kernel::json::b64url_decode(a).ok())
+        .ok_or(ProofError::Rejected)?;
+    let named = text("domain").and_then(|d| access_kernel::json::b64url_decode(d).ok());
+    if text("mode") != Some("commit") || named.as_deref() != Some(&domain.0[..]) {
+        return Err(ProofError::Rejected);
+    }
+    let s = session_statement(&ais, instance, domain, now_ms)?;
+    if s.mode != Mode::Commit {
         return Err(ProofError::Rejected);
     }
     Ok(s)

@@ -121,12 +121,31 @@ impl Browser {
         mode: Mode,
         basis: ExerciseBasis,
     ) -> String {
+        self.ais_for(
+            access_identity_ui::domain::frontend::IDENTITY_PEP,
+            domain,
+            nonce,
+            intent,
+            mode,
+            basis,
+        )
+    }
+
+    fn ais_for(
+        &self,
+        pep: &str,
+        domain: Digest,
+        nonce: &[u8],
+        intent: Digest,
+        mode: Mode,
+        basis: ExerciseBasis,
+    ) -> String {
         let s = Statement {
             domain,
             nonce: nonce.to_vec(),
             intent,
             mode,
-            pep: String::from(access_identity_ui::domain::frontend::IDENTITY_PEP),
+            pep: String::from(pep),
             capacity: Capacity::Own,
             basis,
             iat: now(),
@@ -144,14 +163,22 @@ fn envelope_digest(b64: &str) -> Digest {
     intent_digest(&IntentEnvelope::from_value(&v).unwrap()).unwrap()
 }
 
-// OP-151 m.12 (b), (c), (e), TN-128, TN-129, TN-130, TN-110, TN-27, Ek B 3300: the console
-// signs in at the realm's own authorization server with its client key, opens its session,
-// registers the browser's Instance, reads the settings through the BFF with a read proof and a
-// DPoP-bound realm read token, and writes branding with the browser's AIS: the Exercise is
-// committed by the real sequencer and the domain's log moves
-#[tokio::test]
-async fn the_console_signs_in_reads_and_writes_through_the_sequencer() {
-    let w = World::new("mgmt-e2e").await;
+/// What a signed-in console with a registered browser Instance holds.
+struct Console {
+    w: World,
+    management: axum::Router,
+    browser: Browser,
+    domain: Digest,
+    root: access_kernel::model::Id,
+    route: access_store::tenancy::RealmRoute,
+    subject: [u8; 16],
+}
+
+/// A bootstrapped realm `acme` whose founder signed in to the console at the realm's own
+/// authorization server and registered the browser's key as the session's device Instance; the
+/// console's ADP proxy reaches the real decision point when `with_adp`.
+async fn console(label: &str, with_adp: bool) -> Console {
+    let w = World::new(label).await;
     let declared = DeclaredTargets::default();
     Bootstrap {
         app: &w.db.app,
@@ -167,7 +194,7 @@ async fn the_console_signs_in_reads_and_writes_through_the_sequencer() {
     .await
     .unwrap();
     w.domains.release().await;
-    crate::jobs::open_now(&w.db.app, &w.db.archive, "mgmt-e2e").await;
+    crate::jobs::open_now(&w.db.app, &w.db.archive, label).await;
     let day = u32::try_from(now() / 86_400_000).unwrap();
     for d in [day - 1, day, day + 1] {
         access_store::dpop::open_dpop_replay_day(&w.db.archive, d)
@@ -240,7 +267,16 @@ async fn the_console_signs_in_reads_and_writes_through_the_sequencer() {
         },
         crate::admin::InProcessRoutes {
             oauth: oauth.clone(),
-            adp: axum::Router::new(),
+            adp: if with_adp {
+                access_http::adp::adapters::router(
+                    access_http::adp::app::Service::new(w.domains.clone(), 64 * 1024),
+                    access_http::adp::adapters::Discovery {
+                        issuer: String::from("https://access.test"),
+                    },
+                )
+            } else {
+                axum::Router::new()
+            },
         },
         None,
     )
@@ -344,7 +380,7 @@ async fn the_console_signs_in_reads_and_writes_through_the_sequencer() {
         .unwrap()
         .1
         .clone();
-    let mut browser = Browser {
+    let browser = Browser {
         jar: set.into_iter().filter(|(_, v)| !v.is_empty()).collect(),
         csrf,
         key: SoftSigner::generate_p256().unwrap().0,
@@ -413,6 +449,33 @@ async fn the_console_signs_in_reads_and_writes_through_the_sequencer() {
         String::from_utf8_lossy(&body)
     );
 
+    Console {
+        w,
+        management,
+        browser,
+        domain,
+        root,
+        route,
+        subject,
+    }
+}
+
+// OP-151 m.12 (b), (c), (e), TN-128, TN-129, TN-130, TN-110, TN-27, Ek B 3300: the console
+// signs in at the realm's own authorization server with its client key, opens its session,
+// registers the browser's Instance, reads the settings through the BFF with a read proof and a
+// DPoP-bound realm read token, and writes branding with the browser's AIS: the Exercise is
+// committed by the real sequencer and the domain's log moves
+#[tokio::test]
+async fn the_console_signs_in_reads_and_writes_through_the_sequencer() {
+    let Console {
+        w,
+        management,
+        mut browser,
+        domain,
+        route,
+        subject,
+        ..
+    } = console("mgmt-e2e", false).await;
     // TN-128, TN-130: a read proof gets a realm-issued, DPoP-bound read token at the BFF
     let basis = ExerciseBasis::Anchor(meta::object_id(&domain, kind::ANCHOR, IDP_ANCHOR));
     let target = "/admin/v1/realms/acme/settings";
@@ -608,4 +671,126 @@ async fn the_console_signs_in_reads_and_writes_through_the_sequencer() {
         "session ended"
     );
     browser.jar.clear();
+}
+
+// TN-110, TN-128, MD-14, OP-151 m.19 (a), (d), m.8 (b), Ek B 3088: the console drafts the
+// `access`/`audit_export` intent through the BFF, the browser signs the commit, the BFF passes it
+// on to ADP only with that AIS (a commit without it, or a check, is refused before ADP), the real
+// sequencer commits it and the domain's log moves, and the same request fetches the package
+#[tokio::test]
+async fn a_console_commit_goes_to_adp_only_with_the_browsers_ais() {
+    let Console {
+        management,
+        browser,
+        domain,
+        root,
+        w,
+        ..
+    } = console("mgmt-commit", true).await;
+    let basis = ExerciseBasis::Anchor(meta::object_id(&domain, kind::ANCHOR, IDP_ANCHOR));
+    let ask = serde_json::json!({
+        "action": { "namespace": "access", "name": "audit_export", "major": 1 },
+        "resources": [{ "namespace": "access.audit", "path": ["acme"] }],
+        "params": { "from": 0, "disclosure": "redacted" },
+        "mode": "commit",
+    })
+    .to_string();
+    let proof = browser.ais(
+        domain,
+        &access_crypto::random::bytes::<16>().unwrap(),
+        read_intent(&Method::POST, "/console/api/intents"),
+        Mode::Check,
+        basis,
+    );
+    let (r, body) = send(
+        &management,
+        browser
+            .request(&Method::POST, "/console/api/intents", "x")
+            .header("x-access-ais", proof)
+            .body(Body::from(ask))
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(
+        r.status(),
+        StatusCode::OK,
+        "{}",
+        String::from_utf8_lossy(&body)
+    );
+    let draft: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    let digest = envelope_digest(draft["envelope"].as_str().unwrap());
+    // the founding root roots the meta-anchor and so audits the domain (OP-141 m.38 (d))
+    let auditor = ExerciseBasis::Anchor(meta::meta_anchor(&domain));
+    let nonce = access_crypto::random::bytes::<16>().unwrap();
+    let body_with = |ais: Option<String>| {
+        let mut context = serde_json::json!({
+            "domain": b64url_encode(&domain.0),
+            "mode": "commit",
+            "nonce": b64url_encode(&nonce),
+            "intent": draft["intent"],
+            "basis": { "anchor": b64url_encode(&meta::meta_anchor(&domain).0) },
+            "capacity": "own",
+        });
+        if let Some(a) = ais {
+            context["ais"] = serde_json::Value::String(a);
+        }
+        serde_json::json!({
+            "subject": { "type": "access_party", "id": b64url_encode(&root.0) },
+            "action": { "name": "audit_export" },
+            "resource": { "type": "access.audit", "id": "acme" },
+            "context": context,
+        })
+        .to_string()
+    };
+    let pep = crate::console::CONSOLE_PEP;
+    let post = |path: &str, body: String| {
+        browser
+            .request(&Method::POST, path, "x")
+            .body(Body::from(body))
+            .unwrap()
+    };
+    let before = w.domains.head(domain).await.unwrap().0;
+    let check = browser.ais_for(pep, domain, &nonce, digest, Mode::Check, auditor);
+    for refused in [None, Some(check)] {
+        let (r, body) = send(
+            &management,
+            post("/console/api/proxy/adp/evaluation", body_with(refused)),
+        )
+        .await;
+        assert_eq!(r.status(), StatusCode::FORBIDDEN);
+        let p: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(p["code"], "commit-ais-rejected");
+    }
+    assert_eq!(w.domains.head(domain).await.unwrap().0, before);
+    let ais = browser.ais_for(pep, domain, &nonce, digest, Mode::Commit, auditor);
+    let signed = body_with(Some(ais));
+    let (r, body) = send(
+        &management,
+        post("/console/api/proxy/adp/evaluation", signed.clone()),
+    )
+    .await;
+    assert_eq!(
+        r.status(),
+        StatusCode::OK,
+        "{}",
+        String::from_utf8_lossy(&body)
+    );
+    let decided: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(decided["decision"], true, "{decided}");
+    assert!(decided["context"]["exercise"].is_string());
+    let after = w.domains.head(domain).await.unwrap().0;
+    assert!(after > before, "{after} > {before}");
+    let (r, package) = send(
+        &management,
+        post("/console/api/proxy/adp/audit/export", signed),
+    )
+    .await;
+    assert_eq!(
+        r.status(),
+        StatusCode::OK,
+        "{}",
+        String::from_utf8_lossy(&package)
+    );
+    assert_eq!(r.headers()[header::CONTENT_TYPE], "application/cbor-seq");
+    assert_ne!(package, Vec::<u8>::new());
 }

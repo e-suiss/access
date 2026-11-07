@@ -477,4 +477,5 @@ export const tr: Record<Key, string> = {
   exportFull: "Tam",
   exportStart: "Dışa aktarımı gözden geçir",
   exportDone: "Dışa aktarım {exercise} olarak kaydedildi. Paket aynı imzalı istekle alınır.",
+  exportDownload: "Dışa aktarım paketini kaydet",
 };

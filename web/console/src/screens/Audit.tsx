@@ -5,7 +5,14 @@
 import { useState, type ReactElement } from "react";
 
 import { t } from "../i18n/index.js";
-import { explain, type Explained, exportAudit, search, type SearchAnswer } from "../lib/adp.js";
+import {
+  explain,
+  type Explained,
+  exportAudit,
+  type Exported,
+  search,
+  type SearchAnswer,
+} from "../lib/adp.js";
 import { Explanation } from "./Explanation.js";
 import { type Ctx, Field, PageCount, Panel, Show, useRun } from "./parts.js";
 import {
@@ -236,12 +243,12 @@ export function Unknown({ ctx }: { readonly ctx: Ctx }): ReactElement {
   );
 }
 
-/** OP-151 m.8 (b), (c): the export is an `access.audit.export` Exercise, signed here. */
+/** OP-151 m.8 (b), (c): the export is an `access.audit_export` Exercise, signed here. */
 export function Export({ ctx }: { readonly ctx: Ctx }): ReactElement {
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [disclosure, setDisclosure] = useState<"redacted" | "full">("redacted");
-  const [l, run] = useRun<{ readonly exercise?: string }>();
+  const [l, run] = useRun<Exported>();
   return (
     <>
       <p>{t("exportIntro")}</p>
@@ -295,7 +302,16 @@ export function Export({ ctx }: { readonly ctx: Ctx }): ReactElement {
         </button>
       </form>
       <Show l={l}>
-        {(r) => <p role="status">{t("exportDone", { exercise: r.exercise ?? "" })}</p>}
+        {(r) => (
+          <>
+            <p role="status">{t("exportDone", { exercise: r.exercise })}</p>
+            <p>
+              <a href={URL.createObjectURL(r.package)} download="audit-export.cbor">
+                {t("exportDownload")}
+              </a>
+            </p>
+          </>
+        )}
       </Show>
     </>
   );

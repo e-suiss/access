@@ -9,6 +9,9 @@ import { b64url, call, fromB64url, json, Problem } from "./api.js";
 const DB = "access-console";
 const STORE = "instances";
 const PEP = "access-console";
+
+/** The console's PEP at ADP (OP-151 m.18 (e)): every ADP statement this browser signs names it. */
+export const ADP_PEP = PEP;
 const READ_CONTEXT = "access/console-read/v1";
 const ESP256 = -9;
 // P-256 group order (SEC 2) for the low-S form the Kernel requires (CR-9)
@@ -54,6 +57,8 @@ export interface Instance {
   /** The public basis Grant id the statement's basis names, unpadded base64url. */
   readonly publicBasis: string;
   readonly pep: string;
+  /** The Party the Instance acts for, unpadded base64url; the eligibility check's subject. */
+  readonly party?: string;
 }
 
 function open(): Promise<IDBDatabase> {
@@ -215,6 +220,7 @@ export async function register(
     basis,
     publicBasis: c.basis,
     pep,
+    party: c.party,
   };
   await tx("readwrite", (s) => s.put(instance));
   return instance;

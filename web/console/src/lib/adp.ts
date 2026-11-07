@@ -6,6 +6,7 @@ import { loadKernel } from "@esuiss/access";
 import { b64url, call, Problem } from "./api.js";
 import { draft, type Wanted } from "./intents.js";
 import {
+  ADP_PEP,
   type Confirm,
   decodedStatement,
   type Instance,
@@ -38,14 +39,14 @@ export interface SearchAnswer<T> {
 
 async function signedContext(instance: Instance, w: Wanted): Promise<Record<string, unknown>> {
   const k = await loadKernel();
-  const d = await draft(w, "check");
+  const d = await draft(instance, w, "check");
   const n = nonce();
   const statement = k.aisStatement(
     instance.domain,
     n,
     k.intentDigest(d.envelope),
     "check",
-    instance.pep,
+    ADP_PEP,
     new Uint8Array(),
     instance.basis,
     BigInt(Date.now()),
@@ -131,7 +132,7 @@ export async function explain(
 }
 
 /**
- * OP-151 m.8 (b): an audit export is itself an Exercise (`access.audit.export`) with typed
+ * OP-151 m.8 (b): an audit export is itself an Exercise (`access.audit_export`) with typed
  * `from`, `to` and `disclosure`. The signature screen shows the Kernel's decoding of the drafted
  * intent; only after the user signs is the commit sent, and the package is fetched by sending
  * the committed request again.
@@ -142,21 +143,21 @@ export async function exportAudit(
   subject: string,
   realm: string,
   range: { readonly from: number; readonly to: number; readonly disclosure: "redacted" | "full" },
-): Promise<{ readonly exercise?: string }> {
+): Promise<Exported> {
   const k = await loadKernel();
   const w: Wanted = {
-    action: { namespace: "access", name: "audit.export", major: 1 },
-    resources: [{ namespace: "access.domain", path: [realm] }],
+    action: { namespace: "access", name: "audit_export", major: 1 },
+    resources: [{ namespace: "access.audit", path: [realm] }],
     params: range,
   };
-  const d = await draft(w, "commit");
+  const d = await draft(instance, w, "commit");
   const n = nonce();
   const statement = k.aisStatement(
     instance.domain,
     n,
     k.intentDigest(d.envelope),
     "commit",
-    instance.pep,
+    ADP_PEP,
     new Uint8Array(),
     instance.basis,
     BigInt(Date.now()),
@@ -169,7 +170,7 @@ export async function exportAudit(
   const body = {
     subject: { type: "access_party", id: subject },
     action: { name: w.action.name },
-    resource: { type: "access.domain", id: realm },
+    resource: { type: "access.audit", id: realm },
     context: {
       domain: b64url(instance.domain),
       mode: "commit",
@@ -180,19 +181,37 @@ export async function exportAudit(
       ais: await sign(instance.key, k, instance.kid, statement),
     },
   };
-  const ctx = (
-    await answer<Explained>(await call("/proxy/adp/audit/export", { method: "POST", body }))
-  ).context;
-  const exercise = ctx?.["exercise"];
-  return typeof exercise === "string" ? { exercise } : {};
+  // TN-110, OP-151 m.19: the commit is the single write; the package is the same request again
+  const decided = await answer<Explained>(
+    await call("/proxy/adp/evaluation", { method: "POST", body }),
+  );
+  if (decided.decision !== true) throw new Problem(403, "exercise-not-allowed", undefined);
+  const exercise = decided.context?.["exercise"];
+  const r = await call("/proxy/adp/audit/export", {
+    method: "POST",
+    body,
+    headers: { accept: "application/cbor-seq" },
+  });
+  if (!r.ok) await answer<unknown>(r);
+  const bytes = await r.blob();
+  return {
+    exercise: typeof exercise === "string" ? exercise : "",
+    package: new Blob([bytes], { type: "application/cbor-seq" }),
+  };
+}
+
+/** An export committed and fetched: its Exercise and the Record Export Package (RFC 8742). */
+export interface Exported {
+  readonly exercise: string;
+  readonly package: Blob;
 }
 
 /**
  * The decision lab's Check (§8.17.10.4): would `w` be allowed for `subject` now? An eligibility
  * check on a drafted intent: never recorded and never a promise (E-2).
  */
-export async function check(subject: string, w: Wanted): Promise<boolean> {
-  const d = await draft(w, "check");
+export async function check(instance: Instance, subject: string, w: Wanted): Promise<boolean> {
+  const d = await draft(instance, w, "check");
   const r = await call("/proxy/adp/eligibility:check", {
     method: "POST",
     body: { subject, set: { intent: d.intent } },

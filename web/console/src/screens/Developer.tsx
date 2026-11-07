@@ -279,7 +279,7 @@ export function Lab({ ctx }: { readonly ctx: Ctx }): ReactElement {
             type="button"
             disabled={!here}
             onClick={() => {
-              runCheck(() => check(subject, wanted()));
+              runCheck(() => check(ctx.instance, subject, wanted()));
             }}
           >
             {t("labCheck")}

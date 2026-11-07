@@ -57,6 +57,12 @@ says you can exercise one of the screen's actions (IA-5); there are no disabled 
 Authority reads go to ADP as your own `check`, signed in this browser; changes are drafted, shown
 on the signature screen as the Kernel decoded them, and sent as one Exercise.
 
+The BFF drafts every intent the console signs (`POST /console/api/intents`, a read that needs a
+read proof): only an action of the server's catalogue, with its pinned schema digest, on your
+realm's resources. Changes that are ADP Exercises (the audit export) go to ADP as a `commit`
+signed in this browser; the BFF forwards `evaluation` and `audit/export` only when your device
+key signed that commit, and never signs anything itself.
+
 | Section   | Screen                          | Reads and changes                                                         | Spec                       |
 | --------- | ------------------------------- | ------------------------------------------------------------------------- | -------------------------- |
 | Admin     | Roles & templates               | role editor with "Not included"; `change-impact` preview; meta-actions    | §8.17.9.2, X20, E11        |
@@ -76,7 +82,7 @@ on the signature screen as the Kernel decoded them, and sent as one Exercise.
 | Audit     | Replay                          | a recorded decision evaluated again; match or mismatch                    | INV-27                     |
 | Audit     | Revocation impact               | `revocation-impact`: subtree, exposure, aftermath                         | §5.4, §8.17.7.3            |
 | Audit     | Unknown outcomes                | `compromise-impact`: uses in a window, "Result unknown"                   | RR-13, EI-22               |
-| Audit     | Export                          | an `access.audit.export` Exercise, signed here                            | OP-151 m.8 (b)             |
+| Audit     | Export                          | an `access.audit_export` Exercise, signed here                            | OP-151 m.8 (b)             |
 
 Explanations show a reason by its class and what is needed (§8.17.8); policy content, thresholds
 and statement bodies are never rendered, deeper identities stay pseudonymous, and an unknown

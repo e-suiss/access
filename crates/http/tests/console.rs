@@ -983,13 +983,18 @@ async fn adp_reads_carry_no_bff_credential() {
     let names: Vec<_> = f.headers.iter().map(|(n, _)| n.as_str()).collect();
     assert_eq!(names, ["content-type"]);
     for path in [
-        "/console/api/proxy/adp/evaluation",
         "/console/api/proxy/adp/evaluations",
         "/console/api/proxy/adp/explain?x=1",
+        "/console/api/proxy/adp/audit/export?x=1",
     ] {
         let (r, _) = h.send(s.post(path, "{}"), CLIENT).await;
         assert_eq!(r.status(), StatusCode::NOT_FOUND, "{path}");
     }
+    // OP-151 m.19: without the browser's Instance there is no commit to forward
+    let (r, _) = h
+        .send(s.post("/console/api/proxy/adp/evaluation", "{}"), CLIENT)
+        .await;
+    assert_eq!(r.status(), StatusCode::FORBIDDEN);
     let (r, _) = h
         .send(s.get("/console/api/proxy/adp/explain"), CLIENT)
         .await;
@@ -1155,4 +1160,146 @@ async fn ambiguous_cookies_are_refused() {
     assert_eq!(r.status(), StatusCode::UNAUTHORIZED);
     assert_eq!(json(&body)["reason"], "cookie-ambiguous");
     let _ = csrf_token(&Secret::new([0; 32]));
+}
+
+fn commit_body(ais: &str, domain: &Digest, mode: &str) -> String {
+    serde_json::json!({
+        "context": {
+            "domain": b64url_encode(&domain.0),
+            "mode": mode,
+            "nonce": b64url_encode(&[1; 16]),
+            "ais": ais,
+        },
+    })
+    .to_string()
+}
+
+fn with_body(s: &Session, path: &str, body: String) -> Request<Body> {
+    Request::post(path)
+        .header("cookie", s.cookie())
+        .header("origin", ORIGIN)
+        .header("x-csrf-token", &s.csrf)
+        .header("content-type", "application/json")
+        .body(Body::from(body))
+        .unwrap()
+}
+
+// TN-110, TN-128, MD-14, OP-151 m.19: ADP `evaluation` and `audit/export` go on only as a
+// `commit` the session's device Instance signed for the session's domain; a check, another
+// key, another domain, a stale statement or no statement is refused and nothing goes up
+#[tokio::test]
+#[allow(
+    clippy::many_single_char_names,
+    reason = "the harness, session, answer and body"
+)]
+async fn adp_commits_need_the_browsers_commit_ais() {
+    let h = Harness::new();
+    let s = h.with_instance().await;
+    for rest in ["evaluation", "audit/export"] {
+        let path = format!("/console/api/proxy/adp/{rest}");
+        let good = h.ais(Mode::Commit, Digest([5; 32]), h.now());
+        let (r, _) = h
+            .send(
+                with_body(&s, &path, commit_body(&good, &DOMAIN, "commit")),
+                CLIENT,
+            )
+            .await;
+        assert_eq!(r.status(), StatusCode::OK, "{rest}");
+        let types: Vec<_> = r.headers().get_all("content-type").iter().collect();
+        assert_eq!(types, ["application/json"], "the upstream type, once");
+        let seen = h.env().up.take();
+        let (which, f) = &seen[0];
+        assert_eq!(*which, "adp");
+        assert_eq!(f.path_and_query, format!("/access/v1/{rest}"));
+        let names: Vec<_> = f.headers.iter().map(|(n, _)| n.as_str()).collect();
+        assert_eq!(names, ["content-type"]);
+        let (thief, _) = SoftSigner::generate_p256().unwrap();
+        let refused = [
+            commit_body(
+                &h.ais(Mode::Check, Digest([5; 32]), h.now()),
+                &DOMAIN,
+                "commit",
+            ),
+            commit_body(&good, &DOMAIN, "check"),
+            commit_body(&good, &Digest([4; 32]), "commit"),
+            commit_body(
+                &ais_by(&thief, Mode::Commit, Digest([5; 32]), h.now()),
+                &DOMAIN,
+                "commit",
+            ),
+            commit_body(
+                &h.ais(Mode::Commit, Digest([5; 32]), h.now() - 3_600_000),
+                &DOMAIN,
+                "commit",
+            ),
+            "{\"context\":{\"mode\":\"commit\"}}".to_owned(),
+            "not json".to_owned(),
+        ];
+        for body in refused {
+            let (r, b) = h.send(with_body(&s, &path, body.clone()), CLIENT).await;
+            assert_eq!(r.status(), StatusCode::FORBIDDEN, "{rest} {body}");
+            assert_eq!(json(&b)["code"], "commit-ais-rejected");
+        }
+        assert!(h.env().up.take().is_empty());
+    }
+}
+
+// OP-151 m.19 (a), m.12 (c), PI-7: the BFF drafts a catalogued intent for the session's realm
+// for a read proof over the draft route; without the proof, or for anything else, nothing is
+// drafted, and a draft never goes upstream
+#[tokio::test]
+#[allow(
+    clippy::many_single_char_names,
+    reason = "the harness, session, answer and body"
+)]
+async fn intents_are_drafted_for_a_read_proof() {
+    use access_http::console::drafts::VALID_FOR_MS;
+    let h = Harness::new();
+    let s = h.with_instance().await;
+    let ask = "{\"action\":{\"namespace\":\"idp.account\",\"name\":\"suspend\",\"major\":1},\"resources\":[{\"namespace\":\"idp\",\"path\":[\"acme\"]}],\"mode\":\"check\"}";
+    let (r, b) = h.send(s.post("/console/api/intents", ask), CLIENT).await;
+    assert_eq!(r.status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(json(&b)["code"], "ais-required");
+    let proof = |intent: Digest| h.ais(Mode::Check, intent, h.now());
+    let mut wrong = s.post("/console/api/intents", ask);
+    wrong.headers_mut().insert(
+        "x-access-ais",
+        proof(read_intent(&Method::GET, "/console/api/intents"))
+            .parse()
+            .unwrap(),
+    );
+    let (r, b) = h.send(wrong, CLIENT).await;
+    assert_eq!(r.status(), StatusCode::FORBIDDEN);
+    assert_eq!(json(&b)["code"], "read-proof-rejected");
+    let right = || proof(read_intent(&Method::POST, "/console/api/intents"));
+    let mut good = s.post("/console/api/intents", ask);
+    good.headers_mut()
+        .insert("x-access-ais", right().parse().unwrap());
+    let (r, b) = h.send(good, CLIENT).await;
+    assert_eq!(
+        r.status(),
+        StatusCode::OK,
+        "{}",
+        String::from_utf8_lossy(&b)
+    );
+    let v = json(&b);
+    assert_eq!(v["intent"]["action"]["name"], "suspend");
+    assert_eq!(v["intent"]["validity"]["until"], h.now() + VALID_FOR_MS);
+    assert!(v["envelope"].is_string());
+    let other = "{\"action\":{\"namespace\":\"idp.account\",\"name\":\"suspend\",\"major\":1},\"resources\":[{\"namespace\":\"idp\",\"path\":[\"globex\"]}],\"mode\":\"check\"}";
+    let mut elsewhere = s.post("/console/api/intents", other);
+    elsewhere
+        .headers_mut()
+        .insert("x-access-ais", right().parse().unwrap());
+    let (r, b) = h.send(elsewhere, CLIENT).await;
+    assert_eq!(r.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(json(&b)["code"], "intent-resource-not-allowed");
+    let mut no_csrf = s.post("/console/api/intents", ask);
+    no_csrf.headers_mut().remove("x-csrf-token");
+    no_csrf
+        .headers_mut()
+        .insert("x-access-ais", right().parse().unwrap());
+    let (r, _) = h.send(no_csrf, CLIENT).await;
+    assert_eq!(r.status(), StatusCode::FORBIDDEN);
+    assert!(h.env().up.take().is_empty());
 }

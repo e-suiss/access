@@ -470,6 +470,7 @@ export const en = {
   exportFull: "Full",
   exportStart: "Review export",
   exportDone: "Export recorded as {exercise}. The package is fetched with the same signed request.",
+  exportDownload: "Save the export package",
 } as const;
 
 export type Key = keyof typeof en;

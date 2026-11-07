@@ -21,6 +21,10 @@
 //! - `/console/api/proxy/adp/*` (explain, search, eligibility) passes the body on as the browser
 //!   wrote it: with the browser's AIS the reader is the user's Instance, without it the reader
 //!   is `Anonymous` and sees Public only.
+//! - `/console/api/proxy/adp/evaluation` and `audit/export` pass on only a `commit` whose AIS
+//!   the session's device Instance signed; the authority plane commits it as that Instance's
+//!   Exercise (OP-151 m.19);
+//! - `/console/api/intents` drafts the intent a screen asks for, for a read proof (PI-7).
 //!
 //! A stolen cookie, without the browser's key, can therefore neither write nor read authority
 //! state. A session store failure answers `503`; nothing is ever passed through (fail closed).
@@ -28,6 +32,7 @@
 pub mod adapters;
 pub mod app;
 pub mod domain;
+pub mod drafts;
 pub mod ports;
 
 pub use app::{Console, router};

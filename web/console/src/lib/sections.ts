@@ -3,6 +3,7 @@
 // BFF's ADP read path for a drafted intent. No answer, an error or a refusal shows nothing
 // (fail closed); there are no disabled stubs.
 import { call } from "./api.js";
+import type { Instance } from "./instance.js";
 import { draft, type Wanted } from "./intents.js";
 
 export type Section = "admin" | "developer" | "audit";
@@ -74,7 +75,8 @@ export const PROBES: Readonly<Record<Screen, readonly Probe[]>> = {
 /** The intent `probe` asks about in `realm`. */
 const RESOURCE: Readonly<Record<Probe["resource"], string>> = {
   domain: "access.domain",
-  realm: "idp.realm",
+  // OP-151 m.19 (a): the realm's `idp` resources, as every `idp.*` change names them
+  realm: "idp",
   audit: "access.audit",
 };
 
@@ -85,9 +87,12 @@ export function probeIntent(realm: string, probe: Probe): Wanted {
   };
 }
 
-async function eligible(subject: string, realm: string, probe: Probe): Promise<boolean> {
+async function eligible(instance: Instance, realm: string, probe: Probe): Promise<boolean> {
+  // OP-149 m.10: the subject is the Party the device Instance acts for; without it, nothing
+  const subject = instance.party;
+  if (subject === undefined) return false;
   try {
-    const d = await draft(probeIntent(realm, probe), "check");
+    const d = await draft(instance, probeIntent(realm, probe), "check");
     const r = await call("/proxy/adp/eligibility:check", {
       method: "POST",
       body: { subject, set: { intent: d.intent } },
@@ -101,14 +106,17 @@ async function eligible(subject: string, realm: string, probe: Probe): Promise<b
 }
 
 /** The screens the viewer may see: any probe of the screen answered eligible. */
-export async function visibleScreens(subject: string, realm: string): Promise<ReadonlySet<Screen>> {
+export async function visibleScreens(
+  instance: Instance,
+  realm: string,
+): Promise<ReadonlySet<Screen>> {
   const all = Object.keys(PROBES) as Screen[];
   const probes = new Map<string, Promise<boolean>>();
   const ask = (p: Probe) => {
     const key = `${p.namespace}/${p.name}/${String(p.major)}/${p.resource}`;
     let answer = probes.get(key);
     if (answer === undefined) {
-      answer = eligible(subject, realm, p);
+      answer = eligible(instance, realm, p);
       probes.set(key, answer);
     }
     return answer;
