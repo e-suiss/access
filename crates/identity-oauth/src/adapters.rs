@@ -3,6 +3,7 @@
 
 pub mod clients;
 pub mod dpop;
+pub mod hooks;
 pub mod oauth;
 pub mod outbound;
 

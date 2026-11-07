@@ -693,6 +693,25 @@ impl Outbound {
         self.bounded(&target, request, 0, declared).await
     }
 
+    /// `POST url` with `body` of `content_type` and extra `headers`, the answer body read up to
+    /// `max_body` bytes: an inline hook call (TN-135). A declared delivery target is not reached
+    /// this way; every rule above holds.
+    ///
+    /// # Errors
+    /// [`OutboundError`].
+    pub async fn post_reading(
+        &self,
+        url: &str,
+        content_type: &str,
+        headers: &[(&str, String)],
+        body: &[u8],
+        max_body: usize,
+    ) -> Result<Answer, OutboundError> {
+        let target = Target::parse(url)?;
+        let request = post_request(&target, content_type, headers, body)?;
+        self.bounded(&target, request, max_body, None).await
+    }
+
     /// `POST url` with a form body; only the status and headers are read.
     ///
     /// # Errors

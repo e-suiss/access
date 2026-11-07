@@ -42,6 +42,8 @@ use crate::ports::oauth::{
     ClientKeys, LoginPages, OAuthDb, OAuthTx, Random, TenantIds, TokenSigner,
 };
 use crate::ports::{Directory, RealmEntry, Unavailable};
+use access_identity_hooks::domain::{Call, Outcome, TokenIssuance, with_claims};
+use access_identity_hooks::ports::{HookCaller, NoHooks};
 
 pub use crate::app::oauth::authorize::REQUEST_CONTEXT;
 pub use crate::app::oauth::token::TokenHttp;
@@ -102,6 +104,10 @@ pub trait Env: Send + Sync + 'static {
     fn projections(&self) -> &Self::Projections;
     /// The cell's opaque tenant ids.
     fn tenant_ids(&self) -> &Self::Tenants;
+    /// The realm's inline hooks (TN-135); none unless the server wires them.
+    fn hooks(&self) -> &(dyn HookCaller + Sync) {
+        &NoHooks
+    }
 }
 
 /// What an endpoint answers; the HTTP layer only renders it.
@@ -476,16 +482,11 @@ impl<E: Env> OAuth<E> {
             "scope": details.scope,
         });
         if details.openid {
+            let claims = self.id_claims(realm, &facts, &details.scope, nonce).await?;
             let id = self
                 .env
                 .signer()
-                .sign(
-                    realm.realm,
-                    alg,
-                    ID_TYP,
-                    &id_token_claims(&facts, nonce),
-                    now,
-                )
+                .sign(realm.realm, alg, ID_TYP, &claims, now)
                 .await?;
             if let Value::Object(m) = &mut body {
                 m.insert("id_token".into(), id.into());
@@ -522,15 +523,36 @@ impl<E: Env> OAuth<E> {
             rev: grant.session_epoch,
         };
         let alg = tx.jose_alg().await?;
+        let claims = self.id_claims(realm, &facts, &details.scope, nonce).await?;
         self.env
             .signer()
-            .sign(
-                realm.realm,
-                alg,
-                ID_TYP,
-                &id_token_claims(&facts, nonce),
-                now,
-            )
+            .sign(realm.realm, alg, ID_TYP, &claims, now)
             .await
+    }
+
+    /// The ID token claims with what the realm's `token_issuance` hook adds (TN-135, OP-151
+    /// m.3 (j)): identity claims only, never a reserved or authority claim (must-never #18). A
+    /// hook that fails refuses the token (MD-8), unless it continues without claims.
+    async fn id_claims(
+        &self,
+        realm: &Realm,
+        facts: &TokenFacts<'_>,
+        scope: &str,
+        nonce: Option<&str>,
+    ) -> Result<Vec<u8>, Unavailable> {
+        let base = id_token_claims(facts, nonce);
+        let call = Call::TokenIssuance(TokenIssuance {
+            client_id: String::from(facts.client_id),
+            subject: String::from(facts.sub),
+            scope: String::from(scope),
+            acr: String::from(crate::domain::tokens::acr(facts.aal)),
+        });
+        match self.env.hooks().call(realm.tenant, realm.realm, call).await {
+            Outcome::Proceed { claims } => with_claims(&base, &claims).map_err(|_| Unavailable),
+            Outcome::Refused(r) => {
+                tracing::info!(reason = r.code(), "token not issued: token_issuance hook");
+                Err(Unavailable)
+            }
+        }
     }
 }

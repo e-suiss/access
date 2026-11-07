@@ -10,6 +10,7 @@ publish = false
 
 [dependencies]
 access-crypto = { workspace = true }
+access-identity-hooks = { workspace = true }
 access-identity-account = { workspace = true }
 access-identity-session = { workspace = true }
 access-identity-signer = { path = "../identity-signer" }

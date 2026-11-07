@@ -29,6 +29,8 @@ use access_crypto::dpop::{MAX_STALE_MS, NonceKey, NoncePolicy, NonceRing, Role};
 use access_crypto::jose::JwsAlg;
 use access_crypto::oauth::secret_digest;
 use access_crypto::opaque_id::IdKey;
+use access_identity_hooks::domain::{Call, Outcome};
+use access_identity_hooks::ports::{CallFuture, HookCaller};
 use access_identity_oauth::adapters::dpop::PgReplayCache;
 use access_identity_oauth::adapters::oauth::{HostedPages, OsRandom, PgOAuth};
 use access_identity_oauth::adapters::{PgDirectory, SignerKeys};
@@ -187,6 +189,23 @@ pub struct TestEnv {
     pub profile: DpopProfile,
     pub plane: Scripted,
     pub ids: IdKey,
+    pub hooks: ScriptedHook,
+}
+
+/// A `token_issuance` hook answering what the test sets; none set is no hook (TN-135).
+#[derive(Clone, Default)]
+pub struct ScriptedHook(pub Arc<Mutex<Option<Outcome>>>);
+
+impl HookCaller for ScriptedHook {
+    fn call(&self, _: TenantId, _: RealmId, _: Call) -> CallFuture<'_> {
+        let answer = self
+            .0
+            .lock()
+            .unwrap()
+            .clone()
+            .unwrap_or_else(Outcome::proceed);
+        Box::pin(async move { answer })
+    }
 }
 
 /// The test cell's id key (OP-137): one fixed key, so `tnt_` ids are stable across clones.
@@ -209,6 +228,7 @@ impl Clone for TestEnv {
             profile: self.profile.clone(),
             plane: self.plane.clone(),
             ids: id_key(),
+            hooks: self.hooks.clone(),
         }
     }
 }
@@ -264,6 +284,9 @@ impl Env for TestEnv {
     }
     fn tenant_ids(&self) -> &IdKey {
         &self.ids
+    }
+    fn hooks(&self) -> &(dyn HookCaller + Sync) {
+        &self.hooks
     }
 }
 
@@ -601,6 +624,7 @@ impl Cluster {
             profile: DpopProfile::default(),
             plane: Scripted::default(),
             ids: id_key(),
+            hooks: ScriptedHook::default(),
         };
         let oauth = OAuth::new(env);
         let mut realms = Vec::new();

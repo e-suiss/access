@@ -313,7 +313,7 @@ fn built_events_meet_the_contracts() {
     let mut names: Vec<&str> = built.iter().map(|r| r.name).collect();
     names.sort_unstable();
     names.dedup();
-    assert_eq!(names.len(), NAMES.len());
+    assert_eq!(names.len(), NAMES.len(), "{names:?}");
     for r in &built {
         let mut claims = set_claims(r, "https://id.example/realms/shop", "work", 1_793_750_400);
         assert_set(&claims);
