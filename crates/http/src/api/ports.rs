@@ -363,6 +363,96 @@ impl RealmResources for NoRealmResources {
     }
 }
 
+/// A readable kind of platform resource (OP-151 m.2 M2): metadata only (INV-29, X31).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PlatformKind {
+    /// Tenants, by opaque `tenant_id`.
+    Tenants,
+    /// Realms, by slug: their metadata, never their settings or content.
+    Realms,
+    /// Sandbox domains, by their realm's slug.
+    SandboxDomains,
+    /// The operator's health summary, without secrets.
+    Health,
+}
+
+impl PlatformKind {
+    /// Its name in cursors.
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Tenants => "tenants",
+            Self::Realms => "realms",
+            Self::SandboxDomains => "sandbox-domains",
+            Self::Health => "health",
+        }
+    }
+}
+
+/// A read of platform metadata: one resource, or one page of a collection, optionally within a
+/// tenant.
+#[derive(Clone, Debug)]
+pub struct PlatformQuery {
+    /// What to read.
+    pub kind: PlatformKind,
+    /// The tenant the collection is in, for realms and sandbox domains.
+    pub tenant: Option<String>,
+    /// One resource's natural key; `None` for a page.
+    pub key: Option<String>,
+    /// The natural key the page starts after.
+    pub after: Option<String>,
+    /// Page size.
+    pub limit: u32,
+}
+
+/// A provisioning write (OP-151 m.2 M2): one manifest operation, the tenant its path names and
+/// its JSON body.
+#[derive(Clone, Debug)]
+pub struct PlatformWrite {
+    /// The platform's governing domain.
+    pub domain: Digest,
+    /// The manifest operation.
+    pub operation: &'static str,
+    /// The tenant the path names.
+    pub tenant: Option<String>,
+    /// The body, without the AIS.
+    pub body: serde_json::Value,
+    /// Trusted time of the request, Unix milliseconds.
+    pub now_ms: u64,
+}
+
+/// The platform resources behind the platform-admin surface (OP-151 m.2 M2): metadata reads
+/// across tenants that never include realm content (INV-29, X31), drafts of the intent a write
+/// compiles to, and commits of exactly one `idp.platform.*` Exercise per write in the platform
+/// realm's governing domain (TN-110, PI-4, INV-2).
+pub trait PlatformResources: Send + Sync {
+    /// Reads; `None` when the tenant or resource does not exist.
+    fn read(&self, query: PlatformQuery) -> Pending<'_, Option<Listing>>;
+
+    /// The intent `write` compiles to; nothing is decided or changed.
+    fn draft(&self, write: PlatformWrite) -> Pending<'_, Drafted>;
+
+    /// Commits `write` with the caller's verified AIS.
+    fn commit(&self, write: PlatformWrite, caller: WriteCaller) -> Pending<'_, Written>;
+}
+
+/// Platform resources that are not wired: every request is unavailable (MD-8).
+pub struct NoPlatformResources;
+
+impl PlatformResources for NoPlatformResources {
+    fn read(&self, _: PlatformQuery) -> Pending<'_, Option<Listing>> {
+        Box::pin(async { Err(Unavailable) })
+    }
+
+    fn draft(&self, _: PlatformWrite) -> Pending<'_, Drafted> {
+        Box::pin(async { Err(Unavailable) })
+    }
+
+    fn commit(&self, _: PlatformWrite, _: WriteCaller) -> Pending<'_, Written> {
+        Box::pin(async { Err(Unavailable) })
+    }
+}
+
 /// Every port of the management API.
 pub trait Env: Send + Sync + 'static {
     /// Read token verifier.
@@ -395,5 +485,9 @@ pub trait Env: Send + Sync + 'static {
     /// The realm resources; none by default.
     fn realm(&self) -> &dyn RealmResources {
         &NoRealmResources
+    }
+    /// The platform resources; none by default.
+    fn platform(&self) -> &dyn PlatformResources {
+        &NoPlatformResources
     }
 }

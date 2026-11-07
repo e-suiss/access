@@ -422,6 +422,48 @@
       "status": 400,
       "title": "Bad Request",
       "description": "The operation named is not a realm write operation."
+    },
+    {
+      "code": "invalid-slug",
+      "type": "urn:suiss:access:problem:invalid-slug",
+      "status": 400,
+      "title": "Bad Request",
+      "description": "A slug outside `^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$` (TN-16)."
+    },
+    {
+      "code": "invalid-placement",
+      "type": "urn:suiss:access:problem:invalid-placement",
+      "status": 400,
+      "title": "Bad Request",
+      "description": "A placement outside `^[a-z0-9][a-z0-9-]{0,62}$` (OP-40)."
+    },
+    {
+      "code": "invalid-root",
+      "type": "urn:suiss:access:problem:invalid-root",
+      "status": 400,
+      "title": "Bad Request",
+      "description": "The founding root names no Party, or is a joint root with k below 2 or above its Parties; Joint(k >= 2) is recommended (TN-111, §13.7.7)."
+    },
+    {
+      "code": "recovery-not-acknowledged",
+      "type": "urn:suiss:access:problem:recovery-not-acknowledged",
+      "status": 400,
+      "title": "Bad Request",
+      "description": "A sole founding root cannot be recovered; the request must carry acknowledge_no_recovery: true (TN-111, TN-60, §13.7.7)."
+    },
+    {
+      "code": "invalid-time-lock",
+      "type": "urn:suiss:access:problem:invalid-time-lock",
+      "status": 400,
+      "title": "Bad Request",
+      "description": "The CT3 time-lock is outside one hour to thirty days (OP-141 m.34 (d))."
+    },
+    {
+      "code": "slug-taken",
+      "type": "urn:suiss:access:problem:slug-taken",
+      "status": 409,
+      "title": "Conflict",
+      "description": "The slug is taken, now or by a deleted realm; slugs are never reused (TN-16, INV-32)."
     }
   ]
 }

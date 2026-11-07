@@ -164,7 +164,7 @@ pub const REALM_ROOT: Route = Route {
     lifecycle: None,
 };
 
-const ALL_LEN: usize = 2 + super::realm::ROWS.len();
+const ALL_LEN: usize = 2 + super::realm::ROWS.len() + super::platform::ROWS.len();
 
 #[expect(
     clippy::indexing_slicing,
@@ -178,11 +178,16 @@ const ALL: [Route; ALL_LEN] = {
         out[i + 2] = super::realm::ROWS[i];
         i += 1;
     }
+    let mut j = 0;
+    while j < super::platform::ROWS.len() {
+        out[i + 2 + j] = super::platform::ROWS[j];
+        j += 1;
+    }
     out
 };
 
-/// Every management route: the surface roots and the realm resources
-/// ([`super::realm::ROWS`]).
+/// Every management route: the surface roots, the realm resources ([`super::realm::ROWS`])
+/// and the platform resources ([`super::platform::ROWS`]).
 pub const MANIFEST: &[Route] = &ALL;
 
 /// The suffix of the one `POST` that reads: drafting a write's intent changes nothing (TN-110).

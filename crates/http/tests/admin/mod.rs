@@ -26,9 +26,10 @@ use access_http::api::manifest::{
     Access, Answer, PLATFORM_ROOT, REALM_ROOT, Route, Verb, Visibility,
 };
 use access_http::api::ports::{
-    Clock, CursorSeal, Draft, Drafted, Entropy, Env, Item, Listing, Pending, Presented, Proposal,
-    Proposals, Proposed, RateLimiter, ReadToken, ReadTokens, RealmResources, ResourceKind,
-    ResourceQuery, ResourceWrite, Surfaces, Unavailable, Written,
+    Clock, CursorSeal, Draft, Drafted, Entropy, Env, Item, Listing, Pending, PlatformKind,
+    PlatformQuery, PlatformResources, PlatformWrite, Presented, Proposal, Proposals, Proposed,
+    RateLimiter, ReadToken, ReadTokens, RealmResources, ResourceKind, ResourceQuery, ResourceWrite,
+    Surfaces, Unavailable, Written,
 };
 use access_kernel::ais::{CONTENT_TYPE, Statement};
 use access_kernel::codec::Canonical;
@@ -284,6 +285,66 @@ impl RealmResources for Shared {
     }
 }
 
+/// A field a fake platform read leaks on purpose; the handler must drop it (INV-29, X31).
+pub const LEAKED: &str = "email";
+
+fn fake_platform(kind: PlatformKind, key: &str) -> Item {
+    let body = match kind {
+        PlatformKind::Tenants => json!({ "tenant_id": key, "status": "active",
+                                         "placement": "pool-default", LEAKED: "a@b.example" }),
+        PlatformKind::Realms | PlatformKind::SandboxDomains => json!({
+            "slug": key, "tenant_id": "tnt_x", "status": "active", "sandbox": false,
+            "domain": b64url_encode(&[7; 32]), "key_state": "pending",
+            "signing_available_at": null, "sub": "leak", "redirect_uris": ["https://x"],
+            "genesis": { "digest": b64url_encode(&[7; 32]), "recovery": "not_available",
+                         "recovery_reason": "no-recover-entry", "claims": {} },
+        }),
+        PlatformKind::Health => json!({ "status": "ready", "checks": [], "record": "leak" }),
+    };
+    Item { body, version: 1 }
+}
+
+// INV-29, X31: the fake platform answers any key; the handler keeps what the kind may show
+impl PlatformResources for Shared {
+    fn read(&self, q: PlatformQuery) -> Pending<'_, Option<Listing>> {
+        let keys = q.key.map_or_else(|| vec!["a".to_owned()], |k| vec![k]);
+        let listing = Listing {
+            items: keys.iter().map(|k| fake_platform(q.kind, k)).collect(),
+            last: None,
+        };
+        Box::pin(async move { Ok(Some(listing)) })
+    }
+
+    fn draft(&self, w: PlatformWrite) -> Pending<'_, Drafted> {
+        let bytes = serde_json::to_vec(&w.body).unwrap();
+        let digest = Digest(suiss_crypto::digest::sha256(&bytes));
+        Box::pin(async move {
+            Ok(Drafted::Draft(Draft {
+                body: w.body,
+                domain: w.domain,
+                intent: bytes,
+                intent_digest: digest,
+                pep: "access-identity".to_owned(),
+            }))
+        })
+    }
+
+    fn commit(&self, w: PlatformWrite, caller: WriteCaller) -> Pending<'_, Written> {
+        let ledger = self.0.ledger.clone();
+        ledger.calls.fetch_add(1, Ordering::SeqCst);
+        Box::pin(async move {
+            let position = ledger.position.fetch_add(1, Ordering::SeqCst) + 1;
+            let kind = access_http::api::platform::spec(w.operation).unwrap().0;
+            Ok(Written::Committed {
+                exercise_id: caller.statement.intent,
+                position,
+                resource: Some(fake_platform(kind, "new")),
+                secret: Some("never-shown".to_owned()),
+            })
+        })
+    }
+}
+
 pub struct TestEnv(pub Shared);
 
 impl Env for TestEnv {
@@ -320,6 +381,9 @@ impl Env for TestEnv {
         ORIGIN
     }
     fn realm(&self) -> &dyn RealmResources {
+        &self.0
+    }
+    fn platform(&self) -> &dyn PlatformResources {
         &self.0
     }
 }

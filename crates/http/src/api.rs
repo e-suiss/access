@@ -27,6 +27,7 @@ pub mod adapters;
 pub mod app;
 pub mod domain;
 pub mod manifest;
+pub mod platform;
 pub mod ports;
 pub mod realm;
 pub mod schema;

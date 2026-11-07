@@ -180,6 +180,150 @@ fn schemas() -> Value {
                 "irreversible": { "type": "boolean", "description": "Set on an RP ID change: it cannot be undone and the realm's passkeys stop working (IDI-4)." },
             },
         },
+        "Tenant": {
+            "type": "object",
+            "additionalProperties": false,
+            "description": "A tenant's metadata; never its realms' content (INV-29, X31).",
+            "properties": {
+                "tenant_id": text("Opaque `tnt_` id (OP-137)."),
+                "status": { "type": "string", "enum": ["provisioning", "active", "suspended", "deleted"] },
+                "placement": text("Its placement (OP-40)."),
+                "created_at": r("schemas", "Time"),
+            },
+        },
+        "SandboxBudget": {
+            "type": "object",
+            "additionalProperties": false,
+            "description": "The sandbox template's fixed budget (OP-151 m.3 (m)); structural fair use, not a plan.",
+            "properties": {
+                "exercises_per_day": r("schemas", "Position"),
+                "projections_per_day": r("schemas", "Position"),
+            },
+        },
+        "RealmMetadata": {
+            "type": "object",
+            "additionalProperties": false,
+            "description": "A realm's metadata and the state of its signing keys; never its settings, accounts, clients or authority state (INV-29, X31, TN-119).",
+            "properties": {
+                "slug": text("The immutable slug (TN-16)."),
+                "tenant_id": text("Opaque `tnt_` id of its tenant."),
+                "issuer": { "type": ["string", "null"] },
+                "status": { "type": "string", "enum": ["active", "suspended", "deleted"] },
+                "placement": text("Its placement (OP-40)."),
+                "domain": { "type": "string", "pattern": "^[A-Za-z0-9_-]{43}$", "description": "Its governing DomainID: the digest of its Genesis record." },
+                "sandbox": { "type": "boolean", "description": "Whether its governing domain is a sandbox (OP-151 m.3 (m))." },
+                "budget": { "oneOf": [r("schemas", "SandboxBudget"), { "type": "null" }] },
+                "created_at": r("schemas", "Time"),
+                "key_state": { "type": "string", "enum": ["pending", "published", "signing", "unavailable"], "description": "Its JOSE keys: none published yet, published and inside the publish lead, signing, or the signer did not answer (CR-25, SAI-46)." },
+                "signing_available_at": { "oneOf": [r("schemas", "Time"), { "type": "null" }], "description": "When its first key may sign at the latest: creation plus the publish lead, 90 minutes by default (CR-25); the founding-key exception (CR-59) may make it sooner." },
+            },
+        },
+        "OperatorHealth": {
+            "type": "object",
+            "additionalProperties": false,
+            "description": "The deployment's readiness checks by name; no addresses, keys or secrets.",
+            "properties": {
+                "status": { "type": "string", "enum": ["ready", "degraded"] },
+                "checks": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": ["name", "ok"],
+                        "properties": { "name": text("The check."), "ok": { "type": "boolean" } },
+                    },
+                },
+            },
+        },
+        "TenantPage": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["items"],
+            "description": "One page of tenants; the next is in the `Link` header (OP-65).",
+            "properties": { "items": { "type": "array", "items": r("schemas", "Tenant") } },
+        },
+        "RealmPage": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["items"],
+            "description": "One page of realms or sandbox domains; the next is in the `Link` header (OP-65).",
+            "properties": { "items": { "type": "array", "items": r("schemas", "RealmMetadata") } },
+        },
+        "FoundingRoot": {
+            "type": "object",
+            "additionalProperties": false,
+            "description": "The founding root of the new governing domain (TN-111): `joint` with `k` of `parties`, recommended, or `sole` with one Party; a Party is its 16-byte id, unpadded base64url.",
+            "properties": {
+                "sole": { "type": "string", "pattern": "^[A-Za-z0-9_-]{22}$" },
+                "joint": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["k", "parties"],
+                    "properties": {
+                        "k": { "type": "integer", "minimum": 2 },
+                        "parties": { "type": "array", "minItems": 2, "items": { "type": "string", "pattern": "^[A-Za-z0-9_-]{22}$" } },
+                    },
+                },
+            },
+        },
+        "TenantCreate": {
+            "type": "object",
+            "additionalProperties": false,
+            "description": "A new tenant; the draft assigns its `tenant_id`.",
+            "properties": {
+                "tenant_id": text("Assigned by the draft; send it back unchanged."),
+                "placement": text("Its placement; `pool-default` when omitted (OP-40)."),
+                "validity": r("schemas", "Validity"),
+                "ais": text("The caller's AIS, when not in the header."),
+            },
+        },
+        "RealmCreate": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["slug", "root"],
+            "description": "A new realm and the Genesis of its governing domain (TN-111, §5.16). A sole root needs `acknowledge_no_recovery: true` (TN-60, §13.7.7).",
+            "properties": {
+                "slug": text("The immutable slug (TN-16)."),
+                "issuer_style": { "type": "string", "enum": ["subdomain", "path"], "default": "subdomain" },
+                "placement": text("Its placement; `pool-default` when omitted (OP-40)."),
+                "root": r("schemas", "FoundingRoot"),
+                "ct3_delay_s": { "type": "integer", "minimum": 3600, "maximum": 2_592_000 },
+                "acknowledge_no_recovery": { "type": "boolean", "default": false },
+                "validity": r("schemas", "Validity"),
+                "ais": text("The caller's AIS, when not in the header."),
+            },
+        },
+        "Genesis": {
+            "type": "object",
+            "additionalProperties": false,
+            "description": "What the new governing domain's Genesis declares (TN-111, §13.7.7): its digest (the DomainID), its root's shape, and whether it can be recovered.",
+            "properties": {
+                "digest": { "type": "string", "pattern": "^[A-Za-z0-9_-]{43}$" },
+                "root": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "kind": { "type": "string", "enum": ["sole", "joint"] },
+                        "k": { "type": "integer" },
+                        "n": { "type": "integer" },
+                    },
+                },
+                "recovery": { "type": "string", "enum": ["not_available"], "description": "`not_available`: the rootTerms `domain.recover` entry cannot be built; the domain cannot be recovered (NG, N-14)." },
+                "recovery_reason": text("A stable reason code."),
+            },
+        },
+        "PlatformWriteResult": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["exercise_id", "position"],
+            "description": "The `idp.platform.*` Exercise the write compiled to (TN-110), what it created, and for a realm its Genesis.",
+            "properties": {
+                "exercise_id": { "type": "string", "pattern": "^[A-Za-z0-9_-]{43}$" },
+                "position": r("schemas", "Position"),
+                "resource": { "oneOf": [r("schemas", "Tenant"), r("schemas", "RealmMetadata")] },
+                "genesis": r("schemas", "Genesis"),
+            },
+        },
         "SurfaceRoot": {
             "type": "object",
             "additionalProperties": false,
@@ -265,8 +409,20 @@ fn responses() -> Value {
 
 /// The response body schema of an operation.
 fn body_of(row: &Route) -> &'static str {
-    use super::ports::ResourceKind;
+    use super::platform::Shape as P;
+    use super::ports::{PlatformKind, ResourceKind};
     use super::realm::{Shape, spec};
+    if let Some((kind, shape)) = super::platform::spec(row.operation_id) {
+        return match (kind, shape) {
+            (_, P::Draft) => "IntentDraft",
+            (_, P::Create) => "PlatformWriteResult",
+            (PlatformKind::Tenants, P::List(_)) => "TenantPage",
+            (_, P::List(_)) => "RealmPage",
+            (PlatformKind::Tenants, P::Get) => "Tenant",
+            (PlatformKind::Health, P::Get) => "OperatorHealth",
+            (_, P::Get) => "RealmMetadata",
+        };
+    }
     match (row.operation_id, spec(row.operation_id)) {
         ("getPlatformSurface" | "getRealmSurface", _) => "SurfaceRoot",
         (_, Some((_, Shape::List(_)))) => "Page",
@@ -330,6 +486,9 @@ fn operation(row: &Route) -> Value {
     let creates = matches!(
         super::realm::spec(row.operation_id),
         Some((_, super::realm::Shape::Write { creates: true, .. }))
+    ) || matches!(
+        super::platform::spec(row.operation_id),
+        Some((_, super::platform::Shape::Create))
     );
     let mut responses = Map::new();
     responses.insert(
@@ -360,9 +519,17 @@ fn operation(row: &Route) -> Value {
         Access::Read { scope } => (json!([{ "read_token": [scope] }]), json!(scope)),
         Access::Write => (json!([{ "ais": [] }]), Value::Null),
     };
-    let request_body = match super::realm::spec(row.operation_id) {
-        Some((_, super::realm::Shape::Draft)) => Some("DraftRequest"),
-        Some((_, super::realm::Shape::Write { .. })) => Some("WriteBody"),
+    let request_body = match (
+        super::realm::spec(row.operation_id),
+        super::platform::spec(row.operation_id),
+    ) {
+        (Some((_, super::realm::Shape::Draft)), _)
+        | (_, Some((_, super::platform::Shape::Draft))) => Some("DraftRequest"),
+        (Some((_, super::realm::Shape::Write { .. })), _) => Some("WriteBody"),
+        (_, Some((super::ports::PlatformKind::Tenants, super::platform::Shape::Create))) => {
+            Some("TenantCreate")
+        }
+        (_, Some((_, super::platform::Shape::Create))) => Some("RealmCreate"),
         _ => None,
     };
     let mut op = json!({

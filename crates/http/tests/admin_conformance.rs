@@ -121,7 +121,11 @@ fn no_credential_setting_or_acting_as_route_exists() {
         }
         assert!(row.verb_fits(), "{}", row.operation_id);
         if row.verb.mutating() && row.access != Access::Write {
-            assert_eq!(row.operation_id, "draftIntent");
+            assert!(
+                matches!(row.operation_id, "draftIntent" | "draftPlatformIntent"),
+                "{}",
+                row.operation_id
+            );
         }
     }
 }

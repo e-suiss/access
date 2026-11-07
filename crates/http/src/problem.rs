@@ -113,6 +113,7 @@ impl Code {
 pub mod codes {
     use super::Code;
 
+    pub mod platform;
     pub mod realm;
 
     const fn code(
@@ -410,6 +411,12 @@ pub const CODES: &[Code] = &[
     codes::realm::PASSKEY_LOSS_NOT_ACKNOWLEDGED,
     codes::realm::CONFLICT,
     codes::realm::UNKNOWN_OPERATION,
+    codes::platform::INVALID_SLUG,
+    codes::platform::INVALID_PLACEMENT,
+    codes::platform::INVALID_ROOT,
+    codes::platform::RECOVERY_NOT_ACKNOWLEDGED,
+    codes::platform::INVALID_TIME_LOCK,
+    codes::platform::SLUG_TAKEN,
 ];
 
 /// The type URI of `code`.

@@ -3086,6 +3086,826 @@
           }
         }
       }
+    },
+    "/admin/v1/platform/intents": {
+      "post": {
+        "operationId": "draftPlatformIntent",
+        "summary": "Drafts the intent a provisioning write compiles to, for the caller's AIS; changes nothing.",
+        "tags": [
+          "platform"
+        ],
+        "security": [
+          {
+            "read_token": [
+              "platform.read"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The resource.",
+            "headers": {
+              "Request-Id": {
+                "$ref": "#/components/headers/Request-Id"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntentDraft"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        },
+        "deprecated": false,
+        "x-access-surface": "platform",
+        "x-access-scope": "platform.read",
+        "x-access-visibility": "forbidden",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DraftRequest"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/v1/platform/tenants": {
+      "get": {
+        "operationId": "listTenants",
+        "summary": "Tenants and their states; metadata only.",
+        "tags": [
+          "platform"
+        ],
+        "security": [
+          {
+            "read_token": [
+              "platform.read"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/PageSize"
+          },
+          {
+            "$ref": "#/components/parameters/Cursor"
+          },
+          {
+            "$ref": "#/components/parameters/Filter"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The resource.",
+            "headers": {
+              "Request-Id": {
+                "$ref": "#/components/headers/Request-Id"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "Link": {
+                "$ref": "#/components/headers/Link"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TenantPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        },
+        "deprecated": false,
+        "x-access-surface": "platform",
+        "x-access-scope": "platform.read",
+        "x-access-visibility": "forbidden"
+      },
+      "post": {
+        "operationId": "createTenant",
+        "summary": "Creates a tenant.",
+        "tags": [
+          "platform"
+        ],
+        "security": [
+          {
+            "ais": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/Ais"
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Committed: the Exercise record (TN-110).",
+            "headers": {
+              "Request-Id": {
+                "$ref": "#/components/headers/Request-Id"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformWriteResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/Unprocessable"
+          }
+        },
+        "deprecated": false,
+        "x-access-surface": "platform",
+        "x-access-scope": null,
+        "x-access-visibility": "forbidden",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TenantCreate"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/v1/platform/tenants/{tenant_id}": {
+      "get": {
+        "operationId": "getTenant",
+        "summary": "One tenant's metadata.",
+        "tags": [
+          "platform"
+        ],
+        "security": [
+          {
+            "read_token": [
+              "platform.read"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "name": "tenant_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            },
+            "description": "The resource's natural key."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The resource.",
+            "headers": {
+              "Request-Id": {
+                "$ref": "#/components/headers/Request-Id"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Tenant"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        },
+        "deprecated": false,
+        "x-access-surface": "platform",
+        "x-access-scope": "platform.read",
+        "x-access-visibility": "forbidden"
+      }
+    },
+    "/admin/v1/platform/tenants/{tenant_id}/realms": {
+      "get": {
+        "operationId": "listTenantRealms",
+        "summary": "A tenant's realms; metadata only.",
+        "tags": [
+          "platform"
+        ],
+        "security": [
+          {
+            "read_token": [
+              "platform.read"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "name": "tenant_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            },
+            "description": "The resource's natural key."
+          },
+          {
+            "$ref": "#/components/parameters/PageSize"
+          },
+          {
+            "$ref": "#/components/parameters/Cursor"
+          },
+          {
+            "$ref": "#/components/parameters/Filter"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The resource.",
+            "headers": {
+              "Request-Id": {
+                "$ref": "#/components/headers/Request-Id"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "Link": {
+                "$ref": "#/components/headers/Link"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RealmPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        },
+        "deprecated": false,
+        "x-access-surface": "platform",
+        "x-access-scope": "platform.read",
+        "x-access-visibility": "forbidden"
+      },
+      "post": {
+        "operationId": "createRealm",
+        "summary": "Creates a realm by a Genesis of its governing domain with the caller's founding root; Joint(k >= 2) is recommended, a sole root must acknowledge that it cannot be recovered.",
+        "tags": [
+          "platform"
+        ],
+        "security": [
+          {
+            "ais": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "name": "tenant_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            },
+            "description": "The resource's natural key."
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/Ais"
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Committed: the Exercise record (TN-110).",
+            "headers": {
+              "Request-Id": {
+                "$ref": "#/components/headers/Request-Id"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformWriteResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/Unprocessable"
+          }
+        },
+        "deprecated": false,
+        "x-access-surface": "platform",
+        "x-access-scope": null,
+        "x-access-visibility": "forbidden",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RealmCreate"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/v1/platform/tenants/{tenant_id}/sandbox-domains": {
+      "get": {
+        "operationId": "listSandboxDomains",
+        "summary": "A tenant's sandbox domains.",
+        "tags": [
+          "platform"
+        ],
+        "security": [
+          {
+            "read_token": [
+              "platform.read"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "name": "tenant_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            },
+            "description": "The resource's natural key."
+          },
+          {
+            "$ref": "#/components/parameters/PageSize"
+          },
+          {
+            "$ref": "#/components/parameters/Cursor"
+          },
+          {
+            "$ref": "#/components/parameters/Filter"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The resource.",
+            "headers": {
+              "Request-Id": {
+                "$ref": "#/components/headers/Request-Id"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "Link": {
+                "$ref": "#/components/headers/Link"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RealmPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        },
+        "deprecated": false,
+        "x-access-surface": "platform",
+        "x-access-scope": "platform.read",
+        "x-access-visibility": "forbidden"
+      },
+      "post": {
+        "operationId": "createSandboxDomain",
+        "summary": "Creates a sandbox realm whose governing domain is a separate AuthorityDomain from the sandbox template, with its fixed budget.",
+        "tags": [
+          "platform"
+        ],
+        "security": [
+          {
+            "ais": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "name": "tenant_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            },
+            "description": "The resource's natural key."
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/Ais"
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Committed: the Exercise record (TN-110).",
+            "headers": {
+              "Request-Id": {
+                "$ref": "#/components/headers/Request-Id"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PlatformWriteResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "422": {
+            "$ref": "#/components/responses/Unprocessable"
+          }
+        },
+        "deprecated": false,
+        "x-access-surface": "platform",
+        "x-access-scope": null,
+        "x-access-visibility": "forbidden",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RealmCreate"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/v1/platform/realms/{realm_slug}": {
+      "get": {
+        "operationId": "getRealmMetadata",
+        "summary": "One realm's metadata and the state of its signing keys; never its settings or content.",
+        "tags": [
+          "platform"
+        ],
+        "security": [
+          {
+            "read_token": [
+              "platform.read"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "name": "realm_slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            },
+            "description": "The resource's natural key."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The resource.",
+            "headers": {
+              "Request-Id": {
+                "$ref": "#/components/headers/Request-Id"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RealmMetadata"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        },
+        "deprecated": false,
+        "x-access-surface": "platform",
+        "x-access-scope": "platform.read",
+        "x-access-visibility": "forbidden"
+      }
+    },
+    "/admin/v1/platform/operator/health": {
+      "get": {
+        "operationId": "getOperatorHealth",
+        "summary": "The deployment's readiness checks, by name; no secrets.",
+        "tags": [
+          "platform"
+        ],
+        "security": [
+          {
+            "read_token": [
+              "platform.read"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The resource.",
+            "headers": {
+              "Request-Id": {
+                "$ref": "#/components/headers/Request-Id"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OperatorHealth"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        },
+        "deprecated": false,
+        "x-access-surface": "platform",
+        "x-access-scope": "platform.read",
+        "x-access-visibility": "forbidden"
+      }
     }
   },
   "components": {
@@ -3479,6 +4299,361 @@
           "irreversible": {
             "type": "boolean",
             "description": "Set on an RP ID change: it cannot be undone and the realm's passkeys stop working (IDI-4)."
+          }
+        }
+      },
+      "Tenant": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "A tenant's metadata; never its realms' content (INV-29, X31).",
+        "properties": {
+          "tenant_id": {
+            "type": "string",
+            "description": "Opaque `tnt_` id (OP-137)."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "provisioning",
+              "active",
+              "suspended",
+              "deleted"
+            ]
+          },
+          "placement": {
+            "type": "string",
+            "description": "Its placement (OP-40)."
+          },
+          "created_at": {
+            "$ref": "#/components/schemas/Time"
+          }
+        }
+      },
+      "SandboxBudget": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "The sandbox template's fixed budget (OP-151 m.3 (m)); structural fair use, not a plan.",
+        "properties": {
+          "exercises_per_day": {
+            "$ref": "#/components/schemas/Position"
+          },
+          "projections_per_day": {
+            "$ref": "#/components/schemas/Position"
+          }
+        }
+      },
+      "RealmMetadata": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "A realm's metadata and the state of its signing keys; never its settings, accounts, clients or authority state (INV-29, X31, TN-119).",
+        "properties": {
+          "slug": {
+            "type": "string",
+            "description": "The immutable slug (TN-16)."
+          },
+          "tenant_id": {
+            "type": "string",
+            "description": "Opaque `tnt_` id of its tenant."
+          },
+          "issuer": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "suspended",
+              "deleted"
+            ]
+          },
+          "placement": {
+            "type": "string",
+            "description": "Its placement (OP-40)."
+          },
+          "domain": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{43}$",
+            "description": "Its governing DomainID: the digest of its Genesis record."
+          },
+          "sandbox": {
+            "type": "boolean",
+            "description": "Whether its governing domain is a sandbox (OP-151 m.3 (m))."
+          },
+          "budget": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/SandboxBudget"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "created_at": {
+            "$ref": "#/components/schemas/Time"
+          },
+          "key_state": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "published",
+              "signing",
+              "unavailable"
+            ],
+            "description": "Its JOSE keys: none published yet, published and inside the publish lead, signing, or the signer did not answer (CR-25, SAI-46)."
+          },
+          "signing_available_at": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When its first key may sign at the latest: creation plus the publish lead, 90 minutes by default (CR-25); the founding-key exception (CR-59) may make it sooner."
+          }
+        }
+      },
+      "OperatorHealth": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "The deployment's readiness checks by name; no addresses, keys or secrets.",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ready",
+              "degraded"
+            ]
+          },
+          "checks": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "name",
+                "ok"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "description": "The check."
+                },
+                "ok": {
+                  "type": "boolean"
+                }
+              }
+            }
+          }
+        }
+      },
+      "TenantPage": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "items"
+        ],
+        "description": "One page of tenants; the next is in the `Link` header (OP-65).",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Tenant"
+            }
+          }
+        }
+      },
+      "RealmPage": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "items"
+        ],
+        "description": "One page of realms or sandbox domains; the next is in the `Link` header (OP-65).",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RealmMetadata"
+            }
+          }
+        }
+      },
+      "FoundingRoot": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "The founding root of the new governing domain (TN-111): `joint` with `k` of `parties`, recommended, or `sole` with one Party; a Party is its 16-byte id, unpadded base64url.",
+        "properties": {
+          "sole": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{22}$"
+          },
+          "joint": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "k",
+              "parties"
+            ],
+            "properties": {
+              "k": {
+                "type": "integer",
+                "minimum": 2
+              },
+              "parties": {
+                "type": "array",
+                "minItems": 2,
+                "items": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9_-]{22}$"
+                }
+              }
+            }
+          }
+        }
+      },
+      "TenantCreate": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "A new tenant; the draft assigns its `tenant_id`.",
+        "properties": {
+          "tenant_id": {
+            "type": "string",
+            "description": "Assigned by the draft; send it back unchanged."
+          },
+          "placement": {
+            "type": "string",
+            "description": "Its placement; `pool-default` when omitted (OP-40)."
+          },
+          "validity": {
+            "$ref": "#/components/schemas/Validity"
+          },
+          "ais": {
+            "type": "string",
+            "description": "The caller's AIS, when not in the header."
+          }
+        }
+      },
+      "RealmCreate": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "slug",
+          "root"
+        ],
+        "description": "A new realm and the Genesis of its governing domain (TN-111, §5.16). A sole root needs `acknowledge_no_recovery: true` (TN-60, §13.7.7).",
+        "properties": {
+          "slug": {
+            "type": "string",
+            "description": "The immutable slug (TN-16)."
+          },
+          "issuer_style": {
+            "type": "string",
+            "enum": [
+              "subdomain",
+              "path"
+            ],
+            "default": "subdomain"
+          },
+          "placement": {
+            "type": "string",
+            "description": "Its placement; `pool-default` when omitted (OP-40)."
+          },
+          "root": {
+            "$ref": "#/components/schemas/FoundingRoot"
+          },
+          "ct3_delay_s": {
+            "type": "integer",
+            "minimum": 3600,
+            "maximum": 2592000
+          },
+          "acknowledge_no_recovery": {
+            "type": "boolean",
+            "default": false
+          },
+          "validity": {
+            "$ref": "#/components/schemas/Validity"
+          },
+          "ais": {
+            "type": "string",
+            "description": "The caller's AIS, when not in the header."
+          }
+        }
+      },
+      "Genesis": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "What the new governing domain's Genesis declares (TN-111, §13.7.7): its digest (the DomainID), its root's shape, and whether it can be recovered.",
+        "properties": {
+          "digest": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{43}$"
+          },
+          "root": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "sole",
+                  "joint"
+                ]
+              },
+              "k": {
+                "type": "integer"
+              },
+              "n": {
+                "type": "integer"
+              }
+            }
+          },
+          "recovery": {
+            "type": "string",
+            "enum": [
+              "not_available"
+            ],
+            "description": "`not_available`: the rootTerms `domain.recover` entry cannot be built; the domain cannot be recovered (NG, N-14)."
+          },
+          "recovery_reason": {
+            "type": "string",
+            "description": "A stable reason code."
+          }
+        }
+      },
+      "PlatformWriteResult": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "exercise_id",
+          "position"
+        ],
+        "description": "The `idp.platform.*` Exercise the write compiled to (TN-110), what it created, and for a realm its Genesis.",
+        "properties": {
+          "exercise_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{43}$"
+          },
+          "position": {
+            "$ref": "#/components/schemas/Position"
+          },
+          "resource": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Tenant"
+              },
+              {
+                "$ref": "#/components/schemas/RealmMetadata"
+              }
+            ]
+          },
+          "genesis": {
+            "$ref": "#/components/schemas/Genesis"
           }
         }
       },
