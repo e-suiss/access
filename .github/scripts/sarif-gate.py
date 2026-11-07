@@ -1,7 +1,8 @@
 """Fail when a SARIF file reports a high or critical security alert (F-14).
 
 GitHub maps `security-severity` >= 7.0 to "high" and >= 9.0 to "critical". Results
-whose rule has no security severity are reported but do not fail the gate.
+whose rule has no security severity are reported but do not fail the gate. Reading no
+SARIF file at all fails: an analysis that wrote nothing has not been checked.
 Usage: sarif-gate.py <dir-or-file>...
 """
 
@@ -26,7 +27,9 @@ def main(args):
         print("usage: sarif-gate.py <dir-or-file>...", file=sys.stderr)
         return 2
     blocking = 0
+    read = 0
     for file in sarif_files(args):
+        read += 1
         sarif = json.loads(file.read_text(encoding="utf-8"))
         for run in sarif.get("runs", []):
             rules = {}
@@ -55,10 +58,13 @@ def main(args):
                     print(f"::error::{line}")
                 else:
                     print(f"::notice::{line}")
+    if read == 0:
+        print("::error::no SARIF file found in " + " ".join(args), file=sys.stderr)
+        return 1
     if blocking:
         print(f"{blocking} high or critical finding(s)", file=sys.stderr)
         return 1
-    print("no high or critical findings")
+    print(f"no high or critical findings in {read} SARIF file(s)")
     return 0
 
 

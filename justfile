@@ -55,6 +55,10 @@ rules:
     cargo fetch --locked
     cargo xtask check
 
+# F-14, OP-68: the CI helper scripts' own tests
+ci-scripts-test:
+    python3 -I -m unittest discover -s .github/scripts/tests -p 'test_*.py'
+
 # F-1
 deny:
     cargo deny --locked check

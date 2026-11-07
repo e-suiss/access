@@ -37,6 +37,8 @@ jobs:
         run: just lint
       - name: Repository rules (OP-62, OP-3, OP-66)
         run: just rules
+      - name: CI script tests (F-14)
+        run: just ci-scripts-test
       # CR-39 m.5, SA-T13
       - name: Constant-time comparison assembly snapshot (difference = review)
         run: just ct-asm
