@@ -414,7 +414,7 @@ impl<'a, T: Transport, E: Env> Client<'a, T, E> {
                     headers: vec![
                         (
                             String::from("Authorization"),
-                            format!("DPoP {}", value.expose()),
+                            ["DPoP ", value.expose()].concat(),
                         ),
                         (String::from("DPoP"), dpop),
                     ],
