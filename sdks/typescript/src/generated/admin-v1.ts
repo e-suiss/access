@@ -439,6 +439,128 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/v1/platform/intents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Drafts the intent a provisioning write compiles to, for the caller's AIS; changes nothing. */
+        post: operations["draftPlatformIntent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/v1/platform/tenants": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Tenants and their states; metadata only. */
+        get: operations["listTenants"];
+        put?: never;
+        /** Creates a tenant. */
+        post: operations["createTenant"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/v1/platform/tenants/{tenant_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One tenant's metadata. */
+        get: operations["getTenant"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/v1/platform/tenants/{tenant_id}/realms": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A tenant's realms; metadata only. */
+        get: operations["listTenantRealms"];
+        put?: never;
+        /** Creates a realm by a Genesis of its governing domain with the caller's founding root; Joint(k >= 2) is recommended, a sole root must acknowledge that it cannot be recovered. */
+        post: operations["createRealm"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/v1/platform/tenants/{tenant_id}/sandbox-domains": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A tenant's sandbox domains. */
+        get: operations["listSandboxDomains"];
+        put?: never;
+        /** Creates a sandbox realm whose governing domain is a separate AuthorityDomain from the sandbox template, with its fixed budget. */
+        post: operations["createSandboxDomain"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/v1/platform/realms/{realm_slug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One realm's metadata and the state of its signing keys; never its settings or content. */
+        get: operations["getRealmMetadata"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/v1/platform/operator/health": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The deployment's readiness checks, by name; no secrets. */
+        get: operations["getOperatorHealth"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -572,6 +694,166 @@ export interface components {
             client_secret?: string;
             /** @description Set on an RP ID change: it cannot be undone and the realm's passkeys stop working (IDI-4). */
             irreversible?: boolean;
+        };
+        /** @description A tenant's metadata; never its realms' content (INV-29, X31). */
+        Tenant: {
+            /** @description Opaque `tnt_` id (OP-137). */
+            tenant_id?: string;
+            /** @enum {string} */
+            status?: "provisioning" | "active" | "suspended" | "deleted";
+            /** @description Its placement (OP-40). */
+            placement?: string;
+            created_at?: components["schemas"]["Time"];
+        };
+        /** @description The sandbox template's fixed budget (OP-151 m.3 (m)); structural fair use, not a plan. */
+        SandboxBudget: {
+            exercises_per_day?: components["schemas"]["Position"];
+            projections_per_day?: components["schemas"]["Position"];
+        };
+        /** @description A realm's metadata and the state of its signing keys; never its settings, accounts, clients or authority state (INV-29, X31, TN-119). */
+        RealmMetadata: {
+            /** @description The immutable slug (TN-16). */
+            slug?: string;
+            /** @description Opaque `tnt_` id of its tenant. */
+            tenant_id?: string;
+            issuer?: string | null;
+            /** @enum {string} */
+            status?: "active" | "suspended" | "deleted";
+            /** @description Its placement (OP-40). */
+            placement?: string;
+            /** @description Its governing DomainID: the digest of its Genesis record. */
+            domain?: string;
+            /** @description Whether its governing domain is a sandbox (OP-151 m.3 (m)). */
+            sandbox?: boolean;
+            budget?: components["schemas"]["SandboxBudget"] | null;
+            created_at?: components["schemas"]["Time"];
+            /**
+             * @description Its JOSE keys: none published yet, published and inside the publish lead, signing, or the signer did not answer (CR-25, SAI-46).
+             * @enum {string}
+             */
+            key_state?: "pending" | "published" | "signing" | "unavailable";
+            /** @description When its first key may sign at the latest: creation plus the publish lead, 90 minutes by default (CR-25); the founding-key exception (CR-59) may make it sooner. */
+            signing_available_at?: components["schemas"]["Time"] | null;
+        };
+        /** @description The deployment's readiness checks by name; no addresses, keys or secrets. */
+        OperatorHealth: {
+            /** @enum {string} */
+            status?: "ready" | "degraded";
+            checks?: {
+                /** @description The check. */
+                name: string;
+                ok: boolean;
+            }[];
+        };
+        /** @description One page of tenants; the next is in the `Link` header (OP-65). */
+        TenantPage: {
+            items: components["schemas"]["Tenant"][];
+        };
+        /** @description One page of realms or sandbox domains; the next is in the `Link` header (OP-65). */
+        RealmPage: {
+            items: components["schemas"]["RealmMetadata"][];
+        };
+        /** @description The founding root of the new governing domain (TN-111): `joint` with `k` of `parties`, recommended, or `sole` with one Party; a Party is its 16-byte id, unpadded base64url. */
+        FoundingRoot: {
+            sole?: string;
+            joint?: {
+                k: number;
+                parties: string[];
+            };
+        };
+        /**
+         * @description A new tenant; the draft assigns its `tenant_id`.
+         * @example {
+         *       "placement": "pool-default"
+         *     }
+         */
+        TenantCreate: {
+            /** @description Assigned by the draft; send it back unchanged. */
+            tenant_id?: string;
+            /** @description Its placement; `pool-default` when omitted (OP-40). */
+            placement?: string;
+            validity?: components["schemas"]["Validity"];
+            /** @description The caller's AIS, when not in the header. */
+            ais?: string;
+        };
+        /**
+         * @description A new realm and the Genesis of its governing domain (TN-111, §5.16). A sole root needs `acknowledge_no_recovery: true` (TN-60, §13.7.7).
+         * @example {
+         *       "slug": "shop",
+         *       "issuer_style": "subdomain",
+         *       "root": {
+         *         "joint": {
+         *           "k": 2,
+         *           "parties": [
+         *             "AQEBAQEBAQEBAQEBAQEBAQ",
+         *             "AgICAgICAgICAgICAgICAg"
+         *           ]
+         *         }
+         *       }
+         *     }
+         * @example {
+         *       "slug": "lab",
+         *       "root": {
+         *         "sole": "AQEBAQEBAQEBAQEBAQEBAQ"
+         *       },
+         *       "acknowledge_no_recovery": true
+         *     }
+         */
+        RealmCreate: {
+            /** @description The immutable slug (TN-16). */
+            slug: string;
+            /**
+             * @default subdomain
+             * @enum {string}
+             */
+            issuer_style: "subdomain" | "path";
+            /** @description Its placement; `pool-default` when omitted (OP-40). */
+            placement?: string;
+            root: components["schemas"]["FoundingRoot"];
+            ct3_delay_s?: number;
+            /** @default false */
+            acknowledge_no_recovery: boolean;
+            /** @description Open the governing domain from the sandbox template, a separate AuthorityDomain with its fixed budget (OP-151 m.3 (m)); always true on `sandbox-domains`. */
+            sandbox?: boolean;
+            validity?: components["schemas"]["Validity"];
+            /** @description The caller's AIS, when not in the header. */
+            ais?: string;
+        };
+        /**
+         * @description What the new governing domain's Genesis declares (TN-111, §13.7.7): its digest (the DomainID), its root's shape, and whether it can be recovered.
+         * @example {
+         *       "digest": "BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc",
+         *       "root": {
+         *         "kind": "joint",
+         *         "k": 2,
+         *         "n": 2
+         *       },
+         *       "recovery": "not_available",
+         *       "recovery_reason": "no-recover-entry"
+         *     }
+         */
+        Genesis: {
+            digest?: string;
+            root?: {
+                /** @enum {string} */
+                kind?: "sole" | "joint";
+                k?: number;
+                n?: number;
+            };
+            /**
+             * @description `not_available`: the rootTerms `domain.recover` entry cannot be built; the domain cannot be recovered (NG, N-14).
+             * @enum {string}
+             */
+            recovery?: "not_available";
+            /** @description A stable reason code. */
+            recovery_reason?: string;
+        };
+        /** @description The `idp.platform.*` Exercise the write compiled to (TN-110), what it created, and for a realm its Genesis. */
+        PlatformWriteResult: {
+            exercise_id: string;
+            position: components["schemas"]["Position"];
+            resource?: components["schemas"]["Tenant"] | components["schemas"]["RealmMetadata"];
+            genesis?: components["schemas"]["Genesis"];
         };
         SurfaceRoot: {
             /** @enum {string} */
@@ -2224,6 +2506,399 @@ export interface operations {
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
             422: components["responses"]["Unprocessable"];
+            429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    draftPlatformIntent: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description W3C Trace Context; its trace id becomes `Request-Id`. */
+                traceparent?: components["parameters"]["Traceparent"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DraftRequest"];
+            };
+        };
+        responses: {
+            /** @description The resource. */
+            200: {
+                headers: {
+                    "Request-Id": components["headers"]["Request-Id"];
+                    "RateLimit-Policy": components["headers"]["RateLimit-Policy"];
+                    RateLimit: components["headers"]["RateLimit"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IntentDraft"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    listTenants: {
+        parameters: {
+            query?: {
+                "page[size]"?: components["parameters"]["PageSize"];
+                /** @description Opaque; from the `Link` of the previous page. */
+                cursor?: components["parameters"]["Cursor"];
+                /** @description SCIM filter subset: eq, ne, co, sw, pr, and, or, parentheses; an attribute the endpoint does not name is 400 (TN-112). */
+                filter?: components["parameters"]["Filter"];
+            };
+            header?: {
+                /** @description W3C Trace Context; its trace id becomes `Request-Id`. */
+                traceparent?: components["parameters"]["Traceparent"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The resource. */
+            200: {
+                headers: {
+                    "Request-Id": components["headers"]["Request-Id"];
+                    "RateLimit-Policy": components["headers"]["RateLimit-Policy"];
+                    RateLimit: components["headers"]["RateLimit"];
+                    Link: components["headers"]["Link"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TenantPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    createTenant: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description W3C Trace Context; its trace id becomes `Request-Id`. */
+                traceparent?: components["parameters"]["Traceparent"];
+                /** @description Required on every write: the AIS nonce, unpadded base64url. The same key and request replay the first answer for 24 hours; another request is 422; a running one 409 (TN-126). */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /** @description The caller's actor intent statement, a `COSE_Sign1` signed with its Instance key, unpadded base64url; or the body member `ais` (TN-110, PI-7). */
+                "X-Access-AIS"?: components["parameters"]["Ais"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TenantCreate"];
+            };
+        };
+        responses: {
+            /** @description Committed: the Exercise record (TN-110). */
+            201: {
+                headers: {
+                    "Request-Id": components["headers"]["Request-Id"];
+                    "RateLimit-Policy": components["headers"]["RateLimit-Policy"];
+                    RateLimit: components["headers"]["RateLimit"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlatformWriteResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Unprocessable"];
+            429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    getTenant: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description W3C Trace Context; its trace id becomes `Request-Id`. */
+                traceparent?: components["parameters"]["Traceparent"];
+            };
+            path: {
+                /** @description The resource's natural key. */
+                tenant_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The resource. */
+            200: {
+                headers: {
+                    "Request-Id": components["headers"]["Request-Id"];
+                    "RateLimit-Policy": components["headers"]["RateLimit-Policy"];
+                    RateLimit: components["headers"]["RateLimit"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Tenant"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    listTenantRealms: {
+        parameters: {
+            query?: {
+                "page[size]"?: components["parameters"]["PageSize"];
+                /** @description Opaque; from the `Link` of the previous page. */
+                cursor?: components["parameters"]["Cursor"];
+                /** @description SCIM filter subset: eq, ne, co, sw, pr, and, or, parentheses; an attribute the endpoint does not name is 400 (TN-112). */
+                filter?: components["parameters"]["Filter"];
+            };
+            header?: {
+                /** @description W3C Trace Context; its trace id becomes `Request-Id`. */
+                traceparent?: components["parameters"]["Traceparent"];
+            };
+            path: {
+                /** @description The resource's natural key. */
+                tenant_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The resource. */
+            200: {
+                headers: {
+                    "Request-Id": components["headers"]["Request-Id"];
+                    "RateLimit-Policy": components["headers"]["RateLimit-Policy"];
+                    RateLimit: components["headers"]["RateLimit"];
+                    Link: components["headers"]["Link"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RealmPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    createRealm: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description W3C Trace Context; its trace id becomes `Request-Id`. */
+                traceparent?: components["parameters"]["Traceparent"];
+                /** @description Required on every write: the AIS nonce, unpadded base64url. The same key and request replay the first answer for 24 hours; another request is 422; a running one 409 (TN-126). */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /** @description The caller's actor intent statement, a `COSE_Sign1` signed with its Instance key, unpadded base64url; or the body member `ais` (TN-110, PI-7). */
+                "X-Access-AIS"?: components["parameters"]["Ais"];
+            };
+            path: {
+                /** @description The resource's natural key. */
+                tenant_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RealmCreate"];
+            };
+        };
+        responses: {
+            /** @description Committed: the Exercise record (TN-110). */
+            201: {
+                headers: {
+                    "Request-Id": components["headers"]["Request-Id"];
+                    "RateLimit-Policy": components["headers"]["RateLimit-Policy"];
+                    RateLimit: components["headers"]["RateLimit"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlatformWriteResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Unprocessable"];
+            429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    listSandboxDomains: {
+        parameters: {
+            query?: {
+                "page[size]"?: components["parameters"]["PageSize"];
+                /** @description Opaque; from the `Link` of the previous page. */
+                cursor?: components["parameters"]["Cursor"];
+                /** @description SCIM filter subset: eq, ne, co, sw, pr, and, or, parentheses; an attribute the endpoint does not name is 400 (TN-112). */
+                filter?: components["parameters"]["Filter"];
+            };
+            header?: {
+                /** @description W3C Trace Context; its trace id becomes `Request-Id`. */
+                traceparent?: components["parameters"]["Traceparent"];
+            };
+            path: {
+                /** @description The resource's natural key. */
+                tenant_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The resource. */
+            200: {
+                headers: {
+                    "Request-Id": components["headers"]["Request-Id"];
+                    "RateLimit-Policy": components["headers"]["RateLimit-Policy"];
+                    RateLimit: components["headers"]["RateLimit"];
+                    Link: components["headers"]["Link"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RealmPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    createSandboxDomain: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description W3C Trace Context; its trace id becomes `Request-Id`. */
+                traceparent?: components["parameters"]["Traceparent"];
+                /** @description Required on every write: the AIS nonce, unpadded base64url. The same key and request replay the first answer for 24 hours; another request is 422; a running one 409 (TN-126). */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /** @description The caller's actor intent statement, a `COSE_Sign1` signed with its Instance key, unpadded base64url; or the body member `ais` (TN-110, PI-7). */
+                "X-Access-AIS"?: components["parameters"]["Ais"];
+            };
+            path: {
+                /** @description The resource's natural key. */
+                tenant_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RealmCreate"];
+            };
+        };
+        responses: {
+            /** @description Committed: the Exercise record (TN-110). */
+            201: {
+                headers: {
+                    "Request-Id": components["headers"]["Request-Id"];
+                    "RateLimit-Policy": components["headers"]["RateLimit-Policy"];
+                    RateLimit: components["headers"]["RateLimit"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlatformWriteResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Unprocessable"];
+            429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    getRealmMetadata: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description W3C Trace Context; its trace id becomes `Request-Id`. */
+                traceparent?: components["parameters"]["Traceparent"];
+            };
+            path: {
+                /** @description The resource's natural key. */
+                realm_slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The resource. */
+            200: {
+                headers: {
+                    "Request-Id": components["headers"]["Request-Id"];
+                    "RateLimit-Policy": components["headers"]["RateLimit-Policy"];
+                    RateLimit: components["headers"]["RateLimit"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RealmMetadata"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    getOperatorHealth: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description W3C Trace Context; its trace id becomes `Request-Id`. */
+                traceparent?: components["parameters"]["Traceparent"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The resource. */
+            200: {
+                headers: {
+                    "Request-Id": components["headers"]["Request-Id"];
+                    "RateLimit-Policy": components["headers"]["RateLimit-Policy"];
+                    RateLimit: components["headers"]["RateLimit"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperatorHealth"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
             429: components["responses"]["TooManyRequests"];
             503: components["responses"]["Unavailable"];
         };
