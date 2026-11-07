@@ -33,13 +33,13 @@ browser                                  management listener (access-server)
 
 ## What the cookie can and cannot do
 
-| With the cookie alone                         | Needs this browser's device key                  |
-| --------------------------------------------- | ------------------------------------------------ |
-| Navigate the console                          | Every change (an AIS the management API turns    |
-|                                               | into an Exercise)                                |
-| Read your own profile                         | Every authority read (a `check` AIS bound to the |
-|                                               | request)                                         |
-| List your sign-ins and end one of them        | The Admin, Developer and Audit sections          |
+| With the cookie alone                  | Needs this browser's device key                  |
+| -------------------------------------- | ------------------------------------------------ |
+| Navigate the console                   | Every change (an AIS the management API turns    |
+|                                        | into an Exercise)                                |
+| Read your own profile                  | Every authority read (a `check` AIS bound to the |
+|                                        | request)                                         |
+| List your sign-ins and end one of them | The Admin, Developer and Audit sections          |
 
 A stolen cookie in another browser has no key: the admin proxy refuses it, and what the ADP
 proxy forwards carries no credential of the BFF, so it reads as an anonymous reader and sees
