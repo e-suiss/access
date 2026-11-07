@@ -167,13 +167,13 @@ fn inbound_risk_signals_are_never_quota_refused() {
     assert!(narrowing(&risk));
 }
 
-// CI-2, TN-46: an SL2 `risk.*` Claim narrows like a risk signal; a risk Claim with assurance
+// CI-2, TN-46: an SL2 `risk_*` Claim narrows like a risk signal; a risk Claim with assurance
 // levels or a bound intent or resource is refused, whatever its value
 #[test]
 fn risk_claims_never_qualify() {
     let p = pinned(3);
     let f = frame(&p);
-    let level = statement(&f, "risk.level", EqValue::Text(String::from("low")), 1, 2);
+    let level = statement(&f, "risk_level", EqValue::Text(String::from("low")), 1, 2);
     assert!(narrowing(&level));
     assert_eq!(check_risk(&level), Ok(()));
     let mut assured = level.clone();

@@ -1,7 +1,7 @@
-//! The Claims SL2 asks the realm issuer for (TN-46, OP-150 m.12): the subject's `risk.level`,
+//! The Claims SL2 asks the realm issuer for (TN-46, OP-150 m.12): the subject's `risk_level`,
 //! one line per subject so each level supersedes the last, and one `risk_signal` per fired
 //! signal. Both classes only narrow (CI-2): they carry no assurance level and bind no intent, and
-//! Claim Ingest refuses a `risk.*` Claim that does.
+//! Claim Ingest refuses a `risk_*` Claim that does.
 
 use std::collections::BTreeMap;
 
@@ -14,12 +14,12 @@ use crate::domain::score::Level;
 use crate::domain::signal::RiskSignal;
 
 /// The class of the SL2 level.
-pub const LEVEL_CLASS: &str = "risk.level";
+pub const LEVEL_CLASS: &str = "risk_level";
 
 /// The namespace of SL2 classes.
-pub const NAMESPACE: &str = "risk.";
+pub const NAMESPACE: &str = "risk_";
 
-/// The `risk.level` order of `subject` at `at`.
+/// The `risk_level` order of `subject` at `at`.
 #[must_use]
 pub fn level(subject: [u8; 16], level: Level, at: u64) -> ClaimOrder {
     ClaimOrder {
@@ -70,6 +70,9 @@ mod tests {
             level([1; 16], Level::Low, 1).line,
             level([1; 16], Level::High, 2).line
         );
+        // CMP-22b: the realm's identity signer signs both classes
+        assert!(access_identity_signer::issuer::issues(LEVEL_CLASS));
+        assert!(access_identity_signer::issuer::issues(RISK_SIGNAL));
         assert_ne!(
             level([1; 16], Level::Low, 1).line,
             level([2; 16], Level::Low, 1).line

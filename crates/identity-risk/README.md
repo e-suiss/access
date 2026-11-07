@@ -37,7 +37,7 @@ emotion inference are not inputs.
 
 ## Outputs
 
-- A `risk.level` Claim (one line per account, each level superseding the last) and one
+- A `risk_level` Claim (one line per account, each level superseding the last) and one
   `risk_signal` Claim per fired signal. Neither carries assurance levels or binds an intent;
   Claim Ingest refuses a risk Claim that does.
 - A step-up request to the sign-in flow: a second step from what the account has enrolled. A

@@ -255,6 +255,7 @@ version = "0.3.1"
 dependencies = [
  "access-crypto",
  "access-identity-account",
+ "access-identity-signer",
  "access-store",
  "access-telemetry",
  "esuiss-access-kernel",

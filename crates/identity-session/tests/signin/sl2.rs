@@ -148,8 +148,8 @@ async fn unavailable_risk_neither_blocks_nor_allows() {
         Step::Continue { needs, .. } => assert_eq!(needs, [Requirement::EnrollSecondFactor]),
         other => panic!("{other:?}"),
     }
-    let orders = claim_orders(&e, |o| o.iter().any(|x| x.class == "risk.level")).await;
-    let level = orders.iter().find(|o| o.class == "risk.level").unwrap();
+    let orders = claim_orders(&e, |o| o.iter().any(|x| x.class == "risk_level")).await;
+    let level = orders.iter().find(|o| o.class == "risk_level").unwrap();
     assert!(matches!(
         &level.content,
         access_identity_account::domain::claims::Content::Scalar(

@@ -21,7 +21,7 @@ pub const MEDIUM_AT: u32 = 30;
 /// The lowest `high` score.
 pub const HIGH_AT: u32 = 60;
 
-/// An SL2 level, the value of the `risk.level` Claim.
+/// An SL2 level, the value of the `risk_level` Claim.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Level {
     /// A source could not answer and nothing fired: the engine says nothing (MD-8).

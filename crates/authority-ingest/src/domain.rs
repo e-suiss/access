@@ -113,10 +113,10 @@ pub fn check_size(claim: &[u8], body: Option<&[u8]>) -> Result<(), Refusal> {
 /// The class of the identity plane's risk signals, inbound SSF events among them (TN-42).
 pub const RISK_SIGNAL: &str = "risk_signal";
 
-/// The namespace of the identity plane's SL2 classes, `risk.level` among them (TN-46).
-pub const RISK_NAMESPACE: &str = "risk.";
+/// The namespace of the identity plane's SL2 classes, `risk_level` among them (TN-46).
+pub const RISK_NAMESPACE: &str = "risk_";
 
-/// Whether `class` is a risk class: `risk_signal` or one of `risk.*`.
+/// Whether `class` is a risk class: `risk_signal` or one of `risk_*`.
 #[must_use]
 pub fn risk_class(class: &str) -> bool {
     class == RISK_SIGNAL || class.starts_with(RISK_NAMESPACE)

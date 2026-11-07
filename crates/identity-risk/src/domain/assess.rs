@@ -81,7 +81,7 @@ pub struct Inputs {
 )]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Assessment {
-    /// The level, the `risk.level` Claim's value.
+    /// The level, the `risk_level` Claim's value.
     pub level: Level,
     /// The signals that fired.
     pub signals: BTreeSet<RiskSignal>,

@@ -1,5 +1,5 @@
 //! SL2 at sign-in (§12.2.4, TN-46, IDP-39): reads the sign-in's sources, assesses, and queues the
-//! effects in the business transaction: the `risk.level` and `risk_signal` Claims, a review item,
+//! effects in the business transaction: the `risk_level` and `risk_signal` Claims, a review item,
 //! CAEP `risk-level-change` (OP-151 m.7 (h) port) and log lines. The step-up request goes back to
 //! the sign-in flow, which adds it to its SL1 requirements; nothing here allows or locks.
 

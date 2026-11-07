@@ -5,7 +5,7 @@
 //!   the deterministic requirement path (`RequirementTerm`, step-up, `REQUIRE_ACTION`). This crate is
 //!   SL2: signals from the network, the device marker, the account's history, the login counters,
 //!   the breach corpus and canary accounts, scored into `low`, `medium` or `high`.
-//! - Risk only narrows (CI-2): its outputs are a `risk.level` Claim, a step-up request to the
+//! - Risk only narrows (CI-2): its outputs are a `risk_level` Claim, a step-up request to the
 //!   sign-in flow, a CAEP `risk-level-change` and a human review item. Never an allow, never a
 //!   lock (GDPR art. 22).
 //! - A missing source makes the level `unavailable`; the flow then runs on SL0 and SL1 alone and

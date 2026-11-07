@@ -23,6 +23,7 @@ tracing = { workspace = true, features = ["std"] }
 
 [dev-dependencies]
 access-crypto = { workspace = true, features = ["testing"] }
+access-identity-signer = { path = "../identity-signer" }
 access-store = { workspace = true, features = ["testing"] }
 tokio = { workspace = true, features = ["macros", "net", "io-util", "rt-multi-thread", "time", "fs"] }
 
