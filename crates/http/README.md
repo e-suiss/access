@@ -22,6 +22,22 @@ management token. Lists page with an opaque `cursor` and a `Link` header, take `
 (1–100, default 50) and a SCIM `filter` over the list's own attributes. A resource another realm
 owns is `404`, like a missing one.
 
+A read token comes from the realm's own token endpoint. An Instance of the realm's governing
+domain asks for one by RFC 8693 token exchange:
+`grant_type=urn:ietf:params:oauth:grant-type:token-exchange`,
+`subject_token_type=urn:suiss:access:token-type:ais`, `subject_token` its AIS in `check` mode
+over `SHA-256("access/management-read/v1" ‖ 0x00 ‖ audience ‖ 0x00 ‖ scope)`,
+`audience=access-admin:realm:<slug>` (scope `realm.read`) or `access-admin:platform` (scope
+`platform.read`, only from the platform realm), and a DPoP proof by the same key. The token is
+bound to that key, lives 15 minutes and ends when the Instance does. The console's BFF gets its
+tokens for the session's device Instance, bound to its own key for the session; they end with
+the console session or when the account's session epoch moves.
+
+The console signs in as each realm's first-party `private_key_jwt` client whose redirect URI is
+`<management origin>/console/api/sign-in/callback`; `access-server bootstrap` registers it in
+every realm it makes when the management origin is a registrable host name. Drafting an intent
+(`POST …/intents`) through the console is a read and needs a read proof like a `GET`.
+
 ### Writing
 
 There is one write path: every write is the caller's AIS, signed with a live Instance key of the
