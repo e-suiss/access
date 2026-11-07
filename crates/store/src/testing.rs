@@ -98,40 +98,63 @@ fn unique_name() -> String {
     )
 }
 
-/// Clones older than 20 minutes belong to finished test processes (the PR suite runs at most
-/// 10 minutes, SA-59), and so do clones older than 5 minutes that nobody is connected to: a live
-/// test holds its pools open. Clones are never dropped by their own test, so the cluster would
-/// otherwise grow with every run, and parallel suites fill the disk well within 20 minutes.
-async fn sweep_stale(c: &mut PgConnection) -> Result<(), TestDbError> {
-    const STALE_NANOS: u128 = 1_200_000_000_000;
+/// A clone is swept when nobody is connected to it and it is older than five minutes: a live
+/// test holds its pools open, so a connected clone is never dropped, however old (a long test
+/// or a debugger session). Clones are never dropped by their own test, so the cluster would
+/// otherwise grow with every run.
+fn sweepable_clone(name: &str, now_nanos: u128, connected: bool) -> bool {
     const IDLE_NANOS: u128 = 300_000_000_000;
+    let created = name.split('_').nth(3).and_then(|n| n.parse::<u128>().ok());
+    !connected
+        && generated_name(name, "access_t_")
+        && created.is_some_and(|t| now_nanos.saturating_sub(t) > IDLE_NANOS)
+}
+
+/// A template is swept when it is not this migration set's, nobody is connected to it, and it
+/// was created more than a day ago: another worktree's suite builds its own template, and an
+/// abandoned `_building` copy or a template of an old migration set holds a full schema.
+fn sweepable_template(name: &str, current: &str, connected: bool, age_secs: f64) -> bool {
+    !connected && name != current && generated_name(name, "access_tpl_") && age_secs > 86_400.0
+}
+
+fn generated_name(name: &str, prefix: &str) -> bool {
+    name.starts_with(prefix) && name.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_')
+}
+
+/// Drops `name` unless someone connected to it meanwhile (`55006`, object in use).
+async fn drop_idle(
+    c: &mut PgConnection,
+    name: &str,
+    what: &'static str,
+) -> Result<(), TestDbError> {
+    match exec(c, format!("DROP DATABASE IF EXISTS {name}"), what).await {
+        Err(TestDbError::Db(_, sqlx::Error::Database(e)))
+            if e.code().as_deref() == Some("55006") =>
+        {
+            Ok(())
+        }
+        other => other,
+    }
+}
+
+async fn sweep_stale(c: &mut PgConnection, template: &str) -> Result<(), TestDbError> {
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_or(0, |d| d.as_nanos());
-    let names: Vec<String> =
-        sqlx::query_scalar("SELECT datname FROM pg_database WHERE datname LIKE 'access\\_t\\_%'")
-            .fetch_all(&mut *c)
-            .await
-            .at("list clones")?;
-    let connected: Vec<String> = sqlx::query_scalar(
-        "SELECT DISTINCT datname FROM pg_stat_activity WHERE datname LIKE 'access\\_t\\_%'",
+    let rows: Vec<(String, bool, Option<f64>)> = sqlx::query_as(
+        "SELECT d.datname, \
+                EXISTS (SELECT FROM pg_stat_activity a WHERE a.datname = d.datname), \
+                EXTRACT(EPOCH FROM now() - (pg_stat_file('base/' || d.oid || '/PG_VERSION', true)).modification)::float8 \
+         FROM pg_database d WHERE d.datname LIKE 'access\\_t\\_%' OR d.datname LIKE 'access\\_tpl\\_%'",
     )
     .fetch_all(&mut *c)
     .await
-    .at("list connected clones")?;
-    for name in names {
-        let created = name.split('_').nth(3).and_then(|n| n.parse::<u128>().ok());
-        let age = created.map(|t| now.saturating_sub(t));
-        let idle = !connected.contains(&name);
-        let stale = age.is_some_and(|a| a > STALE_NANOS || (idle && a > IDLE_NANOS));
-        let generated = name.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_');
-        if stale && generated {
-            exec(
-                c,
-                format!("DROP DATABASE IF EXISTS {name} WITH (FORCE)"),
-                "drop stale clone",
-            )
-            .await?;
+    .at("list test databases")?;
+    for (name, connected, age_secs) in rows {
+        if sweepable_clone(&name, now, connected) {
+            drop_idle(c, &name, "drop stale clone").await?;
+        } else if sweepable_template(&name, template, connected, age_secs.unwrap_or(0.0)) {
+            drop_idle(c, &name, "drop stale template").await?;
         }
     }
     Ok(())
@@ -203,7 +226,7 @@ async fn ensure_template(admin: &PgConnectOptions, template: &str) -> Result<(),
             .fetch_one(&mut c)
             .await
             .at("template lookup")?;
-    let swept = sweep_stale(&mut c).await;
+    let swept = sweep_stale(&mut c, template).await;
     let roles = match swept {
         Ok(()) => ensure_roles(&mut c).await,
         Err(e) => Err(e),
@@ -337,5 +360,41 @@ impl TestDb {
         .await
         .at("corrupt")?;
         tx.commit().await.at("commit")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const MINUTE: u128 = 60_000_000_000;
+
+    // OP-66, SA-59: a clone someone is connected to is never swept, however old
+    #[test]
+    fn only_idle_clones_are_swept() {
+        let now = 1_000 * MINUTE;
+        let name = |created: u128| format!("access_t_4242_{created}_0");
+        assert!(!sweepable_clone(&name(now - 600 * MINUTE), now, true));
+        assert!(sweepable_clone(&name(now - 6 * MINUTE), now, false));
+        assert!(!sweepable_clone(&name(now - 4 * MINUTE), now, false));
+        assert!(!sweepable_clone("access_t_x; DROP", now, false));
+    }
+
+    // OP-66: idle templates of other migration sets are swept after a day, never the current one
+    #[test]
+    fn stale_templates_are_swept() {
+        let day = 86_400.0;
+        let current = "access_tpl_00000000000000aa";
+        let other = "access_tpl_00000000000000bb";
+        assert!(sweepable_template(other, current, false, day + 1.0));
+        assert!(sweepable_template(
+            &format!("{other}_building"),
+            current,
+            false,
+            day + 1.0
+        ));
+        assert!(!sweepable_template(other, current, false, day - 1.0));
+        assert!(!sweepable_template(other, current, true, 10.0 * day));
+        assert!(!sweepable_template(current, current, false, 10.0 * day));
     }
 }
