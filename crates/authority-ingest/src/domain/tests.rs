@@ -152,6 +152,21 @@ fn narrowing_claims_are_recognised() {
     assert!(!narrowing(&kyc));
 }
 
+// TN-42, CI-2: an inbound SSF event's risk signal narrows and is never refused for quota
+#[test]
+fn inbound_risk_signals_are_never_quota_refused() {
+    let p = pinned(3);
+    let f = frame(&p);
+    let risk = statement(
+        &f,
+        RISK_SIGNAL,
+        EqValue::Text(String::from("ssf.credential-change")),
+        1,
+        2,
+    );
+    assert!(narrowing(&risk));
+}
+
 // §10.1.2 WebAuthn rows: only a webauthn authentication or a passkey binding with its body
 #[test]
 fn a_webauthn_carrier_needs_its_body() {

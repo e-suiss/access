@@ -12,6 +12,9 @@ pub const VERIFY_PATH: &str = "/ssf/verify";
 /// Path of the status endpoint under the issuer.
 pub const STATUS_PATH: &str = "/ssf/status";
 
+/// Path of the semantic acknowledgement endpoint under the issuer (E30).
+pub const ACK_PATH: &str = "/ssf/ack";
+
 /// The SSF verification event type.
 pub const VERIFICATION_EVENT: &str =
     "https://schemas.openid.net/secevent/ssf/event-type/verification";
@@ -58,6 +61,33 @@ pub fn parse_verify(body: &[u8]) -> Result<VerifyRequest, Invalid> {
             .ok_or(Invalid("stream_id"))?
             .to_owned(),
         state: text(&o, "state")?.map(String::from),
+    })
+}
+
+/// A receiver's semantic acknowledgement (E30): it applied or ignored the SET `jti`. Apart from
+/// the delivery ack (push `2xx`, poll `ack`), and never a statement about authority state.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SemanticAck {
+    /// The SET.
+    pub jti: String,
+    /// `applied` or `ignored`.
+    pub state: &'static str,
+}
+
+/// Reads `{"jti", "state": "applied" | "ignored"}`.
+///
+/// # Errors
+/// [`Invalid`].
+pub fn parse_ack(body: &[u8]) -> Result<SemanticAck, Invalid> {
+    let o = object(body)?;
+    let state = match text(&o, "state")? {
+        Some("applied") => "applied",
+        Some("ignored") => "ignored",
+        _ => return Err(Invalid("state")),
+    };
+    Ok(SemanticAck {
+        jti: text(&o, "jti")?.ok_or(Invalid("jti"))?.to_owned(),
+        state,
     })
 }
 
@@ -115,6 +145,7 @@ pub fn verification_claims(
         "aud": aud,
         "iat": iat_s,
         "jti": jti,
+        "txn": jti,
         "sub_id": { "format": "opaque", "id": stream_id },
         "events": { VERIFICATION_EVENT: event },
     })
@@ -147,6 +178,18 @@ mod tests {
         assert_eq!(c["sub_id"]["id"], "s-1");
         let c = verification_claims("https://i", "rcv", "j", "s-1", None, 7);
         assert_eq!(c["events"][VERIFICATION_EVENT], json!({}));
+    }
+
+    // E30: a semantic ack is applied or ignored, apart from delivery
+    #[test]
+    fn semantic_acks_are_closed() {
+        let a = parse_ack(br#"{"jti":"j","state":"applied"}"#).unwrap();
+        assert_eq!((a.jti.as_str(), a.state), ("j", "applied"));
+        assert_eq!(
+            parse_ack(br#"{"jti":"j","state":"current"}"#),
+            Err(Invalid("state"))
+        );
+        assert_eq!(parse_ack(br#"{"state":"ignored"}"#), Err(Invalid("jti")));
     }
 
     // SSF 1.0 §8.1.2: a status update is enabled, paused or disabled

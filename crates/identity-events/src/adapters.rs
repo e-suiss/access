@@ -9,7 +9,7 @@ use access_store::identity::{RealmId, TenantId};
 use suiss_crypto::envelope::{Dek, Kek, Sealed, open_body, seal_body};
 use zeroize::Zeroizing;
 
-use crate::ports::{PostError, Reply, Sealer, Transport, Unavailable};
+use crate::ports::{PollClient, PostError, Reply, Sealer, Transport, Unavailable};
 
 /// Pushes through the identity plane's outbound client: `https` on 443 to public addresses
 /// only, no redirects, one deadline (§14.3).
@@ -29,6 +29,24 @@ impl Transport for OutboundTransport {
                 status: a.status,
                 retry_after_ms: a.retry_after_s.and_then(|s| s.checked_mul(1000)),
             }),
+            Err(OutboundError::Url | OutboundError::Blocked) => Err(PostError::Refused),
+            Err(OutboundError::Unreachable | OutboundError::Malformed) => {
+                Err(PostError::Unreachable)
+            }
+        }
+    }
+}
+
+impl PollClient for OutboundTransport {
+    async fn poll(
+        &self,
+        url: &str,
+        bearer: &str,
+        body: &[u8],
+    ) -> Result<(u16, Vec<u8>), PostError> {
+        let auth = [("authorization", format!("Bearer {bearer}"))];
+        match self.0.post(url, "application/json", &auth, body).await {
+            Ok(a) => Ok((a.status, a.body)),
             Err(OutboundError::Url | OutboundError::Blocked) => Err(PostError::Refused),
             Err(OutboundError::Unreachable | OutboundError::Malformed) => {
                 Err(PostError::Unreachable)

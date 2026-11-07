@@ -3,6 +3,7 @@
 
 pub mod catalog;
 pub mod control;
+pub mod inbound;
 pub mod mapping;
 pub mod set;
 pub mod stream;

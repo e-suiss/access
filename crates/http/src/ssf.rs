@@ -1,16 +1,19 @@
-//! The realm's SSF transmitter over HTTP (OP-149 m.7, SSF 1.0, RFC 8936): the metadata at
-//! `/.well-known/ssf-configuration`, the stream a bearer credential names at `/ssf/streams`
-//! (`GET`, `PATCH`, `DELETE` disables it), its status at `/ssf/status`, its verification at
-//! `/ssf/verify`, and poll at `/ssf/poll`; at the host root for a
-//! subdomain issuer and under `/realms/{slug}` for a path issuer. Stream and poll answers are
-//! `no-store`.
+//! The realm's SSF transmitter and receiver over HTTP (OP-149 m.7, OP-151 m.3 (l), SSF 1.0,
+//! RFC 8935, RFC 8936): the metadata at `/.well-known/ssf-configuration`, the stream a bearer
+//! credential names at `/ssf/streams` (`GET`, `PATCH`, `DELETE` disables it), its status at
+//! `/ssf/status`, its verification at `/ssf/verify`, poll at `/ssf/poll`, a receiver's semantic
+//! acknowledgement at `/ssf/ack` (E30), and inbound pushes from a declared transmitter at
+//! `/ssf/inbound/{stream}`; at the host root for a subdomain issuer and under `/realms/{slug}`
+//! for a path issuer. Stream and poll answers are `no-store`.
 
 use std::sync::Arc;
 
+use access_identity_events::app::receiver::{InboundReply, Receiver};
 use access_identity_events::app::ssf::{SsfReply, StreamCall, Transmitter};
 use access_identity_events::ports::{Clock, Random, Sealer, TokenSigner};
 use access_identity_oauth::domain::request::Params;
 use access_identity_oauth::ports::Directory;
+use access_identity_oauth::ports::oauth::ClientKeys;
 use axum::Router;
 use axum::body::Bytes;
 use axum::extract::{Path, State};
@@ -92,6 +95,8 @@ where
             "/realms/{slug}/ssf/verify",
             post(verify_call::<D, K, R, S, C>),
         )
+        .route("/ssf/ack", post(ack_call::<D, K, R, S, C>))
+        .route("/realms/{slug}/ssf/ack", post(ack_call::<D, K, R, S, C>))
         .route("/ssf/poll", post(poll::<D, K, R, S, C>))
         .route("/realms/{slug}/ssf/poll", post(poll_under::<D, K, R, S, C>))
         .with_state(shared)
@@ -258,6 +263,140 @@ where
     C: Clock,
 {
     control(&s, slug, Control::Verify, (&method, &uri, &headers, &body)).await
+}
+
+async fn ack_call<D, K, R, S, C>(
+    State(s): Shared<Transmitter<D, K, R, S, C>>,
+    slug: Option<Path<String>>,
+    uri: Uri,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Response
+where
+    D: Directory,
+    K: Sealer,
+    R: Random,
+    S: TokenSigner,
+    C: Clock,
+{
+    if too_large(&body) {
+        return reply(SsfReply::Problem(413, "too-large"), true);
+    }
+    let slug = slug.as_ref().map(|p| p.0.as_str());
+    reply(
+        s.ack(authority(&uri, &headers), slug, bearer(&headers), &body)
+            .await,
+        true,
+    )
+}
+
+/// The receiver routes (OP-151 m.3 (l), RFC 8935): `POST /ssf/inbound/{stream}` with
+/// `application/secevent+jwt`, answered `202` or `400` with the RFC 8935 error body.
+pub fn inbound_router<D, K, S, C>(receiver: Receiver<D, K, S, C>) -> Router
+where
+    D: Directory + 'static,
+    K: ClientKeys + 'static,
+    S: Sealer + 'static,
+    C: Clock + Send + Sync + 'static,
+{
+    let shared = Arc::new(receiver);
+    Router::new()
+        .route("/ssf/inbound/{stream}", post(inbound::<D, K, S, C>))
+        .route(
+            "/realms/{slug}/ssf/inbound/{stream}",
+            post(inbound_under::<D, K, S, C>),
+        )
+        .with_state(shared)
+}
+
+async fn inbound<D, K, S, C>(
+    State(r): Shared<Receiver<D, K, S, C>>,
+    Path(stream): Path<String>,
+    uri: Uri,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Response
+where
+    D: Directory,
+    K: ClientKeys,
+    S: Sealer,
+    C: Clock,
+{
+    inbound_reply(
+        r.push(
+            authority(&uri, &headers),
+            None,
+            &stream,
+            content_type(&headers),
+            &body,
+        )
+        .await,
+    )
+}
+
+async fn inbound_under<D, K, S, C>(
+    State(r): Shared<Receiver<D, K, S, C>>,
+    Path((slug, stream)): Path<(String, String)>,
+    uri: Uri,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Response
+where
+    D: Directory,
+    K: ClientKeys,
+    S: Sealer,
+    C: Clock,
+{
+    inbound_reply(
+        r.push(
+            authority(&uri, &headers),
+            Some(&slug),
+            &stream,
+            content_type(&headers),
+            &body,
+        )
+        .await,
+    )
+}
+
+fn content_type(headers: &HeaderMap) -> Option<&str> {
+    headers
+        .get(header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+}
+
+fn inbound_reply(r: InboundReply) -> Response {
+    match r {
+        InboundReply::Accepted => StatusCode::ACCEPTED.into_response(),
+        // RFC 8935 §2.3
+        InboundReply::Refused(e) => (
+            StatusCode::BAD_REQUEST,
+            [(
+                header::CONTENT_TYPE,
+                HeaderValue::from_static("application/json"),
+            )],
+            serde_json::to_vec(&e.body()).unwrap_or_default(),
+        )
+            .into_response(),
+        InboundReply::NotFound => Problem::new(
+            StatusCode::NOT_FOUND,
+            "not-found",
+            "No such receiver stream",
+        )
+        .into_response(),
+        InboundReply::TooLarge => Problem::new(
+            StatusCode::PAYLOAD_TOO_LARGE,
+            "too-large",
+            "The SET is too large",
+        )
+        .into_response(),
+        InboundReply::Unavailable => Problem::new(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "temporarily-unavailable",
+            "The receiver cannot take SETs now",
+        )
+        .into_response(),
+    }
 }
 
 async fn poll<D, K, R, S, C>(

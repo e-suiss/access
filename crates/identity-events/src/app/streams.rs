@@ -520,6 +520,47 @@ impl<K: Sealer, R: Random> Streams<K, R> {
         }
     }
 
+    /// Records the semantic ack of a receiver for a SET its stream `s` was delivered (E30);
+    /// false when the stream never took that SET or acked it before.
+    ///
+    /// # Errors
+    /// [`StreamError`].
+    pub async fn ack(
+        &self,
+        tenant: TenantId,
+        realm: RealmId,
+        s: &SubscriptionRow,
+        ack: &crate::domain::control::SemanticAck,
+    ) -> Result<bool, StreamError> {
+        let mut t = TenantTx::begin(&self.db.app, tenant, realm)
+            .await
+            .map_err(down)?;
+        let done = t
+            .record_ack(s.id, &ack.jti, "semantic", ack.state)
+            .await
+            .map_err(down)?;
+        t.commit().await.map_err(down)?;
+        Ok(done)
+    }
+
+    /// The realm's delivery, semantic and authority-state ack counts (E30), for the staleness
+    /// exposure view.
+    ///
+    /// # Errors
+    /// [`StreamError`].
+    pub async fn ack_counts(
+        &self,
+        tenant: TenantId,
+        realm: RealmId,
+    ) -> Result<access_store::ssf::AckCounts, StreamError> {
+        let mut t = TenantTx::begin(&self.db.app, tenant, realm)
+            .await
+            .map_err(down)?;
+        let counts = t.ack_counts().await.map_err(down)?;
+        t.commit().await.map_err(down)?;
+        Ok(counts)
+    }
+
     /// RFC 8936 poll by the stream's bearer credential: settles what the receiver acknowledged
     /// or reported, then returns up to `maxEvents` pending SETs, each with `iat` now (OP-149
     /// m.34 (d)) and signed now with the realm's key.

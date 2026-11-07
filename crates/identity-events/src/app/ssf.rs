@@ -9,7 +9,7 @@ use access_store::events::SubscriptionRow;
 use serde_json::Value;
 
 use crate::app::streams::{StreamError, Streams};
-use crate::domain::control::{parse_status, parse_verify};
+use crate::domain::control::{parse_ack, parse_status, parse_verify};
 use crate::domain::stream::ssf_configuration;
 use crate::ports::{Clock, Random, Sealer, TokenSigner};
 
@@ -208,6 +208,31 @@ where
             .await
         {
             Ok(()) => SsfReply::NoContent,
+            Err(e) => e.into(),
+        }
+    }
+
+    /// `POST /ssf/ack` (E30) by the stream's bearer credential: the receiver applied or ignored
+    /// a SET it was delivered. `204` when recorded, `404` for a SET the stream never took or one
+    /// already acknowledged.
+    pub async fn ack(
+        &self,
+        authority: &str,
+        slug: Option<&str>,
+        bearer: Option<&str>,
+        body: &[u8],
+    ) -> SsfReply {
+        let (r, s) = match self.own_stream(authority, slug, bearer).await {
+            Ok(found) => found,
+            Err(e) => return e,
+        };
+        let ack = match parse_ack(body) {
+            Ok(a) => a,
+            Err(e) => return StreamError::from(e).into(),
+        };
+        match self.streams.ack(r.tenant, r.realm, &s, &ack).await {
+            Ok(true) => SsfReply::NoContent,
+            Ok(false) => SsfReply::Problem(404, "no-such-event"),
             Err(e) => e.into(),
         }
     }

@@ -212,6 +212,7 @@ async fn the_server_delivers_events_to_a_webhook() {
         router: db.router.clone(),
         ids: Arc::new(crate::ids::CellIds::new(store.clone())),
         declared: DeclaredTargets::default(),
+        outbound: None,
     };
     let tenant_id = pools.ids.external(tenant.as_bytes()).unwrap();
     let request = serde_json::json!({

@@ -4,6 +4,7 @@
 
 pub mod courier;
 pub mod fanout;
+pub mod receiver;
 pub mod ssf;
 pub mod streams;
 

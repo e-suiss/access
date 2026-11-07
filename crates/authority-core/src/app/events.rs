@@ -53,6 +53,24 @@ fn compromised(e: &Event) -> Vec<Id> {
     }
 }
 
+/// `acceptance-changed` (§9.16): an `acceptance_amend` or `acceptance_revoke` changed what the
+/// domain takes from an issuer.
+fn acceptance_changed(req: &Request, exercise: Digest, now: u64) -> Option<Event> {
+    match &req.payload {
+        Some(
+            Payload::AcceptanceAmend { acceptance, .. } | Payload::AcceptanceRevoke { acceptance },
+        ) => Some(Event {
+            kind: Kind::AcceptanceChanged,
+            domain: req.domain,
+            source: Source::Exercise(exercise),
+            subject: Subject::Acceptance(*acceptance),
+            at: now,
+            detail: Detail::None,
+        }),
+        _ => None,
+    }
+}
+
 /// OP-149 m.7: a declared `occurred_at` is a non-negative integer value.
 /// A `party_compromise` Claim's declared occurredAt: a non-negative integer value.
 pub(crate) fn occurred(value: Option<&EqValue>) -> Option<u64> {
@@ -75,6 +93,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         let mut out = Derived::default();
         let domain = req.domain;
         let mut events = self.decision_events(req, exercise, now).await?;
+        events.extend(acceptance_changed(req, exercise, now));
         out.ended = self.ended_by_decision(req, &events).await?;
         let source = Source::Exercise(exercise);
         events.extend(self.invalidations(domain, source, &out.ended, now).await?);
@@ -156,17 +175,6 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                 events.push(base(
                     Kind::RevalidationRequired,
                     Subject::Policy(*policy),
-                    Detail::None,
-                ));
-            }
-            // §9.16
-            Some(
-                Payload::AcceptanceAmend { acceptance, .. }
-                | Payload::AcceptanceRevoke { acceptance },
-            ) => {
-                events.push(base(
-                    Kind::AcceptanceChanged,
-                    Subject::Acceptance(*acceptance),
                     Detail::None,
                 ));
             }

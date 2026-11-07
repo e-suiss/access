@@ -57,7 +57,7 @@ use access_identity_account::notify::delivery::Backoff;
 use access_identity_oauth::adapters::clients::{CachePolicy, HttpClientKeys, HttpLogoutDelivery};
 use access_identity_oauth::adapters::dpop::SystemClock as OAuthClock;
 use access_identity_oauth::adapters::oauth::{OsRandom, PgLogoutQueue, PgOAuth};
-use access_identity_oauth::adapters::outbound::{DeclaredTarget, DeclaredTargets, Outbound};
+use access_identity_oauth::adapters::outbound::{DeclaredTarget, Outbound};
 use access_identity_oauth::adapters::{PgDirectory, SignerKeys};
 use access_identity_oauth::app::Discovery as RealmDiscovery;
 use access_identity_oauth::app::backchannel::Courier;
@@ -827,7 +827,7 @@ impl Background {
         let logout = courier(config, pools, outbound.clone())?;
         // OP-149 m.4, m.7, m.17
         let events = events::Delivery::outbound(
-            &event_pools(pools, ids, outbound.declared()),
+            &event_pools(pools, ids, &outbound),
             outbound,
             SignerKeys::new(identity.signer.clone()),
             keks,
@@ -857,13 +857,10 @@ impl Background {
     }
 }
 
-fn event_pools(
-    pools: &Pools,
-    ids: &Arc<ids::CellIds>,
-    declared: DeclaredTargets,
-) -> events::EventPools {
+fn event_pools(pools: &Pools, ids: &Arc<ids::CellIds>, outbound: &Outbound) -> events::EventPools {
     events::EventPools {
-        declared,
+        declared: outbound.declared(),
+        outbound: Some(outbound.clone()),
         app: pools.app.clone(),
         reader: pools.outbox_reader.clone(),
         router: pools.router.clone(),
@@ -917,7 +914,7 @@ async fn serve(
     let identity_section = config.identity.as_ref().ok_or("no identity section")?;
     let signer = || SignerKeys::new(identity_section.signer.clone());
     let (platform_outbound, platform_keks) = (prepared.outbound.clone(), keks.clone());
-    let platform_pools = event_pools(&all, &cell_ids, prepared.outbound.declared());
+    let platform_pools = event_pools(&all, &cell_ids, &prepared.outbound);
     // OP-149 m.7
     let ssf = events::ssf(&platform_pools, signer(), keks.clone());
     // OP-146 m.16 (m)

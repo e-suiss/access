@@ -41,6 +41,18 @@ pub trait Transport: Send + Sync {
     ) -> impl Future<Output = Result<Reply, PostError>> + Send;
 }
 
+/// An RFC 8936 poll transmitter, behind the SSRF guard (OP-151 m.3 (l)).
+pub trait PollClient: Send + Sync {
+    /// `POST url` with the bearer credential and the JSON poll request `body`; the answer's
+    /// status and body.
+    fn poll(
+        &self,
+        url: &str,
+        bearer: &str,
+        body: &[u8],
+    ) -> impl Future<Output = Result<(u16, Vec<u8>), PostError>> + Send;
+}
+
 /// Seals and opens a webhook subscription's secret under the realm KEK (OP-42, OP-135).
 pub trait Sealer: Send + Sync {
     /// Seals `plain` for subscription `id`.

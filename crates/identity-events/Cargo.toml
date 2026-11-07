@@ -23,6 +23,7 @@ tracing = { workspace = true, features = ["std"] }
 zeroize = { workspace = true, features = ["alloc", "std"] }
 
 [dev-dependencies]
+aws-lc-rs = { workspace = true }
 access-crypto = { workspace = true, features = ["testing"] }
 access-store = { workspace = true, features = ["testing"] }
 suiss-crypto = { workspace = true, features = ["aead", "testing"] }

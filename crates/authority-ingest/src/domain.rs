@@ -108,9 +108,16 @@ pub fn check_size(claim: &[u8], body: Option<&[u8]>) -> Result<(), Refusal> {
     Ok(())
 }
 
-/// Whether a Claim only narrows (G44, §13.7.4): it is never quarantined for quota.
+/// The class of the identity plane's risk signals, inbound SSF events among them (TN-42).
+pub const RISK_SIGNAL: &str = "risk_signal";
+
+/// Whether a Claim only narrows (G44, §13.7.4): it is never quarantined for quota. A risk
+/// signal only narrows (CI-2), so an inbound SSF event is never refused for quota (TN-42).
 #[must_use]
 pub fn narrowing(s: &Statement) -> bool {
+    if s.class == RISK_SIGNAL {
+        return true;
+    }
     match Class::parse(&s.class) {
         Some(Class::AccountStatus) => !matches!(
             &s.value,

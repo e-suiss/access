@@ -536,4 +536,21 @@ impl TenantTx {
             authority_state: count(row.authority),
         })
     }
+
+    /// The kinds of this realm's identity outbox entries, oldest first; for tests that cannot
+    /// wait for the outbox watermark.
+    ///
+    /// # Errors
+    /// [`StoreError`].
+    #[cfg(feature = "testing")]
+    pub async fn outbox_kinds(&mut self) -> Result<Vec<String>, StoreError> {
+        let (tenant, realm) = scope(self)?;
+        Ok(sqlx::query_scalar!(
+            "SELECT kind FROM access.identity_outbox WHERE tenant_id = $1 AND realm_id = $2 ORDER BY id",
+            tenant,
+            realm,
+        )
+        .fetch_all(&mut *self.tx)
+        .await?)
+    }
 }
