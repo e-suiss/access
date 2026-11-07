@@ -81,6 +81,10 @@ pub struct Incoming {
     pub ais: Option<Vec<u8>>,
     /// The PEP's transport-authenticated identity.
     pub pep: String,
+    /// The end user the PEP forwards for, when it names one (a console session): an anonymous
+    /// request or an eligibility check is counted in this user's bucket under the PEP, not in
+    /// the PEP's own (OP-141 m.23 (a), OP-151 m.12 (e)).
+    pub requester: Option<String>,
     /// Whether the request is an explanation, counted apart from `check` (OP-141 m.23).
     pub explain: bool,
     /// The Token Status List entry the decision point opened for a `projection.issue` commit
@@ -1282,7 +1286,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                     party,
                     instance: Id([0; 16]),
                 }),
-                Who::Pep(inc.pep.clone()),
+                pep_bucket(inc),
             ),
         })
     }
@@ -1764,7 +1768,15 @@ fn rendered(
 
 /// Whom the rate limits count: the actor Instance, else the PEP (OP-141 m.23 (a)).
 pub(crate) fn who(inc: &Incoming, actor: Option<Actor>) -> Who {
-    actor.map_or_else(|| Who::Pep(inc.pep.clone()), |a| Who::Instance(a.instance))
+    actor.map_or_else(|| pep_bucket(inc), |a| Who::Instance(a.instance))
+}
+
+/// The PEP's bucket, or the bucket of the end user it names under it (OP-141 m.23 (a)).
+fn pep_bucket(inc: &Incoming) -> Who {
+    match &inc.requester {
+        Some(r) => Who::Pep(format!("{}/{r}", inc.pep)),
+        None => Who::Pep(inc.pep.clone()),
+    }
 }
 
 /// Counts a re-validation after the head moved (§17.8.2, OP-32).

@@ -393,6 +393,7 @@ async fn send_at(
         ais: Some(cose(ais.to_bytes().unwrap(), CONTENT_TYPE, seed)),
         request,
         pep: PEP.to_owned(),
+        requester: None,
         explain: false,
         status: None,
     };

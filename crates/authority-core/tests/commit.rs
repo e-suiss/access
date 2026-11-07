@@ -395,6 +395,7 @@ fn incoming(request: Request, seed: u8) -> Incoming {
         ais: Some(sign(&statement, seed)),
         request,
         pep: PEP.to_owned(),
+        requester: None,
         explain: false,
         status: None,
     }
@@ -2803,6 +2804,26 @@ async fn search_shows_what_the_reader_may_see() {
         .await,
         Err(CoreError::Limited)
     ));
+    // OP-141 m.23 (a), OP-151 m.12 (e) (W-5): a PEP that names the end user it forwards for has
+    // that user's anonymous reads counted apart, so one user never spends another's limit
+    let as_user = |nonce: u8, user: &str| {
+        let mut inc = incoming(search_request(d, nonce, "resource"), ALICE_KEY);
+        inc.ais = None;
+        inc.requester = Some(user.to_owned());
+        inc
+    };
+    for n in 0..10 {
+        a.search(&as_user(100 + n, "session-1"), &mine, None)
+            .await
+            .unwrap();
+    }
+    assert!(matches!(
+        a.search(&as_user(110, "session-1"), &mine, None).await,
+        Err(CoreError::Limited)
+    ));
+    a.search(&as_user(111, "session-2"), &mine, None)
+        .await
+        .unwrap();
     // the search intent must name the search kind
     assert!(matches!(
         a.search(
@@ -4052,6 +4073,7 @@ fn incoming_at(request: Request, seed: u8, iat: u64) -> Incoming {
         ais: Some(sign(&statement, seed)),
         request,
         pep: PEP.to_owned(),
+        requester: None,
         explain: false,
         status: None,
     }
@@ -4711,6 +4733,7 @@ async fn an_eligibility_check_records_nothing() {
         request: shop_request(d, 50, Mode::Check, ExerciseBasis::Anchor(shop)),
         ais: None,
         pep: PEP.to_owned(),
+        requester: None,
         explain: false,
         status: None,
     };

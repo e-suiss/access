@@ -127,6 +127,64 @@ pub fn adp_read(rest: &str) -> bool {
     })
 }
 
+/// Why a forwarded ADP read is refused (TN-128, OP-151 m.12 (e)).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ReadRefusal {
+    /// The body is not one ADP would read; ADP's own protocol error, with the body it is in.
+    Malformed(crate::adp::domain::AdpError, crate::adp::domain::Body),
+    /// Not the session's own: another domain, another subject than the session's Party, or an
+    /// AIS by another key than the session's device Instance.
+    Foreign,
+}
+
+/// What the session's ADP reads may name (TN-128, OP-151 m.12 (e)): the session's domain only;
+/// an eligibility check only for the session's own Party, which `party` is once bound; an AIS,
+/// when the body carries one, only by the session's device Instance `instance`. The body is
+/// read with ADP's own decoders, so the BFF and ADP see the same request.
+///
+/// # Errors
+/// [`ReadRefusal`].
+pub fn adp_read_scope(
+    rest: &str,
+    body: &[u8],
+    max_len: usize,
+    domain: &Digest,
+    party: Option<[u8; 16]>,
+    instance: Option<&[u8; 32]>,
+) -> Result<(), ReadRefusal> {
+    use crate::adp::domain::{Body, decode_eligibility, decode_explain, decode_search};
+    let (decoded, subject) = if rest == "eligibility:check" {
+        let (d, subject) = decode_eligibility(body, max_len)
+            .map_err(|e| ReadRefusal::Malformed(e, Body::Eligibility))?;
+        (d, Some(subject))
+    } else if rest == "explain" {
+        let (d, _) =
+            decode_explain(body, max_len).map_err(|e| ReadRefusal::Malformed(e, Body::Context))?;
+        (d, None)
+    } else if let Some(kind) = rest.strip_prefix("search/") {
+        let (d, _, _) = decode_search(body, max_len, kind)
+            .map_err(|e| ReadRefusal::Malformed(e, Body::Context))?;
+        (d, None)
+    } else {
+        return Err(ReadRefusal::Foreign);
+    };
+    if decoded.request.domain != *domain {
+        return Err(ReadRefusal::Foreign);
+    }
+    if let Some(subject) = subject
+        && party != Some(subject.0)
+    {
+        return Err(ReadRefusal::Foreign);
+    }
+    if let Some(ais) = &decoded.ais {
+        match (crate::api::domain::caller::ais_kid(ais), instance) {
+            (Ok(kid), Some(own)) if kid == *own => {}
+            _ => return Err(ReadRefusal::Foreign),
+        }
+    }
+    Ok(())
+}
+
 /// Whether `rest` is a path the admin proxy may name under `/admin/v1/`: plain segments, no dot
 /// segments, no encoded slashes or backslashes, no empty segments.
 #[must_use]

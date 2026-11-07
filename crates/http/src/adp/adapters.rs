@@ -28,6 +28,23 @@ use crate::adp::ports::{Page, Pdp};
 #[derive(Clone, Debug)]
 pub struct Pep(pub String);
 
+/// The end user a PEP forwards for, set by that PEP's own transport (a console session): the
+/// rate bucket of its anonymous reads under the PEP (OP-141 m.23 (a), OP-151 m.12 (e)).
+#[derive(Clone, Debug)]
+pub struct Requester(pub String);
+
+type Caller = (
+    Option<axum::Extension<Pep>>,
+    Option<axum::Extension<Requester>>,
+);
+
+fn caller((pep, requester): Caller) -> (Option<String>, Option<String>) {
+    (
+        pep.map(|axum::Extension(Pep(p))| p),
+        requester.map(|axum::Extension(Requester(r))| r),
+    )
+}
+
 const REQUEST_ID: HeaderName = HeaderName::from_static("x-request-id");
 
 /// Domain Metadata caching (§9.15.1): re-signed at each rotation, revalidated within minutes,
@@ -79,52 +96,48 @@ pub fn router<P: Pdp + 'static>(service: Service<P>, discovery: Discovery) -> Ro
 async fn evaluation<P: Pdp>(
     State(shared): State<Arc<Shared<P>>>,
     pep: Option<axum::Extension<Pep>>,
+    requester: Option<axum::Extension<Requester>>,
     headers: HeaderMap,
     body: Bytes,
 ) -> Response {
-    let reply = shared
-        .service
-        .evaluation(&body, pep.map(|axum::Extension(Pep(p))| p))
-        .await;
+    let (pep, requester) = caller((pep, requester));
+    let reply = shared.service.evaluation(&body, pep, requester).await;
     respond(reply, &headers)
 }
 
 async fn evaluations<P: Pdp>(
     State(shared): State<Arc<Shared<P>>>,
     pep: Option<axum::Extension<Pep>>,
+    requester: Option<axum::Extension<Requester>>,
     headers: HeaderMap,
     body: Bytes,
 ) -> Response {
-    let reply = shared
-        .service
-        .evaluations(&body, pep.map(|axum::Extension(Pep(p))| p))
-        .await;
+    let (pep, requester) = caller((pep, requester));
+    let reply = shared.service.evaluations(&body, pep, requester).await;
     respond(reply, &headers)
 }
 
 async fn explain<P: Pdp>(
     State(shared): State<Arc<Shared<P>>>,
     pep: Option<axum::Extension<Pep>>,
+    requester: Option<axum::Extension<Requester>>,
     headers: HeaderMap,
     body: Bytes,
 ) -> Response {
-    let reply = shared
-        .service
-        .explain(&body, pep.map(|axum::Extension(Pep(p))| p))
-        .await;
+    let (pep, requester) = caller((pep, requester));
+    let reply = shared.service.explain(&body, pep, requester).await;
     respond(reply, &headers)
 }
 
 async fn eligibility<P: Pdp>(
     State(shared): State<Arc<Shared<P>>>,
     pep: Option<axum::Extension<Pep>>,
+    requester: Option<axum::Extension<Requester>>,
     headers: HeaderMap,
     body: Bytes,
 ) -> Response {
-    let reply = shared
-        .service
-        .eligibility(&body, pep.map(|axum::Extension(Pep(p))| p))
-        .await;
+    let (pep, requester) = caller((pep, requester));
+    let reply = shared.service.eligibility(&body, pep, requester).await;
     respond(reply, &headers)
 }
 
@@ -132,13 +145,12 @@ async fn search<P: Pdp>(
     State(shared): State<Arc<Shared<P>>>,
     Path(kind): Path<String>,
     pep: Option<axum::Extension<Pep>>,
+    requester: Option<axum::Extension<Requester>>,
     headers: HeaderMap,
     body: Bytes,
 ) -> Response {
-    let reply = shared
-        .service
-        .search(&kind, &body, pep.map(|axum::Extension(Pep(p))| p))
-        .await;
+    let (pep, requester) = caller((pep, requester));
+    let reply = shared.service.search(&kind, &body, pep, requester).await;
     respond(reply, &headers)
 }
 

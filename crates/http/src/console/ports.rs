@@ -209,6 +209,12 @@ pub trait Devices: Send + Sync {
         session: &ConsoleSession,
         body: Bytes,
     ) -> impl Future<Output = Result<DeviceAnswer, Unavailable>> + Send;
+
+    /// The Party the session's realm subject is bound to; `None` before it is bound.
+    fn party(
+        &self,
+        session: &ConsoleSession,
+    ) -> impl Future<Output = Result<Option<[u8; 16]>, Unavailable>> + Send;
 }
 
 /// A management read token issued to a session (TN-130): at most 60 minutes, bound to the
@@ -291,8 +297,13 @@ pub trait Upstream: Send + Sync {
         request: Forward,
     ) -> impl Future<Output = Result<Forwarded, Unavailable>> + Send;
 
-    /// A request to `/access/v1/…`.
-    fn adp(&self, request: Forward) -> impl Future<Output = Result<Forwarded, Unavailable>> + Send;
+    /// A request to `/access/v1/…`, counted in `requester`'s rate bucket under the console's
+    /// PEP (OP-141 m.23 (a), OP-151 m.12 (e)).
+    fn adp(
+        &self,
+        request: Forward,
+        requester: String,
+    ) -> impl Future<Output = Result<Forwarded, Unavailable>> + Send;
 }
 
 /// Every port of the console BFF.

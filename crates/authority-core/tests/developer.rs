@@ -374,6 +374,7 @@ fn incoming(request: Request, seed: u8) -> Incoming {
         ais: Some(sign(&statement, seed)),
         request,
         pep: PEP.to_owned(),
+        requester: None,
         explain: false,
         status: None,
     }

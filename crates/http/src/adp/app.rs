@@ -58,19 +58,29 @@ impl<P: Pdp> Service<P> {
     }
 
     /// `POST /access/v1/evaluation`.
-    pub async fn evaluation(&self, body: &[u8], pep: Option<String>) -> Reply {
+    pub async fn evaluation(
+        &self,
+        body: &[u8],
+        pep: Option<String>,
+        requester: Option<String>,
+    ) -> Reply {
         let Some(pep) = pep else {
             return Reply::Unauthenticated;
         };
         match decode(body, self.max_body) {
-            Ok(d) => self.decide(d, pep, false, Body::Context).await,
+            Ok(d) => self.decide(d, (pep, requester), false, Body::Context).await,
             Err(e) => bad(e, Body::Context),
         }
     }
 
     /// `POST /access/v1/evaluations`: independent items, each answered like a single
     /// evaluation; a short-circuit leaves the rest `{"evaluated": false}` (OP-141 m.22 (a)).
-    pub async fn evaluations(&self, body: &[u8], pep: Option<String>) -> Reply {
+    pub async fn evaluations(
+        &self,
+        body: &[u8],
+        pep: Option<String>,
+        requester: Option<String>,
+    ) -> Reply {
         let Some(pep) = pep else {
             return Reply::Unauthenticated;
         };
@@ -86,7 +96,10 @@ impl<P: Pdp> Service<P> {
                 continue;
             }
             let reply = match item {
-                Ok(d) => self.decide(d, pep.clone(), false, Body::Context).await,
+                Ok(d) => {
+                    self.decide(d, (pep.clone(), requester.clone()), false, Body::Context)
+                        .await
+                }
                 Err(e) => bad(e, Body::Context),
             };
             // OP-141 m.25: a limit is the batch's answer, never an item inside a 200; items
@@ -117,7 +130,12 @@ impl<P: Pdp> Service<P> {
     /// `POST /access/v1/explain`: for a hypothetical intent a `check` evaluation labelled
     /// `kind: "hypothetical"`, never recorded (OP-141 m.22 (h)); with `context.record` the
     /// recorded decision at that position, rebuilt and labelled `kind: "recorded"` (OP-141 m.36).
-    pub async fn explain(&self, body: &[u8], pep: Option<String>) -> Reply {
+    pub async fn explain(
+        &self,
+        body: &[u8],
+        pep: Option<String>,
+        requester: Option<String>,
+    ) -> Reply {
         let Some(pep) = pep else {
             return Reply::Unauthenticated;
         };
@@ -131,6 +149,7 @@ impl<P: Pdp> Service<P> {
                 request: decoded.request,
                 ais: decoded.ais,
                 pep,
+                requester: requester.clone(),
                 explain: true,
                 status: None,
             };
@@ -152,7 +171,10 @@ impl<P: Pdp> Service<P> {
         if decoded.request.mode != Mode::Check {
             return bad(AdpError("explain-mode"), Body::Context);
         }
-        match self.decide(decoded, pep, true, Body::Context).await {
+        match self
+            .decide(decoded, (pep, requester), true, Body::Context)
+            .await
+        {
             Reply::Decision(mut v) => {
                 if let Some(ctx) = v.get_mut("context").and_then(Value::as_object_mut) {
                     ctx.insert(String::from("kind"), Value::from("hypothetical"));
@@ -166,7 +188,12 @@ impl<P: Pdp> Service<P> {
     /// `POST /access/v1/eligibility:check`: whether `subject` may act on the `check` its `set`
     /// describes, with the head it was answered at; a thin wrapper over `check` that records
     /// nothing (OP-149 m.10, §9.5.2 rule 1, P36).
-    pub async fn eligibility(&self, body: &[u8], pep: Option<String>) -> Reply {
+    pub async fn eligibility(
+        &self,
+        body: &[u8],
+        pep: Option<String>,
+        requester: Option<String>,
+    ) -> Reply {
         let Some(pep) = pep else {
             return Reply::Unauthenticated;
         };
@@ -178,6 +205,7 @@ impl<P: Pdp> Service<P> {
             request: decoded.request,
             ais: None,
             pep,
+            requester,
             explain: false,
             status: None,
         };
@@ -192,7 +220,13 @@ impl<P: Pdp> Service<P> {
 
     /// `POST /access/v1/search/{kind}`: one page, advisory, as far as the reader may see
     /// (L1-ADP-16, OP-141 m.22 (j)).
-    pub async fn search(&self, kind: &str, body: &[u8], pep: Option<String>) -> Reply {
+    pub async fn search(
+        &self,
+        kind: &str,
+        body: &[u8],
+        pep: Option<String>,
+        requester: Option<String>,
+    ) -> Reply {
         let Some(pep) = pep else {
             return Reply::Unauthenticated;
         };
@@ -204,6 +238,7 @@ impl<P: Pdp> Service<P> {
             request: decoded.request,
             ais: decoded.ais,
             pep,
+            requester,
             explain: false,
             status: None,
         };
@@ -214,13 +249,20 @@ impl<P: Pdp> Service<P> {
         }
     }
 
-    async fn decide(&self, decoded: Decoded, pep: String, explain: bool, body: Body) -> Reply {
+    async fn decide(
+        &self,
+        decoded: Decoded,
+        (pep, requester): (String, Option<String>),
+        explain: bool,
+        body: Body,
+    ) -> Reply {
         let mode = decoded.request.mode;
         let upstream = decoded.request.intent.context.upstream_exercise.is_some();
         let inc = Incoming {
             request: decoded.request,
             ais: decoded.ais,
             pep,
+            requester,
             explain,
             status: None,
         };

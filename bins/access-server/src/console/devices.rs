@@ -112,7 +112,7 @@ impl<I: DeviceInstances> ConsoleDevices<I> {
         Ok(row.filter(|r| r.ended_ms.is_none() && r.instance.is_none()))
     }
 
-    async fn party(&self, row: &ConsoleSessionRow) -> Result<Option<[u8; 16]>, Unavailable> {
+    async fn row_party(&self, row: &ConsoleSessionRow) -> Result<Option<[u8; 16]>, Unavailable> {
         let mut t = TenantTx::begin(&self.app, row.tenant, row.realm)
             .await
             .map_err(down)?;
@@ -255,7 +255,7 @@ impl<I: DeviceInstances> Devices for ConsoleDevices<I> {
         if row.auth_time_ms.saturating_add(FRESH_MS) < now {
             return Ok(problem(403, "step-up-required", "Sign in again first"));
         }
-        let bound = self.party(&row).await?;
+        let bound = self.row_party(&row).await?;
         let party = match bound {
             Some(p) => p,
             None => access_crypto::random::bytes::<16>().map_err(down)?,
@@ -362,7 +362,7 @@ impl<I: DeviceInstances> Devices for ConsoleDevices<I> {
                 "The device key could not be verified",
             ));
         };
-        let bound = self.party(&row).await?;
+        let bound = self.row_party(&row).await?;
         let fits = match (bound, &register_ais) {
             (Some(p), None) => p == party,
             (None, Some(_)) => true,
@@ -420,5 +420,13 @@ impl<I: DeviceInstances> Devices for ConsoleDevices<I> {
                 key,
             }),
         })
+    }
+
+    async fn party(&self, session: &ConsoleSession) -> Result<Option<[u8; 16]>, Unavailable> {
+        let row = console::by_id(&self.app, &session.id).await.map_err(down)?;
+        match row.filter(|r| r.ended_ms.is_none()) {
+            Some(r) => self.row_party(&r).await,
+            None => Ok(None),
+        }
     }
 }

@@ -138,6 +138,13 @@ impl Devices for NoDevices {
     ) -> impl Future<Output = Result<DeviceAnswer, Unavailable>> + Send {
         ready(Err(Unavailable))
     }
+
+    fn party(
+        &self,
+        _: &ConsoleSession,
+    ) -> impl Future<Output = Result<Option<[u8; 16]>, Unavailable>> + Send {
+        ready(Err(Unavailable))
+    }
 }
 
 /// No read token is issued.
@@ -164,7 +171,11 @@ impl Upstream for NoUpstream {
         ready(Err(Unavailable))
     }
 
-    fn adp(&self, _: Forward) -> impl Future<Output = Result<Forwarded, Unavailable>> + Send {
+    fn adp(
+        &self,
+        _: Forward,
+        _: String,
+    ) -> impl Future<Output = Result<Forwarded, Unavailable>> + Send {
         ready(Err(Unavailable))
     }
 }

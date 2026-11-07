@@ -30,8 +30,9 @@ use suiss_crypto::digest::sha256;
 use suiss_crypto::secret::Secret;
 
 use super::domain::{
-    ADMIN_FORWARDED, ADP_FORWARDED, AIS_HEADER, Gate, ProofError, RETURNED, admin_path, adp_commit,
-    adp_read, gate, pick, read_intent, secure, unsafe_method, verify_commit, verify_read_proof,
+    ADMIN_FORWARDED, ADP_FORWARDED, AIS_HEADER, Gate, ProofError, RETURNED, ReadRefusal,
+    admin_path, adp_commit, adp_read, adp_read_scope, gate, pick, read_intent, secure,
+    unsafe_method, verify_commit, verify_read_proof,
 };
 use super::ports::{
     ConsoleEnv, ConsoleSession, ConsoleSessions, DeviceAnswer, Devices, DpopKeys, Forward,
@@ -144,6 +145,12 @@ pub mod problems {
     #[must_use]
     pub fn commit_rejected() -> Problem {
         Problem::new(StatusCode::FORBIDDEN, "commit-ais-rejected", "Forbidden")
+    }
+
+    /// A forwarded ADP read names another domain, Party or key than the session's (TN-128).
+    #[must_use]
+    pub fn read_not_own() -> Problem {
+        Problem::new(StatusCode::FORBIDDEN, "read-not-own", "Forbidden")
     }
 
     /// No read token may be issued to the session.
@@ -864,6 +871,48 @@ async fn admin_proxy<E: ConsoleEnv>(
     }
 }
 
+/// TN-128, OP-151 m.12 (e): a forwarded read names the session's own domain, an eligibility
+/// check the session's own Party, an AIS the session's own device Instance.
+async fn own_read<E: ConsoleEnv>(
+    c: &Console<E>,
+    session: &ConsoleSession,
+    rest: &str,
+    body: &[u8],
+    headers: &HeaderMap,
+) -> Result<(), Response> {
+    let party = if rest == "eligibility:check" {
+        match c.env.devices().party(session).await {
+            Ok(p) => p,
+            Err(Unavailable) => return Err(unavailable()),
+        }
+    } else {
+        None
+    };
+    let instance = session.instance.as_ref().map(|i| &i.kid);
+    match adp_read_scope(
+        rest,
+        body,
+        c.limits.max_body_bytes,
+        &session.who.domain,
+        party,
+        instance,
+    ) {
+        Ok(()) => Ok(()),
+        Err(ReadRefusal::Malformed(e, kind)) => Err(crate::adp::adapters::respond(
+            crate::adp::app::bad(e, kind),
+            headers,
+        )),
+        Err(ReadRefusal::Foreign) => {
+            tracing::info!(
+                event = "console.adp.refused",
+                outcome = "refused",
+                "forwarded read is not the session's own"
+            );
+            Err(problems::read_not_own().into_response())
+        }
+    }
+}
+
 /// `POST /console/api/proxy/adp/{rest}` → `/access/v1/{rest}` (TN-128): explain, search and
 /// the eligibility check go on as the browser wrote them, with the AIS they carry or none; the
 /// BFF adds no credential of its own, so a request without the browser's AIS is the anonymous
@@ -901,6 +950,8 @@ async fn adp_proxy<E: ConsoleEnv>(
             Err(ProofError::NoInstance) => return problems::instance_required().into_response(),
             Err(ProofError::Rejected) => return problems::commit_rejected().into_response(),
         }
+    } else if let Err(r) = own_read(&c, &live.session, rest, &body, headers).await {
+        return r;
     }
     let forward = Forward {
         method: Method::POST,
@@ -908,7 +959,9 @@ async fn adp_proxy<E: ConsoleEnv>(
         headers: pick(headers, &ADP_FORWARDED),
         body,
     };
-    match c.env.upstream().adp(forward).await {
+    // OP-141 m.23 (a): each session is its own requester under the console's PEP
+    let requester = b64url_encode(&live.session.id);
+    match c.env.upstream().adp(forward, requester).await {
         Ok(f) => forwarded(f),
         Err(Unavailable) => unavailable(),
     }

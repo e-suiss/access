@@ -8,6 +8,7 @@
     clippy::unused_async_trait_impl,
     clippy::panic,
     clippy::map_unwrap_or,
+    clippy::indexing_slicing,
     reason = "test"
 )]
 
@@ -48,6 +49,7 @@ const ORIGIN: &str = "https://access-server:9443";
 const T0: u64 = 1_800_000_000_000;
 const DOMAIN: Digest = Digest([3; 32]);
 const CLIENT: &str = "198.51.100.7";
+const PARTY: [u8; 16] = [9; 16];
 
 struct FakeClock(AtomicU64);
 
@@ -252,6 +254,10 @@ impl Devices for Device {
             instance: ok.then(|| self.0.clone()),
         })
     }
+
+    async fn party(&self, _: &ConsoleSession) -> Result<Option<[u8; 16]>, Unavailable> {
+        Ok(Some(PARTY))
+    }
 }
 
 #[derive(Default)]
@@ -304,6 +310,7 @@ impl DpopKeys for Dpop {
 #[derive(Default)]
 struct Up {
     seen: Mutex<Vec<(&'static str, Forward)>>,
+    requesters: Mutex<Vec<String>>,
 }
 
 impl Up {
@@ -330,7 +337,8 @@ impl Upstream for Up {
         Ok(Self::answer())
     }
 
-    async fn adp(&self, request: Forward) -> Result<Forwarded, Unavailable> {
+    async fn adp(&self, request: Forward, requester: String) -> Result<Forwarded, Unavailable> {
+        self.requesters.lock().unwrap().push(requester);
         self.seen.lock().unwrap().push(("adp", request));
         Ok(Self::answer())
     }
@@ -968,9 +976,10 @@ async fn no_instance_no_proxy() {
 async fn adp_reads_carry_no_bff_credential() {
     let h = Harness::new();
     let s = h.sign_in().await;
+    let body = search_body(&DOMAIN, None);
     let (r, _) = h
         .send(
-            s.post("/console/api/proxy/adp/search/grants", "{\"q\":1}"),
+            with_body(&s, "/console/api/proxy/adp/search/subject", body.clone()),
             CLIENT,
         )
         .await;
@@ -978,8 +987,8 @@ async fn adp_reads_carry_no_bff_credential() {
     let seen = h.env().up.take();
     let (which, f) = &seen[0];
     assert_eq!(*which, "adp");
-    assert_eq!(f.path_and_query, "/access/v1/search/grants");
-    assert_eq!(f.body.as_ref(), b"{\"q\":1}");
+    assert_eq!(f.path_and_query, "/access/v1/search/subject");
+    assert_eq!(f.body.as_ref(), body.as_bytes());
     let names: Vec<_> = f.headers.iter().map(|(n, _)| n.as_str()).collect();
     assert_eq!(names, ["content-type"]);
     for path in [
@@ -1302,4 +1311,148 @@ async fn intents_are_drafted_for_a_read_proof() {
     let (r, _) = h.send(no_csrf, CLIENT).await;
     assert_eq!(r.status(), StatusCode::FORBIDDEN);
     assert!(h.env().up.take().is_empty());
+}
+
+fn adp_context(domain: &Digest, ais: Option<&str>) -> serde_json::Value {
+    let mut ctx = serde_json::json!({
+        "domain": b64url_encode(&domain.0),
+        "mode": "check",
+        "nonce": b64url_encode(&[2; 16]),
+        "basis": { "public": b64url_encode(&[3; 16]) },
+        "capacity": "own",
+        "intent": {
+            "action": { "namespace": "access", "name": "read", "major": 1, "schema": b64url_encode(&[5; 32]) },
+            "resources": [{ "namespace": "access.search", "path": ["subject"] }],
+            "validity": { "from": 0, "until": 100_000 },
+        },
+    });
+    if let Some(a) = ais {
+        ctx["ais"] = serde_json::Value::from(a);
+    }
+    ctx
+}
+
+fn search_body(domain: &Digest, ais: Option<&str>) -> String {
+    let mut ctx = adp_context(domain, ais);
+    ctx["query"] = serde_json::json!({
+        "action": { "namespace": "shop", "name": "read", "major": 1, "schema": b64url_encode(&[5; 32]) },
+        "resource": { "namespace": "shop", "path": ["item-1"] },
+    });
+    serde_json::json!({
+        "subject": { "type": "access_party" },
+        "action": { "name": "read" },
+        "context": ctx,
+    })
+    .to_string()
+}
+
+fn explain_body(domain: &Digest, ais: Option<&str>) -> String {
+    let mut ctx = adp_context(domain, ais);
+    ctx["intent"]["resources"] = serde_json::json!([{ "namespace": "shop", "path": ["item-1"] }]);
+    ctx["intent"]["action"]["namespace"] = serde_json::Value::from("shop");
+    serde_json::json!({
+        "subject": { "type": "user", "id": "alice" },
+        "action": { "name": "read" },
+        "resource": { "type": "shop", "id": "item-1" },
+        "context": ctx,
+    })
+    .to_string()
+}
+
+fn eligibility_body(subject: [u8; 16], domain: &Digest) -> String {
+    serde_json::json!({
+        "subject": b64url_encode(&subject),
+        "set": {
+            "domain": b64url_encode(&domain.0),
+            "intent": {
+                "action": { "namespace": "work", "name": "approve", "major": 1, "schema": b64url_encode(&[4; 32]) },
+                "resources": [{ "namespace": "work", "path": ["gate-1"] }],
+                "validity": { "from": 0, "until": 2_000_000_000_000_u64 },
+            },
+            "basis": { "public": b64url_encode(&[3; 16]) },
+            "capacity": "own",
+        },
+    })
+    .to_string()
+}
+
+// TN-128, OP-151 m.12 (e) (W-5): the ADP proxy is not an oracle over other tenants: a read
+// names the session's own domain, an eligibility check the session's own Party, and an AIS the
+// session's own device Instance; anything else is refused and nothing goes up
+#[tokio::test]
+async fn adp_reads_are_the_sessions_own() {
+    let h = Harness::new();
+    let s = h.with_instance().await;
+    let other = Digest([4; 32]);
+    let mine = h.ais(Mode::Check, Digest([5; 32]), h.now());
+    let (thief, _) = SoftSigner::generate_p256().unwrap();
+    let theirs = ais_by(&thief, Mode::Check, Digest([5; 32]), h.now());
+    let allowed = [
+        ("eligibility:check", eligibility_body(PARTY, &DOMAIN)),
+        ("explain", explain_body(&DOMAIN, None)),
+        ("explain", explain_body(&DOMAIN, Some(&mine))),
+        ("search/subject", search_body(&DOMAIN, None)),
+        ("search/subject", search_body(&DOMAIN, Some(&mine))),
+    ];
+    for (rest, body) in allowed {
+        let path = format!("/console/api/proxy/adp/{rest}");
+        let (r, b) = h.send(with_body(&s, &path, body), CLIENT).await;
+        assert_eq!(
+            r.status(),
+            StatusCode::OK,
+            "{rest} {}",
+            String::from_utf8_lossy(&b)
+        );
+        assert_eq!(h.env().up.take().len(), 1, "{rest}");
+    }
+    let refused = [
+        ("eligibility:check", eligibility_body([8; 16], &DOMAIN)),
+        ("eligibility:check", eligibility_body(PARTY, &other)),
+        ("explain", explain_body(&other, None)),
+        ("explain", explain_body(&DOMAIN, Some(&theirs))),
+        ("search/subject", search_body(&other, None)),
+        ("search/subject", search_body(&DOMAIN, Some(&theirs))),
+    ];
+    for (rest, body) in refused {
+        let path = format!("/console/api/proxy/adp/{rest}");
+        let (r, b) = h.send(with_body(&s, &path, body), CLIENT).await;
+        assert_eq!(r.status(), StatusCode::FORBIDDEN, "{rest}");
+        assert_eq!(json(&b)["code"], "read-not-own");
+    }
+    let (r, b) = h
+        .send(
+            with_body(&s, "/console/api/proxy/adp/explain", "{\"q\":1}".to_owned()),
+            CLIENT,
+        )
+        .await;
+    assert_eq!(r.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(json(&b)["code"], "context");
+    assert!(h.env().up.take().is_empty());
+}
+
+// OP-141 m.23 (a), OP-151 m.12 (e) (W-5): each console session is its own requester under the
+// console's PEP, so one session's reads never spend another's limit
+#[tokio::test]
+async fn each_session_is_its_own_requester() {
+    let h = Harness::new();
+    let a = h.sign_in().await;
+    let b = h.sign_in().await;
+    for s in [&a, &a, &b] {
+        let (r, _) = h
+            .send(
+                with_body(
+                    s,
+                    "/console/api/proxy/adp/search/subject",
+                    search_body(&DOMAIN, None),
+                ),
+                CLIENT,
+            )
+            .await;
+        assert_eq!(r.status(), StatusCode::OK);
+    }
+    let seen = std::mem::take(&mut *h.env().up.requesters.lock().unwrap());
+    assert_eq!(seen.len(), 3);
+    assert_eq!(seen[0], seen[1]);
+    assert_ne!(seen[0], seen[2]);
+    assert!(seen.iter().all(|r| !r.is_empty() && r != "access-console"));
 }

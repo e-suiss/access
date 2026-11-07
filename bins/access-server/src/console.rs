@@ -13,7 +13,7 @@ use std::collections::HashMap;
 use std::sync::Mutex;
 
 use access_crypto::jose::output;
-use access_http::adp::adapters::Pep;
+use access_http::adp::adapters::{Pep, Requester};
 use access_http::console::adapters::PrefixOnly;
 use access_http::console::ports::{
     Clock, ConsoleEnv, DpopKeys, Entropy, Forward, Forwarded, Unavailable, Upstream,
@@ -115,7 +115,7 @@ pub(crate) struct InProcess {
 async fn call(
     router: &Router,
     request: Forward,
-    pep: Option<Pep>,
+    pep: Option<(Pep, Requester)>,
 ) -> Result<Forwarded, Unavailable> {
     let mut builder = Request::builder()
         .method(request.method)
@@ -126,8 +126,9 @@ async fn call(
     let mut request = builder
         .body(Body::from(request.body))
         .map_err(|_| Unavailable)?;
-    if let Some(p) = pep {
+    if let Some((p, r)) = pep {
         request.extensions_mut().insert(p);
+        request.extensions_mut().insert(r);
     }
     let response = router
         .clone()
@@ -149,8 +150,9 @@ impl Upstream for InProcess {
     }
 
     // TN-128, OP-151 m.12 (e): only explain, search and the eligibility check reach here
-    async fn adp(&self, request: Forward) -> Result<Forwarded, Unavailable> {
-        call(&self.adp, request, Some(Pep(String::from(CONSOLE_PEP)))).await
+    async fn adp(&self, request: Forward, requester: String) -> Result<Forwarded, Unavailable> {
+        let caller = (Pep(String::from(CONSOLE_PEP)), Requester(requester));
+        call(&self.adp, request, Some(caller)).await
     }
 }
 

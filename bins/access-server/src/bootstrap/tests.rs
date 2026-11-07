@@ -1259,7 +1259,7 @@ async fn the_bootstrapped_sample_is_eligible() {
     let subject = sample["subject"].as_str().unwrap();
     let pep = || Some(String::from("work"));
     let eligible = adp
-        .eligibility(&eligibility_body(sample, subject, now), pep())
+        .eligibility(&eligibility_body(sample, subject, now), pep(), None)
         .await;
     let Reply::Decision(v) = eligible else {
         panic!("{eligible:?}");
@@ -1267,7 +1267,7 @@ async fn the_bootstrapped_sample_is_eligible() {
     assert_eq!(v["eligible"], true, "{v}");
     let other = b64url_encode(&[0x5a; 16]);
     let refused = adp
-        .eligibility(&eligibility_body(sample, &other, now), pep())
+        .eligibility(&eligibility_body(sample, &other, now), pep(), None)
         .await;
     let Reply::Decision(v) = refused else {
         panic!("{refused:?}");
