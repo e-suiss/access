@@ -54,6 +54,7 @@ mod claims;
 mod governance;
 mod platform;
 mod records;
+mod resources;
 
 const NOW: u64 = 10_000;
 const ROOT: Id = Id([1; 16]);
