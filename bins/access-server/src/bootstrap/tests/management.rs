@@ -520,5 +520,88 @@ async fn the_console_signs_in_reads_and_writes_through_the_sequencer() {
     let position: u64 = written["position"].as_str().unwrap().parse().unwrap();
     assert!(position > before, "{position} > {before}");
     assert!(written["exercise_id"].is_string());
+
+    // TN-130, TN-27, OP-21: the verifier takes a realm read token only with a fresh proof by
+    // its bound key; a bearer presentation, another key, a replayed proof, another surface or a
+    // token whose console session ended reads nothing
+    use access_http::api::domain::SurfaceScope;
+    use access_http::api::domain::caller::{MAX_TOKEN_LIFETIME_MS, Refusal, check_read};
+    use access_http::api::ports::{Presented, ReadTokens as _};
+    use access_http::console::ports::DpopKeys as _;
+    let tokens = crate::admin::tokens::ManagementTokens {
+        directory: PgDirectory::new(w.db.router.clone()),
+        signer: SignerKeys::new(w.identity_signer.clone()),
+        app: w.db.app.clone(),
+        plane: w.plane.clone(),
+        dpop: DpopProfile::default(),
+    };
+    let row = access_store::console::live_of(&w.db.app, route.tenant, route.realm, &subject, 10)
+        .await
+        .unwrap()
+        .remove(0);
+    let (kid, cose) = row.instance.clone().unwrap();
+    let instance = access_http::console::ports::SessionInstance {
+        kid,
+        key: access_identity_session::domain::device::instance_key(&cose).unwrap(),
+    };
+    let dpop = crate::console::MemoryDpop::default();
+    let issued = tokens
+        .issue_console(&row, &instance, dpop.jkt(row.id).unwrap())
+        .await
+        .unwrap()
+        .unwrap();
+    let token = String::from_utf8(issued.token.expose().clone()).unwrap();
+    let uri = format!("{ORIGIN}{target}");
+    let ath = suiss_crypto::digest::sha256(token.as_bytes());
+    let fresh = |session: [u8; 16]| dpop.proof(session, "GET", &uri, &ath, now()).unwrap();
+    let presented = |proofs: &'static [&'static str]| Presented {
+        token: Box::leak(token.clone().into_boxed_str()),
+        proofs,
+        method: "GET",
+        uri: Box::leak(uri.clone().into_boxed_str()),
+    };
+    let leak = |p: String| -> &'static [&'static str] {
+        Box::leak(vec![&*Box::leak(p.into_boxed_str())].into_boxed_slice())
+    };
+    let good = leak(fresh(row.id));
+    let read = tokens.verify(presented(good)).await.unwrap().unwrap();
+    assert_eq!(read.audience, "access-admin:realm:acme");
+    assert_eq!(read.scopes, ["realm.read"]);
+    assert!(read.expires_at_ms - read.issued_at_ms <= MAX_TOKEN_LIFETIME_MS);
+    assert_eq!(
+        check_read(
+            &read,
+            &SurfaceScope::Realm(String::from("platform")),
+            "realm.read",
+            now()
+        ),
+        Err(Refusal::WrongAudience)
+    );
+    assert!(
+        tokens.verify(presented(&[])).await.unwrap().is_none(),
+        "bearer"
+    );
+    assert!(
+        tokens.verify(presented(good)).await.unwrap().is_none(),
+        "replayed proof"
+    );
+    let other = leak(fresh([9; 16]));
+    assert!(
+        tokens.verify(presented(other)).await.unwrap().is_none(),
+        "another key"
+    );
+    access_store::console::end(
+        &w.db.app,
+        &row.id,
+        now(),
+        access_store::console::EndReason::Revoked,
+    )
+    .await
+    .unwrap();
+    let after = leak(fresh(row.id));
+    assert!(
+        tokens.verify(presented(after)).await.unwrap().is_none(),
+        "session ended"
+    );
     browser.jar.clear();
 }
