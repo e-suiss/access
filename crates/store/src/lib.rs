@@ -32,6 +32,7 @@ pub mod realm_binding;
 pub mod relay;
 pub mod scope;
 pub mod sessions;
+pub mod ssf;
 pub mod status;
 pub mod tenancy;
 pub mod throttle;

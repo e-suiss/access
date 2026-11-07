@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:suiss:access:schema:caep:device-compliance-change:1",
+  "title": "CAEP device-compliance-change (OpenID CAEP 1.0)",
+  "description": "A device Instance of the subject ended or its posture changed.",
+  "type": "object",
+  "required": [
+    "event_timestamp",
+    "previous_status",
+    "current_status"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "event_timestamp": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "NumericDate, seconds."
+    },
+    "previous_status": {
+      "type": "string",
+      "enum": [
+        "compliant",
+        "not-compliant"
+      ]
+    },
+    "current_status": {
+      "type": "string",
+      "enum": [
+        "compliant",
+        "not-compliant"
+      ]
+    }
+  }
+}

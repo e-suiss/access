@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:suiss:access:schema:caep:session-revoked:1",
+  "title": "CAEP session-revoked (OpenID CAEP 1.0)",
+  "description": "Sessions of the subject ended: sign-out, a session_epoch step (MD-7), or the approximate counterpart of instance-terminated.",
+  "type": "object",
+  "required": [
+    "event_timestamp"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "event_timestamp": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "NumericDate, seconds."
+    },
+    "initiating_entity": {
+      "type": "string",
+      "enum": [
+        "admin",
+        "user",
+        "policy",
+        "system"
+      ]
+    },
+    "reason_admin": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string",
+        "maxLength": 256
+      },
+      "description": "Localized text for an administrator; for an Access counterpart, the Access event it stands for."
+    }
+  }
+}

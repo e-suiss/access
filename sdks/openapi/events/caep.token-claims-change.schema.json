@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:suiss:access:schema:caep:token-claims-change:1",
+  "title": "CAEP token-claims-change (OpenID CAEP 1.0)",
+  "description": "A claim mapper changed what tokens say, or the approximate counterpart of authority-narrowed.",
+  "type": "object",
+  "required": [
+    "event_timestamp",
+    "claims"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "event_timestamp": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "NumericDate, seconds."
+    },
+    "claims": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "null"
+      },
+      "description": "Names of the claims that changed; never their values."
+    },
+    "initiating_entity": {
+      "type": "string",
+      "enum": [
+        "admin",
+        "user",
+        "policy",
+        "system"
+      ]
+    },
+    "reason_admin": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string",
+        "maxLength": 256
+      },
+      "description": "Localized text for an administrator; for an Access counterpart, the Access event it stands for."
+    }
+  }
+}

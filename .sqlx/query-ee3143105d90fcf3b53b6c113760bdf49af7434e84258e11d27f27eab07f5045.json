@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT g.grant_id FROM access.oauth_grants g\n               JOIN access.idp_clients c\n                 ON c.tenant_id = g.tenant_id AND c.realm_id = g.realm_id AND c.client_uuid = g.client_uuid\n              WHERE g.tenant_id = $1 AND g.realm_id = $2 AND g.revoked_ms IS NULL\n                AND c.backchannel_logout_uri IS NOT NULL\n              ORDER BY g.grant_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "grant_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.oauth_grants",
+            "name": "grant_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "ee3143105d90fcf3b53b6c113760bdf49af7434e84258e11d27f27eab07f5045"
+}

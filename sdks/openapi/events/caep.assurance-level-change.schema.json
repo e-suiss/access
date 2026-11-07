@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:suiss:access:schema:caep:assurance-level-change:1",
+  "title": "CAEP assurance-level-change (OpenID CAEP 1.0)",
+  "description": "A step-up reached a level, or the approximate counterpart of revalidation-required (namespace urn:suiss:access:assurance).",
+  "type": "object",
+  "required": [
+    "event_timestamp",
+    "namespace",
+    "current_level"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "event_timestamp": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "NumericDate, seconds."
+    },
+    "namespace": {
+      "type": "string",
+      "enum": [
+        "NIST-AAL",
+        "urn:suiss:access:assurance"
+      ]
+    },
+    "current_level": {
+      "type": "string",
+      "maxLength": 64
+    },
+    "previous_level": {
+      "type": "string",
+      "maxLength": 64
+    },
+    "change_direction": {
+      "type": "string",
+      "enum": [
+        "increase",
+        "decrease"
+      ]
+    },
+    "initiating_entity": {
+      "type": "string",
+      "enum": [
+        "admin",
+        "user",
+        "policy",
+        "system"
+      ]
+    },
+    "reason_admin": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string",
+        "maxLength": 256
+      },
+      "description": "Localized text for an administrator; for an Access counterpart, the Access event it stands for."
+    }
+  }
+}

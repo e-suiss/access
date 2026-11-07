@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:suiss:access:schema:caep:session-presented:1",
+  "title": "CAEP session-presented (OpenID CAEP 1.0)",
+  "description": "A live login session of the subject was presented to the receiver's client.",
+  "type": "object",
+  "required": [
+    "event_timestamp"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "event_timestamp": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "NumericDate, seconds."
+    }
+  }
+}

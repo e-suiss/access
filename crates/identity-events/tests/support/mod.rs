@@ -28,9 +28,20 @@ pub fn assert_set(claims: &Json) -> String {
     let events = claims["events"].as_object().unwrap();
     assert_eq!(events.len(), 1);
     let (urn, payload) = events.iter().next().unwrap();
-    let name = urn.strip_prefix("urn:suiss:access:event:").unwrap();
-    assert_valid(&format!("{name}.schema.json"), payload);
+    assert_valid(&schema_of(urn), payload);
     urn.clone()
+}
+
+/// The schema file of an event type: an Access URN or a CAEP/RISC type URI.
+pub fn schema_of(uri: &str) -> String {
+    if let Some(name) = uri.strip_prefix("urn:suiss:access:event:") {
+        return format!("{name}.schema.json");
+    }
+    let rest = uri
+        .strip_prefix("https://schemas.openid.net/secevent/")
+        .unwrap();
+    let (family, name) = rest.split_once("/event-type/").unwrap();
+    format!("{family}.{name}.schema.json")
 }
 
 /// Checks a webhook body: the `CloudEvent` envelope, its `data` SET and the event.

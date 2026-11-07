@@ -8,10 +8,12 @@ use access_crypto::Secret;
 use access_identity_account::AccountError;
 use access_identity_account::app::login::{Attempt, LoginServices, password_login};
 use access_identity_account::app::sealing::{open, subject_key};
+use access_identity_account::app::signal::{emit as signal, fresh_id};
 use access_identity_account::domain::gcra::Gcra;
 use access_identity_account::domain::identifier::{MAX_CHARS, normalize};
 use access_identity_account::domain::login::{PasswordLogin, counter_key};
 use access_identity_account::domain::password::Password;
+use access_identity_account::domain::signal::Signal;
 use access_identity_account::domain::throttle::{
     DAY_MS as THROTTLE_DAY_MS, Gate, HARD_LOCK_AT, KeyKind, KeyPolicy, KeyState, Penalty,
 };
@@ -36,7 +38,7 @@ use access_identity_account::ports::AccountTx;
 
 use super::Notifier;
 use crate::SessionError;
-use crate::domain::assurance::{AuthenticationResult, Factor, MethodClass, vector};
+use crate::domain::assurance::{Aal, AuthenticationResult, Factor, MethodClass, vector};
 use crate::domain::codes::{canonical_recovery_code, email_code};
 use crate::domain::flow::{
     Ceremony, EMAIL_CODE_ATTEMPTS, FlowRejection, FlowState, Pending, Purpose, SUSPENSION_TTL_MS,
@@ -1094,6 +1096,9 @@ where
             marker_cookie = Some(set_cookie(MARKER_COOKIE, &encode(&value), Some(ttl / 1000)));
         }
         audit(tx, "session.created", &target, &target, correlation).await?;
+        // TN-41
+        let s = Signal::session_established(fresh_id()?, subject, now);
+        signal(tx, &s).await?;
         Ok(SignedIn {
             session,
             set_cookie: Some(set_cookie(
@@ -1185,6 +1190,14 @@ where
                     return Ok(refuse(STEP_NOT_ALLOWED));
                 }
                 audit(&mut tx, "session.stepped_up", &target, &target, correlation).await?;
+                // TN-41
+                let level = match result.assurance.aal {
+                    Aal::Aal1 => "aal1",
+                    Aal::Aal2 => "aal2",
+                    Aal::Aal3 => "aal3",
+                };
+                let s = Signal::assurance_level(fresh_id()?, subject, level, None, now);
+                signal(&mut tx, &s).await?;
                 SignedIn {
                     session: *session,
                     set_cookie: None,

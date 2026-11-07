@@ -21,19 +21,63 @@ pub const SOURCE_PREFIX: &str = "urn:suiss:access:realm:";
 
 /// The SET claims of `event` for one subscription: `iss` the realm issuer, `aud` the
 /// subscriber, `iat` when it was queued (stamped again at every send, [`stamp_issued`]), `jti`
-/// the event id, `sub_id` an opaque subject identifier (SSF 1.0 §3) and one member of `events`.
+/// the event id, `txn` the event id too, `sub_id` an opaque subject identifier (SSF 1.0 §3) and
+/// one member of `events`; no top-level `sub` and no `exp` (TN-39).
 #[must_use]
 pub fn set_claims(event: &Ready, iss: &str, aud: &str, iat_s: u64) -> Value {
+    standard_claims(
+        &Envelope {
+            iss,
+            aud,
+            iat_s,
+            jti: &event.id,
+            txn: &event.id,
+        },
+        &urn(event.name),
+        &json!({"format": "opaque", "id": event.sub_id}),
+        event.payload.clone(),
+    )
+}
+
+/// Who a SET is from and to, and its ids.
+#[derive(Clone, Copy, Debug)]
+pub struct Envelope<'a> {
+    /// The realm issuer.
+    pub iss: &'a str,
+    /// The receiver.
+    pub aud: &'a str,
+    /// Seconds.
+    pub iat_s: u64,
+    /// The dedup key.
+    pub jti: &'a str,
+    /// The transaction the event comes from (TN-39).
+    pub txn: &'a str,
+}
+
+/// The SET claims of one event of type `uri` (TN-39): exactly one member of `events`, `sub_id`
+/// per RFC 9493, `txn`, no top-level `sub`, no `exp`.
+#[must_use]
+pub fn standard_claims(env: &Envelope<'_>, uri: &str, sub_id: &Value, body: Value) -> Value {
     let mut events = Map::new();
-    events.insert(urn(event.name), event.payload.clone());
+    events.insert(String::from(uri), body);
     json!({
-        "iss": iss,
-        "aud": aud,
-        "iat": iat_s,
-        "jti": event.id,
-        "sub_id": {"format": "opaque", "id": event.sub_id},
+        "iss": env.iss,
+        "aud": env.aud,
+        "iat": env.iat_s,
+        "jti": env.jti,
+        "txn": env.txn,
+        "sub_id": sub_id,
         "events": events,
     })
+}
+
+/// An id derived from `id` for one receiver or one form (TI-RT10): the keyed or random `id`
+/// stays hidden, and two receivers of the same event cannot link their copies by it.
+#[must_use]
+pub fn derived_id(context: &str, id: &[u8], salt: &[u8]) -> String {
+    let mut input = id.to_vec();
+    input.extend_from_slice(salt);
+    access_kernel::json::b64url_encode(&access_crypto::oauth::opaque_digest(context, &input))
 }
 
 /// Stamps `iat` with the time the SET is sent (RFC 8417 §2.2, OP-149 m.34 (d)): a delivery tried
@@ -87,6 +131,7 @@ pub fn head(claims: &Value) -> Result<SetHead, Invalid> {
         event_type: event_type.clone(),
         subject: claims
             .pointer("/sub_id/id")
+            .or_else(|| claims.pointer("/sub_id/sub"))
             .and_then(Value::as_str)
             .map(String::from)
             .unwrap_or_default(),

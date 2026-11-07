@@ -2,13 +2,14 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:suiss:access:schema:event-set:1",
   "title": "Access Security Event Token claims (RFC 8417, SSF 1.0)",
-  "description": "The claims of every SET Access sends, signed as a JWS of typ secevent+jwt with the realm key for SSF push and poll, and carried unsigned as CloudEvent data in the webhook profile. `events` has exactly one member; its key is the event type URN and its value matches that event's schema.",
+  "description": "The claims of every SET Access sends, signed as a JWS of typ secevent+jwt with the realm key for SSF push and poll, and carried unsigned as CloudEvent data in the webhook profile. `events` has exactly one member; its key is the event type (an Access URN, or a CAEP 1.0 / RISC 1.0 type URI) and its value matches that event's schema. There is no top-level `sub` and no `exp` (TN-39).",
   "type": "object",
   "required": [
     "iss",
     "aud",
     "iat",
     "jti",
+    "txn",
     "sub_id",
     "events"
   ],
@@ -31,23 +32,72 @@
     "jti": {
       "type": "string",
       "pattern": "^[A-Za-z0-9_-]{43}$",
-      "description": "The event id; the dedup key of every channel."
+      "description": "The dedup key of every channel: the event id, or for a CAEP/RISC copy an id derived per receiver (TI-RT10)."
+    },
+    "txn": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{43}$",
+      "description": "The transaction the event comes from (TN-39): the Access event id, shared by an Access event and its CAEP counterpart; per receiver for an identity plane signal."
     },
     "sub_id": {
-      "type": "object",
-      "required": [
-        "format",
-        "id"
-      ],
-      "additionalProperties": false,
-      "properties": {
-        "format": {
-          "const": "opaque"
+      "description": "Subject identifier (RFC 9493): `opaque` for Access events, `iss_sub` with the receiver's own pairwise `sub` for identity plane signals, `uri` naming the realm issuer for a realm-wide signal (CR-27).",
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "format",
+            "id"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "format": {
+              "const": "opaque"
+            },
+            "id": {
+              "type": "string"
+            }
+          }
         },
-        "id": {
-          "type": "string"
+        {
+          "type": "object",
+          "required": [
+            "format",
+            "iss",
+            "sub"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "format": {
+              "const": "iss_sub"
+            },
+            "iss": {
+              "type": "string",
+              "pattern": "^https://"
+            },
+            "sub": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "format",
+            "uri"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "format": {
+              "const": "uri"
+            },
+            "uri": {
+              "type": "string",
+              "pattern": "^https://"
+            }
+          }
         }
-      }
+      ]
     },
     "events": {
       "type": "object",
@@ -55,7 +105,17 @@
       "maxProperties": 1,
       "propertyNames": {
         "type": "string",
-        "pattern": "^urn:suiss:access:event:[a-z][a-z0-9_.-]*$"
+        "oneOf": [
+          {
+            "pattern": "^urn:suiss:access:event:[a-z][a-z0-9_.-]*$"
+          },
+          {
+            "pattern": "^https://schemas[.]openid[.]net/secevent/caep/event-type/[a-z][a-z-]*$"
+          },
+          {
+            "pattern": "^https://schemas[.]openid[.]net/secevent/risc/event-type/[a-z][a-z-]*$"
+          }
+        ]
       },
       "additionalProperties": {
         "type": "object"

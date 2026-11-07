@@ -30,7 +30,17 @@
     },
     "type": {
       "type": "string",
-      "pattern": "^urn:suiss:access:event:[a-z][a-z0-9_.-]*$"
+      "oneOf": [
+        {
+          "pattern": "^urn:suiss:access:event:[a-z][a-z0-9_.-]*$"
+        },
+        {
+          "pattern": "^https://schemas[.]openid[.]net/secevent/caep/event-type/[a-z][a-z-]*$"
+        },
+        {
+          "pattern": "^https://schemas[.]openid[.]net/secevent/risc/event-type/[a-z][a-z-]*$"
+        }
+      ]
     },
     "subject": {
       "type": "string"

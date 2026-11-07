@@ -1,0 +1,195 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT transmitter_id, issuer, jwks_uri, audience, events, delivery, poll_endpoint,\n                      secret_kek_id, secret_wrapped_dek, secret_nonce, secret_ciphertext,\n                      expected_interval_s, exercise,\n                      (extract(epoch FROM last_seen_at) * 1000)::bigint AS last_seen_ms,\n                      (extract(epoch FROM created_at) * 1000)::bigint AS created_ms,\n                      disabled_at IS NOT NULL AS \"disabled!\"\n                 FROM access.ssf_transmitter\n                WHERE tenant_id = $1 AND realm_id = $2 AND transmitter_id = $3",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "transmitter_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.ssf_transmitter",
+            "name": "transmitter_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "issuer",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.ssf_transmitter",
+            "name": "issuer"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "jwks_uri",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.ssf_transmitter",
+            "name": "jwks_uri"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "audience",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.ssf_transmitter",
+            "name": "audience"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "events",
+        "type_info": "TextArray",
+        "origin": {
+          "Table": {
+            "table": "access.ssf_transmitter",
+            "name": "events"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "delivery",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.ssf_transmitter",
+            "name": "delivery"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "poll_endpoint",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.ssf_transmitter",
+            "name": "poll_endpoint"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "secret_kek_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.ssf_transmitter",
+            "name": "secret_kek_id"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "secret_wrapped_dek",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.ssf_transmitter",
+            "name": "secret_wrapped_dek"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "secret_nonce",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.ssf_transmitter",
+            "name": "secret_nonce"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "secret_ciphertext",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.ssf_transmitter",
+            "name": "secret_ciphertext"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "expected_interval_s",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "access.ssf_transmitter",
+            "name": "expected_interval_s"
+          }
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "exercise",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.ssf_transmitter",
+            "name": "exercise"
+          }
+        }
+      },
+      {
+        "ordinal": 13,
+        "name": "last_seen_ms",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 14,
+        "name": "created_ms",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 15,
+        "name": "disabled!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      false,
+      true,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "553ba78de5fc43ec7736d0eacab5921c5c19b64143266e76f6f0e01a1c62de10"
+}

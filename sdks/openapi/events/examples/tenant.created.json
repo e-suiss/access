@@ -13,6 +13,7 @@
     "aud": "work",
     "iat": 1793750400,
     "jti": "AQJxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "txn": "AQJxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
     "sub_id": {
       "format": "opaque",
       "id": "tnt_0123456789abcdefghjkmnpqrs"

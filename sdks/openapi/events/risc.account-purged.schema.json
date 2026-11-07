@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:suiss:access:schema:risc:account-purged:1",
+  "title": "RISC account-purged (OpenID RISC 1.0)",
+  "description": "The account was erased by crypto-shredding (OP-73, TN-43).",
+  "type": "object",
+  "required": [
+    "event_timestamp"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "event_timestamp": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "NumericDate, seconds."
+    }
+  }
+}

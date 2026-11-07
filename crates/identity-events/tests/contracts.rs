@@ -12,10 +12,18 @@
 
 mod support;
 
+use access_identity_account::domain::signal::{
+    ChangeType, CredentialType, Initiator, RiskLevel, Signal, SignalKind,
+};
 use access_identity_events::domain::catalog::{
     ClientChange, IdentityEvent, IdentityKind, NAMES, PlatformProduct, authority_ready, urn,
 };
-use access_identity_events::domain::set::{cloud_event, set_claims, set_tenant};
+use access_identity_events::domain::mapping::{
+    Profile, counterpart, counterpart_body, forms, signal_uri,
+};
+use access_identity_events::domain::set::{
+    Envelope, cloud_event, derived_id, set_claims, set_tenant, standard_claims,
+};
 use access_identity_events::domain::stream::{
     Channel, parse_poll, parse_stream, poll_response, ssf_configuration, stream_json,
 };
@@ -43,7 +51,7 @@ fn every_event_has_a_schema_and_an_example() {
         .filter_map(|e| e.ok()?.file_name().into_string().ok())
         .filter(|f| f.ends_with(".schema.json"))
         .count();
-    assert_eq!(listed, NAMES.len() + 7);
+    assert_eq!(listed, NAMES.len() + 7 + SignalKind::ALL.len());
 }
 
 // OP-149 m.4, m.7: every committed example meets its schema
@@ -285,4 +293,119 @@ fn transmitter_documents_meet_the_contracts() {
         "poll-response.schema.json",
         &poll_response(&[(String::from("a"), String::from("x.y.z"))], true),
     );
+}
+
+fn every_signal() -> Vec<Signal> {
+    let (id, s, at) = ([1; 32], [2; 16], 1_793_750_400_000);
+    vec![
+        Signal::session_revoked(id, s, Initiator::Admin, at),
+        Signal::credential_change(id, s, CredentialType::App, ChangeType::Revoke, at),
+        Signal::assurance_level(id, s, "aal2", Some("aal1"), at),
+        Signal::token_claims_change(id, s, &["email"], at),
+        Signal::device_compliance(id, s, false, at),
+        Signal::risk_level(id, s, RiskLevel::High, Some(RiskLevel::Low), at),
+        Signal::session_established(id, s, at),
+        Signal::session_presented(id, s, at),
+        Signal::account_disabled(id, s, at),
+        Signal::account_purged(id, s, at),
+        Signal::identifier_recycled(id, s, at),
+        Signal::credential_compromise(id, None, CredentialType::Key, at),
+    ]
+}
+
+fn signal_set(s: &Signal, receiver: &[u8]) -> Json {
+    let iss = "https://id.example/realms/shop";
+    let jti = derived_id("access/signal-set/v1", &s.id, receiver);
+    let txn = derived_id("access/signal-txn/v1", &s.id, receiver);
+    let sub_id = match s.subject {
+        Some(_) => serde_json::json!({"format": "iss_sub", "iss": iss, "sub": "pairwise-sub"}),
+        None => serde_json::json!({"format": "uri", "uri": iss}),
+    };
+    standard_claims(
+        &Envelope {
+            iss,
+            aud: "rp",
+            iat_s: 1,
+            jti: &jti,
+            txn: &txn,
+        },
+        &signal_uri(s.kind),
+        &sub_id,
+        s.event_body(),
+    )
+}
+
+// TN-39, TN-41, TN-43: every CAEP and RISC event has a schema and an example, and what the
+// transmitter builds meets them: one event per SET, `txn`, `sub_id`, no `sub`, no `exp`
+#[test]
+fn caep_and_risc_sets_meet_the_contracts() {
+    let built = every_signal();
+    let kinds: Vec<SignalKind> = built.iter().map(|s| s.kind).collect();
+    assert_eq!(kinds, SignalKind::ALL.to_vec());
+    for s in &built {
+        let uri = signal_uri(s.kind);
+        let example = load(&format!(
+            "examples/{}",
+            support::schema_of(&uri).replace(".schema", "")
+        ));
+        assert_eq!(assert_set(&example), uri);
+        let claims = signal_set(s, &[9; 16]);
+        assert_eq!(assert_set(&claims), uri);
+        let o = claims.as_object().unwrap();
+        assert!(!o.contains_key("sub") && !o.contains_key("exp"));
+        assert_eq!(o["events"].as_object().unwrap().len(), 1);
+        let ce: Json =
+            serde_json::from_slice(&cloud_event(&claims, TENANT, &[2; 16], s.at).unwrap()).unwrap();
+        assert_valid("cloudevent.schema.json", &ce);
+    }
+}
+
+// TI-RT10: a signal's ids are not a subject hash, and two receivers of the same signal get
+// unrelated jti and txn, so they cannot link their copies of one subject
+#[test]
+fn signal_ids_are_per_receiver_and_not_subject_hashes() {
+    let s = Signal::session_established([7; 32], [2; 16], 0);
+    let a = signal_set(&s, &[1; 16]);
+    let b = signal_set(&s, &[2; 16]);
+    assert_ne!(a["jti"], b["jti"]);
+    assert_ne!(a["txn"], b["txn"]);
+    let other = Signal::session_established([8; 32], [2; 16], 0);
+    assert_ne!(signal_set(&other, &[1; 16])["jti"], a["jti"]);
+    let subject_hash = access_kernel::json::b64url_encode(&access_crypto::oauth::opaque_digest(
+        "access/signal-set/v1",
+        &[2; 16],
+    ));
+    assert_ne!(a["jti"], Json::from(subject_hash));
+}
+
+// TN-41, §9.16: an Access event's CAEP counterpart meets the CAEP schema and shares the
+// Access event's txn; authority-revoked has none
+#[test]
+fn counterparts_meet_the_caep_contracts() {
+    for kind in [
+        Kind::InstanceTerminated,
+        Kind::AuthorityNarrowed,
+        Kind::RevalidationRequired,
+    ] {
+        let r = authority_ready(&sample(kind), &[4; 32]);
+        let standard = counterpart(r.name).unwrap();
+        let uri = signal_uri(standard);
+        let events = vec![urn(r.name), uri.clone()];
+        assert_eq!(forms(r.name, Profile::Both, &events).len(), 2);
+        let claims = standard_claims(
+            &Envelope {
+                iss: "https://id.example/realms/shop",
+                aud: "rp",
+                iat_s: 1,
+                jti: &derived_id("access/set-counterpart/v1", &[4; 32], uri.as_bytes()),
+                txn: &r.id,
+            },
+            &uri,
+            &serde_json::json!({"format": "opaque", "id": r.sub_id}),
+            counterpart_body(standard, r.name, r.at),
+        );
+        assert_eq!(assert_set(&claims), uri);
+        assert_eq!(claims["txn"], set_claims(&r, "https://x", "rp", 1)["txn"]);
+    }
+    assert_eq!(counterpart("authority-revoked"), None);
 }

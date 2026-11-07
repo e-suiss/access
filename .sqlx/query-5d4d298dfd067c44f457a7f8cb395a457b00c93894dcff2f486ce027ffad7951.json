@@ -1,0 +1,53 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT subscription_id, profile, alg FROM access.event_subscription_ssf\n              WHERE tenant_id = $1 AND realm_id = $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "subscription_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.event_subscription_ssf",
+            "name": "subscription_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "profile",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.event_subscription_ssf",
+            "name": "profile"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "alg",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.event_subscription_ssf",
+            "name": "alg"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "5d4d298dfd067c44f457a7f8cb395a457b00c93894dcff2f486ce027ffad7951"
+}

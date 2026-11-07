@@ -7,6 +7,7 @@ pub mod hasher;
 pub mod local;
 pub mod login;
 pub mod sealing;
+pub mod signal;
 
 use access_crypto::opaque_id::IdKey;
 use access_store::identity::{RealmId, TenantId};

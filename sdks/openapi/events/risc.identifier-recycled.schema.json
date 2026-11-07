@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:suiss:access:schema:risc:identifier-recycled:1",
+  "title": "RISC identifier-recycled (OpenID RISC 1.0)",
+  "description": "An identifier of the subject (named by the receiver's own sub, never the identifier) now belongs to another account.",
+  "type": "object",
+  "required": [
+    "event_timestamp"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "event_timestamp": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "NumericDate, seconds."
+    }
+  }
+}

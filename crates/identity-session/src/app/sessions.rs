@@ -8,7 +8,9 @@ use access_store::sessions::{NewFlow, SessionRow};
 use super::signin::{Started, StepOptions};
 use super::{Auth, audit, decode32, encode, i64_of, partition, u64_of};
 use access_identity_account::app::claims::emit;
+use access_identity_account::app::signal::{emit as signal, fresh_id};
 use access_identity_account::domain::claims::authentication_ended;
+use access_identity_account::domain::signal::{Initiator, Signal};
 use access_identity_account::ports::AccountTx;
 
 use super::Notifier;
@@ -146,6 +148,9 @@ where
             let target = self.external(row.subject)?;
             audit(&mut tx, "session.signed_out", &target, &target, correlation).await?;
             emit(&mut tx, &authentication_ended(row.subject, row.id, now)).await?;
+            // TN-41
+            let s = Signal::session_revoked(fresh_id()?, row.subject, Initiator::User, now);
+            signal(&mut tx, &s).await?;
         }
         tx.commit().await?;
         Ok(clear_cookie(SESSION_COOKIE))
@@ -183,6 +188,9 @@ where
         for row in live {
             emit(&mut tx, &authentication_ended(subject, row.id, now)).await?;
         }
+        // TN-41, MD-7
+        let s = Signal::session_revoked(fresh_id()?, subject, Initiator::User, now);
+        signal(&mut tx, &s).await?;
         tx.commit().await?;
         Ok(epoch)
     }

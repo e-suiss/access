@@ -16,8 +16,13 @@ use access_store::{Pool, idp, tenancy};
 
 use crate::app::courier::POLL_INTERVAL;
 use crate::app::{Db, down, realm_signing};
+use access_identity_account::domain::signal::{Initiator, OUTBOX_PREFIX as SIGNAL_PREFIX, Signal};
+use access_kernel::json::b64url_decode;
+use serde_json::{Value, json};
+
 use crate::domain::catalog::{IdentityEvent, OUTBOX_PREFIX, Ready, authority_ready, urn};
-use crate::domain::set::{set_claims, set_tenant};
+use crate::domain::mapping::{Profile, counterpart, counterpart_body, forms, signal_uri};
+use crate::domain::set::{Envelope, derived_id, set_claims, set_tenant, standard_claims};
 use crate::ports::{Clock, Unavailable};
 
 /// The fan-out's cursor name in `access_ops.outbox_cursor`.
@@ -60,6 +65,14 @@ impl<C: Clock + Send + Sync> Fanout<C> {
                         queued = queued.saturating_add(self.queue(ev.tenant, &e.ready()).await?);
                     }
                     Err(e) => tracing::warn!(error = %e, "identity event unreadable; passed"),
+                }
+            } else if ev.kind.starts_with(SIGNAL_PREFIX) {
+                match Signal::from_outbox(&ev.kind, &ev.payload) {
+                    Ok(s) => {
+                        let n = self.queue_signal(ev.tenant, ev.realm, &s).await?;
+                        queued = queued.saturating_add(n);
+                    }
+                    Err(e) => tracing::warn!(error = %e, "identity signal unreadable; passed"),
                 }
             }
             identity::ack(&self.db.reader, CONSUMER, ev.cursor())
@@ -111,6 +124,12 @@ impl<C: Clock + Send + Sync> Fanout<C> {
                         self.end_party_sessions(router, tenant, domain, &p.0)
                             .await?;
                     }
+                    if let (Some(router), Kind::InstanceTerminated, Subject::Instance(i)) =
+                        (router, e.kind, e.subject)
+                    {
+                        self.device_ended(router, tenant, domain, &i.0, e.at)
+                            .await?;
+                    }
                     let ready = authority_ready(&e, &r.event_id);
                     queued = queued.saturating_add(self.queue(tenant, &ready).await?);
                 }
@@ -148,6 +167,46 @@ impl<C: Clock + Send + Sync> Fanout<C> {
                 && let Some(subject) = idp::party_subject(&mut t, party).await.map_err(down)?
             {
                 t.end_sessions(subject).await.map_err(down)?;
+                // TN-41, MD-7
+                let at = t.server_time().await.map_err(down)?;
+                let id = access_identity_account::app::signal::fresh_id().map_err(down)?;
+                let s = Signal::session_revoked(id, subject, Initiator::Policy, at);
+                access_identity_account::app::signal::emit_tenant(&mut t, &s)
+                    .await
+                    .map_err(down)?;
+            }
+            t.commit().await.map_err(down)?;
+        }
+        Ok(())
+    }
+
+    /// TN-41: the CAEP `device-compliance-change` of a device Instance that ended, in every
+    /// live realm of `tenant` that `domain` governs and that knows the Instance as a device key.
+    async fn device_ended(
+        &self,
+        router: &Pool,
+        tenant: TenantId,
+        domain: &DomainId,
+        instance: &[u8; 16],
+        at: u64,
+    ) -> Result<(), Unavailable> {
+        for r in tenancy::tenant_routes(router, &[tenant])
+            .await
+            .map_err(down)?
+        {
+            let mut t = TenantTx::begin(&self.db.app, r.tenant, r.realm)
+                .await
+                .map_err(down)?;
+            let governed = idp::governance(&mut t)
+                .await
+                .map_err(down)?
+                .is_some_and(|g| g.domain == *domain);
+            if governed && let Some(subject) = t.device_subject(instance).await.map_err(down)? {
+                let id = access_identity_account::app::signal::fresh_id().map_err(down)?;
+                let s = Signal::device_compliance(id, subject, false, at);
+                access_identity_account::app::signal::emit_tenant(&mut t, &s)
+                    .await
+                    .map_err(down)?;
             }
             t.commit().await.map_err(down)?;
         }
@@ -208,20 +267,25 @@ impl<C: Clock + Send + Sync> Fanout<C> {
         }
     }
 
-    /// One delivery per live subscription of `tenant` that asked for the event's type, and per
-    /// live platform product subscription of another tenant (OP-149 m.17 (e)). Every SET of a
+    /// One delivery per live subscription of `tenant` that asked for the event's type or its
+    /// CAEP counterpart, and per live platform product subscription of another tenant (OP-149
+    /// m.17 (e)); the stream's profile decides which forms it gets (§9.16). Every SET of a
     /// platform product's subscription names the event's tenant in `access_tenant`, its own
     /// tenant's events included (OP-149 m.26 (d)).
     async fn queue(&self, tenant: TenantId, ready: &Ready) -> Result<u32, Unavailable> {
         let now = self.clock.now().map_err(down)?;
-        let urn = urn(ready.name);
+        let own = urn(ready.name);
+        let standard = counterpart(ready.name).map(signal_uri);
+        let wants = |events: &[String]| {
+            events.contains(&own) || standard.as_ref().is_some_and(|s| events.contains(s))
+        };
         let mut t = TenantTx::begin_tenant(&self.db.app, tenant)
             .await
             .map_err(down)?;
         let subs = t.live_subscriptions().await.map_err(down)?;
         t.commit().await.map_err(down)?;
         let mut by_realm: BTreeMap<([u8; 16], [u8; 16]), Vec<SubscriptionRow>> = BTreeMap::new();
-        for s in subs.into_iter().filter(|s| s.events.contains(&urn)) {
+        for s in subs.into_iter().filter(|s| wants(&s.events)) {
             by_realm
                 .entry((*tenant.as_bytes(), s.realm))
                 .or_default()
@@ -231,7 +295,7 @@ impl<C: Clock + Send + Sync> Fanout<C> {
             .await
             .map_err(down)?
         {
-            if p.tenant == tenant || !p.events.contains(&urn) {
+            if p.tenant == tenant || !wants(&p.events) {
                 continue;
             }
             let mut t = TenantTx::begin(&self.db.app, p.tenant, p.realm)
@@ -246,6 +310,7 @@ impl<C: Clock + Send + Sync> Fanout<C> {
                     .push(s);
             }
         }
+        let raw_id = b64url_decode(&ready.id).map_err(down)?;
         let mut queued = 0_u32;
         for ((owner, realm), subs) in by_realm {
             let (owner, realm) = (TenantId::from_bytes(owner), RealmId::from_bytes(realm));
@@ -255,31 +320,147 @@ impl<C: Clock + Send + Sync> Fanout<C> {
             let mut t = TenantTx::begin(&self.db.app, owner, realm)
                 .await
                 .map_err(down)?;
+            let profiles = profiles(&mut t, realm).await?;
             for s in subs {
-                let mut claims = set_claims(ready, issuer.as_str(), &s.audience, now / 1000);
-                if owner != tenant || s.platform_product.is_some() {
-                    set_tenant(&mut claims, &self.db.tenant(tenant)?);
-                }
-                let payload = serde_json::to_vec(&claims).map_err(down)?;
-                let row = DeliveryRow {
-                    tenant: *owner.as_bytes(),
-                    realm: s.realm,
-                    subscription: s.id,
-                    channel: s.channel.clone(),
-                    event_id: ready.id.clone(),
-                    event_type: urn.clone(),
-                    payload,
-                    occurred_ms: i64::try_from(ready.at).map_err(down)?,
-                    attempts: 0,
-                    state: String::from("pending"),
-                    last_reason: None,
-                };
-                if t.enqueue_delivery(&row, now).await.map_err(down)? {
-                    queued = queued.saturating_add(1);
+                let profile = profiles.get(&s.id).copied().unwrap_or_default();
+                for form in forms(ready.name, profile, &s.events) {
+                    let (mut claims, event_id) = if form == own {
+                        (
+                            set_claims(ready, issuer.as_str(), &s.audience, now / 1000),
+                            ready.id.clone(),
+                        )
+                    } else {
+                        let jti = derived_id("access/set-counterpart/v1", &raw_id, form.as_bytes());
+                        let body = counterpart(ready.name).map_or_else(
+                            || json!({}),
+                            |k| counterpart_body(k, ready.name, ready.at),
+                        );
+                        let env = Envelope {
+                            iss: issuer.as_str(),
+                            aud: &s.audience,
+                            iat_s: now / 1000,
+                            jti: &jti,
+                            txn: &ready.id,
+                        };
+                        let sub_id = json!({"format": "opaque", "id": ready.sub_id});
+                        (standard_claims(&env, &form, &sub_id, body), jti)
+                    };
+                    if owner != tenant || s.platform_product.is_some() {
+                        set_tenant(&mut claims, &self.db.tenant(tenant)?);
+                    }
+                    let row = delivery_row(owner, &s, event_id, form, &claims, ready.at)?;
+                    if t.enqueue_delivery(&row, now).await.map_err(down)? {
+                        queued = queued.saturating_add(1);
+                    }
                 }
             }
             t.commit().await.map_err(down)?;
         }
         Ok(queued)
     }
+
+    /// One CAEP or RISC SET per live stream of the signal's realm that asked for its type
+    /// (TN-41, TN-43). The subject is named by the stream's receiver's own pairwise `sub`
+    /// (RFC 9493 `iss_sub`), and only when the subject already has one there: a receiver never
+    /// learns of a subject it was not given (MD-10). A realm-wide signal names the realm issuer
+    /// (CR-27). Each copy has its own `jti` and `txn`, so receivers cannot link them (TI-RT10).
+    async fn queue_signal(
+        &self,
+        tenant: TenantId,
+        realm: RealmId,
+        signal: &Signal,
+    ) -> Result<u32, Unavailable> {
+        let now = self.clock.now().map_err(down)?;
+        let uri = signal_uri(signal.kind);
+        let Some((issuer, _)) = realm_signing(&self.db.app, tenant, realm).await? else {
+            return Ok(0);
+        };
+        let mut t = TenantTx::begin(&self.db.app, tenant, realm)
+            .await
+            .map_err(down)?;
+        let subs = t.live_subscriptions().await.map_err(down)?;
+        let mut queued = 0_u32;
+        for s in subs
+            .iter()
+            .filter(|s| s.realm == *realm.as_bytes() && s.events.contains(&uri))
+        {
+            let sub_id = match signal.subject {
+                None => json!({"format": "uri", "uri": issuer.as_str()}),
+                Some(subject) => {
+                    let Some(client) = idp::client(&mut t, &s.audience)
+                        .await
+                        .map_err(down)?
+                        .filter(|c| c.active)
+                    else {
+                        continue;
+                    };
+                    let Some(sub) = t
+                        .existing_pairwise(subject, client.client_uuid)
+                        .await
+                        .map_err(down)?
+                    else {
+                        continue;
+                    };
+                    json!({"format": "iss_sub", "iss": issuer.as_str(), "sub": sub})
+                }
+            };
+            let jti = derived_id("access/signal-set/v1", &signal.id, &s.id);
+            let txn = derived_id("access/signal-txn/v1", &signal.id, &s.id);
+            let env = Envelope {
+                iss: issuer.as_str(),
+                aud: &s.audience,
+                iat_s: now / 1000,
+                jti: &jti,
+                txn: &txn,
+            };
+            let claims = standard_claims(&env, &uri, &sub_id, signal.event_body());
+            let row = delivery_row(tenant, s, jti, uri.clone(), &claims, signal.at)?;
+            if t.enqueue_delivery(&row, now).await.map_err(down)? {
+                queued = queued.saturating_add(1);
+            }
+        }
+        t.commit().await.map_err(down)?;
+        Ok(queued)
+    }
+}
+
+/// The profiles of `realm`'s streams; a stream without one is [`Profile::Both`].
+async fn profiles(
+    t: &mut TenantTx,
+    realm: RealmId,
+) -> Result<BTreeMap<[u8; 16], Profile>, Unavailable> {
+    Ok(t.stream_profiles(realm)
+        .await
+        .map_err(down)?
+        .into_iter()
+        .map(|p| {
+            (
+                p.subscription,
+                Profile::parse(&p.profile).unwrap_or_default(),
+            )
+        })
+        .collect())
+}
+
+fn delivery_row(
+    owner: TenantId,
+    s: &SubscriptionRow,
+    event_id: String,
+    event_type: String,
+    claims: &Value,
+    at: u64,
+) -> Result<DeliveryRow, Unavailable> {
+    Ok(DeliveryRow {
+        tenant: *owner.as_bytes(),
+        realm: s.realm,
+        subscription: s.id,
+        channel: s.channel.clone(),
+        event_id,
+        event_type,
+        payload: serde_json::to_vec(claims).map_err(down)?,
+        occurred_ms: i64::try_from(at).map_err(down)?,
+        attempts: 0,
+        state: String::from("pending"),
+        last_reason: None,
+    })
 }

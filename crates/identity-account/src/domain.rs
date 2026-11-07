@@ -6,6 +6,7 @@ pub mod gcra;
 pub mod identifier;
 pub mod login;
 pub mod password;
+pub mod signal;
 pub mod status;
 pub mod throttle;
 pub mod timing;

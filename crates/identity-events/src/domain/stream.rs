@@ -5,6 +5,7 @@ use serde_json::{Map, Value, json};
 
 use crate::domain::Invalid;
 use crate::domain::catalog::{NAMES, name_of, urn, uuid};
+use crate::domain::mapping::{Profile, signal_of, signal_uris};
 
 /// RFC 8935 push delivery method.
 pub const PUSH_METHOD: &str = "urn:ietf:rfc:8935";
@@ -87,6 +88,30 @@ pub struct StreamRequest {
     pub events: Vec<String>,
     /// Free text.
     pub description: Option<String>,
+    /// Whether Access events go with or instead of their CAEP counterparts (§9.16).
+    pub profile: Profile,
+    /// The SET signing algorithm the receiver asked for; `None` is the realm's (TN-40).
+    pub alg: Option<SetAlg>,
+}
+
+/// A SET signing algorithm a receiver may ask for (TN-40, OP-151 m.3 (k)).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SetAlg {
+    /// ES256, the default (MD-3).
+    Es256,
+    /// RS256 of the SSF Interoperability Profile.
+    Rs256,
+}
+
+impl SetAlg {
+    /// The JOSE name.
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Es256 => "ES256",
+            Self::Rs256 => "RS256",
+        }
+    }
 }
 
 fn text<'a>(o: &'a Map<String, Value>, k: &str) -> Result<Option<&'a str>, Invalid> {
@@ -108,7 +133,9 @@ pub fn requested(v: Option<&Value>) -> Result<Vec<String>, Invalid> {
     let mut out = Vec::with_capacity(list.len());
     for e in list {
         let u = e.as_str().ok_or(Invalid("events_requested"))?;
-        name_of(u).ok_or(Invalid("unsupported-event"))?;
+        if name_of(u).is_none() && signal_of(u).is_none() {
+            return Err(Invalid("unsupported-event"));
+        }
         out.push(String::from(u));
     }
     out.sort();
@@ -149,12 +176,22 @@ pub fn parse_stream(body: &[u8]) -> Result<StreamRequest, Invalid> {
     if description.as_ref().is_some_and(|d| d.len() > 512) {
         return Err(Invalid("description"));
     }
+    let profile = text(o, "profile")?.map_or(Ok(Profile::Both), Profile::parse)?;
+    // TN-40, OP-151 m.3 (k)
+    let alg = match text(o, "alg")? {
+        None => None,
+        Some("ES256") => Some(SetAlg::Es256),
+        Some("RS256") => Some(SetAlg::Rs256),
+        Some(_) => return Err(Invalid("unsupported_alg")),
+    };
     Ok(StreamRequest {
         channel,
         endpoint,
         audience: String::from(audience),
         events: requested(o.get("events_requested"))?,
         description,
+        profile,
+        alg,
     })
 }
 
@@ -190,10 +227,12 @@ pub fn stream_json(
     })
 }
 
-/// Every event type URN the transmitter supports.
+/// Every event type the transmitter supports: the Access URNs, then the CAEP and RISC URIs.
 #[must_use]
 pub fn supported() -> Vec<String> {
-    NAMES.iter().map(|n| urn(n)).collect()
+    let mut out: Vec<String> = NAMES.iter().map(|n| urn(n)).collect();
+    out.extend(signal_uris());
+    out
 }
 
 /// The transmitter metadata at `/.well-known/ssf-configuration` (SSF 1.0 §7.1). Stream

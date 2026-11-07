@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:suiss:access:schema:caep:session-established:1",
+  "title": "CAEP session-established (OpenID CAEP 1.0)",
+  "description": "A login session of the subject started.",
+  "type": "object",
+  "required": [
+    "event_timestamp"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "event_timestamp": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "NumericDate, seconds."
+    }
+  }
+}

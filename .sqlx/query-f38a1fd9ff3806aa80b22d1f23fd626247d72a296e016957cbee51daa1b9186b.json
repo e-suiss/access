@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.ssf_transmitter SET last_seen_at = GREATEST(last_seen_at, to_timestamp($4::bigint / 1000.0))\n              WHERE tenant_id = $1 AND realm_id = $2 AND transmitter_id = $3",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "f38a1fd9ff3806aa80b22d1f23fd626247d72a296e016957cbee51daa1b9186b"
+}

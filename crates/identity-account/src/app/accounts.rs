@@ -8,9 +8,11 @@ use access_store::audit::AuditEvent;
 use crate::AccountError;
 use crate::app::hasher::Hasher;
 use crate::app::sealing::{new_subject_key, seal, subject_key};
+use crate::app::signal::{emit as signal, fresh_id};
 use crate::app::{Actor, Realm, breach};
 use crate::domain::identifier::Identifier;
 use crate::domain::password::{ALGORITHM, Password};
+use crate::domain::signal::{ChangeType, CredentialType, Initiator, Signal};
 use crate::domain::status::{AccountStatus, Deactivation};
 use crate::ports::{AccountDb, AccountTx, BreachRanges, Entropy};
 
@@ -38,6 +40,37 @@ async fn audit<T: AccountTx>(
         correlation: who.correlation,
     })
     .await
+}
+
+/// TN-41, TN-43: the CAEP `session-revoked` of ending the subject's sessions and, when the
+/// account can no longer sign in, the RISC `account-disabled`, in the change's transaction.
+async fn ended_signals<T: AccountTx>(
+    tx: &mut T,
+    subject: [u8; 16],
+    disabled: bool,
+) -> Result<(), AccountError> {
+    let at = tx.server_time().await?;
+    signal(
+        tx,
+        &Signal::session_revoked(fresh_id()?, subject, Initiator::Admin, at),
+    )
+    .await?;
+    if disabled {
+        signal(tx, &Signal::account_disabled(fresh_id()?, subject, at)).await?;
+    }
+    Ok(())
+}
+
+/// TN-41: the CAEP `credential-change` of a credential change, in its transaction.
+async fn credential_signal<T: AccountTx>(
+    tx: &mut T,
+    subject: [u8; 16],
+    credential: CredentialType,
+    change: ChangeType,
+) -> Result<(), AccountError> {
+    let at = tx.server_time().await?;
+    let s = Signal::credential_change(fresh_id()?, subject, credential, change, at);
+    signal(tx, &s).await
 }
 
 /// Queues the realm issuer's `account_status` Claim of a status change in the same transaction
@@ -114,6 +147,7 @@ pub async fn change_status<D: AccountDb>(
     }
     if from.can_authenticate() && !to.can_authenticate() {
         tx.end_sessions(subject).await?;
+        ended_signals(&mut tx, subject, true).await?;
     }
     status_claim(&mut tx, subject, to).await?;
     let event = format!("account.{}", to.name());
@@ -166,6 +200,7 @@ pub async fn deactivate<D: AccountDb>(
         .end_sessions(subject)
         .await?
         .ok_or(AccountError::Corrupt)?;
+    ended_signals(&mut tx, subject, true).await?;
     status_claim(&mut tx, subject, AccountStatus::Deactivated).await?;
     audit(
         &mut tx,
@@ -231,11 +266,17 @@ pub async fn set_password<D: AccountDb, B: BreachRanges, E: Entropy>(
             sealed: &sealed,
         })
         .await?;
+    let change = if old.is_empty() {
+        ChangeType::Create
+    } else {
+        ChangeType::Update
+    };
     for c in old {
         if tx.revoke(subject, c.id).await? != Revoke::Done {
             return Err(AccountError::Corrupt);
         }
     }
+    credential_signal(&mut tx, subject, CredentialType::Password, change).await?;
     audit(
         &mut tx,
         "credential.password.set",
@@ -264,11 +305,24 @@ pub async fn remove_credential<D: AccountDb>(
         .await?
         .iter()
         .any(|c| c.id == credential);
+    let kind = if passkey {
+        CredentialType::Fido2
+    } else if tx
+        .credentials(subject, PASSWORD)
+        .await?
+        .iter()
+        .any(|c| c.id == credential)
+    {
+        CredentialType::Password
+    } else {
+        CredentialType::App
+    };
     match tx.revoke(subject, credential).await? {
         Revoke::Done => {}
         Revoke::Missing => return Err(AccountError::NotFound),
         Revoke::LastMethod => return Err(AccountError::LastMethod),
     }
+    credential_signal(&mut tx, subject, kind, ChangeType::Revoke).await?;
     // IDP-2, OP-150 L2: the passkey's binding line ends; no Instance changes
     if passkey {
         let at = tx.server_time().await?;

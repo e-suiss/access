@@ -31,21 +31,51 @@
       "type": "array",
       "items": {
         "type": "string",
-        "pattern": "^urn:suiss:access:event:[a-z][a-z0-9_.-]*$"
+        "oneOf": [
+          {
+            "pattern": "^urn:suiss:access:event:[a-z][a-z0-9_.-]*$"
+          },
+          {
+            "pattern": "^https://schemas[.]openid[.]net/secevent/caep/event-type/[a-z][a-z-]*$"
+          },
+          {
+            "pattern": "^https://schemas[.]openid[.]net/secevent/risc/event-type/[a-z][a-z-]*$"
+          }
+        ]
       }
     },
     "events_requested": {
       "type": "array",
       "items": {
         "type": "string",
-        "pattern": "^urn:suiss:access:event:[a-z][a-z0-9_.-]*$"
+        "oneOf": [
+          {
+            "pattern": "^urn:suiss:access:event:[a-z][a-z0-9_.-]*$"
+          },
+          {
+            "pattern": "^https://schemas[.]openid[.]net/secevent/caep/event-type/[a-z][a-z-]*$"
+          },
+          {
+            "pattern": "^https://schemas[.]openid[.]net/secevent/risc/event-type/[a-z][a-z-]*$"
+          }
+        ]
       }
     },
     "events_delivered": {
       "type": "array",
       "items": {
         "type": "string",
-        "pattern": "^urn:suiss:access:event:[a-z][a-z0-9_.-]*$"
+        "oneOf": [
+          {
+            "pattern": "^urn:suiss:access:event:[a-z][a-z0-9_.-]*$"
+          },
+          {
+            "pattern": "^https://schemas[.]openid[.]net/secevent/caep/event-type/[a-z][a-z-]*$"
+          },
+          {
+            "pattern": "^https://schemas[.]openid[.]net/secevent/risc/event-type/[a-z][a-z-]*$"
+          }
+        ]
       }
     },
     "delivery": {
@@ -76,6 +106,23 @@
         "paused",
         "disabled"
       ]
+    },
+    "profile": {
+      "type": "string",
+      "enum": [
+        "access",
+        "caep",
+        "both"
+      ],
+      "description": "Whether Access events with a CAEP counterpart go with it (`both`, the default), instead of it (`caep`) or alone (`access`) (§9.16)."
+    },
+    "alg": {
+      "type": "string",
+      "enum": [
+        "ES256",
+        "Ed25519"
+      ],
+      "description": "The SET signing algorithm of the stream (TN-40)."
     }
   }
 }

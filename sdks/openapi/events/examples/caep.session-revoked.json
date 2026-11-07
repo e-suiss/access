@@ -1,0 +1,18 @@
+{
+  "iss": "https://id.example/realms/shop",
+  "aud": "rp-client",
+  "iat": 1793750401,
+  "jti": "Q0FFUHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHg",
+  "txn": "VFhOeHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHg",
+  "sub_id": {
+    "format": "iss_sub",
+    "iss": "https://id.example/realms/shop",
+    "sub": "q3Vb0x7tqk9oXhR2mQkYfA2b7Nn8L1pZcVwE4yTgUaI"
+  },
+  "events": {
+    "https://schemas.openid.net/secevent/caep/event-type/session-revoked": {
+      "event_timestamp": 1793750400,
+      "initiating_entity": "user"
+    }
+  }
+}

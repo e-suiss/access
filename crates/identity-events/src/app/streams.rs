@@ -12,6 +12,7 @@ use access_kernel::json::b64url_encode;
 use access_store::events::SubscriptionRow;
 use access_store::identity::{RealmId, TenantId, TenantTx};
 use access_store::idp;
+use access_store::ssf::StreamProfile;
 use serde_json::Value;
 use zeroize::Zeroizing;
 
@@ -19,9 +20,21 @@ use crate::app::{Db, down, realm_signing};
 use crate::domain::Invalid;
 use crate::domain::set::{SET_TYP, stamp_issued};
 use crate::domain::stream::{
-    Channel, StreamRequest, parse_poll, poll_response, requested, stream_json,
+    Channel, SetAlg, StreamRequest, parse_poll, poll_response, requested, stream_json,
 };
 use crate::ports::{Clock, Random, Sealer, TokenSigner, Unavailable};
+use access_crypto::jose::JwsAlg;
+
+/// Adds a stream's `profile` and `alg` to its configuration (§9.16, TN-40).
+fn decorate(stream: &mut Value, p: Option<&StreamProfile>) {
+    if let Some(m) = stream.as_object_mut() {
+        let (profile, alg) = p.map_or(("both", None), |p| (p.profile.as_str(), Some(&p.alg)));
+        m.insert("profile".into(), profile.into());
+        if let Some(a) = alg {
+            m.insert("alg".into(), a.as_str().into());
+        }
+    }
+}
 
 mod control;
 
@@ -37,6 +50,9 @@ pub enum StreamError {
     /// The platform client already owns a live stream to that endpoint (OP-149 m.17 (e)).
     #[error("stream exists")]
     Exists,
+    /// The SET algorithm asked for cannot be signed in this realm (TN-40, OP-151 m.3 (k)).
+    #[error("unsupported alg")]
+    UnsupportedAlg,
     /// Storage, keys or the signer failed.
     #[error("unavailable")]
     Unavailable,
@@ -56,6 +72,7 @@ impl StreamError {
             Self::Invalid(i) => (400, i.0),
             Self::NotFound => (404, "no-such-stream"),
             Self::Exists => (409, "stream-exists"),
+            Self::UnsupportedAlg => (400, "unsupported_alg"),
             Self::Unavailable => (503, "temporarily-unavailable"),
         }
     }
@@ -211,8 +228,13 @@ impl<K: Sealer, R: Random> Streams<K, R> {
             channel: Channel::SsfPush,
             endpoint: Some(String::from(endpoint)),
             audience: String::from(client_id),
-            events: crate::domain::stream::supported(),
+            events: crate::domain::catalog::NAMES
+                .iter()
+                .map(|n| crate::domain::catalog::urn(n))
+                .collect(),
             description: Some(String::from("platform pairing")),
+            profile: crate::domain::mapping::Profile::Access,
+            alg: None,
         };
         match self
             .create_for_platform(tenant, realm, &req, client_id)
@@ -330,7 +352,15 @@ impl<K: Sealer, R: Random> Streams<K, R> {
         {
             return Err(Invalid("endpoint_url").into());
         }
-        let issuer = self.issuer(tenant, realm).await?;
+        let (issuer, realm_alg) = realm_signing(&self.db.app, tenant, realm)
+            .await?
+            .ok_or(StreamError::NotFound)?;
+        let issuer = String::from(issuer.as_str());
+        // TN-40, OP-151 m.3 (k): RS256 needs a realm RSA key the signer ports cannot hold
+        let alg = match (req.alg, realm_alg) {
+            (None, a) | (Some(SetAlg::Es256), a @ JwsAlg::Es256) => a,
+            (Some(SetAlg::Es256 | SetAlg::Rs256), _) => return Err(StreamError::UnsupportedAlg),
+        };
         let mut raw = [0_u8; 16];
         self.random.fill(&mut raw)?;
         let id = as_v4(raw);
@@ -375,10 +405,18 @@ impl<K: Sealer, R: Random> Streams<K, R> {
         } else {
             t.insert_subscription(&row).await.map_err(down)?;
         }
+        let profile = StreamProfile {
+            subscription: id,
+            profile: String::from(req.profile.name()),
+            alg: String::from(alg.name()),
+        };
+        t.set_stream_profile(&profile).await.map_err(down)?;
         t.commit().await.map_err(down)?;
+        let mut stream = Self::render(&issuer, &row);
+        decorate(&mut stream, Some(&profile));
         Ok(Created {
             id,
-            stream: Self::render(&issuer, &row),
+            stream,
             secret,
             token,
         })
@@ -420,8 +458,11 @@ impl<K: Sealer, R: Random> Streams<K, R> {
             .await
             .map_err(down)?;
         let s = t.subscription(realm, id).await.map_err(down)?;
+        let profiles = t.stream_profiles(realm).await.map_err(down)?;
         t.commit().await.map_err(down)?;
-        Ok(Self::render(&issuer, &s.ok_or(StreamError::NotFound)?))
+        let mut stream = Self::render(&issuer, &s.ok_or(StreamError::NotFound)?);
+        decorate(&mut stream, profiles.iter().find(|p| p.subscription == id));
+        Ok(stream)
     }
 
     /// Replaces the requested events, the status (`enabled` or `paused`) and description.

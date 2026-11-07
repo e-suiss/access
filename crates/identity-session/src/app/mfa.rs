@@ -5,7 +5,9 @@
 
 use access_crypto::Secret;
 use access_identity_account::app::sealing::{open, seal, subject_key};
+use access_identity_account::app::signal::{emit as signal, fresh_id};
 use access_identity_account::domain::password::Password;
+use access_identity_account::domain::signal::{ChangeType, CredentialType, Initiator, Signal};
 use access_identity_webauthn::app::RegistrationOutcome;
 use access_identity_webauthn::domain::ceremony::{RegistrationResponse, RegistrationState};
 use access_identity_webauthn::domain::ids::UserHandle;
@@ -172,6 +174,9 @@ where
         if epoch != next {
             return Err(SessionError::Conflict);
         }
+        // TN-41, MD-7
+        let s = Signal::session_revoked(fresh_id()?, session.subject, Initiator::User, self.now());
+        signal(tx, &s).await?;
         Ok(epoch)
     }
 
@@ -303,6 +308,15 @@ where
         if !tx.use_otp_step(credential, i64_of(step)?).await? {
             return Err(SessionError::Corrupt);
         }
+        // TN-41
+        let s = Signal::credential_change(
+            fresh_id()?,
+            subject,
+            CredentialType::App,
+            ChangeType::Create,
+            now,
+        );
+        signal(&mut tx, &s).await?;
         let recovery_codes = if tx.credentials(subject, RECOVERY_CODE).await?.is_empty() {
             Some(self.new_recovery_codes(&mut tx, subject, &dek).await?)
         } else {
@@ -574,6 +588,15 @@ where
                 super::claims::passkey_registered(&mut tx, subject, sibling, record, &others, now)
                     .await?;
             }
+            // TN-41
+            let s = Signal::credential_change(
+                fresh_id()?,
+                subject,
+                CredentialType::Fido2,
+                ChangeType::Create,
+                now,
+            );
+            signal(&mut tx, &s).await?;
             let target = self.external(subject)?;
             audit(
                 &mut tx,

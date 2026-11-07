@@ -8,8 +8,9 @@
 
 use access_crypto::dpop::Role;
 use access_crypto::oauth::pkce_matches;
+use access_identity_account::domain::signal::{Initiator, Signal};
 use access_kernel::digest::Digest;
-use access_store::oauth::NewGrant;
+use access_store::oauth::{GrantRow, NewGrant};
 
 use super::authority::Asked;
 use super::{
@@ -298,7 +299,7 @@ impl<E: Env> OAuth<E> {
             }
             return Ok(invalid_grant());
         }
-        let grant = tx.grant(grant_id).await?.ok_or(Unavailable)?;
+        let grant = presented(tx, grant_id, session.subject, now).await?;
         let nonce = details.nonce.as_deref();
         if let Some(p) = &projected {
             let body = self
@@ -352,6 +353,11 @@ impl<E: Env> OAuth<E> {
             // TN-31, RR-18
             tx.revoke_grant(grant.id, signed(now), "reuse").await?;
             tx.end_sessions(grant.subject).await?;
+            // TN-41, MD-7
+            signal(tx, |id| {
+                Signal::session_revoked(id, grant.subject, Initiator::Policy, now)
+            })
+            .await?;
             // §9.9.3 rule 6, P50: the whole family of authority tokens ends
             if let (Some(family), Some(root), Some(domain)) =
                 (details.family, details.projection, tx.governing().await?)
@@ -427,4 +433,28 @@ impl<E: Env> OAuth<E> {
             .await?;
         Ok(Reply::json(200, &body))
     }
+}
+
+/// Queues the identity plane signal `make` builds with a fresh id, in the token transaction
+/// (TN-41, OP-10).
+async fn signal<T: OAuthTx>(
+    tx: &mut T,
+    make: impl FnOnce([u8; 32]) -> Signal,
+) -> Result<(), Unavailable> {
+    let id = access_identity_account::app::signal::fresh_id().map_err(|_| Unavailable)?;
+    let s = make(id);
+    let bytes = s.to_outbox().map_err(|_| Unavailable)?;
+    tx.outbox(&s.kind.outbox_kind(), &bytes).await
+}
+
+/// The grant a redeemed code opened, with the CAEP `session-presented` of the login session
+/// the client redeemed queued beside it (TN-41).
+async fn presented<T: OAuthTx>(
+    tx: &mut T,
+    grant: [u8; 16],
+    subject: [u8; 16],
+    now: u64,
+) -> Result<GrantRow, Unavailable> {
+    signal(tx, |id| Signal::session_presented(id, subject, now)).await?;
+    tx.grant(grant).await?.ok_or(Unavailable)
 }
