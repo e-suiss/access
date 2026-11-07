@@ -59,6 +59,49 @@ async fn every_table_has_forced_row_level_security_and_a_restrictive_scope_polic
     assert!(bad.is_empty(), "{bad:?}");
 }
 
+/// Every (table, role, privilege) granted in `access` and `access_ops` to a role other than the
+/// owner without a RESTRICTIVE policy that applies to that role and command.
+const UNRESTRICTED_GRANTS: &str = "
+SELECT n.nspname::text || '.' || c.relname::text || ' ' || r.rolname::text || ' ' || priv.p
+  FROM pg_class c
+  JOIN pg_namespace n ON n.oid = c.relnamespace
+ CROSS JOIN pg_roles r
+ CROSS JOIN (VALUES ('SELECT', 'r'), ('INSERT', 'a'), ('UPDATE', 'w'), ('DELETE', 'd')) AS priv (p, cmd)
+ WHERE n.nspname IN ('access', 'access_ops') AND c.relkind IN ('r', 'p')
+   AND r.rolname LIKE 'access\\_%' AND NOT r.rolcanlogin AND r.oid <> c.relowner
+   AND has_table_privilege(r.oid, c.oid, priv.p)
+   AND NOT EXISTS (
+         SELECT FROM pg_policy pol
+          WHERE pol.polrelid = c.oid AND NOT pol.polpermissive
+            AND pol.polcmd::text IN ('*', priv.cmd)
+            AND (0 = ANY (pol.polroles)
+                 OR EXISTS (SELECT FROM unnest(pol.polroles) pr WHERE pg_has_role(r.oid, pr, 'MEMBER'))))
+ ORDER BY 1";
+
+// TNI-3, OP-131: each role's grant on a table meets a RESTRICTIVE policy for that
+// role and command, in the tenant schema and in the operations schema
+#[tokio::test]
+async fn every_granted_role_meets_a_restrictive_policy_for_its_command() {
+    let mut c = admin().await;
+    let bad = strings(&mut c, UNRESTRICTED_GRANTS).await;
+    assert!(bad.is_empty(), "{bad:?}");
+    for sql in [
+        "CREATE TABLE access_ops.tni3_probe (x int)",
+        "ALTER TABLE access_ops.tni3_probe ENABLE ROW LEVEL SECURITY",
+        "ALTER TABLE access_ops.tni3_probe FORCE ROW LEVEL SECURITY",
+        "CREATE POLICY router_only ON access_ops.tni3_probe AS RESTRICTIVE FOR ALL TO access_router USING (true)",
+        "CREATE POLICY reads ON access_ops.tni3_probe AS RESTRICTIVE FOR SELECT TO access_app USING (true)",
+        "GRANT SELECT, INSERT ON access_ops.tni3_probe TO access_app, access_router",
+    ] {
+        sqlx::query(sql).execute(&mut c).await.unwrap();
+    }
+    let probe = strings(&mut c, UNRESTRICTED_GRANTS).await;
+    assert_eq!(
+        probe,
+        vec!["access_ops.tni3_probe access_app INSERT".to_owned()]
+    );
+}
+
 // HL-33
 #[tokio::test]
 async fn the_migrator_owns_everything_and_no_role_bypasses_rls() {
