@@ -365,3 +365,63 @@ fn a_sector_document_lists_every_redirect_uri() {
         Err(Invalid::SectorIdentifier)
     );
 }
+
+// MUST-NEVER-17, TN-61, TNI-6: an administrator never sets or chooses a user's credential: no
+// idp.account action carries one, the account operations take no credential member, and the
+// reset intent (the only way to help a user back in) carries no credential and is never
+// applied here
+#[test]
+fn an_administrator_never_sets_a_users_credential() {
+    use access_internal_api::idp::IdpAction;
+    let account: Vec<_> = IdpAction::ALL
+        .into_iter()
+        .filter(|a| a.namespace() == "idp.account")
+        .collect();
+    assert_eq!(
+        account,
+        [
+            IdpAction::AccountDelete,
+            IdpAction::AccountSuspend,
+            IdpAction::AccountReactivate,
+            IdpAction::AccountCanary,
+        ]
+    );
+    for a in IdpAction::ALL {
+        let label = a.label().to_lowercase();
+        for banned in ["credential", "password", "passkey", "totp", "set_secret"] {
+            assert!(!label.contains(banned), "{label}");
+        }
+    }
+    let ids = ids();
+    let subject = ids.encode(SUBJECT_PREFIX, [1; 16]).unwrap();
+    let chosen = [
+        json!({"password": "hunter2"}),
+        json!({"credential": {"type": "password", "value": "hunter2"}}),
+        json!({"passkey": {"public_key": "pQECAyYgASFYIA"}}),
+        json!({"totp_secret": "JBSWY3DPEHPK3PXP"}),
+    ];
+    for op in [Op::SuspendAccount, Op::ReactivateAccount, Op::MarkCanary] {
+        for body in &chosen {
+            assert_eq!(
+                compile(op, Some(&subject), body, &ids),
+                Err(Invalid::Body),
+                "{op:?} {body}"
+            );
+        }
+    }
+    for body in chosen.iter().chain([&json!({})]) {
+        assert_eq!(
+            compile(Op::ResetIntent, Some(&subject), body, &ids),
+            Err(Invalid::Reserved),
+            "{body}"
+        );
+    }
+    for name in [
+        "setCredential",
+        "setPassword",
+        "putCredential",
+        "createCredential",
+    ] {
+        assert_eq!(Op::from_operation(name), None, "{name}");
+    }
+}

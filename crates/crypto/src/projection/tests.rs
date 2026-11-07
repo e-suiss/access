@@ -531,3 +531,38 @@ fn cbor_maps_to_i_json() {
         s
     );
 }
+
+// TNI-13, MD-9, TN-70: support acting for a subject is a for(P) projection of the one access
+// token type: `sub` is the subject and `act` names the operator; a token naming the subject
+// as `sub` without `act` comes only from the subject's own capacity, never from an operator
+#[test]
+fn support_names_the_subject_and_the_operator() {
+    let f = fixture(false);
+    for signer in signers() {
+        let support = projection(&f, Authority::Bounds);
+        assert_eq!(support.capacity, Capacity::For(PRINCIPAL));
+        let token = access_token(&signer, &support, &parties()).unwrap();
+        let header = token.split('.').next().unwrap();
+        let header = String::from_utf8(b64url_decode(header).unwrap()).unwrap();
+        assert!(
+            header.contains(&format!(r#""typ":"{ACCESS_TOKEN_TYP}""#)),
+            "{header}"
+        );
+        let c = verify_token(&token, &signer, &support.confirmation)
+            .unwrap()
+            .claims;
+        assert_eq!(c.get("sub").and_then(Json::as_str), Some("pw-principal"));
+        let act = c.get("act").unwrap();
+        assert_eq!(act.get("sub").and_then(Json::as_str), Some("pw-actor"));
+        assert_eq!(act.get("iss").and_then(Json::as_str), Some(AS));
+
+        let mut own = projection(&f, Authority::Bounds);
+        own.capacity = Capacity::Own;
+        let token = access_token(&signer, &own, &parties()).unwrap();
+        let c = verify_token(&token, &signer, &own.confirmation)
+            .unwrap()
+            .claims;
+        assert_eq!(c.get("sub").and_then(Json::as_str), Some("pw-actor"));
+        assert!(c.get("act").is_none());
+    }
+}

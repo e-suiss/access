@@ -792,6 +792,60 @@ async fn poll_returns_and_settles_sets() {
     ));
 }
 
+// EI-9, E30, PI-9: delivering semantic events, the receiver's delivery ack and its semantic ack
+// change no authority truth: the domain's log head and state are what the commit left
+#[tokio::test]
+async fn delivery_and_acks_never_change_authority_state() {
+    use access_identity_events::domain::control::parse_ack;
+    use access_store::authority::{read_head, state};
+    let w = World::new().await;
+    let streams = w.streams();
+    let poll = streams
+        .create(
+            w.tenant,
+            w.realm,
+            &parse_stream(&stream_request(
+                "urn:ietf:rfc:8936",
+                None,
+                &["party.compromised", "party.disabled"],
+            ))
+            .unwrap(),
+        )
+        .await
+        .unwrap();
+    let token = poll.token.clone().unwrap();
+    w.authority_events(&[departed(&w.domain), compromised(&w.domain)])
+        .await;
+    let head = read_head(&w.db.sequencer, &w.domain).await.unwrap();
+    let truth = state(&w.db.sequencer, &w.domain).await.unwrap();
+    let fanout = w.fanout();
+    assert_eq!(settle_domain(&fanout, &w.domain, 2).await, 2);
+    let answer = streams
+        .poll(&ClearSigner, &w.clock, w.tenant, w.realm, &token, b"{}")
+        .await
+        .unwrap();
+    let jtis: Vec<String> = answer["sets"]
+        .as_object()
+        .unwrap()
+        .keys()
+        .cloned()
+        .collect();
+    assert_eq!(jtis.len(), 2);
+    let body = serde_json::to_vec(&serde_json::json!({ "ack": jtis })).unwrap();
+    streams
+        .poll(&ClearSigner, &w.clock, w.tenant, w.realm, &token, &body)
+        .await
+        .unwrap();
+    let own = streams.by_token(w.tenant, w.realm, &token).await.unwrap();
+    for (jti, s) in jtis.iter().zip(["applied", "ignored"]) {
+        assert_eq!(w.state(poll.id, jti).await.0, "acknowledged");
+        let ack = parse_ack(format!(r#"{{"jti":"{jti}","state":"{s}"}}"#).as_bytes()).unwrap();
+        assert!(streams.ack(w.tenant, w.realm, &own, &ack).await.unwrap());
+    }
+    assert_eq!(read_head(&w.db.sequencer, &w.domain).await.unwrap(), head);
+    assert_eq!(state(&w.db.sequencer, &w.domain).await.unwrap(), truth);
+}
+
 // §14.3, OP-149 m.4, m.23: an endpoint the SSRF guard refuses fails at once, without retry,
 // also one declared when the stream was created but not by the delivering client, and a
 // disabled stream gets nothing more (OP-73: it stays as a row)

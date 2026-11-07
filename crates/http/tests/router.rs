@@ -136,6 +136,31 @@ async fn healthz_reports_landlock_abi() {
     assert!(body.contains(r#""seccomp_phase":2"#), "{body}");
 }
 
+// U42, §14.5, OP-151 m.3 (b): /healthz on the internal listener names the lockdown in force:
+// the profile, the seccomp phase, the Landlock ABI required (a hard minimum) and the one the
+// kernel reports; the public listener does not serve it
+#[tokio::test]
+async fn healthz_names_the_required_and_the_kernel_landlock_abi() {
+    let app = internal(health(), Readiness::default(), Limits::default(), || 0);
+    let response = app
+        .oneshot(Request::get("/healthz").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let body: serde_json::Value = serde_json::from_str(&body_string(response).await).unwrap();
+    let sandbox = &body["sandbox"];
+    assert_eq!(sandbox["profile"], "server");
+    assert_eq!(sandbox["seccomp_phase"], 2);
+    assert_eq!(sandbox["landlock_required_abi"], 4);
+    assert_eq!(sandbox["landlock_kernel_abi"], 6);
+    let public = router(security_txt(), Limits::default(), Router::new());
+    let response = public
+        .oneshot(Request::get("/healthz").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+}
+
 #[tokio::test]
 async fn unknown_path_is_404_problem() {
     let app = router(security_txt(), Limits::default(), Router::new());

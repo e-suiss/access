@@ -42,9 +42,10 @@ fn brand(logo: &str) -> Branding {
     }
 }
 
-// §13.4 G54, MD-14, OP-149 m.16 (a), OP-63: an idp.* change asked for in a realm subject's
-// session commits only when a live Instance of the Party that subject is bound to signed it;
-// another Party's key, or a subject bound to no Party, is refused before anything is decided
+// §13.4 G54, G53, MD-14, MD-9, OP-149 m.16 (a), OP-63: an idp.* change asked for in a realm
+// subject's session commits only when a live Instance of the Party that subject is bound to
+// signed it; another Party's key (the realm's own administrator acting inside a user's
+// session), or a subject bound to no Party, is refused before anything is decided
 #[tokio::test]
 async fn idp_commits_carry_the_sessions_actor_binding() {
     // L0-META-7, INV-2, PI-7

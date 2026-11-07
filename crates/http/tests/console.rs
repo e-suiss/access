@@ -743,8 +743,8 @@ async fn writes_need_origin_and_the_sessions_csrf_token() {
     assert_eq!(r.status(), StatusCode::UNAUTHORIZED);
 }
 
-// TN-128, MD-14, OP-151 m.3 (s): the cookie alone neither reads through the admin proxy nor
-// writes through it; nothing reaches the management API
+// TN-128, MD-14, OP-151 m.3 (s), TNI-12: the cookie alone neither reads through the admin
+// proxy nor writes through it; nothing reaches the management API
 #[tokio::test]
 async fn the_cookie_alone_cannot_read_or_write() {
     let h = Harness::new();
@@ -962,7 +962,7 @@ async fn no_instance_no_proxy() {
     assert!(h.env().up.take().is_empty());
 }
 
-// TN-128, OP-151 m.3 (s): ADP reads go on as the browser wrote them; the BFF adds no
+// TN-128, OP-151 m.3 (s), TNI-12: ADP reads go on as the browser wrote them; the BFF adds no
 // credential, so a body without the browser's AIS reads as Anonymous; nothing else is reachable
 #[tokio::test]
 async fn adp_reads_carry_no_bff_credential() {

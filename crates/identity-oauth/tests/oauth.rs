@@ -748,6 +748,43 @@ async fn code_flow_with_pkce_and_dpop() {
     assert_ne!(claims(other["id_token"].as_str().unwrap())["sub"], sub);
 }
 
+// U40, MD-10, IDP-24: two relying parties that did not opt in to the public sub get unrelated
+// pairwise subs for the same user, each stable for its own RP, neither derived from the
+// subject's id, and no correlating attribute rides along by default
+#[tokio::test]
+async fn two_relying_parties_cannot_link_a_user_by_sub() {
+    let w = world().await;
+    let id_token = |r: &Reply| claims(body(r, 200)["id_token"].as_str().unwrap());
+    let first = id_token(&w.exchange(&w.code(PUBLIC).await).await);
+    let again = id_token(&w.exchange(&w.code(PUBLIC).await).await);
+    let code = w.code(CONFIDENTIAL).await;
+    let other = id_token(
+        &w.token(
+            &[
+                ("grant_type", "authorization_code"),
+                ("code", &code),
+                ("redirect_uri", CB),
+                ("code_verifier", VERIFIER),
+            ],
+            Some(&basic(CONFIDENTIAL, SECRET)),
+        )
+        .await,
+    );
+    let sub = first["sub"].as_str().unwrap();
+    assert_eq!(again["sub"], sub, "stable for one RP");
+    let other_sub = other["sub"].as_str().unwrap();
+    assert_ne!(other_sub, sub);
+    for s in [sub, other_sub] {
+        assert_ne!(s, b64url_encode(&w.subject));
+        assert!(!s.contains(&b64url_encode(&w.subject)));
+    }
+    for t in [&first, &other] {
+        for c in ["email", "phone_number", "preferred_username"] {
+            assert!(t.get(c).is_none(), "{c} in {t}");
+        }
+    }
+}
+
 /// The realm's tenant as every product-facing surface names it (OP-149 m.19 (a)).
 fn tenant_id(w: &World) -> String {
     IdKey::new(Secret::new([0x1d; 32]))

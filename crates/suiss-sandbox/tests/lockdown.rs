@@ -159,10 +159,10 @@ mod linux {
         ("root_process_without_run_as_is_refused", Expect::Pass),
         // SA-22
         ("lockdown_is_refused_once_other_threads_exist", Expect::Pass),
-        // SA-22, R-2, §14.5
+        // SA-22, R-2, §14.5, U42
         ("landlock_denies_paths_that_were_not_declared", Expect::Pass),
         ("landlock_read_only_path_cannot_be_written", Expect::Pass),
-        // OP-92
+        // OP-92, U42
         (
             "landlock_denies_tcp_connect_to_undeclared_port",
             Expect::Pass,
@@ -189,7 +189,7 @@ mod linux {
             Expect::Pass,
         ),
         ("signer_threads_work_through_both_phases", Expect::Pass),
-        // OP-2
+        // OP-2, U42
         ("signer_can_create_unix_socket_during_startup", Expect::Pass),
         ("signer_cannot_create_inet_socket", Expect::KilledBySeccomp),
         (
@@ -207,7 +207,7 @@ mod linux {
         ),
         // SA-22
         ("server_cannot_spawn_processes", Expect::Pass),
-        // OP-2, §14.5
+        // OP-2, §14.5, U42
         (
             "signer_memfd_secret_memory_is_usable_after_lockdown",
             Expect::PassOrSkip,

@@ -545,8 +545,9 @@ impl World {
     }
 }
 
-// §9.16.2 k.4, TN-42, OP-151 m.3 (l), MD-7: an inbound session-revoked ends the subject's
-// sessions and steps its session_epoch; it is no Grant revocation and writes no authority
+// §9.16.2 k.4, TN-42, OP-151 m.3 (l), MD-7, U38, EP-5: an inbound session-revoked ends the
+// subject's sessions by the time it is taken (the declared processing time is the receipt
+// itself) and steps its session_epoch; it is no Grant revocation and writes no authority
 // state; a replayed jti does nothing twice
 #[tokio::test]
 async fn inbound_session_revoked_ends_sessions_and_revokes_no_grant() {

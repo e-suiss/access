@@ -37,8 +37,8 @@ fn write(key: &str, ais: Option<&str>, token: Option<&str>) -> Request<Body> {
     b.body(Body::from(r#"{"name":"x"}"#)).unwrap()
 }
 
-// §9.7, TN-110, OP-151 m.3 (s): without AIS, with a wrong Instance, or with a read token only,
-// the position of the domain's log does not move; with the caller's own AIS it does
+// §9.7, TN-110, OP-151 m.3 (s), TNI-12: without AIS, with a wrong Instance, or with a read
+// token only, the position of the domain's log does not move; with the caller's own AIS it does
 #[tokio::test]
 async fn a_write_without_actor_proof_changes_nothing() {
     let h = Harness::new();
@@ -128,4 +128,30 @@ fn no_credential_setting_or_acting_as_route_exists() {
             );
         }
     }
+}
+
+// IDI-1, MD-14, TN-110: every realm write route compiles into one idp.* change committed in the
+// realm's governing domain, or is declared reserved and applies nothing; a bulk job runs each
+// item as such a write; no route writes identity plane configuration another way
+#[test]
+fn every_realm_write_is_an_idp_exercise() {
+    use access_http::api::domain::Surface;
+    use access_identity_admin::app::rest::Op;
+    let mut writes = 0;
+    for row in MANIFEST
+        .iter()
+        .filter(|r| r.surface == Surface::Realm && r.changes_state())
+    {
+        assert_eq!(row.access, Access::Write, "{}", row.operation_id);
+        if row.operation_id == "createJob" {
+            continue;
+        }
+        assert!(
+            Op::from_operation(row.operation_id).is_some(),
+            "{} compiles to no idp.* change",
+            row.operation_id
+        );
+        writes += 1;
+    }
+    assert!(writes > 30, "{writes}");
 }
