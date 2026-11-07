@@ -178,11 +178,84 @@ pub fn analyze(
     on_private_runtime(cvc5, async |cvc5| run(cvc5, &old, &new).await)
 }
 
+/// Whether a change moved authority, as a preview shows it (§5.8, OP-105): the relation between
+/// what the old and the new set restrict.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Change {
+    /// Every request gets the same outcome under both sets: authority did not change.
+    Equivalent,
+    /// The new set restricts at least as much everywhere and more somewhere: authority shrank.
+    Narrowing,
+    /// The new set restricts less somewhere and nowhere more: authority grew.
+    Widening(Widening),
+    /// The new set restricts less somewhere and more elsewhere: neither contains the other.
+    Incomparable(Widening),
+    /// A policy of one of the sets can raise an evaluation error (OP-104 m.5).
+    MayError(MayError),
+    /// No relation was proved: a time limit, an `unknown` from the solver, or any other failure.
+    /// Never read as [`Change::Equivalent`].
+    Unknown(AnalysisError),
+}
+
+/// Compares two sets in both directions under the same rules as [`analyze`] and answers "did
+/// authority change?" (§5.8, OP-105). Every failure, a time limit included, is
+/// [`Change::Unknown`]. Blocks the calling thread.
+#[must_use]
+pub fn compare(cvc5: &Cvc5, schema: &str, old: &str, new: &str, limits: Limits) -> Change {
+    let compiled = Engine::compile(schema, old, limits)
+        .map_err(AnalysisError::Old)
+        .and_then(|o| Ok((o, Engine::compile(schema, new, limits).map_err(AnalysisError::New)?)));
+    let (old, new) = match compiled {
+        Ok(pair) => pair,
+        Err(e) => return Change::Unknown(e),
+    };
+    let sets = Set::of(&old).and_then(|o| Ok((o, Set::of(&new)?)));
+    let (old, new) = match sets {
+        Ok(pair) => pair,
+        Err(e) => return Change::Unknown(e),
+    };
+    // OP-104 m.6
+    if let Some(w) = require_changed(&old, &new) {
+        return Change::Widening(w);
+    }
+    match on_private_runtime(cvc5, async |cvc5| relate(cvc5, &old, &new).await) {
+        Ok(change) => change,
+        Err(e) => Change::Unknown(e),
+    }
+}
+
+async fn relate(cvc5: &Cvc5, old: &Set<'_>, new: &Set<'_>) -> Result<Change, AnalysisError> {
+    let compiler = CedarSymCompiler::new(cvc5.spawn()?)?;
+    let mut solver = Solver { compiler, cvc5 };
+    let envs: Vec<RequestEnv> = new.schema.request_envs().collect();
+    let mut widening = None;
+    let mut narrowing = false;
+    for env in &envs {
+        for (side, set) in [(Side::New, new), (Side::Old, old)] {
+            if let Some(e) = solver.may_error(side, set, env).await? {
+                return Ok(Change::MayError(e));
+            }
+        }
+        if widening.is_none() {
+            widening = solver.restricts(old, new, env).await?;
+        }
+        if !narrowing {
+            narrowing = solver.restricts(new, old, env).await?.is_some();
+        }
+    }
+    Ok(match (widening, narrowing) {
+        (None, false) => Change::Equivalent,
+        (None, true) => Change::Narrowing,
+        (Some(w), false) => Change::Widening(w),
+        (Some(w), true) => Change::Incomparable(w),
+    })
+}
+
 /// Runs `f` on a fresh single-threaded runtime in its own thread, so the caller's runtime (if
 /// any) is never entered or blocked from inside.
-fn on_private_runtime<F>(cvc5: &Cvc5, f: F) -> Result<Verdict, AnalysisError>
+fn on_private_runtime<T: Send, F>(cvc5: &Cvc5, f: F) -> Result<T, AnalysisError>
 where
-    F: AsyncFnOnce(&Cvc5) -> Result<Verdict, AnalysisError> + Send,
+    F: AsyncFnOnce(&Cvc5) -> Result<T, AnalysisError> + Send,
 {
     let total = cvc5.timeouts().total;
     std::thread::scope(|s| {

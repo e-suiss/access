@@ -158,3 +158,54 @@ fn sets_outside_the_restriction_rules_are_rejected() {
         Err(AnalysisError::New(CompileError::PermitNotAllowed))
     );
 }
+
+// §5.8, OP-105: a preview that runs out of time says "unknown", never "equivalent"
+#[test]
+fn compare_on_timeout_is_unknown_never_equivalent() {
+    let (path, hash) = script("compare-hang", "exec /bin/sleep 30");
+    let cvc5 = Cvc5::with_hash(path, hash, quick(200, 20_000));
+    let start = std::time::Instant::now();
+    let change = compare(&cvc5, SCHEMA, OLD, NEW, Limits::default());
+    assert_eq!(change, Change::Unknown(AnalysisError::Timeout));
+    assert_ne!(change, Change::Equivalent);
+    assert!(start.elapsed() < Duration::from_secs(10));
+    let missing = Cvc5::with_hash(
+        PathBuf::from("/nonexistent/cvc5"),
+        [0; 32],
+        quick(200, 20_000),
+    );
+    assert_eq!(
+        compare(&missing, SCHEMA, OLD, OLD, Limits::default()),
+        Change::Unknown(AnalysisError::SolverUnavailable)
+    );
+}
+
+// §5.8, OP-105
+#[test]
+fn compare_on_solver_unknown_is_unknown() {
+    let (path, hash) = script(
+        "compare-unknown",
+        "while read -r line; do case \"$line\" in *check-sat*) echo unknown ;; esac; done",
+    );
+    let cvc5 = Cvc5::with_hash(path, hash, quick(5_000, 10_000));
+    assert_eq!(
+        compare(&cvc5, SCHEMA, OLD, NEW, Limits::default()),
+        Change::Unknown(AnalysisError::Unknown)
+    );
+}
+
+// OP-104 m.6, §5.8
+#[test]
+fn compare_sees_a_require_change_as_widening_without_a_solver() {
+    let cvc5 = Cvc5::with_hash(PathBuf::from("/nonexistent"), [0; 32], Timeouts::default());
+    let new = OLD.replace("rs-step-up", "rs-other");
+    assert!(matches!(
+        compare(&cvc5, SCHEMA, OLD, &new, Limits::default()),
+        Change::Widening(_)
+    ));
+    let permit = r#"@id("p") permit(principal, action, resource);"#;
+    assert_eq!(
+        compare(&cvc5, SCHEMA, OLD, permit, Limits::default()),
+        Change::Unknown(AnalysisError::New(CompileError::PermitNotAllowed))
+    );
+}

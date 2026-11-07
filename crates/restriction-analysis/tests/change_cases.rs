@@ -260,3 +260,31 @@ fn e_optional_entity_attribute_is_narrowing() {
         + r#"@id("owner-assurance") forbid(principal, action, resource) when { resource has owner && resource.owner.assurance < 1 };"#;
     assert_eq!(check(&new), Ok(Verdict::Narrowing));
 }
+
+// §5.8, OP-105: "did authority change?" in both directions, timed for the README
+#[test]
+#[cfg(target_os = "linux")]
+#[ignore = "needs the pinned cvc5 in ACCESS_CVC5; run `just smt-test`"]
+fn compare_answers_each_relation_and_reports_its_time() {
+    use esuiss_restriction_analysis::{Change, compare};
+    let tightened = edit("> 10000", "> 5000");
+    let loosened = edit("> 3", "> 4");
+    let both = edit("> 10000", "> 5000").replace("> 3", "> 4");
+    for (name, new, want) in [
+        ("equivalent", OLD.to_owned(), "equivalent"),
+        ("narrowing", tightened, "narrowing"),
+        ("widening", loosened, "widening"),
+        ("incomparable", both, "incomparable"),
+    ] {
+        let start = std::time::Instant::now();
+        let got = match compare(&cvc5(), SCHEMA, OLD, &new, Limits::default()) {
+            Change::Equivalent => "equivalent",
+            Change::Narrowing => "narrowing",
+            Change::Widening(_) => "widening",
+            Change::Incomparable(_) => "incomparable",
+            other => panic!("{name}: {other:?}"),
+        };
+        println!("compare {name}: {} ms", start.elapsed().as_millis());
+        assert_eq!(got, want, "{name}");
+    }
+}
