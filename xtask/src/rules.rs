@@ -27,6 +27,8 @@ pub(crate) mod source;
 pub(crate) mod switches;
 #[path = "rules_telemetry.rs"]
 mod telemetry;
+#[path = "rules_ui_terms.rs"]
+mod ui_terms;
 #[path = "rules_vectors.rs"]
 mod vectors;
 
@@ -142,6 +144,14 @@ pub(crate) fn checks() -> Vec<Check> {
         Check {
             name: "endpoint-manifest",
             run: manifest::check,
+        },
+        Check {
+            name: "forbidden-ui-terms",
+            run: ui_terms::check,
+        },
+        Check {
+            name: "ui-text-nodes",
+            run: ui_terms::check_text_nodes,
         },
     ]);
     all

@@ -15,11 +15,18 @@ const RULE: &str = "no-dev-mode";
 
 /// Reviewed exceptions: (relative path, matched word, reason). Each entry needs
 /// Adem's review.
-const ALLOWLIST: &[(&str, &str, &str)] = &[(
-    "crates/identity-webauthn/src/domain/mds.rs",
-    "bypass",
-    "FIDO MDS3 status name USER_VERIFICATION_BYPASS; it marks a model compromised (OP-146 m.4 (d))",
-)];
+const ALLOWLIST: &[(&str, &str, &str)] = &[
+    (
+        "crates/identity-webauthn/src/domain/mds.rs",
+        "bypass",
+        "FIDO MDS3 status name USER_VERIFICATION_BYPASS; it marks a model compromised (OP-146 m.4 (d))",
+    ),
+    (
+        "xtask/src/rules_ui_terms.rs",
+        "dangerously",
+        "React's dangerouslySetInnerHTML, named only so `ui-text-nodes` can forbid it (TN-131)",
+    ),
+];
 
 /// This file spells out the vocabulary it forbids.
 const SELF_PATH: &str = "xtask/src/rules_switches.rs";

@@ -1,0 +1,14 @@
+# forbidden-ui-terms allowlist (X24, XI-13, OP-151 m.3 (r)). The UI never says "mandate",
+# "pause", "transfer", "verified", "trusted", "full access", "forever", "undo", or "session"
+# for an Instance. An entry keeps a protocol's own phrase where a protocol names it; the phrase
+# starts with the protocol's name, and each entry names its standard and why the word stays.
+
+[[allow]]
+phrase = "OAuth grant type"
+standard = "RFC 6749 §4"
+reason = "The protocol's name for how a client obtains a token; shown only next to the protocol value."
+
+[[allow]]
+phrase = "OAuth scope"
+standard = "RFC 6749 §3.3"
+reason = "The protocol's name for the scope parameter; shown only next to the protocol value."

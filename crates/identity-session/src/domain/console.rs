@@ -5,7 +5,7 @@
 //! cookie carries navigation and the identity plane's own screens only; it authorises no
 //! authority read and no write (MD-14).
 
-use std::net::IpAddr;
+use core::net::IpAddr;
 
 use access_kernel::json::{b64url_decode, b64url_encode};
 use suiss_crypto::digest::context_digest;
