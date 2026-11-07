@@ -447,6 +447,30 @@ jobs:
         run: |
           just web-install
           just wasm
+      # F-10, §14.5: npm trusted publishing (OIDC, no token) with provenance; the package version
+      # is the workspace tag's, and the published entry points are the built ESM files
       - name: Publish the TypeScript SDK
         working-directory: sdks/typescript
-        run: npm publish --provenance --access public
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          if [ -n "${NODE_AUTH_TOKEN:-}" ] || [ -n "${NPM_TOKEN:-}" ]; then
+            echo "trusted publishing only: no npm token may be set" >&2
+            exit 1
+          fi
+          version="${TAG#v}"
+          workspace="$(sed -n 's/^version = "\(.*\)"$/\1/p' ../../Cargo.toml | head -1)"
+          if [ "$version" != "$workspace" ]; then
+            echo "tag $TAG does not match the workspace version $workspace" >&2
+            exit 1
+          fi
+          npm run build
+          node -e '
+            const fs = require("node:fs");
+            const p = JSON.parse(fs.readFileSync("package.json", "utf8"));
+            p.version = process.argv[1];
+            delete p.private;
+            p.exports = { ".": { types: "./dist/index.d.ts", import: "./dist/index.js" } };
+            fs.writeFileSync("package.json", JSON.stringify(p, null, 2) + "\n");
+          ' "$version"
+          npm publish --provenance --access public

@@ -235,6 +235,19 @@ web-check: wasm
 web-test: wasm
     cd sdks/typescript && npm test
 
+# OP-151 m.3 (g), TN-112 item 8: the SDK types are generated from the contracts and committed
+sdk-types-check:
+    cd sdks/typescript && npm run gen
+    git diff --exit-code -- sdks/typescript/src/generated
+
+# OP-151 m.3 (g), T41 item 6: one row of the binding compatibility table (sdks/bindings/README.md)
+bindings-row:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    version="$(sed -n 's/^version = "\(.*\)"$/\1/p' Cargo.toml | head -1)"
+    vectors="$(cd conformance/vectors/core/1 && find . -type f -name '*.json' | LC_ALL=C sort | xargs shasum -a 256 | shasum -a 256 | cut -c1-16)"
+    echo "| ${version} | uniffi (Python, Kotlin, Swift), Wasm (Node) | core/1 \`${vectors}\` |"
+
 web-e2e: wasm login-e2e
     cd web/console && npm run e2e
 

@@ -358,6 +358,9 @@ jobs:
         run: just web-install
       - name: Lint, type check, format (OP-83)
         run: just web-check
+      # OP-151 m.3 (g)
+      - name: Generated SDK types match the OpenAPI contracts
+        run: just sdk-types-check
       # OP-116 m.6
       - name: Unit tests and Kernel vectors through the Wasm binding
         run: just web-test
@@ -368,6 +371,29 @@ jobs:
           path: sdks/typescript/wasm
           retention-days: 1
           if-no-files-found: error
+
+  # OP-151 m.3 (g), T41 item 6: every Kernel binding passes the conformance vectors
+  bindings-gate:
+    name: bindings-gate
+    needs: [test, uniffi-kotlin, uniffi-swift, web]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+        with:
+          cache: "false"
+      - name: Binding compatibility row
+        run: |
+          {
+            echo "| Kernel | Bindings that passed the vectors | Vector set |"
+            echo "|---|---|---|"
+            just bindings-row
+          } >> "$GITHUB_STEP_SUMMARY"
 
   web-e2e:
     name: web-e2e
