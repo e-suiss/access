@@ -1765,9 +1765,11 @@ version = "0.3.1"
 dependencies = [
  "ed25519-dalek",
  "esuiss-access-kernel",
+ "esuiss-access-sdk",
  "esuiss-crypto",
  "miniz_oxide",
  "thiserror",
+ "tokio",
 ]
 
 [[package]]

@@ -1,6 +1,6 @@
 [package]
 name = "esuiss-access-sdk"
-description = "Access SDK for Rust: the PEP and resource server side of an Access decision, fail-closed (CMP-17, OP-150)."
+description = "Access SDK for Rust: `auth` (OIDC relying party, DPoP, refresh single-flight) and `authorize` (the PEP and resource server side of an Access decision), fail-closed (CMP-17, OP-150, OP-151)."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,6 +9,11 @@ repository.workspace = true
 
 [lib]
 name = "access_sdk"
+
+[features]
+default = []
+# OP-151 m.3 (g): the refresh single-flight and the in-memory replay store need a lock
+std = []
 
 [dependencies]
 # OP-150 m.3 (c)
@@ -20,6 +25,9 @@ miniz_oxide = { workspace = true }
 
 [dev-dependencies]
 ed25519-dalek = { workspace = true }
+tokio = { workspace = true, features = ["rt", "macros", "sync"] }
+# the integration tests use the `std` modules
+esuiss-access-sdk = { path = ".", features = ["std"] }
 
 [lints]
 workspace = true
