@@ -297,6 +297,10 @@ where
     /// `POST /v1/account/passkeys/{registration}` finishes with (§10.2.4, OP-150 L2), so the
     /// passkey is a device-bound, user-verified credential of the account like any other. A
     /// registered passkey of that key is found, not made again. Returns the credential id.
+    #[expect(
+        clippy::too_many_lines,
+        reason = "one passkey registration through the sign-in service, as a person would"
+    )]
     async fn passkey(
         &self,
         slug: &str,

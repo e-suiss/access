@@ -10,6 +10,8 @@
 
 use std::time::Duration;
 
+use access_identity_events::app::emit;
+use access_identity_events::domain::catalog::IdentityEvent;
 use access_identity_risk::app::analytics::aggregate;
 use access_store::Pool;
 use access_store::StoreError;
@@ -151,6 +153,18 @@ pub(crate) async fn analytics_tick(
             let step = async {
                 let mut tx = TenantTx::begin(app, realm.tenant, realm.realm).await?;
                 let a = aggregate(&mut tx, day).await.map_err(|e| e.to_string());
+                // OP-151 m.3 (i), IDP-36: the surge also goes to the realm's webhooks
+                if let Ok(Some(s)) = a.as_ref().map(|a| a.surge) {
+                    let id = access_crypto::random::bytes::<32>().map_err(|_| StoreError::Range)?;
+                    let event = IdentityEvent::login_failed_surge(
+                        id,
+                        realm.realm.as_bytes(),
+                        u32::try_from(s.observed).unwrap_or(u32::MAX),
+                        DAY_MS,
+                        now_ms,
+                    );
+                    emit(&mut tx, &event).await?;
+                }
                 let window = tx
                     .analytics_days(day.saturating_sub(FP_WINDOW_DAYS.saturating_sub(1)), day)
                     .await?;

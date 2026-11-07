@@ -760,8 +760,10 @@ fn login(
     products: Pool,
     keks: login::RealmKeks,
     assets: Option<Assets>,
-    hooks: Arc<dyn access_identity_hooks::ports::HookCaller + Sync>,
-    risk: &access_identity_session::app::RiskServices,
+    (hooks, risk): (
+        Arc<dyn access_identity_hooks::ports::HookCaller + Sync>,
+        access_identity_session::app::RiskServices,
+    ),
 ) -> Result<(axum::Router, HostedLogin), String> {
     let identity = config.identity.as_ref().ok_or("no identity section")?;
     let lifetimes = config.login.lifetimes().ok_or("login session lifetimes")?;
@@ -787,7 +789,7 @@ fn login(
         )),
         redirect_to: config.login.redirect_to.clone(),
         hooks,
-        risk: risk.clone(),
+        risk,
     });
     Ok((login_router(discovery, hosted.clone(), assets), hosted))
 }
@@ -1007,8 +1009,7 @@ async fn serve(
         outbox_reader,
         keks,
         prepared.assets,
-        hooks.clone(),
-        &risk_services,
+        (hooks.clone(), risk_services),
     )?;
     let tenants_pool = router_pool.clone();
     let realms = identity(config, router_pool).await?;

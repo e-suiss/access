@@ -338,6 +338,20 @@ ocsf_activity = 99
 caep = ""
 webhook = false
 
+# ---------------------------------------------------------------- identity: risk
+
+# §4.4, TN-46: a canary credential matched; the sign-in ended without a session.
+[[event]]
+event = "risk.canary_hit"
+plane = "identity"
+class = "detection"
+outcome = "failure"
+fields = ["actor", "target"]
+ocsf_class = 2004
+ocsf_activity = 1
+caep = ""
+webhook = false
+
 # ---------------------------------------------------------------- authority: operational stream
 
 # OP-39, OP-44: a protocol rejection makes no record; it goes to this stream, unsampled.
