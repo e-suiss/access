@@ -171,7 +171,17 @@ impl<C: Clock + Send + Sync> WebhookFanout<C> {
             if ev.kind.starts_with(OUTBOX_PREFIX) {
                 match IdentityEvent::from_outbox(&ev.kind, &ev.payload) {
                     Ok(e) => {
-                        queued = queued.saturating_add(self.queue(ev.tenant, &e.ready()).await?);
+                        // OP-67 m.1, §17.8.2
+                        let span = access_telemetry::trace::consumed(
+                            CONSUMER,
+                            ev.trace_parent.as_deref(),
+                            Some(ev.age_ms),
+                        );
+                        let ready = e.ready();
+                        let n =
+                            tracing::Instrument::instrument(self.queue(ev.tenant, &ready), span)
+                                .await?;
+                        queued = queued.saturating_add(n);
                     }
                     Err(e) => tracing::warn!(error = %e, "identity event unreadable; passed"),
                 }
@@ -344,6 +354,14 @@ where
         };
         let after = self.clock.now().map_err(down)?;
         let attempt = judge(&sent, &d, after);
+        if attempt.outcome == "exhausted" {
+            tracing::warn!(
+                event = "webhook.exhausted",
+                attempts = d.attempts.saturating_add(1),
+                reason = attempt.reason.unwrap_or("status"),
+                "webhook delivery given up"
+            );
+        }
         let mut t = TenantTx::begin(&self.db.app, tenant, realm)
             .await
             .map_err(down)?;

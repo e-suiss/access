@@ -177,3 +177,19 @@ since = "unreleased"
 fields = ["factor"]
 ocsf = "account_change"
 caep = "https://schemas.openid.net/secevent/caep/event-type/credential-change"
+
+[[event]]
+name = "hook.refused"
+plane = "identity"
+severity = "info"
+since = "unreleased"
+fields = ["point", "reason"]
+ocsf = "authentication"
+
+[[event]]
+name = "webhook.exhausted"
+plane = "identity"
+severity = "warn"
+since = "unreleased"
+fields = ["attempts", "reason"]
+ocsf = "api_activity"

@@ -75,7 +75,12 @@ where
         };
         let outcome = decide(point, reg.on_no_answer, &reply);
         if let Outcome::Refused(r) = &outcome {
-            tracing::info!(point = point.name(), reason = r.code(), "hook refused");
+            tracing::info!(
+                event = "hook.refused",
+                point = point.name(),
+                reason = r.code(),
+                "hook refused"
+            );
         }
         outcome
     }

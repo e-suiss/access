@@ -215,9 +215,12 @@ impl PgPasskeys<'_> {
             CredentialChange::Added,
             at,
         );
-        tx.outbox(
+        // OP-67 m.1
+        let trace = access_telemetry::trace::current_header();
+        tx.outbox_traced(
             event.kind.outbox_kind(),
             &event.to_outbox().map_err(failed)?,
+            trace.as_deref(),
         )
         .await
         .map_err(failed)?;
