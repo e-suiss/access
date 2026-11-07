@@ -1,0 +1,72 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT r.placement_id, r.governing_domain_id,\n                      (extract(epoch FROM r.created_at) * 1000)::bigint AS \"created_ms!\",\n                      s.exercises_per_day AS \"exercises_per_day?\",\n                      s.projections_per_day AS \"projections_per_day?\"\n                 FROM access.realms r\n                 LEFT JOIN access.sandbox_domains s ON s.domain_id = r.governing_domain_id\n                WHERE r.tenant_id = $1 AND r.realm_id = $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "placement_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.realms",
+            "name": "placement_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "governing_domain_id",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.realms",
+            "name": "governing_domain_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "created_ms!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 3,
+        "name": "exercises_per_day?",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.sandbox_domains",
+            "name": "exercises_per_day"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "projections_per_day?",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.sandbox_domains",
+            "name": "projections_per_day"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      null,
+      true,
+      true
+    ]
+  },
+  "hash": "b23f38c99e31c2af3d188b5c99c9333034619a355cc5ecb4155f718b4bba3704"
+}

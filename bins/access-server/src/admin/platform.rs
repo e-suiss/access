@@ -245,9 +245,14 @@ impl<P: Decider + Governance + Instances + Clone + Send + Sync + 'static> Realms
     }
 
     async fn tenant_exists(&self, tenant: [u8; 16]) -> Result<bool, Unavailable> {
-        let found = sandbox::tenants(&self.router, Some(TenantId::from_bytes(tenant)), None, 1)
-            .await
-            .map_err(|e| unavailable(&e))?;
+        let found = sandbox::tenants(
+            (&self.router, &self.app),
+            Some(TenantId::from_bytes(tenant)),
+            None,
+            1,
+        )
+        .await
+        .map_err(|e| unavailable(&e))?;
         Ok(!found.is_empty())
     }
 
@@ -268,7 +273,7 @@ impl<P: Decider + Governance + Instances + Clone + Send + Sync + 'static> Realms
                     .as_deref()
                     .and_then(|a| tenant_of(&ids, Some(a)))
                     .map(TenantId::from_bytes);
-                let rows = sandbox::tenants(&self.router, only, after, more)
+                let rows = sandbox::tenants((&self.router, &self.app), only, after, more)
                     .await
                     .map_err(|e| unavailable(&e))?;
                 if only.is_some() && rows.is_empty() {
@@ -287,9 +292,15 @@ impl<P: Decider + Governance + Instances + Clone + Send + Sync + 'static> Realms
             PlatformKind::Realms | PlatformKind::SandboxDomains => {
                 let sandbox_only = q.kind == PlatformKind::SandboxDomains;
                 if let Some(slug) = q.key.as_deref() {
-                    let rows = sandbox::realms(&self.router, Some(slug), None, None, (1, false))
-                        .await
-                        .map_err(|e| unavailable(&e))?;
+                    let rows = sandbox::realms(
+                        (&self.router, &self.app),
+                        Some(slug),
+                        None,
+                        None,
+                        (1, false),
+                    )
+                    .await
+                    .map_err(|e| unavailable(&e))?;
                     let Some(m) = rows.first() else {
                         return Ok(None);
                     };
@@ -313,7 +324,7 @@ impl<P: Decider + Governance + Instances + Clone + Send + Sync + 'static> Realms
                     return Ok(None);
                 }
                 let rows = sandbox::realms(
-                    &self.router,
+                    (&self.router, &self.app),
                     None,
                     Some(TenantId::from_bytes(tenant)),
                     q.after.as_deref(),
@@ -340,7 +351,9 @@ impl<P: Decider + Governance + Instances + Clone + Send + Sync + 'static> Realms
 
     /// The deployment's readiness by check name; no addresses or secrets.
     async fn health(&self) -> Value {
-        let database = sandbox::tenants(&self.router, None, None, 1).await.is_ok();
+        let database = sandbox::tenants((&self.router, &self.app), None, None, 1)
+            .await
+            .is_ok();
         let platform = matches!(self.platform().await, Ok(Some(_)));
         let signer = self.keys.ping().await;
         let ids = self.ids.key().is_some();
@@ -467,7 +480,7 @@ impl<P: Decider + Governance + Instances + Clone + Send + Sync + 'static> Realms
     ) -> Result<Item, Unavailable> {
         let body = match created {
             Created::Tenant(t) => {
-                let rows = sandbox::tenants(&self.router, Some(t), None, 1)
+                let rows = sandbox::tenants((&self.router, &self.app), Some(t), None, 1)
                     .await
                     .map_err(|e| unavailable(&e))?;
                 let t = rows.first().ok_or(Unavailable)?;
@@ -480,9 +493,15 @@ impl<P: Decider + Governance + Instances + Clone + Send + Sync + 'static> Realms
                     PlatformChange::Realm(o) | PlatformChange::Sandbox(o) => o.slug.as_str(),
                     PlatformChange::Tenant { .. } => return Err(Unavailable),
                 };
-                let rows = sandbox::realms(&self.router, Some(slug), None, None, (1, false))
-                    .await
-                    .map_err(|e| unavailable(&e))?;
+                let rows = sandbox::realms(
+                    (&self.router, &self.app),
+                    Some(slug),
+                    None,
+                    None,
+                    (1, false),
+                )
+                .await
+                .map_err(|e| unavailable(&e))?;
                 let m = rows.first().ok_or(Unavailable)?;
                 let mut view = realm_view(ids, m)?;
                 let root = match change {

@@ -1,6 +1,6 @@
 -- OP-151 m.2 M2, m.3 (m), X21, H8, D7, INV-29, X31, OP-73: the sandbox domains the platform-admin
 -- surface opens, each the governing domain of its own realm with the sandbox template's fixed
--- budget, and the metadata the platform reads across tenants without any realm content.
+-- budget. The router role reads which side of the sandbox line a domain is on, nothing more.
 SET LOCAL ROLE access_migrator;
 
 -- OP-151 m.3 (m): a sandbox is a separate AuthorityDomain; the row is written once and never changed
@@ -35,10 +35,6 @@ CREATE TRIGGER append_only_row BEFORE UPDATE ON access.sandbox_domains
   FOR EACH ROW EXECUTE FUNCTION access.reject_mutation();
 
 GRANT SELECT, INSERT ON access.sandbox_domains TO access_app;
-GRANT SELECT ON access.sandbox_domains TO access_router;
-
--- INV-29, X31: the platform reads a tenant's and a realm's metadata, never their content
-GRANT SELECT (placement_id, created_at) ON access.tenants TO access_router;
-GRANT SELECT (placement_id, created_at, governing_domain_id) ON access.realms TO access_router;
+GRANT SELECT (domain_id, exercises_per_day, projections_per_day) ON access.sandbox_domains TO access_router;
 
 RESET ROLE;

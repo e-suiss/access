@@ -1,7 +1,8 @@
 //! Sandbox domains and the platform's metadata reads (OP-151 m.2 M2, m.3 (m), X21): which
 //! governing domains are sandboxes with their template's fixed budget, and the tenant and realm
-//! metadata the platform-admin surface reads across tenants. Nothing here reads realm content
-//! (INV-29, X31).
+//! metadata the platform-admin surface reads. The router role pages through the mapping only
+//! (OP-132 m.3); each tenant's metadata is read by the app role in that tenant's scope. Nothing
+//! here reads realm content (INV-29, X31).
 
 use sqlx::PgPool;
 use sqlx::types::Uuid;
@@ -84,21 +85,22 @@ pub struct TenantMeta {
     pub created_ms: u64,
 }
 
-/// At most `limit` tenants in id order after `after`, or the one `only`, read by the router role.
+/// At most `limit` tenants in id order after `after`, or the one `only`: the router role pages
+/// through the ids (OP-132 m.3: the mapping only), and the app role reads each tenant's own
+/// metadata in its scope.
 ///
 /// # Errors
 /// [`StoreError`].
 pub async fn tenants(
-    router: &PgPool,
+    (router, app): (&PgPool, &PgPool),
     only: Option<TenantId>,
     after: Option<TenantId>,
     limit: u32,
 ) -> Result<Vec<TenantMeta>, StoreError> {
     let after = Uuid::from_bytes(after.map_or([0; 16], |t| *t.as_bytes()));
     let only = only.map(|t| Uuid::from_bytes(*t.as_bytes()));
-    let rows = sqlx::query!(
-        r#"SELECT tenant_id, status, placement_id,
-                  (extract(epoch FROM created_at) * 1000)::bigint AS "created_ms!" FROM access.tenants
+    let ids = sqlx::query!(
+        r#"SELECT tenant_id, status FROM access.tenants
             WHERE tenant_id > $1 AND ($2::uuid IS NULL OR tenant_id = $2)
             ORDER BY tenant_id LIMIT $3"#,
         after,
@@ -107,16 +109,26 @@ pub async fn tenants(
     )
     .fetch_all(router)
     .await?;
-    rows.into_iter()
-        .map(|r| {
-            Ok(TenantMeta {
-                tenant: TenantId::from_bytes(*r.tenant_id.as_bytes()),
-                status: r.status,
-                placement: r.placement_id,
-                created_ms: unsigned(r.created_ms)?,
-            })
-        })
-        .collect()
+    let mut out = Vec::with_capacity(ids.len());
+    for r in ids {
+        let tenant = TenantId::from_bytes(*r.tenant_id.as_bytes());
+        let mut t = TenantTx::begin_tenant(app, tenant).await?;
+        let own = sqlx::query!(
+            r#"SELECT placement_id, (extract(epoch FROM created_at) * 1000)::bigint AS "created_ms!"
+                 FROM access.tenants WHERE tenant_id = $1"#,
+            r.tenant_id,
+        )
+        .fetch_one(&mut *t.tx)
+        .await?;
+        t.commit().await?;
+        out.push(TenantMeta {
+            tenant,
+            status: r.status,
+            placement: own.placement_id,
+            created_ms: unsigned(own.created_ms)?,
+        });
+    }
+    Ok(out)
 }
 
 /// A realm's metadata (INV-29, X31: no settings, no accounts, no clients).
@@ -140,62 +152,88 @@ pub struct RealmMeta {
     pub sandbox: Option<Budget>,
 }
 
-/// The live realms, read by the router role: the one with slug `slug`, or those of `tenant`
-/// after the slug `after`, at most `limit`, in slug order; with `sandbox_only`, only sandboxes.
+/// The live realms: the one with slug `slug`, or those of `tenant` after the slug `after`, at
+/// most `limit`, in slug order; with `sandbox_only`, only the tenant's sandboxes. The router role
+/// reads the mapping (OP-132 m.3); the app role reads each realm's metadata in its tenant's
+/// scope.
 ///
 /// # Errors
-/// [`StoreError`].
+/// [`StoreError`]; [`StoreError::Range`] for `sandbox_only` without a tenant.
 pub async fn realms(
-    router: &PgPool,
+    (router, app): (&PgPool, &PgPool),
     slug: Option<&str>,
     tenant: Option<TenantId>,
     after: Option<&str>,
     (limit, sandbox_only): (u32, bool),
 ) -> Result<Vec<RealmMeta>, StoreError> {
-    let tenant = tenant.map(|t| Uuid::from_bytes(*t.as_bytes()));
+    let only: Option<Vec<Uuid>> = if sandbox_only {
+        let tenant = tenant.ok_or(StoreError::Range)?;
+        let mut t = TenantTx::begin_tenant(app, tenant).await?;
+        let ids = sqlx::query_scalar!(
+            "SELECT realm_id FROM access.sandbox_domains WHERE tenant_id = $1",
+            Uuid::from_bytes(*tenant.as_bytes()),
+        )
+        .fetch_all(&mut *t.tx)
+        .await?;
+        t.commit().await?;
+        Some(ids)
+    } else {
+        None
+    };
     let rows = sqlx::query!(
-        r#"SELECT r.tenant_id, r.realm_id, r.slug, r.issuer, r.placement_id, r.governing_domain_id,
-                  (extract(epoch FROM r.created_at) * 1000)::bigint AS "created_ms!",
-                  s.exercises_per_day AS "exercises_per_day?",
-                  s.projections_per_day AS "projections_per_day?"
-             FROM access.realms r
-             LEFT JOIN access.sandbox_domains s ON s.domain_id = r.governing_domain_id
-            WHERE r.status = 'active'
-              AND ($1::text IS NULL OR r.slug = $1)
-              AND ($2::uuid IS NULL OR r.tenant_id = $2)
-              AND r.slug > coalesce($3, '')
-              AND (NOT $4 OR s.domain_id IS NOT NULL)
-            ORDER BY r.slug LIMIT $5"#,
+        r#"SELECT tenant_id, realm_id, slug, issuer FROM access.realms
+            WHERE status = 'active'
+              AND ($1::text IS NULL OR slug = $1)
+              AND ($2::uuid IS NULL OR tenant_id = $2)
+              AND slug > coalesce($3, '')
+              AND ($4::uuid[] IS NULL OR realm_id = ANY($4))
+            ORDER BY slug LIMIT $5"#,
         slug,
-        tenant,
+        tenant.map(|t| Uuid::from_bytes(*t.as_bytes())),
         after,
-        sandbox_only,
+        only.as_deref(),
         i64::from(limit),
     )
     .fetch_all(router)
     .await?;
-    rows.into_iter()
-        .map(|r| {
-            let sandbox = match (r.exercises_per_day, r.projections_per_day) {
-                (Some(e), Some(p)) => Some(Budget {
-                    exercises_per_day: unsigned(e)?,
-                    projections_per_day: unsigned(p)?,
-                }),
-                _ => None,
-            };
-            Ok(RealmMeta {
-                tenant: TenantId::from_bytes(*r.tenant_id.as_bytes()),
-                realm: RealmId::from_bytes(*r.realm_id.as_bytes()),
-                slug: r.slug,
-                issuer: r.issuer,
-                placement: r.placement_id,
-                domain: <[u8; 32]>::try_from(r.governing_domain_id.as_slice())
-                    .map_err(|_| StoreError::Corrupt)?,
-                created_ms: unsigned(r.created_ms)?,
-                sandbox,
-            })
-        })
-        .collect()
+    let mut out = Vec::with_capacity(rows.len());
+    for r in rows {
+        let tenant = TenantId::from_bytes(*r.tenant_id.as_bytes());
+        let mut t = TenantTx::begin_tenant(app, tenant).await?;
+        let own = sqlx::query!(
+            r#"SELECT r.placement_id, r.governing_domain_id,
+                      (extract(epoch FROM r.created_at) * 1000)::bigint AS "created_ms!",
+                      s.exercises_per_day AS "exercises_per_day?",
+                      s.projections_per_day AS "projections_per_day?"
+                 FROM access.realms r
+                 LEFT JOIN access.sandbox_domains s ON s.domain_id = r.governing_domain_id
+                WHERE r.tenant_id = $1 AND r.realm_id = $2"#,
+            r.tenant_id,
+            r.realm_id,
+        )
+        .fetch_one(&mut *t.tx)
+        .await?;
+        t.commit().await?;
+        let sandbox = match (own.exercises_per_day, own.projections_per_day) {
+            (Some(e), Some(p)) => Some(Budget {
+                exercises_per_day: unsigned(e)?,
+                projections_per_day: unsigned(p)?,
+            }),
+            _ => None,
+        };
+        out.push(RealmMeta {
+            tenant,
+            realm: RealmId::from_bytes(*r.realm_id.as_bytes()),
+            slug: r.slug,
+            issuer: r.issuer,
+            placement: own.placement_id,
+            domain: <[u8; 32]>::try_from(own.governing_domain_id.as_slice())
+                .map_err(|_| StoreError::Corrupt)?,
+            created_ms: unsigned(own.created_ms)?,
+            sandbox,
+        });
+    }
+    Ok(out)
 }
 
 /// Creates the tenant `tenant` in `placement` when it does not exist; `false` when it did.

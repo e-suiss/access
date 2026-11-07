@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT realm_id FROM access.sandbox_domains WHERE tenant_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "realm_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.sandbox_domains",
+            "name": "realm_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "1ead1dab2d79c81eb512961f20a2907e8cf2dd4cad4ce147d7cceafc26c3030d"
+}

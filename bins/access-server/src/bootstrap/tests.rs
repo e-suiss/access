@@ -2132,9 +2132,15 @@ mod provision {
                 .unwrap(),
             Some(budget)
         );
-        let listed = sandbox::realms(&w.db.router, None, Some(tenant), None, (10, true))
-            .await
-            .unwrap();
+        let listed = sandbox::realms(
+            (&w.db.router, &w.db.app),
+            None,
+            Some(tenant),
+            None,
+            (10, true),
+        )
+        .await
+        .unwrap();
         assert_eq!(listed.len(), 1);
         assert_eq!(listed[0].slug, "shop-sandbox");
         w.domains.release().await;
