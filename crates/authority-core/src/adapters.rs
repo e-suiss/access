@@ -514,6 +514,190 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
         })
     }
 
+    /// The leader of `domain` and its trusted time now.
+    async fn led_now(&self, domain: Digest) -> Result<(Guard<B, S, C>, u64), CoreError> {
+        let mut guard = self.leading(domain).await?;
+        let Some(led) = guard.as_mut() else {
+            return Err(CoreError::Unavailable("leader"));
+        };
+        let now = led
+            .clock
+            .now()
+            .await
+            .map_err(|_| CoreError::Unavailable("time"))?;
+        Ok((guard, now))
+    }
+
+    /// Decision lab Check on the request's domain (§8.17.10.4, §9.7): advisory, recorded
+    /// nowhere. A sandbox domain is addressed the same way.
+    ///
+    /// # Errors
+    /// As [`Authority::lab_check`].
+    pub async fn lab_check(&self, inc: &Incoming) -> Result<crate::app::lab::LabCheck, CoreError> {
+        let (mut guard, now) = self.led_now(inc.request.domain).await?;
+        let led = guard.as_mut().ok_or(CoreError::Unavailable("leader"))?;
+        led.core.lab_check(inc, now).await
+    }
+
+    /// Decision lab Explain on the request's domain (§8.17.10.4).
+    ///
+    /// # Errors
+    /// As [`Authority::lab_explain`].
+    pub async fn lab_explain(
+        &self,
+        inc: &Incoming,
+    ) -> Result<crate::app::lab::Explanation, CoreError> {
+        let (mut guard, now) = self.led_now(inc.request.domain).await?;
+        let led = guard.as_mut().ok_or(CoreError::Unavailable("leader"))?;
+        led.core.lab_explain(inc, now).await
+    }
+
+    /// Decision lab Replay of the decision at `record` on the request's domain (§8.17.10.4,
+    /// INV-27).
+    ///
+    /// # Errors
+    /// As [`Authority::lab_replay`].
+    pub async fn lab_replay(
+        &self,
+        inc: &Incoming,
+        record: u64,
+    ) -> Result<crate::app::lab::Replay, CoreError> {
+        let (mut guard, now) = self.led_now(inc.request.domain).await?;
+        let led = guard.as_mut().ok_or(CoreError::Unavailable("leader"))?;
+        let result = led.core.lab_replay(inc, record, now).await;
+        if matches!(result, Err(CoreError::Sequencer(_) | CoreError::Store(_))) {
+            *guard = None;
+        }
+        result
+    }
+
+    /// A policy simulation over `samples` on `domain` for the auditor `caller` (§18.3).
+    ///
+    /// # Errors
+    /// As [`Authority::lab_simulate`].
+    pub async fn lab_simulate(
+        &self,
+        domain: Digest,
+        caller: Id,
+        policy: Option<Id>,
+        candidate: &Value,
+        samples: &[crate::app::lab::Sample],
+    ) -> Result<crate::app::lab::Simulation, CoreError> {
+        let (guard, now) = self.led_now(domain).await?;
+        let led = guard.as_ref().ok_or(CoreError::Unavailable("leader"))?;
+        led.core
+            .lab_simulate(caller, policy, candidate, samples, now)
+            .await
+    }
+
+    /// A `policy.set` preview on `domain` with the control-plane analysis `analysis` (§5.8,
+    /// OP-105); the caller must be one of the domain's auditors.
+    ///
+    /// # Errors
+    /// [`CoreError::Protocol`] `lab-scope` for another caller; as
+    /// [`Authority::change_policy`].
+    pub async fn change_policy(
+        &self,
+        domain: Digest,
+        caller: Id,
+        policy: Option<Id>,
+        candidate: &Value,
+        analysis: &impl crate::ports::PolicyAnalysis,
+    ) -> Result<crate::app::impact::PolicyChange, CoreError> {
+        let (guard, _) = self.led_now(domain).await?;
+        let led = guard.as_ref().ok_or(CoreError::Unavailable("leader"))?;
+        if !led.core.audits(&caller).await? {
+            return Err(CoreError::Protocol("lab-scope"));
+        }
+        led.core.change_policy(policy, candidate, analysis).await
+    }
+
+    /// Keeps `published` in the publication registry (§8.17.10.2, E10). It changes no domain.
+    ///
+    /// # Errors
+    /// [`CoreError::Protocol`] `publication-version` when the publisher already published
+    /// another package as this version; the store's errors.
+    pub async fn keep_publication(
+        &self,
+        published: &crate::app::publishing::Published,
+    ) -> Result<bool, CoreError> {
+        let p = &published.publication;
+        let row = access_store::publications::PublicationRow {
+            fingerprint: published.fingerprint.0,
+            publisher: p.spp.publisher.0,
+            namespace: p.spp.namespace.clone(),
+            catalog_version: p.spp.catalog_version,
+            package: p
+                .to_bytes()
+                .map_err(|_| CoreError::Protocol("publication"))?,
+            published_ms: p.published_ms,
+        };
+        match access_store::publications::keep(&self.setup.app, &row).await? {
+            access_store::publications::Kept::New => Ok(true),
+            access_store::publications::Kept::Same => Ok(false),
+            access_store::publications::Kept::VersionTaken => {
+                Err(CoreError::Protocol("publication-version"))
+            }
+        }
+    }
+
+    /// The latest package `publisher` published for `namespace`.
+    ///
+    /// # Errors
+    /// The store's errors.
+    pub async fn latest_publication(
+        &self,
+        publisher: Id,
+        namespace: &str,
+    ) -> Result<Option<crate::app::publishing::Publication>, CoreError> {
+        Ok(
+            access_store::publications::of_namespace(&self.setup.app, namespace)
+                .await?
+                .into_iter()
+                .filter(|r| r.publisher == publisher.0)
+                .find_map(|r| crate::app::publishing::Publication::from_bytes(&r.package).ok()),
+        )
+    }
+
+    /// Where `publication` stands in each of `domains` (§8.17.10.2, X21): the publisher's
+    /// "Pending acceptance in: …". Read without leading any domain; a domain that never
+    /// accepted this publisher for the namespace is left out. There is no accept here.
+    ///
+    /// # Errors
+    /// The store's errors; [`CoreError::Unavailable`] without trusted time.
+    pub async fn publication_status(
+        &self,
+        publication: &crate::app::publishing::Publication,
+        domains: &[Digest],
+    ) -> Result<crate::app::publishing::Status, CoreError> {
+        let now = self
+            .setup
+            .clock
+            .clone()
+            .now()
+            .await
+            .map_err(|_| CoreError::Unavailable("time"))?;
+        let previous =
+            access_store::publications::of_namespace(&self.setup.app, &publication.spp.namespace)
+                .await?
+                .into_iter()
+                .filter(|r| {
+                    r.publisher == publication.spp.publisher.0
+                        && r.catalog_version < publication.spp.catalog_version
+                })
+                .find_map(|r| crate::app::publishing::Publication::from_bytes(&r.package).ok());
+        let readers = domains
+            .iter()
+            .map(|d| {
+                (
+                    *d,
+                    PgReader::new(self.setup.app.clone(), DomainId::from_bytes(d.0)),
+                )
+            })
+            .collect();
+        crate::app::publishing::status(publication, previous.as_ref(), readers, now).await
+    }
+
     /// Explains the recorded decision at `record` on its domain's leader (OP-141 m.36).
     async fn explain_led(
         &self,

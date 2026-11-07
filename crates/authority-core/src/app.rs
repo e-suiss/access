@@ -521,7 +521,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
 
     /// Whether `party` may audit the domain: the meta-anchor's root, or the holder of a live
     /// Grant covering `access:audit.export` (OP-141 m.38 (d), m.39 (b)).
-    async fn audits(&self, party: &Id) -> Result<bool, CoreError> {
+    pub(crate) async fn audits(&self, party: &Id) -> Result<bool, CoreError> {
         let meta_anchor = meta::meta_anchor(&self.domain);
         let root = self
             .settled(|snap| {

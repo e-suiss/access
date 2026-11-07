@@ -4,9 +4,10 @@ use std::collections::BTreeMap;
 
 use access_authority_core::app::MAX_PROOFS;
 use access_authority_core::app::audit::{Explained, Named, reason_user};
+use access_authority_core::app::impact::{Compromised, Revoked};
 use access_authority_core::app::{Response, Scope};
 use access_authority_core::domain::{ProofRef, Request};
-use access_authority_core::query::{Hit, Query};
+use access_authority_core::query::{Change, Hit, Query};
 use access_kernel::codec::Canonical;
 use access_kernel::combinator::codec::decision_value;
 use access_kernel::combinator::{Capacity, Mode, Outcome};
@@ -583,6 +584,33 @@ pub fn decode_search(
             party: id(q.req("party", "query")?)?,
             resource: resource(q.req("resource", "query")?)?,
         },
+        "schema-publications" => Query::SchemaPublications {
+            namespace: text(q.req("namespace", "query")?, "query")?,
+        },
+        "change-impact" => change(&mut q)?,
+        "revocation-impact" => {
+            let revoked = match (q.opt("grant"), q.opt("instance")) {
+                (Some(g), None) => Revoked::Grant(id(g).map_err(within("query"))?),
+                (None, Some(i)) => Revoked::Instance(id(i).map_err(within("query"))?),
+                _ => return Err(AdpError("query")),
+            };
+            Query::RevocationImpact {
+                revoked,
+                at: q.opt("at").map(|a| uint(a, "query")).transpose()?,
+            }
+        }
+        "compromise-impact" => {
+            let compromised = match (q.opt("instance"), q.opt("issuer"), q.opt("key")) {
+                (Some(i), None, None) => Compromised::Instance(id(i).map_err(within("query"))?),
+                (None, Some(p), None) => Compromised::Issuer(id(p).map_err(within("query"))?),
+                (None, None, Some(k)) => Compromised::Key(fixed(k, "query")?),
+                _ => return Err(AdpError("query")),
+            };
+            Query::CompromiseImpact {
+                compromised,
+                window: window(q.req("window", "query")?).map_err(within("query"))?,
+            }
+        }
         _ => return Err(AdpError("search")),
     };
     q.done()?;
@@ -595,6 +623,25 @@ pub fn decode_search(
         .transpose()?
         .filter(|t| !t.is_empty());
     Ok((decoded, query, page))
+}
+
+/// The change of a `change-impact` search: a role move or a `policy.set` candidate.
+fn change(q: &mut Obj<'_>) -> R<Query> {
+    if let Some(name) = q.opt("role") {
+        return Ok(Query::ChangeImpact(Change::Role {
+            name: text(name, "query")?,
+            from: uint(q.req("from", "query")?, "query")?,
+            to: uint(q.req("to", "query")?, "query")?,
+        }));
+    }
+    let candidate = bytes(q.req("candidate", "query")?, "query")?;
+    Ok(Query::ChangeImpact(Change::Policy {
+        policy: q
+            .opt("policy")
+            .map(|p| id(p).map_err(within("query")))
+            .transpose()?,
+        candidate,
+    }))
 }
 
 /// The `page` member of a search answer (§9.7.1): `total` only when this first page is the
@@ -622,6 +669,7 @@ pub fn encode_search(hits: &[Hit], next: Option<&str>, first: bool) -> Out {
             Hit::Group(classes) => serde_json::json!({ "type": "group", "id": classes.join(",") }),
             Hit::Resource(sel) => json_of(&sel.to_value()),
             Hit::Action(a) => json_of(&a.to_value()),
+            Hit::Report(r) => crate::adp::report::encode(r),
         })
         .collect();
     serde_json::json!({
@@ -668,7 +716,7 @@ fn context(ctx: &mut Obj<'_>, intent: IntentEnvelope) -> R<Decoded> {
 }
 
 /// A dCBOR value as JSON: binaries base64url, a digest `[-16, h]` as `h` (L1-ADP-6).
-fn json_of(v: &Value) -> Out {
+pub(crate) fn json_of(v: &Value) -> Out {
     match v {
         Value::Unsigned(n) => Out::from(*n),
         Value::Negative(n) => i64::try_from(*n)

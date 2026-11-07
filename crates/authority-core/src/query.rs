@@ -9,9 +9,13 @@ use access_kernel::algebra::{Catalog, resource_le};
 use access_kernel::combinator::HopStatus;
 use access_kernel::intent::intent_digest;
 use access_kernel::meta::{self, Actor, ExerciseBasis, GrantState, View, kind};
-use access_kernel::model::{ActionRef, Id, ResourceRef, ResourceSelector, SubjectSelector};
+use access_kernel::model::{ActionRef, Id, ResourceRef, ResourceSelector, SubjectSelector, Window};
 
 use crate::CoreError;
+use crate::app::impact::{
+    CompromiseImpact, Compromised, PolicyChange, RevocationImpact, Revoked, RoleChange,
+};
+use crate::app::publishing::Offer;
 use crate::app::{Authority, Incoming};
 use crate::domain::{Snapshot, accepted_catalog, lineage_hops, read};
 use crate::ports::{Binding, Reader, Salts};
@@ -48,6 +52,63 @@ pub enum Query {
         /// Resource.
         resource: ResourceRef,
     },
+    /// The published versions of `namespace` and where each stands here (§8.17.10.2).
+    SchemaPublications {
+        /// Namespace.
+        namespace: String,
+    },
+    /// What a change would do (X20, TN-121, §5.8).
+    ChangeImpact(Change),
+    /// What revoking something at `at` leaves exposed (§5.4, §16.5.1).
+    RevocationImpact {
+        /// What is revoked.
+        revoked: Revoked,
+        /// When; now when absent.
+        at: Option<u64>,
+    },
+    /// What a compromise may have touched in a window (SEC15, RR-13).
+    CompromiseImpact {
+        /// What is compromised.
+        compromised: Compromised,
+        /// The window.
+        window: Window,
+    },
+}
+
+/// The change a `change-impact` search previews.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Change {
+    /// Moving the Grants pinned to role `name` v`from` to v`to`.
+    Role {
+        /// Role name.
+        name: String,
+        /// Version pinned now.
+        from: u64,
+        /// Version to move to.
+        to: u64,
+    },
+    /// Setting a restriction policy: the candidate `policy_set` content as dCBOR.
+    Policy {
+        /// The policy replaced, `None` for a new one.
+        policy: Option<Id>,
+        /// The candidate content's dCBOR bytes.
+        candidate: Vec<u8>,
+    },
+}
+
+/// A developer-surface report (§8.17.10, §5.4, §16.5.1): advisory and never recorded.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Report {
+    /// One published version as this domain sees it.
+    Publication(Offer),
+    /// A role change preview.
+    RoleChange(RoleChange),
+    /// A `policy.set` preview.
+    PolicyChange(PolicyChange),
+    /// A revocation impact.
+    Revocation(RevocationImpact),
+    /// A compromise impact.
+    Compromise(CompromiseImpact),
 }
 
 impl Query {
@@ -58,7 +119,23 @@ impl Query {
             Self::Subject { .. } => "subject",
             Self::Resource { .. } => "resource",
             Self::Action { .. } => "action",
+            Self::SchemaPublications { .. } => "schema-publications",
+            Self::ChangeImpact(_) => "change-impact",
+            Self::RevocationImpact { .. } => "revocation-impact",
+            Self::CompromiseImpact { .. } => "compromise-impact",
         }
+    }
+
+    /// Whether it is a developer-surface report rather than a graph search.
+    #[must_use]
+    pub const fn is_report(&self) -> bool {
+        matches!(
+            self,
+            Self::SchemaPublications { .. }
+                | Self::ChangeImpact(_)
+                | Self::RevocationImpact { .. }
+                | Self::CompromiseImpact { .. }
+        )
     }
 }
 
@@ -75,6 +152,8 @@ pub enum Hit {
     Resource(ResourceSelector),
     /// An action.
     Action(ActionRef),
+    /// A developer-surface report.
+    Report(Box<Report>),
 }
 
 /// One page of results.
@@ -171,6 +250,9 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         let Some(actor) = actor else {
             return Ok(Found::default());
         };
+        if query.is_report() {
+            return self.report(&actor, query, now).await;
+        }
         let candidates = match query {
             Query::Subject { resource, .. } => {
                 self.reader
@@ -183,6 +265,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                 }
                 self.reader.grants_for(party, after, PAGE).await?
             }
+            _ => return Ok(Found::default()),
         };
         let next = (candidates.len() == PAGE as usize)
             .then(|| candidates.last().copied())
@@ -191,6 +274,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         let namespace = match query {
             Query::Subject { action, .. } | Query::Resource { action, .. } => &action.namespace,
             Query::Action { resource, .. } => &resource.namespace,
+            _ => return Ok(Found::default()),
         };
         let catalog = self
             .settled(|snap| accepted_catalog(snap, namespace, now, &Catalog::default()))
@@ -257,7 +341,58 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             Query::Action { resource, .. } => {
                 on(resource).then(|| actions.iter().cloned().map(Hit::Action).collect())
             }
+            _ => None,
         }
+    }
+
+    /// A developer-surface report for `actor` (§8.17.10, §5.4, §16.5.1, SEC15): only the
+    /// domain's auditors (its meta-anchor root, or a holder of a live Grant naming
+    /// `access:audit.export`) get one; anyone else gets nothing, as for a search they may not
+    /// see. One page, never recorded.
+    async fn report(&self, actor: &Actor, query: &Query, now: u64) -> Result<Found, CoreError> {
+        if !self.audits(&actor.party).await? {
+            return Ok(Found::default());
+        }
+        let reports: Vec<Report> = match query {
+            Query::SchemaPublications { namespace } => self
+                .publication_offers(namespace, now)
+                .await?
+                .into_iter()
+                .map(Report::Publication)
+                .collect(),
+            Query::ChangeImpact(Change::Role { name, from, to }) => self
+                .change_role(name, *from, *to, now)
+                .await?
+                .map(Report::RoleChange)
+                .into_iter()
+                .collect(),
+            Query::ChangeImpact(Change::Policy { policy, candidate }) => {
+                let content =
+                    suiss_crypto::dcbor::decode(candidate, suiss_crypto::dcbor::Limits::CEILING)
+                        .map_err(|_| CoreError::Protocol("candidate"))?;
+                vec![Report::PolicyChange(
+                    self.change_policy(*policy, &content, &crate::ports::NoAnalysis)
+                        .await?,
+                )]
+            }
+            Query::RevocationImpact { revoked, at } => vec![Report::Revocation(
+                self.revocation_impact(*revoked, at.unwrap_or(now)).await?,
+            )],
+            Query::CompromiseImpact {
+                compromised,
+                window,
+            } => vec![Report::Compromise(
+                self.compromise_impact(*compromised, *window).await?,
+            )],
+            _ => Vec::new(),
+        };
+        Ok(Found {
+            hits: reports
+                .into_iter()
+                .map(|r| Hit::Report(Box::new(r)))
+                .collect(),
+            next: None,
+        })
     }
 }
 

@@ -13,9 +13,12 @@ use access_kernel::model::{ActionRef, Id, Window};
 use access_kernel::schema::{ActionSchema, Spp, schemas_key};
 use suiss_crypto::dcbor::{self, Limits, Value};
 
+use access_authority_sequencer::ports::DomainLog;
+
 use crate::CoreError;
+use crate::app::Authority;
 use crate::domain::{Snapshot, read};
-use crate::ports::Reader;
+use crate::ports::{Binding, Reader, Salts};
 
 /// Digest context of a package fingerprint.
 pub const FINGERPRINT_CONTEXT: &str = "access/schema-publication/v1";
@@ -737,6 +740,32 @@ pub fn offers(view: &Snapshot, publications: &[Publication], now: u64) -> Vec<Of
             }
         })
         .collect()
+}
+
+impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
+    /// The published versions of `namespace` as this domain sees them (§8.17.10.2), newest
+    /// first. A package that does not decode is left out.
+    ///
+    /// # Errors
+    /// The reader's errors.
+    pub async fn publication_offers(
+        &self,
+        namespace: &str,
+        now: u64,
+    ) -> Result<Vec<Offer>, CoreError> {
+        let publications: Vec<Publication> = self
+            .reader
+            .publications(namespace)
+            .await?
+            .iter()
+            .filter_map(|b| Publication::from_bytes(b).ok())
+            .filter(|p| p.spp.namespace == namespace)
+            .collect();
+        if publications.is_empty() {
+            return Ok(Vec::new());
+        }
+        settle(&self.reader, |snap| offers(snap, &publications, now)).await
+    }
 }
 
 #[cfg(test)]
