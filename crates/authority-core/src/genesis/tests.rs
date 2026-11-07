@@ -122,6 +122,24 @@ fn idp_actions_carry_their_consequence_tiers() {
     assert_eq!(tier(IdpAction::AccountDelete), Tier::Ct3);
     assert_eq!(tier(IdpAction::RealmBranding), Tier::Ct2);
     assert_eq!(tier(IdpAction::RealmKeyDrop), Tier::Ct1);
+    // TN-117, TN-129, TN-132, CR-38, §12.3.1, OP-151 m.2 M1: narrowing is CT1, widening CT2,
+    // an upstream registration reserved CT3
+    for (a, t) in [
+        (IdpAction::GroupCreate, Tier::Ct2),
+        (IdpAction::GroupUpdate, Tier::Ct2),
+        (IdpAction::GroupMembersAdd, Tier::Ct2),
+        (IdpAction::GroupMembersRemove, Tier::Ct1),
+        (IdpAction::GroupRetire, Tier::Ct1),
+        (IdpAction::AccountSuspend, Tier::Ct1),
+        (IdpAction::AccountReactivate, Tier::Ct2),
+        (IdpAction::ClientSecretRotate, Tier::Ct2),
+        (IdpAction::UpstreamUpdate, Tier::Ct3),
+        (IdpAction::UpstreamRetire, Tier::Ct1),
+        (IdpAction::RealmSigninPolicy, Tier::Ct2),
+        (IdpAction::RealmSessionPolicy, Tier::Ct2),
+    ] {
+        assert_eq!(tier(a), t, "{}", a.label());
+    }
     for a in IdpAction::ALL {
         assert_eq!(IdpAction::from_label(&a.label()), Some(a));
     }

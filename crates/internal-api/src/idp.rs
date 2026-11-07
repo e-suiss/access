@@ -18,9 +18,10 @@ pub const RESOURCE_NAMESPACE: &str = "idp";
 pub const CATALOG_VERSION: u64 = 1;
 
 /// The `idp.*` action namespaces, one SPP each (OP-141 m.35).
-pub const NAMESPACES: [&str; 5] = [
+pub const NAMESPACES: [&str; 6] = [
     "idp.account",
     "idp.client",
+    "idp.group",
     "idp.mapper",
     "idp.realm",
     "idp.upstream",
@@ -63,11 +64,38 @@ pub enum IdpAction {
     RealmKeyDrop,
     /// Erases an account for good by crypto-shredding (OP-73, TN-118): reserved, CT3.
     AccountDelete,
+    /// Suspends an account: it cannot sign in until reactivated (§12.3.1); narrowing, CT1.
+    AccountSuspend,
+    /// Reactivates a suspended account (§12.3.1): CT2.
+    AccountReactivate,
+    /// Replaces a confidential client's secret; the old one stays valid for the overlap window
+    /// (CR-38): CT2.
+    ClientSecretRotate,
+    /// Creates a group with its one membership issuer (TN-117): CT2.
+    GroupCreate,
+    /// Renames a group: CT2.
+    GroupUpdate,
+    /// Retires a group and ends its memberships; narrowing, CT1.
+    GroupRetire,
+    /// Adds members to a group whose membership issuer is the realm's administration (TN-117):
+    /// CT2.
+    GroupMembersAdd,
+    /// Removes members from such a group; narrowing, CT1.
+    GroupMembersRemove,
+    /// Replaces an upstream identity provider's registration (TN-95): reserved, CT3.
+    UpstreamUpdate,
+    /// Retires an upstream identity provider; narrowing, CT1.
+    UpstreamRetire,
+    /// Sets the realm's sign-in requirements: methods, required fields, MFA, registration
+    /// domain lists (TN-132): CT2.
+    RealmSigninPolicy,
+    /// Sets the realm's console session policy (TN-129, OP-151 m.3 (f)): CT2.
+    RealmSessionPolicy,
 }
 
 impl IdpAction {
     /// Every action, in catalog order.
-    pub const ALL: [Self; 16] = [
+    pub const ALL: [Self; 28] = [
         Self::ClientRegister,
         Self::ClientUpdate,
         Self::ClientRetire,
@@ -84,15 +112,34 @@ impl IdpAction {
         Self::RealmKeyRotate,
         Self::RealmKeyDrop,
         Self::AccountDelete,
+        Self::AccountSuspend,
+        Self::AccountReactivate,
+        Self::ClientSecretRotate,
+        Self::GroupCreate,
+        Self::GroupUpdate,
+        Self::GroupRetire,
+        Self::GroupMembersAdd,
+        Self::GroupMembersRemove,
+        Self::UpstreamUpdate,
+        Self::UpstreamRetire,
+        Self::RealmSigninPolicy,
+        Self::RealmSessionPolicy,
     ];
 
     /// Its namespace.
     #[must_use]
     pub const fn namespace(self) -> &'static str {
         match self {
-            Self::ClientRegister | Self::ClientUpdate | Self::ClientRetire | Self::CimdPolicy => {
-                "idp.client"
-            }
+            Self::ClientRegister
+            | Self::ClientUpdate
+            | Self::ClientRetire
+            | Self::CimdPolicy
+            | Self::ClientSecretRotate => "idp.client",
+            Self::GroupCreate
+            | Self::GroupUpdate
+            | Self::GroupRetire
+            | Self::GroupMembersAdd
+            | Self::GroupMembersRemove => "idp.group",
             Self::MapperSet => "idp.mapper",
             Self::RealmJoseAlg
             | Self::RealmArgon2
@@ -101,9 +148,14 @@ impl IdpAction {
             | Self::RealmBranding
             | Self::RealmKeyPolicy
             | Self::RealmKeyRotate
-            | Self::RealmKeyDrop => "idp.realm",
-            Self::UpstreamRegister | Self::UpstreamMapping => "idp.upstream",
-            Self::AccountDelete => "idp.account",
+            | Self::RealmKeyDrop
+            | Self::RealmSigninPolicy
+            | Self::RealmSessionPolicy => "idp.realm",
+            Self::UpstreamRegister
+            | Self::UpstreamMapping
+            | Self::UpstreamUpdate
+            | Self::UpstreamRetire => "idp.upstream",
+            Self::AccountDelete | Self::AccountSuspend | Self::AccountReactivate => "idp.account",
         }
     }
 
@@ -112,8 +164,16 @@ impl IdpAction {
     pub const fn name(self) -> &'static str {
         match self {
             Self::ClientRegister | Self::UpstreamRegister => "register",
-            Self::ClientUpdate => "update",
-            Self::ClientRetire => "retire",
+            Self::ClientUpdate | Self::GroupUpdate | Self::UpstreamUpdate => "update",
+            Self::ClientRetire | Self::GroupRetire | Self::UpstreamRetire => "retire",
+            Self::ClientSecretRotate => "secret_rotate",
+            Self::GroupCreate => "create",
+            Self::GroupMembersAdd => "members_add",
+            Self::GroupMembersRemove => "members_remove",
+            Self::AccountSuspend => "suspend",
+            Self::AccountReactivate => "reactivate",
+            Self::RealmSigninPolicy => "signin_policy",
+            Self::RealmSessionPolicy => "session_policy",
             Self::CimdPolicy => "cimd_policy",
             Self::MapperSet => "set",
             Self::RealmJoseAlg => "jose_alg",
@@ -145,7 +205,13 @@ impl IdpAction {
     #[must_use]
     pub const fn effect(self) -> EffectClass {
         match self {
-            Self::ClientRetire | Self::RealmArgon2 | Self::RealmKeyDrop => EffectClass::Reversible,
+            Self::ClientRetire
+            | Self::RealmArgon2
+            | Self::RealmKeyDrop
+            | Self::GroupRetire
+            | Self::GroupMembersRemove
+            | Self::AccountSuspend
+            | Self::UpstreamRetire => EffectClass::Reversible,
             _ => EffectClass::Irreversible,
         }
     }
@@ -159,6 +225,7 @@ impl IdpAction {
                 | Self::RealmRehome
                 | Self::UpstreamRegister
                 | Self::UpstreamMapping
+                | Self::UpstreamUpdate
                 | Self::RealmKeyPolicy
                 | Self::RealmKeyRotate
                 | Self::AccountDelete
