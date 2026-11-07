@@ -119,3 +119,29 @@ impl<K: RealmKek> Sealer for KekSealer<K> {
         Ok(Zeroizing::new(plain.to_vec()))
     }
 }
+
+/// The same envelope seals hook and webhook keys (TN-135, TN-136), each bound to its own
+/// registration or key id.
+impl<K: RealmKek> access_identity_hooks::ports::KeyVault for KekSealer<K> {
+    fn seal(
+        &self,
+        tenant: TenantId,
+        realm: RealmId,
+        id: &[u8; 16],
+        plain: &[u8],
+    ) -> Result<SealedKey, access_identity_hooks::ports::Unavailable> {
+        Sealer::seal(self, tenant, realm, id, plain)
+            .map_err(|Unavailable| access_identity_hooks::ports::Unavailable)
+    }
+
+    fn open(
+        &self,
+        tenant: TenantId,
+        realm: RealmId,
+        id: &[u8; 16],
+        sealed: &SealedKey,
+    ) -> Result<Zeroizing<Vec<u8>>, access_identity_hooks::ports::Unavailable> {
+        Sealer::open(self, tenant, realm, id, sealed)
+            .map_err(|Unavailable| access_identity_hooks::ports::Unavailable)
+    }
+}

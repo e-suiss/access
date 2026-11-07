@@ -7,6 +7,7 @@ pub mod fanout;
 pub mod receiver;
 pub mod ssf;
 pub mod streams;
+pub mod webhooks;
 
 use std::sync::Arc;
 

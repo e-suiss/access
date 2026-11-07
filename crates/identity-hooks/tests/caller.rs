@@ -29,16 +29,16 @@ const NOW_MS: u64 = 1_793_784_600_000;
 struct Registry(Option<OnNoAnswer>, bool);
 
 impl HookRegistry for Registry {
-    async fn live(
+    fn live(
         &self,
         _: TenantId,
         _: RealmId,
         point: HookPoint,
-    ) -> Result<Option<LiveHook>, Unavailable> {
+    ) -> impl Future<Output = Result<Option<LiveHook>, Unavailable>> + Send {
         if self.1 {
-            return Err(Unavailable);
+            return std::future::ready(Err(Unavailable));
         }
-        Ok(self.0.map(|on_no_answer| LiveHook {
+        std::future::ready(Ok(self.0.map(|on_no_answer| LiveHook {
             registration: Registration {
                 id: [1; 16],
                 point,
@@ -48,7 +48,7 @@ impl HookRegistry for Registry {
             },
             key: HookKey::Ed25519(WebhookSigningKey::from_seed(&SEED).unwrap()),
             realm_allows_disclosure: false,
-        }))
+        })))
     }
 }
 

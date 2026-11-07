@@ -190,6 +190,7 @@ version = "0.3.1"
 dependencies = [
  "access-crypto",
  "access-identity-account",
+ "access-identity-hooks",
  "access-identity-oauth",
  "access-internal-api",
  "access-store",

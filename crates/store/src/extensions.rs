@@ -464,7 +464,8 @@ pub struct Attempt<'a> {
 }
 
 impl TenantTx {
-    /// Queues one event for one webhook, due at `due_ms`; `false` when it is already queued.
+    /// Queues one event for one webhook at `due_ms`, its queue time and first attempt; `false`
+    /// when it is already queued.
     ///
     /// # Errors
     /// [`StoreError`].
@@ -476,9 +477,9 @@ impl TenantTx {
         let done = sqlx::query!(
             "INSERT INTO access.idp_webhook_deliveries
                 (tenant_id, realm_id, webhook_id, event_id, event_type, payload, occurred_at,
-                 next_attempt_at)
+                 next_attempt_at, created_at)
              VALUES ($1, $2, $3, $4, $5, $6, to_timestamp($7::bigint / 1000.0),
-                     to_timestamp($8::bigint / 1000.0))
+                     to_timestamp($8::bigint / 1000.0), to_timestamp($8::bigint / 1000.0))
              ON CONFLICT (tenant_id, realm_id, webhook_id, event_id) DO NOTHING",
             uuid(self.tenant.as_bytes()),
             uuid(&d.realm),

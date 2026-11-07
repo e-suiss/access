@@ -7,6 +7,7 @@ pub mod inbound;
 pub mod mapping;
 pub mod set;
 pub mod stream;
+pub mod webhook;
 
 /// A request body or value outside the contract; the code is the RFC 9457 reason.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]

@@ -223,7 +223,7 @@ where
     T: HookTransport,
     C: HookClock,
 {
-    fn call<'a>(&'a self, tenant: TenantId, realm: RealmId, call: Call) -> CallFuture<'a> {
+    fn call(&self, tenant: TenantId, realm: RealmId, call: Call) -> CallFuture<'_> {
         Box::pin(self.run(tenant, realm, call))
     }
 }

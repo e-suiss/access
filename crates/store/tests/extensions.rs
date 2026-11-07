@@ -6,6 +6,7 @@
     clippy::unwrap_used,
     clippy::panic,
     clippy::arithmetic_side_effects,
+    clippy::many_single_char_names,
     reason = "test code; the request-path lints (OP-3) do not apply"
 )]
 
@@ -301,7 +302,7 @@ async fn tn_136_webhooks_are_bound_and_rotate_with_overlap() {
     assert!(retire_webhook(&mut tx, &b, &w.id).await.unwrap());
     tx.commit().await.unwrap();
     let mut tx = TenantTx::begin_tenant(&db.app, t).await.unwrap();
-    assert!(live_webhooks(&mut tx).await.unwrap().is_empty());
+    assert_eq!(live_webhooks(&mut tx).await.unwrap(), Vec::new());
 }
 
 // TN-136, OP-73, OP-17: a delivery is queued once per event, each attempt is logged with status
@@ -346,7 +347,7 @@ async fn tn_136_deliveries_and_their_log_are_kept() {
 
     let due = due_webhooks(&db.reader, 10, 10).await.unwrap();
     assert_eq!(due.len(), 1);
-    assert!(due_webhooks(&db.reader, 9, 10).await.unwrap().is_empty());
+    assert_eq!(due_webhooks(&db.reader, 9, 10).await.unwrap().len(), 0);
 
     let mut tx = TenantTx::begin(&db.app, t, r).await.unwrap();
     let retry = Attempt {

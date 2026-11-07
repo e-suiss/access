@@ -24,7 +24,7 @@ pub type CallFuture<'a> = Pin<Box<dyn Future<Output = Outcome> + Send + 'a>>;
 /// refusal (MD-8), or, for `token_issuance` with `continue_without_claims`, no claims.
 pub trait HookCaller: Send + Sync {
     /// Calls the realm's live hook at `call`'s point, if there is one.
-    fn call<'a>(&'a self, tenant: TenantId, realm: RealmId, call: Call) -> CallFuture<'a>;
+    fn call(&self, tenant: TenantId, realm: RealmId, call: Call) -> CallFuture<'_>;
 }
 
 /// No hook anywhere: every call point goes on unchanged.
@@ -32,7 +32,7 @@ pub trait HookCaller: Send + Sync {
 pub struct NoHooks;
 
 impl HookCaller for NoHooks {
-    fn call<'a>(&'a self, _: TenantId, _: RealmId, _: Call) -> CallFuture<'a> {
+    fn call(&self, _: TenantId, _: RealmId, _: Call) -> CallFuture<'_> {
         Box::pin(async { Outcome::proceed() })
     }
 }

@@ -196,7 +196,7 @@ fn identity_events() -> Vec<IdentityEvent> {
         let kind = AccountEvent::of_status(from, to).unwrap();
         out.push(IdentityEvent::account(&EventOrder::status(
             kind,
-            [20 + i as u8; 32],
+            [20_u8.wrapping_add(i as u8); 32],
             &realm,
             ACCOUNT,
             to,
