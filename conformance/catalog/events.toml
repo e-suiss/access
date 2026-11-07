@@ -337,6 +337,8 @@ severity = "info"
 since = "unreleased"
 fields = ["realms"]
 ocsf = "application_lifecycle"
+
+[[event]]
 name = "oauth.management.read_issued"
 plane = "identity"
 severity = "info"
