@@ -66,15 +66,17 @@ pub(crate) const KINDS: [Kind; 3] = [
 ];
 
 /// The settings sections a write exists for, and their operation.
-pub(crate) const SECTIONS: [(&str, &str); 4] = [
+pub(crate) const SECTIONS: [(&str, &str); 6] = [
     ("signin_policy", "putSigninPolicy"),
     ("session_policy", "putSessionPolicy"),
     ("branding", "putBranding"),
     ("rp_id", "putRpId"),
+    ("cimd", "putCimdPolicy"),
+    ("protection_mode", "putProtectionMode"),
 ];
 
 /// Settings members exported but without a REST write yet.
-pub(crate) const READ_ONLY_SETTINGS: [&str; 3] = ["jose_alg", "argon2", "cimd"];
+pub(crate) const READ_ONLY_SETTINGS: [&str; 1] = ["argon2"];
 
 /// The member that marks a resource as managed by the reconciler, when the contract has it
 /// (TN-124: the console shows managed members read-only).
@@ -458,6 +460,21 @@ fn plan_settings(desired: &Value, runtime: &Runtime, out: &mut Vec<Step>) -> Res
             plan_mappers(value, current, out)?;
             continue;
         }
+        if name == "jose_alg" {
+            if current != Some(value) {
+                let mut body = Map::new();
+                body.insert(String::from("alg"), value.clone());
+                out.push(Step::Write {
+                    operation: String::from("putJoseAlg"),
+                    key: None,
+                    body,
+                    if_match: tag.clone(),
+                    exists: true,
+                    what: String::from("change the JOSE signing algorithm"),
+                });
+            }
+            continue;
+        }
         let Some((_, op)) = SECTIONS.iter().find(|(s, _)| s == name) else {
             return Err(DocError::Shape(format!("unknown setting `{name}`")));
         };
@@ -488,13 +505,23 @@ fn plan_settings(desired: &Value, runtime: &Runtime, out: &mut Vec<Step>) -> Res
         for (k, v) in section {
             body.insert(k.clone(), v.clone());
         }
+        // OP-151 m.3 (o): a protection mode change names the tier the server compiles it to
+        let what = if name == "protection_mode" {
+            format!(
+                "update {at}: {} ({})",
+                fields.join(", "),
+                api::protection_action(&current, &Value::Object(body.clone())).label()
+            )
+        } else {
+            format!("update {at}: {}", fields.join(", "))
+        };
         out.push(Step::Write {
             operation: (*op).to_owned(),
             key: None,
             body,
             if_match: tag.clone(),
             exists: true,
-            what: format!("update {at}: {}", fields.join(", ")),
+            what,
         });
     }
     Ok(())

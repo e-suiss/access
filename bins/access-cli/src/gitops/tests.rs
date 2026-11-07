@@ -329,3 +329,30 @@ fn another_realms_or_an_unknown_document_is_refused() {
             .any(|s| matches!(s, Step::Conflict { at, .. } if at == "clients/c-9"))
     );
 }
+
+// OP-151 m.3 (o): a protection mode change is planned and names its tier
+#[test]
+fn a_protection_mode_change_names_its_tier() {
+    let mut r = runtime();
+    r.settings["protection_mode"] = json!({"bot": "monitor", "suspicious_ip": "monitor",
+        "breached_password": "monitor", "brute_force": "enforce", "sl2": "shadow", "denied_asns": []});
+    let doc = json!({"realm": "acme", "settings": {"protection_mode": {"suspicious_ip": "enforce"}, "jose_alg": "Ed25519"}});
+    let steps = plan(contract(), "acme", &doc, &r, &PlanOptions::default()).unwrap();
+    assert!(
+        steps
+            .iter()
+            .any(|s| matches!(s, Step::Write { operation, what, .. }
+        if operation == "putProtectionMode" && what.ends_with("(idp.realm.protection_mode)"))),
+        "{steps:?}"
+    );
+    assert!(
+        steps
+            .iter()
+            .any(|s| matches!(s, Step::Write { operation, body, .. }
+        if operation == "putJoseAlg" && body["alg"] == "Ed25519"))
+    );
+    let doc = json!({"realm": "acme", "settings": {"protection_mode": {"suspicious_ip": "monitor", "bot": "monitor", "sl2": "shadow"}}});
+    r.settings["protection_mode"]["bot"] = json!("enforce");
+    let steps = plan(contract(), "acme", &doc, &r, &PlanOptions::default()).unwrap();
+    assert!(steps.iter().any(|s| matches!(s, Step::Write { what, .. } if what.ends_with("(idp.realm.protection_mode_loosen)"))), "{steps:?}");
+}

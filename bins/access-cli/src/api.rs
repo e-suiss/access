@@ -7,6 +7,7 @@ use std::collections::BTreeSet;
 use std::fmt::Write as _;
 use std::sync::OnceLock;
 
+use access_identity_risk::domain::mode::{ProtectionMode, Tier, tier};
 use access_internal_api::idp::IdpAction;
 use serde_json::Value;
 
@@ -239,8 +240,17 @@ impl Contract {
     }
 }
 
+/// Writes the contract declares but no server applies yet (answered `501`): reserved (CT3)
+/// and never sent by the command line (OP-150 m.11 (b), TN-61, TN-118).
+pub(crate) const DECLARED_RESERVED: [&str; 1] = ["createResetIntent"];
+
+/// Writes `access admin` refuses: a bulk job is a set of Exercises the command line already
+/// makes one at a time (TN-125, X20); `apply` sends one write per change.
+pub(crate) const UNSUPPORTED: [&str; 1] = ["createJob"];
+
 /// The `idp.*` action a write operation compiles to; `None` for an operation the command line
-/// does not know, which it treats as reserved (fail closed, TN-122).
+/// does not know, which it treats as reserved (fail closed, TN-122). A protection mode change
+/// without its two sides is taken as loosening ([`protection_action`] decides with them).
 pub(crate) fn action_of(operation: &str, exists: bool) -> Option<IdpAction> {
     Some(match operation {
         "putClient" if exists => IdpAction::ClientUpdate,
@@ -265,14 +275,50 @@ pub(crate) fn action_of(operation: &str, exists: bool) -> Option<IdpAction> {
         "putBranding" | "patchBranding" => IdpAction::RealmBranding,
         "putRpId" => IdpAction::RealmRpId,
         "putMapper" => IdpAction::MapperSet,
+        "putJoseAlg" => IdpAction::RealmJoseAlg,
+        "putCimdPolicy" | "patchCimdPolicy" => IdpAction::CimdPolicy,
+        "putProtectionMode" | "patchProtectionMode" => IdpAction::RealmProtectionModeLoosen,
+        "markCanaryAccount" => IdpAction::AccountCanary,
+        "deleteAccount" => IdpAction::AccountDelete,
+        "rehomeRealm" => IdpAction::RealmRehome,
         _ => return None,
     })
+}
+
+fn protection_mode(v: &Value) -> Option<ProtectionMode> {
+    let mut values = Vec::new();
+    for p in ["bot", "suspicious_ip", "breached_password", "brute_force"] {
+        if let Some(e) = v.get(p) {
+            values.push((p, e.as_str()?));
+        }
+    }
+    let asns = match v.get("denied_asns") {
+        None | Some(Value::Null) => Vec::new(),
+        Some(Value::Array(a)) => a
+            .iter()
+            .map(|n| n.as_u64().and_then(|n| u32::try_from(n).ok()))
+            .collect::<Option<Vec<u32>>>()?,
+        Some(_) => return None,
+    };
+    ProtectionMode::parse(&values, v.get("sl2")?.as_str()?, &asns).ok()
+}
+
+/// The action of a protection mode change from `current` to `desired` (the settings view's
+/// `protection_mode`), as the server's tier rule decides it: loosening anything is
+/// `protection_mode_loosen` (CT2), tightening `protection_mode` (CT1); a side that does not
+/// parse is loosening (OP-151 m.3 (o)).
+pub(crate) fn protection_action(current: &Value, desired: &Value) -> IdpAction {
+    match (protection_mode(current), protection_mode(desired)) {
+        (Some(from), Some(to)) if tier(&from, &to) == Tier::Ct1 => IdpAction::RealmProtectionMode,
+        _ => IdpAction::RealmProtectionModeLoosen,
+    }
 }
 
 /// Whether a write is reserved (CT3): the reconciler's Grant has no reserved action, so it only
 /// proposes it (TN-122, E11). An operation the command line cannot place is reserved.
 pub(crate) fn reserved(operation: &str, exists: bool) -> bool {
-    action_of(operation, exists).is_none_or(IdpAction::reserved)
+    DECLARED_RESERVED.contains(&operation)
+        || action_of(operation, exists).is_none_or(IdpAction::reserved)
 }
 
 #[cfg(test)]

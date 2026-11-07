@@ -144,6 +144,14 @@ pub(crate) async fn run(args: AdminArgs) -> Code {
         Ok(x) => x,
         Err(c) => return c,
     };
+    // TN-125: a job bundles Exercises the command line already makes one at a time
+    if api::UNSUPPORTED.contains(&op.id.as_str()) {
+        note(&format!(
+            "access-cli: `{}` is not supported; send each write on its own (`access-cli apply` does)",
+            op.id
+        ));
+        return exit::USAGE;
+    }
     let target = match args.connect.target() {
         Ok(t) => t,
         Err(e) => {

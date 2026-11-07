@@ -51,13 +51,65 @@ fn reserved_operations_follow_the_idp_catalog_and_unknown_ones_fail_closed() {
     assert!(!reserved("createClient", false));
     assert!(!reserved("retireUpstreamIdp", true));
     assert!(reserved("deleteEverything", true));
+    // OP-150 m.11 (b): routes declared but answered 501 are reserved
+    for op in ["deleteAccount", "rehomeRealm", "createResetIntent"] {
+        assert!(reserved(op, true), "{op}");
+    }
+    assert!(!reserved("markCanaryAccount", true));
+    assert!(!reserved("putJoseAlg", true));
+    assert!(!reserved("patchCimdPolicy", true));
+    assert!(!reserved("putProtectionMode", true));
     for op in &contract().operations {
-        if op.writes() {
+        if op.writes()
+            && !DECLARED_RESERVED.contains(&op.id.as_str())
+            && !UNSUPPORTED.contains(&op.id.as_str())
+        {
             assert!(
                 action_of(&op.id, true).is_some(),
                 "{} has no idp.* action",
                 op.id
             );
         }
+    }
+}
+
+// OP-151 m.3 (o): tightening the protection mode is protection_mode (CT1), loosening
+// protection_mode_loosen (CT2), as the server's tier rule decides
+#[test]
+fn the_protection_mode_action_follows_the_tier_rule() {
+    use serde_json::json;
+    let base = json!({"bot": "monitor", "suspicious_ip": "monitor", "breached_password": "monitor",
+        "brute_force": "enforce", "sl2": "shadow", "denied_asns": []});
+    let tight = json!({"bot": "monitor", "suspicious_ip": "enforce", "breached_password": "monitor",
+        "brute_force": "enforce", "sl2": "stepup", "denied_asns": [64496]});
+    assert_eq!(
+        protection_action(&base, &tight),
+        IdpAction::RealmProtectionMode
+    );
+    assert_eq!(
+        protection_action(&tight, &base),
+        IdpAction::RealmProtectionModeLoosen
+    );
+    assert_eq!(
+        protection_action(&base, &json!({"sl2": "nonsense"})),
+        IdpAction::RealmProtectionModeLoosen
+    );
+    assert_eq!(
+        action_of("patchProtectionMode", true),
+        Some(IdpAction::RealmProtectionModeLoosen)
+    );
+}
+
+// TN-125: a bulk job is refused by `access admin`; every listed write is placed
+#[test]
+fn every_contract_write_is_placed_or_refused_explicitly() {
+    for op in &contract().operations {
+        if !op.writes() {
+            continue;
+        }
+        let placed = action_of(&op.id, true).is_some();
+        let listed =
+            DECLARED_RESERVED.contains(&op.id.as_str()) || UNSUPPORTED.contains(&op.id.as_str());
+        assert!(placed ^ listed, "{}", op.id);
     }
 }
