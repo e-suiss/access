@@ -1,0 +1,52 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT request, state, answer FROM access_ops.api_idempotency WHERE scope = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "request",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access_ops.api_idempotency",
+            "name": "request"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "state",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access_ops.api_idempotency",
+            "name": "state"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "answer",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access_ops.api_idempotency",
+            "name": "answer"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "3f87233dc92064405725452a7f83a617cdf2e733b5d5f4dac7453e5d9680fdc5"
+}

@@ -1,0 +1,27 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access_ops.api_idempotency AS t\n             (scope, request, state, lease_until_ms, expires_ms)\n           VALUES ($1, $2, 'running', $4, $5)\n           ON CONFLICT (scope) DO UPDATE\n             SET request = EXCLUDED.request, state = 'running', answer = NULL,\n                 lease_until_ms = EXCLUDED.lease_until_ms, expires_ms = EXCLUDED.expires_ms,\n                 created_at = now()\n           WHERE t.expires_ms <= $3\n              OR t.state = 'released'\n              OR (t.state = 'running' AND t.lease_until_ms <= $3 AND t.request = EXCLUDED.request)\n           RETURNING true AS \"claimed!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "claimed!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Bytea",
+        "Int8",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "5ec46d2e40a404fc3c557d3d92c29100d7c3e395c338265d8d8e36aebd68691a"
+}

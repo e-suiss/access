@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access_ops.api_idempotency\n            SET state = CASE WHEN $3::bytea IS NULL THEN 'released' ELSE 'done' END, answer = $3\n          WHERE scope = $1 AND request = $2 AND state = 'running'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Bytea",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "c428cf2d338fb8b39061bbe5442521137b661df27ad6c1d1129130b50589fbfc"
+}

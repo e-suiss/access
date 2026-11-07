@@ -3,3 +3,4 @@
 pub mod cbor;
 pub mod der;
 pub mod json;
+pub mod scim;
