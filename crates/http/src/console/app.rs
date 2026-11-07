@@ -1,5 +1,5 @@
-//! The console BFF on axum (TN-128–TN-131, OP-151 m.3 (b), (e), (f)): the built console under
-//! `/console/`, its API under `/console/api/`, and the two proxies. The cookie is checked on
+//! The console BFF on axum (TN-128–TN-131, OP-151 m.3 (b), (e), (f)): the built console at
+//! `/console`, its API under `/console/api/`, and the two proxies. The cookie is checked on
 //! every API call against the console session policy; state-changing calls pass the origin and
 //! CSRF checks; the proxies pass on only what the browser signed.
 
@@ -50,6 +50,10 @@ pub const SIGN_IN_COOKIE: &str = "__Host-access-console-signin";
 
 /// How long a sign-in may take, seconds.
 pub const SIGN_IN_TTL_S: u64 = 600;
+
+/// The console's page (TN-113: a path has one spelling, and a trailing slash is an empty
+/// segment, so the console is `/console`, its screens `/console/<screen>`).
+pub const HOME_PATH: &str = "/console";
 
 /// Where the browser returns from the hosted login.
 pub const CALLBACK_PATH: &str = "/console/api/sign-in/callback";
@@ -366,13 +370,6 @@ async fn asset<E: ConsoleEnv>(State(c): St<E>, Path(path): Path<String>) -> Resp
         .unwrap_or_else(not_found)
 }
 
-async fn slash() -> Response {
-    let mut r = StatusCode::PERMANENT_REDIRECT.into_response();
-    r.headers_mut()
-        .insert(header::LOCATION, HeaderValue::from_static("/console/"));
-    r
-}
-
 /// `GET /console/api/session`: who is signed in (TN-128: the identity plane's own data).
 async fn session_info<E: ConsoleEnv>(
     State(c): St<E>,
@@ -617,7 +614,7 @@ async fn callback<E: ConsoleEnv>(
     let token = policy::csrf_token(&value);
     let mut r = no_store(StatusCode::SEE_OTHER.into_response());
     r.headers_mut()
-        .insert(header::LOCATION, HeaderValue::from_static("/console/"));
+        .insert(header::LOCATION, HeaderValue::from_static(HOME_PATH));
     set_cookies(
         r,
         [
@@ -1026,12 +1023,11 @@ async fn headers_layer(request: Request, next: Next) -> Response {
     r
 }
 
-/// The console routes: `/console/` and its assets, `/console/api/*` and the proxies, every
+/// The console routes: `/console`, its screens and assets, `/console/api/*` and the proxies, every
 /// answer with the console's security headers (TN-131).
 pub fn router<E: ConsoleEnv>(console: &Arc<Console<E>>) -> Router {
     let routes = Router::new()
-        .route("/console", get(slash))
-        .route("/console/", get(page::<E>))
+        .route(HOME_PATH, get(page::<E>))
         .route("/console/assets/{*path}", get(asset::<E>))
         .route("/console/api/session", get(session_info::<E>))
         .route("/console/api/csrf", get(csrf::<E>))

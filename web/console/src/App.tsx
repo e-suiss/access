@@ -21,6 +21,14 @@ import { useSignatureScreen } from "./SignatureDialog.js";
 
 const BASE = "/console/";
 
+// TN-113: a path has one spelling and a trailing slash is an empty segment, so the console's
+// own page is `/console` and every screen is `/console/<route>`
+const HOME = "/console";
+
+function hrefOf(r: string): string {
+  return r === "" ? HOME : `${BASE}${r}`;
+}
+
 type Route = "" | "profile" | "sessions" | "about" | Section;
 
 const ROUTES: readonly Route[] = [
@@ -127,8 +135,8 @@ export function App(): ReactElement {
 
   const go = (r: string) => (e: MouseEvent<HTMLAnchorElement>) => {
     e.preventDefault();
-    history.pushState(null, "", `${BASE}${r}`);
-    setWhere(routeOf(`${BASE}${r}`));
+    history.pushState(null, "", hrefOf(r));
+    setWhere(routeOf(hrefOf(r)));
   };
 
   const signOut = () => {
@@ -214,7 +222,7 @@ export function App(): ReactElement {
           {shown.map((n) => (
             <li key={n.route}>
               <a
-                href={`${BASE}${n.route}`}
+                href={hrefOf(n.route)}
                 aria-current={current === n.route ? "page" : undefined}
                 onClick={go(n.route)}
               >

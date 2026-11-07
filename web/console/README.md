@@ -1,7 +1,7 @@
 # Access Console
 
 The administration console of Access: a React and TypeScript single-page app, served by the
-console's Backend-for-Frontend (BFF) under `/console/` on the management listener, an origin of
+console's Backend-for-Frontend (BFF) at `/console` on the management listener, an origin of
 its own, apart from every realm's sign-in pages.
 
 ## Architecture

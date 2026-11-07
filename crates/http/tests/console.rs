@@ -25,7 +25,7 @@ use access_http::console::ports::{
     SessionInstance, SessionSummary, SignIn, SignedIn, Unavailable, Upstream,
 };
 use access_http::console::{Console, router};
-use access_http::login::Peer;
+use access_http::login::{Assets, Peer};
 use access_identity_session::domain::console::{
     BindingPolicy, CONSOLE_COOKIE, CSRF_COOKIE, ConsoleFacts, IDLE_MS, csrf_token,
 };
@@ -407,6 +407,10 @@ struct Harness {
 
 impl Harness {
     fn new() -> Self {
+        Self::serving(None)
+    }
+
+    fn serving(assets: Option<Assets>) -> Self {
         let (key, _) = SoftSigner::generate_p256().unwrap();
         let instance = SessionInstance {
             kid: thumbprint(&key.public_key()),
@@ -421,7 +425,7 @@ impl Harness {
             grants: Grants::default(),
             up: Up::default(),
         };
-        let console = Console::new(env, Limits::default(), None);
+        let console = Console::new(env, Limits::default(), assets);
         let router = router(&console);
         Self {
             console,
@@ -466,7 +470,7 @@ impl Harness {
         .unwrap();
         let (r, _) = self.send(callback, CLIENT).await;
         assert_eq!(r.status(), StatusCode::SEE_OTHER);
-        assert_eq!(r.headers()["location"], "/console/");
+        assert_eq!(r.headers()["location"], "/console");
         let value = set_cookie(&r, CONSOLE_COOKIE);
         let csrf = set_cookie(&r, CSRF_COOKIE);
         Session { value, csrf }
@@ -1131,7 +1135,7 @@ async fn dbsc_is_not_faked() {
 async fn every_answer_carries_the_console_headers() {
     let h = Harness::new();
     for path in [
-        "/console/",
+        "/console",
         "/console/api/session",
         "/console/api/nothing",
         "/console/assets/x.js",
@@ -1147,10 +1151,47 @@ async fn every_answer_carries_the_console_headers() {
         assert_eq!(r.headers()["referrer-policy"], "no-referrer");
         assert_eq!(r.headers()["x-frame-options"], "DENY");
     }
-    let (r, _) = h.send(get("/console", None), CLIENT).await;
-    assert_eq!(r.status(), StatusCode::PERMANENT_REDIRECT);
     let (r, _) = h.send(get("/console/api/nothing", None), CLIENT).await;
     assert_eq!(r.status(), StatusCode::NOT_FOUND);
+}
+
+fn console_dist() -> std::path::PathBuf {
+    let dir = std::env::temp_dir().join(format!(
+        "access-console-dist-{}-{}",
+        std::process::id(),
+        std::thread::current()
+            .name()
+            .unwrap_or("t")
+            .replace("::", "-")
+    ));
+    std::fs::create_dir_all(dir.join("assets")).unwrap();
+    std::fs::write(
+        dir.join("index.html"),
+        "<!doctype html><title>Console</title><script type=module src=/console/assets/app.js></script>",
+    )
+    .unwrap();
+    std::fs::write(dir.join("assets/app.js"), "export {};").unwrap();
+    dir
+}
+
+// TN-113, TN-128 (S-2): the console is served at its one canonical spelling, `/console`, with
+// its screens and its assets under the Vite base `/console/`; the sign-in returns there, and
+// the trailing-slash spelling is refused, never rewritten
+#[tokio::test]
+async fn the_console_is_served_at_its_canonical_path() {
+    let h = Harness::serving(Some(Assets::load(&console_dist()).unwrap()));
+    for path in ["/console", "/console/admin/people", "/console/profile"] {
+        let (r, body) = h.send(get(path, None), CLIENT).await;
+        assert_eq!(r.status(), StatusCode::OK, "{path}");
+        assert!(String::from_utf8_lossy(&body).contains("/console/assets/app.js"));
+    }
+    let (r, body) = h.send(get("/console/assets/app.js", None), CLIENT).await;
+    assert_eq!(r.status(), StatusCode::OK);
+    assert_eq!(body, b"export {};");
+    let (r, body) = h.send(get("/console/", None), CLIENT).await;
+    assert_eq!(r.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(json(&body)["code"], "path-not-canonical");
+    h.sign_in().await;
 }
 
 // TN-131: an ambiguous cookie is refused rather than guessed
