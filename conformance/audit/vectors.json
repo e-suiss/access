@@ -1,0 +1,514 @@
+{
+  "cases": [
+    {
+      "cef": "CEF:0|Suiss|Access|1|login.password.failed|login.password.failed|6|rt=1793000000123 end=1793000000123 externalId=req_01J9Z7Q4 suser=anonymous duser=usr_7Hx2 outcome=failure cat=authentication cn1Label=ocsfType cn1=300201 cs1Label=eventId cs1=identity-audit:41 cs2Label=checkpointAt cs2=1793000000900 cs3Label=tenant cs3=019a0000-0000-7000-8000-000000000001 cs4Label=scope cs4=realm:019a0000-0000-7000-8000-0000000000a1",
+      "name": "identity sign-in failure, checkpointed",
+      "ocsf": {
+        "activity_id": 1,
+        "actor": {
+          "user": {
+            "uid": "anonymous"
+          }
+        },
+        "category_uid": 3,
+        "class_uid": 3002,
+        "metadata": {
+          "correlation_uid": "req_01J9Z7Q4",
+          "event_code": "login.password.failed",
+          "logged_time": 1793000000123,
+          "product": {
+            "name": "Access",
+            "vendor_name": "Suiss"
+          },
+          "uid": "identity-audit:41",
+          "version": "1.3.0"
+        },
+        "severity_id": 2,
+        "status": "failure",
+        "status_id": 2,
+        "time": 1793000000123,
+        "type_uid": 300201,
+        "unmapped": {
+          "access_class": "authentication",
+          "checkpoint_at": 1793000000900,
+          "scope": "realm:019a0000-0000-7000-8000-0000000000a1",
+          "tenant": "019a0000-0000-7000-8000-000000000001"
+        },
+        "user": {
+          "uid": "usr_7Hx2"
+        }
+      },
+      "record": {
+        "actor": "anonymous",
+        "checkpoint_at_ms": 1793000000900,
+        "event": "login.password.failed",
+        "id": "identity-audit:41",
+        "occurred_at_ms": 1793000000123,
+        "recorded_at_ms": 1793000000123,
+        "scope": "realm:019a0000-0000-7000-8000-0000000000a1",
+        "target": "usr_7Hx2",
+        "tenant": "019a0000-0000-7000-8000-000000000001",
+        "txn": "req_01J9Z7Q4"
+      },
+      "set": {
+        "events": {
+          "urn:suiss:access:audit:login.password.failed": {
+            "actor": "anonymous",
+            "checkpoint_at": 1793000000900,
+            "occurred_at": 1793000000123,
+            "outcome": "failure",
+            "recorded_at": 1793000000123,
+            "scope": "realm:019a0000-0000-7000-8000-0000000000a1",
+            "target": "usr_7Hx2",
+            "tenant": "019a0000-0000-7000-8000-000000000001"
+          }
+        },
+        "iat": 1793000000,
+        "iss": "https://cell-a.access.example/audit",
+        "jti": "identity-audit:41",
+        "toe": 1793000000,
+        "txn": "req_01J9Z7Q4"
+      }
+    },
+    {
+      "cef": "CEF:0|Suiss|Access|1|session.created|session.created|3|rt=1793000001000 end=1793000001000 externalId=req_01J9Z7Q5 suser=usr_7Hx2 duser=usr_7Hx2 outcome=success cat=session cn1Label=ocsfType cn1=300399 cs1Label=eventId cs1=identity-audit:42 cs3Label=tenant cs3=019a0000-0000-7000-8000-000000000001 cs4Label=scope cs4=realm:019a0000-0000-7000-8000-0000000000a1",
+      "name": "identity session, CAEP counterpart, not yet checkpointed",
+      "ocsf": {
+        "activity_id": 99,
+        "actor": {
+          "user": {
+            "uid": "usr_7Hx2"
+          }
+        },
+        "category_uid": 3,
+        "class_uid": 3003,
+        "metadata": {
+          "correlation_uid": "req_01J9Z7Q5",
+          "event_code": "session.created",
+          "logged_time": 1793000001000,
+          "product": {
+            "name": "Access",
+            "vendor_name": "Suiss"
+          },
+          "uid": "identity-audit:42",
+          "version": "1.3.0"
+        },
+        "severity_id": 1,
+        "status": "success",
+        "status_id": 1,
+        "time": 1793000001000,
+        "type_uid": 300399,
+        "unmapped": {
+          "access_class": "session",
+          "scope": "realm:019a0000-0000-7000-8000-0000000000a1",
+          "tenant": "019a0000-0000-7000-8000-000000000001"
+        },
+        "user": {
+          "uid": "usr_7Hx2"
+        }
+      },
+      "record": {
+        "actor": "usr_7Hx2",
+        "event": "session.created",
+        "id": "identity-audit:42",
+        "occurred_at_ms": 1793000001000,
+        "recorded_at_ms": 1793000001000,
+        "scope": "realm:019a0000-0000-7000-8000-0000000000a1",
+        "target": "usr_7Hx2",
+        "tenant": "019a0000-0000-7000-8000-000000000001",
+        "txn": "req_01J9Z7Q5"
+      },
+      "set": {
+        "events": {
+          "urn:suiss:access:audit:session.created": {
+            "actor": "usr_7Hx2",
+            "caep": "session-established",
+            "occurred_at": 1793000001000,
+            "outcome": "success",
+            "recorded_at": 1793000001000,
+            "scope": "realm:019a0000-0000-7000-8000-0000000000a1",
+            "target": "usr_7Hx2",
+            "tenant": "019a0000-0000-7000-8000-000000000001"
+          }
+        },
+        "iat": 1793000001,
+        "iss": "https://cell-a.access.example/audit",
+        "jti": "identity-audit:42",
+        "toe": 1793000001,
+        "txn": "req_01J9Z7Q5"
+      }
+    },
+    {
+      "cef": "CEF:0|Suiss|Access|1|credential.passkey.registered|credential.passkey.registered|3|rt=1793000002000 end=1793000002000 externalId=req_01J9Z7Q6 suser=usr_7Hx2 duser=usr_7Hx2 outcome=success cat=credential cn1Label=ocsfType cn1=300110 cs1Label=eventId cs1=identity-audit:43 cs2Label=checkpointAt cs2=1793000002500 cs3Label=tenant cs3=019a0000-0000-7000-8000-000000000001 cs4Label=scope cs4=realm:019a0000-0000-7000-8000-0000000000a1",
+      "name": "credential change",
+      "ocsf": {
+        "activity_id": 10,
+        "actor": {
+          "user": {
+            "uid": "usr_7Hx2"
+          }
+        },
+        "category_uid": 3,
+        "class_uid": 3001,
+        "metadata": {
+          "correlation_uid": "req_01J9Z7Q6",
+          "event_code": "credential.passkey.registered",
+          "logged_time": 1793000002000,
+          "product": {
+            "name": "Access",
+            "vendor_name": "Suiss"
+          },
+          "uid": "identity-audit:43",
+          "version": "1.3.0"
+        },
+        "severity_id": 1,
+        "status": "success",
+        "status_id": 1,
+        "time": 1793000002000,
+        "type_uid": 300110,
+        "unmapped": {
+          "access_class": "credential",
+          "checkpoint_at": 1793000002500,
+          "scope": "realm:019a0000-0000-7000-8000-0000000000a1",
+          "tenant": "019a0000-0000-7000-8000-000000000001"
+        },
+        "user": {
+          "uid": "usr_7Hx2"
+        }
+      },
+      "record": {
+        "actor": "usr_7Hx2",
+        "checkpoint_at_ms": 1793000002500,
+        "event": "credential.passkey.registered",
+        "id": "identity-audit:43",
+        "occurred_at_ms": 1793000002000,
+        "recorded_at_ms": 1793000002000,
+        "scope": "realm:019a0000-0000-7000-8000-0000000000a1",
+        "target": "usr_7Hx2",
+        "tenant": "019a0000-0000-7000-8000-000000000001",
+        "txn": "req_01J9Z7Q6"
+      },
+      "set": {
+        "events": {
+          "urn:suiss:access:audit:credential.passkey.registered": {
+            "actor": "usr_7Hx2",
+            "caep": "credential-change",
+            "checkpoint_at": 1793000002500,
+            "occurred_at": 1793000002000,
+            "outcome": "success",
+            "recorded_at": 1793000002000,
+            "scope": "realm:019a0000-0000-7000-8000-0000000000a1",
+            "target": "usr_7Hx2",
+            "tenant": "019a0000-0000-7000-8000-000000000001"
+          }
+        },
+        "iat": 1793000002,
+        "iss": "https://cell-a.access.example/audit",
+        "jti": "identity-audit:43",
+        "toe": 1793000002,
+        "txn": "req_01J9Z7Q6"
+      }
+    },
+    {
+      "cef": "CEF:0|Suiss|Access|1|authority.protocol.rejected|authority.protocol.rejected|6|rt=1793000003004 end=1793000003000 externalId=req_01J9Z7Q7 suser=pep.example duser=evaluation outcome=failure cat=rejection cn1Label=ocsfType cn1=600399 cs1Label=eventId cs1=authority-operational:7 cs2Label=checkpointAt cs2=1793000004000 cs3Label=tenant cs3=019a0000-0000-7000-8000-000000000001 cs4Label=scope cs4=domain:0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NA reason=ais-signature",
+      "name": "authority protocol rejection, unsampled",
+      "ocsf": {
+        "activity_id": 99,
+        "actor": {
+          "user": {
+            "uid": "pep.example"
+          }
+        },
+        "api": {
+          "operation": "authority.protocol.rejected"
+        },
+        "category_uid": 6,
+        "class_uid": 6003,
+        "metadata": {
+          "correlation_uid": "req_01J9Z7Q7",
+          "event_code": "authority.protocol.rejected",
+          "logged_time": 1793000003004,
+          "product": {
+            "name": "Access",
+            "vendor_name": "Suiss"
+          },
+          "uid": "authority-operational:7",
+          "version": "1.3.0"
+        },
+        "resources": [
+          {
+            "uid": "evaluation"
+          }
+        ],
+        "severity_id": 2,
+        "status": "failure",
+        "status_detail": "ais-signature",
+        "status_id": 2,
+        "time": 1793000003000,
+        "type_uid": 600399,
+        "unmapped": {
+          "access_class": "rejection",
+          "checkpoint_at": 1793000004000,
+          "scope": "domain:0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NA",
+          "tenant": "019a0000-0000-7000-8000-000000000001"
+        }
+      },
+      "record": {
+        "actor": "pep.example",
+        "checkpoint_at_ms": 1793000004000,
+        "event": "authority.protocol.rejected",
+        "id": "authority-operational:7",
+        "occurred_at_ms": 1793000003000,
+        "reason": "ais-signature",
+        "recorded_at_ms": 1793000003004,
+        "scope": "domain:0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NA",
+        "target": "evaluation",
+        "tenant": "019a0000-0000-7000-8000-000000000001",
+        "txn": "req_01J9Z7Q7"
+      },
+      "set": {
+        "events": {
+          "urn:suiss:access:audit:authority.protocol.rejected": {
+            "actor": "pep.example",
+            "checkpoint_at": 1793000004000,
+            "occurred_at": 1793000003000,
+            "outcome": "failure",
+            "reason": "ais-signature",
+            "recorded_at": 1793000003004,
+            "scope": "domain:0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NA",
+            "target": "evaluation",
+            "tenant": "019a0000-0000-7000-8000-000000000001"
+          }
+        },
+        "iat": 1793000003,
+        "iss": "https://cell-a.access.example/audit",
+        "jti": "authority-operational:7",
+        "toe": 1793000003,
+        "txn": "req_01J9Z7Q7"
+      }
+    },
+    {
+      "cef": "CEF:0|Suiss|Access|1|authority.protocol.rejected|authority.protocol.rejected|6|rt=1793000003501 end=1793000003500 externalId=req_01J9Z7Q8 suser=pep.example duser=evaluation outcome=failure cat=rejection cn1Label=ocsfType cn1=600399 cs1Label=eventId cs1=authority-operational:8 reason=json",
+      "name": "authority rejection before any domain",
+      "ocsf": {
+        "activity_id": 99,
+        "actor": {
+          "user": {
+            "uid": "pep.example"
+          }
+        },
+        "api": {
+          "operation": "authority.protocol.rejected"
+        },
+        "category_uid": 6,
+        "class_uid": 6003,
+        "metadata": {
+          "correlation_uid": "req_01J9Z7Q8",
+          "event_code": "authority.protocol.rejected",
+          "logged_time": 1793000003501,
+          "product": {
+            "name": "Access",
+            "vendor_name": "Suiss"
+          },
+          "uid": "authority-operational:8",
+          "version": "1.3.0"
+        },
+        "resources": [
+          {
+            "uid": "evaluation"
+          }
+        ],
+        "severity_id": 2,
+        "status": "failure",
+        "status_detail": "json",
+        "status_id": 2,
+        "time": 1793000003500,
+        "type_uid": 600399,
+        "unmapped": {
+          "access_class": "rejection"
+        }
+      },
+      "record": {
+        "actor": "pep.example",
+        "event": "authority.protocol.rejected",
+        "id": "authority-operational:8",
+        "occurred_at_ms": 1793000003500,
+        "reason": "json",
+        "recorded_at_ms": 1793000003501,
+        "scope": "none",
+        "target": "evaluation",
+        "txn": "req_01J9Z7Q8"
+      },
+      "set": {
+        "events": {
+          "urn:suiss:access:audit:authority.protocol.rejected": {
+            "actor": "pep.example",
+            "occurred_at": 1793000003500,
+            "outcome": "failure",
+            "reason": "json",
+            "recorded_at": 1793000003501,
+            "target": "evaluation"
+          }
+        },
+        "iat": 1793000003,
+        "iss": "https://cell-a.access.example/audit",
+        "jti": "authority-operational:8",
+        "toe": 1793000003,
+        "txn": "req_01J9Z7Q8"
+      }
+    },
+    {
+      "cef": "CEF:0|Suiss|Access|1|audit.export|audit.export|3|rt=1793000005002 end=1793000005000 externalId=req_01J9Z7Q9 suser=inst_x1 duser=records:1-12 outcome=success cat=audit-access cn1Label=ocsfType cn1=600107 cs1Label=eventId cs1=authority-operational:9 cs3Label=tenant cs3=019a0000-0000-7000-8000-000000000001 cs4Label=scope cs4=domain:0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NA reason=full",
+      "name": "audit export, the audit of the audit",
+      "ocsf": {
+        "activity_id": 7,
+        "actor": {
+          "user": {
+            "uid": "inst_x1"
+          }
+        },
+        "category_uid": 6,
+        "class_uid": 6001,
+        "metadata": {
+          "correlation_uid": "req_01J9Z7Q9",
+          "event_code": "audit.export",
+          "logged_time": 1793000005002,
+          "product": {
+            "name": "Access",
+            "vendor_name": "Suiss"
+          },
+          "uid": "authority-operational:9",
+          "version": "1.3.0"
+        },
+        "severity_id": 1,
+        "status": "success",
+        "status_detail": "full",
+        "status_id": 1,
+        "time": 1793000005000,
+        "type_uid": 600107,
+        "unmapped": {
+          "access_class": "audit-access",
+          "scope": "domain:0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NA",
+          "tenant": "019a0000-0000-7000-8000-000000000001"
+        },
+        "web_resources": [
+          {
+            "uid": "records:1-12"
+          }
+        ]
+      },
+      "record": {
+        "actor": "inst_x1",
+        "event": "audit.export",
+        "id": "authority-operational:9",
+        "occurred_at_ms": 1793000005000,
+        "reason": "full",
+        "recorded_at_ms": 1793000005002,
+        "scope": "domain:0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NA",
+        "target": "records:1-12",
+        "tenant": "019a0000-0000-7000-8000-000000000001",
+        "txn": "req_01J9Z7Q9"
+      },
+      "set": {
+        "events": {
+          "urn:suiss:access:audit:audit.export": {
+            "actor": "inst_x1",
+            "occurred_at": 1793000005000,
+            "outcome": "success",
+            "reason": "full",
+            "recorded_at": 1793000005002,
+            "scope": "domain:0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NA",
+            "target": "records:1-12",
+            "tenant": "019a0000-0000-7000-8000-000000000001"
+          }
+        },
+        "iat": 1793000005,
+        "iss": "https://cell-a.access.example/audit",
+        "jti": "authority-operational:9",
+        "toe": 1793000005,
+        "txn": "req_01J9Z7Q9"
+      }
+    },
+    {
+      "cef": "CEF:0|Suiss|Access|1|audit.read|audit.read|3|rt=1793000006001 end=1793000006000 externalId=req_01J9Z7QA suser=inst_x1 duser=record:12 outcome=success cat=audit-access cn1Label=ocsfType cn1=600102 cs1Label=eventId cs1=authority-operational:10 cs3Label=tenant cs3=019a0000-0000-7000-8000-000000000001 cs4Label=scope cs4=domain:0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NA reason=explain",
+      "name": "audit read at audit depth",
+      "ocsf": {
+        "activity_id": 2,
+        "actor": {
+          "user": {
+            "uid": "inst_x1"
+          }
+        },
+        "category_uid": 6,
+        "class_uid": 6001,
+        "metadata": {
+          "correlation_uid": "req_01J9Z7QA",
+          "event_code": "audit.read",
+          "logged_time": 1793000006001,
+          "product": {
+            "name": "Access",
+            "vendor_name": "Suiss"
+          },
+          "uid": "authority-operational:10",
+          "version": "1.3.0"
+        },
+        "severity_id": 1,
+        "status": "success",
+        "status_detail": "explain",
+        "status_id": 1,
+        "time": 1793000006000,
+        "type_uid": 600102,
+        "unmapped": {
+          "access_class": "audit-access",
+          "scope": "domain:0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NA",
+          "tenant": "019a0000-0000-7000-8000-000000000001"
+        },
+        "web_resources": [
+          {
+            "uid": "record:12"
+          }
+        ]
+      },
+      "record": {
+        "actor": "inst_x1",
+        "event": "audit.read",
+        "id": "authority-operational:10",
+        "occurred_at_ms": 1793000006000,
+        "reason": "explain",
+        "recorded_at_ms": 1793000006001,
+        "scope": "domain:0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NA",
+        "target": "record:12",
+        "tenant": "019a0000-0000-7000-8000-000000000001",
+        "txn": "req_01J9Z7QA"
+      },
+      "set": {
+        "events": {
+          "urn:suiss:access:audit:audit.read": {
+            "actor": "inst_x1",
+            "occurred_at": 1793000006000,
+            "outcome": "success",
+            "reason": "explain",
+            "recorded_at": 1793000006001,
+            "scope": "domain:0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NDQ0NA",
+            "target": "record:12",
+            "tenant": "019a0000-0000-7000-8000-000000000001"
+          }
+        },
+        "iat": 1793000006,
+        "iss": "https://cell-a.access.example/audit",
+        "jti": "authority-operational:10",
+        "toe": 1793000006,
+        "txn": "req_01J9Z7QA"
+      }
+    }
+  ],
+  "iss": "https://cell-a.access.example/audit",
+  "operation": "audit.render",
+  "rule": [
+    "OP-41",
+    "CMP-27",
+    "OP-44"
+  ],
+  "track": "audit",
+  "version": "1"
+}

@@ -40,3 +40,31 @@ fn the_cell_key_is_sealed_and_restored() {
         Some(CellError::Name)
     );
 }
+
+// OP-44, OP-39: the same cell key signs the operational chain under its own origin, and nothing
+// else; a body of the identity origin with the operational chain's tree is a different log
+#[test]
+fn the_cell_key_signs_its_two_chains_only() {
+    let mut f = factory();
+    let key = CellKey::generate("cell-a", &mut f).unwrap();
+    let operational = operational_origin(key.origin()).unwrap();
+    assert_eq!(operational, "cell-a/authority-operational");
+    let body = |origin: &str| {
+        Checkpoint {
+            origin: origin.to_owned(),
+            size: 1,
+            root: [7; 32],
+            extensions: vec![String::from("issued_at 1")],
+        }
+        .to_body()
+        .unwrap()
+    };
+    assert!(key.sign(&body(key.origin())).is_ok());
+    assert!(key.sign(&body(&operational)).is_ok());
+    assert_eq!(
+        key.sign(&body("cell-b/authority-operational")).err(),
+        Some(SignerError::Note)
+    );
+    assert_eq!(operational_origin("cell-a/other"), None);
+    assert_eq!(operational_origin("identity-audit"), None);
+}

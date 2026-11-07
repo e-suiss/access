@@ -1,0 +1,140 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT (extract(epoch FROM at) * 1000)::bigint AS \"at_ms!\", id,\n                  xid::text::bigint AS \"xid!\", occurred_at, tenant_id, domain_id, event_type,\n                  actor, target, reason, correlation\n             FROM access_ops.authority_audit\n            WHERE xid < pg_snapshot_xmin(pg_current_snapshot())\n              AND (xid, id) > ($1::bigint::text::xid8, $2)\n            ORDER BY xid, id\n            LIMIT $3",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "at_ms!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access_ops.authority_audit",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "xid!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 3,
+        "name": "occurred_at",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access_ops.authority_audit",
+            "name": "occurred_at"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "tenant_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access_ops.authority_audit",
+            "name": "tenant_id"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "domain_id",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access_ops.authority_audit",
+            "name": "domain_id"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "event_type",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access_ops.authority_audit",
+            "name": "event_type"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "actor",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access_ops.authority_audit",
+            "name": "actor"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "target",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access_ops.authority_audit",
+            "name": "target"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "reason",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access_ops.authority_audit",
+            "name": "reason"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "correlation",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access_ops.authority_audit",
+            "name": "correlation"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      null,
+      false,
+      null,
+      false,
+      true,
+      true,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "42fc8f0ad9b6c355c96e90cc7d5c6ec732f2686fc80de02693753c62f06ffe04"
+}

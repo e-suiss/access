@@ -312,3 +312,66 @@ async fn no_signer_no_checkpoint() {
     assert!(last_checkpoint(&db.checkpointer).await.unwrap().is_none());
     assert_eq!(integrate(&db, 1).await, 1);
 }
+
+/// Writes one operational row (OP-39, OP-44).
+async fn operational(db: &TestDb, n: usize) {
+    access_store::operational::record_operational(
+        &db.app,
+        &access_store::operational::OperationalEvent {
+            occurred_at_ms: 1_000,
+            tenant: Some([1; 16]),
+            domain: Some([0xd0; 32]),
+            event_type: "audit.read",
+            actor: "inst:x",
+            target: &format!("record:{n}"),
+            reason: "explain",
+            correlation: &format!("req_{n}"),
+        },
+    )
+    .await
+    .unwrap();
+}
+
+// OP-44, U53, PI-4: the operational stream is its own chain: its checkpoints carry their own
+// origin under the same cell key, its tree never mixes with the identity log's, and a step
+// over it leaves the identity log untouched
+#[tokio::test]
+async fn op_44_the_operational_stream_is_a_separate_chain() {
+    use access_identity_audit::adapters::PgOperational;
+    use access_identity_audit::domain::operational_leaf;
+    use access_identity_signer::cell::operational_origin;
+    use access_store::operational::{last_operational_checkpoint, operational_rows};
+    let db = fresh().await.unwrap();
+    for n in 0..3 {
+        operational(&db, n).await;
+    }
+    audit(&db, 9).await;
+    let chain = PgOperational(db.checkpointer.clone());
+    let deadline = Instant::now() + Duration::from_secs(20);
+    let checkpoint = loop {
+        step(&chain, &*CELL, NOW).await.unwrap();
+        if let Some(c) = last_operational_checkpoint(&db.checkpointer).await.unwrap()
+            && c.size >= 3
+        {
+            break c;
+        }
+        assert!(Instant::now() < deadline, "operational rows after 20 s");
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    };
+    assert_eq!(checkpoint.size, 3);
+    let rows = operational_rows(&db.checkpointer, 10).await.unwrap();
+    let mut f = Frontier::default();
+    for r in &rows {
+        f.push(operational_leaf(r).unwrap()).unwrap();
+    }
+    assert_eq!(checkpoint.root, f.root());
+    let (identity, vkey) = CELL.key().await.unwrap();
+    let origin = operational_origin(&identity).unwrap();
+    assert_eq!(
+        verify(&access_crypto::AwsLcBackend, &checkpoint, &origin, &vkey).unwrap(),
+        NOW
+    );
+    // the identity log's origin does not verify it: two chains, never one
+    assert!(verify(&access_crypto::AwsLcBackend, &checkpoint, &identity, &vkey).is_err());
+    assert!(last_checkpoint(&db.checkpointer).await.unwrap().is_none());
+}

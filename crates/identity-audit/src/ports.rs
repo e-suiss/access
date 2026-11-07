@@ -2,13 +2,22 @@
 
 use std::future::Future;
 
-use access_store::audit::{AuditRow, CheckpointRow};
+use access_store::audit::CheckpointRow;
 use access_store::identity::Cursor;
 
 use crate::AuditError;
+use crate::domain::Leaf;
 
-/// The audit log as the checkpointer sees it.
+/// One audit chain as the checkpointer sees it: the identity audit log, or the authority
+/// plane's operational stream (OP-44).
 pub trait AuditLog {
+    /// The rows this chain integrates.
+    type Row: Leaf + Send;
+    /// The chain's name under the cell, `None` for the identity audit log; its checkpoints carry
+    /// the origin of that chain.
+    fn chain(&self) -> Option<&'static str> {
+        None
+    }
     /// The latest checkpoint.
     fn last(&self) -> impl Future<Output = Result<Option<CheckpointRow>, AuditError>> + Send;
     /// Ended rows after `after`, in integration order.
@@ -16,7 +25,7 @@ pub trait AuditLog {
         &self,
         after: Cursor,
         limit: u32,
-    ) -> impl Future<Output = Result<Vec<AuditRow>, AuditError>> + Send;
+    ) -> impl Future<Output = Result<Vec<Self::Row>, AuditError>> + Send;
     /// Appends a checkpoint; fails if one of that size exists.
     fn append(
         &self,

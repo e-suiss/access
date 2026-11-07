@@ -2,7 +2,9 @@
 //! cell's `audit-checkpoint` key sign it (OP-150 m.3 (h)).
 
 use access_crypto::AwsLcBackend;
+use access_identity_signer::cell::{OPERATIONAL_CHAIN, operational_origin};
 use access_store::audit::CheckpointRow;
+use suiss_crypto::note::NoteError;
 
 use crate::AuditError;
 use crate::domain::{body, next, verify};
@@ -30,7 +32,15 @@ pub async fn step<L: AuditLog, S: NoteSigner>(
     let Some(mut checkpoint) = next(last.as_ref(), &rows)? else {
         return Ok(None);
     };
-    let (origin, vkey) = signer.key().await?;
+    let (identity, vkey) = signer.key().await?;
+    // OP-44: a separate chain carries its own origin under the same cell key
+    let origin = match log.chain() {
+        None => identity,
+        Some(OPERATIONAL_CHAIN) => {
+            operational_origin(&identity).ok_or(AuditError::Note(NoteError::Checkpoint))?
+        }
+        Some(_) => return Err(AuditError::Note(NoteError::Checkpoint)),
+    };
     let text = body(&origin, &checkpoint, now)?;
     let line = signer.sign(text.clone()).await?;
     checkpoint.note = Some(format!("{text}\n{line}"));

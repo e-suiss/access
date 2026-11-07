@@ -18,7 +18,24 @@ pub const LABEL: &str = "audit-checkpoint";
 /// line.
 #[must_use]
 pub fn origin(cell: &str) -> String {
-    format!("{cell}/identity-audit")
+    format!("{cell}/{IDENTITY_CHAIN}")
+}
+
+/// The identity audit log's chain name: the last segment of its origin.
+pub const IDENTITY_CHAIN: &str = "identity-audit";
+
+/// The authority plane's operational audit stream (OP-39, OP-44): a separate chain the same cell
+/// key signs, so protocol rejections and audit reads never share a tree with the identity log.
+pub const OPERATIONAL_CHAIN: &str = "authority-operational";
+
+/// The origin of the operational chain of the cell whose identity log is `identity_origin`;
+/// `None` when that is not an identity log origin.
+#[must_use]
+pub fn operational_origin(identity_origin: &str) -> Option<String> {
+    identity_origin
+        .strip_suffix(IDENTITY_CHAIN)
+        .filter(|cell| cell.ends_with('/'))
+        .map(|cell| format!("{cell}{OPERATIONAL_CHAIN}"))
 }
 
 /// Why the cell key cannot be opened.
@@ -135,14 +152,17 @@ impl CellKey {
         self.verifier.to_vkey()
     }
 
-    /// The note signature line over a checkpoint body of this cell's audit log (L2-CKP-3).
+    /// The note signature line over a checkpoint body of this cell's audit log or of its
+    /// operational chain (L2-CKP-3, OP-44).
     ///
     /// # Errors
-    /// [`SignerError::Note`] for a body that is not a canonical checkpoint of this origin;
-    /// [`SignerError::Sign`] when the key cannot sign.
+    /// [`SignerError::Note`] for a body that is not a canonical checkpoint of one of these
+    /// origins; [`SignerError::Sign`] when the key cannot sign.
     pub fn sign(&self, body: &str) -> Result<String, SignerError> {
         let cp = Checkpoint::parse(body).map_err(|_| SignerError::Note)?;
-        if cp.origin != self.origin || cp.to_body().ok().as_deref() != Some(body) {
+        let known = cp.origin == self.origin
+            || operational_origin(&self.origin).as_deref() == Some(cp.origin.as_str());
+        if !known || cp.to_body().ok().as_deref() != Some(body) {
             return Err(SignerError::Note);
         }
         sign_note(self.signer.as_ref(), &self.origin, body)

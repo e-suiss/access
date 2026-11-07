@@ -1,0 +1,21 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access_ops.authority_audit\n           (occurred_at, tenant_id, domain_id, event_type, actor, target, reason, correlation)\n         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Uuid",
+        "Bytea",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "121148c8bf619a7ff464ef814f37e6b01e96f46c35ddddc651104add6ac9b675"
+}

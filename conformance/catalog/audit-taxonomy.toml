@@ -1,0 +1,365 @@
+# OP-41, OP-47, §17.6.8, §17.8.1, CMP-27: Access's own audit event taxonomy.
+#
+# The canonical audit records are Access's: the authority record (deterministic CBOR) and the
+# identity audit row. This file names every event the full-taxonomy audit stream (channel B)
+# carries and maps it statically to OCSF and, where one exists, to its CAEP counterpart in the
+# action stream (channel A). The mapping is informative (§9.16.1): a copy, not the record (X22).
+#
+# event          dotted name, as written in the record
+# plane          "identity" or "authority"
+# class          own taxonomy class
+# outcome        "success", "failure" or "unknown"
+# fields         record fields every rendering carries besides the common ones
+# ocsf_class     OCSF class_uid
+# ocsf_activity  OCSF activity_id within that class
+# caep           CAEP event type of channel A, or "" when there is none
+# webhook        whether the tenant webhook feed carries it as a raw event (IDP-36, IDP-37)
+
+version = 1
+ocsf_version = "1.3.0"
+
+# ---------------------------------------------------------------- identity: accounts
+
+[[event]]
+event = "account.created"
+plane = "identity"
+class = "account"
+outcome = "success"
+fields = ["actor", "target"]
+ocsf_class = 3001
+ocsf_activity = 1
+caep = ""
+webhook = true
+
+[[event]]
+event = "account.deactivated"
+plane = "identity"
+class = "account"
+outcome = "success"
+fields = ["actor", "target"]
+ocsf_class = 3001
+ocsf_activity = 5
+caep = ""
+webhook = true
+
+[[event]]
+event = "account.locked"
+plane = "identity"
+class = "account"
+outcome = "success"
+fields = ["actor", "target"]
+ocsf_class = 3001
+ocsf_activity = 9
+caep = ""
+webhook = true
+
+# ---------------------------------------------------------------- identity: credentials
+
+[[event]]
+event = "credential.password.set"
+plane = "identity"
+class = "credential"
+outcome = "success"
+fields = ["actor", "target"]
+ocsf_class = 3001
+ocsf_activity = 3
+caep = "credential-change"
+webhook = true
+
+[[event]]
+event = "credential.passkey.registered"
+plane = "identity"
+class = "credential"
+outcome = "success"
+fields = ["actor", "target"]
+ocsf_class = 3001
+ocsf_activity = 10
+caep = "credential-change"
+webhook = true
+
+[[event]]
+event = "credential.totp.enrolled"
+plane = "identity"
+class = "credential"
+outcome = "success"
+fields = ["actor", "target"]
+ocsf_class = 3001
+ocsf_activity = 10
+caep = "credential-change"
+webhook = true
+
+[[event]]
+event = "credential.recovery_codes.regenerated"
+plane = "identity"
+class = "credential"
+outcome = "success"
+fields = ["actor", "target"]
+ocsf_class = 3001
+ocsf_activity = 99
+caep = "credential-change"
+webhook = true
+
+[[event]]
+event = "credential.removed"
+plane = "identity"
+class = "credential"
+outcome = "success"
+fields = ["actor", "target"]
+ocsf_class = 3001
+ocsf_activity = 11
+caep = "credential-change"
+webhook = true
+
+# ---------------------------------------------------------------- identity: sign-in
+
+[[event]]
+event = "login.password.succeeded"
+plane = "identity"
+class = "authentication"
+outcome = "success"
+fields = ["actor", "target"]
+ocsf_class = 3002
+ocsf_activity = 1
+caep = ""
+webhook = false
+
+[[event]]
+event = "login.password.failed"
+plane = "identity"
+class = "authentication"
+outcome = "failure"
+fields = ["actor", "target"]
+ocsf_class = 3002
+ocsf_activity = 1
+caep = ""
+webhook = false
+
+[[event]]
+event = "login.totp.succeeded"
+plane = "identity"
+class = "authentication"
+outcome = "success"
+fields = ["actor", "target"]
+ocsf_class = 3002
+ocsf_activity = 1
+caep = ""
+webhook = false
+
+[[event]]
+event = "login.totp.failed"
+plane = "identity"
+class = "authentication"
+outcome = "failure"
+fields = ["actor", "target"]
+ocsf_class = 3002
+ocsf_activity = 1
+caep = ""
+webhook = false
+
+[[event]]
+event = "login.recovery_code.succeeded"
+plane = "identity"
+class = "authentication"
+outcome = "success"
+fields = ["actor", "target"]
+ocsf_class = 3002
+ocsf_activity = 1
+caep = ""
+webhook = false
+
+[[event]]
+event = "login.recovery_code.failed"
+plane = "identity"
+class = "authentication"
+outcome = "failure"
+fields = ["actor", "target"]
+ocsf_class = 3002
+ocsf_activity = 1
+caep = ""
+webhook = false
+
+[[event]]
+event = "auth.flow.suspended"
+plane = "identity"
+class = "authentication"
+outcome = "unknown"
+fields = ["actor", "target"]
+ocsf_class = 3002
+ocsf_activity = 99
+caep = ""
+webhook = false
+
+[[event]]
+event = "auth.flow.resumed"
+plane = "identity"
+class = "authentication"
+outcome = "unknown"
+fields = ["actor", "target"]
+ocsf_class = 3002
+ocsf_activity = 99
+caep = ""
+webhook = false
+
+[[event]]
+event = "auth.flow.expired"
+plane = "identity"
+class = "authentication"
+outcome = "failure"
+fields = ["actor", "target"]
+ocsf_class = 3002
+ocsf_activity = 99
+caep = ""
+webhook = false
+
+[[event]]
+event = "instance.challenge_claimed"
+plane = "identity"
+class = "authentication"
+outcome = "success"
+fields = ["actor", "target"]
+ocsf_class = 3002
+ocsf_activity = 99
+caep = ""
+webhook = false
+
+# ---------------------------------------------------------------- identity: sessions
+
+[[event]]
+event = "session.created"
+plane = "identity"
+class = "session"
+outcome = "success"
+fields = ["actor", "target"]
+ocsf_class = 3003
+ocsf_activity = 99
+caep = "session-established"
+webhook = false
+
+[[event]]
+event = "session.stepped_up"
+plane = "identity"
+class = "session"
+outcome = "success"
+fields = ["actor", "target"]
+ocsf_class = 3003
+ocsf_activity = 99
+caep = "assurance-level-change"
+webhook = false
+
+[[event]]
+event = "session.signed_out"
+plane = "identity"
+class = "session"
+outcome = "success"
+fields = ["actor", "target"]
+ocsf_class = 3002
+ocsf_activity = 2
+caep = "session-revoked"
+webhook = true
+
+[[event]]
+event = "session.ended_others"
+plane = "identity"
+class = "session"
+outcome = "success"
+fields = ["actor", "target"]
+ocsf_class = 3002
+ocsf_activity = 2
+caep = "session-revoked"
+webhook = true
+
+[[event]]
+event = "session.ended_everywhere"
+plane = "identity"
+class = "session"
+outcome = "success"
+fields = ["actor", "target"]
+ocsf_class = 3002
+ocsf_activity = 2
+caep = "session-revoked"
+webhook = true
+
+# ---------------------------------------------------------------- identity: OAuth
+
+[[event]]
+event = "oauth.token.refused"
+plane = "identity"
+class = "token"
+outcome = "failure"
+fields = ["actor", "target"]
+ocsf_class = 3002
+ocsf_activity = 4
+caep = ""
+webhook = false
+
+# ---------------------------------------------------------------- authority: the record
+
+[[event]]
+event = "authority.decision.allow"
+plane = "authority"
+class = "decision"
+outcome = "success"
+fields = ["actor", "target"]
+ocsf_class = 3003
+ocsf_activity = 99
+caep = ""
+webhook = false
+
+[[event]]
+event = "authority.decision.deny"
+plane = "authority"
+class = "decision"
+outcome = "failure"
+fields = ["actor", "target"]
+ocsf_class = 3003
+ocsf_activity = 99
+caep = ""
+webhook = false
+
+[[event]]
+event = "authority.decision.require_action"
+plane = "authority"
+class = "decision"
+outcome = "unknown"
+fields = ["actor", "target"]
+ocsf_class = 3003
+ocsf_activity = 99
+caep = ""
+webhook = false
+
+# ---------------------------------------------------------------- authority: operational stream
+
+# OP-39, OP-44: a protocol rejection makes no record; it goes to this stream, unsampled.
+[[event]]
+event = "authority.protocol.rejected"
+plane = "authority"
+class = "rejection"
+outcome = "failure"
+fields = ["actor", "target", "reason"]
+ocsf_class = 6003
+ocsf_activity = 99
+caep = ""
+webhook = false
+
+# U53, OP-44, PI-4: reading the audit is itself audited, one event per query, in its own chain.
+[[event]]
+event = "audit.read"
+plane = "authority"
+class = "audit-access"
+outcome = "success"
+fields = ["actor", "target", "reason"]
+ocsf_class = 6001
+ocsf_activity = 2
+caep = ""
+webhook = false
+
+[[event]]
+event = "audit.export"
+plane = "authority"
+class = "audit-access"
+outcome = "success"
+fields = ["actor", "target", "reason"]
+ocsf_class = 6001
+ocsf_activity = 7
+caep = ""
+webhook = false

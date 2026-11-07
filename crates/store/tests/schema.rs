@@ -13,8 +13,10 @@ use access_store::testing::fresh;
 use sqlx::{Connection, PgConnection, Row};
 
 const SCOPE_COLUMNS: [&str; 2] = ["domain_id", "tenant_id"];
-const APPEND_ONLY: [&str; 11] = [
+const APPEND_ONLY: [&str; 13] = [
     "authority_log",
+    "authority_audit",
+    "authority_audit_checkpoint",
     "authority_nonce",
     "authority_outbox",
     "proof_store",
@@ -132,7 +134,7 @@ async fn append_only_tables_grant_no_change_and_carry_both_triggers() {
            FROM information_schema.role_table_grants
           WHERE table_schema IN ('access', 'access_ops', 'access_derived') AND grantee <> 'access_migrator'
             AND privilege_type IN ('UPDATE', 'DELETE', 'TRUNCATE')
-            AND table_name = ANY (ARRAY['authority_log', 'authority_nonce', 'authority_outbox', 'proof_store', 'identity_outbox', 'authority_single_use', 'identity_audit', 'audit_checkpoint', 'relay_undelivered', 'idp_config_log', 'backchannel_undelivered'])",
+            AND table_name = ANY (ARRAY['authority_log', 'authority_nonce', 'authority_outbox', 'proof_store', 'identity_outbox', 'authority_single_use', 'identity_audit', 'audit_checkpoint', 'relay_undelivered', 'idp_config_log', 'backchannel_undelivered', 'authority_audit', 'authority_audit_checkpoint'])",
     )
     .await;
     assert!(grants.is_empty(), "{grants:?}");
@@ -188,4 +190,23 @@ async fn only_the_four_global_identifiers_are_unique_across_tenants() {
         .map(|r| format!("{} on {}", r.get::<String, _>(0), r.get::<String, _>(1)))
         .collect();
     assert!(bad.is_empty(), "{bad:?}");
+}
+
+// §9.7.1, §9.16.3, C30: explain traces and Cedar diagnostics are operator telemetry, never the
+// record: no table of the Authority Record or its proofs has a trace, span or diagnostics column
+#[tokio::test]
+async fn record_tables_carry_no_trace_columns() {
+    let mut c = admin().await;
+    let traced = strings(
+        &mut c,
+        "SELECT table_name::text || '.' || column_name::text FROM information_schema.columns
+          WHERE table_schema = 'access'
+            AND table_name IN ('authority_log', 'authority_log_default', 'authority_nonce',
+                               'authority_state', 'authority_version', 'authority_counter',
+                               'authority_single_use', 'authority_receipt', 'proof_store')
+            AND (column_name ILIKE '%trace%' OR column_name ILIKE '%span%'
+                 OR column_name ILIKE '%diagnostic%' OR column_name ILIKE '%explain%')",
+    )
+    .await;
+    assert!(traced.is_empty(), "{traced:?}");
 }
