@@ -313,8 +313,16 @@ pub(crate) fn parse_list(text: &str) -> Vec<String> {
         .collect()
 }
 
+/// The one file that may drop a database: the test harness's throwaway clones (OP-73).
+pub(crate) const DROP_DATABASE_FILE: &str = "crates/store/src/testing.rs";
+
 /// Physical-delete statements in a piece of SQL text, as (byte offset, message).
-pub(crate) fn delete_findings(sql: &str, allow: &[String]) -> Vec<(usize, String)> {
+/// `DROP DATABASE` passes only when `drop_database` is set (the test harness, OP-73).
+pub(crate) fn delete_findings(
+    sql: &str,
+    allow: &[String],
+    drop_database: bool,
+) -> Vec<(usize, String)> {
     let upper = sql.to_ascii_uppercase();
     let mut words: Vec<(usize, &str)> = Vec::new();
     let mut start = None;
@@ -362,10 +370,45 @@ pub(crate) fn delete_findings(sql: &str, allow: &[String]) -> Vec<(usize, String
                 at,
                 "`DROP TABLE` is forbidden; archive instead (OP-73)".to_owned(),
             )),
+            ("DROP", Some("SCHEMA")) => out.push((
+                at,
+                "`DROP SCHEMA` is forbidden; archive instead (OP-73)".to_owned(),
+            )),
+            ("DROP", Some("COLUMN")) => out.push((
+                at,
+                "`DROP COLUMN` destroys data; soft delete or crypto-shred instead (OP-73)"
+                    .to_owned(),
+            )),
+            ("DROP", Some(col)) if col != "CONSTRAINT" && alter_table_target(&words, k) => {
+                out.push((
+                    at,
+                    "`ALTER TABLE … DROP` destroys data; soft delete or crypto-shred instead (OP-73)"
+                        .to_owned(),
+                ));
+            }
+            ("DROP", Some("DATABASE")) if !drop_database => out.push((
+                at,
+                "`DROP DATABASE` is forbidden outside the test harness (OP-73)".to_owned(),
+            )),
+            ("THEN", Some("DELETE")) => out.push((
+                at,
+                "`MERGE … THEN DELETE` removes rows; use soft delete (OP-73)".to_owned(),
+            )),
             _ => {}
         }
     }
     out
+}
+
+/// True when the words before `k` are an `ALTER TABLE [IF EXISTS] [ONLY] <name>` head, so the
+/// `DROP` at `k` drops a column (`COLUMN` is optional in PostgreSQL).
+fn alter_table_target(words: &[(usize, &str)], k: usize) -> bool {
+    let back = |n: usize| k.checked_sub(n).and_then(|i| words.get(i)).map(|&(_, w)| w);
+    let mut n = 2;
+    while matches!(back(n), Some("ONLY" | "EXISTS" | "IF")) {
+        n = n.saturating_add(1);
+    }
+    back(n) == Some("TABLE") && back(n.saturating_add(1)) == Some("ALTER")
 }
 
 /// Removes `--` and `/* */` comments from SQL, keeping line structure.
@@ -413,7 +456,7 @@ pub(crate) fn check_delete(root: &Path) -> Result<Vec<Violation>, String> {
         match path.extension().and_then(|e| e.to_str()) {
             Some("sql") => {
                 let sql = strip_sql_comments(&read(&path)?);
-                for (at, msg) in delete_findings(&sql, &allow) {
+                for (at, msg) in delete_findings(&sql, &allow, false) {
                     out.push(violation(DELETE, &rel_path, line_at(&sql, at), msg));
                 }
             }
@@ -424,7 +467,9 @@ pub(crate) fn check_delete(root: &Path) -> Result<Vec<Violation>, String> {
                 let lexed = lex(&read(&path)?);
                 let tests = test_regions(&lexed.code);
                 for lit in lexed.strings.iter().filter(|l| !in_regions(&tests, l.line)) {
-                    for (_, msg) in delete_findings(&lit.text, &allow) {
+                    for (_, msg) in
+                        delete_findings(&lit.text, &allow, rel_path == DROP_DATABASE_FILE)
+                    {
                         out.push(violation(DELETE, &rel_path, lit.line, msg));
                     }
                 }
@@ -506,6 +551,231 @@ pub(crate) fn concurrently_finding(raw: &str) -> Option<String> {
     })
 }
 
+/// OP-55: migrations from this version on are checked for locking DDL on existing tables;
+/// earlier ones are released and never edited.
+pub(crate) const ONLINE_DDL_FROM: u64 = 20_261_108_000_000;
+
+/// The version prefix of a migration file name (`20261108120000_name.sql`).
+pub(crate) fn migration_version(file_name: &str) -> Option<u64> {
+    let digits: String = file_name.chars().take_while(char::is_ascii_digit).collect();
+    (digits.len() == 14).then(|| digits.parse().ok()).flatten()
+}
+
+/// Blanks single-quoted strings and dollar-quoted bodies, keeping byte offsets and newlines.
+fn blank_sql_literals(sql: &str) -> String {
+    let bytes = sql.as_bytes();
+    let mut out = bytes.to_vec();
+    let mut i = 0_usize;
+    let blank = |out: &mut Vec<u8>, from: usize, to: usize| {
+        for b in out.iter_mut().take(to).skip(from) {
+            if *b != b'\n' {
+                *b = b' ';
+            }
+        }
+    };
+    while let Some(&b) = bytes.get(i) {
+        if b == b'\'' {
+            let mut j = i.saturating_add(1);
+            while let Some(&c) = bytes.get(j) {
+                if c == b'\'' {
+                    if bytes.get(j.saturating_add(1)) == Some(&b'\'') {
+                        j = j.saturating_add(2);
+                        continue;
+                    }
+                    break;
+                }
+                j = j.saturating_add(1);
+            }
+            blank(&mut out, i, j.saturating_add(1).min(bytes.len()));
+            i = j.saturating_add(1);
+        } else if b == b'$' {
+            let tag_end = bytes
+                .get(i.saturating_add(1)..)
+                .and_then(|rest| {
+                    rest.iter()
+                        .position(|c| !(c.is_ascii_alphanumeric() || *c == b'_'))
+                })
+                .map(|n| i.saturating_add(1).saturating_add(n));
+            match tag_end {
+                Some(e) if bytes.get(e) == Some(&b'$') => {
+                    let tag = bytes.get(i..=e).unwrap_or_default();
+                    let body = e.saturating_add(1);
+                    let close = bytes
+                        .get(body..)
+                        .and_then(|rest| rest.windows(tag.len()).position(|w| w == tag))
+                        .map_or(bytes.len(), |n| {
+                            body.saturating_add(n).saturating_add(tag.len())
+                        });
+                    blank(&mut out, i, close);
+                    i = close;
+                }
+                _ => i = i.saturating_add(1),
+            }
+        } else {
+            i = i.saturating_add(1);
+        }
+    }
+    String::from_utf8(out).unwrap_or_default()
+}
+
+/// Upper-case words of `sql` (identifiers keep `.` and `"`), with their byte offsets.
+fn sql_words(sql: &str, base: usize) -> Vec<(usize, String)> {
+    let mut words = Vec::new();
+    let mut start = None;
+    for (i, c) in sql.char_indices().chain(std::iter::once((sql.len(), ' '))) {
+        let word_char = c.is_ascii_alphanumeric() || c == '_' || c == '.' || c == '"';
+        match (word_char, start) {
+            (true, None) => start = Some(i),
+            (false, Some(s)) => {
+                words.push((
+                    base.saturating_add(s),
+                    sql.get(s..i).unwrap_or_default().to_ascii_uppercase(),
+                ));
+                start = None;
+            }
+            _ => {}
+        }
+    }
+    words
+}
+
+fn word(ws: &[(usize, String)], k: usize) -> &str {
+    ws.get(k).map_or("", |(_, w)| w.as_str())
+}
+
+fn bare_table(name: &str) -> String {
+    name.rsplit('.')
+        .next()
+        .unwrap_or(name)
+        .trim_matches('"')
+        .to_owned()
+}
+
+/// Splits `text` at commas outside parentheses, with each part's offset in `text`.
+fn top_level_clauses(text: &str) -> Vec<(usize, &str)> {
+    let mut out = Vec::new();
+    let mut depth = 0_i32;
+    let mut start = 0_usize;
+    for (i, c) in text.char_indices() {
+        match c {
+            '(' => depth = depth.saturating_add(1),
+            ')' => depth = depth.saturating_sub(1),
+            ',' if depth == 0 => {
+                out.push((start, text.get(start..i).unwrap_or_default()));
+                start = i.saturating_add(1);
+            }
+            _ => {}
+        }
+    }
+    out.push((start, text.get(start..).unwrap_or_default()));
+    out
+}
+
+/// OP-55: in a migration on a live database, an index on an existing table is built
+/// `CONCURRENTLY` (or `ON ONLY` a partitioned parent), and a `CHECK` or `FOREIGN KEY` added to
+/// an existing table is `NOT VALID` and validated later. Tables the same file creates are empty
+/// and exempt. `sql` is the migration without comments.
+pub(crate) fn online_ddl_findings(sql: &str) -> Vec<(usize, String)> {
+    let code = blank_sql_literals(sql);
+    let mut statements = Vec::new();
+    let mut start = 0_usize;
+    for (i, c) in code
+        .char_indices()
+        .chain(std::iter::once((code.len(), ';')))
+    {
+        if c == ';' {
+            let text = code.get(start..i).unwrap_or_default();
+            statements.push((start, text, sql_words(text, start)));
+            start = i.saturating_add(1);
+        }
+    }
+    let mut created = Vec::new();
+    for (_, _, ws) in &statements {
+        if word(ws, 0) != "CREATE" {
+            continue;
+        }
+        let Some(t) = ws.iter().position(|(_, w)| w == "TABLE") else {
+            continue;
+        };
+        if ws.iter().take(t).any(|(_, w)| w == "INDEX") {
+            continue;
+        }
+        let mut n = t.saturating_add(1);
+        while matches!(word(ws, n), "IF" | "NOT" | "EXISTS") {
+            n = n.saturating_add(1);
+        }
+        created.push(bare_table(word(ws, n)));
+    }
+    let existing = |name: &str| !created.iter().any(|c| *c == bare_table(name));
+    let mut out = Vec::new();
+    for (offset, text, ws) in &statements {
+        let at = ws.first().map_or(*offset, |(a, _)| *a);
+        let head = (word(ws, 0), word(ws, 1), word(ws, 2));
+        let index = matches!(head, ("CREATE", "INDEX", _) | ("CREATE", "UNIQUE", "INDEX"));
+        if index && !ws.iter().any(|(_, w)| w == "CONCURRENTLY") {
+            let on = ws.iter().position(|(_, w)| w == "ON");
+            let target = on.map(|k| (word(ws, k.saturating_add(1)), word(ws, k.saturating_add(2))));
+            match target {
+                Some(("ONLY", _)) => {}
+                Some((table, _)) if existing(table) => out.push((
+                    at,
+                    format!(
+                        "`CREATE INDEX` on existing table `{}` without `CONCURRENTLY` locks writes (OP-55)",
+                        bare_table(table).to_ascii_lowercase()
+                    ),
+                )),
+                _ => {}
+            }
+        }
+        if head.0 == "ALTER" && head.1 == "TABLE" {
+            let mut n = 2_usize;
+            while matches!(word(ws, n), "IF" | "EXISTS" | "ONLY") {
+                n = n.saturating_add(1);
+            }
+            let table = word(ws, n);
+            let Some((name_at, _)) = ws.get(n) else {
+                continue;
+            };
+            if !existing(table) {
+                continue;
+            }
+            let rest_from = name_at.saturating_sub(*offset).saturating_add(table.len());
+            let rest = text.get(rest_from..).unwrap_or_default();
+            for (clause_at, clause) in top_level_clauses(rest) {
+                let cw = sql_words(
+                    clause,
+                    offset.saturating_add(rest_from).saturating_add(clause_at),
+                );
+                if word(&cw, 0) != "ADD" {
+                    continue;
+                }
+                let mut k = 1_usize;
+                if word(&cw, k) == "CONSTRAINT" {
+                    k = k.saturating_add(2);
+                }
+                let kind = word(&cw, k);
+                if !matches!(kind, "CHECK" | "FOREIGN") {
+                    continue;
+                }
+                let not_valid = cw
+                    .windows(2)
+                    .any(|p| matches!(p, [(_, a), (_, b)] if a == "NOT" && b == "VALID"));
+                if !not_valid {
+                    out.push((
+                        cw.first().map_or(at, |(a, _)| *a),
+                        format!(
+                            "`ADD {}` on existing table `{}` without `NOT VALID` scans it under lock; add it `NOT VALID` and `VALIDATE CONSTRAINT` later (OP-55)",
+                            if kind == "CHECK" { "CHECK" } else { "FOREIGN KEY" },
+                            bare_table(table).to_ascii_lowercase()
+                        ),
+                    ));
+                }
+            }
+        }
+    }
+    out
+}
+
 pub(crate) fn check_migrations(root: &Path) -> Result<Vec<Violation>, String> {
     let mut out = Vec::new();
     for path in walk(root)? {
@@ -527,6 +797,15 @@ pub(crate) fn check_migrations(root: &Path) -> Result<Vec<Violation>, String> {
                 }
                 if let Some(msg) = concurrently_finding(&raw) {
                     out.push(violation(MIGRATION, &rel_path, 1, msg));
+                }
+                let name = path
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or_default();
+                if migration_version(name).is_some_and(|v| v >= ONLINE_DDL_FROM) {
+                    for (at, msg) in online_ddl_findings(&sql) {
+                        out.push(violation(MIGRATION, &rel_path, line_at(&sql, at), msg));
+                    }
                 }
             }
         } else if rel_path.starts_with("crates/store/src/")
@@ -863,18 +1142,51 @@ mod tests {
         let f = delete_findings(
             "DELETE FROM accounts WHERE id = 1; truncate x; drop table y;",
             &[],
+            false,
         );
         assert_eq!(f.len(), 3);
+    }
+
+    // OP-73: column, schema and MERGE deletes destroy data as surely as DELETE and DROP TABLE
+    #[test]
+    fn column_schema_and_merge_deletes_are_rejected() {
+        for bad in [
+            "ALTER TABLE access.users DROP COLUMN email;",
+            "ALTER TABLE IF EXISTS ONLY access.users DROP email;",
+            "ALTER TABLE access.users ADD COLUMN x int, DROP COLUMN y;",
+            "DROP SCHEMA access CASCADE;",
+            "DROP DATABASE access;",
+            "MERGE INTO a USING b ON a.id = b.id WHEN MATCHED THEN DELETE;",
+        ] {
+            assert_eq!(delete_findings(bad, &[], false).len(), 1, "{bad}");
+        }
+        for ok in [
+            "ALTER TABLE access.users DROP CONSTRAINT users_email_key;",
+            "ALTER TABLE access.users ALTER COLUMN email DROP NOT NULL;",
+            "ALTER TABLE access.users ALTER COLUMN email DROP DEFAULT;",
+            "MERGE INTO a USING b ON a.id = b.id WHEN MATCHED THEN UPDATE SET x = b.x;",
+            "DROP INDEX access.users_email;",
+        ] {
+            assert_eq!(delete_findings(ok, &[], false), vec![], "{ok}");
+        }
+        assert_eq!(
+            delete_findings("DROP DATABASE IF EXISTS access_t_1 WITH (FORCE)", &[], true),
+            vec![]
+        );
+        assert_eq!(delete_findings("DROP SCHEMA x", &[], true).len(), 1);
     }
 
     #[test]
     fn allowlisted_job_queue_table_may_be_cleaned() {
         let allow = parse_list("# queue\njobs\n");
         assert_eq!(
-            delete_findings("DELETE FROM public.\"jobs\" WHERE done", &allow),
+            delete_findings("DELETE FROM public.\"jobs\" WHERE done", &allow, false),
             vec![]
         );
-        assert_eq!(delete_findings("DELETE FROM accounts", &allow).len(), 1);
+        assert_eq!(
+            delete_findings("DELETE FROM accounts", &allow, false).len(),
+            1
+        );
     }
 
     // OP-11, OP-16, OP-19, §12.1.3 rules 9, 14
@@ -910,20 +1222,58 @@ mod tests {
         assert!(concurrently_finding(late).is_some());
     }
 
+    // OP-55: from 2026-11-08 on, indexes and constraints on existing tables are built online
+    #[test]
+    fn locking_ddl_on_existing_tables_is_rejected() {
+        for bad in [
+            "CREATE INDEX a_x ON access.a (x);",
+            "CREATE UNIQUE INDEX IF NOT EXISTS a_x ON access.a (x);",
+            "ALTER TABLE access.a ADD CONSTRAINT a_x CHECK (x > 0);",
+            "ALTER TABLE IF EXISTS ONLY access.a ADD CHECK (x > 0);",
+            "ALTER TABLE access.a ADD CONSTRAINT a_b FOREIGN KEY (b) REFERENCES access.b (id);",
+            "ALTER TABLE access.a ADD COLUMN y int, ADD CONSTRAINT a_y CHECK (y IN (1, 2));",
+        ] {
+            assert_eq!(online_ddl_findings(bad).len(), 1, "{bad}");
+        }
+        for ok in [
+            "CREATE INDEX CONCURRENTLY a_x ON access.a (x);",
+            "CREATE INDEX a_x ON ONLY access.a (x);",
+            "CREATE TABLE access.a (x int);\nCREATE INDEX a_x ON access.a (x);\n\
+             ALTER TABLE access.a ADD CONSTRAINT a_x CHECK (x > 0);",
+            "CREATE TABLE IF NOT EXISTS access.a (x int);\nCREATE UNIQUE INDEX a_x ON a (x);",
+            "ALTER TABLE access.a ADD CONSTRAINT a_x CHECK (x > 0) NOT VALID;",
+            "ALTER TABLE access.a VALIDATE CONSTRAINT a_x;",
+            "ALTER TABLE access.a ADD COLUMN y int;",
+            "CREATE FUNCTION f() RETURNS void AS $$ CREATE INDEX a_x ON access.a (x); $$ LANGUAGE sql;",
+            "COMMENT ON TABLE access.a IS 'CREATE INDEX a_x ON access.a (x)';",
+        ] {
+            assert_eq!(online_ddl_findings(ok), vec![], "{ok}");
+        }
+        assert_eq!(
+            migration_version("20261108120000_m1_x.sql"),
+            Some(20_261_108_120_000)
+        );
+        assert_eq!(migration_version("README.md"), None);
+        assert!(migration_version("20261107230200_m1c_admin_jobs.sql") < Some(ONLINE_DDL_FROM));
+    }
+
     // OP-17, OP-73
     #[test]
     fn truncate_trigger_events_are_not_statements() {
         let sql = "CREATE TRIGGER t BEFORE TRUNCATE ON a FOR EACH STATEMENT EXECUTE FUNCTION f();\n\
                    CREATE TRIGGER u AFTER UPDATE OR TRUNCATE ON a EXECUTE FUNCTION f();";
-        assert_eq!(delete_findings(sql, &[]), vec![]);
-        assert_eq!(delete_findings("TRUNCATE a;", &[]).len(), 1);
-        assert_eq!(delete_findings("BEGIN; TRUNCATE TABLE a;", &[]).len(), 1);
+        assert_eq!(delete_findings(sql, &[], false), vec![]);
+        assert_eq!(delete_findings("TRUNCATE a;", &[], false).len(), 1);
+        assert_eq!(
+            delete_findings("BEGIN; TRUNCATE TABLE a;", &[], false).len(),
+            1
+        );
     }
 
     #[test]
     fn sql_comments_do_not_count() {
         let sql = strip_sql_comments("-- DELETE FROM a\n/* TRUNCATE b */ SELECT 1;");
-        assert_eq!(delete_findings(&sql, &[]), vec![]);
+        assert_eq!(delete_findings(&sql, &[], false), vec![]);
     }
 
     #[test]
