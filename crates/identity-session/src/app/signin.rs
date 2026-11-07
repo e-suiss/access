@@ -1111,6 +1111,24 @@ where
         })
     }
 
+    /// Whether the realm's `post_login` hook refused a login; a refused flow is abandoned and
+    /// audited (TN-135).
+    async fn refused_by_hook(
+        &self,
+        tx: &mut D::Tx,
+        l: &Loaded,
+        result: &AuthenticationResult,
+        target: &str,
+        correlation: &str,
+    ) -> Result<bool, SessionError> {
+        if !matches!(l.state.purpose, Purpose::Login) || self.post_login(result, target).await {
+            return Ok(false);
+        }
+        save(tx, l, "abandoned", Resume::Clear).await?;
+        audit(tx, "session.hook_refused", target, target, correlation).await?;
+        Ok(true)
+    }
+
     /// Whether the realm's `post_login` hook lets the sign-in through (TN-135): no hook does;
     /// a refusal, no answer or a bad answer does not (MD-8).
     async fn post_login(&self, result: &AuthenticationResult, account: &str) -> bool {
@@ -1182,16 +1200,10 @@ where
             serde_json::to_vec(&vector(&l.state.factors)).map_err(|_| SessionError::Corrupt)?;
         let target = self.external(subject)?;
         // TN-135, OP-151 m.3 (j)
-        if matches!(l.state.purpose, Purpose::Login) && !self.post_login(&result, &target).await {
-            save(&mut tx, &l, "abandoned", Resume::Clear).await?;
-            audit(
-                &mut tx,
-                "session.hook_refused",
-                &target,
-                &target,
-                correlation,
-            )
-            .await?;
+        if self
+            .refused_by_hook(&mut tx, &l, &result, &target, correlation)
+            .await?
+        {
             tx.commit().await?;
             return Ok(refuse(super::HOOK_REFUSED));
         }

@@ -92,6 +92,7 @@ dependencies = [
  "access-identity-account",
  "access-identity-admin",
  "access-identity-events",
+ "access-identity-hooks",
  "access-identity-oauth",
  "access-identity-session",
  "access-identity-signer",
