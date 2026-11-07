@@ -171,6 +171,7 @@ impl Readiness {
     }
 
     /// Adds a start-up flag, unset, and returns its handle.
+    #[must_use]
     pub fn flag(&self, name: &'static str) -> ReadyFlag {
         let flag = ReadyFlag {
             name,

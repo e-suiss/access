@@ -839,6 +839,7 @@ struct Background {
     events: events::Delivery,
     opening: tokio::task::JoinHandle<()>,
     sampling: tokio::task::JoinHandle<()>,
+    ready: Readiness,
 }
 
 impl Background {
@@ -873,6 +874,7 @@ impl Background {
             opening,
             // §17.8.2, OP-53
             sampling: tokio::spawn(sample_pools(PoolGauges::of(pools))),
+            ready: readiness(config, pools),
         })
     }
 
@@ -1032,7 +1034,7 @@ async fn serve(
         listeners,
         &prepared.tls,
         [app, management],
-        health(report),
+        (health(report), background.ready.clone()),
     )
     .await;
     // OP-31
@@ -1081,11 +1083,11 @@ async fn listen(
     listeners: Listeners,
     tls: &Arc<access_http::tls::ServerConfig>,
     [public, management]: [axum::Router; 2],
-    health: Health,
+    (health, ready): (Health, Readiness),
 ) -> Result<(), String> {
     // OP-67 m.3, OP-151 m.3 (b)
-    let ready = &Readiness::default();
-    let inside = internal_router(health, ready.clone(), Limits::default());
+    let ready = &ready;
+    let inside = internal_router(health, ready.clone(), Limits::default(), now_ms);
     let (stop, stopped) = tokio::sync::watch::channel(false);
     let signal = |mut rx: tokio::sync::watch::Receiver<bool>| async move {
         let _ = rx.wait_for(|s| *s).await;
@@ -1137,6 +1139,46 @@ fn health(report: &LockdownReport) -> Health {
             landlock_kernel_abi: report.landlock_kernel_abi,
         },
     }
+}
+
+/// The clock port's Unix milliseconds, for the oracle-watch windows (§17.8.2, SEC31).
+fn now_ms() -> u64 {
+    use access_identity_account::ports::Clock as _;
+    SystemClock.now_ms()
+}
+
+/// The readiness checks of this process (OP-67 m.3): every database pool answers a ping and
+/// both signers accept a connection, each within its budget.
+fn readiness(config: &Config, pools: &Pools) -> Readiness {
+    use access_http::internal::{Probe, SignerSocket};
+    let ready = Readiness::default();
+    for (name, pool) in PoolGauges::of(pools).0 {
+        let check: &'static str = match name {
+            "sequencer" => "db.sequencer",
+            "app" => "db.app",
+            "deriver" => "db.deriver",
+            "router" => "db.router",
+            "archive" => "db.archive",
+            _ => "db.outbox_reader",
+        };
+        ready.add_fn(check, move || -> Probe {
+            let pool = pool.clone();
+            Box::pin(async move { access_store::connect::ping(&pool).await })
+        });
+    }
+    if let Some(path) = config.signer.clone() {
+        ready.add(SignerSocket {
+            name: "signer.authority",
+            path,
+        });
+    }
+    if let Some(identity) = &config.identity {
+        ready.add(SignerSocket {
+            name: "signer.identity",
+            path: identity.signer.clone(),
+        });
+    }
+    ready
 }
 
 /// The pools whose occupancy is sampled, by role (§17.8.2 "Havuz kuyruk derinliği", OP-53).

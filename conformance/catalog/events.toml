@@ -69,8 +69,24 @@ name = "api.throttled"
 plane = "ops"
 severity = "warn"
 since = "unreleased"
-fields = ["surface"]
+fields = ["surface", "layer", "policy"]
 ocsf = "detection_finding"
+
+[[event]]
+name = "api.idempotency.unrecorded"
+plane = "ops"
+severity = "warn"
+since = "unreleased"
+fields = []
+ocsf = "application_error"
+
+[[event]]
+name = "api.idempotency.unavailable"
+plane = "ops"
+severity = "warn"
+since = "unreleased"
+fields = ["error"]
+ocsf = "application_error"
 
 [[event]]
 name = "login.failed"

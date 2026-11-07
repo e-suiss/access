@@ -1,17 +1,20 @@
-//! The internal listener and request correlation (OP-67 m.1, m.3, SA-22, §17.8.2).
+//! The internal listener's readiness, metrics and oracle watch, and request correlation
+//! (OP-67 m.1, m.3, SA-22, §17.8.2).
 
 #![allow(
     clippy::unwrap_used,
     clippy::expect_used,
     clippy::panic,
+    clippy::indexing_slicing,
     reason = "test code; the request-path lints (OP-3) do not apply"
 )]
 
 use std::sync::Arc;
 
-use access_http::internal::{Internal, Probe, Readiness, SignerSocket, router as internal};
-use access_http::trace::{REQUEST_ID, correlate, request_id};
-use access_http::{Health, SandboxHealth};
+use access_http::api::app::{REQUEST_ID, RequestIds, request_id, request_id_of};
+use access_http::api::ports::{Entropy, Unavailable};
+use access_http::internal::{Probe, Readiness, SignerSocket, router as internal};
+use access_http::{Health, Limits, SandboxHealth};
 use access_telemetry::oracle::{Advisory, ORACLE};
 use axum::Router;
 use axum::body::Body;
@@ -33,11 +36,7 @@ fn health() -> Health {
 }
 
 fn app(readiness: Readiness) -> Router {
-    internal(Internal {
-        health: health(),
-        readiness: Arc::new(readiness),
-        now_ms: Arc::new(|| 42),
-    })
+    internal(health(), readiness, Limits::default(), || 42)
 }
 
 async fn get_path(app: &Router, path: &str) -> (StatusCode, String) {
@@ -51,48 +50,42 @@ async fn get_path(app: &Router, path: &str) -> (StatusCode, String) {
     (status, String::from_utf8(bytes.to_vec()).unwrap())
 }
 
-// OP-67 m.3, SA-22: liveness, health with the Landlock ABI, and the metric exposition
+fn failing(body: &str) -> Vec<String> {
+    let v: serde_json::Value = serde_json::from_str(body).unwrap();
+    v["errors"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|e| e["code"].as_str().unwrap().to_owned())
+        .collect()
+}
+
+// OP-67 m.3: the metric exposition is the SDK's, with no tenant or realm label
 #[tokio::test]
-async fn liveness_health_and_metrics_are_served() {
-    let app = app(Readiness::new());
-    assert_eq!(
-        get_path(&app, "/livez").await,
-        (StatusCode::OK, "ok".into())
-    );
-    let (status, body) = get_path(&app, "/healthz").await;
-    assert_eq!(status, StatusCode::OK);
-    let v: serde_json::Value = serde_json::from_str(&body).unwrap();
-    assert_eq!(v["sandbox"]["landlock_required_abi"], 4);
-    assert_eq!(v["sandbox"]["landlock_kernel_abi"], 6);
+async fn metrics_are_exposed() {
     access_telemetry::signals::HTTP_RESPONSES.incr(["2xx"]);
-    let (status, body) = get_path(&app, "/metrics").await;
+    let (status, body) = get_path(&app(Readiness::default()), "/metrics").await;
     assert_eq!(status, StatusCode::OK);
     assert!(body.contains("access_http_responses_total"), "{body}");
     assert!(!body.contains("tenant_id") && !body.contains("realm_id"));
 }
 
-// OP-67 m.3, MD-8, OP-53: no checks and unset start-up flags are not ready; ready once set
+// OP-67 m.3, MD-8, OP-53: unset start-up flags keep the process not ready, by name
 #[tokio::test]
 async fn readiness_fails_closed_during_start() {
-    let (status, body) = get_path(&app(Readiness::new()), "/readyz").await;
-    assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
-    assert!(body.contains("no_checks"));
-
-    let mut readiness = Readiness::new();
+    let readiness = Readiness::default();
     let jwks = readiness.flag("jwks");
-    let caches = readiness.flag("realm_cache");
-    let app = app(readiness);
+    let app = app(readiness.clone());
+    readiness.ready();
     let (status, body) = get_path(&app, "/readyz").await;
     assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
-    let v: serde_json::Value = serde_json::from_str(&body).unwrap();
-    assert_eq!(v["failing"], serde_json::json!(["jwks", "realm_cache"]));
+    assert_eq!(failing(&body), vec!["jwks"]);
     jwks.set(true);
-    caches.set(true);
+    assert_eq!(get_path(&app, "/readyz").await.0, StatusCode::OK);
+    readiness.unready();
     let (status, body) = get_path(&app, "/readyz").await;
-    assert_eq!(
-        (status, body.as_str()),
-        (StatusCode::OK, r#"{"status":"ready","failing":[]}"#)
-    );
+    assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
+    assert_eq!(failing(&body), vec!["started"]);
 }
 
 fn ping(pool: access_store::Pool) -> impl Fn() -> Probe + Send + Sync + 'static {
@@ -103,7 +96,7 @@ fn ping(pool: access_store::Pool) -> impl Fn() -> Probe + Send + Sync + 'static 
 }
 
 // OP-67 m.3: a database pool that cannot hand out a connection and a signer whose socket is
-// closed make the process not ready; the body names the checks, never an address or secret
+// closed make the process not ready; the answer names the checks, never an address or secret
 #[tokio::test]
 async fn readiness_fails_when_a_dependency_is_down() {
     let db = access_store::testing::fresh().await.unwrap();
@@ -113,25 +106,22 @@ async fn readiness_fails_when_a_dependency_is_down() {
     let _ = std::fs::remove_file(&socket);
     let listener = tokio::net::UnixListener::bind(&socket).unwrap();
 
-    let app = app(Readiness::new()
-        .with_fn("db.app", ping(db.app.clone()))
-        .with(SignerSocket {
-            name: "signer.identity",
-            path: socket.clone(),
-        }));
-    let (status, _) = get_path(&app, "/readyz").await;
-    assert_eq!(status, StatusCode::OK);
+    let readiness = Readiness::default();
+    readiness.add_fn("db.app", ping(db.app.clone()));
+    readiness.add(SignerSocket {
+        name: "signer.identity",
+        path: socket.clone(),
+    });
+    readiness.ready();
+    let app = app(readiness);
+    assert_eq!(get_path(&app, "/readyz").await.0, StatusCode::OK);
 
     drop(listener);
     std::fs::remove_file(&socket).unwrap();
     db.app.close().await;
     let (status, body) = get_path(&app, "/readyz").await;
     assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
-    let v: serde_json::Value = serde_json::from_str(&body).unwrap();
-    assert_eq!(
-        v["failing"],
-        serde_json::json!(["db.app", "signer.identity"])
-    );
+    assert_eq!(failing(&body), vec!["db.app", "signer.identity"]);
     assert!(!body.contains(socket.to_str().unwrap()));
     let _ = std::fs::remove_dir(&dir);
 }
@@ -141,7 +131,7 @@ async fn readiness_fails_when_a_dependency_is_down() {
 #[tokio::test]
 async fn oracle_watch_is_exported() {
     ORACLE.record(&[0xab; 16], Advisory::Explain, 42);
-    let (status, body) = get_path(&app(Readiness::new()), "/internal/v1/oracle-watch").await;
+    let (status, body) = get_path(&app(Readiness::default()), "/internal/v1/oracle-watch").await;
     assert_eq!(status, StatusCode::OK);
     let v: serde_json::Value = serde_json::from_str(&body).unwrap();
     assert!(
@@ -153,25 +143,31 @@ async fn oracle_watch_is_exported() {
     );
 }
 
-async fn echo(headers: HeaderMap) -> String {
-    request_id(&headers).unwrap_or_default()
+struct Fixed;
+
+impl Entropy for Fixed {
+    fn fill(&self, out: &mut [u8]) -> Result<(), Unavailable> {
+        out.fill(0x5a);
+        Ok(())
+    }
 }
 
-fn correlated() -> Router {
-    Router::new()
-        .route("/x", get(echo))
-        .layer(axum::middleware::from_fn(correlate))
+async fn echo(headers: HeaderMap) -> String {
+    request_id_of(&headers).unwrap_or_default()
 }
 
 async fn call(traceparent: Option<&str>) -> (String, String) {
+    let app = Router::new()
+        .route("/x", get(echo))
+        .layer(axum::middleware::from_fn_with_state(
+            RequestIds::new(Arc::new(Fixed)),
+            request_id,
+        ));
     let mut req = Request::get("/x");
     if let Some(t) = traceparent {
         req = req.header("traceparent", t);
     }
-    let response = correlated()
-        .oneshot(req.body(Body::empty()).unwrap())
-        .await
-        .unwrap();
+    let response = app.oneshot(req.body(Body::empty()).unwrap()).await.unwrap();
     let id = response
         .headers()
         .get(REQUEST_ID)
@@ -183,8 +179,8 @@ async fn call(traceparent: Option<&str>) -> (String, String) {
     (id, String::from_utf8(bytes.to_vec()).unwrap())
 }
 
-// OP-67 m.1, OP-65 m.4: a well-formed traceparent is continued, Request-Id is its trace id
-// and the handler sees the same trace
+// OP-67 m.1, OP-65 m.4: a well-formed traceparent is continued, Request-Id is its trace id and
+// the handler sees the same trace for what it calls next
 #[tokio::test]
 async fn traceparent_is_accepted_and_propagated() {
     let (id, seen) = call(Some(
@@ -195,15 +191,15 @@ async fn traceparent_is_accepted_and_propagated() {
     assert_eq!(seen, id);
 }
 
-// OP-67 m.1: without one, or with a malformed one, a new trace is generated
+// OP-67 m.1: without one, or with a malformed one, a trace is started from the RNG port and the
+// handler continues it
 #[tokio::test]
 async fn traceparent_is_generated_when_absent_or_malformed() {
     let (a, seen) = call(None).await;
-    assert_eq!(a.len(), 32);
+    assert_eq!(a, "5a".repeat(16));
     assert_eq!(seen, a);
     let before = access_telemetry::signals::TRACEPARENT_MALFORMED.get();
     let (b, _) = call(Some("00-zz-00f067aa0ba902b7-01")).await;
-    assert_eq!(b.len(), 32);
-    assert_ne!(a, b);
+    assert_eq!(b, "5a".repeat(16));
     assert!(access_telemetry::signals::TRACEPARENT_MALFORMED.get() > before);
 }

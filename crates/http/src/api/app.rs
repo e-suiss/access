@@ -16,7 +16,9 @@ use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use serde_json::json;
 
-pub use request_id::{REQUEST_ID, RequestIds, TRACEPARENT, request_id};
+pub use request_id::{
+    REQUEST_ID, RequestIds, TRACEPARENT, TRACESTATE, request_id, request_id_of, status_class,
+};
 
 use super::domain::SurfaceScope;
 use super::domain::caller::{ReadCaller, WriteCaller};

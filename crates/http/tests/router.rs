@@ -125,7 +125,7 @@ async fn oversized_body_is_rejected() {
 // SA-22, OP-92
 #[tokio::test]
 async fn healthz_reports_landlock_abi() {
-    let app = internal(health(), Readiness::default(), Limits::default());
+    let app = internal(health(), Readiness::default(), Limits::default(), || 0);
     let response = app
         .oneshot(Request::get("/healthz").body(Body::empty()).unwrap())
         .await
@@ -188,7 +188,7 @@ async fn non_canonical_paths_never_reach_a_route() {
 async fn health_endpoints_are_internal_only() {
     let public = router(security_txt(), Limits::default(), Router::new());
     let ready = Readiness::default();
-    let inside = internal(health(), ready.clone(), Limits::default());
+    let inside = internal(health(), ready.clone(), Limits::default(), || 0);
     for path in ["/healthz", "/livez", "/readyz", "/metrics"] {
         let r = public
             .clone()
