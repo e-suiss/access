@@ -33,6 +33,16 @@ fn bytes32(b: &[u8]) -> Result<[u8; 32], Refused> {
     <[u8; 32]>::try_from(b).map_err(|_| "input")
 }
 
+/// A digest given as its 32 bytes or as its canonical `digest` CBOR (what `intentDigest`
+/// returns).
+fn digest_of(b: &[u8]) -> Result<Digest, Refused> {
+    if b.len() == 32 {
+        return Ok(Digest(bytes32(b)?));
+    }
+    let v = dcbor::decode(b, Limits::CEILING).map_err(|_| "input")?;
+    Digest::from_value(&v).ok_or("input")
+}
+
 fn id16(b: &[u8]) -> Result<Id, Refused> {
     <[u8; 16]>::try_from(b).map(Id).map_err(|_| "input")
 }
@@ -54,7 +64,8 @@ const fn mode_name(mode: Mode) -> &'static str {
     }
 }
 
-/// The canonical statement (§9.5 AIS): `capacity_for` empty means `own`; `basis` is the
+/// The canonical statement (§9.5 AIS): `domain` and `intent` are digests (32 bytes or their
+/// canonical CBOR); `capacity_for` empty means `own`; `basis` is the
 /// canonical CBOR of an Exercise basis; `exercise` empty means none.
 ///
 /// # Errors
@@ -81,9 +92,9 @@ pub(crate) fn statement(
     };
     let basis = dcbor::decode(basis, Limits::CEILING).map_err(|_| "input")?;
     let s = Statement {
-        domain: Digest(bytes32(domain)?),
+        domain: digest_of(domain)?,
         nonce: nonce.to_vec(),
-        intent: Digest(bytes32(intent)?),
+        intent: digest_of(intent)?,
         mode: mode_of(mode)?,
         pep: pep.to_owned(),
         capacity,

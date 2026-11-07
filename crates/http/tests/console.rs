@@ -1016,6 +1016,11 @@ async fn own_profile_is_a_cookie_read() {
     let (r, body) = h.send(s.get("/console/api/profile"), CLIENT).await;
     assert_eq!(r.status(), StatusCode::OK);
     assert_eq!(json(&body)["account"], "acc_ada");
+    let (r, body) = h.send(s.get("/console/api/about"), CLIENT).await;
+    assert_eq!(r.status(), StatusCode::OK);
+    assert!(json(&body)["server_version"].is_string());
+    let (r, _) = h.send(get("/console/api/about", None), CLIENT).await;
+    assert_eq!(r.status(), StatusCode::UNAUTHORIZED);
 }
 
 // OP-149 m.6, OP-151 m.3 (e): the registration binds the session to its device Instance once

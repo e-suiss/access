@@ -82,6 +82,19 @@ fn a_webcrypto_style_signature_makes_a_verifiable_ais() {
     let s = Statement::from_bytes(&verified.payload).unwrap();
     assert_eq!(s.mode, Mode::Check);
     assert_eq!(s.intent, intent);
+    let via_cbor = statement(
+        &[3; 32],
+        &[9; 16],
+        &dcbor::encode(&intent.to_value(), Limits::CEILING).unwrap(),
+        "check",
+        "access-console",
+        &[],
+        &basis_cbor,
+        1_500,
+        &[],
+    )
+    .unwrap();
+    assert_eq!(via_cbor, payload);
     let shown = describe_statement(&payload).unwrap();
     assert!(shown.contains("\"mode\":\"check\""));
     assert!(shown.contains("\"iat\":\"1500\""));

@@ -381,6 +381,22 @@ async fn session_info<E: ConsoleEnv>(
     )
 }
 
+/// `GET /console/api/about`: the server's version, for the About screen.
+async fn about<E: ConsoleEnv>(
+    State(c): St<E>,
+    method: Method,
+    headers: HeaderMap,
+    peer: Option<Extension<Peer>>,
+) -> Response {
+    if let Err(r) = authed(&c, &method, &headers, peer.as_ref()).await {
+        return r;
+    }
+    json_reply(
+        StatusCode::OK,
+        &json!({ "server_version": env!("CARGO_PKG_VERSION") }),
+    )
+}
+
 /// `GET /console/api/csrf`: the session's CSRF token, also set as the double-submit cookie.
 async fn csrf<E: ConsoleEnv>(
     State(c): St<E>,
@@ -892,6 +908,7 @@ pub fn router<E: ConsoleEnv>(console: &Arc<Console<E>>) -> Router {
         .route("/console/assets/{*path}", get(asset::<E>))
         .route("/console/api/session", get(session_info::<E>))
         .route("/console/api/csrf", get(csrf::<E>))
+        .route("/console/api/about", get(about::<E>))
         .route("/console/api/sessions", get(sessions::<E>))
         .route("/console/api/sessions/{id}/revoke", post(revoke::<E>))
         .route("/console/api/profile", get(profile::<E>))
