@@ -48,6 +48,7 @@ const REALM_BODY: &[&str] = &[
     "root",
     "ct3_delay_s",
     "acknowledge_no_recovery",
+    "sandbox",
     rest::VALIDITY,
 ];
 
@@ -158,9 +159,16 @@ fn change(
             Some(_) => return Err(&codes::realm::INVALID_BODY),
         },
     };
-    match operation {
-        "createRealm" => Ok(PlatformChange::Realm(order)),
-        "createSandboxDomain" => Ok(PlatformChange::Sandbox(order)),
+    // OP-151 m.3 (m): `sandbox: true` opens the realm's domain from the sandbox template
+    let sandbox = match body.get("sandbox") {
+        None | Some(Value::Null) => operation == "createSandboxDomain",
+        Some(Value::Bool(b)) => *b,
+        Some(_) => return Err(&codes::realm::INVALID_BODY),
+    };
+    match (operation, sandbox) {
+        ("createRealm", false) => Ok(PlatformChange::Realm(order)),
+        ("createRealm" | "createSandboxDomain", true) => Ok(PlatformChange::Sandbox(order)),
+        ("createSandboxDomain", false) => Err(&codes::realm::INVALID_BODY),
         _ => Err(&codes::realm::UNKNOWN_OPERATION),
     }
 }
@@ -569,3 +577,6 @@ impl access_http::adp::sandbox::Regimes for SandboxRegimes {
         }
     }
 }
+
+#[cfg(test)]
+mod tests;

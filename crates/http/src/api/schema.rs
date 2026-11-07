@@ -294,6 +294,7 @@ fn schemas() -> Value {
                 "root": r("schemas", "FoundingRoot"),
                 "ct3_delay_s": { "type": "integer", "minimum": 3600, "maximum": 2_592_000 },
                 "acknowledge_no_recovery": { "type": "boolean", "default": false },
+                "sandbox": { "type": "boolean", "description": "Open the governing domain from the sandbox template, a separate AuthorityDomain with its fixed budget (OP-151 m.3 (m)); always true on `sandbox-domains`." },
                 "validity": r("schemas", "Validity"),
                 "ais": text("The caller's AIS, when not in the header."),
             },

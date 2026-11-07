@@ -4603,6 +4603,10 @@
             "type": "boolean",
             "default": false
           },
+          "sandbox": {
+            "type": "boolean",
+            "description": "Open the governing domain from the sandbox template, a separate AuthorityDomain with its fixed budget (OP-151 m.3 (m)); always true on `sandbox-domains`."
+          },
           "validity": {
             "$ref": "#/components/schemas/Validity"
           },
