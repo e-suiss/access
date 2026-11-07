@@ -17,7 +17,7 @@ use access_kernel::combinator::{
 };
 use access_kernel::digest::Digest;
 use access_kernel::fold::Effect;
-use access_kernel::intent::intent_digest;
+use access_kernel::intent::{ParamValue, intent_digest};
 use access_kernel::meta::{self, Actor, ExerciseState, InstanceState, Payload, kind};
 use access_kernel::model::{AuthoritySet, Id, RequirementTerm, ResourceRef, SubjectSelector};
 use access_kernel::record::{Opened, RecordEnvelope, RecordKind};
@@ -789,6 +789,19 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                 ) =>
             {
                 return Err(CoreError::Protocol("action"));
+            }
+            // OP-141 m.39 (a), §9.13.7: an export is CT1 whatever it carries, so it carries
+            // only its typed range and disclosure
+            None if req.intent.action.namespace == meta::NAMESPACE
+                && req.intent.action.name == crate::domain::export::EXPORT_ACTION
+                && !req.intent.params.iter().all(|(k, v)| {
+                    matches!(
+                        (k.as_str(), v),
+                        ("from" | "to", ParamValue::Count(_)) | ("disclosure", ParamValue::Enum(_))
+                    )
+                }) =>
+            {
+                return Err(CoreError::Protocol("export-params"));
             }
             None => {}
         }

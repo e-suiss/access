@@ -7669,3 +7669,42 @@ async fn op_141_m38_d_a_meta_anchor_audit_grant_exports() {
         access_authority_core::domain::export::Coverage::Full
     );
 }
+
+// OP-141 m.39 (a), §9.13.7: an export intent carries only its typed range and disclosure; an
+// amount (which would move its tier), an unknown name or a wrongly typed range is refused
+// before any decision
+#[tokio::test]
+async fn op_141_m39_a_an_export_carries_only_its_typed_parameters() {
+    use access_kernel::intent::ParamValue;
+    let db = fresh().await.unwrap();
+    let (a, d, _, _) = audited_domain(&db).await;
+    let audit_basis = ExerciseBasis::Anchor(meta::meta_anchor(&d));
+    for (nonce, (name, value)) in [
+        (
+            60,
+            (
+                "amount",
+                ParamValue::Amount {
+                    value: i64::MAX,
+                    unit: "eur".to_owned(),
+                },
+            ),
+        ),
+        (61, ("until", ParamValue::Count(1))),
+        (62, ("from", ParamValue::Enum("0".to_owned()))),
+        (63, ("disclosure", ParamValue::Count(1))),
+    ] {
+        let mut req = export_request(d, nonce, audit_basis, "redacted");
+        req.intent.params.insert(name.to_owned(), value);
+        assert!(matches!(
+            a.exercise(&incoming(req, ROOT_KEY)).await,
+            Err(CoreError::Protocol("export-params"))
+        ));
+    }
+    let mut ranged = export_request(d, 64, audit_basis, "redacted");
+    ranged
+        .intent
+        .params
+        .insert("to".to_owned(), ParamValue::Count(1));
+    allowed(&a.exercise(&incoming(ranged, ROOT_KEY)).await.unwrap());
+}
