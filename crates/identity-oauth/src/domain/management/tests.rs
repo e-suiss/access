@@ -215,3 +215,36 @@ fn the_exchange_subject_is_a_fresh_check_statement_by_the_instance() {
     );
     assert_eq!(subject_token("").map(|_| ()), Err(SubjectError::Format));
 }
+
+// TN-130 (S-3): an exchange's AIS is remembered under the day it was signed, so the same
+// statement presented either side of midnight, within the skew, lands in the same slot and is
+// used once; another nonce is another slot
+#[test]
+fn the_replay_slot_is_the_statements_own_day() {
+    let midnight = 20_000 * 86_400_000_u64;
+    let late = statement(Digest([1; 32]), Digest([2; 32]), Mode::Check, midnight - 1);
+    let (day, key) = replay_slot(&late).unwrap();
+    assert_eq!(day, 19_999);
+    assert!(verify_window(&late, midnight - 1) && verify_window(&late, midnight + 1));
+    assert_eq!(replay_slot(&late), Some((day, key)));
+    let mut other = late.clone();
+    other.nonce = vec![9; 16];
+    assert_ne!(replay_slot(&other).unwrap().1, key);
+    let early = statement(Digest([1; 32]), Digest([2; 32]), Mode::Check, midnight);
+    assert_eq!(replay_slot(&early).unwrap().0, 20_000);
+}
+
+fn verify_window(s: &Statement, now_ms: u64) -> bool {
+    let signer = signer();
+    let kid = thumbprint(&signer.public_key());
+    let sign1 = b64url_decode(&ais(&signer, s)).unwrap();
+    verify_subject(
+        &sign1,
+        kid,
+        &signer.public_key(),
+        &s.domain,
+        &s.intent,
+        now_ms,
+    )
+    .is_ok()
+}

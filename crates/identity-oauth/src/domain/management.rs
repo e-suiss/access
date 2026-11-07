@@ -195,6 +195,20 @@ pub fn verify_subject(
     Ok(s)
 }
 
+/// The replay key context of an exchange's AIS nonce.
+const NONCE_CONTEXT: &str = "access/management-read-nonce/v1";
+
+const DAY_MS: u64 = 86_400_000;
+
+/// Where an exchange's AIS is remembered as used (TN-130): the day of its own `iat` and its
+/// nonce. A statement stays fresh for the skew either side of midnight, so it is kept under the
+/// day it was signed, never the day it is presented; `None` past the representable days.
+#[must_use]
+pub fn replay_slot(statement: &Statement) -> Option<(u32, [u8; 32])> {
+    let day = u32::try_from(statement.iat.checked_div(DAY_MS)?).ok()?;
+    Some((day, context_digest(NONCE_CONTEXT, &statement.nonce).0))
+}
+
 /// The facts behind one read token.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ReadFacts<'a> {

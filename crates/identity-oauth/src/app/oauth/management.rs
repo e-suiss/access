@@ -8,14 +8,13 @@ use access_crypto::dpop::Role;
 use access_kernel::digest::Digest;
 use access_kernel::json::b64url_encode;
 use serde_json::json;
-use suiss_crypto::digest::context_digest;
 
 use super::{Env, OAuth, Realm, Reply, TokenHttp};
 use crate::app::dpop::DpopRequest;
 use crate::domain::dpop::Failure;
 use crate::domain::management::{
     ACCESS_TOKEN_TYPE, AIS_TOKEN_TYPE, READ_TTL_MS, ReadFacts, Surface, exchange_intent,
-    read_token_claims, subject_token, verify_subject,
+    read_token_claims, replay_slot, subject_token, verify_subject,
 };
 use crate::domain::metadata::Endpoint;
 use crate::domain::request::Params;
@@ -23,11 +22,6 @@ use crate::domain::tokens::ACCESS_TYP;
 use crate::ports::Unavailable;
 use crate::ports::dpop::ReplayCache;
 use crate::ports::oauth::{OAuthTx, TokenSigner};
-
-/// The replay key context of an exchange's AIS nonce.
-const NONCE_CONTEXT: &str = "access/management-read-nonce/v1";
-
-const DAY_MS: u64 = 86_400_000;
 
 /// The exchange's form, apart from the subject token: its one audience.
 fn shape<'a>(params: &'a Params, http: TokenHttp<'_>) -> Result<&'a str, Reply> {
@@ -146,8 +140,8 @@ impl<E: Env> OAuth<E> {
         let Ok(statement) = verify_subject(&ais, kid, &key, &Digest(domain), &intent, now) else {
             return Ok(invalid_grant().with_nonce(nonce));
         };
-        let day = u32::try_from(now / DAY_MS).map_err(|_| Unavailable)?;
-        let replay_key = context_digest(NONCE_CONTEXT, &statement.nonce).0;
+        // TN-130: the slot is the statement's own day, so a replay across midnight is still one
+        let (day, replay_key) = replay_slot(&statement).ok_or(Unavailable)?;
         match self
             .env
             .replay(realm.tenant, realm.realm)
