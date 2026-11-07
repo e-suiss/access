@@ -269,7 +269,8 @@ mod tests {
             CredentialChange::Replaced,
             5,
         );
-        let keys: Vec<&String> = e.payload.as_object().unwrap().keys().collect();
+        let mut keys: Vec<&String> = e.payload.as_object().unwrap().keys().collect();
+        keys.sort();
         assert_eq!(keys, ["account", "at", "change", "credential", "realm"]);
         let back: Value = serde_json::from_slice(&e.to_outbox().unwrap()).unwrap();
         assert_eq!(back["payload"], e.payload);
