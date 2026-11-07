@@ -12,6 +12,7 @@ pub mod backchannel;
 pub mod bodies;
 pub mod claims;
 pub mod connect;
+pub mod console;
 pub mod derived;
 pub mod dpop;
 pub mod ephemeral;

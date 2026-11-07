@@ -1,0 +1,38 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access_ops.console_sessions\n             (cookie_digest, tenant_id, realm_id, subject_id, login_session_id, slug, domain_id,\n              account, binding, auth_time_ms, created_ms, last_seen_ms)\n           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $11)\n           RETURNING session_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "session_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access_ops.console_sessions",
+            "name": "session_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Bytea",
+        "Text",
+        "Bytea",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "cbd30e9300da1c97b5b34808468ee67a48501852ce74e7697aac6c700e446b30"
+}

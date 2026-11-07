@@ -1,0 +1,65 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access_ops.console_sessions AS s\n              SET pending_challenge = NULL, pending_key = NULL, pending_party = NULL,\n                  pending_from_ms = NULL, pending_until_ms = NULL\n             FROM (SELECT session_id, pending_challenge, pending_key, pending_party,\n                          pending_from_ms, pending_until_ms\n                     FROM access_ops.console_sessions\n                    WHERE session_id = $1 AND pending_challenge = $2 AND ended_ms IS NULL\n                      AND instance_kid IS NULL\n                    FOR UPDATE) AS old\n            WHERE s.session_id = old.session_id\n        RETURNING old.pending_key AS \"key!\", old.pending_party AS \"party!\",\n                  old.pending_from_ms AS \"from_ms!\", old.pending_until_ms AS \"until_ms!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "key!",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access_ops.console_sessions",
+            "name": "pending_key"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "party!",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access_ops.console_sessions",
+            "name": "pending_party"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "from_ms!",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access_ops.console_sessions",
+            "name": "pending_from_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "until_ms!",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access_ops.console_sessions",
+            "name": "pending_until_ms"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "6c515081561a0061f5db377231647f6f19f3d01c6f0d18d03df29afc7c6cbaa1"
+}

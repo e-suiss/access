@@ -1,0 +1,268 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT session_id, tenant_id, realm_id, subject_id, login_session_id, slug, domain_id,\n                account, binding, auth_time_ms, created_ms, last_seen_ms, ended_ms, instance_kid,\n                instance_key, pending_challenge, pending_key, pending_party, pending_from_ms,\n                pending_until_ms, dbsc_key\n           FROM access_ops.console_sessions WHERE session_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "session_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access_ops.console_sessions",
+            "name": "session_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "tenant_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access_ops.console_sessions",
+            "name": "tenant_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "realm_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access_ops.console_sessions",
+            "name": "realm_id"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "subject_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access_ops.console_sessions",
+            "name": "subject_id"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "login_session_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access_ops.console_sessions",
+            "name": "login_session_id"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "slug",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access_ops.console_sessions",
+            "name": "slug"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "domain_id",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access_ops.console_sessions",
+            "name": "domain_id"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "account",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access_ops.console_sessions",
+            "name": "account"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "binding",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access_ops.console_sessions",
+            "name": "binding"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "auth_time_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access_ops.console_sessions",
+            "name": "auth_time_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "created_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access_ops.console_sessions",
+            "name": "created_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "last_seen_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access_ops.console_sessions",
+            "name": "last_seen_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "ended_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access_ops.console_sessions",
+            "name": "ended_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 13,
+        "name": "instance_kid",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access_ops.console_sessions",
+            "name": "instance_kid"
+          }
+        }
+      },
+      {
+        "ordinal": 14,
+        "name": "instance_key",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access_ops.console_sessions",
+            "name": "instance_key"
+          }
+        }
+      },
+      {
+        "ordinal": 15,
+        "name": "pending_challenge",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access_ops.console_sessions",
+            "name": "pending_challenge"
+          }
+        }
+      },
+      {
+        "ordinal": 16,
+        "name": "pending_key",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access_ops.console_sessions",
+            "name": "pending_key"
+          }
+        }
+      },
+      {
+        "ordinal": 17,
+        "name": "pending_party",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access_ops.console_sessions",
+            "name": "pending_party"
+          }
+        }
+      },
+      {
+        "ordinal": 18,
+        "name": "pending_from_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access_ops.console_sessions",
+            "name": "pending_from_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 19,
+        "name": "pending_until_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access_ops.console_sessions",
+            "name": "pending_until_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 20,
+        "name": "dbsc_key",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access_ops.console_sessions",
+            "name": "dbsc_key"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "3337e3cbf0dcf79e5f483003f9e4ffc0ec92e63f752b6f4137fdc2333f5ba8a6"
+}
