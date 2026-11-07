@@ -356,7 +356,7 @@ impl<K: Sealer, R: Random> Streams<K, R> {
             .await?
             .ok_or(StreamError::NotFound)?;
         let issuer = String::from(issuer.as_str());
-        // TN-40, OP-151 m.3 (k): RS256 needs a realm RSA key the signer ports cannot hold
+        // TN-40, OP-151 m.3 (k)
         let alg = match (req.alg, realm_alg) {
             (None, a) | (Some(SetAlg::Es256), a @ JwsAlg::Es256) => a,
             (Some(SetAlg::Es256 | SetAlg::Rs256), _) => return Err(StreamError::UnsupportedAlg),

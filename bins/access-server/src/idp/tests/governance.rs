@@ -253,6 +253,17 @@ async fn a_compromised_key_is_dropped_at_once() {
     assert_eq!(changes[0].action, "idp.realm.key_drop");
     assert_eq!(changes[0].kid, Some(active));
     assert_eq!(changes[0].cutoff_at, Some(at - CUTOFF_MARGIN_MS));
+    // CR-27, TN-41: one realm-wide credential-compromise signal, queued with the drop
+    let mut t = TenantTx::begin(&w.db.app, tenant, realm).await.unwrap();
+    let signals = t.outbox_kinds().await.unwrap();
+    t.commit().await.unwrap();
+    assert_eq!(
+        signals
+            .iter()
+            .filter(|k| *k == "signal.credential_compromise")
+            .count(),
+        1
+    );
     let unknown = proposal(
         (tenant, realm),
         Change::KeyDrop {

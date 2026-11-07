@@ -35,7 +35,7 @@ pub async fn emit_tenant(tx: &mut TenantTx, signal: &Signal) -> Result<(), Accou
     Ok(tx.outbox(&signal.kind.outbox_kind(), &bytes).await?)
 }
 
-/// Where the SL2 risk engine reports a level change of an account (§12.2.4, TN-41): the CAEP
+/// Where SL2 risk scoring reports a level change of an account (§12.2.4, TN-41): the CAEP
 /// `risk-level-change` port. A report only signals; the decision stays with the ADP and a
 /// failing engine never turns into an allow (MD-8, CI-2).
 pub trait RiskLevels: Send + Sync {

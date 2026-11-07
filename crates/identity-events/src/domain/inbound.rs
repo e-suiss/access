@@ -342,7 +342,7 @@ pub fn effect(kind: SignalKind, body: &Json) -> Effect {
     match kind {
         SignalKind::SessionRevoked => Effect::EndSessions,
         SignalKind::CredentialChange => Effect::Risk("ssf.credential-change"),
-        // CI-2: a lower level widens nothing
+        // CI-2
         SignalKind::RiskLevelChange => match text("current_level").and_then(RiskLevel::from_name) {
             Some(RiskLevel::Medium | RiskLevel::High) => Effect::Risk("ssf.risk-level-change"),
             _ => Effect::None,

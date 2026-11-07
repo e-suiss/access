@@ -1770,6 +1770,124 @@
           }
         }
       }
+    },
+    "/ssf/inbound/{stream}": {
+      "post": {
+        "operationId": "pushInboundSet",
+        "summary": "RFC 8935 push of one SET from the upstream transmitter `idp.upstream.register` declared as `stream` (OP-151 m.3 (l), TN-42). The SET is verified against the transmitter's JWKS (ES256 or RS256), its `iss`, `aud`, `iat` within 5 minutes and one declared event; it is taken once by `jti`. It becomes a Claim or ends the linked subject's sessions; it never revokes a Grant and never widens (§9.16.2 k.4).",
+        "security": [],
+        "parameters": [
+          {
+            "name": "stream",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/secevent+jwt": {
+              "schema": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Taken, or a `jti` taken before."
+          },
+          "400": {
+            "description": "Refused (RFC 8935 §2.3).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SsfError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No live push transmitter with this id in the realm."
+          },
+          "413": {
+            "description": "The SET is larger than 64 KiB."
+          },
+          "503": {
+            "description": "Temporarily unavailable; the transmitter retries."
+          }
+        }
+      }
+    },
+    "/ssf/ack": {
+      "post": {
+        "operationId": "ackSet",
+        "summary": "A receiver's semantic acknowledgement of a SET its stream was delivered, apart from the delivery ack (E30). By the stream's bearer credential.",
+        "security": [
+          {
+            "stream_bearer": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SemanticAck"
+              }
+            }
+          }
+        },
+        "responses": {
+          "400": {
+            "description": "The body is not an acknowledgement.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No live stream for the credential.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The stream was never delivered this SET, or it was acknowledged before.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Temporarily unavailable; retry.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "204": {
+            "description": "Recorded."
+          }
+        }
+      }
     }
   },
   "components": {
@@ -3174,6 +3292,51 @@
             "$ref": "#/components/schemas/StatusRef"
           }
         }
+      },
+      "SsfError": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "err",
+          "description"
+        ],
+        "properties": {
+          "err": {
+            "type": "string",
+            "enum": [
+              "invalid_request",
+              "invalid_key",
+              "invalid_issuer",
+              "invalid_audience",
+              "access_denied"
+            ]
+          },
+          "description": {
+            "type": "string",
+            "description": "Why the SET was refused."
+          }
+        }
+      },
+      "SemanticAck": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "jti",
+          "state"
+        ],
+        "properties": {
+          "jti": {
+            "type": "string",
+            "description": "The SET the receiver was delivered."
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "applied",
+              "ignored"
+            ]
+          }
+        }
       }
     },
     "securitySchemes": {
@@ -3186,6 +3349,11 @@
         "scheme": "bearer",
         "bearerFormat": "JWT",
         "description": "An RFC 7523 client assertion (private_key_jwt) of an active platform_product client, signed with its registered client key: iss = sub = client_id, aud = the platform realm's issuer (or the full URL of the endpoint called), exp at most 5 minutes ahead, jti used once. ES256 (OP-149 m.4)."
+      },
+      "stream_bearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "A poll stream's bearer credential, shown once at creation (RFC 6750, OP-149 m.7)."
       }
     }
   }

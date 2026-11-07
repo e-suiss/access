@@ -161,6 +161,7 @@ fn party_components() -> Value {
 
 mod platform;
 mod records;
+mod ssf;
 mod stage6;
 
 fn components() -> Value {
@@ -172,6 +173,7 @@ fn components() -> Value {
         platform::components(),
         crate::declarations::openapi_components(),
         stage6::components(),
+        ssf::components(),
     ] {
         if let (Value::Object(m), Value::Object(more)) = (&mut all, more) {
             m.extend(more);
@@ -501,6 +503,7 @@ pub fn openapi() -> Value {
     records::paths(&mut paths, &common);
     platform::paths(&mut paths);
     stage6::paths(&mut paths, &common);
+    ssf::paths(&mut paths);
     json!({
         "openapi": "3.1.1",
         "info": {
@@ -515,6 +518,7 @@ pub fn openapi() -> Value {
             "securitySchemes": {
                 "client": { "type": "mutualTLS", "description": "The client certificate names the product client (OP-141 m.18 (b))." },
                 "platform_client": platform::scheme(),
+                "stream_bearer": ssf::scheme(),
             },
         },
     })
