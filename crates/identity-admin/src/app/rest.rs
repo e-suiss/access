@@ -1212,6 +1212,8 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                     "mappers": mappers.iter().map(|(c, s)| json!({"claim": c, "source": s}))
                         .collect::<Vec<_>>(),
                     "protection_mode": protection_view(&protection),
+                    // TN-124, OP-151 m.17 (d): no section is marked managed until the marking lands
+                    "managed": [],
                 });
                 Read {
                     items: vec![(view, p.position.unwrap_or(0))],

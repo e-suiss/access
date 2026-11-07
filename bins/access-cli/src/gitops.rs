@@ -76,7 +76,7 @@ pub(crate) const SECTIONS: [(&str, &str); 6] = [
 ];
 
 /// Settings members exported but without a REST write yet.
-pub(crate) const READ_ONLY_SETTINGS: [&str; 1] = ["argon2"];
+pub(crate) const READ_ONLY_SETTINGS: [&str; 2] = ["argon2", "managed"];
 
 /// The member that marks a resource as managed by the reconciler, when the contract has it
 /// (TN-124: the console shows managed members read-only).
