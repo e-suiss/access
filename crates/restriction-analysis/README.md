@@ -39,6 +39,6 @@ for the four-policy reference set (`equivalent`, `narrowing`, `widening`, `incom
 |---|---|---|
 | Reference set, each relation | Linux CI, pinned cvc5 | not yet recorded |
 
-The often-quoted figure of about 75 ms per comparison is **unverified**: it has not been measured
+The often-quoted figure of about 75 ms per comparison is **unverified**, pending reproduction: it has not been measured
 on this code. Until a CI run records it here, size preview time limits by measurement, not by
 that figure. On macOS no cvc5 is pinned and every solver run fails closed.
