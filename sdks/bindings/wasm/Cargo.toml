@@ -14,7 +14,11 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 # OP-62
 access-kernel = { workspace = true }
+suiss-crypto = { workspace = true, features = ["verify"] }
 wasm-bindgen = { workspace = true, features = ["std"] }
+
+[dev-dependencies]
+suiss-crypto = { workspace = true, features = ["verify", "signer"] }
 
 [lints]
 workspace = true

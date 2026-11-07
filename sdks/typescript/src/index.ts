@@ -1,9 +1,17 @@
 // OP-8, OP-116
 import init, {
+  aisProtected,
+  aisStatement,
   apiVersion,
   checkValidity,
   childWithinParent,
+  coseKeyP256,
+  coseSign1,
+  coseToBeSigned,
+  describeIntent,
+  describeStatement,
   evaluate,
+  exerciseBasis,
   intentDigest,
   operationalKey,
   statusLookup,
@@ -17,6 +25,7 @@ import init, {
   verifyReceipt,
   verifyReport,
   verifySdJwt,
+  thumbprintP256,
 } from "../wasm/access_kernel_wasm.js";
 
 export type KernelSource = RequestInfo | URL | Response | BufferSource | WebAssembly.Module;
@@ -39,6 +48,16 @@ const kernel = {
   verifyReport,
   statusLookup,
   verifyCheckpoint,
+  // OP-151 m.3 (e): what a browser needs to sign an AIS with its own key
+  aisStatement,
+  exerciseBasis,
+  aisProtected,
+  coseToBeSigned,
+  coseSign1,
+  coseKeyP256,
+  thumbprintP256,
+  describeStatement,
+  describeIntent,
 };
 
 /** Kernel functions over canonical CBOR bytes; a failure throws an `Error` whose message is the stable name. */

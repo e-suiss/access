@@ -7,6 +7,13 @@
 
 #![forbid(unsafe_code)]
 
+mod sign;
+
+pub use sign::{
+    ais_protected, ais_statement, cose_key_p256_js, cose_sign1, cose_to_be_signed,
+    describe_intent_js, describe_statement_js, exercise_basis_cbor, thumbprint_p256_js,
+};
+
 use access_kernel::binding;
 use wasm_bindgen::JsError;
 use wasm_bindgen::prelude::wasm_bindgen;
