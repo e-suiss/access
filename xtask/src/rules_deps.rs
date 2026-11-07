@@ -113,8 +113,16 @@ fn allowed_targets(from: Class) -> Option<&'static [Class]> {
         // B21, B22, E24
         Service => &[Kernel, Proto, Sdk, Bindings],
         Sdk => &[Kernel, Proto, Bindings, Sdk],
-        // OP-93, OP-62
-        Http => &[Kernel, Proto, Telemetry, InternalApi, Authority, Identity],
+        // OP-93, OP-62; OP-151 m.3: Parse for the management API's SCIM filter subset
+        Http => &[
+            Kernel,
+            Proto,
+            Parse,
+            Telemetry,
+            InternalApi,
+            Authority,
+            Identity,
+        ],
     };
     Some(targets)
 }

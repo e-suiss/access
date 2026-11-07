@@ -92,6 +92,7 @@ dependencies = [
  "access-identity-ui",
  "access-identity-webauthn",
  "access-internal-api",
+ "access-parse",
  "access-store",
  "aws-lc-rs",
  "axum",
