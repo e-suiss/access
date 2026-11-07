@@ -7496,7 +7496,11 @@ fn self_anchor_of(d: Digest, nonce: u8) -> ExerciseBasis {
 }
 
 fn hex(id: Id) -> String {
-    id.0.iter().map(|b| format!("{b:02x}")).collect()
+    use std::fmt::Write as _;
+    id.0.iter().fold(String::new(), |mut s, b| {
+        write!(s, "{b:02x}").unwrap();
+        s
+    })
 }
 
 // E6, §7.9.2.5: a Party's self-anchor covers its own `access.party:[hex]` subtree only; a
@@ -7618,7 +7622,7 @@ async fn op_141_m38_d_a_self_issued_audit_grant_audits_nothing() {
     let db = fresh().await.unwrap();
     let (a, d, holding, record) = audited_domain(&db).await;
     let ExerciseBasis::Anchor(own) = self_anchor_of(d, 3) else {
-        unreachable!()
+        panic!("a self-anchor basis")
     };
     let own_subtree = ResourceSelector::Structural(Structural {
         namespace: "access.party".to_owned(),
@@ -7739,7 +7743,7 @@ async fn u53_op_44_every_report_served_is_one_audit_read() {
     let (a, d, holding, _) = audited_domain(&db).await;
     assert!(a.derive().await.is_empty());
     let ExerciseBasis::Holding(h) = holding else {
-        unreachable!()
+        panic!("a holding basis")
     };
     let reports = [
         (
@@ -7778,7 +7782,7 @@ async fn u53_op_44_every_report_served_is_one_audit_read() {
     }
     let inc = incoming(report_request(d, 90, "revocation-impact"), ALICE_KEY);
     let (hits, _) = a.search(&inc, &reports[0].1, None).await.unwrap();
-    assert!(hits.is_empty());
+    assert_eq!(hits.len(), 0);
     let reads = operational(&db, "audit.read").await;
     assert_eq!(reads.len(), 2 * reports.len());
     assert!(
