@@ -425,7 +425,7 @@ fn private(addr: SocketAddr) -> bool {
 /// The admin address check at start-up (OP-148, §17.9.6, Ek B "admin adresi açılış denetimi"):
 /// three distinct listeners; the management one never non-loopback without TLS; a plain-text
 /// internal one only on a private address when asked for.
-fn check_listeners(config: &Config) -> Result<(), ConfigError> {
+pub(crate) fn check_listeners(config: &Config) -> Result<(), ConfigError> {
     let (Some(management), Some(internal)) = (config.management_listen, config.internal_listen)
     else {
         return Err(ConfigError::NoListeners);

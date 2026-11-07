@@ -25,6 +25,7 @@ mod oauth;
 mod platform;
 mod product;
 mod risk;
+mod startup;
 mod status;
 #[cfg(test)]
 mod testing;
@@ -111,6 +112,9 @@ struct Prepared {
     assets: Option<Assets>,
     console_assets: Option<Assets>,
     outbound: Outbound,
+    /// OP-148: whether the TLS certificate covers the configured origins, read before the
+    /// lockdown.
+    tls_names: Result<(), String>,
 }
 
 /// The database pools of the server's roles.
@@ -536,7 +540,16 @@ fn prepare(config: &Config, tls: Arc<access_http::tls::ServerConfig>) -> Result<
         assets,
         console_assets,
         outbound: outbound(config)?,
+        tls_names: tls_names(config),
     })
+}
+
+/// OP-148, §17.9.6: the certificate covers the issuer and the management origin.
+fn tls_names(config: &Config) -> Result<(), String> {
+    let tls = config.tls.as_ref().ok_or("no tls section")?;
+    let chain = std::fs::read(&tls.cert_file)
+        .map_err(|e| format!("{}: {}", tls.cert_file.display(), e.kind()))?;
+    startup::tls_names(config, &chain)
 }
 
 /// Requests to clients' own endpoints (§10.4.6, §11.3.6): the configured trust anchors, else
@@ -697,7 +710,11 @@ async fn pools(config: &Config, prepared: &Prepared) -> Result<Pools, String> {
 /// The realm surface, once the identity plane's start-up checks pass: the signer answers,
 /// every realm's issuer is the one the configuration forms and its JWKS loads (OP-138,
 /// §17.9.6, §17.9.7, CMP-22b).
-async fn identity(config: &Config, router: Pool) -> Result<axum::Router, String> {
+async fn identity(
+    config: &Config,
+    router: Pool,
+    tls_names: Result<(), String>,
+) -> Result<axum::Router, String> {
     let identity = config.identity.as_ref().ok_or("no identity section")?;
     let base = RealmBase::parse(&identity.realm_base).map_err(|e| e.to_string())?;
     let suiss = config.suiss.as_ref().ok_or("no suiss section")?;
@@ -708,8 +725,20 @@ async fn identity(config: &Config, router: Pool) -> Result<axum::Router, String>
         SignerKeys::new(identity.signer.clone()),
     )
     .with_suiss(suiss.settings(api_base));
-    let realms = discovery.check(&base).await.map_err(|e| e.to_string())?;
-    tracing::info!(realms, "identity plane checks passed");
+    // OP-148, OP-138, MD-8: one report of every start-up check; any failure stops the start
+    let mut report = startup::Report::default();
+    report.record(
+        "listeners",
+        config::check_listeners(config).map_err(|e| e.to_string()),
+    );
+    report.record("tls-names", tls_names);
+    report.record(
+        "authority-signer",
+        startup::authority_signer(config.signer.as_deref()).await,
+    );
+    startup::identity(&discovery.check(&base).await, &mut report);
+    report.emit();
+    report.into_result()?;
     Ok(realm_router(discovery))
 }
 
@@ -1013,7 +1042,7 @@ async fn serve(
     )?;
     let tenants_pool = router_pool.clone();
     let sandbox_pool = router_pool.clone();
-    let realms = identity(config, router_pool).await?;
+    let realms = identity(config, router_pool, prepared.tls_names.clone()).await?;
     let (idp_sequencer, idp_app, product_app) = (sequencer.clone(), app.clone(), app.clone());
     let (issuer, limits) = (config.issuer.clone().ok_or("no issuer")?, Limits::default());
     // OP-141 m.18 (a), (e), (f), OP-149 m.16 (a)

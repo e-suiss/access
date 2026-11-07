@@ -478,6 +478,8 @@ dependencies = [
  "figment",
  "http-body-util",
  "rcgen",
+ "rustls-pki-types",
+ "rustls-webpki",
  "serde",
  "serde_json",
  "thiserror",
