@@ -1029,9 +1029,7 @@ async fn own_sessions_list_and_revoke() {
     let other = list.iter().find(|s| s["current"] == false).unwrap();
     let id = other["id"].as_str().unwrap();
     let path = format!("/console/api/sessions/{id}/revoke");
-    let (r, _) = h
-        .send(a.post(&path, ""), CLIENT)
-        .await;
+    let (r, _) = h.send(a.post(&path, ""), CLIENT).await;
     assert_eq!(r.status(), StatusCode::NO_CONTENT);
     let (r, _) = h.send(b.get("/console/api/session"), CLIENT).await;
     assert_eq!(r.status(), StatusCode::UNAUTHORIZED);
@@ -1055,9 +1053,7 @@ async fn own_sessions_list_and_revoke() {
     assert_eq!(r.status(), StatusCode::NOT_FOUND);
     let id = current["id"].as_str().unwrap();
     let path = format!("/console/api/sessions/{id}/revoke");
-    let (r, _) = h
-        .send(a.post(&path, ""), CLIENT)
-        .await;
+    let (r, _) = h.send(a.post(&path, ""), CLIENT).await;
     assert_eq!(r.status(), StatusCode::NO_CONTENT);
     assert!(set_cookie_line(&r, CONSOLE_COOKIE).contains("Max-Age=0"));
     let (r, body) = h.send(a.get("/console/api/profile"), CLIENT).await;
