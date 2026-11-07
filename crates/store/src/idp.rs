@@ -2,6 +2,8 @@
 //! claim mappers. Every write names a committed ALLOW of an `idp.*` action that was bound in
 //! the same transaction; the database refuses any other write.
 
+pub mod realm;
+
 use sqlx::types::Uuid;
 
 use crate::StoreError;

@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.idp_group_members SET status = 'removed', removed_at = now(),\n                domain_id = $4, decision_pos = $5\n          WHERE tenant_id = $1 AND realm_id = $2 AND group_name = $3 AND status = 'active'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "352ece2140c623d369c25b383febd3e4ac8b78abdcf839c60c8acc3948600e3c"
+}

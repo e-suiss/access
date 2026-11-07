@@ -4,6 +4,7 @@
 pub mod issuer;
 pub mod platform;
 mod signals;
+pub mod rest;
 
 use access_crypto::opaque_id::IdKey;
 use access_identity_account::domain::password::Argon2Params;
@@ -21,6 +22,7 @@ use access_kernel::model::Window;
 use access_kernel::schema::Spp;
 use access_store::Pool;
 use access_store::identity::{RealmId, TenantId, TenantTx};
+use access_store::idp::realm::{self as resources, GroupRow, UpstreamRow};
 use access_store::idp::{self, ClientRow, Decision as Bind, Governing, KeyChange, SettingsRow};
 use access_store::scope::DomainId;
 use access_store::tenancy::{self, HostKind};
@@ -33,9 +35,12 @@ use access_identity_events::domain::catalog::{
 
 use crate::AdminError;
 use crate::domain::{
-    Attribute, AuthMethod, CLIENT_PREFIX, Change, Client, ClientId, Invalid, JoseAlg, cose_key,
-    issuer_cutoff, policy_value, raises,
+    Attribute, AuthMethod, CLIENT_PREFIX, Change, Client, ClientId, Group, Invalid, JoseAlg,
+    MembershipIssuer, Upstream, cose_key, issuer_cutoff, policy_value, raises,
 };
+
+/// How long a rotated client secret stays valid next to its successor (CR-38, PD).
+pub const SECRET_OVERLAP_MS: u64 = 24 * 3_600_000;
 use crate::ports::{Decider, Governance, Instances, RealmKeys};
 
 /// A realm to create (TN-111, TN-16, TN-10).
@@ -277,6 +282,10 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
 
     /// Checks the change against the realm; with `state`, also against its current
     /// configuration, which a retry of an applied change no longer matches.
+    #[expect(
+        clippy::too_many_lines,
+        reason = "one match over the changes, each arm the state it must find"
+    )]
     async fn current(
         t: &mut TenantTx,
         change: &Change,
@@ -318,15 +327,108 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                     return Err(Invalid::Argon2.into());
                 }
             }
+            Change::ClientSecretRotate(id) => {
+                let c = idp::client(t, id.as_str()).await?.filter(|c| c.active);
+                match c {
+                    None => return Err(Invalid::NoClient.into()),
+                    Some(c) if c.auth_method != AuthMethod::ClientSecretBasic.name() => {
+                        return Err(Invalid::NoSecret.into());
+                    }
+                    Some(_) => {}
+                }
+            }
+            Change::GroupCreate(g) => {
+                if resources::group(t, g.name.as_str()).await?.is_some() {
+                    return Err(Invalid::GroupExists.into());
+                }
+                if let MembershipIssuer::Upstream(u) = &g.issuer
+                    && !resources::upstream(t, u.as_str())
+                        .await?
+                        .is_some_and(|u| u.active)
+                {
+                    return Err(Invalid::NoUpstream.into());
+                }
+            }
+            Change::GroupUpdate(g) => {
+                let current = resources::group(t, g.name.as_str())
+                    .await?
+                    .filter(|g| g.active);
+                let current = current.ok_or(Invalid::NoGroup)?;
+                // TN-117: the one membership issuer is fixed
+                if current.membership_issuer != g.issuer.text() {
+                    return Err(Invalid::MembershipIssuer.into());
+                }
+            }
+            Change::GroupRetire(name) => {
+                if !resources::group(t, name.as_str())
+                    .await?
+                    .is_some_and(|g| g.active)
+                {
+                    return Err(Invalid::NoGroup.into());
+                }
+            }
+            Change::GroupMembersAdd(m) | Change::GroupMembersRemove(m) => {
+                let g = resources::group(t, m.group.as_str())
+                    .await?
+                    .filter(|g| g.active);
+                let g = g.ok_or(Invalid::NoGroup)?;
+                // TN-117: members change here only when the administration issues them
+                if g.membership_issuer != MembershipIssuer::Admin.text() {
+                    return Err(Invalid::UpstreamMembership.into());
+                }
+                for s in &m.subjects {
+                    if resources::account(t, *s).await?.is_none() {
+                        return Err(Invalid::NoAccount.into());
+                    }
+                }
+            }
+            Change::AccountSuspend(s) | Change::AccountReactivate(s) => {
+                let a = resources::account(t, *s).await?.ok_or(Invalid::NoAccount)?;
+                let leaves = if matches!(change, Change::AccountSuspend(_)) {
+                    matches!(a.status.as_str(), "active" | "locked")
+                } else {
+                    a.status == "suspended"
+                };
+                if !leaves {
+                    return Err(Invalid::AccountState.into());
+                }
+            }
+            Change::UpstreamRegister(u) => {
+                if resources::upstream(t, u.name.as_str()).await?.is_some() {
+                    return Err(Invalid::UpstreamExists.into());
+                }
+            }
+            Change::UpstreamUpdate(Upstream { name, .. }) | Change::UpstreamRetire(name) => {
+                if !resources::upstream(t, name.as_str())
+                    .await?
+                    .is_some_and(|u| u.active)
+                {
+                    return Err(Invalid::NoUpstream.into());
+                }
+            }
             Change::CimdPolicy(_)
             | Change::MapperSet { .. }
             | Change::JoseAlg(_)
             | Change::Branding(_)
             | Change::KeyPolicy(_)
             | Change::KeyRotate { .. }
-            | Change::KeyDrop { .. } => {}
+            | Change::KeyDrop { .. }
+            | Change::SigninPolicy(_)
+            | Change::SessionPolicy(_) => {}
         }
         Ok(())
+    }
+
+    /// How many passkeys the realm's accounts hold: an RP ID change makes every one of them
+    /// unusable (IDI-4).
+    ///
+    /// # Errors
+    /// [`AdminError`].
+    pub async fn passkey_count(&self, tenant: TenantId, realm: RealmId) -> Result<u64, AdminError> {
+        let mut t = TenantTx::begin(self.app, tenant, realm).await?;
+        let n = resources::passkey_count(&mut t).await?;
+        t.commit().await?;
+        Ok(n)
     }
 
     /// A rotation or drop names a key the realm publishes now; a retry of an applied one no
@@ -544,12 +646,8 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             if let Some(h) = kept {
                 (Some(h), None)
             } else {
-                let raw = access_crypto::random::bytes::<32>().map_err(|_| AdminError::Encode)?;
-                let text = access_kernel::json::b64url_encode(&raw);
-                (
-                    Some(access_crypto::oauth::secret_digest(text.as_bytes())),
-                    Some(ClientSecret(text)),
-                )
+                let (hash, secret) = new_secret()?;
+                (Some(hash), Some(secret))
             }
         } else {
             (None, None)
@@ -624,12 +722,93 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                 idp::record_key_change(t, bound, &key_change(change, declared_at)?).await?;
                 true
             }
+            Change::ClientSecretRotate(id) => {
+                let (hash, s) = new_secret()?;
+                secret = Some(s);
+                resources::rotate_secret(t, bound, id.as_str(), &hash, SECRET_OVERLAP_MS).await?
+            }
+            Change::GroupCreate(g) => {
+                resources::insert_group(t, bound, &group_row(g)).await?;
+                true
+            }
+            Change::GroupUpdate(g) => {
+                resources::rename_group(t, bound, g.name.as_str(), &g.display_name).await?
+            }
+            Change::GroupRetire(name) => resources::retire_group(t, bound, name.as_str()).await?,
+            Change::GroupMembersAdd(m) => {
+                let ids: Vec<[u8; 16]> = m.subjects.iter().copied().collect();
+                resources::add_members(t, bound, m.group.as_str(), &ids).await?;
+                true
+            }
+            Change::GroupMembersRemove(m) => {
+                let ids: Vec<[u8; 16]> = m.subjects.iter().copied().collect();
+                resources::remove_members(t, bound, m.group.as_str(), &ids).await?;
+                true
+            }
+            Change::AccountSuspend(s) => resources::set_account_state(t, bound, *s, true).await?,
+            Change::AccountReactivate(s) => {
+                resources::set_account_state(t, bound, *s, false).await?
+            }
+            Change::UpstreamRegister(u) => {
+                resources::put_upstream(t, bound, &upstream_row(u), true).await?
+            }
+            Change::UpstreamUpdate(u) => {
+                resources::put_upstream(t, bound, &upstream_row(u), false).await?
+            }
+            Change::UpstreamRetire(name) => {
+                resources::retire_upstream(t, bound, name.as_str()).await?
+            }
+            Change::SigninPolicy(p) => {
+                let bytes = dcbor::encode(&p.to_value(), Limits::CEILING)
+                    .map_err(|_| AdminError::Encode)?;
+                resources::set_policy(t, bound, true, &bytes).await?;
+                true
+            }
+            Change::SessionPolicy(p) => {
+                let bytes = dcbor::encode(&p.to_value(), Limits::CEILING)
+                    .map_err(|_| AdminError::Encode)?;
+                resources::set_policy(t, bound, false, &bytes).await?;
+                true
+            }
         };
         if done {
             Ok(secret)
         } else {
             Err(AdminError::Conflict)
         }
+    }
+}
+
+/// A fresh server-generated client secret and its stored digest (CR-38).
+fn new_secret() -> Result<([u8; 32], ClientSecret), AdminError> {
+    let raw = access_crypto::random::bytes::<32>().map_err(|_| AdminError::Encode)?;
+    let text = access_kernel::json::b64url_encode(&raw);
+    Ok((
+        access_crypto::oauth::secret_digest(text.as_bytes()),
+        ClientSecret(text),
+    ))
+}
+
+fn group_row(g: &Group) -> GroupRow {
+    GroupRow {
+        name: String::from(g.name.as_str()),
+        display_name: g.display_name.clone(),
+        membership_issuer: g.issuer.text(),
+        active: true,
+        position: 0,
+    }
+}
+
+fn upstream_row(u: &Upstream) -> UpstreamRow {
+    UpstreamRow {
+        name: String::from(u.name.as_str()),
+        issuer: u.issuer.clone(),
+        client_id: u.client_id.clone(),
+        client_secret_ref: u.client_secret_ref.clone(),
+        jwks_uri: u.jwks_uri.clone(),
+        ssf_configuration_uri: u.ssf_configuration_uri.clone(),
+        active: true,
+        position: 0,
     }
 }
 
@@ -646,14 +825,7 @@ fn settings_with(mut s: SettingsRow, change: &Change) -> SettingsRow {
             s.argon2_p = p.p;
         }
         Change::RpId(r) => s.rp_id = Some(String::from(r.as_str())),
-        Change::ClientRegister(_)
-        | Change::ClientUpdate(_)
-        | Change::ClientRetire(_)
-        | Change::MapperSet { .. }
-        | Change::Branding(_)
-        | Change::KeyPolicy(_)
-        | Change::KeyRotate { .. }
-        | Change::KeyDrop { .. } => {}
+        _ => {}
     }
     s
 }

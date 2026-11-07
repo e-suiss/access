@@ -1,0 +1,53 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT signin_policy, session_policy, decision_pos FROM access.idp_realm_policies\n          WHERE tenant_id = $1 AND realm_id = $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "signin_policy",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.idp_realm_policies",
+            "name": "signin_policy"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "session_policy",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.idp_realm_policies",
+            "name": "session_policy"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "decision_pos",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.idp_realm_policies",
+            "name": "decision_pos"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      true,
+      true,
+      false
+    ]
+  },
+  "hash": "8a97a8ea4c6b300061cace5ee380a6a756ba86d54dfca74a2c507b7d354af6a3"
+}

@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT decision_pos FROM access.idp_clients\n          WHERE tenant_id = $1 AND realm_id = $2 AND client_id = $3",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "decision_pos",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.idp_clients",
+            "name": "decision_pos"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "7d8654c8ac66d1ba89a9fc38a03ba3c03895d516636339da4ce11c7363e90823"
+}

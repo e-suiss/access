@@ -17,6 +17,13 @@ use suiss_crypto::dcbor::{self, Limits, Value};
 use suiss_crypto::digest::context_digest;
 use suiss_crypto::rotation::Policy;
 
+pub mod realm;
+
+pub use realm::{
+    Binding, Group, Members, MembershipIssuer, Name, SessionPolicy, SigninMethod, SigninPolicy,
+    Upstream,
+};
+
 /// Context label of a change digest.
 pub const CHANGE_CONTEXT: &str = "access/idp-change/v1";
 
@@ -190,6 +197,57 @@ pub enum Invalid {
     /// A rotation or drop of a key the realm does not publish.
     #[error("no such key")]
     NoKey,
+    /// A group or upstream name outside `^[a-z][a-z0-9_-]{0,63}$`.
+    #[error("bad name")]
+    Name,
+    /// A membership issuer that is not `admin` or `upstream:<name>` (TN-117).
+    #[error("bad membership issuer")]
+    MembershipIssuer,
+    /// No members, or too many in one change.
+    #[error("bad member list")]
+    Members,
+    /// An upstream registration outside its fields' shapes (OP-150 m.11 (j)).
+    #[error("bad upstream registration")]
+    Upstream,
+    /// Sign-in requirements outside their shapes (TN-132).
+    #[error("bad sign-in policy")]
+    SigninPolicy,
+    /// A console session policy beyond 12 h / 15 min or without a binding (TN-129).
+    #[error("bad session policy")]
+    SessionPolicy,
+    /// The group does not exist or is retired.
+    #[error("no such group")]
+    NoGroup,
+    /// The group exists already.
+    #[error("group exists")]
+    GroupExists,
+    /// The group's members are issued by an upstream provider, not the administration (TN-117).
+    #[error("membership issued upstream")]
+    UpstreamMembership,
+    /// The account does not exist.
+    #[error("no such account")]
+    NoAccount,
+    /// The account is not in a state the change leaves (§12.3.1, TN-49).
+    #[error("account state")]
+    AccountState,
+    /// The upstream provider does not exist or is retired.
+    #[error("no such upstream")]
+    NoUpstream,
+    /// The upstream provider exists already.
+    #[error("upstream exists")]
+    UpstreamExists,
+    /// The client does not authenticate with a secret.
+    #[error("client has no secret")]
+    NoSecret,
+    /// An RP ID change without acknowledging the realm's registered passkeys (IDI-4).
+    #[error("passkeys would be lost")]
+    PasskeyLoss,
+    /// A request body that is not the operation's JSON object.
+    #[error("bad body")]
+    Body,
+    /// An intent validity missing, malformed, inverted or longer than 15 minutes.
+    #[error("bad validity")]
+    Validity,
 }
 
 impl Invalid {
@@ -216,6 +274,23 @@ impl Invalid {
             Self::Branding => "invalid-branding",
             Self::KeyPolicy => "invalid-key-policy",
             Self::NoKey => "no-such-key",
+            Self::Name => "invalid-name",
+            Self::MembershipIssuer => "invalid-membership-issuer",
+            Self::Members => "invalid-members",
+            Self::Upstream => "invalid-upstream",
+            Self::SigninPolicy => "invalid-signin-policy",
+            Self::SessionPolicy => "invalid-session-policy",
+            Self::NoGroup => "no-such-group",
+            Self::GroupExists => "group-exists",
+            Self::UpstreamMembership => "membership-issued-upstream",
+            Self::NoAccount => "no-such-account",
+            Self::AccountState => "account-state-conflict",
+            Self::NoUpstream => "no-such-upstream",
+            Self::UpstreamExists => "upstream-exists",
+            Self::NoSecret => "client-has-no-secret",
+            Self::PasskeyLoss => "passkey-loss-not-acknowledged",
+            Self::Body => "invalid-body",
+            Self::Validity => "invalid-validity",
         }
     }
 }
@@ -948,6 +1023,32 @@ pub enum Change {
         /// When it was compromised, if known.
         compromised_at: Option<u64>,
     },
+    /// `idp.client.secret_rotate`.
+    ClientSecretRotate(ClientId),
+    /// `idp.group.create`.
+    GroupCreate(Group),
+    /// `idp.group.update`.
+    GroupUpdate(Group),
+    /// `idp.group.retire`.
+    GroupRetire(Name),
+    /// `idp.group.members_add`.
+    GroupMembersAdd(Members),
+    /// `idp.group.members_remove`.
+    GroupMembersRemove(Members),
+    /// `idp.account.suspend`: the subject's internal id.
+    AccountSuspend([u8; 16]),
+    /// `idp.account.reactivate`.
+    AccountReactivate([u8; 16]),
+    /// `idp.upstream.register`.
+    UpstreamRegister(Upstream),
+    /// `idp.upstream.update`.
+    UpstreamUpdate(Upstream),
+    /// `idp.upstream.retire`.
+    UpstreamRetire(Name),
+    /// `idp.realm.signin_policy`.
+    SigninPolicy(SigninPolicy),
+    /// `idp.realm.session_policy`.
+    SessionPolicy(SessionPolicy),
 }
 
 fn uint(v: u32) -> Value {
@@ -971,6 +1072,19 @@ impl Change {
             Self::KeyPolicy(_) => IdpAction::RealmKeyPolicy,
             Self::KeyRotate { .. } => IdpAction::RealmKeyRotate,
             Self::KeyDrop { .. } => IdpAction::RealmKeyDrop,
+            Self::ClientSecretRotate(_) => IdpAction::ClientSecretRotate,
+            Self::GroupCreate(_) => IdpAction::GroupCreate,
+            Self::GroupUpdate(_) => IdpAction::GroupUpdate,
+            Self::GroupRetire(_) => IdpAction::GroupRetire,
+            Self::GroupMembersAdd(_) => IdpAction::GroupMembersAdd,
+            Self::GroupMembersRemove(_) => IdpAction::GroupMembersRemove,
+            Self::AccountSuspend(_) => IdpAction::AccountSuspend,
+            Self::AccountReactivate(_) => IdpAction::AccountReactivate,
+            Self::UpstreamRegister(_) => IdpAction::UpstreamRegister,
+            Self::UpstreamUpdate(_) => IdpAction::UpstreamUpdate,
+            Self::UpstreamRetire(_) => IdpAction::UpstreamRetire,
+            Self::SigninPolicy(_) => IdpAction::RealmSigninPolicy,
+            Self::SessionPolicy(_) => IdpAction::RealmSessionPolicy,
         }
     }
 
@@ -990,19 +1104,29 @@ impl Change {
             Self::KeyPolicy(p) => {
                 access_identity_signer::domain::check(p).map_err(|_| Invalid::KeyPolicy)
             }
+            Self::GroupCreate(g) | Self::GroupUpdate(g) => g.check(),
+            Self::GroupMembersAdd(m) | Self::GroupMembersRemove(m) => m.check(),
+            Self::UpstreamRegister(u) | Self::UpstreamUpdate(u) => u.check(),
+            Self::SigninPolicy(p) => p.check(),
+            Self::SessionPolicy(p) => p.check(),
             Self::ClientRetire(_)
             | Self::MapperSet { .. }
             | Self::JoseAlg(_)
             | Self::RpId(_)
             | Self::KeyRotate { .. }
-            | Self::KeyDrop { .. } => Ok(()),
+            | Self::KeyDrop { .. }
+            | Self::ClientSecretRotate(_)
+            | Self::GroupRetire(_)
+            | Self::AccountSuspend(_)
+            | Self::AccountReactivate(_)
+            | Self::UpstreamRetire(_) => Ok(()),
         }
     }
 
     fn body(&self) -> Value {
         match self {
             Self::ClientRegister(c) | Self::ClientUpdate(c) => c.to_value(),
-            Self::ClientRetire(id) => {
+            Self::ClientRetire(id) | Self::ClientSecretRotate(id) => {
                 Value::Map(vec![(Value::text("client_id"), Value::text(id.as_str()))])
             }
             Self::CimdPolicy(p) => Value::Map(vec![
@@ -1041,6 +1165,17 @@ impl Change {
                 }
                 Value::Map(m)
             }
+            Self::GroupCreate(g) | Self::GroupUpdate(g) => g.to_value(),
+            Self::GroupRetire(n) | Self::UpstreamRetire(n) => {
+                Value::Map(vec![(Value::text("name"), Value::text(n.as_str()))])
+            }
+            Self::GroupMembersAdd(m) | Self::GroupMembersRemove(m) => m.to_value(),
+            Self::AccountSuspend(s) | Self::AccountReactivate(s) => {
+                Value::Map(vec![(Value::text("subject"), Value::Bytes(s.to_vec()))])
+            }
+            Self::UpstreamRegister(u) | Self::UpstreamUpdate(u) => u.to_value(),
+            Self::SigninPolicy(p) => p.to_value(),
+            Self::SessionPolicy(p) => p.to_value(),
         }
     }
 
@@ -1065,8 +1200,23 @@ impl Change {
             Self::ClientRegister(c) | Self::ClientUpdate(c) => {
                 path.extend([String::from("client"), String::from(c.id.as_str())]);
             }
-            Self::ClientRetire(id) => {
+            Self::ClientRetire(id) | Self::ClientSecretRotate(id) => {
                 path.extend([String::from("client"), String::from(id.as_str())]);
+            }
+            Self::GroupCreate(Group { name, .. })
+            | Self::GroupUpdate(Group { name, .. })
+            | Self::GroupRetire(name)
+            | Self::GroupMembersAdd(Members { group: name, .. })
+            | Self::GroupMembersRemove(Members { group: name, .. }) => {
+                path.extend([String::from("group"), String::from(name.as_str())]);
+            }
+            Self::AccountSuspend(s) | Self::AccountReactivate(s) => {
+                path.extend([String::from("account"), b64url_encode(s)]);
+            }
+            Self::UpstreamRegister(Upstream { name, .. })
+            | Self::UpstreamUpdate(Upstream { name, .. })
+            | Self::UpstreamRetire(name) => {
+                path.extend([String::from("upstream"), String::from(name.as_str())]);
             }
             Self::MapperSet { claim, .. } => {
                 path.extend([String::from("mapper"), String::from(claim.as_str())]);
@@ -1075,7 +1225,9 @@ impl Change {
             | Self::JoseAlg(_)
             | Self::Argon2(_)
             | Self::RpId(_)
-            | Self::Branding(_) => {
+            | Self::Branding(_)
+            | Self::SigninPolicy(_)
+            | Self::SessionPolicy(_) => {
                 path.push(String::from("realm"));
             }
             Self::KeyPolicy(_) | Self::KeyRotate { .. } | Self::KeyDrop { .. } => {

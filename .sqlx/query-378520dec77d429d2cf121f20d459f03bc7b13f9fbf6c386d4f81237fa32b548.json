@@ -1,0 +1,78 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT name, display_name, membership_issuer, status, decision_pos\n           FROM access.idp_groups WHERE tenant_id = $1 AND realm_id = $2 AND name = $3",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.idp_groups",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "display_name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.idp_groups",
+            "name": "display_name"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "membership_issuer",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.idp_groups",
+            "name": "membership_issuer"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "status",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.idp_groups",
+            "name": "status"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "decision_pos",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.idp_groups",
+            "name": "decision_pos"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "378520dec77d429d2cf121f20d459f03bc7b13f9fbf6c386d4f81237fa32b548"
+}

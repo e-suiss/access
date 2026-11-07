@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.idp_groups SET display_name = $4, domain_id = $5, decision_pos = $6\n          WHERE tenant_id = $1 AND realm_id = $2 AND name = $3 AND status = 'active'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Text",
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "97f4115485155d10e565b433bdaa398cdfbaf0c53c4c93268cf6cbcf4a9f27d3"
+}

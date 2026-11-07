@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.idp_group_members (tenant_id, realm_id, group_name, subject_id,\n                domain_id, decision_pos)\n         SELECT $1, $2, $3, s, $5, $6 FROM unnest($4::uuid[]) AS s\n         ON CONFLICT (tenant_id, realm_id, group_name, subject_id) DO UPDATE\n            SET status = 'active', removed_at = NULL, domain_id = EXCLUDED.domain_id,\n                decision_pos = EXCLUDED.decision_pos\n          WHERE access.idp_group_members.status = 'removed'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "UuidArray",
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "866afe92bd008176af7fd4cce7a62e385a5674672fb3639c6044231bd36154ee"
+}
