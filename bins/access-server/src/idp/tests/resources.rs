@@ -164,6 +164,19 @@ async fn an_account_is_suspended_and_reactivated_through_commit() {
 #[tokio::test]
 async fn the_realm_policies_change_through_commit() {
     let (w, at, d) = ready("policies").await;
+    // TN-129, OP-151 m.3 (f), m.11 (d): the console binds to the prefix by default and to the
+    // full address once the realm's session policy says `ip`
+    let network = crate::console::sessions::RealmBinding {
+        app: w.db.app.clone(),
+        directory: access_identity_oauth::adapters::PgDirectory::new(w.db.router.clone()),
+    };
+    let binding = || async {
+        access_http::console::ports::Network::policy(&network, "policies")
+            .await
+            .unwrap()
+            .full_ip
+    };
+    assert!(!binding().await);
     let fresh = w
         .admin()
         .read(at.0, at.1, Kind::Settings, None, None, 1)
@@ -196,6 +209,15 @@ async fn the_realm_policies_change_through_commit() {
     assert_eq!(s["signin_policy"]["mfa_required"], true);
     assert_eq!(s["session_policy"]["binding"], "ip");
     assert!(*version > 0);
+    assert!(
+        binding().await,
+        "the console reads the realm's full-address binding"
+    );
+    assert!(
+        access_http::console::ports::Network::policy(&network, "nowhere")
+            .await
+            .is_err()
+    );
     let open = compile(
         Op::PutSessionPolicy,
         None,

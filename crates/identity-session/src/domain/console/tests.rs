@@ -157,3 +157,31 @@ fn cookies_are_strict_and_host_only() {
         assert!(clear.ends_with("Max-Age=0"));
     }
 }
+
+// TN-129, OP-151 m.3 (f), m.11 (d): the realm's stored session policy decides the full-address
+// binding; a row that does not decode, or names no binding the console takes, is no policy
+#[test]
+fn the_realm_session_policy_names_the_binding() {
+    use suiss_crypto::dcbor::{self, Limits, Value};
+    let stored = |binding: &str| {
+        dcbor::encode(
+            &Value::Map(vec![
+                (Value::text("absolute_ms"), Value::Unsigned(3_600_000)),
+                (Value::text("idle_ms"), Value::Unsigned(300_000)),
+                (Value::text("binding"), Value::text(binding)),
+            ]),
+            Limits::CEILING,
+        )
+        .unwrap()
+    };
+    assert_eq!(
+        BindingPolicy::decode(&stored("ip")),
+        Some(BindingPolicy { full_ip: true })
+    );
+    assert_eq!(
+        BindingPolicy::decode(&stored("asn")),
+        Some(BindingPolicy { full_ip: false })
+    );
+    assert_eq!(BindingPolicy::decode(&stored("none")), None);
+    assert_eq!(BindingPolicy::decode(b"not cbor"), None);
+}

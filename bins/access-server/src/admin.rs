@@ -228,6 +228,10 @@ pub(crate) fn router<P: RealmPlane>(
             directory: directory(),
             ids: Arc::clone(&ids),
         },
+        network: crate::console::sessions::RealmBinding {
+            app: app.clone(),
+            directory: directory(),
+        },
         sign_in: crate::console::sign_in::RealmSignIn {
             public: routes.oauth,
             directory: directory(),

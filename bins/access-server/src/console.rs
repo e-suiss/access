@@ -3,7 +3,8 @@
 //! sign-in through the realm's own authorization server, the device Instance through the same
 //! self-signed Exercises as the Frontend API, read tokens from the realm, and the management API
 //! and ADP in process. ADP sees the console as its own PEP, [`CONSOLE_PEP`], and only for the
-//! reads the BFF forwards. No `GeoResolver` source answers yet: sessions bind to the prefix.
+//! reads the BFF forwards. No `GeoResolver` source answers yet: sessions bind to the prefix, or
+//! to the full address when the realm's session policy says `ip`.
 
 pub(crate) mod devices;
 pub(crate) mod sessions;
@@ -14,7 +15,6 @@ use std::sync::Mutex;
 
 use access_crypto::jose::output;
 use access_http::adp::adapters::{Pep, Requester};
-use access_http::console::adapters::PrefixOnly;
 use access_http::console::ports::{
     Clock, ConsoleEnv, DpopKeys, Entropy, Forward, Forwarded, Unavailable, Upstream,
 };
@@ -161,6 +161,7 @@ pub(crate) struct ServerConsole<P> {
     dpop: MemoryDpop,
     upstream: InProcess,
     sessions: sessions::PgConsoleSessions,
+    network: sessions::RealmBinding,
     sign_in: sign_in::RealmSignIn,
     devices: devices::ConsoleDevices<P>,
     grants: crate::admin::tokens::ConsoleGrants<P>,
@@ -175,6 +176,8 @@ pub(crate) struct Parts<P> {
     pub(crate) adp: Router,
     /// The session store and profile source.
     pub(crate) sessions: sessions::PgConsoleSessions,
+    /// The realms' session binding policies.
+    pub(crate) network: sessions::RealmBinding,
     /// The realm sign-in.
     pub(crate) sign_in: sign_in::RealmSignIn,
     /// The device Instances.
@@ -194,6 +197,7 @@ impl<P> ServerConsole<P> {
                 adp: parts.adp,
             },
             sessions: parts.sessions,
+            network: parts.network,
             sign_in: parts.sign_in,
             devices: parts.devices,
             grants: parts.grants,
@@ -212,7 +216,7 @@ where
 {
     type Sessions = sessions::PgConsoleSessions;
     type SignIn = sign_in::RealmSignIn;
-    type Network = PrefixOnly;
+    type Network = sessions::RealmBinding;
     type Profiles = sessions::PgConsoleSessions;
     type Devices = devices::ConsoleDevices<P>;
     type Grants = crate::admin::tokens::ConsoleGrants<P>;
@@ -235,8 +239,8 @@ where
         &self.sign_in
     }
 
-    fn network(&self) -> &PrefixOnly {
-        &PrefixOnly
+    fn network(&self) -> &sessions::RealmBinding {
+        &self.network
     }
 
     fn profiles(&self) -> &sessions::PgConsoleSessions {

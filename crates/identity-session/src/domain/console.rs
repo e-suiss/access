@@ -36,6 +36,29 @@ pub struct BindingPolicy {
     pub full_ip: bool,
 }
 
+impl BindingPolicy {
+    /// The binding of the realm's stored session policy (`idp.realm.session_policy`, OP-151
+    /// m.11 (d)): `ip` binds to the full address, `asn` to the ASN or prefix. `None` when the
+    /// bytes are not the written form or name another binding: never read as the default
+    /// (MD-8).
+    #[must_use]
+    pub fn decode(bytes: &[u8]) -> Option<Self> {
+        use suiss_crypto::dcbor::{self, Limits, Value};
+        let Ok(Value::Map(m)) = dcbor::decode(bytes, Limits::CEILING) else {
+            return None;
+        };
+        let binding = m.iter().find_map(|(k, v)| match (k, v) {
+            (Value::Text(k), Value::Text(v)) if k == "binding" => Some(v.as_str()),
+            _ => None,
+        });
+        match binding {
+            Some("ip") => Some(Self { full_ip: true }),
+            Some("asn") => Some(Self { full_ip: false }),
+            _ => None,
+        }
+    }
+}
+
 /// The network a console session is bound to (TN-129, OP-151 m.1 (b)).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Binding {

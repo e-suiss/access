@@ -4,17 +4,18 @@
 //! MD-7). Any store failure is `503` (Ek B "BFF session store failure is fail-closed"). The
 //! signed-in user's own profile is the realm's account view of the subject (Ek B 3089).
 
+use std::net::IpAddr;
 use std::sync::Arc;
 
 use access_http::console::ports::{
-    ConsoleSession, ConsoleSessions, NewConsoleSession, Profiles, SessionInstance, SessionSummary,
-    SignedIn, Unavailable,
+    ConsoleSession, ConsoleSessions, Network, NewConsoleSession, Profiles, SessionInstance,
+    SessionSummary, SignedIn, Unavailable,
 };
 use access_identity_account::domain::status::AccountStatus;
 use access_identity_admin::app::rest::account_view;
 use access_identity_oauth::adapters::PgDirectory;
 use access_identity_oauth::ports::Directory as _;
-use access_identity_session::domain::console::{Binding, ConsoleFacts};
+use access_identity_session::domain::console::{Binding, BindingPolicy, ConsoleFacts};
 use access_identity_session::domain::device::instance_key;
 use access_internal_api::instances::cose_key;
 use access_kernel::digest::Digest;
@@ -244,6 +245,37 @@ impl ConsoleSessions for PgConsoleSessions {
         };
         t.commit().await.map_err(down)?;
         Ok(ended)
+    }
+}
+
+/// The network facts of a console session (TN-129, OP-151 m.3 (f), m.11 (d)): the realm's
+/// session policy says whether it binds to the full address; no `GeoResolver` source answers
+/// yet, so the ASN is never known and sessions bind to the prefix otherwise.
+pub(crate) struct RealmBinding {
+    pub(crate) app: Pool,
+    pub(crate) directory: PgDirectory,
+}
+
+impl Network for RealmBinding {
+    fn asn(&self, _: IpAddr) -> Option<u32> {
+        None
+    }
+
+    async fn policy(&self, realm: &str) -> Result<BindingPolicy, Unavailable> {
+        let Some(entry) = self.directory.by_slug(realm).await.map_err(down)? else {
+            return Err(Unavailable);
+        };
+        let mut t = TenantTx::begin(&self.app, entry.tenant, entry.realm)
+            .await
+            .map_err(down)?;
+        let stored = access_store::idp::realm::policies(&mut t)
+            .await
+            .map_err(down)?;
+        t.commit().await.map_err(down)?;
+        match stored.session {
+            None => Ok(BindingPolicy::default()),
+            Some(bytes) => BindingPolicy::decode(&bytes).ok_or(Unavailable),
+        }
     }
 }
 
