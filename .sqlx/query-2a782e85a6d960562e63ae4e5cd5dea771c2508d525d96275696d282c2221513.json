@@ -1,0 +1,162 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT hook_id, point, url, on_no_answer, disclose, signing, key_kek_id, key_wrapped_dek,\n                key_nonce, key_ciphertext, public_key, status\n           FROM access.idp_hooks\n          WHERE tenant_id = $1 AND realm_id = $2 AND point = $3 AND status = 'active'",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "hook_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.idp_hooks",
+            "name": "hook_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "point",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.idp_hooks",
+            "name": "point"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "url",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.idp_hooks",
+            "name": "url"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "on_no_answer",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.idp_hooks",
+            "name": "on_no_answer"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "disclose",
+        "type_info": "TextArray",
+        "origin": {
+          "Table": {
+            "table": "access.idp_hooks",
+            "name": "disclose"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "signing",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.idp_hooks",
+            "name": "signing"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "key_kek_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.idp_hooks",
+            "name": "key_kek_id"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "key_wrapped_dek",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.idp_hooks",
+            "name": "key_wrapped_dek"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "key_nonce",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.idp_hooks",
+            "name": "key_nonce"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "key_ciphertext",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.idp_hooks",
+            "name": "key_ciphertext"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "public_key",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.idp_hooks",
+            "name": "public_key"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "status",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.idp_hooks",
+            "name": "status"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      false
+    ]
+  },
+  "hash": "2a782e85a6d960562e63ae4e5cd5dea771c2508d525d96275696d282c2221513"
+}

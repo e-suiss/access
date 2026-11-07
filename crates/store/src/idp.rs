@@ -115,10 +115,10 @@ pub struct Decision<'a> {
 }
 
 /// A decision bound in this transaction: the only way to write configuration. Deliberately
-/// neither `Clone` nor constructible outside this module.
+/// neither `Clone` nor constructible outside this crate.
 pub struct Bound {
-    domain: DomainId,
-    position: i64,
+    pub(crate) domain: DomainId,
+    pub(crate) position: i64,
 }
 
 impl Bound {

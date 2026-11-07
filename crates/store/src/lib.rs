@@ -14,6 +14,7 @@ pub mod derived;
 pub mod dpop;
 pub mod ephemeral;
 pub mod events;
+pub mod extensions;
 
 /// The connection pool type, so other crates need no driver dependency (OP-66 m.2).
 pub use sqlx::PgPool as Pool;

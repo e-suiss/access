@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.idp_hooks\n            (tenant_id, realm_id, hook_id, point, url, on_no_answer, disclose, signing, key_kek_id,\n             key_wrapped_dek, key_nonce, key_ciphertext, public_key, domain_id, decision_pos)\n         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Text",
+        "Text",
+        "TextArray",
+        "Text",
+        "Text",
+        "Bytea",
+        "Bytea",
+        "Bytea",
+        "Bytea",
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "185a3f9f29fcf44b35b7c74f55ff9b63b6892daac217ad313754b6d50d157909"
+}

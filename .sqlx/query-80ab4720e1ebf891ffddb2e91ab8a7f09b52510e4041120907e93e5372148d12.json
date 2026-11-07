@@ -1,0 +1,110 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT key_id, signing, key_kek_id, key_wrapped_dek, key_nonce, key_ciphertext,\n                  public_key, (extract(epoch FROM not_after) * 1000)::bigint AS not_after_ms\n             FROM access.idp_webhook_keys\n            WHERE tenant_id = $1 AND realm_id = $2 AND webhook_id = $3\n              AND (not_after IS NULL OR not_after > to_timestamp($4::bigint / 1000.0))\n            ORDER BY not_after NULLS FIRST, created_at DESC",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "key_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.idp_webhook_keys",
+            "name": "key_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "signing",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.idp_webhook_keys",
+            "name": "signing"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "key_kek_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.idp_webhook_keys",
+            "name": "key_kek_id"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "key_wrapped_dek",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.idp_webhook_keys",
+            "name": "key_wrapped_dek"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "key_nonce",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.idp_webhook_keys",
+            "name": "key_nonce"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "key_ciphertext",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.idp_webhook_keys",
+            "name": "key_ciphertext"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "public_key",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.idp_webhook_keys",
+            "name": "public_key"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "not_after_ms",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      null
+    ]
+  },
+  "hash": "80ab4720e1ebf891ffddb2e91ab8a7f09b52510e4041120907e93e5372148d12"
+}
