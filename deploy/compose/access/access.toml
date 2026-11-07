@@ -1,6 +1,9 @@
 # OP-69, OP-149 m.21: access-server in the local deployment (deploy/compose/access.yaml).
 # Paths are the volumes access-local-init fills; secrets are files, never environment variables.
 listen = "0.0.0.0:8443"
+# OP-151 m.3 (b): the management API and console, and the health endpoints, on their own ports
+management_listen = "0.0.0.0:9443"
+internal_listen = "0.0.0.0:9090"
 issuer = "https://access-server:8443"
 # OP-143 m.5
 signer = "/run/access/signer.sock"
@@ -35,7 +38,7 @@ signer = "/run/access/identity-signer.sock"
 [suiss]
 region = "local"
 relay = "https://relay:8443"
-management_api = "https://access-server:8443"
+management_api = "https://access-server:9443"
 products = { work = "https://work:8443" }
 
 # SI-13, CR-22, CR-30, OP-150: SoftHSM has no quota; one token store serves every local domain

@@ -10,6 +10,7 @@
 //! `api_client.updated` and `api_client.disabled` (OP-149 m.26 (c)). A command's standard
 //! output is its result, so its logs go to standard error.
 
+mod admin;
 mod bootstrap;
 mod claims;
 mod config;
@@ -39,7 +40,9 @@ use access_authority_sequencer::adapters::SourcesClock;
 use access_crypto::secret_file::SecretFile;
 use access_http::adp::adapters::{Discovery, router as adp_router};
 use access_http::adp::app::Service;
+use access_http::api::app::{RequestIds, request_id};
 use access_http::declarations::{Declarations, router as declared};
+use access_http::internal::{Readiness, router as internal_router};
 use access_http::login::{Assets, me_router, router as login_router};
 use access_http::oauth::router as oauth_router;
 use access_http::realm::router as realm_router;
@@ -413,11 +416,11 @@ fn serve_main(config: &Config) -> ExitCode {
         }
     };
 
-    // §14.5
-    let listener = match std::net::TcpListener::bind(config.listen) {
-        Ok(listener) => listener,
+    // §14.5, OP-151 m.3 (b): the three listeners are bound before the lockdown closes bind
+    let listeners = match Listeners::bind(config) {
+        Ok(listeners) => listeners,
         Err(error) => {
-            tracing::error!(%error, listen = %config.listen, "cannot bind the listening socket");
+            tracing::error!(%error, "cannot bind the listening sockets");
             return ExitCode::FAILURE;
         }
     };
@@ -457,7 +460,7 @@ fn serve_main(config: &Config) -> ExitCode {
         "runtime lockdown in force"
     );
 
-    match runtime.block_on(serve(config, listener, prepared, &report)) {
+    match runtime.block_on(serve(config, listeners, prepared, &report)) {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
             tracing::error!(%error, "server stopped with an error");
@@ -683,7 +686,7 @@ where
     Q: access_identity_ui::ports::ApprovalClaims + 'static,
 {
     let identity = config.identity.as_ref().ok_or("no identity section")?;
-    Ok(me_router(
+    let me = me_router(
         RealmDiscovery::new(
             PgDirectory::new(router),
             SignerKeys::new(identity.signer.clone()),
@@ -696,7 +699,12 @@ where
             claims,
             pep: String::from(IDENTITY_PEP),
         },
-    ))
+    );
+    // OP-65, OP-67 m.1: the Frontend API answers with Request-Id too
+    Ok(me.layer(axum::middleware::from_fn_with_state(
+        RequestIds::new(Arc::new(admin::OsEntropy)),
+        request_id,
+    )))
 }
 
 /// The hosted login (OP-146 m.12): the request's `Host` selects the realm as for discovery;
@@ -879,9 +887,13 @@ fn tls_config(config: &Config) -> Result<std::sync::Arc<access_http::tls::Server
         .map_err(|e| e.to_string())
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "the composition root wires every plane and listener in one place (OP-62)"
+)]
 async fn serve(
     config: &Config,
-    listener: std::net::TcpListener,
+    listeners: Listeners,
     prepared: Prepared,
     report: &LockdownReport,
 ) -> Result<(), String> {
@@ -891,6 +903,8 @@ async fn serve(
     // OP-137, OP-149 m.15 (i), m.22 (g)
     ids::open_root(&all.app, &prepared.identity_keys).await?;
     let cell_ids = Arc::new(ids::CellIds::new(prepared.identity_keys.clone()));
+    // OP-151 m.3 (b)-(d): the management API, on its own listener
+    let management = admin::router(config, all.app.clone(), &prepared.identity_keys)?;
     // OP-146 m.5 (f): today's day partitions exist before anything writes to them
     jobs::open_now(&all.app, &all.archive, &holder()?).await;
     let background = Background::start(
@@ -979,7 +993,6 @@ async fn serve(
     );
     let app = router(
         config.security_txt(),
-        health(report),
         limits,
         adp.merge(products)
             .merge(platform)
@@ -988,7 +1001,14 @@ async fn serve(
             .merge(authorize)
             .merge(declared(&Declarations::of(config.provider))),
     );
-    let served = listen(config, listener, prepared.tls, app).await;
+    let served = listen(
+        config,
+        listeners,
+        &prepared.tls,
+        [app, management],
+        health(report),
+    )
+    .await;
     // OP-31
     background.stop().await;
     renewing.stop().await;
@@ -996,19 +1016,88 @@ async fn serve(
     served
 }
 
-/// Serves `app` over TLS 1.3 on `listener` until a shutdown signal.
+/// The three listening sockets (OP-151 m.3 (b)), bound before the lockdown.
+struct Listeners {
+    public: std::net::TcpListener,
+    management: std::net::TcpListener,
+    internal: std::net::TcpListener,
+}
+
+impl Listeners {
+    fn bind(config: &Config) -> Result<Self, String> {
+        let bind = |addr: std::net::SocketAddr, what: &str| {
+            std::net::TcpListener::bind(addr).map_err(|e| format!("{what} {addr}: {e}"))
+        };
+        let management = config
+            .management_listen
+            .ok_or("management_listen is required")?;
+        let internal = config
+            .internal_listen
+            .ok_or("internal_listen is required")?;
+        Ok(Self {
+            public: bind(config.listen, "listen")?,
+            management: bind(management, "management_listen")?,
+            internal: bind(internal, "internal_listen")?,
+        })
+    }
+}
+
+fn nonblocking(listener: std::net::TcpListener) -> Result<tokio::net::TcpListener, String> {
+    listener.set_nonblocking(true).map_err(|e| e.to_string())?;
+    tokio::net::TcpListener::from_std(listener).map_err(|e| e.to_string())
+}
+
+/// Serves the public, management and internal routers on their listeners until a shutdown
+/// signal; the process is ready once all three accept. Each speaks TLS 1.3, except the internal
+/// one when `internal_plain` is set on a private address (checked at start-up).
 async fn listen(
     config: &Config,
-    listener: std::net::TcpListener,
-    tls: Arc<access_http::tls::ServerConfig>,
-    app: axum::Router,
+    listeners: Listeners,
+    tls: &Arc<access_http::tls::ServerConfig>,
+    [public, management]: [axum::Router; 2],
+    health: Health,
 ) -> Result<(), String> {
-    listener.set_nonblocking(true).map_err(|e| e.to_string())?;
-    let listener = tokio::net::TcpListener::from_std(listener).map_err(|e| e.to_string())?;
-    tracing::info!(listen = %config.listen, "access-server listening (TLS 1.3)");
-    access_http::tls::serve(listener, tls, app, shutdown_signal())
-        .await
-        .map_err(|e| e.to_string())
+    // OP-67 m.3, OP-151 m.3 (b)
+    let ready = &Readiness::default();
+    let inside = internal_router(health, ready.clone(), Limits::default());
+    let (stop, stopped) = tokio::sync::watch::channel(false);
+    let signal = |mut rx: tokio::sync::watch::Receiver<bool>| async move {
+        let _ = rx.wait_for(|s| *s).await;
+    };
+    let public_l = nonblocking(listeners.public)?;
+    let management_l = nonblocking(listeners.management)?;
+    let internal_l = nonblocking(listeners.internal)?;
+    tracing::info!(
+        listen = %config.listen,
+        management_listen = ?config.management_listen,
+        internal_listen = ?config.internal_listen,
+        internal_plain = config.internal_plain,
+        "access-server listening (TLS 1.3)"
+    );
+    let public = access_http::tls::serve(public_l, tls.clone(), public, signal(stopped.clone()));
+    let management = access_http::tls::serve(
+        management_l,
+        tls.clone(),
+        management,
+        signal(stopped.clone()),
+    );
+    let inside = async {
+        if config.internal_plain {
+            axum::serve(internal_l, inside)
+                .with_graceful_shutdown(signal(stopped.clone()))
+                .await
+        } else {
+            access_http::tls::serve(internal_l, tls.clone(), inside, signal(stopped.clone())).await
+        }
+    };
+    let shutdown = async {
+        shutdown_signal().await;
+        ready.unready();
+        let _ = stop.send(true);
+    };
+    ready.ready();
+    let ((), p, m, i) = tokio::join!(shutdown, public, management, inside);
+    p.and(m).and(i).map_err(|e| e.to_string())
 }
 
 /// What `/healthz` reports: the lockdown in force (SA-22).

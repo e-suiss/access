@@ -65,16 +65,24 @@ spec:
             - name: https
               containerPort: 8443
               protocol: TCP
-          # OP-50, OP-67
+            # OP-151 m.3 (b), CMP-15.5: the management API and console
+            - name: management
+              containerPort: 9443
+              protocol: TCP
+            # OP-67 m.3: health and metrics, internal only
+            - name: internal
+              containerPort: 9090
+              protocol: TCP
+          # OP-50, OP-67 m.3, OP-151 m.3 (b)
           startupProbe:
-            httpGet: { path: /healthz, port: https, scheme: HTTPS }
+            httpGet: { path: /livez, port: internal, scheme: HTTPS }
             periodSeconds: 2
             failureThreshold: 30
           livenessProbe:
-            httpGet: { path: /healthz, port: https, scheme: HTTPS }
+            httpGet: { path: /livez, port: internal, scheme: HTTPS }
             periodSeconds: 10
           readinessProbe:
-            httpGet: { path: /healthz, port: https, scheme: HTTPS }
+            httpGet: { path: /readyz, port: internal, scheme: HTTPS }
             periodSeconds: 5
           volumeMounts:
             - name: config

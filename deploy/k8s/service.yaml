@@ -14,3 +14,22 @@ spec:
       port: 443
       targetPort: https
       protocol: TCP
+---
+# OP-151 m.3 (b), CMP-15.5, §17.9.6: the management API and console behind their own
+# hostname, never the public Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: access-server-management
+  labels:
+    app.kubernetes.io/name: access-server
+    app.kubernetes.io/part-of: access
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: access-server
+  ports:
+    - name: management
+      port: 443
+      targetPort: management
+      protocol: TCP

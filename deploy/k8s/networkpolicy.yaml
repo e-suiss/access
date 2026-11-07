@@ -23,6 +23,17 @@ spec:
       ports:
         - port: https
           protocol: TCP
+        # OP-151 m.3 (b), CMP-15.5: the management hostname has its own ingress route
+        - port: management
+          protocol: TCP
+    # OP-67 m.3: metrics scraping on the internal port only
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - port: internal
+          protocol: TCP
   egress:
     - to:
         - namespaceSelector:

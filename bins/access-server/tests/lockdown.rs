@@ -132,6 +132,8 @@ fn op_90_server_refuses_to_start_without_lockdown() {
     .expect("write config");
     let mut child = command
         .env("ACCESS_LISTEN", "127.0.0.1:0")
+        .env("ACCESS_MANAGEMENT_LISTEN", "127.0.0.1:0")
+        .env("ACCESS_INTERNAL_LISTEN", "127.0.0.1:0")
         .env("ACCESS_CONFIG", &config)
         .env("SOFTHSM2_CONF", &softhsm)
         .stdout(std::process::Stdio::piped())

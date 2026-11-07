@@ -213,11 +213,14 @@ services:
       - sockets:/run/access
     ports:
       - "127.0.0.1:${ACCESS_PORT:-8443}:8443"
+      # OP-151 m.3 (b), CMP-15.5: the management API on its own port
+      - "127.0.0.1:${ACCESS_ADMIN_PORT:-9443}:9443"
     depends_on:
       bootstrap:
         condition: service_completed_successfully
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "--cacert", "/var/lib/access/certs/ca.crt", "https://localhost:8443/healthz"]
+      # OP-67 m.3, OP-151 m.3 (b): readiness on the internal listener, never on the public one
+      test: ["CMD", "curl", "-fsS", "--cacert", "/var/lib/access/certs/ca.crt", "https://localhost:9090/readyz"]
       interval: 2s
       timeout: 3s
       retries: 30

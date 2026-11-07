@@ -8,6 +8,9 @@ metadata:
 data:
   access.toml: |
     listen = "0.0.0.0:8443"
+    # OP-151 m.3 (b): the management API and console, and the health endpoints, on their own ports
+    management_listen = "0.0.0.0:9443"
+    internal_listen = "0.0.0.0:9090"
     issuer = "https://access-server.access.svc"
 
     [tls]

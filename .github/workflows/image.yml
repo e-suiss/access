@@ -149,7 +149,7 @@ jobs:
           healthy=
           for _ in $(seq 1 60); do
             if $COMPOSE exec -T access-server \
-              curl -fsS --cacert /var/lib/access/certs/ca.crt https://localhost:8443/healthz; then
+              curl -fsS --cacert /var/lib/access/certs/ca.crt https://localhost:9090/readyz; then
               healthy=1
               break
             fi
@@ -162,6 +162,11 @@ jobs:
           $COMPOSE logs --no-color bootstrap
           tls=(-fsS --cacert "$RUNNER_TEMP/ca.crt" --resolve access-server:8443:127.0.0.1)
           curl "${tls[@]}" https://access-server:8443/realms/platform/.well-known/suiss-configuration
+          # OP-151 m.3 (b): health is internal only; the management API answers on its own port
+          test "$(curl -s -o /dev/null -w '%{http_code}' --cacert "$RUNNER_TEMP/ca.crt" \
+            --resolve access-server:8443:127.0.0.1 https://access-server:8443/healthz)" = 404
+          test "$(curl -s -o /dev/null -w '%{http_code}' --cacert "$RUNNER_TEMP/ca.crt" \
+            --resolve access-server:9443:127.0.0.1 https://access-server:9443/admin/v1/platform)" = 401
           curl "${tls[@]}" --cert "$RUNNER_TEMP/pep.crt" --key "$RUNNER_TEMP/pep.key" \
             https://access-server:8443/access/v1/tenants | grep -q '"tnt_'
           $COMPOSE logs --no-color access-server | grep -q 'declared delivery targets'

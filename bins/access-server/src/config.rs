@@ -1,7 +1,7 @@
 //! Process configuration (OP-63 rule 4).
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::net::{Ipv4Addr, SocketAddr};
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::path::PathBuf;
 
 use access_http::SecurityTxt;
@@ -19,6 +19,15 @@ pub(crate) struct Config {
     /// Listen address. Defaults to loopback (§14.3 RAUTHY-008): exposing the
     /// server beyond the host is an explicit operator decision.
     pub(crate) listen: SocketAddr,
+    /// The management listener: the management API `/admin/v1/*` and the console's `/console/*`,
+    /// on its own address (OP-151 m.3 (b), CMP-15.5, §17.9.6). Required; never the public one.
+    pub(crate) management_listen: Option<SocketAddr>,
+    /// The internal listener: `/livez`, `/readyz`, `/healthz`, `/metrics` (OP-67 m.3, OP-151
+    /// m.3 (b)). Required; never the public or management one.
+    pub(crate) internal_listen: Option<SocketAddr>,
+    /// Serve the internal listener in plain HTTP. Only on a loopback or private address (RFC
+    /// 1918, IPv6 unique local); off by default, so it speaks TLS like the others.
+    pub(crate) internal_plain: bool,
     /// `tracing` filter directives.
     pub(crate) log: String,
     /// `security.txt` contact URIs (RFC 9116).
@@ -264,6 +273,9 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             listen: SocketAddr::from((Ipv4Addr::LOCALHOST, 8443)),
+            management_listen: None,
+            internal_listen: None,
+            internal_plain: false,
             log: "info".to_owned(),
             security_contacts: vec![
                 "https://github.com/e-suiss/access/security/advisories/new".to_owned(),
@@ -321,6 +333,61 @@ pub(crate) enum ConfigError {
     DeliveryTargets,
     #[error(transparent)]
     SecretEnvironment(#[from] access_crypto::secret_file::SecretFileError),
+    #[error(
+        "management_listen and internal_listen are required: the management API and the health endpoints have listeners of their own (OP-151 m.3 (b), CMP-15.5)"
+    )]
+    NoListeners,
+    #[error(
+        "listen, management_listen and internal_listen must be three different addresses; the admin interface is never on the public listener (§17.9.6, OP-148)"
+    )]
+    SharedListener,
+    #[error("management_listen binds a non-loopback address without TLS (§17.9.6, OP-148)")]
+    AdminWithoutTls,
+    #[error(
+        "internal_plain is allowed only on a loopback or private internal_listen address (OP-151 m.3 (b))"
+    )]
+    InternalPlain,
+}
+
+/// Whether two listen addresses would take the same socket: one port, and one address or the
+/// unspecified address on either side. An ephemeral port (0) takes a fresh port each time.
+fn overlap(a: SocketAddr, b: SocketAddr) -> bool {
+    a.port() != 0
+        && a.port() == b.port()
+        && (a.ip() == b.ip() || a.ip().is_unspecified() || b.ip().is_unspecified())
+}
+
+/// A loopback or private address: RFC 1918 or IPv4 loopback, IPv6 loopback or unique local.
+fn private(addr: SocketAddr) -> bool {
+    match addr.ip() {
+        IpAddr::V4(v4) => v4.is_loopback() || v4.is_private(),
+        IpAddr::V6(v6) => {
+            v6.is_loopback() || v6.segments().first().is_some_and(|s| s & 0xfe00 == 0xfc00)
+        }
+    }
+}
+
+/// The admin address check at start-up (OP-148, §17.9.6, Ek B "admin adresi açılış denetimi"):
+/// three distinct listeners; the management one never non-loopback without TLS; a plain-text
+/// internal one only on a private address when asked for.
+fn check_listeners(config: &Config) -> Result<(), ConfigError> {
+    let (Some(management), Some(internal)) = (config.management_listen, config.internal_listen)
+    else {
+        return Err(ConfigError::NoListeners);
+    };
+    if overlap(config.listen, management)
+        || overlap(config.listen, internal)
+        || overlap(management, internal)
+    {
+        return Err(ConfigError::SharedListener);
+    }
+    if config.tls.is_none() && !management.ip().is_loopback() {
+        return Err(ConfigError::AdminWithoutTls);
+    }
+    if config.internal_plain && !private(internal) {
+        return Err(ConfigError::InternalPlain);
+    }
+    Ok(())
 }
 
 impl Config {
@@ -346,6 +413,8 @@ impl Config {
         if !(1..=364).contains(&self.security_txt_valid_days) {
             return Err(ConfigError::SecurityTxtValidity);
         }
+        // OP-148, OP-151 m.3 (b), §17.9.6
+        check_listeners(self)?;
         if self.tls.is_none() {
             return Err(ConfigError::NoTls);
         }
@@ -417,6 +486,8 @@ mod tests {
 
     fn with_tls() -> Config {
         Config {
+            management_listen: Some(SocketAddr::from((Ipv4Addr::LOCALHOST, 9443))),
+            internal_listen: Some(SocketAddr::from((Ipv4Addr::LOCALHOST, 9090))),
             tls: Some(Tls {
                 cert_file: "/run/tls/tls.crt".into(),
                 key_file: "/run/tls/tls.key".into(),
@@ -495,10 +566,102 @@ mod tests {
     // CR-12, OP-52: no TLS, no start
     #[test]
     fn tls_is_required() {
+        let config = Config {
+            tls: None,
+            ..with_tls()
+        };
+        assert!(matches!(config.validate(), Err(ConfigError::NoTls)));
+    }
+
+    fn listeners(management: &str, internal: &str) -> Config {
+        Config {
+            management_listen: Some(management.parse().unwrap()),
+            internal_listen: Some(internal.parse().unwrap()),
+            ..with_tls()
+        }
+    }
+
+    // OP-151 m.3 (b), CMP-15.5, §17.9.6: both listeners are required, with no default address
+    #[test]
+    fn the_management_and_internal_listeners_are_required() {
         assert!(matches!(
             Config::default().validate(),
-            Err(ConfigError::NoTls)
+            Err(ConfigError::NoListeners)
         ));
+        for (m, i) in [
+            (None, Some("127.0.0.1:9090")),
+            (Some("127.0.0.1:9443"), None),
+        ] {
+            let config = Config {
+                management_listen: m.map(|a| a.parse().unwrap()),
+                internal_listen: i.map(|a| a.parse().unwrap()),
+                ..with_tls()
+            };
+            assert!(matches!(config.validate(), Err(ConfigError::NoListeners)));
+        }
+    }
+
+    // OP-148, §17.9.6, Ek B admin address check: the admin interface never shares the public
+    // listener, and never binds beyond loopback without TLS
+    #[test]
+    fn the_admin_address_is_checked_at_start_up() {
+        for (m, i) in [
+            ("127.0.0.1:8443", "127.0.0.1:9090"),
+            ("0.0.0.0:8443", "127.0.0.1:9090"),
+            ("127.0.0.1:9443", "127.0.0.1:8443"),
+            ("127.0.0.1:9443", "0.0.0.0:9443"),
+        ] {
+            assert!(
+                matches!(listeners(m, i).validate(), Err(ConfigError::SharedListener)),
+                "{m} {i}"
+            );
+        }
+        let config = Config {
+            tls: None,
+            ..listeners("0.0.0.0:9443", "127.0.0.1:9090")
+        };
+        assert!(matches!(
+            config.validate(),
+            Err(ConfigError::AdminWithoutTls)
+        ));
+        let config = Config {
+            tls: None,
+            ..listeners("127.0.0.1:9443", "127.0.0.1:9090")
+        };
+        assert!(matches!(config.validate(), Err(ConfigError::NoTls)));
+    }
+
+    // OP-151 m.3 (b), TI-9: plain-text internal listener only when asked and only on a
+    // loopback or private address
+    #[test]
+    fn a_plain_internal_listener_stays_private() {
+        for ok in [
+            "127.0.0.1:9090",
+            "10.1.2.3:9090",
+            "192.168.0.1:9090",
+            "[fd00::1]:9090",
+        ] {
+            let config = Config {
+                internal_plain: true,
+                ..listeners("127.0.0.1:9443", ok)
+            };
+            config.validate().unwrap();
+        }
+        for bad in [
+            "0.0.0.0:9090",
+            "8.8.8.8:9090",
+            "[::]:9090",
+            "[2001:db8::1]:9090",
+        ] {
+            let config = Config {
+                internal_plain: true,
+                ..listeners("127.0.0.1:9443", bad)
+            };
+            assert!(
+                matches!(config.validate(), Err(ConfigError::InternalPlain)),
+                "{bad}"
+            );
+        }
     }
 
     #[test]
