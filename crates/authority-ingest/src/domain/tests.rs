@@ -167,6 +167,34 @@ fn inbound_risk_signals_are_never_quota_refused() {
     assert!(narrowing(&risk));
 }
 
+// CI-2, TN-46: an SL2 `risk.*` Claim narrows like a risk signal; a risk Claim with assurance
+// levels or a bound intent or resource is refused, whatever its value
+#[test]
+fn risk_claims_never_qualify() {
+    let p = pinned(3);
+    let f = frame(&p);
+    let level = statement(&f, "risk.level", EqValue::Text(String::from("low")), 1, 2);
+    assert!(narrowing(&level));
+    assert_eq!(check_risk(&level), Ok(()));
+    let mut assured = level.clone();
+    assured.assurance.insert(String::from("aal"), 2);
+    assert_eq!(check_risk(&assured), Err(Refusal::RISK_QUALIFYING));
+    let mut bound = statement(
+        &f,
+        RISK_SIGNAL,
+        EqValue::Text(String::from("new_device")),
+        1,
+        2,
+    );
+    assert_eq!(check_risk(&bound), Ok(()));
+    bound.bound_intent = Some(access_kernel::digest::Digest([7; 32]));
+    assert_eq!(check_risk(&bound), Err(Refusal::RISK_QUALIFYING));
+    let mut kyc = statement(&f, "kyc", EqValue::Bool(true), 1, 2);
+    kyc.assurance.insert(String::from("aal"), 2);
+    assert_eq!(check_risk(&kyc), Ok(()));
+    assert!(!risk_class("riskless"));
+}
+
 // §10.1.2 WebAuthn rows: only a webauthn authentication or a passkey binding with its body
 #[test]
 fn a_webauthn_carrier_needs_its_body() {

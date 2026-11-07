@@ -291,6 +291,10 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         {
             return Ok(Err(r));
         }
+        // CI-2, TN-46
+        if let Err(r) = carrier::check_risk(&statement) {
+            return Ok(Err(r));
+        }
         Ok(Ok(Verified {
             statement,
             instance,

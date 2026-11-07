@@ -17,6 +17,31 @@ fn scope(t: &TenantTx) -> Result<(Uuid, Uuid), StoreError> {
     ))
 }
 
+/// The columns of `access.analytics_daily` besides its key: every one a non-negative count.
+pub const COUNTERS: [&str; 18] = [
+    "flows_started",
+    "identifier_entered",
+    "first_factor_passed",
+    "second_factor_passed",
+    "sessions_created",
+    "method_password",
+    "method_passkey",
+    "method_email_code",
+    "method_magic_link",
+    "accounts_active",
+    "accounts_with_passkey",
+    "accounts_with_mfa",
+    "mfa_setup_started",
+    "mfa_setup_completed",
+    "failed_logins",
+    "risk_step_ups",
+    "risk_reviews",
+    "risk_false_positives",
+];
+
+/// The other columns of `access.analytics_daily`: the realm, the day and when it was computed.
+pub const KEY: [&str; 4] = ["tenant_id", "realm_id", "day", "computed_at"];
+
 fn count(v: i64) -> Result<u64, StoreError> {
     u64::try_from(v).map_err(|_| StoreError::Corrupt)
 }

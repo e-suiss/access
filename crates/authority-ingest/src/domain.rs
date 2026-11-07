@@ -79,6 +79,8 @@ impl Refusal {
     pub const SUBJECT: Self = Self("claim-subject");
     /// The carrier context does not parse.
     pub const CONTEXT: Self = Self("claim-carrier-context");
+    /// A risk Claim carries assurance or binds an intent or resource: it could qualify (CI-2).
+    pub const RISK_QUALIFYING: Self = Self("claim-risk-qualifying");
 }
 
 /// Digest of a submission in the day's table: carrier and bytes, nothing else.
@@ -111,11 +113,34 @@ pub fn check_size(claim: &[u8], body: Option<&[u8]>) -> Result<(), Refusal> {
 /// The class of the identity plane's risk signals, inbound SSF events among them (TN-42).
 pub const RISK_SIGNAL: &str = "risk_signal";
 
+/// The namespace of the identity plane's SL2 classes, `risk.level` among them (TN-46).
+pub const RISK_NAMESPACE: &str = "risk.";
+
+/// Whether `class` is a risk class: `risk_signal` or one of `risk.*`.
+#[must_use]
+pub fn risk_class(class: &str) -> bool {
+    class == RISK_SIGNAL || class.starts_with(RISK_NAMESPACE)
+}
+
+/// CI-2, TN-46: risk only narrows. A risk Claim that carries assurance levels, or binds an intent
+/// or a resource, has the form of a Claim that qualifies a requirement term, and is refused.
+///
+/// # Errors
+/// [`Refusal::RISK_QUALIFYING`].
+pub fn check_risk(s: &Statement) -> Result<(), Refusal> {
+    let qualifying =
+        !s.assurance.is_empty() || s.bound_intent.is_some() || s.bound_resource.is_some();
+    if risk_class(&s.class) && qualifying {
+        return Err(Refusal::RISK_QUALIFYING);
+    }
+    Ok(())
+}
+
 /// Whether a Claim only narrows (G44, §13.7.4): it is never quarantined for quota. A risk
 /// signal only narrows (CI-2), so an inbound SSF event is never refused for quota (TN-42).
 #[must_use]
 pub fn narrowing(s: &Statement) -> bool {
-    if s.class == RISK_SIGNAL {
+    if risk_class(&s.class) {
         return true;
     }
     match Class::parse(&s.class) {
