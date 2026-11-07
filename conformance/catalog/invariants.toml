@@ -1238,7 +1238,7 @@ id = "SI-11"
 family = "SI"
 section = "6.6"
 status = "canonical"
-stage = 6
+stage = 13
 title = "Inclusion over assertion after recovery and handover"
 tests = []
 

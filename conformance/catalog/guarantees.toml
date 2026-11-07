@@ -849,7 +849,7 @@ family = "U"
 section = "13.4"
 status = "canonical"
 class = "UDC"
-stage = 6
+stage = 8
 title = "Custodian-signed regime key events visible in Party's Changes view"
 tests = []
 

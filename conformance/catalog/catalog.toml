@@ -34,3 +34,13 @@ reason = "OP-151: the Ek B Stage 7 item 'Expansion about you' events (SI-21) is 
 id = "XI-26"
 stage = 8
 reason = "OP-151: Stage 7 has no impersonation path (manifest and AIS checks, for(P) projections with act; the TNI-13, G53 and MUST-NEVER-17 tests), but the rule's other half, the support Grant visible in the Party's inventory and the break-glass notify-subject requirement, needs the Authority hub sections (Acting for you, Shared from you, Changes), Stage 8 items no Stage 7 code serves"
+
+[[rule_overrides]]
+id = "SI-11"
+stage = 13
+reason = "T-5: the Stage 6 PAP item lists SI-11 among its sources, but the rule is the Stage 13 item 'Recovery / handover sonrası inclusion proof' (§6.5, §6.6, PI-15): an artefact under a superseded provider key is accepted only with an exact-content inclusion proof at the checkpoint the lineage-changing record cites. Stage 6 refuses a superseded binding on its own say-so (key_scope test, CR-58); no code yet checks the inclusion proof after recovery or handover"
+
+[[rule_overrides]]
+id = "U26"
+stage = 8
+reason = "T-5: the Ek B Stage 6 item 'Regime key-event ingest' is half served: custodian-signed party_key_state Claims are ingested under the regime's actor-binding Acceptance (the P21, E18 ingest test), but their visibility in the Party's Changes view needs the Authority hub, a Stage 8 item no Stage 6 or 7 code serves"

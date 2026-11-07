@@ -155,3 +155,94 @@ fn every_realm_write_is_an_idp_exercise() {
     }
     assert!(writes > 30, "{writes}");
 }
+
+// XI-3, C2, E27: no surface holds or queues authority state; every management write answers
+// only once its Exercise committed, naming the Exercise and its log position, never 202 Accepted
+#[test]
+fn every_management_write_answers_with_its_committed_exercise() {
+    let doc = access_http::api::schema::openapi();
+    let schemas = doc["components"]["schemas"].as_object().unwrap();
+    let mut writes = 0;
+    for (path, ops) in doc["paths"].as_object().unwrap() {
+        for (method, op) in ops.as_object().unwrap() {
+            if !matches!(method.as_str(), "post" | "put" | "patch" | "delete") {
+                continue;
+            }
+            let id = op["operationId"].as_str().unwrap();
+            // PI-7: a draft changes nothing; it returns the intent the caller's AIS signs
+            if matches!(id, "draftIntent" | "draftPlatformIntent") {
+                continue;
+            }
+            let responses = op["responses"].as_object().unwrap();
+            assert!(!responses.contains_key("202"), "{method} {path}: 202");
+            for (code, response) in responses.iter().filter(|(c, _)| c.starts_with('2')) {
+                let reference = response["content"]["application/json"]["schema"]["$ref"]
+                    .as_str()
+                    .unwrap_or_else(|| panic!("{method} {path} {code}: no schema"));
+                let name = reference.rsplit('/').next().unwrap();
+                let required = schemas[name]["required"].as_array().unwrap();
+                for member in ["exercise_id", "position"] {
+                    assert!(
+                        required.iter().any(|r| r == member),
+                        "{method} {path} {code}: {name} lacks {member}"
+                    );
+                }
+                writes += 1;
+            }
+        }
+    }
+    assert!(writes > 40, "{writes}");
+}
+
+fn committed_contract(name: &str) -> serde_json::Value {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../sdks/openapi")
+        .join(name);
+    serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap()
+}
+
+// XI-7, E30, E44: Access has no inbox: no contract offers a person a list of requests, tasks or
+// notifications to act on, and the Approval Surface opens only for a request the coordinator
+// holds and hands over (its digest or pushed request_uri), never by browsing
+#[test]
+fn no_contract_offers_an_inbox() {
+    let banned = [
+        "inbox",
+        "task",
+        "todo",
+        "notification",
+        "attention",
+        "queue",
+        "pending",
+    ];
+    let mut approval_entries = 0;
+    for name in [
+        "access-v1.json",
+        "admin-v1.json",
+        "frontend.json",
+        "login.json",
+    ] {
+        let doc = committed_contract(name);
+        for (path, ops) in doc["paths"].as_object().unwrap() {
+            for (method, op) in ops.as_object().unwrap() {
+                let id = op["operationId"].as_str().unwrap_or_default();
+                let words = format!("{path} {id}").to_ascii_lowercase();
+                for word in banned {
+                    assert!(!words.contains(word), "{name}: {method} {path} ({id})");
+                }
+                if method != "get" || !path.contains("approv") || path.ends_with(".js") {
+                    continue;
+                }
+                let params = op["parameters"].as_array().cloned().unwrap_or_default();
+                assert!(
+                    params
+                        .iter()
+                        .any(|p| p["name"] == "request" && p["required"] == true),
+                    "{name}: {method} {path} opens without the coordinator's request"
+                );
+                approval_entries += 1;
+            }
+        }
+    }
+    assert_eq!(approval_entries, 1);
+}
