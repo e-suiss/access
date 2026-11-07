@@ -69,8 +69,7 @@ pub struct LiveHook {
     pub registration: Registration,
     /// Its signing key.
     pub key: HookKey,
-    /// Whether the realm allows the disclosures the registration declares. No realm setting
-    /// allows it yet, so the registries here answer `false`.
+    /// Whether the realm's extension policy permits disclosing the e-mail (OP-151 m.10 (e)).
     pub realm_allows_disclosure: bool,
 }
 

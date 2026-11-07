@@ -286,3 +286,33 @@ fn ei_25_hook_changes_are_digested() {
     let r = HookChange::Retire { id: [1; 16] };
     assert_eq!(r.action(), ExtensionAction::HookRetire);
 }
+
+// OP-151 m.10 (e), OP-149 m.23, MD-8: a private target needs the realm's permission and the
+// operator's declaration; the stored policy round-trips, nothing stored is closed, and a
+// malformed one is refused rather than read as open
+#[test]
+fn extension_policy_is_closed_by_default_and_strict_when_stored() {
+    let closed = ExtensionPolicy::from_stored(None).unwrap();
+    assert_eq!(closed, ExtensionPolicy::default());
+    assert!(!closed.private_allowed(true));
+    let open = ExtensionPolicy {
+        allow_private_targets: true,
+        hook_disclosure: vec![Disclosure::Email],
+    };
+    assert!(open.private_allowed(true));
+    assert!(!open.private_allowed(false));
+    assert!(open.permits(&[Disclosure::Email]));
+    let bytes = dcbor::encode(&open.to_value(), Limits::CEILING).unwrap();
+    assert_eq!(ExtensionPolicy::from_stored(Some(&bytes)).unwrap(), open);
+    let odd = Cbor::Map(vec![(
+        Cbor::text("allow_private_targets"),
+        Cbor::Bool(true),
+    )]);
+    let odd = dcbor::encode(&odd, Limits::CEILING).unwrap();
+    assert!(ExtensionPolicy::from_stored(Some(&odd)).is_err());
+    assert!(ExtensionPolicy::from_stored(Some(b"\xff")).is_err());
+    let private = "https://hooks.shop.internal:8443/x";
+    assert!(check_target(private, closed.private_allowed(true)).is_err());
+    assert!(check_target(private, open.private_allowed(false)).is_err());
+    assert!(check_target(private, open.private_allowed(true)).is_ok());
+}

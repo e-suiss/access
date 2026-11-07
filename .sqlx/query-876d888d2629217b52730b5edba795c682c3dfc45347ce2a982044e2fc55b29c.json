@@ -1,0 +1,104 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT realm_id, webhook_id, url, events, signing, status, decision_pos\n           FROM access.idp_webhooks\n          WHERE tenant_id = $1 AND realm_id = $2 AND ($3::uuid IS NULL OR webhook_id = $3)\n            AND webhook_id > $4\n          ORDER BY webhook_id LIMIT $5",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "realm_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.idp_webhooks",
+            "name": "realm_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "webhook_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.idp_webhooks",
+            "name": "webhook_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "url",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.idp_webhooks",
+            "name": "url"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "events",
+        "type_info": "TextArray",
+        "origin": {
+          "Table": {
+            "table": "access.idp_webhooks",
+            "name": "events"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "signing",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.idp_webhooks",
+            "name": "signing"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "status",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.idp_webhooks",
+            "name": "status"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "decision_pos",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.idp_webhooks",
+            "name": "decision_pos"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "876d888d2629217b52730b5edba795c682c3dfc45347ce2a982044e2fc55b29c"
+}

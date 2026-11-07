@@ -354,6 +354,124 @@ pub async fn webhook(t: &mut TenantTx, id: &[u8; 16]) -> Result<Option<WebhookRo
     }))
 }
 
+/// A hook as the management API reads it: no key material but the Ed25519 public key.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct HookListing {
+    /// Its id.
+    pub id: [u8; 16],
+    /// Its call point.
+    pub point: String,
+    /// The tenant's HTTPS endpoint.
+    pub url: String,
+    /// `refuse` or `continue_without_claims`.
+    pub on_no_answer: String,
+    /// What it may receive besides pseudonymous ids.
+    pub disclose: Vec<String>,
+    /// `ed25519` or `hmac`.
+    pub signing: String,
+    /// The Ed25519 public key.
+    pub public_key: Option<[u8; 32]>,
+    /// Whether it is live.
+    pub active: bool,
+    /// Position of the decision that last changed it: its `ETag`.
+    pub position: u64,
+}
+
+/// The realm's hooks, live or retired, in id order after `after`; only `only` when given
+/// (OP-151 m.11, TN-113: the transaction's realm is the filter).
+///
+/// # Errors
+/// [`StoreError`].
+pub async fn hooks(
+    t: &mut TenantTx,
+    only: Option<&[u8; 16]>,
+    after: &[u8; 16],
+    limit: u32,
+) -> Result<Vec<HookListing>, StoreError> {
+    let (tenant, realm) = scope(t)?;
+    let rows = sqlx::query!(
+        "SELECT hook_id, point, url, on_no_answer, disclose, signing, public_key, status,
+                decision_pos
+           FROM access.idp_hooks
+          WHERE tenant_id = $1 AND realm_id = $2 AND ($3::uuid IS NULL OR hook_id = $3)
+            AND hook_id > $4
+          ORDER BY hook_id LIMIT $5",
+        tenant,
+        realm,
+        only.map(uuid),
+        uuid(after),
+        i64::from(limit),
+    )
+    .fetch_all(&mut *t.tx)
+    .await?;
+    rows.into_iter()
+        .map(|r| {
+            Ok(HookListing {
+                id: *r.hook_id.as_bytes(),
+                point: r.point,
+                url: r.url,
+                on_no_answer: r.on_no_answer,
+                disclose: r.disclose,
+                signing: r.signing,
+                public_key: key32(r.public_key)?,
+                active: r.status == "active",
+                position: u64::try_from(r.decision_pos).map_err(|_| StoreError::Corrupt)?,
+            })
+        })
+        .collect()
+}
+
+/// A webhook as the management API reads it: no key material.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct WebhookListing {
+    /// The registration.
+    pub webhook: WebhookRow,
+    /// Position of the decision that last changed it: its `ETag`.
+    pub position: u64,
+}
+
+/// The realm's webhooks, live or retired, in id order after `after`; only `only` when given.
+///
+/// # Errors
+/// [`StoreError`].
+pub async fn webhooks(
+    t: &mut TenantTx,
+    only: Option<&[u8; 16]>,
+    after: &[u8; 16],
+    limit: u32,
+) -> Result<Vec<WebhookListing>, StoreError> {
+    let (tenant, realm) = scope(t)?;
+    let rows = sqlx::query!(
+        "SELECT realm_id, webhook_id, url, events, signing, status, decision_pos
+           FROM access.idp_webhooks
+          WHERE tenant_id = $1 AND realm_id = $2 AND ($3::uuid IS NULL OR webhook_id = $3)
+            AND webhook_id > $4
+          ORDER BY webhook_id LIMIT $5",
+        tenant,
+        realm,
+        only.map(uuid),
+        uuid(after),
+        i64::from(limit),
+    )
+    .fetch_all(&mut *t.tx)
+    .await?;
+    rows.into_iter()
+        .map(|r| {
+            Ok(WebhookListing {
+                webhook: WebhookRow {
+                    realm: *r.realm_id.as_bytes(),
+                    id: *r.webhook_id.as_bytes(),
+                    url: r.url,
+                    events: r.events,
+                    signing: r.signing,
+                    active: r.status == "active",
+                },
+                position: u64::try_from(r.decision_pos).map_err(|_| StoreError::Corrupt)?,
+            })
+        })
+        .collect()
+}
+
 /// The keys of a webhook valid at `now_ms`: the current one and a rotated one in its overlap.
 ///
 /// # Errors

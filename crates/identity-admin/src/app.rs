@@ -36,8 +36,9 @@ use access_identity_events::domain::catalog::{
 
 use crate::AdminError;
 use crate::domain::{
-    Attribute, AuthMethod, CLIENT_PREFIX, Change, Client, ClientId, Group, Invalid, JoseAlg,
-    MembershipIssuer, Upstream, cose_key, issuer_cutoff, policy_value, raises,
+    Attribute, AuthMethod, CLIENT_PREFIX, Change, Client, ClientId, ExtensionPolicy, Group,
+    HookChange, Invalid, JoseAlg, MembershipIssuer, Upstream, WebhookChange, cose_key,
+    extension_invalid, issuer_cutoff, policy_value, raises,
 };
 
 /// Clients that opted in to their realm's public `sub` (MD-10, OP-151 m.9 (h)); no realm label
@@ -52,6 +53,8 @@ pub static PUBLIC_SUB_OPT_IN: access_telemetry::metrics::Counter<0> =
 /// How long a rotated client secret stays valid next to its successor (CR-38, PD).
 pub const SECRET_OVERLAP_MS: u64 = 24 * 3_600_000;
 use crate::ports::{Decider, Governance, Instances, RealmKeys};
+use access_identity_hooks::ports::KeyVault;
+use access_store::idp::realm::PolicyKind;
 
 /// A realm to create (TN-111, TN-16, TN-10).
 pub struct NewRealm<'a> {
@@ -189,6 +192,9 @@ pub struct Admin<'a, D, G, K> {
     /// The operator's declared delivery targets: a `suiss_event_receiver` on a private
     /// address or another port than 443 must be one (OP-149 m.23).
     pub declared: DeclaredTargets,
+    /// Seals hook and webhook signing keys under the realm KEK (OP-42, OP-135); without it no
+    /// hook or webhook is registered and no webhook key rotates (MD-8).
+    pub vault: Option<&'a dyn KeyVault>,
 }
 
 fn host_of(authority: &str) -> &str {
@@ -315,6 +321,9 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                     return Err(Invalid::RpId.into());
                 }
             }
+            Change::Hook(_) | Change::Webhook(_) => {
+                extension_current(t, change, declared, state).await?;
+            }
             _ if !state => {}
             Change::ClientRegister(c) => {
                 if idp::client(t, c.id.as_str()).await?.is_some() {
@@ -438,7 +447,8 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             | Change::KeyRotate { .. }
             | Change::KeyDrop { .. }
             | Change::SigninPolicy(_)
-            | Change::SessionPolicy(_) => {}
+            | Change::SessionPolicy(_)
+            | Change::ExtensionPolicy(_) => {}
         }
         Ok(())
     }
@@ -811,15 +821,17 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             Change::UpstreamRetire(name) => {
                 resources::retire_upstream(t, bound, name.as_str()).await?
             }
-            Change::SigninPolicy(_) | Change::SessionPolicy(_) => {
-                let (signin, value) = match change {
-                    Change::SigninPolicy(p) => (true, p.to_value()),
-                    Change::SessionPolicy(p) => (false, p.to_value()),
-                    _ => return Err(AdminError::Encode),
-                };
-                let bytes =
-                    dcbor::encode(&value, Limits::CEILING).map_err(|_| AdminError::Encode)?;
-                resources::set_policy(t, bound, signin, &bytes).await?;
+            Change::SigninPolicy(p) => {
+                set_policy(t, bound, PolicyKind::Signin, &p.to_value()).await?
+            }
+            Change::SessionPolicy(p) => {
+                set_policy(t, bound, PolicyKind::Session, &p.to_value()).await?
+            }
+            Change::ExtensionPolicy(p) => {
+                set_policy(t, bound, PolicyKind::Extension, &p.to_value()).await?
+            }
+            Change::Hook(_) | Change::Webhook(_) => {
+                secret = self.write_extension(t, bound, change).await?;
                 true
             }
             Change::ProtectionMode { mode, .. } => {
@@ -851,6 +863,177 @@ fn risk(e: access_identity_risk::RiskError) -> AdminError {
             AdminError::Unavailable(String::from("risk"))
         }
     }
+}
+
+impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
+    /// A new hook or webhook id: a fresh UUID as an opaque external id under `prefix`
+    /// (OP-65, OP-137).
+    ///
+    /// # Errors
+    /// [`AdminError`].
+    pub async fn new_extension_id(&self, prefix: &str) -> Result<String, AdminError> {
+        let uuid = idp::new_uuid(self.app).await?;
+        Ok(self.ids.encode(prefix, uuid)?)
+    }
+
+    /// TN-135, TN-136, OP-151 m.10 (e): writes a hook or webhook change with M6's use cases, the
+    /// realm's extension policy read in the same transaction; a registration's or rotation's key
+    /// is shown once.
+    async fn write_extension(
+        &self,
+        t: &mut TenantTx,
+        bound: &idp::Bound,
+        change: &Change,
+    ) -> Result<Option<ClientSecret>, AdminError> {
+        let vault = self
+            .vault
+            .ok_or_else(|| AdminError::Unavailable(String::from("key-vault")))?;
+        let policy = extension_policy(t).await?;
+        let shown = match change {
+            Change::Hook(h) => {
+                if let HookChange::Register { spec, .. } = h
+                    && !policy.permits(&spec.disclose)
+                {
+                    return Err(Invalid::Disclosure.into());
+                }
+                let allow = allow_private(&policy, &self.declared, h);
+                match access_identity_hooks::app::write(t, bound, h, vault, allow).await {
+                    Ok(access_identity_hooks::app::Written::Registered(k)) => Some(k),
+                    Ok(access_identity_hooks::app::Written::Retired) => None,
+                    Err(e) => return Err(extension_error(&e)),
+                }
+            }
+            Change::Webhook(w) => {
+                let allow = webhook_allow_private(&policy, &self.declared, w);
+                let now = access_store::authority::server_time(self.app).await?;
+                let written =
+                    access_identity_events::app::webhooks::write(t, bound, w, vault, now, allow)
+                        .await;
+                match written {
+                    Ok(access_identity_events::app::webhooks::Written::Key(k)) => Some(k),
+                    Ok(access_identity_events::app::webhooks::Written::Done) => None,
+                    Err(e) => return Err(extension_error(&e)),
+                }
+            }
+            _ => return Err(AdminError::Encode),
+        };
+        Ok(shown.map(|k| ClientSecret(String::from(k.expose()))))
+    }
+}
+
+/// Stores one of the realm's policies under `bound`.
+async fn set_policy(
+    t: &mut TenantTx,
+    bound: &idp::Bound,
+    kind: PolicyKind,
+    value: &dcbor::Value,
+) -> Result<bool, AdminError> {
+    let bytes = dcbor::encode(value, Limits::CEILING).map_err(|_| AdminError::Encode)?;
+    resources::set_policy(t, bound, kind, &bytes).await?;
+    Ok(true)
+}
+
+fn extension_error(e: &access_identity_hooks::app::WriteError) -> AdminError {
+    use access_identity_hooks::app::WriteError;
+    match e {
+        WriteError::Invalid(i) => extension_invalid(*i).into(),
+        WriteError::Conflict => AdminError::Conflict,
+        WriteError::Unavailable => AdminError::Unavailable(String::from("extension-write")),
+    }
+}
+
+/// The realm's extension policy; nothing stored is the default (OP-151 m.10 (e)).
+async fn extension_policy(t: &mut TenantTx) -> Result<ExtensionPolicy, AdminError> {
+    let stored = resources::policies(t).await?;
+    ExtensionPolicy::from_stored(stored.extension.as_deref())
+        .map_err(|_| AdminError::Store(access_store::StoreError::Corrupt))
+}
+
+/// OP-151 m.10 (e), OP-149 m.23: a private target needs the realm's permission and the
+/// operator's declaration of that very URL.
+fn allow_private(policy: &ExtensionPolicy, declared: &DeclaredTargets, h: &HookChange) -> bool {
+    match h {
+        HookChange::Register { spec, .. } => policy.private_allowed(declared.declares(&spec.url)),
+        HookChange::Retire { .. } => false,
+    }
+}
+
+fn webhook_allow_private(
+    policy: &ExtensionPolicy,
+    declared: &DeclaredTargets,
+    w: &WebhookChange,
+) -> bool {
+    let url = match w {
+        WebhookChange::Register { spec, .. } => &spec.url,
+        WebhookChange::Update { url, .. } => url,
+        WebhookChange::Retire { .. } => return false,
+    };
+    policy.private_allowed(declared.declares(url))
+}
+
+/// The hook or webhook change against the realm: its target and disclosures under the realm's
+/// extension policy; with `state`, also the hook or webhook it names (OP-151 m.10 (d)).
+async fn extension_current(
+    t: &mut TenantTx,
+    change: &Change,
+    declared: &DeclaredTargets,
+    state: bool,
+) -> Result<(), AdminError> {
+    let policy = extension_policy(t).await?;
+    match change {
+        Change::Hook(h) => {
+            if let HookChange::Register { spec, .. } = h {
+                spec.check(allow_private(&policy, declared, h))
+                    .map_err(extension_invalid)?;
+                if !policy.permits(&spec.disclose) {
+                    return Err(Invalid::Disclosure.into());
+                }
+            }
+            if !state {
+                return Ok(());
+            }
+            match h {
+                HookChange::Register { spec, .. } => {
+                    if access_store::extensions::live_hook(t, spec.point.name())
+                        .await?
+                        .is_some()
+                    {
+                        return Err(Invalid::HookPointTaken.into());
+                    }
+                }
+                HookChange::Retire { id } => {
+                    let live = access_store::extensions::hooks(t, Some(id), &[0; 16], 1)
+                        .await?
+                        .into_iter()
+                        .any(|h| h.active);
+                    if !live {
+                        return Err(Invalid::NoHook.into());
+                    }
+                }
+            }
+        }
+        Change::Webhook(w) => {
+            w.check(webhook_allow_private(&policy, declared, w))
+                .map_err(|e| extension_invalid(access_identity_hooks::domain::Invalid(e.0)))?;
+            if !state {
+                return Ok(());
+            }
+            let found = access_store::extensions::webhook(t, w.id()).await?;
+            match w {
+                WebhookChange::Register { .. } if found.is_some() => {
+                    return Err(AdminError::Conflict);
+                }
+                WebhookChange::Update { .. } | WebhookChange::Retire { .. }
+                    if !found.as_ref().is_some_and(|f| f.active) =>
+                {
+                    return Err(Invalid::NoWebhook.into());
+                }
+                _ => {}
+            }
+        }
+        _ => {}
+    }
+    Ok(())
 }
 
 /// Context of an upstream provider's transmitter id.

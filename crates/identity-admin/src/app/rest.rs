@@ -20,11 +20,15 @@ use super::Admin;
 use crate::AdminError;
 use crate::domain::realm::Binding;
 use crate::domain::{
-    Attribute, AuthMethod, Branding, Change, CimdPolicy, ClaimName, Client, ClientId, Color, Group,
-    Invalid, JoseAlg, Members, MembershipIssuer, Name, ProtectionMode, RedirectUri, RpId,
-    SessionPolicy, SigninMethod, SigninPolicy, Subject, Upstream,
+    Attribute, AuthMethod, Branding, Change, CimdPolicy, ClaimName, Client, ClientId, Color,
+    Disclosure, ExtensionPolicy, Group, HOOK_PREFIX, HookChange, HookPoint, HookSpec, Invalid,
+    JoseAlg, Members, MembershipIssuer, Name, OnNoAnswer, ProtectionMode, RedirectUri, RpId,
+    SessionPolicy, SigninMethod, SigninPolicy, Signing, Subject, Upstream, WEBHOOK_PREFIX,
+    WebhookChange, WebhookSpec,
 };
 use crate::ports::{Decider, Governance, Instances, RealmKeys};
+use access_identity_events::domain::webhook::event_names;
+use access_store::extensions::{HookListing, WebhookListing};
 
 /// The longest validity a write's intent may ask for.
 pub const MAX_VALIDITY_MS: u64 = 15 * 60_000;
@@ -86,6 +90,20 @@ pub enum Op {
     RehomeRealm,
     /// `createResetIntent`: declared for the recovery stage, never applied here (TN-61).
     ResetIntent,
+    /// `registerHook` (TN-135).
+    RegisterHook,
+    /// `retireHook`.
+    RetireHook,
+    /// `registerWebhook` (TN-136).
+    RegisterWebhook,
+    /// `putWebhook`: a new URL and events.
+    PutWebhook,
+    /// `rotateWebhookKey`: a new key, the old one overlapping.
+    RotateWebhookKey,
+    /// `retireWebhook`.
+    RetireWebhook,
+    /// `putExtensionPolicy` (OP-151 m.10 (e)).
+    PutExtensionPolicy,
 }
 
 impl Op {
@@ -117,6 +135,13 @@ impl Op {
             "deleteAccount" => Self::DeleteAccount,
             "rehomeRealm" => Self::RehomeRealm,
             "createResetIntent" => Self::ResetIntent,
+            "registerHook" => Self::RegisterHook,
+            "retireHook" => Self::RetireHook,
+            "registerWebhook" => Self::RegisterWebhook,
+            "putWebhook" | "patchWebhook" => Self::PutWebhook,
+            "rotateWebhookKey" => Self::RotateWebhookKey,
+            "retireWebhook" => Self::RetireWebhook,
+            "putExtensionPolicy" | "patchExtensionPolicy" => Self::PutExtensionPolicy,
             _ => return None,
         })
     }
@@ -294,6 +319,25 @@ fn subject(ids: &IdKey, s: &str) -> Result<[u8; 16], Invalid> {
 
 fn key_of(key: Option<&str>) -> Result<&str, Invalid> {
     key.ok_or(Invalid::Body)
+}
+
+/// A hook's or webhook's id from its external id; anything else is `missing`.
+fn extension_id(ids: &IdKey, prefix: &str, s: &str, missing: Invalid) -> Result<[u8; 16], Invalid> {
+    ids.decode(prefix, s).map_err(|_| missing)
+}
+
+/// Disclosures, sorted and unique.
+fn disclosures(list: &[&str], invalid: Invalid) -> Result<Vec<Disclosure>, Invalid> {
+    let set = list
+        .iter()
+        .map(|d| Disclosure::from_name(d).ok_or(invalid))
+        .collect::<Result<BTreeSet<_>, _>>()?;
+    Ok(set.into_iter().collect())
+}
+
+fn events(m: &Map<String, Json>) -> Result<Vec<String>, Invalid> {
+    let list: Vec<String> = texts(m, "events")?.into_iter().map(String::from).collect();
+    event_names(&list).map_err(|_| Invalid::WebhookEvents)
 }
 
 /// Compiles one write operation's body into its one [`Change`] (TN-110). `key` is the path's
@@ -533,6 +577,88 @@ pub fn compile(op: Op, key: Option<&str>, body: &Json, ids: &IdKey) -> Result<Ch
                 source: opt_text(m, "source")?.map(Attribute::parse).transpose()?,
             }
         }
+        Op::RegisterHook => {
+            only(
+                m,
+                &[
+                    "hook_id",
+                    "point",
+                    "url",
+                    "on_no_answer",
+                    "disclose",
+                    "signing",
+                ],
+            )?;
+            let id = extension_id(ids, HOOK_PREFIX, text(m, "hook_id")?, Invalid::Body)?;
+            let spec = HookSpec {
+                point: HookPoint::from_name(text(m, "point")?).ok_or(Invalid::Hook)?,
+                url: String::from(text(m, "url")?),
+                on_no_answer: OnNoAnswer::from_name(
+                    opt_text(m, "on_no_answer")?.unwrap_or("refuse"),
+                )
+                .ok_or(Invalid::Hook)?,
+                disclose: disclosures(&texts(m, "disclose")?, Invalid::Hook)?,
+                signing: Signing::from_name(opt_text(m, "signing")?.unwrap_or("ed25519"))
+                    .ok_or(Invalid::Hook)?,
+            };
+            Change::Hook(HookChange::Register { id, spec })
+        }
+        Op::RetireHook => {
+            only(m, &[])?;
+            let id = extension_id(ids, HOOK_PREFIX, key_of(key)?, Invalid::NoHook)?;
+            Change::Hook(HookChange::Retire { id })
+        }
+        Op::RegisterWebhook => {
+            only(m, &["webhook_id", "url", "events", "signing"])?;
+            let id = extension_id(ids, WEBHOOK_PREFIX, text(m, "webhook_id")?, Invalid::Body)?;
+            let spec = WebhookSpec {
+                url: String::from(text(m, "url")?),
+                events: events(m)?,
+                signing: Signing::from_name(opt_text(m, "signing")?.unwrap_or("ed25519"))
+                    .ok_or(Invalid::Hook)?,
+            };
+            Change::Webhook(WebhookChange::Register { id, spec })
+        }
+        Op::PutWebhook => {
+            only(m, &["webhook_id", "url", "events", "status"])?;
+            let k = key_of(key)?;
+            let id = extension_id(ids, WEBHOOK_PREFIX, k, Invalid::NoWebhook)?;
+            if opt_text(m, "webhook_id")?.is_some_and(|w| w != k) {
+                return Err(Invalid::Body);
+            }
+            Change::Webhook(WebhookChange::Update {
+                id,
+                url: String::from(text(m, "url")?),
+                events: events(m)?,
+                rotate: false,
+            })
+        }
+        Op::RotateWebhookKey => {
+            only(m, &[])?;
+            let id = extension_id(ids, WEBHOOK_PREFIX, key_of(key)?, Invalid::NoWebhook)?;
+            // the URL and events are the webhook's own, filled in by `resolve`
+            Change::Webhook(WebhookChange::Update {
+                id,
+                url: String::new(),
+                events: Vec::new(),
+                rotate: true,
+            })
+        }
+        Op::RetireWebhook => {
+            only(m, &[])?;
+            let id = extension_id(ids, WEBHOOK_PREFIX, key_of(key)?, Invalid::NoWebhook)?;
+            Change::Webhook(WebhookChange::Retire { id })
+        }
+        Op::PutExtensionPolicy => {
+            only(m, &["allow_private_targets", "hook_disclosure"])?;
+            Change::ExtensionPolicy(ExtensionPolicy {
+                allow_private_targets: flag(m, "allow_private_targets")?,
+                hook_disclosure: disclosures(
+                    &texts(m, "hook_disclosure")?,
+                    Invalid::ExtensionPolicy,
+                )?,
+            })
+        }
     })
 }
 
@@ -614,6 +740,33 @@ pub fn protection_view(m: &ProtectionMode) -> Json {
     })
 }
 
+/// A hook's view: the Ed25519 public key it signs with, never the key itself (TN-61).
+#[must_use]
+pub fn hook_view(h: &HookListing, ids: &IdKey) -> Json {
+    json!({
+        "hook_id": ids.encode(HOOK_PREFIX, h.id).unwrap_or_default(),
+        "point": h.point,
+        "url": h.url,
+        "on_no_answer": h.on_no_answer,
+        "disclose": h.disclose,
+        "signing": h.signing,
+        "public_key": h.public_key.map(|k| access_crypto::webhook::WebhookPublicKey::from_bytes(k).text()),
+        "status": if h.active { "active" } else { "retired" },
+    })
+}
+
+/// A webhook's view, without key material (TN-61).
+#[must_use]
+pub fn webhook_view(w: &WebhookListing, ids: &IdKey) -> Json {
+    json!({
+        "webhook_id": ids.encode(WEBHOOK_PREFIX, w.webhook.id).unwrap_or_default(),
+        "url": w.webhook.url,
+        "events": w.webhook.events,
+        "signing": w.webhook.signing,
+        "status": if w.webhook.active { "active" } else { "retired" },
+    })
+}
+
 /// Deterministic CBOR of a stored policy as JSON: maps, text, booleans, arrays; integers up to
 /// 2^53 as numbers.
 #[must_use]
@@ -678,10 +831,25 @@ pub enum Kind {
     Upstreams,
     /// The realm settings singleton.
     Settings,
+    /// Inline hooks (TN-135).
+    Hooks,
+    /// Webhooks (TN-136).
+    Webhooks,
 }
 
 #[cfg(test)]
 mod tests;
+
+/// The id a page starts after: the cursor's 16 bytes, past every id when it is not one.
+fn cursor(after: Option<&str>) -> [u8; 16] {
+    match after {
+        Some(a) => b64url_decode(a)
+            .ok()
+            .and_then(|b| <[u8; 16]>::try_from(b).ok())
+            .unwrap_or([0xff; 16]),
+        None => [0; 16],
+    }
+}
 
 fn full<T>(rows: &[T], limit: u32, key: impl Fn(&T) -> String) -> Option<String> {
     (u32::try_from(rows.len()).ok() == Some(limit))
@@ -729,6 +897,18 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                     loosens: tier == access_identity_risk::domain::mode::Tier::Ct2,
                 }
             }
+            // TN-136: a key rotation keeps the webhook's URL and events
+            Change::Webhook(WebhookChange::Update {
+                id, rotate: true, ..
+            }) => match access_store::extensions::webhook(&mut t, &id).await? {
+                Some(w) if w.active => Change::Webhook(WebhookChange::Update {
+                    id,
+                    url: w.url,
+                    events: w.events,
+                    rotate: true,
+                }),
+                _ => return Err(Invalid::NoWebhook.into()),
+            },
             other => other,
         };
         t.commit().await?;
@@ -851,6 +1031,44 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                         .collect(),
                 }
             }
+            (Kind::Hooks, _) => {
+                let only = match key {
+                    Some(k) => match self.ids.decode(HOOK_PREFIX, k) {
+                        Ok(id) => Some(id),
+                        Err(_) => return Ok(Read::default()),
+                    },
+                    None => None,
+                };
+                let rows = access_store::extensions::hooks(t, only.as_ref(), &cursor(after), limit)
+                    .await?;
+                Read {
+                    last: full(&rows, limit, |h| b64url_encode(&h.id)).filter(|_| key.is_none()),
+                    items: rows
+                        .iter()
+                        .map(|h| (hook_view(h, self.ids), h.position))
+                        .collect(),
+                }
+            }
+            (Kind::Webhooks, _) => {
+                let only = match key {
+                    Some(k) => match self.ids.decode(WEBHOOK_PREFIX, k) {
+                        Ok(id) => Some(id),
+                        Err(_) => return Ok(Read::default()),
+                    },
+                    None => None,
+                };
+                let rows =
+                    access_store::extensions::webhooks(t, only.as_ref(), &cursor(after), limit)
+                        .await?;
+                Read {
+                    last: full(&rows, limit, |w| b64url_encode(&w.webhook.id))
+                        .filter(|_| key.is_none()),
+                    items: rows
+                        .iter()
+                        .map(|w| (webhook_view(w, self.ids), w.position))
+                        .collect(),
+                }
+            }
             (Kind::Settings, _) => {
                 let s = idp::settings(t).await?.ok_or(AdminError::NoRealm)?;
                 let p = resources::policies(t).await?;
@@ -870,6 +1088,8 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                     "session_policy":
                         stored(p.session.as_deref(), &SessionPolicy::DEFAULT.to_value()),
                     "branding": stored(branding.as_deref(), &Branding::default().to_value()),
+                    "extension_policy":
+                        stored(p.extension.as_deref(), &ExtensionPolicy::default().to_value()),
                     "mappers": mappers.iter().map(|(c, s)| json!({"claim": c, "source": s}))
                         .collect::<Vec<_>>(),
                     "protection_mode": protection_view(&protection),

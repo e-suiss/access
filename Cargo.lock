@@ -180,6 +180,7 @@ dependencies = [
  "access-crypto",
  "access-identity-account",
  "access-identity-events",
+ "access-identity-hooks",
  "access-identity-oauth",
  "access-identity-risk",
  "access-identity-signer",

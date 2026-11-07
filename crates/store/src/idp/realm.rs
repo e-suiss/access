@@ -54,7 +54,9 @@ pub struct PoliciesRow {
     pub signin: Option<Vec<u8>>,
     /// The console session policy (TN-129).
     pub session: Option<Vec<u8>>,
-    /// Position of the decision that last changed them; `None` while both are the default.
+    /// What the extension points may reach and receive (OP-151 m.10 (e)).
+    pub extension: Option<Vec<u8>>,
+    /// Position of the decision that last changed them; `None` while all are the default.
     pub position: Option<u64>,
 }
 
@@ -503,7 +505,8 @@ pub async fn retire_upstream(
 pub async fn policies(t: &mut TenantTx) -> Result<PoliciesRow, StoreError> {
     let (tenant, realm) = scope(t)?;
     let row = sqlx::query!(
-        "SELECT signin_policy, session_policy, decision_pos FROM access.idp_realm_policies
+        "SELECT signin_policy, session_policy, extension_policy, decision_pos
+           FROM access.idp_realm_policies
           WHERE tenant_id = $1 AND realm_id = $2",
         tenant,
         realm,
@@ -516,26 +519,38 @@ pub async fn policies(t: &mut TenantTx) -> Result<PoliciesRow, StoreError> {
             Ok(PoliciesRow {
                 signin: r.signin_policy,
                 session: r.session_policy,
+                extension: r.extension_policy,
                 position: Some(pos(r.decision_pos)?),
             })
         },
     )
 }
 
-/// Sets the sign-in policy (`signin`) or the console session policy under `bound`.
+/// One of the realm's stored policies.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PolicyKind {
+    /// The sign-in requirements (`idp.realm.signin_policy`).
+    Signin,
+    /// The console session policy (`idp.realm.session_policy`).
+    Session,
+    /// The extension policy (`idp.realm.extension_policy`).
+    Extension,
+}
+
+/// Sets one of the realm's policies under `bound`; the others stay as they are.
 ///
 /// # Errors
 /// [`StoreError`].
 pub async fn set_policy(
     t: &mut TenantTx,
     bound: &Bound,
-    signin: bool,
+    kind: PolicyKind,
     value: &[u8],
 ) -> Result<(), StoreError> {
     let (tenant, realm) = scope(t)?;
     let domain = bound.domain.as_bytes().as_slice();
-    if signin {
-        sqlx::query!(
+    let q = match kind {
+        PolicyKind::Signin => sqlx::query!(
             "INSERT INTO access.idp_realm_policies (tenant_id, realm_id, signin_policy, domain_id,
                     decision_pos)
              VALUES ($1, $2, $3, $4, $5)
@@ -546,11 +561,8 @@ pub async fn set_policy(
             value,
             domain,
             bound.position,
-        )
-        .execute(&mut *t.tx)
-        .await?;
-    } else {
-        sqlx::query!(
+        ),
+        PolicyKind::Session => sqlx::query!(
             "INSERT INTO access.idp_realm_policies (tenant_id, realm_id, session_policy, domain_id,
                     decision_pos)
              VALUES ($1, $2, $3, $4, $5)
@@ -561,10 +573,22 @@ pub async fn set_policy(
             value,
             domain,
             bound.position,
-        )
-        .execute(&mut *t.tx)
-        .await?;
-    }
+        ),
+        PolicyKind::Extension => sqlx::query!(
+            "INSERT INTO access.idp_realm_policies (tenant_id, realm_id, extension_policy,
+                    domain_id, decision_pos)
+             VALUES ($1, $2, $3, $4, $5)
+             ON CONFLICT (tenant_id, realm_id) DO UPDATE
+                SET extension_policy = EXCLUDED.extension_policy,
+                    domain_id = EXCLUDED.domain_id, decision_pos = EXCLUDED.decision_pos",
+            tenant,
+            realm,
+            value,
+            domain,
+            bound.position,
+        ),
+    };
+    q.execute(&mut *t.tx).await?;
     Ok(())
 }
 

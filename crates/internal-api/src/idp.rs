@@ -18,13 +18,15 @@ pub const RESOURCE_NAMESPACE: &str = "idp";
 pub const CATALOG_VERSION: u64 = 1;
 
 /// The `idp.*` action namespaces, one SPP each (OP-141 m.35).
-pub const NAMESPACES: [&str; 6] = [
+pub const NAMESPACES: [&str; 8] = [
     "idp.account",
     "idp.client",
     "idp.group",
+    "idp.hook",
     "idp.mapper",
     "idp.realm",
     "idp.upstream",
+    "idp.webhook",
 ];
 
 /// One `idp.*` domain action. Its Consequence Tier follows from its Action Schema (OP-141
@@ -98,11 +100,24 @@ pub enum IdpAction {
     RealmProtectionModeLoosen,
     /// Makes an account a canary: a credential the realm plants (§4.4, OP-151 m.14 (f)): CT2.
     AccountCanary,
+    /// Sets what the realm's extension points may reach and receive: private targets and hook
+    /// disclosures (OP-151 m.10 (e)): CT2 either way.
+    RealmExtensionPolicy,
+    /// Registers an inline hook at one call point (TN-135, OP-151 m.10 (d)): CT2.
+    HookRegister,
+    /// Retires an inline hook; narrowing, CT1.
+    HookRetire,
+    /// Registers a webhook (TN-136): CT2.
+    WebhookRegister,
+    /// Changes a webhook's URL or events, or rotates its key: CT2.
+    WebhookUpdate,
+    /// Retires a webhook; narrowing, CT1.
+    WebhookRetire,
 }
 
 impl IdpAction {
     /// Every action, in catalog order.
-    pub const ALL: [Self; 31] = [
+    pub const ALL: [Self; 37] = [
         Self::ClientRegister,
         Self::ClientUpdate,
         Self::ClientRetire,
@@ -134,6 +149,12 @@ impl IdpAction {
         Self::RealmProtectionMode,
         Self::RealmProtectionModeLoosen,
         Self::AccountCanary,
+        Self::RealmExtensionPolicy,
+        Self::HookRegister,
+        Self::HookRetire,
+        Self::WebhookRegister,
+        Self::WebhookUpdate,
+        Self::WebhookRetire,
     ];
 
     /// Its namespace.
@@ -162,7 +183,10 @@ impl IdpAction {
             | Self::RealmSigninPolicy
             | Self::RealmSessionPolicy
             | Self::RealmProtectionMode
-            | Self::RealmProtectionModeLoosen => "idp.realm",
+            | Self::RealmProtectionModeLoosen
+            | Self::RealmExtensionPolicy => "idp.realm",
+            Self::HookRegister | Self::HookRetire => "idp.hook",
+            Self::WebhookRegister | Self::WebhookUpdate | Self::WebhookRetire => "idp.webhook",
             Self::UpstreamRegister
             | Self::UpstreamMapping
             | Self::UpstreamUpdate
@@ -178,9 +202,19 @@ impl IdpAction {
     #[must_use]
     pub const fn name(self) -> &'static str {
         match self {
-            Self::ClientRegister | Self::UpstreamRegister => "register",
-            Self::ClientUpdate | Self::GroupUpdate | Self::UpstreamUpdate => "update",
-            Self::ClientRetire | Self::GroupRetire | Self::UpstreamRetire => "retire",
+            Self::ClientRegister
+            | Self::UpstreamRegister
+            | Self::HookRegister
+            | Self::WebhookRegister => "register",
+            Self::ClientUpdate | Self::GroupUpdate | Self::UpstreamUpdate | Self::WebhookUpdate => {
+                "update"
+            }
+            Self::ClientRetire
+            | Self::GroupRetire
+            | Self::UpstreamRetire
+            | Self::HookRetire
+            | Self::WebhookRetire => "retire",
+            Self::RealmExtensionPolicy => "extension_policy",
             Self::ClientSecretRotate => "secret_rotate",
             Self::GroupCreate => "create",
             Self::GroupMembersAdd => "members_add",
@@ -230,7 +264,9 @@ impl IdpAction {
             | Self::GroupMembersRemove
             | Self::AccountSuspend
             | Self::UpstreamRetire
-            | Self::RealmProtectionMode => EffectClass::Reversible,
+            | Self::RealmProtectionMode
+            | Self::HookRetire
+            | Self::WebhookRetire => EffectClass::Reversible,
             _ => EffectClass::Irreversible,
         }
     }

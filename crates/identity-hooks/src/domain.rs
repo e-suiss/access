@@ -248,6 +248,102 @@ pub fn check_target(url: &str, allow_private: bool) -> Result<(), Invalid> {
     Ok(())
 }
 
+/// What a realm lets its extension points reach and receive (`idp.realm.extension_policy`,
+/// OP-151 m.10 (e)): by default no private target and no personal data beyond pseudonymous ids.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ExtensionPolicy {
+    /// Whether a hook or webhook may target a local name or another port than 443; such a
+    /// target must also be one the operator declared (OP-149 m.23).
+    pub allow_private_targets: bool,
+    /// The personal data hooks may receive, sorted and unique.
+    pub hook_disclosure: Vec<Disclosure>,
+}
+
+impl ExtensionPolicy {
+    /// Whether `url` may be targeted, `declared` telling whether the operator declared it.
+    #[must_use]
+    pub fn private_allowed(&self, declared: bool) -> bool {
+        self.allow_private_targets && declared
+    }
+
+    /// Whether every disclosure in `asked` is permitted.
+    #[must_use]
+    pub fn permits(&self, asked: &[Disclosure]) -> bool {
+        asked.iter().all(|d| self.hook_disclosure.contains(d))
+    }
+
+    /// The deterministic CBOR the change and its stored form carry.
+    #[must_use]
+    pub fn to_value(&self) -> Cbor {
+        Cbor::Map(vec![
+            (
+                Cbor::text("allow_private_targets"),
+                Cbor::Bool(self.allow_private_targets),
+            ),
+            (
+                Cbor::text("hook_disclosure"),
+                Cbor::Array(
+                    self.hook_disclosure
+                        .iter()
+                        .map(|d| Cbor::text(d.name()))
+                        .collect(),
+                ),
+            ),
+        ])
+    }
+
+    /// From its stored form; nothing stored is the default.
+    ///
+    /// # Errors
+    /// [`Invalid`] `extension_policy` for anything that is not exactly a stored policy.
+    pub fn from_stored(bytes: Option<&[u8]>) -> Result<Self, Invalid> {
+        let bad = Invalid("extension_policy");
+        let Some(bytes) = bytes else {
+            return Ok(Self::default());
+        };
+        let Ok(Cbor::Map(m)) = dcbor::decode(bytes, Limits::CEILING) else {
+            return Err(bad);
+        };
+        let mut allow = None;
+        let mut disclose = None;
+        for (k, v) in &m {
+            match (k, v) {
+                (Cbor::Text(k), Cbor::Bool(b)) if k == "allow_private_targets" => allow = Some(*b),
+                (Cbor::Text(k), Cbor::Array(a)) if k == "hook_disclosure" => {
+                    disclose = Some(
+                        a.iter()
+                            .map(|d| match d {
+                                Cbor::Text(t) => Disclosure::from_name(t).ok_or(bad),
+                                _ => Err(bad),
+                            })
+                            .collect::<Result<Vec<_>, _>>()?,
+                    );
+                }
+                _ => return Err(bad),
+            }
+        }
+        let p = Self {
+            allow_private_targets: allow.ok_or(bad)?,
+            hook_disclosure: disclose.ok_or(bad)?,
+        };
+        p.check()?;
+        Ok(p)
+    }
+
+    /// Checks the disclosures are sorted and unique.
+    ///
+    /// # Errors
+    /// [`Invalid`] `extension_policy`.
+    pub fn check(&self) -> Result<(), Invalid> {
+        let d = &self.hook_disclosure;
+        if d.iter().zip(d.iter().skip(1)).all(|(a, b)| a < b) {
+            Ok(())
+        } else {
+            Err(Invalid("extension_policy"))
+        }
+    }
+}
+
 /// A hook as an actor registers it (`idp.hook.register`).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct HookSpec {

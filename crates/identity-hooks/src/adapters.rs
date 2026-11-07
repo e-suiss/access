@@ -7,7 +7,7 @@ use access_store::Pool;
 use access_store::extensions::live_hook;
 use access_store::identity::{RealmId, TenantId, TenantTx};
 
-use crate::domain::{Disclosure, HookPoint, OnNoAnswer, Registration, Signing};
+use crate::domain::{Disclosure, ExtensionPolicy, HookPoint, OnNoAnswer, Registration, Signing};
 use crate::ports::{HookKey, HookRegistry, KeyVault, LiveHook, Unavailable};
 
 /// The live hooks of `access_app`, with keys opened by `K`.
@@ -38,7 +38,12 @@ impl<K: KeyVault> HookRegistry for PgRegistry<K> {
             .await
             .map_err(down)?;
         let row = live_hook(&mut t, point.name()).await.map_err(down)?;
+        let stored = access_store::idp::realm::policies(&mut t)
+            .await
+            .map_err(down)?;
         t.commit().await.map_err(down)?;
+        // OP-151 m.10 (e): an unreadable policy refuses the call (MD-8)
+        let policy = ExtensionPolicy::from_stored(stored.extension.as_deref()).map_err(down)?;
         let Some(row) = row else {
             return Ok(None);
         };
@@ -60,7 +65,7 @@ impl<K: KeyVault> HookRegistry for PgRegistry<K> {
                     .collect::<Result<_, _>>()?,
             },
             key,
-            realm_allows_disclosure: false,
+            realm_allows_disclosure: policy.permits(&[Disclosure::Email]),
         }))
     }
 }

@@ -4,6 +4,11 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use access_identity_account::domain::password::Argon2Params;
+pub use access_identity_events::domain::webhook::{WebhookChange, WebhookSpec};
+use access_identity_hooks::domain::uuid;
+pub use access_identity_hooks::domain::{
+    Disclosure, ExtensionPolicy, HookChange, HookPoint, HookSpec, OnNoAnswer, Signing,
+};
 use access_identity_oauth::adapters::outbound::DeclaredTargets;
 use access_internal_api::idp::{IdpAction, RESOURCE_NAMESPACE};
 use access_internal_api::instances::PlatformProduct;
@@ -35,6 +40,23 @@ pub const CHANGE_PARAM: &str = "change";
 
 /// Type prefix of a `client_id` (OP-137).
 pub const CLIENT_PREFIX: &str = "cli";
+
+/// Type prefix of an inline hook's external id (OP-65, OP-137).
+pub const HOOK_PREFIX: &str = "hok";
+
+/// Type prefix of a webhook's external id (OP-65, OP-137).
+pub const WEBHOOK_PREFIX: &str = "whk";
+
+/// The realm-admin error of an extension point registration that M6's contract refuses.
+#[must_use]
+pub fn extension_invalid(e: access_identity_hooks::domain::Invalid) -> Invalid {
+    match e.0 {
+        "url" => Invalid::ExtensionTarget,
+        "events" => Invalid::WebhookEvents,
+        "extension_policy" => Invalid::ExtensionPolicy,
+        _ => Invalid::Hook,
+    }
+}
 
 /// Most redirect URIs of one client.
 pub const MAX_REDIRECT_URIS: usize = 32;
@@ -270,6 +292,32 @@ pub enum Invalid {
     /// (OP-151 m.3 (o), TI-9).
     #[error("bad protection mode")]
     ProtectionMode,
+    /// A hook or webhook URL that is not `https` on a DNS name, or a private target the realm
+    /// does not allow or the operator did not declare (OP-151 m.10 (e), OP-149 m.23).
+    #[error("bad extension target")]
+    ExtensionTarget,
+    /// A hook registration outside its call point's contract (TN-135).
+    #[error("bad hook")]
+    Hook,
+    /// A hook asking for personal data the realm's extension policy does not permit
+    /// (OP-151 m.10 (e)).
+    #[error("disclosure not permitted")]
+    Disclosure,
+    /// Webhook events outside the identity event catalogue (TN-136).
+    #[error("bad webhook events")]
+    WebhookEvents,
+    /// An extension policy outside its shape.
+    #[error("bad extension policy")]
+    ExtensionPolicy,
+    /// The call point has a live hook already (OP-151 m.10 (d)).
+    #[error("hook point taken")]
+    HookPointTaken,
+    /// The hook does not exist or is retired.
+    #[error("no such hook")]
+    NoHook,
+    /// The webhook does not exist or is retired.
+    #[error("no such webhook")]
+    NoWebhook,
 }
 
 impl Invalid {
@@ -318,6 +366,14 @@ impl Invalid {
             Self::Reserved => "reserved-operation",
             Self::ProtectionMode => "invalid-protection-mode",
             Self::JoseAlg => "invalid-jose-alg",
+            Self::ExtensionTarget => "invalid-extension-target",
+            Self::Hook => "invalid-hook",
+            Self::Disclosure => "disclosure-not-permitted",
+            Self::WebhookEvents => "invalid-webhook-events",
+            Self::ExtensionPolicy => "invalid-extension-policy",
+            Self::HookPointTaken => "hook-point-taken",
+            Self::NoHook => "no-such-hook",
+            Self::NoWebhook => "no-such-webhook",
         }
     }
 }
@@ -1149,6 +1205,12 @@ pub enum Change {
     },
     /// `idp.account.canary`: the subject's internal id (§4.4).
     AccountCanary([u8; 16]),
+    /// `idp.realm.extension_policy`.
+    ExtensionPolicy(ExtensionPolicy),
+    /// `idp.hook.register` or `idp.hook.retire` (TN-135).
+    Hook(HookChange),
+    /// `idp.webhook.register`, `idp.webhook.update` or `idp.webhook.retire` (TN-136).
+    Webhook(WebhookChange),
 }
 
 fn uint(v: u32) -> Value {
@@ -1188,6 +1250,9 @@ impl Change {
             Self::ProtectionMode { loosens: false, .. } => IdpAction::RealmProtectionMode,
             Self::ProtectionMode { loosens: true, .. } => IdpAction::RealmProtectionModeLoosen,
             Self::AccountCanary(_) => IdpAction::AccountCanary,
+            Self::ExtensionPolicy(_) => IdpAction::RealmExtensionPolicy,
+            Self::Hook(h) => h.action().idp(),
+            Self::Webhook(w) => w.action().idp(),
         }
     }
 
@@ -1212,7 +1277,10 @@ impl Change {
             Self::UpstreamRegister(u) | Self::UpstreamUpdate(u) => u.check(),
             Self::SigninPolicy(p) => p.check(),
             Self::SessionPolicy(p) => p.check(),
-            Self::ClientRetire(_)
+            Self::ExtensionPolicy(p) => p.check().map_err(|_| Invalid::ExtensionPolicy),
+            Self::Hook(_)
+            | Self::Webhook(_)
+            | Self::ClientRetire(_)
             | Self::MapperSet { .. }
             | Self::JoseAlg(_)
             | Self::RpId(_)
@@ -1285,6 +1353,9 @@ impl Change {
             Self::UpstreamRegister(u) | Self::UpstreamUpdate(u) => u.to_value(),
             Self::SigninPolicy(p) => p.to_value(),
             Self::SessionPolicy(p) => p.to_value(),
+            Self::ExtensionPolicy(p) => p.to_value(),
+            Self::Hook(h) => h.body(),
+            Self::Webhook(w) => w.body(),
         }
     }
 
@@ -1337,8 +1408,15 @@ impl Change {
             | Self::Branding(_)
             | Self::SigninPolicy(_)
             | Self::SessionPolicy(_)
-            | Self::ProtectionMode { .. } => {
+            | Self::ProtectionMode { .. }
+            | Self::ExtensionPolicy(_) => {
                 path.push(String::from("realm"));
+            }
+            Self::Hook(HookChange::Register { id, .. } | HookChange::Retire { id }) => {
+                path.extend([String::from("hook"), uuid(id)]);
+            }
+            Self::Webhook(w) => {
+                path.extend([String::from("webhook"), uuid(w.id())]);
             }
             Self::KeyPolicy(_) | Self::KeyRotate { .. } | Self::KeyDrop { .. } => {
                 path.push(String::from("keys"));

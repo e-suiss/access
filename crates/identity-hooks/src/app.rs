@@ -136,7 +136,7 @@ impl From<access_store::StoreError> for WriteError {
 ///
 /// # Errors
 /// [`WriteError::Unavailable`].
-pub fn new_key<V: crate::ports::KeyVault>(
+pub fn new_key<V: crate::ports::KeyVault + ?Sized>(
     vault: &V,
     tenant: TenantId,
     realm: RealmId,
@@ -175,7 +175,7 @@ pub fn new_key<V: crate::ports::KeyVault>(
 ///
 /// # Errors
 /// [`WriteError`]; the caller rolls its transaction back.
-pub async fn write<V: crate::ports::KeyVault>(
+pub async fn write<V: crate::ports::KeyVault + ?Sized>(
     t: &mut access_store::identity::TenantTx,
     bound: &access_store::idp::Bound,
     change: &crate::domain::HookChange,

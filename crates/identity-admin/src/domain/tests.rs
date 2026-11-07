@@ -384,3 +384,71 @@ fn a_third_party_platform_product_is_checked_like_a_first_party_one() {
     }
     assert_ne!(digests[0], digests[1]);
 }
+
+// EI-25, TN-135, TN-136, OP-151 m.4, m.10 (d): a hook or webhook change is authorized by the
+// same intent M6's own change builds, under the merged idp.* catalogue
+#[test]
+fn extension_changes_bind_the_same_intent_as_their_own_contract() {
+    let window = Window {
+        from: 1,
+        until: 600_001,
+    };
+    let hook = HookChange::Register {
+        id: [7; 16],
+        spec: HookSpec {
+            point: HookPoint::PostLogin,
+            url: String::from("https://hooks.shop.example/check"),
+            on_no_answer: OnNoAnswer::Refuse,
+            disclose: Vec::new(),
+            signing: Signing::Ed25519,
+        },
+    };
+    let webhook = WebhookChange::Update {
+        id: [8; 16],
+        url: String::from("https://sync.shop.example/events"),
+        events: vec![String::from("account.created")],
+        rotate: true,
+    };
+    let as_change = Change::Hook(hook.clone());
+    assert_eq!(
+        as_change.intent("shop", window).unwrap(),
+        hook.intent("shop", window).unwrap()
+    );
+    assert_eq!(as_change.action(), IdpAction::HookRegister);
+    let as_change = Change::Webhook(webhook.clone());
+    assert_eq!(
+        as_change.intent("shop", window).unwrap(),
+        webhook.intent("shop", window).unwrap()
+    );
+    assert_eq!(as_change.action().label(), "idp.webhook.update");
+    for a in [
+        IdpAction::HookRegister,
+        IdpAction::WebhookRegister,
+        IdpAction::WebhookUpdate,
+        IdpAction::RealmExtensionPolicy,
+    ] {
+        assert!(!a.reserved(), "{a:?} is CT2, not reserved");
+        assert_eq!(a.effect(), access_kernel::schema::EffectClass::Irreversible);
+    }
+    for a in [IdpAction::HookRetire, IdpAction::WebhookRetire] {
+        assert_eq!(a.effect(), access_kernel::schema::EffectClass::Reversible);
+    }
+    assert!(access_internal_api::idp::NAMESPACES.contains(&"idp.hook"));
+    assert!(access_internal_api::idp::NAMESPACES.contains(&"idp.webhook"));
+}
+
+// OP-151 m.10 (e): the extension policy is realm configuration at the realm resource; its
+// default allows no private target and no disclosure
+#[test]
+fn the_extension_policy_defaults_closed() {
+    let p = ExtensionPolicy::default();
+    assert!(!p.private_allowed(true));
+    assert!(!p.permits(&[Disclosure::Email]));
+    assert!(p.permits(&[]));
+    let change = Change::ExtensionPolicy(ExtensionPolicy {
+        allow_private_targets: true,
+        hook_disclosure: vec![Disclosure::Email],
+    });
+    assert_eq!(change.resource("shop").path, ["shop", "realm"]);
+    assert_eq!(change.action().label(), "idp.realm.extension_policy");
+}

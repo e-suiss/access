@@ -48,7 +48,7 @@ pub enum Written {
 }
 
 fn key_row(
-    vault: &impl KeyVault,
+    vault: &(impl KeyVault + ?Sized),
     t: &TenantTx,
     id: [u8; 16],
     signing: Signing,
@@ -81,7 +81,7 @@ pub async fn write(
     t: &mut TenantTx,
     bound: &Bound,
     change: &WebhookChange,
-    vault: &impl KeyVault,
+    vault: &(impl KeyVault + ?Sized),
     now_ms: u64,
     allow_private: bool,
 ) -> Result<Written, WriteError> {
