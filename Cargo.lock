@@ -254,6 +254,7 @@ version = "0.3.1"
 dependencies = [
  "access-crypto",
  "access-identity-account",
+ "access-identity-hooks",
  "access-identity-webauthn",
  "access-internal-api",
  "access-parse",
@@ -306,6 +307,7 @@ version = "0.3.1"
 dependencies = [
  "access-crypto",
  "access-identity-account",
+ "access-identity-hooks",
  "access-identity-oauth",
  "access-identity-session",
  "access-identity-webauthn",
@@ -374,6 +376,7 @@ dependencies = [
  "access-crypto",
  "access-http",
  "access-identity-account",
+ "access-identity-hooks",
  "access-identity-oauth",
  "access-identity-session",
  "access-identity-signer",
@@ -434,6 +437,7 @@ dependencies = [
  "access-identity-account",
  "access-identity-admin",
  "access-identity-events",
+ "access-identity-hooks",
  "access-identity-oauth",
  "access-identity-session",
  "access-identity-signer",

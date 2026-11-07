@@ -42,9 +42,14 @@ use access_identity_account::notify::envelope::EventId;
 use access_identity_account::notify::message::{Body, Message};
 use access_identity_account::notify::ports::Notifier;
 use access_identity_account::ports::{BreachRanges, Clock, RangeUnavailable};
+use access_identity_hooks::domain::{
+    Call, HookPoint, Outcome as HookOutcome, Refusal as HookRefusal,
+};
+use access_identity_hooks::ports::{CallFuture, HookCaller};
 use access_identity_session::SessionError;
 use access_identity_session::adapters::OsRandom;
 use access_identity_session::adapters::passkeys::PgPasskeys;
+use access_identity_session::app::HOOK_REFUSED;
 use access_identity_session::app::epochs::Epochs;
 use access_identity_session::app::sessions::SessionStatus;
 use access_identity_session::app::signin::{Identify, LinkOutcome, LinkPreview, PasswordStep};
@@ -138,6 +143,24 @@ struct Env {
     rp: RelyingParty,
     wa_policy: RealmPolicy,
     policy: AuthPolicy,
+    hook: ScriptedHook,
+}
+
+/// A `post_login` hook answering what the test sets; none set is no hook (TN-135).
+#[derive(Default)]
+struct ScriptedHook(Mutex<Option<HookOutcome>>);
+
+impl HookCaller for ScriptedHook {
+    fn call(&self, _: TenantId, _: RealmId, call: Call) -> CallFuture<'_> {
+        assert_eq!(call.point(), HookPoint::PostLogin);
+        let answer = self
+            .0
+            .lock()
+            .unwrap()
+            .clone()
+            .unwrap_or_else(HookOutcome::proceed);
+        Box::pin(async move { answer })
+    }
 }
 
 type TestAuth<'a> =
@@ -172,6 +195,7 @@ impl Env {
             link_base: LINK_BASE,
             gate: &self.gate,
             hasher: &self.hasher,
+            hooks: &self.hook,
             passkeys: Passkeys {
                 registry: &registry,
                 signals: &self.signals,
@@ -249,6 +273,7 @@ async fn env(seed: u8, slug: &str) -> Env {
         },
         wa_policy: RealmPolicy::default(),
         policy: AuthPolicy::DEFAULT,
+        hook: ScriptedHook::default(),
     }
 }
 
@@ -454,6 +479,33 @@ async fn identifier_first_does_not_tell_whether_the_account_exists() {
 }
 
 // TN-36, CR-38, TN-103, G57, EP-2, XI-23, §10.1.6
+// TN-135, MD-8, OP-151 m.3 (j): a post_login hook that refuses, or does not answer, refuses the
+// sign-in after every requirement is met and no session opens; one that allows changes nothing
+#[tokio::test]
+async fn tn_135_a_post_login_hook_may_only_refuse() {
+    let e = env(40, "is-hook").await;
+    e.account("ada@example.com").await;
+    for refusal in [
+        HookRefusal::Denied {
+            reason_code: Some(String::from("blocked")),
+        },
+        HookRefusal::Unanswered,
+        HookRefusal::Violation,
+    ] {
+        *e.hook.0.lock().unwrap() = Some(HookOutcome::Refused(refusal));
+        let flow = start(&e, Some("ada@example.com"), None).await;
+        let step = password(&e, &flow, "ada@example.com", PW).await;
+        assert!(
+            matches!(step, Step::Rejected(Refusal { problem, .. }) if problem == HOOK_REFUSED),
+            "{step:?}"
+        );
+    }
+    *e.hook.0.lock().unwrap() = Some(HookOutcome::proceed());
+    let flow = start(&e, Some("ada@example.com"), None).await;
+    let (cookie, _) = signed_in(password(&e, &flow, "ada@example.com", PW).await);
+    assert!(matches!(status(&e, &cookie).await, SessionStatus::Valid(_)));
+}
+
 #[tokio::test]
 async fn a_password_opens_a_session_and_sign_out_ends_it() {
     let e = env(2, "is-b").await;

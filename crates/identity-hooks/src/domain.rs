@@ -442,7 +442,7 @@ pub struct PostLogin {
     pub account: String,
     /// The AAL reached.
     pub aal: u8,
-    /// The method classes used (`password`, `passkey`, `totp`, …).
+    /// The methods used, as `amr` values (RFC 8176).
     pub methods: Vec<&'static str>,
 }
 

@@ -361,6 +361,7 @@ where
             link_base: &link_base,
             gate: &gate,
             hasher: &hasher,
+            hooks: &access_identity_hooks::ports::NoHooks,
             passkeys: Passkeys {
                 registry: &registry,
                 signals: &LogSignals,

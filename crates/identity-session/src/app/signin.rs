@@ -1111,6 +1111,28 @@ where
         })
     }
 
+    /// Whether the realm's `post_login` hook lets the sign-in through (TN-135): no hook does;
+    /// a refusal, no answer or a bad answer does not (MD-8).
+    async fn post_login(&self, result: &AuthenticationResult, account: &str) -> bool {
+        use access_identity_hooks::domain::{Call, Outcome, PostLogin};
+        let aal = match result.assurance.aal {
+            crate::domain::assurance::Aal::Aal1 => 1,
+            crate::domain::assurance::Aal::Aal2 => 2,
+            crate::domain::assurance::Aal::Aal3 => 3,
+        };
+        let call = Call::PostLogin(PostLogin {
+            account: String::from(account),
+            aal,
+            methods: result.methods.iter().map(|m| m.amr()).collect(),
+        });
+        matches!(
+            self.hooks
+                .call(self.realm.tenant, self.realm.realm, call)
+                .await,
+            Outcome::Proceed { .. }
+        )
+    }
+
     /// Moves the flow after a step: saves what is missing, or completes it (TN-132).
     pub(crate) async fn advance(
         &self,
@@ -1159,6 +1181,20 @@ where
         let assurance =
             serde_json::to_vec(&vector(&l.state.factors)).map_err(|_| SessionError::Corrupt)?;
         let target = self.external(subject)?;
+        // TN-135, OP-151 m.3 (j)
+        if matches!(l.state.purpose, Purpose::Login) && !self.post_login(&result, &target).await {
+            save(&mut tx, &l, "abandoned", Resume::Clear).await?;
+            audit(
+                &mut tx,
+                "session.hook_refused",
+                &target,
+                &target,
+                correlation,
+            )
+            .await?;
+            tx.commit().await?;
+            return Ok(refuse(super::HOOK_REFUSED));
+        }
         let signed = match &l.state.purpose {
             Purpose::Login => {
                 self.issue_login(

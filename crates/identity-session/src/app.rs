@@ -30,6 +30,7 @@ use crate::domain::session::SessionPolicy;
 pub use access_identity_account::notify::ports::Notifier;
 
 use crate::ports::{Clock, Random, SessionDb, SessionTx};
+use access_identity_hooks::ports::HookCaller;
 
 /// The credential kinds of second factors.
 pub const TOTP: &str = "totp";
@@ -74,6 +75,8 @@ pub struct Auth<'a, D, C, R, N, P, S> {
     pub hasher: &'a Hasher,
     /// Passkeys.
     pub passkeys: Passkeys<'a, P, S>,
+    /// The realm's inline hooks (TN-135): `post_login` may refuse a sign-in.
+    pub hooks: &'a (dyn HookCaller + Sync),
 }
 
 /// A flow as the browser names it: the handle from the page, the device secret from the
@@ -140,6 +143,14 @@ pub const FLOW_GONE: Problem = Problem {
     status: 410,
     code: "sign-in-expired",
     title: "This sign-in has expired; start again",
+    retry_after_s: None,
+};
+
+/// The realm's `post_login` hook refused the sign-in or did not answer (TN-135, MD-8).
+pub const HOOK_REFUSED: Problem = Problem {
+    status: 403,
+    code: "sign-in-refused",
+    title: "This sign-in isn't allowed",
     retry_after_s: None,
 };
 

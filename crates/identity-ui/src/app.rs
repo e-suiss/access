@@ -211,6 +211,7 @@ macro_rules! signin {
             link_base: &link_base,
             gate: &$self.gate,
             hasher: &$self.hasher,
+            hooks: &::access_identity_hooks::ports::NoHooks,
             passkeys: ::access_identity_session::app::Passkeys {
                 registry: &registry,
                 signals: &$crate::adapters::LogSignals,

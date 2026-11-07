@@ -34,6 +34,7 @@ access-http = { workspace = true }
 access-identity-account = { workspace = true }
 access-identity-oauth = { workspace = true }
 access-identity-session = { workspace = true }
+access-identity-hooks = { workspace = true }
 access-identity-signer = { path = "../../crates/identity-signer" }
 access-identity-ui = { workspace = true }
 access-identity-webauthn = { workspace = true }

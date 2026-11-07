@@ -4,8 +4,10 @@
 //! (TN-64).
 
 use access_crypto::Secret;
+use access_identity_account::app::events;
 use access_identity_account::app::sealing::{open, seal, subject_key};
 use access_identity_account::app::signal::{emit as signal, fresh_id};
+use access_identity_account::domain::events::CredentialChange;
 use access_identity_account::domain::password::Password;
 use access_identity_account::domain::signal::{ChangeType, CredentialType, Initiator, Signal};
 use access_identity_webauthn::app::RegistrationOutcome;
@@ -177,6 +179,8 @@ where
         // TN-41, MD-7
         let s = Signal::session_revoked(fresh_id()?, session.subject, Initiator::User, self.now());
         signal(tx, &s).await?;
+        // OP-151 m.3 (i)
+        events::sessions_ended(tx, &self.realm, session.subject, epoch).await?;
         Ok(epoch)
     }
 
@@ -317,6 +321,8 @@ where
             now,
         );
         signal(&mut tx, &s).await?;
+        // OP-151 m.3 (i)
+        events::credential(&mut tx, &self.realm, subject, TOTP, CredentialChange::Added).await?;
         let recovery_codes = if tx.credentials(subject, RECOVERY_CODE).await?.is_empty() {
             Some(self.new_recovery_codes(&mut tx, subject, &dek).await?)
         } else {
@@ -384,6 +390,15 @@ where
                 return Err(SessionError::Corrupt);
             }
         }
+        // OP-151 m.3 (i)
+        events::credential(
+            &mut tx,
+            &self.realm,
+            subject,
+            RECOVERY_CODE,
+            CredentialChange::Replaced,
+        )
+        .await?;
         let target = self.external(subject)?;
         audit(
             &mut tx,
