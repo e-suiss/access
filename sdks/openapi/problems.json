@@ -219,6 +219,209 @@
       "status": 400,
       "title": "Bad Request",
       "description": "The Exercise the write compiled to was refused before a decision; nothing changed (TN-110)."
+    },
+    {
+      "code": "invalid-body",
+      "type": "urn:suiss:access:problem:invalid-body",
+      "status": 400,
+      "title": "Bad Request",
+      "description": "The body is not the operation's JSON object, or names a member the operation does not take."
+    },
+    {
+      "code": "invalid-validity",
+      "type": "urn:suiss:access:problem:invalid-validity",
+      "status": 400,
+      "title": "Bad Request",
+      "description": "The write's intent validity is missing, malformed, inverted or longer than 15 minutes (TN-110)."
+    },
+    {
+      "code": "invalid-client-id",
+      "type": "urn:suiss:access:problem:invalid-client-id",
+      "status": 400,
+      "title": "Bad Request",
+      "description": "A client_id that is not one the server generated (OP-137, TN-15)."
+    },
+    {
+      "code": "invalid-display-name",
+      "type": "urn:suiss:access:problem:invalid-display-name",
+      "status": 400,
+      "title": "Bad Request",
+      "description": "An empty, too long or control-character display name."
+    },
+    {
+      "code": "invalid-redirect-uri",
+      "type": "urn:suiss:access:problem:invalid-redirect-uri",
+      "status": 400,
+      "title": "Bad Request",
+      "description": "A redirect URI that is not an exact, absolute, allowed URI, or too many (IDP-7, RFC 9700)."
+    },
+    {
+      "code": "invalid-jwks-uri",
+      "type": "urn:suiss:access:problem:invalid-jwks-uri",
+      "status": 400,
+      "title": "Bad Request",
+      "description": "A JWKS URI that is not https, or an authentication method without the fields it needs."
+    },
+    {
+      "code": "invalid-host",
+      "type": "urn:suiss:access:problem:invalid-host",
+      "status": 400,
+      "title": "Bad Request",
+      "description": "A host name that is not a lower-case DNS name."
+    },
+    {
+      "code": "reserved-claim",
+      "type": "urn:suiss:access:problem:reserved-claim",
+      "status": 400,
+      "title": "Bad Request",
+      "description": "A claim name that is reserved or names authority (must-never #18, P55)."
+    },
+    {
+      "code": "invalid-attribute",
+      "type": "urn:suiss:access:problem:invalid-attribute",
+      "status": 400,
+      "title": "Bad Request",
+      "description": "A profile attribute outside the OpenID Connect standard claims (§9.9.6)."
+    },
+    {
+      "code": "argon-parameters-lowered",
+      "type": "urn:suiss:access:problem:argon-parameters-lowered",
+      "status": 400,
+      "title": "Bad Request",
+      "description": "Argon2 parameters may only be raised (OP-33)."
+    },
+    {
+      "code": "invalid-rp-id",
+      "type": "urn:suiss:access:problem:invalid-rp-id",
+      "status": 400,
+      "title": "Bad Request",
+      "description": "An RP ID that is not the issuer's host or a parent domain of it (WebAuthn §5.1.4)."
+    },
+    {
+      "code": "platform-fields-read-only",
+      "type": "urn:suiss:access:problem:platform-fields-read-only",
+      "status": 400,
+      "title": "Bad Request",
+      "description": "Platform product fields are not written on the realm-admin surface (OP-149 m.4)."
+    },
+    {
+      "code": "invalid-public-key",
+      "type": "urn:suiss:access:problem:invalid-public-key",
+      "status": 400,
+      "title": "Bad Request",
+      "description": "A public key that is not a usable Ed25519 or P-256 key, or a client key that is not P-256 (MD-3)."
+    },
+    {
+      "code": "invalid-event-receiver",
+      "type": "urn:suiss:access:problem:invalid-event-receiver",
+      "status": 400,
+      "title": "Bad Request",
+      "description": "An event receiver that is not an https URL Access may push to (OP-149 m.23)."
+    },
+    {
+      "code": "invalid-branding",
+      "type": "urn:suiss:access:problem:invalid-branding",
+      "status": 400,
+      "title": "Bad Request",
+      "description": "Branding outside its fields' shapes, or a logo outside its CSP origins (TN-106)."
+    },
+    {
+      "code": "invalid-key-policy",
+      "type": "urn:suiss:access:problem:invalid-key-policy",
+      "status": 400,
+      "title": "Bad Request",
+      "description": "A key rotation policy the realm may not take (CR-26, TN-118)."
+    },
+    {
+      "code": "invalid-name",
+      "type": "urn:suiss:access:problem:invalid-name",
+      "status": 400,
+      "title": "Bad Request",
+      "description": "A group or upstream name outside ^[a-z][a-z0-9_-]{0,63}$."
+    },
+    {
+      "code": "invalid-membership-issuer",
+      "type": "urn:suiss:access:problem:invalid-membership-issuer",
+      "status": 400,
+      "title": "Bad Request",
+      "description": "A membership issuer that is not admin or upstream:<name>, or one that would change (TN-117)."
+    },
+    {
+      "code": "invalid-members",
+      "type": "urn:suiss:access:problem:invalid-members",
+      "status": 400,
+      "title": "Bad Request",
+      "description": "No members, or more than 100 in one change."
+    },
+    {
+      "code": "invalid-upstream",
+      "type": "urn:suiss:access:problem:invalid-upstream",
+      "status": 400,
+      "title": "Bad Request",
+      "description": "An upstream registration outside its fields' shapes; its secret is a secret:// reference, never the secret (OP-150 m.11 (j))."
+    },
+    {
+      "code": "invalid-signin-policy",
+      "type": "urn:suiss:access:problem:invalid-signin-policy",
+      "status": 400,
+      "title": "Bad Request",
+      "description": "Sign-in requirements outside their shapes (TN-132)."
+    },
+    {
+      "code": "invalid-session-policy",
+      "type": "urn:suiss:access:problem:invalid-session-policy",
+      "status": 400,
+      "title": "Bad Request",
+      "description": "A console session policy beyond 12 hours absolute or 15 minutes idle, or without a binding (TN-129, OP-151 m.3 (f))."
+    },
+    {
+      "code": "resource-exists",
+      "type": "urn:suiss:access:problem:resource-exists",
+      "status": 409,
+      "title": "Conflict",
+      "description": "A resource with this natural key exists, or existed and was retired; keys are never reused (OP-73)."
+    },
+    {
+      "code": "membership-issued-upstream",
+      "type": "urn:suiss:access:problem:membership-issued-upstream",
+      "status": 409,
+      "title": "Conflict",
+      "description": "The group's members are issued by an upstream provider, not by the administration (TN-117)."
+    },
+    {
+      "code": "account-state-conflict",
+      "type": "urn:suiss:access:problem:account-state-conflict",
+      "status": 409,
+      "title": "Conflict",
+      "description": "The account is not in a state the change leaves (§12.3.1, TN-49)."
+    },
+    {
+      "code": "client-has-no-secret",
+      "type": "urn:suiss:access:problem:client-has-no-secret",
+      "status": 409,
+      "title": "Conflict",
+      "description": "The client does not authenticate with a secret (CR-38)."
+    },
+    {
+      "code": "passkey-loss-not-acknowledged",
+      "type": "urn:suiss:access:problem:passkey-loss-not-acknowledged",
+      "status": 409,
+      "title": "Conflict",
+      "description": "An RP ID change makes the realm's registered passkeys unusable; acknowledge_passkey_loss must equal their count (IDI-4)."
+    },
+    {
+      "code": "conflict",
+      "type": "urn:suiss:access:problem:conflict",
+      "status": 409,
+      "title": "Conflict",
+      "description": "The resource changed while the write was applied; nothing changed."
+    },
+    {
+      "code": "unknown-operation",
+      "type": "urn:suiss:access:problem:unknown-operation",
+      "status": 400,
+      "title": "Bad Request",
+      "description": "The operation named is not a realm write operation."
     }
   ]
 }

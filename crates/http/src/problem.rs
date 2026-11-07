@@ -113,6 +113,8 @@ impl Code {
 pub mod codes {
     use super::Code;
 
+    pub mod realm;
+
     const fn code(
         code: &'static str,
         status: u16,
@@ -379,6 +381,35 @@ pub const CODES: &[Code] = &[
     codes::AIS_REJECTED,
     codes::EXERCISE_NOT_ALLOWED,
     codes::EXERCISE_REFUSED,
+    codes::realm::INVALID_BODY,
+    codes::realm::INVALID_VALIDITY,
+    codes::realm::INVALID_CLIENT_ID,
+    codes::realm::INVALID_DISPLAY_NAME,
+    codes::realm::INVALID_REDIRECT_URI,
+    codes::realm::INVALID_JWKS_URI,
+    codes::realm::INVALID_HOST,
+    codes::realm::RESERVED_CLAIM,
+    codes::realm::INVALID_ATTRIBUTE,
+    codes::realm::ARGON2_LOWERED,
+    codes::realm::INVALID_RP_ID,
+    codes::realm::PLATFORM_FIELDS_READ_ONLY,
+    codes::realm::INVALID_PUBLIC_KEY,
+    codes::realm::INVALID_EVENT_RECEIVER,
+    codes::realm::INVALID_BRANDING,
+    codes::realm::INVALID_KEY_POLICY,
+    codes::realm::INVALID_NAME,
+    codes::realm::INVALID_MEMBERSHIP_ISSUER,
+    codes::realm::INVALID_MEMBERS,
+    codes::realm::INVALID_UPSTREAM,
+    codes::realm::INVALID_SIGNIN_POLICY,
+    codes::realm::INVALID_SESSION_POLICY,
+    codes::realm::RESOURCE_EXISTS,
+    codes::realm::MEMBERSHIP_ISSUED_UPSTREAM,
+    codes::realm::ACCOUNT_STATE_CONFLICT,
+    codes::realm::CLIENT_HAS_NO_SECRET,
+    codes::realm::PASSKEY_LOSS_NOT_ACKNOWLEDGED,
+    codes::realm::CONFLICT,
+    codes::realm::UNKNOWN_OPERATION,
 ];
 
 /// The type URI of `code`.

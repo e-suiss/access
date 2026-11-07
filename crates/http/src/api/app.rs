@@ -166,6 +166,7 @@ pub fn router<E: Env>(api: &Arc<Api<E>>) -> Result<Router, ManifestError> {
             super::manifest::REALM_ROOT.operation_id,
             handlers::realm_root::<E>,
         )
+        .and_then(super::realm::register::<_, E>)
     })
 }
 

@@ -28,6 +28,7 @@ pub mod app;
 pub mod domain;
 pub mod manifest;
 pub mod ports;
+pub mod realm;
 pub mod schema;
 
 pub use app::{Api, router};

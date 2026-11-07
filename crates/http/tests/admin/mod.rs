@@ -21,12 +21,14 @@ use access_http::api::adapters::{MemoryIdempotency, MemoryLimiter, SivCursors};
 use access_http::api::app::{Ctx, router_for, submit};
 use access_http::api::domain::Surface;
 use access_http::api::domain::SurfaceScope;
+use access_http::api::domain::caller::WriteCaller;
 use access_http::api::manifest::{
     Access, Answer, PLATFORM_ROOT, REALM_ROOT, Route, Verb, Visibility,
 };
 use access_http::api::ports::{
-    Clock, CursorSeal, Entropy, Env, Presented, Proposal, Proposals, Proposed, RateLimiter,
-    ReadToken, ReadTokens, Surfaces, Unavailable,
+    Clock, CursorSeal, Draft, Drafted, Entropy, Env, Item, Listing, Pending, Presented, Proposal,
+    Proposals, Proposed, RateLimiter, ReadToken, ReadTokens, RealmResources, ResourceKind,
+    ResourceQuery, ResourceWrite, Surfaces, Unavailable, Written,
 };
 use access_kernel::ais::{CONTENT_TYPE, Statement};
 use access_kernel::codec::Canonical;
@@ -45,6 +47,7 @@ use axum::http::StatusCode;
 use axum::http::{Request, Response};
 use axum::response::IntoResponse;
 use http_body_util::BodyExt;
+use serde_json::json;
 use suiss_crypto::dcbor::{self, Limits as CborLimits};
 use suiss_crypto::secret::Secret;
 use suiss_crypto::signer::{Signer, SoftSigner, sign_sign1};
@@ -188,6 +191,83 @@ impl access_http::api::ports::IdempotencyStore for Shared {
     }
 }
 
+/// The key a fake realm resource is hidden behind: it belongs to another realm (TN-113).
+pub const HIDDEN_KEY: &str = "elsewhere";
+
+fn fake_item(kind: ResourceKind, key: &str, version: u64) -> Item {
+    let body = match kind {
+        ResourceKind::Settings => json!({
+            "signin_policy": { "methods": ["email"], "required_fields": [], "mfa_required": false,
+                               "domain_allow": [], "domain_deny": [] },
+            "session_policy": { "absolute_ms": 43_200_000, "idle_ms": 900_000, "binding": "asn" },
+            "branding": { "csp_origins": [] },
+        }),
+        ResourceKind::Clients => json!({ "client_id": key, "display_name": "Shop",
+                                         "redirect_uris": [], "status": "active" }),
+        ResourceKind::Accounts => json!({ "account_id": key, "status": "active" }),
+        ResourceKind::Groups | ResourceKind::UpstreamIdps => {
+            json!({ "name": key, "display_name": "Fake", "status": "active" })
+        }
+    };
+    Item { body, version }
+}
+
+// TN-113: the fake store scopes reads to the realm; a key of another realm is simply absent
+impl RealmResources for Shared {
+    fn read(&self, q: ResourceQuery) -> Pending<'_, Option<Listing>> {
+        let version = self.0.ledger.position.load(Ordering::SeqCst);
+        let listing = (q.slug == REALM).then(|| {
+            let keys: Vec<String> = match q.key {
+                Some(k) if k == HIDDEN_KEY => Vec::new(),
+                Some(k) => vec![k],
+                None if q.kind == ResourceKind::Settings => vec![String::new()],
+                None => vec!["a".to_owned(), "b".to_owned()],
+            };
+            Listing {
+                items: keys.iter().map(|k| fake_item(q.kind, k, version)).collect(),
+                last: None,
+            }
+        });
+        Box::pin(async move { Ok(listing) })
+    }
+
+    fn draft(&self, w: ResourceWrite) -> Pending<'_, Drafted> {
+        let bytes = serde_json::to_vec(&w.body).unwrap();
+        let digest = Digest(suiss_crypto::digest::sha256(&bytes));
+        let mut body = w.body;
+        if let Some(o) = body.as_object_mut() {
+            o.entry("validity").or_insert(json!({}));
+        }
+        Box::pin(async move {
+            Ok(Drafted::Draft(Draft {
+                body,
+                domain: w.domain,
+                intent: bytes,
+                intent_digest: digest,
+                pep: "access-identity".to_owned(),
+            }))
+        })
+    }
+
+    fn commit(&self, w: ResourceWrite, caller: WriteCaller) -> Pending<'_, Written> {
+        let ledger = self.0.ledger.clone();
+        ledger.calls.fetch_add(1, Ordering::SeqCst);
+        Box::pin(async move {
+            if w.key.as_deref() == Some(HIDDEN_KEY) {
+                return Ok(Written::Rejected(&access_http::problem::codes::NOT_FOUND));
+            }
+            let position = ledger.position.fetch_add(1, Ordering::SeqCst) + 1;
+            let kind = access_http::api::realm::spec(w.operation).unwrap().0;
+            Ok(Written::Committed {
+                exercise_id: caller.statement.intent,
+                position,
+                resource: Some(fake_item(kind, w.key.as_deref().unwrap_or("new"), position)),
+                secret: None,
+            })
+        })
+    }
+}
+
 pub struct TestEnv(pub Shared);
 
 impl Env for TestEnv {
@@ -222,6 +302,9 @@ impl Env for TestEnv {
     }
     fn origin(&self) -> &str {
         ORIGIN
+    }
+    fn realm(&self) -> &dyn RealmResources {
+        &self.0
     }
 }
 

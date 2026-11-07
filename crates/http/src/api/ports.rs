@@ -3,6 +3,7 @@
 //! and the rate limiter. Every port fails closed: [`Unavailable`] refuses the request (MD-8).
 
 use std::future::Future;
+use std::pin::Pin;
 
 use access_kernel::digest::Digest;
 use access_kernel::verify::cose::PublicKey;
@@ -201,6 +202,167 @@ pub trait CursorSeal: Send + Sync {
     fn open(&self, context: &[u8], cursor: &str) -> Option<Vec<u8>>;
 }
 
+/// A port answer that may be pending, boxed so [`RealmResources`] stays object safe.
+pub type Pending<'a, T> = Pin<Box<dyn Future<Output = Result<T, Unavailable>> + Send + 'a>>;
+
+/// A readable kind of realm resource (OP-151 m.2 M1).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ResourceKind {
+    /// Clients, by `client_id`.
+    Clients,
+    /// Groups, by name.
+    Groups,
+    /// Accounts, by `account_id`.
+    Accounts,
+    /// Upstream identity providers, by name.
+    UpstreamIdps,
+    /// The settings singleton.
+    Settings,
+}
+
+impl ResourceKind {
+    /// Its name in `ETag`s and cursors.
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Clients => "clients",
+            Self::Groups => "groups",
+            Self::Accounts => "accounts",
+            Self::UpstreamIdps => "upstream-idps",
+            Self::Settings => "settings",
+        }
+    }
+}
+
+/// A read of one realm resource, or of one page of a collection (TN-113: the answer holds only
+/// what the realm may see; the handler filters nothing).
+#[derive(Clone, Debug)]
+pub struct ResourceQuery {
+    /// The realm's slug.
+    pub slug: String,
+    /// What to read.
+    pub kind: ResourceKind,
+    /// One resource's natural key; `None` for a page.
+    pub key: Option<String>,
+    /// The natural key the page starts after.
+    pub after: Option<String>,
+    /// Page size.
+    pub limit: u32,
+}
+
+/// One resource as read: its JSON view and the position of the decision that last changed it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Item {
+    /// The view, with no credential field (TN-61).
+    pub body: serde_json::Value,
+    /// Its version, the `ETag`'s source.
+    pub version: u64,
+}
+
+/// What a read found.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Listing {
+    /// The items.
+    pub items: Vec<Item>,
+    /// The natural key the next page starts after, when there may be one.
+    pub last: Option<String>,
+}
+
+/// A write to a realm resource, as one manifest operation with its natural key and its JSON body
+/// (a merge patch already applied).
+#[derive(Clone, Debug)]
+pub struct ResourceWrite {
+    /// The realm's slug.
+    pub slug: String,
+    /// Its governing domain.
+    pub domain: Digest,
+    /// The manifest operation.
+    pub operation: &'static str,
+    /// The path's natural key.
+    pub key: Option<String>,
+    /// The body, without the AIS.
+    pub body: serde_json::Value,
+    /// Trusted time of the request, Unix milliseconds.
+    pub now_ms: u64,
+}
+
+/// The intent a write compiles to, for the caller to sign (TN-110, PI-7).
+#[derive(Clone, Debug, PartialEq)]
+pub struct Draft {
+    /// The body to send with the AIS: the request's, with its validity and any server-assigned
+    /// key filled in.
+    pub body: serde_json::Value,
+    /// The governing domain the AIS names.
+    pub domain: Digest,
+    /// Deterministic CBOR of the intent.
+    pub intent: Vec<u8>,
+    /// Its digest, which the AIS signs.
+    pub intent_digest: Digest,
+    /// The PEP the AIS addresses.
+    pub pep: String,
+}
+
+/// What a write did.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Written {
+    /// Committed: the Exercise record and the resource as it now is.
+    Committed {
+        /// The `ExerciseID`.
+        exercise_id: Digest,
+        /// Its position in the domain's log.
+        position: u64,
+        /// The resource after the write, when it has a view.
+        resource: Option<Item>,
+        /// A server-generated secret, shown this once and never kept (CR-38).
+        secret: Option<String>,
+    },
+    /// Decided and not allowed; nothing changed.
+    NotAllowed,
+    /// Refused before a decision with this problem; nothing changed.
+    Rejected(&'static crate::problem::Code),
+}
+
+/// What a draft found.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Drafted {
+    /// The intent to sign.
+    Draft(Draft),
+    /// The write cannot be made, with this problem.
+    Rejected(&'static crate::problem::Code),
+}
+
+/// The realm resources behind the realm-admin surface (OP-151 m.2 M1): reads scoped to the realm
+/// in the store (TN-113), drafts of the intent a write compiles to, and commits of exactly one
+/// `idp.*` Exercise per write through the identity plane (TN-110, PI-4, INV-2).
+pub trait RealmResources: Send + Sync {
+    /// Reads; `None` when there is no such realm.
+    fn read(&self, query: ResourceQuery) -> Pending<'_, Option<Listing>>;
+
+    /// The intent `write` compiles to; nothing is decided or changed.
+    fn draft(&self, write: ResourceWrite) -> Pending<'_, Drafted>;
+
+    /// Commits `write` with the caller's verified AIS.
+    fn commit(&self, write: ResourceWrite, caller: WriteCaller) -> Pending<'_, Written>;
+}
+
+/// Realm resources that do not exist: every read finds no realm and every write is refused
+/// (MD-8). The default until a process wires its own.
+pub struct NoRealmResources;
+
+impl RealmResources for NoRealmResources {
+    fn read(&self, _: ResourceQuery) -> Pending<'_, Option<Listing>> {
+        Box::pin(async { Ok(None) })
+    }
+
+    fn draft(&self, _: ResourceWrite) -> Pending<'_, Drafted> {
+        Box::pin(async { Err(Unavailable) })
+    }
+
+    fn commit(&self, _: ResourceWrite, _: WriteCaller) -> Pending<'_, Written> {
+        Box::pin(async { Err(Unavailable) })
+    }
+}
+
 /// Every port of the management API.
 pub trait Env: Send + Sync + 'static {
     /// Read token verifier.
@@ -230,4 +392,8 @@ pub trait Env: Send + Sync + 'static {
     fn idempotency(&self) -> &Self::Idempotency;
     /// The management origin, `https://<host>[:port]`, from configuration only (§17.9.6).
     fn origin(&self) -> &str;
+    /// The realm resources; none by default.
+    fn realm(&self) -> &dyn RealmResources {
+        &NoRealmResources
+    }
 }

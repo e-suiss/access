@@ -164,8 +164,45 @@ pub const REALM_ROOT: Route = Route {
     lifecycle: None,
 };
 
-/// Every management route.
-pub const MANIFEST: &[Route] = &[PLATFORM_ROOT, REALM_ROOT];
+const ALL_LEN: usize = 2 + super::realm::ROWS.len();
+
+#[expect(
+    clippy::indexing_slicing,
+    reason = "evaluated at compile time; an out-of-range index fails the build"
+)]
+const ALL: [Route; ALL_LEN] = {
+    let mut out = [PLATFORM_ROOT; ALL_LEN];
+    out[1] = REALM_ROOT;
+    let mut i = 0;
+    while i < super::realm::ROWS.len() {
+        out[i + 2] = super::realm::ROWS[i];
+        i += 1;
+    }
+    out
+};
+
+/// Every management route: the surface roots and the realm resources
+/// ([`super::realm::ROWS`]).
+pub const MANIFEST: &[Route] = &ALL;
+
+/// The suffix of the one `POST` that reads: drafting a write's intent changes nothing (TN-110).
+pub const DRAFT_SUFFIX: &str = "/intents";
+
+impl Route {
+    /// Whether it changes state: every write, and no read; drafting an intent is a read.
+    #[must_use]
+    pub fn changes_state(&self) -> bool {
+        self.access == Access::Write
+    }
+
+    /// Whether its verb fits its access: `GET` reads and the other verbs write, except the
+    /// intent draft, a `POST` that reads.
+    #[must_use]
+    pub fn verb_fits(&self) -> bool {
+        let draft = self.verb == Verb::Post && self.path.ends_with(DRAFT_SUFFIX);
+        draft != (self.verb.mutating() == self.changes_state())
+    }
+}
 
 /// Why a router cannot be built from a manifest.
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
@@ -208,7 +245,7 @@ pub fn check(rows: &[Route]) -> Result<(), ManifestError> {
             Access::Read { scope } => scope.starts_with(namespace),
             Access::Write => true,
         };
-        if !under || !scoped || r.verb.mutating() != (r.access == Access::Write) {
+        if !under || !scoped || !r.verb_fits() {
             return Err(ManifestError::Surface(r.operation_id));
         }
     }

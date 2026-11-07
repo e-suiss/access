@@ -27,7 +27,27 @@ use admin::{
 };
 
 fn concrete(row: &Route, slug: &str) -> String {
-    row.path.replace("{slug}", slug)
+    row.path
+        .split('/')
+        .map(|s| match s {
+            "{slug}" => slug,
+            s if s.starts_with('{') => "k1",
+            s => s,
+        })
+        .collect::<Vec<_>>()
+        .join("/")
+}
+
+fn request(row: &Route, path: &str) -> axum::http::request::Builder {
+    Request::builder().method(row.verb.method()).uri(path)
+}
+
+fn read_as(row: &Route, path: &str, token: &str) -> Request<Body> {
+    request(row, path)
+        .header("authorization", format!("DPoP {token}"))
+        .header("dpop", proof(row.verb.method().as_str(), path))
+        .body(Body::empty())
+        .unwrap()
 }
 
 fn audience(row: &Route) -> String {
@@ -57,16 +77,16 @@ async fn deny_matrix(h: &Harness, router: &axum::Router, rows: &[Route]) {
         let before = h.position();
         match row.access {
             Access::Read { scope } => {
-                let none = Request::get(&path).body(Body::empty()).unwrap();
+                let none = request(row, &path).body(Body::empty()).unwrap();
                 assert_eq!(
                     code_of(router, none).await,
                     (StatusCode::UNAUTHORIZED, "invalid-token".into()),
                     "{op}"
                 );
                 let good = h.token(&format!("{op}-good"), &audience(row), &[scope], 3_600_000);
-                let bearer = Request::get(&path)
+                let bearer = request(row, &path)
                     .header("authorization", format!("Bearer {good}"))
-                    .header("dpop", proof("GET", &path))
+                    .header("dpop", proof(row.verb.method().as_str(), &path))
                     .body(Body::empty())
                     .unwrap();
                 assert_eq!(
@@ -74,7 +94,7 @@ async fn deny_matrix(h: &Harness, router: &axum::Router, rows: &[Route]) {
                     (StatusCode::UNAUTHORIZED, "invalid-token".into()),
                     "{op}: a bearer token is never a management credential"
                 );
-                let unbound = Request::get(&path)
+                let unbound = request(row, &path)
                     .header("authorization", format!("DPoP {good}"))
                     .body(Body::empty())
                     .unwrap();
@@ -90,7 +110,7 @@ async fn deny_matrix(h: &Harness, router: &axum::Router, rows: &[Route]) {
                     600_000,
                 );
                 assert_eq!(
-                    code_of(router, read(&path, &other)).await,
+                    code_of(router, read_as(row, &path, &other)).await,
                     (StatusCode::UNAUTHORIZED, "wrong-audience".into()),
                     "{op}"
                 );
@@ -107,13 +127,13 @@ async fn deny_matrix(h: &Harness, router: &axum::Router, rows: &[Route]) {
                     }
                 };
                 assert_eq!(
-                    code_of(router, read(&path, &unscoped)).await,
+                    code_of(router, read_as(row, &path, &unscoped)).await,
                     expected,
                     "{op}"
                 );
                 let long = h.token(&format!("{op}-long"), &audience(row), &[scope], 3_600_001);
                 assert_eq!(
-                    code_of(router, read(&path, &long)).await,
+                    code_of(router, read_as(row, &path, &long)).await,
                     (StatusCode::UNAUTHORIZED, "token-lifetime".into()),
                     "{op}"
                 );
@@ -126,25 +146,29 @@ async fn deny_matrix(h: &Harness, router: &axum::Router, rows: &[Route]) {
                     );
                     let missing = concrete(row, MISSING);
                     assert_eq!(
-                        code_of(router, read(&missing, &ghost)).await,
+                        code_of(router, read_as(row, &missing, &ghost)).await,
                         (StatusCode::NOT_FOUND, "not_found".into()),
                         "{op}: a missing realm is 404"
                     );
                     assert_eq!(
-                        code_of(router, read(&missing, &good)).await,
+                        code_of(router, read_as(row, &missing, &good)).await,
                         (StatusCode::UNAUTHORIZED, "wrong-audience".into()),
                         "{op}: a token never reaches another realm"
                     );
                 }
                 assert_eq!(
-                    code_of(router, read(&path, &good)).await.0,
-                    StatusCode::OK,
-                    "{op}"
+                    code_of(router, read_as(row, &path, &good)).await.0,
+                    if row.verb == Verb::Get {
+                        StatusCode::OK
+                    } else {
+                        StatusCode::BAD_REQUEST
+                    },
+                    "{op}: a draft without an operation is refused only after its caller is"
                 );
             }
             Access::Write => {
                 let post = |ais: Option<String>, auth: Option<String>| {
-                    let mut b = Request::post(&path)
+                    let mut b = request(row, &path)
                         .header("content-type", "application/json")
                         .header("idempotency-key", "AAAAAAAAAAAAAAAAAAAAAA");
                     if let Some(a) = ais {
@@ -153,7 +177,7 @@ async fn deny_matrix(h: &Harness, router: &axum::Router, rows: &[Route]) {
                     if let Some(a) = auth {
                         b = b
                             .header("authorization", format!("DPoP {a}"))
-                            .header("dpop", proof("POST", &path));
+                            .header("dpop", proof(row.verb.method().as_str(), &path));
                     }
                     b.body(Body::from("{}")).unwrap()
                 };

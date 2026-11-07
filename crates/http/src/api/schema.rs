@@ -22,6 +22,10 @@ fn text(description: &str) -> Value {
     json!({ "type": "string", "description": description })
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "one JSON literal of the contract's component schemas"
+)]
 fn schemas() -> Value {
     json!({
         "Problem": {
@@ -57,6 +61,122 @@ fn schemas() -> Value {
             "properties": {
                 "exercise_id": { "type": "string", "pattern": "^[A-Za-z0-9_-]{43}$", "description": "The ExerciseID, unpadded base64url." },
                 "position": r("schemas", "Position"),
+            },
+        },
+        "Validity": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["not_before", "not_after"],
+            "description": "The intent's validity, at most 15 minutes; the draft fills it in (TN-110).",
+            "properties": { "not_before": r("schemas", "Time"), "not_after": r("schemas", "Time") },
+        },
+        "WriteBody": {
+            "type": "object",
+            "description": "The operation's resource members as the draft returned them, with `validity` and, unless sent as `X-Access-AIS`, the `ais`. No member writes a credential (TN-61).",
+            "properties": {
+                "validity": r("schemas", "Validity"),
+                "ais": text("The caller's AIS, unpadded base64url of its COSE_Sign1, when not in the header."),
+            },
+        },
+        "DraftRequest": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["operation"],
+            "properties": {
+                "operation": text("The write's operationId."),
+                "key": text("The path's natural key, for operations on one resource."),
+                "body": r("schemas", "WriteBody"),
+            },
+        },
+        "IntentDraft": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["operation", "body", "domain", "pep", "intent", "intent_digest"],
+            "description": "What the caller signs: an AIS over `intent_digest` for `domain` and `pep`, mode `commit`, then the write with `body` (TN-110, PI-7). Drafting changes nothing.",
+            "properties": {
+                "operation": text("The write's operationId."),
+                "key": { "type": ["string", "null"] },
+                "body": r("schemas", "WriteBody"),
+                "domain": { "type": "string", "pattern": "^[A-Za-z0-9_-]{43}$" },
+                "pep": text("The PEP the AIS addresses."),
+                "intent": text("Deterministic CBOR of the intent, unpadded base64url."),
+                "intent_digest": { "type": "string", "pattern": "^[A-Za-z0-9_-]{43}$" },
+            },
+        },
+        "Client": {
+            "type": "object",
+            "additionalProperties": false,
+            "description": "A client registration (TN-15, IDP-7). No secret is ever read back (CR-38).",
+            "properties": {
+                "client_id": text("Server-generated, never reused (OP-137, TN-20)."),
+                "display_name": text("Display name."),
+                "token_endpoint_auth_method": { "type": "string", "enum": ["none", "private_key_jwt", "client_secret_basic"] },
+                "jwks_uri": { "type": ["string", "null"] },
+                "redirect_uris": { "type": "array", "items": text("Compared as an exact string.") },
+                "post_logout_redirect_uris": { "type": "array", "items": { "type": "string" } },
+                "backchannel_logout_uri": { "type": ["string", "null"] },
+                "require_pushed_authorization_requests": { "type": "boolean" },
+                "platform_product": { "type": ["string", "null"], "readOnly": true },
+                "status": { "type": "string", "enum": ["active", "retired"], "readOnly": true },
+            },
+        },
+        "Group": {
+            "type": "object",
+            "additionalProperties": false,
+            "description": "A group with its one membership issuer (TN-117); membership is an identity Claim, never authority.",
+            "properties": {
+                "name": text("Natural key."),
+                "display_name": text("Display name."),
+                "membership_issuer": { "type": "string", "pattern": "^(admin|upstream:[a-z][a-z0-9_-]{0,63})$" },
+                "status": { "type": "string", "enum": ["active", "retired"], "readOnly": true },
+            },
+        },
+        "Account": {
+            "type": "object",
+            "additionalProperties": false,
+            "description": "An account's state (§12.3.1). There is no credential field: a reset goes through the account's own flows (TN-61).",
+            "properties": {
+                "account_id": text("Opaque `usr_` id (OP-137)."),
+                "status": { "type": "string", "enum": ["staged", "pending_user_action", "active", "locked", "suspended", "deactivated", "tombstone", "purging"] },
+                "status_at": r("schemas", "Time"),
+                "created_at": r("schemas", "Time"),
+            },
+        },
+        "UpstreamIdp": {
+            "type": "object",
+            "additionalProperties": false,
+            "description": "An upstream identity provider's registration (OP-150 m.11 (j)); its client secret only by `secret://` reference.",
+            "properties": {
+                "name": text("Natural key."),
+                "issuer": text("https issuer."),
+                "client_id": text("Access's client id at the provider."),
+                "client_secret_ref": { "type": ["string", "null"], "pattern": "^secret://" },
+                "jwks_uri": text("https JWKS."),
+                "ssf_configuration_uri": { "type": ["string", "null"] },
+                "status": { "type": "string", "enum": ["active", "retired"], "readOnly": true },
+            },
+        },
+        "Settings": {
+            "type": "object",
+            "description": "The realm's settings: JOSE algorithm, Argon2, RP ID, CIMD, sign-in requirements (TN-132), console session policy (TN-129), branding (TN-106) and mappers (TN-117).",
+        },
+        "Page": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["items"],
+            "description": "One page; the next is in the `Link` header (OP-65). Only what the realm may see is listed (TN-113).",
+            "properties": { "items": { "type": "array", "items": { "type": "object" } } },
+        },
+        "WriteResult": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["exercise_id", "position"],
+            "description": "The Exercise the write compiled to (TN-110), the resource as it now is, and a server-generated `client_secret` shown this once (CR-38).",
+            "properties": {
+                "exercise_id": { "type": "string", "pattern": "^[A-Za-z0-9_-]{43}$" },
+                "position": r("schemas", "Position"),
+                "resource": { "type": "object" },
+                "client_secret": text("Shown once; never stored or read back."),
             },
         },
         "SurfaceRoot": {
@@ -144,10 +264,39 @@ fn responses() -> Value {
 
 /// The response body schema of an operation.
 fn body_of(row: &Route) -> &'static str {
-    match row.operation_id {
-        "getPlatformSurface" | "getRealmSurface" => "SurfaceRoot",
+    use super::ports::ResourceKind;
+    use super::realm::{Shape, spec};
+    match (row.operation_id, spec(row.operation_id)) {
+        ("getPlatformSurface" | "getRealmSurface", _) => "SurfaceRoot",
+        (_, Some((_, Shape::List(_)))) => "Page",
+        (_, Some((_, Shape::Draft))) => "IntentDraft",
+        (_, Some((_, Shape::Write { .. }))) => "WriteResult",
+        (_, Some((kind, Shape::Get))) => match kind {
+            ResourceKind::Clients => "Client",
+            ResourceKind::Groups => "Group",
+            ResourceKind::Accounts => "Account",
+            ResourceKind::UpstreamIdps => "UpstreamIdp",
+            ResourceKind::Settings => "Settings",
+        },
         _ => "ExerciseRef",
     }
+}
+
+/// The path parameters other than the slug: natural keys, never a server-internal id.
+fn path_params(path: &str) -> Vec<Value> {
+    path.split('/')
+        .filter_map(|s| s.strip_prefix('{').and_then(|s| s.strip_suffix('}')))
+        .filter(|p| *p != "slug")
+        .map(|p| {
+            json!({
+                "name": p,
+                "in": "path",
+                "required": true,
+                "schema": { "type": "string", "maxLength": 255 },
+                "description": "The resource's natural key.",
+            })
+        })
+        .collect()
 }
 
 fn operation(row: &Route) -> Value {
@@ -156,6 +305,7 @@ fn operation(row: &Route) -> Value {
     if row.surface == Surface::Realm {
         params.push(r("parameters", "Slug"));
     }
+    params.extend(path_params(row.path));
     for q in row.query {
         let name = match *q {
             PAGE_SIZE => "PageSize",
@@ -176,9 +326,13 @@ fn operation(row: &Route) -> Value {
         ok_headers.insert("Deprecation".to_owned(), r("headers", "Deprecation"));
         ok_headers.insert("Sunset".to_owned(), r("headers", "Sunset"));
     }
+    let creates = matches!(
+        super::realm::spec(row.operation_id),
+        Some((_, super::realm::Shape::Write { creates: true, .. }))
+    );
     let mut responses = Map::new();
     responses.insert(
-        "200".to_owned(),
+        if creates { "201" } else { "200" }.to_owned(),
         json!({
             "description": if write { "Committed: the Exercise record (TN-110)." } else { "The resource." },
             "headers": ok_headers,
@@ -205,7 +359,12 @@ fn operation(row: &Route) -> Value {
         Access::Read { scope } => (json!([{ "read_token": [scope] }]), json!(scope)),
         Access::Write => (json!([{ "ais": [] }]), Value::Null),
     };
-    json!({
+    let request_body = match super::realm::spec(row.operation_id) {
+        Some((_, super::realm::Shape::Draft)) => Some("DraftRequest"),
+        Some((_, super::realm::Shape::Write { .. })) => Some("WriteBody"),
+        _ => None,
+    };
+    let mut op = json!({
         "operationId": row.operation_id,
         "summary": row.summary,
         "tags": [row.surface.name()],
@@ -216,7 +375,14 @@ fn operation(row: &Route) -> Value {
         "x-access-surface": row.surface.name(),
         "x-access-scope": scope,
         "x-access-visibility": match row.visibility { Visibility::Hidden => "hidden", Visibility::Forbidden => "forbidden" },
-    })
+    });
+    if let (Some(name), Some(o)) = (request_body, op.as_object_mut()) {
+        o.insert(
+            "requestBody".to_owned(),
+            json!({ "required": true, "content": { "application/json": { "schema": r("schemas", name) } } }),
+        );
+    }
+    op
 }
 
 /// The document.
