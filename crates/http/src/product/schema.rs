@@ -159,6 +159,7 @@ fn party_components() -> Value {
     })
 }
 
+mod developer;
 mod platform;
 mod records;
 mod ssf;
@@ -174,6 +175,7 @@ fn components() -> Value {
         crate::declarations::openapi_components(),
         stage6::components(),
         ssf::components(),
+        developer::components(),
     ] {
         if let (Value::Object(m), Value::Object(more)) = (&mut all, more) {
             m.extend(more);
@@ -504,6 +506,7 @@ pub fn openapi() -> Value {
     platform::paths(&mut paths);
     stage6::paths(&mut paths, &common);
     ssf::paths(&mut paths);
+    developer::paths(&mut paths);
     json!({
         "openapi": "3.1.1",
         "info": {

@@ -1888,6 +1888,99 @@
           }
         }
       }
+    },
+    "/access/v1/search/{kind}": {
+      "post": {
+        "operationId": "search",
+        "summary": "One advisory search page (L1-ADP-16). Graph kinds `subject`, `resource`, `action`; developer kinds `schema-publications` (a namespace's published versions and where each stands here: there is no accept, a domain accepts only by its own `acceptance.amend` with the exact fingerprint, X21), `change-impact` (a role move or a `policy.set` candidate: abilities gained and lost per holder count, expansion requirements, orphan rows; X20, TN-121, §5.8; the SMT relation is `unknown` until proved), `revocation-impact` (subtree, staleness exposure, index lag, orphan tuples; §5.4) and `compromise-impact` (Exercises, Grants, contributions, projections and Claims in a window; SEC15). Developer kinds answer only the domain's auditors; anyone else gets an empty page. Nothing is recorded.",
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "subject",
+                "resource",
+                "action",
+                "schema-publications",
+                "change-impact",
+                "revocation-impact",
+                "compromise-impact"
+              ]
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SearchRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "`results`, `page` and `context.advisory: true`. A developer kind's results hold one report.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "results",
+                    "page",
+                    "context"
+                  ],
+                  "properties": {
+                    "results": {
+                      "type": "array",
+                      "items": {
+                        "oneOf": [
+                          {
+                            "type": "object"
+                          },
+                          {
+                            "$ref": "#/components/schemas/SchemaPublication"
+                          },
+                          {
+                            "$ref": "#/components/schemas/ChangeImpact"
+                          },
+                          {
+                            "$ref": "#/components/schemas/RevocationImpact"
+                          },
+                          {
+                            "$ref": "#/components/schemas/CompromiseImpact"
+                          }
+                        ]
+                      },
+                      "description": "One page."
+                    },
+                    "page": {
+                      "type": "object"
+                    },
+                    "context": {
+                      "type": "object"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Not a search of this kind (a protocol error, L1-ADP-3)."
+          },
+          "429": {
+            "description": "Over the search rate (§13.7.4)."
+          },
+          "503": {
+            "description": "No answer within the search deadline, never a partial list."
+          }
+        }
+      }
     }
   },
   "components": {
@@ -3335,6 +3428,530 @@
               "applied",
               "ignored"
             ]
+          }
+        }
+      },
+      "SearchRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "context"
+        ],
+        "properties": {
+          "context": {
+            "type": "object",
+            "description": "The reader's `check` context (L1-ADP-5…9) with `query`: the intent's action is `access`/`read` and its first resource `access.search` with the path `[kind]`."
+          },
+          "page": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [],
+            "properties": {
+              "token": {
+                "type": "string",
+                "description": "The `next_token` of the previous page."
+              }
+            }
+          }
+        }
+      },
+      "SchemaPublicationsQuery": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "namespace"
+        ],
+        "properties": {
+          "namespace": {
+            "type": "string",
+            "description": "The action namespace."
+          }
+        }
+      },
+      "ChangeImpactQuery": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "role",
+              "from",
+              "to"
+            ],
+            "properties": {
+              "role": {
+                "type": "string",
+                "description": "The Named AuthoritySet."
+              },
+              "from": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "The version the Grants pin now."
+              },
+              "to": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "The version to move them to."
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "candidate"
+            ],
+            "properties": {
+              "policy": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_-]+$",
+                "description": "The restriction policy replaced; absent for a new one."
+              },
+              "candidate": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_-]+$",
+                "description": "The candidate `policy_set` content, dCBOR."
+              }
+            }
+          }
+        ]
+      },
+      "RevocationImpactQuery": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [],
+        "properties": {
+          "grant": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "A Grant; its lineage subtree ends with it."
+          },
+          "instance": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "An Instance."
+          },
+          "at": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "When, Unix ms; now when absent."
+          }
+        }
+      },
+      "CompromiseImpactQuery": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "window"
+        ],
+        "properties": {
+          "instance": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "A compromised Instance."
+          },
+          "issuer": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "A compromised Claim issuer Party."
+          },
+          "key": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "A compromised key's thumbprint; resolved to its Instance now."
+          },
+          "window": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "from",
+              "until"
+            ],
+            "properties": {
+              "from": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Unix ms."
+              },
+              "until": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Unix ms."
+              }
+            }
+          }
+        }
+      },
+      "SchemaPublication": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "type",
+          "fingerprint",
+          "publisher",
+          "namespace",
+          "catalog_version",
+          "standing",
+          "diff",
+          "existing_grants_unchanged",
+          "advisory"
+        ],
+        "properties": {
+          "type": {
+            "const": "schema_publication"
+          },
+          "fingerprint": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "The exact digest a `schema-definition` Acceptance pins (E10)."
+          },
+          "publisher": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "The publisher Party."
+          },
+          "namespace": {
+            "type": "string",
+            "description": "The namespace."
+          },
+          "catalog_version": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "The catalog version."
+          },
+          "standing": {
+            "type": "string",
+            "enum": [
+              "accepted",
+              "pending_acceptance",
+              "unreferenced"
+            ]
+          },
+          "accepted_version": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "The version this domain accepts now."
+          },
+          "diff": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "added",
+              "removed",
+              "changed",
+              "reserved_added",
+              "reserved_removed"
+            ],
+            "properties": {
+              "added": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Actions it adds."
+              },
+              "removed": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Actions it drops."
+              },
+              "changed": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Actions whose schema changed."
+              },
+              "reserved_added": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Newly reserved."
+              },
+              "reserved_removed": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "No longer reserved: broadening (E11)."
+              }
+            }
+          },
+          "reserved": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Reserved actions."
+          },
+          "parameters": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            },
+            "description": "`{action, parameter, class, affects?}`; `class` is `authority-relevant` or `authority-opaque`."
+          },
+          "compatibility": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "description": "The publisher's declaration `{from, relation}` (§9.13.4); a Claim, not a mapping in force."
+          },
+          "existing_grants_unchanged": {
+            "const": true
+          },
+          "new_actions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Not included in delegations whose catalog is pinned (E11)."
+          },
+          "text": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Text keys, in order."
+          },
+          "advisory": {
+            "const": true
+          }
+        }
+      },
+      "ChangeImpact": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "type",
+          "relation",
+          "advisory"
+        ],
+        "properties": {
+          "type": {
+            "const": "change_impact"
+          },
+          "role": {
+            "type": "object",
+            "description": "`{name, from, to}` for a role move."
+          },
+          "pin": {
+            "type": "object",
+            "description": "The pin each `grant.amend` of the move carries."
+          },
+          "policy": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "For a policy candidate: the policy replaced."
+          },
+          "relation": {
+            "type": "string",
+            "enum": [
+              "equivalent",
+              "narrowing",
+              "widening",
+              "incomparable",
+              "may_error",
+              "unknown"
+            ]
+          },
+          "refused": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The candidate's compile error."
+          },
+          "moves": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "description": "Grant"
+            },
+            "description": "The Grants to amend, one Exercise each."
+          },
+          "holders": {
+            "type": "object",
+            "description": "`{parties, everyone, upper_bound}`."
+          },
+          "abilities": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            },
+            "description": "`{ability: {action, bounds}, holders_gaining, holders_losing}`."
+          },
+          "expansion": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "description": "What a widening move needs (INV-10): `{tier, joint_root_quorum, delay_s, requirements}`."
+          },
+          "orphans": {
+            "type": "object",
+            "description": "`{empty_scopes, unselecting}` (TN-121)."
+          },
+          "capped": {
+            "type": "boolean"
+          },
+          "advisory": {
+            "const": true
+          }
+        }
+      },
+      "RevocationImpact": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "type",
+          "revoked",
+          "at",
+          "subtree",
+          "exposed",
+          "orphan_tuples",
+          "aftermath",
+          "advisory"
+        ],
+        "properties": {
+          "type": {
+            "const": "revocation_impact"
+          },
+          "revoked": {
+            "type": "object"
+          },
+          "at": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "When."
+          },
+          "subtree": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "description": "Grant"
+            },
+            "description": "Grants that end with it."
+          },
+          "exposed": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            },
+            "description": "`{exercise, holder, class, horizon_ms, window_ms}`: projections whose contract outlives it."
+          },
+          "max_exposure_ms": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "The longest window."
+          },
+          "index_lag": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Positions the derived index is behind."
+          },
+          "orphan_tuples": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Index rows live for an ended Grant (§5.4)."
+          },
+          "aftermath": {
+            "type": "object",
+            "description": "`{grants_ending, projections_open, honoured_until_ms, running_copies}` (XI-3)."
+          },
+          "advisory": {
+            "const": true
+          }
+        }
+      },
+      "CompromiseImpact": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "type",
+          "compromised",
+          "window",
+          "exercises",
+          "grants",
+          "contributions",
+          "projections",
+          "claims",
+          "advisory"
+        ],
+        "properties": {
+          "type": {
+            "const": "compromise_impact"
+          },
+          "compromised": {
+            "type": "object"
+          },
+          "window": {
+            "type": "object"
+          },
+          "instance": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "exercises": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            },
+            "description": "`{pos, intent, outcome}`."
+          },
+          "grants": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "description": "Grant"
+            },
+            "description": "Grants allowed Exercises changed."
+          },
+          "contributions": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "description": "Contribution"
+            },
+            "description": "Contributions recorded."
+          },
+          "projections": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "description": "ExerciseID"
+            },
+            "description": "Projections issued."
+          },
+          "claims": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]+$",
+              "description": "Claim"
+            },
+            "description": "Claims of the issuer."
+          },
+          "capped": {
+            "type": "boolean"
+          },
+          "advisory": {
+            "const": true
           }
         }
       }
