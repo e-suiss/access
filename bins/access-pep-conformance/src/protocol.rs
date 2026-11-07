@@ -45,6 +45,10 @@ pub struct Upstreams {
     pub introspection: String,
     /// JWKS (GET).
     pub jwks: String,
+    /// The domain's binding-signed Domain Metadata (GET), which declares the token and status
+    /// list keys (§10.4.5, TI-RT6).
+    #[serde(default)]
+    pub metadata: String,
     /// The protected resource: POST here performs the effect.
     pub effect: String,
 }

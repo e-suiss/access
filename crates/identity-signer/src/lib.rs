@@ -43,6 +43,10 @@ pub enum SignerError {
     /// The rotation policy may not be taken (CR-26).
     #[error("policy: {0}")]
     Policy(#[from] crate::domain::PolicyError),
+    /// An access token carrying authority: only the domain's operational key signs one, never
+    /// a realm key (§10.4.5, §12.1.2, TI-RT6).
+    #[error("authority token")]
+    Authority,
 }
 
 impl SignerError {
@@ -58,6 +62,7 @@ impl SignerError {
             Self::NoBackup => "signer-no-backup",
             Self::UnknownKey => "signer-unknown-key",
             Self::Policy(p) => p.code(),
+            Self::Authority => "signer-authority",
         }
     }
 }

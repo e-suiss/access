@@ -61,8 +61,10 @@ pub enum Reply {
         /// Whether `context.receipt` carries the signed receipt.
         receipt: bool,
     },
-    /// JWKS: the signing key.
+    /// JWKS: the signing keys.
     Keys,
+    /// The binding-signed Domain Metadata, served beside the JWKS under the same case reply.
+    Metadata,
     /// Token Status List: a signed list.
     List {
         /// The list expired before `now`.
@@ -177,7 +179,7 @@ impl Case {
             return Err("no rule IDs");
         }
         let decision_only = |r: &Option<Reply>| matches!(r, Some(Reply::Decision { .. }));
-        let keys_only = |r: &Option<Reply>| matches!(r, Some(Reply::Keys));
+        let keys_only = |r: &Option<Reply>| matches!(r, Some(Reply::Keys | Reply::Metadata));
         let list_only = |r: &Option<Reply>| matches!(r, Some(Reply::List { .. }));
         if decision_only(&self.introspection)
             || decision_only(&self.jwks)

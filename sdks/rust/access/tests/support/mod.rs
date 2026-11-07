@@ -24,7 +24,7 @@ use access_kernel::status::{CWT_CONTENT_TYPE, ListToken};
 use access_kernel::verify::cose::{Algorithm, PublicKey, to_be_signed};
 use access_kernel::verify::key_scope::{
     BindingKey, BindingScope, DomainMetadata, EXCERPT_CONTENT_TYPE, KeyExcerpt, KeyUsage,
-    OperationalKey, SpecVersions, thumbprint,
+    METADATA_CONTENT_TYPE, OperationalKey, SpecVersions, thumbprint,
 };
 use access_sdk::authorize::{Action, Actor, Ask, Intent, Nonce, Pep, Resource};
 use access_sdk::resource::{
@@ -150,6 +150,15 @@ pub(crate) fn metadata() -> DomainMetadata {
         hybrid: None,
         discovery: None,
     }
+}
+
+/// The metadata as the domain serves it, signed by the binding key `seed`.
+pub(crate) fn signed_metadata_by(seed: u8, m: &DomainMetadata) -> Vec<u8> {
+    sign1(seed, METADATA_CONTENT_TYPE, &m.to_bytes().unwrap())
+}
+
+pub(crate) fn signed_metadata() -> Vec<u8> {
+    signed_metadata_by(BINDING_SEED, &metadata())
 }
 
 pub(crate) fn excerpt(usage: KeyUsage) -> Vec<u8> {
@@ -449,10 +458,6 @@ impl TokenSpec {
     }
 }
 
-pub(crate) fn jwks() -> Vec<u8> {
-    jwks_of(TOKEN_SEED)
-}
-
 pub(crate) fn jwks_of(seed: u8) -> Vec<u8> {
     let PublicKey::Ed25519(x) = ed_pub(seed) else {
         panic!("ed25519 key")
@@ -512,12 +517,16 @@ pub(crate) fn zlib(bits: &[u8]) -> Vec<u8> {
 }
 
 pub(crate) fn list_jwt(iat_s: u64, revoked: bool) -> Vec<u8> {
+    list_jwt_by(LIST_SEED, iat_s, revoked)
+}
+
+pub(crate) fn list_jwt_by(seed: u8, iat_s: u64, revoked: bool) -> Vec<u8> {
     let claims = format!(
         r#"{{"sub":"{LIST_URI}","iat":{iat_s},"exp":{},"ttl":300,"status_list":{{"bits":1,"lst":"{}"}},"as_of":{BASIS_POS}}}"#,
         iat_s + 600,
         b64url_encode(&zlib(&[u8::from(revoked)]))
     );
-    jws(TOKEN_SEED, "statuslist+jwt", &claims).into_bytes()
+    jws(seed, "statuslist+jwt", &claims).into_bytes()
 }
 
 pub(crate) fn list_cwt(iat_s: u64, revoked: bool) -> Response {
@@ -566,7 +575,7 @@ pub(crate) struct Memory {
 impl Memory {
     pub(crate) fn healthy() -> Self {
         let m = Self::default();
-        *m.keys.borrow_mut() = Some(Keys::Fetched(ok(jwks())));
+        *m.keys.borrow_mut() = Some(Keys::Fetched(ok(signed_metadata())));
         *m.list.borrow_mut() = Some(ok(list_jwt(NOW / 1000 - 60, false)));
         *m.introspection.borrow_mut() = Some(ok(introspection_body(
             &TokenSpec::intent_token(),
@@ -589,7 +598,7 @@ impl Memory {
 }
 
 impl KeySource for Memory {
-    fn jwks(&self) -> Keys {
+    fn metadata(&self) -> Keys {
         self.calls.set(self.calls.get() + 1);
         self.keys
             .borrow()
@@ -652,7 +661,7 @@ pub(crate) fn config(profile: Profile) -> Config {
         issuer: ISSUER.to_owned(),
         audience: RS.to_owned(),
         domain: domain(),
-        metadata: Some(metadata()),
+        metadata: metadata(),
         profile,
         algorithms: BTreeSet::from([Algorithm::Ed25519]),
         key_epoch_ms: HOUR,

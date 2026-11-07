@@ -467,3 +467,30 @@ fn a_decided_policy_is_checked() {
     assert_eq!(ring.set_policy(faster), Ok(()));
     assert_eq!(ring.policy(), faster);
 }
+
+// §10.4.5, §12.1.2, TI-RT6: a realm key never signs an access token carrying authority, in
+// any spelling of the type, nor one whose claims cannot be read; a protocol-scope-only access
+// token and other types are signed
+#[test]
+fn a_realm_key_refuses_authority_tokens() {
+    let mut ring = Keyring::new(JwsAlg::Es256, Policy::REALM).unwrap();
+    let mut factory = Factory { down: false };
+    advance(&mut ring, &mut factory, 0, LEAD, MINUTE);
+    let authority =
+        br#"{"sub":"u1","authorization_details":[{"type":"door:open:1","kind":"bounds"}]}"#;
+    for typ in ["at+jwt", "AT+JWT", "application/at+jwt"] {
+        assert!(matches!(
+            ring.sign(typ, authority, LEAD),
+            Err(SignerError::Authority)
+        ));
+        assert!(matches!(
+            ring.sign(typ, b"[]", LEAD),
+            Err(SignerError::Authority)
+        ));
+    }
+    assert!(
+        ring.sign("at+jwt", br#"{"sub":"u1","scope":"openid"}"#, LEAD)
+            .is_ok()
+    );
+    assert!(ring.sign("JWT", authority, LEAD).is_ok());
+}

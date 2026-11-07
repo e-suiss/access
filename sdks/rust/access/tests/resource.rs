@@ -22,8 +22,9 @@ use access_sdk::resource::{
 use access_sdk::transport::{Answer, Fault, FixedClock, Response};
 use support::{
     BASIS_POS, Door, HOLDER_SEED, HOUR, NOW, OTHER_SEED, Open, REQUEST_URI, RS, TokenSpec, config,
-    d, exercise, family, intent, intent_hash, introspection_body, jwks, jwks_of, list_cwt,
-    list_jwt, ok, proof, proof_with, server, status, text_digest,
+    d, exercise, family, intent, intent_hash, introspection_body, jws, list_cwt, list_jwt,
+    metadata, ok, proof, proof_with, server, signed_metadata, signed_metadata_by, status,
+    text_digest,
 };
 
 fn present<'a>(token: &'a str, proof: Option<&'a str>) -> Presented<'a> {
@@ -229,19 +230,20 @@ fn a_token_over_8_kib_is_refused_before_anything_else() {
     assert!(m.seen.borrow().is_empty());
 }
 
-// §9.11.2, §13.11 EP-4, MD-6, MD-7, U36, U39: JWKS within key_epoch, default 1 h, ceiling 24 h
+// §9.11.2, §13.11 EP-4, MD-6, MD-7, U36, U39: the domain's keys within key_epoch, default 1 h,
+// ceiling 24 h
 #[test]
-fn the_jwks_serves_within_the_key_epoch_and_every_fetch_fault_is_deny() {
+fn the_keys_serve_within_the_key_epoch_and_every_fetch_fault_is_deny() {
     let token = TokenSpec::intent_token().signed();
     let s = server(Profile::Fast);
     let m = support::Memory::healthy();
     *m.keys.borrow_mut() = Some(Keys::Cached {
-        body: jwks(),
+        body: signed_metadata(),
         fetched_at: NOW - HOUR / 2,
     });
     assert!(verify(&s, &token, &proof(&token, "p-1"), &m).is_ok());
     *m.keys.borrow_mut() = Some(Keys::Cached {
-        body: jwks(),
+        body: signed_metadata(),
         fetched_at: NOW - HOUR - 1,
     });
     assert_eq!(
@@ -263,11 +265,6 @@ fn the_jwks_serves_within_the_key_epoch_and_every_fetch_fault_is_deny() {
         verify(&s, &token, &proof(&token, "p-5"), &m).unwrap_err(),
         Denied::KeysMalformed
     );
-    *m.keys.borrow_mut() = Some(Keys::Fetched(ok(jwks_of(OTHER_SEED))));
-    assert!(matches!(
-        verify(&s, &token, &proof(&token, "p-6"), &m).unwrap_err(),
-        Denied::Projection(ProjectionError::Jws(_))
-    ));
     let mut c = config(Profile::Fast);
     c.key_epoch_ms = MAX_KEY_EPOCH_MS + 1;
     assert_eq!(ResourceServer::new(c).unwrap_err(), ConfigError::KeyEpoch);
@@ -287,7 +284,7 @@ fn a_set_stale_unreadable_or_missing_status_list_is_deny() {
         verify(&s, &token, &proof(&token, "p-1"), &m).unwrap_err(),
         Denied::Revoked
     );
-    *m.list.borrow_mut() = Some(ok(list_jwt(NOW / 1000 - 7_200, false)));
+    *m.list.borrow_mut() = Some(ok(list_jwt(NOW / 1000 - 1_000, false)));
     assert_eq!(
         verify(&s, &token, &proof(&token, "p-2"), &m).unwrap_err(),
         Denied::StatusStale
@@ -607,4 +604,142 @@ fn a_family_ended_by_a_received_event_is_refused_and_family_is_required() {
     );
     assert_eq!(text_digest(&d(1)).len(), 8 + 43);
     let _ = Response::new(200, Vec::new());
+}
+
+// §10.4.5, §12.1.2, TI-RT6, MD-6 (supersedes OP-150 m.9 (b)'s thumbprint-only key rule): the
+// token key resolves only through the domain's binding-signed Domain Metadata, for usage
+// `token`, live at the token's `iat`; a realm JWKS key, another usage's key, a key outside its
+// window, metadata the pinned binding keys did not sign, another domain's or an older one all
+// verify nothing
+#[test]
+fn only_the_domains_token_key_live_at_iat_verifies_a_token() {
+    let s = server(Profile::Fast);
+    let spec = TokenSpec::intent_token();
+    // a realm key, served as a JWKS: not Domain Metadata at all
+    let m = support::Memory::healthy();
+    *m.keys.borrow_mut() = Some(Keys::Fetched(ok(support::jwks_of(OTHER_SEED))));
+    let token = spec.signed();
+    assert_eq!(
+        verify(&s, &token, &proof(&token, "k-1"), &m).unwrap_err(),
+        Denied::KeysMalformed
+    );
+    // a realm key signing the same claims: not declared by the metadata
+    let m = support::Memory::healthy();
+    let realm_signed = jws(OTHER_SEED, "at+jwt", &spec.claims());
+    assert!(matches!(
+        verify(&s, &realm_signed, &proof(&realm_signed, "k-2"), &m).unwrap_err(),
+        Denied::Projection(ProjectionError::Jws(_))
+    ));
+    // the domain's receipt and status-list keys: declared, but not for `token`
+    for (i, seed) in [support::RECEIPT_SEED, support::LIST_SEED]
+        .into_iter()
+        .enumerate()
+    {
+        let other_usage = jws(seed, "at+jwt", &spec.claims());
+        assert!(matches!(
+            verify(
+                &s,
+                &other_usage,
+                &proof(&other_usage, &format!("k-3-{i}")),
+                &m
+            )
+            .unwrap_err(),
+            Denied::Projection(ProjectionError::Jws(_))
+        ));
+    }
+    // the token key, but the token says it was signed before the key's window
+    let mut early = TokenSpec::intent_token();
+    early.iat_s = (11 * HOUR) / 1000;
+    let early = early.signed();
+    assert_eq!(
+        verify(&s, &early, &proof(&early, "k-4"), &m).unwrap_err(),
+        Denied::TokenKey
+    );
+    assert!(Denied::TokenKey.is_decision());
+}
+
+// §10.4.5, CR-58, TI-RT5, TI-RT6: the metadata itself must come from a pinned binding key, for
+// this domain, no older than the pinned one, and declare a token key
+#[test]
+fn metadata_from_another_binding_domain_or_time_verifies_nothing() {
+    let s = server(Profile::Fast);
+    let spec = TokenSpec::intent_token();
+    let m = support::Memory::healthy();
+    // metadata signed by a binding key the server does not pin
+    *m.keys.borrow_mut() = Some(Keys::Fetched(ok(signed_metadata_by(
+        OTHER_SEED,
+        &metadata(),
+    ))));
+    let token = spec.signed();
+    assert_eq!(
+        verify(&s, &token, &proof(&token, "k-5"), &m).unwrap_err(),
+        Denied::KeysMalformed
+    );
+    // another domain's metadata, signed by the pinned binding key
+    let mut other_domain = metadata();
+    other_domain.domain = d(2);
+    *m.keys.borrow_mut() = Some(Keys::Fetched(ok(signed_metadata_by(
+        support::BINDING_SEED,
+        &other_domain,
+    ))));
+    assert_eq!(
+        verify(&s, &token, &proof(&token, "k-6"), &m).unwrap_err(),
+        Denied::KeysMalformed
+    );
+    // metadata older than the pinned one (TI-RT5)
+    let mut older = metadata();
+    older.issued_at -= 1;
+    *m.keys.borrow_mut() = Some(Keys::Fetched(ok(signed_metadata_by(
+        support::BINDING_SEED,
+        &older,
+    ))));
+    assert_eq!(
+        verify(&s, &token, &proof(&token, "k-7"), &m).unwrap_err(),
+        Denied::KeysMalformed
+    );
+    // metadata that declares no token key
+    let mut no_token_key = metadata();
+    no_token_key.operational_keys.retain(|k| {
+        !k.usage
+            .contains(&access_kernel::verify::key_scope::KeyUsage::Token)
+    });
+    *m.keys.borrow_mut() = Some(Keys::Fetched(ok(signed_metadata_by(
+        support::BINDING_SEED,
+        &no_token_key,
+    ))));
+    assert_eq!(
+        verify(&s, &token, &proof(&token, "k-8"), &m).unwrap_err(),
+        Denied::TokenKey
+    );
+    // a status list signed by the token key or a realm key: only `status-list` keys sign lists
+    for (i, seed) in [support::TOKEN_SEED, OTHER_SEED].into_iter().enumerate() {
+        let m = support::Memory::healthy();
+        *m.list.borrow_mut() = Some(ok(support::list_jwt_by(seed, NOW / 1000 - 60, false)));
+        let token = spec.signed();
+        assert_eq!(
+            verify(&s, &token, &proof(&token, &format!("k-9-{i}")), &m).unwrap_err(),
+            Denied::StatusSignature
+        );
+    }
+    // a key whose window opens inside the token's `iat` second still signed it (JOSE times
+    // are whole seconds, rounded down)
+    let mut mid_second = metadata();
+    for k in &mut mid_second.operational_keys {
+        if k.usage
+            .contains(&access_kernel::verify::key_scope::KeyUsage::Token)
+        {
+            k.valid_from = spec.iat_s * 1000 + 500;
+        }
+    }
+    let m = support::Memory::healthy();
+    *m.keys.borrow_mut() = Some(Keys::Fetched(ok(signed_metadata_by(
+        support::BINDING_SEED,
+        &mid_second,
+    ))));
+    let token = spec.signed();
+    assert!(verify(&s, &token, &proof(&token, "k-10"), &m).is_ok());
+    // the pinned metadata must be the configured domain's
+    let mut c = config(Profile::Fast);
+    c.metadata.domain = d(2);
+    assert_eq!(ResourceServer::new(c).unwrap_err(), ConfigError::Domain);
 }

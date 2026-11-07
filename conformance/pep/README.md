@@ -61,7 +61,7 @@ Upstream answers (`kind`):
 | `json` | `status`, `body` | A literal JSON body |
 | `hang` | | Accepts the request and never answers |
 | `decision` | `decision`, `receipt` | ADP only: AuthZEN answer, with or without `context.receipt` |
-| `keys` | | JWKS only: the signing key |
+| `keys` | | JWKS only: the token and status list signing keys. The same case reply also governs `upstream.metadata`, which serves the binding-signed Domain Metadata when healthy |
 | `list` | `stale`, `revoked` | Status list only: a signed list, expired or not, the token's bit set or not |
 
 Expected effects:
@@ -94,6 +94,7 @@ Each case:
  "upstream":{"adp":"http://127.0.0.1:53111/adp-503/access/v1/evaluation",
              "introspection":"http://127.0.0.1:53111/adp-503/introspect",
              "jwks":"http://127.0.0.1:53111/adp-503/jwks",
+             "metadata":"http://127.0.0.1:53111/adp-503/metadata",
              "effect":"http://127.0.0.1:53111/adp-503/effect"},
  "request":{"mode":"decision","intent":"822f5820…","evaluation":{"subject":{…},"action":{…},"resource":{…},"context":{…}}}}
 ```
@@ -123,11 +124,15 @@ What the PEP does per mode:
   `token=…`). Allow only on `active: true`, `aud` naming the PEP and `exp` after `now`; a
   resource server SDK also checks `cnf` against the `DPoP` proof and reads
   `authorization_details` and `as_of`.
-- `jwt`: `GET upstream.jwks`, verify the token (`alg` `Ed25519`, `kid` the key's thumbprint,
+- `jwt`: get the token key, verify the token (`alg` `Ed25519`, `kid` the key's thumbprint,
   `typ` `at+jwt`, `iss`, one `aud`, `exp`, `iat`, `cnf.jkt` = the proof's key, 8 KiB ceiling),
   check the `DPoP` proof of this presentation against replay, refuse a second presentation of
   an exact-intent token, then `GET` the status list (`typ` `statuslist+jwt`, signed by the
-  same key), which must not be expired, and check the token's bit.
+  domain's status list key), which must not be expired, and check the token's bit. A plain
+  PEP may read the keys from `GET upstream.jwks`; an Access SDK resolves them from
+  `GET upstream.metadata` (`application/access-domain-metadata+cbor`, signed by a binding key
+  of the pinned metadata), taking only a key declared for `token` (or `status-list`) whose
+  window holds the artefact's `iat`.
 
 The effect is `POST upstream.effect`. Then the adapter answers:
 

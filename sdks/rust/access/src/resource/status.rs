@@ -1,6 +1,6 @@
 //! The Token Status List at the resource server (L2-STL-1 to L2-STL-3, §9.12.4, PI-9, OP-150
 //! m.7 (e), m.10 (b), (c)): the list the token's `status` claim names, verified as a CWT under
-//! the domain's `status-list` key or as a JWT under the realm keys, read within Δ of the
+//! the domain's `status-list` key, from its excerpt or its Domain Metadata, read within Δ of the
 //! canonical position it reflects. A set bit is DENY; a list that cannot be read or is older
 //! than Δ is DENY; the list never extends anything.
 
@@ -11,7 +11,9 @@ use access_kernel::json::{self, Json, b64url_decode};
 use access_kernel::model::TrustedTime;
 use access_kernel::status::{self, CWT_CONTENT_TYPE, ListToken, StatusRef};
 use access_kernel::verify::PureBackend;
-use access_kernel::verify::cose::{KeySet, parse_sign1, verify_sign1};
+use alloc::collections::BTreeSet;
+
+use access_kernel::verify::cose::{Algorithm, parse_sign1, verify_sign1};
 use access_kernel::verify::jws::{MAX_PAYLOAD, Origin, verify_compact};
 use access_kernel::verify::key_scope::{DomainMetadata, KeyUsage, operational_key};
 
@@ -30,14 +32,14 @@ pub trait StatusSource {
     fn list(&self, uri: &str) -> Answer;
 }
 
-/// What the resource server verifies lists with: the realm keys for the JWT form and, when it
-/// pins Domain Metadata, the domain's `status-list` key for the CWT form.
+/// What the resource server verifies lists with: the domain's verified Domain Metadata, whose
+/// `status-list` keys sign both forms (CR-58 m.2, TI-RT6); a realm key signs no list.
 #[derive(Clone, Copy, Debug)]
 pub struct ListKeys<'a> {
-    /// The realm key set the token verified under.
-    pub realm: &'a KeySet,
-    /// Verified Domain Metadata, when pinned.
-    pub metadata: Option<&'a DomainMetadata>,
+    /// Verified Domain Metadata.
+    pub metadata: &'a DomainMetadata,
+    /// Signature algorithms the resource server allows (MD-3).
+    pub allowed: &'a BTreeSet<Algorithm>,
 }
 
 fn inflate(lst: &[u8]) -> Result<Vec<u8>, Denied> {
@@ -46,7 +48,8 @@ fn inflate(lst: &[u8]) -> Result<Vec<u8>, Denied> {
 }
 
 fn cwt(response: &Response, keys: &ListKeys<'_>) -> Result<(ListToken, Vec<u8>), Denied> {
-    let (Some(metadata), Some(excerpt)) = (keys.metadata, &response.key_excerpt) else {
+    let metadata = keys.metadata;
+    let Some(excerpt) = &response.key_excerpt else {
         return Err(Denied::StatusKey);
     };
     let unverified = parse_sign1(&response.body)
@@ -87,16 +90,27 @@ fn uint(v: &Json, name: &str) -> Option<u64> {
 
 fn jwt(response: &Response, keys: &ListKeys<'_>) -> Result<(ListToken, Vec<u8>), Denied> {
     let text = core::str::from_utf8(&response.body).map_err(|_| Denied::StatusMalformed)?;
+    let list_keys = super::keys::usage_keys(keys.metadata, KeyUsage::StatusList, keys.allowed);
     let verified = verify_compact(
         &PureBackend,
         text.trim(),
-        keys.realm,
+        &list_keys,
         JWT_TYP,
         Origin::Native,
     )
     .map_err(|_| Denied::StatusSignature)?;
     let claims =
         json::parse(&verified.payload, MAX_PAYLOAD).map_err(|_| Denied::StatusMalformed)?;
+    // §9.10 step 1
+    let signed_at = uint(&claims, "iat").ok_or(Denied::StatusMalformed)?;
+    if !super::keys::live_at(
+        keys.metadata,
+        &verified.kid,
+        KeyUsage::StatusList,
+        signed_at,
+    ) {
+        return Err(Denied::StatusKey);
+    }
     let uri = claims
         .get("sub")
         .and_then(Json::as_str)

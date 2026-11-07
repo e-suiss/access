@@ -92,8 +92,8 @@ impl AskDecision for Http<'_> {
 }
 
 impl KeySource for Http<'_> {
-    fn jwks(&self) -> Keys {
-        Keys::Fetched(self.fetch("GET", &self.msg.upstream.jwks, None))
+    fn metadata(&self) -> Keys {
+        Keys::Fetched(self.fetch("GET", &self.msg.upstream.metadata, None))
     }
 }
 
@@ -219,7 +219,7 @@ impl Sdk {
             issuer: self.msg.pep.issuer.clone(),
             audience: self.msg.pep.audience.clone(),
             domain,
-            metadata: Some(metadata),
+            metadata,
             profile,
             algorithms: BTreeSet::from([Algorithm::Ed25519]),
             key_epoch_ms: resource::DEFAULT_KEY_EPOCH_MS,

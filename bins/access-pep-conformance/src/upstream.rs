@@ -150,6 +150,7 @@ impl Upstream {
             .route("/{case}/access/v1/evaluation", post(adp))
             .route("/{case}/introspect", post(introspection))
             .route("/{case}/jwks", get(jwks))
+            .route("/{case}/metadata", get(metadata))
             .route("/{case}/status", get(status_list))
             .route("/{case}/effect", post(effect))
             .with_state(self)
@@ -430,6 +431,7 @@ impl Upstream {
                 adp: self.url(&case.id, "access/v1/evaluation"),
                 introspection: self.url(&case.id, "introspect"),
                 jwks: self.url(&case.id, "jwks"),
+                metadata: self.url(&case.id, "metadata"),
                 effect: self.url(&case.id, "effect"),
             },
             request,
@@ -533,17 +535,25 @@ impl Upstream {
                 axum::Json(json!({ "decision": decision, "context": context })).into_response()
             }
             Reply::Keys => {
-                let signer = self.fixture.token_signer();
-                let x = ed25519_public(signer).map_err(sign_err)?;
-                axum::Json(json!({
-                    "keys": [{
+                let mut keys = Vec::new();
+                for signer in [self.fixture.token_signer(), self.fixture.list_signer()] {
+                    let x = ed25519_public(signer).map_err(sign_err)?;
+                    keys.push(json!({
                         "kty": "OKP", "crv": "Ed25519", "alg": "Ed25519", "use": "sig",
                         "kid": b64url_encode(&thumbprint(&signer.public_key())),
                         "x": b64url_encode(&x),
-                    }]
-                }))
-                .into_response()
+                    }));
+                }
+                axum::Json(json!({ "keys": keys })).into_response()
             }
+            Reply::Metadata => (
+                [(
+                    header::CONTENT_TYPE,
+                    "application/access-domain-metadata+cbor",
+                )],
+                self.fixture.signed_metadata.clone(),
+            )
+                .into_response(),
             Reply::List { stale, revoked } => {
                 let (iat, exp) = if *stale {
                     (now.saturating_sub(7_200), now.saturating_sub(3_600))
@@ -561,7 +571,7 @@ impl Upstream {
                         "lst": b64url_encode(&zlib_stored(&[u8::from(*revoked)])),
                     },
                 });
-                let signer = self.fixture.token_signer();
+                let signer = self.fixture.list_signer();
                 let kid = thumbprint(&signer.public_key());
                 let token = sign_compact(
                     signer,
@@ -640,6 +650,11 @@ async fn introspection(State(u): Shared, Path(case): Path<String>) -> Response {
 
 async fn jwks(State(u): Shared, Path(case): Path<String>) -> Response {
     u.reply(&case, |c| c.jwks.clone(), Reply::Keys, None).await
+}
+
+async fn metadata(State(u): Shared, Path(case): Path<String>) -> Response {
+    u.reply(&case, |c| c.jwks.clone(), Reply::Metadata, None)
+        .await
 }
 
 async fn status_list(State(u): Shared, Path(case): Path<String>) -> Response {

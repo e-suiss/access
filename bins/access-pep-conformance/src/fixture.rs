@@ -12,7 +12,7 @@ use access_kernel::model::{ActionRef, Id, ResourceRef, Window};
 use access_kernel::verify::cose::{Algorithm, PublicKey};
 use access_kernel::verify::key_scope::{
     BindingKey, BindingScope, DomainMetadata, EXCERPT_CONTENT_TYPE, KeyExcerpt, KeyUsage,
-    OperationalKey, SpecVersions, thumbprint,
+    METADATA_CONTENT_TYPE, OperationalKey, SpecVersions, thumbprint,
 };
 use suiss_crypto::signer::{SignError, Signer, SoftSigner, sign_sign1};
 
@@ -49,6 +49,8 @@ pub enum FixtureError {
 pub struct Fixture {
     /// Verified `domain-metadata` (CBOR) the PEP is configured with.
     pub metadata: Vec<u8>,
+    /// The same metadata as the domain serves it: a `COSE_Sign1` by the binding key (CR-58).
+    pub signed_metadata: Vec<u8>,
     /// The domain ID.
     pub domain: Digest,
     /// The PEP audience the receipts and tokens are for.
@@ -208,8 +210,15 @@ impl Fixture {
             &excerpt.to_bytes()?,
         )?;
         let envelope = envelope();
+        let signed_metadata = sign_sign1(
+            &binding,
+            binding_key.kid,
+            METADATA_CONTENT_TYPE,
+            &metadata.to_bytes()?,
+        )?;
         Ok(Self {
             metadata: metadata.to_bytes()?,
+            signed_metadata,
             domain,
             audience: AUDIENCE.to_owned(),
             intent: intent_digest(&envelope)?,
@@ -241,7 +250,7 @@ impl Fixture {
         Ok((sign1, self.receipt_excerpt.clone()))
     }
 
-    /// The token signing key, published in the realm JWKS (§9.9.3 rule 7).
+    /// The token signing key, declared for `token` in the Domain Metadata (§10.4.5).
     #[must_use]
     pub fn token_signer(&self) -> &SoftSigner {
         &self.token

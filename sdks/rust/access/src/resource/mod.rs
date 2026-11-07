@@ -1,7 +1,8 @@
 //! Verification of authority tokens at a resource server (§9.9, §9.9.3, §9.9.4, §10.4.3,
 //! §12.2.1, §13.4 U55, §13.7.9, L2-JOS-1 to L2-JOS-4, OP-150 m.3 (d), m.9): an RFC 9068 token
-//! whose authority is in RAR `authorization_details`, signed by the domain's operational key
-//! published in the realm JWKS, for this one resource server, bound to the key the request
+//! whose authority is in RAR `authorization_details`, signed by an operational key the domain's
+//! binding-signed Domain Metadata declares for `token` at the token's `iat` (§10.4.5, TI-RT6;
+//! never a realm JWKS key), for this one resource server, bound to the key the request
 //! was made with, within its `ValidityContract`, its status list entry clear, and, under the
 //! strict profile, confirmed by introspection on every request.
 //!
@@ -23,7 +24,7 @@ use access_kernel::model::TrustedTime;
 use access_kernel::verify::PureBackend;
 use access_kernel::verify::cose::Algorithm;
 use access_kernel::verify::dpop::{self, DpopError, ProofRules};
-use access_kernel::verify::key_scope::DomainMetadata;
+use access_kernel::verify::key_scope::{DomainMetadata, KeyUsage};
 use access_kernel::verify::projection::{
     AccessTokenRules, Confirmation, Kind, ProjectionError, verify_access_token,
 };
@@ -31,7 +32,7 @@ use suiss_crypto::digest::context_digest;
 
 pub use self::claims::{ActionType, ActorRef, Contract, Detail, TokenCapacity};
 pub use self::introspection::Introspector;
-pub use self::keys::{DEFAULT_KEY_EPOCH_MS, KeySource, Keys, MAX_KEY_EPOCH_MS};
+pub use self::keys::{DEFAULT_KEY_EPOCH_MS, KeySource, Keys, MAX_KEY_EPOCH_MS, MAX_METADATA};
 pub use self::status::StatusSource;
 use crate::authorize::{Authorized, Intent};
 use crate::transport::{Clock, Fault};
@@ -81,6 +82,9 @@ pub enum ConfigError {
     /// No algorithm is allowed, or one that is not enabled.
     #[error("algorithms")]
     Algorithms,
+    /// The pinned Domain Metadata is not the configured domain's.
+    #[error("domain")]
+    Domain,
 }
 
 /// A resource server.
@@ -89,7 +93,7 @@ pub struct ResourceServer {
     issuer: String,
     audience: String,
     domain: Digest,
-    metadata: Option<DomainMetadata>,
+    metadata: DomainMetadata,
     profile: Profile,
     algorithms: BTreeSet<Algorithm>,
     key_epoch_ms: u64,
@@ -107,13 +111,15 @@ pub struct Config {
     pub audience: String,
     /// The domain whose authority the tokens project.
     pub domain: Digest,
-    /// Verified Domain Metadata of that domain, for CWT status lists.
-    pub metadata: Option<DomainMetadata>,
+    /// Verified Domain Metadata of that domain the resource server pins: its binding keys
+    /// verify the metadata the key port serves, which declares the token and status list keys
+    /// (§10.4.5, CR-58, TI-RT6).
+    pub metadata: DomainMetadata,
     /// The revocation profile.
     pub profile: Profile,
     /// Signature algorithms allowed for tokens and proofs (MD-3).
     pub algorithms: BTreeSet<Algorithm>,
-    /// How long a fetched JWKS stays usable, at most [`MAX_KEY_EPOCH_MS`].
+    /// How long fetched Domain Metadata stays usable, at most [`MAX_KEY_EPOCH_MS`].
     pub key_epoch_ms: u64,
 }
 
@@ -131,6 +137,10 @@ impl ResourceServer {
         }
         if config.algorithms.is_empty() || config.algorithms.iter().any(|a| !a.enabled()) {
             return Err(ConfigError::Algorithms);
+        }
+        // TI-RT6
+        if config.metadata.domain != config.domain {
+            return Err(ConfigError::Domain);
         }
         Ok(Self {
             issuer: config.issuer,
@@ -195,7 +205,7 @@ pub trait Revocations {
 /// The ports one verification uses.
 #[derive(Clone, Copy, Debug)]
 pub struct Ports<'a, K, P, N, S, I, V> {
-    /// The realm JWKS.
+    /// The domain's signed Domain Metadata.
     pub keys: &'a K,
     /// DPoP and single-use replay state.
     pub replay: &'a P,
@@ -254,18 +264,23 @@ pub enum Denied {
     /// The replay store did not answer.
     #[error("replay-store")]
     ReplayStore,
-    /// The JWKS could not be fetched.
-    #[error("jwks-unavailable: {0}")]
+    /// The Domain Metadata could not be fetched.
+    #[error("keys-unavailable: {0}")]
     KeysUnavailable(Fault),
-    /// The JWKS endpoint answered other than 200.
-    #[error("jwks-status {0}")]
+    /// The Domain Metadata endpoint answered other than 200.
+    #[error("keys-status {0}")]
     KeysStatus(u16),
-    /// The JWKS is not a key set.
-    #[error("jwks-malformed")]
+    /// The Domain Metadata is not signed by a pinned binding key, names another domain, or is
+    /// older than the pinned one.
+    #[error("keys-malformed")]
     KeysMalformed,
-    /// The cached JWKS is older than `key_epoch`.
-    #[error("jwks-stale")]
+    /// The cached Domain Metadata is older than `key_epoch`.
+    #[error("keys-stale")]
     KeysStale,
+    /// No operational key declared for `token` was live at the token's `iat` (§10.4.5,
+    /// TI-RT6).
+    #[error("token-key")]
+    TokenKey,
     /// The token fails the Kernel's profile (L2-JOS-1 to L2-JOS-4).
     #[error("{0}")]
     Projection(ProjectionError),
@@ -372,6 +387,7 @@ impl Denied {
                 | Self::FamilyEnded
                 | Self::Reused
                 | Self::Projection(_)
+                | Self::TokenKey
                 | Self::Dpop(_)
                 | Self::DpopNonce
                 | Self::DpopReplay
@@ -511,7 +527,12 @@ impl ResourceServer {
         keys: &K,
         status: &S,
     ) -> Result<Verdict, Denied> {
-        let key_set = keys::resolve(keys.jwks(), &self.algorithms, now, self.key_epoch_ms)?;
+        let metadata = keys::resolve(keys.metadata(), &self.metadata, now, self.key_epoch_ms)?;
+        // §10.4.5, TI-RT6: only the domain's operational keys for `token`, never a realm key
+        let key_set = keys::usage_keys(&metadata, KeyUsage::Token, &self.algorithms);
+        if key_set.keys.is_empty() {
+            return Err(Denied::TokenKey);
+        }
         // L2-JOS-1 to L2-JOS-4
         let rules = AccessTokenRules {
             issuer: &self.issuer,
@@ -523,7 +544,13 @@ impl ResourceServer {
         };
         let token = verify_access_token(&PureBackend, presented.token, &key_set, &rules)
             .map_err(Denied::Projection)?;
+        let signed_with = token.token.kid;
         let claims = token.claims;
+        // §9.10 step 1: the key was live when the token was signed
+        let iat_s = claims::time_ms(&claims, "iat")? / 1000;
+        if !keys::live_at(&metadata, &signed_with, KeyUsage::Token, iat_s) {
+            return Err(Denied::TokenKey);
+        }
         // §9.9.4 k.1, P55
         claims::reserved_shapes(&claims)?;
         let details = claims::details(&claims, &self.domain)?;
@@ -542,8 +569,8 @@ impl ResourceServer {
             return Err(Denied::ContractStatus);
         }
         let list_keys = status::ListKeys {
-            realm: &key_set,
-            metadata: self.metadata.as_ref(),
+            metadata: &metadata,
+            allowed: &self.algorithms,
         };
         status::check(
             status.list(&reference.uri),
@@ -607,7 +634,8 @@ impl ResourceServer {
 
     /// Verifies one presentation of an authority token for `intent` and, when everything
     /// holds, authorizes the effect: size, proof of possession (DPoP with this server's nonce
-    /// and replay state, or mTLS), the realm key within `key_epoch`, the Kernel's token profile
+    /// and replay state, or mTLS), the domain's `token` key from its binding-signed Domain
+    /// Metadata within `key_epoch` and live at `iat`, the Kernel's token profile
     /// for this issuer, audience, domain and confirmation, the reserved claim shapes, the RAR
     /// details for this intent or action, the contract's audience and horizon, the status list
     /// entry within Δ, locally known revocations, introspection under the strict profile,

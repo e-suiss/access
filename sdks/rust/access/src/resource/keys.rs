@@ -1,16 +1,21 @@
-//! The realm JWKS at the resource server (§9.9.3 rule 7, §9.11.2, §13.11 EP-4, MD-6, MD-7):
-//! the keys that verify authority tokens, read from a document the caller fetched, within the
-//! `key_epoch` window when it was fetched earlier. A key's `kid` is its RFC 7638 thumbprint
-//! (CR-24); the algorithm allowlist comes from the resource server's configuration, never from
-//! the document (MD-3).
+//! The keys that verify authority tokens at the resource server (§10.4.5, §9.10 step 1, §9.11.2,
+//! §13.11 EP-4, MD-6, MD-7, TI-RT6): the domain's operational keys declared for usage `token`
+//! in its binding-signed Domain Metadata, verified against the binding keys the resource server
+//! pins, read within the `key_epoch` window when it was fetched earlier. A realm JWKS key, or
+//! any key the metadata does not declare for `token` at the token's `iat`, verifies nothing.
+//! The algorithm allowlist is the intersection of the metadata's and the resource server's
+//! configuration, never the token header's (MD-3).
 
 use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::vec::Vec;
 
 use access_kernel::json::{self, Json, b64url_decode};
 use access_kernel::model::TrustedTime;
+use access_kernel::verify::PureBackend;
 use access_kernel::verify::cose::{Algorithm, KeySet, PublicKey};
-use access_kernel::verify::key_scope::thumbprint;
+use access_kernel::verify::key_scope::{
+    DomainMetadata, KeyUsage, MAX_WINDOW_MS, OperationalKey, thumbprint, verify_metadata,
+};
 
 use super::Denied;
 use crate::transport::Answer;
@@ -18,7 +23,10 @@ use crate::transport::Answer;
 /// Largest JWKS document read (§14.6).
 pub const MAX_JWKS: usize = 64 * 1024;
 
-/// Default `key_epoch`: how long a fetched JWKS stays usable (MD-6, PD: 1 hour).
+/// Largest Domain Metadata document read (§14.6).
+pub const MAX_METADATA: usize = 64 * 1024;
+
+/// Default `key_epoch`: how long fetched Domain Metadata stays usable (MD-6, PD: 1 hour).
 pub const DEFAULT_KEY_EPOCH_MS: u64 = 60 * 60 * 1000;
 
 /// Longest `key_epoch` a resource server may configure (MD-6: 24 hours).
@@ -27,21 +35,132 @@ pub const MAX_KEY_EPOCH_MS: u64 = 24 * 60 * 60 * 1000;
 /// What the key port hands back.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Keys {
-    /// A fresh fetch of the JWKS.
+    /// A fresh fetch of the binding-signed Domain Metadata.
     Fetched(Answer),
-    /// The last JWKS the caller fetched, and when.
+    /// The last binding-signed Domain Metadata the caller fetched, and when.
     Cached {
-        /// The document.
+        /// The `COSE_Sign1` bytes.
         body: Vec<u8>,
         /// Trusted time of the fetch, Unix milliseconds.
         fetched_at: TrustedTime,
     },
 }
 
-/// The key port: the realm's JWKS.
+/// The key port: the domain's binding-signed Domain Metadata
+/// (`application/access-domain-metadata+cbor`, served at
+/// `/.well-known/access-domain-metadata/{DomainID}`).
 pub trait KeySource {
-    /// The JWKS, fetched now or as cached.
-    fn jwks(&self) -> Keys;
+    /// The signed metadata, fetched now or as cached.
+    fn metadata(&self) -> Keys;
+}
+
+fn binding_keys(pinned: &DomainMetadata) -> KeySet {
+    let mut set = KeySet::default();
+    set.keys.extend(
+        pinned
+            .binding
+            .values()
+            .filter(|b| b.superseded.is_none())
+            .map(|b| (b.kid, b.key.clone())),
+    );
+    set.allowed.extend(pinned.algorithms.iter().copied());
+    set
+}
+
+/// Verifies signed Domain Metadata against the binding keys of the `pinned` metadata (CR-58):
+/// the same domain, issued no earlier than the pinned one.
+///
+/// # Errors
+/// [`Denied::KeysMalformed`].
+pub fn verified(body: &[u8], pinned: &DomainMetadata) -> Result<DomainMetadata, Denied> {
+    if body.len() > MAX_METADATA {
+        return Err(Denied::KeysMalformed);
+    }
+    let metadata = verify_metadata(&PureBackend, body, &binding_keys(pinned))
+        .map_err(|_| Denied::KeysMalformed)?;
+    // TI-RT6, TI-RT5
+    if metadata.domain != pinned.domain || metadata.issued_at < pinned.issued_at {
+        return Err(Denied::KeysMalformed);
+    }
+    Ok(metadata)
+}
+
+/// The metadata from what the port handed back: a 200 with metadata the pinned binding keys
+/// signed, or such a document fetched no more than `key_epoch_ms` ago (§9.11.2: keys that
+/// cannot be refreshed serve within the `key_epoch` window, not beyond it).
+///
+/// # Errors
+/// [`Denied`].
+pub fn resolve(
+    keys: Keys,
+    pinned: &DomainMetadata,
+    now: TrustedTime,
+    key_epoch_ms: u64,
+) -> Result<DomainMetadata, Denied> {
+    match keys {
+        Keys::Fetched(Answer::Unanswered(fault)) => Err(Denied::KeysUnavailable(fault)),
+        Keys::Fetched(Answer::Response(r)) if r.status != 200 => Err(Denied::KeysStatus(r.status)),
+        Keys::Fetched(Answer::Response(r)) => verified(&r.body, pinned),
+        Keys::Cached { body, fetched_at } => {
+            let age = now.checked_sub(fetched_at).ok_or(Denied::KeysStale)?;
+            if age > key_epoch_ms {
+                return Err(Denied::KeysStale);
+            }
+            verified(&body, pinned)
+        }
+    }
+}
+
+fn usable(metadata: &DomainMetadata, key: &OperationalKey, allowed: &BTreeSet<Algorithm>) -> bool {
+    let fits = matches!(
+        (&key.key, key.alg),
+        (PublicKey::Ed25519(_), Algorithm::Ed25519)
+            | (PublicKey::P256(_), Algorithm::Esp256 | Algorithm::Es256)
+    );
+    let width = key.valid_until.checked_sub(key.valid_from);
+    fits && key.key.check().is_ok()
+        && key.kid == thumbprint(&key.key)
+        && key.alg.enabled()
+        && metadata.algorithms.contains(&key.alg)
+        && allowed.contains(&key.alg)
+        && width.is_some_and(|w| w <= metadata.operational_window_max_ms.min(MAX_WINDOW_MS))
+}
+
+/// The key set of the operational keys `metadata` declares for `usage` that the allowlist
+/// admits (CR-58 m.5, TI-RT6). Whether the key that verified was live at the artefact's `iat`
+/// is [`live_at`].
+#[must_use]
+pub fn usage_keys(
+    metadata: &DomainMetadata,
+    usage: KeyUsage,
+    allowed: &BTreeSet<Algorithm>,
+) -> KeySet {
+    let mut set = KeySet::default();
+    for key in metadata
+        .operational_keys
+        .iter()
+        .filter(|k| k.usage.contains(&usage) && usable(metadata, k, allowed))
+    {
+        if set.insert(key.kid, key.key.clone()).is_ok() {
+            set.allowed.insert(key.alg);
+        }
+    }
+    set
+}
+
+/// Whether the key `kid` of `metadata`, declared for `usage`, was live in the second `iat_s`
+/// (§9.10 step 1: the signature time is inside the operational key's window). A JOSE `iat` is
+/// whole seconds, rounded down from the signing time, so the key's window must overlap that
+/// second.
+#[must_use]
+pub fn live_at(metadata: &DomainMetadata, kid: &[u8; 32], usage: KeyUsage, iat_s: u64) -> bool {
+    let Some(from) = iat_s.checked_mul(1000) else {
+        return false;
+    };
+    let until = from.saturating_add(999);
+    metadata.operational_keys.iter().any(|k| {
+        k.kid == *kid && k.usage.contains(&usage) && k.valid_from <= until && from <= k.valid_until
+    })
 }
 
 fn coordinate(jwk: &Json, name: &str) -> Option<[u8; 32]> {
@@ -64,9 +183,10 @@ fn public_key(jwk: &Json) -> Option<PublicKey> {
     }
 }
 
-/// Reads a JWKS document into the key set the tokens verify under: every Ed25519 or P-256
-/// key whose `kid` is its thumbprint; other keys are not authority keys (MD-3) and are left
-/// out. A document without such a key is refused.
+/// Reads a realm JWKS into the key set identity assertions (ID tokens) verify under: every
+/// Ed25519 or P-256 key whose `kid` is its RFC 7638 thumbprint (CR-24). A realm key never
+/// verifies an authority token (§10.4.5); those resolve through [`usage_keys`]. A document
+/// without such a key is refused.
 ///
 /// # Errors
 /// [`Denied::KeysMalformed`].
@@ -95,30 +215,4 @@ pub fn key_set(body: &[u8], allowed: &BTreeSet<Algorithm>) -> Result<KeySet, Den
         return Err(Denied::KeysMalformed);
     }
     Ok(set)
-}
-
-/// The key set from what the port handed back: a 200 with a readable document, or a cached
-/// document fetched no more than `key_epoch_ms` ago (§9.11.2: a JWKS that cannot be refreshed
-/// serves within the `key_epoch` window, not beyond it).
-///
-/// # Errors
-/// [`Denied`].
-pub fn resolve(
-    keys: Keys,
-    allowed: &BTreeSet<Algorithm>,
-    now: TrustedTime,
-    key_epoch_ms: u64,
-) -> Result<KeySet, Denied> {
-    match keys {
-        Keys::Fetched(Answer::Unanswered(fault)) => Err(Denied::KeysUnavailable(fault)),
-        Keys::Fetched(Answer::Response(r)) if r.status != 200 => Err(Denied::KeysStatus(r.status)),
-        Keys::Fetched(Answer::Response(r)) => key_set(&r.body, allowed),
-        Keys::Cached { body, fetched_at } => {
-            let age = now.checked_sub(fetched_at).ok_or(Denied::KeysStale)?;
-            if age > key_epoch_ms {
-                return Err(Denied::KeysStale);
-            }
-            key_set(&body, allowed)
-        }
-    }
 }

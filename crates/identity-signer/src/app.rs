@@ -349,11 +349,16 @@ impl Keyring {
     }
 
     /// Signs a JSON object `payload` as a compact JWS of type `typ` at `now`, with the key
-    /// that may sign now (SAI-46); without one, nothing is signed (CR-23, G42).
+    /// that may sign now (SAI-46); without one, nothing is signed (CR-23, G42). An access token
+    /// is signed only when it carries no `authorization_details`: a realm key never signs an
+    /// authority projection (§10.4.5, §12.1.2).
     ///
     /// # Errors
-    /// [`SignerError::NoKey`] or [`SignerError::Jose`].
+    /// [`SignerError::Authority`], [`SignerError::NoKey`] or [`SignerError::Jose`].
     pub fn sign(&mut self, typ: &str, payload: &[u8], now: u64) -> Result<Signed, SignerError> {
+        if carries_authority(typ, payload) {
+            return Err(SignerError::Authority);
+        }
         let records = self.records();
         let kid = rotation::signing_key(&records, &self.policy, now)
             .map(|k| k.kid)
@@ -456,3 +461,17 @@ impl Keyring {
 
 #[cfg(test)]
 mod tests;
+
+/// Whether `payload` of type `typ` is, or cannot be shown not to be, an authority-carrying
+/// access token (§10.4.5, TI-RT6).
+fn carries_authority(typ: &str, payload: &[u8]) -> bool {
+    let typ = typ.strip_prefix("application/").unwrap_or(typ);
+    if !typ.eq_ignore_ascii_case(access_kernel::verify::projection::ACCESS_TOKEN_TYP) {
+        return false;
+    }
+    !matches!(
+        access_kernel::json::parse(payload, access_kernel::verify::jws::MAX_PAYLOAD),
+        Ok(claims @ access_kernel::json::Json::Object(_))
+            if claims.get("authorization_details").is_none()
+    )
+}
