@@ -17,8 +17,8 @@ use access_store::authority::{
 use access_store::events::SealedKey;
 use access_store::extensions::{
     Attempt, HookRow, WebhookDelivery, WebhookKeyRow, WebhookRow, due_webhooks, insert_hook,
-    insert_webhook, live_hook, live_webhooks, retire_hook, retire_webhook, update_webhook,
-    webhook, webhook_keys,
+    insert_webhook, live_hook, live_webhooks, retire_hook, retire_webhook, update_webhook, webhook,
+    webhook_keys,
 };
 use access_store::identity::{RealmId, TenantId, TenantTx};
 use access_store::idp::{Decision, bind, create_settings};
@@ -157,14 +157,20 @@ async fn tn_135_hooks_are_bound_realm_configuration() {
         .await
         .unwrap()
         .unwrap();
-    assert!(insert_hook(&mut tx, &b, &hook(1, "post_login")).await.is_err());
+    assert!(
+        insert_hook(&mut tx, &b, &hook(1, "post_login"))
+            .await
+            .is_err()
+    );
 
     let mut tx = TenantTx::begin(&db.app, t, r).await.unwrap();
     let b = bind(&mut tx, &decision(&d, 2, &[2; 16], "idp.hook.register"))
         .await
         .unwrap()
         .unwrap();
-    insert_hook(&mut tx, &b, &hook(1, "post_login")).await.unwrap();
+    insert_hook(&mut tx, &b, &hook(1, "post_login"))
+        .await
+        .unwrap();
     assert!(
         insert_hook(&mut tx, &b, &hook(2, "post_login"))
             .await
@@ -175,7 +181,9 @@ async fn tn_135_hooks_are_bound_realm_configuration() {
         .await
         .unwrap()
         .unwrap();
-    insert_hook(&mut tx, &b, &hook(1, "post_login")).await.unwrap();
+    insert_hook(&mut tx, &b, &hook(1, "post_login"))
+        .await
+        .unwrap();
     let mut continue_on_login = hook(3, "pre_registration");
     continue_on_login.on_no_answer = String::from("continue_without_claims");
     assert!(
@@ -187,7 +195,9 @@ async fn tn_135_hooks_are_bound_realm_configuration() {
         .await
         .unwrap()
         .unwrap();
-    insert_hook(&mut tx, &b, &hook(1, "post_login")).await.unwrap();
+    insert_hook(&mut tx, &b, &hook(1, "post_login"))
+        .await
+        .unwrap();
     tx.commit().await.unwrap();
 
     let mut tx = TenantTx::begin(&db.app, t, r).await.unwrap();
@@ -266,7 +276,10 @@ async fn tn_136_webhooks_are_bound_and_rotate_with_overlap() {
     tx.commit().await.unwrap();
 
     let mut tx = TenantTx::begin(&db.app, t, r).await.unwrap();
-    assert_eq!(webhook(&mut tx, &w.id).await.unwrap(), Some(changed.clone()));
+    assert_eq!(
+        webhook(&mut tx, &w.id).await.unwrap(),
+        Some(changed.clone())
+    );
     let keys = webhook_keys(&mut tx, &w.id, now).await.unwrap();
     assert_eq!(keys.len(), 2);
     assert_eq!(keys[0].id, [2; 16]);
@@ -373,7 +386,9 @@ async fn tn_136_deliveries_and_their_log_are_kept() {
         .unwrap();
     assert_eq!((row.state.as_str(), row.attempts), ("delivered", 2));
     assert_eq!(
-        tx.webhook_attempts(&w.id, &delivery.event_id).await.unwrap(),
+        tx.webhook_attempts(&w.id, &delivery.event_id)
+            .await
+            .unwrap(),
         vec![
             (String::from("retry"), Some(503), Some(42)),
             (String::from("delivered"), Some(204), Some(7)),

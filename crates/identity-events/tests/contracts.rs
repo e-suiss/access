@@ -142,6 +142,70 @@ fn tenants_are_named_by_their_opaque_id() {
     );
 }
 
+const ACCOUNT: &str = "usr_0b5yq2mtzk6x4hd1e8fg3wa7rc";
+
+/// OP-151 m.3 (i): every identity event the account use cases queue and every one whose
+/// producer arrives later.
+fn identity_events() -> Vec<IdentityEvent> {
+    use access_identity_account::domain::events::{AccountEvent, CredentialChange, EventOrder};
+    use access_identity_account::domain::status::AccountStatus;
+    let realm = [2; 16];
+    let mut out = vec![
+        IdentityEvent::account(&EventOrder::created([10; 32], &realm, ACCOUNT, 5)),
+        IdentityEvent::account(&EventOrder::session_revoked(
+            [11; 32], &realm, ACCOUNT, 3, 5,
+        )),
+        IdentityEvent::account(&EventOrder::credential(
+            [12; 32],
+            &realm,
+            ACCOUNT,
+            "webauthn",
+            CredentialChange::Added,
+            5,
+        )),
+        IdentityEvent::membership(
+            IdentityKind::MembershipAdded,
+            [13; 32],
+            &realm,
+            ACCOUNT,
+            &[4; 16],
+            5,
+        ),
+        IdentityEvent::membership(
+            IdentityKind::MembershipRemoved,
+            [14; 32],
+            &realm,
+            ACCOUNT,
+            &[4; 16],
+            5,
+        ),
+        IdentityEvent::preference_changed([15; 32], &realm, ACCOUNT, &["marketing.email"], 5),
+        IdentityEvent::document_accepted([16; 32], &realm, ACCOUNT, "terms", "2026-11-01", 5),
+        IdentityEvent::agent_suspended([17; 32], &realm, &[5; 16], 5),
+        IdentityEvent::login_failed_surge([18; 32], &realm, 250, 300_000, 5),
+    ];
+    for (i, (from, to)) in [
+        (AccountStatus::Locked, AccountStatus::Active),
+        (AccountStatus::Active, AccountStatus::Suspended),
+        (AccountStatus::Suspended, AccountStatus::Active),
+        (AccountStatus::Active, AccountStatus::Deactivated),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let kind = AccountEvent::of_status(from, to).unwrap();
+        out.push(IdentityEvent::account(&EventOrder::status(
+            kind,
+            [20 + i as u8; 32],
+            &realm,
+            ACCOUNT,
+            to,
+            5,
+        )));
+    }
+    out
+}
+
 fn sample(kind: Kind) -> Event {
     let d = Digest([7; 32]);
     let (subject, detail) = match kind {
@@ -232,7 +296,10 @@ fn built_events_meet_the_contracts() {
         IdentityEvent::party_suspended([5; 32], &[2; 16], 5),
         // §9.9.3 rule 6, P50
         IdentityEvent::projection_invalidated([6; 32], &[7; 32], &[8; 32], &[9; 16], 5),
-    ] {
+    ]
+    .into_iter()
+    .chain(identity_events())
+    {
         let back =
             IdentityEvent::from_outbox(e.kind.outbox_kind(), &e.to_outbox().unwrap()).unwrap();
         assert_eq!(back, e);

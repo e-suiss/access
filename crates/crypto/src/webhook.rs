@@ -290,7 +290,9 @@ impl WebhookPublicKey {
     /// # Errors
     /// [`MalformedSecret`].
     pub fn parse(text: &str) -> Result<Self, MalformedSecret> {
-        let b64 = text.strip_prefix(PUBLIC_KEY_PREFIX).ok_or(MalformedSecret)?;
+        let b64 = text
+            .strip_prefix(PUBLIC_KEY_PREFIX)
+            .ok_or(MalformedSecret)?;
         let raw = b64_decode(b64).ok_or(MalformedSecret)?;
         Ok(Self(
             <[u8; 32]>::try_from(raw.as_slice()).map_err(|_| MalformedSecret)?,

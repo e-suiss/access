@@ -70,11 +70,8 @@ fn tn_136_ed25519_keys_round_trip_and_overlap() {
     );
     assert!(WebhookSigningKey::from_seed(&[0; 31]).is_err());
     assert!(WebhookPublicKey::parse("whpk_AAAA").is_err());
-    assert!(!old.public_key().verify(
-        ID,
-        TS,
-        BODY,
-        &old.sign(ID, TS, BODY),
-        TS + TOLERANCE_S + 1
-    ));
+    assert!(
+        !old.public_key()
+            .verify(ID, TS, BODY, &old.sign(ID, TS, BODY), TS + TOLERANCE_S + 1)
+    );
 }

@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:suiss:access:schema:event:agent.suspended:1",
+  "title": "An agent Party was suspended (OP-151 m.3 (i))",
+  "description": "The member of the SET `events` claim, and of the CloudEvent `data.events`, under `urn:suiss:access:event:agent.suspended`. A notification, never an authority source: losing or delaying it changes no decision (INV-24).",
+  "type": "object",
+  "required": [
+    "realm",
+    "agent",
+    "at"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "realm": {
+      "$ref": "#/$defs/uuid"
+    },
+    "agent": {
+      "$ref": "#/$defs/b64url16"
+    },
+    "at": {
+      "$ref": "#/$defs/ms"
+    }
+  },
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "ms": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Unix time, milliseconds."
+    },
+    "b64url16": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{22}$"
+    }
+  }
+}

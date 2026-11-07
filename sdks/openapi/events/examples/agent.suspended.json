@@ -1,0 +1,28 @@
+{
+  "specversion": "1.0",
+  "id": "AQLxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+  "source": "urn:suiss:access:realm:019a0000-0000-7000-8000-0000000000a1",
+  "type": "urn:suiss:access:event:agent.suspended",
+  "subject": "AgICAgICAgICAgICAgICAg",
+  "time": "2026-11-04T00:00:00.000Z",
+  "datacontenttype": "application/json",
+  "accesstenant": "tnt_0123456789abcdefghjkmnpqrs",
+  "accessrealm": "019a0000-0000-7000-8000-0000000000a1",
+  "data": {
+    "iss": "https://id.example/realms/shop",
+    "aud": "019a0000-0000-7000-8000-0000000000c3",
+    "iat": 1793750400,
+    "jti": "AQLxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "sub_id": {
+      "format": "opaque",
+      "id": "AgICAgICAgICAgICAgICAg"
+    },
+    "events": {
+      "urn:suiss:access:event:agent.suspended": {
+        "realm": "019a0000-0000-7000-8000-0000000000a1",
+        "agent": "AgICAgICAgICAgICAgICAg",
+        "at": 1793750400000
+      }
+    }
+  }
+}

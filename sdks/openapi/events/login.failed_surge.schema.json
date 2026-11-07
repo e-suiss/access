@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:suiss:access:schema:event:login.failed_surge:1",
+  "title": "Failed sign-ins in a realm rose above the surge threshold within a window (OP-151 m.3 (i))",
+  "description": "The member of the SET `events` claim, and of the CloudEvent `data.events`, under `urn:suiss:access:event:login.failed_surge`. A notification, never an authority source: losing or delaying it changes no decision (INV-24).",
+  "type": "object",
+  "required": [
+    "realm",
+    "failures",
+    "window_ms",
+    "at"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "realm": {
+      "$ref": "#/$defs/uuid"
+    },
+    "failures": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "window_ms": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "at": {
+      "$ref": "#/$defs/ms"
+    }
+  },
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "ms": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Unix time, milliseconds."
+    }
+  }
+}

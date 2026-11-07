@@ -4,6 +4,7 @@
 
 use core::fmt::Write as _;
 
+use access_identity_account::domain::events::{AccountEvent, EventOrder};
 use access_internal_api::events::{Detail, Event, Kind, Source, Subject};
 use access_kernel::json::b64url_encode;
 use serde_json::{Map, Value, json};
@@ -18,8 +19,8 @@ pub use access_identity_oauth::ports::oauth::TENANT_PREFIX;
 /// Prefix of the identity outbox kinds this crate reads.
 pub const OUTBOX_PREFIX: &str = "event.";
 
-/// Every event name, authority events first.
-pub const NAMES: [&str; 16] = [
+/// Every event name, authority events first; the identity events of OP-151 m.3 (i) last.
+pub const NAMES: [&str; 29] = [
     "authority-revoked",
     "authority-narrowed",
     "authority-expired",
@@ -36,6 +37,19 @@ pub const NAMES: [&str; 16] = [
     "api_client.created",
     "api_client.updated",
     "api_client.disabled",
+    "account.created",
+    "account.updated",
+    "account.suspended",
+    "account.reactivated",
+    "account.deleted",
+    "membership.added",
+    "membership.removed",
+    "session.revoked",
+    "credential.changed",
+    "preference.changed",
+    "document.accepted",
+    "agent.suspended",
+    "login.failed_surge",
 ];
 
 /// The type URN of `name`.
@@ -71,10 +85,24 @@ pub enum IdentityKind {
     /// `projection-invalidated`: the realm's authorization server ended a refresh family of
     /// authority tokens on reuse (§9.9.3 rule 6).
     ProjectionInvalidated,
+    /// An account, session or credential event of the account use cases (OP-151 m.3 (i)).
+    Account(AccountEvent),
+    /// `membership.added`; its producer arrives with organization membership.
+    MembershipAdded,
+    /// `membership.removed`; its producer arrives with organization membership.
+    MembershipRemoved,
+    /// `preference.changed` (IDP-37); its producer arrives with the preference center.
+    PreferenceChanged,
+    /// `document.accepted`; its producer arrives with document acceptance.
+    DocumentAccepted,
+    /// `agent.suspended`; its producer arrives with agent connections.
+    AgentSuspended,
+    /// `login.failed_surge`; its producer arrives with the risk signals.
+    LoginFailedSurge,
 }
 
 impl IdentityKind {
-    const ALL: [Self; 8] = [
+    const ALL: [Self; 14] = [
         Self::TenantCreated,
         Self::OrganizationCreated,
         Self::OrganizationUpdated,
@@ -83,6 +111,12 @@ impl IdentityKind {
         Self::ApiClientDisabled,
         Self::PartyDisabled,
         Self::ProjectionInvalidated,
+        Self::MembershipAdded,
+        Self::MembershipRemoved,
+        Self::PreferenceChanged,
+        Self::DocumentAccepted,
+        Self::AgentSuspended,
+        Self::LoginFailedSurge,
     ];
 
     /// The event name.
@@ -97,6 +131,13 @@ impl IdentityKind {
             Self::ApiClientDisabled => "api_client.disabled",
             Self::PartyDisabled => "party.disabled",
             Self::ProjectionInvalidated => "projection-invalidated",
+            Self::Account(a) => a.name(),
+            Self::MembershipAdded => "membership.added",
+            Self::MembershipRemoved => "membership.removed",
+            Self::PreferenceChanged => "preference.changed",
+            Self::DocumentAccepted => "document.accepted",
+            Self::AgentSuspended => "agent.suspended",
+            Self::LoginFailedSurge => "login.failed_surge",
         }
     }
 
@@ -112,13 +153,33 @@ impl IdentityKind {
             Self::ApiClientDisabled => "event.api_client.disabled",
             Self::PartyDisabled => "event.party.disabled",
             Self::ProjectionInvalidated => "event.projection_invalidated",
+            Self::Account(a) => a.outbox_kind(),
+            Self::MembershipAdded => "event.membership.added",
+            Self::MembershipRemoved => "event.membership.removed",
+            Self::PreferenceChanged => "event.preference.changed",
+            Self::DocumentAccepted => "event.document.accepted",
+            Self::AgentSuspended => "event.agent.suspended",
+            Self::LoginFailedSurge => "event.login.failed_surge",
         }
     }
 
     /// The kind of an identity outbox kind.
     #[must_use]
     pub fn from_outbox(kind: &str) -> Option<Self> {
-        Self::ALL.into_iter().find(|k| k.outbox_kind() == kind)
+        Self::ALL
+            .into_iter()
+            .find(|k| k.outbox_kind() == kind)
+            .or_else(|| AccountEvent::from_outbox(kind).map(Self::Account))
+    }
+
+    /// Whether the identity plane itself produces it, so a webhook may ask for it (OP-151
+    /// m.3 (i)); authority events reach tenants through streams (OP-149 m.7).
+    #[must_use]
+    pub fn of_name(name: &str) -> Option<Self> {
+        Self::ALL
+            .into_iter()
+            .chain(AccountEvent::ALL.into_iter().map(Self::Account))
+            .find(|k| k.name() == name)
     }
 }
 
@@ -212,6 +273,110 @@ impl IdentityEvent {
             payload: json!({
                 "tenant": tenant,
                 "organization": uuid(organization),
+                "at": at,
+            }),
+        }
+    }
+
+    /// An account, session or credential event as the account use cases queued it.
+    #[must_use]
+    pub fn account(order: &EventOrder) -> Self {
+        Self {
+            kind: IdentityKind::Account(order.kind),
+            id: order.id,
+            payload: order.payload.clone(),
+        }
+    }
+
+    /// `membership.added` or `membership.removed` of `account` (its `usr_` id) in
+    /// `organization`.
+    #[must_use]
+    pub fn membership(
+        kind: IdentityKind,
+        id: [u8; 32],
+        realm: &[u8; 16],
+        account: &str,
+        organization: &[u8; 16],
+        at: u64,
+    ) -> Self {
+        Self {
+            kind,
+            id,
+            payload: json!({
+                "realm": uuid(realm),
+                "account": account,
+                "organization": uuid(organization),
+                "at": at,
+            }),
+        }
+    }
+
+    /// `preference.changed` of `account`: which preference topics changed, never their values
+    /// (IDP-37).
+    #[must_use]
+    pub fn preference_changed(
+        id: [u8; 32],
+        realm: &[u8; 16],
+        account: &str,
+        topics: &[&str],
+        at: u64,
+    ) -> Self {
+        Self {
+            kind: IdentityKind::PreferenceChanged,
+            id,
+            payload: json!({"realm": uuid(realm), "account": account, "topics": topics, "at": at}),
+        }
+    }
+
+    /// `document.accepted`: `account` accepted `document` at `version`.
+    #[must_use]
+    pub fn document_accepted(
+        id: [u8; 32],
+        realm: &[u8; 16],
+        account: &str,
+        document: &str,
+        version: &str,
+        at: u64,
+    ) -> Self {
+        Self {
+            kind: IdentityKind::DocumentAccepted,
+            id,
+            payload: json!({
+                "realm": uuid(realm),
+                "account": account,
+                "document": document,
+                "version": version,
+                "at": at,
+            }),
+        }
+    }
+
+    /// `agent.suspended`: the agent Party `agent` was suspended.
+    #[must_use]
+    pub fn agent_suspended(id: [u8; 32], realm: &[u8; 16], agent: &[u8; 16], at: u64) -> Self {
+        Self {
+            kind: IdentityKind::AgentSuspended,
+            id,
+            payload: json!({"realm": uuid(realm), "agent": b64url_encode(agent), "at": at}),
+        }
+    }
+
+    /// `login.failed_surge`: `failures` failed sign-ins in the realm within `window_ms`.
+    #[must_use]
+    pub fn login_failed_surge(
+        id: [u8; 32],
+        realm: &[u8; 16],
+        failures: u32,
+        window_ms: u64,
+        at: u64,
+    ) -> Self {
+        Self {
+            kind: IdentityKind::LoginFailedSurge,
+            id,
+            payload: json!({
+                "realm": uuid(realm),
+                "failures": failures,
+                "window_ms": window_ms,
                 "at": at,
             }),
         }
@@ -318,12 +483,20 @@ pub struct Ready {
 }
 
 fn subject_id(p: &Value) -> String {
-    ["party", "client_id", "organization", "tenant"]
-        .into_iter()
-        .find_map(|k| p.get(k).and_then(Value::as_str))
-        .or_else(|| p.pointer("/subject/id").and_then(Value::as_str))
-        .map(String::from)
-        .unwrap_or_default()
+    [
+        "account",
+        "agent",
+        "party",
+        "client_id",
+        "organization",
+        "tenant",
+        "realm",
+    ]
+    .into_iter()
+    .find_map(|k| p.get(k).and_then(Value::as_str))
+    .or_else(|| p.pointer("/subject/id").and_then(Value::as_str))
+    .map(String::from)
+    .unwrap_or_default()
 }
 
 fn source_json(s: Source) -> Value {

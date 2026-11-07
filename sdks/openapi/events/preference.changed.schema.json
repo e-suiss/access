@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:suiss:access:schema:event:preference.changed:1",
+  "title": "An account changed preferences (OP-151 m.3 (i), IDP-37); the topics that changed are named, never their values",
+  "description": "The member of the SET `events` claim, and of the CloudEvent `data.events`, under `urn:suiss:access:event:preference.changed`. A notification, never an authority source: losing or delaying it changes no decision (INV-24).",
+  "type": "object",
+  "required": [
+    "realm",
+    "account",
+    "topics",
+    "at"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "realm": {
+      "$ref": "#/$defs/uuid"
+    },
+    "account": {
+      "$ref": "#/$defs/account"
+    },
+    "at": {
+      "$ref": "#/$defs/ms"
+    },
+    "topics": {
+      "type": "array",
+      "maxItems": 32,
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9_.-]{0,63}$"
+      }
+    }
+  },
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "ms": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Unix time, milliseconds."
+    },
+    "account": {
+      "type": "string",
+      "pattern": "^usr_[0-9a-hjkmnp-tv-z]{26}$",
+      "description": "The account's opaque external id (OP-137): pseudonymous, never an identifier or a name."
+    }
+  }
+}

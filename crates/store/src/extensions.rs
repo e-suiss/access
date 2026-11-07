@@ -101,7 +101,11 @@ pub async fn insert_hook(t: &mut TenantTx, bound: &Bound, h: &HookRow) -> Result
 ///
 /// # Errors
 /// [`StoreError`].
-pub async fn retire_hook(t: &mut TenantTx, bound: &Bound, id: &[u8; 16]) -> Result<bool, StoreError> {
+pub async fn retire_hook(
+    t: &mut TenantTx,
+    bound: &Bound,
+    id: &[u8; 16],
+) -> Result<bool, StoreError> {
     let (tenant, realm) = scope(t)?;
     let done = sqlx::query!(
         "UPDATE access.idp_hooks SET status = 'retired', retired_at = now(), domain_id = $4,
@@ -144,7 +148,12 @@ pub async fn live_hook(t: &mut TenantTx, point: &str) -> Result<Option<HookRow>,
             on_no_answer: r.on_no_answer,
             disclose: r.disclose,
             signing: r.signing,
-            key: sealed(r.key_kek_id, r.key_wrapped_dek, &r.key_nonce, r.key_ciphertext)?,
+            key: sealed(
+                r.key_kek_id,
+                r.key_wrapped_dek,
+                &r.key_nonce,
+                r.key_ciphertext,
+            )?,
             public_key: key32(r.public_key)?,
             active: r.status == "active",
         })
@@ -374,7 +383,12 @@ pub async fn webhook_keys(
             Ok(WebhookKeyRow {
                 id: *r.key_id.as_bytes(),
                 signing: r.signing,
-                key: sealed(r.key_kek_id, r.key_wrapped_dek, &r.key_nonce, r.key_ciphertext)?,
+                key: sealed(
+                    r.key_kek_id,
+                    r.key_wrapped_dek,
+                    &r.key_nonce,
+                    r.key_ciphertext,
+                )?,
                 public_key: key32(r.public_key)?,
                 not_after_ms: r
                     .not_after_ms

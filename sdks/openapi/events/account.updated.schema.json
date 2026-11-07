@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:suiss:access:schema:event:account.updated:1",
+  "title": "An account's status moved without being suspended, reactivated or deleted (OP-151 m.3 (i), TN-49)",
+  "description": "The member of the SET `events` claim, and of the CloudEvent `data.events`, under `urn:suiss:access:event:account.updated`. A notification, never an authority source: losing or delaying it changes no decision (INV-24).",
+  "type": "object",
+  "required": [
+    "realm",
+    "account",
+    "at"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "realm": {
+      "$ref": "#/$defs/uuid"
+    },
+    "account": {
+      "$ref": "#/$defs/account"
+    },
+    "at": {
+      "$ref": "#/$defs/ms"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "staged",
+        "pending_user_action",
+        "active",
+        "locked",
+        "suspended",
+        "deactivated"
+      ]
+    }
+  },
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "ms": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Unix time, milliseconds."
+    },
+    "account": {
+      "type": "string",
+      "pattern": "^usr_[0-9a-hjkmnp-tv-z]{26}$",
+      "description": "The account's opaque external id (OP-137): pseudonymous, never an identifier or a name."
+    }
+  }
+}
