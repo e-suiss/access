@@ -205,11 +205,11 @@ async fn failures_are_not_kept() {
     let h = Harness::new();
     let router = test_router(&h);
     let actor = h.instance(realm_domain());
-    for (body, status) in [
-        ("refuse", StatusCode::BAD_REQUEST),
-        ("fail", StatusCode::SERVICE_UNAVAILABLE),
+    for (body, status, n) in [
+        ("refuse", StatusCode::BAD_REQUEST, 6_u8),
+        ("fail", StatusCode::SERVICE_UNAVAILABLE, 4),
     ] {
-        let nonce = [body.len() as u8; 16];
+        let nonce = [n; 16];
         let key = b64url_encode(&nonce);
         let a = ais(&actor, realm_domain(), nonce, h.now());
         let before = h.proposals();

@@ -62,7 +62,7 @@ fn an_unknown_attribute_is_refused() {
         r#"password eq "x""#,
         "secret pr",
         r#"userName eq "a" or password eq "b""#,
-        r#"(active eq true) and (nope eq 1)"#,
+        "(active eq true) and (nope eq 1)",
     ] {
         assert_eq!(parse(f, ATTRS), Err(FilterError::UnknownAttribute), "{f}");
     }

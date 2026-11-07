@@ -51,7 +51,7 @@ pub(crate) fn check(root: &Path) -> Result<Vec<Violation>, String> {
     let mut out = Vec::new();
     for path in walk(root)? {
         let rel_path = rel(root, &path);
-        if rel_path.starts_with(API_DIR) && rel_path.ends_with(".rs") {
+        if rel_path.starts_with(API_DIR) && path.extension().is_some_and(|e| e == "rs") {
             let src = std::fs::read_to_string(&path).map_err(|e| format!("{rel_path}: {e}"))?;
             out.extend(violations(&rel_path, &src));
         }
@@ -69,7 +69,10 @@ mod tests {
         let src = "fn r() -> Router { Router::new().route(\"/x\", get(h)).nest(\"/y\", other) }\n";
         let v = violations("crates/http/src/api/app.rs", src);
         assert_eq!(v.len(), 2, "{v:?}");
-        assert!(violations("crates/http/src/api/app/handlers.rs", src).len() == 2);
+        assert_eq!(
+            violations("crates/http/src/api/app/handlers.rs", src).len(),
+            2
+        );
     }
 
     // TN-113: the builder itself, comments, strings, tests and other directories are accepted

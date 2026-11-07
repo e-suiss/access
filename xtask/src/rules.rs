@@ -37,6 +37,7 @@ fn planes(root: &std::path::Path) -> Result<Vec<crate::Violation>, String> {
     Ok(out)
 }
 
+#[expect(clippy::too_many_lines, reason = "one entry per rule, in report order")]
 pub(crate) fn checks() -> Vec<Check> {
     vec![
         Check {
