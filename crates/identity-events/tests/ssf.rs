@@ -746,3 +746,149 @@ async fn acks_are_apart_and_counted() {
         (1, 1, 0, 0)
     );
 }
+
+/// An RFC 8936 poll transmitter over TLS on a private address and a port other than 443: the
+/// first poll answers `sets`, every later one none; each request it saw, and the trust anchors.
+async fn poll_transmitter(
+    sets: Json,
+) -> (
+    u16,
+    Arc<rustls::ClientConfig>,
+    Arc<std::sync::Mutex<Vec<String>>>,
+) {
+    use rustls::pki_types::{PrivateKeyDer, PrivatePkcs8KeyDer};
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    let cert = rcgen::generate_simple_self_signed(vec!["localhost".to_owned()]).unwrap();
+    let der = cert.cert.der().clone();
+    let key = PrivateKeyDer::Pkcs8(PrivatePkcs8KeyDer::from(cert.signing_key.serialize_der()));
+    let provider = Arc::new(rustls::crypto::aws_lc_rs::default_provider());
+    let server = rustls::ServerConfig::builder_with_provider(provider.clone())
+        .with_safe_default_protocol_versions()
+        .unwrap()
+        .with_no_client_auth()
+        .with_single_cert(vec![der.clone()], key)
+        .unwrap();
+    let acceptor = tokio_rustls::TlsAcceptor::from(Arc::new(server));
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let seen = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let log = seen.clone();
+    tokio::spawn(async move {
+        loop {
+            let (tcp, _) = listener.accept().await.unwrap();
+            let Ok(mut s) = acceptor.accept(tcp).await else {
+                continue;
+            };
+            let mut buf = Vec::new();
+            let mut chunk = [0_u8; 4096];
+            let head = loop {
+                if let Some(i) = buf.windows(4).position(|w| w == b"\r\n\r\n") {
+                    break i + 4;
+                }
+                let n = s.read(&mut chunk).await.unwrap();
+                assert!(n > 0);
+                buf.extend_from_slice(&chunk[..n]);
+            };
+            let text = String::from_utf8_lossy(&buf[..head]).to_ascii_lowercase();
+            let length: usize = text
+                .lines()
+                .find_map(|l| l.strip_prefix("content-length:"))
+                .unwrap()
+                .trim()
+                .parse()
+                .unwrap();
+            while buf.len() < head + length {
+                let n = s.read(&mut chunk).await.unwrap();
+                buf.extend_from_slice(&chunk[..n]);
+            }
+            let first = {
+                let mut l = log.lock().unwrap();
+                l.push(String::from_utf8_lossy(&buf).into_owned());
+                l.len() == 1
+            };
+            let answer = if first {
+                json!({ "sets": sets, "moreAvailable": false })
+            } else {
+                json!({ "sets": {}, "moreAvailable": false })
+            };
+            let body = serde_json::to_vec(&answer).unwrap();
+            let mut reply = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n",
+                body.len()
+            )
+            .into_bytes();
+            reply.extend_from_slice(&body);
+            s.write_all(&reply).await.unwrap();
+            let _ = s.shutdown().await;
+        }
+    });
+    let mut roots = rustls::RootCertStore::empty();
+    roots.add(der).unwrap();
+    let tls = rustls::ClientConfig::builder_with_provider(provider)
+        .with_safe_default_protocol_versions()
+        .unwrap()
+        .with_root_certificates(roots)
+        .with_no_client_auth();
+    (port, Arc::new(tls), seen)
+}
+
+// OP-151 m.3 (l), RFC 8936, OP-149 m.23 (S-1): the poll client reads the transmitter's answer
+// through the SSRF-guarded client, reaches a declared poll endpoint, takes the SETs it returns
+// with the bearer credential, and acknowledges them in the next request
+#[tokio::test]
+async fn polling_a_declared_transmitter_takes_its_sets() {
+    use access_identity_events::adapters::OutboundTransport;
+    use access_identity_oauth::adapters::outbound::{DeclaredTarget, Outbound};
+
+    let w = World::new().await;
+    let k = ec();
+    let compact = set(&k, SignalKind::SessionRevoked, "p1", &json!({}));
+    let sets = json!({ "p1": String::from_utf8(compact).unwrap() });
+    let (port, tls, seen) = poll_transmitter(sets).await;
+    let url = format!("https://localhost:{port}/ssf/poll");
+    let cfg = TransmitterConfig::parse(&json!({
+        "issuer": UPSTREAM,
+        "jwks_uri": "https://upstream.example/jwks",
+        "aud": ISSUER,
+        "events": SignalKind::ALL.iter().map(|k| signal_uri(*k)).collect::<Vec<_>>(),
+        "poll_endpoint": url,
+    }))
+    .unwrap();
+    let mut t = w.tx().await;
+    declare(&mut t, &sealer(), [8; 16], &cfg, Some(b"poll-bearer"), None)
+        .await
+        .unwrap();
+    t.link_upstream_subject(&subject_digest(UPSTREAM, "up-1"), w.subject)
+        .await
+        .unwrap();
+    let row = t.transmitter([8; 16]).await.unwrap().unwrap();
+    t.commit().await.unwrap();
+    let before = w.epoch().await;
+
+    let undeclared = OutboundTransport(Outbound::new(tls.clone(), Duration::from_secs(5)));
+    assert!(
+        w.receiver(&k)
+            .poll_once(&undeclared, w.tenant, w.realm, &row)
+            .await
+            .is_err(),
+        "an undeclared private endpoint is never reached"
+    );
+    assert!(seen.lock().unwrap().is_empty());
+
+    let outbound = Outbound::new(tls, Duration::from_secs(5))
+        .declaring(vec![DeclaredTarget::new(&url, None).unwrap()]);
+    let taken = w
+        .receiver(&k)
+        .poll_once(&OutboundTransport(outbound), w.tenant, w.realm, &row)
+        .await
+        .unwrap();
+    assert_eq!(taken, 1);
+    assert_eq!(w.epoch().await, before + 1);
+    let requests = seen.lock().unwrap().clone();
+    assert_eq!(requests.len(), 2);
+    assert!(requests[0].contains("authorization: Bearer poll-bearer\r\n"));
+    let ack = requests[1].split("\r\n\r\n").nth(1).unwrap();
+    let ack: Json = serde_json::from_str(ack).unwrap();
+    assert_eq!(ack["ack"], json!(["p1"]));
+}

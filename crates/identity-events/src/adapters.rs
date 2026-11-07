@@ -9,6 +9,7 @@ use access_store::identity::{RealmId, TenantId};
 use suiss_crypto::envelope::{Dek, Kek, Sealed, open_body, seal_body};
 use zeroize::Zeroizing;
 
+use crate::app::receiver::MAX_POLL_ANSWER;
 use crate::ports::{PollClient, PostError, Reply, Sealer, Transport, Unavailable};
 
 /// Pushes through the identity plane's outbound client: `https` on 443 to public addresses
@@ -45,7 +46,7 @@ impl PollClient for OutboundTransport {
         body: &[u8],
     ) -> Result<(u16, Vec<u8>), PostError> {
         let auth = [("authorization", format!("Bearer {bearer}"))];
-        match self.0.post(url, "application/json", &auth, body).await {
+        match self.0.poll(url, &auth, body, MAX_POLL_ANSWER).await {
             Ok(a) => Ok((a.status, a.body)),
             Err(OutboundError::Url | OutboundError::Blocked) => Err(PostError::Refused),
             Err(OutboundError::Unreachable | OutboundError::Malformed) => {

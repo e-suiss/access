@@ -228,9 +228,12 @@ dependencies = [
  "aws-lc-rs",
  "esuiss-access-kernel",
  "esuiss-crypto",
+ "rcgen",
+ "rustls",
  "serde_json",
  "thiserror",
  "tokio",
+ "tokio-rustls",
  "tracing",
  "zeroize",
 ]

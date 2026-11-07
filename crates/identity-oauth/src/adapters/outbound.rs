@@ -674,8 +674,8 @@ impl Outbound {
     }
 
     /// `POST url` with `body` of `content_type` and extra `headers`: an event delivery
-    /// (OP-149 m.4, m.7), the one request a declared target is reached by (m.23). Only the
-    /// status and headers are read. A header name or value that is not a visible ASCII token,
+    /// (OP-149 m.4, m.7), one of the two requests a declared target is reached by (m.23), with
+    /// [`Outbound::poll`]. Only the status and headers are read. A header name or value that is not a visible ASCII token,
     /// or contains a line break, is [`OutboundError::Url`].
     ///
     /// # Errors
@@ -691,6 +691,26 @@ impl Outbound {
         let request = post_request(&target, content_type, headers, body)?;
         let declared = self.declared.iter().find(|d| d.url == url);
         self.bounded(&target, request, 0, declared).await
+    }
+
+    /// `POST url` with the JSON `body` and extra `headers`, the answer body read up to
+    /// `max_body` bytes: an RFC 8936 poll of an inbound SSF transmitter (OP-151 m.3 (l)). Like
+    /// a delivery, it reaches a declared target by its exact URL (OP-149 m.23); every other rule
+    /// above holds.
+    ///
+    /// # Errors
+    /// [`OutboundError`].
+    pub async fn poll(
+        &self,
+        url: &str,
+        headers: &[(&str, String)],
+        body: &[u8],
+        max_body: usize,
+    ) -> Result<Answer, OutboundError> {
+        let target = Target::parse(url)?;
+        let request = post_request(&target, "application/json", headers, body)?;
+        let declared = self.declared.iter().find(|d| d.url == url);
+        self.bounded(&target, request, max_body, declared).await
     }
 
     /// `POST url` with `body` of `content_type` and extra `headers`, the answer body read up to

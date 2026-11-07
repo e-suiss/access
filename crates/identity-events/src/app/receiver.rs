@@ -37,6 +37,10 @@ use crate::ports::{Clock, PollClient, Sealer, Unavailable};
 /// Most SETs one poll asks for (PD).
 pub const POLL_BATCH: u32 = 100;
 
+/// The largest poll answer read: a full batch of the largest SETs, and as much again for the
+/// JSON around them (RFC 8936 §2.3, OP-151 m.3 (l)).
+pub const MAX_POLL_ANSWER: usize = MAX_SET * (POLL_BATCH as usize + 1);
+
 /// Most poll rounds of one transmitter per step (PD).
 pub const POLL_ROUNDS: u32 = 10;
 
