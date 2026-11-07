@@ -233,7 +233,7 @@ impl Profiles for Profile {
 struct Device(SessionInstance);
 
 impl Devices for Device {
-    async fn challenge(&self, _: &ConsoleSession) -> Result<DeviceAnswer, Unavailable> {
+    async fn challenge(&self, _: &ConsoleSession, _: Bytes) -> Result<DeviceAnswer, Unavailable> {
         Ok(DeviceAnswer {
             status: 201,
             body: serde_json::json!({ "challenge": "c" }),
@@ -579,6 +579,7 @@ async fn sign_in_opens_a_strict_console_session() {
     let v = json(&body);
     assert_eq!(v["account"], "acc_ada");
     assert_eq!(v["realm"], "acme");
+    assert_eq!(v["domain"], b64url_encode(&DOMAIN.0));
     assert_eq!(v["display_name"], "<b>Ada</b>");
     assert_eq!(v["idle_timeout_s"], "900");
     assert!(v["instance"].is_null());
@@ -1045,6 +1046,10 @@ async fn registration_binds_the_session_instance_once() {
         .await;
     assert_eq!(r.status(), StatusCode::CONFLICT);
     assert_eq!(json(&body)["code"], "instance-exists");
+    let (r, _) = h
+        .send(s.post("/console/api/instances/challenge", ""), CLIENT)
+        .await;
+    assert_eq!(r.status(), StatusCode::CONFLICT);
 }
 
 // TN-33: the DBSC handshake answers 501 until DBSC lands; nothing is faked

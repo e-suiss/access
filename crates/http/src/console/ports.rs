@@ -186,10 +186,15 @@ pub struct DeviceAnswer {
 /// The session's device Instance (OP-149 m.6, OP-151 m.3 (e)): the existing challenge and
 /// `instance_create` flow, run for the console session.
 pub trait Devices: Send + Sync {
-    /// A challenge for the session's device key.
+    /// A challenge for the device key the browser generated; `body` is `{"key": <COSE_Key,
+    /// base64url>}`. The answer carries what the browser signs: the challenge, the governing
+    /// domain, basis and PEP, the validity, and the canonical `instance_create` (and, for a
+    /// user without a Party, `party_register`) intent envelopes, which the browser's Kernel
+    /// decodes and shows before it signs (X11).
     fn challenge(
         &self,
         session: &ConsoleSession,
+        body: Bytes,
     ) -> impl Future<Output = Result<DeviceAnswer, Unavailable>> + Send;
 
     /// Registers the device key; `body` is the Frontend API's `InstanceRegistration`.

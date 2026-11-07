@@ -373,6 +373,7 @@ async fn session_info<E: ConsoleEnv>(
             "account": s.who.account,
             "display_name": s.who.display_name,
             "realm": s.who.realm,
+            "domain": b64url_encode(&s.who.domain.0),
             "expires_at": rfc3339(absolute),
             "idle_timeout_s": (policy::IDLE_MS / 1000).to_string(),
             "instance": s.instance.as_ref().map(|i| b64url_encode(&i.kid)),
@@ -629,12 +630,16 @@ async fn challenge<E: ConsoleEnv>(
     method: Method,
     headers: HeaderMap,
     peer: Option<Extension<Peer>>,
+    body: Bytes,
 ) -> Response {
     let live = match authed(&c, &method, &headers, peer.as_ref()).await {
         Ok(l) => l,
         Err(r) => return r,
     };
-    match c.env.devices().challenge(&live.session).await {
+    if live.session.instance.is_some() {
+        return Problem::new(StatusCode::CONFLICT, "instance-exists", "Conflict").into_response();
+    }
+    match c.env.devices().challenge(&live.session, body).await {
         Ok(a) => device_reply(&a),
         Err(Unavailable) => unavailable(),
     }

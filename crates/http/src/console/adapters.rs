@@ -126,6 +126,7 @@ impl Devices for NoDevices {
     fn challenge(
         &self,
         _: &ConsoleSession,
+        _: Bytes,
     ) -> impl Future<Output = Result<DeviceAnswer, Unavailable>> + Send {
         ready(Err(Unavailable))
     }
