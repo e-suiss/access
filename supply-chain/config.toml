@@ -617,6 +617,10 @@ criteria = "safe-to-deploy"
 version = "0.1.15"
 criteria = "safe-to-deploy"
 
+[[exemptions.ipnetwork]]
+version = "0.21.1"
+criteria = "safe-to-deploy"
+
 [[exemptions.itertools]]
 version = "0.10.3"
 criteria = "safe-to-deploy"
@@ -715,6 +719,10 @@ criteria = "safe-to-deploy"
 
 [[exemptions.matchit]]
 version = "0.8.4"
+criteria = "safe-to-deploy"
+
+[[exemptions.maxminddb]]
+version = "0.32.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.md-5]]

@@ -160,7 +160,7 @@ pub async fn evaluate<T: RiskTx + Send>(
         emit(tx, &claims::signal(s.subject, *signal, s.now_ms)).await?;
     }
     if a.review {
-        let signals: Vec<String> = a.signals.iter().map(|x| x.name().to_owned()).collect();
+        let signals = names(&a.signals);
         tx.store()
             .insert_review(&NewReview {
                 subject: s.subject,

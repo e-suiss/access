@@ -52,6 +52,9 @@ Every metric name starts with `access_`. The section column is the row of the op
 | `access_ready`, `access_readiness_failures_total` | gauge, counter | `check` | Readiness |
 | `access_traceparent_malformed_total` | counter | | Malformed incoming trace context |
 | `access_telemetry_export_failures_total` | counter | `kind` | Dropped exports |
+| `access_risk_assessments_total` | counter | `outcome`, `mode` | SL2 sign-in assessments by level and stage |
+| `access_risk_signals_total` | counter | `kind` | SL2 risk signals that fired |
+| `access_risk_fp_ratio_ppm` | gauge | | SL2 false-positive ratio over 30 days, parts per million (budget 5000) |
 
 Tenant, realm and domain breakdowns come from the analytics summary tables, not from metric labels.
 
