@@ -51,8 +51,7 @@ pub static FENCE_EVENTS: Counter<1> = Counter::new(
     [Label::Reason],
 );
 
-/// §17.8.2 "quarantine oranı": ingested Claims by `outcome` (`indexed`, `quarantined`,
-/// `held`).
+/// §17.8.2 "quarantine oranı": committed Claims by `outcome` (`admitted`, `quarantined`).
 pub static INGEST_CLAIMS: Counter<1> = Counter::new(
     "access_ingest_claims_total",
     "Ingested Claims by verdict (TI-18: telemetry, not a decision input)",

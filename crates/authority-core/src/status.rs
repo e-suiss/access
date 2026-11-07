@@ -218,13 +218,31 @@ impl<L: Lists, S: ListSigner> Publisher<L, S> {
     /// [`CoreError::Unavailable`] when the lists cannot be read, built or signed; lists
     /// published before the failure stay published.
     pub async fn publish(&self, domain: Digest, now: u64) -> Result<Vec<Published>, CoreError> {
+        Ok(self.publish_aged(domain, now).await?.0)
+    }
+
+    /// [`Publisher::publish`], with the `iat` of the oldest latest publication among the
+    /// domain's lists after the pass: the §17.8.2 status list `iat` age signal (SI-7).
+    ///
+    /// # Errors
+    /// As [`Publisher::publish`].
+    pub async fn publish_aged(
+        &self,
+        domain: Digest,
+        now: u64,
+    ) -> Result<(Vec<Published>, Option<u64>), CoreError> {
         let mut out = Vec::new();
+        let mut oldest: Option<u64> = None;
         for list in self.lists.lists(domain).await? {
-            if let Some(p) = self.publish_list(domain, &list, now).await? {
+            let (published, iat) = self.publish_list(domain, &list, now).await?;
+            if let Some(iat) = iat {
+                oldest = Some(oldest.map_or(iat, |o| o.min(iat)));
+            }
+            if let Some(p) = published {
                 out.push(p);
             }
         }
-        Ok(out)
+        Ok((out, oldest))
     }
 
     async fn publish_list(
@@ -232,7 +250,7 @@ impl<L: Lists, S: ListSigner> Publisher<L, S> {
         domain: Digest,
         list: &List,
         now: u64,
-    ) -> Result<Option<Published>, CoreError> {
+    ) -> Result<(Option<Published>, Option<u64>), CoreError> {
         let Some(snapshot) = self.lists.snapshot(domain, &list.uri).await? else {
             return Err(CoreError::Unavailable("status-head"));
         };
@@ -240,7 +258,7 @@ impl<L: Lists, S: ListSigner> Publisher<L, S> {
         let set = previous.as_ref().and_then(|p| set_entries(&p.token));
         let Plan::Publish { seq } = plan(previous.as_ref().map(|p| (p, set)), &snapshot, now)
         else {
-            return Ok(None);
+            return Ok((None, previous.map(|p| p.iat_ms)));
         };
         let payload = token(list, &snapshot)
             .map_err(|_| CoreError::Unavailable("status-build"))?
@@ -261,11 +279,14 @@ impl<L: Lists, S: ListSigner> Publisher<L, S> {
             excerpt: Some(excerpt),
         };
         self.lists.record(domain, &p).await?;
-        Ok(Some(Published {
-            uri: p.uri,
-            seq,
-            as_of: snapshot.pos,
-        }))
+        Ok((
+            Some(Published {
+                uri: p.uri,
+                seq,
+                as_of: snapshot.pos,
+            }),
+            Some(p.iat_ms),
+        ))
     }
 }
 

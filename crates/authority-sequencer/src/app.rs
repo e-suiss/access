@@ -12,6 +12,9 @@ use crate::domain::{
     Bound, Item, Outcome, check_effects, check_last, head_of, independent, nonces, replay, rows,
 };
 use crate::ports::DomainLog;
+use access_store::StoreError;
+use access_telemetry::metrics::Stopwatch;
+use access_telemetry::signals::{CAS_FAILURES, COMMIT_BATCH_SIZE, COMMIT_DURATION, FENCE_EVENTS};
 
 /// The leader of one domain over a [`DomainLog`].
 pub struct Leader<L: DomainLog> {
@@ -111,7 +114,10 @@ impl<L: DomainLog> Leader<L> {
                 return Err(e);
             }
         };
-        match self.log.commit(&stored).await {
+        let watch = Stopwatch::start();
+        let committed = self.log.commit(&stored).await;
+        observe(&committed, watch, items.len());
+        match committed {
             Ok(()) => {
                 self.seq.committed(batch)?;
                 Ok(Outcome::Appended(
@@ -130,6 +136,44 @@ impl<L: DomainLog> Leader<L> {
             }
         }
     }
+}
+
+/// §17.8.2: commit latency and batch size; a moved head is a CAS failure and a lost lease a
+/// fence event (TI-2, FA-13). Telemetry only (TI-18).
+fn observe(committed: &Result<(), SequencerError>, watch: Stopwatch, batch: usize) {
+    let outcome = match committed {
+        Ok(()) => {
+            COMMIT_BATCH_SIZE.record(f64::from(u32::try_from(batch).unwrap_or(u32::MAX)), []);
+            "ok"
+        }
+        Err(e) if e.is_retry() => "retry",
+        Err(SequencerError::Store(StoreError::HeadMoved)) => {
+            CAS_FAILURES.incr([]);
+            tracing::warn!(
+                event = "sequencer.cas.failed",
+                outcome = "stepped_down",
+                "the domain head moved under the leader (TI-2)"
+            );
+            "error"
+        }
+        Err(SequencerError::Store(StoreError::LeaseLost)) => {
+            fenced("lease_lost");
+            "error"
+        }
+        Err(_) => "error",
+    };
+    COMMIT_DURATION.record_duration(watch.elapsed(), [outcome]);
+}
+
+/// Counts and logs a fence event (§17.8.2, TI-2, FA-13).
+pub fn fenced(reason: &'static str) {
+    FENCE_EVENTS.incr([reason]);
+    tracing::warn!(
+        event = "sequencer.fenced",
+        outcome = "fenced",
+        reason,
+        "the sequencer leader was fenced (TI-2)"
+    );
 }
 
 #[cfg(test)]

@@ -62,10 +62,18 @@ where
             tracing::warn!("no trusted time; status lists not published");
             continue;
         };
+        let mut oldest: Option<u64> = None;
         for domain in led() {
-            if let Err(error) = publisher.publish(domain, now).await {
-                tracing::warn!(%error, "status lists not published");
+            match publisher.publish_aged(domain, now).await {
+                Ok((_, Some(iat))) => oldest = Some(oldest.map_or(iat, |o| o.min(iat))),
+                Ok((_, None)) => {}
+                Err(error) => tracing::warn!(%error, "status lists not published"),
             }
+        }
+        // §17.8.2, SI-7
+        if let Some(iat) = oldest {
+            access_telemetry::signals::STATUS_LIST_IAT_AGE
+                .set_u64(now.saturating_sub(iat).checked_div(1_000).unwrap_or(0), []);
         }
     }
 }

@@ -384,6 +384,25 @@ impl<const N: usize> Histogram<N> {
     }
 }
 
+/// Measures an elapsed time for a histogram. Telemetry only: a measured duration never feeds
+/// a decision (TI-18); trusted time enters decisions through the clock port.
+#[derive(Clone, Copy, Debug)]
+pub struct Stopwatch(std::time::Instant);
+
+impl Stopwatch {
+    /// Starts measuring.
+    #[must_use]
+    pub fn start() -> Self {
+        Self(std::time::Instant::now())
+    }
+
+    /// Time since [`Stopwatch::start`].
+    #[must_use]
+    pub fn elapsed(&self) -> Duration {
+        self.0.elapsed()
+    }
+}
+
 fn escape(value: &str) -> String {
     let mut out = String::with_capacity(value.len());
     for c in value.chars() {

@@ -13,9 +13,11 @@ access-authority-signer = { path = "../authority-signer" }
 access-kernel = { workspace = true }
 access-crypto = { workspace = true }
 access-store = { workspace = true }
+access-telemetry = { workspace = true }
 suiss-ledger = { workspace = true }
 suiss-crypto = { workspace = true, features = ["pkcs11"] }
 thiserror = { workspace = true }
+tracing = { workspace = true, features = ["std"] }
 
 [dev-dependencies]
 access-crypto = { workspace = true, features = ["testing"] }

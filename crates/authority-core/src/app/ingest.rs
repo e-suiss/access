@@ -149,6 +149,14 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                         }
                         Committed::Replayed(at) => (at, Vec::new()),
                     };
+                    // §17.8.2 quarantine rate; telemetry, not a decision input (TI-18)
+                    access_telemetry::signals::INGEST_CLAIMS.incr([
+                        if Quarantine::of(disposition).is_some() {
+                            "quarantined"
+                        } else {
+                            "admitted"
+                        },
+                    ]);
                     let verdict = match Quarantine::of(disposition) {
                         None => ClaimVerdict::Admitted {
                             claim: id,
@@ -170,7 +178,9 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                         until,
                     });
                 }
-                Err(e) if e.is_retry() => {}
+                Err(e) if e.is_retry() => {
+                    access_telemetry::signals::VALIDATION_RETRIES.incr(["ingest"]);
+                }
                 Err(SequencerError::NonceConflict) => return Err(CoreError::Nonce),
                 Err(e) => return Err(e.into()),
             }

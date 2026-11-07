@@ -1,0 +1,170 @@
+# OP-67 m.2, OP-151 m.3 (p): permanent event names.
+#
+# Every `event = "…"` field of a log line in non-test code names an entry here (xtask
+# `event-names`). A published name is never renamed or removed: alerts, dashboards and the
+# OCSF/CAEP mapping depend on it. A changed meaning gets a new name; the old one stays,
+# marked `deprecated = true`.
+#
+# Fields per entry:
+#   name      dotted lowercase name, `<subject>.<verb>[.<detail>]`
+#   plane     authority | identity | signer | ops
+#   severity  debug | info | warn | error (the level the event is logged at)
+#   since     the release that first logs it, or "unreleased" until the release commit stamps it
+#   fields    the event's own fields besides the common ones (OP-67 m.2: trace_id, span_id,
+#             service, version, event, outcome); never a body, secret or PII (OP-47)
+#   ocsf      static OCSF class it maps to (§17.8.1: own taxonomy, static mapping layer)
+#   caep      CAEP/RISC event type it maps to, when one fits
+
+[[event]]
+name = "artifact.version.unknown"
+plane = "authority"
+severity = "warn"
+since = "0.3.1"
+fields = ["kind", "track", "total"]
+ocsf = "detection_finding"
+
+[[event]]
+name = "claim.issuer.quota"
+plane = "authority"
+severity = "warn"
+since = "0.3.1"
+fields = ["window_s", "total"]
+ocsf = "detection_finding"
+
+[[event]]
+name = "key.rotation"
+plane = "signer"
+severity = "info"
+since = "0.3.1"
+fields = ["step", "domain", "kid"]
+ocsf = "entity_management"
+
+[[event]]
+name = "key.rotation.delayed"
+plane = "signer"
+severity = "error"
+since = "0.3.1"
+fields = ["domain", "late_ms"]
+ocsf = "entity_management"
+
+[[event]]
+name = "telemetry.export.failed"
+plane = "ops"
+severity = "error"
+since = "unreleased"
+fields = ["error"]
+ocsf = "application_error"
+
+[[event]]
+name = "grant.issued"
+plane = "authority"
+severity = "info"
+since = "unreleased"
+fields = ["position"]
+ocsf = "account_change"
+
+[[event]]
+name = "decision.made"
+plane = "authority"
+severity = "info"
+since = "unreleased"
+fields = ["surface"]
+ocsf = "authorize_session"
+
+[[event]]
+name = "request.rejected"
+plane = "ops"
+severity = "info"
+since = "unreleased"
+fields = ["surface", "code", "status"]
+ocsf = "api_activity"
+
+[[event]]
+name = "api.throttled"
+plane = "ops"
+severity = "warn"
+since = "unreleased"
+fields = ["surface"]
+ocsf = "detection_finding"
+
+[[event]]
+name = "login.failed"
+plane = "identity"
+severity = "info"
+since = "unreleased"
+fields = ["reason"]
+ocsf = "authentication"
+
+[[event]]
+name = "login.succeeded"
+plane = "identity"
+severity = "info"
+since = "unreleased"
+fields = ["factor"]
+ocsf = "authentication"
+
+[[event]]
+name = "signer.refused"
+plane = "signer"
+severity = "warn"
+since = "unreleased"
+fields = ["reason"]
+ocsf = "application_error"
+
+[[event]]
+name = "traceparent.malformed"
+plane = "ops"
+severity = "debug"
+since = "unreleased"
+fields = []
+ocsf = "api_activity"
+
+[[event]]
+name = "readiness.failed"
+plane = "ops"
+severity = "warn"
+since = "unreleased"
+fields = ["checks"]
+ocsf = "application_error"
+
+[[event]]
+name = "sequencer.epoch.changed"
+plane = "authority"
+severity = "info"
+since = "unreleased"
+fields = ["reason"]
+ocsf = "application_lifecycle"
+
+[[event]]
+name = "sequencer.fenced"
+plane = "authority"
+severity = "warn"
+since = "unreleased"
+fields = ["reason"]
+ocsf = "detection_finding"
+
+[[event]]
+name = "sequencer.cas.failed"
+plane = "authority"
+severity = "info"
+since = "unreleased"
+fields = []
+ocsf = "application_error"
+
+[[event]]
+name = "session.revoked"
+plane = "identity"
+severity = "info"
+since = "unreleased"
+fields = ["reason"]
+ocsf = "authentication"
+caep = "https://schemas.openid.net/secevent/caep/event-type/session-revoked"
+
+[[event]]
+name = "credential.changed"
+plane = "identity"
+severity = "info"
+since = "unreleased"
+fields = ["factor"]
+ocsf = "account_change"
+caep = "https://schemas.openid.net/secevent/caep/event-type/credential-change"

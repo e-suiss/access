@@ -447,7 +447,11 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
         let pseudonyms = s.keys.pseudonym_key(&domain)?;
         let log = PgLog::new(s.sequencer.clone(), domain, tenant, s.holder.clone(), s.ttl);
         let leader = match Leader::acquire(log, domain, key).await {
-            Ok(leader) => leader,
+            Ok(leader) => {
+                // §17.8.2, TI-2: a new leader epoch
+                epoch_changed("acquired");
+                leader
+            }
             Err(SequencerError::Store(StoreError::LeaseHeld)) => {
                 return Err(CoreError::Unavailable("lease-held"));
             }
@@ -1171,10 +1175,15 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
                 Ok(Renewal::Extended) => {}
                 Ok(Renewal::HandoffRequested) => {
                     if let Some(led) = guard.take() {
+                        epoch_changed("handoff");
                         let _ = led.core.release().await;
                     }
                 }
-                Err(_) => *guard = None,
+                Err(_) => {
+                    // §17.8.2, TI-2, OP-130 m.6
+                    access_authority_sequencer::app::fenced("renew_failed");
+                    *guard = None;
+                }
             }
         }
     }
@@ -1431,4 +1440,15 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
             tier,
         }))
     }
+}
+
+/// Counts a leader epoch change by `reason` (§17.8.2, TI-2, FA-13).
+fn epoch_changed(reason: &'static str) {
+    access_telemetry::signals::LEADER_EPOCH_CHANGES.incr([reason]);
+    tracing::info!(
+        event = "sequencer.epoch.changed",
+        outcome = "ok",
+        reason,
+        "sequencer leader epoch changed"
+    );
 }

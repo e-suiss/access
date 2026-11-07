@@ -44,11 +44,13 @@ dependencies = [
  "access-authority-signer",
  "access-crypto",
  "access-store",
+ "access-telemetry",
  "esuiss-access-kernel",
  "esuiss-crypto",
  "esuiss-ledger",
  "thiserror",
  "tokio",
+ "tracing",
 ]
 
 [[package]]

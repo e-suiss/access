@@ -29,6 +29,8 @@ use crate::CoreError;
 use crate::domain::{Evaluation, Frame, Pass, Request, Snapshot, pass};
 use crate::ports::{Binding, Reader, Row, Salts};
 use crate::rate::{Class, Limiter, Who};
+use access_telemetry::oracle::{Advisory, ORACLE};
+use access_telemetry::signals::{DECISIONS, REQUESTER_THROTTLED, VALIDATION_RETRIES};
 use proofs::Resolved as Proofs;
 
 /// Most snapshot passes before a request is refused (SI-20, PD).
@@ -1093,6 +1095,34 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         Ok((Some(receipt), pap))
     }
 
+    /// The rate limit of a request's class (§13.7.4, OP-141 m.23); an advisory `check` or
+    /// explain also goes to the oracle-watch table, never to a metric label (§17.8.2, SEC31).
+    fn admit(
+        &mut self,
+        inc: &Incoming,
+        bucket: Who,
+        actor: Option<Actor>,
+        now: u64,
+    ) -> Result<(), CoreError> {
+        let class = Self::class_of(inc);
+        let advisory = match class {
+            Class::Check => Some(Advisory::Check),
+            Class::Explain => Some(Advisory::Explain),
+            Class::Commit | Class::Search => None,
+        };
+        if let Some(what) = advisory {
+            match actor {
+                Some(a) => ORACLE.record(&a.instance.0, what, now),
+                None => ORACLE.record(b"anonymous", what, now),
+            }
+        }
+        if self.limiter.admit(class, bucket, now) {
+            Ok(())
+        } else {
+            Err(CoreError::Limited)
+        }
+    }
+
     /// The rate class of a request (§13.7.4, OP-141 m.23).
     const fn class_of(inc: &Incoming) -> Class {
         match (inc.request.mode, inc.explain) {
@@ -1125,6 +1155,14 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         for (len, limit) in crate::rate::REQUEST_RATE {
             let key = crate::rate::request_rate_key(&actor.party, len, now);
             if self.counter(&key).await? >= limit {
+                // §13.7.4: requester throttling is a security event
+                REQUESTER_THROTTLED.incr(["adp"]);
+                tracing::warn!(
+                    event = "api.throttled",
+                    outcome = "deny",
+                    surface = "adp",
+                    "requester rate reached; the request is denied (§13.7.4)"
+                );
                 evaluation.decision = Decision {
                     outcome: Outcome::Deny,
                     blockers: vec![Blocker {
@@ -1246,9 +1284,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         Self::check_payload(req)?;
         let digest = intent_digest(&req.intent).map_err(|_| CoreError::Protocol("intent"))?;
         let (actor, bucket) = self.requester(inc, &digest, now, subject).await?;
-        if !self.limiter.admit(Self::class_of(inc), bucket, now) {
-            return Err(CoreError::Limited);
-        }
+        self.admit(inc, bucket, actor, now)?;
         self.continued(req, &digest, actor).await?;
         let exercise =
             meta::exercise_id(&req.domain, &req.nonce).map_err(|_| CoreError::Protocol("nonce"))?;
@@ -1279,6 +1315,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                 .await?;
             self.requester_rules(req, &mut evaluation, actor, open, now)
                 .await?;
+            observe(&evaluation.decision);
             if req.mode == Mode::Check {
                 return Ok(answer(evaluation.decision, None, None, false));
             }
@@ -1334,7 +1371,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                         true,
                     ));
                 }
-                Err(e) if e.is_retry() => {}
+                Err(e) if e.is_retry() => retried(),
                 Err(SequencerError::NonceConflict) => return Err(CoreError::Nonce),
                 Err(e) => return Err(e.into()),
             }
@@ -1696,6 +1733,21 @@ fn rendered(
 /// Whom the rate limits count: the actor Instance, else the PEP (OP-141 m.23 (a)).
 pub(crate) fn who(inc: &Incoming, actor: Option<Actor>) -> Who {
     actor.map_or_else(|| Who::Pep(inc.pep.clone()), |a| Who::Instance(a.instance))
+}
+
+/// Counts a re-validation after the head moved (§17.8.2, OP-32).
+fn retried() {
+    VALIDATION_RETRIES.incr(["exercise"]);
+}
+
+/// Counts a decision by outcome (§17.8.2, RR-8). Telemetry only: nothing reads it back
+/// (TI-18).
+fn observe(decision: &Decision) {
+    DECISIONS.incr([match decision.outcome {
+        Outcome::Allow => "allow",
+        Outcome::Deny => "deny",
+        Outcome::RequireAction => "require_action",
+    }]);
 }
 
 const fn answer(
