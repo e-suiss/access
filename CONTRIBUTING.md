@@ -61,6 +61,7 @@ The full rules are in the project specification: repository layout (OP-62), arch
 - An authority decision (ALLOW / DENY / REQUIRE_ACTION) is a result, not an error.
 - Secrets and personal data are never logged.
 - SQL lives only in the `store` crate; no ORM.
+- A new or updated crates.io dependency waits seven days after its release; `XTASK_ONLINE=1 cargo xtask check cooldown` records its publication date in `supply-chain/publication-dates.json`, and the pull request check fails until it is recorded.
 - Code that implements a specification rule names its ID in a comment, e.g. `// INV-2: single write path`.
 - `TODO` comments must reference an issue.
 - Tests are named after behavior (`deny_when_grant_expired`); flaky tests are quarantined, never retried until green.
