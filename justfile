@@ -229,6 +229,10 @@ npm_packages :="sdks/typescript web/console web/login"
 web-install:
     for p in {{npm_packages}}; do (cd "$p" && npm ci); done
 
+# F-1, §14.7: known high or critical advisories in any npm package's lockfile, development tools included
+web-audit:
+    status=0; for p in {{npm_packages}}; do echo "$p"; (cd "$p" && npm audit --audit-level=high) || status=1; done; exit "$status"
+
 web-check: wasm
     for p in {{npm_packages}}; do (cd "$p" && npm run lint && npm run typecheck && npm run format:check); done
 
