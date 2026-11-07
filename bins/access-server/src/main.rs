@@ -931,8 +931,8 @@ async fn serve(
     // OP-137, OP-149 m.15 (i), m.22 (g)
     ids::open_root(&all.app, &prepared.identity_keys).await?;
     let cell_ids = Arc::new(ids::CellIds::new(prepared.identity_keys.clone()));
-    // OP-151 m.3 (b)-(d): the management API, on its own listener
-    let management = admin::router(config, all.app.clone(), &prepared.identity_keys)?;
+    let (admin_app, admin_ids) = (all.app.clone(), cell_ids.clone());
+    let admin_targets = prepared.outbound.declared();
     // OP-146 m.5 (f): today's day partitions exist before anything writes to them
     jobs::open_now(&all.app, &all.archive, &holder()?).await;
     let background = Background::start(
@@ -949,7 +949,10 @@ async fn serve(
     // OP-149 m.7
     let ssf = events::ssf(&platform_pools, signer(), keks.clone());
     // OP-146 m.16 (m)
-    let _realm_keys = idp::RealmKeyring::new(signer(), prepared.identity_keys);
+    let realm_keys = Arc::new(idp::RealmKeyring::new(
+        signer(),
+        prepared.identity_keys.clone(),
+    ));
     let Pools {
         sequencer,
         app,
@@ -995,6 +998,21 @@ async fn serve(
         SourcesClock::new(idp_sequencer),
         actors,
     );
+    // OP-151 m.3 (b)-(d), m.2 M1: the management API, on its own listener
+    let management = admin::router(
+        config,
+        admin_app.clone(),
+        &prepared.identity_keys,
+        admin::realm::Realms {
+            app: admin_app,
+            router: tenants_pool.clone(),
+            ids: admin_ids,
+            plane: idp_plane.clone(),
+            base: RealmBase::parse(&identity_section.realm_base).map_err(|e| e.to_string())?,
+            keys: realm_keys,
+            declared: admin_targets,
+        },
+    )?;
     // OP-149 m.4, m.16 (a), m.17 (e), (g), m.37
     let (platform, platform_api) = platform::routes(
         &platform_pools,

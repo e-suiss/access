@@ -175,6 +175,37 @@ fn verdict(e: &CoreError) -> Result<Verdict, Unavailable> {
     }
 }
 
+// OP-151 m.6 (e): a management write's AIS verifies with a live Instance key of the domain
+impl<K, B, S, C> crate::admin::realm::LiveKeys for Plane<K, B, S, C>
+where
+    K: Keys + Send + Sync + 'static,
+    B: Binding + Clone + Send + Sync + 'static,
+    S: Salts + Clone + Send + Sync + 'static,
+    C: Clock + Clone + Send + Sync + 'static,
+{
+    async fn live_key(
+        &self,
+        domain: Digest,
+        kid: [u8; 32],
+    ) -> Result<Option<PublicKey>, access_http::api::ports::Unavailable> {
+        use access_authority_core::keys::{AsOf, KeyState};
+        match self
+            .domains
+            .lookup_keys(domain, &[kid], AsOf::Head, false)
+            .await
+        {
+            Ok(answer) => Ok(answer
+                .lookup
+                .keys
+                .into_iter()
+                .find(|e| e.kid == kid && e.state == KeyState::Active)
+                .map(|e| e.key)),
+            Err(CoreError::Protocol(_)) => Ok(None),
+            Err(_) => Err(access_http::api::ports::Unavailable),
+        }
+    }
+}
+
 impl<K, B, S, C> Decider for Plane<K, B, S, C>
 where
     K: Keys + Send + Sync + 'static,

@@ -1,20 +1,23 @@
 //! The management API's ports in this process (OP-151 m.3 (b)-(d)): system time and randomness,
 //! the in-process rate limiter, cursors under a key derived in the HSM, `Idempotency-Key` answers
-//! in PostgreSQL, and the read token verifier, surfaces and write path, which stay fail-closed
-//! until their lanes wire them: no read token verifies, no realm resolves, no write is proposed.
+//! in PostgreSQL, the realm surfaces and resources over the identity plane ([`realm`]), and the
+//! read token verifier and the platform's write path, which stay fail-closed until their lanes
+//! wire them: no read token verifies and no platform write is proposed.
+
+pub(crate) mod realm;
 
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use access_crypto::Secret;
 use access_http::Limits;
 use access_http::api::Api;
-use access_http::api::adapters::{
-    MemoryLimiter, NoProposals, NoReadTokens, NoSurfaces, SivCursors,
-};
+use access_http::api::adapters::{MemoryLimiter, NoProposals, NoReadTokens, SivCursors};
 use access_http::api::domain::idempotency::{LEASE_MS, RETENTION_MS};
 use access_http::api::ports::{
-    Begun, Clock, CursorSeal, Entropy, Env, IdempotencyStore, RateLimiter, Unavailable,
+    Begun, Clock, CursorSeal, Entropy, Env, IdempotencyStore, RateLimiter, RealmResources,
+    Unavailable,
 };
+use access_identity_admin::ports::{Decider, Governance, Instances};
 use access_store::Pool;
 use access_store::api_idempotency;
 use suiss_crypto::pkcs11::KeyStore;
@@ -89,17 +92,23 @@ impl IdempotencyStore for PgIdempotency {
 }
 
 /// The management API's ports in this process.
-pub(crate) struct ServerApi {
+pub(crate) struct ServerApi<P> {
     limiter: MemoryLimiter,
     cursors: SivCursors,
     idempotency: PgIdempotency,
     origin: String,
+    realms: realm::Realms<P>,
 }
 
-impl ServerApi {
-    /// The ports over the app pool, with the cursor key derived in `keys` and the management
-    /// origin from configuration (§17.9.6: never from a request).
-    pub(crate) fn new(app: Pool, keys: &KeyStore, origin: String) -> Result<Self, String> {
+impl<P> ServerApi<P> {
+    /// The ports over the app pool, with the cursor key derived in `keys`, the management
+    /// origin from configuration (§17.9.6: never from a request) and the realms behind it.
+    pub(crate) fn new(
+        app: Pool,
+        keys: &KeyStore,
+        origin: String,
+        realms: realm::Realms<P>,
+    ) -> Result<Self, String> {
         let key = keys
             .mac(ID_KEY_ROOT)
             .and_then(|m| m.mac(CURSOR_CONTEXT))
@@ -109,29 +118,45 @@ impl ServerApi {
             cursors: SivCursors::new(Secret::new(key)),
             idempotency: PgIdempotency(app),
             origin,
+            realms,
         })
     }
 }
 
+/// What the realm surface needs of the identity plane.
+pub(crate) trait RealmPlane:
+    Decider + Governance + Instances + realm::LiveKeys + Clone + Send + Sync + 'static
+{
+}
+
+impl<P: Decider + Governance + Instances + realm::LiveKeys + Clone + Send + Sync + 'static>
+    RealmPlane for P
+{
+}
+
 /// The management router over this process's ports; its origin is the configured
 /// `suiss.management_api` (§17.9.6: never derived from `Host`).
-pub(crate) fn router(
+pub(crate) fn router<P: RealmPlane>(
     config: &crate::config::Config,
     app: Pool,
     keys: &KeyStore,
+    realms: realm::Realms<P>,
 ) -> Result<axum::Router, String> {
     let origin = config
         .suiss
         .as_ref()
         .map(|s| s.management_api.clone())
         .ok_or("no suiss section")?;
-    let api = Api::new(ServerApi::new(app, keys, origin)?, Limits::default());
+    let api = Api::new(
+        ServerApi::new(app, keys, origin, realms)?,
+        Limits::default(),
+    );
     access_http::api::router(&api).map_err(|e| e.to_string())
 }
 
-impl Env for ServerApi {
+impl<P: RealmPlane> Env for ServerApi<P> {
     type Tokens = NoReadTokens;
-    type Surfaces = NoSurfaces;
+    type Surfaces = realm::Realms<P>;
     type Proposals = NoProposals;
     type Idempotency = PgIdempotency;
 
@@ -155,8 +180,8 @@ impl Env for ServerApi {
         &NoReadTokens
     }
 
-    fn surfaces(&self) -> &NoSurfaces {
-        &NoSurfaces
+    fn surfaces(&self) -> &realm::Realms<P> {
+        &self.realms
     }
 
     fn proposals(&self) -> &NoProposals {
@@ -169,5 +194,9 @@ impl Env for ServerApi {
 
     fn origin(&self) -> &str {
         &self.origin
+    }
+
+    fn realm(&self) -> &dyn RealmResources {
+        &self.realms
     }
 }

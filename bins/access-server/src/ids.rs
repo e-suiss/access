@@ -46,7 +46,7 @@ impl CellIds {
         }
     }
 
-    fn key(&self) -> Option<Arc<IdKey>> {
+    pub(crate) fn key(&self) -> Option<Arc<IdKey>> {
         let mut slot = self.key.lock().ok()?;
         if slot.is_none() {
             let bytes = crate::login::id_key_bytes(&self.keys).ok()?;
