@@ -474,6 +474,7 @@ async fn env_with(seed: u8, slug: &str, auth: AuthPolicy, live: bool) -> Env {
         hasher: Hasher::new(config),
         redirect_to: "/".into(),
         hooks: std::sync::Arc::new(access_identity_hooks::ports::NoHooks),
+        risk: access_identity_session::app::RiskServices::without_sources(),
     });
     let assets = Assets::load(&fixture()).unwrap();
     let signer = ArtifactKey(Arc::new(SoftSigner::generate_ed25519().unwrap().0));

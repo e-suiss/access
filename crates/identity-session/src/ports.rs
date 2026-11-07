@@ -5,6 +5,7 @@
 use std::future::Future;
 
 use access_identity_account::ports::{AccountDb, AccountTx};
+use access_identity_risk::ports::RiskTx;
 use access_store::sessions::{
     EpochChange, FlowRow, FlowUpdate, MarkerRow, NewFlow, NewSession, SessionRow,
 };
@@ -31,8 +32,9 @@ pub trait Random: Send + Sync {
     fn salt(&self) -> Result<[u8; 16], SessionError>;
 }
 
-/// The account transaction plus the flow and session tables.
-pub trait SessionTx: AccountTx {
+/// The account transaction plus the flow and session tables, and the SL2 risk tables in the
+/// same unit of work (TN-46).
+pub trait SessionTx: AccountTx + RiskTx {
     /// Stores a flow.
     fn insert_flow(
         &mut self,

@@ -54,6 +54,9 @@ pub enum PasswordLogin {
         session_epoch: i64,
         /// The stored hash was upgraded (CR-37).
         rehashed: bool,
+        /// Failed attempts the account's counter held before this one (OP-35); SL2 reads it as
+        /// the brute-force signal (IDP-39).
+        prior_failures: u32,
     },
     /// Wrong password, unknown, locked, suspended or deactivated account: one answer (TN-82).
     Rejected {

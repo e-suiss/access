@@ -1684,6 +1684,7 @@ async fn approval_through_the_local_client(world: &str, step_up: Option<StepUp>)
         )),
         redirect_to: String::from("/"),
         hooks: std::sync::Arc::new(access_identity_hooks::ports::NoHooks),
+        risk: access_identity_session::app::RiskServices::without_sources(),
     });
     let discovery = || {
         RealmDiscovery::new(

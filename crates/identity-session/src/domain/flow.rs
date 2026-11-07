@@ -209,6 +209,24 @@ pub struct FlowState {
     pub started_ms: u64,
     /// Absolute end.
     pub expires_ms: u64,
+    /// What SL2 noted and decided for this sign-in (TN-46).
+    #[serde(default)]
+    pub risk: Option<RiskNote>,
+}
+
+/// What SL2 notes in a sign-in flow (§12.2.4, TN-46): the password step's breach check and
+/// prior failure count, then the level and whether a step-up was asked. Closed codes and counts
+/// only; no address and no place.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RiskNote {
+    /// The breached-password check of the password step (`clean`, `listed`, `unavailable`).
+    pub breach: Option<String>,
+    /// Failed attempts the account's counter held before the password step.
+    pub prior_failures: Option<u32>,
+    /// The SL2 level, once assessed.
+    pub level: Option<String>,
+    /// A step-up was asked of the user (SL1 path).
+    pub step_up: bool,
 }
 
 /// A sealed secret in transit (ciphertext under the subject's DEK; never plaintext).
@@ -262,6 +280,7 @@ impl FlowState {
             sealed: None,
             started_ms: now_ms,
             expires_ms: now_ms.saturating_add(FLOW_TTL_MS),
+            risk: None,
         }
     }
 

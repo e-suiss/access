@@ -18,6 +18,7 @@ access-identity-account = { workspace = true }
 access-identity-admin = { workspace = true }
 access-identity-events = { workspace = true }
 access-identity-oauth = { workspace = true }
+access-identity-risk = { workspace = true }
 access-identity-session = { workspace = true }
 access-identity-hooks = { workspace = true }
 access-identity-ui = { workspace = true }

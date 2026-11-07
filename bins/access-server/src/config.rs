@@ -66,6 +66,27 @@ pub(crate) struct Config {
     /// Log format, OTLP export and trace sampling (OP-47, OP-67).
     #[serde(default)]
     pub(crate) telemetry: access_telemetry::Settings,
+    /// SL2 risk sources (TN-46, OP-151 m.1 (b), m.3 (o)).
+    #[serde(default)]
+    pub(crate) risk: Risk,
+}
+
+/// SL2 risk sources (TN-46, OP-151 m.1 (b), m.3 (o)). Each one is optional; a missing source
+/// makes its signals `unavailable`, never "fine" (MD-8), and the management surface says so.
+#[derive(Debug, Default, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct Risk {
+    /// A GeoIP/ASN MMDB file (any `MaxMind` DB producer). No data is embedded; it is read again
+    /// when it changes.
+    #[serde(default)]
+    pub(crate) geo_mmdb_path: Option<PathBuf>,
+    /// The k-anonymity range API base, `https://…` without a trailing path to `/range` (HIBP
+    /// format, e.g. `https://api.pwnedpasswords.com`).
+    #[serde(default)]
+    pub(crate) breach_range_api: Option<String>,
+    /// A local mirror of the range files `<PREFIX>.txt`, used when no range API is set.
+    #[serde(default)]
+    pub(crate) breach_ranges_dir: Option<PathBuf>,
 }
 
 /// One declared event delivery target (OP-149 m.23).
@@ -309,6 +330,7 @@ impl Default for Config {
             delivery_targets: Vec::new(),
             provider: access_http::declarations::Stated::default(),
             telemetry: access_telemetry::Settings::default(),
+            risk: Risk::default(),
         }
     }
 }
@@ -344,6 +366,10 @@ pub(crate) enum ConfigError {
         "the suiss section is required: region, and https base URLs without a trailing slash for relay, management_api and products (OP-149 m.3)"
     )]
     Suiss,
+    #[error(
+        "risk.breach_range_api must be an https URL without query or fragment (OP-151 m.3 (o))"
+    )]
+    BreachRangeApi,
     #[error(
         "delivery_targets must be distinct https URLs with a lowercase host, the port only when not 443, a path and no user info or fragment (OP-149 m.23)"
     )]
@@ -473,6 +499,12 @@ impl Config {
         }
         // OP-67
         self.telemetry.validate()?;
+        // OP-151 m.3 (o)
+        if let Some(base) = &self.risk.breach_range_api
+            && access_identity_risk::adapters::range_api::RangeApi::new(base, ()).is_err()
+        {
+            return Err(ConfigError::BreachRangeApi);
+        }
         Ok(())
     }
 

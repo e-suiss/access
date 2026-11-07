@@ -230,7 +230,8 @@ async fn an_account_signs_in_with_its_password() {
         PasswordLogin::Accepted {
             subject: s,
             session_epoch: 0,
-            rehashed: false
+            rehashed: false,
+            prior_failures: 0
         }
     );
     e.clock.advance(60_000);

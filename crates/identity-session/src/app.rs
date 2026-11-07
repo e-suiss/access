@@ -31,6 +31,7 @@ pub use access_identity_account::notify::ports::Notifier;
 
 use crate::ports::{Clock, Random, SessionDb, SessionTx};
 use access_identity_hooks::ports::HookCaller;
+pub use access_identity_risk::app::sl2::{Services as RiskServices, Sl2};
 
 /// The credential kinds of second factors.
 pub const TOTP: &str = "totp";
@@ -77,6 +78,8 @@ pub struct Auth<'a, D, C, R, N, P, S> {
     pub passkeys: Passkeys<'a, P, S>,
     /// The realm's inline hooks (TN-135): `post_login` may refuse a sign-in.
     pub hooks: &'a (dyn HookCaller + Sync),
+    /// SL2 risk for this request (TN-46): its sources and the client's address.
+    pub risk: Sl2<'a>,
 }
 
 /// A flow as the browser names it: the handle from the page, the device secret from the

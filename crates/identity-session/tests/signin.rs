@@ -54,7 +54,7 @@ use access_identity_session::app::epochs::Epochs;
 use access_identity_session::app::sessions::SessionStatus;
 use access_identity_session::app::signin::{Identify, LinkOutcome, LinkPreview, PasswordStep};
 use access_identity_session::app::{
-    Auth, CODE_NOT_ACCEPTED, FLOW_GONE, FlowRef, Passkeys, Refusal, Step,
+    Auth, CODE_NOT_ACCEPTED, FLOW_GONE, FlowRef, Passkeys, Refusal, RiskServices, Sl2, Step,
 };
 use access_identity_session::domain::assurance::{Aal, CtCeiling, MethodClass};
 use access_identity_session::domain::requirement::{AuthPolicy, MfaPolicy, Requirement};
@@ -130,6 +130,7 @@ const PW: &str = "correct horse battery";
 
 struct Env {
     db: TestDb,
+    domain: DomainId,
     tenant: TenantId,
     realm: RealmId,
     kek: SoftKek,
@@ -144,6 +145,8 @@ struct Env {
     wa_policy: RealmPolicy,
     policy: AuthPolicy,
     hook: ScriptedHook,
+    risk: RiskServices,
+    client: Option<IpAddr>,
 }
 
 /// A `post_login` hook answering what the test sets; none set is no hook (TN-135).
@@ -203,6 +206,10 @@ impl Env {
                 rp: &self.rp,
                 policy: &self.wa_policy,
             },
+            risk: Sl2 {
+                services: &self.risk,
+                client: self.client,
+            },
         };
         f(&auth).await
     }
@@ -254,6 +261,7 @@ async fn env(seed: u8, slug: &str) -> Env {
     let wa = WaRealm::from_bytes(*realm.as_bytes());
     Env {
         db,
+        domain: d,
         tenant,
         realm,
         kek: SoftKek::new("realm-kek:1", [seed; 32]),
@@ -274,6 +282,8 @@ async fn env(seed: u8, slug: &str) -> Env {
         wa_policy: RealmPolicy::default(),
         policy: AuthPolicy::DEFAULT,
         hook: ScriptedHook::default(),
+        risk: RiskServices::without_sources(),
+        client: Some(ip()),
     }
 }
 
@@ -1367,7 +1377,13 @@ async fn sign_in_queues_its_claims_and_signals_never_gate() {
     other.aaguid = [0x22; 16];
     other.credential_id = vec![0xc2; 32];
     register_passkey(&e, &cookie, &mut other).await;
-    let orders = claim_orders(&e, |o| o.len() >= 6).await;
+    let orders = claim_orders(&e, |o| {
+        o.iter()
+            .filter(|x| x.class == "authenticator_binding")
+            .count()
+            >= 2
+    })
+    .await;
     let bindings: Vec<_> = orders
         .iter()
         .filter(|o| o.class == "authenticator_binding")
@@ -1409,7 +1425,10 @@ async fn sign_in_queues_its_claims_and_signals_never_gate() {
     let (_, s) =
         signed_in(assert_passkey(&e, &f2, &again.options.passkey, &mut key, &handle).await);
     assert_eq!(s.result.methods, [MethodClass::Passkey]);
-    let orders = claim_orders(&e, |o| o.len() >= 9).await;
+    let orders = claim_orders(&e, |o| {
+        risk_names(o).contains(&String::from("sign_count_regression"))
+    })
+    .await;
     assert!(risk_names(&orders).contains(&String::from("sign_count_regression")));
     let passkey_login = orders
         .iter()
@@ -1434,3 +1453,6 @@ async fn sign_in_queues_its_claims_and_signals_never_gate() {
     assert_eq!(removal.class, "authenticator_binding");
     assert!(bindings.iter().any(|b| b.line == removal.line));
 }
+
+#[path = "signin/sl2.rs"]
+mod sl2;

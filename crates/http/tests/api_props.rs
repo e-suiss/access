@@ -122,6 +122,7 @@ fn app(c: &Cluster) -> Router {
         hasher: Hasher::new(HasherConfig::sized(Argon2Params::CANONICAL, 2, None)),
         redirect_to: String::from("/"),
         hooks: std::sync::Arc::new(access_identity_hooks::ports::NoHooks),
+        risk: access_identity_session::app::RiskServices::without_sources(),
     };
     let routes = realm_router(discovery())
         .merge(oauth_router(OAuth::new(env.clone())))

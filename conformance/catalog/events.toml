@@ -217,3 +217,83 @@ severity = "info"
 since = "unreleased"
 fields = []
 ocsf = "authentication"
+
+[[event]]
+name = "risk.assessed"
+plane = "identity"
+severity = "info"
+since = "unreleased"
+fields = ["level", "mode", "step_up", "shadow_step_up", "signals", "missing"]
+ocsf = "detection_finding"
+
+[[event]]
+name = "risk.protection.monitored"
+plane = "identity"
+severity = "warn"
+since = "unreleased"
+fields = ["protection"]
+ocsf = "detection_finding"
+
+[[event]]
+name = "risk.review.opened"
+plane = "identity"
+severity = "warn"
+since = "unreleased"
+fields = ["level", "reason"]
+ocsf = "detection_finding"
+
+[[event]]
+name = "risk.review.decided"
+plane = "identity"
+severity = "info"
+since = "unreleased"
+fields = ["verdict"]
+ocsf = "detection_finding"
+
+[[event]]
+name = "risk.canary.hit"
+plane = "identity"
+severity = "warn"
+since = "unreleased"
+fields = []
+ocsf = "detection_finding"
+
+[[event]]
+name = "risk.protection_mode.changed"
+plane = "identity"
+severity = "info"
+since = "unreleased"
+fields = ["sl2", "suspicious_ip", "breached_password", "bot"]
+ocsf = "entity_management"
+
+[[event]]
+name = "geo.source.loaded"
+plane = "ops"
+severity = "info"
+since = "unreleased"
+fields = ["database_type", "build_epoch"]
+ocsf = "application_lifecycle"
+
+[[event]]
+name = "geo.source.unavailable"
+plane = "ops"
+severity = "warn"
+since = "unreleased"
+fields = []
+ocsf = "application_error"
+
+[[event]]
+name = "login.failed_surge"
+plane = "identity"
+severity = "warn"
+since = "unreleased"
+fields = ["observed", "baseline"]
+ocsf = "detection_finding"
+
+[[event]]
+name = "analytics.aggregated"
+plane = "ops"
+severity = "info"
+since = "unreleased"
+fields = ["realms"]
+ocsf = "application_lifecycle"

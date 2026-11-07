@@ -41,14 +41,18 @@ use crate::SessionError;
 use crate::domain::assurance::{Aal, AuthenticationResult, Factor, MethodClass, vector};
 use crate::domain::codes::{canonical_recovery_code, email_code};
 use crate::domain::flow::{
-    Ceremony, EMAIL_CODE_ATTEMPTS, FlowRejection, FlowState, Pending, Purpose, SUSPENSION_TTL_MS,
-    code_digest, device_digest, handle_digest, identifier_digest, resume_digest,
+    Ceremony, EMAIL_CODE_ATTEMPTS, FlowRejection, FlowState, Pending, Purpose, RiskNote,
+    SUSPENSION_TTL_MS, code_digest, device_digest, handle_digest, identifier_digest, resume_digest,
 };
-use crate::domain::requirement::{AuthPolicy, Enrolled, Requirement, missing};
+use crate::domain::requirement::{AuthPolicy, Enrolled, Requirement, missing, with_step_up};
 use crate::domain::session::{
     MARKER_COOKIE, SESSION_COOKIE, cookie_digest, marker_digest, set_cookie,
 };
 use crate::ports::{Clock, Random, SessionDb, SessionTx};
+use access_identity_risk::app::sl2::{SignIn, evaluate, record_sign_in};
+use access_identity_risk::domain::assess::Breach;
+use access_identity_risk::domain::score::Level;
+use access_identity_risk::domain::signal::RiskSignal;
 
 /// The audit actor before authentication.
 pub const ANONYMOUS: &str = "anonymous";
@@ -373,12 +377,21 @@ where
             },
         )
         .await?;
-        let subject = match outcome {
-            PasswordLogin::Accepted { subject, .. } => subject,
+        let (subject, prior_failures) = match outcome {
+            PasswordLogin::Accepted {
+                subject,
+                prior_failures,
+                ..
+            } => (subject, prior_failures),
             PasswordLogin::Rejected { pad_ms } => return Ok(neutral(pad_ms)),
             PasswordLogin::Throttled { retry_after_s } => {
                 return Ok(Step::Throttled { retry_after_s });
             }
+        };
+        // IDP-39, OP-151 m.3 (o): checked outside any transaction; failure is unavailable
+        let breach = match Password::presented(step.password) {
+            Some(p) => self.risk.services.breach.check(&p).await,
+            None => Breach::Unavailable,
         };
         let mut tx = self.begin().await?;
         let mut l = match load(&mut tx, flow, now).await? {
@@ -387,6 +400,11 @@ where
         };
         if l.state.record(subject, Factor::password(now)).is_err() {
             return Ok(neutral(0));
+        }
+        if matches!(l.state.purpose, Purpose::Login) {
+            let note = l.state.risk.get_or_insert_with(RiskNote::default);
+            note.breach = Some(breach.name().to_owned());
+            note.prior_failures = Some(prior_failures);
         }
         self.advance(tx, l, now, step.correlation).await
     }
@@ -1159,7 +1177,7 @@ where
     pub(crate) async fn advance(
         &self,
         mut tx: D::Tx,
-        l: Loaded,
+        mut l: Loaded,
         now: u64,
         correlation: &str,
     ) -> Result<Step, SessionError> {
@@ -1184,8 +1202,15 @@ where
         let marker = self
             .marker_ok(&mut tx, &l.state, subject, row.session_epoch, now)
             .await?;
-        let policy = self.policy_for(&l.state.purpose);
-        let needs = missing(&policy, &enrolled, &l.state.factors, marker);
+        if self
+            .sl2(&mut tx, &mut l.state, subject, now, marker)
+            .await?
+        {
+            save(&mut tx, &l, "abandoned", Resume::Clear).await?;
+            tx.commit().await?;
+            return Ok(neutral(self.gate.mean_ms()));
+        }
+        let needs = self.needs(&l.state, enrolled, marker);
         if !needs.is_empty() {
             save(&mut tx, &l, "open", Resume::Keep).await?;
             tx.commit().await?;
@@ -1266,8 +1291,91 @@ where
         // F17, TN-103, OP-150 L2
         let unknown_device = self.policy.remember_device_days.is_some() && !marker;
         super::claims::signed_in(&mut tx, &l.state, &signed, unknown_device).await?;
+        if matches!(l.state.purpose, Purpose::Login) {
+            self.sl2_signed_in(&mut tx, &l.state, subject, now, marker)
+                .await?;
+        }
         save(&mut tx, &l, "done", Resume::Clear).await?;
         tx.commit().await?;
         Ok(Step::SignedIn(Box::new(signed)))
+    }
+
+    /// SL2 once per login, when its first step has passed (TN-46, IDP-39): notes the level and
+    /// the step-up in the flow. True for a canary match, whose flow ends with the generic
+    /// failure and never gets a session (§4.4).
+    async fn sl2(
+        &self,
+        tx: &mut D::Tx,
+        state: &mut FlowState,
+        subject: [u8; 16],
+        now: u64,
+        marker: bool,
+    ) -> Result<bool, SessionError> {
+        let assessed = state.risk.as_ref().is_some_and(|n| n.level.is_some());
+        if !matches!(state.purpose, Purpose::Login) || assessed {
+            return Ok(false);
+        }
+        let facts = self.sign_in_facts(state, subject, now, marker);
+        let a = evaluate(tx, &self.risk, &facts).await?;
+        if a.signals.contains(&RiskSignal::CanaryHit) {
+            return Ok(true);
+        }
+        let note = state.risk.get_or_insert_with(RiskNote::default);
+        note.level = Some(a.level.name().to_owned());
+        note.step_up = a.step_up;
+        Ok(false)
+    }
+
+    /// What is still missing (TN-132), with SL2's step-up added when it asked for one (TN-46).
+    fn needs(&self, state: &FlowState, enrolled: Enrolled, marker: bool) -> Vec<Requirement> {
+        let policy = self.policy_for(&state.purpose);
+        let needs = missing(&policy, &enrolled, &state.factors, marker);
+        if state.risk.as_ref().is_some_and(|n| n.step_up) {
+            with_step_up(needs, &state.factors)
+        } else {
+            needs
+        }
+    }
+
+    /// TN-46: only a session moves the account's last sign-in.
+    async fn sl2_signed_in(
+        &self,
+        tx: &mut D::Tx,
+        state: &FlowState,
+        subject: [u8; 16],
+        now: u64,
+        marker: bool,
+    ) -> Result<(), SessionError> {
+        let level = state
+            .risk
+            .as_ref()
+            .and_then(|n| n.level.as_deref())
+            .and_then(Level::parse);
+        let facts = self.sign_in_facts(state, subject, now, marker);
+        record_sign_in(tx, &self.risk, &facts, level).await?;
+        Ok(())
+    }
+
+    fn sign_in_facts(
+        &self,
+        state: &FlowState,
+        subject: [u8; 16],
+        now: u64,
+        marker: bool,
+    ) -> SignIn {
+        let note = state.risk.clone().unwrap_or_default();
+        SignIn {
+            tenant: *self.realm.tenant.as_bytes(),
+            realm: *self.realm.realm.as_bytes(),
+            subject,
+            now_ms: now,
+            device_known: self.policy.remember_device_days.map(|_| marker),
+            prior_failures: note.prior_failures,
+            breach: note
+                .breach
+                .as_deref()
+                .and_then(Breach::parse)
+                .unwrap_or_default(),
+        }
     }
 }

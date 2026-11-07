@@ -91,3 +91,19 @@ groups:
           description: >-
             Metrics or traces are not reaching the collector. Decisions are unaffected; the
             dashboards and the other alerts go blind.
+
+  - name: access-risk
+    rules:
+      # OP-151 m.3 (o), TN-46: the FP budget of SL2 step-up requests is 0.5 %
+      - alert: AccessRiskFalsePositiveBudget
+        expr: access_risk_fp_ratio_ppm > 5000
+        for: 1h
+        labels:
+          severity: ticket
+          runbook: risk-fp-budget
+        annotations:
+          summary: More than 0.5 % of SL2 step-up requests were marked false positive
+          description: >-
+            Reviewers marked more than 0.5 % of risk step-up requests of the last 30 days as
+            false positives. Keep or move realms back to shadow mode and review the signal
+            weights before asking users for more step-ups.

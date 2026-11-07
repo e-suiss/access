@@ -96,6 +96,31 @@ pub const fn is_second_factor(m: MethodClass) -> bool {
     )
 }
 
+/// Whether the steps prove two factors: one multi-factor step, or two steps one of which is a
+/// second factor.
+#[must_use]
+pub fn multi_factor(factors: &[Factor]) -> bool {
+    let one_multi_factor = factors.iter().any(|f| f.kinds.len() >= 2);
+    let two_steps = factors.len() >= 2 && factors.iter().any(|f| is_second_factor(f.method));
+    one_multi_factor || two_steps
+}
+
+/// The requirements once SL2 asked for a step-up (TN-46, §12.2.4): a second step from what the
+/// account has enrolled, which a device marker does not stand in for. An account without a second
+/// factor is not offered enrolment here, so a stolen password cannot enrol the thief's own
+/// factor; the flow stays incomplete and a review item waits for a person. Never a lock.
+#[must_use]
+pub fn with_step_up(mut needs: Vec<Requirement>, factors: &[Factor]) -> Vec<Requirement> {
+    if needs.contains(&Requirement::FirstFactor) || multi_factor(factors) {
+        return needs;
+    }
+    needs.retain(|r| *r != Requirement::EnrollSecondFactor);
+    if !needs.contains(&Requirement::SecondFactor) {
+        needs.insert(0, Requirement::SecondFactor);
+    }
+    needs
+}
+
 /// What is still missing. Empty means complete. `marker` is a valid device marker for the
 /// subject (X33): it stands in for the second step, never for the AAL requirement.
 #[must_use]
@@ -111,9 +136,7 @@ pub fn missing(
         out.push(Requirement::FirstFactor);
         return out;
     }
-    let one_multi_factor = factors.iter().any(|f| f.kinds.len() >= 2);
-    let two_steps = factors.len() >= 2 && factors.iter().any(|f| is_second_factor(f.method));
-    let multi = one_multi_factor || two_steps;
+    let multi = multi_factor(factors);
     let wants_second = match policy.mfa {
         MfaPolicy::Required => true,
         MfaPolicy::WhenEnrolled => enrolled.second_factor(),
@@ -140,6 +163,31 @@ mod tests {
 
     fn pw() -> Factor {
         Factor::password(T)
+    }
+
+    // TN-46, MD-8: an SL2 step-up adds a second step a marker cannot skip, never offers
+    // enrolment to a password-only sign-in, and adds nothing once two factors are proven
+    #[test]
+    fn sl2_step_up_adds_a_second_step() {
+        let e = Enrolled {
+            totp: true,
+            ..Enrolled::default()
+        };
+        let skipped = missing(&AuthPolicy::DEFAULT, &e, &[pw()], true);
+        assert_eq!(skipped, []);
+        assert_eq!(with_step_up(skipped, &[pw()]), [Requirement::SecondFactor]);
+        assert_eq!(
+            with_step_up(vec![Requirement::EnrollSecondFactor], &[pw()]),
+            [Requirement::SecondFactor]
+        );
+        assert_eq!(
+            with_step_up(vec![], &[pw(), Factor::totp([2; 16], T)]),
+            Vec::<Requirement>::new()
+        );
+        assert_eq!(
+            with_step_up(vec![Requirement::FirstFactor], &[]),
+            [Requirement::FirstFactor]
+        );
     }
 
     // TN-132, LFP-23

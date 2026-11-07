@@ -190,6 +190,9 @@ type Signin<'a, C, N> = Auth<'a, PgAccounts, C, OsRandom, N, PgPasskeys<'a>, Log
 /// Builds the sign-in service of one realm for one request.
 macro_rules! signin {
     ($self:ident, $kit:ident, $auth:ident) => {
+        $crate::app::signin!($self, $kit, $auth, None);
+    };
+    ($self:ident, $kit:ident, $auth:ident, $client:expr) => {
         let db = ::access_identity_account::adapters::pg::PgAccounts($self.db.clone());
         let registry = ::access_identity_session::adapters::passkeys::PgPasskeys {
             pool: &$self.db,
@@ -219,6 +222,10 @@ macro_rules! signin {
                 rp: &$kit.rp,
                 policy: &$kit.webauthn,
             },
+            risk: ::access_identity_session::app::Sl2 {
+                services: &$self.risk,
+                client: $client,
+            },
         };
     };
 }
@@ -247,6 +254,8 @@ pub struct Hosted<K, C, M> {
     pub redirect_to: String,
     /// The realms' inline hooks (TN-135): `post_login` may refuse a sign-in.
     pub hooks: std::sync::Arc<dyn ::access_identity_hooks::ports::HookCaller + Sync>,
+    /// SL2 risk sources (TN-46, OP-151 m.1 (b)).
+    pub risk: access_identity_session::app::RiskServices,
 }
 
 fn failed(e: &SessionError) -> Reply {
@@ -344,7 +353,7 @@ where
             Ok(k) => k,
             Err(r) => return r,
         };
-        signin!(self, kit, auth);
+        signin!(self, kit, auth, Some(b.ip));
         self.start(&auth, &kit, b, None, 201)
             .await
             .unwrap_or_else(|r| r)
@@ -393,7 +402,7 @@ where
             Ok(k) => k,
             Err(r) => return r,
         };
-        signin!(self, kit, auth);
+        signin!(self, kit, auth, Some(b.ip));
         let flow = match flow_id(handle) {
             Ok(f) => f,
             Err(r) => return r,
@@ -425,7 +434,7 @@ where
             Ok(k) => k,
             Err(r) => return r,
         };
-        signin!(self, kit, auth);
+        signin!(self, kit, auth, Some(b.ip));
         self.submitted(&auth, &kit, b, handle, submission)
             .await
             .unwrap_or_else(|r| r)
@@ -721,7 +730,7 @@ where
             Ok(k) => k,
             Err(r) => return r,
         };
-        signin!(self, kit, auth);
+        signin!(self, kit, auth, Some(b.ip));
         match auth.preview_link(token, b.flow).await {
             Ok(LinkPreview::Confirm { same_device }) => Reply::json(
                 200,
@@ -746,7 +755,7 @@ where
             Ok(k) => k,
             Err(r) => return r,
         };
-        signin!(self, kit, auth);
+        signin!(self, kit, auth, Some(b.ip));
         match auth
             .confirm_link(token, b.flow, other_device, b.correlation)
             .await

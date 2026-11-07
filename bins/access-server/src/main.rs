@@ -24,6 +24,7 @@ mod login;
 mod oauth;
 mod platform;
 mod product;
+mod risk;
 mod status;
 #[cfg(test)]
 mod testing;
@@ -620,6 +621,13 @@ fn lockdown(config: &Config) -> Lockdown {
             lockdown = lockdown.allow_read_write(path);
         }
     }
+    // OP-151 m.1 (b): the MMDB file is read again when replaced, so its directory stays readable
+    if let Some(dir) = config.risk.geo_mmdb_path.as_deref().and_then(Path::parent) {
+        lockdown = lockdown.allow_read(dir);
+    }
+    if let Some(dir) = &config.risk.breach_ranges_dir {
+        lockdown = lockdown.allow_read(dir);
+    }
     lockdown
 }
 
@@ -753,6 +761,7 @@ fn login(
     keks: login::RealmKeks,
     assets: Option<Assets>,
     hooks: Arc<dyn access_identity_hooks::ports::HookCaller + Sync>,
+    risk: &access_identity_session::app::RiskServices,
 ) -> Result<(axum::Router, HostedLogin), String> {
     let identity = config.identity.as_ref().ok_or("no identity section")?;
     let lifetimes = config.login.lifetimes().ok_or("login session lifetimes")?;
@@ -778,6 +787,7 @@ fn login(
         )),
         redirect_to: config.login.redirect_to.clone(),
         hooks,
+        risk: risk.clone(),
     });
     Ok((login_router(discovery, hosted.clone(), assets), hosted))
 }
@@ -880,6 +890,7 @@ impl Background {
         let opening = tokio::spawn(jobs::run(
             pools.app.clone(),
             pools.archive.clone(),
+            pools.router.clone(),
             holder()?,
         ));
         Ok(Self {
@@ -945,6 +956,16 @@ async fn serve(
     let keks = login::RealmKeks::new(prepared.login_keys);
     // OP-137, OP-149 m.15 (i), m.22 (g)
     ids::open_root(&all.app, &prepared.identity_keys).await?;
+    // TN-46, OP-151 m.1 (b), m.3 (o)
+    let (risk_services, mmdb) = risk::services(
+        config,
+        &all.app,
+        &prepared.identity_keys,
+        prepared.outbound.clone(),
+    )
+    .await?;
+    let _geo_watch =
+        mmdb.map(|m| tokio::spawn(m.watch(access_identity_risk::adapters::mmdb::WATCH_EVERY)));
     let cell_ids = Arc::new(ids::CellIds::new(prepared.identity_keys.clone()));
     let (admin_app, admin_ids) = (all.app.clone(), cell_ids.clone());
     let admin_targets = prepared.outbound.declared();
@@ -987,6 +1008,7 @@ async fn serve(
         keks,
         prepared.assets,
         hooks.clone(),
+        &risk_services,
     )?;
     let tenants_pool = router_pool.clone();
     let realms = identity(config, router_pool).await?;

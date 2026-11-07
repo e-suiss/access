@@ -186,7 +186,7 @@ pub async fn clear_account<D: AccountDb, C: Clock>(
 /// identifier names.
 enum Admission {
     Throttled(u64),
-    Admitted(Option<Box<Candidate>>),
+    Admitted(Option<Box<Candidate>>, u32),
 }
 
 async fn admit<D: AccountDb>(
@@ -228,7 +228,7 @@ async fn admit<D: AccountDb>(
         }
     }
     tx.commit().await?;
-    Ok(Admission::Admitted(candidate))
+    Ok(Admission::Admitted(candidate, admitted[0].failures))
 }
 
 /// Counts the attempt on every key and writes its audit rows in one transaction; returns
@@ -316,14 +316,15 @@ pub async fn password_login<D: AccountDb, C: Clock, E: Entropy>(
     }
     let normalized = normalize(attempt.identifier);
     let keys = keys(realm, &normalized.to_lowercase(), &network(attempt.ip));
-    let candidate = match admit(db, realm, &gate.policy, &keys, &normalized, start).await? {
-        Admission::Throttled(wait) => {
-            return Ok(observed(PasswordLogin::Throttled {
-                retry_after_s: ceil_seconds(wait),
-            }));
-        }
-        Admission::Admitted(candidate) => candidate.map(|c| *c),
-    };
+    let (candidate, prior_failures) =
+        match admit(db, realm, &gate.policy, &keys, &normalized, start).await? {
+            Admission::Throttled(wait) => {
+                return Ok(observed(PasswordLogin::Throttled {
+                    retry_after_s: ceil_seconds(wait),
+                }));
+            }
+            Admission::Admitted(candidate, failures) => (candidate.map(|c| *c), failures),
+        };
     let presented = Password::presented(attempt.password);
     let verified = verify(realm, services, candidate.as_ref(), presented.as_ref()).await?;
     let rehashed = record(
@@ -344,6 +345,7 @@ pub async fn password_login<D: AccountDb, C: Clock, E: Entropy>(
                 subject: v.subject,
                 session_epoch: v.epoch,
                 rehashed,
+                prior_failures,
             }
         }
         None => PasswordLogin::Rejected {

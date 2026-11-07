@@ -12,6 +12,7 @@ pub mod ports;
 use access_identity_account::AccountError;
 use access_identity_account::domain::login::{Problem, unavailable};
 use access_identity_account::notify::NotifyError;
+use access_identity_risk::RiskError;
 use access_identity_webauthn::WebAuthnError;
 use access_store::StoreError;
 
@@ -45,6 +46,9 @@ pub enum SessionError {
     /// Stored data does not match the model.
     #[error("stored data is malformed")]
     Corrupt,
+    /// SL2 could not record its assessment; nothing was authenticated (MD-8).
+    #[error("risk: {0}")]
+    Risk(#[from] RiskError),
 }
 
 impl SessionError {
@@ -53,7 +57,10 @@ impl SessionError {
     #[must_use]
     pub fn problem(&self) -> Problem {
         match self {
-            Self::Store(_) | Self::Notify(_) | Self::WebAuthn(WebAuthnError::Registry(_)) => {
+            Self::Store(_)
+            | Self::Notify(_)
+            | Self::WebAuthn(WebAuthnError::Registry(_))
+            | Self::Risk(RiskError::Store(_) | RiskError::Account(AccountError::Store(_))) => {
                 unavailable(1)
             }
             Self::Account(e) => e.problem(),
@@ -69,7 +76,7 @@ impl SessionError {
                 title: "The sign-in changed; try again",
                 retry_after_s: None,
             },
-            Self::WebAuthn(_) | Self::Random | Self::Corrupt => Problem {
+            Self::WebAuthn(_) | Self::Random | Self::Corrupt | Self::Risk(_) => Problem {
                 status: 500,
                 code: "internal",
                 title: "Internal error",
