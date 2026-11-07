@@ -71,7 +71,7 @@ const HTML_SINKS: &[&str] = &[
 /// Source roots scanned.
 const ROOTS: &[&str] = &["web/", "sdks/typescript/src/"];
 
-/// Generated or built output that is not ours to word; the types generated from the OpenAPI
+/// Generated or built output that is not ours to word; the types generated from the `OpenAPI`
 /// contracts carry protocol values, not UI text (OP-151 m.3 (g), (r)).
 const SKIP: &[&str] = &[
     "/dist/",
