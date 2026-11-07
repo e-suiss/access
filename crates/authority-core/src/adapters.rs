@@ -604,9 +604,9 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
         candidate: &Value,
         analysis: &impl crate::ports::PolicyAnalysis,
     ) -> Result<crate::app::impact::PolicyChange, CoreError> {
-        let (guard, _) = self.led_now(domain).await?;
+        let (guard, now) = self.led_now(domain).await?;
         let led = guard.as_ref().ok_or(CoreError::Unavailable("leader"))?;
-        if !led.core.audits(&caller).await? {
+        if !led.core.audits(&caller, now).await? {
             return Err(CoreError::Protocol("lab-scope"));
         }
         led.core.change_policy(policy, candidate, analysis).await

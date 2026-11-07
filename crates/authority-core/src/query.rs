@@ -350,7 +350,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
     /// `access:audit_export`) get one; anyone else gets nothing, as for a search they may not
     /// see. One page, never recorded.
     async fn report(&self, actor: &Actor, query: &Query, now: u64) -> Result<Found, CoreError> {
-        if !self.audits(&actor.party).await? {
+        if !self.audits(&actor.party, now).await? {
             return Ok(Found::default());
         }
         let reports: Vec<Report> = match query {

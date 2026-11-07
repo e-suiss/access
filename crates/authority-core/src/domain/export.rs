@@ -25,6 +25,9 @@ pub const VERSIONS_CONTEXT: &str = "access/versions/v1";
 /// concept name `access.audit.export` (OP-151 m.19 (d)).
 pub const EXPORT_ACTION: &str = "audit_export";
 
+/// The namespace of the export intent's resource.
+pub const AUDIT_NAMESPACE: &str = "access.audit";
+
 /// Most records one package holds (PD); a larger range is several exports.
 pub const MAX_RECORDS: u64 = 10_000;
 

@@ -421,7 +421,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                 self.settled(|snap| crate::domain::views(snap, &req.basis, &a.party))
                     .await?
             }
-            (Scope::Audit, Some(a)) => self.audits(&a.party).await?,
+            (Scope::Audit, Some(a)) => self.audits(&a.party, now).await?,
             (_, None) => false,
         };
         if !allowed_scope {
@@ -524,7 +524,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
 
     /// Whether `party` may audit the domain: the meta-anchor's root, or the holder of a live
     /// Grant covering `access:audit_export` (OP-141 m.38 (d), m.39 (b)).
-    pub(crate) async fn audits(&self, party: &Id) -> Result<bool, CoreError> {
+    pub(crate) async fn audits(&self, party: &Id, now: u64) -> Result<bool, CoreError> {
         let meta_anchor = meta::meta_anchor(&self.domain);
         let root = self
             .settled(|snap| {
@@ -546,7 +546,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         }
         for g in self.reader.grants_for(party, None, 1_000).await? {
             let audit = self
-                .settled(|snap| crate::domain::audit_grant(snap, &g, party))
+                .settled(|snap| crate::domain::audit_grant(snap, &g, party, &self.domain, now))
                 .await?;
             if audit {
                 return Ok(true);

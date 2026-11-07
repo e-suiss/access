@@ -628,9 +628,11 @@ pub(crate) fn views(view: &Snapshot, basis: &ExerciseBasis, party: &Id) -> bool 
     holds || top_anchor(view, basis).is_some_and(|a| root_of(&a))
 }
 
-/// Whether Grant `g` is held by `party`, live along its lineage, and covers
-/// `access:audit_export` by name (OP-141 m.38 (d), m.39 (b)).
-pub(crate) fn audit_grant(view: &Snapshot, g: &Id, party: &Id) -> bool {
+/// Whether Grant `g` is held by `party` and makes it an auditor of `domain` at `now`: it
+/// names `access:audit_export`, rests on the meta-anchor or covers the whole `access.audit`
+/// namespace, and every hop of its lineage is live, in its validity window and free of
+/// conditions and requirements an audit read cannot satisfy (OP-141 m.38 (d), m.39 (b)).
+pub(crate) fn audit_grant(view: &Snapshot, g: &Id, party: &Id, domain: &Digest, now: u64) -> bool {
     let Some(state) = read::<GrantState>(view, kind::GRANT, g) else {
         return false;
     };
@@ -642,10 +644,29 @@ pub(crate) fn audit_grant(view: &Snapshot, g: &Id, party: &Id) -> bool {
         .exact
         .iter()
         .any(|a| a.namespace == meta::NAMESPACE && a.name == export::EXPORT_ACTION);
-    named
-        && state.content.holder == SubjectSelector::Party(*party)
-        && lineage_hops(view, g)
-            .is_some_and(|(hops, _)| hops.iter().all(|h| h.status == HopStatus::Active))
+    if !named || state.content.holder != SubjectSelector::Party(*party) {
+        return false;
+    }
+    let audit = ResourceSelector::Structural(Structural {
+        namespace: String::from(export::AUDIT_NAMESPACE),
+        prefix: Vec::new(),
+        kind: None,
+        attrs: BTreeMap::new(),
+    });
+    let on_audit =
+        access_kernel::algebra::resource_le(&audit, &state.content.authority.authority.resource);
+    let on_meta = top_anchor(view, &ExerciseBasis::Public(*g)) == Some(meta::meta_anchor(domain));
+    (on_meta || on_audit)
+        && lineage_hops(view, g).is_some_and(|(hops, _)| {
+            hops.iter().all(|h| {
+                let c = &h.authority.constraints;
+                h.status == HopStatus::Active
+                    && c.validity.from <= now
+                    && now <= c.validity.until
+                    && c.conditions.is_empty()
+                    && h.authority.requirements.is_empty()
+            })
+        })
 }
 
 /// The Anchor a basis rests on: the Anchor itself, or the top of the Grant's lineage.

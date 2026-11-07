@@ -25,7 +25,7 @@ use crate::rate::Class;
 pub use crate::domain::export::EXPORT_ACTION;
 
 /// The namespace of the export intent's resource.
-pub const EXPORT_NAMESPACE: &str = "access.audit";
+pub use crate::domain::export::AUDIT_NAMESPACE as EXPORT_NAMESPACE;
 
 /// A built export and who made it.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -105,7 +105,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             Some(_) => return Err(CoreError::Protocol("export-scope")),
         };
         // OP-141 m.38 (d): full records only for who audits the domain
-        if coverage == Coverage::Full && !self.audits(&actor.party).await? {
+        if coverage == Coverage::Full && !self.audits(&actor.party, now).await? {
             return Err(CoreError::Protocol("export-scope"));
         }
         let exercise: Digest =

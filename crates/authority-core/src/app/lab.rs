@@ -255,7 +255,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             return Err(CoreError::Limited);
         }
         let auditor = match actor {
-            Some(a) => self.audits(&a.party).await?,
+            Some(a) => self.audits(&a.party, now).await?,
             None => false,
         };
         if !auditor {
@@ -336,7 +336,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         samples: &[Sample],
         now: u64,
     ) -> Result<Simulation, CoreError> {
-        if !self.audits(&caller).await? {
+        if !self.audits(&caller, now).await? {
             return Err(CoreError::Protocol("lab-scope"));
         }
         crate::restrict::compile(candidate).map_err(|_| CoreError::Protocol("lab-policy"))?;

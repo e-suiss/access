@@ -7557,3 +7557,115 @@ async fn e6_resource_anchor_stays_scoped_domain_anchor_covers_the_domain() {
         Some(Outcome::Allow)
     );
 }
+
+/// Issues ALICE a Grant naming `access:audit_export` on `resource` from `basis`, signed by
+/// `seed`, with `edit` applied to its authority; returns its holding.
+async fn audit_grant_for_alice(
+    a: &Led,
+    d: Digest,
+    nonce: u8,
+    (basis, seed): (Id, u8),
+    resource: ResourceSelector,
+    edit: impl FnOnce(&mut CanonicalAuthority),
+) -> ExerciseBasis {
+    let mut auth = authority(vec![action("access", "audit_export")], resource);
+    edit(&mut auth);
+    let issue = Payload::GrantIssue(GrantContent {
+        basis: GrantBasis::Anchor(basis),
+        holder: SubjectSelector::Party(ALICE),
+        authority: auth,
+        agency: BTreeSet::from([Capacity::Own]),
+        named: None,
+    });
+    let issued = a
+        .exercise(&incoming(
+            meta_request(d, nonce, ExerciseBasis::Anchor(basis), issue),
+            seed,
+        ))
+        .await
+        .unwrap();
+    allowed(&issued);
+    ExerciseBasis::Holding(HoldingRef {
+        grant: meta::object_id(&issued.exercise.unwrap(), kind::GRANT, 0),
+        holder: ALICE,
+        since: issued.record.unwrap(),
+    })
+}
+
+/// Whether ALICE may read `record` at audit scope.
+async fn alice_audits(a: &Led, d: Digest, holding: ExerciseBasis, record: u64) -> bool {
+    assert!(a.derive().await.is_empty());
+    let inc = incoming(shop_request(d, 20, Mode::Commit, holding), ALICE_KEY);
+    match a.explain_recorded(&inc, record, Scope::Audit).await {
+        Ok(_) => true,
+        Err(CoreError::Protocol("explain-scope")) => false,
+        Err(e) => panic!("{e:?}"),
+    }
+}
+
+fn audit_selector() -> ResourceSelector {
+    selector("access.audit")
+}
+
+// OP-141 m.38 (d), m.39 (b): a Grant a Party issues itself on its self-anchor never makes it
+// an auditor, even when it names `access:audit_export`
+#[tokio::test]
+async fn op_141_m38_d_a_self_issued_audit_grant_audits_nothing() {
+    let db = fresh().await.unwrap();
+    let (a, d, holding, record) = audited_domain(&db).await;
+    let ExerciseBasis::Anchor(own) = self_anchor_of(d, 3) else {
+        unreachable!()
+    };
+    let own_subtree = ResourceSelector::Structural(Structural {
+        namespace: "access.party".to_owned(),
+        prefix: vec![hex(ALICE)],
+        kind: None,
+        attrs: BTreeMap::new(),
+    });
+    audit_grant_for_alice(&a, d, 50, (own, ALICE_KEY), own_subtree, |_| {}).await;
+    assert!(!alice_audits(&a, d, holding, record).await);
+}
+
+// OP-141 m.38 (d): an audit Grant out of its validity window, or with conditions or
+// requirements an audit read cannot satisfy, makes no auditor; a clean one from the
+// meta-anchor does
+#[tokio::test]
+async fn op_141_m38_d_an_audit_grant_must_hold_now() {
+    let db = fresh().await.unwrap();
+    let (a, d, holding, record) = audited_domain(&db).await;
+    let meta_anchor = meta::meta_anchor(&d);
+    audit_grant_for_alice(&a, d, 50, (meta_anchor, ROOT_KEY), audit_selector(), |g| {
+        g.constraints.validity = Window {
+            from: NOW + 1_000,
+            until: 1_000_000,
+        };
+    })
+    .await;
+    assert!(!alice_audits(&a, d, holding, record).await);
+    audit_grant_for_alice(&a, d, 51, (meta_anchor, ROOT_KEY), audit_selector(), |g| {
+        g.requirements = BTreeSet::from([term(ProofKind::Claim, "kyc", ProofBinding::None)]);
+    })
+    .await;
+    assert!(!alice_audits(&a, d, holding, record).await);
+    audit_grant_for_alice(&a, d, 52, (meta_anchor, ROOT_KEY), audit_selector(), |_| {}).await;
+    assert!(alice_audits(&a, d, holding, record).await);
+}
+
+// OP-141 m.38 (d), m.39 (b), AP-14: a Grant from the meta-anchor naming
+// `access:audit_export` commits the export intent and gets the full package
+#[tokio::test]
+async fn op_141_m38_d_a_meta_anchor_audit_grant_exports() {
+    let db = fresh().await.unwrap();
+    let (a, d, _, _) = audited_domain(&db).await;
+    let meta_anchor = meta::meta_anchor(&d);
+    let grant =
+        audit_grant_for_alice(&a, d, 50, (meta_anchor, ROOT_KEY), audit_selector(), |_| {}).await;
+    let inc = incoming(export_request(d, 51, grant, "full"), ALICE_KEY);
+    allowed(&a.exercise(&inc).await.unwrap());
+    assert!(a.derive().await.is_empty());
+    let exported = a.export(&inc).await.unwrap();
+    assert_eq!(
+        exported.package.replay_coverage,
+        access_authority_core::domain::export::Coverage::Full
+    );
+}
