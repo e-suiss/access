@@ -1,12 +1,16 @@
-//! Standard Webhooks signatures (OP-149 m.4, m.7): the Suiss webhook profile signs every
-//! delivery with HMAC-SHA-256 under the subscription's own secret.
+//! Standard Webhooks signatures, the Suiss webhook profile shared with Relay (OP-149 m.4, m.7,
+//! TN-135, TN-136, E42).
 //!
 //! - The signed content is `webhook-id ‖ "." ‖ webhook-timestamp ‖ "." ‖ body`.
-//! - `webhook-signature` is a space-separated list of `v1,<base64 signature>`; a receiver
-//!   accepts the delivery when any entry verifies, so a rotated secret can overlap.
-//! - The secret is 32 random bytes, written `whsec_<base64>`.
+//! - `webhook-signature` is a space-separated list of `<version>,<base64 signature>`; a
+//!   receiver accepts the delivery when any entry verifies, so a rotated key can overlap.
+//! - `v1a` is Ed25519, the default (TN-136): the signing key is a 32-byte seed written
+//!   `whsk_<base64>`; the receiver holds its public key, written `whpk_<base64>`.
+//! - `v1` is HMAC-SHA-256, for compatibility only: the secret is 32 random bytes written
+//!   `whsec_<base64>`.
 
 use aws_lc_rs::hmac;
+use aws_lc_rs::signature::{ED25519, Ed25519KeyPair, KeyPair as _, UnparsedPublicKey};
 use zeroize::Zeroizing;
 
 use crate::dit::DitGuard;
@@ -15,8 +19,17 @@ use crate::secret::Secret;
 /// Prefix of a written secret.
 pub const SECRET_PREFIX: &str = "whsec_";
 
-/// Version tag of a signature entry.
+/// Version tag of an HMAC signature entry.
 pub const SIGNATURE_VERSION: &str = "v1";
+
+/// Version tag of an Ed25519 signature entry (TN-136).
+pub const ED25519_VERSION: &str = "v1a";
+
+/// Prefix of a written Ed25519 signing key.
+pub const SIGNING_KEY_PREFIX: &str = "whsk_";
+
+/// Prefix of a written Ed25519 public key.
+pub const PUBLIC_KEY_PREFIX: &str = "whpk_";
 
 /// Largest accepted clock skew of `webhook-timestamp`, seconds (PD).
 pub const TOLERANCE_S: u64 = 300;
@@ -178,6 +191,139 @@ impl WebhookSecret {
                     let _dit = DitGuard::new();
                     hmac::verify(&key, &content, &sig).is_ok()
                 })
+        })
+    }
+}
+
+/// An Ed25519 webhook signing key (TN-136 `v1a`). It never appears in `Debug`.
+pub struct WebhookSigningKey {
+    seed: Secret<Vec<u8>>,
+    pair: Ed25519KeyPair,
+}
+
+impl core::fmt::Debug for WebhookSigningKey {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str("WebhookSigningKey(<redacted>)")
+    }
+}
+
+impl WebhookSigningKey {
+    /// A fresh key from 32 random bytes.
+    ///
+    /// # Errors
+    /// [`crate::random::RandomError`].
+    pub fn generate() -> Result<Self, crate::random::RandomError> {
+        let seed = Zeroizing::new(crate::random::bytes::<32>()?);
+        Self::from_seed(seed.as_slice()).map_err(|MalformedSecret| crate::random::RandomError)
+    }
+
+    /// From the 32-byte seed, as stored sealed.
+    ///
+    /// # Errors
+    /// [`MalformedSecret`] for any other length.
+    pub fn from_seed(seed: &[u8]) -> Result<Self, MalformedSecret> {
+        if seed.len() != 32 {
+            return Err(MalformedSecret);
+        }
+        let pair = Ed25519KeyPair::from_seed_unchecked(seed).map_err(|_| MalformedSecret)?;
+        Ok(Self {
+            seed: Secret::new(seed.to_vec()),
+            pair,
+        })
+    }
+
+    /// Reads `whsk_<base64>`.
+    ///
+    /// # Errors
+    /// [`MalformedSecret`].
+    pub fn parse(text: &str) -> Result<Self, MalformedSecret> {
+        let b64 = text
+            .strip_prefix(SIGNING_KEY_PREFIX)
+            .ok_or(MalformedSecret)?;
+        let seed = Zeroizing::new(b64_decode(b64).ok_or(MalformedSecret)?);
+        Self::from_seed(&seed)
+    }
+
+    /// The seed, to seal for storage.
+    #[must_use]
+    pub fn expose_seed(&self) -> &[u8] {
+        self.seed.expose()
+    }
+
+    /// The public key the receiver verifies with.
+    #[must_use]
+    pub fn public_key(&self) -> WebhookPublicKey {
+        let mut pk = [0_u8; 32];
+        if let Some(src) = self.pair.public_key().as_ref().get(..32) {
+            pk.copy_from_slice(src);
+        }
+        WebhookPublicKey(pk)
+    }
+
+    /// The `v1a,<base64>` signature of one delivery.
+    #[must_use]
+    pub fn sign(&self, id: &str, timestamp_s: u64, body: &[u8]) -> String {
+        let sig = self.pair.sign(&signed_content(id, timestamp_s, body));
+        format!("{ED25519_VERSION},{}", b64_encode(sig.as_ref()))
+    }
+}
+
+/// An Ed25519 webhook public key, published to the receiver (TN-136).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct WebhookPublicKey([u8; 32]);
+
+impl WebhookPublicKey {
+    /// From its 32 bytes.
+    #[must_use]
+    pub const fn from_bytes(raw: [u8; 32]) -> Self {
+        Self(raw)
+    }
+
+    /// Its 32 bytes.
+    #[must_use]
+    pub const fn as_bytes(&self) -> &[u8; 32] {
+        &self.0
+    }
+
+    /// Reads `whpk_<base64>`.
+    ///
+    /// # Errors
+    /// [`MalformedSecret`].
+    pub fn parse(text: &str) -> Result<Self, MalformedSecret> {
+        let b64 = text.strip_prefix(PUBLIC_KEY_PREFIX).ok_or(MalformedSecret)?;
+        let raw = b64_decode(b64).ok_or(MalformedSecret)?;
+        Ok(Self(
+            <[u8; 32]>::try_from(raw.as_slice()).map_err(|_| MalformedSecret)?,
+        ))
+    }
+
+    /// The written form, `whpk_<base64>`.
+    #[must_use]
+    pub fn text(&self) -> String {
+        format!("{PUBLIC_KEY_PREFIX}{}", b64_encode(&self.0))
+    }
+
+    /// Whether `header` holds a `v1a` signature of the delivery under this key and the
+    /// timestamp is within [`TOLERANCE_S`] of `now_s`.
+    #[must_use]
+    pub fn verify(
+        &self,
+        id: &str,
+        timestamp_s: u64,
+        body: &[u8],
+        header: &str,
+        now_s: u64,
+    ) -> bool {
+        if now_s.abs_diff(timestamp_s) > TOLERANCE_S {
+            return false;
+        }
+        let content = signed_content(id, timestamp_s, body);
+        let key = UnparsedPublicKey::new(&ED25519, &self.0);
+        header.split(' ').any(|entry| {
+            entry
+                .strip_prefix("v1a,")
+                .and_then(b64_decode)
+                .is_some_and(|sig| key.verify(&content, &sig).is_ok())
         })
     }
 }

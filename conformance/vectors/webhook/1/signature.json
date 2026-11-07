@@ -1,0 +1,68 @@
+{
+  "track": "webhook",
+  "version": "1",
+  "operation": "webhook.sign",
+  "rule": [
+    "TN-135",
+    "TN-136",
+    "E42"
+  ],
+  "description": "The Suiss webhook profile shared by Access and Relay: Standard Webhooks signatures over webhook-id.webhook-timestamp.body. v1a is Ed25519 (the default), v1 is HMAC-SHA-256 (compatibility only). Ed25519 signatures are deterministic (RFC 8032), so both entries are exact.",
+  "keys": {
+    "ed25519_signing_key": "whsk_nWGxne/9WmC6hEr0kuwsxERJxWl7MmkZcDusAxyuf2A=",
+    "ed25519_public_key": "whpk_11qYAYKxCrfVS/7TyWQHOg7hcvPapiMlrwIaaPcHURo=",
+    "hmac_secret": "whsec_MfKQ9r8GKYqrTwjUPD8ILPZIo2LaLaSw"
+  },
+  "tolerance_s": 300,
+  "cases": [
+    {
+      "name": "standard-webhooks-reference-body",
+      "webhook_id": "msg_p5jXN8AQM9LWM0D4loKWxJek",
+      "webhook_timestamp": 1614265330,
+      "body_hex": "7b2274657374223a20323433323233323331347d",
+      "signed_content_hex": "6d73675f70356a584e3841514d394c574d3044346c6f4b57784a656b2e313631343236353333302e7b2274657374223a20323433323233323331347d",
+      "v1a": "v1a,fldxM4gAKugP6nnt1hdz3sgGfZ6d99nzrMFnZOELIxbzEHoVmAb2ADpkJK7zgPePmPsle0zV9jSeGlHFG2NVAw==",
+      "v1": "v1,g0hM9SsE+OTPJTGt/tmIKtSyZlE3uFJELVlNIOLJ1OE="
+    },
+    {
+      "name": "cloudevent-account-created",
+      "webhook_id": "evt_2a8nW3zQ0jVb7lq9b8cXUg",
+      "webhook_timestamp": 1793784600,
+      "body_hex": "7b227370656376657273696f6e223a22312e30222c226964223a226576745f3261386e57337a51306a5662376c7139623863585567222c22736f75726365223a2268747470733a2f2f61636d652e6163636573732e6578616d706c652f722f6d61696e222c2274797065223a2275726e3a73756973733a6163636573733a6576656e743a6163636f756e742e63726561746564222c2274696d65223a22323032362d31312d30375430393a33303a30305a222c2264617461636f6e74656e7474797065223a226170706c69636174696f6e2f6a736f6e222c2264617461223a7b226163636f756e74223a227573725f30316a63347830663863327134613772357733763979366b316d222c227265616c6d223a2230313933613162322d633364342d376535662d386139622d306331643265336634613562222c226174223a313739333738343630303030307d7d",
+      "signed_content_hex": "6576745f3261386e57337a51306a5662376c71396238635855672e313739333738343630302e7b227370656376657273696f6e223a22312e30222c226964223a226576745f3261386e57337a51306a5662376c7139623863585567222c22736f75726365223a2268747470733a2f2f61636d652e6163636573732e6578616d706c652f722f6d61696e222c2274797065223a2275726e3a73756973733a6163636573733a6576656e743a6163636f756e742e63726561746564222c2274696d65223a22323032362d31312d30375430393a33303a30305a222c2264617461636f6e74656e7474797065223a226170706c69636174696f6e2f6a736f6e222c2264617461223a7b226163636f756e74223a227573725f30316a63347830663863327134613772357733763979366b316d222c227265616c6d223a2230313933613162322d633364342d376535662d386139622d306331643265336634613562222c226174223a313739333738343630303030307d7d",
+      "v1a": "v1a,jrxDwMntodCxmcx76knbbALWRrhFX8Y6d90xRuqGH8SNzursiTGPho4I2nKuM10lcCqyBZyFeGVADsjtoOegBg==",
+      "v1": "v1,XN17/1PNid9GNiT9pQ3Ua+kz9wVIxSU568b6xkdopcQ="
+    },
+    {
+      "name": "empty-body",
+      "webhook_id": "hook_01jc4x0f8c2q4a7r5w3v9y6k1m",
+      "webhook_timestamp": 1793784601,
+      "body_hex": "",
+      "signed_content_hex": "686f6f6b5f30316a63347830663863327134613772357733763979366b316d2e313739333738343630312e",
+      "v1a": "v1a,LzA0rVNM/91pEOzWBxqEbZwwxJ15fBdGJ82QIzwgvG8V0ERu7c6sjSEANsXwYO/CBxr8Aqj5hinh4mC8bMgWCg==",
+      "v1": "v1,w7If6ZxnZExEDmz+jp+0xL5pi2eUB0qGNTCJGgVL4I4="
+    }
+  ],
+  "rejections": [
+    {
+      "name": "tampered-body",
+      "case": "standard-webhooks-reference-body",
+      "body_hex": "7b2274657374223a20323433323233323331357d"
+    },
+    {
+      "name": "other-id",
+      "case": "standard-webhooks-reference-body",
+      "webhook_id": "msg_other"
+    },
+    {
+      "name": "timestamp-outside-tolerance",
+      "case": "standard-webhooks-reference-body",
+      "now": 1614265631
+    },
+    {
+      "name": "version-tags-swapped",
+      "case": "standard-webhooks-reference-body",
+      "swap_versions": true
+    }
+  ]
+}

@@ -50,3 +50,31 @@ fn base64_round_trips() {
     assert!(b64_decode("Zm9=Yg==").is_none());
     assert!(b64_decode("Zm9").is_none());
 }
+
+// TN-136, SA-26: an Ed25519 key round-trips, never prints, and a rotated key overlaps
+#[test]
+fn tn_136_ed25519_keys_round_trip_and_overlap() {
+    let old = WebhookSigningKey::generate().unwrap();
+    let new = WebhookSigningKey::generate().unwrap();
+    assert_eq!(format!("{old:?}"), "WebhookSigningKey(<redacted>)");
+    let again = WebhookSigningKey::from_seed(old.expose_seed()).unwrap();
+    assert_eq!(again.public_key(), old.public_key());
+    let pk = WebhookPublicKey::parse(&old.public_key().text()).unwrap();
+    assert_eq!(pk, old.public_key());
+    let header = format!("{} {}", new.sign(ID, TS, BODY), old.sign(ID, TS, BODY));
+    assert!(old.public_key().verify(ID, TS, BODY, &header, TS));
+    assert!(new.public_key().verify(ID, TS, BODY, &header, TS));
+    assert!(
+        !old.public_key()
+            .verify(ID, TS, BODY, &new.sign(ID, TS, BODY), TS)
+    );
+    assert!(WebhookSigningKey::from_seed(&[0; 31]).is_err());
+    assert!(WebhookPublicKey::parse("whpk_AAAA").is_err());
+    assert!(!old.public_key().verify(
+        ID,
+        TS,
+        BODY,
+        &old.sign(ID, TS, BODY),
+        TS + TOLERANCE_S + 1
+    ));
+}
