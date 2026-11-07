@@ -4,8 +4,12 @@
 // credential, so a body without the browser's AIS reads as Anonymous (Public only).
 import { readFile } from "node:fs/promises";
 
+import { createHash } from "node:crypto";
+
 import type { BrowserContext, Route } from "@playwright/test";
 import { loadKernel, type Kernel } from "@esuiss/access";
+
+import { type Cbor, encode } from "./cbor.js";
 
 export const COOKIE = "__Host-access-console";
 export const CSRF = "__Host-access-console-csrf";
@@ -68,6 +72,76 @@ interface Session {
   ended: boolean;
 }
 
+/** An intent as a screen asks for it. */
+export interface Wanted {
+  readonly action: { readonly namespace: string; readonly name: string; readonly major: number };
+  readonly resources: readonly { readonly namespace: string; readonly path: readonly string[] }[];
+  readonly params?: Readonly<Record<string, unknown>>;
+}
+
+const SCHEMA = Buffer.alloc(32, 7);
+
+function typed(v: unknown): Record<string, Cbor> {
+  if (typeof v === "number") return { count: v };
+  return { enum: String(v) };
+}
+
+/** The canonical envelope and ADP wire JSON of `w`, as a draft carries them (test side only). */
+export function envelopeOf(w: Wanted): { envelope: Uint8Array; intent: unknown } {
+  const from = 1000;
+  const until = 2000;
+  const params = Object.fromEntries(Object.entries(w.params ?? {}).map(([k, v]) => [k, typed(v)]));
+  const body: Record<string, Cbor> = {
+    action: {
+      name: w.action.name,
+      major: w.action.major,
+      schema: [-16, Uint8Array.from(SCHEMA)],
+      namespace: w.action.namespace,
+    },
+    validity: [from, until],
+    resources: w.resources.map((r) => ({
+      path: [...r.path],
+      namespace: r.namespace,
+      incarnation: 0,
+    })),
+  };
+  if (Object.keys(params).length > 0) body["params"] = params;
+  const intent = {
+    action: { ...w.action, schema: SCHEMA.toString("base64url") },
+    resources: w.resources.map((r) => ({ ...r, incarnation: 0 })),
+    params,
+    validity: { from, until },
+  };
+  return { envelope: encode(body), intent };
+}
+
+/** The read proof intent of `method target` (OP-151 m.12 (c)). */
+function readIntent(method: string, target: string): string {
+  return createHash("sha256")
+    .update(
+      Buffer.concat([
+        Buffer.from("access/console-read/v1"),
+        Buffer.from([0]),
+        Buffer.from(`${method} ${target}`),
+      ]),
+    )
+    .digest("base64url");
+}
+
+/** The `idp.*` action each admin operation compiles to (identity-admin). */
+const OPERATIONS: Readonly<Record<string, readonly [string, string]>> = {
+  patchBranding: ["idp.realm", "branding"],
+  putRpId: ["idp.realm", "rp_id"],
+  suspendAccount: ["idp.account", "suspend"],
+  reactivateAccount: ["idp.account", "reactivate"],
+};
+
+export interface Write {
+  readonly method: string;
+  readonly path: string;
+  readonly body: Record<string, unknown>;
+}
+
 export interface Seen {
   readonly method: string;
   readonly path: string;
@@ -82,6 +156,22 @@ export class ConsoleMock {
   eligible = new Set<string>();
   /** Make the session store fail (Ek B 2973). */
   down = false;
+  /** Actions (`namespace/name`) eligibility answers yes for; empty means every action. */
+  readonly eligibleActions = new Set<string>();
+  /** Management API answers by path under `/admin/v1/`. */
+  readonly admin = new Map<string, unknown>();
+  /** ADP search answers by kind. */
+  readonly searches = new Map<string, unknown>();
+  /** The ADP explain answer, by scope. */
+  readonly explains = new Map<string, unknown>();
+  /** The search queries ADP received, with whether they carried the browser's AIS. */
+  readonly queries: { kind: string; query: unknown; ais: boolean }[] = [];
+  /** The writes the management API applied. */
+  readonly writes: Write[] = [];
+  /** The realm's registered passkeys (IDI-4). */
+  passkeys = 3;
+  /** Draft a different action than asked (a compromised draft). */
+  tamper = false;
 
   /** A signed-in session, as the hosted login hand-off leaves it, in `context`. */
   async signIn(context: BrowserContext, baseURL: string, account = "acc_ada"): Promise<string> {
@@ -115,7 +205,16 @@ export class ConsoleMock {
   }
 
   private async verify(s: Session, ais: string | undefined, mode: string): Promise<boolean> {
-    if (ais === undefined || s.key === undefined || s.kid === undefined) return false;
+    return (await this.statement(s, ais, mode)) !== undefined;
+  }
+
+  /** The verified statement of `ais` by the session's key in `mode`. */
+  private async statement(
+    s: Session,
+    ais: string | undefined,
+    mode: string,
+  ): Promise<{ intent: string } | undefined> {
+    if (ais === undefined || s.key === undefined || s.kid === undefined) return undefined;
     const kernel = await k();
     const parts = sign1Parts(Buffer.from(ais, "base64url"));
     const tbs = Uint8Array.from(kernel.coseToBeSigned(parts.protected, parts.payload));
@@ -125,9 +224,12 @@ export class ConsoleMock {
       Uint8Array.from(parts.sig),
       tbs,
     );
-    if (!ok) return false;
-    const st = JSON.parse(kernel.describeStatement(parts.payload)) as { mode: string };
-    return st.mode === mode;
+    if (!ok) return undefined;
+    const st = JSON.parse(kernel.describeStatement(parts.payload)) as {
+      mode: string;
+      intent: string;
+    };
+    return st.mode === mode ? st : undefined;
   }
 
   private async handle(route: Route): Promise<void> {
@@ -246,24 +348,112 @@ export class ConsoleMock {
       s.kid = Buffer.from((await k()).thumbprintP256(x, y)).toString("base64url");
       return reply(201, { instance: s.kid });
     }
+    if (path === "/intents") {
+      const w = body() as unknown as Wanted;
+      const asked = this.tamper ? { ...w, action: { ...w.action, name: "grant_issue" } } : w;
+      const d = envelopeOf(asked);
+      return reply(200, {
+        intent: d.intent,
+        envelope: Buffer.from(d.envelope).toString("base64url"),
+      });
+    }
     if (path.startsWith("/proxy/admin/")) {
       const ais = headers["x-access-ais"];
       if (ais === undefined) return problem(401, "ais-required");
       if (s.kid === undefined) return problem(403, "console-instance-required");
-      const mode = r.method() === "GET" ? "check" : "commit";
-      if (!(await this.verify(s, ais, mode))) return problem(403, "read-proof-rejected");
-      return reply(200, { ok: true });
+      const rest = path.slice("/proxy/admin/".length);
+      const target = `/admin/v1/${rest}${url.search}`;
+      const drafting = r.method() === "POST" && rest.endsWith("/intents");
+      const read = r.method() === "GET" || drafting;
+      const st = await this.statement(s, ais, read ? "check" : "commit");
+      if (st === undefined) return problem(403, "read-proof-rejected");
+      if (read && st.intent !== readIntent(r.method(), target)) {
+        return problem(403, "read-proof-rejected");
+      }
+      if (drafting) {
+        const b = body();
+        const op = String(b["operation"]);
+        const action = OPERATIONS[op];
+        if (action === undefined) return problem(400, "invalid-request");
+        const slug = rest.split("/")[1] ?? "";
+        const d = envelopeOf({
+          action: { namespace: action[0], name: action[1], major: 1 },
+          resources: [{ namespace: "idp.realm", path: [slug] }],
+        });
+        const kernel = await k();
+        return reply(200, {
+          operation: op,
+          key: b["key"] ?? null,
+          body: {
+            ...(b["body"] as Record<string, unknown>),
+            ...(this.tamper ? { display_name: "Someone else" } : {}),
+            validity: { not_before: "1970-01-01T00:00:01Z", not_after: "1970-01-01T00:00:02Z" },
+          },
+          domain: DOMAIN,
+          pep: "access-admin",
+          intent: Buffer.from(d.envelope).toString("base64url"),
+          intent_digest: Buffer.from(kernel.intentDigest(d.envelope)).toString("base64url"),
+        });
+      }
+      if (!read) {
+        const b = body();
+        if (
+          rest.endsWith("/settings/rp-id") &&
+          b["acknowledge_passkey_loss"] !== String(this.passkeys)
+        ) {
+          return problem(409, "passkey-loss-not-acknowledged");
+        }
+        this.writes.push({ method: r.method(), path: rest, body: b });
+        return reply(200, {
+          exercise_id: Buffer.alloc(32, this.writes.length).toString("base64url"),
+          position: { seq: this.writes.length },
+        });
+      }
+      const answer = this.admin.get(rest);
+      if (answer === undefined) return problem(404, "not_found");
+      return reply(200, answer);
     }
     if (path === "/proxy/adp/eligibility:check") {
-      return reply(200, { eligible: s.kid !== undefined && this.eligible.has(s.account) });
+      const intent = (body()["set"] as { intent?: Wanted } | undefined)?.intent;
+      const act = intent === undefined ? "" : `${intent.action.namespace}/${intent.action.name}`;
+      const yes =
+        s.kid !== undefined &&
+        this.eligible.has(s.account) &&
+        intent !== undefined &&
+        (this.eligibleActions.size === 0 || this.eligibleActions.has(act));
+      return reply(200, { eligible: yes });
     }
     if (path.startsWith("/proxy/adp/search/")) {
-      const b = body();
-      const anonymous = b["ais"] === undefined;
-      return reply(200, {
-        results: anonymous ? [{ id: "public-grant", visibility: "public" }] : [],
-        reader: anonymous ? "anonymous" : "instance",
-      });
+      const kind = path.slice("/proxy/adp/search/".length);
+      const ctx = (body()["context"] ?? {}) as Record<string, unknown>;
+      const ais = typeof ctx["ais"] === "string" ? ctx["ais"] : undefined;
+      this.queries.push({ kind, query: ctx["query"], ais: ais !== undefined });
+      if ((await this.statement(s, ais, "check")) === undefined) {
+        return reply(200, {
+          results: [{ type: "public", visibility: "public" }],
+          reader: "anonymous",
+          page: { next_token: "", total: 1 },
+          context: { advisory: true },
+        });
+      }
+      return reply(
+        200,
+        this.searches.get(kind) ?? {
+          results: [],
+          page: { next_token: "", total: 0 },
+          context: { advisory: true },
+        },
+      );
+    }
+    if (path === "/proxy/adp/explain") {
+      const ctx = (body()["context"] ?? {}) as Record<string, unknown>;
+      const ais = typeof ctx["ais"] === "string" ? ctx["ais"] : undefined;
+      if ((await this.statement(s, ais, "check")) === undefined) return problem(400, "proofs");
+      const scope = typeof ctx["scope"] === "string" ? ctx["scope"] : "requester";
+      return reply(
+        200,
+        this.explains.get(scope) ?? { decision: false, context: { advisory: true } },
+      );
     }
     return problem(404, "not_found");
   }
