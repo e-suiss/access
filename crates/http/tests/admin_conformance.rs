@@ -230,7 +230,12 @@ fn no_contract_offers_an_inbox() {
                 for word in banned {
                     assert!(!words.contains(word), "{name}: {method} {path} ({id})");
                 }
-                if method != "get" || !path.contains("approv") || path.ends_with(".js") {
+                if method != "get"
+                    || !path.contains("approv")
+                    || std::path::Path::new(path)
+                        .extension()
+                        .is_some_and(|e| e.eq_ignore_ascii_case("js"))
+                {
                     continue;
                 }
                 let params = op["parameters"].as_array().cloned().unwrap_or_default();
