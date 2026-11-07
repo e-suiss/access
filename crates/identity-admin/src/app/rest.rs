@@ -22,7 +22,7 @@ use crate::domain::realm::Binding;
 use crate::domain::{
     Attribute, AuthMethod, Branding, Change, ClaimName, Client, ClientId, Color, Group, Invalid,
     Members, MembershipIssuer, Name, RedirectUri, RpId, SessionPolicy, SigninMethod, SigninPolicy,
-    Upstream,
+    Subject, Upstream,
 };
 use crate::ports::{Decider, Governance, Instances, RealmKeys};
 
@@ -225,6 +225,9 @@ fn client(id: ClientId, m: &Map<String, Json>) -> Result<Client, Invalid> {
             "require_pushed_authorization_requests",
             "status",
             "platform_product",
+            "subject_type",
+            "public_sub_opt_in",
+            "sector_identifier_uri",
         ],
     )?;
     // OP-149 m.4: platform product fields are read-only here
@@ -241,6 +244,25 @@ fn client(id: ClientId, m: &Map<String, Json>) -> Result<Client, Invalid> {
         backchannel_logout_uri: opt_text(m, "backchannel_logout_uri")?.map(String::from),
         require_par: flag(m, "require_pushed_authorization_requests")?,
         platform: None,
+        subject: subject_of(m)?,
+    })
+}
+
+/// MD-10: `subject_type` is `pairwise` unless the body says `public` and opts in with
+/// `public_sub_opt_in: true`; a client's view carries both, so a merge patch keeps them.
+fn subject_of(m: &Map<String, Json>) -> Result<Subject, Invalid> {
+    let public = match opt_text(m, "subject_type")? {
+        None | Some("pairwise") => false,
+        Some("public") => true,
+        Some(_) => return Err(Invalid::PublicSub),
+    };
+    let opted = flag(m, "public_sub_opt_in")?;
+    if public != opted && (public || opted) {
+        return Err(Invalid::PublicSub);
+    }
+    Ok(Subject {
+        public,
+        sector_identifier_uri: opt_text(m, "sector_identifier_uri")?.map(String::from),
     })
 }
 
@@ -458,6 +480,9 @@ pub fn client_view(c: &ClientRow) -> Json {
         "backchannel_logout_uri": c.backchannel_logout_uri,
         "require_pushed_authorization_requests": c.require_par,
         "platform_product": c.platform_product,
+        "subject_type": if c.public_sub { "public" } else { "pairwise" },
+        "public_sub_opt_in": c.public_sub,
+        "sector_identifier_uri": c.sector_identifier_uri,
         "status": if c.active { "active" } else { "retired" },
     })
 }

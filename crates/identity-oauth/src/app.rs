@@ -141,7 +141,26 @@ impl<D: Directory, K: Keys> Discovery<D, K> {
         };
         match doc {
             Document::OpenIdConfiguration | Document::AuthorizationServer => {
-                Reply::Metadata(metadata::authorization_server(&realm.issuer, &self.served))
+                let Ok(facts) = self.directory.facts(&realm).await else {
+                    return Reply::Unavailable;
+                };
+                // §9.15.1 k.2, P60: the AS metadata refers to its governing domain's metadata
+                let domain_metadata = self.suiss.as_ref().zip(facts.domain).map(|(s, d)| {
+                    format!(
+                        "{}/.well-known/access-domain-metadata/sha-256:{}",
+                        s.api_base,
+                        access_kernel::json::b64url_encode(&d)
+                    )
+                });
+                let facts = metadata::RealmFacts {
+                    public_sub: facts.public_sub_clients > 0,
+                    domain_metadata,
+                };
+                Reply::Metadata(metadata::authorization_server_of(
+                    &realm.issuer,
+                    &self.served,
+                    &facts,
+                ))
             }
             Document::ProtectedResource => {
                 Reply::Metadata(metadata::protected_resource(&realm.issuer, &self.served))

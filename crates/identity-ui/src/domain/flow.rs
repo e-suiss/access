@@ -312,6 +312,23 @@ impl Ui {
         Self::new(flow, Step::Authenticate, policy, nodes)
     }
 
+    /// Keeps only the first steps the realm enabled (TN-132): without password sign-in the
+    /// password field and button go, without passkey sign-in the passkey button and autofill
+    /// go. Only the identifier and first-factor steps change; later steps keep a passkey as a
+    /// second factor.
+    #[must_use]
+    pub fn with_first_steps(mut self, password: bool, passkey: bool) -> Self {
+        if !matches!(self.step, Step::Identifier | Step::Authenticate) {
+            return self;
+        }
+        self.nodes.retain(|n| match n.method() {
+            Some(Method::Password) => password,
+            Some(Method::Passkey) => passkey,
+            _ => true,
+        });
+        self
+    }
+
     /// Adds the realm's e-mail first steps to the first-factor step (TN-102). They come from
     /// realm policy, so the step reads the same for every account (OP-146 m.12 (c)); other
     /// steps are returned unchanged.

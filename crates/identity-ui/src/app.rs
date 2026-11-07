@@ -309,10 +309,11 @@ fn shape(kit: &RealmKit, flow: &FlowId, current: &Current) -> Option<Ui> {
     let blank = PasskeyOptions::new(json!({}))?;
     let reqs = policy(kit);
     Some(match current {
-        Current::Identifier => Ui::identifier(flow.clone(), blank, &reqs),
-        Current::Authenticate(id) => {
-            Ui::authenticate(flow.clone(), id, blank, &reqs).with_email(email(kit))
-        }
+        Current::Identifier => Ui::identifier(flow.clone(), blank, &reqs)
+            .with_first_steps(kit.auth.password, kit.auth.passkey),
+        Current::Authenticate(id) => Ui::authenticate(flow.clone(), id, blank, &reqs)
+            .with_email(email(kit))
+            .with_first_steps(kit.auth.password, kit.auth.passkey),
         Current::Email(wait) => Ui::email_sent(flow.clone(), *wait, &reqs),
         Current::Second(offered) => Ui::second_factor(flow.clone(), *offered, Some(blank), &reqs),
         Current::Done(_) => return None,
@@ -382,11 +383,14 @@ where
         let reqs = policy(kit);
         let (ui, login) = match identifier {
             None => (
-                Ui::identifier(flow, passkey, &reqs),
+                Ui::identifier(flow, passkey, &reqs)
+                    .with_first_steps(kit.auth.password, kit.auth.passkey),
                 clear_cookie(LOGIN_COOKIE),
             ),
             Some(id) => (
-                Ui::authenticate(flow, id, passkey, &reqs).with_email(email(kit)),
+                Ui::authenticate(flow, id, passkey, &reqs)
+                    .with_email(email(kit))
+                    .with_first_steps(kit.auth.password, kit.auth.passkey),
                 login_cookie(&started.handle, id),
             ),
         };
@@ -589,12 +593,25 @@ where
             Ok(v) => options(v),
             Err(_) => Err(Reply::problem(FLOW_GONE)),
         };
+        let blank = || options(json!({}));
         let ui = match current {
             Current::Done(r) => return Ok(r),
-            Current::Identifier => Ui::identifier(flow.clone(), fresh(None).await?, &reqs),
+            // TN-132: no passkey challenge where the realm did not enable passkey sign-in
+            Current::Identifier if !kit.auth.passkey => {
+                Ui::identifier(flow.clone(), blank()?, &reqs)
+                    .with_first_steps(kit.auth.password, false)
+            }
+            Current::Identifier => Ui::identifier(flow.clone(), fresh(None).await?, &reqs)
+                .with_first_steps(kit.auth.password, true),
             Current::Authenticate(id) => {
-                let passkey = fresh(Some(&id)).await?;
-                Ui::authenticate(flow.clone(), &id, passkey, &reqs).with_email(email(kit))
+                let passkey = if kit.auth.passkey {
+                    fresh(Some(&id)).await?
+                } else {
+                    blank()?
+                };
+                Ui::authenticate(flow.clone(), &id, passkey, &reqs)
+                    .with_email(email(kit))
+                    .with_first_steps(kit.auth.password, kit.auth.passkey)
             }
             Current::Email(wait) => Ui::email_sent(flow.clone(), wait, &reqs),
             Current::Second(offered) => {

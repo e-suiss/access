@@ -290,10 +290,78 @@ fn a_client_view_has_no_secret() {
         service_key: None,
         event_receiver: None,
         require_par: false,
+        public_sub: false,
+        sector_identifier_uri: None,
     };
     let text = client_view(&row).to_string();
     assert!(
         !text.contains("secret_hash") && !text.contains("CQkJ"),
         "{text}"
+    );
+}
+
+// MD-10: a client reads pairwise subs; public needs subject_type public and the explicit
+// public_sub_opt_in, both or neither
+#[test]
+fn public_sub_needs_the_explicit_opt_in() {
+    let ids = ids();
+    let body = |extra: Json| {
+        let mut b = json!({"client_id": CLIENT, "display_name": "Shop",
+                           "redirect_uris": ["https://shop.example/cb"]});
+        if let (Some(o), Json::Object(e)) = (b.as_object_mut(), extra) {
+            o.extend(e);
+        }
+        b
+    };
+    let subject = |extra| match compile(Op::CreateClient, None, &body(extra), &ids) {
+        Ok(Change::ClientRegister(c)) => Ok(c.subject),
+        Ok(other) => panic!("{other:?}"),
+        Err(e) => Err(e),
+    };
+    assert!(!subject(json!({})).unwrap().public);
+    assert_eq!(
+        subject(json!({"subject_type": "public"})),
+        Err(Invalid::PublicSub)
+    );
+    assert_eq!(
+        subject(json!({"public_sub_opt_in": true})),
+        Err(Invalid::PublicSub)
+    );
+    assert_eq!(
+        subject(json!({"subject_type": "global"})),
+        Err(Invalid::PublicSub)
+    );
+    let public = subject(json!({"subject_type": "public", "public_sub_opt_in": true,
+                                "sector_identifier_uri": "https://shop.example/sector.json"}))
+    .unwrap();
+    assert!(public.public);
+    assert_eq!(
+        public.sector_identifier_uri.as_deref(),
+        Some("https://shop.example/sector.json")
+    );
+}
+
+// MD-10, OIDC Core §8.1: the sector document is a JSON array of https URIs listing every
+// redirect URI
+#[test]
+fn a_sector_document_lists_every_redirect_uri() {
+    use crate::domain::{RedirectUri, sector_covers};
+    let uris = [
+        RedirectUri::parse("https://a.example/cb").unwrap(),
+        RedirectUri::parse("https://b.example/cb").unwrap(),
+    ];
+    let doc = br#"["https://a.example/cb","https://b.example/cb","https://c.example/cb"]"#;
+    assert_eq!(sector_covers(doc, &uris), Ok(()));
+    assert_eq!(
+        sector_covers(br#"["https://a.example/cb"]"#, &uris),
+        Err(Invalid::SectorIdentifier)
+    );
+    assert_eq!(
+        sector_covers(br#"["https://a.example/cb","http://b.example/cb"]"#, &uris),
+        Err(Invalid::SectorIdentifier)
+    );
+    assert_eq!(
+        sector_covers(br#"{"redirect_uris":[]}"#, &uris),
+        Err(Invalid::SectorIdentifier)
     );
 }

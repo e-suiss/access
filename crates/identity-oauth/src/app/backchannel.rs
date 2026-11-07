@@ -258,7 +258,7 @@ where
         let mut candidate = [0_u8; 32];
         self.random.fill(&mut candidate)?;
         let sub = tx
-            .pairwise(g.subject, client.uuid, &b64url_encode(&candidate))
+            .pairwise(g.subject, client.sector(), &b64url_encode(&candidate))
             .await?;
         tx.commit().await?;
         let mut jti = [0_u8; 16];

@@ -175,6 +175,7 @@ dependencies = [
  "access-identity-signer",
  "access-internal-api",
  "access-store",
+ "access-telemetry",
  "esuiss-access-kernel",
  "esuiss-crypto",
  "serde_json",

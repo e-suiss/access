@@ -50,7 +50,13 @@ pub struct Client {
     pub require_par: bool,
     /// The platform product the client pairs, when it is one (OP-149 m.4, OP-150 m.3 (m)).
     pub platform_product: Option<String>,
+    /// Whether it opted in to the realm's public `sub` (MD-10).
+    pub public_sub: bool,
 }
+
+/// The sector of the realm's public `sub` (MD-10): no client has the nil id, so its values are
+/// shared by every opted-in client of the realm and by no pairwise one.
+pub const PUBLIC_SECTOR: [u8; 16] = [0; 16];
 
 impl Client {
     /// The client of a stored row; `None` for a retired client or a row that does not match
@@ -84,7 +90,19 @@ impl Client {
             backchannel_logout_uri: row.backchannel_logout_uri,
             require_par: row.require_par,
             platform_product: row.platform_product,
+            public_sub: row.public_sub,
         })
+    }
+
+    /// The sector its `sub` values are kept under (MD-10, OP-146 m.5 (b)): the client itself,
+    /// or the realm's [`PUBLIC_SECTOR`] when it opted in.
+    #[must_use]
+    pub const fn sector(&self) -> [u8; 16] {
+        if self.public_sub {
+            PUBLIC_SECTOR
+        } else {
+            self.uuid
+        }
     }
 
     /// Whether the client can keep a secret (RFC 6749 §2.1).
@@ -322,6 +340,18 @@ pub fn check_method(client: &Client, presented: &Presented) -> Result<(), Client
             }
         }
         _ => Err(ClientAuthError::Method),
+    }
+}
+
+/// Whether `presented` is the client's previous secret, `previous` its digest, during the
+/// 24-hour overlap a rotation leaves (CR-38, OP-151 m.11 (g)); compared in constant time.
+#[must_use]
+pub fn previous_matches(client: &Client, previous: &[u8; 32], presented: &Presented) -> bool {
+    match (&client.auth, presented) {
+        (ClientAuth::SecretBasic { .. }, Presented::Basic { secret, .. }) => {
+            secret_matches(previous, secret.as_bytes())
+        }
+        _ => false,
     }
 }
 

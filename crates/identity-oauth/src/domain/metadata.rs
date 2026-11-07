@@ -134,10 +134,31 @@ const SIGNING_ALGS: [&str; 2] = ["ES256", "Ed25519"];
 /// identity plane only (§11.4.5 (a), CR-2).
 const CLIENT_ASSERTION_ALGS: [&str; 2] = ["ES256", "RS256"];
 
+/// What a realm's AS metadata says about the realm itself.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct RealmFacts {
+    /// At least one active client of the realm opted in to the public `sub` (MD-10).
+    pub public_sub: bool,
+    /// The address of the governing domain's signed Domain Metadata (§9.15.1 k.2, P60).
+    pub domain_metadata: Option<String>,
+}
+
+/// The AS metadata member that names the governing domain's Domain Metadata: the AS metadata
+/// is the realm's identity document and refers to the authority document, never replaces it
+/// (§9.15.1 k.2, MD-5, P60).
+pub const DOMAIN_METADATA_MEMBER: &str = "suiss_domain_metadata";
+
 /// The AS metadata of the realm `issuer`, served both as OIDC Discovery and as RFC 8414
-/// metadata (§10.4.6, §11.4.5).
+/// metadata (§10.4.6, §11.4.5), with nothing known about the realm: pairwise `sub` only and no
+/// Domain Metadata reference.
 #[must_use]
 pub fn authorization_server(issuer: &Issuer, served: &Served) -> String {
+    authorization_server_of(issuer, served, &RealmFacts::default())
+}
+
+/// The AS metadata of the realm `issuer` with what is known about the realm (`facts`).
+#[must_use]
+pub fn authorization_server_of(issuer: &Issuer, served: &Served, facts: &RealmFacts) -> String {
     let mut m = Map::new();
     m.insert("issuer".into(), issuer.as_str().into());
     m.insert("jwks_uri".into(), issuer.endpoint(JWKS_PATH).into());
@@ -155,8 +176,13 @@ pub fn authorization_server(issuer: &Issuer, served: &Served) -> String {
             "authorization_response_iss_parameter_supported".into(),
             Value::Bool(true),
         );
-        // MD-10, IDP-24
-        m.insert("subject_types_supported".into(), json!(["pairwise"]));
+        // MD-10, IDP-24: public only once a client of the realm opted in
+        let subjects = if facts.public_sub {
+            json!(["pairwise", "public"])
+        } else {
+            json!(["pairwise"])
+        };
+        m.insert("subject_types_supported".into(), subjects);
         m.insert("scopes_supported".into(), json!(SCOPES));
         m.insert("claims_supported".into(), json!(CLAIMS));
         m.insert(
@@ -226,6 +252,9 @@ pub fn authorization_server(issuer: &Issuer, served: &Served) -> String {
             "backchannel_logout_session_supported".into(),
             Value::Bool(true),
         );
+    }
+    if let Some(u) = &facts.domain_metadata {
+        m.insert(DOMAIN_METADATA_MEMBER.into(), u.as_str().into());
     }
     Value::Object(m).to_string()
 }

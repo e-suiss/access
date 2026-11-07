@@ -781,6 +781,7 @@ impl ProductPlan {
                 event_receiver: self.event_receiver.clone(),
             }),
             require_par: false,
+            subject: access_identity_admin::domain::Subject::default(),
         }
     }
 }

@@ -17,6 +17,7 @@ access-identity-signer = { path = "../identity-signer" }
 access-internal-api = { workspace = true }
 access-kernel = { workspace = true }
 access-store = { workspace = true }
+access-telemetry = { workspace = true }
 suiss-crypto = { workspace = true }
 serde_json = { workspace = true, features = ["std"] }
 thiserror = { workspace = true }

@@ -401,7 +401,10 @@ impl<E: Env> OAuth<E> {
         let live = grant.client == client.uuid
             && self.live_grant(&mut tx, &grant.sid, now).await?.is_some();
         let sub = if live {
-            Some(self.pairwise(&mut tx, grant.subject, grant.client).await?)
+            Some(
+                self.pairwise(&mut tx, grant.subject, client.sector())
+                    .await?,
+            )
         } else {
             None
         };

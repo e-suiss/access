@@ -17,11 +17,19 @@ pub enum MfaPolicy {
 
 /// A realm's sign-in requirements (PD values; TN-132).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "each first step the realm enables is one flag (TN-132)"
+)]
 pub struct AuthPolicy {
     /// MFA rule.
     pub mfa: MfaPolicy,
     /// Lowest AAL a sign-in reaches.
     pub min_aal: Aal,
+    /// Passwords as a first step (TN-132: the realm enabled e-mail or username sign-in).
+    pub password: bool,
+    /// Passkeys as a first step (TN-132: the realm enabled passkey sign-in).
+    pub passkey: bool,
     /// E-mail codes as a first step.
     pub email_otp: bool,
     /// E-mail links as a first step.
@@ -35,6 +43,8 @@ impl AuthPolicy {
     pub const DEFAULT: Self = Self {
         mfa: MfaPolicy::WhenEnrolled,
         min_aal: Aal::Aal1,
+        password: true,
+        passkey: true,
         email_otp: true,
         magic_link: true,
         remember_device_days: Some(30),

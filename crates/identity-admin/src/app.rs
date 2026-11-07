@@ -40,6 +40,15 @@ use crate::domain::{
     MembershipIssuer, Upstream, cose_key, issuer_cutoff, policy_value, raises,
 };
 
+/// Clients that opted in to their realm's public `sub` (MD-10, OP-151 m.9 (h)); no realm label
+/// (OP-47).
+pub static PUBLIC_SUB_OPT_IN: access_telemetry::metrics::Counter<0> =
+    access_telemetry::metrics::Counter::new(
+        "access_public_sub_opt_in_total",
+        "Clients that opted in to their realm's public sub (MD-10)",
+        [],
+    );
+
 /// How long a rotated client secret stays valid next to its successor (CR-38, PD).
 pub const SECRET_OVERLAP_MS: u64 = 24 * 3_600_000;
 use crate::ports::{Decider, Governance, Instances, RealmKeys};
@@ -674,9 +683,37 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                 service_key: c.platform.as_ref().map(|p| cose_key(&p.service_key)),
                 event_receiver: c.platform.as_ref().and_then(|p| p.event_receiver.clone()),
                 require_par: c.require_par,
+                public_sub: c.subject.public,
+                sector_identifier_uri: c.subject.sector_identifier_uri.clone(),
             },
             secret,
         ))
+    }
+
+    /// Registers or updates `c`; counts a new public `sub` opt-in (MD-10), never labelled by
+    /// realm (OP-47).
+    async fn write_client(
+        &self,
+        t: &mut TenantTx,
+        bound: &idp::Bound,
+        c: &Client,
+        register: bool,
+    ) -> Result<(bool, Option<ClientSecret>), AdminError> {
+        let was_public = !register
+            && idp::client(t, c.id.as_str())
+                .await?
+                .is_some_and(|r| r.public_sub);
+        let (row, secret) = self.client_row(t, c).await?;
+        let done = if register {
+            idp::insert_client(t, bound, &row).await?;
+            true
+        } else {
+            idp::update_client(t, bound, &row).await?
+        };
+        if done && c.subject.public && !was_public {
+            PUBLIC_SUB_OPT_IN.incr([]);
+        }
+        Ok((done, secret))
     }
 
     async fn write(
@@ -687,16 +724,12 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
     ) -> Result<Option<ClientSecret>, AdminError> {
         let mut secret = None;
         let done = match change {
-            Change::ClientRegister(c) => {
-                let (row, s) = self.client_row(t, c).await?;
-                idp::insert_client(t, bound, &row).await?;
+            Change::ClientRegister(c) | Change::ClientUpdate(c) => {
+                let (done, s) = self
+                    .write_client(t, bound, c, matches!(change, Change::ClientRegister(_)))
+                    .await?;
                 secret = s;
-                true
-            }
-            Change::ClientUpdate(c) => {
-                let (row, s) = self.client_row(t, c).await?;
-                secret = s;
-                idp::update_client(t, bound, &row).await?
+                done
             }
             Change::ClientRetire(id) => idp::retire_client(t, bound, id.as_str()).await?,
             Change::MapperSet { claim, source } => {

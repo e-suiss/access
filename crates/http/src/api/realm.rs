@@ -297,6 +297,9 @@ const CLIENT_PATCH: &[&str] = &[
     "post_logout_redirect_uris",
     "backchannel_logout_uri",
     "require_pushed_authorization_requests",
+    "subject_type",
+    "public_sub_opt_in",
+    "sector_identifier_uri",
 ];
 const GROUP_PATCH: &[&str] = &["display_name"];
 const UPSTREAM_PATCH: &[&str] = &[
@@ -447,6 +450,9 @@ pub fn problem_of(e: &AdminError) -> &'static Code {
             Invalid::PasskeyLoss => &r::PASSKEY_LOSS_NOT_ACKNOWLEDGED,
             Invalid::Body => &r::INVALID_BODY,
             Invalid::Validity => &r::INVALID_VALIDITY,
+            Invalid::PublicSub => &r::PUBLIC_SUB_NOT_OPTED_IN,
+            Invalid::SectorIdentifier => &r::INVALID_SECTOR_IDENTIFIER_URI,
+            Invalid::Reserved => &r::RESERVED_OPERATION,
             Invalid::NoClient
             | Invalid::NoKey
             | Invalid::NoGroup

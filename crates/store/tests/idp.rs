@@ -131,6 +131,8 @@ fn client_row(seed: u8) -> ClientRow {
         service_key: None,
         event_receiver: None,
         require_par: false,
+        public_sub: false,
+        sector_identifier_uri: None,
     }
 }
 

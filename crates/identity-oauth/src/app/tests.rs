@@ -38,6 +38,14 @@ impl Directory for Rows {
         }
         Ok(self.realms.clone())
     }
+
+    async fn facts(&self, realm: &RealmEntry) -> Result<crate::ports::Facts, Unavailable> {
+        let n = realm.realm.as_bytes()[0];
+        Ok(crate::ports::Facts {
+            public_sub_clients: u64::from(n == 3),
+            domain: Some([n; 32]),
+        })
+    }
 }
 
 #[derive(Default)]
@@ -262,4 +270,63 @@ async fn startup_checks_fail_fast() {
         FakeKeys::default(),
     );
     assert_eq!(no_db.check(&base).await, Err(StartupError::Directory));
+}
+
+fn metadata_of(reply: &Reply) -> serde_json::Value {
+    let Reply::Metadata(doc) = reply else {
+        panic!("{reply:?}");
+    };
+    serde_json::from_str(doc).unwrap()
+}
+
+// MD-10, IDP-24: public is a supported subject type only in a realm where a client opted in
+#[tokio::test]
+async fn public_sub_is_declared_only_where_a_client_opted_in() {
+    let s = service();
+    let acme = metadata_of(
+        &s.serve(Document::OpenIdConfiguration, "acme.id.example", None)
+            .await,
+    );
+    assert_eq!(
+        acme["subject_types_supported"],
+        serde_json::json!(["pairwise"])
+    );
+    let gamma = metadata_of(
+        &s.serve(Document::OpenIdConfiguration, "gamma.id.example", None)
+            .await,
+    );
+    assert_eq!(
+        gamma["subject_types_supported"],
+        serde_json::json!(["pairwise", "public"])
+    );
+}
+
+// §9.15.1 k.2, MD-5, P60: the realm's AS metadata refers to its governing domain's Domain
+// Metadata on the ADP issuer; without the deployment's settings it names none
+#[tokio::test]
+async fn as_metadata_refers_to_the_governing_domain_metadata() {
+    let plain = metadata_of(
+        &service()
+            .serve(Document::AuthorizationServer, "acme.id.example", None)
+            .await,
+    );
+    assert!(plain.get(metadata::DOMAIN_METADATA_MEMBER).is_none());
+    let s = service().with_suiss(suiss::Settings {
+        region: String::from("eu"),
+        relay: String::from("https://relay.example"),
+        management_api: String::from("https://manage.example"),
+        api_base: String::from("https://api.example"),
+        products: std::collections::BTreeMap::new(),
+    });
+    let doc = metadata_of(
+        &s.serve(Document::AuthorizationServer, "acme.id.example", None)
+            .await,
+    );
+    assert_eq!(
+        doc[metadata::DOMAIN_METADATA_MEMBER],
+        format!(
+            "https://api.example/.well-known/access-domain-metadata/sha-256:{}",
+            access_kernel::json::b64url_encode(&[1; 32])
+        )
+    );
 }

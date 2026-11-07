@@ -326,6 +326,7 @@ where
         let kits = HsmKits::new(
             RealmKeks::new(Arc::clone(self.hsm)),
             self.router.clone(),
+            self.app.clone(),
             SessionPolicy::DEFAULT,
         );
         let kit = kits
@@ -483,6 +484,7 @@ where
             post_logout_redirect_uris: Vec::new(),
             backchannel_logout_uri: None,
             require_par: false,
+            subject: access_identity_admin::domain::Subject::default(),
             platform: None,
         };
         let id = String::from(client.id.as_str());

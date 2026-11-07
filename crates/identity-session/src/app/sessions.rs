@@ -294,6 +294,7 @@ where
             options: StepOptions {
                 passkey: start.options,
                 password: true,
+                passkey_offered: true,
                 email_code: false,
                 magic_link: false,
             },

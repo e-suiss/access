@@ -12,6 +12,7 @@ use access_crypto::opaque_id::IdKey;
 use access_crypto::webauthn::{DecoyKey, decoy_label};
 use access_identity_events::adapters::RealmKek;
 use access_identity_oauth::ports::{RealmEntry, Unavailable};
+use access_identity_session::domain::realm_policy::RealmSignin;
 use access_identity_session::domain::requirement::AuthPolicy;
 use access_identity_session::domain::session::SessionPolicy;
 use access_identity_ui::ports::{Kits, RealmKit};
@@ -20,7 +21,7 @@ use access_identity_webauthn::domain::ids::RealmId as WaRealm;
 use access_identity_webauthn::domain::policy::RealmPolicy;
 use access_identity_webauthn::domain::rp::{RelyingParty, RpId};
 use access_store::Pool;
-use access_store::identity::{RealmId, TenantId};
+use access_store::identity::{RealmId, TenantId, TenantTx};
 use access_store::tenancy::realm_tenant;
 use suiss_crypto::envelope::{Dek, EnvelopeError, Kek};
 use suiss_crypto::pkcs11::{HsmKek, KeyStore};
@@ -138,27 +139,62 @@ impl RealmKek for RealmKeks {
     }
 }
 
+/// What a realm's settings say about its sign-in (TN-132, Ek B carry-over 3379): the stored
+/// sign-in policy and the pinned RP ID. A kit is rebuilt when either changes.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+struct Settings {
+    signin: Option<Vec<u8>>,
+    rp_id: Option<String>,
+}
+
+/// A kit and the settings it was built from.
+type Loaded = (Settings, Arc<RealmKit>);
+
 /// The realm kits of this process.
 pub(crate) struct HsmKits {
     keys: Arc<KeyStore>,
     keks: RealmKeks,
     router: Pool,
+    app: Pool,
     lifetimes: SessionPolicy,
-    loaded: Mutex<HashMap<[u8; 16], Arc<RealmKit>>>,
+    loaded: Mutex<HashMap<[u8; 16], Loaded>>,
 }
 
 impl HsmKits {
-    pub(crate) fn new(keks: RealmKeks, router: Pool, lifetimes: SessionPolicy) -> Self {
+    pub(crate) fn new(keks: RealmKeks, router: Pool, app: Pool, lifetimes: SessionPolicy) -> Self {
         Self {
             keys: keks.keys.clone(),
             keks,
             router,
+            app,
             lifetimes,
             loaded: Mutex::new(HashMap::new()),
         }
     }
 
-    fn load(&self, entry: &RealmEntry, tenant: TenantId) -> Result<RealmKit, String> {
+    /// The realm's sign-in settings as they are now, read in its own scope (TN-113).
+    async fn settings(&self, tenant: TenantId, realm: RealmId) -> Result<Settings, Unavailable> {
+        let mut t = TenantTx::begin(&self.app, tenant, realm)
+            .await
+            .map_err(|_| Unavailable)?;
+        let signin = access_store::idp::realm::policies(&mut t)
+            .await
+            .map_err(|_| Unavailable)?
+            .signin;
+        let rp_id = access_store::idp::settings(&mut t)
+            .await
+            .map_err(|_| Unavailable)?
+            .and_then(|s| s.rp_id);
+        t.commit().await.map_err(|_| Unavailable)?;
+        Ok(Settings { signin, rp_id })
+    }
+
+    fn load(
+        &self,
+        entry: &RealmEntry,
+        tenant: TenantId,
+        settings: &Settings,
+    ) -> Result<RealmKit, String> {
         let kek = self.keks.get(entry.realm.as_bytes())?;
         let decoy = self
             .keys
@@ -173,6 +209,19 @@ impl HsmKits {
             .next()
             .unwrap_or_default();
         let wa = WaRealm::from_bytes(*entry.realm.as_bytes());
+        // TN-132, MD-8: the realm's stored sign-in policy narrows the flows; one that does
+        // not decode refuses the realm's sign-ins instead of falling back to the defaults
+        let signin = match &settings.signin {
+            Some(bytes) => RealmSignin::decode(bytes).ok_or("sign-in policy")?,
+            None => RealmSignin::default(),
+        };
+        // IDP-5, IDI-4: a pinned RP ID serves when it covers the issuer's host
+        let rp_id = match &settings.rp_id {
+            Some(pinned) => RpId::parse(pinned)
+                .filter(|r| r.as_str() == host || host.ends_with(&format!(".{}", r.as_str())))
+                .ok_or("pinned rp id")?,
+            None => RpId::parse(host).ok_or("rp id")?,
+        };
         Ok(RealmKit {
             tenant,
             realm: entry.realm,
@@ -183,36 +232,41 @@ impl HsmKits {
             decoys: RealmDecoyKeys::default().with(wa, DecoyKey::token(decoy)),
             rp: RelyingParty {
                 realm: wa,
-                rp_id: RpId::parse(host).ok_or("rp id")?,
+                rp_id,
                 name: entry.slug.clone(),
                 pinned: true,
                 related: Vec::new(),
             },
             webauthn: RealmPolicy::default(),
-            auth: AuthPolicy::DEFAULT,
+            auth: signin.apply(AuthPolicy::DEFAULT),
             lifetimes: self.lifetimes,
         })
     }
 }
 
 impl Kits for HsmKits {
+    /// The realm's kit with its sign-in settings as they are now: each request reads them, and
+    /// a kit built from older ones is rebuilt (TN-132).
     async fn kit(&self, entry: &RealmEntry) -> Result<Arc<RealmKit>, Unavailable> {
         let key = *entry.realm.as_bytes();
-        if let Some(kit) = self.loaded.lock().map_err(|_| Unavailable)?.get(&key) {
-            return Ok(kit.clone());
-        }
         let tenant = realm_tenant(&self.router, entry.realm)
             .await
             .map_err(|_| Unavailable)?
             .ok_or(Unavailable)?;
-        let kit = Arc::new(self.load(entry, tenant).map_err(|error| {
+        let settings = self.settings(tenant, entry.realm).await?;
+        if let Some((seen, kit)) = self.loaded.lock().map_err(|_| Unavailable)?.get(&key)
+            && *seen == settings
+        {
+            return Ok(kit.clone());
+        }
+        let kit = Arc::new(self.load(entry, tenant, &settings).map_err(|error| {
             tracing::error!(%error, realm = %entry.slug, "realm keys unavailable");
             Unavailable
         })?);
         self.loaded
             .lock()
             .map_err(|_| Unavailable)?
-            .insert(key, kit.clone());
+            .insert(key, (settings, kit.clone()));
         Ok(kit)
     }
 }

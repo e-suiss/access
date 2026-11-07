@@ -18,6 +18,7 @@ fn client(uris: &[&str]) -> Client {
         post_logout_redirect_uris: Vec::new(),
         backchannel_logout_uri: None,
         require_par: false,
+        subject: crate::domain::Subject::default(),
         platform: None,
     }
 }

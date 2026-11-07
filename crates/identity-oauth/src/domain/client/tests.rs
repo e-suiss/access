@@ -21,6 +21,8 @@ fn row(method: &str, jwks: Option<&str>, secret: Option<[u8; 32]>) -> ClientRow 
         service_key: None,
         event_receiver: None,
         require_par: false,
+        public_sub: false,
+        sector_identifier_uri: None,
     }
 }
 
@@ -146,4 +148,44 @@ fn client_credentials_are_one_method_only() {
     );
     assert_eq!(presented(None, None, None, None), Ok(None));
     assert_eq!(ClientAuthError::Rejected.error(), "invalid_client");
+}
+
+// CR-38, OP-151 m.11 (g): during a rotation's overlap the previous secret is accepted for a
+// client_secret_basic client only, compared against its digest
+#[test]
+fn a_previous_secret_is_accepted_only_for_its_secret_client() {
+    let old = access_crypto::oauth::secret_digest(b"old");
+    let c = Client::from_row(row(
+        "client_secret_basic",
+        None,
+        Some(access_crypto::oauth::secret_digest(b"new")),
+    ))
+    .unwrap();
+    let basic = |s: &str| Presented::Basic {
+        client_id: String::from("cli_x"),
+        secret: String::from(s),
+    };
+    assert_eq!(
+        check_method(&c, &basic("old")),
+        Err(ClientAuthError::Rejected)
+    );
+    assert!(previous_matches(&c, &old, &basic("old")));
+    assert!(!previous_matches(&c, &old, &basic("other")));
+    let public = Client::from_row(row("none", None, None)).unwrap();
+    assert!(!previous_matches(&public, &old, &basic("old")));
+}
+
+// MD-10, IDP-24: a client's sub is kept under its own pairwise sector unless it opted in to
+// the realm's public sub, which every opted-in client shares and no pairwise client reads
+#[test]
+fn only_an_opted_in_client_reads_the_public_sector() {
+    let pairwise = Client::from_row(row("none", None, None)).unwrap();
+    assert_eq!(pairwise.sector(), pairwise.uuid);
+    assert_ne!(pairwise.sector(), PUBLIC_SECTOR);
+    let public = Client::from_row(ClientRow {
+        public_sub: true,
+        ..row("none", None, None)
+    })
+    .unwrap();
+    assert_eq!(public.sector(), PUBLIC_SECTOR);
 }

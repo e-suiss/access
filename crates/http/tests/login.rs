@@ -686,6 +686,8 @@ impl Env {
                 service_key: platform_product.map(|_| vec![0xa4, 1, 1, 0x20, 6]),
                 event_receiver: None,
                 require_par: false,
+                public_sub: false,
+                sector_identifier_uri: None,
             },
         )
         .await

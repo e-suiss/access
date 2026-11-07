@@ -232,6 +232,18 @@ async fn a_client_secret_rotates_with_a_new_one_shown_once() {
         panic!("a rotation shows the new secret")
     };
     assert_ne!(old.expose(), new.expose());
+    // CR-38, OP-151 m.11 (g): the old secret stays acceptable, as a digest, for the overlap
+    let mut t = access_store::identity::TenantTx::begin(&w.db.app, at.0, at.1)
+        .await
+        .unwrap();
+    let previous = access_store::idp::realm::previous_secret(&mut t, c.id.as_str())
+        .await
+        .unwrap();
+    t.commit().await.unwrap();
+    assert_eq!(
+        previous,
+        Some(access_crypto::oauth::secret_digest(old.expose().as_bytes()))
+    );
     let public = new_client(&w).await;
     written(
         &run(&w, at, d, Change::ClientRegister(public.clone()), 3)

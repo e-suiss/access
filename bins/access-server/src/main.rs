@@ -713,6 +713,7 @@ async fn pools(config: &Config, prepared: &Prepared) -> Result<Pools, String> {
 async fn identity(
     config: &Config,
     router: Pool,
+    app: Pool,
     tls_names: Result<(), String>,
 ) -> Result<axum::Router, String> {
     let identity = config.identity.as_ref().ok_or("no identity section")?;
@@ -720,8 +721,9 @@ async fn identity(
     let suiss = config.suiss.as_ref().ok_or("no suiss section")?;
     let api_base = config.issuer.as_deref().ok_or("no issuer")?;
     // OP-149 m.3
+    // MD-10, §9.15.1 k.2: discovery also reads the realm's public sub opt-ins and its domain
     let discovery = RealmDiscovery::new(
-        PgDirectory::new(router),
+        PgDirectory::new(router).with_facts(app),
         SignerKeys::new(identity.signer.clone()),
     )
     .with_suiss(suiss.settings(api_base));
@@ -801,7 +803,7 @@ fn login(
         SignerKeys::new(identity.signer.clone()),
     );
     let hosted = Arc::new(Hosted {
-        kits: login::HsmKits::new(keks, router, lifetimes),
+        kits: login::HsmKits::new(keks, router, app.clone(), lifetimes),
         db: app,
         products,
         clock: SystemClock,
@@ -1001,6 +1003,7 @@ async fn serve(
     let (admin_app, admin_ids) = (all.app.clone(), cell_ids.clone());
     let admin_targets = prepared.outbound.declared();
     let console_assets = prepared.console_assets;
+    let admin_outbound = prepared.outbound.clone();
     // OP-146 m.5 (f): today's day partitions exist before anything writes to them
     jobs::open_now(&all.app, &all.archive, &holder()?).await;
     let background = Background::start(
@@ -1042,7 +1045,7 @@ async fn serve(
     )?;
     let tenants_pool = router_pool.clone();
     let sandbox_pool = router_pool.clone();
-    let realms = identity(config, router_pool, prepared.tls_names.clone()).await?;
+    let realms = identity(config, router_pool, app.clone(), prepared.tls_names.clone()).await?;
     let (idp_sequencer, idp_app, product_app) = (sequencer.clone(), app.clone(), app.clone());
     let (issuer, limits) = (config.issuer.clone().ok_or("no issuer")?, Limits::default());
     // OP-141 m.18 (a), (e), (f), OP-149 m.16 (a)
@@ -1084,6 +1087,7 @@ async fn serve(
             keys: realm_keys,
             declared: admin_targets,
             platform: config.suiss.as_ref().and_then(|s| s.platform_realm.clone()),
+            outbound: admin_outbound,
         },
         console_assets,
     )?;

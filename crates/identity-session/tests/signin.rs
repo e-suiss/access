@@ -1456,3 +1456,80 @@ async fn sign_in_queues_its_claims_and_signals_never_gate() {
 
 #[path = "signin/sl2.rs"]
 mod sl2;
+fn stored_signin(methods: &[&str], mfa: bool) -> Vec<u8> {
+    use suiss_crypto::dcbor::{self, Limits, Value};
+    let list = |l: &[&str]| Value::Array(l.iter().map(|s| Value::text(s)).collect());
+    dcbor::encode(
+        &Value::Map(vec![
+            (Value::text("methods"), list(methods)),
+            (Value::text("required_fields"), list(&["email"])),
+            (Value::text("mfa_required"), Value::Bool(mfa)),
+            (Value::text("domain_allow"), list(&[])),
+            (Value::text("domain_deny"), list(&[])),
+        ]),
+        Limits::CEILING,
+    )
+    .unwrap()
+}
+
+// TN-132, Ek B 3379: the realm's stored sign-in policy decides the first steps; a method it
+// did not enable is not offered and not accepted
+#[tokio::test]
+async fn a_disabled_sign_in_method_is_neither_offered_nor_accepted() {
+    use access_identity_session::app::STEP_NOT_ALLOWED;
+    use access_identity_session::domain::realm_policy::RealmSignin;
+    let mut e = env(60, "is-policy").await;
+    e.policy = RealmSignin::decode(&stored_signin(&["passkey"], false))
+        .unwrap()
+        .apply(AuthPolicy::DEFAULT);
+    e.account("alice@example.com").await;
+    let started = e
+        .with(async |a| {
+            a.identify(&Identify {
+                identifier: Some("alice@example.com"),
+                ..Identify::default()
+            })
+            .await
+        })
+        .await
+        .unwrap();
+    assert!(!started.options.password && started.options.passkey_offered);
+    assert!(!started.options.email_code && !started.options.magic_link);
+    let flow = (started.handle, started.device);
+    let step = password(&e, &flow, "alice@example.com", PW).await;
+    assert!(
+        matches!(step, Step::Rejected(Refusal { problem, .. }) if problem == STEP_NOT_ALLOWED),
+        "{step:?}"
+    );
+    e.policy = RealmSignin::decode(&stored_signin(&["email"], false))
+        .unwrap()
+        .apply(AuthPolicy::DEFAULT);
+    let flow = start(&e, Some("alice@example.com"), None).await;
+    let r = FlowRef {
+        handle: &flow.0,
+        device: &flow.1,
+    };
+    let options = e
+        .with(async |a| a.passkey_options(&r, Some("alice@example.com")).await)
+        .await
+        .unwrap();
+    assert!(
+        matches!(options, Err(Step::Rejected(Refusal { problem, .. })) if problem == STEP_NOT_ALLOWED)
+    );
+}
+
+// TN-132, §12.4.2: a realm that requires MFA in its stored policy never signs in on one factor
+#[tokio::test]
+async fn a_stored_mfa_requirement_cannot_be_skipped() {
+    use access_identity_session::domain::realm_policy::RealmSignin;
+    let mut e = env(61, "is-policy-mfa").await;
+    e.policy = RealmSignin::decode(&stored_signin(&["email", "passkey"], true))
+        .unwrap()
+        .apply(AuthPolicy::DEFAULT);
+    e.account("alice@example.com").await;
+    let flow = start(&e, Some("alice@example.com"), None).await;
+    let step = password(&e, &flow, "alice@example.com", PW).await;
+    assert!(
+        matches!(step, Step::Continue { ref needs, .. } if needs == &[Requirement::EnrollSecondFactor])
+    );
+}

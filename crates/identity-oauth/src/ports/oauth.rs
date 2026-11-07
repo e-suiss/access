@@ -26,6 +26,11 @@ pub trait OAuthTx: Send {
         &mut self,
         client_id: &str,
     ) -> impl Future<Output = Result<Option<ClientRow>, Unavailable>> + Send;
+    /// The digest of the client's previous secret while its rotation overlap lasts (CR-38).
+    fn previous_secret(
+        &mut self,
+        client_id: &str,
+    ) -> impl Future<Output = Result<Option<[u8; 32]>, Unavailable>> + Send;
     /// The client with internal id `uuid`, active or retired.
     fn client_by_uuid(
         &mut self,

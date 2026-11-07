@@ -14,22 +14,32 @@ use access_identity_signer::adapters::call;
 use access_identity_signer::protocol::{Realm, Request, Response};
 use access_identity_signer::service::UNKNOWN_REALM;
 use access_store::Pool;
-use access_store::identity::RealmId;
+use access_store::identity::{RealmId, TenantTx};
+use access_store::idp;
 use access_store::tenancy::{self, RealmRoute};
 
 use crate::domain::issuer::Issuer;
-use crate::ports::{Directory, Keys, RealmEntry, Unavailable};
+use crate::ports::{Directory, Facts, Keys, RealmEntry, Unavailable};
 
-/// The realm rows as the `access_router` role reads them.
+/// The realm rows as the `access_router` role reads them; with the `access_app` pool, also
+/// each realm's discovery facts in its own scope (TN-113).
 pub struct PgDirectory {
     router: Pool,
+    app: Option<Pool>,
 }
 
 impl PgDirectory {
     /// A directory over a pool of the router role.
     #[must_use]
     pub const fn new(router: Pool) -> Self {
-        Self { router }
+        Self { router, app: None }
+    }
+
+    /// Also reads each realm's discovery facts through `app` (MD-10, §9.15.1 k.2).
+    #[must_use]
+    pub fn with_facts(mut self, app: Pool) -> Self {
+        self.app = Some(app);
+        self
     }
 }
 
@@ -63,6 +73,27 @@ impl Directory for PgDirectory {
             .await
             .map(|rows| rows.into_iter().filter_map(entry).collect())
             .map_err(|_| Unavailable)
+    }
+
+    async fn facts(&self, realm: &RealmEntry) -> Result<Facts, Unavailable> {
+        let Some(app) = &self.app else {
+            return Ok(Facts::default());
+        };
+        let mut t = TenantTx::begin(app, realm.tenant, realm.realm)
+            .await
+            .map_err(|_| Unavailable)?;
+        let public_sub_clients = idp::public_sub_clients(&mut t)
+            .await
+            .map_err(|_| Unavailable)?;
+        let domain = idp::governance(&mut t)
+            .await
+            .map_err(|_| Unavailable)?
+            .map(|g| *g.domain.as_bytes());
+        t.commit().await.map_err(|_| Unavailable)?;
+        Ok(Facts {
+            public_sub_clients,
+            domain,
+        })
     }
 }
 

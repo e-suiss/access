@@ -417,6 +417,9 @@ pub const CODES: &[Code] = &[
     codes::platform::RECOVERY_NOT_ACKNOWLEDGED,
     codes::platform::INVALID_TIME_LOCK,
     codes::platform::SLUG_TAKEN,
+    codes::realm::PUBLIC_SUB_NOT_OPTED_IN,
+    codes::realm::INVALID_SECTOR_IDENTIFIER_URI,
+    codes::realm::RESERVED_OPERATION,
 ];
 
 /// The type URI of `code`.

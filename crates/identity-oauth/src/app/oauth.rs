@@ -28,7 +28,7 @@ use serde_json::{Value, json};
 
 use crate::app::dpop::{Accepted, DpopChecker, DpopRequest};
 use crate::domain::client::{
-    Client, ClientAuth, ClientAuthError, Presented, check_method, presented,
+    Client, ClientAuth, ClientAuthError, Presented, check_method, presented, previous_matches,
 };
 use crate::domain::dpop::{DpopProfile, Failure};
 use crate::domain::jwt::{AssertionRules, assertion_subject, parse_jwks, verify_assertion};
@@ -358,7 +358,14 @@ impl<E: Env> OAuth<E> {
             return Ok(Err(ClientAuthError::Unknown));
         };
         if let Err(e) = check_method(&client, &presented) {
-            return Ok(Err(e));
+            // CR-38: a rotated secret stays valid next to its successor for the overlap
+            let previous = match e {
+                ClientAuthError::Rejected => tx.previous_secret(&client.id).await?,
+                _ => None,
+            };
+            if !previous.is_some_and(|p| previous_matches(&client, &p, &presented)) {
+                return Ok(Err(e));
+            }
         }
         if let Presented::Assertion { assertion, .. } = &presented {
             let doc = match &client.auth {
@@ -414,7 +421,8 @@ impl<E: Env> OAuth<E> {
         ring.issue(now).ok()
     }
 
-    /// The pairwise `sub` of a subject for a client (MD-10, OP-146 m.5 (b)).
+    /// The `sub` of a subject in `sector` (MD-10, OP-146 m.5 (b)): a client's pairwise sector
+    /// or the realm's public one ([`Client::sector`]).
     pub(crate) async fn pairwise(
         &self,
         tx: &mut <E::Db as OAuthDb>::Tx,
@@ -442,7 +450,7 @@ impl<E: Env> OAuth<E> {
         let refresh = self.random::<32>()?;
         tx.insert_refresh(&refresh_digest(&refresh), grant.id, signed(now))
             .await?;
-        let sub = self.pairwise(tx, grant.subject, client.uuid).await?;
+        let sub = self.pairwise(tx, grant.subject, client.sector()).await?;
         let sid = b64url_encode(&grant.sid);
         let tenant = if details.resource.is_some() {
             Some(self.tenant_name(realm)?)
@@ -508,7 +516,7 @@ impl<E: Env> OAuth<E> {
         nonce: Option<&str>,
         now: u64,
     ) -> Result<String, Unavailable> {
-        let sub = self.pairwise(tx, grant.subject, client.uuid).await?;
+        let sub = self.pairwise(tx, grant.subject, client.sector()).await?;
         let sid = b64url_encode(&grant.sid);
         let facts = TokenFacts {
             issuer: &realm.issuer,

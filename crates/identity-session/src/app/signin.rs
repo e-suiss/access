@@ -76,11 +76,18 @@ pub struct Identify<'a> {
 
 /// What the second screen offers: the same for every identifier (TN-96, CR-40).
 #[derive(Clone, Debug, PartialEq)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "each first step the realm offers is one flag (TN-132)"
+)]
 pub struct StepOptions {
     /// `PublicKeyCredentialRequestOptionsJSON`, with real or decoy credentials (TN-97).
     pub passkey: Value,
-    /// The password form; always shown.
+    /// The password form, when the realm allows it (TN-132).
     pub password: bool,
+    /// Passkey sign-in, when the realm allows it (TN-132); the options are drawn either way so
+    /// the answer's shape does not depend on the policy's internals.
+    pub passkey_offered: bool,
     /// E-mail code, when the realm allows it.
     pub email_code: bool,
     /// E-mail link, when the realm allows it.
@@ -323,7 +330,8 @@ where
             device,
             options: StepOptions {
                 passkey,
-                password: true,
+                password: self.policy.password,
+                passkey_offered: self.policy.passkey,
                 email_code: self.policy.email_otp,
                 magic_link: self.policy.magic_link,
             },
@@ -356,6 +364,10 @@ where
             return Ok(neutral(self.gate.mean_ms()));
         }
         if l.state.first_done() && matches!(l.state.purpose, Purpose::Login) {
+            return Ok(refuse(STEP_NOT_ALLOWED));
+        }
+        // TN-132: a sign-in method the realm did not enable is never accepted
+        if !self.policy.password {
             return Ok(refuse(STEP_NOT_ALLOWED));
         }
         let salts = Salts(self.random);
@@ -431,6 +443,10 @@ where
             None => None,
         };
         let authenticated = l.state.first_done();
+        // TN-132: passkeys open a sign-in only where the realm enabled them
+        if !authenticated && matches!(l.state.purpose, Purpose::Login) && !self.policy.passkey {
+            return Ok(Err(refuse(STEP_NOT_ALLOWED)));
+        }
         let who = match (&folded, l.state.identifier) {
             (Some(f), Some(d)) if d == self.identifier_digest(f) => Identified::Identifier {
                 normalized: f,
@@ -476,6 +492,10 @@ where
             Err(e) => return Ok(gone(e)),
         };
         let authenticated = l.state.first_done();
+        // TN-132: passkeys open a sign-in only where the realm enabled them
+        if !authenticated && matches!(l.state.purpose, Purpose::Login) && !self.policy.passkey {
+            return Ok(refuse(STEP_NOT_ALLOWED));
+        }
         let Some(ceremony) = l.state.ceremony.take() else {
             return Ok(neutral(0));
         };

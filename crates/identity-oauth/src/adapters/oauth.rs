@@ -82,6 +82,12 @@ impl OAuthTx for PgOAuthTx {
         idp::client(&mut self.0, client_id).await.map_err(down)
     }
 
+    async fn previous_secret(&mut self, client_id: &str) -> Result<Option<[u8; 32]>, Unavailable> {
+        idp::realm::previous_secret(&mut self.0, client_id)
+            .await
+            .map_err(down)
+    }
+
     async fn client_by_uuid(&mut self, uuid: [u8; 16]) -> Result<Option<ClientRow>, Unavailable> {
         idp::client_by_uuid(&mut self.0, uuid).await.map_err(down)
     }

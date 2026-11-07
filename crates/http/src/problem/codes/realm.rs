@@ -205,3 +205,24 @@ pub const UNKNOWN_OPERATION: Code = code(
     "Bad Request",
     "The operation named is not a realm write operation.",
 );
+/// A public `sub` without `public_sub_opt_in: true`, or an unknown subject type (MD-10).
+pub const PUBLIC_SUB_NOT_OPTED_IN: Code = code(
+    "public-sub-not-opted-in",
+    400,
+    "Bad Request",
+    "A client reads pairwise subs unless subject_type is public and public_sub_opt_in is true (MD-10).",
+);
+/// A sector identifier URI that is not https, or whose document does not list every redirect URI.
+pub const INVALID_SECTOR_IDENTIFIER_URI: Code = code(
+    "invalid-sector-identifier-uri",
+    400,
+    "Bad Request",
+    "The sector_identifier_uri is not https, or its document is not a JSON array of https URIs listing every redirect URI (OIDC Core 8.1).",
+);
+/// A declared operation that is reserved: it is never applied (OP-150 m.11 (b)).
+pub const RESERVED_OPERATION: Code = code(
+    "reserved-operation",
+    501,
+    "Not Implemented",
+    "The operation is declared in the catalogue and reserved; it is never applied (OP-150 m.11 (b)).",
+);

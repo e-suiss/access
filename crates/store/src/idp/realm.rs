@@ -792,3 +792,28 @@ pub async fn rotate_secret(
     .rows_affected();
     Ok(done == 1)
 }
+
+/// The digest of an active `client_secret_basic` client's previous secret while its rotation
+/// overlap lasts (CR-38, OP-151 m.11 (g)); `None` once it has ended or when there is none.
+///
+/// # Errors
+/// [`StoreError`].
+pub async fn previous_secret(
+    t: &mut TenantTx,
+    client_id: &str,
+) -> Result<Option<[u8; 32]>, StoreError> {
+    let (tenant, realm) = scope(t)?;
+    let hash = sqlx::query_scalar!(
+        "SELECT previous_secret_hash FROM access.idp_clients
+          WHERE tenant_id = $1 AND realm_id = $2 AND client_id = $3 AND status = 'active'
+            AND auth_method = 'client_secret_basic' AND previous_secret_until > now()",
+        tenant,
+        realm,
+        client_id,
+    )
+    .fetch_optional(&mut *t.tx)
+    .await?
+    .flatten();
+    hash.map(|h| <[u8; 32]>::try_from(h.as_slice()).map_err(|_| StoreError::Corrupt))
+        .transpose()
+}

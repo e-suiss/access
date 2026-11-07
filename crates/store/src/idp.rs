@@ -249,6 +249,10 @@ pub struct ClientRow {
     pub event_receiver: Option<String>,
     /// Whether its authorization requests are accepted only from `/par` (RFC 9126 §6).
     pub require_par: bool,
+    /// Whether it reads the realm's public `sub` instead of a pairwise one (MD-10 opt-in).
+    pub public_sub: bool,
+    /// Its sector identifier URI, checked when it was registered (OIDC Core §8.1).
+    pub sector_identifier_uri: Option<String>,
 }
 
 /// Inserts a client under `bound`.
@@ -265,8 +269,10 @@ pub async fn insert_client(
         "INSERT INTO access.idp_clients (tenant_id, realm_id, client_uuid, client_id, display_name,
                 auth_method, jwks_uri, redirect_uris, domain_id, decision_pos, secret_hash,
                 post_logout_redirect_uris, backchannel_logout_uri, jwks, platform_product,
-                service_key, suiss_event_receiver, require_pushed_authorization_requests)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)",
+                service_key, suiss_event_receiver, require_pushed_authorization_requests,
+                subject_type, sector_identifier_uri)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18,
+                 $19, $20)",
         tenant,
         realm,
         Uuid::from_bytes(c.client_uuid),
@@ -285,6 +291,8 @@ pub async fn insert_client(
         c.service_key.as_deref(),
         c.event_receiver,
         c.require_par,
+        subject_type(c.public_sub),
+        c.sector_identifier_uri,
     )
     .execute(&mut *t.tx)
     .await?;
@@ -306,7 +314,8 @@ pub async fn update_client(
                 redirect_uris = $7, domain_id = $8, decision_pos = $9, secret_hash = $10,
                 post_logout_redirect_uris = $11, backchannel_logout_uri = $12, jwks = $13,
                 platform_product = $14, service_key = $15, suiss_event_receiver = $16,
-                require_pushed_authorization_requests = $17
+                require_pushed_authorization_requests = $17, subject_type = $18,
+                sector_identifier_uri = $19
           WHERE tenant_id = $1 AND realm_id = $2 AND client_id = $3 AND status = 'active'",
         tenant,
         realm,
@@ -325,11 +334,17 @@ pub async fn update_client(
         c.service_key.as_deref(),
         c.event_receiver,
         c.require_par,
+        subject_type(c.public_sub),
+        c.sector_identifier_uri,
     )
     .execute(&mut *t.tx)
     .await?
     .rows_affected();
     Ok(done == 1)
+}
+
+const fn subject_type(public: bool) -> &'static str {
+    if public { "public" } else { "pairwise" }
 }
 
 /// Retires an active client under `bound`; its id stays taken (OP-73, INV-32).
@@ -368,7 +383,7 @@ pub async fn client(t: &mut TenantTx, client_id: &str) -> Result<Option<ClientRo
         "SELECT client_uuid, client_id, display_name, auth_method, jwks_uri, redirect_uris, status,
                 secret_hash, post_logout_redirect_uris, backchannel_logout_uri, jwks,
                 platform_product, service_key, suiss_event_receiver,
-                require_pushed_authorization_requests
+                require_pushed_authorization_requests, subject_type, sector_identifier_uri
            FROM access.idp_clients WHERE tenant_id = $1 AND realm_id = $2 AND client_id = $3",
         tenant,
         realm,
@@ -396,6 +411,8 @@ pub async fn client(t: &mut TenantTx, client_id: &str) -> Result<Option<ClientRo
             service_key: r.service_key,
             event_receiver: r.suiss_event_receiver,
             require_par: r.require_pushed_authorization_requests,
+            public_sub: r.subject_type == "public",
+            sector_identifier_uri: r.sector_identifier_uri,
         })
     })
     .transpose()
@@ -500,6 +517,25 @@ pub async fn client_by_uuid(
         Some(id) => client(t, &id).await,
         None => Ok(None),
     }
+}
+
+/// How many active clients of the transaction's realm read its public `sub` (MD-10): discovery
+/// lists `public` among `subject_types_supported` only when at least one does.
+///
+/// # Errors
+/// [`StoreError`].
+pub async fn public_sub_clients(t: &mut TenantTx) -> Result<u64, StoreError> {
+    let (tenant, realm) = scope(t)?;
+    let n = sqlx::query_scalar!(
+        r#"SELECT count(*) AS "n!" FROM access.idp_clients
+            WHERE tenant_id = $1 AND realm_id = $2 AND subject_type = 'public'
+              AND status = 'active'"#,
+        tenant,
+        realm,
+    )
+    .fetch_one(&mut *t.tx)
+    .await?;
+    u64::try_from(n).map_err(|_| StoreError::Corrupt)
 }
 
 /// A realm's settings (OP-146 m.4 (f), m.8 (e), IDP-5, §11.3).

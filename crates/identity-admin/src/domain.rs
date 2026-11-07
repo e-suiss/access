@@ -249,6 +249,18 @@ pub enum Invalid {
     /// An intent validity missing, malformed, inverted or longer than 15 minutes.
     #[error("bad validity")]
     Validity,
+    /// A public `sub` without the explicit opt-in, or a subject type that is neither
+    /// `pairwise` nor `public` (MD-10).
+    #[error("public sub needs the opt-in")]
+    PublicSub,
+    /// A sector identifier URI that is not `https`, or whose document is not a JSON array of
+    /// `https` URIs listing every redirect URI (OIDC Core §8.1).
+    #[error("bad sector_identifier_uri")]
+    SectorIdentifier,
+    /// A management operation the catalogue declares and reserves: never applied
+    /// (OP-150 m.11 (b)).
+    #[error("reserved operation")]
+    Reserved,
 }
 
 impl Invalid {
@@ -292,6 +304,9 @@ impl Invalid {
             Self::PasskeyLoss => "passkey-loss-not-acknowledged",
             Self::Body => "invalid-body",
             Self::Validity => "invalid-validity",
+            Self::PublicSub => "public-sub-not-opted-in",
+            Self::SectorIdentifier => "invalid-sector-identifier-uri",
+            Self::Reserved => "reserved-operation",
         }
     }
 }
@@ -581,6 +596,51 @@ impl AuthMethod {
     }
 }
 
+/// Which `sub` a client reads (MD-10): pairwise by default; the realm's public `sub` only by
+/// explicit opt-in.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Subject {
+    /// Whether the client opted in to the realm's public `sub`.
+    pub public: bool,
+    /// The sector identifier URI the client registered, `https` (OIDC Core §8.1). Its document
+    /// is checked when the registration is drafted and committed; the pairwise sector stays the
+    /// client.
+    pub sector_identifier_uri: Option<String>,
+}
+
+impl Subject {
+    /// The `subject_type` value.
+    #[must_use]
+    pub const fn kind(&self) -> &'static str {
+        if self.public { "public" } else { "pairwise" }
+    }
+}
+
+/// Most entries of a sector identifier document.
+pub const MAX_SECTOR_URIS: usize = 256;
+
+/// Whether `document`, a sector identifier URI's body, is a JSON array of `https` URIs that
+/// lists every one of `redirect_uris` (OIDC Core §8.1, MD-10).
+///
+/// # Errors
+/// [`Invalid::SectorIdentifier`].
+pub fn sector_covers(document: &[u8], redirect_uris: &[RedirectUri]) -> Result<(), Invalid> {
+    let listed: Vec<String> =
+        serde_json::from_slice(document).map_err(|_| Invalid::SectorIdentifier)?;
+    let ok = listed.len() <= MAX_SECTOR_URIS
+        && listed
+            .iter()
+            .all(|u| u.starts_with("https://") && u.len() <= MAX_URI)
+        && redirect_uris
+            .iter()
+            .all(|r| listed.iter().any(|l| l == r.as_str()));
+    if ok {
+        Ok(())
+    } else {
+        Err(Invalid::SectorIdentifier)
+    }
+}
+
 /// A client registration (TN-15, IDP-7).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Client {
@@ -601,6 +661,8 @@ pub struct Client {
     pub require_par: bool,
     /// The platform product it pairs (OP-149 m.4); set only in the platform tenant.
     pub platform: Option<Platform>,
+    /// The `sub` it reads (MD-10).
+    pub subject: Subject,
 }
 
 impl Client {
@@ -639,6 +701,14 @@ impl Client {
             if !matches!(key, PublicKey::P256(_)) {
                 return Err(Invalid::ClientKey);
             }
+        }
+        if self
+            .subject
+            .sector_identifier_uri
+            .as_deref()
+            .is_some_and(|u| !https(u))
+        {
+            return Err(Invalid::SectorIdentifier);
         }
         if let Some(p) = &self.platform {
             if !matches!(
@@ -710,6 +780,13 @@ impl Client {
                 Value::text("require_pushed_authorization_requests"),
                 Value::Bool(true),
             ));
+        }
+        // MD-10: only an opt-in changes the digest of a client registration
+        if self.subject.public {
+            m.push((Value::text("subject_type"), Value::text("public")));
+        }
+        if let Some(u) = &self.subject.sector_identifier_uri {
+            m.push((Value::text("sector_identifier_uri"), Value::text(u)));
         }
         Value::Map(m)
     }

@@ -44,6 +44,23 @@ pub trait Directory: Send + Sync {
 
     /// Every live realm with an issuer, for the start-up JWKS check (§17.9.7).
     fn all(&self) -> impl Future<Output = Result<Vec<RealmEntry>, Unavailable>> + Send;
+
+    /// What the realm's discovery documents say about it: whether a client opted in to the
+    /// public `sub` (MD-10) and its governing domain (§9.15.1 k.2). A directory that cannot tell
+    /// knows nothing: pairwise only, no Domain Metadata reference.
+    fn facts(&self, realm: &RealmEntry) -> impl Future<Output = Result<Facts, Unavailable>> + Send {
+        let _ = realm;
+        async { Ok(Facts::default()) }
+    }
+}
+
+/// What a directory knows of a realm beyond its route.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Facts {
+    /// Active clients that read the realm's public `sub` (MD-10).
+    pub public_sub_clients: u64,
+    /// The realm's governing `DomainID` (PI-7).
+    pub domain: Option<[u8; 32]>,
 }
 
 /// The realm keys the identity signer holds (CMP-22b, OP-143 m.9).

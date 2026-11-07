@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT previous_secret_hash FROM access.idp_clients\n          WHERE tenant_id = $1 AND realm_id = $2 AND client_id = $3 AND status = 'active'\n            AND auth_method = 'client_secret_basic' AND previous_secret_until > now()",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "previous_secret_hash",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.idp_clients",
+            "name": "previous_secret_hash"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "9273b81b04e4fa388c1eb0a41d550f7c2edce05d6d2a0e368c8ebf4c3625d7b4"
+}

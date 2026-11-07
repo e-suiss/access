@@ -20,7 +20,7 @@ use access_identity_admin::app::rest::{
 use access_identity_admin::app::{Admin, Applied, Proposal};
 use access_identity_admin::domain::{Change, Invalid};
 use access_identity_admin::ports::{Decider, Governance, Instances};
-use access_identity_oauth::adapters::outbound::DeclaredTargets;
+use access_identity_oauth::adapters::outbound::{DeclaredTargets, Outbound};
 use access_identity_oauth::domain::issuer::RealmBase;
 use access_identity_ui::domain::frontend::IDENTITY_PEP;
 use access_kernel::codec::Canonical;
@@ -50,7 +50,12 @@ pub(crate) struct Realms<P> {
     /// The platform realm's slug: its governing domain governs the platform-admin surface
     /// (OP-151 m.2 M2); without it the platform surface finds no domain.
     pub(crate) platform: Option<String>,
+    /// Fetches sector identifier documents (MD-10, OIDC Core §8.1).
+    pub(crate) outbound: Outbound,
 }
+
+/// Largest sector identifier document read.
+const MAX_SECTOR_DOCUMENT: usize = 64 * 1024;
 
 fn kind(k: ResourceKind) -> Kind {
     match k {
@@ -171,6 +176,13 @@ impl<P: Decider + Governance + Instances + Clone + Send + Sync + 'static> Realms
             Ok(c) => c,
             Err(e) => return refusal(&e).map(Err),
         };
+        // MD-10, OIDC Core §8.1: the sector document lists every redirect URI, on each write
+        if let Change::ClientRegister(c) | Change::ClientUpdate(c) = &change
+            && let Some(uri) = &c.subject.sector_identifier_uri
+            && let Err(i) = self.sector(uri, c).await?
+        {
+            return Ok(Err(problem_of(&AdminError::Invalid(i))));
+        }
         // IDI-4: an RP ID change makes every registered passkey unusable; the caller says so
         if matches!(change, Change::RpId(_)) {
             let n = match admin.passkey_count(tenant, realm).await {
@@ -188,6 +200,34 @@ impl<P: Decider + Governance + Instances + Clone + Send + Sync + 'static> Realms
             validity,
             body,
         }))
+    }
+
+    /// Fetches the sector identifier document `uri` through the SSRF-guarded client and checks
+    /// it covers `c`'s redirect URIs; unreachable is `503` (MD-8), anything else a refusal.
+    async fn sector(
+        &self,
+        uri: &str,
+        c: &access_identity_admin::domain::Client,
+    ) -> Result<Result<(), Invalid>, Unavailable> {
+        let answer = match self
+            .outbound
+            .get(uri, "application/json", MAX_SECTOR_DOCUMENT)
+            .await
+        {
+            Ok(a) => a,
+            Err(e) if e.transient() => {
+                tracing::warn!(event = "api.realm.unavailable", outcome = "error", error = %e, "sector identifier document unreachable");
+                return Err(Unavailable);
+            }
+            Err(_) => return Ok(Err(Invalid::SectorIdentifier)),
+        };
+        if answer.status != 200 {
+            return Ok(Err(Invalid::SectorIdentifier));
+        }
+        Ok(access_identity_admin::domain::sector_covers(
+            &answer.body,
+            &c.redirect_uris,
+        ))
     }
 
     fn proposal(

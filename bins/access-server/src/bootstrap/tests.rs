@@ -1671,7 +1671,12 @@ async fn approval_through_the_local_client(world: &str, step_up: Option<StepUp>)
     let tls = test_tls("access.test");
     let keks = RealmKeks::new(Arc::clone(&w.keys));
     let hosted = Arc::new(Hosted {
-        kits: HsmKits::new(keks, w.db.router.clone(), SessionPolicy::DEFAULT),
+        kits: HsmKits::new(
+            keks,
+            w.db.router.clone(),
+            w.db.app.clone(),
+            SessionPolicy::DEFAULT,
+        ),
         db: w.db.app.clone(),
         products: w.db.reader.clone(),
         clock: SystemClock,
