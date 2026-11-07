@@ -3,6 +3,7 @@
 
 pub mod issuer;
 pub mod platform;
+mod signals;
 
 use access_crypto::opaque_id::IdKey;
 use access_identity_account::domain::password::Argon2Params;
@@ -443,6 +444,8 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
         };
         let secret = self.write(&mut t, &bound, &p.change).await?;
         self.announce(&mut t, p, &committed.exercise).await?;
+        let at = access_store::authority::server_time(self.app).await?;
+        signals::queue_for(&mut t, &p.change, at).await?;
         t.commit().await?;
         self.after(p).await?;
         Ok(Applied::Written {

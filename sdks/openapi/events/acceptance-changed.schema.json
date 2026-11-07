@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:suiss:access:schema:event:acceptance-changed:1",
+  "title": "Re-query: an Acceptance was amended or revoked (§9.16)",
+  "description": "The member of the SET `events` claim, and of the CloudEvent `data.events`, under `urn:suiss:access:event:acceptance-changed`.",
+  "type": "object",
+  "required": [
+    "domain",
+    "source",
+    "subject",
+    "at"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "domain": {
+      "$ref": "#/$defs/b64url32"
+    },
+    "source": {
+      "$ref": "#/$defs/source"
+    },
+    "subject": {
+      "type": "object",
+      "required": [
+        "kind",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "acceptance"
+        },
+        "id": {
+          "$ref": "#/$defs/b64url16"
+        }
+      }
+    },
+    "at": {
+      "$ref": "#/$defs/ms"
+    }
+  },
+  "$defs": {
+    "b64url32": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{43}$"
+    },
+    "b64url16": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9_-]{22}$"
+    },
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "ms": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Unix time, milliseconds."
+    },
+    "source": {
+      "description": "The Exercise whose decision recorded the event, or the Claim whose record admitted it.",
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "exercise"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "exercise": {
+              "$ref": "#/$defs/b64url32"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "claim"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "claim": {
+              "$ref": "#/$defs/b64url16"
+            }
+          }
+        }
+      ]
+    }
+  }
+}

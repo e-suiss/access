@@ -159,6 +159,17 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                     Detail::None,
                 ));
             }
+            // §9.16
+            Some(
+                Payload::AcceptanceAmend { acceptance, .. }
+                | Payload::AcceptanceRevoke { acceptance },
+            ) => {
+                events.push(base(
+                    Kind::AcceptanceChanged,
+                    Subject::Acceptance(*acceptance),
+                    Detail::None,
+                ));
+            }
             Some(Payload::MandateRevoke { mandate }) => {
                 events.push(base(
                     Kind::MandateEnded,

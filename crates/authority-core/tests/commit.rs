@@ -4374,6 +4374,12 @@ async fn a_foreign_pap_holds_a_bridging_grant() {
         .await
         .unwrap(),
     );
+    // §9.16: an Acceptance revoked is an acceptance-changed re-query signal
+    let revoked = meta::object_id(&unpinned.exercise.unwrap(), kind::ACCEPTANCE, 0);
+    assert!(outbox_events(&db, b).await.iter().any(|e| {
+        e.kind == access_internal_api::events::Kind::AcceptanceChanged
+            && e.subject == access_internal_api::events::Subject::Acceptance(revoked)
+    }));
 
     // 2455, L26, OP-143 m.13 (a): an identity issuer (a Party) cannot be a foreign authority
     // issuer, and a Party's `predicate-input` Acceptance opens no bridge

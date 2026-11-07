@@ -19,7 +19,7 @@ pub use access_identity_oauth::ports::oauth::TENANT_PREFIX;
 pub const OUTBOX_PREFIX: &str = "event.";
 
 /// Every event name, authority events first.
-pub const NAMES: [&str; 15] = [
+pub const NAMES: [&str; 16] = [
     "authority-revoked",
     "authority-narrowed",
     "authority-expired",
@@ -27,6 +27,7 @@ pub const NAMES: [&str; 15] = [
     "instance-terminated",
     "revalidation-required",
     "projection-invalidated",
+    "acceptance-changed",
     "party.disabled",
     "party.compromised",
     "tenant.created",

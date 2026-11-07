@@ -102,6 +102,7 @@ impl From<StreamError> for PlatformError {
             StreamError::Invalid(i) => Self::Invalid(i.0),
             StreamError::NotFound => Self::NotFound("no-such-stream"),
             StreamError::Exists => Self::Conflict("stream-exists"),
+            StreamError::UnsupportedAlg => Self::Invalid("unsupported_alg"),
             StreamError::Unavailable => Self::Unavailable,
         }
     }

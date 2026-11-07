@@ -27,6 +27,8 @@ pub enum Kind {
     RevalidationRequired,
     /// A projection's bounds no longer hold.
     ProjectionInvalidated,
+    /// `acceptance_amend`, `acceptance_revoke`: what the domain takes from an issuer changed.
+    AcceptanceChanged,
     /// `party_depart` or a suspension (OP-149 m.7).
     PartyDisabled,
     /// An admitted `party_compromise` Claim (OP-149 m.7, SI-9).
@@ -35,7 +37,7 @@ pub enum Kind {
 
 impl Kind {
     /// Every kind, in order.
-    pub const ALL: [Self; 9] = [
+    pub const ALL: [Self; 10] = [
         Self::AuthorityRevoked,
         Self::AuthorityNarrowed,
         Self::AuthorityExpired,
@@ -43,6 +45,7 @@ impl Kind {
         Self::InstanceTerminated,
         Self::RevalidationRequired,
         Self::ProjectionInvalidated,
+        Self::AcceptanceChanged,
         Self::PartyDisabled,
         Self::PartyCompromised,
     ];
@@ -58,6 +61,7 @@ impl Kind {
             Self::InstanceTerminated => "instance-terminated",
             Self::RevalidationRequired => "revalidation-required",
             Self::ProjectionInvalidated => "projection-invalidated",
+            Self::AcceptanceChanged => "acceptance-changed",
             Self::PartyDisabled => "party.disabled",
             Self::PartyCompromised => "party.compromised",
         }
@@ -92,6 +96,8 @@ pub enum Subject {
     Party(Id),
     /// A policy.
     Policy(Id),
+    /// An Acceptance.
+    Acceptance(Id),
     /// A projection, by its digest.
     Projection(Digest),
 }
@@ -106,6 +112,7 @@ impl Subject {
             Self::Instance(_) => "instance",
             Self::Party(_) => "party",
             Self::Policy(_) => "policy",
+            Self::Acceptance(_) => "acceptance",
             Self::Projection(_) => "projection",
         }
     }
@@ -118,7 +125,8 @@ impl Subject {
             | Self::Mandate(i)
             | Self::Instance(i)
             | Self::Party(i)
-            | Self::Policy(i) => &i.0,
+            | Self::Policy(i)
+            | Self::Acceptance(i) => &i.0,
             Self::Projection(d) => &d.0,
         }
     }
@@ -376,6 +384,7 @@ impl Event {
             ("instance", raw) => Subject::Instance(Id(as_bytes(raw)?)),
             ("party", raw) => Subject::Party(Id(as_bytes(raw)?)),
             ("policy", raw) => Subject::Policy(Id(as_bytes(raw)?)),
+            ("acceptance", raw) => Subject::Acceptance(Id(as_bytes(raw)?)),
             ("projection", raw) => Subject::Projection(Digest(as_bytes(raw)?)),
             _ => return Err(Malformed),
         };
