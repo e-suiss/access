@@ -365,8 +365,8 @@ fn client_row() -> ClientRow {
 }
 
 // TN-39, TN-41, MD-10, TI-RT10: a realm holds several streams; an identity plane signal reaches
-// a receiver only through the pairwise
-// sub it already has; the SET is iss_sub, one event, txn, no sub, no exp
+// a receiver only through the pairwise sub it already has; the SET is iss_sub, one event, txn,
+// no sub, no exp
 #[tokio::test]
 async fn signals_name_the_subject_by_the_receivers_own_sub() {
     let w = World::new().await;
