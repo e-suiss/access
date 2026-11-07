@@ -73,3 +73,80 @@ audience, event types, optional RFC 8936 poll endpoint and credential, expected 
 Delivery (a push `2xx` or a poll `ack`), semantic (`POST /ssf/ack` with `{"jti", "state":
 "applied" | "ignored"}`) and authority-state acknowledgements are recorded apart and counted for
 the staleness view.
+
+## Webhooks
+
+A realm's administrator registers a webhook (an HTTPS URL and the events it wants). Access then
+delivers every matching event to that URL.
+
+### What a delivery looks like
+
+Each delivery is a `POST` with a [CloudEvents 1.0](https://cloudevents.io) structured JSON body
+(`application/cloudevents+json`) and the [Standard Webhooks](https://www.standardwebhooks.com)
+headers:
+
+```http
+POST /access-events HTTP/1.1
+Content-Type: application/cloudevents+json; charset=utf-8
+webhook-id: AQMxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+webhook-timestamp: 1793750400
+webhook-signature: v1a,fldxM4gAKugP6nnt1hdz3sgGfZ6d99nzrMFnZOELIxbzEHoVmAb2ADpkJK7zgPePmPsle0zV9jSeGlHFG2NVAw==
+
+{"specversion":"1.0","id":"AQMx…","source":"urn:suiss:access:realm:…",
+ "type":"urn:suiss:access:event:account.created","time":"2026-11-04T00:00:00.000Z",
+ "data":{"iss":"https://id.example/realms/shop","jti":"AQMx…",
+         "events":{"urn:suiss:access:event:account.created":{"realm":"…","account":"usr_…","at":1793750400000}}}}
+```
+
+- `id` equals `webhook-id` and the event's `jti`: deduplicate by it.
+- `data` carries ids only (`usr_…`, `tnt_…`, UUIDs), never an e-mail address, a name or a secret.
+- The schema of every event is in [`sdks/openapi/events`](../../sdks/openapi/events), with an
+  example under `examples/`.
+
+### Verifying a delivery
+
+The signature covers `webhook-id + "." + webhook-timestamp + "." + body`.
+
+- `v1a` (default): Ed25519. Registration shows the public key once as `whpk_<base64>`; verify with
+  it. Access never holds a secret the receiver needs.
+- `v1` (compatibility): HMAC-SHA-256. Registration shows the secret once as `whsec_<base64>`.
+
+Any Standard Webhooks library verifies `v1`; for `v1a` verify the Ed25519 signature over the same
+content. Reject a timestamp more than five minutes from your clock. A header may carry several
+space-separated signatures: during a key rotation the old key keeps signing next to the new one
+for 24 hours, so accept a delivery when any signature verifies with a key you hold. The same
+profile is used by Relay, so one verifier accepts both products. Test vectors:
+[`conformance/vectors/webhook/1/signature.json`](../../conformance/vectors/webhook/1/signature.json).
+
+### Delivery guarantees
+
+- **At least once.** Answer `2xx` within 10 seconds. Anything else, or no answer, is retried:
+  after 1 minute, then doubling up to 24 hours between attempts, for 7 days. After that the
+  delivery is `exhausted`.
+- **No ordering.** A later event can arrive before an earlier one. Order by the CloudEvent
+  `time`, deduplicate by `webhook-id`.
+- **Isolation.** One failing endpoint never delays another endpoint's deliveries.
+- **A notification, not a decision.** A lost or late delivery changes no Access decision:
+  suspending an account ends its sessions at once whether or not the webhook arrives. To act on
+  current state, ask Access.
+- Each attempt is logged with its status and latency; request and response bodies are not kept.
+
+### Events
+
+| Event | When |
+|---|---|
+| `account.created` | an account is created |
+| `account.updated` | an account's status moves otherwise (for example unlocked) |
+| `account.suspended` | an administrator suspends an account |
+| `account.reactivated` | a suspended or deprovisioned account is active again |
+| `account.deleted` | an account is deprovisioned |
+| `session.revoked` | every session of an account ended |
+| `credential.changed` | a password, passkey or second factor is added, replaced or removed |
+| `membership.added`, `membership.removed` | an account joins or leaves an organization |
+| `preference.changed` | an account's preferences change (topics only, never values) |
+| `document.accepted` | an account accepts a version of a document |
+| `agent.suspended` | an agent is suspended |
+| `login.failed_surge` | failed sign-ins in a realm rise above the surge threshold |
+
+The tenant, organization and API client events of the catalogue (`tenant.created`,
+`organization.*`, `api_client.*`) and the authority events reach subscribers through streams.
