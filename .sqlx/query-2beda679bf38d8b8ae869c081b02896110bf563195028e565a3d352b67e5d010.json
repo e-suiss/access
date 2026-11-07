@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT exercises_per_day, projections_per_day FROM access.sandbox_domains\n          WHERE domain_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "exercises_per_day",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.sandbox_domains",
+            "name": "exercises_per_day"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "projections_per_day",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.sandbox_domains",
+            "name": "projections_per_day"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "2beda679bf38d8b8ae869c081b02896110bf563195028e565a3d352b67e5d010"
+}

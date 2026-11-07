@@ -35,6 +35,7 @@ pub mod publications;
 pub mod realm_binding;
 pub mod relay;
 pub mod risk;
+pub mod sandbox;
 pub mod scope;
 pub mod sessions;
 pub mod ssf;

@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.sandbox_domains\n           (domain_id, tenant_id, realm_id, exercises_per_day, projections_per_day)\n         VALUES ($1, $2, $3, $4, $5) ON CONFLICT (domain_id) DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Uuid",
+        "Uuid",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "dd541aa5c1bcd94f9b2f3483173880a64cdc3ad26eebae60faa893e5e18f246b"
+}

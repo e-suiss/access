@@ -17,6 +17,7 @@ use suiss_crypto::dcbor::{self, Limits, Value};
 use suiss_crypto::digest::context_digest;
 use suiss_crypto::rotation::Policy;
 
+pub mod provision;
 pub mod realm;
 
 pub use realm::{

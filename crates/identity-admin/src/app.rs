@@ -3,6 +3,7 @@
 
 pub mod issuer;
 pub mod platform;
+pub mod provision;
 pub mod rest;
 mod signals;
 
