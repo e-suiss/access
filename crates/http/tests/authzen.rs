@@ -94,6 +94,42 @@ impl Pdp for Scripted {
     fn metadata(&self, domain: Digest) -> impl Future<Output = Option<Vec<u8>>> + Send {
         std::future::ready((domain == SIGNED).then(|| METADATA.to_vec()))
     }
+
+    fn lab_explain(
+        &self,
+        _inc: Incoming,
+    ) -> impl Future<Output = Result<access_authority_core::app::lab::Explanation, CoreError>> + Send
+    {
+        std::future::ready(Ok(access_authority_core::app::lab::Explanation {
+            outcome: Outcome::Allow,
+            blockers: Vec::new(),
+            unmet: Vec::new(),
+            path: Vec::new(),
+            path_hidden: true,
+            selection: Some(access_authority_core::app::lab::Selection {
+                grant: access_kernel::model::Id([4; 16]),
+                classes: vec![String::from("employee")],
+                since: 2,
+            }),
+            advisory: true,
+            recorded: false,
+        }))
+    }
+
+    fn lab_replay(
+        &self,
+        _inc: Incoming,
+        record: u64,
+    ) -> impl Future<Output = Result<access_authority_core::app::lab::Replay, CoreError>> + Send
+    {
+        std::future::ready(Ok(access_authority_core::app::lab::Replay {
+            record,
+            recorded: Outcome::Allow,
+            rebuilt: Outcome::Deny,
+            matches: false,
+            differing: vec![String::from("outcome")],
+        }))
+    }
 }
 
 /// The one domain whose signer has Domain Metadata, and its (opaque) `COSE_Sign1` bytes.
@@ -708,4 +744,74 @@ async fn the_three_discovery_documents_stay_separate() {
         assert!(az.get(identity).is_none(), "{identity}");
     }
     assert_eq!(az["signed_metadata"], b64url_encode(&md));
+}
+
+// OP-151 m.19 (e), E-5, INV-27: a recorded explanation at audit scope carries the selection
+// part of a two-part reason and whether the decision evaluated again matches; below audit scope
+// neither member exists
+#[tokio::test]
+async fn audit_depth_adds_selection_and_replay() {
+    let (status, _, body) = post_to(
+        app(Ok(Outcome::Allow), Some("pep-1")),
+        "/access/v1/explain",
+        evaluation("commit", r#", "record": 7, "scope": "audit""#),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        body["context"]["selection"]["grant"],
+        b64url_encode(&[4; 16])
+    );
+    assert_eq!(body["context"]["selection"]["classes"][0], "employee");
+    assert_eq!(body["context"]["replay"]["match"], false);
+    assert_eq!(body["context"]["replay"]["differing"][0], "outcome");
+    for scope in ["viewer", "requester"] {
+        let (status, _, body) = post_to(
+            app(Ok(Outcome::Allow), Some("pep-1")),
+            "/access/v1/explain",
+            evaluation("commit", &format!(r#", "record": 7, "scope": "{scope}""#)),
+            None,
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK);
+        assert!(body["context"].get("selection").is_none(), "{scope}");
+        assert!(body["context"].get("replay").is_none(), "{scope}");
+    }
+}
+
+// §9.9.2, E17: a request naming an upstream Exercise is told the link is audit-only, never
+// enforced while no causal-bound allowance is evaluated; without one the member does not exist
+#[tokio::test]
+async fn an_upstream_causal_ref_is_marked_audit_only() {
+    let upstream = format!(
+        r#"{{"subject": {{"type": "user", "id": "alice"}},
+            "action": {{"name": "read"}},
+            "resource": {{"type": "shop", "id": "item-1"}},
+            "context": {{
+                "domain": "{d}", "mode": "commit", "nonce": "{n}",
+                "basis": {{"anchor": "{a}"}}, "capacity": "own",
+                "intent": {{
+                    "action": {{"namespace": "shop", "name": "read", "major": 1, "schema": "{s}"}},
+                    "resources": [{{"namespace": "shop", "path": ["item-1"]}}],
+                    "context": {{"upstream_exercise": "{u}"}},
+                    "validity": {{"from": 0, "until": 100000}}
+                }}
+            }}}}"#,
+        d = b64url_encode(&[1; 32]),
+        n = b64url_encode(&[2; 16]),
+        a = b64url_encode(&[3; 16]),
+        s = b64url_encode(&[5; 32]),
+        u = b64url_encode(&[6; 32]),
+    );
+    let (status, _, body) = post(app(Ok(Outcome::Allow), Some("pep-1")), upstream, None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["context"]["causal_binding"], "audit-only");
+    let (_, _, body) = post(
+        app(Ok(Outcome::Allow), Some("pep-1")),
+        evaluation("commit", ""),
+        None,
+    )
+    .await;
+    assert!(body["context"].get("causal_binding").is_none());
 }

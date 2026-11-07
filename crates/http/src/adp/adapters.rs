@@ -358,4 +358,19 @@ where
             .to_bytes()
             .map_err(|_| CoreError::Unavailable("export"))
     }
+
+    async fn lab_explain(
+        &self,
+        inc: Incoming,
+    ) -> Result<access_authority_core::app::lab::Explanation, CoreError> {
+        Domains::lab_explain(self, &inc).await
+    }
+
+    async fn lab_replay(
+        &self,
+        inc: Incoming,
+        record: u64,
+    ) -> Result<access_authority_core::app::lab::Replay, CoreError> {
+        Domains::lab_replay(self, &inc, record).await
+    }
 }

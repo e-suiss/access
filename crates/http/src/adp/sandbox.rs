@@ -136,6 +136,21 @@ impl<P: Pdp, R: Regimes> Pdp for SandboxLine<P, R> {
     async fn export(&self, inc: Incoming) -> Result<Vec<u8>, CoreError> {
         self.inner.export(inc).await
     }
+
+    async fn lab_explain(
+        &self,
+        inc: Incoming,
+    ) -> Result<access_authority_core::app::lab::Explanation, CoreError> {
+        self.inner.lab_explain(inc).await
+    }
+
+    async fn lab_replay(
+        &self,
+        inc: Incoming,
+        record: u64,
+    ) -> Result<access_authority_core::app::lab::Replay, CoreError> {
+        self.inner.lab_replay(inc, record).await
+    }
 }
 
 #[cfg(test)]

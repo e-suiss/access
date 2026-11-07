@@ -1,8 +1,9 @@
 //! One evaluation call from body to reply (L1-ADP-2, L1-ADP-3).
 
 use access_authority_core::CoreError;
-use access_authority_core::app::Incoming;
+use access_authority_core::app::{Incoming, Scope};
 use access_kernel::combinator::{Mode, Outcome};
+use access_kernel::json::b64url_encode;
 use serde_json::Value;
 
 use crate::adp::domain::{
@@ -133,12 +134,15 @@ impl<P: Pdp> Service<P> {
                 explain: true,
                 status: None,
             };
-            return match self.pdp.explain_recorded(inc, record, scope).await {
+            return match self.pdp.explain_recorded(inc.clone(), record, scope).await {
                 Ok(r) => {
                     let mut v = encode_for(&r, mode, scope);
+                    let extra = self.depth(&inc, record, scope).await;
                     if let Some(ctx) = v.get_mut("context").and_then(Value::as_object_mut) {
                         ctx.insert(String::from("kind"), Value::from("recorded"));
                         ctx.insert(String::from("record"), Value::from(record));
+                        causal(ctx, &inc.request.intent);
+                        ctx.extend(extra);
                     }
                     Reply::Decision(v)
                 }
@@ -212,6 +216,7 @@ impl<P: Pdp> Service<P> {
 
     async fn decide(&self, decoded: Decoded, pep: String, explain: bool, body: Body) -> Reply {
         let mode = decoded.request.mode;
+        let upstream = decoded.request.intent.context.upstream_exercise.is_some();
         let inc = Incoming {
             request: decoded.request,
             ais: decoded.ais,
@@ -220,9 +225,77 @@ impl<P: Pdp> Service<P> {
             status: None,
         };
         match self.pdp.evaluate(inc).await {
-            Ok(r) => Reply::Decision(encode(&r, mode)),
+            Ok(r) => {
+                let mut v = encode(&r, mode);
+                if upstream && let Some(ctx) = v.get_mut("context").and_then(Value::as_object_mut) {
+                    ctx.insert(String::from(CAUSAL_BINDING), Value::from(AUDIT_ONLY));
+                }
+                Reply::Decision(v)
+            }
             Err(e) => failed(e, body),
         }
+    }
+
+    /// What a recorded explanation adds at its depth: at audit scope, the selection part of a
+    /// two-part reason (E-5) and the decision evaluated again (INV-27). Either is left out when
+    /// the decision point does not give it; neither is ever guessed.
+    async fn depth(
+        &self,
+        inc: &Incoming,
+        record: u64,
+        scope: Scope,
+    ) -> serde_json::Map<String, Value> {
+        let mut out = serde_json::Map::new();
+        if scope != Scope::Audit {
+            return out;
+        }
+        // E-5: the selection is read by an anonymous check of the same intent and basis, under a
+        // nonce of its own, so the recorded statement is neither reused nor needed
+        let mut probe = inc.clone();
+        probe.request.mode = Mode::Check;
+        probe.ais = None;
+        probe.request.nonce =
+            suiss_crypto::digest::context_digest(SELECTION_NONCE, &inc.request.nonce).0[..16]
+                .to_vec();
+        if let Ok(e) = self.pdp.lab_explain(probe).await
+            && let Some(s) = e.selection
+        {
+            out.insert(
+                String::from("selection"),
+                serde_json::json!({
+                    "grant": b64url_encode(&s.grant.0),
+                    "classes": s.classes,
+                    "since": s.since,
+                }),
+            );
+        }
+        if let Ok(r) = self.pdp.lab_replay(inc.clone(), record).await {
+            out.insert(
+                String::from("replay"),
+                serde_json::json!({ "match": r.matches, "differing": r.differing }),
+            );
+        }
+        out
+    }
+}
+
+/// The digest context of the nonce a selection probe runs under.
+const SELECTION_NONCE: &str = "access/explain-selection/v1";
+
+/// The Decision Response member that tells whether an upstream causal ref was enforced (§9.9.2).
+pub const CAUSAL_BINDING: &str = "causal_binding";
+
+/// §9.9.2, E17: the upstream link was not enforced, only recorded for audit and detection.
+pub const AUDIT_ONLY: &str = "audit-only";
+
+/// §9.9.2: a request naming an upstream Exercise says whether that link was enforced. No
+/// causal-bound allowance is evaluated yet, so the link is never claimed `enforced`.
+fn causal(
+    ctx: &mut serde_json::Map<String, Value>,
+    intent: &access_kernel::intent::IntentEnvelope,
+) {
+    if intent.context.upstream_exercise.is_some() {
+        ctx.insert(String::from(CAUSAL_BINDING), Value::from(AUDIT_ONLY));
     }
 }
 

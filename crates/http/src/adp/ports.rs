@@ -5,6 +5,7 @@ use std::future::Future;
 use std::sync::Arc;
 
 use access_authority_core::CoreError;
+use access_authority_core::app::lab::{Explanation, Replay};
 use access_authority_core::app::{Incoming, Response, Scope};
 use access_authority_core::query::{Hit, Query};
 use access_kernel::digest::Digest;
@@ -61,6 +62,27 @@ pub trait Pdp: Send + Sync {
         let _ = inc;
         std::future::ready(Err(CoreError::Protocol("export")))
     }
+
+    /// The decision lab's structured explanation of the `check` `inc` (§8.17.10.4), whose
+    /// selection part is the second half of a two-part reason (E-5); none by default.
+    fn lab_explain(
+        &self,
+        inc: Incoming,
+    ) -> impl Future<Output = Result<Explanation, CoreError>> + Send {
+        let _ = inc;
+        std::future::ready(Err(CoreError::Protocol("lab")))
+    }
+
+    /// The recorded decision at `record` evaluated again (INV-27), for an auditor; none by
+    /// default.
+    fn lab_replay(
+        &self,
+        inc: Incoming,
+        record: u64,
+    ) -> impl Future<Output = Result<Replay, CoreError>> + Send {
+        let _ = (inc, record);
+        std::future::ready(Err(CoreError::Protocol("lab")))
+    }
 }
 
 /// Results and the next page token.
@@ -103,5 +125,20 @@ impl<P: Pdp> Pdp for Arc<P> {
 
     fn export(&self, inc: Incoming) -> impl Future<Output = Result<Vec<u8>, CoreError>> + Send {
         (**self).export(inc)
+    }
+
+    fn lab_explain(
+        &self,
+        inc: Incoming,
+    ) -> impl Future<Output = Result<Explanation, CoreError>> + Send {
+        (**self).lab_explain(inc)
+    }
+
+    fn lab_replay(
+        &self,
+        inc: Incoming,
+        record: u64,
+    ) -> impl Future<Output = Result<Replay, CoreError>> + Send {
+        (**self).lab_replay(inc, record)
     }
 }
