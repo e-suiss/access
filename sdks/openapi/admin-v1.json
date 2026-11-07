@@ -3416,11 +3416,12 @@
             "type": "string",
             "description": "https JWKS."
           },
-          "ssf_configuration_uri": {
+          "ssf": {
             "type": [
-              "string",
+              "object",
               "null"
-            ]
+            ],
+            "description": "The provider as an SSF push transmitter: `issuer`, `jwks_uri`, `aud`, `events`, `expected_interval_s` (OP-151 m.7 (g))."
           },
           "status": {
             "type": "string",
@@ -3474,6 +3475,10 @@
           "client_secret": {
             "type": "string",
             "description": "Shown once; never stored or read back."
+          },
+          "irreversible": {
+            "type": "boolean",
+            "description": "Set on an RP ID change: it cannot be undone and the realm's passkeys stop working (IDI-4)."
           }
         }
       },

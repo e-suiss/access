@@ -177,6 +177,7 @@ fn schemas() -> Value {
                 "position": r("schemas", "Position"),
                 "resource": { "type": "object" },
                 "client_secret": text("Shown once; never stored or read back."),
+                "irreversible": { "type": "boolean", "description": "Set on an RP ID change: it cannot be undone and the realm's passkeys stop working (IDI-4)." },
             },
         },
         "SurfaceRoot": {

@@ -98,6 +98,8 @@ async fn every_realm_write_without_its_actor_proof_changes_nothing() {
             body["exercise_id"].is_string() && body["position"].is_string(),
             "{op}"
         );
+        // IDI-4: the RP ID answer marks the change irreversible
+        assert_eq!(body["irreversible"] == true, op == "putRpId", "{op}");
         let (r, _) = send(&router, write(row, nonce, Some(&signed), "{\"other\":1}")).await;
         // TN-126: a kept answer refuses the key at once; a secret answer is never kept, and
         // the spent nonce refuses the Exercise

@@ -343,6 +343,10 @@ async fn commit<E: Env>(
             // CR-38: shown once, never kept (the row's answer is not replayed)
             o.insert("client_secret".to_owned(), Value::String(s));
         }
+        // IDI-4: an RP ID change cannot be undone; the answer says so
+        if ctx.row.operation_id == "putRpId" {
+            o.insert("irreversible".to_owned(), Value::Bool(true));
+        }
     }
     let status = if creates {
         StatusCode::CREATED
