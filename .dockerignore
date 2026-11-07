@@ -1,8 +1,8 @@
-.git
-.github
-.devcontainer
-.claude
-CLAUDE.md
+.*
+!.cargo
+!.config
+!.sqlx
+*.md
 docs
 deploy
 !deploy/compose/access

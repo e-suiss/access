@@ -5,7 +5,7 @@
 [scan]
 docs = ["*.md", "*.mdx", ".github/**", "web/**", "sdks/**"]
 ui = ["web/**", "sdks/**", "**/locales/**", "**/i18n/**"]
-exclude = ["docs/**", "target/**", "**/node_modules/**", "conformance/catalog/**", "xtask/**", "CLAUDE.md"]
+exclude = ["docs/**", "target/**", "**/node_modules/**", "conformance/catalog/**", "xtask/**"]
 extensions = ["md", "mdx", "txt", "html", "ts", "tsx", "js", "jsx", "json", "yml", "yaml", "ftl", "po", "vue", "svelte"]
 
 [vocab]
