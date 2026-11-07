@@ -135,6 +135,20 @@ async fn an_account_is_suspended_and_reactivated_through_commit() {
     let (w, at, d) = ready("suspend").await;
     let mut t = TenantTx::begin(&w.db.app, at.0, at.1).await.unwrap();
     let subject = t.insert_subject("active", "kek-1", &[1; 40]).await.unwrap();
+    let session = t
+        .insert_session(&access_store::sessions::NewSession {
+            cookie_hash: &[3; 32],
+            subject,
+            session_epoch: 0,
+            keep_signed_in: false,
+            created_ms: 1,
+            auth_time_ms: 1,
+            idle_ms: i64::MAX / 4,
+            expires_ms: i64::MAX / 2,
+            assurance: b"[]",
+        })
+        .await
+        .unwrap();
     t.commit().await.unwrap();
     let account = w.ids.encode(SUBJECT_PREFIX, subject).unwrap();
     let suspend = compile(Op::SuspendAccount, Some(&account), &json!({}), &w.ids).unwrap();
@@ -153,10 +167,40 @@ async fn an_account_is_suspended_and_reactivated_through_commit() {
         .unwrap()
         .unwrap()
         .session_epoch;
+    // TN-49, TN-41, OP-150 L2, OP-151 m.3 (i): a decided suspension does what any status move
+    // does in its transaction: the session ends, the session-revoked and account-disabled
+    // signals, the realm issuer's account_status Claim and the webhook events are queued
+    let ended = t.session_by_id(session).await.unwrap().unwrap();
+    let kinds = t.outbox_kinds().await.unwrap();
     t.commit().await.unwrap();
     assert_eq!(epoch, 1, "the suspension raised the session epoch");
+    assert!(ended.ended_ms.is_some());
+    for kind in [
+        "signal.session_revoked",
+        "signal.account_disabled",
+        "claim.account_status",
+        "event.session.revoked",
+        "event.account.suspended",
+    ] {
+        assert_eq!(
+            kinds.iter().filter(|k| *k == kind).count(),
+            1,
+            "{kind} in {kinds:?}"
+        );
+    }
     let back = compile(Op::ReactivateAccount, Some(&account), &json!({}), &w.ids).unwrap();
     written(&run(&w, at, d, back, 3).await.unwrap());
+    let mut t = TenantTx::begin(&w.db.app, at.0, at.1).await.unwrap();
+    let kinds = t.outbox_kinds().await.unwrap();
+    t.commit().await.unwrap();
+    assert_eq!(
+        kinds
+            .iter()
+            .filter(|k| *k == "claim.account_status")
+            .count(),
+        2
+    );
+    assert!(kinds.iter().any(|k| k == "event.account.reactivated"));
 }
 
 // TN-129, TN-132, OP-151 m.3 (f): the policies are written by their own Exercises and read
@@ -342,6 +386,77 @@ async fn the_protection_mode_action_follows_its_tier() {
         ),
         Err(Invalid::ProtectionMode)
     );
+}
+
+// TN-110, EI-25, MD-8: a commit that was never drafted is checked against the realm's state on
+// the first application of its decision: a client id already registered is the write's problem
+// (400), not a storage failure (503), and nothing is bound; a retry of a written decision is
+// still answered without a check. A write the database refuses for the state it found is a
+// conflict (409)
+#[tokio::test]
+async fn a_commit_is_checked_against_the_state_on_first_application() {
+    let (w, at, d) = ready("first-application").await;
+    let c = new_client(&w).await;
+    let register = proposal(at, Change::ClientRegister(c.clone()), 1, idp_anchor(d), 1);
+    let ais = {
+        let prepared = w.admin().prepare(&register).await.unwrap();
+        sign(
+            &statement(
+                prepared.domain,
+                &register.nonce,
+                prepared.digest,
+                register.basis,
+            ),
+            ROOT_KEY,
+        )
+    };
+    written(&w.admin().apply(&register, ais.clone()).await.unwrap());
+
+    let again = proposal(at, Change::ClientRegister(c), 2, idp_anchor(d), 1);
+    let mut t = TenantTx::begin(&w.db.app, at.0, at.1).await.unwrap();
+    let g = access_store::idp::governance(&mut t)
+        .await
+        .unwrap()
+        .unwrap();
+    t.commit().await.unwrap();
+    let intent = again.change.intent(&g.slug, again.validity).unwrap();
+    let digest = access_kernel::intent::intent_digest(&intent).unwrap();
+    let undrafted = sign(&statement(d, &again.nonce, digest, again.basis), ROOT_KEY);
+    let refused = w.admin().apply(&again, undrafted).await.unwrap_err();
+    assert!(
+        matches!(refused, AdminError::Invalid(Invalid::ClientExists)),
+        "{refused:?}"
+    );
+    assert_eq!(refused.problem().0, 400);
+    assert!(matches!(
+        w.admin().apply(&register, ais).await.unwrap(),
+        Applied::AlreadyWritten { .. }
+    ));
+
+    // TN-16, INV-32: a second realm on a taken slug is refused by the database's unique index
+    let tenant = access_store::tenancy::create_tenant(&w.db.app, "pool-default")
+        .await
+        .unwrap();
+    let taken = w
+        .admin()
+        .create_realm(&NewRealm {
+            tenant,
+            slug: "first-application",
+            style: IssuerStyle::Subdomain,
+            placement: "pool-default",
+            root: Root::Sole(ROOT),
+            ct3_delay_s: None,
+            schemas: Vec::new(),
+            acceptances: Vec::new(),
+            issuer_predicate_input: Vec::new(),
+            provisioned_by: None,
+        })
+        .await;
+    let Err(conflict) = taken else {
+        panic!("a taken slug opened a second realm");
+    };
+    assert!(matches!(conflict, AdminError::Conflict), "{conflict:?}");
+    assert_eq!(conflict.problem().0, 409);
 }
 
 // §4.4, OP-151 m.14 (f): an account becomes a canary through idp.account.canary (CT2), once

@@ -91,3 +91,14 @@ pub enum StoreError {
     #[error("unsafe database: {0}")]
     Unsafe(String),
 }
+
+impl StoreError {
+    /// Whether the database refused the write for the state it found: an integrity constraint,
+    /// a foreign key or a trigger raising one (SQLSTATE class 23). The write did not happen; it
+    /// is a conflict with the current state, not an outage.
+    #[must_use]
+    pub fn integrity(&self) -> bool {
+        matches!(self, Self::Db(sqlx::Error::Database(e))
+            if e.code().is_some_and(|c| c.starts_with("23")))
+    }
+}

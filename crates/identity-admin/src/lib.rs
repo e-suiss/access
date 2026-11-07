@@ -48,7 +48,19 @@ pub enum AdminError {
     Encode,
     /// Storage failed; nothing was written.
     #[error("store: {0}")]
-    Store(#[from] StoreError),
+    Store(StoreError),
+}
+
+impl From<StoreError> for AdminError {
+    /// A write the database refused for the state it found (a constraint, a foreign key or a
+    /// trigger) is a conflict with that state, never an outage (MD-8, TN-110).
+    fn from(e: StoreError) -> Self {
+        if e.integrity() {
+            Self::Conflict
+        } else {
+            Self::Store(e)
+        }
+    }
 }
 
 impl AdminError {

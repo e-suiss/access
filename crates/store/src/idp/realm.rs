@@ -660,9 +660,9 @@ pub async fn accounts(
         .collect()
 }
 
-/// Suspends (`suspend`) or reactivates the account `subject` under `bound` (§12.3.1, TN-49): a
-/// suspension also ends its sessions by raising the session epoch. `false` when the account is
-/// not in a state the change leaves.
+/// Suspends (`suspend`) or reactivates the account `subject` under `bound` (§12.3.1, TN-49).
+/// What follows a status move (ending the sessions, the Claim, the events) is the caller's, in
+/// the same transaction. `false` when the account is not in a state the change leaves.
 ///
 /// # Errors
 /// [`StoreError`].
@@ -676,8 +676,7 @@ pub async fn set_account_state(
     let id = Uuid::from_bytes(subject);
     let (action, done) = if suspend {
         let done = sqlx::query!(
-            "UPDATE access.identity_subjects SET status = 'suspended', status_at = now(),
-                    session_epoch = session_epoch + 1
+            "UPDATE access.identity_subjects SET status = 'suspended', status_at = now()
               WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3
                 AND status IN ('active', 'locked')",
             tenant,

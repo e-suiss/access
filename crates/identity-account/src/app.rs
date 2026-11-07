@@ -28,6 +28,47 @@ pub struct Realm<'a> {
     pub ids: &'a IdKey,
 }
 
+/// A realm as events and audit rows name it: its id and the cell's id key (OP-137).
+#[derive(Clone, Copy)]
+pub struct Named<'a> {
+    /// Realm.
+    pub realm: RealmId,
+    /// The cell's id key for external subject ids (OP-137).
+    pub ids: &'a IdKey,
+}
+
+/// What names a realm and its subjects in events and audit rows (OP-137).
+pub trait Naming: Sync {
+    /// The realm.
+    fn realm_id(&self) -> RealmId;
+
+    /// The subject's external id, as audit rows and APIs name it.
+    ///
+    /// # Errors
+    /// [`AccountError::OpaqueId`].
+    fn external(&self, subject: [u8; 16]) -> Result<String, AccountError>;
+}
+
+impl Naming for Named<'_> {
+    fn realm_id(&self) -> RealmId {
+        self.realm
+    }
+
+    fn external(&self, subject: [u8; 16]) -> Result<String, AccountError> {
+        Ok(self.ids.encode(SUBJECT_PREFIX, subject)?)
+    }
+}
+
+impl Naming for Realm<'_> {
+    fn realm_id(&self) -> RealmId {
+        self.realm
+    }
+
+    fn external(&self, subject: [u8; 16]) -> Result<String, AccountError> {
+        Realm::external(self, subject)
+    }
+}
+
 /// Who acts and the request it belongs to, as the audit row records them (OP-10).
 pub struct Actor<'a> {
     /// Actor reference.

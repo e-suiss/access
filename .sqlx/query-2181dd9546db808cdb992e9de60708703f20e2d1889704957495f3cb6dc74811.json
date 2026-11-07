@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.identity_subjects SET status = 'suspended', status_at = now()\n              WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3\n                AND status IN ('active', 'locked')",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "2181dd9546db808cdb992e9de60708703f20e2d1889704957495f3cb6dc74811"
+}

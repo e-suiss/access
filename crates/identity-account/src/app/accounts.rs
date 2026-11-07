@@ -10,7 +10,7 @@ use crate::app::events;
 use crate::app::hasher::Hasher;
 use crate::app::sealing::{new_subject_key, seal, subject_key};
 use crate::app::signal::{emit as signal, fresh_id};
-use crate::app::{Actor, Realm, breach};
+use crate::app::{Actor, Naming, Realm, breach};
 use crate::domain::events::CredentialChange;
 use crate::domain::identifier::{Identifier, IdentifierKind};
 use crate::domain::password::{ALGORITHM, Password};
@@ -187,19 +187,37 @@ pub async fn change_status<D: AccountDb>(
     if !tx.set_status(subject, from, to).await? {
         return Err(AccountError::Corrupt);
     }
+    status_moved(&mut tx, realm, subject, (from, to), who).await?;
+    tx.commit().await
+}
+
+/// What follows a status move of `subject` in its transaction, once the status is written
+/// (TN-49, TN-41, OP-150 L2, OP-151 m.3 (i)): leaving the states that sign in ends the
+/// subject's sessions with their signals and event, and every move queues the realm issuer's
+/// `account_status` Claim, its event and its audit row. An `idp.account.*` decision writes the
+/// status bound to the decision and then this (TN-110).
+///
+/// # Errors
+/// [`AccountError`]; the caller rolls its transaction back.
+pub async fn status_moved<T: AccountTx>(
+    tx: &mut T,
+    realm: &impl Naming,
+    subject: [u8; 16],
+    (from, to): (AccountStatus, AccountStatus),
+    who: &Actor<'_>,
+) -> Result<(), AccountError> {
     if from.can_authenticate() && !to.can_authenticate() {
         let rev = tx.end_sessions(subject).await?;
-        ended_signals(&mut tx, subject, true).await?;
+        ended_signals(tx, subject, true).await?;
         // OP-151 m.3 (i)
         if let Some(rev) = rev {
-            events::sessions_ended(&mut tx, realm, subject, rev).await?;
+            events::sessions_ended(tx, realm, subject, rev).await?;
         }
     }
-    status_claim(&mut tx, subject, to).await?;
-    events::status(&mut tx, realm, subject, from, to).await?;
+    status_claim(tx, subject, to).await?;
+    events::status(tx, realm, subject, from, to).await?;
     let event = format!("account.{}", to.name());
-    audit(&mut tx, &event, who, &realm.external(subject)?).await?;
-    tx.commit().await
+    audit(tx, &event, who, &realm.external(subject)?).await
 }
 
 /// What deactivation did.

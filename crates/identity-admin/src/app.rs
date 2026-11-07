@@ -8,7 +8,10 @@ pub mod rest;
 mod signals;
 
 use access_crypto::opaque_id::IdKey;
+use access_identity_account::adapters::pg::PgTx;
+use access_identity_account::app::accounts::status_moved;
 use access_identity_account::domain::password::Argon2Params;
+use access_identity_account::domain::status::AccountStatus;
 use access_identity_oauth::adapters::outbound::DeclaredTargets;
 use access_identity_oauth::domain::issuer::{Issuer, IssuerStyle, RealmBase};
 use access_internal_api::idp::{ACTOR_BINDING, GenesisOrder, Submission, Verdict};
@@ -584,18 +587,56 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                 position: committed.position,
             });
         };
-        let secret = self.write(&mut t, &bound, &p.change).await?;
-        declare_transmitter(&mut t, &p.change, &committed.exercise).await?;
-        self.announce(&mut t, p, &committed.exercise).await?;
-        let at = access_store::authority::server_time(self.app).await?;
-        signals::queue_for(&mut t, &p.change, at).await?;
-        t.commit().await?;
+        let secret = self
+            .first_application(t, p, &bound, &committed.exercise)
+            .await?;
         self.after(p).await?;
         Ok(Applied::Written {
             exercise: committed.exercise,
             position: committed.position,
             secret,
         })
+    }
+
+    /// The first application of a bound decision, in the transaction that bound it: the change
+    /// must fit the realm's current configuration, which only a retry no longer matches (TN-110,
+    /// EI-25); then the write, its effects and its events, committed together.
+    async fn first_application(
+        &self,
+        t: TenantTx,
+        p: &Proposal,
+        bound: &idp::Bound,
+        exercise: &Digest,
+    ) -> Result<Option<ClientSecret>, AdminError> {
+        let mut t = PgTx(t);
+        let g = idp::governance(&mut t.0)
+            .await?
+            .ok_or(AdminError::NoRealm)?;
+        Self::current(&mut t.0, &p.change, &g, true, &self.declared).await?;
+        self.published(p).await?;
+        let moved = account_move(&mut t.0, &p.change).await?;
+        let secret = self.write(&mut t.0, bound, &p.change).await?;
+        if let Some((subject, from, to)) = moved {
+            // TN-49, TN-41, OP-150 L2: a decided move does what any status move does
+            let correlation = access_kernel::json::b64url_encode(&exercise.0);
+            let who = access_identity_account::app::Actor {
+                actor: DECIDED_BY,
+                correlation: &correlation,
+            };
+            let named = access_identity_account::app::Named {
+                realm: p.realm,
+                ids: self.ids,
+            };
+            status_moved(&mut t, &named, subject, (from, to), &who)
+                .await
+                .map_err(account)?;
+        }
+        declare_transmitter(&mut t.0, &p.change, exercise).await?;
+        self.announce(&mut t.0, p, exercise).await?;
+        let at = access_store::authority::server_time(self.app).await?;
+        signals::queue_for(&mut t.0, &p.change, at).await?;
+        t.0.commit().await?;
+        Ok(secret)
     }
 
     /// The Party the session subject of `p` is bound to (§13.4 G54, OP-149 m.16 (a)); a subject
@@ -860,10 +901,41 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
     }
 }
 
+/// Who a decided account status move is in the account audit log (OP-10); the correlation is
+/// the `ExerciseID`.
+const DECIDED_BY: &str = "idp-decision";
+
+/// The status move an `idp.account.*` change makes: the subject, the status it leaves and the
+/// one it enters, read before the move is written.
+async fn account_move(
+    t: &mut TenantTx,
+    change: &Change,
+) -> Result<Option<([u8; 16], AccountStatus, AccountStatus)>, AdminError> {
+    let (subject, to) = match change {
+        Change::AccountSuspend(s) => (*s, AccountStatus::Suspended),
+        Change::AccountReactivate(s) => (*s, AccountStatus::Active),
+        _ => return Ok(None),
+    };
+    let a = resources::account(t, subject)
+        .await?
+        .ok_or(Invalid::NoAccount)?;
+    let from = AccountStatus::parse(&a.status)
+        .ok_or(AdminError::Store(access_store::StoreError::Corrupt))?;
+    Ok(Some((subject, from, to)))
+}
+
+/// An account use case failure as the write path reports it.
+fn account(e: access_identity_account::AccountError) -> AdminError {
+    match e {
+        access_identity_account::AccountError::Store(s) => s.into(),
+        _ => AdminError::Unavailable(String::from("account")),
+    }
+}
+
 /// A risk store failure as the write path reports it.
 fn risk(e: access_identity_risk::RiskError) -> AdminError {
     match e {
-        access_identity_risk::RiskError::Store(s) => AdminError::Store(s),
+        access_identity_risk::RiskError::Store(s) => s.into(),
         access_identity_risk::RiskError::Mode(_) => Invalid::ProtectionMode.into(),
         access_identity_risk::RiskError::Account(_) | access_identity_risk::RiskError::Corrupt => {
             AdminError::Unavailable(String::from("risk"))
