@@ -44,6 +44,8 @@ data:
     relay = "https://relay.access.example"
     management_api = "https://api.access.example"
     products = { work = "https://work.access.example" }
+    # OP-151 m.2 M2: the platform tenant realm governs the platform-admin surface
+    platform_realm = "platform"
 
     # OP-94, OP-141 m.18 (h)
     [hsm]

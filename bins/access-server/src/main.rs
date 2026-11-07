@@ -1053,6 +1053,7 @@ async fn serve(
             base: RealmBase::parse(&identity_section.realm_base).map_err(|e| e.to_string())?,
             keys: realm_keys,
             declared: admin_targets,
+            platform: config.suiss.as_ref().and_then(|s| s.platform_realm.clone()),
         },
         console_assets,
     )?;

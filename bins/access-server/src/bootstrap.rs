@@ -1212,7 +1212,12 @@ where
                     slug,
                     style,
                     party,
-                    catalog.map(|s| vec![s.catalog(party)]).unwrap_or_default(),
+                    // OP-151 m.2 M2: only the platform realm's domain decides provisioning
+                    if is_platform {
+                        vec![access_identity_admin::domain::provision::catalog(party)]
+                    } else {
+                        catalog.map(|s| vec![s.catalog(party)]).unwrap_or_default()
+                    },
                     genesis_acceptances(catalog, accepted.map(|(_, (_, issuer))| *issuer)),
                 )
                 .await?;

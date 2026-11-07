@@ -47,6 +47,9 @@ pub(crate) struct Realms<P> {
     pub(crate) base: RealmBase,
     pub(crate) keys: Arc<RealmKeyring>,
     pub(crate) declared: DeclaredTargets,
+    /// The platform realm's slug: its governing domain governs the platform-admin surface
+    /// (OP-151 m.2 M2); without it the platform surface finds no domain.
+    pub(crate) platform: Option<String>,
 }
 
 fn kind(k: ResourceKind) -> Kind {
@@ -84,7 +87,7 @@ struct Compiled {
 }
 
 impl<P: Decider + Governance + Instances + Clone + Send + Sync + 'static> Realms<P> {
-    fn admin<'a>(
+    pub(super) fn admin<'a>(
         &'a self,
         ids: &'a access_crypto::opaque_id::IdKey,
     ) -> Admin<'a, P, P, RealmKeyring> {
@@ -102,7 +105,10 @@ impl<P: Decider + Governance + Instances + Clone + Send + Sync + 'static> Realms
         }
     }
 
-    async fn locate(&self, slug: &str) -> Result<Option<(TenantId, RealmId)>, Unavailable> {
+    pub(super) async fn locate(
+        &self,
+        slug: &str,
+    ) -> Result<Option<(TenantId, RealmId)>, Unavailable> {
         let route = tenancy::route_by_slug(&self.router, slug)
             .await
             .map_err(|_| Unavailable)?;
@@ -348,8 +354,11 @@ where
     async fn domain(&self, scope: &SurfaceScope) -> Result<Option<Digest>, Unavailable> {
         match scope {
             SurfaceScope::Realm(slug) => Realms::domain(self, slug).await,
-            // OP-151 m.2: the platform surface is M2's
-            SurfaceScope::Platform => Ok(None),
+            // OP-151 m.2 M2, TN-119: the platform surface is governed by the platform realm's domain
+            SurfaceScope::Platform => match self.platform.as_deref() {
+                Some(slug) => Realms::domain(self, slug).await,
+                None => Ok(None),
+            },
         }
     }
 

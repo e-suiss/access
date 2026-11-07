@@ -4,6 +4,7 @@
 //! read token verifier and the platform's write path, which stay fail-closed until their lanes
 //! wire them: no read token verifies and no platform write is proposed.
 
+pub(crate) mod platform;
 pub(crate) mod realm;
 
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -14,8 +15,8 @@ use access_http::api::Api;
 use access_http::api::adapters::{MemoryLimiter, NoProposals, NoReadTokens, SivCursors};
 use access_http::api::domain::idempotency::{LEASE_MS, RETENTION_MS};
 use access_http::api::ports::{
-    Begun, Clock, CursorSeal, Entropy, Env, IdempotencyStore, RateLimiter, RealmResources,
-    Unavailable,
+    Begun, Clock, CursorSeal, Entropy, Env, IdempotencyStore, PlatformResources, RateLimiter,
+    RealmResources, Unavailable,
 };
 use access_http::console::Console;
 use access_http::login::Assets;
@@ -32,6 +33,13 @@ const CURSOR_CONTEXT: &[u8] = b"access/admin-cursor/v1";
 
 /// Wall-clock time.
 pub(crate) struct WallClock;
+
+impl WallClock {
+    /// Unix milliseconds; 0 before the epoch.
+    pub(crate) fn now() -> u64 {
+        Self.now_ms().unwrap_or(0)
+    }
+}
 
 impl Clock for WallClock {
     fn now_ms(&self) -> Result<u64, Unavailable> {
@@ -208,6 +216,10 @@ impl<P: RealmPlane> Env for ServerApi<P> {
     }
 
     fn realm(&self) -> &dyn RealmResources {
+        &self.realms
+    }
+
+    fn platform(&self) -> &dyn PlatformResources {
         &self.realms
     }
 }

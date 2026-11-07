@@ -1946,3 +1946,197 @@ async fn approval_through_the_local_client(world: &str, step_up: Option<StepUp>)
         allowed
     );
 }
+
+mod provision {
+    use access_identity_admin::app::provision::{
+        Created, Order, Platform, ProvisionError, Provisioned,
+    };
+    use access_identity_admin::domain::provision::{
+        PlatformChange, ProvisionInvalid, RealmOrder, Recovery, SANDBOX_BUDGET,
+    };
+    use access_store::sandbox;
+
+    use super::*;
+
+    /// Signs `change` as the platform root and has the platform realm's domain commit it.
+    async fn provision(
+        w: &World,
+        admin: &Admin<'_, TestPlane, TestPlane, RealmKeyring>,
+        platform: &Platform<'_>,
+        change: &PlatformChange,
+        nonce: [u8; 16],
+    ) -> Result<Provisioned, ProvisionError> {
+        let root = root_key(&w.keys).unwrap();
+        let m = Moment::at(server_time(&w.db.app).await.unwrap());
+        let prepared = admin
+            .prepare_provision(platform, change, m.validity)
+            .await?;
+        MetaExercises::lead(&w.plane, prepared.domain)
+            .await
+            .unwrap();
+        let basis =
+            ExerciseBasis::Anchor(meta::object_id(&prepared.domain, kind::ANCHOR, IDP_ANCHOR));
+        let ais = sign(
+            &root,
+            &m.statement(prepared.domain, &nonce, prepared.digest, basis),
+        )
+        .unwrap();
+        let order = Order {
+            change,
+            nonce: nonce.to_vec(),
+            validity: m.validity,
+            basis,
+            capacity: Capacity::Own,
+        };
+        Box::pin(admin.provision(platform, order, ais)).await
+    }
+
+    fn realm(tenant: TenantId, slug: &str, root: Root, ack: bool) -> RealmOrder {
+        RealmOrder {
+            tenant: *tenant.as_bytes(),
+            slug: String::from(slug),
+            style: IssuerStyle::Path,
+            placement: String::from(PLACEMENT),
+            root,
+            ct3_delay_s: None,
+            acknowledge_no_recovery: ack,
+        }
+    }
+
+    // TN-110, TN-111, OP-151 m.2 M2, m.3 (m): a provisioning write is an `idp.platform.*`
+    // Exercise in the platform realm's domain; a realm is opened by a Genesis with the caller's
+    // root and says recovery is not available; a sandbox gets its own domain with the template's
+    // budget; a sole root needs the acknowledgement; a taken slug is never opened twice
+    #[tokio::test]
+    async fn platform_provisioning_commits_then_opens_a_genesis() {
+        let w = World::new("provision").await;
+        w.run(&plan()).await;
+        let ids = cell_ids(&w.db.app, &w.keys).await.unwrap();
+        let declared = DeclaredTargets::default();
+        let bootstrap = Bootstrap {
+            app: &w.db.app,
+            router: &w.db.router,
+            plane: &w.plane,
+            realm_keys: &w.keyring,
+            hsm: &w.keys,
+            base: &w.base,
+            declared: &declared,
+        };
+        let admin = bootstrap.admin(&ids, None);
+        let route = route_by_slug(&w.db.router, "platform")
+            .await
+            .unwrap()
+            .unwrap();
+        let platform = Platform {
+            tenant: route.tenant,
+            realm: route.realm,
+            router: &w.db.router,
+        };
+        let founder = root_party(&root_key(&w.keys).unwrap().public_key());
+
+        let tenant = TenantId::from_bytes(idp::new_uuid(&w.db.app).await.unwrap());
+        let change = PlatformChange::Tenant {
+            tenant: *tenant.as_bytes(),
+            placement: String::from(PLACEMENT),
+        };
+        let Provisioned::Done { created, .. } = provision(&w, &admin, &platform, &change, [1; 16])
+            .await
+            .unwrap()
+        else {
+            panic!("tenant creation not allowed");
+        };
+        assert!(created == Created::Tenant(tenant));
+        assert!(
+            access_store::tenancy::tenant(&w.db.router, tenant)
+                .await
+                .unwrap()
+                .is_some()
+        );
+
+        // TN-111, §13.7.7: a sole root without the acknowledgement is refused before a decision
+        let sole = PlatformChange::Realm(realm(tenant, "solo", Root::Sole(founder), false));
+        assert!(matches!(
+            provision(&w, &admin, &platform, &sole, [2; 16]).await,
+            Err(ProvisionError::Invalid(
+                ProvisionInvalid::RecoveryNotAcknowledged
+            ))
+        ));
+
+        let joint = Root::Joint {
+            parties: [founder, Id([0x42; 16])].into_iter().collect(),
+            k: 2,
+        };
+        let shop = PlatformChange::Realm(realm(tenant, "shop", joint.clone(), false));
+        let Provisioned::Done {
+            exercise, created, ..
+        } = provision(&w, &admin, &platform, &shop, [3; 16])
+            .await
+            .unwrap()
+        else {
+            panic!("realm creation not allowed");
+        };
+        let Created::Realm {
+            realm: shop_realm,
+            domain,
+            recovery,
+            sandbox: None,
+            ..
+        } = created
+        else {
+            panic!("not a production realm");
+        };
+        assert_eq!(recovery, Recovery::NotAvailable);
+        let shop_route = route_by_slug(&w.db.router, "shop").await.unwrap().unwrap();
+        assert!(shop_route.tenant == tenant && shop_route.realm == shop_realm);
+        assert_ne!(domain.0, [0; 32]);
+        assert!(
+            sandbox::budget(&w.db.router, &domain.0)
+                .await
+                .unwrap()
+                .is_none()
+        );
+
+        // TN-16, INV-32: a taken slug is refused before a decision
+        let again = provision(&w, &admin, &platform, &shop, [3; 16]).await;
+        assert!(matches!(
+            again,
+            Err(ProvisionError::Invalid(ProvisionInvalid::SlugTaken))
+        ));
+
+        // OP-151 m.3 (m): a sandbox is a domain of its own with the template's budget
+        let play = PlatformChange::Sandbox(realm(tenant, "shop-sandbox", joint, false));
+        let Provisioned::Done {
+            exercise: sandbox_exercise,
+            created,
+            ..
+        } = provision(&w, &admin, &platform, &play, [4; 16])
+            .await
+            .unwrap()
+        else {
+            panic!("sandbox creation not allowed");
+        };
+        let Created::Realm {
+            domain: sandbox_domain,
+            sandbox: Some(budget),
+            ..
+        } = created
+        else {
+            panic!("not a sandbox");
+        };
+        assert_ne!(sandbox_domain, domain);
+        assert_ne!(sandbox_exercise, exercise);
+        assert_eq!(budget.exercises_per_day, SANDBOX_BUDGET.exercises_per_day);
+        assert_eq!(
+            sandbox::budget(&w.db.router, &sandbox_domain.0)
+                .await
+                .unwrap(),
+            Some(budget)
+        );
+        let listed = sandbox::realms(&w.db.router, None, Some(tenant), None, (10, true))
+            .await
+            .unwrap();
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].slug, "shop-sandbox");
+        w.domains.release().await;
+    }
+}

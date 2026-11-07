@@ -115,6 +115,11 @@ pub(crate) struct Suiss {
     /// Product name to base URL.
     #[serde(default)]
     pub(crate) products: BTreeMap<String, String>,
+    /// The platform tenant's realm slug: its governing domain governs the platform-admin
+    /// surface (OP-151 m.2 M2, TN-119). Without it the platform surface finds no domain and
+    /// refuses every request.
+    #[serde(default)]
+    pub(crate) platform_realm: Option<String>,
 }
 
 impl Suiss {
@@ -129,7 +134,12 @@ impl Suiss {
         let product = |n: &String| {
             !n.is_empty() && n.len() <= 32 && n.bytes().all(|b| b.is_ascii_lowercase() || b == b'-')
         };
+        let platform = self
+            .platform_realm
+            .as_deref()
+            .is_none_or(|s| access_identity_oauth::domain::issuer::check_slug(s).is_ok());
         region
+            && platform
             && url(&self.relay)
             && url(&self.management_api)
             && self.products.iter().all(|(n, u)| product(n) && url(u))
@@ -363,7 +373,7 @@ pub(crate) enum ConfigError {
     #[error("identity.realm_base must be an https origin without a path or trailing slash (TN-10)")]
     RealmBase,
     #[error(
-        "the suiss section is required: region, and https base URLs without a trailing slash for relay, management_api and products (OP-149 m.3)"
+        "the suiss section is required: region, https base URLs without a trailing slash for relay, management_api and products (OP-149 m.3), and a realm slug as platform_realm when set (OP-151 m.2 M2)"
     )]
     Suiss,
     #[error(
@@ -577,6 +587,7 @@ mod tests {
                 relay: "https://relay.example".to_owned(),
                 management_api: "https://api.access.example".to_owned(),
                 products: BTreeMap::from([("work".to_owned(), "https://work.example".to_owned())]),
+                platform_realm: Some("platform".to_owned()),
             }),
             ..Config::default()
         }

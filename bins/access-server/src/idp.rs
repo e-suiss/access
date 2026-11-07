@@ -549,6 +549,13 @@ impl RealmKeyring {
         Self { signer, keys }
     }
 
+    /// Whether the identity signer answers (OP-148).
+    pub(crate) async fn ping(&self) -> bool {
+        access_identity_oauth::ports::Keys::ping(&self.signer)
+            .await
+            .is_ok()
+    }
+
     fn hsm(&self, realm: &[u8; 16]) -> Result<(), HsmError> {
         let kek = kek_label(realm);
         if self.keys.kek(&kek).is_err() {
