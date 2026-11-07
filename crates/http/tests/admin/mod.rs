@@ -89,6 +89,7 @@ pub struct Fake {
     pub keys: Mutex<HashMap<(Digest, [u8; 32]), PublicKey>>,
     pub ledger: Arc<Ledger>,
     pub idempotency: MemoryIdempotency,
+    pub nonces: Mutex<HashMap<Vec<u8>, String>>,
 }
 
 pub struct Tokens<'a>(&'a Fake);
@@ -252,7 +253,22 @@ impl RealmResources for Shared {
     fn commit(&self, w: ResourceWrite, caller: WriteCaller) -> Pending<'_, Written> {
         let ledger = self.0.ledger.clone();
         ledger.calls.fetch_add(1, Ordering::SeqCst);
+        // TI-8: like ADP, a nonce is spent once; another request under it is refused
+        let request = format!("{} {:?} {}", w.operation, w.key, w.body);
+        let spent = self
+            .0
+            .nonces
+            .lock()
+            .unwrap()
+            .entry(caller.statement.nonce.clone())
+            .or_insert_with(|| request.clone())
+            .clone();
         Box::pin(async move {
+            if spent != request {
+                return Ok(Written::Rejected(
+                    &access_http::problem::codes::EXERCISE_REFUSED,
+                ));
+            }
             if w.key.as_deref() == Some(HIDDEN_KEY) {
                 return Ok(Written::Rejected(&access_http::problem::codes::NOT_FOUND));
             }
@@ -324,6 +340,7 @@ impl Harness {
             keys: Mutex::new(HashMap::new()),
             ledger: Arc::new(Ledger::default()),
             idempotency: MemoryIdempotency::default(),
+            nonces: Mutex::new(HashMap::new()),
         });
         let api = Api::new(TestEnv(Shared(fake.clone())), Limits::default());
         Self { fake, api }
