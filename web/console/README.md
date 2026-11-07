@@ -50,6 +50,38 @@ your device Instance, valid for at most 60 minutes, limited to read scopes and b
 key the BFF keeps for your session; it presents that token only after your browser has signed a
 read proof for the exact request.
 
+## Screens
+
+Admin, Developer and Audit, and every screen inside them, appear only when the eligibility check
+says you can exercise one of the screen's actions (IA-5); there are no disabled placeholders.
+Authority reads go to ADP as your own `check`, signed in this browser; changes are drafted, shown
+on the signature screen as the Kernel decoded them, and sent as one Exercise.
+
+| Section   | Screen                          | Reads and changes                                                         | Spec                       |
+| --------- | ------------------------------- | ------------------------------------------------------------------------- | -------------------------- |
+| Admin     | Roles & templates               | role editor with "Not included"; `change-impact` preview; meta-actions    | §8.17.9.2, X20, E11        |
+| Admin     | People & agents                 | accounts (suspend, reactivate); own holdings; running copies' impact      | X31, §8.17.7.4, OP-142     |
+| Admin     | Sources                         | uses of a source; `schema-publications` waiting here, no accept control   | §8.17.9.3, §8.17.10.2, X21 |
+| Admin     | Restrictions & requirements     | what restrictions and requirements are; no stop-all control               | §8.17.7.5                  |
+| Admin     | Protected actions & break-glass | protected actions, emergency access as a delegation                       | §8.17.9.4                  |
+| Admin     | Offboarding                     | every channel needs an explicit choice                                    | §8.17.9.6                  |
+| Admin     | Domain                          | constitution, provider, partner authority ceilings                        | §8.17.9.7, §5.13           |
+| Admin     | Changes                         | information only                                                          | IA-2                       |
+| Admin     | Sign-in settings                | settings, branding, RP ID, apps, upstreams, keys, signals, analytics      | E34, TN-17, TN-111, §8.13  |
+| Developer | Namespaces & schemas            | pre-publication check; where each version stands; no accept control       | §8.17.10.2, E10–E12, X21   |
+| Developer | Integrations                    | apps, hooks, webhooks                                                     | §8.11                      |
+| Developer | Decision lab                    | advisory Check and Explain; sandbox domains listed as domains             | §8.17.10.4, E-2, D7        |
+| Developer | Logs                            | a recorded event at viewer depth; audit-only chain link warning           | §8.17.10.3, §9.9.2         |
+| Audit     | Records                         | a record at audit depth (`reason_admin`, StateBasis, `basis_ref`); search | OP-151 m.8 (d), (e), (g)   |
+| Audit     | Replay                          | a recorded decision evaluated again; match or mismatch                    | INV-27                     |
+| Audit     | Revocation impact               | `revocation-impact`: subtree, exposure, aftermath                         | §5.4, §8.17.7.3            |
+| Audit     | Unknown outcomes                | `compromise-impact`: uses in a window, "Result unknown"                   | RR-13, EI-22               |
+| Audit     | Export                          | an `access.audit.export` Exercise, signed here                            | OP-151 m.8 (b)             |
+
+Explanations show a reason by its class and what is needed (§8.17.8); policy content, thresholds
+and statement bodies are never rendered, deeper identities stay pseudonymous, and an unknown
+subcode reads as its class.
+
 ## Security headers
 
 Every page, asset and API answer carries a strict Content Security Policy (`default-src 'none'`,
