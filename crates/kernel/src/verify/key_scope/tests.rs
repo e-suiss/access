@@ -55,7 +55,7 @@ fn sign1(signer: &Signer, kid: [u8; 32], content_type: &str, payload: &[u8]) -> 
         Limits::CEILING,
     )
     .unwrap();
-    let tbs = to_be_signed(&prot, payload);
+    let tbs = to_be_signed(&prot, payload).unwrap();
     let sig = match signer {
         Signer::Ed(seed) => {
             use ed25519_dalek::Signer as _;

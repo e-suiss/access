@@ -44,7 +44,7 @@ fn sign1(seed: u8, content_type: &str, payload: &[u8]) -> Vec<u8> {
     )
     .unwrap();
     let sig = ed(seed)
-        .sign(&to_be_signed(&prot, payload))
+        .sign(&to_be_signed(&prot, payload).unwrap())
         .to_bytes()
         .to_vec();
     let body = Value::Array(vec![

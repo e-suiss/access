@@ -373,11 +373,22 @@ pub fn ais_protected(alg: i32, kid: &[u8]) -> Result<Vec<u8>, JsError> {
     protected(i64::from(alg), kid).map_err(js)
 }
 
-/// The `Sig_structure` (RFC 9052 §4.4) the browser signs.
+/// The `Sig_structure` (RFC 9052 §4.4) the browser signs; refused, never empty, when a part is
+/// above the profile limits.
+///
+/// # Errors
+/// `input`.
+fn sig_structure(protected: &[u8], payload: &[u8]) -> Result<Vec<u8>, Refused> {
+    to_be_signed(protected, payload).map_err(|_| "input")
+}
+
+/// See [`sig_structure`].
+///
+/// # Errors
+/// `input`.
 #[wasm_bindgen(js_name = coseToBeSigned)]
-#[must_use]
-pub fn cose_to_be_signed(protected: &[u8], payload: &[u8]) -> Vec<u8> {
-    to_be_signed(protected, payload)
+pub fn cose_to_be_signed(protected: &[u8], payload: &[u8]) -> Result<Vec<u8>, JsError> {
+    sig_structure(protected, payload).map_err(js)
 }
 
 /// See [`sign1`].

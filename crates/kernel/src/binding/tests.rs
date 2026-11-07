@@ -532,7 +532,7 @@ fn sign1(seed: u8, kid: [u8; 32], content_type: &str, payload: &[u8]) -> Vec<u8>
         Limits::CEILING,
     )
     .unwrap();
-    let tbs = cose::to_be_signed(&prot, payload);
+    let tbs = cose::to_be_signed(&prot, payload).unwrap();
     let sig = ed25519_dalek::SigningKey::from_bytes(&[seed; 32]).sign(&tbs);
     let body = Value::Array(vec![
         Value::Bytes(prot),

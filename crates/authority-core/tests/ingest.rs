@@ -301,7 +301,7 @@ fn cose(payload: Vec<u8>, content_type: &str, seed: u8) -> Vec<u8> {
     )
     .unwrap();
     let sig = signing(seed)
-        .sign(&to_be_signed(&prot, &payload))
+        .sign(&to_be_signed(&prot, &payload).unwrap())
         .to_bytes();
     let body = dcbor::encode(
         &Value::Array(vec![

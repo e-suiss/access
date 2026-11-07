@@ -311,7 +311,7 @@ fn sign1(seed: u8, content_type: &str, payload: &[u8]) -> Vec<u8> {
         Limits::CEILING,
     )
     .unwrap();
-    let sig = ed(seed).sign(&to_be_signed(&prot, payload));
+    let sig = ed(seed).sign(&to_be_signed(&prot, payload).unwrap());
     let body = Value::Array(vec![
         Value::Bytes(prot),
         Value::Map(vec![]),

@@ -69,14 +69,14 @@ fn message(prot: &[u8], payload: Option<&[u8]>, sig: &[u8]) -> Vec<u8> {
 fn ed_signed(prot: &[u8], payload: &[u8]) -> Vec<u8> {
     use ed25519_dalek::Signer as _;
     ed_key()
-        .sign(&to_be_signed(prot, payload))
+        .sign(&to_be_signed(prot, payload).unwrap())
         .to_bytes()
         .to_vec()
 }
 
 fn p_signed(prot: &[u8], payload: &[u8]) -> Vec<u8> {
     use p256::ecdsa::signature::Signer as _;
-    let sig: p256::ecdsa::Signature = p_key().sign(&to_be_signed(prot, payload));
+    let sig: p256::ecdsa::Signature = p_key().sign(&to_be_signed(prot, payload).unwrap());
     sig.normalize_s().to_bytes().to_vec()
 }
 
@@ -204,6 +204,7 @@ fn name(e: CoseError) -> &'static str {
         CoseError::Signature(SignatureError::HighS) => "high-s",
         CoseError::Signature(_) => "signature",
         CoseError::Payload => "payload",
+        CoseError::Encode(_) => "encode",
     }
 }
 
@@ -249,4 +250,23 @@ fn cose_vectors_match() {
             Err(e) => assert_eq!(Some(name(e)), c.error.as_deref(), "{}", c.id),
         }
     }
+}
+
+// CR-10, G60: a part above the profile limits has no Sig_structure; a signature over the empty
+// byte string never verifies a > 64 KiB detached payload
+#[test]
+fn oversized_detached_payload_is_refused() {
+    use ed25519_dalek::Signer as _;
+    let big = vec![0x41; Limits::MAX_STRING + 1];
+    let prot = header(Algorithm::Ed25519, [1; 32]);
+    assert_eq!(
+        to_be_signed(&prot, &big),
+        Err(CoseError::Encode(dcbor::EncodeError::Limits))
+    );
+    let empty_sig = ed_key().sign(b"").to_bytes();
+    let msg = message(&prot, None, &empty_sig);
+    assert_eq!(
+        verify_sign1_detached(&PureBackend, &msg, &big, &keys(), CT),
+        Err(CoseError::Encode(dcbor::EncodeError::Limits))
+    );
 }

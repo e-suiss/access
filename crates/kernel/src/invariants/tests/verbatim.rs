@@ -75,7 +75,11 @@ fn cose_payload_is_returned_verbatim() {
     let prot = protected();
     for payload in NON_CANONICAL {
         assert!(dcbor::decode(payload, Limits::CEILING).is_err());
-        let bytes = sign1(&prot, payload, &sign(&cose::to_be_signed(&prot, payload)));
+        let bytes = sign1(
+            &prot,
+            payload,
+            &sign(&cose::to_be_signed(&prot, payload).unwrap()),
+        );
         let v = cose::verify_sign1(&PureBackend, &bytes, &keys(), CT).unwrap();
         assert_eq!(v.payload, payload);
 
@@ -115,7 +119,7 @@ fn cose_signature_covers_the_received_bytes_only() {
     let prot = protected();
     let received = NON_CANONICAL[0];
     let canonical = [0xa2, 0x61, 0x61, 0x02, 0x61, 0x62, 0x01];
-    let sig = sign(&cose::to_be_signed(&prot, &canonical));
+    let sig = sign(&cose::to_be_signed(&prot, &canonical).unwrap());
     assert_eq!(
         cose::verify_sign1(&PureBackend, &sign1(&prot, received, &sig), &keys(), CT),
         Err(CoseError::Signature(SignatureError::Invalid))

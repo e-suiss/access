@@ -231,7 +231,8 @@ pub fn sign_sign1(
         Limits::CEILING,
     )
     .map_err(|_| SignError::Encode)?;
-    let signature = signer.sign(&to_be_signed(&protected, payload))?;
+    let signature =
+        signer.sign(&to_be_signed(&protected, payload).map_err(|_| SignError::Encode)?)?;
     let body = dcbor::encode(
         &Value::Array(alloc::vec![
             Value::Bytes(protected),

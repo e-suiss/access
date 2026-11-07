@@ -64,14 +64,14 @@ fn keys() -> KeySet {
 fn ed_signed(prot: &[u8], payload: &[u8]) -> Vec<u8> {
     use ed25519_dalek::Signer as _;
     ed_key()
-        .sign(&to_be_signed(prot, payload))
+        .sign(&to_be_signed(prot, payload).unwrap())
         .to_bytes()
         .to_vec()
 }
 
 fn p_signed(prot: &[u8], payload: &[u8]) -> Vec<u8> {
     use p256::ecdsa::signature::Signer as _;
-    let sig: p256::ecdsa::Signature = p_key().sign(&to_be_signed(prot, payload));
+    let sig: p256::ecdsa::Signature = p_key().sign(&to_be_signed(prot, payload).unwrap());
     sig.normalize_s().to_bytes().to_vec()
 }
 
@@ -226,7 +226,7 @@ fn high_s_is_rejected_for_native_artefacts() {
         p256(
             &PureBackend,
             &p256_bytes(&keys().keys[&[2; 32]]),
-            &to_be_signed(&prot, b"p"),
+            &to_be_signed(&prot, b"p").unwrap(),
             &high,
             false
         )

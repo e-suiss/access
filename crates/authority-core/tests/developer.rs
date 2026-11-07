@@ -285,7 +285,9 @@ fn sign(s: &Statement, seed: u8) -> Vec<u8> {
     )
     .unwrap();
     let payload = s.to_bytes().unwrap();
-    let sig = with.sign(&to_be_signed(&prot, &payload)).to_bytes();
+    let sig = with
+        .sign(&to_be_signed(&prot, &payload).unwrap())
+        .to_bytes();
     let body = dcbor::encode(
         &Value::Array(vec![
             Value::Bytes(prot),

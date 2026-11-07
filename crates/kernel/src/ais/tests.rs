@@ -82,7 +82,7 @@ fn sign_with(s: &Statement, key: &PublicKey, alg: i64, sig: impl Fn(&[u8]) -> Ve
     )
     .unwrap();
     let payload = s.to_bytes().unwrap();
-    let signature = sig(&to_be_signed(&prot, &payload));
+    let signature = sig(&to_be_signed(&prot, &payload).unwrap());
     let body = dcbor::encode(
         &Value::Array(vec![
             Value::Bytes(prot),

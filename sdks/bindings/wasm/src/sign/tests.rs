@@ -72,7 +72,7 @@ fn a_webcrypto_style_signature_makes_a_verifiable_ais() {
     )
     .unwrap();
     let prot = protected(-9, &kid).unwrap();
-    let signature = key.sign(&to_be_signed(&prot, &payload)).unwrap();
+    let signature = key.sign(&to_be_signed(&prot, &payload).unwrap()).unwrap();
     let ais = sign1(&prot, &payload, &signature).unwrap();
     let mut keys = KeySet::default();
     keys.insert(kid.clone().try_into().unwrap(), key.public_key())
@@ -152,4 +152,13 @@ fn malformed_input_is_refused() {
     assert!(cose_key_p256(&[0; 32], &[0; 32]).is_err());
     assert!(describe_statement(b"\x00").is_err());
     assert!(describe_intent(b"\x00").is_err());
+}
+
+// CR-10: `coseToBeSigned` refuses a payload above the limits instead of returning empty bytes
+#[test]
+fn oversized_sig_structure_is_refused() {
+    let prot = protected(-9, &[0; 32]).unwrap();
+    let big = vec![0_u8; Limits::MAX_STRING + 1];
+    assert_eq!(sig_structure(&prot, &big), Err("input"));
+    assert_ne!(sig_structure(&prot, b"p").unwrap(), Vec::<u8>::new());
 }

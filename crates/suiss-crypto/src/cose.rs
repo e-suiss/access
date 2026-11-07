@@ -190,6 +190,9 @@ pub enum CoseError {
     /// The payload is detached where it must be attached, or the other way round.
     #[error("payload presence does not match")]
     Payload,
+    /// The `Sig_structure` cannot be encoded within the profile limits.
+    #[error("Sig_structure: {0}")]
+    Encode(#[from] dcbor::EncodeError),
 }
 
 impl CoseError {
@@ -208,6 +211,7 @@ impl CoseError {
             Self::ContentType => "cose-content-type",
             Self::Signature(e) => e.code(),
             Self::Payload => "cose-payload",
+            Self::Encode(e) => e.code(),
         }
     }
 }
@@ -317,15 +321,18 @@ fn protected(bytes: &[u8]) -> Result<Protected, CoseError> {
 }
 
 /// The `Sig_structure` to be signed (RFC 9052 §4.4) with empty `external_aad`.
-#[must_use]
-pub fn to_be_signed(protected: &[u8], payload: &[u8]) -> Vec<u8> {
+///
+/// # Errors
+/// [`CoseError::Encode`] when a part is above the profile limits (CR-10); there is no
+/// fallback structure.
+pub fn to_be_signed(protected: &[u8], payload: &[u8]) -> Result<Vec<u8>, CoseError> {
     let s = Value::Array(alloc::vec![
         Value::text("Signature1"),
         Value::Bytes(protected.to_vec()),
         Value::Bytes(Vec::new()),
         Value::Bytes(payload.to_vec()),
     ]);
-    dcbor::encode(&s, Limits::CEILING).unwrap_or_default()
+    Ok(dcbor::encode(&s, Limits::CEILING)?)
 }
 
 /// Verifies a tagged `COSE_Sign1` with an attached payload, signed by the producer itself:
@@ -388,7 +395,7 @@ pub fn verify_sign1_with(
     if !key.fits(h.alg) {
         return Err(CoseError::KeyType);
     }
-    let tbs = to_be_signed(&msg.protected, payload);
+    let tbs = to_be_signed(&msg.protected, payload)?;
     match key {
         PublicKey::Ed25519(pk) => ed25519(backend, pk, &tbs, &msg.signature)?,
         PublicKey::P256(pk) => p256(backend, pk, &tbs, &msg.signature, native)?,

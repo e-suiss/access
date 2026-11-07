@@ -306,7 +306,9 @@ fn sign(s: &Statement, seed: u8) -> Vec<u8> {
     )
     .unwrap();
     let payload = s.to_bytes().unwrap();
-    let sig = with.sign(&to_be_signed(&prot, &payload)).to_bytes();
+    let sig = with
+        .sign(&to_be_signed(&prot, &payload).unwrap())
+        .to_bytes();
     let body = dcbor::encode(
         &Value::Array(vec![
             Value::Bytes(prot),
@@ -962,7 +964,9 @@ fn sign_claim(st: &access_kernel::claim::Statement, seed: u8) -> Vec<u8> {
     )
     .unwrap();
     let payload = st.to_bytes().unwrap();
-    let sig = with.sign(&to_be_signed(&prot, &payload)).to_bytes();
+    let sig = with
+        .sign(&to_be_signed(&prot, &payload).unwrap())
+        .to_bytes();
     let body = dcbor::encode(
         &Value::Array(vec![
             Value::Bytes(prot),
@@ -3550,7 +3554,7 @@ async fn a_projection_carries_a_signed_pap() {
         .unwrap();
         let payload = p.to_bytes().unwrap();
         let sig = signing(ROOT_KEY)
-            .sign(&to_be_signed(&prot, &payload))
+            .sign(&to_be_signed(&prot, &payload).unwrap())
             .to_bytes()
             .to_vec();
         let body = dcbor::encode(
@@ -3939,7 +3943,9 @@ fn sign1(seed: u8, content_type: &str, payload: &[u8]) -> Vec<u8> {
         Limits::CEILING,
     )
     .unwrap();
-    let sig = signing(seed).sign(&to_be_signed(&prot, payload)).to_bytes();
+    let sig = signing(seed)
+        .sign(&to_be_signed(&prot, payload).unwrap())
+        .to_bytes();
     let body = dcbor::encode(
         &Value::Array(vec![
             Value::Bytes(prot),

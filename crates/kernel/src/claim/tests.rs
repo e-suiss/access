@@ -48,7 +48,7 @@ fn sign(payload: &[u8], with: &ed25519_dalek::SigningKey, ct: &str) -> Vec<u8> {
         Limits::CEILING,
     )
     .unwrap();
-    let sig = with.sign(&to_be_signed(&prot, payload)).to_bytes();
+    let sig = with.sign(&to_be_signed(&prot, payload).unwrap()).to_bytes();
     let body = dcbor::encode(
         &Value::Array(vec![
             Value::Bytes(prot),

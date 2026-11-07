@@ -82,3 +82,14 @@ fn signed_and_cosigned_checkpoint_verifies() {
         SignError::Algorithm
     );
 }
+
+// CR-10: the signer refuses a payload with no Sig_structure instead of signing empty bytes
+#[test]
+fn oversized_payload_is_not_signed() {
+    let (signer, _) = SoftSigner::generate_ed25519().unwrap();
+    let big = alloc::vec![0_u8; crate::dcbor::Limits::MAX_STRING + 1];
+    assert!(matches!(
+        sign_sign1(&signer, [4; 32], "application/test+cbor", &big),
+        Err(SignError::Encode)
+    ));
+}
