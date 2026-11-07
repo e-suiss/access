@@ -1,6 +1,7 @@
 //! The adapters over a temporary directory and an in-process KEK.
 
 use std::collections::BTreeSet;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use access_kernel::verify::key_scope::{KeyUsage, SpecVersions};
 use suiss_crypto::envelope::SoftKek;
@@ -153,4 +154,50 @@ async fn peer_credentials_name_the_connecting_process() {
     let cred = server.peer_cred().unwrap();
     assert_eq!(cred.uid(), uid);
     assert_eq!(cred.pid(), Some(i32::try_from(std::process::id()).unwrap()));
+}
+
+static FRAME_SENT: AtomicBool = AtomicBool::new(false);
+static READ_EARLY: AtomicBool = AtomicBool::new(false);
+
+fn watched_clock() -> u64 {
+    if !FRAME_SENT.load(Ordering::SeqCst) {
+        READ_EARLY.store(true, Ordering::SeqCst);
+    }
+    now_ms()
+}
+
+// CR-25, CMP-22a: the signer's time is read after the request frame arrives, never at accept;
+// a caller holding the connection open cannot make a later signature carry an earlier time
+#[tokio::test]
+async fn the_clock_is_read_after_the_frame() {
+    let dir = temp("clock");
+    let service = started(&dir);
+    let (mut server, mut client) = UnixStream::pair().unwrap();
+    let answering =
+        tokio::spawn(
+            async move { answer(&mut server, &service, watched_clock, READ_TIMEOUT).await },
+        );
+    tokio::task::yield_now().await;
+    FRAME_SENT.store(true, Ordering::SeqCst);
+    let frame = protocol::encode_request_traced(&Request::Metadata(Digest([7; 32])), None).unwrap();
+    client.write_all(&frame).await.unwrap();
+    answering.await.unwrap().unwrap();
+    let mut header = [0_u8; 4];
+    client.read_exact(&mut header).await.unwrap();
+    assert!(!READ_EARLY.load(Ordering::SeqCst));
+}
+
+// CMP-22a: a caller that never sends its frame is closed after the read timeout instead of
+// holding a connection task forever
+#[tokio::test]
+async fn a_silent_caller_times_out() {
+    let dir = temp("silent");
+    let service = started(&dir);
+    let (mut server, mut client) = UnixStream::pair().unwrap();
+    client.write_all(&[0, 0]).await.unwrap();
+    let answered = answer(&mut server, &service, now_ms, Duration::from_millis(20)).await;
+    assert_eq!(
+        answered.map_err(|e| e.kind()),
+        Err(std::io::ErrorKind::TimedOut)
+    );
 }

@@ -16,7 +16,7 @@ suiss-crypto = { workspace = true, features = ["signer", "aead"] }
 thiserror = { workspace = true }
 access-telemetry = { workspace = true }
 tracing = { workspace = true, features = ["std"] }
-tokio = { workspace = true, features = ["net", "io-util", "rt"] }
+tokio = { workspace = true, features = ["net", "io-util", "rt", "time"] }
 
 [dev-dependencies]
 suiss-crypto = { workspace = true, features = ["signer", "aead", "testing"] }

@@ -107,3 +107,24 @@ async fn the_socket_serves_the_cell_key() {
     assert!(DirVault::new(&dir).cell().unwrap().is_some());
     assert_eq!(DirVault::new(&dir).all().unwrap().len(), 0);
 }
+
+// CMP-22b: a caller that never sends its frame is closed after the read timeout instead of
+// holding a connection task forever
+#[tokio::test]
+async fn a_silent_caller_times_out() {
+    let dir = temp("silent");
+    let service = Service::start(
+        SealedFactory::new(SoftKek::new("realm-kek-1", [1; 32])),
+        DirVault::new(&dir),
+        Policy::REALM,
+    )
+    .unwrap();
+    let service = Arc::new(Mutex::new(service));
+    let (mut server, mut client) = UnixStream::pair().unwrap();
+    client.write_all(&[0, 0]).await.unwrap();
+    let answered = answer(&mut server, &service, now_ms, Duration::from_millis(20)).await;
+    assert_eq!(
+        answered.map_err(|e| e.kind()),
+        Err(std::io::ErrorKind::TimedOut)
+    );
+}

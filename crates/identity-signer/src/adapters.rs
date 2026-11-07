@@ -4,6 +4,7 @@
 
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use access_crypto::jose::JwsAlg;
 use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
@@ -185,23 +186,38 @@ pub fn draw() -> u64 {
     access_crypto::random::bytes::<8>().map_or(0, u64::from_le_bytes)
 }
 
+/// How long a caller may take to send its whole request frame (CMP-22b).
+pub const READ_TIMEOUT: Duration = Duration::from_secs(5);
+
+async fn read_frame(stream: &mut UnixStream) -> Result<Result<Vec<u8>, ()>, std::io::Error> {
+    let mut header = [0_u8; 4];
+    stream.read_exact(&mut header).await?;
+    let Ok(len) = protocol::frame_len(header) else {
+        return Ok(Err(()));
+    };
+    let mut body = vec![0_u8; len];
+    stream.read_exact(&mut body).await?;
+    Ok(Ok(body))
+}
+
 /// CR-28: the service runs on the blocking pool, since its key store calls (PKCS#11, KMS) block;
-/// a stuck HSM session holds a blocking thread, never the runtime's request tasks.
+/// a stuck HSM session holds a blocking thread, never the runtime's request tasks. A caller that
+/// does not send its frame within `deadline` is closed unanswered.
 async fn answer<F, V>(
     stream: &mut UnixStream,
     service: &Arc<Mutex<Service<F, V>>>,
     clock: fn() -> u64,
+    deadline: Duration,
 ) -> Result<(), std::io::Error>
 where
     F: KeyFactory + Send + 'static,
     V: Vault + Send + 'static,
 {
-    let mut header = [0_u8; 4];
-    stream.read_exact(&mut header).await?;
-    let response = match protocol::frame_len(header) {
-        Ok(len) => {
-            let mut body = vec![0_u8; len];
-            stream.read_exact(&mut body).await?;
+    let frame = tokio::time::timeout(deadline, read_frame(stream))
+        .await
+        .map_err(|_| std::io::Error::from(std::io::ErrorKind::TimedOut))??;
+    let response = match frame {
+        Ok(body) => {
             match protocol::decode_request_traced(&body) {
                 Ok((request, traceparent)) => {
                     let service = Arc::clone(service);
@@ -227,7 +243,7 @@ where
                 Err(_) => Response::Error(String::from("signer-frame")),
             }
         }
-        Err(_) => Response::Error(String::from("signer-frame")),
+        Err(()) => Response::Error(String::from("signer-frame")),
     };
     let out =
         protocol::encode_response(&response).map_err(|_| std::io::Error::other("signer-frame"))?;
@@ -258,7 +274,7 @@ where
         }
         let service = Arc::clone(&service);
         tokio::spawn(async move {
-            let _ = answer(&mut stream, &service, clock).await;
+            let _ = answer(&mut stream, &service, clock, READ_TIMEOUT).await;
         });
     }
 }
