@@ -23,7 +23,7 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: read
-      actions: read # the latest nightly DRT summary artifact
+      actions: read # the latest nightly DRT summary artifact and the tagged commit's CI runs
     outputs:
       drt-run: ${{ steps.drt.outputs.run }}
       drt-commit: ${{ steps.drt.outputs.commit }}
@@ -32,6 +32,22 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 0 # compare the tagged commit with the commit the nightly DRT ran on
+      - name: The tagged commit is on main and its CI passed
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+        run: |
+          on_main="$(gh api "repos/$REPOSITORY/compare/main...$SHA" --jq .status)"
+          case "$on_main" in
+            identical|behind) ;;
+            *) echo "::error::$SHA is not an ancestor of main (compare: $on_main)"; exit 1 ;;
+          esac
+          passed="$(gh api "repos/$REPOSITORY/actions/workflows/ci.yml/runs?head_sha=$SHA&branch=main&event=push&status=success" --jq '.total_count')"
+          if [[ "$passed" -lt 1 ]]; then
+            echo "::error::no successful CI run on main for $SHA"
+            exit 1
+          fi
       - uses: ./.github/actions/setup
         with:
           cache: "false"
@@ -59,9 +75,22 @@ jobs:
         run: just f0
       - name: Kernel on the vectors
         run: cargo test --locked -p esuiss-access-kernel
-      # OP-119 m.3, m.6
+      # OP-119 m.3, m.6: every algebra theorem is marked proved, and the model builds with no
+      # theorem marked proved depending on sorry or an axiom outside the allowed set
       - name: Lean algebra proofs are proved
         run: python3 -I .github/scripts/f0-drt.py lean conformance/lean/proofs.toml
+      # F-2
+      - name: Install the pinned Lean toolchain
+        run: scripts/lean-fetch.sh "$RUNNER_TEMP/lean" >> "$GITHUB_PATH"
+      - name: Build the algebra model and its proofs
+        working-directory: conformance/lean
+        run: lake build --wfail AccessAlgebra vectors
+      - name: No theorem marked proved depends on sorry
+        working-directory: conformance/lean
+        run: ./check-axioms.sh
+      - name: Model against the Kernel algebra vectors
+        working-directory: conformance/lean
+        run: lake exe vectors ../vectors/core/*/*.json
       # OP-119 m.6: the latest nightly DRT had zero mismatches over at least 10^7 inputs
       - name: Latest nightly DRT
         id: drt

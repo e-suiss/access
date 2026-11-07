@@ -17,8 +17,44 @@ env:
   IMAGE: ghcr.io/e-suiss/access
 
 jobs:
+  # OP-68, SA-59: nothing is built or published unless the tagged commit is on main, its CI
+  # run passed, and the repository rules (rule coverage included) hold at the tag
+  gate:
+    name: gate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      actions: read # the CI runs of the tagged commit
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: The tagged commit is on main and its CI passed
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+        run: |
+          on_main="$(gh api "repos/$REPOSITORY/compare/main...$SHA" --jq .status)"
+          case "$on_main" in
+            identical|behind) ;;
+            *) echo "::error::$SHA is not an ancestor of main (compare: $on_main)"; exit 1 ;;
+          esac
+          passed="$(gh api "repos/$REPOSITORY/actions/workflows/ci.yml/runs?head_sha=$SHA&branch=main&event=push&status=success" --jq '.total_count')"
+          if [[ "$passed" -lt 1 ]]; then
+            echo "::error::no successful CI run on main for $SHA"
+            exit 1
+          fi
+      - uses: ./.github/actions/setup
+        with:
+          cache: "false"
+      - name: Repository rules, rule coverage included (OP-62, SA-59)
+        run: just rules
+
   build:
     name: build (${{ matrix.arch }})
+    needs: gate
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 60
     permissions:
@@ -118,6 +154,7 @@ jobs:
   # F-8
   test:
     name: test
+    needs: gate
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
@@ -259,6 +296,7 @@ jobs:
 
   image:
     name: image (${{ matrix.arch }})
+    needs: gate
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 60
     permissions:
