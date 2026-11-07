@@ -491,6 +491,21 @@ pub(crate) fn migration_findings(sql: &str) -> Vec<(usize, String)> {
     out
 }
 
+/// OP-138, OP-55: an index built `CONCURRENTLY` cannot run inside a transaction, so its
+/// migration starts with sqlx's `-- no-transaction` directive and holds nothing else that needs
+/// one. `None` when `raw` (the file as written) is fine.
+pub(crate) fn concurrently_finding(raw: &str) -> Option<String> {
+    let code = strip_sql_comments(raw).to_ascii_uppercase();
+    let concurrent = code
+        .split(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
+        .any(|w| w == "CONCURRENTLY");
+    let detached = raw.lines().next().map(str::trim) == Some("-- no-transaction");
+    (concurrent && !detached).then(|| {
+        "`CONCURRENTLY` runs outside a transaction: start the migration with `-- no-transaction` (OP-138)"
+            .to_owned()
+    })
+}
+
 pub(crate) fn check_migrations(root: &Path) -> Result<Vec<Violation>, String> {
     let mut out = Vec::new();
     for path in walk(root)? {
@@ -505,9 +520,13 @@ pub(crate) fn check_migrations(root: &Path) -> Result<Vec<Violation>, String> {
                 ));
             }
             if path.extension().and_then(|e| e.to_str()) == Some("sql") {
-                let sql = strip_sql_comments(&read(&path)?);
+                let raw = read(&path)?;
+                let sql = strip_sql_comments(&raw);
                 for (at, msg) in migration_findings(&sql) {
                     out.push(violation(MIGRATION, &rel_path, line_at(&sql, at), msg));
+                }
+                if let Some(msg) = concurrently_finding(&raw) {
+                    out.push(violation(MIGRATION, &rel_path, 1, msg));
                 }
             }
         } else if rel_path.starts_with("crates/store/src/")
@@ -873,6 +892,22 @@ mod tests {
         ] {
             assert_eq!(migration_findings(bad).len(), 1, "{bad}");
         }
+    }
+
+    // OP-138, OP-55: an index built CONCURRENTLY lives in a migration without a transaction
+    #[test]
+    fn concurrent_indexes_run_outside_a_transaction() {
+        let detached = "-- no-transaction\nCREATE INDEX CONCURRENTLY a_x ON access.a (x);\n";
+        assert_eq!(concurrently_finding(detached), None);
+        let plain = "SET LOCAL ROLE access_migrator;\nCREATE INDEX a_x ON access.a (x);\n";
+        assert_eq!(concurrently_finding(plain), None);
+        let commented = "-- builds it CONCURRENTLY later\nCREATE INDEX a_x ON access.a (x);\n";
+        assert_eq!(concurrently_finding(commented), None);
+        let inside =
+            "SET LOCAL ROLE access_migrator;\nCREATE INDEX CONCURRENTLY a_x ON access.a (x);\n";
+        assert!(concurrently_finding(inside).is_some());
+        let late = "-- OP-138\n-- no-transaction\nCREATE INDEX CONCURRENTLY a_x ON access.a (x);\n";
+        assert!(concurrently_finding(late).is_some());
     }
 
     // OP-17, OP-73

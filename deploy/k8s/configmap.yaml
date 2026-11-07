@@ -52,3 +52,12 @@ data:
     module = "/opt/pkcs11/module.so"
     token = "access"
     pin_file = "/run/secrets/hsm-pin"
+  # OP-55, OP-138: the migration job's configuration, the database and its migration login only
+  migrate.toml: |
+    [database]
+    host = "access-db.access-db.svc"
+    port = 5432
+    name = "access"
+    root_cert_file = "/run/tls/ca.crt"
+    durability = "replicated"
+    migrator = { user = "access_migrator_login", password_file = "/run/secrets/db-migrator", pool = 1 }

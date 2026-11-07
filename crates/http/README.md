@@ -54,3 +54,32 @@ changed here only for `admin` groups. The console session policy lives at most 1
 idles at most 15 minutes and is always bound to the client's network (`asn` or `ip`). Changing
 the RP ID makes every registered passkey unusable: the write must carry
 `acknowledge_passkey_loss` equal to their count.
+
+### Platform resources
+
+The platform surface manages tenants and realms as metadata. It has no route into a realm's
+resources, settings, accounts, clients or authority state, and its answers carry only the
+members listed for each resource: an operator reads no realm content.
+
+| Resource | Paths |
+|---|---|
+| Tenants | `tenants`, `tenants/{tenant_id}` |
+| Realms | `tenants/{tenant_id}/realms` (list, create), `realms/{realm_slug}` (metadata) |
+| Sandbox domains | `tenants/{tenant_id}/sandbox-domains` (list, create) |
+| Operator health | `operator/health` |
+
+Writes take the same two steps against `POST /admin/v1/platform/intents`; the AIS is signed with
+a live Instance key of the platform realm's governing domain (`suiss.platform_realm` in the
+configuration) and compiles to one `idp.platform.*` Exercise there.
+
+Creating a realm opens its governing domain with a Genesis whose founding root is the caller's:
+`{"joint": {"k": 2, "parties": [...]}}` is recommended; `{"sole": ...}` needs
+`"acknowledge_no_recovery": true`. The answer carries `genesis.digest` (the new domain's id),
+the root's shape and `genesis.recovery`, which is `not_available` while no recovery entry can
+be declared. A realm's `signing_available_at` is when its first key may sign at the latest
+(creation plus the 90-minute publish lead); `key_state` says whether its keys are `pending`,
+`published` or `signing`.
+
+A sandbox domain is a realm whose governing domain is a separate authority domain; it carries
+the sandbox template's fixed daily budget of Exercises and projections. No request brings
+authority between a sandbox domain and a production one, in either direction.

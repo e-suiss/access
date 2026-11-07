@@ -198,3 +198,42 @@ pub async fn migrate(migrator: &PgPool) -> Result<(), StoreError> {
         .await
         .map_err(|e| StoreError::Unsafe(e.to_string()))
 }
+
+/// One migration a run applied.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Applied {
+    /// Its version, the file name's timestamp.
+    pub version: i64,
+    /// Its description.
+    pub description: String,
+}
+
+/// Runs the migrations as [`migrate`] does and returns the ones this run applied, in order
+/// (OP-55, OP-138): the migration job prints them.
+///
+/// # Errors
+/// [`StoreError`].
+pub async fn migrate_listed(migrator: &PgPool) -> Result<Vec<Applied>, StoreError> {
+    use sqlx::migrate::Migrate as _;
+    let failed = |e: sqlx::migrate::MigrateError| StoreError::Unsafe(e.to_string());
+    let table = &crate::MIGRATOR.table_name;
+    let before: std::collections::BTreeSet<i64> = {
+        let mut conn = migrator.acquire().await?;
+        conn.ensure_migrations_table(table).await.map_err(failed)?;
+        conn.list_applied_migrations(table)
+            .await
+            .map_err(failed)?
+            .into_iter()
+            .map(|m| m.version)
+            .collect()
+    };
+    migrate(migrator).await?;
+    Ok(crate::MIGRATOR
+        .iter()
+        .filter(|m| m.migration_type.is_up_migration() && !before.contains(&m.version))
+        .map(|m| Applied {
+            version: m.version,
+            description: m.description.to_string(),
+        })
+        .collect())
+}

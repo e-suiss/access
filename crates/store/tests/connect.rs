@@ -76,3 +76,20 @@ async fn the_migration_job_runs_as_the_migrator_and_is_idempotent() {
     // OP-12: the application role cannot migrate
     assert!(migrate(&db.app).await.is_err());
 }
+
+// OP-55, OP-138: the migration job reports what it applied, oldest first; a second run applies
+// nothing and reports nothing
+#[tokio::test]
+async fn the_migration_job_lists_what_it_applied() {
+    let db = unmigrated().await.unwrap();
+    let first = access_store::connect::migrate_listed(&db.migrator)
+        .await
+        .unwrap();
+    let known: Vec<i64> = access_store::MIGRATOR.iter().map(|m| m.version).collect();
+    assert_eq!(first.iter().map(|a| a.version).collect::<Vec<_>>(), known);
+    assert!(first.iter().any(|a| a.description == "m2 sandbox domains"));
+    let second = access_store::connect::migrate_listed(&db.migrator)
+        .await
+        .unwrap();
+    assert_eq!(second, Vec::new());
+}

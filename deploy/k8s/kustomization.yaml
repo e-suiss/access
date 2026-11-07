@@ -10,3 +10,4 @@ resources:
   - service.yaml
   - poddisruptionbudget.yaml
   - networkpolicy.yaml
+  - migrate-job.yaml

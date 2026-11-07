@@ -1,0 +1,31 @@
+[package]
+name = "access-cli"
+description = "Access operator and developer command line (OP-151 m.3 (h)): the schema migration job, and the admin, GitOps and replay commands."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[[bin]]
+name = "access-cli"
+path = "src/main.rs"
+
+[dependencies]
+access-crypto = { workspace = true }
+access-store = { workspace = true }
+clap = { workspace = true, features = ["std", "derive", "help", "usage", "error-context"] }
+figment = { workspace = true, features = ["env", "toml"] }
+serde = { workspace = true, features = ["derive", "std"] }
+serde_json = { workspace = true, features = ["std"] }
+thiserror = { workspace = true, features = ["std"] }
+tokio = { workspace = true, features = ["macros", "net", "rt-multi-thread", "time"] }
+tracing = { workspace = true, features = ["std"] }
+access-telemetry = { workspace = true }
+
+[dev-dependencies]
+access-store = { workspace = true, features = ["testing"] }
+
+[lints]
+workspace = true

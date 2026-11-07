@@ -128,7 +128,7 @@ spec:
             volumeAttributes:
               csi.cert-manager.io/issuer-name: access-cell-ca
               csi.cert-manager.io/issuer-kind: ClusterIssuer
-              csi.cert-manager.io/dns-names: access-server.access.svc,access-server.access.svc.cluster.local
+              csi.cert-manager.io/dns-names: access-server.access.svc,access-server.access.svc.cluster.local,api.access.example
               csi.cert-manager.io/key-algorithm: ECDSA
               csi.cert-manager.io/fs-group: "65532"
               csi.cert-manager.io/certificate-file: tls.crt
