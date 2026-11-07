@@ -233,7 +233,7 @@ async fn a_draft_returns_the_intent_and_changes_nothing() {
     for bad in [
         r#"{"operation":"getClient"}"#,
         r#"{"operation":"setPassword"}"#,
-        r#"{}"#,
+        "{}",
     ] {
         let (r, body) = send(&router, draft(bad)).await;
         assert_eq!(body["code"], "unknown-operation", "{bad}");
