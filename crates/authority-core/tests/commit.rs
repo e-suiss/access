@@ -7471,3 +7471,89 @@ async fn traces_never_reach_the_record() {
     );
     assert_eq!(traced, records(&quiet_db, d).await);
 }
+
+// ---------------------------------------------------------------- review fixes (F1)
+
+/// The outcome of `req` signed by `seed`, `None` when it is rejected before a decision.
+async fn outcome_of(a: &Led, req: Request, seed: u8) -> Option<Outcome> {
+    a.exercise(&incoming(req, seed))
+        .await
+        .ok()
+        .map(|r| r.decision.outcome)
+}
+
+/// The self-anchor the `party_register` with `nonce` opened.
+fn self_anchor_of(d: Digest, nonce: u8) -> ExerciseBasis {
+    ExerciseBasis::Anchor(meta::object_id(
+        &meta::exercise_id(&d, &[nonce; 16]).unwrap(),
+        kind::ANCHOR,
+        0,
+    ))
+}
+
+fn hex(id: Id) -> String {
+    id.0.iter().map(|b| format!("{b:02x}")).collect()
+}
+
+// E6, §7.9.2.5: a Party's self-anchor covers its own `access.party:[hex]` subtree only; a
+// domain action on another namespace, another Party's subtree or the audit export is not
+// covered by it
+#[tokio::test]
+async fn e6_a_self_anchor_covers_only_its_party() {
+    let db = fresh().await.unwrap();
+    let (a, d, _, _) = audited_domain(&db).await;
+    let alice_anchor = self_anchor_of(d, 3);
+    assert_ne!(
+        outcome_of(
+            &a,
+            shop_request(d, 40, Mode::Commit, alice_anchor),
+            ALICE_KEY
+        )
+        .await,
+        Some(Outcome::Allow)
+    );
+    assert_ne!(
+        outcome_of(
+            &a,
+            export_request(d, 41, alice_anchor, "redacted"),
+            ALICE_KEY
+        )
+        .await,
+        Some(Outcome::Allow)
+    );
+    let mut bobs = shop_request(d, 42, Mode::Commit, alice_anchor);
+    bobs.intent.resources[0] = ResourceRef {
+        namespace: "access.party".to_owned(),
+        path: vec![hex(BOB)],
+        incarnation: 0,
+    };
+    assert_ne!(outcome_of(&a, bobs, ALICE_KEY).await, Some(Outcome::Allow));
+    let mut own = shop_request(d, 43, Mode::Commit, alice_anchor);
+    own.intent.resources[0] = ResourceRef {
+        namespace: "access.party".to_owned(),
+        path: vec![hex(ALICE), "profile".to_owned()],
+        incarnation: 0,
+    };
+    assert_eq!(outcome_of(&a, own, ALICE_KEY).await, Some(Outcome::Allow));
+}
+
+// E6, §7.9.2.5: a Resource Anchor covers its selector only; the Domain meta-anchor covers
+// the domain's actions
+#[tokio::test]
+async fn e6_resource_anchor_stays_scoped_domain_anchor_covers_the_domain() {
+    let db = fresh().await.unwrap();
+    let (a, d, _, _) = audited_domain(&db).await;
+    let shop = ExerciseBasis::Anchor(meta::object_id(&d, kind::ANCHOR, 1));
+    assert_eq!(
+        outcome_of(&a, shop_request(d, 40, Mode::Commit, shop), ROOT_KEY).await,
+        Some(Outcome::Allow)
+    );
+    let mut other = shop_request(d, 41, Mode::Commit, shop);
+    other.intent.resources[0].namespace = "ledger".to_owned();
+    assert_ne!(outcome_of(&a, other, ROOT_KEY).await, Some(Outcome::Allow));
+    let domain = ExerciseBasis::Anchor(meta::meta_anchor(&d));
+    assert_eq!(
+        outcome_of(&a, shop_request(d, 42, Mode::Commit, domain), ROOT_KEY).await,
+        Some(Outcome::Allow)
+    );
+}

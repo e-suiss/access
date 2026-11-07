@@ -360,6 +360,30 @@ pub(crate) fn read<T: Canonical>(
         .and_then(|v| T::from_value(&v).ok())
 }
 
+/// The resources an Anchor's scope covers: a Resource Anchor its selector, a Party's
+/// self-anchor its own `access.party:[hex]` subtree, the domain everything.
+// E6, §7.9.2.5
+fn anchor_selector(scope: &meta::AnchorScope) -> Option<ResourceSelector> {
+    match scope {
+        meta::AnchorScope::Resource(r) => Some(r.clone()),
+        meta::AnchorScope::Party(p) => Some(ResourceSelector::Structural(Structural {
+            namespace: String::from("access.party"),
+            prefix: vec![hex16(p)],
+            kind: None,
+            attrs: BTreeMap::new(),
+        })),
+        meta::AnchorScope::Domain => None,
+    }
+}
+
+fn hex16(id: &Id) -> String {
+    use std::fmt::Write as _;
+    id.0.iter().fold(String::with_capacity(32), |mut s, b| {
+        let _ = write!(s, "{b:02x}");
+        s
+    })
+}
+
 /// The lineage of a basis as Kernel hops, from the Anchor down to the basis Grant; an ended
 /// Grant anywhere above makes the hops below it `Revoked` (INV-5).
 pub(crate) fn lineage_hops(
@@ -1503,12 +1527,8 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
                 .filter(|s| s.ended.is_none())
                 .and_then(|s| {
                     let terms = meta::root_requirements(&s, actor.as_ref()?)?;
-                    let scope = match s.scope {
-                        meta::AnchorScope::Resource(r) => Some(r),
-                        _ => None,
-                    };
                     Some((
-                        vec![exact_hop(&req.intent, scope, terms)],
+                        vec![exact_hop(&req.intent, anchor_selector(&s.scope), terms)],
                         BTreeSet::from([Capacity::Own]),
                     ))
                 })
