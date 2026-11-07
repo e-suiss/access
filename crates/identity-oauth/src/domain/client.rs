@@ -199,8 +199,8 @@ impl ClientAuthError {
 /// The JWT bearer client assertion type (RFC 7523 §2.2).
 pub const ASSERTION_TYPE: &str = "urn:ietf:params:oauth:client-assertion-type:jwt-bearer";
 
-/// What a request presents to authenticate its client.
-#[derive(Clone, Debug, PartialEq, Eq)]
+/// What a request presents to authenticate its client. `Debug` shows no secret or assertion.
+#[derive(Clone, PartialEq, Eq)]
 pub enum Presented {
     /// Only `client_id`: a public client.
     Id(String),
@@ -218,6 +218,24 @@ pub enum Presented {
         /// The compact JWT.
         assertion: String,
     },
+}
+
+impl core::fmt::Debug for Presented {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::Id(id) => f.debug_tuple("Id").field(id).finish(),
+            Self::Basic { client_id, .. } => f
+                .debug_struct("Basic")
+                .field("client_id", client_id)
+                .field("secret", &"[redacted]")
+                .finish(),
+            Self::Assertion { client_id, .. } => f
+                .debug_struct("Assertion")
+                .field("client_id", client_id)
+                .field("assertion", &"[redacted]")
+                .finish(),
+        }
+    }
 }
 
 impl Presented {

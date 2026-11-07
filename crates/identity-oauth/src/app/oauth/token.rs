@@ -30,13 +30,22 @@ use crate::domain::tokens::{CodeDetails, GrantDetails};
 use crate::ports::Unavailable;
 use crate::ports::oauth::OAuthTx;
 
-/// What a token request presents besides its form.
-#[derive(Clone, Copy, Debug)]
+/// What a token request presents besides its form. `Debug` shows neither credential.
+#[derive(Clone, Copy)]
 pub struct TokenHttp<'a> {
     /// `Authorization`, when sent.
     pub authorization: Option<&'a str>,
     /// Every `DPoP` header value.
     pub dpop: &'a [&'a str],
+}
+
+impl core::fmt::Debug for TokenHttp<'_> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("TokenHttp")
+            .field("authorization", &self.authorization.map(|_| "[redacted]"))
+            .field("dpop", &self.dpop.len())
+            .finish()
+    }
 }
 
 fn invalid_grant() -> Reply {

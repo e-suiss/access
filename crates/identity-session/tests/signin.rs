@@ -1533,3 +1533,19 @@ async fn a_stored_mfa_requirement_cannot_be_skipped() {
         matches!(step, Step::Continue { ref needs, .. } if needs == &[Requirement::EnrollSecondFactor])
     );
 }
+
+// OP-64 (S-4): a password step prints neither the password nor who or where it came from
+#[test]
+fn password_steps_do_not_print_the_password() {
+    let step = access_identity_session::app::signin::PasswordStep {
+        identifier: "ada@example.com",
+        password: "correct horse battery staple",
+        ip: IpAddr::V4(Ipv4Addr::new(198, 51, 100, 7)),
+        correlation: "req-1",
+    };
+    let printed = format!("{step:?}");
+    for secret in ["correct horse", "ada@example.com", "198.51.100.7"] {
+        assert!(!printed.contains(secret), "{printed}");
+    }
+    assert!(printed.contains("req-1"));
+}

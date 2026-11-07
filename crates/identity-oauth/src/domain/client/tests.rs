@@ -189,3 +189,20 @@ fn only_an_opted_in_client_reads_the_public_sector() {
     .unwrap();
     assert_eq!(public.sector(), PUBLIC_SECTOR);
 }
+
+// OP-64 (S-4): a presented client credential never prints its secret or assertion
+#[test]
+fn presented_credentials_do_not_print_their_secrets() {
+    let basic = Presented::Basic {
+        client_id: String::from("cli_x"),
+        secret: String::from("s3cret-value"),
+    };
+    let assertion = Presented::Assertion {
+        client_id: None,
+        assertion: String::from("eyJhbGciOiJFUzI1NiJ9.eyJzdWIiOiJ4In0.sig"),
+    };
+    let printed = format!("{basic:?} {assertion:?}");
+    assert!(!printed.contains("s3cret-value"), "{printed}");
+    assert!(!printed.contains("eyJ"), "{printed}");
+    assert!(printed.contains("cli_x"));
+}

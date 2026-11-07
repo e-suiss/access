@@ -494,3 +494,16 @@ fn a_realm_key_refuses_authority_tokens() {
     );
     assert!(ring.sign("JWT", authority, LEAD).is_ok());
 }
+
+// OP-64 (A-13): a signed token prints its key and algorithm, never the token
+#[test]
+fn signed_tokens_do_not_print_the_token() {
+    let signed = Signed {
+        token: String::from("eyJhbGciOiJFUzI1NiJ9.secret-claims.sig"),
+        kid: [4; 32],
+        alg: JwsAlg::Es256,
+    };
+    let printed = format!("{signed:?}");
+    assert!(!printed.contains("secret-claims"), "{printed}");
+    assert!(printed.contains("Es256"));
+}

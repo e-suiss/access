@@ -32,8 +32,8 @@ pub struct Saved {
     pub sealed: Option<Vec<u8>>,
 }
 
-/// A signed token.
-#[derive(Clone, Debug, PartialEq, Eq)]
+/// A signed token. `Debug` shows the key and algorithm, never the token.
+#[derive(Clone, PartialEq, Eq)]
 pub struct Signed {
     /// Compact JWS.
     pub token: String,
@@ -41,6 +41,16 @@ pub struct Signed {
     pub kid: [u8; 32],
     /// The algorithm.
     pub alg: JwsAlg,
+}
+
+impl core::fmt::Debug for Signed {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("Signed")
+            .field("token", &"[redacted]")
+            .field("kid", &self.kid)
+            .field("alg", &self.alg)
+            .finish()
+    }
 }
 
 /// What a schedule round did; each applied step is a realm audit event (CR-27).

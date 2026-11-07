@@ -292,3 +292,26 @@ fn kernel_steps_surface_with_their_step() {
     ));
     assert!(cache.0.lock().unwrap().is_empty());
 }
+
+// OP-64 (S-4): neither a DPoP request nor a token request prints its proofs, access token or
+// `Authorization` credential
+#[test]
+fn requests_do_not_print_their_credentials() {
+    let proofs = ["eyJ0eXAiOiJkcG9wK2p3dCJ9.proof.sig"];
+    let request = DpopRequest {
+        proofs: &proofs,
+        method: "POST",
+        uri: URI,
+        access_token: Some("at-secret-value"),
+        bound: None,
+    };
+    let http = crate::app::oauth::TokenHttp {
+        authorization: Some("Basic Y2xpOnNlY3JldA=="),
+        dpop: &proofs,
+    };
+    let printed = format!("{request:?} {http:?}");
+    for secret in ["eyJ0eXAi", "at-secret-value", "Y2xpOnNlY3JldA"] {
+        assert!(!printed.contains(secret), "{printed}");
+    }
+    assert!(printed.contains(URI));
+}

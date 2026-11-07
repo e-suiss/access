@@ -11,8 +11,8 @@ use crate::ports::dpop::{Clock, ReplayCache};
 
 const DAY_MS: u64 = 24 * 60 * 60 * 1000;
 
-/// What the request presents.
-#[derive(Clone, Copy, Debug)]
+/// What the request presents. `Debug` shows neither the proofs nor the access token.
+#[derive(Clone, Copy)]
 pub struct DpopRequest<'a> {
     /// Every `DPoP` header value of the request.
     pub proofs: &'a [&'a str],
@@ -24,6 +24,18 @@ pub struct DpopRequest<'a> {
     pub access_token: Option<&'a str>,
     /// The key the token, code or refresh token is bound to.
     pub bound: Option<Jkt>,
+}
+
+impl core::fmt::Debug for DpopRequest<'_> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("DpopRequest")
+            .field("proofs", &self.proofs.len())
+            .field("method", &self.method)
+            .field("uri", &self.uri)
+            .field("access_token", &self.access_token.map(|_| "[redacted]"))
+            .field("bound", &self.bound)
+            .finish()
+    }
 }
 
 /// An accepted proof.

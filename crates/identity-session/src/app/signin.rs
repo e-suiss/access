@@ -107,8 +107,8 @@ pub struct Started {
     pub options: StepOptions,
 }
 
-/// A password step.
-#[derive(Clone, Copy, Debug)]
+/// A password step. `Debug` shows neither the password nor who or where (OP-64).
+#[derive(Clone, Copy)]
 pub struct PasswordStep<'a> {
     /// The identifier, as on the first screen.
     pub identifier: &'a str,
@@ -118,6 +118,17 @@ pub struct PasswordStep<'a> {
     pub ip: IpAddr,
     /// Request correlation id.
     pub correlation: &'a str,
+}
+
+impl core::fmt::Debug for PasswordStep<'_> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("PasswordStep")
+            .field("identifier", &"[redacted]")
+            .field("password", &"[redacted]")
+            .field("ip", &"[redacted]")
+            .field("correlation", &self.correlation)
+            .finish()
+    }
 }
 
 /// What opening a magic link shows; nothing is consumed (§10.2.2: preview bots).

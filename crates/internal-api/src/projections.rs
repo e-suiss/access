@@ -81,8 +81,8 @@ pub struct TokenProjectionRequest {
     pub family: Option<[u8; 16]>,
 }
 
-/// A token the authority plane signed.
-#[derive(Clone, Debug, PartialEq, Eq)]
+/// A token the authority plane signed. `Debug` shows everything but the token itself.
+#[derive(Clone, PartialEq, Eq)]
 pub struct IssuedToken {
     /// The compact JWS, `typ` `at+jwt` (RFC 9068), with `authorization_details` (RFC 9396).
     pub token: String,
@@ -98,6 +98,20 @@ pub struct IssuedToken {
     pub status: Option<StatusRef>,
     /// The refresh family it belongs to.
     pub family: [u8; 16],
+}
+
+impl core::fmt::Debug for IssuedToken {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("IssuedToken")
+            .field("token", &"[redacted]")
+            .field("exercise", &self.exercise)
+            .field("position", &self.position)
+            .field("contract", &self.contract)
+            .field("expires_at", &self.expires_at)
+            .field("status", &self.status)
+            .field("family", &self.family)
+            .finish()
+    }
 }
 
 /// The authority plane's answer to a [`TokenProjectionRequest`].
@@ -201,6 +215,23 @@ mod tests {
 
     use super::*;
     use crate::instances::core_action;
+
+    // OP-64 (A-13): an issued token never prints the token itself
+    #[test]
+    fn issued_tokens_do_not_print_the_token() {
+        let issued = IssuedToken {
+            token: String::from("eyJhbGciOiJFUzI1NiJ9.secret-claims.sig"),
+            exercise: Digest([1; 32]),
+            position: 7,
+            contract: Digest([2; 32]),
+            expires_at: 9,
+            status: None,
+            family: [3; 16],
+        };
+        let printed = format!("{issued:?}");
+        assert!(!printed.contains("secret-claims"), "{printed}");
+        assert!(printed.contains("position: 7"));
+    }
 
     // OP-150 m.2, m.3 (s): the stub is the typed unavailable; the token ceiling is 8 KiB
     #[test]
