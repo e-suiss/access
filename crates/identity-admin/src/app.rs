@@ -416,6 +416,20 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                     return Err(Invalid::NoUpstream.into());
                 }
             }
+            Change::AccountCanary(s) => {
+                if resources::account(t, *s).await?.is_none() {
+                    return Err(Invalid::NoAccount.into());
+                }
+            }
+            Change::ProtectionMode { mode, loosens } => {
+                // OP-151 m.14 (f): the action follows the tier against the current mode
+                let tier = access_identity_risk::app::settings::change_tier(t, mode)
+                    .await
+                    .map_err(risk)?;
+                if *loosens != (tier == access_identity_risk::domain::mode::Tier::Ct2) {
+                    return Err(AdminError::Conflict);
+                }
+            }
             Change::CimdPolicy(_)
             | Change::MapperSet { .. }
             | Change::JoseAlg(_)
@@ -716,6 +730,10 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
         Ok((done, secret))
     }
 
+    #[expect(
+        clippy::too_many_lines,
+        reason = "one match over the changes, each arm its write"
+    )]
     async fn write(
         &self,
         t: &mut TenantTx,
@@ -793,23 +811,44 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             Change::UpstreamRetire(name) => {
                 resources::retire_upstream(t, bound, name.as_str()).await?
             }
-            Change::SigninPolicy(p) => {
-                let bytes = dcbor::encode(&p.to_value(), Limits::CEILING)
-                    .map_err(|_| AdminError::Encode)?;
-                resources::set_policy(t, bound, true, &bytes).await?;
+            Change::SigninPolicy(_) | Change::SessionPolicy(_) => {
+                let (signin, value) = match change {
+                    Change::SigninPolicy(p) => (true, p.to_value()),
+                    Change::SessionPolicy(p) => (false, p.to_value()),
+                    _ => return Err(AdminError::Encode),
+                };
+                let bytes =
+                    dcbor::encode(&value, Limits::CEILING).map_err(|_| AdminError::Encode)?;
+                resources::set_policy(t, bound, signin, &bytes).await?;
                 true
             }
-            Change::SessionPolicy(p) => {
-                let bytes = dcbor::encode(&p.to_value(), Limits::CEILING)
-                    .map_err(|_| AdminError::Encode)?;
-                resources::set_policy(t, bound, false, &bytes).await?;
+            Change::ProtectionMode { mode, .. } => {
+                access_identity_risk::app::settings::apply_mode(t, bound, mode)
+                    .await
+                    .map_err(risk)?;
                 true
+            }
+            Change::AccountCanary(s) => {
+                access_identity_risk::app::settings::mark_canary(t, bound, *s)
+                    .await
+                    .map_err(risk)?
             }
         };
         if done {
             Ok(secret)
         } else {
             Err(AdminError::Conflict)
+        }
+    }
+}
+
+/// A risk store failure as the write path reports it.
+fn risk(e: access_identity_risk::RiskError) -> AdminError {
+    match e {
+        access_identity_risk::RiskError::Store(s) => AdminError::Store(s),
+        access_identity_risk::RiskError::Mode(_) => Invalid::ProtectionMode.into(),
+        access_identity_risk::RiskError::Account(_) | access_identity_risk::RiskError::Corrupt => {
+            AdminError::Unavailable(String::from("risk"))
         }
     }
 }

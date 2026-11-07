@@ -265,3 +265,94 @@ async fn a_client_secret_rotates_with_a_new_one_shown_once() {
         "{text}"
     );
 }
+
+// OP-151 m.3 (o), m.14 (f): tightening the protection mode is idp.realm.protection_mode (CT1),
+// loosening it idp.realm.protection_mode_loosen (CT2); an intent drawn for the wrong one is
+// refused; the settings view reads the mode back
+#[tokio::test]
+async fn the_protection_mode_action_follows_its_tier() {
+    use access_internal_api::idp::IdpAction;
+    let (w, at, d) = ready("protection").await;
+    let tighten = compile(
+        Op::PutProtectionMode,
+        None,
+        &json!({"suspicious_ip": "enforce", "sl2": "stepup", "denied_asns": [64500]}),
+        &w.ids,
+    )
+    .unwrap();
+    let tighten = w.admin().resolve(at.0, at.1, tighten).await.unwrap();
+    assert_eq!(tighten.action(), IdpAction::RealmProtectionMode);
+    written(&run(&w, at, d, tighten, 1).await.unwrap());
+    let view = w
+        .admin()
+        .read(at.0, at.1, Kind::Settings, None, None, 1)
+        .await
+        .unwrap();
+    assert_eq!(
+        view.items[0].0["protection_mode"]["suspicious_ip"],
+        "enforce"
+    );
+    assert_eq!(view.items[0].0["protection_mode"]["brute_force"], "enforce");
+    let loosen = compile(
+        Op::PutProtectionMode,
+        None,
+        &json!({"sl2": "shadow"}),
+        &w.ids,
+    )
+    .unwrap();
+    let mislabelled = loosen.clone();
+    let loosen = w.admin().resolve(at.0, at.1, loosen).await.unwrap();
+    assert_eq!(loosen.action(), IdpAction::RealmProtectionModeLoosen);
+    assert!(matches!(
+        w.admin()
+            .prepare(&proposal(at, mislabelled, 2, idp_anchor(d), 1))
+            .await,
+        Err(AdminError::Conflict)
+    ));
+    written(&run(&w, at, d, loosen, 3).await.unwrap());
+    // TI-9: brute-force protection has no monitor mode
+    assert_eq!(
+        compile(
+            Op::PutProtectionMode,
+            None,
+            &json!({"brute_force": "monitor", "sl2": "shadow"}),
+            &w.ids,
+        ),
+        Err(Invalid::ProtectionMode)
+    );
+}
+
+// §4.4, OP-151 m.14 (f): an account becomes a canary through idp.account.canary (CT2), once
+#[tokio::test]
+async fn an_account_becomes_a_canary_through_commit() {
+    let (w, at, d) = ready("canary").await;
+    let mut t = TenantTx::begin(&w.db.app, at.0, at.1).await.unwrap();
+    let subject = t.insert_subject("active", "kek-1", &[1; 40]).await.unwrap();
+    t.commit().await.unwrap();
+    let account = w.ids.encode(SUBJECT_PREFIX, subject).unwrap();
+    let canary = compile(Op::MarkCanary, Some(&account), &json!({}), &w.ids).unwrap();
+    assert_eq!(canary, Change::AccountCanary(subject));
+    written(&run(&w, at, d, canary.clone(), 1).await.unwrap());
+    assert!(matches!(
+        run(&w, at, d, canary, 2).await,
+        Err(AdminError::Conflict)
+    ));
+}
+
+// OP-150 m.11 (b), TN-61: account deletion, realm rehoming and reset intents are declared and
+// never compiled into a change here
+#[test]
+fn reserved_operations_compile_to_nothing() {
+    let ids = access_crypto::opaque_id::IdKey::new(access_crypto::Secret::new([7; 32]));
+    let account = ids.encode(SUBJECT_PREFIX, [1; 16]).unwrap();
+    for op in [Op::DeleteAccount, Op::ResetIntent] {
+        assert_eq!(
+            compile(op, Some(&account), &json!({}), &ids),
+            Err(Invalid::Reserved)
+        );
+    }
+    assert_eq!(
+        compile(Op::RehomeRealm, None, &json!({}), &ids),
+        Err(Invalid::Reserved)
+    );
+}

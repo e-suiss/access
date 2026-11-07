@@ -420,6 +420,8 @@ pub const CODES: &[Code] = &[
     codes::realm::PUBLIC_SUB_NOT_OPTED_IN,
     codes::realm::INVALID_SECTOR_IDENTIFIER_URI,
     codes::realm::RESERVED_OPERATION,
+    codes::realm::INVALID_JOSE_ALG,
+    codes::realm::INVALID_PROTECTION_MODE,
 ];
 
 /// The type URI of `code`.

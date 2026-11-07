@@ -172,6 +172,7 @@ dependencies = [
  "access-identity-account",
  "access-identity-events",
  "access-identity-oauth",
+ "access-identity-risk",
  "access-identity-signer",
  "access-internal-api",
  "access-store",

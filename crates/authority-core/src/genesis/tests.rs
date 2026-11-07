@@ -137,6 +137,11 @@ fn idp_actions_carry_their_consequence_tiers() {
         (IdpAction::UpstreamRetire, Tier::Ct1),
         (IdpAction::RealmSigninPolicy, Tier::Ct2),
         (IdpAction::RealmSessionPolicy, Tier::Ct2),
+        // OP-151 m.14 (f): tightening the protection mode is CT1, loosening it and planting a
+        // canary CT2
+        (IdpAction::RealmProtectionMode, Tier::Ct1),
+        (IdpAction::RealmProtectionModeLoosen, Tier::Ct2),
+        (IdpAction::AccountCanary, Tier::Ct2),
     ] {
         assert_eq!(tier(a), t, "{}", a.label());
     }

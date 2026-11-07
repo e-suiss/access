@@ -91,11 +91,18 @@ pub enum IdpAction {
     RealmSigninPolicy,
     /// Sets the realm's console session policy (TN-129, OP-151 m.3 (f)): CT2.
     RealmSessionPolicy,
+    /// Tightens the realm's protection mode: monitor to enforce, a later SL2 stage, more denied
+    /// ASNs (OP-151 m.3 (o), m.14 (f)); narrowing, CT1.
+    RealmProtectionMode,
+    /// Changes the realm's protection mode so that anything loosens (OP-151 m.14 (f)): CT2.
+    RealmProtectionModeLoosen,
+    /// Makes an account a canary: a credential the realm plants (§4.4, OP-151 m.14 (f)): CT2.
+    AccountCanary,
 }
 
 impl IdpAction {
     /// Every action, in catalog order.
-    pub const ALL: [Self; 28] = [
+    pub const ALL: [Self; 31] = [
         Self::ClientRegister,
         Self::ClientUpdate,
         Self::ClientRetire,
@@ -124,6 +131,9 @@ impl IdpAction {
         Self::UpstreamRetire,
         Self::RealmSigninPolicy,
         Self::RealmSessionPolicy,
+        Self::RealmProtectionMode,
+        Self::RealmProtectionModeLoosen,
+        Self::AccountCanary,
     ];
 
     /// Its namespace.
@@ -150,12 +160,17 @@ impl IdpAction {
             | Self::RealmKeyRotate
             | Self::RealmKeyDrop
             | Self::RealmSigninPolicy
-            | Self::RealmSessionPolicy => "idp.realm",
+            | Self::RealmSessionPolicy
+            | Self::RealmProtectionMode
+            | Self::RealmProtectionModeLoosen => "idp.realm",
             Self::UpstreamRegister
             | Self::UpstreamMapping
             | Self::UpstreamUpdate
             | Self::UpstreamRetire => "idp.upstream",
-            Self::AccountDelete | Self::AccountSuspend | Self::AccountReactivate => "idp.account",
+            Self::AccountDelete
+            | Self::AccountSuspend
+            | Self::AccountReactivate
+            | Self::AccountCanary => "idp.account",
         }
     }
 
@@ -186,6 +201,9 @@ impl IdpAction {
             Self::RealmKeyRotate => "key_rotate",
             Self::RealmKeyDrop => "key_drop",
             Self::AccountDelete => "delete",
+            Self::RealmProtectionMode => "protection_mode",
+            Self::RealmProtectionModeLoosen => "protection_mode_loosen",
+            Self::AccountCanary => "canary",
         }
     }
 
@@ -211,7 +229,8 @@ impl IdpAction {
             | Self::GroupRetire
             | Self::GroupMembersRemove
             | Self::AccountSuspend
-            | Self::UpstreamRetire => EffectClass::Reversible,
+            | Self::UpstreamRetire
+            | Self::RealmProtectionMode => EffectClass::Reversible,
             _ => EffectClass::Irreversible,
         }
     }

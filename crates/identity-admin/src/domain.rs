@@ -18,6 +18,8 @@ use suiss_crypto::digest::context_digest;
 use suiss_crypto::rotation::Policy;
 
 pub mod provision;
+pub use access_identity_risk::domain::mode::ProtectionMode;
+
 pub mod realm;
 
 pub use realm::{
@@ -261,6 +263,13 @@ pub enum Invalid {
     /// (OP-150 m.11 (b)).
     #[error("reserved operation")]
     Reserved,
+    /// A JOSE algorithm the realm cannot take: `ES256` or `Ed25519` (MD-3, CR-5).
+    #[error("bad JOSE algorithm")]
+    JoseAlg,
+    /// A protection mode outside its model; brute-force protection is always enforced
+    /// (OP-151 m.3 (o), TI-9).
+    #[error("bad protection mode")]
+    ProtectionMode,
 }
 
 impl Invalid {
@@ -307,6 +316,8 @@ impl Invalid {
             Self::PublicSub => "public-sub-not-opted-in",
             Self::SectorIdentifier => "invalid-sector-identifier-uri",
             Self::Reserved => "reserved-operation",
+            Self::ProtectionMode => "invalid-protection-mode",
+            Self::JoseAlg => "invalid-jose-alg",
         }
     }
 }
@@ -1127,6 +1138,17 @@ pub enum Change {
     SigninPolicy(SigninPolicy),
     /// `idp.realm.session_policy`.
     SessionPolicy(SessionPolicy),
+    /// `idp.realm.protection_mode` when it only tightens, `idp.realm.protection_mode_loosen`
+    /// when anything loosens (OP-151 m.14 (f)); `loosens` is resolved against the realm's
+    /// current mode before the intent is drawn.
+    ProtectionMode {
+        /// The new mode.
+        mode: ProtectionMode,
+        /// Whether it loosens anything the current mode enforces.
+        loosens: bool,
+    },
+    /// `idp.account.canary`: the subject's internal id (§4.4).
+    AccountCanary([u8; 16]),
 }
 
 fn uint(v: u32) -> Value {
@@ -1163,6 +1185,9 @@ impl Change {
             Self::UpstreamRetire(_) => IdpAction::UpstreamRetire,
             Self::SigninPolicy(_) => IdpAction::RealmSigninPolicy,
             Self::SessionPolicy(_) => IdpAction::RealmSessionPolicy,
+            Self::ProtectionMode { loosens: false, .. } => IdpAction::RealmProtectionMode,
+            Self::ProtectionMode { loosens: true, .. } => IdpAction::RealmProtectionModeLoosen,
+            Self::AccountCanary(_) => IdpAction::AccountCanary,
         }
     }
 
@@ -1197,7 +1222,9 @@ impl Change {
             | Self::GroupRetire(_)
             | Self::AccountSuspend(_)
             | Self::AccountReactivate(_)
-            | Self::UpstreamRetire(_) => Ok(()),
+            | Self::UpstreamRetire(_)
+            | Self::ProtectionMode { .. }
+            | Self::AccountCanary(_) => Ok(()),
         }
     }
 
@@ -1248,9 +1275,13 @@ impl Change {
                 Value::Map(vec![(Value::text("name"), Value::text(n.as_str()))])
             }
             Self::GroupMembersAdd(m) | Self::GroupMembersRemove(m) => m.to_value(),
-            Self::AccountSuspend(s) | Self::AccountReactivate(s) => {
+            Self::AccountSuspend(s) | Self::AccountReactivate(s) | Self::AccountCanary(s) => {
                 Value::Map(vec![(Value::text("subject"), Value::Bytes(s.to_vec()))])
             }
+            Self::ProtectionMode { mode, .. } => Value::Map(vec![(
+                Value::text("mode"),
+                Value::text(&access_identity_risk::app::settings::canonical(mode)),
+            )]),
             Self::UpstreamRegister(u) | Self::UpstreamUpdate(u) => u.to_value(),
             Self::SigninPolicy(p) => p.to_value(),
             Self::SessionPolicy(p) => p.to_value(),
@@ -1288,7 +1319,7 @@ impl Change {
             | Self::GroupMembersRemove(Members { group: name, .. }) => {
                 path.extend([String::from("group"), String::from(name.as_str())]);
             }
-            Self::AccountSuspend(s) | Self::AccountReactivate(s) => {
+            Self::AccountSuspend(s) | Self::AccountReactivate(s) | Self::AccountCanary(s) => {
                 path.extend([String::from("account"), b64url_encode(s)]);
             }
             Self::UpstreamRegister(Upstream { name, .. })
@@ -1305,7 +1336,8 @@ impl Change {
             | Self::RpId(_)
             | Self::Branding(_)
             | Self::SigninPolicy(_)
-            | Self::SessionPolicy(_) => {
+            | Self::SessionPolicy(_)
+            | Self::ProtectionMode { .. } => {
                 path.push(String::from("realm"));
             }
             Self::KeyPolicy(_) | Self::KeyRotate { .. } | Self::KeyDrop { .. } => {

@@ -20,9 +20,9 @@ use super::Admin;
 use crate::AdminError;
 use crate::domain::realm::Binding;
 use crate::domain::{
-    Attribute, AuthMethod, Branding, Change, ClaimName, Client, ClientId, Color, Group, Invalid,
-    Members, MembershipIssuer, Name, RedirectUri, RpId, SessionPolicy, SigninMethod, SigninPolicy,
-    Subject, Upstream,
+    Attribute, AuthMethod, Branding, Change, CimdPolicy, ClaimName, Client, ClientId, Color, Group,
+    Invalid, JoseAlg, Members, MembershipIssuer, Name, ProtectionMode, RedirectUri, RpId,
+    SessionPolicy, SigninMethod, SigninPolicy, Subject, Upstream,
 };
 use crate::ports::{Decider, Governance, Instances, RealmKeys};
 
@@ -72,6 +72,20 @@ pub enum Op {
     PutRpId,
     /// `putMapper`: set or remove.
     PutMapper,
+    /// `putJoseAlg` (MD-3, OP-146 m.8 (e)).
+    PutJoseAlg,
+    /// `putCimdPolicy`/`patchCimdPolicy` (§11.3, AG-4).
+    PutCimdPolicy,
+    /// `putProtectionMode`/`patchProtectionMode` (OP-151 m.3 (o), m.14 (f)).
+    PutProtectionMode,
+    /// `markCanaryAccount` (§4.4).
+    MarkCanary,
+    /// `deleteAccount`: `idp.account.delete`, reserved and declaration only (OP-150 m.11 (b)).
+    DeleteAccount,
+    /// `rehomeRealm`: `idp.realm.rehome`, reserved and declaration only (OP-150 m.11 (b)).
+    RehomeRealm,
+    /// `createResetIntent`: declared for the recovery stage, never applied here (TN-61).
+    ResetIntent,
 }
 
 impl Op {
@@ -96,6 +110,13 @@ impl Op {
             "putBranding" | "patchBranding" => Self::PutBranding,
             "putRpId" => Self::PutRpId,
             "putMapper" => Self::PutMapper,
+            "putJoseAlg" => Self::PutJoseAlg,
+            "putCimdPolicy" | "patchCimdPolicy" => Self::PutCimdPolicy,
+            "putProtectionMode" | "patchProtectionMode" => Self::PutProtectionMode,
+            "markCanaryAccount" => Self::MarkCanary,
+            "deleteAccount" => Self::DeleteAccount,
+            "rehomeRealm" => Self::RehomeRealm,
+            "createResetIntent" => Self::ResetIntent,
             _ => return None,
         })
     }
@@ -448,6 +469,62 @@ pub fn compile(op: Op, key: Option<&str>, body: &Json, ids: &IdKey) -> Result<Ch
             only(m, &["rp_id", "acknowledge_passkey_loss"])?;
             Change::RpId(RpId::parse(text(m, "rp_id")?)?)
         }
+        // OP-150 m.11 (b), TN-61: declared, reserved, never applied; nothing is compiled
+        Op::DeleteAccount | Op::RehomeRealm | Op::ResetIntent => return Err(Invalid::Reserved),
+        Op::PutJoseAlg => {
+            only(m, &["alg"])?;
+            Change::JoseAlg(JoseAlg::from_name(text(m, "alg")?).ok_or(Invalid::JoseAlg)?)
+        }
+        Op::PutCimdPolicy => {
+            only(m, &["enabled", "domains"])?;
+            Change::CimdPolicy(CimdPolicy {
+                enabled: flag(m, "enabled")?,
+                domains: texts(m, "domains")?.into_iter().map(String::from).collect(),
+            })
+        }
+        Op::PutProtectionMode => {
+            const PROTECTIONS: [&str; 4] =
+                ["bot", "suspicious_ip", "breached_password", "brute_force"];
+            only(
+                m,
+                &[
+                    "bot",
+                    "suspicious_ip",
+                    "breached_password",
+                    "brute_force",
+                    "sl2",
+                    "denied_asns",
+                ],
+            )?;
+            let mut values = Vec::new();
+            for p in PROTECTIONS {
+                if let Some(v) = opt_text(m, p)? {
+                    values.push((p, v));
+                }
+            }
+            let asns = match m.get("denied_asns") {
+                None | Some(Json::Null) => Vec::new(),
+                Some(Json::Array(a)) => a
+                    .iter()
+                    .map(|v| {
+                        v.as_u64()
+                            .and_then(|n| u32::try_from(n).ok())
+                            .ok_or(Invalid::ProtectionMode)
+                    })
+                    .collect::<Result<_, _>>()?,
+                Some(_) => return Err(Invalid::ProtectionMode),
+            };
+            let mode = ProtectionMode::parse(&values, text(m, "sl2")?, &asns)
+                .map_err(|_| Invalid::ProtectionMode)?;
+            Change::ProtectionMode {
+                mode,
+                loosens: false,
+            }
+        }
+        Op::MarkCanary => {
+            only(m, &[])?;
+            Change::AccountCanary(subject(ids, key_of(key)?)?)
+        }
         Op::PutMapper => {
             only(m, &["claim", "source"])?;
             let claim = ClaimName::parse(key_of(key)?)?;
@@ -520,6 +597,20 @@ pub fn account_view(a: &AccountRow, ids: &IdKey) -> Json {
         "status": a.status,
         "status_at": rfc3339(a.status_at_ms),
         "created_at": rfc3339(a.created_at_ms),
+    })
+}
+
+/// The realm's protection mode as the settings view shows it (OP-151 m.3 (o)); brute-force
+/// protection is always `enforce`.
+#[must_use]
+pub fn protection_view(m: &ProtectionMode) -> Json {
+    json!({
+        "bot": m.bot.name(),
+        "suspicious_ip": m.suspicious_ip.name(),
+        "breached_password": m.breached_password.name(),
+        "brute_force": "enforce",
+        "sl2": m.sl2.name(),
+        "denied_asns": m.denied_asns.iter().collect::<Vec<_>>(),
     })
 }
 
@@ -624,6 +715,19 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                     .is_some() =>
             {
                 Change::UpstreamUpdate(u)
+            }
+            // OP-151 m.14 (f): CT1 when it only tightens, CT2 when anything loosens
+            Change::ProtectionMode { mode, .. } => {
+                let tier = access_identity_risk::app::settings::change_tier(&mut t, &mode)
+                    .await
+                    .map_err(|e| match e {
+                        access_identity_risk::RiskError::Store(s) => AdminError::Store(s),
+                        _ => AdminError::Unavailable(String::from("risk")),
+                    })?;
+                Change::ProtectionMode {
+                    mode,
+                    loosens: tier == access_identity_risk::domain::mode::Tier::Ct2,
+                }
             }
             other => other,
         };
@@ -752,6 +856,9 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                 let p = resources::policies(t).await?;
                 let branding = idp::branding(t).await?;
                 let mappers = idp::mappers(t).await?;
+                let protection = access_identity_risk::app::settings::mode(t)
+                    .await
+                    .map_err(|_| AdminError::Unavailable(String::from("risk")))?;
                 let view = json!({
                     "jose_alg": s.jose_alg,
                     "argon2": {
@@ -765,6 +872,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                     "branding": stored(branding.as_deref(), &Branding::default().to_value()),
                     "mappers": mappers.iter().map(|(c, s)| json!({"claim": c, "source": s}))
                         .collect::<Vec<_>>(),
+                    "protection_mode": protection_view(&protection),
                 });
                 Read {
                     items: vec![(view, p.position.unwrap_or(0))],

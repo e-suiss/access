@@ -265,6 +265,60 @@ pub const ROWS: &[Route] = &[
         "putMapper",
         "Sets or removes the profile attribute a claim is taken from.",
     ),
+    write(
+        Verb::Put,
+        "/admin/v1/realms/{slug}/settings/jose-alg",
+        "putJoseAlg",
+        "Sets the realm's JOSE signing algorithm: ES256 or Ed25519.",
+    ),
+    write(
+        Verb::Put,
+        "/admin/v1/realms/{slug}/settings/cimd-policy",
+        "putCimdPolicy",
+        "Sets which Client ID Metadata Document clients the realm accepts.",
+    ),
+    write(
+        Verb::Patch,
+        "/admin/v1/realms/{slug}/settings/cimd-policy",
+        "patchCimdPolicy",
+        "Changes the CIMD acceptance policy by JSON Merge Patch.",
+    ),
+    write(
+        Verb::Put,
+        "/admin/v1/realms/{slug}/settings/protection-mode",
+        "putProtectionMode",
+        "Sets the attack protections' modes; loosening anything is a higher tier.",
+    ),
+    write(
+        Verb::Patch,
+        "/admin/v1/realms/{slug}/settings/protection-mode",
+        "patchProtectionMode",
+        "Changes the attack protections' modes by JSON Merge Patch.",
+    ),
+    write(
+        Verb::Post,
+        "/admin/v1/realms/{slug}/accounts/{account_id}/canary",
+        "markCanaryAccount",
+        "Makes an account a canary: a sign-in with it never opens a session.",
+    ),
+    write(
+        Verb::Post,
+        "/admin/v1/realms/{slug}/accounts/{account_id}/delete",
+        "deleteAccount",
+        "Erases an account by crypto-shredding: declared and reserved, never applied.",
+    ),
+    write(
+        Verb::Post,
+        "/admin/v1/realms/{slug}/accounts/{account_id}/reset-intents",
+        "createResetIntent",
+        "Asks for a one-time reset intent sent to the account's own registered address: declared, never applied here.",
+    ),
+    write(
+        Verb::Post,
+        "/admin/v1/realms/{slug}/rehome",
+        "rehomeRealm",
+        "Moves the realm to another governing domain: declared and reserved, never applied.",
+    ),
 ];
 
 /// How a row is served.
@@ -317,6 +371,15 @@ const SIGNIN_PATCH: &[&str] = &[
     "domain_deny",
 ];
 const SESSION_PATCH: &[&str] = &["absolute_ms", "idle_ms", "binding"];
+const CIMD_PATCH: &[&str] = &["enabled", "domains"];
+const PROTECTION_PATCH: &[&str] = &[
+    "bot",
+    "suspicious_ip",
+    "breached_password",
+    "brute_force",
+    "sl2",
+    "denied_asns",
+];
 const BRANDING_PATCH: &[&str] = &[
     "display_name",
     "logo_uri",
@@ -382,7 +445,8 @@ pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
         "retireGroup" | "addGroupMembers" | "removeGroupMembers" => (Groups, w(false)),
         "listAccounts" => (Accounts, Shape::List(&["account_id", "status"])),
         "getAccount" => (Accounts, Shape::Get),
-        "suspendAccount" | "reactivateAccount" => (Accounts, w(false)),
+        "suspendAccount" | "reactivateAccount" | "markCanaryAccount" | "deleteAccount"
+        | "createResetIntent" => (Accounts, w(false)),
         "listUpstreamIdps" => (UpstreamIdps, Shape::List(&["name", "issuer", "status"])),
         "getUpstreamIdp" => (UpstreamIdps, Shape::Get),
         "putUpstreamIdp" => (UpstreamIdps, w(true)),
@@ -397,6 +461,12 @@ pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
         "patchBranding" => (Settings, patch(BRANDING_PATCH, Some("branding"))),
         "putRpId" => (Settings, put("rp_id")),
         "putMapper" => (Settings, put("mappers")),
+        "putJoseAlg" => (Settings, put("jose_alg")),
+        "putCimdPolicy" => (Settings, put("cimd")),
+        "patchCimdPolicy" => (Settings, patch(CIMD_PATCH, Some("cimd"))),
+        "putProtectionMode" => (Settings, put("protection_mode")),
+        "patchProtectionMode" => (Settings, patch(PROTECTION_PATCH, Some("protection_mode"))),
+        "rehomeRealm" => (Settings, w(false)),
         _ => return None,
     })
 }
@@ -453,6 +523,8 @@ pub fn problem_of(e: &AdminError) -> &'static Code {
             Invalid::PublicSub => &r::PUBLIC_SUB_NOT_OPTED_IN,
             Invalid::SectorIdentifier => &r::INVALID_SECTOR_IDENTIFIER_URI,
             Invalid::Reserved => &r::RESERVED_OPERATION,
+            Invalid::JoseAlg => &r::INVALID_JOSE_ALG,
+            Invalid::ProtectionMode => &r::INVALID_PROTECTION_MODE,
             Invalid::NoClient
             | Invalid::NoKey
             | Invalid::NoGroup

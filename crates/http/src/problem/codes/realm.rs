@@ -226,3 +226,17 @@ pub const RESERVED_OPERATION: Code = code(
     "Not Implemented",
     "The operation is declared in the catalogue and reserved; it is never applied (OP-150 m.11 (b)).",
 );
+/// A JOSE algorithm other than ES256 or Ed25519 (MD-3, CR-5).
+pub const INVALID_JOSE_ALG: Code = code(
+    "invalid-jose-alg",
+    400,
+    "Bad Request",
+    "The realm signs with ES256 or Ed25519; EdDSA is never named (MD-3, CR-5).",
+);
+/// A protection mode outside its model; brute-force protection is always enforced.
+pub const INVALID_PROTECTION_MODE: Code = code(
+    "invalid-protection-mode",
+    400,
+    "Bad Request",
+    "Each protection is monitor or enforce, sl2 is shadow, stepup or stepup_caep, at most 1024 nonzero denied ASNs; brute-force protection is always enforce (OP-151 m.3 (o), TI-9).",
+);
