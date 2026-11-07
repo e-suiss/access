@@ -13,6 +13,7 @@ use std::collections::BTreeMap;
 
 use access_kernel::ais::{CONTENT_TYPE, Statement};
 use access_kernel::codec::Canonical;
+use access_kernel::combinator::Mode;
 use access_kernel::digest::Digest;
 use access_kernel::intent::{ContextRefs, IntentEnvelope, intent_digest};
 use access_kernel::json::{b64url_decode, b64url_encode};
@@ -87,6 +88,8 @@ struct Fake {
     tamper_body: Cell<bool>,
     settings: RefCell<Value>,
     writes: Cell<u32>,
+    no_domain: Cell<bool>,
+    want_nonce: Cell<bool>,
 }
 
 fn reply(status: u16, body: &Value, headers: &[(&str, &str)]) -> Response {
@@ -117,22 +120,35 @@ impl Fake {
         let read = r.header("authorization").is_some();
         if r.url.starts_with(ISSUER) {
             if path.ends_with("/.well-known/openid-configuration") {
-                return reply(
-                    200,
-                    &json!({"issuer": ISSUER, "authorization_endpoint": format!("{ISSUER}/authorize"),
-                        "token_endpoint": format!("{ISSUER}/token"), "jwks_uri": format!("{ISSUER}/jwks"),
-                        "code_challenge_methods_supported": ["S256"]}),
-                    &[],
-                );
+                let mut meta = json!({"issuer": ISSUER, "authorization_endpoint": format!("{ISSUER}/authorize"),
+                    "token_endpoint": format!("{ISSUER}/token"), "jwks_uri": format!("{ISSUER}/jwks"),
+                    "code_challenge_methods_supported": ["S256"]});
+                if !self.no_domain.get() {
+                    meta["suiss_domain_metadata"] = json!(format!(
+                        "https://api.example/.well-known/access-domain-metadata/sha-256:{}",
+                        b64url_encode(&DOMAIN)
+                    ));
+                }
+                return reply(200, &meta, &[]);
             }
             assert!(
                 r.header("dpop").is_some(),
                 "the token request is DPoP-bound"
             );
-            let form = String::from_utf8(r.body.clone().unwrap().1).unwrap();
-            assert!(form.contains("grant_type=client_credentials"));
-            assert!(form.contains("client_assertion_type="));
-            assert!(form.contains("resource=access-admin%3Arealm%3Aacme"));
+            assert!(
+                r.header("authorization").is_none(),
+                "the exchange takes no client authentication"
+            );
+            let form = form_of(r);
+            assert_eq!(form["grant_type"], TOKEN_EXCHANGE);
+            assert!(!form.contains_key("client_assertion") && !form.contains_key("resource"));
+            if self.want_nonce.get() && !proof_has_nonce(r.header("dpop").unwrap()) {
+                return reply(
+                    400,
+                    &json!({"error": "use_dpop_nonce"}),
+                    &[("dpop-nonce", "n-1")],
+                );
+            }
             let t = self.token_type.borrow().unwrap_or("DPoP");
             return reply(
                 200,
@@ -197,6 +213,44 @@ impl Transport for Fake {
     }
 }
 
+fn pct_decode(s: &str) -> String {
+    let b = s.as_bytes();
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < b.len() {
+        if b[i] == b'%' {
+            let hex = std::str::from_utf8(&b[i + 1..i + 3]).unwrap();
+            out.push(u8::from_str_radix(hex, 16).unwrap());
+            i += 3;
+        } else {
+            out.push(b[i]);
+            i += 1;
+        }
+    }
+    String::from_utf8(out).unwrap()
+}
+
+fn form_of(r: &Request) -> BTreeMap<String, String> {
+    let text = String::from_utf8(r.body.clone().unwrap().1).unwrap();
+    let mut out = BTreeMap::new();
+    for pair in text.split('&') {
+        let (k, v) = pair.split_once('=').unwrap();
+        assert!(
+            out.insert(pct_decode(k), pct_decode(v)).is_none(),
+            "{k} appears once"
+        );
+    }
+    out
+}
+
+fn proof_claims(proof: &str) -> Value {
+    serde_json::from_slice(&b64url_decode(proof.split('.').nth(1).unwrap()).unwrap()).unwrap()
+}
+
+fn proof_has_nonce(proof: &str) -> bool {
+    proof_claims(proof).get("nonce").is_some()
+}
+
 fn key() -> InstanceKey {
     let (signer, _) = SoftSigner::generate_p256().unwrap();
     InstanceKey::from_signer(Box::new(signer))
@@ -207,8 +261,7 @@ fn target() -> Target {
         api: API.into(),
         realm: "acme".into(),
         issuer: ISSUER.into(),
-        client_id: "reconciler".into(),
-        basis: Some(ExerciseBasis::Public(Id([5; 16]))),
+        basis: ExerciseBasis::Public(Id([5; 16])),
     }
 }
 
@@ -312,21 +365,150 @@ async fn a_bearer_or_long_lived_read_token_is_refused() {
     ));
 }
 
-// The AIS declares the caller's basis; without one nothing is drafted or written
+fn token_requests(fake: &Fake) -> Vec<Request> {
+    fake.seen
+        .borrow()
+        .iter()
+        .filter(|r| r.url == format!("{ISSUER}/token"))
+        .cloned()
+        .collect()
+}
+
+// TN-130, TN-27, OP-151 m.18 (b): the read token is an RFC 8693 exchange of the Instance's own
+// check AIS over audience‖0‖scope in the realm's governing domain, with no client authentication
+// and a DPoP proof by the same Instance key
 #[tokio::test(flavor = "current_thread")]
-async fn a_write_without_a_basis_is_refused() {
+async fn tn_130_the_read_token_is_exchanged_for_the_instances_own_check_statement() {
     let fake = Fake::new();
     let k = key();
-    let t = Target {
-        basis: None,
-        ..target()
+    let t = target();
+    let c = Client::new(&fake, &k, &t, &Fixed);
+    c.get("/admin/v1/realms/acme/settings").await.unwrap();
+    let requests = token_requests(&fake);
+    let [request] = requests.as_slice() else {
+        panic!("one token request");
     };
+    let form = form_of(request);
+    let names: Vec<&str> = form.keys().map(String::as_str).collect();
+    assert_eq!(
+        names,
+        [
+            "audience",
+            "grant_type",
+            "requested_token_type",
+            "scope",
+            "subject_token",
+            "subject_token_type"
+        ]
+    );
+    assert_eq!(form["grant_type"], TOKEN_EXCHANGE);
+    assert_eq!(form["subject_token_type"], AIS_TOKEN_TYPE);
+    assert_eq!(form["requested_token_type"], ACCESS_TOKEN_TYPE);
+    assert_eq!(form["audience"], "access-admin:realm:acme");
+    assert_eq!(form["scope"], REALM_READ);
+    assert!(request.header("authorization").is_none());
+
+    let ais = b64url_decode(&form["subject_token"]).unwrap();
+    let mut keys = KeySet::default();
+    keys.insert(*k.kid(), k.public_key().clone()).unwrap();
+    keys.allowed
+        .extend([Algorithm::Esp256, Algorithm::Es256, Algorithm::Ed25519]);
+    let v = cose::verify_sign1(&PureBackend, &ais, &keys, CONTENT_TYPE).unwrap();
+    let s = Statement::from_bytes(&v.payload).unwrap();
+    assert_eq!(s.mode, Mode::Check);
+    assert_eq!(s.domain, Digest(DOMAIN));
+    assert_eq!(
+        s.intent,
+        exchange_intent("access-admin:realm:acme", REALM_READ)
+    );
+    assert_eq!(s.nonce.len(), 32);
+    assert_eq!(s.iat, Fixed.now_ms());
+
+    let allowed = [Algorithm::Es256].into_iter().collect();
+    let proof = access_kernel::verify::dpop::verify_proof(
+        &access_crypto::AwsLcBackend,
+        request.header("dpop").unwrap(),
+        &access_kernel::verify::dpop::ProofRules {
+            method: "POST",
+            uri: &format!("{ISSUER}/token"),
+            allowed: &allowed,
+            now: Fixed.now_ms(),
+            lifetime_ms: 60_000,
+            skew_ms: 5_000,
+            access_token: None,
+            bound_jkt: None,
+        },
+    )
+    .unwrap();
+    assert_eq!(&proof.jkt, k.kid(), "the DPoP key is the Instance key");
+}
+
+// OP-151 m.18 (b), (c): the realm token endpoint asks for a DPoP nonce; the retry carries it
+#[tokio::test(flavor = "current_thread")]
+async fn the_exchange_retries_once_with_the_token_endpoints_dpop_nonce() {
+    let fake = Fake::new();
+    fake.want_nonce.set(true);
+    let k = key();
+    let t = target();
+    let c = Client::new(&fake, &k, &t, &Fixed);
+    c.get("/admin/v1/realms/acme/settings").await.unwrap();
+    let requests = token_requests(&fake);
+    assert_eq!(requests.len(), 2);
+    let retry = proof_claims(requests[1].header("dpop").unwrap());
+    assert_eq!(retry["nonce"], "n-1");
+}
+
+// MD-8, OP-151 m.18 (b): a realm whose metadata names no governing domain gets no statement and
+// no token request
+#[tokio::test(flavor = "current_thread")]
+async fn no_governing_domain_in_the_metadata_means_no_token() {
+    let fake = Fake::new();
+    fake.no_domain.set(true);
+    let k = key();
+    let t = target();
     let c = Client::new(&fake, &k, &t, &Fixed);
     assert!(matches!(
-        c.write(branding(), None, &body(), None).await.unwrap_err(),
-        ClientError::Draft(_)
+        c.get("/admin/v1/realms/acme/settings").await.unwrap_err(),
+        ClientError::Unexpected("governing domain")
     ));
-    assert!(fake.seen.borrow().is_empty());
+    assert_eq!(token_requests(&fake).len(), 0);
+}
+
+// OP-151 m.18 (b): the exchange's intent and names are the identity plane's
+#[test]
+fn the_exchange_matches_the_identity_planes_contract() {
+    use access_identity_oauth::domain::management as server;
+    for (audience, scope) in [
+        ("access-admin:realm:acme", REALM_READ),
+        (server::PLATFORM_AUDIENCE, server::PLATFORM_READ),
+    ] {
+        assert_eq!(
+            exchange_intent(audience, scope),
+            server::exchange_intent(audience, scope)
+        );
+    }
+    assert_eq!(TOKEN_EXCHANGE, server::TOKEN_EXCHANGE);
+    assert_eq!(AIS_TOKEN_TYPE, server::AIS_TOKEN_TYPE);
+    assert_eq!(ACCESS_TOKEN_TYPE, server::ACCESS_TOKEN_TYPE);
+    assert_eq!(EXCHANGE_CONTEXT, server::EXCHANGE_CONTEXT);
+    assert_eq!(REALM_READ, server::REALM_READ);
+}
+
+// §9.15.1 k.2: the governing domain is the DomainID the Domain Metadata address ends with
+#[test]
+fn the_governing_domain_is_read_from_the_domain_metadata_address() {
+    let id = b64url_encode(&DOMAIN);
+    let path = "/.well-known/access-domain-metadata/sha-256:";
+    let doc = json!({ "suiss_domain_metadata": format!("https://api.example{path}{id}") });
+    assert_eq!(governing_domain(&doc), Some(Digest(DOMAIN)));
+    for bad in [
+        json!({}),
+        json!({ "suiss_domain_metadata": format!("http://api.example{path}{id}") }),
+        json!({ "suiss_domain_metadata": format!("https://api.example{path}AAAA") }),
+        json!({ "suiss_domain_metadata": format!("https://api.example/other/sha-256:{id}") }),
+    ] {
+        assert_eq!(governing_domain(&bad), None, "{bad}");
+    }
 }
 
 // TN-122: the reconciler applies a CT2 change as one Exercise and only proposes the reserved one

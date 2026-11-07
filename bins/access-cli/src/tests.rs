@@ -135,8 +135,8 @@ mod management {
         "acme",
         "--issuer",
         "https://login.example/realms/acme",
-        "--client-id",
-        "reconciler",
+        "--basis",
+        "public:AAAAAAAAAAAAAAAAAAAAAA",
         "--ca",
         "ca.pem",
     ];
@@ -195,6 +195,23 @@ mod management {
             ]))
             .is_ok()
         );
+    }
+
+    // TN-130, OP-151 m.18 (b): every read is exchanged for an AIS, so the basis is always
+    // required, and there is no client id: the exchange takes no client authentication
+    #[test]
+    fn the_basis_is_required_and_no_client_id_exists() {
+        let without: Vec<&str> = CONNECT
+            .iter()
+            .copied()
+            .filter(|a| *a != "--basis" && !a.starts_with("public:"))
+            .collect();
+        let mut a = vec!["access-cli", "admin"];
+        a.extend(&without);
+        a.extend(["--key-file", "k.pem", "list", "clients"]);
+        assert!(Cli::try_parse_from(&a).is_err());
+        let a = args(&["--key-file", "k.pem", "--client-id", "x", "list", "clients"]);
+        assert!(Cli::try_parse_from(a).is_err());
     }
 
     #[test]

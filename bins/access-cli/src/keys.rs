@@ -1,6 +1,6 @@
 //! The caller's Instance key (OP-151 m.3 (h), TN-130, PI-11): a PKCS#8 file or a PKCS#11 token
-//! object. It signs the AIS of every write, the DPoP proofs that bind the read token, and the
-//! client assertion that obtains it. There is no other credential: the command line has no
+//! object. It signs the AIS of every write, the `check` AIS exchanged for the read token, and the
+//! DPoP proofs that bind that token to it. There is no other credential: the command line has no
 //! bearer token option and never reads a token from an argument or the environment (TN-130,
 //! MD-14).
 
@@ -10,7 +10,7 @@ use access_kernel::ais::CONTENT_TYPE;
 use access_kernel::json::b64url_encode;
 use access_kernel::verify::cose::PublicKey;
 use access_kernel::verify::key_scope::thumbprint;
-use access_sdk::auth::dpop::{ProofKey, jwk};
+use access_sdk::auth::dpop::ProofKey;
 use rustls::pki_types::PrivateKeyDer;
 use rustls::pki_types::pem::PemObject as _;
 use suiss_crypto::pkcs11::KeyStore;
@@ -180,25 +180,6 @@ impl InstanceKey {
     pub(crate) fn sign_ais(&self, statement: &[u8]) -> Result<Vec<u8>, KeyError> {
         sign_sign1(self.signer.as_ref(), self.kid, CONTENT_TYPE, statement)
             .map_err(|_| KeyError::Sign)
-    }
-
-    /// A compact JWS with `typ` over `claims` (JSON text), `kid` the thumbprint.
-    pub(crate) fn jws(&self, typ: &str, claims: &str) -> Result<String, KeyError> {
-        let (_, alg) = jwk(&self.public).map_err(|_| KeyError::Sign)?;
-        let header = format!(
-            r#"{{"alg":"{alg}","kid":"{}","typ":"{typ}"}}"#,
-            b64url_encode(&self.kid)
-        );
-        let mut out = b64url_encode(header.as_bytes());
-        out.push('.');
-        out.push_str(&b64url_encode(claims.as_bytes()));
-        let sig = self
-            .signer
-            .sign(out.as_bytes())
-            .map_err(|_| KeyError::Sign)?;
-        out.push('.');
-        out.push_str(&b64url_encode(&sig));
-        Ok(out)
     }
 }
 

@@ -2,7 +2,7 @@
 
 The Access command line for operators and developers.
 
-The management commands (`admin`, `export`, `diff`, `apply`) act as an agent Instance, not with an administrator token. Every read uses a short-lived token bound to the Instance key with DPoP; every write is drafted, checked, signed as the Instance's own statement (AIS) and committed as one Exercise. There is no `--token` or `--bearer` option: a stolen read token is useless without the key and cannot write anyway.
+The management commands (`admin`, `export`, `diff`, `apply`) act as an agent Instance, not with an administrator token. Every read uses a short-lived token bound to the Instance key with DPoP, obtained by exchanging the Instance's own signed statement; every write is drafted, checked, signed as the Instance's own statement (AIS) and committed as one Exercise. There is no `--token` or `--bearer` option: a stolen read token is useless without the key and cannot write anyway.
 
 ```
 access-cli [--config <PATH>] [--log <FILTER>] <COMMAND>
@@ -67,13 +67,41 @@ Every management command takes:
 |---|---|
 | `--api <URL>` | The management API origin, `https://host[:port]` |
 | `--realm <SLUG>` | The realm |
-| `--issuer <URL>` | The realm issuer; its metadata names the token endpoint |
-| `--client-id <ID>` | The Instance's client at the realm (`private_key_jwt`) |
+| `--issuer <URL>` | The realm issuer; its metadata names the token endpoint and the realm's governing domain |
 | `--ca <PATH>` | PEM file of the CA the API and the issuer chain to |
 | `--key-file <PATH>` or `--pkcs11 <URI>` | The Instance key: a PKCS#8 P-256 (or Ed25519) PEM file, or an RFC 7512 URI `pkcs11:token=…;object=…?module-path=…&pin-source=file:…` |
-| `--basis <BASIS>` | What the AIS declares as its authority: `public:<GrantID>`, `anchor:<AnchorID>` or `holding:<GrantID>:<PartyID>:<since>`; required for writes |
+| `--basis <BASIS>` | What every AIS declares as its authority: `public:<GrantID>`, `anchor:<AnchorID>` or `holding:<GrantID>:<PartyID>:<since>` |
 
 Secrets never come from arguments or the environment: the PKCS#11 PIN is read from the file the URI names.
+
+### How a read token is obtained
+
+The key must belong to a live Instance of the realm's governing domain. Before the first read, the
+command line fetches the issuer's metadata, takes the token endpoint and the governing domain (the
+`DomainID` at the end of `suiss_domain_metadata`), and signs a `check` statement (AIS) with the
+Instance key: a fresh 32-byte nonce, the domain, and as intent the digest of
+`access-admin:realm:<slug>`, a zero byte and `realm.read` under the context
+`access/management-read/v1`. It trades that statement at the token endpoint in an RFC 8693 token
+exchange:
+
+```
+POST <token_endpoint>
+DPoP: <proof by the Instance key>
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=urn:ietf:params:oauth:grant-type:token-exchange
+&subject_token_type=urn:suiss:access:token-type:ais
+&subject_token=<base64url COSE_Sign1 of the statement>
+&requested_token_type=urn:ietf:params:oauth:token-type:access_token
+&audience=access-admin:realm:<slug>
+&scope=realm.read
+```
+
+There is no client authentication: the statement and the DPoP proof by the same key are the proof,
+and the server accepts each statement nonce once. The token is bound to the Instance key
+(`cnf.jkt`), so it reads nothing without that key. A token that is not `DPoP`-bound or lives
+longer than 60 minutes is refused, and nothing writes with it. When the endpoint asks for a DPoP
+nonce, the command line retries once with it and a new statement.
 
 ## Management commands
 

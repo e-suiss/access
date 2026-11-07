@@ -1,9 +1,11 @@
 //! The management API client (OP-151 m.3 (c), m.6, m.11 (a), (b)).
 //!
 //! A read presents a read token bound to the Instance key with DPoP. The token comes from the
-//! realm's token endpoint by `client_credentials`, authenticated with a `private_key_jwt`
-//! assertion signed by the same Instance key, for the surface's audience and `realm.read`; it
-//! lives at most 60 minutes and is never written anywhere (TN-130, TN-27).
+//! realm's token endpoint by an RFC 8693 token exchange: the subject token is the Instance's own
+//! AIS in `check` mode over the surface's audience and `realm.read`, in the realm's governing
+//! domain, with a single-use nonce; there is no client authentication, and the DPoP proof is made
+//! by the same Instance key, which becomes the token's `cnf.jkt`. The token lives at most 60
+//! minutes and is never written anywhere (TN-130, TN-27, OP-151 m.18 (b)).
 //!
 //! A write is two steps: `POST …/intents` drafts it (a read; nothing changes), the client checks
 //! that the drafted intent's digest is the digest of the drafted intent bytes, that the domain is
@@ -13,6 +15,7 @@
 
 use std::cell::RefCell;
 
+use access_internal_api::instances::IDENTITY_PEP;
 use access_kernel::ais::Statement;
 use access_kernel::codec::Canonical;
 use access_kernel::combinator::{Capacity, Mode};
@@ -26,6 +29,7 @@ use access_sdk::auth::token::{self, Secret, TokenError};
 use access_sdk::auth::{OAuthClass, Random, RandomUnavailable};
 use access_sdk::transport::{Answer, Response as SdkResponse};
 use serde_json::{Map, Value, json};
+use suiss_crypto::digest::context_digest;
 
 use crate::api::{self, DRAFT, Method, Operation};
 use crate::http::{HttpError, Request, Response, Transport};
@@ -34,8 +38,49 @@ use crate::keys::{InstanceKey, KeyError};
 /// Longest read token accepted (TN-130, OP-151 m.3 (c)).
 pub(crate) const MAX_TOKEN_SECONDS: u64 = 60 * 60;
 
-/// The `client_assertion_type` of RFC 7523.
-const ASSERTION_TYPE: &str = "urn:ietf:params:oauth:client-assertion-type:jwt-bearer";
+/// RFC 8693 §2.1 `grant_type`.
+pub(crate) const TOKEN_EXCHANGE: &str = "urn:ietf:params:oauth:grant-type:token-exchange";
+
+/// The `subject_token_type` of an AIS subject token: unpadded base64url of its `COSE_Sign1`.
+pub(crate) const AIS_TOKEN_TYPE: &str = "urn:suiss:access:token-type:ais";
+
+/// RFC 8693 §3 token type of an access token.
+pub(crate) const ACCESS_TOKEN_TYPE: &str = "urn:ietf:params:oauth:token-type:access_token";
+
+/// The digest context of the exchange's AIS intent.
+pub(crate) const EXCHANGE_CONTEXT: &str = "access/management-read/v1";
+
+/// The read scope of the realm-admin surface.
+pub(crate) const REALM_READ: &str = "realm.read";
+
+/// The AS metadata member naming the governing domain's Domain Metadata (§9.15.1 k.2).
+const DOMAIN_METADATA_MEMBER: &str = "suiss_domain_metadata";
+
+/// The path of a Domain Metadata address up to its `DomainID` (L0-ENC-20).
+const DOMAIN_METADATA_PATH: &str = "/.well-known/access-domain-metadata/sha-256:";
+
+/// What the exchange's AIS signs as its intent: `context_digest` over `audience‖0‖scope`
+/// (TN-130, OP-151 m.18 (b)).
+pub(crate) fn exchange_intent(audience: &str, scope: &str) -> Digest {
+    let mut canonical =
+        Vec::with_capacity(audience.len().saturating_add(scope.len()).saturating_add(1));
+    canonical.extend_from_slice(audience.as_bytes());
+    canonical.push(0);
+    canonical.extend_from_slice(scope.as_bytes());
+    Digest(context_digest(EXCHANGE_CONTEXT, &canonical).0)
+}
+
+/// The realm's governing domain, from the `DomainID` its AS metadata's Domain Metadata address
+/// ends with; `None` when the metadata names none.
+pub(crate) fn governing_domain(metadata: &Value) -> Option<Digest> {
+    let address = metadata.get(DOMAIN_METADATA_MEMBER)?.as_str()?;
+    if !discovery::is_https(address) {
+        return None;
+    }
+    let (_, id) = address.rsplit_once(DOMAIN_METADATA_PATH)?;
+    let bytes = b64url_decode(id).ok()?;
+    <[u8; 32]>::try_from(bytes.as_slice()).ok().map(Digest)
+}
 
 /// Why a call produced nothing.
 #[derive(Debug, thiserror::Error)]
@@ -137,10 +182,8 @@ pub(crate) struct Target {
     pub(crate) realm: String,
     /// The realm issuer; its metadata names the token endpoint.
     pub(crate) issuer: String,
-    /// The Instance's `client_id` at the realm.
-    pub(crate) client_id: String,
     /// The basis every AIS declares (the caller's Grant holding or anchor).
-    pub(crate) basis: Option<ExerciseBasis>,
+    pub(crate) basis: ExerciseBasis,
 }
 
 impl Target {
@@ -247,14 +290,37 @@ impl<'a, T: Transport, E: Env> Client<'a, T, E> {
         .map_err(|_| ClientError::Key(KeyError::Sign))
     }
 
-    /// Obtains the read token (TN-130): `client_credentials` with a `private_key_jwt`
-    /// assertion and a DPoP proof, both by the Instance key.
+    /// The Instance's own AIS in `check` mode over the exchange's intent, as a subject token
+    /// (TN-130, OP-151 m.18 (b)); a fresh nonce every time, since the server uses each once.
+    fn exchange_statement(&self, domain: Digest, audience: &str) -> Result<String, ClientError> {
+        let mut nonce = vec![0u8; 32];
+        self.env.random().fill_bytes(&mut nonce)?;
+        let statement = Statement {
+            domain,
+            nonce,
+            intent: exchange_intent(audience, REALM_READ),
+            mode: Mode::Check,
+            pep: String::from(IDENTITY_PEP),
+            capacity: Capacity::Own,
+            basis: self.target.basis,
+            iat: self.env.now_ms(),
+            exercise: None,
+        };
+        let bytes = statement
+            .to_bytes()
+            .map_err(|_| ClientError::Unexpected("statement encoding"))?;
+        Ok(b64url_encode(&self.key.sign_ais(&bytes)?))
+    }
+
+    /// Obtains the read token (TN-130, OP-151 m.18 (b)): an RFC 8693 token exchange of the
+    /// Instance's own `check` AIS, without client authentication, with a DPoP proof by the same
+    /// Instance key.
     async fn read_token(&self) -> Result<(), ClientError> {
         if self.token.borrow().is_some() {
             return Ok(());
         }
         let meta_url = discovery::well_known(&self.target.issuer);
-        let meta = self
+        let answer = self
             .transport
             .send(Request {
                 method: "GET",
@@ -263,30 +329,21 @@ impl<'a, T: Transport, E: Env> Client<'a, T, E> {
                 body: None,
             })
             .await?;
-        let meta = discovery::parse(&sdk_answer(&meta), &self.target.issuer)
+        let meta = discovery::parse(&sdk_answer(&answer), &self.target.issuer)
             .map_err(ClientError::Discovery)?;
+        let domain =
+            governing_domain(&answer.json()).ok_or(ClientError::Unexpected("governing domain"))?;
         let audience = self.target.audience();
         let mut nonce: Option<String> = None;
         for _ in 0..2 {
-            let now_s = self.env.now_ms() / 1000;
-            let mut jti = [0u8; 16];
-            self.env.random().fill_bytes(&mut jti)?;
-            let claims = json!({
-                "iss": self.target.client_id,
-                "sub": self.target.client_id,
-                "aud": self.target.issuer,
-                "jti": b64url_encode(&jti),
-                "iat": now_s,
-                "exp": now_s.saturating_add(60),
-            })
-            .to_string();
-            let assertion = self.key.jws("JWT", &claims)?;
+            let subject = self.exchange_statement(domain, &audience)?;
             let body = form(&[
-                ("grant_type", "client_credentials"),
-                ("client_assertion_type", ASSERTION_TYPE),
-                ("client_assertion", &assertion),
-                ("scope", "realm.read"),
-                ("resource", &audience),
+                ("grant_type", TOKEN_EXCHANGE),
+                ("subject_token_type", AIS_TOKEN_TYPE),
+                ("subject_token", &subject),
+                ("requested_token_type", ACCESS_TOKEN_TYPE),
+                ("audience", &audience),
+                ("scope", REALM_READ),
             ]);
             let dpop = self.proof("POST", &meta.token_endpoint, None, nonce.as_deref())?;
             let r = self
@@ -315,7 +372,7 @@ impl<'a, T: Transport, E: Env> Client<'a, T, E> {
             }
             *self.token.borrow_mut() = Some(Token {
                 value: tokens.access_token,
-                nonce: r.header("dpop-nonce").map(String::from),
+                nonce: None,
             });
             return Ok(());
         }
@@ -441,9 +498,7 @@ impl<'a, T: Transport, E: Env> Client<'a, T, E> {
         body: &Map<String, Value>,
         if_match: Option<&str>,
     ) -> Result<Written, ClientError> {
-        let basis = self.target.basis.ok_or(ClientError::Draft(
-            "no --basis: the AIS must declare its basis",
-        ))?;
+        let basis = self.target.basis;
         let domain = self.domain().await?;
         let draft_path = format!(
             "/admin/v1/realms/{}/intents",

@@ -35,21 +35,19 @@ pub(crate) struct Connect {
     /// The realm slug.
     #[arg(long, value_name = "SLUG")]
     pub(crate) realm: String,
-    /// The realm issuer; its metadata names the token endpoint.
+    /// The realm issuer; its metadata names the token endpoint and the governing domain.
     #[arg(long, value_name = "URL")]
     pub(crate) issuer: String,
-    /// The Instance's `client_id` at the realm (an agent or service client, `private_key_jwt`).
-    #[arg(long, value_name = "ID")]
-    pub(crate) client_id: String,
     /// PEM file of the CA the management API and the issuer chain to.
     #[arg(long, value_name = "PATH")]
     pub(crate) ca: PathBuf,
     #[command(flatten)]
     pub(crate) key: KeyArgs,
     /// The basis every AIS declares: `public:<GrantID>`, `anchor:<AnchorID>` or
-    /// `holding:<GrantID>:<HolderPartyID>:<since>` (base64url ids); required for writes.
+    /// `holding:<GrantID>:<HolderPartyID>:<since>` (base64url ids). Reads carry an AIS too: the
+    /// read token is exchanged for one.
     #[arg(long, value_name = "BASIS")]
-    pub(crate) basis: Option<String>,
+    pub(crate) basis: String,
 }
 
 /// The Instance key: a file or a PKCS#11 object, exactly one.
@@ -105,11 +103,8 @@ impl Connect {
 
     /// The target.
     pub(crate) fn target(&self) -> Result<Target, String> {
-        let basis = self
-            .basis
-            .as_deref()
-            .map(|b| basis(b).ok_or_else(|| format!("--basis {b} is not a basis")))
-            .transpose()?;
+        let basis =
+            basis(&self.basis).ok_or_else(|| format!("--basis {} is not a basis", self.basis))?;
         if !self.api.starts_with("https://") || !self.issuer.starts_with("https://") {
             return Err(String::from("--api and --issuer must be https URLs"));
         }
@@ -117,7 +112,6 @@ impl Connect {
             api: self.api.clone(),
             realm: self.realm.clone(),
             issuer: self.issuer.clone(),
-            client_id: self.client_id.clone(),
             basis,
         })
     }
