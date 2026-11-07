@@ -304,7 +304,7 @@ const UPSTREAM_PATCH: &[&str] = &[
     "client_id",
     "client_secret_ref",
     "jwks_uri",
-    "ssf_configuration_uri",
+    "ssf",
 ];
 const SIGNIN_PATCH: &[&str] = &[
     "methods",

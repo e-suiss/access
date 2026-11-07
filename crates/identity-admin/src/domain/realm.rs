@@ -5,6 +5,7 @@
 
 use std::collections::BTreeSet;
 
+pub use access_identity_events::domain::inbound::TransmitterConfig;
 use suiss_crypto::dcbor::Value;
 
 use super::Invalid;
@@ -204,8 +205,25 @@ pub struct Upstream {
     pub client_secret_ref: Option<String>,
     /// The provider's JWKS, `https`.
     pub jwks_uri: String,
-    /// The provider's SSF transmitter configuration, `https`, for the receiver (OP-151 m.3 (l)).
-    pub ssf_configuration_uri: Option<String>,
+    /// The provider as an SSF transmitter the realm receives from (OP-151 m.3 (l), m.7 (g)):
+    /// push only here, since a poll credential is a secret this surface never carries.
+    pub ssf: Option<TransmitterConfig>,
+}
+
+/// The SSF fields as JSON: the form the request carries and the store keeps.
+#[must_use]
+pub fn ssf_json(c: &TransmitterConfig) -> serde_json::Value {
+    let mut v = serde_json::json!({
+        "issuer": c.issuer,
+        "jwks_uri": c.jwks_uri,
+        "aud": c.audience,
+        "events": c.events,
+        "expected_interval_s": c.expected_interval_s,
+    });
+    if let (Some(p), Some(o)) = (&c.poll_endpoint, v.as_object_mut()) {
+        o.insert(String::from("poll_endpoint"), serde_json::json!(p));
+    }
+    v
 }
 
 impl Upstream {
@@ -227,10 +245,7 @@ impl Upstream {
         });
         let urls_ok = super::https(&self.issuer)
             && super::https(&self.jwks_uri)
-            && self
-                .ssf_configuration_uri
-                .as_deref()
-                .is_none_or(super::https);
+            && self.ssf.as_ref().is_none_or(|s| s.poll_endpoint.is_none());
         if id_ok && ref_ok && urls_ok {
             Ok(())
         } else {
@@ -250,8 +265,23 @@ impl Upstream {
         if let Some(r) = &self.client_secret_ref {
             m.push((Value::text("client_secret_ref"), Value::text(r)));
         }
-        if let Some(u) = &self.ssf_configuration_uri {
-            m.push((Value::text("ssf_configuration_uri"), Value::text(u)));
+        if let Some(s) = &self.ssf {
+            m.push((
+                Value::text("ssf"),
+                Value::Map(vec![
+                    (Value::text("issuer"), Value::text(&s.issuer)),
+                    (Value::text("jwks_uri"), Value::text(&s.jwks_uri)),
+                    (Value::text("aud"), Value::text(&s.audience)),
+                    (
+                        Value::text("events"),
+                        Value::Array(s.events.iter().map(|e| Value::text(e)).collect()),
+                    ),
+                    (
+                        Value::text("expected_interval_s"),
+                        Value::Unsigned(u64::from(s.expected_interval_s)),
+                    ),
+                ]),
+            ));
         }
         Value::Map(m)
     }

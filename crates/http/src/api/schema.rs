@@ -152,7 +152,7 @@ fn schemas() -> Value {
                 "client_id": text("Access's client id at the provider."),
                 "client_secret_ref": { "type": ["string", "null"], "pattern": "^secret://" },
                 "jwks_uri": text("https JWKS."),
-                "ssf_configuration_uri": { "type": ["string", "null"] },
+                "ssf": { "type": ["object", "null"], "description": "The provider as an SSF push transmitter: `issuer`, `jwks_uri`, `aud`, `events`, `expected_interval_s` (OP-151 m.7 (g))." },
                 "status": { "type": "string", "enum": ["active", "retired"], "readOnly": true },
             },
         },

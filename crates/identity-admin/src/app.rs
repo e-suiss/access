@@ -3,8 +3,8 @@
 
 pub mod issuer;
 pub mod platform;
-mod signals;
 pub mod rest;
+mod signals;
 
 use access_crypto::opaque_id::IdKey;
 use access_identity_account::domain::password::Argon2Params;
@@ -545,6 +545,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             });
         };
         let secret = self.write(&mut t, &bound, &p.change).await?;
+        declare_transmitter(&mut t, &p.change, &committed.exercise).await?;
         self.announce(&mut t, p, &committed.exercise).await?;
         let at = access_store::authority::server_time(self.app).await?;
         signals::queue_for(&mut t, &p.change, at).await?;
@@ -779,6 +780,71 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
     }
 }
 
+/// Context of an upstream provider's transmitter id.
+pub const TRANSMITTER_CONTEXT: &str = "access/upstream-transmitter/v1";
+
+/// The inbound transmitter id of the realm's upstream provider `name`: the same for every
+/// declaration of it.
+#[must_use]
+pub fn transmitter_id(name: &str) -> [u8; 16] {
+    let d = suiss_crypto::digest::context_digest(TRANSMITTER_CONTEXT, name.as_bytes()).0;
+    let mut id = [0; 16];
+    id.copy_from_slice(d.get(..16).unwrap_or(&[0; 16]));
+    id
+}
+
+/// A push transmitter has no credential to seal; anything asked to seal is refused.
+struct NoCredential;
+
+impl access_identity_events::ports::Sealer for NoCredential {
+    fn seal(
+        &self,
+        _: TenantId,
+        _: RealmId,
+        _: &[u8; 16],
+        _: &[u8],
+    ) -> Result<access_store::events::SealedKey, access_identity_events::ports::Unavailable> {
+        Err(access_identity_events::ports::Unavailable)
+    }
+
+    fn open(
+        &self,
+        _: TenantId,
+        _: RealmId,
+        _: &[u8; 16],
+        _: &access_store::events::SealedKey,
+    ) -> Result<zeroize::Zeroizing<Vec<u8>>, access_identity_events::ports::Unavailable> {
+        Err(access_identity_events::ports::Unavailable)
+    }
+}
+
+/// OP-151 m.7 (g): an `idp.upstream.register` with SSF fields declares the provider as an
+/// inbound transmitter in the write's transaction, bound to the Exercise.
+async fn declare_transmitter(
+    t: &mut TenantTx,
+    change: &Change,
+    exercise: &Digest,
+) -> Result<(), AdminError> {
+    let Change::UpstreamRegister(Upstream {
+        name,
+        ssf: Some(cfg),
+        ..
+    }) = change
+    else {
+        return Ok(());
+    };
+    access_identity_events::app::receiver::declare(
+        t,
+        &NoCredential,
+        transmitter_id(name.as_str()),
+        cfg,
+        None,
+        Some(exercise.0),
+    )
+    .await
+    .map_err(|_| AdminError::Unavailable(String::from("ssf-receiver")))
+}
+
 /// A fresh server-generated client secret and its stored digest (CR-38).
 fn new_secret() -> Result<([u8; 32], ClientSecret), AdminError> {
     let raw = access_crypto::random::bytes::<32>().map_err(|_| AdminError::Encode)?;
@@ -806,7 +872,10 @@ fn upstream_row(u: &Upstream) -> UpstreamRow {
         client_id: u.client_id.clone(),
         client_secret_ref: u.client_secret_ref.clone(),
         jwks_uri: u.jwks_uri.clone(),
-        ssf_configuration_uri: u.ssf_configuration_uri.clone(),
+        ssf: u
+            .ssf
+            .as_ref()
+            .map(|s| crate::domain::realm::ssf_json(s).to_string()),
         active: true,
         position: 0,
     }

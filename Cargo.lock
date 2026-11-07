@@ -163,6 +163,7 @@ dependencies = [
  "thiserror",
  "time",
  "tracing",
+ "zeroize",
 ]
 
 [[package]]

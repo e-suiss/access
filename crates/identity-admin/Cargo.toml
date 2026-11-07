@@ -21,6 +21,7 @@ suiss-crypto = { workspace = true }
 serde_json = { workspace = true, features = ["std"] }
 thiserror = { workspace = true }
 time = { workspace = true, features = ["std", "formatting", "parsing"] }
+zeroize = { workspace = true, features = ["alloc", "std"] }
 tracing = { workspace = true, features = ["std"] }
 
 [dev-dependencies]

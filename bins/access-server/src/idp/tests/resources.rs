@@ -54,11 +54,21 @@ async fn a_group_keeps_its_one_membership_issuer() {
         Op::PutUpstream,
         Some("google"),
         &json!({"issuer": "https://accounts.google.com", "client_id": "c",
-                "jwks_uri": "https://www.googleapis.com/oauth2/v3/certs"}),
+                "jwks_uri": "https://www.googleapis.com/oauth2/v3/certs",
+                "ssf": {"issuer": "https://accounts.google.com",
+                        "jwks_uri": "https://www.googleapis.com/oauth2/v3/certs",
+                        "aud": "https://groups.id.test",
+                        "events": ["https://schemas.openid.net/secevent/caep/event-type/session-revoked"]}}),
         &w.ids,
     )
     .unwrap();
     written(&run(&w, at, d, up, 1).await.unwrap());
+    // OP-151 m.7 (g): the registration declared the provider as an inbound transmitter
+    let mut t = TenantTx::begin(&w.db.app, at.0, at.1).await.unwrap();
+    let transmitters = t.transmitters().await.unwrap();
+    t.commit().await.unwrap();
+    assert_eq!(transmitters.len(), 1);
+    assert_eq!(transmitters[0].issuer, "https://accounts.google.com");
     let staff = |issuer: &str| {
         compile(
             Op::PutGroup,

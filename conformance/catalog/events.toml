@@ -89,6 +89,14 @@ fields = ["error"]
 ocsf = "application_error"
 
 [[event]]
+name = "api.realm.unavailable"
+plane = "ops"
+severity = "warn"
+since = "unreleased"
+fields = ["error"]
+ocsf = "application_error"
+
+[[event]]
 name = "login.failed"
 plane = "identity"
 severity = "info"

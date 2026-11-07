@@ -82,8 +82,7 @@ CREATE TABLE access.idp_upstreams (
   client_id text NOT NULL CHECK (length(client_id) BETWEEN 1 AND 255),
   client_secret_ref text CHECK (client_secret_ref ~ '^secret://[A-Za-z0-9/._-]{1,246}$'),
   jwks_uri text NOT NULL CHECK (length(jwks_uri) <= 2048 AND jwks_uri ~ '^https://'),
-  ssf_configuration_uri text CHECK (length(ssf_configuration_uri) <= 2048
-                                    AND ssf_configuration_uri ~ '^https://'),
+  ssf text CHECK (length(ssf) <= 8192),
   status text NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'retired')),
   retired_at timestamptz,
   domain_id bytea NOT NULL,

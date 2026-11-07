@@ -336,7 +336,7 @@ pub fn compile(op: Op, key: Option<&str>, body: &Json, ids: &IdKey) -> Result<Ch
                     "client_id",
                     "client_secret_ref",
                     "jwks_uri",
-                    "ssf_configuration_uri",
+                    "ssf",
                     "status",
                 ],
             )?;
@@ -350,7 +350,13 @@ pub fn compile(op: Op, key: Option<&str>, body: &Json, ids: &IdKey) -> Result<Ch
                 client_id: String::from(text(m, "client_id")?),
                 client_secret_ref: opt_text(m, "client_secret_ref")?.map(String::from),
                 jwks_uri: String::from(text(m, "jwks_uri")?),
-                ssf_configuration_uri: opt_text(m, "ssf_configuration_uri")?.map(String::from),
+                ssf: match m.get("ssf") {
+                    None | Some(Json::Null) => None,
+                    Some(v) => Some(
+                        crate::domain::realm::TransmitterConfig::parse(v)
+                            .map_err(|_| Invalid::Upstream)?,
+                    ),
+                },
             })
         }
         Op::RetireUpstream => {
@@ -476,7 +482,7 @@ pub fn upstream_view(u: &UpstreamRow) -> Json {
         "client_id": u.client_id,
         "client_secret_ref": u.client_secret_ref,
         "jwks_uri": u.jwks_uri,
-        "ssf_configuration_uri": u.ssf_configuration_uri,
+        "ssf": u.ssf.as_deref().and_then(|s| serde_json::from_str::<Json>(s).ok()),
         "status": if u.active { "active" } else { "retired" },
     })
 }
