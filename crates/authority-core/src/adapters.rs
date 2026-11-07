@@ -256,7 +256,7 @@ impl Reader for PgReader {
 
     async fn publications(&self, namespace: &str) -> Result<Vec<Vec<u8>>, CoreError> {
         Ok(
-            access_store::publications::of_namespace(&self.pool, namespace)
+            access_store::publications::of_namespace(&self.pool, &self.domain, namespace)
                 .await?
                 .into_iter()
                 .map(|r| r.package)
@@ -612,14 +612,16 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
         led.core.change_policy(policy, candidate, analysis).await
     }
 
-    /// Keeps `published` in the publication registry (§8.17.10.2, E10). It changes no domain.
+    /// Offers `published` to each of `domains` (§8.17.10.2, E10): kept in each domain's scope,
+    /// it changes none of them; each accepts only by its own `acceptance.amend`.
     ///
     /// # Errors
-    /// [`CoreError::Protocol`] `publication-version` when the publisher already published
-    /// another package as this version; the store's errors.
+    /// [`CoreError::Protocol`] `publication-version` when the publisher already offered
+    /// another package as this version to one of them; the store's errors.
     pub async fn keep_publication(
         &self,
         published: &crate::app::publishing::Published,
+        domains: &[Digest],
     ) -> Result<bool, CoreError> {
         let p = &published.publication;
         let row = access_store::publications::PublicationRow {
@@ -632,31 +634,39 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
                 .map_err(|_| CoreError::Protocol("publication"))?,
             published_ms: p.published_ms,
         };
-        match access_store::publications::keep(&self.setup.app, &row).await? {
-            access_store::publications::Kept::New => Ok(true),
-            access_store::publications::Kept::Same => Ok(false),
-            access_store::publications::Kept::VersionTaken => {
-                Err(CoreError::Protocol("publication-version"))
+        let mut new = false;
+        for d in domains {
+            let domain = DomainId::from_bytes(d.0);
+            match access_store::publications::keep(&self.setup.app, &domain, &row).await? {
+                access_store::publications::Kept::New => new = true,
+                access_store::publications::Kept::Same => {}
+                access_store::publications::Kept::VersionTaken => {
+                    return Err(CoreError::Protocol("publication-version"));
+                }
             }
         }
+        Ok(new)
     }
 
-    /// The latest package `publisher` published for `namespace`.
+    /// The latest package `publisher` offered to `domain` for `namespace`.
     ///
     /// # Errors
     /// The store's errors.
     pub async fn latest_publication(
         &self,
+        domain: Digest,
         publisher: Id,
         namespace: &str,
     ) -> Result<Option<crate::app::publishing::Publication>, CoreError> {
-        Ok(
-            access_store::publications::of_namespace(&self.setup.app, namespace)
-                .await?
-                .into_iter()
-                .filter(|r| r.publisher == publisher.0)
-                .find_map(|r| crate::app::publishing::Publication::from_bytes(&r.package).ok()),
+        Ok(access_store::publications::of_namespace(
+            &self.setup.app,
+            &DomainId::from_bytes(domain.0),
+            namespace,
         )
+        .await?
+        .into_iter()
+        .filter(|r| r.publisher == publisher.0)
+        .find_map(|r| crate::app::publishing::Publication::from_bytes(&r.package).ok()))
     }
 
     /// Where `publication` stands in each of `domains` (§8.17.10.2, X21): the publisher's
@@ -677,15 +687,25 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
             .now()
             .await
             .map_err(|_| CoreError::Unavailable("time"))?;
-        let previous =
-            access_store::publications::of_namespace(&self.setup.app, &publication.spp.namespace)
-                .await?
-                .into_iter()
-                .filter(|r| {
-                    r.publisher == publication.spp.publisher.0
-                        && r.catalog_version < publication.spp.catalog_version
-                })
-                .find_map(|r| crate::app::publishing::Publication::from_bytes(&r.package).ok());
+        let mut rows = Vec::new();
+        for d in domains {
+            rows.extend(
+                access_store::publications::of_namespace(
+                    &self.setup.app,
+                    &DomainId::from_bytes(d.0),
+                    &publication.spp.namespace,
+                )
+                .await?,
+            );
+        }
+        rows.sort_by_key(|r| std::cmp::Reverse(r.catalog_version));
+        let previous = rows
+            .into_iter()
+            .filter(|r| {
+                r.publisher == publication.spp.publisher.0
+                    && r.catalog_version < publication.spp.catalog_version
+            })
+            .find_map(|r| crate::app::publishing::Publication::from_bytes(&r.package).ok());
         let readers = domains
             .iter()
             .map(|d| {

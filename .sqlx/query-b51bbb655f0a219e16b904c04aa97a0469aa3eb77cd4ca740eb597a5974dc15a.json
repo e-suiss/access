@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT fingerprint, publisher, namespace, catalog_version, package, published_ms\n           FROM access.schema_publication WHERE namespace = $1\n          ORDER BY catalog_version DESC, fingerprint LIMIT $2",
+  "query": "SELECT fingerprint, publisher, namespace, catalog_version, package, published_ms\n           FROM access.schema_publication WHERE domain_id = $1 AND namespace = $2\n          ORDER BY catalog_version DESC, fingerprint LIMIT $3",
   "describe": {
     "columns": [
       {
@@ -72,6 +72,7 @@
     ],
     "parameters": {
       "Left": [
+        "Bytea",
         "Text",
         "Int8"
       ]
@@ -85,5 +86,5 @@
       false
     ]
   },
-  "hash": "dbee33ce09a89542b7db82d1192ac52479cdbb68d2515a08cdf6b0f6029381ea"
+  "hash": "b51bbb655f0a219e16b904c04aa97a0469aa3eb77cd4ca740eb597a5974dc15a"
 }

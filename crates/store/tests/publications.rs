@@ -7,7 +7,11 @@
 )]
 
 use access_store::publications::{Kept, PublicationRow, keep, of_namespace};
+use access_store::scope::DomainId;
 use access_store::testing::fresh;
+
+const D: DomainId = DomainId::from_bytes([5; 32]);
+const OTHER: DomainId = DomainId::from_bytes([6; 32]);
 
 fn row(fingerprint: u8, version: u64) -> PublicationRow {
     PublicationRow {
@@ -25,24 +29,30 @@ fn row(fingerprint: u8, version: u64) -> PublicationRow {
 #[tokio::test]
 async fn a_published_version_is_kept_once_and_never_replaced() {
     let db = fresh().await.unwrap();
-    assert_eq!(keep(&db.app, &row(1, 2)).await.unwrap(), Kept::New);
-    assert_eq!(keep(&db.app, &row(1, 2)).await.unwrap(), Kept::Same);
-    assert_eq!(keep(&db.app, &row(2, 2)).await.unwrap(), Kept::VersionTaken);
-    assert_eq!(keep(&db.app, &row(3, 3)).await.unwrap(), Kept::New);
-    let listed = of_namespace(&db.app, "commerce").await.unwrap();
+    assert_eq!(keep(&db.app, &D, &row(1, 2)).await.unwrap(), Kept::New);
+    assert_eq!(keep(&db.app, &D, &row(1, 2)).await.unwrap(), Kept::Same);
+    assert_eq!(
+        keep(&db.app, &D, &row(2, 2)).await.unwrap(),
+        Kept::VersionTaken
+    );
+    assert_eq!(keep(&db.app, &D, &row(3, 3)).await.unwrap(), Kept::New);
+    let listed = of_namespace(&db.app, &D, "commerce").await.unwrap();
     assert_eq!(
         listed.iter().map(|r| r.catalog_version).collect::<Vec<_>>(),
         [3, 2]
     );
     assert_eq!(listed[1].package, vec![1]);
-    assert_eq!(of_namespace(&db.app, "other").await.unwrap(), []);
+    assert_eq!(of_namespace(&db.app, &D, "other").await.unwrap(), []);
+    // TN-20: another domain sees none of it, and may keep the same package for itself
+    assert_eq!(of_namespace(&db.app, &OTHER, "commerce").await.unwrap(), []);
+    assert_eq!(keep(&db.app, &OTHER, &row(2, 2)).await.unwrap(), Kept::New);
 }
 
 // OP-73, E10: neither the app role nor anyone else changes or removes a published row
 #[tokio::test]
 async fn a_published_row_is_never_updated_or_deleted() {
     let db = fresh().await.unwrap();
-    keep(&db.app, &row(1, 1)).await.unwrap();
+    keep(&db.app, &D, &row(1, 1)).await.unwrap();
     for pool in [&db.app, &db.owner] {
         for sql in [
             "UPDATE access.schema_publication SET package = '\\x00'",
@@ -55,7 +65,7 @@ async fn a_published_row_is_never_updated_or_deleted() {
             assert_eq!(changed, 0, "{sql}");
         }
     }
-    let listed = of_namespace(&db.app, "commerce").await.unwrap();
+    let listed = of_namespace(&db.app, &D, "commerce").await.unwrap();
     assert_eq!(listed.len(), 1);
     assert_eq!(listed[0].package, vec![1]);
 }

@@ -520,6 +520,7 @@ async fn a_publication_reaches_a_domain_only_by_its_own_acceptance() {
     let p2 = published.publication.clone();
     access_store::publications::keep(
         &db.app,
+        &DomainId::from_bytes(d.0),
         &access_store::publications::PublicationRow {
             fingerprint: published.fingerprint.0,
             publisher: ROOT.0,

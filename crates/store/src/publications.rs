@@ -1,10 +1,12 @@
 //! Schema Publication Packages as their publisher published them (§8.17.10.2, §9.13, E10, X21):
 //! one immutable row per fingerprint and per (publisher, namespace, catalog version). A row is a
-//! statement; no domain is changed by it. Nothing is updated or deleted (OP-73).
+//! statement; no domain is changed by it. A package is kept per domain it is offered to and
+//! read only in that domain's scope (TN-20). Nothing is updated or deleted (OP-73).
 
 use sqlx::PgPool;
 
 use crate::StoreError;
+use crate::scope::{DomainId, DomainTx};
 
 /// Most rows one namespace listing returns.
 pub const MAX_LISTED: i64 = 64;
@@ -49,16 +51,21 @@ fn bytes<const N: usize>(v: &[u8]) -> Result<[u8; N], StoreError> {
     <[u8; N]>::try_from(v).map_err(|_| StoreError::Corrupt)
 }
 
-/// Keeps `row` (app role).
+/// Keeps `row` as offered to `domain` (app role).
 ///
 /// # Errors
 /// [`StoreError`].
-pub async fn keep(app: &PgPool, row: &PublicationRow) -> Result<Kept, StoreError> {
-    let mut tx = app.begin().await?;
+pub async fn keep(
+    app: &PgPool,
+    domain: &DomainId,
+    row: &PublicationRow,
+) -> Result<Kept, StoreError> {
+    let mut t = DomainTx::begin(app, domain).await?;
     let inserted = sqlx::query!(
         "INSERT INTO access.schema_publication
-           (fingerprint, publisher, namespace, catalog_version, package, published_ms)
-         VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT DO NOTHING",
+           (domain_id, fingerprint, publisher, namespace, catalog_version, package, published_ms)
+         VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT DO NOTHING",
+        domain.as_bytes().as_slice(),
         row.fingerprint.as_slice(),
         row.publisher.as_slice(),
         row.namespace,
@@ -66,16 +73,18 @@ pub async fn keep(app: &PgPool, row: &PublicationRow) -> Result<Kept, StoreError
         row.package,
         signed(row.published_ms)?,
     )
-    .execute(&mut *tx)
+    .execute(&mut *t.tx)
     .await?;
     let kept = if inserted.rows_affected() == 1 {
         Kept::New
     } else {
         let same = sqlx::query_scalar!(
-            "SELECT 1 AS \"one!\" FROM access.schema_publication WHERE fingerprint = $1",
+            "SELECT 1 AS \"one!\" FROM access.schema_publication
+              WHERE domain_id = $1 AND fingerprint = $2",
+            domain.as_bytes().as_slice(),
             row.fingerprint.as_slice(),
         )
-        .fetch_optional(&mut *tx)
+        .fetch_optional(&mut *t.tx)
         .await?;
         if same.is_some() {
             Kept::Same
@@ -83,27 +92,32 @@ pub async fn keep(app: &PgPool, row: &PublicationRow) -> Result<Kept, StoreError
             Kept::VersionTaken
         }
     };
-    tx.commit().await?;
+    t.commit().await?;
     Ok(kept)
 }
 
-/// The packages published for `namespace`, newest version first, at most [`MAX_LISTED`].
+/// The packages offered to `domain` for `namespace`, newest version first, at most
+/// [`MAX_LISTED`].
 ///
 /// # Errors
 /// [`StoreError`].
 pub async fn of_namespace(
     app: &PgPool,
+    domain: &DomainId,
     namespace: &str,
 ) -> Result<Vec<PublicationRow>, StoreError> {
+    let mut t = DomainTx::begin(app, domain).await?;
     let rows = sqlx::query!(
         "SELECT fingerprint, publisher, namespace, catalog_version, package, published_ms
-           FROM access.schema_publication WHERE namespace = $1
-          ORDER BY catalog_version DESC, fingerprint LIMIT $2",
+           FROM access.schema_publication WHERE domain_id = $1 AND namespace = $2
+          ORDER BY catalog_version DESC, fingerprint LIMIT $3",
+        domain.as_bytes().as_slice(),
         namespace,
         MAX_LISTED,
     )
-    .fetch_all(app)
+    .fetch_all(&mut *t.tx)
     .await?;
+    t.commit().await?;
     rows.into_iter()
         .map(|r| {
             Ok(PublicationRow {

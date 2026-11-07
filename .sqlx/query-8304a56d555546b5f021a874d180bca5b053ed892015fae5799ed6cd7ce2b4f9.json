@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT 1 AS \"one!\" FROM access.schema_publication WHERE fingerprint = $1",
+  "query": "SELECT 1 AS \"one!\" FROM access.schema_publication\n              WHERE domain_id = $1 AND fingerprint = $2",
   "describe": {
     "columns": [
       {
@@ -12,6 +12,7 @@
     ],
     "parameters": {
       "Left": [
+        "Bytea",
         "Bytea"
       ]
     },
@@ -19,5 +20,5 @@
       null
     ]
   },
-  "hash": "3bbd759cf7db1bf487911a9a3cd134a10f939f1f5e3960d2a472a0bbe0a500f0"
+  "hash": "8304a56d555546b5f021a874d180bca5b053ed892015fae5799ed6cd7ce2b4f9"
 }
