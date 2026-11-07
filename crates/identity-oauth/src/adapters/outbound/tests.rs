@@ -77,6 +77,36 @@ fn only_public_addresses_are_reached() {
     }
 }
 
+// §14.3 (S-5): an IPv4 address carried in an SIIT-translated address is checked as IPv4, the
+// local-use NAT64 prefix 64:ff9b:1::/48 is never public, and after a bracketed IPv6 host only
+// `:port` may follow
+#[test]
+fn wrapped_and_bracketed_addresses_are_not_a_way_around() {
+    for blocked in [
+        "::ffff:0:127.0.0.1",
+        "::ffff:0:169.254.169.254",
+        "::ffff:0:10.0.0.1",
+        "64:ff9b:1::a00:1",
+        "64:ff9b:1:abcd::1",
+        "64:ff9b:1:ffff:ffff:ffff:ffff:ffff",
+    ] {
+        assert!(!public(blocked.parse().unwrap()), "{blocked}");
+    }
+    assert!(public("::ffff:0:1.1.1.1".parse().unwrap()));
+    assert!(public("64:ff9b::101:101".parse().unwrap()));
+    for bad in [
+        "https://[2606:4700::1]x/",
+        "https://[2606:4700::1].evil.example/",
+        "https://[2606:4700::1]8443/",
+        "https://[2606:4700::1]]/",
+    ] {
+        assert_eq!(Target::parse(bad), Err(OutboundError::Url), "{bad}");
+    }
+    let t = Target::parse("https://[2606:4700::1]:8443/k").unwrap();
+    assert_eq!(t.port(), 8443);
+    assert_eq!(Target::parse("https://[2606:4700::1]").unwrap().port(), 443);
+}
+
 // §14.3: an address literal is checked without resolution
 #[tokio::test]
 async fn literal_private_hosts_are_refused_before_connecting() {
