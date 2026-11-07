@@ -9,6 +9,7 @@
 //! The resource server never re-emits a token: a [`Verified`] carries what the token proved,
 //! not the token (§9.9.3 rule 9, L24). Nothing is accepted on a fault (MD-8, X21, TI-9).
 
+pub mod bounds;
 pub mod claims;
 pub mod introspection;
 pub mod keys;
@@ -20,7 +21,7 @@ use alloc::vec::Vec;
 
 use access_kernel::digest::Digest;
 use access_kernel::json::Json;
-use access_kernel::model::TrustedTime;
+use access_kernel::model::{RequirementTerm, TrustedTime};
 use access_kernel::verify::PureBackend;
 use access_kernel::verify::cose::Algorithm;
 use access_kernel::verify::dpop::{self, DpopError, ProofRules};
@@ -234,6 +235,9 @@ pub struct Presented<'a> {
     pub certificate: Option<[u8; 32]>,
     /// The position the protected content was written at, when known (§13.4 U60).
     pub content_position: Option<u64>,
+    /// The requirements this server satisfied locally for this request; a contract's local
+    /// requirement outside them refuses the token (OP-150 m.8 (b)).
+    pub satisfied: &'a [RequirementTerm],
 }
 
 /// Why a token is not accepted. A value applied as DENY, never an error that could pass.
@@ -293,9 +297,16 @@ pub enum Denied {
     /// The exact-intent token is not for this intent.
     #[error("token-intent")]
     Intent,
-    /// The bounds token does not name this action.
+    /// The bounds token does not cover this intent: its action, resource scope, parameters,
+    /// recipient or purpose.
     #[error("token-bounds")]
     Bounds,
+    /// A contract member the SDK cannot evaluate; nothing is assumed (MD-8).
+    #[error("unevaluable {0}")]
+    Unevaluable(&'static str),
+    /// A local requirement of the contract this server did not satisfy.
+    #[error("local-requirement")]
+    LocalRequirement,
     /// This server is not in the contract's audience.
     #[error("contract-audience")]
     ContractAudience,
@@ -394,6 +405,7 @@ impl Denied {
                 | Self::Claim(_)
                 | Self::Intent
                 | Self::Bounds
+                | Self::LocalRequirement
                 | Self::ContractAudience
                 | Self::ContractHorizon
                 | Self::IntrospectionAudience
@@ -703,8 +715,12 @@ impl ResourceServer {
                 if !verdict.details.iter().any(|d| d.action.is(action)) {
                     return Err(Denied::Bounds);
                 }
+                // §9.9.1, §5.3, OP-150 m.9 (b)
+                bounds::bounds(claims, claims::validity(claims)?, intent.envelope())?;
             }
         }
+        // OP-150 m.8 (b)
+        bounds::contract(claims::validity(claims)?, presented.satisfied)?;
         // §9.12: the contract names this verifier and has not ended
         if !verdict.contract.audience.contains(&self.audience) {
             return Err(Denied::ContractAudience);

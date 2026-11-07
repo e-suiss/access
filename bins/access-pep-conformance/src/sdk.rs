@@ -9,6 +9,7 @@ use std::time::Instant;
 use access_kernel::codec::Canonical;
 use access_kernel::combinator::Capacity;
 use access_kernel::digest::Digest;
+use access_kernel::intent::IntentEnvelope;
 use access_kernel::json::b64url_decode;
 use access_kernel::meta::ExerciseBasis;
 use access_kernel::model::Id;
@@ -238,8 +239,14 @@ impl Sdk {
             proof: proof.map(String::as_str),
             certificate: None,
             content_position: None,
+            satisfied: &[],
         };
-        let intent: Intent<Door, Open> = Intent::approved(intent, Some(action()));
+        // §9.9.1: a bounds token is evaluated against the envelope of this intent
+        let intent: Intent<Door, Open> = unhex(&self.msg.request.envelope)
+            .and_then(|b| IntentEnvelope::from_bytes(&b).ok())
+            .and_then(|e| Intent::of(e).ok())
+            .filter(|i| *i.digest() == intent)
+            .unwrap_or_else(|| Intent::approved(intent, Some(action())));
         let ports = Ports {
             keys: http,
             replay: http,

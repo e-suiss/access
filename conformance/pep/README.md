@@ -113,6 +113,7 @@ Each case:
 | `request.method`, `request.uri` | The request the token is presented with, as the resource server sees it: what the `DPoP` proof's `htm` and `htu` must match |
 | `request.proofs` | The `DPoP` proofs, one per presentation, in order; empty when the request carries none |
 | `request.repeat` | How many times to present the token (default 1); each presentation uses the proof at its index |
+| `request.envelope` | The intent envelope (hex CBOR) whose digest is `request.intent`; a resource server evaluates a bounds token's resource scope and parameters against it |
 
 What the PEP does per mode:
 

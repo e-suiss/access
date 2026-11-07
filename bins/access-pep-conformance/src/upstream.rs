@@ -413,6 +413,7 @@ impl Upstream {
             uri: String::from("https://rs.example/doors/1"),
             proofs: Vec::new(),
             repeat: case.repeat.unwrap_or(1),
+            envelope: hex(&self.fixture.envelope.to_bytes().map_err(encode_err)?),
         };
         if let Some(t) = &token {
             request.proofs = self.proofs(case, t, &request)?;

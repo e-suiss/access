@@ -10,7 +10,15 @@
 
 mod support;
 
+use std::collections::BTreeMap;
+
+use access_kernel::codec::Canonical;
 use access_kernel::digest::Digest;
+use access_kernel::intent::ParamValue;
+use access_kernel::model::{
+    AuthoritySet, Binding as RequirementBinding, Bound, Consumption, Id, Independence, ProofKind,
+    RequirementTerm, ResourceRef, ResourceSelector, Structural, SubjectSelector,
+};
 use access_kernel::verify::dpop::DpopError;
 use access_kernel::verify::jws::ClaimError;
 use access_kernel::verify::projection::{Kind, ProjectionError};
@@ -35,6 +43,7 @@ fn present<'a>(token: &'a str, proof: Option<&'a str>) -> Presented<'a> {
         proof,
         certificate: None,
         content_position: None,
+        satisfied: &[],
     }
 }
 
@@ -742,4 +751,241 @@ fn metadata_from_another_binding_domain_or_time_verifies_nothing() {
     let mut c = config(Profile::Fast);
     c.metadata.domain = d(2);
     assert_eq!(ResourceServer::new(c).unwrap_err(), ConfigError::Domain);
+}
+
+fn bounds_token(set: AuthoritySet) -> String {
+    let mut spec = TokenSpec::bounds_token();
+    spec.bounds = Some(set);
+    spec.signed()
+}
+
+fn door(path: &[&str], params: BTreeMap<String, ParamValue>) -> Intent<Door, Open> {
+    let mut e = support::envelope();
+    e.resources = vec![ResourceRef {
+        namespace: "door".to_owned(),
+        path: path.iter().map(|p| (*p).to_owned()).collect(),
+        incarnation: 0,
+    }];
+    e.params = params;
+    Intent::of(e).unwrap()
+}
+
+fn verify_for(
+    s: &ResourceServer,
+    token: &str,
+    jti: &str,
+    intent: &Intent<Door, Open>,
+    satisfied: &[RequirementTerm],
+    m: &support::Memory,
+) -> Result<Verified<Door, Open>, Denied> {
+    let p = proof(token, jti);
+    let mut presented = present(token, Some(&p));
+    presented.satisfied = satisfied;
+    s.verify(&presented, intent, &FixedClock(NOW), &m.ports())
+}
+
+// §9.9.1, §5.3, OP-109 m.7, OP-150 m.9 (b), MD-8: a bounds token is evaluated with the Kernel's
+// covers: a token for store A does not open a door in store B, a parameter outside its range
+// is refused, and what the SDK cannot evaluate (no intent envelope, a party selector it only
+// knows by pseudonym, details that differ from the contract's bounds) is refused
+#[test]
+fn a_bounds_token_covers_its_resource_scope_and_parameters_only() {
+    let s = server(Profile::Fast);
+    let m = support::Memory::healthy();
+    let mut store_a = support::door_bounds();
+    store_a.resource = ResourceSelector::Structural(Structural {
+        namespace: "door".to_owned(),
+        prefix: vec!["store-a".to_owned()],
+        kind: None,
+        attrs: BTreeMap::new(),
+    });
+    store_a.params = BTreeMap::from([(
+        "amount".to_owned(),
+        Bound::Range {
+            min: None,
+            max: Some(100),
+            unit: "eur".to_owned(),
+        },
+    )]);
+    let token = bounds_token(store_a.clone());
+    let amount = |value| {
+        BTreeMap::from([(
+            "amount".to_owned(),
+            ParamValue::Amount {
+                value,
+                unit: "eur".to_owned(),
+            },
+        )])
+    };
+    assert!(
+        verify_for(
+            &s,
+            &token,
+            "b-1",
+            &door(&["store-a", "1"], amount(50)),
+            &[],
+            &m
+        )
+        .is_ok()
+    );
+    assert_eq!(
+        verify_for(
+            &s,
+            &token,
+            "b-2",
+            &door(&["store-b", "1"], amount(50)),
+            &[],
+            &m
+        )
+        .unwrap_err(),
+        Denied::Bounds
+    );
+    assert_eq!(
+        verify_for(
+            &s,
+            &token,
+            "b-3",
+            &door(&["store-a", "1"], amount(150)),
+            &[],
+            &m
+        )
+        .unwrap_err(),
+        Denied::Bounds
+    );
+    assert_eq!(
+        verify_for(
+            &s,
+            &token,
+            "b-4",
+            &door(&["store-a", "1"], BTreeMap::new()),
+            &[],
+            &m
+        )
+        .unwrap_err(),
+        Denied::Bounds
+    );
+    let blind: Intent<Door, Open> = Intent::approved(intent_hash(), Some(support::action()));
+    assert_eq!(
+        verify_for(&s, &token, "b-5", &blind, &[], &m).unwrap_err(),
+        Denied::Unevaluable("intent")
+    );
+    let mut to_party = store_a.clone();
+    to_party.recipient = Some(SubjectSelector::Party(Id([5; 16])));
+    let token = bounds_token(to_party);
+    assert_eq!(
+        verify_for(
+            &s,
+            &token,
+            "b-6",
+            &door(&["store-a", "1"], amount(50)),
+            &[],
+            &m
+        )
+        .unwrap_err(),
+        Denied::Unevaluable("bounds")
+    );
+}
+
+// OP-150 m.9 (b), MD-8: every bounds detail repeats the contract's bounds, and a bounds token
+// without readable bounds is refused
+#[test]
+fn bounds_details_must_repeat_readable_contract_bounds() {
+    let s = server(Profile::Fast);
+    let m = support::Memory::healthy();
+    let amount = BTreeMap::from([(
+        "amount".to_owned(),
+        ParamValue::Amount {
+            value: 50,
+            unit: "eur".to_owned(),
+        },
+    )]);
+    let mut store_a = support::door_bounds();
+    store_a.resource = ResourceSelector::Structural(Structural {
+        namespace: "door".to_owned(),
+        prefix: vec!["store-a".to_owned()],
+        kind: None,
+        attrs: BTreeMap::new(),
+    });
+    let mut spec = TokenSpec::bounds_token();
+    spec.bounds = Some(store_a);
+    let claims = spec.claims().replacen(r#""store-a""#, r#""store-b""#, 1);
+    let mismatched = jws(support::TOKEN_SEED, "at+jwt", &claims);
+    assert_eq!(
+        verify_for(
+            &s,
+            &mismatched,
+            "b-7",
+            &door(&["store-b", "1"], amount),
+            &[],
+            &m
+        )
+        .unwrap_err(),
+        Denied::Claim("authorization_details")
+    );
+    let mut spec = TokenSpec::bounds_token();
+    spec.bounds = None;
+    let unbounded = spec.signed();
+    assert_eq!(
+        verify_for(&s, &unbounded, "b-8", &intent(), &[], &m).unwrap_err(),
+        Denied::Unevaluable("bounds")
+    );
+}
+
+// OP-150 m.8 (b), §9.12, MD-8: a contract's local requirement, such as an approval, must be one
+// this server satisfied; an extension the SDK must understand is refused
+#[test]
+fn a_contract_local_requirement_this_server_did_not_satisfy_is_refused() {
+    let s = server(Profile::Fast);
+    let m = support::Memory::healthy();
+    let approval = RequirementTerm {
+        proof_kind: ProofKind::Claim,
+        class: "approval".to_owned(),
+        count: 1,
+        binding: RequirementBinding::IntentDigest,
+        freshness_ms: None,
+        independence: Independence::None,
+        consumption: Consumption::Reusable,
+        source: None,
+        assurance: BTreeMap::new(),
+    };
+    for (i, spec) in [TokenSpec::bounds_token(), TokenSpec::intent_token()]
+        .into_iter()
+        .enumerate()
+    {
+        let mut spec = spec;
+        spec.local_requirements_json =
+            Some(format!("[{}]", support::value_json(&approval.to_value())));
+        spec.extra = format!(r#","note":"{i}""#);
+        let token = spec.signed();
+        assert_eq!(
+            verify_for(&s, &token, &format!("l-{i}-1"), &intent(), &[], &m).unwrap_err(),
+            Denied::LocalRequirement
+        );
+        assert!(
+            verify_for(
+                &s,
+                &token,
+                &format!("l-{i}-2"),
+                &intent(),
+                std::slice::from_ref(&approval),
+                &m
+            )
+            .is_ok()
+        );
+    }
+    assert!(Denied::LocalRequirement.is_decision());
+    let mut spec = TokenSpec::bounds_token();
+    spec.local_requirements_json = Some(r#"[{"proof_kind":"claim"}]"#.to_owned());
+    let token = spec.signed();
+    assert_eq!(
+        verify_for(&s, &token, "l-3", &intent(), &[], &m).unwrap_err(),
+        Denied::Unevaluable("local_requirements")
+    );
+    let mut spec = TokenSpec::bounds_token();
+    spec.contract_audience = format!(r#""{RS}"],"must_understand":["x-ext""#);
+    let token = spec.signed();
+    assert_eq!(
+        verify_for(&s, &token, "l-4", &intent(), &[], &m).unwrap_err(),
+        Denied::Unevaluable("must_understand")
+    );
 }

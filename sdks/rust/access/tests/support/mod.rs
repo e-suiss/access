@@ -18,7 +18,9 @@ use access_kernel::digest::Digest;
 use access_kernel::intent::{ContextRefs, IntentEnvelope, intent_digest};
 use access_kernel::json::b64url_encode;
 use access_kernel::meta::{ExerciseBasis, exercise_id};
-use access_kernel::model::{ActionRef, Id, ResourceRef, Window};
+use access_kernel::model::{
+    ActionRef, ActionSet, AuthoritySet, Id, ResourceRef, ResourceSelector, Window,
+};
 use access_kernel::receipt::{self, Receipt};
 use access_kernel::status::{CWT_CONTENT_TYPE, ListToken};
 use access_kernel::verify::cose::{Algorithm, PublicKey, to_be_signed};
@@ -291,6 +293,47 @@ pub(crate) fn ask<'a>(
 
 // ---------------------------------------------------------------- tokens
 
+/// A model value in the token's JSON form: digests as `sha-256:` text, bytes as base64url.
+pub(crate) fn value_json(v: &Value) -> String {
+    match v {
+        Value::Unsigned(n) => n.to_string(),
+        Value::Negative(n) => format!("-{}", n + 1),
+        Value::Bytes(b) => format!(r#""{}""#, b64url_encode(b)),
+        Value::Text(t) => format!("{t:?}"),
+        Value::Bool(b) => b.to_string(),
+        Value::Array(items) => match items.as_slice() {
+            [Value::Negative(15), Value::Bytes(h)] => format!(r#""sha-256:{}""#, b64url_encode(h)),
+            _ => format!(
+                "[{}]",
+                items.iter().map(value_json).collect::<Vec<_>>().join(",")
+            ),
+        },
+        Value::Map(entries) => format!(
+            "{{{}}}",
+            entries
+                .iter()
+                .map(|(k, v)| format!("{}:{}", value_json(k), value_json(v)))
+                .collect::<Vec<_>>()
+                .join(",")
+        ),
+        Value::Tag(..) => panic!("no tags in tokens"),
+    }
+}
+
+/// The bounds of the healthy bounds token: the door-opening action on door 1.
+pub(crate) fn door_bounds() -> AuthoritySet {
+    AuthoritySet {
+        actions: ActionSet {
+            exact: BTreeSet::from([action()]),
+            prefix: BTreeSet::new(),
+        },
+        resource: ResourceSelector::Exact(envelope().resources.first().unwrap().clone()),
+        params: BTreeMap::new(),
+        recipient: None,
+        purpose: None,
+    }
+}
+
 pub(crate) fn jws(seed: u8, typ: &str, claims: &str) -> String {
     let header = format!(
         r#"{{"alg":"Ed25519","kid":"{}","typ":"{}"}}"#,
@@ -350,6 +393,8 @@ pub(crate) struct TokenSpec {
     pub(crate) max_staleness_ms: Option<u64>,
     pub(crate) extra: String,
     pub(crate) contract_audience: String,
+    pub(crate) bounds: Option<AuthoritySet>,
+    pub(crate) local_requirements_json: Option<String>,
 }
 
 impl TokenSpec {
@@ -378,12 +423,15 @@ impl TokenSpec {
             max_staleness_ms: None,
             extra: String::new(),
             contract_audience: format!(r#""{RS}""#),
+            bounds: None,
+            local_requirements_json: None,
         }
     }
 
     pub(crate) fn bounds_token() -> Self {
         Self {
             kind: "bounds",
+            bounds: Some(door_bounds()),
             ..Self::intent_token()
         }
     }
@@ -412,13 +460,37 @@ impl TokenSpec {
             .as_ref()
             .map(|s| format!(r#","status":{s}"#))
             .unwrap_or_default();
+        let bounds = self.bounds.as_ref().map(|b| value_json(&b.to_value()));
+        let bounds_member = bounds
+            .as_ref()
+            .map(|b| format!(r#","bounds":{b}"#))
+            .unwrap_or_default();
+        let repeated = match &self.bounds {
+            Some(b) if self.kind == "bounds" => {
+                let Value::Map(entries) = b.to_value() else {
+                    panic!("bounds map")
+                };
+                entries
+                    .iter()
+                    .filter(|(k, _)| matches!(k, Value::Text(t) if t != "actions"))
+                    .map(|(k, v)| format!(",{}:{}", value_json(k), value_json(v)))
+                    .collect::<Vec<_>>()
+                    .concat()
+            }
+            _ => String::new(),
+        };
+        let local = self
+            .local_requirements_json
+            .as_ref()
+            .map(|l| format!(r#","local_requirements":{l}"#))
+            .unwrap_or_default();
         let (class, variant) = if self.kind == "intent" {
             ("online", "online-strict")
         } else {
             ("intermittent", "bounded-staleness")
         };
         let validity = format!(
-            r#"{{"audience":[{}],"horizon":{},"profile":{{"class":"{class}","variant":"{variant}","version":1}}{staleness}{contract_status}}}"#,
+            r#"{{"audience":[{}],"horizon":{},"profile":{{"class":"{class}","variant":"{variant}","version":1}}{staleness}{contract_status}{bounds_member}{local}}}"#,
             self.contract_audience, self.horizon_ms
         );
         let status = self
@@ -436,7 +508,7 @@ impl TokenSpec {
             .map(|c| format!(r#","access_contract":"{}""#, text_digest(c)))
             .unwrap_or_default();
         format!(
-            r#"{{"iss":"{}","sub":"p-1"{act},"aud":{aud},"exp":{},"iat":{},"jti":"{}","client_id":"c-1","cnf":{{"jkt":"{}"}},"authorization_details":[{{"type":"{}","kind":"{}","schema":"{}","domain":"{}","exercise":"{}","basis_ref":"{}","capacity":{},"validity":{validity}{intent}}}]{family}{contract}{status}{}}}"#,
+            r#"{{"iss":"{}","sub":"p-1"{act},"aud":{aud},"exp":{},"iat":{},"jti":"{}","client_id":"c-1","cnf":{{"jkt":"{}"}},"authorization_details":[{{"type":"{}","kind":"{}","schema":"{}","domain":"{}","exercise":"{}","basis_ref":"{}","capacity":{},"validity":{validity}{intent}{repeated}}}]{family}{contract}{status}{}}}"#,
             self.issuer,
             self.exp_s,
             self.iat_s,

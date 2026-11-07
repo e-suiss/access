@@ -439,6 +439,7 @@ fn the_rs_sdk_refuses_a_replayed_dpop_proof_with_the_memory_store() {
                 proof: Some(p),
                 certificate: None,
                 content_position: None,
+                satisfied: &[],
             },
             &intent(),
             &FixedClock(NOW),

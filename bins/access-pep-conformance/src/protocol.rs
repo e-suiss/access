@@ -77,6 +77,10 @@ pub struct Request {
     /// How many times the same token is presented; the effect is allowed at most once.
     #[serde(default = "one")]
     pub repeat: u32,
+    /// The intent envelope (hex of its CBOR) whose digest is the fixture's intent; a resource
+    /// server evaluates a bounds token against it (§9.9.1).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub envelope: String,
 }
 
 fn default_method() -> String {
