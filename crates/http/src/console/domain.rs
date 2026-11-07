@@ -1,0 +1,220 @@
+//! The BFF's pure rules (OP-63 sans-I/O): the console's security headers, the request origin
+//! and CSRF checks, what the proxies forward, and the read proof a browser AIS gives.
+
+use access_kernel::ais::{CONTENT_TYPE, SKEW_MS, Statement};
+use access_kernel::codec::Canonical;
+use access_kernel::combinator::Mode;
+use access_kernel::digest::Digest;
+use access_kernel::verify::PureBackend;
+use access_kernel::verify::cose::{self, KeySet, PublicKey};
+use axum::http::{HeaderMap, HeaderName, HeaderValue, Method};
+use suiss_crypto::dcbor::{self, Limits};
+use suiss_crypto::digest::context_digest;
+
+/// `Content-Security-Policy` of the console (TN-131): nothing but its own scripts, styles and
+/// API; `'wasm-unsafe-eval'` lets the Kernel's WebAssembly compile, and nothing else is
+/// evaluated.
+pub const CONTENT_SECURITY_POLICY: &str = "default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self'; connect-src 'self'; font-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types 'none'";
+
+/// The headers every console page, asset and API answer carries (TN-131, §14.5).
+/// Cross-origin isolation is safe: the Kernel's WebAssembly is a same-origin asset.
+pub const SECURITY_HEADERS: [(&str, &str); 8] = [
+    ("content-security-policy", CONTENT_SECURITY_POLICY),
+    ("x-content-type-options", "nosniff"),
+    ("referrer-policy", "no-referrer"),
+    ("cross-origin-opener-policy", "same-origin"),
+    ("cross-origin-embedder-policy", "require-corp"),
+    ("cross-origin-resource-policy", "same-origin"),
+    (
+        "permissions-policy",
+        "publickey-credentials-get=(self), publickey-credentials-create=(self), camera=(), microphone=(), geolocation=(), payment=(), usb=(), serial=(), bluetooth=()",
+    ),
+    ("x-frame-options", "DENY"),
+];
+
+/// Adds [`SECURITY_HEADERS`], replacing any the inner answer set.
+pub fn secure(h: &mut HeaderMap) {
+    for (name, value) in SECURITY_HEADERS {
+        h.insert(name, HeaderValue::from_static(value));
+    }
+}
+
+/// The header carrying the browser's AIS (OP-151 m.3 (e)); the management API's own name.
+pub const AIS_HEADER: HeaderName = HeaderName::from_static(crate::api::domain::caller::AIS_HEADER);
+
+/// The digest context of a console read proof.
+pub const READ_CONTEXT: &str = "access/console-read/v1";
+
+/// Whether a method changes something and so needs the CSRF checks.
+#[must_use]
+pub fn unsafe_method(m: &Method) -> bool {
+    !matches!(*m, Method::GET | Method::HEAD)
+}
+
+/// Why a request is refused before anything else looks at it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Gate {
+    /// Passes.
+    Pass,
+    /// `Origin` is missing or not the configured management origin (TN-131: the `Host` header
+    /// is never consulted).
+    Origin,
+    /// `Sec-Fetch-Site` says another site sent it.
+    CrossSite,
+}
+
+/// The origin gate (TN-131): a state-changing request names the configured origin in
+/// `Origin`; any request a browser marks as cross-site is refused.
+#[must_use]
+pub fn gate(headers: &HeaderMap, method: &Method, origin: &str) -> Gate {
+    let site = headers.get("sec-fetch-site").and_then(|v| v.to_str().ok());
+    if matches!(site, Some(s) if s != "same-origin" && s != "none") {
+        return Gate::CrossSite;
+    }
+    if unsafe_method(method) {
+        let presented: Vec<&str> = headers
+            .get_all(axum::http::header::ORIGIN)
+            .iter()
+            .filter_map(|v| v.to_str().ok())
+            .collect();
+        if presented != [origin] {
+            return Gate::Origin;
+        }
+    }
+    Gate::Pass
+}
+
+/// The request headers the admin proxy passes on; everything else (cookies, `Authorization`,
+/// `DPoP`, forwarding headers) stays at the BFF.
+pub const ADMIN_FORWARDED: [&str; 6] = [
+    "content-type",
+    "accept",
+    "idempotency-key",
+    "if-match",
+    "if-none-match",
+    crate::api::domain::caller::AIS_HEADER,
+];
+
+/// The request headers the ADP proxy passes on: its AIS travels in the body (§9.5).
+pub const ADP_FORWARDED: [&str; 2] = ["content-type", "accept"];
+
+/// The response headers the proxies hand back to the console.
+pub const RETURNED: [&str; 9] = [
+    "content-type",
+    "etag",
+    "link",
+    "location",
+    "ratelimit",
+    "ratelimit-policy",
+    "retry-after",
+    "request-id",
+    "www-authenticate",
+];
+
+/// The ADP reads the console may ask for (TN-128): explain, search and the eligibility check.
+/// No evaluation is forwarded, so nothing through the BFF is ever recorded or committed.
+#[must_use]
+pub fn adp_read(rest: &str) -> bool {
+    if rest == "explain" || rest == "eligibility:check" {
+        return true;
+    }
+    rest.strip_prefix("search/").is_some_and(|kind| {
+        !kind.is_empty()
+            && kind.len() <= 64
+            && kind
+                .bytes()
+                .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-' || b == b'_')
+    })
+}
+
+/// Whether `rest` is a path the admin proxy may name under `/admin/v1/`: plain segments, no dot
+/// segments, no encoded slashes or backslashes, no empty segments.
+#[must_use]
+pub fn admin_path(rest: &str) -> bool {
+    !rest.is_empty()
+        && rest.len() <= 1024
+        && rest.split('/').all(|s| {
+            !s.is_empty()
+                && s != "."
+                && s != ".."
+                && !s.contains('%')
+                && !s.contains('\\')
+                && s.bytes().all(|b| b.is_ascii_graphic())
+        })
+}
+
+/// What a read proof binds: the method and the path with its query, as the management API
+/// sees them.
+#[must_use]
+pub fn read_intent(method: &Method, path_and_query: &str) -> Digest {
+    let mut canonical = Vec::with_capacity(path_and_query.len().saturating_add(8));
+    canonical.extend_from_slice(method.as_str().as_bytes());
+    canonical.push(b' ');
+    canonical.extend_from_slice(path_and_query.as_bytes());
+    Digest(context_digest(READ_CONTEXT, &canonical).0)
+}
+
+/// Why a read proof is refused.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
+pub enum ProofError {
+    /// The session has no device Instance yet.
+    #[error("no instance")]
+    NoInstance,
+    /// Not signed by the session's Instance key, not a `check` statement for the session's
+    /// domain and this request, or not signed within the skew.
+    #[error("rejected")]
+    Rejected,
+}
+
+/// A read proof (TN-128, OP-151 m.3 (e)): the browser's AIS, signed with the session's device
+/// Instance key, in `check` mode (CT0), for the session's domain, over [`read_intent`] of this
+/// request, signed within [`SKEW_MS`] of now. Only then does the BFF attach the session's read
+/// token: a cookie without the browser's key reads nothing.
+///
+/// # Errors
+/// [`ProofError`].
+pub fn verify_read_proof(
+    sign1: &[u8],
+    instance: Option<(&[u8; 32], &PublicKey)>,
+    domain: &Digest,
+    intent: &Digest,
+    now_ms: u64,
+) -> Result<Statement, ProofError> {
+    let (kid, key) = instance.ok_or(ProofError::NoInstance)?;
+    let mut keys = KeySet::default();
+    keys.insert(*kid, key.clone())
+        .map_err(|_| ProofError::Rejected)?;
+    keys.allowed.extend([
+        cose::Algorithm::Esp256,
+        cose::Algorithm::Es256,
+        cose::Algorithm::Ed25519,
+    ]);
+    let verified = cose::verify_sign1(&PureBackend, sign1, &keys, CONTENT_TYPE)
+        .map_err(|_| ProofError::Rejected)?;
+    let value =
+        dcbor::decode(&verified.payload, Limits::CEILING).map_err(|_| ProofError::Rejected)?;
+    let s = Statement::from_value(&value).map_err(|_| ProofError::Rejected)?;
+    let fresh = s.iat <= now_ms.saturating_add(SKEW_MS) && now_ms <= s.iat.saturating_add(SKEW_MS);
+    if s.mode != Mode::Check || s.domain != *domain || s.intent != *intent || !fresh {
+        return Err(ProofError::Rejected);
+    }
+    Ok(s)
+}
+
+/// Copies the headers named in `names` from `from`.
+#[must_use]
+pub fn pick(from: &HeaderMap, names: &[&str]) -> Vec<(HeaderName, HeaderValue)> {
+    names
+        .iter()
+        .filter_map(|n| HeaderName::from_bytes(n.as_bytes()).ok())
+        .flat_map(|n| {
+            from.get_all(&n)
+                .iter()
+                .map(|v| (n.clone(), v.clone()))
+                .collect::<Vec<_>>()
+        })
+        .collect()
+}
+
+#[cfg(test)]
+mod tests;

@@ -14,6 +14,7 @@ access-authority-sequencer = { path = "../authority-sequencer" }
 access-identity-admin = { workspace = true }
 access-identity-events = { workspace = true }
 access-identity-oauth = { workspace = true }
+access-identity-session = { workspace = true }
 access-identity-ui = { workspace = true }
 access-internal-api = { workspace = true }
 access-kernel = { workspace = true }
@@ -38,7 +39,6 @@ tracing = { workspace = true, features = ["std"] }
 access-crypto = { workspace = true, features = ["testing"] }
 access-identity-account = { workspace = true }
 access-identity-hooks = { workspace = true }
-access-identity-session = { workspace = true }
 access-identity-signer = { path = "../identity-signer" }
 access-identity-webauthn = { workspace = true }
 access-store = { workspace = true, features = ["testing"] }

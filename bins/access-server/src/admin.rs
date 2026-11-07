@@ -18,10 +18,13 @@ use access_http::api::ports::{
     Unavailable,
 };
 use access_identity_admin::ports::{Decider, Governance, Instances};
+use access_http::console::Console;
+use access_http::login::Assets;
 use access_store::Pool;
 use access_store::api_idempotency;
 use suiss_crypto::pkcs11::KeyStore;
 
+use crate::console::ServerConsole;
 use crate::login::ID_KEY_ROOT;
 
 /// The derivation context of the cursor key under the cell's id-key root.
@@ -134,13 +137,15 @@ impl<P: Decider + Governance + Instances + realm::LiveKeys + Clone + Send + Sync
 {
 }
 
-/// The management router over this process's ports; its origin is the configured
-/// `suiss.management_api` (§17.9.6: never derived from `Host`).
+/// The management router over this process's ports, with the console's BFF under
+/// `/console/*` (TN-128); its origin is the configured `suiss.management_api` (§17.9.6: never
+/// derived from `Host`).
 pub(crate) fn router<P: RealmPlane>(
     config: &crate::config::Config,
     app: Pool,
     keys: &KeyStore,
     realms: realm::Realms<P>,
+    console_assets: Option<Assets>,
 ) -> Result<axum::Router, String> {
     let origin = config
         .suiss
@@ -148,10 +153,16 @@ pub(crate) fn router<P: RealmPlane>(
         .map(|s| s.management_api.clone())
         .ok_or("no suiss section")?;
     let api = Api::new(
-        ServerApi::new(app, keys, origin, realms)?,
+        ServerApi::new(app, keys, origin.clone(), realms)?,
         Limits::default(),
     );
-    access_http::api::router(&api).map_err(|e| e.to_string())
+    let admin = access_http::api::router(&api).map_err(|e| e.to_string())?;
+    let console = Console::new(
+        ServerConsole::new(admin.clone(), origin),
+        Limits::default(),
+        console_assets,
+    );
+    Ok(access_http::console::router(&console).merge(admin))
 }
 
 impl<P: RealmPlane> Env for ServerApi<P> {

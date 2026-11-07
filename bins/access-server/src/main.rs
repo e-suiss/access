@@ -14,6 +14,7 @@ mod admin;
 mod bootstrap;
 mod claims;
 mod config;
+mod console;
 mod events;
 mod idp;
 mod ids;
@@ -107,6 +108,7 @@ struct Prepared {
     login_keys: Arc<KeyStore>,
     identity_keys: Arc<KeyStore>,
     assets: Option<Assets>,
+    console_assets: Option<Assets>,
     outbound: Outbound,
 }
 
@@ -510,6 +512,14 @@ fn prepare(config: &Config, tls: Arc<access_http::tls::ServerConfig>) -> Result<
         .map(Assets::load)
         .transpose()
         .map_err(|e| e.to_string())?;
+    // TN-128: the built console, read before the lockdown as well
+    let console_assets = config
+        .console
+        .dist_dir
+        .as_deref()
+        .map(Assets::load)
+        .transpose()
+        .map_err(|e| e.to_string())?;
     Ok(Prepared {
         tls,
         root_cert,
@@ -523,6 +533,7 @@ fn prepare(config: &Config, tls: Arc<access_http::tls::ServerConfig>) -> Result<
         login_keys,
         identity_keys,
         assets,
+        console_assets,
         outbound: outbound(config)?,
     })
 }
@@ -937,6 +948,7 @@ async fn serve(
     let cell_ids = Arc::new(ids::CellIds::new(prepared.identity_keys.clone()));
     let (admin_app, admin_ids) = (all.app.clone(), cell_ids.clone());
     let admin_targets = prepared.outbound.declared();
+    let console_assets = prepared.console_assets;
     // OP-146 m.5 (f): today's day partitions exist before anything writes to them
     jobs::open_now(&all.app, &all.archive, &holder()?).await;
     let background = Background::start(
@@ -1019,6 +1031,7 @@ async fn serve(
             keys: realm_keys,
             declared: admin_targets,
         },
+        console_assets,
     )?;
     // OP-149 m.4, m.16 (a), m.17 (e), (g), m.37
     let (platform, platform_api) = platform::routes(

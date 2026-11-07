@@ -49,6 +49,9 @@ pub(crate) struct Config {
     /// The identity plane (TN-10, CMP-22b, OP-138).
     pub(crate) identity: Option<Identity>,
     pub(crate) login: Login,
+    /// The console (OP-151 m.2 M3).
+    #[serde(default)]
+    pub(crate) console: Console,
     /// The Suiss deployment this Access belongs to (OP-149 m.3, E42).
     pub(crate) suiss: Option<Suiss>,
     /// Event delivery targets the operator declares (OP-149 m.23): a push or webhook stream
@@ -124,6 +127,15 @@ impl Suiss {
             products: self.products.clone(),
         }
     }
+}
+
+/// The console on the management listener (TN-128, OP-151 m.2 M3).
+#[derive(Debug, Default, Deserialize, Serialize)]
+#[serde(deny_unknown_fields, default)]
+pub(crate) struct Console {
+    /// The built `web/console/dist`; read once before the lockdown. Without it only the
+    /// console's API is served.
+    pub(crate) dist_dir: Option<PathBuf>,
 }
 
 /// The hosted login (OP-146 m.12, m.14).
@@ -292,6 +304,7 @@ impl Default for Config {
             signer: None,
             identity: None,
             login: Login::default(),
+            console: Console::default(),
             suiss: None,
             delivery_targets: Vec::new(),
             provider: access_http::declarations::Stated::default(),
