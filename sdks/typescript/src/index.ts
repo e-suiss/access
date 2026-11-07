@@ -14,6 +14,7 @@ import init, {
   exerciseBasis,
   intentDigest,
   operationalKey,
+  receiptPosition,
   statusLookup,
   verifyCheckpoint,
   verifyConsistency,
@@ -45,6 +46,8 @@ const kernel = {
   verifyConsistency,
   verifyPap,
   verifyReceipt,
+  // §9.5.2 k.6: the verified receipt names this nonce's Exercise
+  receiptPosition,
   verifyReport,
   statusLookup,
   verifyCheckpoint,
@@ -106,3 +109,12 @@ export async function inflateStatusList(lst: Uint8Array): Promise<Uint8Array> {
   }
   return out;
 }
+
+// CMP-17, T41: `auth` (identity) and `authorize` (PEP), kept apart in code
+export * as auth from "./auth.js";
+export * as authorize from "./authorize.js";
+export * as reason from "./reason.js";
+export type * as AccessApi from "./generated/access-v1.js";
+export type * as AdminApi from "./generated/admin-v1.js";
+export type * as FrontendApi from "./generated/frontend.js";
+export type * as LoginApi from "./generated/login.js";

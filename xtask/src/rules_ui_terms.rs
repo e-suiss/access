@@ -71,8 +71,15 @@ const HTML_SINKS: &[&str] = &[
 /// Source roots scanned.
 const ROOTS: &[&str] = &["web/", "sdks/typescript/src/"];
 
-/// Generated or built output that is not ours to word.
-const SKIP: &[&str] = &["/dist/", "/node_modules/", "/e2e/", "sdks/typescript/wasm/"];
+/// Generated or built output that is not ours to word; the types generated from the OpenAPI
+/// contracts carry protocol values, not UI text (OP-151 m.3 (g), (r)).
+const SKIP: &[&str] = &[
+    "/dist/",
+    "/node_modules/",
+    "/e2e/",
+    "sdks/typescript/wasm/",
+    "sdks/typescript/src/generated/",
+];
 
 const SCRIPT: &[&str] = &["ts", "tsx", "mts", "cts", "js", "jsx", "mjs", "cjs"];
 
@@ -420,5 +427,6 @@ mod tests {
         assert!(!scanned("web/console/vite.config.ts"));
         assert!(!scanned("sdks/typescript/src/index.test.ts"));
         assert!(!scanned("sdks/typescript/wasm/x.js"));
+        assert!(!scanned("sdks/typescript/src/generated/access-v1.ts"));
     }
 }

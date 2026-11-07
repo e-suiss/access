@@ -1,15 +1,26 @@
 {
   "name": "@esuiss/access",
   "version": "0.0.0",
-  "description": "Access TypeScript SDK. Kernel semantics come from the Access Kernel compiled to WebAssembly.",
+  "description": "Access TypeScript SDK: auth (OIDC client, PKCE, DPoP, refresh single-flight) and authorize (PEP decisions and receipt verification). Kernel semantics come from the Access Kernel compiled to WebAssembly.",
   "private": true,
   "type": "module",
   "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/e-suiss/access.git",
+    "directory": "sdks/typescript"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true,
+    "registry": "https://registry.npmjs.org/"
+  },
+  "sideEffects": false,
   "exports": {
     ".": "./src/index.ts"
   },
   "files": [
-    "src",
+    "dist",
     "wasm"
   ],
   "scripts": {
@@ -17,7 +28,9 @@
     "test": "vitest run",
     "lint": "eslint --max-warnings=0 .",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "build": "tsc -p tsconfig.build.json",
+    "gen": "openapi-typescript ../openapi/access-v1.json -o src/generated/access-v1.ts && openapi-typescript ../openapi/admin-v1.json -o src/generated/admin-v1.ts && openapi-typescript ../openapi/frontend.json -o src/generated/frontend.ts && openapi-typescript ../openapi/login.json -o src/generated/login.ts"
   },
   "engines": {
     "node": ">=24",
@@ -28,9 +41,15 @@
     "@types/node": "25.9.9",
     "eslint": "10.11.0",
     "globals": "17.13.0",
+    "openapi-typescript": "7.13.0",
     "prettier": "3.9.9",
     "typescript": "6.0.3",
     "typescript-eslint": "8.71.0",
     "vitest": "5.0.3"
+  },
+  "overrides": {
+    "openapi-typescript": {
+      "typescript": "$typescript"
+    }
   }
 }

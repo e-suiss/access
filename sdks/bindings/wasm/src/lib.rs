@@ -7,7 +7,10 @@
 
 #![forbid(unsafe_code)]
 
+mod pep;
 mod sign;
+
+pub use pep::receipt_position_js;
 
 pub use sign::{
     ais_protected, ais_statement, cose_key_p256_js, cose_sign1, cose_to_be_signed,
