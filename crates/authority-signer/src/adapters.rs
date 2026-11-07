@@ -191,10 +191,19 @@ where
         Ok(len) => {
             let mut body = vec![0_u8; len];
             stream.read_exact(&mut body).await?;
-            match protocol::decode_request(&body) {
-                Ok(request) => {
+            match protocol::decode_request_traced(&body) {
+                Ok((request, traceparent)) => {
                     let service = Arc::clone(service);
+                    // OP-67 m.1: the caller's trace, when well formed, is the span's parent
+                    let span = tracing::info_span!("signer.request");
+                    if let Some(parent) = traceparent
+                        .as_deref()
+                        .and_then(access_telemetry::trace::TraceParent::parse)
+                    {
+                        access_telemetry::trace::adopt(&span, parent, None);
+                    }
                     tokio::task::spawn_blocking(move || {
+                        let _entered = span.entered();
                         service
                             .lock()
                             .map_or(Response::Error(String::from("signer-poisoned")), |mut s| {
@@ -249,9 +258,33 @@ where
 /// # Errors
 /// The socket fails or the answer is not a frame.
 pub async fn call(path: &Path, request: &Request) -> Result<Response, std::io::Error> {
+    let watch = access_telemetry::metrics::Stopwatch::start();
+    let answered = exchange(path, request).await;
+    // §13.9, §17.8.2: signer latency; a refusal is logged by its stable reason
+    let outcome = match &answered {
+        Ok(Response::Error(reason)) => {
+            tracing::warn!(
+                event = "signer.refused",
+                outcome = "refused",
+                plane = "authority",
+                %reason,
+                "the signer refused a request"
+            );
+            "refused"
+        }
+        Ok(_) => "ok",
+        Err(_) => "error",
+    };
+    access_telemetry::signals::SIGNER_CALL.record_duration(watch.elapsed(), ["authority", outcome]);
+    answered
+}
+
+async fn exchange(path: &Path, request: &Request) -> Result<Response, std::io::Error> {
     let mut stream = UnixStream::connect(path).await?;
-    let frame =
-        protocol::encode_request(request).map_err(|_| std::io::Error::other("signer-frame"))?;
+    // OP-67 m.1
+    let traceparent = access_telemetry::trace::current_header();
+    let frame = protocol::encode_request_traced(request, traceparent.as_deref())
+        .map_err(|_| std::io::Error::other("signer-frame"))?;
     stream.write_all(&frame).await?;
     let mut header = [0_u8; 4];
     stream.read_exact(&mut header).await?;

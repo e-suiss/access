@@ -12,6 +12,7 @@ use access_authority_sequencer::ports::Clock;
 use access_kernel::digest::Digest;
 use access_kernel::model::Id;
 use access_kernel::verify::key_scope::METADATA_CONTENT_TYPE;
+use access_telemetry::signals::PROTOCOL_REJECTIONS;
 use axum::Router;
 use axum::body::Bytes;
 use axum::extract::{Path, State};
@@ -153,6 +154,12 @@ async fn audit_export<P: Pdp>(
 }
 
 pub(crate) fn respond(reply: Reply, headers: &HeaderMap) -> Response {
+    // §17.8.2, RR-8: rejection rates by stable code; telemetry, not canonical
+    match &reply {
+        Reply::Protocol(code, _) => drop(PROTOCOL_REJECTIONS.incr(["adp", code])),
+        Reply::Limited => drop(PROTOCOL_REJECTIONS.incr(["adp", "rate-limited"])),
+        _ => {}
+    }
     let mut response = match reply {
         Reply::Decision(v) => (
             StatusCode::OK,

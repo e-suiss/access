@@ -140,3 +140,25 @@ fn key_changes_round_trip() {
         r
     );
 }
+
+// OP-67 m.1: a request carries the caller's traceparent; without one it is the plain frame and
+// an oversized value is not carried
+#[test]
+fn traceparent_rides_along() {
+    let tp = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01";
+    let f = encode_request_traced(&Request::Ping, Some(tp)).unwrap();
+    assert_eq!(
+        decode_request_traced(&f[4..]).unwrap(),
+        (Request::Ping, Some(tp.to_owned()))
+    );
+    let plain = encode_request(&Request::Ping).unwrap();
+    assert_eq!(
+        decode_request_traced(&plain[4..]).unwrap(),
+        (Request::Ping, None)
+    );
+    let long = "0".repeat(56);
+    assert_eq!(
+        encode_request_traced(&Request::Ping, Some(&long)).unwrap(),
+        plain
+    );
+}

@@ -17,6 +17,7 @@ mod security_txt;
 pub mod ssf;
 pub mod status;
 pub mod tls;
+pub mod trace;
 
 use std::time::Duration;
 

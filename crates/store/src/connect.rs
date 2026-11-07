@@ -109,6 +109,16 @@ pub async fn pool(opts: PgConnectOptions, size: u32) -> Result<PgPool, ConnectEr
         .await?)
 }
 
+/// Whether the pool hands out a connection that answers a ping: the readiness check of a pool
+/// (OP-67 m.3). The caller bounds it with its own deadline.
+pub async fn ping(pool: &PgPool) -> bool {
+    use sqlx::Connection as _;
+    match pool.acquire().await {
+        Ok(mut conn) => conn.ping().await.is_ok(),
+        Err(_) => false,
+    }
+}
+
 /// Whether a `server_version_num` is supported.
 #[must_use]
 pub const fn supported(version: i32) -> bool {

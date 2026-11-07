@@ -502,6 +502,13 @@ fn header_ok(name: &str, value: &str) -> bool {
         && value.bytes().all(|c| c == b' ' || c.is_ascii_graphic())
 }
 
+/// The `traceparent` header line of the current trace, or nothing outside one (OP-67 m.1).
+fn traceparent() -> String {
+    access_telemetry::trace::current_header()
+        .map(|t| format!("traceparent: {t}\r\n"))
+        .unwrap_or_default()
+}
+
 /// The bytes of `POST target` with `body`: the request [`Outbound::post`] sends, also for a
 /// test receiver.
 ///
@@ -518,10 +525,11 @@ pub fn post_request(
     }
     let mut head = format!(
         "POST {} HTTP/1.1\r\nHost: {}\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\n\
-         User-Agent: access\r\nCache-Control: no-store\r\nConnection: close\r\n",
+         User-Agent: access\r\nCache-Control: no-store\r\nConnection: close\r\n{}",
         target.path,
         target.host_header(),
         body.len(),
+        traceparent(),
     );
     for (n, v) in headers {
         head.push_str(n);
@@ -656,9 +664,10 @@ impl Outbound {
         let target = Target::parse(url)?;
         let request = format!(
             "GET {} HTTP/1.1\r\nHost: {}\r\nAccept: {accept}\r\nUser-Agent: access\r\n\
-             Accept-Encoding: identity\r\nConnection: close\r\n\r\n",
+             Accept-Encoding: identity\r\nConnection: close\r\n{}\r\n",
             target.path,
             target.host_header(),
+            traceparent(),
         );
         self.bounded(&target, request.into_bytes(), max_body, None)
             .await
@@ -693,10 +702,11 @@ impl Outbound {
         let request = format!(
             "POST {} HTTP/1.1\r\nHost: {}\r\nContent-Type: application/x-www-form-urlencoded\r\n\
              Content-Length: {}\r\nUser-Agent: access\r\nCache-Control: no-store\r\n\
-             Connection: close\r\n\r\n{form}",
+             Connection: close\r\n{}\r\n{form}",
             target.path,
             target.host_header(),
             form.len(),
+            traceparent(),
         );
         self.bounded(&target, request.into_bytes(), 0, None).await
     }

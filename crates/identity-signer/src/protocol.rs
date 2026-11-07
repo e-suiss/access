@@ -572,7 +572,31 @@ fn body(bytes: &[u8]) -> Result<Value, FrameError> {
 /// # Errors
 /// [`FrameError`].
 pub fn encode_request(r: &Request) -> Result<Vec<u8>, FrameError> {
-    frame(&r.to_value())
+    encode_request_traced(r, None)
+}
+
+/// The request key of the caller's W3C trace context (OP-67 m.1): carried for correlation,
+/// never read by the signing logic.
+const TRACEPARENT: &str = "traceparent";
+
+/// Longest `traceparent` carried (version 00 is 55 bytes).
+const TRACEPARENT_MAX: usize = 55;
+
+/// A request as a frame, with the caller's `traceparent` when it has one (OP-67 m.1).
+///
+/// # Errors
+/// [`FrameError`].
+pub fn encode_request_traced(
+    r: &Request,
+    traceparent: Option<&str>,
+) -> Result<Vec<u8>, FrameError> {
+    let mut v = r.to_value();
+    if let (Some(t), Value::Map(entries)) = (traceparent, &mut v)
+        && t.len() <= TRACEPARENT_MAX
+    {
+        entries.push((Value::text(TRACEPARENT), Value::text(t)));
+    }
+    frame(&v)
 }
 
 /// A request from a frame body (after its header).
@@ -580,7 +604,21 @@ pub fn encode_request(r: &Request) -> Result<Vec<u8>, FrameError> {
 /// # Errors
 /// [`FrameError::Malformed`].
 pub fn decode_request(b: &[u8]) -> Result<Request, FrameError> {
-    Request::from_value(&body(b)?)
+    decode_request_traced(b).map(|(r, _)| r)
+}
+
+/// A request from a frame body with the caller's `traceparent`, if it sent one; the caller
+/// checks its form before using it.
+///
+/// # Errors
+/// [`FrameError::Malformed`].
+pub fn decode_request_traced(b: &[u8]) -> Result<(Request, Option<String>), FrameError> {
+    let v = body(b)?;
+    let traceparent = match v.get(TRACEPARENT) {
+        Some(Value::Text(t)) if t.len() <= TRACEPARENT_MAX => Some(t.clone()),
+        _ => None,
+    };
+    Ok((Request::from_value(&v)?, traceparent))
 }
 
 /// A response as a frame.

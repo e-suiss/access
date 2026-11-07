@@ -21,6 +21,7 @@ serde = { workspace = true, features = ["derive", "std"] }
 serde_json = { workspace = true, features = ["std"] }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["sync", "time", "net", "io-util"] }
+access-telemetry = { workspace = true }
 tracing = { workspace = true, features = ["std"] }
 rustls = { workspace = true, features = ["aws_lc_rs", "std"] }
 tokio-rustls = { workspace = true, features = ["aws_lc_rs"] }

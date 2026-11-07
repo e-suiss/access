@@ -81,3 +81,24 @@ fn bad_frames_are_refused() {
     assert_eq!(decode_request(&[0xa0]), Err(FrameError::Malformed));
     assert_eq!(decode_request(&[0xff]), Err(FrameError::Malformed));
 }
+
+// OP-67 m.1: a request carries the caller's traceparent; without one it is the plain frame and
+// an oversized value is not carried
+#[test]
+fn traceparent_rides_along() {
+    let tp = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01";
+    let r = Request::Metadata(Digest([7; 32]));
+    let f = encode_request_traced(&r, Some(tp)).unwrap();
+    assert_eq!(
+        decode_request_traced(&f[4..]).unwrap(),
+        (r.clone(), Some(tp.to_owned()))
+    );
+    assert_eq!(decode_request(&f[4..]).unwrap(), r);
+    let plain = encode_request(&r).unwrap();
+    assert_eq!(
+        decode_request_traced(&plain[4..]).unwrap(),
+        (r.clone(), None)
+    );
+    let long = "0".repeat(56);
+    assert_eq!(encode_request_traced(&r, Some(&long)).unwrap(), plain);
+}

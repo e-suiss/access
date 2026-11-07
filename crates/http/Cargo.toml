@@ -19,6 +19,7 @@ access-internal-api = { workspace = true }
 access-kernel = { workspace = true }
 suiss-crypto = { workspace = true, features = ["aead", "verify"] }
 access-parse = { workspace = true }
+access-telemetry = { workspace = true }
 axum = { workspace = true, features = ["http1", "http2", "tokio", "json"] }
 hyper-util = { workspace = true, features = ["server-auto", "server-graceful", "service", "tokio"] }
 rustls = { workspace = true, features = ["aws_lc_rs", "prefer-post-quantum", "std"] }
