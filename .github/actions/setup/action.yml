@@ -7,7 +7,7 @@ inputs:
     description: >-
       Space-separated CI tools to install (just is always installed). Known names:
       nextest deny audit auditable cyclonedx mutants git-cliff wasmtime gungraun
-      syft cosign wasm-bindgen vet.
+      syft cosign wasm-bindgen vet sqlx.
     required: false
     default: ""
   cache-key:
@@ -73,14 +73,17 @@ runs:
         }
         list="just@1.58.0"
         vet=false
+        sqlx=false
         for name in $WANTED; do
           if [[ "$name" == vet ]]; then vet=true; continue; fi
+          if [[ "$name" == sqlx ]]; then sqlx=true; continue; fi
           spec="$(pinned "$name")"
           if [[ -z "$spec" ]]; then echo "::error::unknown tool '$name'"; exit 1; fi
           list="$list,$spec"
         done
         echo "list=$list" >> "$GITHUB_OUTPUT"
         echo "vet=$vet" >> "$GITHUB_OUTPUT"
+        echo "sqlx=$sqlx" >> "$GITHUB_OUTPUT"
 
     - name: Restore Cargo cache
       if: inputs.cache == 'true'
@@ -101,4 +104,13 @@ runs:
       run: |
         if [[ "$(cargo vet --version 2>/dev/null || true)" != "cargo-vet 0.10.2" ]]; then
           cargo install --locked cargo-vet --version 0.10.2
+        fi
+
+    # OP-66: the CLI matches the sqlx version in Cargo.lock
+    - name: Install sqlx-cli
+      if: steps.tools.outputs.sqlx == 'true'
+      shell: bash
+      run: |
+        if [[ "$(sqlx --version 2>/dev/null || true)" != "sqlx-cli 0.9.0" ]]; then
+          cargo install --locked sqlx-cli --version 0.9.0 --no-default-features --features rustls,postgres
         fi

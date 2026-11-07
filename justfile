@@ -40,6 +40,19 @@ sqlx-prepare:
     DATABASE_URL="$base/$db" sqlx migrate run --source crates/store/migrations
     DATABASE_URL="$base/$db" SQLX_OFFLINE=false cargo sqlx prepare --workspace -- --all-targets -p access-store --features testing
 
+# OP-66: the committed .sqlx query metadata matches the queries against a freshly migrated database
+sqlx-check:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    url="${DATABASE_URL:-$(scripts/pg-local.sh up)}"
+    base="${url%/*}"
+    db="access_sqlx_check_$$"
+    trap 'psql -X -q "$url" -c "DROP DATABASE IF EXISTS $db WITH (FORCE)"' EXIT
+    psql -X -q -v ON_ERROR_STOP=1 "$url" -c "CREATE DATABASE $db"
+    psql -X -q -v ON_ERROR_STOP=1 "$base/$db" -f crates/store/bootstrap/roles.sql -f crates/store/bootstrap/database.sql
+    DATABASE_URL="$base/$db" sqlx migrate run --source crates/store/migrations
+    DATABASE_URL="$base/$db" SQLX_OFFLINE=false cargo sqlx prepare --check --workspace -- --all-targets -p access-store --features testing
+
 fmt:
     cargo fmt --all
 
