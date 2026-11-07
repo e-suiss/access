@@ -342,3 +342,41 @@ pub trait LogoutQueue: Send + Sync {
         record: &LogoutUndelivered,
     ) -> impl Future<Output = Result<(), Unavailable>> + Send;
 }
+
+/// A pending answer of [`ManagementHolders`], boxed so the port stays object safe.
+pub type Held<'a, T> = std::pin::Pin<Box<dyn Future<Output = Result<T, Unavailable>> + Send + 'a>>;
+
+/// The authority plane's Instances, as a management read token exchange reads them (TN-130,
+/// OP-151 m.3 (c)).
+pub trait ManagementHolders: Send + Sync {
+    /// The live key `kid` (RFC 7638 thumbprint) of an Instance of `domain` at the head; `None`
+    /// when no live Instance of the domain holds it.
+    fn instance_key(
+        &self,
+        domain: [u8; 32],
+        kid: [u8; 32],
+    ) -> Held<'_, Option<access_kernel::verify::cose::PublicKey>>;
+
+    /// Whether `realm` is the platform's own realm, whose Instances may read the platform
+    /// surface (OP-151 m.3 (a)).
+    fn platform(&self, realm: &crate::ports::RealmEntry) -> Held<'_, bool>;
+}
+
+/// No management holder: no key is live and no realm is the platform's; every exchange is
+/// refused (MD-8).
+#[derive(Clone, Copy, Debug, Default)]
+pub struct NoManagement;
+
+impl ManagementHolders for NoManagement {
+    fn instance_key(
+        &self,
+        _: [u8; 32],
+        _: [u8; 32],
+    ) -> Held<'_, Option<access_kernel::verify::cose::PublicKey>> {
+        Box::pin(async { Ok(None) })
+    }
+
+    fn platform(&self, _: &crate::ports::RealmEntry) -> Held<'_, bool> {
+        Box::pin(async { Ok(false) })
+    }
+}

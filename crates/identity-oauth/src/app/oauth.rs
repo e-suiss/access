@@ -8,6 +8,7 @@
 mod authority;
 mod authorize;
 mod logout;
+mod management;
 mod resource;
 mod service;
 mod token;
@@ -39,7 +40,8 @@ use crate::domain::tokens::{
 };
 use crate::ports::dpop::{Clock, ReplayCache};
 use crate::ports::oauth::{
-    ClientKeys, LoginPages, OAuthDb, OAuthTx, Random, TenantIds, TokenSigner,
+    ClientKeys, LoginPages, ManagementHolders, NoManagement, OAuthDb, OAuthTx, Random, TenantIds,
+    TokenSigner,
 };
 use crate::ports::{Directory, RealmEntry, Unavailable};
 use access_identity_hooks::domain::{Call, Outcome, TokenIssuance, with_claims};
@@ -107,6 +109,11 @@ pub trait Env: Send + Sync + 'static {
     /// The realm's inline hooks (TN-135); none unless the server wires them.
     fn hooks(&self) -> &(dyn HookCaller + Sync) {
         &NoHooks
+    }
+    /// The Instances management read token exchanges read (TN-130); none unless the server
+    /// wires them.
+    fn management(&self) -> &(dyn ManagementHolders + Sync) {
+        &NoManagement
     }
 }
 

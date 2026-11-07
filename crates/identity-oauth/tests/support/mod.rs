@@ -40,7 +40,7 @@ use access_identity_oauth::domain::issuer::{IssuerStyle, RealmBase};
 use access_identity_oauth::domain::request::Params;
 use access_identity_oauth::ports::Unavailable;
 use access_identity_oauth::ports::dpop::{Clock, ClockUnavailable};
-use access_identity_oauth::ports::oauth::ClientKeys;
+use access_identity_oauth::ports::oauth::{ClientKeys, Held, ManagementHolders};
 use access_identity_session::domain::assurance::{Factor, vector};
 use access_identity_session::domain::session::cookie_digest;
 use access_identity_signer::adapters::{DirVault, SealedFactory, now_ms, serve};
@@ -190,6 +190,27 @@ pub struct TestEnv {
     pub plane: Scripted,
     pub ids: IdKey,
     pub hooks: ScriptedHook,
+    pub management: ScriptedManagement,
+}
+
+/// The live Instance keys and the platform realm a management read token exchange sees
+/// (TN-130); none by default.
+#[derive(Clone, Default)]
+pub struct ScriptedManagement {
+    pub keys: Arc<Mutex<HashMap<([u8; 32], [u8; 32]), PublicKey>>>,
+    pub platform: Arc<Mutex<Option<RealmId>>>,
+}
+
+impl ManagementHolders for ScriptedManagement {
+    fn instance_key(&self, domain: [u8; 32], kid: [u8; 32]) -> Held<'_, Option<PublicKey>> {
+        let key = self.keys.lock().unwrap().get(&(domain, kid)).cloned();
+        Box::pin(async move { Ok(key) })
+    }
+
+    fn platform(&self, realm: &Realm) -> Held<'_, bool> {
+        let yes = *self.platform.lock().unwrap() == Some(realm.realm);
+        Box::pin(async move { Ok(yes) })
+    }
 }
 
 /// A `token_issuance` hook answering what the test sets; none set is no hook (TN-135).
@@ -229,6 +250,7 @@ impl Clone for TestEnv {
             plane: self.plane.clone(),
             ids: id_key(),
             hooks: self.hooks.clone(),
+            management: self.management.clone(),
         }
     }
 }
@@ -287,6 +309,9 @@ impl Env for TestEnv {
     }
     fn hooks(&self) -> &(dyn HookCaller + Sync) {
         &self.hooks
+    }
+    fn management(&self) -> &(dyn ManagementHolders + Sync) {
+        &self.management
     }
 }
 
@@ -627,6 +652,7 @@ impl Cluster {
             plane: Scripted::default(),
             ids: id_key(),
             hooks: ScriptedHook::default(),
+            management: ScriptedManagement::default(),
         };
         let oauth = OAuth::new(env);
         let mut realms = Vec::new();

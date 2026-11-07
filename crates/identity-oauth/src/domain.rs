@@ -6,6 +6,7 @@ pub mod dpop;
 pub mod issuer;
 pub mod jwt;
 pub mod login;
+pub mod management;
 pub mod metadata;
 pub mod request;
 pub mod scope;

@@ -3,7 +3,8 @@
 //! there is no bearer access token (TN-27). A request for authority (RFC 9396
 //! `authorization_details`) is a `projection.issue` decision of the authority plane (§9.9);
 //! client credentials exist for it and, towards a platform product, for the identity-assertion
-//! service token (OP-149 m.31 (a), m.34 (b)). ROPC and implicit do not exist; device code is a later
+//! service token (OP-149 m.31 (a), m.34 (b)). An Instance's management read token is an RFC 8693
+//! exchange (TN-130, see `management`). ROPC and implicit do not exist; device code is a later
 //! stage (OP-146 m.6). A refused request is written to the identity audit log (OP-39).
 
 use access_crypto::dpop::Role;
@@ -117,6 +118,10 @@ impl<E: Env> OAuth<E> {
         http: TokenHttp<'_>,
     ) -> Result<Reply, Unavailable> {
         let grant_type = params.get("grant_type");
+        // TN-130, OP-151 m.3 (c)
+        if grant_type == Some(crate::domain::management::TOKEN_EXCHANGE) {
+            return self.exchange_read(realm, params, http).await;
+        }
         if !matches!(
             grant_type,
             Some("authorization_code" | "refresh_token" | "client_credentials")
