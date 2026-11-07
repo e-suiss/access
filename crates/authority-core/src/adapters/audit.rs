@@ -164,7 +164,7 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
         Ok(response)
     }
 
-    /// The Record Export Package of the allowed `access.audit.export` Exercise `inc` names
+    /// The Record Export Package of the allowed `access.audit_export` Exercise `inc` names
     /// (AP-14), written to the stream before it leaves (U53, OP-44, PI-4).
     ///
     /// # Errors

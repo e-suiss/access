@@ -55,7 +55,7 @@ pub trait Pdp: Send + Sync {
         std::future::ready(None)
     }
 
-    /// The Record Export Package bytes of the allowed `access.audit.export` Exercise `inc`
+    /// The Record Export Package bytes of the allowed `access.audit_export` Exercise `inc`
     /// names (AP-14), audited before they leave (U53, OP-44); none by default.
     fn export(&self, inc: Incoming) -> impl Future<Output = Result<Vec<u8>, CoreError>> + Send {
         let _ = inc;

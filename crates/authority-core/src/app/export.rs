@@ -1,5 +1,5 @@
-//! The Record Export Package of an `access.audit.export` Exercise (AP-14, PI-4, U53, §17.6.13).
-//! An export is never a separate read path: the caller first commits an `access:audit.export`
+//! The Record Export Package of an `access.audit_export` Exercise (AP-14, PI-4, U53, §17.6.13).
+//! An export is never a separate read path: the caller first commits an `access:audit_export`
 //! intent through ADP with its AIS, which the audit Grant must cover; the package is then built
 //! for that allowed Exercise only, from the request that made it, and names it as
 //! `export_exercise`. The package verifies itself before it leaves (INV-27).
@@ -21,8 +21,8 @@ use crate::domain::export::{self, Coverage, ExportError, Package};
 use crate::ports::{Binding, Reader, Salts};
 use crate::rate::Class;
 
-/// The export action's name in the core namespace.
-pub const EXPORT_ACTION: &str = "audit.export";
+/// The export action.s name in the core namespace (OP-151 m.19 (d)).
+pub use crate::domain::export::EXPORT_ACTION;
 
 /// The namespace of the export intent's resource.
 pub const EXPORT_NAMESPACE: &str = "access.audit";
@@ -47,7 +47,7 @@ fn count(req: &crate::domain::Request, name: &str) -> Result<Option<u64>, CoreEr
 }
 
 impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
-    /// The package of the allowed `access.audit.export` Exercise `inc` names, at trusted time
+    /// The package of the allowed `access.audit_export` Exercise `inc` names, at trusted time
     /// `now` (AP-14).
     ///
     /// # Errors

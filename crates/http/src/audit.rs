@@ -1,5 +1,5 @@
 //! `POST /access/v1/audit/export` (AP-14, PI-4, U53, §17.6.13): the Record Export Package of an
-//! allowed `access.audit.export` Exercise, on the ADP router. There is no separate audit read
+//! allowed `access.audit_export` Exercise, on the ADP router. There is no separate audit read
 //! path: the body is the very request that committed the export intent, with the actor's AIS,
 //! and the decision point builds the package only for that Exercise and audits the export
 //! before it answers. The answer is a CBOR sequence (RFC 8742) anyone verifies with the open

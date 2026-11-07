@@ -2,7 +2,7 @@
 //! domain's Authority Record. Everything in it is a Kernel structure the log already holds:
 //! record disclosures (full, or redacted to field commitments), the Merkle frontier before the
 //! range, the checkpoint at its end, the version vectors and schema and Claim digests the records
-//! cite, and the `access.audit.export` Exercise that made it. Bytes are deterministic CBOR.
+//! cite, and the `access.audit_export` Exercise that made it. Bytes are deterministic CBOR.
 //!
 //! Anyone re-folds the checkpoint root from the package with the open Kernel alone (INV-27,
 //! PI-6): [`verify`]. A redacted package declares `replay_coverage: "digest"`: chain, Merkle
@@ -20,6 +20,10 @@ use suiss_ledger::merkle::Frontier;
 
 /// Digest context of a version vector in the package (the context checkpoints use, L0-ENC-22a).
 pub const VERSIONS_CONTEXT: &str = "access/versions/v1";
+
+/// The export action's name in the core namespace: an identifier the Kernel reads, unlike the
+/// concept name `access.audit.export` (OP-151 m.19 (d)).
+pub const EXPORT_ACTION: &str = "audit_export";
 
 /// Most records one package holds (PD); a larger range is several exports.
 pub const MAX_RECORDS: u64 = 10_000;
@@ -75,7 +79,7 @@ pub struct Package {
     pub schemas: Vec<Digest>,
     /// The Claims ingested in the range: their ids when opened, else their leaf hashes.
     pub claims: Vec<Digest>,
-    /// The `access.audit.export` Exercise that made it.
+    /// The `access.audit_export` Exercise that made it.
     pub export_exercise: Digest,
     /// Full or digest-level replay.
     pub replay_coverage: Coverage,

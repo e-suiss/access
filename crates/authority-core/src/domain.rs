@@ -605,7 +605,7 @@ pub(crate) fn views(view: &Snapshot, basis: &ExerciseBasis, party: &Id) -> bool 
 }
 
 /// Whether Grant `g` is held by `party`, live along its lineage, and covers
-/// `access:audit.export` by name (OP-141 m.38 (d), m.39 (b)).
+/// `access:audit_export` by name (OP-141 m.38 (d), m.39 (b)).
 pub(crate) fn audit_grant(view: &Snapshot, g: &Id, party: &Id) -> bool {
     let Some(state) = read::<GrantState>(view, kind::GRANT, g) else {
         return false;
@@ -617,7 +617,7 @@ pub(crate) fn audit_grant(view: &Snapshot, g: &Id, party: &Id) -> bool {
         .actions
         .exact
         .iter()
-        .any(|a| a.namespace == meta::NAMESPACE && a.name == "audit.export");
+        .any(|a| a.namespace == meta::NAMESPACE && a.name == export::EXPORT_ACTION);
     named
         && state.content.holder == SubjectSelector::Party(*party)
         && lineage_hops(view, g)

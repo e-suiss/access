@@ -7104,7 +7104,7 @@ async fn operational(db: &TestDb, event: &str) -> Vec<access_store::operational:
 /// The export intent of `nonce` from position 0 with `disclosure`.
 fn export_request(d: Digest, nonce: u8, basis: ExerciseBasis, disclosure: &str) -> Request {
     let mut intent = intent(
-        action("access", "audit.export"),
+        action("access", "audit_export"),
         ("access.audit", "export"),
         None,
     );
@@ -7280,7 +7280,7 @@ async fn audit_answers_expand_basis_ref_and_state_basis() {
     assert!(own.explained.is_none());
 }
 
-// AP-14, INV-27, PI-6, PI-4, U53: an export is an allowed `access.audit.export` Exercise; its
+// AP-14, INV-27, PI-6, PI-4, U53: an export is an allowed `access.audit_export` Exercise; its
 // package names that Exercise, re-folds to the checkpoint root and, full from Genesis, folds
 // into state; every export is one row; a redacted one declares digest-level replay
 #[tokio::test]
@@ -7343,6 +7343,13 @@ async fn ap_14_an_export_is_an_audited_exercise_that_verifies_itself() {
         Err(CoreError::Protocol("export-exercise"))
     ));
     assert_eq!(operational(&db, "audit.export").await.len(), 3);
+    // OP-151 m.19 (d): the export is `audit_export`; the dotted concept name is no action
+    let mut dotted = export_request(d, 34, audit_basis, "full");
+    dotted.intent.action = action("access", "audit.export");
+    assert!(matches!(
+        a.exercise(&incoming(dotted, ROOT_KEY)).await,
+        Err(CoreError::Protocol("action"))
+    ));
 }
 
 // OP-39, OP-44, carry-over of OP-142: a protocol rejection makes no record but is one row of

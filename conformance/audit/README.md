@@ -12,7 +12,7 @@ names and their OCSF and CAEP mapping come from
 
 ## Verifying an export without Suiss
 
-An auditor first commits an `access:audit.export` intent through ADP with their own Actor
+An auditor first commits an `access:audit_export` intent through ADP with their own Actor
 Intent Statement. Once it is allowed, `POST /access/v1/audit/export` with the same request
 returns the package as a CBOR sequence (`application/cbor-seq`):
 

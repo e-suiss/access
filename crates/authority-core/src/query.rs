@@ -347,7 +347,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
 
     /// A developer-surface report for `actor` (§8.17.10, §5.4, §16.5.1, SEC15): only the
     /// domain's auditors (its meta-anchor root, or a holder of a live Grant naming
-    /// `access:audit.export`) get one; anyone else gets nothing, as for a search they may not
+    /// `access:audit_export`) get one; anyone else gets nothing, as for a search they may not
     /// see. One page, never recorded.
     async fn report(&self, actor: &Actor, query: &Query, now: u64) -> Result<Found, CoreError> {
         if !self.audits(&actor.party).await? {

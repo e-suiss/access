@@ -91,6 +91,9 @@ pub struct Incoming {
 
 const BOOTSTRAP: [&str; 2] = ["party_register", "instance_create"];
 
+/// The core read action (§9.13.7, OP-141 m.39 (a)).
+const READ_ACTION: &str = "read";
+
 fn kid_of(sign1: &[u8]) -> Result<[u8; 32], CoreError> {
     let msg = cose::parse_sign1(sign1).map_err(|e| CoreError::Ais(AisError::Signature(e)))?;
     let Ok(Value::Map(header)) = dcbor::decode(&msg.protected, Limits::CEILING) else {
@@ -520,7 +523,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
     }
 
     /// Whether `party` may audit the domain: the meta-anchor's root, or the holder of a live
-    /// Grant covering `access:audit.export` (OP-141 m.38 (d), m.39 (b)).
+    /// Grant covering `access:audit_export` (OP-141 m.38 (d), m.39 (b)).
     pub(crate) async fn audits(&self, party: &Id) -> Result<bool, CoreError> {
         let meta_anchor = meta::meta_anchor(&self.domain);
         let root = self
@@ -778,9 +781,12 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                 }
             }
             None if is_meta => return Err(CoreError::Protocol("payload")),
-            // OP-141 m.39 (a)
+            // OP-141 m.39 (a), OP-151 m.19 (d)
             None if req.intent.action.namespace == meta::NAMESPACE
-                && !meta::is_read(&req.intent.action.namespace, &req.intent.action.name) =>
+                && !matches!(
+                    req.intent.action.name.as_str(),
+                    READ_ACTION | crate::domain::export::EXPORT_ACTION
+                ) =>
             {
                 return Err(CoreError::Protocol("action"));
             }
