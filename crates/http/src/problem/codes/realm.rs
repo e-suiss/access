@@ -268,3 +268,45 @@ pub const FAILED_DEPENDENCY: Code = code(
     "Failed Dependency",
     "An earlier item of the sequential job did not commit, so this one was not run (TN-125).",
 );
+/// A hook or webhook URL that is not `https` on a DNS name, or a private target the realm does not allow or the operator did not declare (OP-151 m.10 (e), OP-149 m.23).
+pub const INVALID_EXTENSION_TARGET: Code = code(
+    "invalid-extension-target",
+    400,
+    "Bad Request",
+    "A hook or webhook URL that is not https on a DNS name, or a private target the realm does not allow or the operator did not declare (OP-151 m.10 (e), OP-149 m.23).",
+);
+/// A hook registration outside its call point's contract (TN-135).
+pub const INVALID_HOOK: Code = code(
+    "invalid-hook",
+    400,
+    "Bad Request",
+    "A hook registration outside its call point's contract (TN-135).",
+);
+/// A hook asks for personal data the realm's extension policy does not permit (OP-151 m.10 (e)).
+pub const DISCLOSURE_NOT_PERMITTED: Code = code(
+    "disclosure-not-permitted",
+    400,
+    "Bad Request",
+    "A hook asks for personal data the realm's extension policy does not permit (OP-151 m.10 (e)).",
+);
+/// Webhook events outside the identity event catalogue (TN-136).
+pub const INVALID_WEBHOOK_EVENTS: Code = code(
+    "invalid-webhook-events",
+    400,
+    "Bad Request",
+    "Webhook events outside the identity event catalogue (TN-136).",
+);
+/// An extension policy outside its shape (OP-151 m.10 (e)).
+pub const INVALID_EXTENSION_POLICY: Code = code(
+    "invalid-extension-policy",
+    400,
+    "Bad Request",
+    "An extension policy outside its shape (OP-151 m.10 (e)).",
+);
+/// The call point has a live hook already; retire it first (OP-151 m.10 (d)).
+pub const HOOK_POINT_TAKEN: Code = code(
+    "hook-point-taken",
+    409,
+    "Conflict",
+    "The call point has a live hook already; retire it first (OP-151 m.10 (d)).",
+);

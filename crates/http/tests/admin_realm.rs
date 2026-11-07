@@ -104,6 +104,16 @@ async fn every_realm_write_without_its_actor_proof_changes_nothing() {
         );
         // IDI-4: the RP ID answer marks the change irreversible
         assert_eq!(body["irreversible"] == true, op == "putRpId", "{op}");
+        // TN-135, TN-136: a hook's or webhook's verification key is shown once, by its name
+        assert_eq!(
+            body["verification_key"].is_string(),
+            matches!(op, "registerHook" | "registerWebhook" | "rotateWebhookKey"),
+            "{op}"
+        );
+        assert!(
+            body.get("client_secret").is_none() || op.contains("Client"),
+            "{op}"
+        );
         let (r, _) = send(&router, write(row, nonce, Some(&signed), "{\"other\":1}")).await;
         // TN-126: a kept answer refuses the key at once; a secret answer is never kept, and
         // the spent nonce refuses the Exercise
@@ -126,7 +136,14 @@ async fn reads_see_only_the_realms_own_resources() {
     let h = Harness::new();
     let router = h.router();
     let token = h.token("r", "access-admin:realm:acme", &["realm.read"], 600_000);
-    for collection in ["clients", "groups", "accounts", "upstream-idps"] {
+    for collection in [
+        "clients",
+        "groups",
+        "accounts",
+        "upstream-idps",
+        "hooks",
+        "webhooks",
+    ] {
         let path = format!("/admin/v1/realms/{REALM}/{collection}/{HIDDEN_KEY}");
         let (r, body) = send(&router, read(&path, &token)).await;
         assert_eq!(

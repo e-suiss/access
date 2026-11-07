@@ -1490,6 +1490,7 @@ where
             keys: self.realm_keys,
             platform_tenant: platform,
             declared: self.declared.clone(),
+            vault: None,
         }
     }
 

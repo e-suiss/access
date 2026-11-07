@@ -1,5 +1,7 @@
 //! HTTP layer shared by both Access planes (OP-62).
 
+#![recursion_limit = "256"]
+
 pub mod adp;
 pub mod api;
 pub mod audit;

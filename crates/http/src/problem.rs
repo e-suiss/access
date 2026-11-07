@@ -426,6 +426,12 @@ pub const CODES: &[Code] = &[
     codes::realm::JOB_OPERATION_NOT_ALLOWED,
     codes::realm::JOB_INTENT_MISMATCH,
     codes::realm::FAILED_DEPENDENCY,
+    codes::realm::INVALID_EXTENSION_TARGET,
+    codes::realm::INVALID_HOOK,
+    codes::realm::DISCLOSURE_NOT_PERMITTED,
+    codes::realm::INVALID_WEBHOOK_EVENTS,
+    codes::realm::INVALID_EXTENSION_POLICY,
+    codes::realm::HOOK_POINT_TAKEN,
 ];
 
 /// The type URI of `code`.

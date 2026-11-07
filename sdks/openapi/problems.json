@@ -527,6 +527,48 @@
       "status": 424,
       "title": "Failed Dependency",
       "description": "An earlier item of the sequential job did not commit, so this one was not run (TN-125)."
+    },
+    {
+      "code": "invalid-extension-target",
+      "type": "urn:suiss:access:problem:invalid-extension-target",
+      "status": 400,
+      "title": "Bad Request",
+      "description": "A hook or webhook URL that is not https on a DNS name, or a private target the realm does not allow or the operator did not declare (OP-151 m.10 (e), OP-149 m.23)."
+    },
+    {
+      "code": "invalid-hook",
+      "type": "urn:suiss:access:problem:invalid-hook",
+      "status": 400,
+      "title": "Bad Request",
+      "description": "A hook registration outside its call point's contract (TN-135)."
+    },
+    {
+      "code": "disclosure-not-permitted",
+      "type": "urn:suiss:access:problem:disclosure-not-permitted",
+      "status": 400,
+      "title": "Bad Request",
+      "description": "A hook asks for personal data the realm's extension policy does not permit (OP-151 m.10 (e))."
+    },
+    {
+      "code": "invalid-webhook-events",
+      "type": "urn:suiss:access:problem:invalid-webhook-events",
+      "status": 400,
+      "title": "Bad Request",
+      "description": "Webhook events outside the identity event catalogue (TN-136)."
+    },
+    {
+      "code": "invalid-extension-policy",
+      "type": "urn:suiss:access:problem:invalid-extension-policy",
+      "status": 400,
+      "title": "Bad Request",
+      "description": "An extension policy outside its shape (OP-151 m.10 (e))."
+    },
+    {
+      "code": "hook-point-taken",
+      "type": "urn:suiss:access:problem:hook-point-taken",
+      "status": 409,
+      "title": "Conflict",
+      "description": "The call point has a live hook already; retire it first (OP-151 m.10 (d))."
     }
   ]
 }

@@ -204,6 +204,7 @@ fn fake_item(kind: ResourceKind, key: &str, version: u64) -> Item {
                                "domain_allow": [], "domain_deny": [] },
             "session_policy": { "absolute_ms": 43_200_000, "idle_ms": 900_000, "binding": "asn" },
             "branding": { "csp_origins": [] },
+            "extension_policy": { "allow_private_targets": false, "hook_disclosure": [] },
         }),
         ResourceKind::Clients => json!({ "client_id": key, "display_name": "Shop",
                                          "redirect_uris": [], "status": "active" }),
@@ -211,6 +212,10 @@ fn fake_item(kind: ResourceKind, key: &str, version: u64) -> Item {
         ResourceKind::Groups | ResourceKind::UpstreamIdps => {
             json!({ "name": key, "display_name": "Fake", "status": "active" })
         }
+        ResourceKind::Hooks => json!({ "hook_id": key, "point": "post_login",
+                                       "url": "https://hooks.shop.example/h", "status": "active" }),
+        ResourceKind::Webhooks => json!({ "webhook_id": key, "url": "https://sync.shop.example/w",
+                                          "events": ["account.created"], "status": "active" }),
     };
     Item { body, version }
 }
@@ -280,7 +285,11 @@ impl RealmResources for Shared {
                 exercise_id: caller.statement.intent,
                 position,
                 resource: Some(fake_item(kind, w.key.as_deref().unwrap_or("new"), position)),
-                secret: None,
+                secret: matches!(
+                    w.operation,
+                    "registerHook" | "registerWebhook" | "rotateWebhookKey"
+                )
+                .then(|| "whpk_fake".to_owned()),
             })
         })
     }

@@ -1044,6 +1044,7 @@ async fn serve(
     let identity_section = config.identity.as_ref().ok_or("no identity section")?;
     let signer = || SignerKeys::new(identity_section.signer.clone());
     let (platform_outbound, platform_keks) = (prepared.outbound.clone(), keks.clone());
+    let admin_keks = keks.clone();
     let platform_pools = event_pools(&all, &cell_ids, &prepared.outbound);
     // TN-135, OP-151 m.3 (j)
     let hooks = oauth::hooks(all.app.clone(), prepared.outbound.clone(), keks.clone());
@@ -1150,6 +1151,7 @@ async fn serve(
             declared: admin_targets,
             platform: config.suiss.as_ref().and_then(|s| s.platform_realm.clone()),
             outbound: admin_outbound,
+            vault: access_identity_events::adapters::KekSealer(admin_keks),
         },
         admin::InProcessRoutes {
             oauth: authorize.clone(),

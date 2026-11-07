@@ -8,7 +8,11 @@ use std::net::{IpAddr, Ipv4Addr};
 use std::time::Duration;
 
 use access_authority_core::genesis::IDP_ANCHOR;
+use access_http::api::domain::SurfaceScope;
+use access_http::api::domain::caller::{MAX_TOKEN_LIFETIME_MS, Refusal, check_read};
+use access_http::api::ports::{Presented, ReadTokens as _};
 use access_http::console::domain::read_intent;
+use access_http::console::ports::DpopKeys as _;
 use access_http::login::Peer;
 use access_identity_oauth::adapters::clients::{CachePolicy, HttpClientKeys};
 use access_identity_oauth::adapters::oauth::PgOAuth;
@@ -230,6 +234,9 @@ async fn the_console_signs_in_reads_and_writes_through_the_sequencer() {
             declared: DeclaredTargets::default(),
             platform: None,
             outbound: Outbound::disabled(Duration::from_secs(5)),
+            vault: access_identity_events::adapters::KekSealer(crate::login::RealmKeks::new(
+                w.keys.clone(),
+            )),
         },
         crate::admin::InProcessRoutes {
             oauth: oauth.clone(),
@@ -524,16 +531,13 @@ async fn the_console_signs_in_reads_and_writes_through_the_sequencer() {
     // TN-130, TN-27, OP-21: the verifier takes a realm read token only with a fresh proof by
     // its bound key; a bearer presentation, another key, a replayed proof, another surface or a
     // token whose console session ended reads nothing
-    use access_http::api::domain::SurfaceScope;
-    use access_http::api::domain::caller::{MAX_TOKEN_LIFETIME_MS, Refusal, check_read};
-    use access_http::api::ports::{Presented, ReadTokens as _};
-    use access_http::console::ports::DpopKeys as _;
     let tokens = crate::admin::tokens::ManagementTokens {
         directory: PgDirectory::new(w.db.router.clone()),
         signer: SignerKeys::new(w.identity_signer.clone()),
         app: w.db.app.clone(),
         plane: w.plane.clone(),
         dpop: DpopProfile::default(),
+        platform: None,
     };
     let row = access_store::console::live_of(&w.db.app, route.tenant, route.realm, &subject, 10)
         .await

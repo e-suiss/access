@@ -1,6 +1,7 @@
 //! The realm-admin resources under `/admin/v1/realms/{slug}/…` (OP-151 m.2 M1): clients,
-//! groups and their members, accounts, upstream identity providers, mappers and the settings
-//! singleton with its sign-in, session, branding and RP ID sections.
+//! groups and their members, accounts, upstream identity providers, mappers, inline hooks and
+//! webhooks (TN-135, TN-136), and the settings singleton with its sign-in, session, branding, RP
+//! ID and extension policy sections.
 //!
 //! Every write compiles to exactly one `idp.*` Exercise through [`RealmResources`] (TN-110,
 //! PI-4, INV-2) and answers with `exercise_id` and `position`. A caller first drafts the write
@@ -23,7 +24,7 @@ use super::manifest::{Access, Answer, Builder, Guard, ManifestError, Route, Verb
 use super::ports::ResourceKind;
 use crate::problem::{Code, codes};
 
-pub use handlers::serve;
+pub use handlers::{id_member, serve};
 
 const LIST: &[&str] = &[PAGE_SIZE, CURSOR, FILTER];
 
@@ -80,6 +81,9 @@ const fn secret(verb: Verb, path: &'static str, id: &'static str, summary: &'sta
 
 const C: &str = "/admin/v1/realms/{slug}/clients";
 const G: &str = "/admin/v1/realms/{slug}/groups";
+const H: &str = "/admin/v1/realms/{slug}/hooks";
+const W: &str = "/admin/v1/realms/{slug}/webhooks";
+const WK: &str = "/admin/v1/realms/{slug}/webhooks/{webhook_id}";
 
 /// Every realm resource route, in contract order.
 pub const ROWS: &[Route] = &[
@@ -336,6 +340,68 @@ pub const ROWS: &[Route] = &[
         "rehomeRealm",
         "Moves the realm to another governing domain: declared and reserved, never applied.",
     ),
+    write(
+        Verb::Put,
+        "/admin/v1/realms/{slug}/settings/extension-policy",
+        "putExtensionPolicy",
+        "Sets whether hooks and webhooks may reach declared private targets and what hooks may receive.",
+    ),
+    write(
+        Verb::Patch,
+        "/admin/v1/realms/{slug}/settings/extension-policy",
+        "patchExtensionPolicy",
+        "Changes the extension policy by JSON Merge Patch.",
+    ),
+    list(H, "listHooks", "The realm's inline hooks."),
+    secret(
+        Verb::Post,
+        H,
+        "registerHook",
+        "Registers an inline hook at one call point; its verification key is shown once.",
+    ),
+    read(
+        "/admin/v1/realms/{slug}/hooks/{hook_id}",
+        "getHook",
+        "One inline hook.",
+    ),
+    write(
+        Verb::Post,
+        "/admin/v1/realms/{slug}/hooks/{hook_id}/retire",
+        "retireHook",
+        "Retires an inline hook; a URL change is a retirement and a new registration.",
+    ),
+    list(W, "listWebhooks", "The realm's webhooks."),
+    secret(
+        Verb::Post,
+        W,
+        "registerWebhook",
+        "Registers a webhook; its verification key is shown once.",
+    ),
+    read(WK, "getWebhook", "One webhook."),
+    write(
+        Verb::Put,
+        WK,
+        "putWebhook",
+        "Replaces a webhook's URL and events.",
+    ),
+    write(
+        Verb::Patch,
+        WK,
+        "patchWebhook",
+        "Changes a webhook's URL or events by JSON Merge Patch.",
+    ),
+    secret(
+        Verb::Post,
+        "/admin/v1/realms/{slug}/webhooks/{webhook_id}/rotate",
+        "rotateWebhookKey",
+        "Issues a new signing key, its verification key shown once; the old key signs too for 24 hours.",
+    ),
+    write(
+        Verb::Post,
+        "/admin/v1/realms/{slug}/webhooks/{webhook_id}/retire",
+        "retireWebhook",
+        "Retires a webhook; its pending deliveries fail.",
+    ),
 ];
 
 /// How a row is served.
@@ -403,6 +469,8 @@ const PROTECTION_PATCH: &[&str] = &[
     "sl2",
     "denied_asns",
 ];
+const EXTENSION_PATCH: &[&str] = &["allow_private_targets", "hook_disclosure"];
+const WEBHOOK_PATCH: &[&str] = &["url", "events"];
 const BRANDING_PATCH: &[&str] = &[
     "display_name",
     "logo_uri",
@@ -441,7 +509,13 @@ const fn put(section: &'static str) -> Shape {
 /// The resource kind and shape of a realm row.
 #[must_use]
 pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
-    use ResourceKind::{Accounts, Clients, Groups, Settings, UpstreamIdps};
+    use ResourceKind::{Accounts, Clients, Groups, Hooks, Settings, UpstreamIdps, Webhooks};
+    const CREATE: Shape = Shape::Write {
+        patch: None,
+        section: None,
+        conditional: false,
+        creates: true,
+    };
     Some(match operation_id {
         "draftIntent" => (Settings, Shape::Draft),
         "listClients" => (
@@ -493,6 +567,18 @@ pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
         "createJob" => (Settings, Shape::JobCreate),
         "getJob" => (Settings, Shape::JobGet),
         "listJobItems" => (Settings, Shape::JobItems),
+        "putExtensionPolicy" => (Settings, put("extension_policy")),
+        "patchExtensionPolicy" => (Settings, patch(EXTENSION_PATCH, Some("extension_policy"))),
+        "listHooks" => (Hooks, Shape::List(&["hook_id", "point", "status"])),
+        "getHook" => (Hooks, Shape::Get),
+        "registerHook" => (Hooks, CREATE),
+        "retireHook" => (Hooks, w(false)),
+        "listWebhooks" => (Webhooks, Shape::List(&["webhook_id", "url", "status"])),
+        "getWebhook" => (Webhooks, Shape::Get),
+        "registerWebhook" => (Webhooks, CREATE),
+        "putWebhook" => (Webhooks, w(true)),
+        "patchWebhook" => (Webhooks, patch(WEBHOOK_PATCH, None)),
+        "rotateWebhookKey" | "retireWebhook" => (Webhooks, w(false)),
         _ => return None,
     })
 }
@@ -551,11 +637,19 @@ pub fn problem_of(e: &AdminError) -> &'static Code {
             Invalid::Reserved => &r::RESERVED_OPERATION,
             Invalid::JoseAlg => &r::INVALID_JOSE_ALG,
             Invalid::ProtectionMode => &r::INVALID_PROTECTION_MODE,
+            Invalid::ExtensionTarget => &r::INVALID_EXTENSION_TARGET,
+            Invalid::Hook => &r::INVALID_HOOK,
+            Invalid::Disclosure => &r::DISCLOSURE_NOT_PERMITTED,
+            Invalid::WebhookEvents => &r::INVALID_WEBHOOK_EVENTS,
+            Invalid::ExtensionPolicy => &r::INVALID_EXTENSION_POLICY,
+            Invalid::HookPointTaken => &r::HOOK_POINT_TAKEN,
             Invalid::NoClient
             | Invalid::NoKey
             | Invalid::NoGroup
             | Invalid::NoAccount
-            | Invalid::NoUpstream => &codes::NOT_FOUND,
+            | Invalid::NoUpstream
+            | Invalid::NoHook
+            | Invalid::NoWebhook => &codes::NOT_FOUND,
         },
         AdminError::Issuer(_) | AdminError::NoRealm => &codes::NOT_FOUND,
         AdminError::Refused(_) => &codes::EXERCISE_REFUSED,

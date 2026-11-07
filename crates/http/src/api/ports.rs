@@ -218,6 +218,10 @@ pub enum ResourceKind {
     UpstreamIdps,
     /// The settings singleton.
     Settings,
+    /// Inline hooks, by `hook_id` (TN-135).
+    Hooks,
+    /// Webhooks, by `webhook_id` (TN-136).
+    Webhooks,
 }
 
 impl ResourceKind {
@@ -230,6 +234,8 @@ impl ResourceKind {
             Self::Accounts => "accounts",
             Self::UpstreamIdps => "upstream-idps",
             Self::Settings => "settings",
+            Self::Hooks => "hooks",
+            Self::Webhooks => "webhooks",
         }
     }
 }
@@ -313,7 +319,8 @@ pub enum Written {
         position: u64,
         /// The resource after the write, when it has a view.
         resource: Option<Item>,
-        /// A server-generated secret, shown this once and never kept (CR-38).
+        /// A server-generated secret, shown this once and never kept (CR-38): a client secret,
+        /// or a hook's or webhook's verification key (TN-135, TN-136).
         secret: Option<String>,
     },
     /// Decided and not allowed; nothing changed.

@@ -41,6 +41,25 @@ fn key_of(params: &RawPathParams) -> Option<String> {
         .map(|(_, v)| v.to_owned())
 }
 
+/// The member a created resource's server-assigned id is in.
+#[must_use]
+pub const fn id_member(kind: ResourceKind) -> &'static str {
+    match kind {
+        ResourceKind::Hooks => "hook_id",
+        ResourceKind::Webhooks => "webhook_id",
+        _ => "client_id",
+    }
+}
+
+/// The member a write's one-time secret is shown in: a client's secret, or the key a hook's or
+/// webhook's receiver verifies with (`whpk_…` or `whsec_…`).
+const fn secret_member(kind: ResourceKind) -> &'static str {
+    match kind {
+        ResourceKind::Hooks | ResourceKind::Webhooks => "verification_key",
+        _ => "client_secret",
+    }
+}
+
 fn tag(kind: ResourceKind, key: Option<&str>, item: &Item) -> String {
     etag(kind.name(), key.unwrap_or(""), &item.version.to_be_bytes())
 }
@@ -367,8 +386,8 @@ pub(super) async fn commit<E: Env>(
             o.insert("resource".to_owned(), r.body.clone());
         }
         if let Some(s) = secret {
-            // CR-38: shown once, never kept (the row's answer is not replayed)
-            o.insert("client_secret".to_owned(), Value::String(s));
+            // CR-38, TN-135, TN-136: shown once, never kept (the row's answer is not replayed)
+            o.insert(secret_member(kind).to_owned(), Value::String(s));
         }
         // IDI-4: an RP ID change cannot be undone; the answer says so
         if ctx.row.operation_id == "putRpId" {
@@ -384,7 +403,7 @@ pub(super) async fn commit<E: Env>(
     if let Some(item) = &resource {
         let id = key
             .as_deref()
-            .or_else(|| item.body.get("client_id").and_then(Value::as_str));
+            .or_else(|| item.body.get(id_member(kind)).and_then(Value::as_str));
         if let Ok(v) = HeaderValue::from_str(&tag(kind, id, item)) {
             response.headers_mut().insert(header::ETAG, v);
         }

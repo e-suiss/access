@@ -51,6 +51,7 @@ use super::*;
 use crate::testing::hsm;
 
 mod claims;
+mod extensions;
 mod governance;
 mod platform;
 mod records;
@@ -324,12 +325,26 @@ impl RealmKeys for Opened {
     }
 }
 
+/// One soft KEK for every realm, sealing hook and webhook keys (OP-42, OP-135).
+struct TestKek(Arc<SoftKek>);
+
+impl access_identity_events::adapters::RealmKek for TestKek {
+    fn kek(
+        &self,
+        _: TenantId,
+        _: RealmId,
+    ) -> Option<Arc<dyn suiss_crypto::envelope::Kek + Send + Sync>> {
+        Some(self.0.clone())
+    }
+}
+
 struct World {
     db: TestDb,
     plane: TestPlane,
     ids: IdKey,
     base: RealmBase,
     keys: Opened,
+    vault: access_identity_events::adapters::KekSealer<TestKek>,
 }
 
 impl World {
@@ -342,6 +357,10 @@ impl World {
             ids: IdKey::new(Secret::new([8; 32])),
             base: RealmBase::parse("https://id.test").unwrap(),
             keys: Opened::default(),
+            vault: access_identity_events::adapters::KekSealer(TestKek(Arc::new(SoftKek::new(
+                "realm-kek",
+                [9; 32],
+            )))),
         }
     }
 
@@ -356,6 +375,7 @@ impl World {
             keys: &self.keys,
             platform_tenant: None,
             declared: DeclaredTargets::default(),
+            vault: Some(&self.vault),
         }
     }
 

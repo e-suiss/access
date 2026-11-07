@@ -19,8 +19,9 @@ use access_identity_admin::app::rest::{
     self, Kind, Op, acknowledged_passkeys, compile, default_validity,
 };
 use access_identity_admin::app::{Admin, Applied, Proposal};
-use access_identity_admin::domain::{Change, Invalid};
+use access_identity_admin::domain::{Change, HOOK_PREFIX, Invalid, WEBHOOK_PREFIX};
 use access_identity_admin::ports::{Decider, Governance, Instances};
+use access_identity_events::adapters::KekSealer;
 use access_identity_oauth::adapters::outbound::{DeclaredTargets, Outbound};
 use access_identity_oauth::domain::issuer::RealmBase;
 use access_identity_ui::domain::frontend::IDENTITY_PEP;
@@ -39,6 +40,7 @@ use suiss_crypto::dcbor::{self, Limits};
 
 use crate::idp::RealmKeyring;
 use crate::ids::CellIds;
+use crate::login::RealmKeks;
 
 /// The identity plane behind the realm-admin surface.
 pub(crate) struct Realms<P> {
@@ -57,6 +59,8 @@ pub(crate) struct Realms<P> {
     pub(crate) platform: Option<String>,
     /// Fetches sector identifier documents (MD-10, OIDC Core §8.1).
     pub(crate) outbound: Outbound,
+    /// Seals hook and webhook keys under the realm KEKs (TN-135, TN-136).
+    pub(crate) vault: KekSealer<RealmKeks>,
 }
 
 /// Largest sector identifier document read.
@@ -69,6 +73,8 @@ fn kind(k: ResourceKind) -> Kind {
         ResourceKind::Accounts => Kind::Accounts,
         ResourceKind::UpstreamIdps => Kind::Upstreams,
         ResourceKind::Settings => Kind::Settings,
+        ResourceKind::Hooks => Kind::Hooks,
+        ResourceKind::Webhooks => Kind::Webhooks,
     }
 }
 
@@ -120,6 +126,7 @@ impl<P: Decider + Governance + Instances + Clone + Send + Sync + 'static> Realms
             // OP-149 m.4: platform product clients are not written on the realm-admin surface
             platform_tenant: None,
             declared: self.declared.clone(),
+            vault: Some(&self.vault),
         }
     }
 
@@ -175,6 +182,21 @@ impl<P: Decider + Governance + Instances + Clone + Send + Sync + 'static> Realms
                     "client_id".to_owned(),
                     Value::String(id.as_str().to_owned()),
                 );
+            }
+            // TN-135, TN-136: a new hook's or webhook's id is assigned with its draft
+            let assigned = match op {
+                Op::RegisterHook => Some(("hook_id", HOOK_PREFIX)),
+                Op::RegisterWebhook => Some(("webhook_id", WEBHOOK_PREFIX)),
+                _ => None,
+            };
+            if let Some((member, prefix)) = assigned
+                && !o.contains_key(member)
+            {
+                let id = admin
+                    .new_extension_id(prefix)
+                    .await
+                    .map_err(|e| unavailable(&e))?;
+                o.insert(member.to_owned(), Value::String(id));
             }
         }
         let validity = match rest::validity(&body) {
@@ -343,7 +365,7 @@ impl<P: Decider + Governance + Instances + Clone + Send + Sync + 'static> Realms
             ResourceKind::Settings => None,
             _ => w.key.clone().or_else(|| {
                 c.body
-                    .get("client_id")
+                    .get(access_http::api::realm::id_member(k))
                     .and_then(Value::as_str)
                     .map(String::from)
             }),
