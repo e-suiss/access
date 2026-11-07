@@ -225,6 +225,45 @@ impl Reader for PgReader {
         Ok(access_store::authority::nonce_opened(&self.pool, &self.domain, nonce).await?)
     }
 
+    async fn position_at(&self, at: u64) -> Result<Option<u64>, CoreError> {
+        Ok(position_at(&self.pool, &self.domain, at).await?)
+    }
+
+    async fn open_contracts(&self, at: u64) -> Result<Vec<crate::ports::OpenContract>, CoreError> {
+        Ok(access_store::offline::open_at(&self.pool, &self.domain, at)
+            .await?
+            .into_iter()
+            .map(|c| crate::ports::OpenContract {
+                exercise: Digest(c.exercise),
+                holder: Id(c.holder),
+                class: c.class,
+                horizon_ms: c.horizon_ms,
+            })
+            .collect())
+    }
+
+    async fn indexed_live(
+        &self,
+        after: Option<Id>,
+        limit: u32,
+    ) -> Result<(Vec<Id>, u64), CoreError> {
+        let live =
+            access_store::derived::live_grants(&self.pool, &self.domain, after.map(|a| a.0), limit)
+                .await?;
+        let at = cursor(&self.pool, &self.domain).await?;
+        Ok((live.into_iter().map(Id).collect(), at))
+    }
+
+    async fn publications(&self, namespace: &str) -> Result<Vec<Vec<u8>>, CoreError> {
+        Ok(
+            access_store::publications::of_namespace(&self.pool, namespace)
+                .await?
+                .into_iter()
+                .map(|r| r.package)
+                .collect(),
+        )
+    }
+
     async fn opening(&self, intent: &Digest) -> Result<Option<crate::ports::Opening>, CoreError> {
         let Some(row) =
             access_store::authority::find_opening(&self.pool, &self.domain, &intent.0).await?

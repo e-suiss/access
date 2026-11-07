@@ -204,7 +204,12 @@ pub enum Change {
 pub fn compare(cvc5: &Cvc5, schema: &str, old: &str, new: &str, limits: Limits) -> Change {
     let compiled = Engine::compile(schema, old, limits)
         .map_err(AnalysisError::Old)
-        .and_then(|o| Ok((o, Engine::compile(schema, new, limits).map_err(AnalysisError::New)?)));
+        .and_then(|o| {
+            Ok((
+                o,
+                Engine::compile(schema, new, limits).map_err(AnalysisError::New)?,
+            ))
+        });
     let (old, new) = match compiled {
         Ok(pair) => pair,
         Err(e) => return Change::Unknown(e),

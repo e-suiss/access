@@ -122,6 +122,114 @@ pub trait Reader {
         &self,
         intent: &Digest,
     ) -> impl Future<Output = Result<Option<Opening>, CoreError>> + Send;
+    /// The last position recorded at or before trusted time `at` (§16.5.1); unavailable by
+    /// default.
+    fn position_at(&self, at: u64) -> impl Future<Output = Result<Option<u64>, CoreError>> + Send {
+        let _ = at;
+        std::future::ready(Err(CoreError::Unavailable("position")))
+    }
+    /// The projection contracts open after `at`, family not revoked (§5.4); unavailable by
+    /// default.
+    fn open_contracts(
+        &self,
+        at: u64,
+    ) -> impl Future<Output = Result<Vec<OpenContract>, CoreError>> + Send {
+        let _ = at;
+        std::future::ready(Err(CoreError::Unavailable("contracts")))
+    }
+    /// The Grants the derived index holds as live, in id order after `after`, and the last
+    /// position it applied (§5.4 orphan tuple counter); unavailable by default.
+    fn indexed_live(
+        &self,
+        after: Option<Id>,
+        limit: u32,
+    ) -> impl Future<Output = Result<(Vec<Id>, u64), CoreError>> + Send {
+        let _ = (after, limit);
+        std::future::ready(Err(CoreError::Unavailable("index")))
+    }
+    /// The canonical bytes of the packages published for `namespace`, newest first
+    /// (§8.17.10.2); unavailable by default.
+    fn publications(
+        &self,
+        namespace: &str,
+    ) -> impl Future<Output = Result<Vec<Vec<u8>>, CoreError>> + Send {
+        let _ = namespace;
+        std::future::ready(Err(CoreError::Unavailable("publications")))
+    }
+}
+
+/// A projection contract still open at some time (§5.4).
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct OpenContract {
+    /// The projection's `ExerciseID`.
+    pub exercise: Digest,
+    /// The holder Instance.
+    pub holder: Id,
+    /// Profile class word.
+    pub class: String,
+    /// The contract's horizon, milliseconds.
+    pub horizon_ms: u64,
+}
+
+/// Whether a restriction policy change moved authority (§5.8, OP-105), as the control-plane
+/// analysis answers it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum PolicyRelation {
+    /// Same outcome for every request.
+    Equivalent,
+    /// Restricts at least as much everywhere and more somewhere.
+    Narrowing,
+    /// Restricts less somewhere.
+    Widening,
+    /// Restricts less somewhere and more elsewhere.
+    Incomparable,
+    /// A policy can raise an evaluation error.
+    MayError,
+    /// No relation was proved (time limit, solver `unknown`, any failure); never equivalent.
+    Unknown,
+}
+
+impl PolicyRelation {
+    /// Its word.
+    #[must_use]
+    pub const fn word(self) -> &'static str {
+        match self {
+            Self::Equivalent => "equivalent",
+            Self::Narrowing => "narrowing",
+            Self::Widening => "widening",
+            Self::Incomparable => "incomparable",
+            Self::MayError => "may_error",
+            Self::Unknown => "unknown",
+        }
+    }
+}
+
+/// The control-plane SMT analysis of restriction policy changes (OP-105): never on the request
+/// path, wired by the binary that holds the pinned solver.
+pub trait PolicyAnalysis: Send + Sync {
+    /// The relation of `new` to `old`, both written against `schema`.
+    fn compare(
+        &self,
+        schema: &str,
+        old: &str,
+        new: &str,
+    ) -> impl Future<Output = PolicyRelation> + Send;
+}
+
+/// No analysis is wired: every change is [`PolicyRelation::Unknown`].
+#[derive(Clone, Copy, Debug, Default)]
+pub struct NoAnalysis;
+
+impl PolicyAnalysis for NoAnalysis {
+    fn compare(
+        &self,
+        schema: &str,
+        old: &str,
+        new: &str,
+    ) -> impl Future<Output = PolicyRelation> + Send {
+        let _ = (schema, old, new);
+        std::future::ready(PolicyRelation::Unknown)
+    }
 }
 
 /// What a decision point recorded when it asked for an approval (§9.14.1, §13.7.3).

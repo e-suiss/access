@@ -35,7 +35,7 @@ async fn a_published_version_is_kept_once_and_never_replaced() {
         [3, 2]
     );
     assert_eq!(listed[1].package, vec![1]);
-    assert!(of_namespace(&db.app, "other").await.unwrap().is_empty());
+    assert_eq!(of_namespace(&db.app, "other").await.unwrap(), []);
 }
 
 // OP-73, E10: neither the app role nor anyone else changes or removes a published row

@@ -1815,11 +1815,14 @@ pub mod audit;
 mod binding;
 mod events;
 pub mod export;
+pub mod impact;
 mod ingest;
+pub mod lab;
 pub mod projection;
 mod proofs;
+pub mod publishing;
 mod regime;
-mod roles;
+pub mod roles;
 
 pub use ingest::Ingested;
 pub use proofs::{Compromise, MAX_PROOFS, NewClaim, Resolved};
