@@ -7708,3 +7708,85 @@ async fn op_141_m39_a_an_export_carries_only_its_typed_parameters() {
         .insert("to".to_owned(), ParamValue::Count(1));
     allowed(&a.exercise(&incoming(ranged, ROOT_KEY)).await.unwrap());
 }
+
+/// A developer-surface search of `kind`, on the meta-anchor.
+fn report_request(d: Digest, nonce: u8, kind: &str) -> Request {
+    Request {
+        domain: d,
+        mode: Mode::Check,
+        nonce: vec![nonce; 16],
+        intent: intent(action("access", "read"), ("access.search", kind), None),
+        payload: None,
+        basis: ExerciseBasis::Anchor(meta::meta_anchor(&d)),
+        capacity: Capacity::Own,
+        proofs: Vec::new(),
+        exercise: None,
+        consistency: None,
+    }
+}
+
+// U53, OP-44, §8.17.10: every developer report served to an auditor is one `audit.read` row
+// of the operational stream, never sampled; a caller who gets no report makes no row
+#[tokio::test]
+async fn u53_op_44_every_report_served_is_one_audit_read() {
+    use access_authority_core::app::impact::{Compromised, Revoked};
+    use access_authority_core::query::Query;
+    let db = fresh().await.unwrap();
+    let (a, d, holding, _) = audited_domain(&db).await;
+    assert!(a.derive().await.is_empty());
+    let ExerciseBasis::Holding(h) = holding else {
+        unreachable!()
+    };
+    let reports = [
+        (
+            "revocation-impact",
+            Query::RevocationImpact {
+                revoked: Revoked::Grant(h.grant),
+                at: None,
+            },
+        ),
+        (
+            "compromise-impact",
+            Query::CompromiseImpact {
+                compromised: Compromised::Issuer(ALICE),
+                window: Window {
+                    from: 0,
+                    until: NOW,
+                },
+            },
+        ),
+        (
+            "schema-publications",
+            Query::SchemaPublications {
+                namespace: "shop".to_owned(),
+            },
+        ),
+    ];
+    let mut nonce = 70;
+    for _ in 0..2 {
+        for (kind, query) in &reports {
+            nonce += 1;
+            let inc = incoming(report_request(d, nonce, kind), ROOT_KEY);
+            let (hits, _) = a.search(&inc, query, None).await.unwrap();
+            // no publication is offered to `shop`: an empty report is still an audit read
+            assert_eq!(hits.len(), usize::from(*kind != "schema-publications"));
+        }
+    }
+    let inc = incoming(report_request(d, 90, "revocation-impact"), ALICE_KEY);
+    let (hits, _) = a.search(&inc, &reports[0].1, None).await.unwrap();
+    assert!(hits.is_empty());
+    let reads = operational(&db, "audit.read").await;
+    assert_eq!(reads.len(), 2 * reports.len());
+    assert!(
+        reads.iter().all(|r| r.reason == "report"
+            && r.tenant == Some(TENANT)
+            && r.actor.starts_with("inst:"))
+    );
+    assert_eq!(
+        reads
+            .iter()
+            .filter(|r| r.target == "report:revocation-impact")
+            .count(),
+        2
+    );
+}

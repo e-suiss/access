@@ -1089,7 +1089,21 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
         page: Option<&str>,
     ) -> Result<(Vec<Hit>, Option<String>), CoreError> {
         let result = self.search_led(inc, query, page).await;
-        self.audited(inc, "search", result).await
+        let (hits, next, audited) = self.audited(inc, "search", result).await?;
+        // U53, OP-44: every report served to an auditor is one row, written before it leaves
+        if let Some(instance) = audited {
+            self.operational(
+                inc,
+                (
+                    audit::AUDIT_EVENT_READ,
+                    &audit::who(inc, Some(&instance)),
+                    &format!("report:{}", query.kind()),
+                    "report",
+                ),
+            )
+            .await?;
+        }
+        Ok((hits, next))
     }
 
     async fn search_led(
@@ -1097,7 +1111,7 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
         inc: &Incoming,
         query: &Query,
         page: Option<&str>,
-    ) -> Result<(Vec<Hit>, Option<String>), CoreError> {
+    ) -> Result<(Vec<Hit>, Option<String>, Option<Id>), CoreError> {
         let domain = inc.request.domain;
         let mut guard = self.leading(domain).await?;
         let Some(led) = guard.as_mut() else {
@@ -1126,7 +1140,7 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
             .map(|n| led.tokens.seal(&domain.0, PAGE_TOKEN, &page_body(&n)))
             .transpose()
             .map_err(|_| CoreError::Unavailable("token-key"))?;
-        Ok((found.hits, next))
+        Ok((found.hits, next, found.audited))
     }
 
     /// The current binding-signed Domain Metadata of `domain` from the signer (§9.15.1,

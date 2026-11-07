@@ -75,7 +75,7 @@ pub fn txn(inc: &Incoming) -> String {
 }
 
 /// Who made a request: the actor's Instance once known, else the PEP.
-fn who(inc: &Incoming, instance: Option<&access_kernel::model::Id>) -> String {
+pub(super) fn who(inc: &Incoming, instance: Option<&access_kernel::model::Id>) -> String {
     instance.map_or_else(
         || audit_text(&inc.pep),
         |i| format!("inst:{}", b64url_encode(&i.0)),
@@ -84,7 +84,7 @@ fn who(inc: &Incoming, instance: Option<&access_kernel::model::Id>) -> String {
 
 impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K, B, S, C> {
     /// Writes one operational row about `inc` (OP-44).
-    async fn operational(
+    pub(super) async fn operational(
         &self,
         inc: &Incoming,
         (event, actor, target, reason): (&str, &str, &str, &str),
