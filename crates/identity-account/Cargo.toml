@@ -10,6 +10,7 @@ publish = false
 
 [dependencies]
 access-crypto = { workspace = true }
+access-identity-hooks = { workspace = true }
 access-internal-api = { workspace = true }
 access-kernel = { workspace = true }
 access-store = { workspace = true }

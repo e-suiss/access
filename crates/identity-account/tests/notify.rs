@@ -22,6 +22,7 @@ use access_identity_account::adapters::pg::PgAccounts;
 use access_identity_account::adapters::system::SystemEntropy;
 use access_identity_account::app::accounts::{change_status, create};
 use access_identity_account::app::{Actor, Realm, SUBJECT_PREFIX};
+use access_identity_account::domain::events::OUTBOX_PREFIX as EVENT_PREFIX;
 use access_identity_account::domain::identifier::{Identifier, IdentifierKind};
 use access_identity_account::domain::status::AccountStatus;
 use access_identity_account::notify::NotifyError;
@@ -264,14 +265,26 @@ impl Env {
 
     async fn subject(&self, who: &str) -> [u8; 16] {
         let id = Identifier::new(IdentifierKind::Email, who).unwrap();
-        create(
+        let s = create(
             &PgAccounts(self.db.app.clone()),
             &self.realm(),
             &[id],
             &ADMIN,
         )
         .await
-        .unwrap()
+        .unwrap();
+        // OP-151 m.3 (i): account.created belongs to the webhook fan-out; the courier passes it
+        let deadline = Instant::now() + Duration::from_secs(20);
+        while access_store::identity::poll(&self.db.reader, Cursor::default(), 1_000)
+            .await
+            .unwrap()
+            .is_empty()
+        {
+            assert!(Instant::now() < deadline);
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+        self.courier.step().await.unwrap();
+        s
     }
 
     /// Queues `m` together with a business change (a session epoch bump) and commits.
@@ -306,6 +319,7 @@ impl Env {
                     .unwrap()
                     .into_iter()
                     .map(|e| (e.kind, e.payload))
+                    .filter(|(kind, _)| !kind.starts_with(EVENT_PREFIX))
                     .collect();
             if rows.len() >= n {
                 return rows;

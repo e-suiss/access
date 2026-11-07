@@ -31,6 +31,7 @@ access-identity-webauthn = { path = "crates/identity-webauthn", default-features
 access-identity-ui = { path = "crates/identity-ui", default-features = false }
 access-identity-admin = { path = "crates/identity-admin", default-features = false }
 access-identity-events = { path = "crates/identity-events", default-features = false }
+access-identity-hooks = { path = "crates/identity-hooks", default-features = false }
 access-authority-ingest = { path = "crates/authority-ingest", default-features = false }
 access-sdk = { package = "esuiss-access-sdk", path = "sdks/rust/access", version = "=0.3.1", default-features = false }
 access-verifier = { package = "esuiss-access-verifier", path = "sdks/rust/verifier", version = "=0.3.1", default-features = false }

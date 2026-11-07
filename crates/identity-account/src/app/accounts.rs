@@ -6,11 +6,13 @@ use access_store::accounts::{NewCredential, Revoke};
 use access_store::audit::AuditEvent;
 
 use crate::AccountError;
+use crate::app::events;
 use crate::app::hasher::Hasher;
 use crate::app::sealing::{new_subject_key, seal, subject_key};
 use crate::app::signal::{emit as signal, fresh_id};
 use crate::app::{Actor, Realm, breach};
-use crate::domain::identifier::Identifier;
+use crate::domain::events::CredentialChange;
+use crate::domain::identifier::{Identifier, IdentifierKind};
 use crate::domain::password::{ALGORITHM, Password};
 use crate::domain::signal::{ChangeType, CredentialType, Initiator, Signal};
 use crate::domain::status::{AccountStatus, Deactivation};
@@ -116,8 +118,48 @@ pub async fn create<D: AccountDb>(
         }
     }
     audit(&mut tx, "account.created", who, &realm.external(subject)?).await?;
+    // OP-151 m.3 (i)
+    events::created(&mut tx, realm, subject).await?;
     tx.commit().await?;
     Ok(subject)
+}
+
+/// Self-service registration (TN-135, OP-151 m.3 (j)): the realm's `pre_registration` hook is
+/// asked first and may only refuse; any failure to answer refuses (MD-8). Then [`create`].
+///
+/// # Errors
+/// [`AccountError`]; a refusal is [`Registered::Refused`], not an error.
+pub async fn register<D: AccountDb>(
+    db: &D,
+    realm: &Realm<'_>,
+    identifiers: &[Identifier],
+    who: &Actor<'_>,
+    hooks: &(dyn access_identity_hooks::ports::HookCaller + Sync),
+) -> Result<Registered, AccountError> {
+    use access_identity_hooks::domain::{Call, Outcome, PreRegistration};
+    let email = identifiers
+        .iter()
+        .find(|i| i.kind() == IdentifierKind::Email)
+        .map(|i| String::from(i.value()));
+    let call = Call::PreRegistration(PreRegistration {
+        identifier_kinds: identifiers.iter().map(|i| i.kind().name()).collect(),
+        email,
+    });
+    match hooks.call(realm.tenant, realm.realm, call).await {
+        Outcome::Proceed { .. } => Ok(Registered::Created(
+            create(db, realm, identifiers, who).await?,
+        )),
+        Outcome::Refused(reason) => Ok(Registered::Refused(reason)),
+    }
+}
+
+/// What registration did.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Registered {
+    /// The new `staged` subject.
+    Created([u8; 16]),
+    /// The `pre_registration` hook refused or did not answer (TN-135, MD-8).
+    Refused(access_identity_hooks::domain::Refusal),
 }
 
 /// Moves an account along TN-49. Leaving `active` for `locked` or `suspended` ends its
@@ -146,10 +188,15 @@ pub async fn change_status<D: AccountDb>(
         return Err(AccountError::Corrupt);
     }
     if from.can_authenticate() && !to.can_authenticate() {
-        tx.end_sessions(subject).await?;
+        let rev = tx.end_sessions(subject).await?;
         ended_signals(&mut tx, subject, true).await?;
+        // OP-151 m.3 (i)
+        if let Some(rev) = rev {
+            events::sessions_ended(&mut tx, realm, subject, rev).await?;
+        }
     }
     status_claim(&mut tx, subject, to).await?;
+    events::status(&mut tx, realm, subject, from, to).await?;
     let event = format!("account.{}", to.name());
     audit(&mut tx, &event, who, &realm.external(subject)?).await?;
     tx.commit().await
@@ -202,6 +249,9 @@ pub async fn deactivate<D: AccountDb>(
         .ok_or(AccountError::Corrupt)?;
     ended_signals(&mut tx, subject, true).await?;
     status_claim(&mut tx, subject, AccountStatus::Deactivated).await?;
+    // OP-151 m.3 (i)
+    events::sessions_ended(&mut tx, realm, subject, session_epoch).await?;
+    events::status(&mut tx, realm, subject, from, AccountStatus::Deactivated).await?;
     audit(
         &mut tx,
         "account.deactivated",
@@ -258,6 +308,11 @@ pub async fn set_password<D: AccountDb, B: BreachRanges, E: Entropy>(
     let dek = subject_key(realm, &row)?;
     let sealed = seal(realm, &dek, &subject, PASSWORD, phc.expose().as_bytes())?;
     let old = tx.credentials(subject, PASSWORD).await?;
+    let replaced = if old.is_empty() {
+        CredentialChange::Added
+    } else {
+        CredentialChange::Replaced
+    };
     let id = tx
         .insert_credential(&NewCredential {
             subject,
@@ -277,6 +332,8 @@ pub async fn set_password<D: AccountDb, B: BreachRanges, E: Entropy>(
         }
     }
     credential_signal(&mut tx, subject, CredentialType::Password, change).await?;
+    // OP-151 m.3 (i)
+    events::credential(&mut tx, realm, subject, PASSWORD, replaced).await?;
     audit(
         &mut tx,
         "credential.password.set",
@@ -306,23 +363,21 @@ pub async fn remove_credential<D: AccountDb>(
         .iter()
         .any(|c| c.id == credential);
     let kind = if passkey {
-        CredentialType::Fido2
-    } else if tx
-        .credentials(subject, PASSWORD)
-        .await?
-        .iter()
-        .any(|c| c.id == credential)
-    {
-        CredentialType::Password
+        PASSKEY
     } else {
-        CredentialType::App
+        credential_kind(&mut tx, subject, credential).await?
+    };
+    let signal_kind = match kind {
+        PASSKEY => CredentialType::Fido2,
+        PASSWORD => CredentialType::Password,
+        _ => CredentialType::App,
     };
     match tx.revoke(subject, credential).await? {
         Revoke::Done => {}
         Revoke::Missing => return Err(AccountError::NotFound),
         Revoke::LastMethod => return Err(AccountError::LastMethod),
     }
-    credential_signal(&mut tx, subject, kind, ChangeType::Revoke).await?;
+    credential_signal(&mut tx, subject, signal_kind, ChangeType::Revoke).await?;
     // IDP-2, OP-150 L2: the passkey's binding line ends; no Instance changes
     if passkey {
         let at = tx.server_time().await?;
@@ -337,6 +392,8 @@ pub async fn remove_credential<D: AccountDb>(
         )
         .await?;
     }
+    // OP-151 m.3 (i)
+    events::credential(&mut tx, realm, subject, kind, CredentialChange::Removed).await?;
     audit(
         &mut tx,
         "credential.removed",
@@ -345,4 +402,23 @@ pub async fn remove_credential<D: AccountDb>(
     )
     .await?;
     tx.commit().await
+}
+
+/// The kind of a live credential other than a passkey, before it is revoked.
+async fn credential_kind<T: AccountTx>(
+    tx: &mut T,
+    subject: [u8; 16],
+    credential: [u8; 16],
+) -> Result<&'static str, AccountError> {
+    for kind in [PASSWORD, "totp", "recovery_code"] {
+        if tx
+            .credentials(subject, kind)
+            .await?
+            .iter()
+            .any(|c| c.id == credential)
+        {
+            return Ok(kind);
+        }
+    }
+    Ok("other")
 }

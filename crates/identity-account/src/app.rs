@@ -3,6 +3,7 @@
 pub mod accounts;
 pub mod breach;
 pub mod claims;
+pub mod events;
 pub mod hasher;
 pub mod local;
 pub mod login;

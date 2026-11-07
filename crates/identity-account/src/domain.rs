@@ -2,6 +2,7 @@
 
 pub mod breach;
 pub mod claims;
+pub mod events;
 pub mod gcra;
 pub mod identifier;
 pub mod login;

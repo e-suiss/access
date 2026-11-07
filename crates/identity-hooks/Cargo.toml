@@ -1,0 +1,27 @@
+[package]
+name = "access-identity-hooks"
+description = "Inline hooks of the identity plane (TN-135, OP-151 m.3 (j)): signed calls to the tenant's own HTTPS endpoint that may only refuse or add identity claims, fail-closed."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+access-crypto = { workspace = true }
+access-internal-api = { workspace = true }
+access-kernel = { workspace = true }
+access-store = { workspace = true }
+suiss-crypto = { workspace = true }
+serde_json = { workspace = true, features = ["std"] }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["time"] }
+tracing = { workspace = true, features = ["std"] }
+zeroize = { workspace = true, features = ["alloc", "std"] }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "time", "test-util"] }
+
+[lints]
+workspace = true
