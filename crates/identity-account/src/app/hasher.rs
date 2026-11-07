@@ -52,6 +52,7 @@ pub struct HashMetrics {
     slow_waits: AtomicU64,
     shed: AtomicU64,
     hashes: AtomicU64,
+    waiting: AtomicU64,
 }
 
 impl HashMetrics {
@@ -71,6 +72,26 @@ impl HashMetrics {
     #[must_use]
     pub fn hashes(&self) -> u64 {
         self.hashes.load(Ordering::Relaxed)
+    }
+
+    /// Hashes waiting for a permit now (§17.8.2 Argon2 queue depth).
+    #[must_use]
+    pub fn waiting(&self) -> u64 {
+        self.waiting.load(Ordering::Relaxed)
+    }
+
+    fn queue(&self, joined: bool) {
+        let now = if joined {
+            self.waiting
+                .fetch_add(1, Ordering::Relaxed)
+                .saturating_add(1)
+        } else {
+            self.waiting
+                .fetch_sub(1, Ordering::Relaxed)
+                .saturating_sub(1)
+        };
+        // §17.8.2, OP-33
+        access_telemetry::signals::ARGON2_QUEUE_DEPTH.set_u64(now, []);
     }
 }
 
@@ -106,11 +127,14 @@ impl Hasher {
 
     async fn permit(&self) -> Result<OwnedSemaphorePermit, AccountError> {
         let start = tokio::time::Instant::now();
+        self.metrics.queue(true);
         let acquired = tokio::time::timeout(
             self.config.queue_wait,
             self.semaphore.clone().acquire_owned(),
         )
         .await;
+        self.metrics.queue(false);
+        access_telemetry::signals::ARGON2_WAIT.record_duration(start.elapsed(), []);
         let Ok(Ok(permit)) = acquired else {
             self.metrics.shed.fetch_add(1, Ordering::Relaxed);
             return Err(AccountError::Busy);

@@ -448,7 +448,7 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
         let log = PgLog::new(s.sequencer.clone(), domain, tenant, s.holder.clone(), s.ttl);
         let leader = match Leader::acquire(log, domain, key).await {
             Ok(leader) => {
-                // §17.8.2, TI-2: a new leader epoch
+                // §17.8.2, TI-2
                 epoch_changed("acquired");
                 leader
             }

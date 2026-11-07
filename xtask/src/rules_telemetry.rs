@@ -6,6 +6,9 @@
 //! `event-names` (OP-67 m.2): every `event = "…"` field in non-test code names an entry of
 //! `conformance/catalog/events.toml`, and the catalogue itself is well formed.
 //!
+//! `alert-runbooks` (OP-67 m.5, OP-151 m.1 (a)): every alert rule has a `severity` and a
+//! `runbook` label.
+//!
 //! [`Label`]: ../../crates/telemetry/src/metrics.rs
 
 use std::collections::BTreeSet;
@@ -97,6 +100,82 @@ pub(crate) fn forbidden_in_line(line: &str) -> Option<&'static str> {
             !matches!(before, Some('.' | '-' | '/')) && !matches!(after, Some('.' | '-' | '/'))
         })
     })
+}
+
+/// The two telemetry checks.
+pub(crate) fn checks() -> Vec<crate::Check> {
+    vec![
+        crate::Check {
+            name: "no-tenant-labels",
+            run: check_labels,
+        },
+        crate::Check {
+            name: "event-names",
+            run: check_events,
+        },
+        crate::Check {
+            name: "alert-runbooks",
+            run: check_alerts,
+        },
+    ]
+}
+
+const ALERTS_RULE: &str = "alert-runbooks";
+const ALERTS_DIR: &str = "deploy/observability/alerts/";
+
+/// Alert names in a Prometheus rule file that lack a `severity` or a `runbook` label.
+pub(crate) fn unlabelled_alerts(text: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut current: Option<(String, bool, bool)> = None;
+    let finish = |c: Option<(String, bool, bool)>, out: &mut Vec<String>| {
+        if let Some((name, severity, runbook)) = c
+            && !(severity && runbook)
+        {
+            out.push(name);
+        }
+    };
+    for line in text.lines() {
+        let t = line.trim_start();
+        if let Some(name) = t.strip_prefix("- alert:") {
+            finish(current.take(), &mut out);
+            current = Some((name.trim().to_owned(), false, false));
+        } else if let Some(c) = current.as_mut() {
+            let value = |key: &str| {
+                t.strip_prefix(key)
+                    .map(str::trim)
+                    .is_some_and(|v| !v.is_empty())
+            };
+            if value("severity:") {
+                c.1 = true;
+            }
+            if value("runbook:") {
+                c.2 = true;
+            }
+        }
+    }
+    finish(current, &mut out);
+    out
+}
+
+/// OP-67 m.5: every alert names its severity and its runbook.
+pub(crate) fn check_alerts(root: &Path) -> Result<Vec<Violation>, String> {
+    let mut out = Vec::new();
+    for path in walk(root)? {
+        let r = rel(root, &path);
+        if !r.starts_with(ALERTS_DIR) {
+            continue;
+        }
+        for name in unlabelled_alerts(&read(&path)?) {
+            out.push(Violation {
+                rule: ALERTS_RULE,
+                path: path.clone(),
+                message: format!(
+                    "alert `{name}` needs `severity` and `runbook` labels (OP-67 m.5)"
+                ),
+            });
+        }
+    }
+    Ok(out)
 }
 
 pub(crate) fn check_labels(root: &Path) -> Result<Vec<Violation>, String> {
@@ -365,6 +444,13 @@ mod tests {
             event_fields(src),
             vec![(2, Some("login.failed".to_owned())), (4, None)]
         );
+    }
+
+    // OP-67 m.5: an alert without a runbook or a severity is caught
+    #[test]
+    fn alerts_need_runbooks() {
+        let text = "groups:\n  - name: g\n    rules:\n      - alert: A\n        expr: x > 0\n        labels:\n          severity: page\n          runbook: a\n      - alert: B\n        expr: y > 0\n        labels:\n          severity: page\n";
+        assert_eq!(unlabelled_alerts(text), vec!["B".to_owned()]);
     }
 
     // OP-67 m.2: the catalogue format is checked

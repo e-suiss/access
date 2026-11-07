@@ -117,7 +117,7 @@ async fn push(exporter: MetricExporter) {
             continue;
         };
         if exporter.export(&rm).await.is_err() {
-            // TI-18: a failed export is counted and dropped; nothing waits on it
+            // TI-18
             signals::TELEMETRY_EXPORT_FAILURES.incr(["metrics"]);
         }
     }

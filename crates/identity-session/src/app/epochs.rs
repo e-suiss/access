@@ -56,6 +56,11 @@ impl Epochs {
             .lock()
             .map_err(poisoned)?
             .check(&subject, presented, now_ms);
+        // §17.8.2, OP-21
+        access_telemetry::signals::EPOCH_CACHE.incr([match cached {
+            EpochCheck::AskPrimary => "miss",
+            EpochCheck::Current | EpochCheck::Revoked => "hit",
+        }]);
         match cached {
             EpochCheck::Current => return Ok(true),
             EpochCheck::Revoked => return Ok(false),

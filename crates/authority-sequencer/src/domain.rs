@@ -294,6 +294,7 @@ pub fn rows(
                 idx,
                 event_id: key.event_id(domain, pos, idx)?,
                 event: event.clone(),
+                trace_parent: None,
             });
         }
         for (digest, bytes) in &item.proofs {

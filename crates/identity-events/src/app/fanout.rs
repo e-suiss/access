@@ -62,7 +62,17 @@ impl<C: Clock + Send + Sync> Fanout<C> {
             if ev.kind.starts_with(OUTBOX_PREFIX) {
                 match IdentityEvent::from_outbox(&ev.kind, &ev.payload) {
                     Ok(e) => {
-                        queued = queued.saturating_add(self.queue(ev.tenant, &e.ready()).await?);
+                        // OP-67 m.1, §17.8.2
+                        let span = access_telemetry::trace::consumed(
+                            CONSUMER,
+                            ev.trace_parent.as_deref(),
+                            Some(ev.age_ms),
+                        );
+                        let ready = e.ready();
+                        let n =
+                            tracing::Instrument::instrument(self.queue(ev.tenant, &ready), span)
+                                .await?;
+                        queued = queued.saturating_add(n);
                     }
                     Err(e) => tracing::warn!(error = %e, "identity event unreadable; passed"),
                 }
@@ -131,7 +141,15 @@ impl<C: Clock + Send + Sync> Fanout<C> {
                             .await?;
                     }
                     let ready = authority_ready(&e, &r.event_id);
-                    queued = queued.saturating_add(self.queue(tenant, &ready).await?);
+                    // OP-67 m.1
+                    let span = access_telemetry::trace::consumed(
+                        "authority-events",
+                        r.trace_parent.as_deref(),
+                        None,
+                    );
+                    let n =
+                        tracing::Instrument::instrument(self.queue(tenant, &ready), span).await?;
+                    queued = queued.saturating_add(n);
                 }
                 Err(e) => tracing::warn!(error = %e, "authority event unreadable; passed"),
             }

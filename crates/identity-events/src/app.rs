@@ -26,7 +26,10 @@ use crate::ports::{TenantIds, Unavailable};
 /// [`StoreError`]; the caller rolls its transaction back.
 pub async fn emit(tx: &mut TenantTx, event: &IdentityEvent) -> Result<(), StoreError> {
     let bytes = event.to_outbox().map_err(|_: Invalid| StoreError::Range)?;
-    tx.outbox(event.kind.outbox_kind(), &bytes).await
+    // OP-67 m.1
+    let trace = access_telemetry::trace::current_header();
+    tx.outbox_traced(event.kind.outbox_kind(), &bytes, trace.as_deref())
+        .await
 }
 
 /// The pools delivery uses: `access_app` for realm-scoped rows and the authority outbox,

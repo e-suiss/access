@@ -209,6 +209,25 @@ pub fn current() -> Option<TraceParent> {
     of(&tracing::Span::current())
 }
 
+/// The span an outbox consumer handles one row in: its parent is the `traceparent` the
+/// writing request stored with the row, when well formed (OP-67 m.1). It also records the
+/// row's age as the consumer's §17.8.2 lag.
+#[must_use]
+pub fn consumed(
+    consumer: &'static str,
+    trace_parent: Option<&str>,
+    age_ms: Option<u64>,
+) -> tracing::Span {
+    if let Some(age) = age_ms {
+        crate::signals::OUTBOX_LAG.set_u64(age.checked_div(1_000).unwrap_or(0), [consumer]);
+    }
+    let span = tracing::info_span!("outbox.consume", consumer);
+    if let Some(parent) = trace_parent.and_then(TraceParent::parse) {
+        adopt(&span, parent, None);
+    }
+    span
+}
+
 /// The current `traceparent` header value, if there is a trace.
 #[must_use]
 pub fn current_header() -> Option<String> {

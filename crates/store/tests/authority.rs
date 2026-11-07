@@ -74,6 +74,7 @@ fn batch(epoch: u64, after: &HeadRow, seed: u8) -> CommitBatch {
             idx: 0,
             event_id: [seed; 32],
             event: vec![0xa0],
+            trace_parent: None,
         }],
         proofs: vec![ProofRow {
             digest: [seed; 32],

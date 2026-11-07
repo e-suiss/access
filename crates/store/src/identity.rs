@@ -145,13 +145,29 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError::Db`].
     pub async fn outbox(&mut self, kind: &str, payload: &[u8]) -> Result<(), StoreError> {
+        self.outbox_traced(kind, payload, None).await
+    }
+
+    /// Adds an event to the outbox in this transaction with the writing request's
+    /// `traceparent` (OP-10, OP-67 m.1).
+    ///
+    /// # Errors
+    /// [`StoreError::Db`].
+    pub async fn outbox_traced(
+        &mut self,
+        kind: &str,
+        payload: &[u8],
+        trace_parent: Option<&str>,
+    ) -> Result<(), StoreError> {
         let realm = self.realm.ok_or(StoreError::Range)?;
         sqlx::query!(
-            "INSERT INTO access.identity_outbox (tenant_id, realm_id, kind, payload) VALUES ($1, $2, $3, $4)",
+            "INSERT INTO access.identity_outbox (tenant_id, realm_id, kind, payload, trace_parent)
+             VALUES ($1, $2, $3, $4, $5)",
             self.tenant.0,
             realm.0,
             kind,
             payload,
+            trace_parent,
         )
         .execute(&mut *self.tx)
         .await?;
@@ -205,6 +221,10 @@ pub struct OutboxEvent {
     pub kind: String,
     /// Payload.
     pub payload: Vec<u8>,
+    /// The writing request's `traceparent`, if it had one (OP-67 m.1).
+    pub trace_parent: Option<String>,
+    /// Milliseconds since it was written, by the database clock (§17.8.2 outbox lag).
+    pub age_ms: u64,
 }
 
 /// Where a consumer stands.
@@ -270,7 +290,9 @@ pub async fn poll(
 ) -> Result<Vec<OutboxEvent>, StoreError> {
     let after_xid = i64::try_from(after.xid).map_err(|_| StoreError::Range)?;
     let rows = sqlx::query!(
-        r#"SELECT tenant_id, realm_id, xid::text::bigint AS "xid!", id, kind, payload FROM access.identity_outbox
+        r#"SELECT tenant_id, realm_id, xid::text::bigint AS "xid!", id, kind, payload, trace_parent,
+                  (extract(epoch FROM clock_timestamp() - created_at) * 1000)::bigint AS "age_ms!"
+             FROM access.identity_outbox
             WHERE xid < pg_snapshot_xmin(pg_current_snapshot())
               AND (xid, id) > ($1::bigint::text::xid8, $2)
             ORDER BY xid, id
@@ -290,6 +312,8 @@ pub async fn poll(
                 id: r.id,
                 kind: r.kind,
                 payload: r.payload,
+                trace_parent: r.trace_parent,
+                age_ms: u64::try_from(r.age_ms).unwrap_or(0),
             })
         })
         .collect()

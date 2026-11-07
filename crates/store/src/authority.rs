@@ -78,6 +78,8 @@ pub struct OutboxRow {
     pub event_id: [u8; 32],
     /// Event payload.
     pub event: Vec<u8>,
+    /// The writing request's `traceparent`, if it had one (OP-67 m.1).
+    pub trace_parent: Option<String>,
 }
 
 /// Signed bytes kept verbatim (§17.6.1 rule 2).
@@ -535,14 +537,15 @@ async fn side_rows(
     }
     for o in &batch.outbox {
         sqlx::query!(
-            "INSERT INTO access.authority_outbox (domain_id, tenant_id, pos, idx, event_id, event)
-             VALUES ($1, $2, $3, $4, $5, $6)",
+            "INSERT INTO access.authority_outbox (domain_id, tenant_id, pos, idx, event_id, event, trace_parent)
+             VALUES ($1, $2, $3, $4, $5, $6, $7)",
             id,
             tenant,
             signed(o.pos)?,
             i32::try_from(o.idx).map_err(|_| StoreError::Range)?,
             o.event_id.as_slice(),
             o.event.as_slice(),
+            o.trace_parent.as_deref(),
         )
         .execute(&mut *t.tx)
         .await?;
@@ -1044,7 +1047,7 @@ pub async fn read_outbox(
 ) -> Result<Vec<OutboxRow>, StoreError> {
     let mut t = DomainTx::begin(pool, domain).await?;
     let rows = sqlx::query!(
-        "SELECT pos, idx, event_id, event FROM access.authority_outbox
+        "SELECT pos, idx, event_id, event, trace_parent FROM access.authority_outbox
           WHERE domain_id = $1 AND (pos, idx) > ($2, $3) ORDER BY pos, idx LIMIT $4",
         domain.as_bytes().as_slice(),
         signed(after.0)?,
@@ -1061,6 +1064,7 @@ pub async fn read_outbox(
                 idx: u32::try_from(r.idx).map_err(|_| StoreError::Corrupt)?,
                 event_id: hash(r.event_id)?,
                 event: r.event,
+                trace_parent: r.trace_parent,
             })
         })
         .collect()

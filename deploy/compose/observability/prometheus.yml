@@ -2,6 +2,10 @@
 global:
   scrape_interval: 10s
 
+# OP-67 m.5
+rule_files:
+  - /etc/prometheus/alerts/*.yaml
+
 scrape_configs:
   - job_name: otel-collector
     static_configs:

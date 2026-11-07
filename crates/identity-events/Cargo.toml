@@ -15,6 +15,7 @@ access-identity-oauth = { workspace = true }
 access-internal-api = { workspace = true }
 access-kernel = { workspace = true }
 access-store = { workspace = true }
+access-telemetry = { workspace = true }
 suiss-crypto = { workspace = true, features = ["aead"] }
 serde_json = { workspace = true, features = ["std"] }
 thiserror = { workspace = true }

@@ -235,7 +235,12 @@ impl OAuthTx for PgOAuthTx {
     }
 
     async fn outbox(&mut self, kind: &str, payload: &[u8]) -> Result<(), Unavailable> {
-        self.0.outbox(kind, payload).await.map_err(down)
+        // OP-67 m.1
+        let trace = access_telemetry::trace::current_header();
+        self.0
+            .outbox_traced(kind, payload, trace.as_deref())
+            .await
+            .map_err(down)
     }
 
     async fn governing(&mut self) -> Result<Option<[u8; 32]>, Unavailable> {

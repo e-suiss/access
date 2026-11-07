@@ -107,13 +107,18 @@ impl<L: DomainLog> Leader<L> {
             })
             .collect();
         let batch = self.seq.plan(now, &entries)?;
-        let stored = match rows(&self.domain.0, &self.key, items, &batch) {
+        let mut stored = match rows(&self.domain.0, &self.key, items, &batch) {
             Ok(stored) => stored,
             Err(e) => {
                 self.seq.failed();
                 return Err(e);
             }
         };
+        // OP-67 m.1
+        let trace_parent = access_telemetry::trace::current_header();
+        for row in &mut stored.outbox {
+            row.trace_parent.clone_from(&trace_parent);
+        }
         let watch = Stopwatch::start();
         let committed = self.log.commit(&stored).await;
         observe(&committed, watch, items.len());

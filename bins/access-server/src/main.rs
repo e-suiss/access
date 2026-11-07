@@ -192,7 +192,7 @@ fn main() -> ExitCode {
         }
     };
 
-    // OP-47, OP-67: the one-shot commands log to standard error and export nothing
+    // OP-47, OP-67
     let mut settings =
         config
             .telemetry

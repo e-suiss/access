@@ -131,7 +131,15 @@ where
         let mut step = Step::default();
         for event in &batch {
             if event.kind == LOGOUT_OUTBOX {
-                if let Some(wait) = self.notice(event, &mut step).await? {
+                // OP-67 m.1, §17.8.2
+                let span = access_telemetry::trace::consumed(
+                    CONSUMER,
+                    event.trace_parent.as_deref(),
+                    Some(event.age_ms),
+                );
+                let noticed =
+                    tracing::Instrument::instrument(self.notice(event, &mut step), span).await;
+                if let Some(wait) = noticed? {
                     step.wait_ms = Some(wait);
                     return Ok(step);
                 }

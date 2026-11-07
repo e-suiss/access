@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT pos, idx, event_id, event FROM access.authority_outbox\n          WHERE domain_id = $1 AND (pos, idx) > ($2, $3) ORDER BY pos, idx LIMIT $4",
+  "query": "SELECT pos, idx, event_id, event, trace_parent FROM access.authority_outbox\n          WHERE domain_id = $1 AND (pos, idx) > ($2, $3) ORDER BY pos, idx LIMIT $4",
   "describe": {
     "columns": [
       {
@@ -46,6 +46,17 @@
             "name": "event"
           }
         }
+      },
+      {
+        "ordinal": 4,
+        "name": "trace_parent",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.authority_outbox",
+            "name": "trace_parent"
+          }
+        }
       }
     ],
     "parameters": {
@@ -60,8 +71,9 @@
       false,
       false,
       false,
-      false
+      false,
+      true
     ]
   },
-  "hash": "587460e3887a56de3d5b457f282e74b3635bbcf2cd327c8f8c4b516b82bec9e1"
+  "hash": "1f3056e5aa2e25719a6c3c07b3e69997925734dedcabfd76e9afd213404b8e07"
 }

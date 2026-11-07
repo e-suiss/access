@@ -1155,7 +1155,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         for (len, limit) in crate::rate::REQUEST_RATE {
             let key = crate::rate::request_rate_key(&actor.party, len, now);
             if self.counter(&key).await? >= limit {
-                // §13.7.4: requester throttling is a security event
+                // §13.7.4
                 REQUESTER_THROTTLED.incr(["adp"]);
                 tracing::warn!(
                     event = "api.throttled",

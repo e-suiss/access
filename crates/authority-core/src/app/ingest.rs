@@ -149,7 +149,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                         }
                         Committed::Replayed(at) => (at, Vec::new()),
                     };
-                    // §17.8.2 quarantine rate; telemetry, not a decision input (TI-18)
+                    // §17.8.2, TI-18
                     access_telemetry::signals::INGEST_CLAIMS.incr([
                         if Quarantine::of(disposition).is_some() {
                             "quarantined"

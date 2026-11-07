@@ -133,6 +133,8 @@ services:
       - /prometheus:uid=65532,gid=65532
     volumes:
       - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      # OP-67 m.5
+      - ../observability/alerts:/etc/prometheus/alerts:ro
     ports:
       - "127.0.0.1:${ACCESS_DEV_PROMETHEUS_PORT:-9090}:9090"
     healthcheck:
@@ -158,6 +160,8 @@ services:
       - /tmp:uid=472,gid=0
     volumes:
       - ./observability/grafana-datasources.yaml:/etc/grafana/provisioning/datasources/access.yaml:ro
+      - ./observability/grafana-dashboards.yaml:/etc/grafana/provisioning/dashboards/access.yaml:ro
+      - ./observability/dashboards:/etc/grafana/dashboards:ro
     ports:
       - "127.0.0.1:${ACCESS_DEV_GRAFANA_PORT:-3300}:3000"
     healthcheck:

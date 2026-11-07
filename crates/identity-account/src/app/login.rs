@@ -310,17 +310,17 @@ pub async fn password_login<D: AccountDb, C: Clock, E: Entropy>(
     let gate = services.gate;
     let start = services.clock.now_ms();
     if let Err(wait) = gate.local.check(attempt.ip, start) {
-        return Ok(PasswordLogin::Throttled {
+        return Ok(observed(PasswordLogin::Throttled {
             retry_after_s: ceil_seconds(wait),
-        });
+        }));
     }
     let normalized = normalize(attempt.identifier);
     let keys = keys(realm, &normalized.to_lowercase(), &network(attempt.ip));
     let candidate = match admit(db, realm, &gate.policy, &keys, &normalized, start).await? {
         Admission::Throttled(wait) => {
-            return Ok(PasswordLogin::Throttled {
+            return Ok(observed(PasswordLogin::Throttled {
                 retry_after_s: ceil_seconds(wait),
-            });
+            }));
         }
         Admission::Admitted(candidate) => candidate.map(|c| *c),
     };
@@ -337,7 +337,7 @@ pub async fn password_login<D: AccountDb, C: Clock, E: Entropy>(
     )
     .await?;
     let elapsed = services.clock.now_ms().saturating_sub(start);
-    Ok(match verified {
+    Ok(observed(match verified {
         Some(v) => {
             gate.record(elapsed);
             PasswordLogin::Accepted {
@@ -349,7 +349,41 @@ pub async fn password_login<D: AccountDb, C: Clock, E: Entropy>(
         None => PasswordLogin::Rejected {
             pad_ms: gate.pad(elapsed),
         },
-    })
+    }))
+}
+
+/// Telemetry of a password step (§13.7.4, §13.9, OP-67 m.2): the outcome only, never the
+/// identifier or the address. Nothing reads it back (TI-18).
+fn observed(step: PasswordLogin) -> PasswordLogin {
+    use access_telemetry::signals::REQUESTER_THROTTLED;
+    match &step {
+        PasswordLogin::Throttled { .. } => {
+            REQUESTER_THROTTLED.incr(["login"]);
+            tracing::warn!(
+                event = "api.throttled",
+                outcome = "throttled",
+                surface = "login",
+                "sign-in attempts throttled (§13.7.4)"
+            );
+        }
+        PasswordLogin::Rejected { .. } => {
+            tracing::info!(
+                event = "login.failed",
+                outcome = "deny",
+                reason = "credentials",
+                "password step refused"
+            );
+        }
+        PasswordLogin::Accepted { .. } => {
+            tracing::info!(
+                event = "login.succeeded",
+                outcome = "allow",
+                factor = "password",
+                "password step accepted"
+            );
+        }
+    }
+    step
 }
 
 async fn audit<T: AccountTx>(

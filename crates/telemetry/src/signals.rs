@@ -163,14 +163,16 @@ pub static SIGNER_CALL: Histogram<2> = Histogram::new(
     LATENCY_SECONDS,
 );
 
-/// §13.9 "faktör dağılımı": completed sign-ins by `factor`.
+/// §13.9 "faktör dağılımı": submitted sign-in steps by `factor` class.
 pub static SIGN_IN_FACTORS: Counter<1> = Counter::new(
     "access_sign_in_factor_total",
-    "Completed sign-in steps by factor class (§13.9)",
+    "Submitted sign-in steps by factor class (§13.9)",
     [Label::Factor],
 );
 
-/// TN-99: passkey conditional UI, by `stage` (`capability`, `focus`, `promise`) and `outcome`.
+/// TN-99: passkey conditional UI, by `stage` and `outcome`. The server sees the `assertion`
+/// stage; the browser's `capability`, `focus` and `promise` stages need a frontend contract
+/// field to arrive.
 pub static PASSKEY_CONDITIONAL_UI: Counter<2> = Counter::new(
     "access_passkey_conditional_ui_total",
     "Passkey conditional UI stages seen by the server (TN-99)",

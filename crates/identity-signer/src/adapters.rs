@@ -205,7 +205,7 @@ where
             match protocol::decode_request_traced(&body) {
                 Ok((request, traceparent)) => {
                     let service = Arc::clone(service);
-                    // OP-67 m.1: the caller's trace, when well formed, is the span's parent
+                    // OP-67 m.1
                     let span = tracing::info_span!("signer.request");
                     if let Some(parent) = traceparent
                         .as_deref()
@@ -270,7 +270,7 @@ where
 pub async fn call(path: &Path, request: &Request) -> Result<Response, std::io::Error> {
     let watch = access_telemetry::metrics::Stopwatch::start();
     let answered = exchange(path, request).await;
-    // §13.9, §17.8.2: signer latency; a refusal is logged by its stable reason
+    // §13.9, §17.8.2
     let outcome = match &answered {
         Ok(Response::Error(reason)) => {
             tracing::warn!(

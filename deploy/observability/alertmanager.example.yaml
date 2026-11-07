@@ -1,0 +1,28 @@
+# OP-151 m.1 (a)
+route:
+  receiver: tickets
+  group_by: [alertname, severity]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  routes:
+    - matchers: ['severity = "page"']
+      receiver: on-call
+      repeat_interval: 1h
+    - matchers: ['severity = "ticket"']
+      receiver: tickets
+
+receivers:
+  - name: on-call
+    webhook_configs:
+      - url: http://pager.invalid/replace-me
+        send_resolved: true
+  - name: tickets
+    webhook_configs:
+      - url: http://tickets.invalid/replace-me
+        send_resolved: true
+
+inhibit_rules:
+  - source_matchers: ['alertname = "AccessSequencerFenced"']
+    target_matchers: ['alertname = "AccessSequencerCasFailures"']
+    equal: []

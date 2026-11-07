@@ -154,7 +154,7 @@ async fn audit_export<P: Pdp>(
 }
 
 pub(crate) fn respond(reply: Reply, headers: &HeaderMap) -> Response {
-    // §17.8.2, RR-8: rejection rates by stable code; telemetry, not canonical
+    // §17.8.2, RR-8
     match &reply {
         Reply::Protocol(code, _) => drop(PROTOCOL_REJECTIONS.incr(["adp", code])),
         Reply::Limited => drop(PROTOCOL_REJECTIONS.incr(["adp", "rate-limited"])),

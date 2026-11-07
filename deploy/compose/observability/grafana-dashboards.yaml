@@ -1,0 +1,9 @@
+# OP-67, OP-95
+apiVersion: 1
+providers:
+  - name: access
+    type: file
+    disableDeletion: true
+    allowUiUpdates: false
+    options:
+      path: /etc/grafana/dashboards

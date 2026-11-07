@@ -41,7 +41,8 @@ fn planes(root: &std::path::Path) -> Result<Vec<crate::Violation>, String> {
 
 #[expect(clippy::too_many_lines, reason = "one entry per rule, in report order")]
 pub(crate) fn checks() -> Vec<Check> {
-    vec![
+    let mut all = telemetry::checks();
+    all.extend(vec![
         Check {
             name: "dependency-direction",
             run: planes,
@@ -142,13 +143,6 @@ pub(crate) fn checks() -> Vec<Check> {
             name: "endpoint-manifest",
             run: manifest::check,
         },
-        Check {
-            name: "no-tenant-labels",
-            run: telemetry::check_labels,
-        },
-        Check {
-            name: "event-names",
-            run: telemetry::check_events,
-        },
-    ]
+    ]);
+    all
 }

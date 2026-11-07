@@ -173,6 +173,7 @@ async fn authority_event(db: &TestDb, tenant: TenantId, domain: &DomainId, event
             idx: 0,
             event_id: [41; 32],
             event: event.to_bytes().unwrap(),
+            trace_parent: None,
         }],
         proofs: vec![],
         reads: vec![],

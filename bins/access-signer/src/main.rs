@@ -59,7 +59,7 @@ fn configured() -> Option<Config> {
             return None;
         }
     };
-    // OP-67: a signer logs; it opens no connection to export telemetry (CR-51)
+    // OP-67, CR-51
     let telemetry = access_telemetry::Config {
         service: "access-signer",
         version: env!("CARGO_PKG_VERSION"),

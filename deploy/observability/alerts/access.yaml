@@ -1,0 +1,93 @@
+# OP-67 m.5, OP-151 m.1 (a), OP-47
+groups:
+  - name: access-sequencer
+    rules:
+      # §17.8.2, TI-2, FA-13
+      - alert: AccessSequencerFenced
+        expr: increase(access_sequencer_fence_events_total[5m]) > 0
+        labels:
+          severity: page
+          runbook: sequencer-fenced
+        annotations:
+          summary: A sequencer leader was fenced off ({{ $labels.reason }})
+          description: >-
+            A domain leader lost or could not renew its lease and stepped down. Requests to
+            the domain wait until a leader holds the lease again.
+      - alert: AccessSequencerCasFailures
+        expr: increase(access_sequencer_cas_failures_total[5m]) > 0
+        labels:
+          severity: page
+          runbook: sequencer-cas-failure
+        annotations:
+          summary: A batch commit found the domain head moved under its leader
+          description: >-
+            Two writers believed they led the same domain. The leader stepped down; the
+            fencing held. Find out why two processes led at once.
+      - alert: AccessLeaderEpochChurn
+        expr: sum(increase(access_leader_epoch_changes_total[15m])) > 20
+        for: 15m
+        labels:
+          severity: ticket
+          runbook: leader-epoch-churn
+        annotations:
+          summary: Sequencer leader epochs change unusually often
+          description: >-
+            Leases are acquired or handed over more than 20 times in 15 minutes. Leadership
+            is flapping between processes.
+
+  - name: access-status-lists
+    rules:
+      # §17.8.2, SI-7
+      - alert: AccessStatusListStale
+        expr: access_status_list_iat_age_seconds > 240
+        for: 5m
+        labels:
+          severity: page
+          runbook: status-list-stale
+        annotations:
+          summary: The oldest published status list is {{ $value | humanizeDuration }} old
+          description: >-
+            Verifiers holding a list older than its TTL treat the tokens it covers as
+            unknown. Publication has stopped or is failing.
+
+  - name: access-signers
+    rules:
+      # §13.9
+      - alert: AccessSignerSlow
+        expr: >-
+          histogram_quantile(0.99,
+            sum by (le, plane) (rate(access_signer_call_duration_seconds_bucket[5m]))) > 0.5
+        for: 10m
+        labels:
+          severity: ticket
+          runbook: signer-slow
+        annotations:
+          summary: The {{ $labels.plane }} signer answers slowly (p99 above 500 ms)
+          description: >-
+            Signing waits on the signer. Tokens, receipts and status lists are delayed.
+      - alert: AccessSignerFailing
+        expr: >-
+          sum by (plane, outcome) (rate(access_signer_call_duration_seconds_count{outcome!="ok"}[5m])) > 0
+        for: 5m
+        labels:
+          severity: page
+          runbook: signer-failing
+        annotations:
+          summary: The {{ $labels.plane }} signer refuses or cannot be reached ({{ $labels.outcome }})
+          description: >-
+            Signer calls fail. Whatever needs a signature is refused, fail closed.
+
+  - name: access-telemetry
+    rules:
+      # OP-67, TI-18
+      - alert: AccessTelemetryExportFailing
+        expr: increase(access_telemetry_export_failures_total[15m]) > 0
+        for: 15m
+        labels:
+          severity: ticket
+          runbook: telemetry-export-failing
+        annotations:
+          summary: OTLP export to the collector fails
+          description: >-
+            Metrics or traces are not reaching the collector. Decisions are unaffected; the
+            dashboards and the other alerts go blind.

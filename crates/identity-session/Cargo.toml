@@ -16,6 +16,7 @@ access-internal-api = { workspace = true }
 access-kernel = { workspace = true }
 access-parse = { workspace = true }
 access-store = { workspace = true }
+access-telemetry = { workspace = true }
 suiss-crypto = { workspace = true, features = ["aead"] }
 serde = { workspace = true, features = ["derive", "std"] }
 serde_json = { workspace = true, features = ["std"] }

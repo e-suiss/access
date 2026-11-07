@@ -136,7 +136,12 @@ impl AccountTx for PgTx {
     }
 
     async fn outbox(&mut self, kind: &str, payload: &[u8]) -> Result<(), AccountError> {
-        Ok(self.0.outbox(kind, payload).await?)
+        // OP-67 m.1
+        let trace = access_telemetry::trace::current_header();
+        Ok(self
+            .0
+            .outbox_traced(kind, payload, trace.as_deref())
+            .await?)
     }
 
     async fn audit(&mut self, event: &AuditEvent<'_>) -> Result<(), AccountError> {

@@ -451,6 +451,7 @@ where
             .map_err(|_| Reply::problem(INVALID_SUBMISSION))?;
         let field = |name| checked.get(name).unwrap_or_default();
         let corr = b.correlation;
+        steps(checked.method);
         let outcome = match (checked.method, &current) {
             (Method::Identifier, _) => {
                 return self
@@ -758,4 +759,23 @@ where
             Err(e) => failed(&e),
         }
     }
+}
+
+/// §13.9 factor distribution and TN-99: the factor class of a submitted step; a passkey
+/// assertion is the conditional UI stage the server sees. Telemetry only (TI-18).
+fn steps(method: Method) {
+    use access_telemetry::signals::{PASSKEY_CONDITIONAL_UI, SIGN_IN_FACTORS};
+    let factor = match method {
+        Method::Password => "password",
+        Method::Passkey => {
+            PASSKEY_CONDITIONAL_UI.incr(["assertion", "submitted"]);
+            "passkey"
+        }
+        Method::Totp => "totp",
+        Method::RecoveryCode => "recovery_code",
+        Method::EmailCode => "email_code",
+        Method::MagicLink => "magic_link",
+        _ => return,
+    };
+    SIGN_IN_FACTORS.incr([factor]);
 }

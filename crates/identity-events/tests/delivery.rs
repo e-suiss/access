@@ -390,6 +390,7 @@ impl World {
                     idx: u32::try_from(i).unwrap(),
                     event_id: [u8::try_from(i).unwrap() + 40; 32],
                     event: e.to_bytes().unwrap(),
+                    trace_parent: None,
                 })
                 .collect(),
             proofs: vec![],

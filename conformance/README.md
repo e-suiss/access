@@ -38,6 +38,22 @@ The Kernel and F0 are also compared every night on random inputs (`just f0-rando
 
 An implementation conforms to a track version when it produces the expected result for every case of every operation it implements in that version ([L0-GEN-5](../protocol/l0/README.md)). A claim names the track, the version and the operations covered. Vectors are only added to a published version, never changed; a fix to an expected result is a new version.
 
+## Event names
+
+[`catalog/events.toml`](catalog/events.toml) lists the permanent names of the events Access logs (`grant.issued`, `login.failed`, `api.throttled`, …). Alerts, dashboards and the OCSF and CAEP mappings rely on them, so a published name is never renamed or removed: a changed meaning gets a new name, and the old entry stays with `deprecated = true`. Each entry has:
+
+| Field | Meaning |
+|---|---|
+| `name` | dotted lowercase name, `<subject>.<verb>[.<detail>]` |
+| `plane` | `authority`, `identity`, `signer` or `ops` |
+| `severity` | the level it is logged at: `debug`, `info`, `warn` or `error` |
+| `since` | the release that first logs it, or `unreleased` until a release stamps it |
+| `fields` | its own fields besides the common ones every line carries (`trace_id`, `span_id`, `service`, `version`, `event`, `outcome`); never a body, a secret or personal data |
+| `ocsf` | the OCSF class it maps to |
+| `caep` | the CAEP or RISC event type it maps to, when one fits |
+
+`cargo xtask check` refuses an event name in the code that is not listed here.
+
 ## Releases
 
 Each released version of the vectors and of F0 is published as an archive with its SHA-256 and a build attestation. Every released F0 stays available, so an old decision can be replayed with the evaluator of its own version.

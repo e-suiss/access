@@ -105,7 +105,13 @@ where
         let batch = self.store.poll(at, BATCH).await?;
         let mut step = Step::default();
         for event in &batch {
-            match self.deliver(event).await? {
+            // OP-67 m.1, §17.8.2
+            let span = access_telemetry::trace::consumed(
+                CONSUMER,
+                event.trace_parent.as_deref(),
+                Some(event.age_ms),
+            );
+            match tracing::Instrument::instrument(self.deliver(event), span).await? {
                 Outcome::Delivered => step.delivered = step.delivered.saturating_add(1),
                 Outcome::Skipped => step.skipped = step.skipped.saturating_add(1),
                 Outcome::Undeliverable(id, tenant, realm, why) => {

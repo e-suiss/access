@@ -17,6 +17,7 @@ access-identity-webauthn = { workspace = true }
 access-internal-api = { workspace = true }
 access-kernel = { workspace = true }
 access-store = { workspace = true }
+access-telemetry = { workspace = true }
 suiss-crypto = { workspace = true }
 time = { workspace = true, features = ["std", "formatting", "parsing"] }
 tracing = { workspace = true, features = ["std"] }

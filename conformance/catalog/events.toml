@@ -1,19 +1,4 @@
-# OP-67 m.2, OP-151 m.3 (p): permanent event names.
-#
-# Every `event = "…"` field of a log line in non-test code names an entry here (xtask
-# `event-names`). A published name is never renamed or removed: alerts, dashboards and the
-# OCSF/CAEP mapping depend on it. A changed meaning gets a new name; the old one stays,
-# marked `deprecated = true`.
-#
-# Fields per entry:
-#   name      dotted lowercase name, `<subject>.<verb>[.<detail>]`
-#   plane     authority | identity | signer | ops
-#   severity  debug | info | warn | error (the level the event is logged at)
-#   since     the release that first logs it, or "unreleased" until the release commit stamps it
-#   fields    the event's own fields besides the common ones (OP-67 m.2: trace_id, span_id,
-#             service, version, event, outcome); never a body, secret or PII (OP-47)
-#   ocsf      static OCSF class it maps to (§17.8.1: own taxonomy, static mapping layer)
-#   caep      CAEP/RISC event type it maps to, when one fits
+# OP-67 m.2, OP-151 m.3 (p), §17.8.1
 
 [[event]]
 name = "artifact.version.unknown"
