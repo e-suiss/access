@@ -38,7 +38,7 @@ signer = "/run/access/identity-signer.sock"
 [suiss]
 region = "local"
 relay = "https://relay:8443"
-management_api = "https://access-server:9443"
+management_api = "https://access-server.local:9443"
 products = { work = "https://work:8443" }
 # OP-151 m.2 M2: the platform realm the bootstrap creates governs the platform-admin surface
 platform_realm = "platform"

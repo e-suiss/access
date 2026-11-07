@@ -72,7 +72,7 @@ secret hsm-so
 secret postgres
 
 ca
-leaf access-server "$secrets/access-server.key" serverAuth "DNS:access-server,DNS:localhost,IP:127.0.0.1"
+leaf access-server "$secrets/access-server.key" serverAuth "DNS:access-server,DNS:access-server.local,DNS:localhost,IP:127.0.0.1"
 leaf postgres "$initdb/postgres.key" serverAuth "DNS:postgres"
 # OP-141 m.18 (b): a PEP client certificate for products calling /access/v1
 leaf pep "$certs/pep.key" clientAuth

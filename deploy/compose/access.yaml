@@ -215,6 +215,11 @@ services:
       - "127.0.0.1:${ACCESS_PORT:-8443}:8443"
       # OP-151 m.3 (b), CMP-15.5: the management API on its own port
       - "127.0.0.1:${ACCESS_ADMIN_PORT:-9443}:9443"
+    # OP-151 m.12 (b): the management origin is a registrable host name, so every realm gets the
+    # console's client; on the host, map access-server.local to 127.0.0.1 to use the console
+    networks:
+      default:
+        aliases: [access-server.local]
     depends_on:
       bootstrap:
         condition: service_completed_successfully

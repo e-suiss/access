@@ -166,7 +166,12 @@ jobs:
           test "$(curl -s -o /dev/null -w '%{http_code}' --cacert "$RUNNER_TEMP/ca.crt" \
             --resolve access-server:8443:127.0.0.1 https://access-server:8443/healthz)" = 404
           test "$(curl -s -o /dev/null -w '%{http_code}' --cacert "$RUNNER_TEMP/ca.crt" \
-            --resolve access-server:9443:127.0.0.1 https://access-server:9443/admin/v1/platform)" = 401
+            --resolve access-server.local:9443:127.0.0.1 https://access-server.local:9443/admin/v1/platform)" = 401
+          # OP-151 m.12 (b): the console sends a sign-in to the realm's own authorization server
+          test "$(curl -s -o /dev/null -w '%{redirect_url}' --cacert "$RUNNER_TEMP/ca.crt" \
+            --resolve access-server.local:9443:127.0.0.1 \
+            'https://access-server.local:9443/console/api/sign-in?realm=acme' | cut -d'?' -f1)" \
+            = https://access-server:8443/realms/acme/authorize
           curl "${tls[@]}" --cert "$RUNNER_TEMP/pep.crt" --key "$RUNNER_TEMP/pep.key" \
             https://access-server:8443/access/v1/tenants | grep -q '"tnt_'
           $COMPOSE logs --no-color access-server | grep -q 'declared delivery targets'
