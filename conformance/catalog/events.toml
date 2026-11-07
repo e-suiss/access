@@ -97,6 +97,38 @@ fields = ["error"]
 ocsf = "application_error"
 
 [[event]]
+name = "api.platform.unavailable"
+plane = "ops"
+severity = "warn"
+since = "unreleased"
+fields = ["error"]
+ocsf = "application_error"
+
+[[event]]
+name = "adp.sandbox_line.refused"
+plane = "authority"
+severity = "warn"
+since = "unreleased"
+fields = []
+ocsf = "detection_finding"
+
+[[event]]
+name = "adp.sandbox_line.unavailable"
+plane = "authority"
+severity = "warn"
+since = "unreleased"
+fields = ["error"]
+ocsf = "application_error"
+
+[[event]]
+name = "startup.checks"
+plane = "ops"
+severity = "info"
+since = "unreleased"
+fields = ["passed", "checks", "failed"]
+ocsf = "application_lifecycle"
+
+[[event]]
 name = "login.failed"
 plane = "identity"
 severity = "info"

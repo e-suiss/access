@@ -527,3 +527,26 @@ impl<P: Decider + Governance + Instances + Clone + Send + Sync + 'static> Platfo
         Box::pin(self.platform_commit(write, caller))
     }
 }
+
+/// Which side of the sandbox line a domain is on, read by the router role (OP-151 m.3 (m)).
+pub(crate) struct SandboxRegimes(pub(crate) access_store::Pool);
+
+impl access_http::adp::sandbox::Regimes for SandboxRegimes {
+    async fn regime(
+        &self,
+        domain: access_kernel::digest::Digest,
+    ) -> Result<access_identity_admin::domain::provision::Regime, access_authority_core::CoreError>
+    {
+        use access_identity_admin::domain::provision::Regime;
+        match sandbox::budget(&self.0, &domain.0).await {
+            Ok(Some(_)) => Ok(Regime::Sandbox),
+            Ok(None) => Ok(Regime::Production),
+            Err(e) => {
+                tracing::warn!(event = "adp.sandbox_line.unavailable", outcome = "error", error = %e, "sandbox regime unavailable");
+                Err(access_authority_core::CoreError::Unavailable(
+                    "sandbox-line",
+                ))
+            }
+        }
+    }
+}

@@ -1012,6 +1012,7 @@ async fn serve(
         (hooks.clone(), risk_services),
     )?;
     let tenants_pool = router_pool.clone();
+    let sandbox_pool = router_pool.clone();
     let realms = identity(config, router_pool).await?;
     let (idp_sequencer, idp_app, product_app) = (sequencer.clone(), app.clone(), app.clone());
     let (issuer, limits) = (config.issuer.clone().ok_or("no issuer")?, Limits::default());
@@ -1083,8 +1084,15 @@ async fn serve(
         cell_ids,
         platform_api,
     )?;
+    // OP-151 m.3 (m): no request brings authority across the sandbox line
     let adp = adp_router(
-        Service::new(domains.clone(), limits.max_body_bytes),
+        Service::new(
+            access_http::adp::sandbox::SandboxLine {
+                inner: domains.clone(),
+                regimes: admin::platform::SandboxRegimes(sandbox_pool),
+            },
+            limits.max_body_bytes,
+        ),
         Discovery { issuer },
     );
     let app = router(
