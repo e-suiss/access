@@ -6,6 +6,8 @@ use std::process::Command;
 
 use crate::{Check, Violation};
 
+#[path = "policy_ci.rs"]
+mod ci;
 #[path = "policy_scan.rs"]
 mod scan;
 
@@ -29,6 +31,7 @@ pub(crate) fn checks() -> Vec<Check> {
         },
     ];
     all.extend(scan::checks());
+    all.extend(ci::checks());
     all
 }
 
