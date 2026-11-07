@@ -193,3 +193,27 @@ severity = "warn"
 since = "unreleased"
 fields = ["attempts", "reason"]
 ocsf = "api_activity"
+
+[[event]]
+name = "console.session.opened"
+plane = "identity"
+severity = "info"
+since = "unreleased"
+fields = []
+ocsf = "authentication"
+
+[[event]]
+name = "console.session.refused"
+plane = "identity"
+severity = "info"
+since = "unreleased"
+fields = ["reason"]
+ocsf = "authentication"
+
+[[event]]
+name = "console.session.revoked"
+plane = "identity"
+severity = "info"
+since = "unreleased"
+fields = []
+ocsf = "authentication"
