@@ -972,6 +972,30 @@ async fn a_passkey_signs_in_phishing_resistant_and_steps_up() {
     let cookie = sign_in(&e, "alice@example.com").await;
     let mut key = Authenticator::new(Key::es256());
     let handle = register_passkey(&e, &cookie, &mut key).await;
+    // OP-151 m.3 (i): the registration queues credential.changed in its own transaction
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
+    loop {
+        let rows = access_store::identity::poll(
+            &e.db.reader,
+            access_store::identity::Cursor::default(),
+            1_000,
+        )
+        .await
+        .unwrap();
+        if let Some(r) = rows
+            .iter()
+            .filter(|r| r.kind == "event.credential.changed")
+            .find(|r| String::from_utf8_lossy(&r.payload).contains("\"webauthn\""))
+        {
+            assert!(String::from_utf8_lossy(&r.payload).contains("\"added\""));
+            break;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "no credential.changed"
+        );
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
 
     let started = e
         .with(async |a| {

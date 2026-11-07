@@ -6,6 +6,7 @@
 use access_crypto::opaque_id::IdKey;
 use access_identity_account::app::Realm;
 use access_identity_account::app::sealing::{seal, subject_key};
+use access_identity_account::domain::events::{CredentialChange, EventOrder};
 use access_identity_webauthn::WebAuthnError;
 use access_identity_webauthn::domain::cose::CoseAlgorithm;
 use access_identity_webauthn::domain::credential::{AttestationKind, CredentialRecord};
@@ -199,6 +200,27 @@ impl PgPasskeys<'_> {
             tx.rollback().await.map_err(failed)?;
             return Ok(Inserted::Duplicate);
         }
+        // OP-151 m.3 (i)
+        let at = access_store::authority::server_time(self.pool)
+            .await
+            .map_err(failed)?;
+        let event = EventOrder::credential(
+            access_identity_account::app::events::new_id().map_err(failed)?,
+            record.realm.as_bytes(),
+            &self
+                .ids
+                .encode(access_identity_account::app::SUBJECT_PREFIX, subject)
+                .map_err(failed)?,
+            WEBAUTHN,
+            CredentialChange::Added,
+            at,
+        );
+        tx.outbox(
+            event.kind.outbox_kind(),
+            &event.to_outbox().map_err(failed)?,
+        )
+        .await
+        .map_err(failed)?;
         tx.commit().await.map_err(failed)?;
         Ok(Inserted::Stored)
     }
