@@ -937,7 +937,7 @@ id = "XI-26"
 family = "XI"
 section = "8.19"
 status = "candidate"
-stage = 7
+stage = 8
 title = "Support access is always a visible delegation"
 tests = []
 
@@ -1324,7 +1324,7 @@ id = "SI-21"
 family = "SI"
 section = "6.6"
 status = "canonical"
-stage = 7
+stage = 8
 title = "Expansion about you is visible to you"
 tests = []
 

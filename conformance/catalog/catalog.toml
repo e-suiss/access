@@ -1,6 +1,6 @@
 # OP-81, SAI-1, SA-59, INV-2
 
-current_stage = 6
+current_stage = 7
 
 enforced_families = [
   "CI", "INV", "EI", "XI", "PI", "SI", "TI", "TI-RT", "SAI", "IDI", "AGI", "TNI", "OPI",
@@ -24,3 +24,13 @@ reason = "OP-150 m.13 (h): the MCP list cache rules are not in the Stage 6 PEP S
 id = "U64"
 stage = 9
 reason = "OP-150 m.13 (h): the MCP subscriptions/listen horizon rule is not in the Stage 6 PEP SDK; the Ek B Stage 6 PEP SDK item cites U64 for the conformance vectors, the rule itself is the Stage 9 K09 item (MCP subscriptions/listen horizon limit)"
+
+[[rule_overrides]]
+id = "SI-21"
+stage = 8
+reason = "OP-151: the Ek B Stage 7 item 'Expansion about you' events (SI-21) is still open: an instance.create, a grant.issue on a Party's behalf or a delegation under it derives nothing the Party sees (only acceptance-changed is emitted, by the Stage 6 commit path); the visibility the rule promises is the Party's Authority hub Changes view, the Stage 8 item (§6.6, IA-2, SI-13, SI-21), which no Stage 7 code serves"
+
+[[rule_overrides]]
+id = "XI-26"
+stage = 8
+reason = "OP-151: Stage 7 has no impersonation path (manifest and AIS checks, for(P) projections with act; the TNI-13, G53 and MUST-NEVER-17 tests), but the rule's other half, the support Grant visible in the Party's inventory and the break-glass notify-subject requirement, needs the Authority hub sections (Acting for you, Shared from you, Changes), Stage 8 items no Stage 7 code serves"
