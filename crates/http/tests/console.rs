@@ -181,6 +181,9 @@ fn who(account: &str) -> SignedIn {
         domain: DOMAIN,
         account: account.to_owned(),
         display_name: "<b>Ada</b>".to_owned(),
+        subject: [1; 16],
+        login_session: [2; 16],
+        auth_time_ms: 1,
     }
 }
 
@@ -852,6 +855,42 @@ async fn a_read_proof_gets_the_holder_bound_read_token() {
         dpop,
         "proof GET https://access-server:9443/admin/v1/realms/acme/clients"
     );
+}
+
+// OP-151 m.11 (a), TN-130: drafting an intent is a read; it needs a read proof over the POST
+// and goes up with the read token, never as a write
+#[tokio::test]
+async fn drafting_an_intent_is_a_read() {
+    let h = Harness::new();
+    let s = h.with_instance().await;
+    let target = "/admin/v1/realms/acme/intents";
+    let body = "{\"operation\":\"createGroup\",\"body\":{\"name\":\"ops\"}}";
+    let mut commit = s.post("/console/api/proxy/admin/realms/acme/intents", body);
+    commit.headers_mut().insert(
+        "x-access-ais",
+        h.ais(Mode::Commit, Digest([5; 32]), h.now())
+            .parse()
+            .unwrap(),
+    );
+    let (r, refused) = h.send(commit, CLIENT).await;
+    assert_eq!(r.status(), StatusCode::FORBIDDEN);
+    assert_eq!(json(&refused)["code"], "read-proof-rejected");
+    let mut draft = s.post("/console/api/proxy/admin/realms/acme/intents", body);
+    draft.headers_mut().insert(
+        "x-access-ais",
+        h.ais(Mode::Check, read_intent(&Method::POST, target), h.now())
+            .parse()
+            .unwrap(),
+    );
+    let (r, _) = h.send(draft, CLIENT).await;
+    assert_eq!(r.status(), StatusCode::OK);
+    let seen = h.env().up.take();
+    let (_, f) = &seen[0];
+    assert_eq!(f.method, Method::POST);
+    assert_eq!(f.body.as_ref(), body.as_bytes());
+    let names: Vec<_> = f.headers.iter().map(|(n, _)| n.as_str()).collect();
+    assert!(names.contains(&"authorization") && names.contains(&"dpop"));
+    assert!(!names.contains(&"x-access-ais"));
 }
 
 // TN-130: no read token for the session means no read

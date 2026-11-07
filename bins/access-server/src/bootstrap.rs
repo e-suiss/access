@@ -980,6 +980,9 @@ pub(crate) struct Bootstrap<'a, P, K> {
     pub(crate) base: &'a RealmBase,
     /// The operator's declared delivery targets (OP-149 m.23).
     pub(crate) declared: &'a DeclaredTargets,
+    /// The management origin, `suiss.management_api`: every realm gets the console's client
+    /// with its callback there (OP-151 m.12 (b)); `None` registers none.
+    pub(crate) console: Option<&'a str>,
 }
 
 /// The cell's opaque-id key; its root is made by the path the server starts with (OP-137,
@@ -1223,6 +1226,11 @@ where
                 )
                 .await?;
             self.onboard(tenant, realm, domain, &root, party).await?;
+            // OP-151 m.12 (b)
+            if let Some(origin) = self.console {
+                self.console_client(&admin, (tenant, realm), domain, &root, origin)
+                    .await?;
+            }
             if let Some(s) = catalog {
                 sample = Some(self.sample(s, (tenant, realm), domain, &root).await?);
             }
@@ -1675,6 +1683,62 @@ where
 
     /// Commits the `idp.*` change `change` in the realm as an Exercise the root signs on the
     /// realm's `idp` Anchor (MD-14, EI-25); a fresh nonce every time.
+    /// The realm's console client (OP-151 m.12 (b), RFC 10017 BFF pattern): a first-party
+    /// confidential client whose one redirect URI is the management origin's sign-in callback
+    /// and whose `private_key_jwt` key is the server's console key in the HSM; registered by
+    /// the realm's founding root through `idp.client.register` once, when the realm has no
+    /// active client with that callback and key.
+    async fn console_client(
+        &self,
+        admin: &Admin<'_, P, P, K>,
+        (tenant, realm): (TenantId, RealmId),
+        domain: Digest,
+        root: &HsmSigner,
+        origin: &str,
+    ) -> Result<(), BootstrapError> {
+        use crate::console::sign_in::{CLIENT_NAME, client_key, registered};
+        let callback = format!("{origin}{}", access_http::console::app::CALLBACK_PATH);
+        let key = client_key(self.hsm)
+            .map_err(BootstrapError::Unavailable)?
+            .public_key();
+        let mut t = TenantTx::begin(self.app, tenant, realm).await?;
+        let found = registered(&mut t, &callback, &key).await?;
+        t.commit().await?;
+        if found.is_some() {
+            return Ok(());
+        }
+        // OP-151 m.12 (b): an origin no client may name (a single-label host) gets no console
+        // client; the console then signs no one in there
+        let Ok(redirect) = RedirectUri::parse(&callback) else {
+            tracing::warn!(
+                event = "console.client.skipped",
+                outcome = "refused",
+                "management origin is not a registrable redirect URI"
+            );
+            return Ok(());
+        };
+        let client = Client {
+            id: admin.new_client_id().await?,
+            display_name: String::from(CLIENT_NAME),
+            auth: AuthMethod::PrivateKeyJwtKey { key },
+            redirect_uris: vec![redirect],
+            post_logout_redirect_uris: Vec::new(),
+            backchannel_logout_uri: None,
+            require_par: false,
+            platform: None,
+            subject: access_identity_admin::domain::Subject::default(),
+        };
+        self.change(
+            admin,
+            (tenant, realm),
+            domain,
+            root,
+            Change::ClientRegister(client),
+        )
+        .await
+        .map(drop)
+    }
+
     async fn change(
         &self,
         admin: &Admin<'_, P, P, K>,

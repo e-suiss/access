@@ -343,3 +343,35 @@ severity = "info"
 since = "unreleased"
 fields = []
 ocsf = "authentication"
+
+[[event]]
+name = "console.device.registered"
+plane = "identity"
+severity = "info"
+since = "unreleased"
+fields = []
+ocsf = "entity_management"
+
+[[event]]
+name = "console.device.refused"
+plane = "identity"
+severity = "info"
+since = "unreleased"
+fields = ["code"]
+ocsf = "entity_management"
+
+[[event]]
+name = "console.device.party_bound"
+plane = "identity"
+severity = "warn"
+since = "unreleased"
+fields = []
+ocsf = "entity_management"
+
+[[event]]
+name = "console.client.skipped"
+plane = "identity"
+severity = "warn"
+since = "unreleased"
+fields = []
+ocsf = "entity_management"

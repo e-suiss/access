@@ -754,8 +754,9 @@ async fn read_token<E: ConsoleEnv>(
 
 /// `/console/api/proxy/admin/{rest}` → `/admin/v1/{rest}` (TN-128, OP-151 m.3 (c), (e)). Only
 /// with the browser's AIS: a write passes it on for the management API to verify and compile
-/// into an Exercise, and never carries a token; a read is a read proof by the session's device
-/// Instance, and only then does the BFF present the session's read token.
+/// into an Exercise, and never carries a token; a read, and the `POST …/intents` draft that is
+/// one (OP-151 m.11 (a)), is a read proof by the session's device Instance, and only then does
+/// the BFF present the session's read token.
 async fn admin_proxy<E: ConsoleEnv>(
     State(c): St<E>,
     peer: Option<Extension<Peer>>,
@@ -794,7 +795,9 @@ async fn admin_proxy<E: ConsoleEnv>(
         headers: pick(headers, &ADMIN_FORWARDED),
         body,
     };
-    if unsafe_method(method) {
+    // OP-151 m.11 (a): drafting an intent is a read, by a read proof over the POST
+    let drafting = *method == Method::POST && rest.ends_with("/intents");
+    if unsafe_method(method) && !drafting {
         // MD-14: the write is the browser's statement; the BFF only checks it is the session's
         match crate::api::domain::caller::ais_kid(&ais) {
             Ok(kid) if kid == instance.kid => {}

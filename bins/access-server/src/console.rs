@@ -1,16 +1,20 @@
-//! The console BFF's ports in this process (TN-128–TN-131, OP-151 m.2 M3): system time and
-//! randomness, per-session DPoP keys held in memory, the management API in process, and the
-//! fail-closed adapters for what other lanes wire: no sign-in hand-off yet (so no session
-//! opens), no read token issuance, no device registration through the console, no ADP proxy
-//! and no `GeoResolver` source.
+//! The console BFF's ports in this process (TN-128–TN-131, OP-151 m.2 M3, m.12): system time
+//! and randomness, per-session DPoP keys held in memory, the session store in PostgreSQL, the
+//! sign-in through the realm's own authorization server, the device Instance through the same
+//! self-signed Exercises as the Frontend API, read tokens from the realm, and the management API
+//! and ADP in process. ADP sees the console as its own PEP, [`CONSOLE_PEP`], and only for the
+//! reads the BFF forwards. No `GeoResolver` source answers yet: sessions bind to the prefix.
+
+pub(crate) mod devices;
+pub(crate) mod sessions;
+pub(crate) mod sign_in;
 
 use std::collections::HashMap;
 use std::sync::Mutex;
 
 use access_crypto::jose::output;
-use access_http::console::adapters::{
-    NoDevices, NoProfiles, NoReadGrants, NoSessions, NoSignIn, PrefixOnly,
-};
+use access_http::adp::adapters::Pep;
+use access_http::console::adapters::PrefixOnly;
 use access_http::console::ports::{
     Clock, ConsoleEnv, DpopKeys, Entropy, Forward, Forwarded, Unavailable, Upstream,
 };
@@ -98,71 +102,118 @@ impl DpopKeys for MemoryDpop {
     }
 }
 
-/// The management API in this process; ADP is not reachable through the console yet.
+/// The console's PEP name at ADP (OP-151 m.12 (e)): the management process's own, so its
+/// forwarded reads are told apart from every product's.
+pub(crate) const CONSOLE_PEP: &str = "access-console";
+
+/// The management API and ADP in this process.
 pub(crate) struct InProcess {
     admin: Router,
+    adp: Router,
+}
+
+async fn call(
+    router: &Router,
+    request: Forward,
+    pep: Option<Pep>,
+) -> Result<Forwarded, Unavailable> {
+    let mut builder = Request::builder()
+        .method(request.method)
+        .uri(request.path_and_query);
+    for (name, value) in request.headers {
+        builder = builder.header(name, value);
+    }
+    let mut request = builder
+        .body(Body::from(request.body))
+        .map_err(|_| Unavailable)?;
+    if let Some(p) = pep {
+        request.extensions_mut().insert(p);
+    }
+    let response = router
+        .clone()
+        .oneshot(request)
+        .await
+        .map_err(|_| Unavailable)?;
+    let (parts, body) = response.into_parts();
+    let body = to_bytes(body, MAX_ANSWER).await.map_err(|_| Unavailable)?;
+    Ok(Forwarded {
+        status: parts.status.as_u16(),
+        headers: parts.headers,
+        body,
+    })
 }
 
 impl Upstream for InProcess {
     async fn admin(&self, request: Forward) -> Result<Forwarded, Unavailable> {
-        let mut builder = Request::builder()
-            .method(request.method)
-            .uri(request.path_and_query);
-        for (name, value) in request.headers {
-            builder = builder.header(name, value);
-        }
-        let request = builder
-            .body(Body::from(request.body))
-            .map_err(|_| Unavailable)?;
-        let response = self
-            .admin
-            .clone()
-            .oneshot(request)
-            .await
-            .map_err(|_| Unavailable)?;
-        let (parts, body) = response.into_parts();
-        let body = to_bytes(body, MAX_ANSWER).await.map_err(|_| Unavailable)?;
-        Ok(Forwarded {
-            status: parts.status.as_u16(),
-            headers: parts.headers,
-            body,
-        })
+        call(&self.admin, request, None).await
     }
 
-    fn adp(
-        &self,
-        _: Forward,
-    ) -> impl std::future::Future<Output = Result<Forwarded, Unavailable>> + Send {
-        std::future::ready(Err(Unavailable))
+    // TN-128, OP-151 m.12 (e): only explain, search and the eligibility check reach here
+    async fn adp(&self, request: Forward) -> Result<Forwarded, Unavailable> {
+        call(&self.adp, request, Some(Pep(String::from(CONSOLE_PEP)))).await
     }
 }
 
 /// The console BFF's ports in this process.
-pub(crate) struct ServerConsole {
+pub(crate) struct ServerConsole<P> {
     dpop: MemoryDpop,
     upstream: InProcess,
+    sessions: sessions::PgConsoleSessions,
+    sign_in: sign_in::RealmSignIn,
+    devices: devices::ConsoleDevices<P>,
+    grants: crate::admin::tokens::ConsoleGrants<P>,
     origin: String,
 }
 
-impl ServerConsole {
-    /// The ports, passing management API calls to `admin` in process; `origin` is the
-    /// configured `suiss.management_api` (TN-131: never from a request).
-    pub(crate) fn new(admin: Router, origin: String) -> Self {
+/// What the console reaches in this process.
+pub(crate) struct Parts<P> {
+    /// The management API's routes.
+    pub(crate) admin: Router,
+    /// ADP's routes.
+    pub(crate) adp: Router,
+    /// The session store and profile source.
+    pub(crate) sessions: sessions::PgConsoleSessions,
+    /// The realm sign-in.
+    pub(crate) sign_in: sign_in::RealmSignIn,
+    /// The device Instances.
+    pub(crate) devices: devices::ConsoleDevices<P>,
+    /// Read tokens.
+    pub(crate) grants: crate::admin::tokens::ConsoleGrants<P>,
+}
+
+impl<P> ServerConsole<P> {
+    /// The ports; `origin` is the configured `suiss.management_api` (TN-131: never from a
+    /// request).
+    pub(crate) fn new(parts: Parts<P>, origin: String) -> Self {
         Self {
             dpop: MemoryDpop::default(),
-            upstream: InProcess { admin },
+            upstream: InProcess {
+                admin: parts.admin,
+                adp: parts.adp,
+            },
+            sessions: parts.sessions,
+            sign_in: parts.sign_in,
+            devices: parts.devices,
+            grants: parts.grants,
             origin,
         }
     }
 }
 
-impl ConsoleEnv for ServerConsole {
-    type Sessions = NoSessions;
-    type SignIn = NoSignIn;
+impl<P> ConsoleEnv for ServerConsole<P>
+where
+    P: crate::admin::realm::LiveKeys
+        + access_identity_ui::ports::DeviceInstances
+        + Send
+        + Sync
+        + 'static,
+{
+    type Sessions = sessions::PgConsoleSessions;
+    type SignIn = sign_in::RealmSignIn;
     type Network = PrefixOnly;
-    type Profiles = NoProfiles;
-    type Devices = NoDevices;
-    type Grants = NoReadGrants;
+    type Profiles = sessions::PgConsoleSessions;
+    type Devices = devices::ConsoleDevices<P>;
+    type Grants = crate::admin::tokens::ConsoleGrants<P>;
     type Dpop = MemoryDpop;
     type Upstream = InProcess;
 
@@ -174,28 +225,28 @@ impl ConsoleEnv for ServerConsole {
         &OsEntropy
     }
 
-    fn sessions(&self) -> &NoSessions {
-        &NoSessions
+    fn sessions(&self) -> &sessions::PgConsoleSessions {
+        &self.sessions
     }
 
-    fn sign_in(&self) -> &NoSignIn {
-        &NoSignIn
+    fn sign_in(&self) -> &sign_in::RealmSignIn {
+        &self.sign_in
     }
 
     fn network(&self) -> &PrefixOnly {
         &PrefixOnly
     }
 
-    fn profiles(&self) -> &NoProfiles {
-        &NoProfiles
+    fn profiles(&self) -> &sessions::PgConsoleSessions {
+        &self.sessions
     }
 
-    fn devices(&self) -> &NoDevices {
-        &NoDevices
+    fn devices(&self) -> &devices::ConsoleDevices<P> {
+        &self.devices
     }
 
-    fn grants(&self) -> &NoReadGrants {
-        &NoReadGrants
+    fn grants(&self) -> &crate::admin::tokens::ConsoleGrants<P> {
+        &self.grants
     }
 
     fn dpop(&self) -> &MemoryDpop {

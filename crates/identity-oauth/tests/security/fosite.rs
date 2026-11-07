@@ -349,9 +349,10 @@ async fn code_exchange_downgrades_are_refused() {
             "urn:ietf:params:oauth:grant-type:jwt-bearer",
             "unsupported_grant_type",
         ),
+        // TN-130: the exchange exists only for an Instance's AIS, never for a client's code
         (
             "urn:ietf:params:oauth:grant-type:token-exchange",
-            "unsupported_grant_type",
+            "invalid_request",
         ),
         ("AUTHORIZATION_CODE", "unsupported_grant_type"),
     ] {

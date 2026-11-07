@@ -23,6 +23,8 @@ pub struct NewConsoleSession<'a> {
     pub subject: [u8; 16],
     /// The realm login session the sign-in came back with.
     pub login_session: [u8; 16],
+    /// The subject's `session_epoch` at sign-in (TN-50).
+    pub session_epoch: i64,
     /// The realm's slug.
     pub slug: &'a str,
     /// The realm's governing domain.
@@ -65,6 +67,8 @@ pub struct ConsoleSessionRow {
     pub subject: [u8; 16],
     /// The realm login session.
     pub login_session: [u8; 16],
+    /// The subject's `session_epoch` at sign-in.
+    pub session_epoch: i64,
     /// The slug.
     pub slug: String,
     /// The governing domain.
@@ -128,6 +132,7 @@ struct Record {
     realm_id: Uuid,
     subject_id: Uuid,
     login_session_id: Uuid,
+    session_epoch: i64,
     slug: String,
     domain_id: Vec<u8>,
     account: String,
@@ -176,6 +181,7 @@ impl Record {
             realm: RealmId::from_bytes(*self.realm_id.as_bytes()),
             subject: *self.subject_id.as_bytes(),
             login_session: *self.login_session_id.as_bytes(),
+            session_epoch: self.session_epoch,
             slug: self.slug,
             domain: fixed(self.domain_id)?,
             account: self.account,
@@ -199,15 +205,16 @@ pub async fn open(app: &PgPool, s: &NewConsoleSession<'_>) -> Result<[u8; 16], S
     let now = ms(s.now_ms)?;
     let id = sqlx::query_scalar!(
         r#"INSERT INTO access_ops.console_sessions
-             (cookie_digest, tenant_id, realm_id, subject_id, login_session_id, slug, domain_id,
-              account, binding, auth_time_ms, created_ms, last_seen_ms)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $11)
+             (cookie_digest, tenant_id, realm_id, subject_id, login_session_id, session_epoch,
+              slug, domain_id, account, binding, auth_time_ms, created_ms, last_seen_ms)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $12)
            RETURNING session_id"#,
         s.cookie_digest.as_slice(),
         Uuid::from_bytes(*s.tenant.as_bytes()),
         Uuid::from_bytes(*s.realm.as_bytes()),
         Uuid::from_bytes(s.subject),
         Uuid::from_bytes(s.login_session),
+        s.session_epoch,
         s.slug,
         s.domain.as_slice(),
         s.account,
@@ -230,10 +237,10 @@ pub async fn by_cookie(
 ) -> Result<Option<ConsoleSessionRow>, StoreError> {
     let r = sqlx::query_as!(
         Record,
-        "SELECT session_id, tenant_id, realm_id, subject_id, login_session_id, slug, domain_id,
-                account, binding, auth_time_ms, created_ms, last_seen_ms, ended_ms, instance_kid,
-                instance_key, pending_challenge, pending_key, pending_party, pending_from_ms,
-                pending_until_ms, dbsc_key
+        "SELECT session_id, tenant_id, realm_id, subject_id, login_session_id, session_epoch, slug,
+                domain_id, account, binding, auth_time_ms, created_ms, last_seen_ms, ended_ms,
+                instance_kid, instance_key, pending_challenge, pending_key, pending_party,
+                pending_from_ms, pending_until_ms, dbsc_key
            FROM access_ops.console_sessions WHERE cookie_digest = $1",
         cookie_digest.as_slice(),
     )
@@ -249,10 +256,10 @@ pub async fn by_cookie(
 pub async fn by_id(app: &PgPool, id: &[u8; 16]) -> Result<Option<ConsoleSessionRow>, StoreError> {
     let r = sqlx::query_as!(
         Record,
-        "SELECT session_id, tenant_id, realm_id, subject_id, login_session_id, slug, domain_id,
-                account, binding, auth_time_ms, created_ms, last_seen_ms, ended_ms, instance_kid,
-                instance_key, pending_challenge, pending_key, pending_party, pending_from_ms,
-                pending_until_ms, dbsc_key
+        "SELECT session_id, tenant_id, realm_id, subject_id, login_session_id, session_epoch, slug,
+                domain_id, account, binding, auth_time_ms, created_ms, last_seen_ms, ended_ms,
+                instance_kid, instance_key, pending_challenge, pending_key, pending_party,
+                pending_from_ms, pending_until_ms, dbsc_key
            FROM access_ops.console_sessions WHERE session_id = $1",
         Uuid::from_bytes(*id),
     )
@@ -274,10 +281,10 @@ pub async fn live_of(
 ) -> Result<Vec<ConsoleSessionRow>, StoreError> {
     let rows = sqlx::query_as!(
         Record,
-        "SELECT session_id, tenant_id, realm_id, subject_id, login_session_id, slug, domain_id,
-                account, binding, auth_time_ms, created_ms, last_seen_ms, ended_ms, instance_kid,
-                instance_key, pending_challenge, pending_key, pending_party, pending_from_ms,
-                pending_until_ms, dbsc_key
+        "SELECT session_id, tenant_id, realm_id, subject_id, login_session_id, session_epoch, slug,
+                domain_id, account, binding, auth_time_ms, created_ms, last_seen_ms, ended_ms,
+                instance_kid, instance_key, pending_challenge, pending_key, pending_party,
+                pending_from_ms, pending_until_ms, dbsc_key
            FROM access_ops.console_sessions
           WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND ended_ms IS NULL
           ORDER BY session_id LIMIT $4",

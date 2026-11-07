@@ -391,6 +391,7 @@ async fn seed(
         hsm: &prepared.identity_keys,
         base: &base,
         declared: &declared,
+        console: config.suiss.as_ref().map(|s| s.management_api.as_str()),
     };
     let result = match job {
         Job::Bootstrap => Box::pin(bootstrap.run(plan))
@@ -870,9 +871,14 @@ fn authorization<P>(
     hooks: Arc<dyn access_identity_hooks::ports::HookCaller + Sync>,
 ) -> Result<axum::Router, String>
 where
-    P: access_internal_api::projections::Projections + 'static,
+    P: access_internal_api::projections::Projections + admin::realm::LiveKeys + Clone + 'static,
 {
     let identity = config.identity.as_ref().ok_or("no identity section")?;
+    // TN-130
+    let management = Arc::new(admin::tokens::PlaneHolders(
+        projections.clone(),
+        config.suiss.as_ref().and_then(|s| s.platform_realm.clone()),
+    ));
     let env = oauth::ServerEnv {
         // OP-149 m.26 (a)
         db: PgOAuth::with_reader(app.clone(), reader),
@@ -885,6 +891,7 @@ where
         projections,
         tenant_ids,
         hooks,
+        management,
     };
     Ok(oauth_router(OAuth::new(env)))
 }
@@ -1094,25 +1101,6 @@ async fn serve(
         SourcesClock::new(idp_sequencer),
         actors,
     );
-    // OP-151 m.3 (b)-(d), m.2 M1: the management API, on its own listener
-    let management = admin::router(
-        config,
-        admin_app.clone(),
-        &prepared.identity_keys,
-        admin::realm::Realms {
-            app: admin_app,
-            reads: admin_reads,
-            router: tenants_pool.clone(),
-            ids: admin_ids,
-            plane: idp_plane.clone(),
-            base: RealmBase::parse(&identity_section.realm_base).map_err(|e| e.to_string())?,
-            keys: realm_keys,
-            declared: admin_targets,
-            platform: config.suiss.as_ref().and_then(|s| s.platform_realm.clone()),
-            outbound: admin_outbound,
-        },
-        console_assets,
-    )?;
     // OP-149 m.4, m.16 (a), m.17 (e), (g), m.37
     let (platform, platform_api) = platform::routes(
         &platform_pools,
@@ -1128,16 +1116,6 @@ async fn serve(
         idp_plane.clone(),
         cell_ids.clone(),
         hooks,
-    )?
-    .merge(ssf);
-    // OP-149 m.6, m.8, m.9
-    let me = frontend(config, tenants_pool.clone(), hosted, idp_plane, courier)?;
-    let products = product::routes(
-        config,
-        domains.clone(),
-        (tenants_pool, product_app),
-        cell_ids,
-        platform_api,
     )?;
     // OP-151 m.3 (m): no request brings authority across the sandbox line
     let adp = adp_router(
@@ -1150,6 +1128,45 @@ async fn serve(
         ),
         Discovery { issuer },
     );
+    // OP-151 m.3 (b)-(d), m.2 M1, m.12: the management API and the console, on their own
+    // listener; the console signs in through the realms' authorization servers and forwards its
+    // ADP reads, both in process
+    let management_origin = config
+        .suiss
+        .as_ref()
+        .map(|s| s.management_api.clone())
+        .ok_or("no suiss section")?;
+    let management = admin::router(
+        (management_origin, identity_section.signer.clone()),
+        &prepared.identity_keys,
+        admin::realm::Realms {
+            app: admin_app,
+            reads: admin_reads,
+            router: tenants_pool.clone(),
+            ids: admin_ids,
+            plane: idp_plane.clone(),
+            base: RealmBase::parse(&identity_section.realm_base).map_err(|e| e.to_string())?,
+            keys: realm_keys,
+            declared: admin_targets,
+            platform: config.suiss.as_ref().and_then(|s| s.platform_realm.clone()),
+            outbound: admin_outbound,
+        },
+        admin::InProcessRoutes {
+            oauth: authorize.clone(),
+            adp: adp.clone(),
+        },
+        console_assets,
+    )?;
+    let authorize = authorize.merge(ssf);
+    // OP-149 m.6, m.8, m.9
+    let me = frontend(config, tenants_pool.clone(), hosted, idp_plane, courier)?;
+    let products = product::routes(
+        config,
+        domains.clone(),
+        (tenants_pool, product_app),
+        cell_ids,
+        platform_api,
+    )?;
     let app = router(
         config.security_txt(),
         limits,

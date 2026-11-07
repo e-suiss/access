@@ -13,6 +13,7 @@ use access_identity_oauth::adapters::oauth::{HostedPages, OsRandom, PgOAuth};
 use access_identity_oauth::adapters::{PgDirectory, SignerKeys};
 use access_identity_oauth::app::oauth::Env;
 use access_identity_oauth::domain::dpop::DpopProfile;
+use access_identity_oauth::ports::oauth::ManagementHolders;
 use access_internal_api::projections::Projections;
 use access_store::Pool;
 use access_store::identity::{RealmId, TenantId};
@@ -81,6 +82,8 @@ pub(crate) struct ServerEnv<P> {
     pub(crate) tenant_ids: Arc<crate::ids::CellIds>,
     /// The realms' inline hooks (TN-135): `token_issuance`.
     pub(crate) hooks: Arc<dyn HookCaller + Sync>,
+    /// The authority plane's live Instance keys, for management read tokens (TN-130).
+    pub(crate) management: Arc<dyn ManagementHolders + Sync>,
 }
 
 impl<P: Projections + 'static> Env for ServerEnv<P> {
@@ -144,6 +147,9 @@ impl<P: Projections + 'static> Env for ServerEnv<P> {
     }
     fn hooks(&self) -> &(dyn HookCaller + Sync) {
         &*self.hooks
+    }
+    fn management(&self) -> &(dyn ManagementHolders + Sync) {
+        &*self.management
     }
 }
 

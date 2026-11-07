@@ -211,6 +211,7 @@ impl World {
             hsm: &self.keys,
             base: &self.base,
             declared: &declared,
+            console: None,
         };
         let admin = bootstrap.admin(&ids, None);
         let tenant = create_tenant(&self.db.app, PLACEMENT).await.unwrap();
@@ -241,6 +242,7 @@ impl World {
             hsm: &self.keys,
             base: &self.base,
             declared: &DeclaredTargets::default(),
+            console: None,
         }
         .run(plan)
         .await
@@ -587,6 +589,7 @@ async fn local_fixtures_are_made_once_and_produce_events() {
         hsm: &w.keys,
         base: &w.base,
         declared: &DeclaredTargets::default(),
+        console: None,
     };
     let updated = bootstrap
         .change_product_client(
@@ -723,6 +726,7 @@ async fn a_one_shot_change_commits_while_another_process_leads() {
         hsm: &w.keys,
         base: &w.base,
         declared: &DeclaredTargets::default(),
+        console: None,
     };
     let updated = bootstrap
         .change_product_client(
@@ -1030,6 +1034,7 @@ async fn admin_realm_creation_opens_the_domain_keys() {
         hsm: &w.keys,
         base: &w.base,
         declared: &declared,
+        console: None,
     };
     let admin = bootstrap.admin(&ids, None);
     let tenant = create_tenant(&w.db.app, PLACEMENT).await.unwrap();
@@ -1075,6 +1080,7 @@ async fn admin_realms_sign_key_lookups_from_genesis() {
         hsm: &w.keys,
         base: &w.base,
         declared: &declared,
+        console: None,
     };
 
     schedule(&signer);
@@ -1129,6 +1135,7 @@ async fn admin_realms_answer_party_lookups() {
         hsm: &w.keys,
         base: &w.base,
         declared: &declared,
+        console: None,
     };
     schedule(&signer);
     let before = w
@@ -2026,6 +2033,7 @@ mod provision {
             hsm: &w.keys,
             base: &w.base,
             declared: &declared,
+            console: None,
         };
         let admin = bootstrap.admin(&ids, None);
         let route = route_by_slug(&w.db.router, "platform")
@@ -2151,3 +2159,5 @@ mod provision {
         w.domains.release().await;
     }
 }
+
+mod management;

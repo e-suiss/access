@@ -193,11 +193,14 @@ pub struct TestEnv {
     pub management: ScriptedManagement,
 }
 
+/// Live Instance keys by (domain, kid).
+pub type LiveKeyMap = HashMap<([u8; 32], [u8; 32]), PublicKey>;
+
 /// The live Instance keys and the platform realm a management read token exchange sees
 /// (TN-130); none by default.
 #[derive(Clone, Default)]
 pub struct ScriptedManagement {
-    pub keys: Arc<Mutex<HashMap<([u8; 32], [u8; 32]), PublicKey>>>,
+    pub keys: Arc<Mutex<LiveKeyMap>>,
     pub platform: Arc<Mutex<Option<RealmId>>>,
 }
 

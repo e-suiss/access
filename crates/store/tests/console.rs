@@ -24,6 +24,7 @@ fn new(cookie: &[u8; 32], subject: u8) -> NewConsoleSession<'_> {
         realm: R,
         subject: [subject; 16],
         login_session: [9; 16],
+        session_epoch: 0,
         slug: "acme",
         domain: &[3; 32],
         account: "usr_x",

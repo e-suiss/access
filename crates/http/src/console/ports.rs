@@ -35,6 +35,12 @@ pub struct SignedIn {
     pub account: String,
     /// The display name, tenant-controlled text (TN-131).
     pub display_name: String,
+    /// The realm subject's internal id.
+    pub subject: [u8; 16],
+    /// The realm login session the sign-in authenticated with.
+    pub login_session: [u8; 16],
+    /// When the user authenticated, Unix milliseconds.
+    pub auth_time_ms: u64,
 }
 
 /// A console session as stored. The cookie value itself is never stored, only its digest.

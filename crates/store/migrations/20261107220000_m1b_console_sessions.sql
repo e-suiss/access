@@ -1,6 +1,6 @@
 -- TN-128, TN-129, OP-151 m.3 (e), (f), m.12 (b): the console BFF's sessions on the management
 -- listener. A row holds identifiers only: the cookie as a digest, the realm and subject it
--- signed in, the account's opaque external id, the network binding and its times, the device
+-- signed in with the subject's session epoch then, the account's opaque external id, the network binding and its times, the device
 -- Instance the browser registered (public key only) and the one pending registration challenge.
 -- A session ends softly (ended_ms), never by DELETE (OP-73); the identity columns never change.
 SET LOCAL ROLE access_migrator;
@@ -12,6 +12,7 @@ CREATE TABLE access_ops.console_sessions (
   realm_id uuid NOT NULL,
   subject_id uuid NOT NULL,
   login_session_id uuid NOT NULL,
+  session_epoch bigint NOT NULL CHECK (session_epoch >= 0),
   slug text NOT NULL CHECK (char_length(slug) BETWEEN 1 AND 63),
   domain_id bytea NOT NULL CHECK (octet_length(domain_id) = 32),
   account text NOT NULL CHECK (char_length(account) BETWEEN 1 AND 128),
