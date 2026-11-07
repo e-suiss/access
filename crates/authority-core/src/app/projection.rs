@@ -14,7 +14,10 @@ use access_kernel::combinator::{
 use access_kernel::digest::Digest;
 use access_kernel::intent::{ContextRefs, IntentEnvelope, ParamValue};
 use access_kernel::meta::{self, Actor, ExerciseBasis, InstanceState, Payload, SliceRequest, kind};
-use access_kernel::model::{ActionRef, AuthoritySet, CanonicalAuthority, Id, Window};
+use access_kernel::model::{
+    ActionRef, AuthoritySet, Binding as ProofBinding, CanonicalAuthority, Id, ProofKind,
+    RequirementTerm, Window,
+};
 use access_kernel::tier::{self, Tier};
 use access_kernel::validity::ceiling::{
     self, Ceiling, HOUR_MS, SECURE_CLOCK_CLASS, SLICE_SHARE_DIVISOR,
@@ -63,6 +66,23 @@ pub mod policy {
     pub const OPEN_OFFLINE: &str = "policy:open-offline";
     /// An audience left a `checkpointed-offline` projection unreported past its deadline.
     pub const UNREPORTED: &str = "policy:unreported-contracts";
+    /// The bounds carry a requirement the verifier cannot check itself.
+    pub const LOCAL_REQUIREMENT: &str = "policy:local-requirement";
+}
+
+/// Whether a verifier checks `term` itself, without the authority plane: a local
+/// authentication or a Claim presented to it, unbound or bound to the holder Instance. A
+/// contribution, foreign authority, or a proof bound to an intent or a resource is never
+/// local (§9.10 `local_requirements`).
+#[must_use]
+pub fn locally_verifiable(term: &RequirementTerm) -> bool {
+    matches!(
+        term.proof_kind,
+        ProofKind::Authentication | ProofKind::Claim
+    ) && matches!(
+        term.binding,
+        ProofBinding::None | ProofBinding::ActorInstance
+    )
 }
 
 /// The class and variant words a contract is recorded under.
@@ -229,6 +249,10 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             return Err(CoreError::Protocol("payload"));
         };
         let refuse = |code| Ok(Err((code, Remediation::NewRequestRequired)));
+        // §9.10, Ek B 2517: an action whose requirement the verifier cannot check stays online
+        if !bounds.requirements.iter().all(locally_verifiable) {
+            return refuse(policy::LOCAL_REQUIREMENT);
+        }
         // §9.9.3 rule 4, OP-141 m.35 (g): the tier of what is projected
         let Some(actions) = self.bounded_actions(bounds) else {
             return refuse(policy::TIER);

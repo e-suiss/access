@@ -7790,3 +7790,85 @@ async fn u53_op_44_every_report_served_is_one_audit_read() {
         2
     );
 }
+
+// §9.10, Ek B 2517: an action whose requirement the verifier cannot check itself never enters
+// the bounds: a contribution, a foreign authority or an intent-bound proof is a `restricted`
+// DENY of the issuance policy; a local authentication or a holder-bound Claim is projected
+#[tokio::test]
+async fn s9_10_a_requirement_the_verifier_cannot_check_stays_online() {
+    use access_kernel::combinator::BlockerClass;
+    use access_kernel::validity::ProfileVariant;
+    let db = fresh().await.unwrap();
+    let d = create_genesis(&db.sequencer, TENANT, genesis_offline(), 1_000)
+        .await
+        .unwrap();
+    let a = moving_process(&db, d, Movable::at(NOW));
+    onboard_process(&a, d, ROOT, ROOT_KEY, (1, 2)).await;
+    onboard_process(&a, d, ALICE, ALICE_KEY, (3, 4)).await;
+    let holding = grant_alice(&a, d, 5, vec![action("shop", "read")], 5).await;
+    let with = |terms: Vec<RequirementTerm>| {
+        let mut p = projection(
+            vec![action("shop", "read")],
+            &[ROBOT],
+            ProfileVariant::OnlineStrict,
+            (NOW, NOW + 60_000),
+            None,
+            None,
+        );
+        if let Payload::ProjectionIssue { bounds, .. } = &mut p {
+            bounds.requirements = terms.into_iter().collect();
+        }
+        p
+    };
+    let remote = [
+        term(
+            ProofKind::Contribution,
+            "approve",
+            ProofBinding::IntentDigest,
+        ),
+        term(ProofKind::ForeignAuthority, "partner", ProofBinding::None),
+        term(ProofKind::Claim, "kyc", ProofBinding::IntentDigest),
+        term(
+            ProofKind::Authentication,
+            "presence",
+            ProofBinding::Resource,
+        ),
+    ];
+    for (nonce, t) in (10..).zip(remote) {
+        let denied = a
+            .exercise(&incoming(
+                meta_request(d, nonce, holding, with(vec![t])),
+                ALICE_KEY,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(denied.decision.outcome, Outcome::Deny);
+        assert!(
+            denied
+                .decision
+                .blockers
+                .iter()
+                .any(|b| b.class == BlockerClass::Restricted
+                    && b.subcode.as_deref() == Some("policy:local-requirement"))
+        );
+        assert!(denied.pap.is_none());
+    }
+    let local = vec![
+        term(
+            ProofKind::Authentication,
+            "presence",
+            ProofBinding::ActorInstance,
+        ),
+        term(ProofKind::Claim, "device_posture", ProofBinding::None),
+    ];
+    let projected = a
+        .exercise(&incoming(
+            meta_request(d, 20, holding, with(local.clone())),
+            ALICE_KEY,
+        ))
+        .await
+        .unwrap();
+    allowed(&projected);
+    let pap = access_kernel::pap::Pap::from_bytes(&projected.pap.unwrap()).unwrap();
+    assert_eq!(pap.local_requirements, local.into_iter().collect());
+}
