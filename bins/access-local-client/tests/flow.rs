@@ -350,6 +350,7 @@ async fn the_headless_client_runs_the_code_flow() {
         gate: LoginGate::new(LocalLimiter::default(), ThrottlePolicy::DEFAULT, 0),
         hasher: Hasher::new(hasher),
         redirect_to: String::from("/"),
+        hooks: std::sync::Arc::new(access_identity_hooks::ports::NoHooks),
     });
     // the test user, as the bootstrap makes it (OP-149 m.26 (b))
     let accounts = PgAccounts(c.db.app.clone());

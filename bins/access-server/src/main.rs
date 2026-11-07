@@ -741,6 +741,7 @@ fn login(
     products: Pool,
     keks: login::RealmKeks,
     assets: Option<Assets>,
+    hooks: Arc<dyn access_identity_hooks::ports::HookCaller + Sync>,
 ) -> Result<(axum::Router, HostedLogin), String> {
     let identity = config.identity.as_ref().ok_or("no identity section")?;
     let lifetimes = config.login.lifetimes().ok_or("login session lifetimes")?;
@@ -765,6 +766,7 @@ fn login(
             cgroup_memory_budget(),
         )),
         redirect_to: config.login.redirect_to.clone(),
+        hooks,
     });
     Ok((login_router(discovery, hosted.clone(), assets), hosted))
 }
@@ -791,6 +793,7 @@ fn authorization<P>(
     (app, router, reader, nonce_keys, outbound): OAuthInputs,
     projections: P,
     tenant_ids: Arc<ids::CellIds>,
+    hooks: Arc<dyn access_identity_hooks::ports::HookCaller + Sync>,
 ) -> Result<axum::Router, String>
 where
     P: access_internal_api::projections::Projections + 'static,
@@ -807,6 +810,7 @@ where
         dpop: DpopProfile::default(),
         projections,
         tenant_ids,
+        hooks,
     };
     Ok(oauth_router(OAuth::new(env)))
 }
@@ -946,6 +950,8 @@ async fn serve(
     let signer = || SignerKeys::new(identity_section.signer.clone());
     let (platform_outbound, platform_keks) = (prepared.outbound.clone(), keks.clone());
     let platform_pools = event_pools(&all, &cell_ids, &prepared.outbound);
+    // TN-135, OP-151 m.3 (j)
+    let hooks = oauth::hooks(all.app.clone(), prepared.outbound.clone(), keks.clone());
     // OP-149 m.7
     let ssf = events::ssf(&platform_pools, signer(), keks.clone());
     // OP-146 m.16 (m)
@@ -968,6 +974,7 @@ async fn serve(
         outbox_reader,
         keks,
         prepared.assets,
+        hooks.clone(),
     )?;
     let tenants_pool = router_pool.clone();
     let realms = identity(config, router_pool).await?;
@@ -1022,8 +1029,14 @@ async fn serve(
         issuer.clone(),
     );
     // OP-150 m.2: authority tokens are the authority plane's projection.issue decisions
-    let authorize =
-        authorization(config, oauth_inputs, idp_plane.clone(), cell_ids.clone())?.merge(ssf);
+    let authorize = authorization(
+        config,
+        oauth_inputs,
+        idp_plane.clone(),
+        cell_ids.clone(),
+        hooks,
+    )?
+    .merge(ssf);
     // OP-149 m.6, m.8, m.9
     let me = frontend(config, tenants_pool.clone(), hosted, idp_plane, courier)?;
     let products = product::routes(

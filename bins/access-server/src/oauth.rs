@@ -6,6 +6,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 use access_crypto::dpop::{NonceKey, NoncePolicy, NonceRing, Role, label};
+use access_identity_hooks::ports::HookCaller;
 use access_identity_oauth::adapters::clients::HttpClientKeys;
 use access_identity_oauth::adapters::dpop::{PgReplayCache, SystemClock};
 use access_identity_oauth::adapters::oauth::{HostedPages, OsRandom, PgOAuth};
@@ -78,6 +79,8 @@ pub(crate) struct ServerEnv<P> {
     pub(crate) dpop: DpopProfile,
     pub(crate) projections: P,
     pub(crate) tenant_ids: Arc<crate::ids::CellIds>,
+    /// The realms' inline hooks (TN-135): `token_issuance`.
+    pub(crate) hooks: Arc<dyn HookCaller + Sync>,
 }
 
 impl<P: Projections + 'static> Env for ServerEnv<P> {
@@ -139,4 +142,25 @@ impl<P: Projections + 'static> Env for ServerEnv<P> {
     fn tenant_ids(&self) -> &Arc<crate::ids::CellIds> {
         &self.tenant_ids
     }
+    fn hooks(&self) -> &(dyn HookCaller + Sync) {
+        &*self.hooks
+    }
+}
+
+/// The realms' inline hooks as this process calls them (TN-135, OP-151 m.3 (j)): live hooks
+/// from the realm tables, keys opened under the realm KEKs, calls through the SSRF-guarded
+/// outbound client.
+pub(crate) fn hooks(
+    app: Pool,
+    outbound: access_identity_oauth::adapters::outbound::Outbound,
+    keks: crate::login::RealmKeks,
+) -> Arc<dyn HookCaller + Sync> {
+    Arc::new(access_identity_hooks::app::Hooks::new(
+        access_identity_hooks::adapters::PgRegistry::new(
+            app,
+            access_identity_events::adapters::KekSealer(keks),
+        ),
+        access_identity_oauth::adapters::hooks::OutboundHooks(outbound),
+        access_identity_hooks::adapters::SystemClock,
+    ))
 }

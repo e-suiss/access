@@ -1683,6 +1683,7 @@ async fn approval_through_the_local_client(world: &str, step_up: Option<StepUp>)
             cgroup_memory_budget(),
         )),
         redirect_to: String::from("/"),
+        hooks: std::sync::Arc::new(access_identity_hooks::ports::NoHooks),
     });
     let discovery = || {
         RealmDiscovery::new(

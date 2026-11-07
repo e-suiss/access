@@ -121,6 +121,7 @@ fn app(c: &Cluster) -> Router {
         gate: LoginGate::new(LocalLimiter::default(), ThrottlePolicy::DEFAULT, 0),
         hasher: Hasher::new(HasherConfig::sized(Argon2Params::CANONICAL, 2, None)),
         redirect_to: String::from("/"),
+        hooks: std::sync::Arc::new(access_identity_hooks::ports::NoHooks),
     };
     let routes = realm_router(discovery())
         .merge(oauth_router(OAuth::new(env.clone())))

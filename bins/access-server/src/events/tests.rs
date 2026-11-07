@@ -93,6 +93,7 @@ async fn receiver() -> (u16, Got) {
 }
 
 /// The request the outbound client would send, over plain TCP to the local receiver.
+#[derive(Clone)]
 struct Local(u16);
 
 impl Transport for Local {

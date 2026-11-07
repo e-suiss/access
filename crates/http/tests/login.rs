@@ -473,6 +473,7 @@ async fn env_with(seed: u8, slug: &str, auth: AuthPolicy, live: bool) -> Env {
         gate: LoginGate::new(LocalLimiter::default(), ThrottlePolicy::DEFAULT, 0),
         hasher: Hasher::new(config),
         redirect_to: "/".into(),
+        hooks: std::sync::Arc::new(access_identity_hooks::ports::NoHooks),
     });
     let assets = Assets::load(&fixture()).unwrap();
     let signer = ArtifactKey(Arc::new(SoftSigner::generate_ed25519().unwrap().0));

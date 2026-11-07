@@ -1152,6 +1152,10 @@ where
     }
 
     /// Moves the flow after a step: saves what is missing, or completes it (TN-132).
+    #[expect(
+        clippy::too_many_lines,
+        reason = "one completed flow: requirements, post_login hook, session and signals"
+    )]
     pub(crate) async fn advance(
         &self,
         mut tx: D::Tx,

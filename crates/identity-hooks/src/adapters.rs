@@ -64,3 +64,16 @@ impl<K: KeyVault> HookRegistry for PgRegistry<K> {
         }))
     }
 }
+
+/// The operating system clock.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct SystemClock;
+
+impl crate::ports::HookClock for SystemClock {
+    fn now_ms(&self) -> Option<u64> {
+        let d = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .ok()?;
+        u64::try_from(d.as_millis()).ok()
+    }
+}

@@ -211,7 +211,7 @@ macro_rules! signin {
             link_base: &link_base,
             gate: &$self.gate,
             hasher: &$self.hasher,
-            hooks: &::access_identity_hooks::ports::NoHooks,
+            hooks: &*$self.hooks,
             passkeys: ::access_identity_session::app::Passkeys {
                 registry: &registry,
                 signals: &$crate::adapters::LogSignals,
@@ -245,6 +245,8 @@ pub struct Hosted<K, C, M> {
     pub hasher: Hasher,
     /// Where a completed sign-in goes (`redirect_to`).
     pub redirect_to: String,
+    /// The realms' inline hooks (TN-135): `post_login` may refuse a sign-in.
+    pub hooks: std::sync::Arc<dyn ::access_identity_hooks::ports::HookCaller + Sync>,
 }
 
 fn failed(e: &SessionError) -> Reply {

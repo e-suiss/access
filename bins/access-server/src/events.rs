@@ -13,6 +13,7 @@ use access_identity_events::app::fanout::Fanout;
 use access_identity_events::app::receiver::Receiver;
 use access_identity_events::app::ssf::Transmitter;
 use access_identity_events::app::streams::Streams;
+use access_identity_events::app::webhooks::{WebhookCourier, WebhookFanout};
 use access_identity_events::ports::{TenantIds, Transport};
 use access_identity_oauth::adapters::clients::{CachePolicy, HttpClientKeys};
 use access_identity_oauth::adapters::dpop::SystemClock;
@@ -52,17 +53,20 @@ impl EventPools {
     }
 }
 
-/// The fan-out and the courier as two tasks of this process.
+/// The stream fan-out and courier, and the webhook fan-out and courier (TN-136), as tasks of
+/// this process.
 pub(crate) struct Delivery {
     stop: tokio::sync::watch::Sender<bool>,
     fanning: tokio::task::JoinHandle<()>,
     sending: tokio::task::JoinHandle<()>,
     polling: Option<tokio::task::JoinHandle<()>>,
+    webhook_fanning: tokio::task::JoinHandle<()>,
+    webhook_sending: tokio::task::JoinHandle<()>,
 }
 
 impl Delivery {
-    /// Starts both over `transport`.
-    pub(crate) fn start<T: Transport + 'static>(
+    /// Starts the four delivery tasks over `transport`.
+    pub(crate) fn start<T: Transport + Clone + 'static>(
         pools: &EventPools,
         transport: T,
         signer: SignerKeys,
@@ -75,18 +79,28 @@ impl Delivery {
         let fanning = tokio::spawn(async move { fanout.run(&router, &until).await });
         let courier = Courier::new(
             pools.db(),
-            transport,
+            transport.clone(),
             signer,
-            KekSealer(keks),
+            KekSealer(keks.clone()),
             SystemClock,
             Backoff::default(),
         );
-        let sending = tokio::spawn(async move { courier.run(&stopped).await });
+        let until = stopped.clone();
+        let sending = tokio::spawn(async move { courier.run(&until).await });
+        // TN-136, OP-151 m.3 (i)
+        let webhook_fanout = WebhookFanout::new(pools.db(), SystemClock);
+        let until = stopped.clone();
+        let webhook_fanning = tokio::spawn(async move { webhook_fanout.run(&until).await });
+        let webhook_courier =
+            WebhookCourier::new(pools.db(), transport, KekSealer(keks), SystemClock);
+        let webhook_sending = tokio::spawn(async move { webhook_courier.run(&stopped).await });
         Self {
             stop,
             fanning,
             sending,
             polling: None,
+            webhook_fanning,
+            webhook_sending,
         }
     }
 
@@ -122,6 +136,8 @@ impl Delivery {
         if let Some(p) = self.polling {
             let _ = p.await;
         }
+        let _ = self.webhook_fanning.await;
+        let _ = self.webhook_sending.await;
     }
 }
 
