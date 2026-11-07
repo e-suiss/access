@@ -206,3 +206,26 @@ pub static TELEMETRY_EXPORT_FAILURES: Counter<1> = Counter::new(
     "Telemetry exports that failed and were dropped (TI-18)",
     [Label::Kind],
 );
+
+/// §12.2.4, TN-46: SL2 sign-in assessments by `outcome` (the level: `low`, `medium`, `high`,
+/// `unavailable`) and `mode` (the stage in force: `shadow`, `stepup`, `stepup_caep`).
+pub static RISK_ASSESSMENTS: Counter<2> = Counter::new(
+    "access_risk_assessments_total",
+    "SL2 sign-in risk assessments by level and stage (TN-46; never a decision input, TI-18)",
+    [Label::Outcome, Label::Mode],
+);
+
+/// IDP-39, TN-108: SL2 signals that fired, by `kind` (the signal name).
+pub static RISK_SIGNALS: Counter<1> = Counter::new(
+    "access_risk_signals_total",
+    "SL2 risk signals that fired, by signal (IDP-39)",
+    [Label::Kind],
+);
+
+/// OP-151 m.3 (o): review items marked false positive per step-up request over the last 30
+/// days, in parts per million; the FP budget is 5000 (0.5 %).
+pub static RISK_FP_RATIO: Gauge<0> = Gauge::new(
+    "access_risk_fp_ratio_ppm",
+    "SL2 false-positive ratio of step-up requests over 30 days, parts per million (OP-151 m.3 (o))",
+    [],
+);

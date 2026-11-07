@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.risk_subject (tenant_id, realm_id, subject_id, last_at_ms,\n                    ip_pseudonym, ip_prefix, country, asn, lat_cdeg, lon_cdeg, level)\n             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)\n             ON CONFLICT (tenant_id, realm_id, subject_id) DO UPDATE\n                SET last_at_ms = EXCLUDED.last_at_ms, ip_pseudonym = EXCLUDED.ip_pseudonym,\n                    ip_prefix = EXCLUDED.ip_prefix, country = EXCLUDED.country,\n                    asn = EXCLUDED.asn, lat_cdeg = EXCLUDED.lat_cdeg,\n                    lon_cdeg = EXCLUDED.lon_cdeg,\n                    level = coalesce(EXCLUDED.level, access.risk_subject.level),\n                    updated_at = now()",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Int8",
+        "Bytea",
+        "Text",
+        "Text",
+        "Int8",
+        "Int4",
+        "Int4",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "a2c5765b11c1a4c86da6958a90abd2314df850cce97febdaa35a9c5122f04f20"
+}

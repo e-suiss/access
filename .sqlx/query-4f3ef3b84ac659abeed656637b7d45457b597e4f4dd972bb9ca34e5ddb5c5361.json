@@ -1,0 +1,114 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT last_at_ms, ip_pseudonym, ip_prefix, country, asn, lat_cdeg, lon_cdeg, level\n               FROM access.risk_subject\n              WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "last_at_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.risk_subject",
+            "name": "last_at_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "ip_pseudonym",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.risk_subject",
+            "name": "ip_pseudonym"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "ip_prefix",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.risk_subject",
+            "name": "ip_prefix"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "country",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.risk_subject",
+            "name": "country"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "asn",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.risk_subject",
+            "name": "asn"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "lat_cdeg",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "access.risk_subject",
+            "name": "lat_cdeg"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "lon_cdeg",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "access.risk_subject",
+            "name": "lon_cdeg"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "level",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.risk_subject",
+            "name": "level"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "4f3ef3b84ac659abeed656637b7d45457b597e4f4dd972bb9ca34e5ddb5c5361"
+}

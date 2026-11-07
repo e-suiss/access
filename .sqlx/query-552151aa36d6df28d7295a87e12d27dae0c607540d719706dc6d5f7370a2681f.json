@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.risk_review SET state = $4, decided_at = now(), decided_by = $5\n              WHERE tenant_id = $1 AND realm_id = $2 AND review_id = $3 AND state = 'open'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "552151aa36d6df28d7295a87e12d27dae0c607540d719706dc6d5f7370a2681f"
+}

@@ -127,6 +127,14 @@ impl Bound {
     pub fn position(&self) -> u64 {
         u64::try_from(self.position).unwrap_or(0)
     }
+
+    pub(crate) const fn domain(&self) -> &DomainId {
+        &self.domain
+    }
+
+    pub(crate) const fn raw_position(&self) -> i64 {
+        self.position
+    }
 }
 
 /// A realm as its configuration is governed (MD-5a).

@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.risk_canary (tenant_id, realm_id, subject_id, domain_id, decision_pos)\n             VALUES ($1, $2, $3, $4, $5) ON CONFLICT DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "69c52a139b8ed105914272e9d7cb4f9873e0784ff82d4f50078a62d3f00f3f0a"
+}

@@ -1,0 +1,30 @@
+[package]
+name = "access-identity-risk"
+description = "SL2 sign-in risk of the identity plane (TN-46, IDP-39): signals, scoring, shadow and monitor modes, the GeoResolver, breached passwords, canary credentials and tenant analytics."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+access-crypto = { workspace = true }
+access-identity-account = { workspace = true }
+access-kernel = { workspace = true }
+access-store = { workspace = true }
+access-telemetry = { workspace = true }
+maxminddb = { workspace = true }
+serde = { workspace = true, features = ["derive", "std"] }
+suiss-crypto = { workspace = true, features = ["pkcs11"] }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["fs", "time"] }
+tracing = { workspace = true, features = ["std"] }
+
+[dev-dependencies]
+access-crypto = { workspace = true, features = ["testing"] }
+access-store = { workspace = true, features = ["testing"] }
+tokio = { workspace = true, features = ["macros", "net", "io-util", "rt-multi-thread", "time", "fs"] }
+
+[lints]
+workspace = true

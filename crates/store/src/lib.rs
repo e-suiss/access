@@ -2,6 +2,7 @@
 //! All SQL of the workspace lives in this crate.
 
 pub mod accounts;
+pub mod analytics;
 pub mod api_idempotency;
 pub mod approvals;
 pub mod audit;
@@ -33,6 +34,7 @@ pub mod projections;
 pub mod publications;
 pub mod realm_binding;
 pub mod relay;
+pub mod risk;
 pub mod scope;
 pub mod sessions;
 pub mod ssf;

@@ -254,6 +254,10 @@ pub(crate) const HMAC_ALLOWED: &[(&str, &str)] = &[
         "CR-3 (a): pairwise party pseudonyms (MD-10)",
     ),
     (
+        "crates/crypto/src/ip_pseudonym.rs",
+        "CR-3 (a): keyed client address pseudonyms per realm (OP-151 m.1 (b), PII pairwise)",
+    ),
+    (
         "crates/crypto/src/dpop.rs",
         "CR-3 (b): DPoP server nonce, issued and checked by the same AS or RS (TN-29)",
     ),

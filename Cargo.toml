@@ -32,6 +32,7 @@ access-identity-ui = { path = "crates/identity-ui", default-features = false }
 access-identity-admin = { path = "crates/identity-admin", default-features = false }
 access-identity-events = { path = "crates/identity-events", default-features = false }
 access-identity-hooks = { path = "crates/identity-hooks", default-features = false }
+access-identity-risk = { path = "crates/identity-risk", default-features = false }
 access-authority-ingest = { path = "crates/authority-ingest", default-features = false }
 access-sdk = { package = "esuiss-access-sdk", path = "sdks/rust/access", version = "=0.3.1", default-features = false }
 access-verifier = { package = "esuiss-access-verifier", path = "sdks/rust/verifier", version = "=0.3.1", default-features = false }
@@ -52,6 +53,8 @@ cryptoki = { version = "=0.12.1", default-features = false }
 aws-lc-rs = { version = "1.18.2", default-features = false, features = ["aws-lc-sys"] }
 # OP-146 m.3, CR-36
 argon2 = { version = "=0.6.0", default-features = false }
+# OP-151 m.1 (b): GeoIP/ASN MMDB files
+maxminddb = { version = "0.32.0", default-features = false }
 # OP-146 m.5 (j)
 unicode-normalization = { version = "0.1.26", default-features = false }
 # OP-104

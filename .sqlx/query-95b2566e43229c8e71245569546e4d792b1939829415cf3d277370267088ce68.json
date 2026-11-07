@@ -1,0 +1,247 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT day, flows_started, identifier_entered, first_factor_passed,\n                    second_factor_passed, sessions_created, method_password, method_passkey,\n                    method_email_code, method_magic_link, accounts_active, accounts_with_passkey,\n                    accounts_with_mfa, mfa_setup_started, mfa_setup_completed, failed_logins,\n                    risk_step_ups, risk_reviews, risk_false_positives\n               FROM access.analytics_daily\n              WHERE tenant_id = $1 AND realm_id = $2 AND day BETWEEN $3 AND $4\n              ORDER BY day",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "day",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "access.analytics_daily",
+            "name": "day"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "flows_started",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.analytics_daily",
+            "name": "flows_started"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "identifier_entered",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.analytics_daily",
+            "name": "identifier_entered"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "first_factor_passed",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.analytics_daily",
+            "name": "first_factor_passed"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "second_factor_passed",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.analytics_daily",
+            "name": "second_factor_passed"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "sessions_created",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.analytics_daily",
+            "name": "sessions_created"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "method_password",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.analytics_daily",
+            "name": "method_password"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "method_passkey",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.analytics_daily",
+            "name": "method_passkey"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "method_email_code",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.analytics_daily",
+            "name": "method_email_code"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "method_magic_link",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.analytics_daily",
+            "name": "method_magic_link"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "accounts_active",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.analytics_daily",
+            "name": "accounts_active"
+          }
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "accounts_with_passkey",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.analytics_daily",
+            "name": "accounts_with_passkey"
+          }
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "accounts_with_mfa",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.analytics_daily",
+            "name": "accounts_with_mfa"
+          }
+        }
+      },
+      {
+        "ordinal": 13,
+        "name": "mfa_setup_started",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.analytics_daily",
+            "name": "mfa_setup_started"
+          }
+        }
+      },
+      {
+        "ordinal": 14,
+        "name": "mfa_setup_completed",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.analytics_daily",
+            "name": "mfa_setup_completed"
+          }
+        }
+      },
+      {
+        "ordinal": 15,
+        "name": "failed_logins",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.analytics_daily",
+            "name": "failed_logins"
+          }
+        }
+      },
+      {
+        "ordinal": 16,
+        "name": "risk_step_ups",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.analytics_daily",
+            "name": "risk_step_ups"
+          }
+        }
+      },
+      {
+        "ordinal": 17,
+        "name": "risk_reviews",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.analytics_daily",
+            "name": "risk_reviews"
+          }
+        }
+      },
+      {
+        "ordinal": 18,
+        "name": "risk_false_positives",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.analytics_daily",
+            "name": "risk_false_positives"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "95b2566e43229c8e71245569546e4d792b1939829415cf3d277370267088ce68"
+}

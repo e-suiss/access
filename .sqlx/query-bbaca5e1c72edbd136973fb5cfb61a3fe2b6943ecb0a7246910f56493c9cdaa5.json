@@ -1,0 +1,34 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.risk_review (tenant_id, realm_id, subject_id, level, signals, mode,\n                    reason)\n             VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING review_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "review_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.risk_review",
+            "name": "review_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Text",
+        "TextArray",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "bbaca5e1c72edbd136973fb5cfb61a3fe2b6943ecb0a7246910f56493c9cdaa5"
+}

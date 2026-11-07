@@ -1,0 +1,55 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT day, observed, baseline FROM access.analytics_alert\n              WHERE tenant_id = $1 AND realm_id = $2 AND kind = 'failed_login_surge'\n                AND day BETWEEN $3 AND $4\n              ORDER BY day",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "day",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "access.analytics_alert",
+            "name": "day"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "observed",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.analytics_alert",
+            "name": "observed"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "baseline",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.analytics_alert",
+            "name": "baseline"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "443cef13c6583dd6d90c2d8bbbbcf672923d9f9289cb41316474f05d91964435"
+}
