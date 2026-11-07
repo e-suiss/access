@@ -81,6 +81,14 @@ fields = []
 ocsf = "application_error"
 
 [[event]]
+name = "api.job.unrecorded"
+plane = "ops"
+severity = "warn"
+since = "unreleased"
+fields = []
+ocsf = "application_error"
+
+[[event]]
 name = "api.idempotency.unavailable"
 plane = "ops"
 severity = "warn"
