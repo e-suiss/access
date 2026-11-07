@@ -5,7 +5,8 @@
 #![allow(
     clippy::unwrap_used,
     clippy::panic,
-    reason = "test code; the request-path lints (OP-3) do not apply"
+    clippy::print_stdout,
+    reason = "test code; the request-path lints (OP-3) do not apply, and the printed compare time is the §5.8 measurement"
 )]
 
 use std::path::Path;

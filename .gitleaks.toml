@@ -77,3 +77,10 @@ paths = [
     '''^conformance/vectors/core/1/status-list\.json$''',
     '''^conformance/vectors/core/1/aas\.json$''',
 ]
+
+[[allowlists]]
+description = "Suiss webhook profile vectors: published test keys shared with Relay (TN-136, E42); other rules still apply here"
+targetRules = ["generic-api-key"]
+paths = [
+    '''^conformance/vectors/webhook/1/signature\.json$''',
+]

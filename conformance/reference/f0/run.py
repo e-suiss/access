@@ -544,7 +544,9 @@ OPERATIONS = {
 
 # Operations in the vectors that F0 does not implement, each with its reason. Any other
 # operation F0 does not know fails the run.
-NOT_IMPLEMENTED = {}
+NOT_IMPLEMENTED = {
+    "webhook.sign": "transport signature profile (TN-136, E42), not Kernel semantics; checked by crates/crypto webhook tests",
+}
 
 # Third-party raw data sets without an `operation`; the Kernel's own tests read them.
 RAW_DATA_DIRECTORY = "external"
