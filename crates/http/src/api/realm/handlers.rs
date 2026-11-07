@@ -97,7 +97,7 @@ pub async fn serve<E: Env>(
     };
     let key = key_of(&params);
     let answer = match shape {
-        Shape::List(attrs) => list(&ctx, kind, attrs, &uri).await,
+        Shape::List(attrs) => list(&ctx, kind, key, attrs, &uri).await,
         Shape::Get => get(&ctx, kind, key).await,
         Shape::Draft => draft(&ctx, &body).await,
         Shape::JobCreate => super::jobs::create(&ctx, &body).await,
@@ -114,9 +114,11 @@ pub async fn serve<E: Env>(
     answer.unwrap_or_else(problem)
 }
 
+/// A page of a collection; `key` names the resource a nested collection belongs to.
 async fn list<E: Env>(
     ctx: &Ctx<E>,
     kind: ResourceKind,
+    key: Option<String>,
     attrs: &'static [&'static str],
     uri: &Uri,
 ) -> Result<Response, &'static Code> {
@@ -133,7 +135,7 @@ async fn list<E: Env>(
         .read(ResourceQuery {
             slug: slug(ctx),
             kind,
-            key: None,
+            key,
             after,
             limit: request.size,
         })

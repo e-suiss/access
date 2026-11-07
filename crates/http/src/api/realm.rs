@@ -402,6 +402,21 @@ pub const ROWS: &[Route] = &[
         "retireWebhook",
         "Retires a webhook; its pending deliveries fail.",
     ),
+    list(
+        "/admin/v1/realms/{slug}/webhooks/{webhook_id}/deliveries",
+        "listWebhookDeliveries",
+        "A webhook's delivery log, newest first: state, attempts and the last answer; never the event body.",
+    ),
+    read(
+        "/admin/v1/realms/{slug}/signals",
+        "getSignals",
+        "The realm's signal sources: delayed transmitters, the GeoIP source, verifier reports.",
+    ),
+    read(
+        "/admin/v1/realms/{slug}/analytics",
+        "getAnalytics",
+        "The realm's daily sign-in counts of the last 30 days and failed sign-in surges; never a decision input.",
+    ),
 ];
 
 /// How a row is served.
@@ -509,7 +524,10 @@ const fn put(section: &'static str) -> Shape {
 /// The resource kind and shape of a realm row.
 #[must_use]
 pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
-    use ResourceKind::{Accounts, Clients, Groups, Hooks, Settings, UpstreamIdps, Webhooks};
+    use ResourceKind::{
+        Accounts, Analytics, Clients, Deliveries, Groups, Hooks, Settings, Signals, UpstreamIdps,
+        Webhooks,
+    };
     const CREATE: Shape = Shape::Write {
         patch: None,
         section: None,
@@ -579,6 +597,9 @@ pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
         "putWebhook" => (Webhooks, w(true)),
         "patchWebhook" => (Webhooks, patch(WEBHOOK_PATCH, None)),
         "rotateWebhookKey" | "retireWebhook" => (Webhooks, w(false)),
+        "listWebhookDeliveries" => (Deliveries, Shape::List(&["event", "state"])),
+        "getSignals" => (Signals, Shape::Get),
+        "getAnalytics" => (Analytics, Shape::Get),
         _ => return None,
     })
 }

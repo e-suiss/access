@@ -24,6 +24,7 @@ use access_identity_admin::ports::{Decider, Governance, Instances};
 use access_identity_events::adapters::KekSealer;
 use access_identity_oauth::adapters::outbound::{DeclaredTargets, Outbound};
 use access_identity_oauth::domain::issuer::RealmBase;
+use access_identity_risk::ports::{GeoResolver, GeoStatus};
 use access_identity_ui::domain::frontend::IDENTITY_PEP;
 use access_kernel::codec::Canonical;
 use access_kernel::combinator::Capacity;
@@ -61,6 +62,18 @@ pub(crate) struct Realms<P> {
     pub(crate) outbound: Outbound,
     /// Seals hook and webhook keys under the realm KEKs (TN-135, TN-136).
     pub(crate) vault: KekSealer<RealmKeks>,
+    /// The process's `GeoIP` source, whose state the signals read states (OP-151 m.3 (o)).
+    pub(crate) geo: Arc<dyn GeoResolver>,
+}
+
+/// The `GeoIP` source's state as the signals read names it (§8.13): never `configured` unless
+/// a source is loaded.
+fn geoip(status: &GeoStatus) -> &'static str {
+    match status {
+        GeoStatus::Ready { .. } => "configured",
+        GeoStatus::NotConfigured => "not_configured",
+        GeoStatus::Unreadable => "unreadable",
+    }
 }
 
 /// Largest sector identifier document read.
@@ -75,6 +88,9 @@ fn kind(k: ResourceKind) -> Kind {
         ResourceKind::Settings => Kind::Settings,
         ResourceKind::Hooks => Kind::Hooks,
         ResourceKind::Webhooks => Kind::Webhooks,
+        ResourceKind::Signals => Kind::Signals,
+        ResourceKind::Analytics => Kind::Analytics,
+        ResourceKind::Deliveries => Kind::Deliveries,
     }
 }
 
@@ -403,16 +419,22 @@ impl<P: Decider + Governance + Instances + Clone + Send + Sync + 'static> Realms
                 q.limit,
             )
             .await;
+        let geo = (q.kind == ResourceKind::Signals).then(|| geoip(&self.geo.status()));
         match read {
             Ok(r) => Ok(Some(Listing {
                 items: r
                     .items
                     .into_iter()
-                    .map(|(body, version)| Item { body, version })
+                    .map(|(mut body, version)| {
+                        if let (Some(g), Some(o)) = (geo, body.as_object_mut()) {
+                            o.insert(String::from("geoip"), Value::String(String::from(g)));
+                        }
+                        Item { body, version }
+                    })
                     .collect(),
                 last: r.last,
             })),
-            Err(AdminError::NoRealm) => Ok(None),
+            Err(AdminError::NoRealm | AdminError::Invalid(Invalid::NoWebhook)) => Ok(None),
             Err(e) => Err(unavailable(&e)),
         }
     }

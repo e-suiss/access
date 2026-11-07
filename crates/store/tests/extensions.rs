@@ -1,4 +1,4 @@
-//! TN-135, TN-136, MD-14, EI-25, OP-73: inline hook and webhook registrations are written only
+//! TN-135, TN-136, MD-14, EI-25, OP-73: i        .map(|n| format!("event{n}{}", "A".repeat(30)))line hook and webhook registrations are written only
 //! against a committed ALLOW of their own `idp.*` action; deliveries and their log are never
 //! deleted and the log is never rewritten.
 
@@ -407,4 +407,94 @@ async fn tn_136_deliveries_and_their_log_are_kept() {
         let tx = TenantTx::begin(&db.app, t, r).await.unwrap();
         assert!(tx.raw_rows(sql).await.is_err(), "{sql}");
     }
+}
+
+// TN-136, OP-151 m.19 (e): the delivery log reads newest first in pages after a cursor, with
+// the last answer of each delivery and never its body; another realm's webhook has no log here
+#[tokio::test]
+async fn tn_136_the_delivery_log_pages_without_bodies() {
+    let db = fresh().await.unwrap();
+    let t = create_tenant(&db.app, "pool-default").await.unwrap();
+    let d = domain(&db, t, 82, 1).await;
+    let r = realm(&db, t, &d, "delivery-log").await;
+    let d2 = domain(&db, t, 83, 1).await;
+    let other = realm(&db, t, &d2, "delivery-other").await;
+    let w = WebhookRow {
+        realm: *r.as_bytes(),
+        id: [9; 16],
+        url: String::from("https://sync.shop.example/access"),
+        events: vec![String::from("account.created")],
+        signing: String::from("hmac"),
+        active: true,
+    };
+    let mut k = key(2);
+    k.signing = String::from("hmac");
+    k.public_key = None;
+    let mut tx = TenantTx::begin(&db.app, t, r).await.unwrap();
+    let b = bind(&mut tx, &decision(&d, 1, &[1; 16], "idp.webhook.register"))
+        .await
+        .unwrap()
+        .unwrap();
+    insert_webhook(&mut tx, &b, &w, &k).await.unwrap();
+    let ids: Vec<String> = (1..=3_u8)
+        .map(|n| format!("event{n}{}", "A".repeat(30)))
+        .collect();
+    for (n, id) in (1_u64..).zip(&ids) {
+        let delivery = WebhookDelivery {
+            realm: *r.as_bytes(),
+            webhook: w.id,
+            event_id: id.clone(),
+            event_type: String::from("urn:suiss:access:event:account.created"),
+            payload: b"{\"secret\":1}".to_vec(),
+            occurred_ms: n,
+            queued_ms: 0,
+            attempts: 0,
+            state: String::from("pending"),
+        };
+        assert!(tx.enqueue_webhook(&delivery, n * 1_000).await.unwrap());
+    }
+    let failed = Attempt {
+        outcome: "retry",
+        status: Some(500),
+        latency_ms: Some(12),
+        reason: Some("status"),
+        retry_at_ms: Some(90_000),
+    };
+    assert!(
+        tx.record_webhook_attempt(&w.id, &ids[2], &failed)
+            .await
+            .unwrap()
+    );
+    let first = tx.webhook_deliveries(&w.id, None, 2).await.unwrap();
+    assert_eq!(
+        first
+            .iter()
+            .map(|x| x.event_id.as_str())
+            .collect::<Vec<_>>(),
+        [ids[2].as_str(), ids[1].as_str()]
+    );
+    assert_eq!(
+        (
+            first[0].attempts,
+            first[0].last_status,
+            first[0].last_latency_ms
+        ),
+        (1, Some(500), Some(12))
+    );
+    assert_eq!(first[0].last_reason.as_deref(), Some("status"));
+    let last = &first[1];
+    let next = tx
+        .webhook_deliveries(&w.id, Some((&last.queued_at, &last.event_id)), 2)
+        .await
+        .unwrap();
+    assert_eq!(
+        next.iter().map(|x| x.event_id.as_str()).collect::<Vec<_>>(),
+        [ids[0].as_str()]
+    );
+    tx.commit().await.unwrap();
+    let mut tx = TenantTx::begin(&db.app, t, other).await.unwrap();
+    assert_eq!(
+        tx.webhook_deliveries(&w.id, None, 10).await.unwrap(),
+        Vec::new()
+    );
 }

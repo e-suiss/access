@@ -566,6 +566,32 @@ pub struct WebhookDelivery {
     pub state: String,
 }
 
+/// One row of a webhook's delivery log (TN-136, OP-151 m.19 (e)): what was sent and what came
+/// of it, never the event body.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DeliveryLogRow {
+    /// The event id: the dedup key and `webhook-id`.
+    pub event_id: String,
+    /// Event type URN.
+    pub event_type: String,
+    /// `pending`, `delivered`, `exhausted` or `failed`.
+    pub state: String,
+    /// Attempts so far.
+    pub attempts: u32,
+    /// The receiver's last status, when it answered.
+    pub last_status: Option<u16>,
+    /// How long the last exchange took, ms.
+    pub last_latency_ms: Option<u32>,
+    /// Why the last attempt was not delivered.
+    pub last_reason: Option<String>,
+    /// When the event happened, Unix ms.
+    pub occurred_ms: u64,
+    /// When it was queued, Unix ms.
+    pub queued_ms: u64,
+    /// The queue time as the database keeps it: the page cursor's first half.
+    pub queued_at: String,
+}
+
 /// What became of one attempt.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Attempt<'a> {
@@ -714,6 +740,63 @@ impl TenantTx {
         .execute(&mut *self.tx)
         .await?;
         Ok(true)
+    }
+
+    /// One page of a webhook's delivery log, newest first, after the row `after` names
+    /// (queue time as [`DeliveryLogRow::queued_at`], event id). No event body is read.
+    ///
+    /// # Errors
+    /// [`StoreError`].
+    pub async fn webhook_deliveries(
+        &mut self,
+        webhook: &[u8; 16],
+        after: Option<(&str, &str)>,
+        limit: u32,
+    ) -> Result<Vec<DeliveryLogRow>, StoreError> {
+        let (tenant, realm) = scope(self)?;
+        let (at, id) = after.map_or((None, None), |(a, i)| (Some(a), Some(i)));
+        let rows = sqlx::query!(
+            r#"SELECT event_id, event_type, state, attempts, last_status, last_latency_ms,
+                      last_reason,
+                      (extract(epoch FROM occurred_at) * 1000)::bigint AS "occurred_ms!",
+                      (extract(epoch FROM created_at) * 1000)::bigint AS "queued_ms!",
+                      created_at::text AS "queued_at!"
+                 FROM access.idp_webhook_deliveries
+                WHERE tenant_id = $1 AND realm_id = $2 AND webhook_id = $3
+                  AND ($4::text IS NULL OR (created_at, event_id) < ($4::text::timestamptz, $5::text))
+                ORDER BY created_at DESC, event_id DESC
+                LIMIT $6"#,
+            tenant,
+            realm,
+            uuid(webhook),
+            at,
+            id,
+            i64::from(limit),
+        )
+        .fetch_all(&mut *self.tx)
+        .await?;
+        rows.into_iter()
+            .map(|r| {
+                Ok(DeliveryLogRow {
+                    event_id: r.event_id,
+                    event_type: r.event_type,
+                    state: r.state,
+                    attempts: u32::try_from(r.attempts).map_err(|_| StoreError::Corrupt)?,
+                    last_status: r
+                        .last_status
+                        .map(|s| u16::try_from(s).map_err(|_| StoreError::Corrupt))
+                        .transpose()?,
+                    last_latency_ms: r
+                        .last_latency_ms
+                        .map(|l| u32::try_from(l).map_err(|_| StoreError::Corrupt))
+                        .transpose()?,
+                    last_reason: r.last_reason,
+                    occurred_ms: u64::try_from(r.occurred_ms).map_err(|_| StoreError::Corrupt)?,
+                    queued_ms: u64::try_from(r.queued_ms).map_err(|_| StoreError::Corrupt)?,
+                    queued_at: r.queued_at,
+                })
+            })
+            .collect()
     }
 
     /// The attempt log of one delivery, first attempt first: outcome, status and latency.

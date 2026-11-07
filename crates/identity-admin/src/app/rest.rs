@@ -835,6 +835,71 @@ pub enum Kind {
     Hooks,
     /// Webhooks (TN-136).
     Webhooks,
+    /// The realm's signal sources (§8.13, OP-151 m.19 (e)): inbound transmitters and verifier
+    /// reports; the process adds its `GeoIP` source's state.
+    Signals,
+    /// The realm's daily sign-in analytics of the last [`ANALYTICS_DAYS`] days (IDP-36).
+    Analytics,
+    /// One webhook's delivery log, by its `webhook_id` (TN-136): no event body.
+    Deliveries,
+}
+
+/// How many days the analytics read covers, today included (PD).
+pub const ANALYTICS_DAYS: u32 = 30;
+
+/// One day, `YYYY-MM-DD`, of days since the Unix epoch.
+fn day_text(day: u32) -> String {
+    rfc3339(u64::from(day).saturating_mul(86_400_000))
+        .get(..10)
+        .map(String::from)
+        .unwrap_or_default()
+}
+
+/// The analytics view: per day the funnel's ends, adoption and methods; surge alerts (IDP-36).
+fn analytics_view(r: &access_identity_risk::app::analytics::Report) -> Json {
+    json!({
+        "days": r.days.iter().map(|d| json!({
+            "day": day_text(d.day),
+            "started": d.flows_started,
+            "completed": d.sessions_created,
+            "failed": d.failed_logins,
+            "active_accounts": d.accounts_active,
+            "passkey_accounts": d.accounts_with_passkey,
+            "mfa_accounts": d.accounts_with_mfa,
+            "mfa_setup": d.mfa_setup_completed,
+            "methods": {
+                "password": d.method_password,
+                "passkey": d.method_passkey,
+                "email_code": d.method_email_code,
+                "magic_link": d.method_magic_link,
+            },
+        })).collect::<Vec<_>>(),
+        "surges": r.surges.iter().map(|a| json!({
+            "day": day_text(a.day),
+            "failed": a.observed,
+            "baseline": a.baseline,
+        })).collect::<Vec<_>>(),
+    })
+}
+
+/// The delivery log view of one row: no event body (TN-136).
+fn delivery_view(d: &access_store::extensions::DeliveryLogRow) -> Json {
+    json!({
+        "event_id": d.event_id,
+        "event": d.event_type.strip_prefix("urn:suiss:access:event:").unwrap_or(&d.event_type),
+        "state": d.state,
+        "attempts": d.attempts,
+        "last_status": d.last_status,
+        "last_latency_ms": d.last_latency_ms,
+        "last_reason": d.last_reason,
+        "occurred_at": rfc3339(d.occurred_ms),
+        "queued_at": rfc3339(d.queued_ms),
+    })
+}
+
+/// A delivery log cursor: the queue time as stored and the event id.
+fn delivery_cursor(after: &str) -> Option<(&str, &str)> {
+    after.split_once('|')
 }
 
 #[cfg(test)]
@@ -1069,6 +1134,60 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                         .collect(),
                 }
             }
+            // §8.13, OP-151 m.7 (g), m.19 (e): no verifier report is stored yet, so none is listed
+            (Kind::Signals, _) => {
+                let now = t.server_time().await?;
+                let rows = t.transmitters().await?;
+                let transmitters: Vec<Json> = rows
+                    .iter()
+                    .filter(|r| !r.disabled)
+                    .map(|r| {
+                        json!({
+                            "name": r.issuer,
+                            "delayed_since": access_identity_events::domain::inbound::delayed_since(
+                                r.last_seen_ms,
+                                r.created_ms,
+                                r.expected_interval_s,
+                                now,
+                            ),
+                        })
+                    })
+                    .collect();
+                Read {
+                    items: vec![(json!({ "transmitters": transmitters, "verifiers": [] }), 0)],
+                    last: None,
+                }
+            }
+            // IDP-36, OP-151 m.14 (i): counters only, read in the realm's own transaction
+            (Kind::Analytics, _) => {
+                let today = u32::try_from(t.server_time().await? / 86_400_000)
+                    .map_err(|_| AdminError::Unavailable(String::from("time")))?;
+                let from = today.saturating_sub(ANALYTICS_DAYS.saturating_sub(1));
+                let report = access_identity_risk::app::analytics::read(t, from, today)
+                    .await
+                    .map_err(|_| AdminError::Unavailable(String::from("analytics")))?;
+                Read {
+                    items: vec![(analytics_view(&report), 0)],
+                    last: None,
+                }
+            }
+            // TN-136, OP-151 m.19 (e): only a webhook of this realm has a log
+            (Kind::Deliveries, Some(k)) => {
+                let Ok(id) = self.ids.decode(WEBHOOK_PREFIX, k) else {
+                    return Err(Invalid::NoWebhook.into());
+                };
+                if access_store::extensions::webhook(t, &id).await?.is_none() {
+                    return Err(Invalid::NoWebhook.into());
+                }
+                let rows = t
+                    .webhook_deliveries(&id, after.and_then(delivery_cursor), limit)
+                    .await?;
+                Read {
+                    last: full(&rows, limit, |d| format!("{}|{}", d.queued_at, d.event_id)),
+                    items: rows.iter().map(|d| (delivery_view(d), 0)).collect(),
+                }
+            }
+            (Kind::Deliveries, None) => Read::default(),
             (Kind::Settings, _) => {
                 let s = idp::settings(t).await?.ok_or(AdminError::NoRealm)?;
                 let p = resources::policies(t).await?;

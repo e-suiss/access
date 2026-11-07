@@ -1,0 +1,126 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT event_id, event_type, state, attempts, last_status, last_latency_ms,\n                      last_reason,\n                      (extract(epoch FROM occurred_at) * 1000)::bigint AS \"occurred_ms!\",\n                      (extract(epoch FROM created_at) * 1000)::bigint AS \"queued_ms!\",\n                      created_at::text AS \"queued_at!\"\n                 FROM access.idp_webhook_deliveries\n                WHERE tenant_id = $1 AND realm_id = $2 AND webhook_id = $3\n                  AND ($4::text IS NULL OR (created_at, event_id) < ($4::text::timestamptz, $5::text))\n                ORDER BY created_at DESC, event_id DESC\n                LIMIT $6",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "event_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.idp_webhook_deliveries",
+            "name": "event_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "event_type",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.idp_webhook_deliveries",
+            "name": "event_type"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "state",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.idp_webhook_deliveries",
+            "name": "state"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "attempts",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "access.idp_webhook_deliveries",
+            "name": "attempts"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "last_status",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "access.idp_webhook_deliveries",
+            "name": "last_status"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "last_latency_ms",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "access.idp_webhook_deliveries",
+            "name": "last_latency_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "last_reason",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.idp_webhook_deliveries",
+            "name": "last_reason"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "occurred_ms!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 8,
+        "name": "queued_ms!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 9,
+        "name": "queued_at!",
+        "type_info": "Text",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "1fdf521d422d32af581d39ef167f5dabb9fe0ecb78a429f5ace15945a90ca0df"
+}

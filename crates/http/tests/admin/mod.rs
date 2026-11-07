@@ -216,6 +216,13 @@ fn fake_item(kind: ResourceKind, key: &str, version: u64) -> Item {
                                        "url": "https://hooks.shop.example/h", "status": "active" }),
         ResourceKind::Webhooks => json!({ "webhook_id": key, "url": "https://sync.shop.example/w",
                                           "events": ["account.created"], "status": "active" }),
+        ResourceKind::Signals => {
+            json!({ "transmitters": [], "geoip": "not_configured", "verifiers": [] })
+        }
+        ResourceKind::Analytics => json!({ "days": [], "surges": [] }),
+        ResourceKind::Deliveries => {
+            json!({ "event_id": key, "event": "account.created", "state": "delivered" })
+        }
     };
     Item { body, version }
 }

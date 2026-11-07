@@ -264,6 +264,7 @@ async fn console(label: &str, with_adp: bool) -> Console {
             vault: access_identity_events::adapters::KekSealer(crate::login::RealmKeks::new(
                 w.keys.clone(),
             )),
+            geo: std::sync::Arc::new(access_identity_risk::adapters::NoGeoSource),
         },
         crate::admin::InProcessRoutes {
             oauth: oauth.clone(),
@@ -508,6 +509,53 @@ async fn the_console_signs_in_reads_and_writes_through_the_sequencer() {
     let etag = r.headers()[header::ETAG].to_str().unwrap().to_owned();
     let settings: serde_json::Value = serde_json::from_slice(&body).unwrap();
     assert!(settings.get("branding").is_some());
+
+    // §8.13, IDP-36, TN-136, OP-151 m.19 (e): signals state a missing GeoIP source, analytics
+    // are counts of the realm's own days, and an unknown webhook has no delivery log
+    let read = |target: &'static str| {
+        let proof = browser.ais(
+            domain,
+            &access_crypto::random::bytes::<16>().unwrap(),
+            read_intent(&Method::GET, target),
+            Mode::Check,
+            basis,
+        );
+        browser
+            .request(
+                &Method::GET,
+                &target.replacen("/admin/v1/", "/console/api/proxy/admin/", 1),
+                "",
+            )
+            .header("x-access-ais", proof)
+            .body(Body::empty())
+            .unwrap()
+    };
+    let (r, body) = send(&management, read("/admin/v1/realms/acme/signals")).await;
+    assert_eq!(
+        r.status(),
+        StatusCode::OK,
+        "{}",
+        String::from_utf8_lossy(&body)
+    );
+    let signals: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(signals["geoip"], "not_configured");
+    assert_eq!(signals["transmitters"], serde_json::json!([]));
+    assert_eq!(signals["verifiers"], serde_json::json!([]));
+    let (r, body) = send(&management, read("/admin/v1/realms/acme/analytics")).await;
+    assert_eq!(
+        r.status(),
+        StatusCode::OK,
+        "{}",
+        String::from_utf8_lossy(&body)
+    );
+    let analytics: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert!(analytics["days"].is_array() && analytics["surges"].is_array());
+    let (r, _) = send(
+        &management,
+        read("/admin/v1/realms/acme/webhooks/whk_unknown/deliveries"),
+    )
+    .await;
+    assert_eq!(r.status(), StatusCode::NOT_FOUND);
 
     // the cookie alone reads nothing (OP-151 m.3 (s))
     let (r, _) = send(

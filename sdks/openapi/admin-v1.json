@@ -5306,6 +5306,226 @@
         }
       }
     },
+    "/admin/v1/realms/{slug}/webhooks/{webhook_id}/deliveries": {
+      "get": {
+        "operationId": "listWebhookDeliveries",
+        "summary": "A webhook's delivery log, newest first: state, attempts and the last answer; never the event body.",
+        "tags": [
+          "realm"
+        ],
+        "security": [
+          {
+            "read_token": [
+              "realm.read"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Slug"
+          },
+          {
+            "name": "webhook_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            },
+            "description": "The resource's natural key."
+          },
+          {
+            "$ref": "#/components/parameters/PageSize"
+          },
+          {
+            "$ref": "#/components/parameters/Cursor"
+          },
+          {
+            "$ref": "#/components/parameters/Filter"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The resource.",
+            "headers": {
+              "Request-Id": {
+                "$ref": "#/components/headers/Request-Id"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "Link": {
+                "$ref": "#/components/headers/Link"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        },
+        "deprecated": false,
+        "x-access-surface": "realm",
+        "x-access-scope": "realm.read",
+        "x-access-visibility": "hidden"
+      }
+    },
+    "/admin/v1/realms/{slug}/signals": {
+      "get": {
+        "operationId": "getSignals",
+        "summary": "The realm's signal sources: delayed transmitters, the GeoIP source, verifier reports.",
+        "tags": [
+          "realm"
+        ],
+        "security": [
+          {
+            "read_token": [
+              "realm.read"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Slug"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The resource.",
+            "headers": {
+              "Request-Id": {
+                "$ref": "#/components/headers/Request-Id"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Signals"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        },
+        "deprecated": false,
+        "x-access-surface": "realm",
+        "x-access-scope": "realm.read",
+        "x-access-visibility": "hidden"
+      }
+    },
+    "/admin/v1/realms/{slug}/analytics": {
+      "get": {
+        "operationId": "getAnalytics",
+        "summary": "The realm's daily sign-in counts of the last 30 days and failed sign-in surges; never a decision input.",
+        "tags": [
+          "realm"
+        ],
+        "security": [
+          {
+            "read_token": [
+              "realm.read"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Slug"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The resource.",
+            "headers": {
+              "Request-Id": {
+                "$ref": "#/components/headers/Request-Id"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Analytics"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        },
+        "deprecated": false,
+        "x-access-surface": "realm",
+        "x-access-scope": "realm.read",
+        "x-access-visibility": "hidden"
+      }
+    },
     "/admin/v1/platform/intents": {
       "post": {
         "operationId": "draftPlatformIntent",
@@ -6572,6 +6792,160 @@
               "retired"
             ],
             "readOnly": true
+          }
+        }
+      },
+      "Signals": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "transmitters",
+          "geoip",
+          "verifiers"
+        ],
+        "description": "The realm's signal sources (§8.13): a delayed source is stated, never hidden, and decisions keep using declared validity windows.",
+        "properties": {
+          "transmitters": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "name",
+                "delayed_since"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "description": "The transmitter's issuer."
+                },
+                "delayed_since": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "minimum": 0,
+                  "description": "Since when it is delayed, Unix ms; null while on time (OP-151 m.7 (g))."
+                }
+              }
+            }
+          },
+          "geoip": {
+            "type": "string",
+            "enum": [
+              "configured",
+              "not_configured",
+              "unreadable"
+            ],
+            "description": "The GeoIP source; without one geographic signals are unavailable (OP-151 m.3 (o))."
+          },
+          "verifiers": {
+            "type": "array",
+            "description": "Verifier reports past their declared window; none is stored yet.",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "name",
+                "declared_until"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "description": "The verifier."
+                },
+                "declared_until": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "description": "Unix ms."
+                }
+              }
+            }
+          }
+        }
+      },
+      "Analytics": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "days",
+          "surges"
+        ],
+        "description": "Daily sign-in counts of the last 30 days and failed sign-in surges (IDP-36): counters only, never a decision input.",
+        "properties": {
+          "days": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "description": "`day` (YYYY-MM-DD, UTC), `started`, `completed`, `failed`, `active_accounts`, `passkey_accounts`, `mfa_accounts`, `mfa_setup` and `methods` (sessions by method)."
+            }
+          },
+          "surges": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "description": "`day`, `failed` (that day) and `baseline` (the day before)."
+            }
+          }
+        }
+      },
+      "WebhookDelivery": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "One delivery of a webhook's log (TN-136); the event body is never read back. An item of `listWebhookDeliveries`.",
+        "properties": {
+          "event_id": {
+            "type": "string",
+            "description": "The event id: the dedup key and `webhook-id`."
+          },
+          "event": {
+            "type": "string",
+            "description": "The event name of the catalogue (OP-151 m.3 (i))."
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "delivered",
+              "exhausted",
+              "failed"
+            ]
+          },
+          "attempts": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "last_status": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "last_latency_ms": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "last_reason": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "status",
+              "unreachable",
+              "refused",
+              "retired",
+              "unsigned",
+              null
+            ]
+          },
+          "occurred_at": {
+            "$ref": "#/components/schemas/Time"
+          },
+          "queued_at": {
+            "$ref": "#/components/schemas/Time"
           }
         }
       },

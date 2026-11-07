@@ -752,6 +752,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/v1/realms/{slug}/webhooks/{webhook_id}/deliveries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A webhook's delivery log, newest first: state, attempts and the last answer; never the event body. */
+        get: operations["listWebhookDeliveries"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/v1/realms/{slug}/signals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The realm's signal sources: delayed transmitters, the GeoIP source, verifier reports. */
+        get: operations["getSignals"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/v1/realms/{slug}/analytics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The realm's daily sign-in counts of the last 30 days and failed sign-in surges; never a decision input. */
+        get: operations["getAnalytics"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/v1/platform/intents": {
         parameters: {
             query?: never;
@@ -1031,6 +1082,48 @@ export interface components {
             signing?: "ed25519" | "hmac";
             /** @enum {string} */
             readonly status?: "active" | "retired";
+        };
+        /** @description The realm's signal sources (§8.13): a delayed source is stated, never hidden, and decisions keep using declared validity windows. */
+        Signals: {
+            transmitters: {
+                /** @description The transmitter's issuer. */
+                name: string;
+                /** @description Since when it is delayed, Unix ms; null while on time (OP-151 m.7 (g)). */
+                delayed_since: number | null;
+            }[];
+            /**
+             * @description The GeoIP source; without one geographic signals are unavailable (OP-151 m.3 (o)).
+             * @enum {string}
+             */
+            geoip: "configured" | "not_configured" | "unreadable";
+            /** @description Verifier reports past their declared window; none is stored yet. */
+            verifiers: {
+                /** @description The verifier. */
+                name: string;
+                /** @description Unix ms. */
+                declared_until: number;
+            }[];
+        };
+        /** @description Daily sign-in counts of the last 30 days and failed sign-in surges (IDP-36): counters only, never a decision input. */
+        Analytics: {
+            days: Record<string, never>[];
+            surges: Record<string, never>[];
+        };
+        /** @description One delivery of a webhook's log (TN-136); the event body is never read back. An item of `listWebhookDeliveries`. */
+        WebhookDelivery: {
+            /** @description The event id: the dedup key and `webhook-id`. */
+            event_id?: string;
+            /** @description The event name of the catalogue (OP-151 m.3 (i)). */
+            event?: string;
+            /** @enum {string} */
+            state?: "pending" | "delivered" | "exhausted" | "failed";
+            attempts?: number;
+            last_status?: number | null;
+            last_latency_ms?: number | null;
+            /** @enum {string|null} */
+            last_reason?: "status" | "unreachable" | "refused" | "retired" | "unsigned" | null;
+            occurred_at?: components["schemas"]["Time"];
+            queued_at?: components["schemas"]["Time"];
         };
         /** @description The realm's settings: JOSE algorithm, Argon2, RP ID, CIMD, sign-in requirements (TN-132), console session policy (TN-129), branding (TN-106), mappers (TN-117) and the extension policy (`allow_private_targets`, `hook_disclosure`; OP-151 m.10 (e)). */
         Settings: Record<string, never>;
@@ -3936,6 +4029,114 @@ export interface operations {
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
             422: components["responses"]["Unprocessable"];
+            429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    listWebhookDeliveries: {
+        parameters: {
+            query?: {
+                "page[size]"?: components["parameters"]["PageSize"];
+                /** @description Opaque; from the `Link` of the previous page. */
+                cursor?: components["parameters"]["Cursor"];
+                /** @description SCIM filter subset: eq, ne, co, sw, pr, and, or, parentheses; an attribute the endpoint does not name is 400 (TN-112). */
+                filter?: components["parameters"]["Filter"];
+            };
+            header?: {
+                /** @description W3C Trace Context; its trace id becomes `Request-Id`. */
+                traceparent?: components["parameters"]["Traceparent"];
+            };
+            path: {
+                slug: components["parameters"]["Slug"];
+                /** @description The resource's natural key. */
+                webhook_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The resource. */
+            200: {
+                headers: {
+                    "Request-Id": components["headers"]["Request-Id"];
+                    "RateLimit-Policy": components["headers"]["RateLimit-Policy"];
+                    RateLimit: components["headers"]["RateLimit"];
+                    Link: components["headers"]["Link"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    getSignals: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description W3C Trace Context; its trace id becomes `Request-Id`. */
+                traceparent?: components["parameters"]["Traceparent"];
+            };
+            path: {
+                slug: components["parameters"]["Slug"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The resource. */
+            200: {
+                headers: {
+                    "Request-Id": components["headers"]["Request-Id"];
+                    "RateLimit-Policy": components["headers"]["RateLimit-Policy"];
+                    RateLimit: components["headers"]["RateLimit"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Signals"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    getAnalytics: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description W3C Trace Context; its trace id becomes `Request-Id`. */
+                traceparent?: components["parameters"]["Traceparent"];
+            };
+            path: {
+                slug: components["parameters"]["Slug"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The resource. */
+            200: {
+                headers: {
+                    "Request-Id": components["headers"]["Request-Id"];
+                    "RateLimit-Policy": components["headers"]["RateLimit-Policy"];
+                    RateLimit: components["headers"]["RateLimit"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Analytics"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
             429: components["responses"]["TooManyRequests"];
             503: components["responses"]["Unavailable"];
         };

@@ -183,6 +183,78 @@ fn schemas() -> Value {
                 "status": { "type": "string", "enum": ["active", "retired"], "readOnly": true },
             },
         },
+        "Signals": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["transmitters", "geoip", "verifiers"],
+            "description": "The realm's signal sources (§8.13): a delayed source is stated, never hidden, and decisions keep using declared validity windows.",
+            "properties": {
+                "transmitters": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": ["name", "delayed_since"],
+                        "properties": {
+                            "name": text("The transmitter's issuer."),
+                            "delayed_since": { "type": ["integer", "null"], "minimum": 0, "description": "Since when it is delayed, Unix ms; null while on time (OP-151 m.7 (g))." },
+                        },
+                    },
+                },
+                "geoip": { "type": "string", "enum": ["configured", "not_configured", "unreadable"], "description": "The GeoIP source; without one geographic signals are unavailable (OP-151 m.3 (o))." },
+                "verifiers": {
+                    "type": "array",
+                    "description": "Verifier reports past their declared window; none is stored yet.",
+                    "items": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": ["name", "declared_until"],
+                        "properties": {
+                            "name": text("The verifier."),
+                            "declared_until": { "type": "integer", "minimum": 0, "description": "Unix ms." },
+                        },
+                    },
+                },
+            },
+        },
+        "Analytics": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["days", "surges"],
+            "description": "Daily sign-in counts of the last 30 days and failed sign-in surges (IDP-36): counters only, never a decision input.",
+            "properties": {
+                "days": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "description": "`day` (YYYY-MM-DD, UTC), `started`, `completed`, `failed`, `active_accounts`, `passkey_accounts`, `mfa_accounts`, `mfa_setup` and `methods` (sessions by method).",
+                    },
+                },
+                "surges": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "description": "`day`, `failed` (that day) and `baseline` (the day before).",
+                    },
+                },
+            },
+        },
+        "WebhookDelivery": {
+            "type": "object",
+            "additionalProperties": false,
+            "description": "One delivery of a webhook's log (TN-136); the event body is never read back. An item of `listWebhookDeliveries`.",
+            "properties": {
+                "event_id": text("The event id: the dedup key and `webhook-id`."),
+                "event": text("The event name of the catalogue (OP-151 m.3 (i))."),
+                "state": { "type": "string", "enum": ["pending", "delivered", "exhausted", "failed"] },
+                "attempts": { "type": "integer", "minimum": 0 },
+                "last_status": { "type": ["integer", "null"] },
+                "last_latency_ms": { "type": ["integer", "null"] },
+                "last_reason": { "type": ["string", "null"], "enum": ["status", "unreachable", "refused", "retired", "unsigned", null] },
+                "occurred_at": r("schemas", "Time"),
+                "queued_at": r("schemas", "Time"),
+            },
+        },
         "Settings": {
             "type": "object",
             "description": "The realm's settings: JOSE algorithm, Argon2, RP ID, CIMD, sign-in requirements (TN-132), console session policy (TN-129), branding (TN-106), mappers (TN-117) and the extension policy (`allow_private_targets`, `hook_disclosure`; OP-151 m.10 (e)).",
@@ -471,6 +543,9 @@ fn body_of(row: &Route) -> &'static str {
             ResourceKind::Settings => "Settings",
             ResourceKind::Hooks => "Hook",
             ResourceKind::Webhooks => "Webhook",
+            ResourceKind::Signals => "Signals",
+            ResourceKind::Analytics => "Analytics",
+            ResourceKind::Deliveries => "Page",
         },
         _ => "ExerciseRef",
     }

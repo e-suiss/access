@@ -1032,6 +1032,7 @@ async fn serve(
     let admin_targets = prepared.outbound.declared();
     let console_assets = prepared.console_assets;
     let admin_outbound = prepared.outbound.clone();
+    let admin_geo = risk_services.geo.clone();
     // OP-146 m.5 (f): today's day partitions exist before anything writes to them
     jobs::open_now(&all.app, &all.archive, &holder()?).await;
     let background = Background::start(
@@ -1152,6 +1153,7 @@ async fn serve(
             platform: config.suiss.as_ref().and_then(|s| s.platform_realm.clone()),
             outbound: admin_outbound,
             vault: access_identity_events::adapters::KekSealer(admin_keks),
+            geo: admin_geo,
         },
         admin::InProcessRoutes {
             oauth: authorize.clone(),

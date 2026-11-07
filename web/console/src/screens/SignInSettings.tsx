@@ -28,7 +28,7 @@ interface Signals {
     readonly name: string;
     readonly delayed_since?: number | null;
   }[];
-  readonly geoip?: "configured" | "not_configured";
+  readonly geoip?: "configured" | "not_configured" | "unreadable";
   readonly verifiers?: readonly { readonly name: string; readonly declared_until: number }[];
 }
 
@@ -72,7 +72,8 @@ function Status({ ctx }: { readonly ctx: Ctx }): ReactElement {
             {t("signalsDelayed", { provider: x.name, since: at(x.delayed_since) })}
           </p>
         ))}
-      {s.geoip === "not_configured" && (
+      {/* OP-151 m.3 (o): a source that is missing or cannot be read is stated */}
+      {s.geoip !== undefined && s.geoip !== "configured" && (
         <p role="status" className="banner">
           <strong>{t("geoipMissing")}</strong> — {t("geoipMissingText")}
         </p>

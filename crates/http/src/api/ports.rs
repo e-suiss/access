@@ -222,6 +222,12 @@ pub enum ResourceKind {
     Hooks,
     /// Webhooks, by `webhook_id` (TN-136).
     Webhooks,
+    /// The realm's signal sources singleton (§8.13).
+    Signals,
+    /// The realm's sign-in analytics singleton (IDP-36).
+    Analytics,
+    /// One webhook's delivery log, by `webhook_id` (TN-136).
+    Deliveries,
 }
 
 impl ResourceKind {
@@ -236,6 +242,9 @@ impl ResourceKind {
             Self::Settings => "settings",
             Self::Hooks => "hooks",
             Self::Webhooks => "webhooks",
+            Self::Signals => "signals",
+            Self::Analytics => "analytics",
+            Self::Deliveries => "deliveries",
         }
     }
 }
