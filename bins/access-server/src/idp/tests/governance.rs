@@ -55,7 +55,7 @@ async fn idp_commits_carry_the_sessions_actor_binding() {
     onboard(&w.plane, d, ALICE, ALICE_KEY).await;
     let mut t = TenantTx::begin(&w.db.app, tenant, realm).await.unwrap();
     let root_subject = t
-        .insert_subject("staged", "realm-kek:1", &[9; 40])
+        .insert_subject("active", "realm-kek:1", &[9; 40])
         .await
         .unwrap();
     let alice_subject = t

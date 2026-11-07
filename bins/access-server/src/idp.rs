@@ -241,6 +241,16 @@ where
         };
         self.commit(request, s.ais, s.pep).await
     }
+
+    async fn signer(&self, domain: Digest, ais: &[u8]) -> Result<Option<Id>, Unavailable> {
+        match self.domains.signer_party(domain, ais).await {
+            Ok(party) => Ok(party),
+            Err(e) => match verdict(&e) {
+                Err(u) => Err(u),
+                Ok(_) => Ok(None),
+            },
+        }
+    }
 }
 
 impl<K, B, S, C> Plane<K, B, S, C>

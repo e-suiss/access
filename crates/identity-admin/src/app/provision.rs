@@ -199,6 +199,9 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             .intent(&slug, order.validity)
             .map_err(|_| AdminError::Encode)?;
         let digest = intent_digest(&intent).map_err(|_| AdminError::Encode)?;
+        // §13.4 G54, TN-49
+        self.standing((p.tenant, p.realm), Digest(*domain.as_bytes()), &ais, None)
+            .await?;
         let verdict = self
             .decider
             .decide(Submission {

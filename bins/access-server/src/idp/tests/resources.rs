@@ -476,6 +476,64 @@ async fn an_account_becomes_a_canary_through_commit() {
     ));
 }
 
+// §13.4 G54, §12.3.1, TN-49, OP-150 m.11 (f): a write signed by an Instance of a Party whose
+// account in the realm is suspended, locked or deactivated is refused before a decision, with
+// or without a session naming that account; while the account is active, and for a Party bound
+// to no account of the realm (the operator's root), the write goes on
+#[tokio::test]
+async fn a_party_whose_account_cannot_act_changes_nothing() {
+    let (w, at, d) = ready("standing").await;
+    let client = Change::ClientRegister(new_client(&w).await);
+    written(&run(&w, at, d, client, 1).await.unwrap());
+
+    let mut t = TenantTx::begin(&w.db.app, at.0, at.1).await.unwrap();
+    let subject = t.insert_subject("active", "kek-1", &[1; 40]).await.unwrap();
+    assert!(
+        access_store::idp::bind_subject_party(&mut t, &subject, &ROOT.0)
+            .await
+            .unwrap()
+    );
+    t.commit().await.unwrap();
+    let client = Change::ClientRegister(new_client(&w).await);
+    written(&run(&w, at, d, client, 2).await.unwrap());
+
+    let mut nonce = 3;
+    for (from, to) in [
+        ("active", "suspended"),
+        ("suspended", "active"),
+        ("active", "locked"),
+        ("locked", "deactivated"),
+    ] {
+        let mut t = TenantTx::begin(&w.db.app, at.0, at.1).await.unwrap();
+        assert!(t.set_subject_status(subject, from, to).await.unwrap());
+        t.commit().await.unwrap();
+        for session in [None, Some(subject)] {
+            let client = Change::ClientRegister(new_client(&w).await);
+            let mut p = proposal(at, client, nonce, idp_anchor(d), 1);
+            p.subject = session;
+            nonce += 1;
+            let answer = exercise(&w, &p, ROOT_KEY).await;
+            if to == "active" {
+                written(&answer.unwrap());
+            } else {
+                assert!(
+                    matches!(&answer, Err(AdminError::Refused(code)) if code == "actor-binding"),
+                    "{to}: {answer:?}"
+                );
+            }
+        }
+    }
+    let mut t = TenantTx::begin(&w.db.app, at.0, at.1).await.unwrap();
+    assert!(
+        t.set_subject_status(subject, "deactivated", "active")
+            .await
+            .unwrap()
+    );
+    t.commit().await.unwrap();
+    let client = Change::ClientRegister(new_client(&w).await);
+    written(&run(&w, at, d, client, nonce).await.unwrap());
+}
+
 // OP-150 m.11 (b), TN-61: account deletion, realm rehoming and reset intents are declared and
 // never compiled into a change here
 #[test]

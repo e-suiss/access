@@ -6,6 +6,8 @@ use std::future::Future;
 pub use access_identity_signer::issuer::Registration as IssuerAis;
 use access_internal_api::idp::{GenesisOpened, GenesisOrder, Submission, Unavailable, Verdict};
 use access_internal_api::instances::{Registration, RegistrationVerdict};
+use access_kernel::digest::Digest;
+use access_kernel::model::Id;
 use access_kernel::verify::cose::PublicKey;
 use access_store::identity::RealmId;
 use suiss_crypto::rotation::Policy;
@@ -19,6 +21,14 @@ pub trait Decider: Send + Sync {
         &self,
         submission: Submission,
     ) -> impl Future<Output = Result<Verdict, Unavailable>> + Send;
+
+    /// The Party whose live Instance key in `domain` signed `ais` (§13.4 G54); `None` when no
+    /// live Instance of the domain holds that key.
+    fn signer(
+        &self,
+        domain: Digest,
+        ais: &[u8],
+    ) -> impl Future<Output = Result<Option<Id>, Unavailable>> + Send;
 }
 
 /// The keys of a realm that live outside the database (OP-146 m.16 (m), m.15 (e), m.7 (b)):

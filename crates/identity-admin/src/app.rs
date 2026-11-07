@@ -532,6 +532,8 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
     pub async fn apply(&self, p: &Proposal, ais: Vec<u8>) -> Result<Applied, AdminError> {
         let prepared = self.prepared(p, false).await?;
         let actor = self.actor(p).await?;
+        self.standing((p.tenant, p.realm), prepared.domain, &ais, actor)
+            .await?;
         let verdict = self
             .decider
             .decide(Submission {
@@ -651,6 +653,49 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
         party
             .map(|p| Some(Id(p)))
             .ok_or_else(|| AdminError::Refused(String::from(ACTOR_BINDING)))
+    }
+
+    /// The Party that signs a change in `(tenant, realm)` stands only while its account there
+    /// can act (§13.4 G54, §12.3.1, TN-49): a Party bound to a suspended, locked or deleted
+    /// account changes nothing, whether a session or an Instance key alone asks. A Party bound
+    /// to no account of the realm, such as the operator's root, is not narrowed here (OP-150
+    /// m.11 (f)); a key no live Instance holds is the authority plane's to refuse.
+    ///
+    /// # Errors
+    /// [`AdminError::Refused`] with `actor-binding`; [`AdminError`].
+    pub async fn standing(
+        &self,
+        (tenant, realm): (TenantId, RealmId),
+        domain: Digest,
+        ais: &[u8],
+        actor: Option<Id>,
+    ) -> Result<(), AdminError> {
+        let party = match actor {
+            Some(party) => Some(party),
+            None => self
+                .decider
+                .signer(domain, ais)
+                .await
+                .map_err(|e| AdminError::Unavailable(e.0))?,
+        };
+        let Some(party) = party else {
+            return Ok(());
+        };
+        let mut t = TenantTx::begin(self.app, tenant, realm).await?;
+        let status = match idp::party_subject(&mut t, &party.0).await? {
+            Some(subject) => Some(resources::account(&mut t, subject).await?.map(|a| a.status)),
+            None => None,
+        };
+        t.commit().await?;
+        match status {
+            None => Ok(()),
+            Some(Some(s))
+                if AccountStatus::parse(&s).is_some_and(AccountStatus::can_authenticate) =>
+            {
+                Ok(())
+            }
+            Some(_) => Err(AdminError::Refused(String::from(ACTOR_BINDING))),
+        }
     }
 
     /// What follows a written change outside the database: a new JOSE algorithm reaches the
