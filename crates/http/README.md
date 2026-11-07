@@ -46,8 +46,10 @@ realm's governing domain, and compiles to exactly one `idp.*` Exercise. A write 
 | Groups | `groups`, `groups/{name}`, `…/retire`, `…/members`, `…/members/remove` |
 | Accounts | `accounts`, `accounts/{account_id}`, `…/suspend`, `…/reactivate`, `…/canary` |
 | Upstream identity providers | `upstream-idps`, `upstream-idps/{name}`, `…/retire` |
-| Settings | `settings`, `settings/signin-policy`, `settings/session-policy`, `settings/branding`, `settings/rp-id`, `settings/jose-alg`, `settings/cimd-policy`, `settings/protection-mode` |
+| Settings | `settings`, `settings/signin-policy`, `settings/session-policy`, `settings/branding`, `settings/rp-id`, `settings/jose-alg`, `settings/cimd-policy`, `settings/protection-mode`, `settings/extension-policy` |
 | Mappers | `mappers/{claim}` |
+| Inline hooks | `hooks`, `hooks/{hook_id}`, `…/retire` |
+| Webhooks | `webhooks`, `webhooks/{webhook_id}`, `…/rotate`, `…/retire` |
 | Bulk jobs | `jobs`, `jobs/{job_id}`, `jobs/{job_id}/items` |
 | Reserved | `accounts/{account_id}/delete`, `accounts/{account_id}/reset-intents`, `rehome` |
 
@@ -67,6 +69,16 @@ Tightening the protection mode (monitor to enforce, a later SL2 stage, more deni
 `idp.realm.protection_mode`; a change that loosens anything is `idp.realm.protection_mode_loosen`,
 a higher tier. Brute-force protection is always enforced. Reserved routes check the caller's AIS
 and answer `501 reserved-operation`; nothing is applied.
+
+A hook or webhook is registered with `POST hooks` or `POST webhooks`; the draft assigns its
+`hok_…` or `whk_…` id, and the answer shows its `verification_key` once: the `whpk_…` Ed25519
+public key (default) or the `whsec_…` HMAC secret its receiver verifies requests with. A realm
+has at most one live hook per call point; changing a hook's URL is a retirement and a new
+registration. Targets are `https` on a public DNS name and port 443. The extension policy
+(`allow_private_targets`, `hook_disclosure`) is off by default; with `allow_private_targets` a
+hook or webhook may also target a local name or another port, but only at a URL the operator
+declared. A hook receives the account's e-mail only when it asks for it at `pre_registration`
+and `hook_disclosure` permits `email`.
 
 ### Platform resources
 

@@ -76,7 +76,8 @@ the staleness view.
 
 ## Webhooks
 
-A realm's administrator registers a webhook (an HTTPS URL and the events it wants). Access then
+A realm's administrator registers a webhook (an HTTPS URL and the events it wants) through the
+management API's `webhooks` resource, as an `idp.webhook.register` decision. Access then
 delivers every matching event to that URL.
 
 ### What a delivery looks like
