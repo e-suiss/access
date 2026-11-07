@@ -819,6 +819,7 @@ async fn the_ledger_indexes_held_claims_and_quota_notices() {
         deriver: db.deriver.clone(),
         signer: None,
         api_base: "https://api.example".to_owned(),
+        analysis: std::sync::Arc::new(access_authority_core::ports::NoAnalysis),
     });
     let held = signed(&kyc(d, BOB, 1), BOB_KEY);
     let first = domains.record(held.clone(), false).await.unwrap();

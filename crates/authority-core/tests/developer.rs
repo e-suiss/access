@@ -990,3 +990,57 @@ async fn revocation_and_compromise_impact_are_derived() {
         .unwrap();
     assert!(empty.exercises.is_empty());
 }
+
+/// A control-plane analysis that proves every change narrowing.
+struct Narrows;
+
+impl access_authority_core::ports::PolicyAnalysis for Narrows {
+    fn compare<'a>(
+        &'a self,
+        _: &'a str,
+        _: &'a str,
+        _: &'a str,
+    ) -> access_authority_core::ports::Comparing<'a> {
+        Box::pin(std::future::ready(
+            access_authority_core::ports::PolicyRelation::Narrowing,
+        ))
+    }
+}
+
+// OP-105, §5.8: the policy change-impact report asks the analysis the core was given, not a
+// fixed "unknown"
+#[tokio::test]
+async fn op_105_the_change_impact_report_asks_the_wired_analysis() {
+    let db = fresh().await.unwrap();
+    let (core, d) = ready(&db).await;
+    let mut core = core.with_analysis(std::sync::Arc::new(Narrows));
+    let candidate = Value::Map(vec![
+        (Value::text("schema"), Value::text(meta::RESTRICTION_SCHEMA)),
+        (
+            Value::text("source"),
+            Value::text(r#"@id("all") forbid(principal, action, resource);"#),
+        ),
+    ]);
+    let query = Query::ChangeImpact(Change::Policy {
+        policy: None,
+        candidate: suiss_crypto::dcbor::encode(&candidate, suiss_crypto::dcbor::Limits::CEILING)
+            .unwrap(),
+    });
+    let found = core
+        .search(
+            &incoming(search_request(d, 70, "change-impact"), ROOT_KEY),
+            &query,
+            None,
+            NOW,
+        )
+        .await
+        .unwrap();
+    assert!(matches!(
+        found.hits.as_slice(),
+        [Hit::Report(r)] if matches!(
+            &**r,
+            Report::PolicyChange(c)
+                if c.relation == access_authority_core::ports::PolicyRelation::Narrowing
+        )
+    ));
+}

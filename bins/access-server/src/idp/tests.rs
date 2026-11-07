@@ -130,6 +130,7 @@ fn plane(db: &TestDb) -> TestPlane {
         deriver: db.deriver.clone(),
         signer: None,
         api_base: String::from("https://access.test"),
+        analysis: std::sync::Arc::new(access_authority_core::ports::NoAnalysis),
     }));
     Plane::new(domains, db.app.clone(), Fixed, actors)
 }

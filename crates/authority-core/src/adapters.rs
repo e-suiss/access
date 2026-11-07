@@ -367,6 +367,10 @@ pub struct Setup<K, B, S, C> {
     /// The deployment's API base: the address a domain's Token Status Lists are served under,
     /// and the `uri` a token's `status` claim names (OP-150 m.10 (b)).
     pub api_base: String,
+    /// The control-plane analysis of restriction policy changes (OP-105); a process without the
+    /// pinned, sandboxed solver passes [`crate::ports::NoAnalysis`] and every policy preview
+    /// answers `unknown`.
+    pub analysis: Arc<dyn crate::ports::PolicyAnalysis>,
 }
 
 struct Led<B: Binding, S: Salts, C> {
@@ -507,7 +511,8 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
         let signer_open = false;
         Ok(Led {
             core: Authority::new(leader, reader, s.binding.clone(), s.salts.clone(), domain)
-                .with_pseudonyms(pseudonyms),
+                .with_pseudonyms(pseudonyms)
+                .with_analysis(s.analysis.clone()),
             clock: s.clock.clone(),
             tokens,
             signer_open,
@@ -590,7 +595,7 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
             .await
     }
 
-    /// A `policy.set` preview on `domain` with the control-plane analysis `analysis` (§5.8,
+    /// A `policy.set` preview on `domain` with the control-plane analysis of the setup (§5.8,
     /// OP-105); the caller must be one of the domain's auditors.
     ///
     /// # Errors
@@ -602,14 +607,15 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
         caller: Id,
         policy: Option<Id>,
         candidate: &Value,
-        analysis: &impl crate::ports::PolicyAnalysis,
     ) -> Result<crate::app::impact::PolicyChange, CoreError> {
         let (guard, now) = self.led_now(domain).await?;
         let led = guard.as_ref().ok_or(CoreError::Unavailable("leader"))?;
         if !led.core.audits(&caller, now).await? {
             return Err(CoreError::Protocol("lab-scope"));
         }
-        led.core.change_policy(policy, candidate, analysis).await
+        led.core
+            .change_policy(policy, candidate, self.setup.analysis.as_ref())
+            .await
     }
 
     /// Offers `published` to each of `domains` (§8.17.10.2, E10): kept in each domain's scope,

@@ -204,16 +204,14 @@ impl PolicyRelation {
     }
 }
 
+/// The relation a [`PolicyAnalysis`] answers, boxed so the port can be shared.
+pub type Comparing<'a> = std::pin::Pin<Box<dyn Future<Output = PolicyRelation> + Send + 'a>>;
+
 /// The control-plane SMT analysis of restriction policy changes (OP-105): never on the request
-/// path, wired by the binary that holds the pinned solver.
+/// path, wired by the binary that holds the pinned solver ([`crate::adapters::Setup`]).
 pub trait PolicyAnalysis: Send + Sync {
     /// The relation of `new` to `old`, both written against `schema`.
-    fn compare(
-        &self,
-        schema: &str,
-        old: &str,
-        new: &str,
-    ) -> impl Future<Output = PolicyRelation> + Send;
+    fn compare<'a>(&'a self, schema: &'a str, old: &'a str, new: &'a str) -> Comparing<'a>;
 }
 
 /// No analysis is wired: every change is [`PolicyRelation::Unknown`].
@@ -221,14 +219,9 @@ pub trait PolicyAnalysis: Send + Sync {
 pub struct NoAnalysis;
 
 impl PolicyAnalysis for NoAnalysis {
-    fn compare(
-        &self,
-        schema: &str,
-        old: &str,
-        new: &str,
-    ) -> impl Future<Output = PolicyRelation> + Send {
+    fn compare<'a>(&'a self, schema: &'a str, old: &'a str, new: &'a str) -> Comparing<'a> {
         let _ = (schema, old, new);
-        std::future::ready(PolicyRelation::Unknown)
+        Box::pin(std::future::ready(PolicyRelation::Unknown))
     }
 }
 

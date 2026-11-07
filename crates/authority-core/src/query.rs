@@ -374,7 +374,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                     suiss_crypto::dcbor::decode(candidate, suiss_crypto::dcbor::Limits::CEILING)
                         .map_err(|_| CoreError::Protocol("candidate"))?;
                 vec![Report::PolicyChange(
-                    self.change_policy(*policy, &content, &crate::ports::NoAnalysis)
+                    self.change_policy(*policy, &content, self.analysis.as_ref())
                         .await?,
                 )]
             }

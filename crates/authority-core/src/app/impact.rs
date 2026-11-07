@@ -548,7 +548,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         &self,
         policy: Option<Id>,
         candidate: &Value,
-        analysis: &impl PolicyAnalysis,
+        analysis: &dyn PolicyAnalysis,
     ) -> Result<PolicyChange, CoreError> {
         let refused = crate::restrict::compile(candidate).err();
         let source = |v: &Value| match v.get("source") {

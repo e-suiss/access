@@ -141,6 +141,7 @@ fn process(
         deriver: db.deriver.clone(),
         signer,
         api_base: String::from("https://access.test"),
+        analysis: std::sync::Arc::new(access_authority_core::ports::NoAnalysis),
     }));
     let plane = Plane::new(
         domains.clone(),

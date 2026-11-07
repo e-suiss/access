@@ -371,6 +371,8 @@ async fn seed(
         deriver: all.deriver.clone(),
         signer: config.signer.clone(),
         api_base: config.issuer.clone().ok_or("no issuer")?,
+        // OP-105
+        analysis: Arc::new(access_authority_core::ports::NoAnalysis),
     }));
     let plane = idp::Plane::new(
         domains.clone(),
@@ -1092,6 +1094,8 @@ async fn serve(
         deriver,
         signer: config.signer.clone(),
         api_base: issuer.clone(),
+        // OP-105
+        analysis: Arc::new(access_authority_core::ports::NoAnalysis),
     }));
     // OP-150 L2, CMP-8
     let (renewing, courier) = claims::start(signer(), &platform_pools, domains.clone(), renew);

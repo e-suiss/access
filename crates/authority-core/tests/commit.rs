@@ -694,6 +694,7 @@ fn process(db: &TestDb, holder: &str, keys: Vec<Digest>) -> Domains<Listed, Boun
         deriver: db.deriver.clone(),
         signer: None,
         api_base: API.to_owned(),
+        analysis: std::sync::Arc::new(access_authority_core::ports::NoAnalysis),
     })
 }
 
@@ -3452,6 +3453,7 @@ fn signing_process(
         deriver: db.deriver.clone(),
         signer: Some(socket.to_path_buf()),
         api_base: API.to_owned(),
+        analysis: std::sync::Arc::new(access_authority_core::ports::NoAnalysis),
     })
 }
 
@@ -3633,6 +3635,7 @@ async fn an_allow_carries_a_signed_receipt() {
         deriver: db.deriver.clone(),
         signer: Some(socket.clone()),
         api_base: API.to_owned(),
+        analysis: std::sync::Arc::new(access_authority_core::ports::NoAnalysis),
     });
     let public_basis = ExerciseBasis::Public(meta::object_id(&d, kind::GRANT, 0));
     for (nonce, payload) in [
@@ -6115,6 +6118,7 @@ fn moving_process(
         deriver: db.deriver.clone(),
         signer: None,
         api_base: API.to_owned(),
+        analysis: std::sync::Arc::new(access_authority_core::ports::NoAnalysis),
     })
 }
 

@@ -171,6 +171,7 @@ pub struct Authority<L: DomainLog, R: Reader, B: Binding, S: Salts> {
     catalog: Catalog,
     past: Option<Past>,
     pseudonyms: Option<access_crypto::pseudonym::PseudonymKey>,
+    pub(crate) analysis: std::sync::Arc<dyn crate::ports::PolicyAnalysis>,
 }
 
 /// The rebuilt decision of an explanation as a trace event (§9.7.1, §9.16.3): operator
@@ -299,7 +300,19 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             catalog: Catalog::default(),
             past: None,
             pseudonyms: None,
+            analysis: std::sync::Arc::new(crate::ports::NoAnalysis),
         }
+    }
+
+    /// The control-plane analysis a policy change preview asks (OP-105); without one every
+    /// change is [`crate::ports::PolicyRelation::Unknown`].
+    #[must_use]
+    pub fn with_analysis(
+        mut self,
+        analysis: std::sync::Arc<dyn crate::ports::PolicyAnalysis>,
+    ) -> Self {
+        self.analysis = analysis;
+        self
     }
 
     /// The domain's pseudonym key; without one, a projection that names a Party is refused
