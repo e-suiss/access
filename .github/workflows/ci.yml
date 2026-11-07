@@ -444,3 +444,29 @@ jobs:
             web/console/playwright-report
             web/login/playwright-report
           retention-days: 7
+
+  # OP-68, F-6, F-7: the main image is built, pushed and signed only after every check above passed
+  image:
+    name: image
+    needs:
+      - fast
+      - test
+      - smt
+      - lean
+      - cross
+      - supply-chain
+      - secrets
+      - sandbox
+      - uniffi-kotlin
+      - uniffi-swift
+      - bench-instructions
+      - web
+      - bindings-gate
+      - web-e2e
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    uses: ./.github/workflows/image.yml

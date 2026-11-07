@@ -1,10 +1,9 @@
 # OP-68, F-6, F-7, OP-49, OP-69
 name: Image
 
+# OP-68: called by CI on main once every check passed, so no image is pushed or signed before
 on:
-  push:
-    branches: [main]
-  workflow_dispatch:
+  workflow_call:
 
 permissions: {}
 
