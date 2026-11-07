@@ -71,14 +71,22 @@ name = "access-cli"
 version = "0.3.1"
 dependencies = [
  "access-crypto",
+ "access-internal-api",
  "access-store",
  "access-telemetry",
  "clap",
+ "esuiss-access-kernel",
+ "esuiss-access-sdk",
+ "esuiss-crypto",
  "figment",
+ "httparse",
+ "rustls",
+ "rustls-pki-types",
  "serde",
  "serde_json",
  "thiserror",
  "tokio",
+ "tokio-rustls",
  "tracing",
 ]
 

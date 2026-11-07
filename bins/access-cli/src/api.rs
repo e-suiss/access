@@ -1,0 +1,279 @@
+//! The management API as the command line knows it: `sdks/openapi/admin-v1.json`, compiled in
+//! (TN-112 item 8: the client follows the contract the server generates). Resource names,
+//! operations and the members a client may not write (`readOnly`) come from it; a resource the
+//! contract does not name is refused before anything is sent.
+
+use std::collections::BTreeSet;
+use std::fmt::Write as _;
+use std::sync::OnceLock;
+
+use access_internal_api::idp::IdpAction;
+use serde_json::Value;
+
+const CONTRACT: &str = include_str!("../../../sdks/openapi/admin-v1.json");
+
+/// The realm surface's path prefix.
+pub(crate) const REALM_PREFIX: &str = "/admin/v1/realms/{slug}";
+
+/// The operation that drafts a write (OP-151 m.11 (a)).
+pub(crate) const DRAFT: &str = "draftIntent";
+
+/// An HTTP method of the contract.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Method {
+    Get,
+    Post,
+    Put,
+    Patch,
+}
+
+impl Method {
+    pub(crate) const fn as_str(self) -> &'static str {
+        match self {
+            Self::Get => "GET",
+            Self::Post => "POST",
+            Self::Put => "PUT",
+            Self::Patch => "PATCH",
+        }
+    }
+
+    fn parse(m: &str) -> Option<Self> {
+        match m {
+            "get" => Some(Self::Get),
+            "post" => Some(Self::Post),
+            "put" => Some(Self::Put),
+            "patch" => Some(Self::Patch),
+            _ => None,
+        }
+    }
+}
+
+/// One operation of the realm surface.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct Operation {
+    pub(crate) id: String,
+    pub(crate) method: Method,
+    /// The path after the realm prefix, with at most one `{key}` parameter.
+    pub(crate) path: String,
+    /// The read scope; `None` for a write (the caller's AIS).
+    pub(crate) scope: Option<String>,
+}
+
+impl Operation {
+    /// A write: it carries an AIS and compiles to one Exercise (TN-110).
+    pub(crate) fn writes(&self) -> bool {
+        self.scope.is_none()
+    }
+
+    /// The resource name: the first path segment after the realm prefix.
+    pub(crate) fn resource(&self) -> &str {
+        self.path
+            .trim_start_matches('/')
+            .split('/')
+            .next()
+            .unwrap_or("")
+    }
+
+    /// Whether the path names one resource by key.
+    pub(crate) fn keyed(&self) -> bool {
+        self.path.contains('{')
+    }
+
+    /// The trailing action segment (`retire`, `secret/rotate`, …) after the key, if any.
+    pub(crate) fn action(&self) -> &str {
+        self.path.split_once('}').map_or("", |(_, rest)| rest)
+    }
+
+    /// The concrete path for `slug` and `key`, each percent-encoded as one segment.
+    pub(crate) fn url_path(&self, slug: &str, key: Option<&str>) -> String {
+        let mut out = String::from("/admin/v1/realms/");
+        out.push_str(&segment(slug));
+        let mut rest = self.path.as_str();
+        while let Some(open) = rest.find('{') {
+            out.push_str(rest.get(..open).unwrap_or(""));
+            out.push_str(&segment(key.unwrap_or("")));
+            rest = rest
+                .get(open..)
+                .and_then(|r| r.find('}').and_then(|c| r.get(c.saturating_add(1)..)))
+                .unwrap_or("");
+        }
+        out.push_str(rest);
+        out
+    }
+}
+
+/// One path segment, percent-encoded (RFC 3986 unreserved kept).
+pub(crate) fn segment(text: &str) -> String {
+    let mut out = String::new();
+    for b in text.bytes() {
+        if b.is_ascii_alphanumeric() || matches!(b, b'-' | b'.' | b'_' | b'~') {
+            out.push(char::from(b));
+        } else {
+            let _ = write!(out, "%{b:02X}");
+        }
+    }
+    out
+}
+
+/// The contract, parsed once.
+pub(crate) struct Contract {
+    pub(crate) operations: Vec<Operation>,
+    read_only: BTreeSet<(String, String)>,
+    declared: BTreeSet<(String, String)>,
+}
+
+fn parse(doc: &Value) -> Contract {
+    let mut operations = Vec::new();
+    if let Some(paths) = doc.get("paths").and_then(Value::as_object) {
+        for (path, item) in paths {
+            let Some(rest) = path.strip_prefix(REALM_PREFIX) else {
+                continue;
+            };
+            let Some(item) = item.as_object() else {
+                continue;
+            };
+            for (m, op) in item {
+                let (Some(method), Some(id)) = (
+                    Method::parse(m),
+                    op.get("operationId").and_then(Value::as_str),
+                ) else {
+                    continue;
+                };
+                operations.push(Operation {
+                    id: id.to_owned(),
+                    method,
+                    path: rest.to_owned(),
+                    scope: op
+                        .get("x-access-scope")
+                        .and_then(Value::as_str)
+                        .map(String::from),
+                });
+            }
+        }
+    }
+    let mut read_only = BTreeSet::new();
+    let mut declared = BTreeSet::new();
+    if let Some(schemas) = doc
+        .pointer("/components/schemas")
+        .and_then(Value::as_object)
+    {
+        for (name, schema) in schemas {
+            if let Some(props) = schema.get("properties").and_then(Value::as_object) {
+                for (field, p) in props {
+                    declared.insert((name.clone(), field.clone()));
+                    if p.get("readOnly").and_then(Value::as_bool) == Some(true) {
+                        read_only.insert((name.clone(), field.clone()));
+                    }
+                }
+            }
+        }
+    }
+    Contract {
+        operations,
+        read_only,
+        declared,
+    }
+}
+
+/// The compiled-in contract.
+pub(crate) fn contract() -> &'static Contract {
+    static C: OnceLock<Contract> = OnceLock::new();
+    C.get_or_init(|| {
+        serde_json::from_str::<Value>(CONTRACT).map_or_else(
+            |_| Contract {
+                operations: Vec::new(),
+                read_only: BTreeSet::new(),
+                declared: BTreeSet::new(),
+            },
+            |doc| parse(&doc),
+        )
+    })
+}
+
+impl Contract {
+    /// The operation with this id.
+    pub(crate) fn operation(&self, id: &str) -> Option<&Operation> {
+        self.operations.iter().find(|o| o.id == id)
+    }
+
+    /// Every resource name of the realm surface, sorted.
+    pub(crate) fn resources(&self) -> BTreeSet<&str> {
+        self.operations
+            .iter()
+            .map(Operation::resource)
+            .filter(|r| !r.is_empty() && *r != "intents")
+            .collect()
+    }
+
+    /// The operation with `method` on `resource`: for a keyed one, the first path segment and
+    /// the action suffix after the key (`/retire`); otherwise the whole path
+    /// (`settings/branding`).
+    pub(crate) fn find(
+        &self,
+        resource: &str,
+        method: Method,
+        keyed: bool,
+        action: &str,
+    ) -> Option<&Operation> {
+        self.operations.iter().find(|o| {
+            o.method == method
+                && o.keyed() == keyed
+                && if keyed {
+                    o.resource() == resource && o.action() == action
+                } else {
+                    o.path.trim_start_matches('/') == resource && action.is_empty()
+                }
+        })
+    }
+
+    /// Whether `field` of schema `schema` is server-generated (`readOnly`).
+    pub(crate) fn read_only(&self, schema: &str, field: &str) -> bool {
+        self.read_only
+            .contains(&(schema.to_owned(), field.to_owned()))
+    }
+
+    /// Whether schema `schema` declares `field`.
+    pub(crate) fn declares(&self, schema: &str, field: &str) -> bool {
+        self.declared
+            .contains(&(schema.to_owned(), field.to_owned()))
+    }
+}
+
+/// The `idp.*` action a write operation compiles to; `None` for an operation the command line
+/// does not know, which it treats as reserved (fail closed, TN-122).
+pub(crate) fn action_of(operation: &str, exists: bool) -> Option<IdpAction> {
+    Some(match operation {
+        "putClient" if exists => IdpAction::ClientUpdate,
+        "createClient" | "putClient" => IdpAction::ClientRegister,
+        "patchClient" => IdpAction::ClientUpdate,
+        "retireClient" => IdpAction::ClientRetire,
+        "rotateClientSecret" => IdpAction::ClientSecretRotate,
+        "putGroup" if exists => IdpAction::GroupUpdate,
+        "putGroup" => IdpAction::GroupCreate,
+        "patchGroup" => IdpAction::GroupUpdate,
+        "retireGroup" => IdpAction::GroupRetire,
+        "addGroupMembers" => IdpAction::GroupMembersAdd,
+        "removeGroupMembers" => IdpAction::GroupMembersRemove,
+        "suspendAccount" => IdpAction::AccountSuspend,
+        "reactivateAccount" => IdpAction::AccountReactivate,
+        "putUpstreamIdp" if exists => IdpAction::UpstreamUpdate,
+        "putUpstreamIdp" => IdpAction::UpstreamRegister,
+        "patchUpstreamIdp" => IdpAction::UpstreamUpdate,
+        "retireUpstreamIdp" => IdpAction::UpstreamRetire,
+        "putSigninPolicy" | "patchSigninPolicy" => IdpAction::RealmSigninPolicy,
+        "putSessionPolicy" | "patchSessionPolicy" => IdpAction::RealmSessionPolicy,
+        "putBranding" | "patchBranding" => IdpAction::RealmBranding,
+        "putRpId" => IdpAction::RealmRpId,
+        "putMapper" => IdpAction::MapperSet,
+        _ => return None,
+    })
+}
+
+/// Whether a write is reserved (CT3): the reconciler's Grant has no reserved action, so it only
+/// proposes it (TN-122, E11). An operation the command line cannot place is reserved.
+pub(crate) fn reserved(operation: &str, exists: bool) -> bool {
+    action_of(operation, exists).is_none_or(IdpAction::reserved)
+}
+
+#[cfg(test)]
+mod tests;

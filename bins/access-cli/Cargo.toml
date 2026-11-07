@@ -14,18 +14,27 @@ path = "src/main.rs"
 
 [dependencies]
 access-crypto = { workspace = true }
+access-internal-api = { workspace = true }
+access-kernel = { workspace = true }
+access-sdk = { workspace = true, features = ["std"] }
 access-store = { workspace = true }
 clap = { workspace = true, features = ["std", "derive", "help", "usage", "error-context"] }
 figment = { workspace = true, features = ["env", "toml"] }
+httparse = { workspace = true, features = ["std"] }
+rustls = { workspace = true, features = ["aws_lc_rs", "std"] }
+rustls-pki-types = { workspace = true, features = ["std"] }
 serde = { workspace = true, features = ["derive", "std"] }
 serde_json = { workspace = true, features = ["std"] }
+suiss-crypto = { workspace = true, features = ["pkcs11"] }
 thiserror = { workspace = true, features = ["std"] }
-tokio = { workspace = true, features = ["macros", "net", "rt-multi-thread", "time"] }
+tokio = { workspace = true, features = ["macros", "net", "rt-multi-thread", "io-util", "time"] }
+tokio-rustls = { workspace = true, features = ["aws_lc_rs"] }
 tracing = { workspace = true, features = ["std"] }
 access-telemetry = { workspace = true }
 
 [dev-dependencies]
 access-store = { workspace = true, features = ["testing"] }
+tokio = { workspace = true, features = ["macros", "rt", "sync"] }
 
 [lints]
 workspace = true

@@ -121,3 +121,93 @@ fn the_report_is_one_json_line() {
     assert_eq!(v["applied"][0]["description"], "m2 \"sandbox\" domains");
     assert_eq!(commands::migrate::report(&[]), r#"{"applied":[]}"#);
 }
+
+/// The management commands (OP-151 m.3 (h), TN-130).
+mod management {
+    use clap::{CommandFactory, Parser};
+
+    use super::super::Cli;
+
+    const CONNECT: [&str; 10] = [
+        "--api",
+        "https://mgmt.example:9443",
+        "--realm",
+        "acme",
+        "--issuer",
+        "https://login.example/realms/acme",
+        "--client-id",
+        "reconciler",
+        "--ca",
+        "ca.pem",
+    ];
+
+    fn args(extra: &[&str]) -> Vec<String> {
+        let mut v = vec!["access-cli".to_owned(), "admin".to_owned()];
+        v.extend(CONNECT.iter().map(|s| (*s).to_owned()));
+        v.extend(extra.iter().map(|s| (*s).to_owned()));
+        v
+    }
+
+    // TN-130, MD-14, Ek B 3315: there is no bearer management token; clap rejects any token option
+    #[test]
+    fn no_bearer_or_token_option_exists() {
+        for flag in ["--bearer", "--token", "--access-token", "--read-token"] {
+            let a = args(&["--key-file", "k.pem", flag, "x", "list", "clients"]);
+            assert!(Cli::try_parse_from(a).is_err(), "{flag} must not parse");
+        }
+        let mut cmd = Cli::command();
+        for sub in ["admin", "export", "diff", "apply"] {
+            let help = cmd
+                .find_subcommand_mut(sub)
+                .unwrap()
+                .render_long_help()
+                .to_string()
+                .to_ascii_lowercase();
+            assert!(
+                !help.contains("--bearer") && !help.contains("--token"),
+                "{sub}"
+            );
+        }
+    }
+
+    // TN-130, PI-11: automation is an Instance: exactly one key source, a file or PKCS#11
+    #[test]
+    fn the_instance_key_is_required_and_comes_from_one_source() {
+        assert!(Cli::try_parse_from(args(&["list", "clients"])).is_err());
+        assert!(
+            Cli::try_parse_from(args(&[
+                "--key-file",
+                "k.pem",
+                "--pkcs11",
+                "pkcs11:token=a",
+                "list",
+                "clients"
+            ]))
+            .is_err()
+        );
+        assert!(Cli::try_parse_from(args(&["--key-file", "k.pem", "list", "clients"])).is_ok());
+        assert!(
+            Cli::try_parse_from(args(&[
+                "--pkcs11",
+                "pkcs11:token=a;object=b?module-path=/m&pin-source=file:/p",
+                "get",
+                "settings"
+            ]))
+            .is_ok()
+        );
+    }
+
+    #[test]
+    fn release_is_an_apply_option_that_excludes_a_document() {
+        let mut a = vec!["access-cli".to_owned(), "apply".to_owned()];
+        a.extend(CONNECT.iter().map(|s| (*s).to_owned()));
+        a.extend(["--key-file", "k.pem"].map(String::from));
+        let mut release = a.clone();
+        release.extend(["--release", "clients/c-1"].map(String::from));
+        assert!(Cli::try_parse_from(&release).is_ok());
+        let mut both = release.clone();
+        both.extend(["--file", "realm.yaml"].map(String::from));
+        assert!(Cli::try_parse_from(&both).is_err());
+        assert!(Cli::try_parse_from(&a).is_err());
+    }
+}
