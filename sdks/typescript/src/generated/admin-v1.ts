@@ -439,6 +439,178 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/v1/realms/{slug}/settings/jose-alg": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Sets the realm's JOSE signing algorithm: ES256 or Ed25519. */
+        put: operations["putJoseAlg"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/v1/realms/{slug}/settings/cimd-policy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Sets which Client ID Metadata Document clients the realm accepts. */
+        put: operations["putCimdPolicy"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Changes the CIMD acceptance policy by JSON Merge Patch. */
+        patch: operations["patchCimdPolicy"];
+        trace?: never;
+    };
+    "/admin/v1/realms/{slug}/settings/protection-mode": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Sets the attack protections' modes; loosening anything is a higher tier. */
+        put: operations["putProtectionMode"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Changes the attack protections' modes by JSON Merge Patch. */
+        patch: operations["patchProtectionMode"];
+        trace?: never;
+    };
+    "/admin/v1/realms/{slug}/accounts/{account_id}/canary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Makes an account a canary: a sign-in with it never opens a session. */
+        post: operations["markCanaryAccount"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/v1/realms/{slug}/accounts/{account_id}/delete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Erases an account by crypto-shredding: declared and reserved, never applied. */
+        post: operations["deleteAccount"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/v1/realms/{slug}/accounts/{account_id}/reset-intents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Asks for a one-time reset intent sent to the account's own registered address: declared, never applied here. */
+        post: operations["createResetIntent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/v1/realms/{slug}/jobs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Starts a bulk job: each item is its own write under its own AIS; answers 202. */
+        post: operations["createJob"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/v1/realms/{slug}/jobs/{job_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A bulk job's state and counts, throttled items included. */
+        get: operations["getJob"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/v1/realms/{slug}/jobs/{job_id}/items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A bulk job's per-item results: the Exercise or the problem that refused it. */
+        get: operations["listJobItems"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/v1/realms/{slug}/rehome": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Moves the realm to another governing domain: declared and reserved, never applied. */
+        post: operations["rehomeRealm"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/v1/platform/intents": {
         parameters: {
             query?: never;
@@ -2479,6 +2651,525 @@ export interface operations {
                 slug: components["parameters"]["Slug"];
                 /** @description The resource's natural key. */
                 claim: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WriteBody"];
+            };
+        };
+        responses: {
+            /** @description Committed: the Exercise record (TN-110). */
+            200: {
+                headers: {
+                    "Request-Id": components["headers"]["Request-Id"];
+                    "RateLimit-Policy": components["headers"]["RateLimit-Policy"];
+                    RateLimit: components["headers"]["RateLimit"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WriteResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Unprocessable"];
+            429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    putJoseAlg: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description W3C Trace Context; its trace id becomes `Request-Id`. */
+                traceparent?: components["parameters"]["Traceparent"];
+                /** @description Required on every write: the AIS nonce, unpadded base64url. The same key and request replay the first answer for 24 hours; another request is 422; a running one 409 (TN-126). */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /** @description The caller's actor intent statement, a `COSE_Sign1` signed with its Instance key, unpadded base64url; or the body member `ais` (TN-110, PI-7). */
+                "X-Access-AIS"?: components["parameters"]["Ais"];
+            };
+            path: {
+                slug: components["parameters"]["Slug"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WriteBody"];
+            };
+        };
+        responses: {
+            /** @description Committed: the Exercise record (TN-110). */
+            200: {
+                headers: {
+                    "Request-Id": components["headers"]["Request-Id"];
+                    "RateLimit-Policy": components["headers"]["RateLimit-Policy"];
+                    RateLimit: components["headers"]["RateLimit"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WriteResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Unprocessable"];
+            429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    putCimdPolicy: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description W3C Trace Context; its trace id becomes `Request-Id`. */
+                traceparent?: components["parameters"]["Traceparent"];
+                /** @description Required on every write: the AIS nonce, unpadded base64url. The same key and request replay the first answer for 24 hours; another request is 422; a running one 409 (TN-126). */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /** @description The caller's actor intent statement, a `COSE_Sign1` signed with its Instance key, unpadded base64url; or the body member `ais` (TN-110, PI-7). */
+                "X-Access-AIS"?: components["parameters"]["Ais"];
+            };
+            path: {
+                slug: components["parameters"]["Slug"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WriteBody"];
+            };
+        };
+        responses: {
+            /** @description Committed: the Exercise record (TN-110). */
+            200: {
+                headers: {
+                    "Request-Id": components["headers"]["Request-Id"];
+                    "RateLimit-Policy": components["headers"]["RateLimit-Policy"];
+                    RateLimit: components["headers"]["RateLimit"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WriteResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Unprocessable"];
+            429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    patchCimdPolicy: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description W3C Trace Context; its trace id becomes `Request-Id`. */
+                traceparent?: components["parameters"]["Traceparent"];
+                /** @description Required on every write: the AIS nonce, unpadded base64url. The same key and request replay the first answer for 24 hours; another request is 422; a running one 409 (TN-126). */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /** @description The caller's actor intent statement, a `COSE_Sign1` signed with its Instance key, unpadded base64url; or the body member `ais` (TN-110, PI-7). */
+                "X-Access-AIS"?: components["parameters"]["Ais"];
+            };
+            path: {
+                slug: components["parameters"]["Slug"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WriteBody"];
+            };
+        };
+        responses: {
+            /** @description Committed: the Exercise record (TN-110). */
+            200: {
+                headers: {
+                    "Request-Id": components["headers"]["Request-Id"];
+                    "RateLimit-Policy": components["headers"]["RateLimit-Policy"];
+                    RateLimit: components["headers"]["RateLimit"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WriteResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Unprocessable"];
+            429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    putProtectionMode: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description W3C Trace Context; its trace id becomes `Request-Id`. */
+                traceparent?: components["parameters"]["Traceparent"];
+                /** @description Required on every write: the AIS nonce, unpadded base64url. The same key and request replay the first answer for 24 hours; another request is 422; a running one 409 (TN-126). */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /** @description The caller's actor intent statement, a `COSE_Sign1` signed with its Instance key, unpadded base64url; or the body member `ais` (TN-110, PI-7). */
+                "X-Access-AIS"?: components["parameters"]["Ais"];
+            };
+            path: {
+                slug: components["parameters"]["Slug"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WriteBody"];
+            };
+        };
+        responses: {
+            /** @description Committed: the Exercise record (TN-110). */
+            200: {
+                headers: {
+                    "Request-Id": components["headers"]["Request-Id"];
+                    "RateLimit-Policy": components["headers"]["RateLimit-Policy"];
+                    RateLimit: components["headers"]["RateLimit"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WriteResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Unprocessable"];
+            429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    patchProtectionMode: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description W3C Trace Context; its trace id becomes `Request-Id`. */
+                traceparent?: components["parameters"]["Traceparent"];
+                /** @description Required on every write: the AIS nonce, unpadded base64url. The same key and request replay the first answer for 24 hours; another request is 422; a running one 409 (TN-126). */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /** @description The caller's actor intent statement, a `COSE_Sign1` signed with its Instance key, unpadded base64url; or the body member `ais` (TN-110, PI-7). */
+                "X-Access-AIS"?: components["parameters"]["Ais"];
+            };
+            path: {
+                slug: components["parameters"]["Slug"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WriteBody"];
+            };
+        };
+        responses: {
+            /** @description Committed: the Exercise record (TN-110). */
+            200: {
+                headers: {
+                    "Request-Id": components["headers"]["Request-Id"];
+                    "RateLimit-Policy": components["headers"]["RateLimit-Policy"];
+                    RateLimit: components["headers"]["RateLimit"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WriteResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Unprocessable"];
+            429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    markCanaryAccount: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description W3C Trace Context; its trace id becomes `Request-Id`. */
+                traceparent?: components["parameters"]["Traceparent"];
+                /** @description Required on every write: the AIS nonce, unpadded base64url. The same key and request replay the first answer for 24 hours; another request is 422; a running one 409 (TN-126). */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /** @description The caller's actor intent statement, a `COSE_Sign1` signed with its Instance key, unpadded base64url; or the body member `ais` (TN-110, PI-7). */
+                "X-Access-AIS"?: components["parameters"]["Ais"];
+            };
+            path: {
+                slug: components["parameters"]["Slug"];
+                /** @description The resource's natural key. */
+                account_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WriteBody"];
+            };
+        };
+        responses: {
+            /** @description Committed: the Exercise record (TN-110). */
+            200: {
+                headers: {
+                    "Request-Id": components["headers"]["Request-Id"];
+                    "RateLimit-Policy": components["headers"]["RateLimit-Policy"];
+                    RateLimit: components["headers"]["RateLimit"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WriteResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Unprocessable"];
+            429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    deleteAccount: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description W3C Trace Context; its trace id becomes `Request-Id`. */
+                traceparent?: components["parameters"]["Traceparent"];
+                /** @description Required on every write: the AIS nonce, unpadded base64url. The same key and request replay the first answer for 24 hours; another request is 422; a running one 409 (TN-126). */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /** @description The caller's actor intent statement, a `COSE_Sign1` signed with its Instance key, unpadded base64url; or the body member `ais` (TN-110, PI-7). */
+                "X-Access-AIS"?: components["parameters"]["Ais"];
+            };
+            path: {
+                slug: components["parameters"]["Slug"];
+                /** @description The resource's natural key. */
+                account_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WriteBody"];
+            };
+        };
+        responses: {
+            /** @description Committed: the Exercise record (TN-110). */
+            200: {
+                headers: {
+                    "Request-Id": components["headers"]["Request-Id"];
+                    "RateLimit-Policy": components["headers"]["RateLimit-Policy"];
+                    RateLimit: components["headers"]["RateLimit"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WriteResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Unprocessable"];
+            429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    createResetIntent: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description W3C Trace Context; its trace id becomes `Request-Id`. */
+                traceparent?: components["parameters"]["Traceparent"];
+                /** @description Required on every write: the AIS nonce, unpadded base64url. The same key and request replay the first answer for 24 hours; another request is 422; a running one 409 (TN-126). */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /** @description The caller's actor intent statement, a `COSE_Sign1` signed with its Instance key, unpadded base64url; or the body member `ais` (TN-110, PI-7). */
+                "X-Access-AIS"?: components["parameters"]["Ais"];
+            };
+            path: {
+                slug: components["parameters"]["Slug"];
+                /** @description The resource's natural key. */
+                account_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WriteBody"];
+            };
+        };
+        responses: {
+            /** @description Committed: the Exercise record (TN-110). */
+            200: {
+                headers: {
+                    "Request-Id": components["headers"]["Request-Id"];
+                    "RateLimit-Policy": components["headers"]["RateLimit-Policy"];
+                    RateLimit: components["headers"]["RateLimit"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WriteResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Unprocessable"];
+            429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    createJob: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description W3C Trace Context; its trace id becomes `Request-Id`. */
+                traceparent?: components["parameters"]["Traceparent"];
+                /** @description Required on every write: the AIS nonce, unpadded base64url. The same key and request replay the first answer for 24 hours; another request is 422; a running one 409 (TN-126). */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /** @description The caller's actor intent statement, a `COSE_Sign1` signed with its Instance key, unpadded base64url; or the body member `ais` (TN-110, PI-7). */
+                "X-Access-AIS"?: components["parameters"]["Ais"];
+            };
+            path: {
+                slug: components["parameters"]["Slug"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Committed: the Exercise record (TN-110). */
+            200: {
+                headers: {
+                    "Request-Id": components["headers"]["Request-Id"];
+                    "RateLimit-Policy": components["headers"]["RateLimit-Policy"];
+                    RateLimit: components["headers"]["RateLimit"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExerciseRef"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Unprocessable"];
+            429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    getJob: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description W3C Trace Context; its trace id becomes `Request-Id`. */
+                traceparent?: components["parameters"]["Traceparent"];
+            };
+            path: {
+                slug: components["parameters"]["Slug"];
+                /** @description The resource's natural key. */
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The resource. */
+            200: {
+                headers: {
+                    "Request-Id": components["headers"]["Request-Id"];
+                    "RateLimit-Policy": components["headers"]["RateLimit-Policy"];
+                    RateLimit: components["headers"]["RateLimit"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExerciseRef"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    listJobItems: {
+        parameters: {
+            query?: {
+                "page[size]"?: components["parameters"]["PageSize"];
+                /** @description Opaque; from the `Link` of the previous page. */
+                cursor?: components["parameters"]["Cursor"];
+                /** @description SCIM filter subset: eq, ne, co, sw, pr, and, or, parentheses; an attribute the endpoint does not name is 400 (TN-112). */
+                filter?: components["parameters"]["Filter"];
+            };
+            header?: {
+                /** @description W3C Trace Context; its trace id becomes `Request-Id`. */
+                traceparent?: components["parameters"]["Traceparent"];
+            };
+            path: {
+                slug: components["parameters"]["Slug"];
+                /** @description The resource's natural key. */
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The resource. */
+            200: {
+                headers: {
+                    "Request-Id": components["headers"]["Request-Id"];
+                    "RateLimit-Policy": components["headers"]["RateLimit-Policy"];
+                    RateLimit: components["headers"]["RateLimit"];
+                    Link: components["headers"]["Link"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExerciseRef"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    rehomeRealm: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description W3C Trace Context; its trace id becomes `Request-Id`. */
+                traceparent?: components["parameters"]["Traceparent"];
+                /** @description Required on every write: the AIS nonce, unpadded base64url. The same key and request replay the first answer for 24 hours; another request is 422; a running one 409 (TN-126). */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+                /** @description The caller's actor intent statement, a `COSE_Sign1` signed with its Instance key, unpadded base64url; or the body member `ais` (TN-110, PI-7). */
+                "X-Access-AIS"?: components["parameters"]["Ais"];
+            };
+            path: {
+                slug: components["parameters"]["Slug"];
             };
             cookie?: never;
         };
