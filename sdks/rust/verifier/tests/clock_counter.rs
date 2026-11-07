@@ -19,7 +19,9 @@ use access_verifier::counter::{
     CounterError, CounterId, CounterReading, Draw, SliceGuard, TamperEvidentCounter,
 };
 use access_verifier::testing::{EmulatedClock, EmulatedCounter};
-use access_verifier::time::{ClockError, ClockGuard, DEFAULT_TOLERANCE_MS};
+use access_verifier::time::{
+    ClockError, ClockGuard, ClockReading, DEFAULT_DRIFT_PPM, DEFAULT_TOLERANCE_MS, TrustedClock,
+};
 
 const HORIZON: TrustedTime = 10_000_000;
 const SKEW: u64 = 60_000;
@@ -208,6 +210,84 @@ fn an_unavailable_clock_or_a_reset_monotonic_clock_gives_no_time() {
     clock.reset_monotonic();
     clock.advance(10);
     assert_eq!(guard.now(&clock), Err(ClockError::MonotonicWentBack));
+}
+
+// TI-RT2, FA-3, U29: steps each within the fixed tolerance do not add up; the tolerance grows
+// with the monotonic time elapsed since the anchor, never beyond fixed + drift
+#[test]
+fn small_steps_do_not_add_up_and_the_tolerance_grows_with_elapsed_time() {
+    let clock = EmulatedClock::new(IAT);
+    let mut guard = ClockGuard::default();
+    assert!(guard.now(&clock).is_ok());
+    let step = i64::try_from(DEFAULT_TOLERANCE_MS / 2).unwrap();
+    clock.advance(1_000);
+    clock.jump(step);
+    assert!(guard.now(&clock).is_ok());
+    clock.advance(1_000);
+    clock.jump(step);
+    assert!(guard.now(&clock).is_ok());
+    clock.advance(1_000);
+    clock.jump(step);
+    assert_eq!(guard.now(&clock), Err(ClockError::JumpedAhead));
+    let mut guard = ClockGuard::default();
+    let base = ClockReading {
+        trusted: IAT,
+        monotonic_ms: 0,
+    };
+    assert!(guard.accept(base).is_ok());
+    let day = 86_400_000;
+    let allowed = DEFAULT_TOLERANCE_MS + day * DEFAULT_DRIFT_PPM / 1_000_000;
+    assert_eq!(guard.allowance_ms(day), allowed);
+    let ahead = ClockReading {
+        trusted: IAT + day + allowed,
+        monotonic_ms: day,
+    };
+    assert_eq!(guard.accept(ahead), Ok(IAT + day + allowed));
+    let mut guard = ClockGuard::anchored(DEFAULT_TOLERANCE_MS, base).with_drift(0);
+    assert_eq!(guard.accept(ahead), Err(ClockError::JumpedAhead));
+}
+
+// TI-RT2, TI-RT5, TI-19: a refusing guard recovers only by re-anchoring on an attested time;
+// a reboot's monotonic restart is re-anchored the same way; never backwards
+#[test]
+fn a_refusing_guard_re_anchors_only_on_an_attested_time() {
+    let clock = EmulatedClock::new(IAT);
+    let mut guard = ClockGuard::default();
+    assert!(guard.now(&clock).is_ok());
+    assert_eq!(clock.freeze(), Ok(()));
+    clock.advance(10_000);
+    assert_eq!(guard.now(&clock), Err(ClockError::Frozen));
+    clock.thaw();
+    clock.jump(60_000);
+    assert_eq!(guard.now(&clock), Err(ClockError::JumpedAhead));
+    assert_eq!(guard.now(&clock), Err(ClockError::JumpedAhead));
+    let reading = clock.read().unwrap();
+    assert_eq!(
+        guard.reanchor(reading, reading.trusted - DEFAULT_TOLERANCE_MS - 1),
+        Err(ClockError::Unattested)
+    );
+    assert_eq!(
+        guard.reanchor(reading, reading.trusted),
+        Ok(reading.trusted)
+    );
+    assert_eq!(guard.anchor(), Some(reading));
+    clock.advance(1_000);
+    assert_eq!(guard.now(&clock), Ok(reading.trusted + 1_000));
+    clock.reset_monotonic();
+    clock.advance(10);
+    assert_eq!(guard.now(&clock), Err(ClockError::MonotonicWentBack));
+    let rebooted = clock.read().unwrap();
+    assert_eq!(
+        guard.reanchor(rebooted, rebooted.trusted),
+        Ok(rebooted.trusted)
+    );
+    clock.advance(10);
+    assert!(guard.now(&clock).is_ok());
+    let earlier = ClockReading {
+        trusted: IAT,
+        monotonic_ms: rebooted.monotonic_ms + 20,
+    };
+    assert_eq!(guard.reanchor(earlier, IAT), Err(ClockError::WentBack));
 }
 
 const ID: CounterId = CounterId([1; 16]);
