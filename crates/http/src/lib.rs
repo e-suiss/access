@@ -4,6 +4,7 @@ pub mod adp;
 pub mod api;
 pub mod declarations;
 pub mod ingest;
+pub mod internal;
 pub mod login;
 pub mod oauth;
 pub mod path;
@@ -18,9 +19,9 @@ pub mod tls;
 
 use std::time::Duration;
 
+use axum::Router;
 use axum::http::StatusCode;
 use axum::routing::get;
-use axum::{Json, Router};
 use serde::Serialize;
 use tower_http::catch_panic::CatchPanicLayer;
 use tower_http::limit::RequestBodyLimitLayer;
@@ -70,13 +71,10 @@ pub struct SandboxHealth {
     pub landlock_kernel_abi: u32,
 }
 
-/// Builds the public router around `api`, the plane routes (e.g. ADP).
-pub fn router(security_txt: SecurityTxt, health: Health, limits: Limits, api: Router) -> Router {
+/// Builds the public router around `api`, the plane routes (e.g. ADP). Health and metrics are
+/// on the internal listener only ([`internal::router`], OP-67 m.3, OP-151 m.3 (b)).
+pub fn router(security_txt: SecurityTxt, limits: Limits, api: Router) -> Router {
     let routes = api
-        .route(
-            "/healthz",
-            get(move || std::future::ready(Json(health.clone()))),
-        )
         .route(
             "/.well-known/security.txt",
             get(move || std::future::ready(security_txt.response())),

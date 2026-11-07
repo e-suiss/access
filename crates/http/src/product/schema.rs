@@ -65,7 +65,7 @@ fn key_components() -> Value {
             },
         },
         "Position": { "type": "string", "pattern": "^[0-9]+$", "description": "A ledger position, in decimal." },
-        "Time": { "type": "string", "description": "RFC 3339, UTC." },
+        "Time": { "type": "string", "format": "date-time", "description": "RFC 3339, UTC." },
         "DomainId": { "type": "string", "pattern": "^sha-256:[A-Za-z0-9_-]{43}$" },
         "Kid": { "type": "string", "pattern": "^[A-Za-z0-9_-]{43}$", "description": "RFC 7638 SHA-256 thumbprint, unpadded base64url (CR-24)." },
         "LedgerPoint": object(&json!({ "position": r("Position"), "time": r("Time") }), &["position", "time"]),

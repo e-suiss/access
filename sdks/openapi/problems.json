@@ -1,0 +1,224 @@
+{
+  "title": "Access problem codes",
+  "description": "Stable RFC 9457 problem codes of the shared HTTP stack and the management API (OP-65, OP-149 m.12).",
+  "type_prefix": "urn:suiss:access:problem:",
+  "codes": [
+    {
+      "code": "not_found",
+      "type": "about:blank",
+      "status": 404,
+      "title": "Not Found",
+      "description": "No such resource, or one the caller may not see (TN-113)."
+    },
+    {
+      "code": "internal",
+      "type": "about:blank",
+      "status": 500,
+      "title": "Internal Server Error",
+      "description": "A server failure; details stay in the logs."
+    },
+    {
+      "code": "unavailable",
+      "type": "about:blank",
+      "status": 503,
+      "title": "Service Unavailable",
+      "description": "A dependency is unavailable; nothing was decided or changed (MD-8)."
+    },
+    {
+      "code": "path-not-canonical",
+      "type": "urn:suiss:access:problem:path-not-canonical",
+      "status": 400,
+      "title": "Bad Request",
+      "description": "The request path is not in its one canonical spelling (TN-113)."
+    },
+    {
+      "code": "body-too-large",
+      "type": "urn:suiss:access:problem:body-too-large",
+      "status": 413,
+      "title": "Payload Too Large",
+      "description": "The request body exceeds the limit (R-5)."
+    },
+    {
+      "code": "method-not-allowed",
+      "type": "urn:suiss:access:problem:method-not-allowed",
+      "status": 405,
+      "title": "Method Not Allowed",
+      "description": "The method is not served on this path."
+    },
+    {
+      "code": "rate-limited",
+      "type": "urn:suiss:access:problem:rate-limited",
+      "status": 429,
+      "title": "Too Many Requests",
+      "description": "A rate limit was reached; the RateLimit and Retry-After headers say when to retry (TN-127)."
+    },
+    {
+      "code": "idempotency-key-required",
+      "type": "urn:suiss:access:problem:idempotency-key-required",
+      "status": 400,
+      "title": "Bad Request",
+      "description": "A mutating request carries no Idempotency-Key (TN-126)."
+    },
+    {
+      "code": "idempotency-key-invalid",
+      "type": "urn:suiss:access:problem:idempotency-key-invalid",
+      "status": 400,
+      "title": "Bad Request",
+      "description": "The Idempotency-Key is empty, longer than 255 characters or not visible ASCII (TN-126)."
+    },
+    {
+      "code": "idempotency-key-not-nonce",
+      "type": "urn:suiss:access:problem:idempotency-key-not-nonce",
+      "status": 400,
+      "title": "Bad Request",
+      "description": "The Idempotency-Key of a write is its AIS nonce, unpadded base64url (TN-126)."
+    },
+    {
+      "code": "idempotency-key-reused",
+      "type": "urn:suiss:access:problem:idempotency-key-reused",
+      "status": 422,
+      "title": "Idempotency-Key reused with another request",
+      "description": "The Idempotency-Key already ran another request (TN-126, TI-8)."
+    },
+    {
+      "code": "idempotency-key-in-use",
+      "type": "urn:suiss:access:problem:idempotency-key-in-use",
+      "status": 409,
+      "title": "A request with this Idempotency-Key is still running",
+      "description": "The first request under the Idempotency-Key is still running (TN-126)."
+    },
+    {
+      "code": "precondition-required",
+      "type": "urn:suiss:access:problem:precondition-required",
+      "status": 428,
+      "title": "Precondition Required",
+      "description": "An update must carry If-Match with the resource's ETag (OP-65)."
+    },
+    {
+      "code": "precondition-failed",
+      "type": "urn:suiss:access:problem:precondition-failed",
+      "status": 412,
+      "title": "Precondition Failed",
+      "description": "If-Match does not name the resource's current ETag (OP-65)."
+    },
+    {
+      "code": "invalid-filter",
+      "type": "urn:suiss:access:problem:invalid-filter",
+      "status": 400,
+      "title": "Bad Request",
+      "description": "The filter is outside the SCIM subset: eq, ne, co, sw, pr, and, or, parentheses (TN-112)."
+    },
+    {
+      "code": "unknown-filter-attribute",
+      "type": "urn:suiss:access:problem:unknown-filter-attribute",
+      "status": 400,
+      "title": "Bad Request",
+      "description": "The filter names an attribute the endpoint does not filter on; it is never ignored (TN-112)."
+    },
+    {
+      "code": "filter-too-complex",
+      "type": "urn:suiss:access:problem:filter-too-complex",
+      "status": 400,
+      "title": "Bad Request",
+      "description": "The filter exceeds its size, depth or term limits (CR-10)."
+    },
+    {
+      "code": "invalid-cursor",
+      "type": "urn:suiss:access:problem:invalid-cursor",
+      "status": 400,
+      "title": "Bad Request",
+      "description": "The cursor was not issued by this list (OP-65)."
+    },
+    {
+      "code": "invalid-page-size",
+      "type": "urn:suiss:access:problem:invalid-page-size",
+      "status": 400,
+      "title": "Bad Request",
+      "description": "page[size] must be an integer from 1 to 100 (§13.7.4)."
+    },
+    {
+      "code": "unknown-query-parameter",
+      "type": "urn:suiss:access:problem:unknown-query-parameter",
+      "status": 400,
+      "title": "Bad Request",
+      "description": "A query parameter the endpoint does not take, or one given twice."
+    },
+    {
+      "code": "invalid-merge-patch",
+      "type": "urn:suiss:access:problem:invalid-merge-patch",
+      "status": 400,
+      "title": "Bad Request",
+      "description": "The body is not a JSON Merge Patch the resource takes (RFC 7396)."
+    },
+    {
+      "code": "invalid-request",
+      "type": "urn:suiss:access:problem:invalid-request",
+      "status": 400,
+      "title": "Bad Request",
+      "description": "The request is malformed."
+    },
+    {
+      "code": "invalid-token",
+      "type": "urn:suiss:access:problem:invalid-token",
+      "status": 401,
+      "title": "Unauthorized",
+      "description": "No usable read token: missing, bearer, malformed, expired, revoked or not holder-bound (TN-27, TN-130)."
+    },
+    {
+      "code": "wrong-audience",
+      "type": "urn:suiss:access:problem:wrong-audience",
+      "status": 401,
+      "title": "Unauthorized",
+      "description": "The token's audience is another management surface (TN-119)."
+    },
+    {
+      "code": "token-lifetime",
+      "type": "urn:suiss:access:problem:token-lifetime",
+      "status": 401,
+      "title": "Unauthorized",
+      "description": "Management read tokens live at most 60 minutes (OP-151 m.3 (c))."
+    },
+    {
+      "code": "insufficient-scope",
+      "type": "urn:suiss:access:problem:insufficient-scope",
+      "status": 403,
+      "title": "Forbidden",
+      "description": "The token lacks the route's scope (TN-113)."
+    },
+    {
+      "code": "ais-required",
+      "type": "urn:suiss:access:problem:ais-required",
+      "status": 401,
+      "title": "Unauthorized",
+      "description": "A write carries the caller's AIS; no token writes (TN-110, TN-130)."
+    },
+    {
+      "code": "ais-invalid",
+      "type": "urn:suiss:access:problem:ais-invalid",
+      "status": 401,
+      "title": "Unauthorized",
+      "description": "The AIS is not a well-formed, signed actor intent statement (PI-7)."
+    },
+    {
+      "code": "ais-rejected",
+      "type": "urn:suiss:access:problem:ais-rejected",
+      "status": 403,
+      "title": "Forbidden",
+      "description": "The AIS does not verify with a live Instance key of this surface's domain, or names another domain or mode (PI-7, TN-119)."
+    },
+    {
+      "code": "exercise-not-allowed",
+      "type": "urn:suiss:access:problem:exercise-not-allowed",
+      "status": 403,
+      "title": "Forbidden",
+      "description": "The Exercise the write compiled to was decided and not allowed; nothing changed (TN-110)."
+    },
+    {
+      "code": "exercise-refused",
+      "type": "urn:suiss:access:problem:exercise-refused",
+      "status": 400,
+      "title": "Bad Request",
+      "description": "The Exercise the write compiled to was refused before a decision; nothing changed (TN-110)."
+    }
+  ]
+}

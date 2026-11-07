@@ -14,6 +14,7 @@ use http_body_util::BodyExt;
 use time::macros::datetime;
 use tower::ServiceExt;
 
+use access_http::internal::{Readiness, router as internal};
 use access_http::{Health, Limits, SandboxHealth, SecurityTxt, harden, router};
 
 fn security_txt() -> SecurityTxt {
@@ -49,7 +50,7 @@ async fn body_string(response: axum::response::Response) -> String {
 // SA-14
 #[tokio::test]
 async fn security_txt_has_required_fields() {
-    let app = router(security_txt(), health(), Limits::default(), Router::new());
+    let app = router(security_txt(), Limits::default(), Router::new());
     let response = app
         .oneshot(
             Request::get("/.well-known/security.txt")
@@ -124,7 +125,7 @@ async fn oversized_body_is_rejected() {
 // SA-22, OP-92
 #[tokio::test]
 async fn healthz_reports_landlock_abi() {
-    let app = router(security_txt(), health(), Limits::default(), Router::new());
+    let app = internal(health(), Readiness::default(), Limits::default());
     let response = app
         .oneshot(Request::get("/healthz").body(Body::empty()).unwrap())
         .await
@@ -137,7 +138,7 @@ async fn healthz_reports_landlock_abi() {
 
 #[tokio::test]
 async fn unknown_path_is_404_problem() {
-    let app = router(security_txt(), health(), Limits::default(), Router::new());
+    let app = router(security_txt(), Limits::default(), Router::new());
     let response = app
         .oneshot(Request::get("/nope").body(Body::empty()).unwrap())
         .await
@@ -153,19 +154,23 @@ async fn unknown_path_is_404_problem() {
 // dot segments, empty segments and needless percent-encoding are refused before any route
 #[tokio::test]
 async fn non_canonical_paths_never_reach_a_route() {
-    let app = router(security_txt(), health(), Limits::default(), Router::new());
+    let app = router(security_txt(), Limits::default(), Router::new());
     let ok = app
         .clone()
-        .oneshot(Request::get("/healthz").body(Body::empty()).unwrap())
+        .oneshot(
+            Request::get("/.well-known/security.txt")
+                .body(Body::empty())
+                .unwrap(),
+        )
         .await
         .unwrap();
     assert_eq!(ok.status(), StatusCode::OK);
     for path in [
-        "/x/../healthz",
-        "/./healthz",
-        "//healthz",
-        "/%68ealthz",
-        "/x/%2E%2E/healthz",
+        "/x/../.well-known/security.txt",
+        "/./.well-known/security.txt",
+        "//.well-known/security.txt",
+        "/%2Ewell-known/security.txt",
+        "/x/%2E%2E/.well-known/security.txt",
     ] {
         let response = app
             .clone()
@@ -175,6 +180,38 @@ async fn non_canonical_paths_never_reach_a_route() {
         assert_eq!(response.status(), StatusCode::BAD_REQUEST, "{path}");
         assert!(body_string(response).await.contains("path-not-canonical"));
     }
+}
+
+// OP-67 m.3, OP-151 m.3 (b): health, liveness, readiness and metrics are on the internal
+// listener only; the public router does not serve them
+#[tokio::test]
+async fn health_endpoints_are_internal_only() {
+    let public = router(security_txt(), Limits::default(), Router::new());
+    let ready = Readiness::default();
+    let inside = internal(health(), ready.clone(), Limits::default());
+    for path in ["/healthz", "/livez", "/readyz", "/metrics"] {
+        let r = public
+            .clone()
+            .oneshot(Request::get(path).body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(r.status(), StatusCode::NOT_FOUND, "{path}");
+    }
+    let get = |path: &'static str| {
+        inside
+            .clone()
+            .oneshot(Request::get(path).body(Body::empty()).unwrap())
+    };
+    assert_eq!(get("/livez").await.unwrap().status(), StatusCode::OK);
+    assert_eq!(get("/metrics").await.unwrap().status(), StatusCode::OK);
+    // MD-8: a process that is not ready takes no traffic
+    assert_eq!(
+        get("/readyz").await.unwrap().status(),
+        StatusCode::SERVICE_UNAVAILABLE
+    );
+    ready.ready();
+    assert_eq!(get("/readyz").await.unwrap().status(), StatusCode::OK);
+    assert_eq!(get("/nope").await.unwrap().status(), StatusCode::NOT_FOUND);
 }
 
 // SI-13, OP-150, CR-22: the provider declarations are served without authentication and state

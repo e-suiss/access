@@ -1836,6 +1836,7 @@
       },
       "Time": {
         "type": "string",
+        "format": "date-time",
         "description": "RFC 3339, UTC."
       },
       "DomainId": {
@@ -2765,10 +2766,12 @@
           },
           "valid_from": {
             "type": "string",
+            "format": "date-time",
             "description": "RFC 3339: start of the intents' validity."
           },
           "valid_until": {
             "type": "string",
+            "format": "date-time",
             "description": "RFC 3339: end of it; the challenge is not accepted later."
           },
           "instance_create": {

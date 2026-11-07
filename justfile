@@ -250,6 +250,10 @@ login-contract:
 access-contract:
     ACCESS_UPDATE_CONTRACTS=1 cargo test --locked -p access-http --test product
 
+# OP-65, OP-151 m.4: rewrite sdks/openapi/admin-v1.json and problems.json from crates/http
+admin-contract:
+    ACCESS_UPDATE_CONTRACTS=1 cargo test --locked -p access-http --test admin_contract
+
 web-e2e-update-snapshots: wasm
     docker run --rm --ipc=host -v "{{justfile_directory()}}:/work" \
       -v /work/web/console/node_modules -v /work/sdks/typescript/node_modules -w /work \

@@ -1,0 +1,647 @@
+{
+  "openapi": "3.1.1",
+  "info": {
+    "title": "Access management API",
+    "version": "1.0.0",
+    "description": "Realm-admin (`/admin/v1/realms/{slug}`) and platform-admin (`/admin/v1/platform`) surfaces on the management listener. Reads take a holder-bound DPoP token of the surface's audience living at most 60 minutes; writes take the caller's AIS and compile to an Exercise; there is no bearer management token (TN-110, TN-119, TN-130). Field names are snake_case, times RFC 3339 UTC, 64-bit integers strings (OP-65).",
+    "license": {
+      "name": "Apache-2.0",
+      "identifier": "Apache-2.0"
+    }
+  },
+  "tags": [
+    {
+      "name": "realm",
+      "description": "Realm administration; audience `access-admin:realm:<slug>`, scopes `realm.*`."
+    },
+    {
+      "name": "platform",
+      "description": "Platform administration; audience `access-admin:platform`, scopes `platform.*`."
+    }
+  ],
+  "paths": {
+    "/admin/v1/platform": {
+      "get": {
+        "operationId": "getPlatformSurface",
+        "summary": "The platform-admin surface: its audience, scope namespace and rate policies.",
+        "tags": [
+          "platform"
+        ],
+        "security": [
+          {
+            "read_token": [
+              "platform.read"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The resource.",
+            "headers": {
+              "Request-Id": {
+                "$ref": "#/components/headers/Request-Id"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SurfaceRoot"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        },
+        "deprecated": false,
+        "x-access-surface": "platform",
+        "x-access-scope": "platform.read",
+        "x-access-visibility": "forbidden"
+      }
+    },
+    "/admin/v1/realms/{slug}": {
+      "get": {
+        "operationId": "getRealmSurface",
+        "summary": "One realm's admin surface: its audience, scope namespace and rate policies.",
+        "tags": [
+          "realm"
+        ],
+        "security": [
+          {
+            "read_token": [
+              "realm.read"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Slug"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The resource.",
+            "headers": {
+              "Request-Id": {
+                "$ref": "#/components/headers/Request-Id"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SurfaceRoot"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        },
+        "deprecated": false,
+        "x-access-surface": "realm",
+        "x-access-scope": "realm.read",
+        "x-access-visibility": "hidden"
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Problem": {
+        "type": "object",
+        "description": "RFC 9457. `type` is `urn:suiss:access:problem:<code>`, or `about:blank` when the status says all; the codes are listed in `problems.json`.",
+        "required": [
+          "type",
+          "title",
+          "status",
+          "code"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "description": "Problem type URI."
+          },
+          "title": {
+            "type": "string",
+            "description": "Short title."
+          },
+          "status": {
+            "type": "integer",
+            "minimum": 100,
+            "maximum": 599
+          },
+          "code": {
+            "type": "string",
+            "description": "Stable error code (OP-65)."
+          },
+          "reason": {
+            "type": "string",
+            "description": "A stable, non-secret reason narrowing `code`."
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "code"
+              ],
+              "properties": {
+                "pointer": {
+                  "type": "string",
+                  "description": "A JSON Pointer (RFC 6901) into the request body, as a URI fragment."
+                },
+                "code": {
+                  "type": "string",
+                  "description": "Stable code of what is wrong there."
+                }
+              }
+            }
+          }
+        }
+      },
+      "Position": {
+        "type": "string",
+        "pattern": "^[0-9]{1,20}$",
+        "description": "A ledger position, in decimal: 64-bit integers are strings (OP-65)."
+      },
+      "Time": {
+        "type": "string",
+        "format": "date-time",
+        "description": "RFC 3339, UTC."
+      },
+      "ExerciseRef": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "The Exercise a write compiled to and its position (TN-110).",
+        "required": [
+          "exercise_id",
+          "position"
+        ],
+        "properties": {
+          "exercise_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{43}$",
+            "description": "The ExerciseID, unpadded base64url."
+          },
+          "position": {
+            "$ref": "#/components/schemas/Position"
+          }
+        }
+      },
+      "SurfaceRoot": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "surface",
+          "audience",
+          "scope_namespace",
+          "read_scope",
+          "domain",
+          "rate_policies"
+        ],
+        "properties": {
+          "surface": {
+            "type": "string",
+            "enum": [
+              "realm",
+              "platform"
+            ]
+          },
+          "realm": {
+            "type": "string",
+            "description": "The realm's slug (realm surface)."
+          },
+          "audience": {
+            "type": "string",
+            "description": "The token audience: `access-admin:realm:<slug>` or `access-admin:platform` (TN-119)."
+          },
+          "scope_namespace": {
+            "type": "string",
+            "description": "The surface's scope prefix: `realm.` or `platform.`."
+          },
+          "read_scope": {
+            "type": "string",
+            "description": "The scope a read needs at least."
+          },
+          "domain": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{43}$",
+            "description": "The surface's governing DomainID, unpadded base64url."
+          },
+          "rate_policies": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "description": "A `RateLimit-Policy` item of the caller's own budget."
+            }
+          }
+        }
+      }
+    },
+    "headers": {
+      "Request-Id": {
+        "description": "The request's W3C trace id, 32 lower-case hex digits: the `traceparent` trace id when one was sent (OP-65, OP-67).",
+        "schema": {
+          "type": "string"
+        }
+      },
+      "RateLimit-Policy": {
+        "description": "The quotas that applied (IETF httpapi RateLimit header fields): `\"<name>\";q=<quota>;w=<window seconds>`, per layer (TN-127).",
+        "schema": {
+          "type": "string"
+        }
+      },
+      "RateLimit": {
+        "description": "What is left of each quota: `\"<name>\";r=<remaining>;t=<seconds to reset>`.",
+        "schema": {
+          "type": "string"
+        }
+      },
+      "Retry-After": {
+        "description": "Seconds to wait before retrying (RFC 9110 §10.2.3).",
+        "schema": {
+          "type": "string"
+        }
+      },
+      "ETag": {
+        "description": "The resource version, a strong entity tag; send it in `If-Match` to update (OP-65).",
+        "schema": {
+          "type": "string"
+        }
+      },
+      "Link": {
+        "description": "RFC 8288 `rel=\"next\"` to the next page; absent on the last page.",
+        "schema": {
+          "type": "string"
+        }
+      },
+      "Deprecation": {
+        "description": "RFC 9745: when the operation was deprecated, `@<unix seconds>`.",
+        "schema": {
+          "type": "string"
+        }
+      },
+      "Sunset": {
+        "description": "RFC 8594: when the operation goes away, an HTTP-date.",
+        "schema": {
+          "type": "string"
+        }
+      }
+    },
+    "parameters": {
+      "Traceparent": {
+        "name": "traceparent",
+        "in": "header",
+        "required": false,
+        "description": "W3C Trace Context; its trace id becomes `Request-Id`.",
+        "schema": {
+          "type": "string"
+        }
+      },
+      "IdempotencyKey": {
+        "name": "Idempotency-Key",
+        "in": "header",
+        "required": true,
+        "description": "Required on every write: the AIS nonce, unpadded base64url. The same key and request replay the first answer for 24 hours; another request is 422; a running one 409 (TN-126).",
+        "schema": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255
+        }
+      },
+      "Ais": {
+        "name": "X-Access-AIS",
+        "in": "header",
+        "required": false,
+        "description": "The caller's actor intent statement, a `COSE_Sign1` signed with its Instance key, unpadded base64url; or the body member `ais` (TN-110, PI-7).",
+        "schema": {
+          "type": "string"
+        }
+      },
+      "IfMatch": {
+        "name": "If-Match",
+        "in": "header",
+        "required": true,
+        "description": "The resource's ETag (OP-65): 428 without, 412 on a mismatch.",
+        "schema": {
+          "type": "string"
+        }
+      },
+      "Slug": {
+        "name": "slug",
+        "in": "path",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$"
+        }
+      },
+      "PageSize": {
+        "name": "page[size]",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100,
+          "default": 50
+        }
+      },
+      "Cursor": {
+        "name": "cursor",
+        "in": "query",
+        "required": false,
+        "description": "Opaque; from the `Link` of the previous page.",
+        "schema": {
+          "type": "string"
+        }
+      },
+      "Filter": {
+        "name": "filter",
+        "in": "query",
+        "required": false,
+        "description": "SCIM filter subset: eq, ne, co, sw, pr, and, or, parentheses; an attribute the endpoint does not name is 400 (TN-112).",
+        "schema": {
+          "type": "string",
+          "maxLength": 1024
+        }
+      }
+    },
+    "responses": {
+      "BadRequest": {
+        "description": "Malformed request: query, filter, cursor, body or Idempotency-Key.",
+        "headers": {
+          "Request-Id": {
+            "$ref": "#/components/headers/Request-Id"
+          },
+          "RateLimit-Policy": {
+            "$ref": "#/components/headers/RateLimit-Policy"
+          },
+          "RateLimit": {
+            "$ref": "#/components/headers/RateLimit"
+          }
+        },
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "#/components/schemas/Problem"
+            }
+          }
+        }
+      },
+      "Unauthorized": {
+        "description": "No usable credential for this surface: invalid-token, wrong-audience, token-lifetime, ais-required or ais-invalid.",
+        "headers": {
+          "Request-Id": {
+            "$ref": "#/components/headers/Request-Id"
+          },
+          "RateLimit-Policy": {
+            "$ref": "#/components/headers/RateLimit-Policy"
+          },
+          "RateLimit": {
+            "$ref": "#/components/headers/RateLimit"
+          }
+        },
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "#/components/schemas/Problem"
+            }
+          }
+        }
+      },
+      "Forbidden": {
+        "description": "insufficient-scope, ais-rejected or exercise-not-allowed.",
+        "headers": {
+          "Request-Id": {
+            "$ref": "#/components/headers/Request-Id"
+          },
+          "RateLimit-Policy": {
+            "$ref": "#/components/headers/RateLimit-Policy"
+          },
+          "RateLimit": {
+            "$ref": "#/components/headers/RateLimit"
+          }
+        },
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "#/components/schemas/Problem"
+            }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "No such resource, or one the caller may not see (TN-113).",
+        "headers": {
+          "Request-Id": {
+            "$ref": "#/components/headers/Request-Id"
+          },
+          "RateLimit-Policy": {
+            "$ref": "#/components/headers/RateLimit-Policy"
+          },
+          "RateLimit": {
+            "$ref": "#/components/headers/RateLimit"
+          }
+        },
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "#/components/schemas/Problem"
+            }
+          }
+        }
+      },
+      "Conflict": {
+        "description": "idempotency-key-in-use.",
+        "headers": {
+          "Request-Id": {
+            "$ref": "#/components/headers/Request-Id"
+          },
+          "RateLimit-Policy": {
+            "$ref": "#/components/headers/RateLimit-Policy"
+          },
+          "RateLimit": {
+            "$ref": "#/components/headers/RateLimit"
+          }
+        },
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "#/components/schemas/Problem"
+            }
+          }
+        }
+      },
+      "PreconditionFailed": {
+        "description": "precondition-failed.",
+        "headers": {
+          "Request-Id": {
+            "$ref": "#/components/headers/Request-Id"
+          },
+          "RateLimit-Policy": {
+            "$ref": "#/components/headers/RateLimit-Policy"
+          },
+          "RateLimit": {
+            "$ref": "#/components/headers/RateLimit"
+          }
+        },
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "#/components/schemas/Problem"
+            }
+          }
+        }
+      },
+      "Unprocessable": {
+        "description": "idempotency-key-reused.",
+        "headers": {
+          "Request-Id": {
+            "$ref": "#/components/headers/Request-Id"
+          },
+          "RateLimit-Policy": {
+            "$ref": "#/components/headers/RateLimit-Policy"
+          },
+          "RateLimit": {
+            "$ref": "#/components/headers/RateLimit"
+          }
+        },
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "#/components/schemas/Problem"
+            }
+          }
+        }
+      },
+      "PreconditionRequired": {
+        "description": "precondition-required.",
+        "headers": {
+          "Request-Id": {
+            "$ref": "#/components/headers/Request-Id"
+          },
+          "RateLimit-Policy": {
+            "$ref": "#/components/headers/RateLimit-Policy"
+          },
+          "RateLimit": {
+            "$ref": "#/components/headers/RateLimit"
+          }
+        },
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "#/components/schemas/Problem"
+            }
+          }
+        }
+      },
+      "TooManyRequests": {
+        "description": "rate-limited.",
+        "headers": {
+          "Request-Id": {
+            "$ref": "#/components/headers/Request-Id"
+          },
+          "RateLimit-Policy": {
+            "$ref": "#/components/headers/RateLimit-Policy"
+          },
+          "RateLimit": {
+            "$ref": "#/components/headers/RateLimit"
+          },
+          "Retry-After": {
+            "$ref": "#/components/headers/Retry-After"
+          }
+        },
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "#/components/schemas/Problem"
+            }
+          }
+        }
+      },
+      "Unavailable": {
+        "description": "A dependency is unavailable; nothing changed.",
+        "headers": {
+          "Request-Id": {
+            "$ref": "#/components/headers/Request-Id"
+          },
+          "RateLimit-Policy": {
+            "$ref": "#/components/headers/RateLimit-Policy"
+          },
+          "RateLimit": {
+            "$ref": "#/components/headers/RateLimit"
+          }
+        },
+        "content": {
+          "application/problem+json": {
+            "schema": {
+              "$ref": "#/components/schemas/Problem"
+            }
+          }
+        }
+      }
+    },
+    "securitySchemes": {
+      "read_token": {
+        "type": "http",
+        "scheme": "DPoP",
+        "description": "A DPoP-bound access token (RFC 9449) whose one audience is the surface's and whose scopes include the operation's; at most 60 minutes; with its `DPoP` proof (TN-27, OP-151 m.3 (c))."
+      },
+      "ais": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-Access-AIS",
+        "description": "The caller's AIS signed with a live Instance key of the surface's governing domain (PI-7, TN-110)."
+      }
+    }
+  }
+}
