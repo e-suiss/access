@@ -1,0 +1,34 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.admin_jobs (tenant_id, realm_id, mode, actor, item_count, created_ms,\n                expires_ms)\n         VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING job_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "job_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.admin_jobs",
+            "name": "job_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Bytea",
+        "Int4",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "a09976ebf00513e1c03894dd1e771f2028d8f5d7c401587bc41147f8a6053725"
+}

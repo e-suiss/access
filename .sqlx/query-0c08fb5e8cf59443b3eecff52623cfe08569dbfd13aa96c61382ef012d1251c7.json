@@ -1,0 +1,116 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT item_index, operation, resource_key, status, http_status, problem, exercise_id,\n                decision_pos\n           FROM access.admin_job_items\n          WHERE tenant_id = $1 AND realm_id = $2 AND job_id = $3 AND item_index > $4\n          ORDER BY item_index LIMIT $5",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "item_index",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "access.admin_job_items",
+            "name": "item_index"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "operation",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.admin_job_items",
+            "name": "operation"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "resource_key",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.admin_job_items",
+            "name": "resource_key"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "status",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.admin_job_items",
+            "name": "status"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "http_status",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "access.admin_job_items",
+            "name": "http_status"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "problem",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.admin_job_items",
+            "name": "problem"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "exercise_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.admin_job_items",
+            "name": "exercise_id"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "decision_pos",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.admin_job_items",
+            "name": "decision_pos"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Int4",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      false,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "0c08fb5e8cf59443b3eecff52623cfe08569dbfd13aa96c61382ef012d1251c7"
+}

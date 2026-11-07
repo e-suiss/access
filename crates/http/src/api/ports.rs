@@ -453,6 +453,124 @@ impl PlatformResources for NoPlatformResources {
     }
 }
 
+/// A bulk job to record (TN-125): its mode, the Instance whose AIS submitted it, and each
+/// item's operation and natural key.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NewJob {
+    /// `sequential` or `parallel`.
+    pub mode: &'static str,
+    /// The submitting Instance's `kid`.
+    pub actor: [u8; 32],
+    /// Each item's operation and natural key, in order.
+    pub items: Vec<(String, Option<String>)>,
+    /// Accepted at, Unix milliseconds.
+    pub created_ms: u64,
+    /// Shown until.
+    pub expires_ms: u64,
+}
+
+/// A job as read: its counts, so a throttled item is visible on the envelope (TN-125).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct JobView {
+    /// Its id, a UUID.
+    pub id: String,
+    /// `sequential` or `parallel`.
+    pub mode: String,
+    /// `running`, `succeeded`, `partial` or `failed`.
+    pub status: String,
+    /// Items in it.
+    pub items: u32,
+    /// Items committed.
+    pub committed: u32,
+    /// Items refused, not allowed, unavailable or not run for a failed dependency.
+    pub failed: u32,
+    /// Items refused by a rate limit.
+    pub throttled: u32,
+    /// Accepted at, Unix milliseconds.
+    pub created_ms: u64,
+    /// Finished at.
+    pub finished_ms: Option<u64>,
+    /// Shown until.
+    pub expires_ms: u64,
+}
+
+/// One item's outcome: the Exercise it committed or why not (TN-125's per-item error file).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct JobItem {
+    /// Its place in the job.
+    pub index: u32,
+    /// The write operation.
+    pub operation: String,
+    /// The natural key it names.
+    pub key: Option<String>,
+    /// `pending`, `committed`, `not_allowed`, `rejected`, `throttled`, `failed_dependency` or
+    /// `unavailable`.
+    pub status: String,
+    /// The status the write answered with.
+    pub http_status: Option<u16>,
+    /// The problem code of a refusal.
+    pub problem: Option<String>,
+    /// The committed Exercise, base64url.
+    pub exercise_id: Option<String>,
+    /// Its log position.
+    pub position: Option<u64>,
+}
+
+/// Where bulk jobs are kept (TN-125): in the realm's scope, 7 days, never deleted (OP-73).
+pub trait Jobs: Send + Sync {
+    /// Records a job; `None` when there is no such realm.
+    fn create(&self, slug: String, job: NewJob) -> Pending<'_, Option<String>>;
+
+    /// Records one item's outcome.
+    fn record(&self, slug: String, job: String, item: JobItem) -> Pending<'_, ()>;
+
+    /// Finishes the job with `status` at `now_ms`.
+    fn finish(
+        &self,
+        slug: String,
+        job: String,
+        status: &'static str,
+        now_ms: u64,
+    ) -> Pending<'_, ()>;
+
+    /// The job, unless it is unknown or expired by `now_ms`.
+    fn read(&self, slug: String, job: String, now_ms: u64) -> Pending<'_, Option<JobView>>;
+
+    /// Up to `limit` of its items after `after`.
+    fn items(
+        &self,
+        slug: String,
+        job: String,
+        after: Option<u32>,
+        limit: u32,
+    ) -> Pending<'_, Vec<JobItem>>;
+}
+
+/// No job store: every job request is unavailable (MD-8).
+pub struct NoJobs;
+
+impl Jobs for NoJobs {
+    fn create(&self, _: String, _: NewJob) -> Pending<'_, Option<String>> {
+        Box::pin(async { Err(Unavailable) })
+    }
+
+    fn record(&self, _: String, _: String, _: JobItem) -> Pending<'_, ()> {
+        Box::pin(async { Err(Unavailable) })
+    }
+
+    fn finish(&self, _: String, _: String, _: &'static str, _: u64) -> Pending<'_, ()> {
+        Box::pin(async { Err(Unavailable) })
+    }
+
+    fn read(&self, _: String, _: String, _: u64) -> Pending<'_, Option<JobView>> {
+        Box::pin(async { Err(Unavailable) })
+    }
+
+    fn items(&self, _: String, _: String, _: Option<u32>, _: u32) -> Pending<'_, Vec<JobItem>> {
+        Box::pin(async { Err(Unavailable) })
+    }
+}
+
 /// Every port of the management API.
 pub trait Env: Send + Sync + 'static {
     /// Read token verifier.
@@ -489,5 +607,9 @@ pub trait Env: Send + Sync + 'static {
     /// The platform resources; none by default.
     fn platform(&self) -> &dyn PlatformResources {
         &NoPlatformResources
+    }
+    /// The bulk job store; none by default.
+    fn jobs(&self) -> &dyn Jobs {
+        &NoJobs
     }
 }

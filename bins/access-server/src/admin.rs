@@ -222,4 +222,8 @@ impl<P: RealmPlane> Env for ServerApi<P> {
     fn platform(&self) -> &dyn PlatformResources {
         &self.realms
     }
+
+    fn jobs(&self) -> &dyn access_http::api::ports::Jobs {
+        &self.realms
+    }
 }

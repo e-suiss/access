@@ -27,7 +27,7 @@ fn problem(code: &Code) -> Response {
     code.problem().into_response()
 }
 
-fn slug(ctx: &Ctx<impl Env>) -> String {
+pub(super) fn slug(ctx: &Ctx<impl Env>) -> String {
     match &ctx.scope {
         SurfaceScope::Realm(s) => s.clone(),
         SurfaceScope::Platform => String::new(),
@@ -81,6 +81,15 @@ pub async fn serve<E: Env>(
         Shape::List(attrs) => list(&ctx, kind, attrs, &uri).await,
         Shape::Get => get(&ctx, kind, key).await,
         Shape::Draft => draft(&ctx, &body).await,
+        Shape::JobCreate => super::jobs::create(&ctx, &body).await,
+        Shape::JobGet => match key {
+            Some(k) => super::jobs::get(&ctx, k).await,
+            None => Err(&codes::NOT_FOUND),
+        },
+        Shape::JobItems => match key {
+            Some(k) => super::jobs::items(&ctx, k, &uri).await,
+            None => Err(&codes::NOT_FOUND),
+        },
         Shape::Write { .. } => commit(&ctx, kind, shape, key, &headers, &body).await,
     };
     answer.unwrap_or_else(problem)
@@ -141,7 +150,7 @@ async fn get<E: Env>(
     Ok(response)
 }
 
-fn object(body: &[u8]) -> Result<Map<String, Value>, &'static Code> {
+pub(super) fn object(body: &[u8]) -> Result<Map<String, Value>, &'static Code> {
     let bytes: &[u8] = if body.is_empty() { b"{}" } else { body };
     access_parse::json::check(bytes, bytes.len(), access_parse::json::MAX_DEPTH)
         .map_err(|_| &codes::realm::INVALID_BODY)?;
@@ -213,6 +222,24 @@ async fn draft<E: Env>(ctx: &Ctx<E>, raw: &[u8]) -> Result<Response, &'static Co
         .filter(|r| r.access == crate::api::manifest::Access::Write)
         .ok_or(&codes::realm::UNKNOWN_OPERATION)?;
     let (kind, shape) = spec(operation.operation_id).ok_or(&codes::realm::UNKNOWN_OPERATION)?;
+    // TN-125: a job's envelope AIS signs the job digest, not an Exercise intent
+    if shape == Shape::JobCreate {
+        let Some(Value::Object(body)) = request.remove("body") else {
+            return Err(&codes::realm::INVALID_JOB);
+        };
+        let d = super::jobs::draft_digest(&body)?;
+        return Ok((
+            StatusCode::OK,
+            axum::Json(json!({
+                "operation": operation.operation_id,
+                "key": null,
+                "body": body,
+                "domain": b64url_encode(&ctx.domain.0),
+                "intent_digest": b64url_encode(&d),
+            })),
+        )
+            .into_response());
+    }
     let key = match request.remove("key") {
         None | Some(Value::Null) => None,
         Some(Value::String(k)) => Some(k),
@@ -268,7 +295,7 @@ async fn draft<E: Env>(ctx: &Ctx<E>, raw: &[u8]) -> Result<Response, &'static Co
         .into_response())
 }
 
-async fn commit<E: Env>(
+pub(super) async fn commit<E: Env>(
     ctx: &Ctx<E>,
     kind: ResourceKind,
     shape: Shape,

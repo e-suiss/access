@@ -26,10 +26,10 @@ use access_http::api::manifest::{
     Access, Answer, PLATFORM_ROOT, REALM_ROOT, Route, Verb, Visibility,
 };
 use access_http::api::ports::{
-    Clock, CursorSeal, Draft, Drafted, Entropy, Env, Item, Listing, Pending, PlatformKind,
-    PlatformQuery, PlatformResources, PlatformWrite, Presented, Proposal, Proposals, Proposed,
-    RateLimiter, ReadToken, ReadTokens, RealmResources, ResourceKind, ResourceQuery, ResourceWrite,
-    Surfaces, Unavailable, Written,
+    Clock, CursorSeal, Draft, Drafted, Entropy, Env, Item, JobItem, JobView, Jobs, Listing, NewJob,
+    Pending, PlatformKind, PlatformQuery, PlatformResources, PlatformWrite, Presented, Proposal,
+    Proposals, Proposed, RateLimiter, ReadToken, ReadTokens, RealmResources, ResourceKind,
+    ResourceQuery, ResourceWrite, Surfaces, Unavailable, Written,
 };
 use access_kernel::ais::{CONTENT_TYPE, Statement};
 use access_kernel::codec::Canonical;
@@ -91,6 +91,7 @@ pub struct Fake {
     pub ledger: Arc<Ledger>,
     pub idempotency: MemoryIdempotency,
     pub nonces: Mutex<HashMap<Vec<u8>, String>>,
+    pub jobs: Mutex<HashMap<String, (JobView, Vec<JobItem>)>>,
 }
 
 pub struct Tokens<'a>(&'a Fake);
@@ -386,6 +387,122 @@ impl Env for TestEnv {
     fn platform(&self) -> &dyn PlatformResources {
         &self.0
     }
+    fn jobs(&self) -> &dyn Jobs {
+        &self.0
+    }
+}
+
+// TN-125: the fake job store keeps everything in memory, in the one realm
+impl Jobs for Shared {
+    fn create(&self, slug: String, job: NewJob) -> Pending<'_, Option<String>> {
+        let mut jobs = self.0.jobs.lock().unwrap();
+        let id = format!("00000000-0000-0000-0000-{:012}", jobs.len() + 1);
+        let created = (slug == REALM).then(|| {
+            let items = job
+                .items
+                .iter()
+                .enumerate()
+                .map(|(i, (op, key))| JobItem {
+                    index: u32::try_from(i).unwrap(),
+                    operation: op.clone(),
+                    key: key.clone(),
+                    status: "pending".to_owned(),
+                    http_status: None,
+                    problem: None,
+                    exercise_id: None,
+                    position: None,
+                })
+                .collect();
+            let view = JobView {
+                id: id.clone(),
+                mode: job.mode.to_owned(),
+                status: "running".to_owned(),
+                items: u32::try_from(job.items.len()).unwrap(),
+                committed: 0,
+                failed: 0,
+                throttled: 0,
+                created_ms: job.created_ms,
+                finished_ms: None,
+                expires_ms: job.expires_ms,
+            };
+            jobs.insert(id.clone(), (view, items));
+            id
+        });
+        Box::pin(async move { Ok(created) })
+    }
+
+    fn record(&self, _: String, job: String, item: JobItem) -> Pending<'_, ()> {
+        if let Some((view, items)) = self.0.jobs.lock().unwrap().get_mut(&job) {
+            match item.status.as_str() {
+                "committed" => view.committed += 1,
+                "throttled" => view.throttled += 1,
+                _ => view.failed += 1,
+            }
+            let i = item.index as usize;
+            items[i] = item;
+        }
+        Box::pin(async { Ok(()) })
+    }
+
+    fn finish(&self, _: String, job: String, status: &'static str, now_ms: u64) -> Pending<'_, ()> {
+        if let Some((view, _)) = self.0.jobs.lock().unwrap().get_mut(&job) {
+            status.clone_into(&mut view.status);
+            view.finished_ms = Some(now_ms);
+        }
+        Box::pin(async { Ok(()) })
+    }
+
+    fn read(&self, slug: String, job: String, now_ms: u64) -> Pending<'_, Option<JobView>> {
+        let found = self
+            .0
+            .jobs
+            .lock()
+            .unwrap()
+            .get(&job)
+            .map(|(v, _)| v.clone())
+            .or_else(|| {
+                // like the resources, any other key of the realm reads as a finished job
+                (job != HIDDEN_KEY).then(|| JobView {
+                    id: job.clone(),
+                    mode: "parallel".to_owned(),
+                    status: "succeeded".to_owned(),
+                    items: 1,
+                    committed: 1,
+                    failed: 0,
+                    throttled: 0,
+                    created_ms: now_ms,
+                    finished_ms: Some(now_ms),
+                    expires_ms: now_ms + 1,
+                })
+            })
+            .filter(|v| slug == REALM && v.expires_ms > now_ms);
+        Box::pin(async move { Ok(found) })
+    }
+
+    fn items(
+        &self,
+        _: String,
+        job: String,
+        after: Option<u32>,
+        limit: u32,
+    ) -> Pending<'_, Vec<JobItem>> {
+        let page = self
+            .0
+            .jobs
+            .lock()
+            .unwrap()
+            .get(&job)
+            .map(|(_, items)| {
+                items
+                    .iter()
+                    .filter(|i| after.is_none_or(|a| i.index > a))
+                    .take(limit as usize)
+                    .cloned()
+                    .collect()
+            })
+            .unwrap_or_default();
+        Box::pin(async move { Ok(page) })
+    }
 }
 
 pub struct Harness {
@@ -405,6 +522,7 @@ impl Harness {
             ledger: Arc::new(Ledger::default()),
             idempotency: MemoryIdempotency::default(),
             nonces: Mutex::new(HashMap::new()),
+            jobs: Mutex::new(HashMap::new()),
         });
         let api = Api::new(TestEnv(Shared(fake.clone())), Limits::default());
         Self { fake, api }
@@ -467,10 +585,22 @@ pub fn ais_with(
     iat: u64,
     mode: Mode,
 ) -> String {
+    ais_over(signer, domain, nonce, iat, mode, Digest([0x44; 32]))
+}
+
+/// An AIS whose statement signs `intent`.
+pub fn ais_over(
+    signer: &SoftSigner,
+    domain: Digest,
+    nonce: [u8; 16],
+    iat: u64,
+    mode: Mode,
+    intent: Digest,
+) -> String {
     let statement = Statement {
         domain,
         nonce: nonce.to_vec(),
-        intent: Digest([0x44; 32]),
+        intent,
         mode,
         pep: "access-identity".to_owned(),
         capacity: Capacity::Own,

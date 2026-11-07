@@ -298,6 +298,11 @@ pub(crate) struct Database {
     /// (OP-55).
     #[serde(default)]
     pub(crate) migrator: Option<Role>,
+    /// A read replica's host for admin search and listing (OP-27, §17.4.6), reached with the
+    /// `access_app` login and pool size on the same port and database. No security read is
+    /// served from it; without it those reads go to the primary.
+    #[serde(default)]
+    pub(crate) replica_host: Option<String>,
 }
 
 /// The PKCS#11 token holding the domains' keys.
@@ -570,6 +575,7 @@ mod tests {
                 archive: role("access_archive_login"),
                 outbox_reader: role("access_outbox_reader_login"),
                 migrator: None,
+                replica_host: None,
             }),
             hsm: Some(Hsm {
                 module: "/usr/lib/softhsm/libsofthsm2.so".into(),

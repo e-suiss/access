@@ -3,13 +3,14 @@
 //! authority plane's key index, and the realm resources are read and written through the
 //! identity plane's `idp.*` path (TN-110, PI-4, INV-2).
 
+use std::fmt::Write as _;
 use std::sync::Arc;
 
 use access_http::api::domain::SurfaceScope;
 use access_http::api::domain::caller::WriteCaller;
 use access_http::api::ports::{
-    Draft, Drafted, Item, Listing, Pending, RealmResources, ResourceKind, ResourceQuery,
-    ResourceWrite, Surfaces, Unavailable, Written,
+    Draft, Drafted, Item, JobItem, JobView, Jobs, Listing, NewJob, Pending, RealmResources,
+    ResourceKind, ResourceQuery, ResourceWrite, Surfaces, Unavailable, Written,
 };
 use access_http::api::realm::problem_of;
 use access_http::problem::codes;
@@ -30,6 +31,7 @@ use access_kernel::meta::ExerciseBasis;
 use access_kernel::model::Window;
 use access_kernel::verify::cose::PublicKey;
 use access_store::Pool;
+use access_store::admin_jobs;
 use access_store::identity::{RealmId, TenantId, TenantTx};
 use access_store::tenancy;
 use serde_json::Value;
@@ -41,6 +43,9 @@ use crate::ids::CellIds;
 /// The identity plane behind the realm-admin surface.
 pub(crate) struct Realms<P> {
     pub(crate) app: Pool,
+    /// Admin listing (OP-27, §17.4.6): the read replica when one is configured, else `app`.
+    /// One resource, which a conditional write compares against, is read from `app`.
+    pub(crate) reads: Pool,
     pub(crate) router: Pool,
     pub(crate) ids: Arc<CellIds>,
     pub(crate) plane: P,
@@ -96,8 +101,16 @@ impl<P: Decider + Governance + Instances + Clone + Send + Sync + 'static> Realms
         &'a self,
         ids: &'a access_crypto::opaque_id::IdKey,
     ) -> Admin<'a, P, P, RealmKeyring> {
+        self.admin_on(&self.app, ids)
+    }
+
+    fn admin_on<'a>(
+        &'a self,
+        app: &'a Pool,
+        ids: &'a access_crypto::opaque_id::IdKey,
+    ) -> Admin<'a, P, P, RealmKeyring> {
         Admin {
-            app: &self.app,
+            app,
             ids,
             decider: &self.plane,
             governance: &self.plane,
@@ -351,8 +364,14 @@ impl<P: Decider + Governance + Instances + Clone + Send + Sync + 'static> Realms
             return Ok(None);
         };
         let ids = self.ids.key().ok_or(Unavailable)?;
+        // OP-27: a page of a collection may come from the replica; never a security read
+        let pool = if q.key.is_none() {
+            &self.reads
+        } else {
+            &self.app
+        };
         let read = self
-            .admin(&ids)
+            .admin_on(pool, &ids)
             .read(
                 tenant,
                 realm,
@@ -425,5 +444,219 @@ impl<P: Decider + Governance + Instances + Clone + Send + Sync + 'static> RealmR
 
     fn commit(&self, write: ResourceWrite, caller: WriteCaller) -> Pending<'_, Written> {
         Box::pin(self.commit_inner(write, caller))
+    }
+}
+
+/// A job id as the API shows it: the UUID in its hyphenated form.
+fn job_text(id: [u8; 16]) -> String {
+    let hex = id.iter().fold(String::with_capacity(32), |mut out, b| {
+        let _ = write!(out, "{b:02x}");
+        out
+    });
+    format!(
+        "{}-{}-{}-{}-{}",
+        &hex[..8],
+        &hex[8..12],
+        &hex[12..16],
+        &hex[16..20],
+        &hex[20..]
+    )
+}
+
+/// The id of a job's text; `None` for anything that is not a UUID in that form.
+fn job_id(text: &str) -> Option<[u8; 16]> {
+    let hex: String = text.split('-').collect();
+    if text.len() != 36 || hex.len() != 32 {
+        return None;
+    }
+    let mut out = [0; 16];
+    for (o, pair) in out.iter_mut().zip(hex.as_bytes().chunks(2)) {
+        *o = u8::from_str_radix(std::str::from_utf8(pair).ok()?, 16).ok()?;
+    }
+    (job_text(out) == text).then_some(out)
+}
+
+fn job_view(j: admin_jobs::JobRow) -> JobView {
+    JobView {
+        id: job_text(j.id),
+        mode: j.mode,
+        status: j.status,
+        items: j.items,
+        committed: j.committed,
+        failed: j.failed,
+        throttled: j.throttled,
+        created_ms: j.created_ms,
+        finished_ms: j.finished_ms,
+        expires_ms: j.expires_ms,
+    }
+}
+
+fn store_down(e: &access_store::StoreError) -> Unavailable {
+    tracing::warn!(event = "api.realm.unavailable", outcome = "error", error = %e, "job store unavailable");
+    Unavailable
+}
+
+impl<P: Decider + Governance + Instances + Clone + Send + Sync + 'static> Realms<P> {
+    /// A transaction in the realm `slug`'s scope (TN-113); `None` when there is no such realm.
+    async fn scoped(&self, slug: &str) -> Result<Option<TenantTx>, Unavailable> {
+        let Some((tenant, realm)) = self.locate(slug).await? else {
+            return Ok(None);
+        };
+        TenantTx::begin(&self.app, tenant, realm)
+            .await
+            .map(Some)
+            .map_err(|e| store_down(&e))
+    }
+
+    async fn create_job(&self, slug: String, job: NewJob) -> Result<Option<String>, Unavailable> {
+        let Some(mut t) = self.scoped(&slug).await? else {
+            return Ok(None);
+        };
+        let id = admin_jobs::create(
+            &mut t,
+            &admin_jobs::NewJob {
+                mode: job.mode,
+                actor: job.actor,
+                items: &job.items,
+                created_ms: job.created_ms,
+                expires_ms: job.expires_ms,
+            },
+        )
+        .await
+        .map_err(|e| store_down(&e))?;
+        t.commit().await.map_err(|e| store_down(&e))?;
+        Ok(Some(job_text(id)))
+    }
+
+    async fn record_item(&self, slug: String, job: String, i: JobItem) -> Result<(), Unavailable> {
+        let id = job_id(&job).ok_or(Unavailable)?;
+        let mut t = self.scoped(&slug).await?.ok_or(Unavailable)?;
+        let row = admin_jobs::ItemRow {
+            index: i.index,
+            operation: i.operation,
+            key: i.key,
+            status: i.status,
+            http_status: i.http_status,
+            problem: i.problem,
+            exercise_id: i.exercise_id,
+            position: i.position,
+        };
+        admin_jobs::record(&mut t, id, &row)
+            .await
+            .map_err(|e| store_down(&e))?;
+        t.commit().await.map_err(|e| store_down(&e))
+    }
+
+    async fn finish_job(
+        &self,
+        slug: String,
+        job: String,
+        status: &'static str,
+        now_ms: u64,
+    ) -> Result<(), Unavailable> {
+        let id = job_id(&job).ok_or(Unavailable)?;
+        let mut t = self.scoped(&slug).await?.ok_or(Unavailable)?;
+        admin_jobs::finish(&mut t, id, status, now_ms)
+            .await
+            .map_err(|e| store_down(&e))?;
+        t.commit().await.map_err(|e| store_down(&e))
+    }
+
+    async fn read_job(
+        &self,
+        slug: String,
+        job: String,
+        now_ms: u64,
+    ) -> Result<Option<JobView>, Unavailable> {
+        let Some(id) = job_id(&job) else {
+            return Ok(None);
+        };
+        let Some(mut t) = self.scoped(&slug).await? else {
+            return Ok(None);
+        };
+        let j = admin_jobs::job(&mut t, id, now_ms)
+            .await
+            .map_err(|e| store_down(&e))?;
+        t.commit().await.map_err(|e| store_down(&e))?;
+        Ok(j.map(job_view))
+    }
+
+    async fn job_items(
+        &self,
+        slug: String,
+        job: String,
+        after: Option<u32>,
+        limit: u32,
+    ) -> Result<Vec<JobItem>, Unavailable> {
+        let id = job_id(&job).ok_or(Unavailable)?;
+        let mut t = self.scoped(&slug).await?.ok_or(Unavailable)?;
+        let rows = admin_jobs::items(&mut t, id, after, limit)
+            .await
+            .map_err(|e| store_down(&e))?;
+        t.commit().await.map_err(|e| store_down(&e))?;
+        Ok(rows
+            .into_iter()
+            .map(|r| JobItem {
+                index: r.index,
+                operation: r.operation,
+                key: r.key,
+                status: r.status,
+                http_status: r.http_status,
+                problem: r.problem,
+                exercise_id: r.exercise_id,
+                position: r.position,
+            })
+            .collect())
+    }
+}
+
+impl<P: Decider + Governance + Instances + Clone + Send + Sync + 'static> Jobs for Realms<P> {
+    fn create(&self, slug: String, job: NewJob) -> Pending<'_, Option<String>> {
+        Box::pin(self.create_job(slug, job))
+    }
+
+    fn record(&self, slug: String, job: String, item: JobItem) -> Pending<'_, ()> {
+        Box::pin(self.record_item(slug, job, item))
+    }
+
+    fn finish(
+        &self,
+        slug: String,
+        job: String,
+        status: &'static str,
+        now_ms: u64,
+    ) -> Pending<'_, ()> {
+        Box::pin(self.finish_job(slug, job, status, now_ms))
+    }
+
+    fn read(&self, slug: String, job: String, now_ms: u64) -> Pending<'_, Option<JobView>> {
+        Box::pin(self.read_job(slug, job, now_ms))
+    }
+
+    fn items(
+        &self,
+        slug: String,
+        job: String,
+        after: Option<u32>,
+        limit: u32,
+    ) -> Pending<'_, Vec<JobItem>> {
+        Box::pin(self.job_items(slug, job, after, limit))
+    }
+}
+
+#[cfg(test)]
+mod job_ids {
+    use super::*;
+
+    // TN-125: a job id reads back only in its one canonical form
+    #[test]
+    fn job_ids_round_trip_in_one_form() {
+        let id = [0xab; 16];
+        let text = job_text(id);
+        assert_eq!(text, "abababab-abab-abab-abab-abababababab");
+        assert_eq!(job_id(&text), Some(id));
+        assert_eq!(job_id(&text.to_uppercase()), None);
+        assert_eq!(job_id("abababababababababababababababab"), None);
+        assert_eq!(job_id("not-a-job"), None);
     }
 }

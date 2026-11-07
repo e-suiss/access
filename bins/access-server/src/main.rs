@@ -121,6 +121,8 @@ struct Prepared {
 struct Pools {
     sequencer: Pool,
     app: Pool,
+    /// Admin search and listing (OP-27): the replica when one is configured, else `app`.
+    reads: Pool,
     deriver: Pool,
     router: Pool,
     archive: Pool,
@@ -671,6 +673,23 @@ async fn pools(config: &Config, prepared: &Prepared) -> Result<Pools, String> {
     };
     let sequencer = open(&db.sequencer, &prepared.sequencer_password).await?;
     let app = open(&db.app, &prepared.app_password).await?;
+    // OP-27: only admin search and listing read from the replica
+    let reads = match &db.replica_host {
+        Some(host) => {
+            let target = Target {
+                host,
+                port: db.port,
+                database: &db.name,
+                user: &db.app.user,
+                password: prepared.app_password.value().expose(),
+                root_cert: &prepared.root_cert,
+            };
+            pool(options(&target), db.app.pool)
+                .await
+                .map_err(|e| format!("replica {}: {e}", db.app.user))?
+        }
+        None => app.clone(),
+    };
     let deriver = open(&db.deriver, &prepared.deriver_password).await?;
     let router = open(&db.router, &prepared.router_password).await?;
     let archive = open(&db.archive, &prepared.archive_password).await?;
@@ -700,6 +719,7 @@ async fn pools(config: &Config, prepared: &Prepared) -> Result<Pools, String> {
     Ok(Pools {
         sequencer,
         app,
+        reads,
         deriver,
         router,
         archive,
@@ -1001,6 +1021,7 @@ async fn serve(
         mmdb.map(|m| tokio::spawn(m.watch(access_identity_risk::adapters::mmdb::WATCH_EVERY)));
     let cell_ids = Arc::new(ids::CellIds::new(prepared.identity_keys.clone()));
     let (admin_app, admin_ids) = (all.app.clone(), cell_ids.clone());
+    let admin_reads = all.reads.clone();
     let admin_targets = prepared.outbound.declared();
     let console_assets = prepared.console_assets;
     let admin_outbound = prepared.outbound.clone();
@@ -1080,6 +1101,7 @@ async fn serve(
         &prepared.identity_keys,
         admin::realm::Realms {
             app: admin_app,
+            reads: admin_reads,
             router: tenants_pool.clone(),
             ids: admin_ids,
             plane: idp_plane.clone(),

@@ -90,6 +90,10 @@ async fn every_realm_write_without_its_actor_proof_changes_nothing() {
             );
             assert_eq!(h.position(), before, "{op} case {i}");
         }
+        // TN-125: a job's envelope is checked in its own test
+        if op == "createJob" {
+            continue;
+        }
         let signed = ais(&own, realm_domain(), nonce, h.now());
         let (r, body) = send(&router, write(row, nonce, Some(&signed), "{}")).await;
         assert!(r.status().is_success(), "{op}: {} {body}", r.status());

@@ -1,0 +1,124 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT j.job_id, j.mode, j.status, j.item_count, j.created_ms, j.finished_ms,\n                  j.expires_ms,\n                  count(*) FILTER (WHERE i.status = 'committed') AS \"committed!\",\n                  count(*) FILTER (WHERE i.status IN ('not_allowed', 'rejected',\n                                   'failed_dependency', 'unavailable')) AS \"failed!\",\n                  count(*) FILTER (WHERE i.status = 'throttled') AS \"throttled!\"\n             FROM access.admin_jobs j\n             JOIN access.admin_job_items i\n               ON i.tenant_id = j.tenant_id AND i.realm_id = j.realm_id AND i.job_id = j.job_id\n            WHERE j.tenant_id = $1 AND j.realm_id = $2 AND j.job_id = $3 AND j.expires_ms > $4\n            GROUP BY j.tenant_id, j.realm_id, j.job_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "job_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.admin_jobs",
+            "name": "job_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "mode",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.admin_jobs",
+            "name": "mode"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "status",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.admin_jobs",
+            "name": "status"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "item_count",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "access.admin_jobs",
+            "name": "item_count"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "created_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.admin_jobs",
+            "name": "created_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "finished_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.admin_jobs",
+            "name": "finished_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "expires_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.admin_jobs",
+            "name": "expires_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "committed!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 8,
+        "name": "failed!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 9,
+        "name": "throttled!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "29e4dcb8821e0820df689c35aba00a3684fa68b378789cf8d6660c4f10ac6b54"
+}

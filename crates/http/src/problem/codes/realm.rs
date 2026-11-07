@@ -240,3 +240,31 @@ pub const INVALID_PROTECTION_MODE: Code = code(
     "Bad Request",
     "Each protection is monitor or enforce, sl2 is shadow, stepup or stepup_caep, at most 1024 nonzero denied ASNs; brute-force protection is always enforce (OP-151 m.3 (o), TI-9).",
 );
+/// A job body that is not `{mode, operations}` with 1 to 100 items (TN-125).
+pub const INVALID_JOB: Code = code(
+    "invalid-job",
+    400,
+    "Bad Request",
+    "A job is {mode: sequential or parallel, operations: 1 to 100 items of {operation, key, if_match, body with its ais}} (TN-125).",
+);
+/// An item that is not a realm write whose answer may be kept (TN-125).
+pub const JOB_OPERATION_NOT_ALLOWED: Code = code(
+    "job-operation-not-allowed",
+    400,
+    "Bad Request",
+    "A job item is a realm write whose answer may be kept; a write that shows a secret once is sent on its own (TN-125, CR-38).",
+);
+/// The envelope's AIS does not sign this job's digest (TN-110, TN-125).
+pub const JOB_INTENT_MISMATCH: Code = code(
+    "job-intent-mismatch",
+    400,
+    "Bad Request",
+    "The job's AIS does not sign the digest of its mode and items; draft it with POST intents (TN-110, TN-125).",
+);
+/// An item of a sequential job after a failed one (TN-125).
+pub const FAILED_DEPENDENCY: Code = code(
+    "failed-dependency",
+    424,
+    "Failed Dependency",
+    "An earlier item of the sequential job did not commit, so this one was not run (TN-125).",
+);

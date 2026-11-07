@@ -10,6 +10,7 @@
 //! to `…/{key}/retire`, never a `DELETE` (OP-73). No route writes a credential (TN-61).
 
 mod handlers;
+pub mod jobs;
 
 use access_identity_admin::AdminError;
 use access_identity_admin::domain::Invalid;
@@ -315,6 +316,22 @@ pub const ROWS: &[Route] = &[
     ),
     write(
         Verb::Post,
+        "/admin/v1/realms/{slug}/jobs",
+        "createJob",
+        "Starts a bulk job: each item is its own write under its own AIS; answers 202.",
+    ),
+    read(
+        "/admin/v1/realms/{slug}/jobs/{job_id}",
+        "getJob",
+        "A bulk job's state and counts, throttled items included.",
+    ),
+    list(
+        "/admin/v1/realms/{slug}/jobs/{job_id}/items",
+        "listJobItems",
+        "A bulk job's per-item results: the Exercise or the problem that refused it.",
+    ),
+    write(
+        Verb::Post,
         "/admin/v1/realms/{slug}/rehome",
         "rehomeRealm",
         "Moves the realm to another governing domain: declared and reserved, never applied.",
@@ -341,6 +358,12 @@ pub enum Shape {
     },
     /// The intent draft.
     Draft,
+    /// A bulk job's start (TN-125).
+    JobCreate,
+    /// A bulk job's envelope.
+    JobGet,
+    /// A bulk job's per-item results.
+    JobItems,
 }
 
 const CLIENT_PATCH: &[&str] = &[
@@ -467,6 +490,9 @@ pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
         "putProtectionMode" => (Settings, put("protection_mode")),
         "patchProtectionMode" => (Settings, patch(PROTECTION_PATCH, Some("protection_mode"))),
         "rehomeRealm" => (Settings, w(false)),
+        "createJob" => (Settings, Shape::JobCreate),
+        "getJob" => (Settings, Shape::JobGet),
+        "listJobItems" => (Settings, Shape::JobItems),
         _ => return None,
     })
 }

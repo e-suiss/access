@@ -464,6 +464,69 @@
       "status": 409,
       "title": "Conflict",
       "description": "The slug is taken, now or by a deleted realm; slugs are never reused (TN-16, INV-32)."
+    },
+    {
+      "code": "public-sub-not-opted-in",
+      "type": "urn:suiss:access:problem:public-sub-not-opted-in",
+      "status": 400,
+      "title": "Bad Request",
+      "description": "A client reads pairwise subs unless subject_type is public and public_sub_opt_in is true (MD-10)."
+    },
+    {
+      "code": "invalid-sector-identifier-uri",
+      "type": "urn:suiss:access:problem:invalid-sector-identifier-uri",
+      "status": 400,
+      "title": "Bad Request",
+      "description": "The sector_identifier_uri is not https, or its document is not a JSON array of https URIs listing every redirect URI (OIDC Core 8.1)."
+    },
+    {
+      "code": "reserved-operation",
+      "type": "urn:suiss:access:problem:reserved-operation",
+      "status": 501,
+      "title": "Not Implemented",
+      "description": "The operation is declared in the catalogue and reserved; it is never applied (OP-150 m.11 (b))."
+    },
+    {
+      "code": "invalid-jose-alg",
+      "type": "urn:suiss:access:problem:invalid-jose-alg",
+      "status": 400,
+      "title": "Bad Request",
+      "description": "The realm signs with ES256 or Ed25519; EdDSA is never named (MD-3, CR-5)."
+    },
+    {
+      "code": "invalid-protection-mode",
+      "type": "urn:suiss:access:problem:invalid-protection-mode",
+      "status": 400,
+      "title": "Bad Request",
+      "description": "Each protection is monitor or enforce, sl2 is shadow, stepup or stepup_caep, at most 1024 nonzero denied ASNs; brute-force protection is always enforce (OP-151 m.3 (o), TI-9)."
+    },
+    {
+      "code": "invalid-job",
+      "type": "urn:suiss:access:problem:invalid-job",
+      "status": 400,
+      "title": "Bad Request",
+      "description": "A job is {mode: sequential or parallel, operations: 1 to 100 items of {operation, key, if_match, body with its ais}} (TN-125)."
+    },
+    {
+      "code": "job-operation-not-allowed",
+      "type": "urn:suiss:access:problem:job-operation-not-allowed",
+      "status": 400,
+      "title": "Bad Request",
+      "description": "A job item is a realm write whose answer may be kept; a write that shows a secret once is sent on its own (TN-125, CR-38)."
+    },
+    {
+      "code": "job-intent-mismatch",
+      "type": "urn:suiss:access:problem:job-intent-mismatch",
+      "status": 400,
+      "title": "Bad Request",
+      "description": "The job's AIS does not sign the digest of its mode and items; draft it with POST intents (TN-110, TN-125)."
+    },
+    {
+      "code": "failed-dependency",
+      "type": "urn:suiss:access:problem:failed-dependency",
+      "status": 424,
+      "title": "Failed Dependency",
+      "description": "An earlier item of the sequential job did not commit, so this one was not run (TN-125)."
     }
   ]
 }

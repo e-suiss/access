@@ -44,16 +44,29 @@ realm's governing domain, and compiles to exactly one `idp.*` Exercise. A write 
 |---|---|
 | Clients | `clients`, `clients/{client_id}`, `…/retire`, `…/secret/rotate` |
 | Groups | `groups`, `groups/{name}`, `…/retire`, `…/members`, `…/members/remove` |
-| Accounts | `accounts`, `accounts/{account_id}`, `…/suspend`, `…/reactivate` |
+| Accounts | `accounts`, `accounts/{account_id}`, `…/suspend`, `…/reactivate`, `…/canary` |
 | Upstream identity providers | `upstream-idps`, `upstream-idps/{name}`, `…/retire` |
-| Settings | `settings`, `settings/signin-policy`, `settings/session-policy`, `settings/branding`, `settings/rp-id` |
+| Settings | `settings`, `settings/signin-policy`, `settings/session-policy`, `settings/branding`, `settings/rp-id`, `settings/jose-alg`, `settings/cimd-policy`, `settings/protection-mode` |
 | Mappers | `mappers/{claim}` |
+| Bulk jobs | `jobs`, `jobs/{job_id}`, `jobs/{job_id}/items` |
+| Reserved | `accounts/{account_id}/delete`, `accounts/{account_id}/reset-intents`, `rehome` |
 
 A group has one membership issuer, `admin` or `upstream:<name>`, fixed at creation; members are
 changed here only for `admin` groups. The console session policy lives at most 12 hours,
 idles at most 15 minutes and is always bound to the client's network (`asn` or `ip`). Changing
 the RP ID makes every registered passkey unusable: the write must carry
 `acknowledge_passkey_loss` equal to their count.
+
+A client reads pairwise `sub` values. It reads the realm's public `sub` only with
+`subject_type: "public"` and `public_sub_opt_in: true`; discovery then lists `public` among the
+realm's subject types. A `sector_identifier_uri` is fetched on every write of the client and must
+be a JSON array of `https` URIs listing every redirect URI. A rotated client secret stays valid
+for 24 hours next to its successor.
+
+Tightening the protection mode (monitor to enforce, a later SL2 stage, more denied ASNs) is
+`idp.realm.protection_mode`; a change that loosens anything is `idp.realm.protection_mode_loosen`,
+a higher tier. Brute-force protection is always enforced. Reserved routes check the caller's AIS
+and answer `501 reserved-operation`; nothing is applied.
 
 ### Platform resources
 
@@ -83,3 +96,17 @@ be declared. A realm's `signing_available_at` is when its first key may sign at 
 A sandbox domain is a realm whose governing domain is a separate authority domain; it carries
 the sandbox template's fixed daily budget of Exercises and projections. No request brings
 authority between a sandbox domain and a production one, in either direction.
+
+### Bulk jobs
+
+`POST /admin/v1/realms/{slug}/jobs` takes
+`{"mode": "sequential" | "parallel", "operations": [{"operation", "key", "if_match", "body"}]}`
+with 1 to 100 items. Each item is a realm write with its own AIS in its `body`; the envelope's
+own AIS signs the job digest, which `POST …/intents` with `"operation": "createJob"` returns. The
+answer is `202` with the job; poll `jobs/{job_id}` for its state and counts (committed, failed,
+throttled) and read `jobs/{job_id}/items` for each item's Exercise or problem. In a sequential job
+a failed item fails the rest with `424 failed-dependency`; parallel items are independent.
+Writes that show a secret once are not accepted in a job. Results are shown for 7 days.
+
+List endpoints read from the read replica when `[database] replica_host` is set; a single
+resource, which conditional writes compare against, is always read from the primary.
