@@ -49,10 +49,6 @@ audit-as-crates-io = false
 [policy.esuiss-sandbox]
 audit-as-crates-io = false
 
-[[exemptions.adler2]]
-version = "2.0.1"
-criteria = "safe-to-deploy"
-
 [[exemptions.aho-corasick]]
 version = "1.1.5"
 criteria = "safe-to-deploy"
@@ -115,6 +111,10 @@ criteria = "safe-to-run"
 
 [[exemptions.async-recursion]]
 version = "1.2.0"
+criteria = "safe-to-deploy"
+
+[[exemptions.async-trait]]
+version = "0.1.92"
 criteria = "safe-to-deploy"
 
 [[exemptions.atoi]]
@@ -469,24 +469,8 @@ criteria = "safe-to-deploy"
 version = "1.3.0"
 criteria = "safe-to-deploy"
 
-[[exemptions.futures-channel]]
-version = "0.3.34"
-criteria = "safe-to-deploy"
-
-[[exemptions.futures-executor]]
-version = "0.3.34"
-criteria = "safe-to-deploy"
-
 [[exemptions.futures-intrusive]]
 version = "0.5.0"
-criteria = "safe-to-deploy"
-
-[[exemptions.futures-io]]
-version = "0.3.34"
-criteria = "safe-to-deploy"
-
-[[exemptions.futures-sink]]
-version = "0.3.34"
 criteria = "safe-to-deploy"
 
 [[exemptions.futures-task]]
@@ -575,6 +559,10 @@ criteria = "safe-to-deploy"
 
 [[exemptions.hyper]]
 version = "1.11.1"
+criteria = "safe-to-deploy"
+
+[[exemptions.hyper-timeout]]
+version = "0.5.2"
 criteria = "safe-to-deploy"
 
 [[exemptions.hyper-util]]
@@ -793,6 +781,22 @@ criteria = "safe-to-run"
 version = "1.21.4"
 criteria = "safe-to-deploy"
 
+[[exemptions.opentelemetry]]
+version = "0.33.1"
+criteria = "safe-to-deploy"
+
+[[exemptions.opentelemetry-otlp]]
+version = "0.33.1"
+criteria = "safe-to-deploy"
+
+[[exemptions.opentelemetry-proto]]
+version = "0.33.1"
+criteria = "safe-to-deploy"
+
+[[exemptions.opentelemetry_sdk]]
+version = "0.33.1"
+criteria = "safe-to-deploy"
+
 [[exemptions.p256]]
 version = "0.14.0"
 criteria = "safe-to-deploy"
@@ -837,6 +841,14 @@ criteria = "safe-to-deploy"
 version = "0.5.0"
 criteria = "safe-to-deploy"
 
+[[exemptions.pin-project]]
+version = "1.1.13"
+criteria = "safe-to-deploy"
+
+[[exemptions.pin-project-internal]]
+version = "1.1.13"
+criteria = "safe-to-deploy"
+
 [[exemptions.pin-project-lite]]
 version = "0.2.17"
 criteria = "safe-to-deploy"
@@ -855,6 +867,10 @@ criteria = "safe-to-deploy"
 
 [[exemptions.potential_utf]]
 version = "0.1.6"
+criteria = "safe-to-deploy"
+
+[[exemptions.ppv-lite86]]
+version = "0.2.21"
 criteria = "safe-to-deploy"
 
 [[exemptions.pretty]]
@@ -889,12 +905,32 @@ criteria = "safe-to-deploy"
 version = "1.12.0"
 criteria = "safe-to-run"
 
+[[exemptions.prost]]
+version = "0.14.4"
+criteria = "safe-to-deploy"
+
+[[exemptions.prost-derive]]
+version = "0.14.4"
+criteria = "safe-to-deploy"
+
+[[exemptions.prost-types]]
+version = "0.14.4"
+criteria = "safe-to-deploy"
+
 [[exemptions.psm]]
 version = "0.1.32"
 criteria = "safe-to-deploy"
 
 [[exemptions.r-efi]]
+version = "5.2.0"
+criteria = "safe-to-deploy"
+
+[[exemptions.r-efi]]
 version = "6.0.0"
+criteria = "safe-to-deploy"
+
+[[exemptions.rand]]
+version = "0.9.5"
 criteria = "safe-to-deploy"
 
 [[exemptions.rand_xorshift]]
@@ -1229,6 +1265,18 @@ criteria = "safe-to-deploy"
 version = "1.1.2+spec-1.1.0"
 criteria = "safe-to-deploy"
 
+[[exemptions.tonic]]
+version = "0.14.9"
+criteria = "safe-to-deploy"
+
+[[exemptions.tonic-prost]]
+version = "0.14.9"
+criteria = "safe-to-deploy"
+
+[[exemptions.tonic-types]]
+version = "0.14.9"
+criteria = "safe-to-deploy"
+
 [[exemptions.tower]]
 version = "0.5.3"
 criteria = "safe-to-deploy"
@@ -1251,6 +1299,10 @@ criteria = "safe-to-deploy"
 
 [[exemptions.tracing-attributes]]
 version = "0.1.31"
+criteria = "safe-to-deploy"
+
+[[exemptions.tracing-opentelemetry]]
+version = "0.34.0"
 criteria = "safe-to-deploy"
 
 [[exemptions.tracing-serde]]
@@ -1439,6 +1491,14 @@ criteria = "safe-to-deploy"
 
 [[exemptions.yoke-derive]]
 version = "0.8.4"
+criteria = "safe-to-deploy"
+
+[[exemptions.zerocopy]]
+version = "0.8.63"
+criteria = "safe-to-deploy"
+
+[[exemptions.zerocopy-derive]]
+version = "0.8.63"
 criteria = "safe-to-deploy"
 
 [[exemptions.zerofrom]]

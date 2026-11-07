@@ -25,6 +25,7 @@ libc
 num-traits
 object
 parking_lot_core
+portable-atomic
 proc-macro2
 proc-macro2-diagnostics
 psm
@@ -41,4 +42,6 @@ thiserror
 uncased
 wasm-bindgen
 wasm-bindgen-shared
+wit-bindgen
+zerocopy
 zmij

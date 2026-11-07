@@ -192,22 +192,35 @@ fn main() -> ExitCode {
         }
     };
 
+    // OP-47, OP-67: the one-shot commands log to standard error and export nothing
+    let mut settings =
+        config
+            .telemetry
+            .config(&config.log, "access-server", env!("CARGO_PKG_VERSION"));
     let logged = match command {
-        Command::Serve => access_telemetry::init(&config.log),
+        Command::Serve => access_telemetry::install(&settings, std::io::stdout),
         Command::Migrate | Command::Local(..) => {
-            access_telemetry::init_with_writer(&config.log, std::io::stderr)
+            settings.otlp_endpoint = None;
+            access_telemetry::install(&settings, std::io::stderr)
         }
     };
-    if let Err(error) = logged {
-        #[allow(clippy::print_stderr)]
-        {
-            eprintln!("access-server: {error}");
+    let telemetry = match logged {
+        Ok(telemetry) => telemetry,
+        Err(error) => {
+            #[allow(clippy::print_stderr)]
+            {
+                eprintln!("access-server: {error}");
+            }
+            return ExitCode::FAILURE;
         }
-        return ExitCode::FAILURE;
-    }
+    };
 
     match command {
-        Command::Serve => serve_main(&config),
+        Command::Serve => {
+            let code = serve_main(&config, &telemetry);
+            telemetry.shutdown();
+            code
+        }
         Command::Migrate => migrate_main(&config),
         Command::Local(plan, job) => local_main(&config, &plan, job),
     }
@@ -398,7 +411,7 @@ async fn seed(
     result
 }
 
-fn serve_main(config: &Config) -> ExitCode {
+fn serve_main(config: &Config, telemetry: &access_telemetry::Telemetry) -> ExitCode {
     // CR-12, OP-52: the TLS files are read before the lockdown closes the file system
     let tls = match tls_config(config) {
         Ok(tls) => tls,
@@ -460,7 +473,15 @@ fn serve_main(config: &Config) -> ExitCode {
         "runtime lockdown in force"
     );
 
-    match runtime.block_on(serve(config, listeners, prepared, &report)) {
+    let served = runtime.block_on(async {
+        let exporting = export(telemetry);
+        let served = serve(config, listeners, prepared, &report).await;
+        if let Some(exporting) = exporting {
+            exporting.abort();
+        }
+        served
+    });
+    match served {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
             tracing::error!(%error, "server stopped with an error");
@@ -564,6 +585,10 @@ fn lockdown(config: &Config) -> Lockdown {
     }
     // §10.4.6, §11.3.6
     lockdown = lockdown.allow_tcp_connect(access_identity_oauth::adapters::outbound::PORT);
+    // OP-67
+    if let Some(port) = config.telemetry.otlp_port() {
+        lockdown = lockdown.allow_tcp_connect(port);
+    }
     // OP-149 m.23
     let mut declared: Vec<u16> = config
         .delivery_targets
@@ -813,6 +838,7 @@ struct Background {
     delivering: tokio::task::JoinHandle<()>,
     events: events::Delivery,
     opening: tokio::task::JoinHandle<()>,
+    sampling: tokio::task::JoinHandle<()>,
 }
 
 impl Background {
@@ -845,6 +871,8 @@ impl Background {
             delivering,
             events,
             opening,
+            // §17.8.2, OP-53
+            sampling: tokio::spawn(sample_pools(PoolGauges::of(pools))),
         })
     }
 
@@ -854,6 +882,7 @@ impl Background {
         let _ = self.delivering.await;
         self.events.stop().await;
         self.opening.abort();
+        self.sampling.abort();
     }
 }
 
@@ -1107,6 +1136,55 @@ fn health(report: &LockdownReport) -> Health {
             landlock_required_abi: report.landlock_required_abi.as_u32(),
             landlock_kernel_abi: report.landlock_kernel_abi,
         },
+    }
+}
+
+/// The pools whose occupancy is sampled, by role (§17.8.2 "Havuz kuyruk derinliği", OP-53).
+struct PoolGauges(Vec<(&'static str, Pool)>);
+
+impl PoolGauges {
+    fn of(pools: &Pools) -> Self {
+        Self(vec![
+            ("sequencer", pools.sequencer.clone()),
+            ("app", pools.app.clone()),
+            ("deriver", pools.deriver.clone()),
+            ("router", pools.router.clone()),
+            ("archive", pools.archive.clone()),
+            ("outbox_reader", pools.outbox_reader.clone()),
+        ])
+    }
+}
+
+/// OP-67, TI-18: starts the OTLP export; one that cannot start is logged and serving does not
+/// depend on it.
+fn export(telemetry: &access_telemetry::Telemetry) -> Option<tokio::task::JoinHandle<()>> {
+    telemetry.start_export().unwrap_or_else(|error| {
+        tracing::error!(
+            %error,
+            event = "telemetry.export.failed",
+            outcome = "error",
+            "OTLP export not started"
+        );
+        None
+    })
+}
+
+/// How often pool occupancy is sampled (PD).
+const POOL_SAMPLE: Duration = Duration::from_secs(10);
+
+/// Samples each pool's connections in use, idle and configured until aborted.
+async fn sample_pools(pools: PoolGauges) {
+    use access_telemetry::signals::{POOL_IDLE, POOL_IN_USE, POOL_MAX};
+    let mut tick = tokio::time::interval(POOL_SAMPLE);
+    loop {
+        tick.tick().await;
+        for (role, pool) in &pools.0 {
+            let size = pool.size();
+            let idle = u32::try_from(pool.num_idle()).unwrap_or(u32::MAX);
+            POOL_IN_USE.set(i64::from(size.saturating_sub(idle)), [*role]);
+            POOL_IDLE.set(i64::from(idle), [*role]);
+            POOL_MAX.set(i64::from(pool.options().get_max_connections()), [*role]);
+        }
     }
 }
 

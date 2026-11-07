@@ -48,7 +48,13 @@ fn configured() -> Option<Config> {
             return None;
         }
     };
-    if let Err(error) = access_telemetry::init(&config.log) {
+    // OP-67: a signer logs; it opens no connection to export telemetry (CR-51)
+    let telemetry = access_telemetry::Config {
+        service: "access-identity-signer",
+        version: env!("CARGO_PKG_VERSION"),
+        ..access_telemetry::Config::local(&config.log)
+    };
+    if let Err(error) = access_telemetry::install(&telemetry, std::io::stdout) {
         #[allow(clippy::print_stderr)]
         {
             eprintln!("access-identity-signer: {error}");

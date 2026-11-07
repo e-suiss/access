@@ -60,6 +60,9 @@ pub(crate) struct Config {
     /// fixes (SI-13, CR-22, CR-30, OP-150 m.3 (e)); undeclared facts are published as null.
     #[serde(default)]
     pub(crate) provider: access_http::declarations::Stated,
+    /// Log format, OTLP export and trace sampling (OP-47, OP-67).
+    #[serde(default)]
+    pub(crate) telemetry: access_telemetry::Settings,
 }
 
 /// One declared event delivery target (OP-149 m.23).
@@ -292,6 +295,7 @@ impl Default for Config {
             suiss: None,
             delivery_targets: Vec::new(),
             provider: access_http::declarations::Stated::default(),
+            telemetry: access_telemetry::Settings::default(),
         }
     }
 }
@@ -331,6 +335,8 @@ pub(crate) enum ConfigError {
         "delivery_targets must be distinct https URLs with a lowercase host, the port only when not 443, a path and no user info or fragment (OP-149 m.23)"
     )]
     DeliveryTargets,
+    #[error(transparent)]
+    Telemetry(#[from] access_telemetry::SettingsError),
     #[error(transparent)]
     SecretEnvironment(#[from] access_crypto::secret_file::SecretFileError),
     #[error(
@@ -452,6 +458,8 @@ impl Config {
                 return Err(ConfigError::DeliveryTargets);
             }
         }
+        // OP-67
+        self.telemetry.validate()?;
         Ok(())
     }
 
