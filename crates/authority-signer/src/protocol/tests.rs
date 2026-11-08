@@ -19,7 +19,7 @@ fn template() -> Template {
     }
 }
 
-// OP-143 m.4: every message survives its frame
+// OP-143 m.4
 #[test]
 fn messages_round_trip() {
     let requests = [
@@ -73,7 +73,7 @@ fn messages_round_trip() {
     }
 }
 
-// OP-143 m.4: an oversized or malformed frame is refused
+// OP-143 m.4
 #[test]
 fn bad_frames_are_refused() {
     let too_big = u32::try_from(MAX_FRAME + 1).unwrap().to_be_bytes();
@@ -82,8 +82,7 @@ fn bad_frames_are_refused() {
     assert_eq!(decode_request(&[0xff]), Err(FrameError::Malformed));
 }
 
-// OP-67 m.1: a request carries the caller's traceparent; without one it is the plain frame and
-// an oversized value is not carried
+// OP-67 m.1
 #[test]
 fn traceparent_rides_along() {
     let tp = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01";

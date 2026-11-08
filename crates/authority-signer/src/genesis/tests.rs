@@ -23,7 +23,7 @@ fn signed(s: &SoftSigner, statement: &Statement) -> Vec<u8> {
     .unwrap()
 }
 
-// T20, CR-58: the binding key's Genesis statement verifies for its domain only
+// T20, CR-58
 #[test]
 fn the_genesis_statement_verifies_for_its_domain_only() {
     let (binding, _) = SoftSigner::generate_ed25519().unwrap();
@@ -48,7 +48,7 @@ fn the_genesis_statement_verifies_for_its_domain_only() {
     ));
 }
 
-// CR-58: a payload with another shape is not a Genesis statement
+// CR-58
 #[test]
 fn a_malformed_statement_is_rejected() {
     let extra = dcbor::encode(

@@ -39,7 +39,7 @@ fn temp(name: &str) -> PathBuf {
     dir
 }
 
-// CR-21 m.3: a sealed key loads back under the same KEK and not under another
+// CR-21 m.3
 #[test]
 fn sealed_keys_open_only_under_their_kek() {
     let mut factory = SealedFactory::new(SoftKek::new("kek-1", [1; 32]));
@@ -50,8 +50,7 @@ fn sealed_keys_open_only_under_their_kek() {
     assert!(other.load(Algorithm::Ed25519, &g.sealed).is_err());
 }
 
-// CMP-22, OP-143 m.4: a caller on the socket opens a domain, gets its metadata and, once a key
-// may sign, a signature; the vault directory keeps the domain
+// CMP-22, OP-143 m.4
 #[tokio::test]
 async fn the_socket_serves_declared_callers() {
     let dir = temp("vault");
@@ -121,7 +120,7 @@ fn started(dir: &Path) -> Started {
     Arc::new(Mutex::new(service))
 }
 
-// CMP-22, OP-143 m.4 (c): a caller whose user id is not declared is closed unanswered
+// CMP-22, OP-143 m.4 (c)
 #[tokio::test]
 async fn undeclared_callers_get_no_answer() {
     let dir = temp("undeclared");
@@ -140,8 +139,7 @@ async fn undeclared_callers_get_no_answer() {
     assert_eq!(DirVault::new(&dir).all().unwrap(), Vec::<Vec<u8>>::new());
 }
 
-// CR-21, CMP-22: the caller's identity comes from the kernel (`SO_PEERCRED` on Linux,
-// `getpeereid` on macOS), not from anything the caller sends
+// CR-21, CMP-22
 #[tokio::test]
 async fn peer_credentials_name_the_connecting_process() {
     let dir = temp("peer");
@@ -166,8 +164,7 @@ fn watched_clock() -> u64 {
     now_ms()
 }
 
-// CR-25, CMP-22a: the signer's time is read after the request frame arrives, never at accept;
-// a caller holding the connection open cannot make a later signature carry an earlier time
+// CR-25, CMP-22a
 #[tokio::test]
 async fn the_clock_is_read_after_the_frame() {
     let dir = temp("clock");
@@ -187,8 +184,7 @@ async fn the_clock_is_read_after_the_frame() {
     assert!(!READ_EARLY.load(Ordering::SeqCst));
 }
 
-// CMP-22a: a caller that never sends its frame is closed after the read timeout instead of
-// holding a connection task forever
+// CMP-22a
 #[tokio::test]
 async fn a_silent_caller_times_out() {
     let dir = temp("silent");

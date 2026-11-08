@@ -95,8 +95,7 @@ fn verify(ring: &Keyring, signed: &Signed, now: u64) -> Result<(), KeyScopeError
     Ok(())
 }
 
-// T20, CR-18, CR-58: the metadata is signed by the binding key, the excerpt names the
-// operational key and the artefact verifies through them
+// T20, CR-18, CR-58
 #[test]
 fn an_artefact_verifies_through_metadata_and_excerpt() {
     // G35, HL-8, SAI-9
@@ -108,7 +107,7 @@ fn an_artefact_verifies_through_metadata_and_excerpt() {
         .sign(KeyUsage::Receipt, RECEIPT, b"receipt", now)
         .unwrap();
     verify(&ring, &signed, now).unwrap();
-    // another domain's artefact does not verify with this domain's excerpt (G35)
+    // G35
     let metadata =
         verify_metadata(&PureBackend, ring.metadata().unwrap(), &trusted(&ring)).unwrap();
     assert_eq!(
@@ -124,8 +123,7 @@ fn an_artefact_verifies_through_metadata_and_excerpt() {
     );
 }
 
-// §9.9.3 rule 7, PI-11, G18, AGI-3, CR-19: an access token is an `at+jwt` by the operational key
-// under usage `token`; it must be holder-bound and must not outlive the key's publication
+// §9.9.3 rule 7, PI-11, G18, AGI-3, CR-19
 #[test]
 fn a_token_is_holder_bound_and_within_the_key_publication() {
     // CR-24, MD-7, U41
@@ -144,7 +142,7 @@ fn a_token_is_holder_bound_and_within_the_key_publication() {
         header.get("kid").and_then(|v| v.as_str()),
         Some(access_kernel::json::b64url_encode(&t.kid).as_str())
     );
-    // PI-11: no bearer token
+    // PI-11
     let bearer = format!(r#"{{"aud":"https://rs.example","exp":{exp}}}"#);
     assert_eq!(
         ring.sign_token(bearer.as_bytes(), now),
@@ -159,7 +157,7 @@ fn a_token_is_holder_bound_and_within_the_key_publication() {
         ring.sign_token(br#"{"cnf":{"jkt":"x"}}"#, now),
         Err(SignerError::Token)
     );
-    // CR-19: T_token < T_sign
+    // CR-19
     let far = (now + 30 * 24 * HOUR) / 1000;
     let long = format!(r#"{{"exp":{far},"cnf":{{"jkt":"x"}}}}"#);
     assert_eq!(
@@ -169,9 +167,7 @@ fn a_token_is_holder_bound_and_within_the_key_publication() {
     assert_eq!(SignerError::TokenHorizon.code(), "signer-token-horizon");
 }
 
-// CR-59, CR-25, SAI-46: the founding key signs at Genesis, in the round that publishes it,
-// and its artefact verifies through the metadata; the backup published beside it is the only
-// other key and does not sign before its full lead, after which it takes over
+// CR-59, CR-25, SAI-46
 #[test]
 fn the_founding_key_signs_at_genesis_and_the_next_waits_for_the_lead() {
     // SAI-46, G61
@@ -210,8 +206,7 @@ fn the_founding_key_signs_at_genesis_and_the_next_waits_for_the_lead() {
     assert_eq!(ring.records().iter().filter(|k| k.founding).count(), 1);
 }
 
-// CR-27: across rotations every artefact verifies against the metadata current when it is
-// signed, and a retired key's artefacts still verify while it is published
+// CR-27
 #[test]
 fn artefacts_verify_across_rotations() {
     let mut ring = keyring();
@@ -234,8 +229,7 @@ fn artefacts_verify_across_rotations() {
     }
 }
 
-// CR-23, G42: through a key-generation outage the active key signs to the end of its window;
-// after that nothing is signed, never an unsigned artefact
+// CR-23, G42
 #[test]
 fn an_outage_delays_artefacts_after_the_window() {
     // G42
@@ -263,8 +257,7 @@ fn an_outage_delays_artefacts_after_the_window() {
     );
 }
 
-// CR-23, OP-143 m.4: a restarted signer loads its sealed keys back and signs on with the same
-// key; a dropped key's sealed material is gone
+// CR-23, OP-143 m.4
 #[test]
 fn a_restart_restores_the_keys() {
     let (binding, binding_doc) = SoftSigner::generate_ed25519().unwrap();

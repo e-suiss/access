@@ -88,8 +88,7 @@ fn sign(at: u64) -> Request {
     }
 }
 
-// OP-143 m.4, CR-23: open, sign and fetch metadata; a restart from the vault signs on with the
-// same keys; a signing time far from the signer's clock is refused
+// OP-143 m.4, CR-23
 #[test]
 fn the_service_signs_and_survives_a_restart() {
     let (binding, doc) = SoftSigner::generate_ed25519().unwrap();
@@ -180,8 +179,7 @@ fn trusted(binding: &SoftSigner) -> KeySet {
     trusted
 }
 
-// T20, L2-CKP-3, OP-143 m.1 E4: the operational key signs a checkpoint of its own domain's log as
-// a note the published key verifies; a body for another origin is refused
+// T20, L2-CKP-3, OP-143 m.1 E4
 #[test]
 fn the_service_signs_checkpoints_of_its_domain() {
     let (mut s, binding, now) = ready();
@@ -240,8 +238,7 @@ fn the_service_signs_checkpoints_of_its_domain() {
     );
 }
 
-// CR-23, G42: without an operational key that may sign (a key-generation outage from Genesis
-// on), no checkpoint is signed
+// CR-23, G42
 #[test]
 fn no_key_no_checkpoint() {
     let (_, doc) = SoftSigner::generate_ed25519().unwrap();
@@ -273,9 +270,7 @@ fn no_key_no_checkpoint() {
     );
 }
 
-// CR-59, SAI-46, OP-143 m.4: `open` brings the domain's founding key to signing in the same
-// call, so an artefact is signed right after Genesis; a vault written before the founding key
-// was recorded restores with none, so its first key keeps the full lead
+// CR-59, SAI-46, OP-143 m.4
 #[test]
 fn the_founding_key_signs_on_open_and_an_older_vault_has_none() {
     let (binding, doc) = SoftSigner::generate_ed25519().unwrap();
@@ -365,8 +360,7 @@ fn without_founding(bytes: &[u8]) -> Vec<u8> {
     dcbor::encode(&Value::Map(top), Limits::CEILING).unwrap()
 }
 
-// T20, OP-143 m.1 E4: `open` has the binding key sign the Genesis statement once; a restart
-// keeps it
+// T20, OP-143 m.1 E4
 #[test]
 fn the_genesis_statement_is_signed_on_open_and_kept() {
     let (binding, doc) = SoftSigner::generate_ed25519().unwrap();
@@ -420,9 +414,7 @@ impl KeyFactory for Flaky {
 
 const HOUR: u64 = 60 * MINUTE;
 
-// CR-23, CR-27, OP-150, TN-12, TN-118: each round reports its key transitions, the OPERATIONAL audit events;
-// while keys can be made no rotation is late, and a key-generation outage makes the round report
-// the delayed rotation
+// CR-23, CR-27, OP-150, TN-12, TN-118
 #[test]
 fn rounds_report_transitions_and_delays() {
     let down = std::rc::Rc::new(std::cell::Cell::new(false));
@@ -461,8 +453,7 @@ fn rounds_report_transitions_and_delays() {
     assert!(late.is_some_and(|ms| ms > 0));
 }
 
-// CR-26, CR-27, OP-150: a dropped operational key loses its private material but its public
-// declaration and binding-signed excerpt stay in the vault, across a restart
+// CR-26, CR-27, OP-150
 #[test]
 fn dropped_keys_stay_archived() {
     let (_, doc) = SoftSigner::generate_ed25519().unwrap();
