@@ -15,6 +15,8 @@ They are renderers. They show the Access data you pass them and hand requests ba
 
 Texts come from a catalogue you pass as `catalogue`; English is the fallback.
 
+**`Catalogs`** reads Access's Fluent files (`locales/<locale>/*.ftl`) with no dependency, by the same rules as the server: only messages, continuation lines and `{ $name }` placeables (no selectors, terms or attributes), and the fallback chain realm locale → realm language → Access locale → Access language → `en`. A protected key (`conformance/catalog/protected-messages.toml`) is never taken from a realm's overrides. `catalogue(locale)` gives the flat map the components take.
+
 ## Develop
 
 ```sh

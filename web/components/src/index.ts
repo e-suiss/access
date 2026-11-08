@@ -4,3 +4,15 @@ export { WhyPanel, type Depth, type Explanation, type OwnerLine } from "./WhyPan
 export { StepUp } from "./StepUp.js";
 export * as honesty from "./honesty.js";
 export { EN, text } from "./texts.js";
+export {
+  Catalogs,
+  DEFAULT_LANGUAGE,
+  FluentError,
+  idOf,
+  keyOf,
+  type Messages,
+  type Overrides,
+  parse as parseFluent,
+  parseProtected,
+  tag,
+} from "./fluent.js";
