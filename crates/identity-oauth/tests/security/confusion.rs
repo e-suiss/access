@@ -186,11 +186,8 @@ fn accepted(r: &Reply) -> bool {
     }
 }
 
-// TN-23, §12.1.3, OP-138, RFC 9068 §4, RFC 8725 §3.11, TN-8, TN-27, MD-3, CR-5, PI-11,
-// Storm-0558 class (OP-119 m.2): a token is honoured only when it is this realm's access
-// token: signed by this realm's key, typ at+jwt, this issuer, this audience alone, bound to
-// the caller's key, unexpired and of a live grant here; every single deviation and a random
-// sample of combined deviations is refused
+// TN-23, §12.1.3, OP-138, RFC 9068 §4, RFC 8725 §3.11, TN-8, TN-27, MD-3, CR-5, PI-11
+// Storm-0558 (OP-119 m.2)
 #[tokio::test]
 async fn signed_confusions_are_refused() {
     // K05
@@ -238,11 +235,7 @@ fn hs256(header: &str, payload: &str, key: &[u8]) -> String {
     format!("{input}.{}", b64url_encode(tag.as_ref()))
 }
 
-// TN-23, MD-3, CR-5, RFC 8725 §2.1 and §3.1, OP-119 m.2: the algorithm and key come from the
-// realm's own key set, never from the token: alg none, HS256 keyed with the public key set,
-// EdDSA, an embedded jwk or jku, or an attacker key under the realm's kid are all refused; ID,
-// refresh and logout tokens are not access tokens, and an access token is not a refresh token
-// or a logout hint
+// TN-23, MD-3, CR-5, RFC 8725 §2.1 and §3.1, OP-119 m.2
 #[tokio::test]
 async fn swapped_algorithms_keys_and_token_kinds_are_refused() {
     let c = Cluster::new(&["tcs-a", "tcs-b"]).await;
@@ -359,7 +352,7 @@ async fn swapped_algorithms_keys_and_token_kinds_are_refused() {
         assert_eq!(a.introspect(token).await["active"], false, "{class}");
     }
 
-    // RFC 9449 §7.1: a DPoP token as a bearer token, or with a proof that does not bind it
+    // RFC 9449 §7.1
     let bearer = c
         .oauth
         .userinfo(a.realm(), "GET", Some(&format!("Bearer {access}")), &[])
@@ -395,7 +388,7 @@ async fn swapped_algorithms_keys_and_token_kinds_are_refused() {
     );
     assert!(accepted(&a.userinfo(access).await));
 
-    // RFC 6749 §6: only a refresh token refreshes
+    // RFC 6749 §6
     for (class, token) in [
         ("access token", access),
         ("ID token", real["id_token"].as_str().unwrap()),
@@ -407,8 +400,7 @@ async fn swapped_algorithms_keys_and_token_kinds_are_refused() {
         assert_eq!(error(&a.refresh(token).await), "invalid_grant", "{class}");
     }
 
-    // OIDC RP-Initiated Logout §2, Back-Channel Logout §2.4: only this realm's ID token is a
-    // hint; an access, logout or foreign ID token leaves the session to the confirm page
+    // OIDC §2 §2.4
     let logout_token = c
         .oauth
         .env()

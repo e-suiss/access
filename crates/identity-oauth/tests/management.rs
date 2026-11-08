@@ -122,8 +122,7 @@ async fn exchange(
     .await
 }
 
-// TN-130, TN-27, OP-151 m.3 (c): a live Instance of the realm's domain trades its own check
-// statement for a read token bound to its own key, lasting at most an hour, read scope only
+// TN-130, TN-27, OP-151 m.3 (c)
 #[tokio::test]
 async fn tn_130_an_instance_exchanges_its_statement_for_a_bound_read_token() {
     let c = Cluster::new(&["mgmtread"]).await;
@@ -152,15 +151,14 @@ async fn tn_130_an_instance_exchanges_its_statement_for_a_bound_read_token() {
     assert_eq!(claims.jkt, i.kid());
     assert_eq!(claims.instance, i.kid());
     assert!(claims.exp_ms - claims.iat_ms <= 3_600_000);
-    // TN-130: the AIS nonce is used once
+    // TN-130
     assert_eq!(
         error(&exchange(&at, audience, REALM_READ, &ais).await),
         "invalid_grant"
     );
 }
 
-// TN-130, TN-27: no token for an unknown Instance, a proof by another key, a commit statement,
-// another audience or scope, client authentication, or the platform surface from a tenant realm
+// TN-130, TN-27
 #[tokio::test]
 async fn tn_130_the_exchange_refuses_everything_but_the_instances_own_read() {
     let c = Cluster::new(&["mgmtrefuse"]).await;

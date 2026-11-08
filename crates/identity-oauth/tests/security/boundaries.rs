@@ -10,11 +10,8 @@ use serde_json::Value;
 
 use crate::support::{CB, Cluster, VERIFIER, body, error, location, now, query};
 
-// TN-34, TN-101, IDP-7, RR-18, §10.4.1, §10.4.6, IDP-24, MD-3, CR-5, §16.4.10, OP-146 m.8 (d):
-// the served metadata offers only the code flow with S256, no implicit or hybrid response, no
-// ROPC or device grant, client credentials only for authority tokens (OP-150 m.2), no OIDC
-// Session Management iframe, no Token Binding, no EdDSA, no unsigned or symmetric ID token and
-// no request objects
+// TN-34, TN-101, IDP-7, RR-18, §10.4.1, §10.4.6, IDP-24, MD-3, CR-5, §16.4.10, OP-146 m.8 (d)
+// OP-150
 #[test]
 fn metadata_offers_no_forbidden_surface() {
     let issuer = Issuer::parse("https://acme.id.test").unwrap();
@@ -76,9 +73,7 @@ fn metadata_offers_no_forbidden_surface() {
     );
 }
 
-// TN-10, TN-16, §17.9.6, §12.1.2, OP-146 m.4 (a), m.8 (b): Host only selects the realm; the issuer
-// in every answer is the one stored on the realm's row, whatever the request spelled, and an
-// origin the issuer does not name has no realm
+// TN-10, TN-16, §17.9.6, §12.1.2, OP-146 m.4 (a), m.8 (b)
 #[tokio::test]
 async fn the_issuer_never_comes_from_host() {
     let c = Cluster::new(&["bnd-a"]).await;
@@ -113,8 +108,7 @@ async fn the_issuer_never_comes_from_host() {
     assert_eq!(at["iss"], a.issuer());
 }
 
-// MD-18, TN-29, §12.2.1, OP-146 m.7 (b): there is no short-lived 60 s nonce model; a nonce
-// stays good across its window, so a proof made minutes after its nonce was issued is accepted
+// MD-18, TN-29, §12.2.1, OP-146 m.7 (b)
 #[tokio::test]
 async fn dpop_nonces_are_not_a_sixty_second_model() {
     const { assert!(NoncePolicy::DEFAULT_PERIOD_MS >= 60 * 60 * 1000) };
@@ -155,8 +149,7 @@ fn okp_proof(key: &Ed25519KeyPair, alg: &str, uri: &str, nonce: &str) -> String 
     format!("{input}.{}", b64url_encode(sig.as_ref()))
 }
 
-// MD-3, CR-5, RFC 9864, OP-144, §10.4.3: an Ed25519 DPoP proof is accepted under its fully
-// specified name and refused under the polymorphic `EdDSA`
+// MD-3, CR-5, RFC 9864, OP-144, §10.4.3
 #[tokio::test]
 async fn eddsa_is_refused_and_ed25519_accepted() {
     let c = Cluster::new(&["bnd-c"]).await;

@@ -144,7 +144,7 @@ impl<D: Directory, K: Keys> Discovery<D, K> {
                 let Ok(facts) = self.directory.facts(&realm).await else {
                     return Reply::Unavailable;
                 };
-                // §9.15.1 k.2, P60: the AS metadata refers to its governing domain's metadata
+                // §9.15.1 k.2, P60
                 let domain_metadata = self.suiss.as_ref().zip(facts.domain).map(|(s, d)| {
                     format!(
                         "{}/.well-known/access-domain-metadata/sha-256:{}",

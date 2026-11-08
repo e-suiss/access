@@ -35,7 +35,7 @@ pub fn return_to_ok(issuer: &Issuer, value: &str) -> bool {
 mod tests {
     use super::*;
 
-    // TN-104, X41: the login page can only return the browser to this realm's /authorize
+    // TN-104, X41
     #[test]
     fn return_to_names_only_the_stored_request() {
         let sub = Issuer::parse("https://acme.id.test").unwrap();

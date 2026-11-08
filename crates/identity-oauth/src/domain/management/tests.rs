@@ -49,8 +49,7 @@ fn facts(surface: &Surface, sid: Option<[u8; 16]>) -> ReadFacts<'_> {
     }
 }
 
-// TN-130, OP-151 m.3 (a): one audience and one read scope per surface; nothing else is a
-// management audience
+// TN-130, OP-151 m.3 (a)
 #[test]
 fn surfaces_have_one_audience_and_one_read_scope() {
     let realm = Surface::Realm(String::from("acme"));
@@ -78,8 +77,7 @@ fn surfaces_have_one_audience_and_one_read_scope() {
     );
 }
 
-// TN-130, TN-27, RFC 9068: the claims round-trip through the realm's signature, bound by
-// cnf.jkt, naming the Instance and the console session, never living past 60 minutes
+// TN-130, TN-27, RFC 9068
 #[test]
 fn read_tokens_round_trip_and_never_outlive_an_hour() {
     let s = signer();
@@ -103,7 +101,7 @@ fn read_tokens_round_trip_and_never_outlive_an_hour() {
     );
 }
 
-// TN-130: another typ, another issuer, a foreign key or a token without cnf.jkt is refused
+// TN-130
 #[test]
 fn read_tokens_refuse_what_the_realm_did_not_issue() {
     let s = signer();
@@ -160,9 +158,7 @@ fn ais(s: &SoftSigner, st: &Statement) -> String {
     b64url_encode(&sign1)
 }
 
-// TN-130, OP-151 m.3 (c): the exchange's subject token is the Instance's own check statement
-// over this audience and scope, in the realm's domain, fresh; a commit statement, another
-// intent, another domain, a stale one or another key is refused
+// TN-130, OP-151 m.3 (c)
 #[test]
 fn the_exchange_subject_is_a_fresh_check_statement_by_the_instance() {
     let s = signer();
@@ -216,9 +212,7 @@ fn the_exchange_subject_is_a_fresh_check_statement_by_the_instance() {
     assert_eq!(subject_token("").map(|_| ()), Err(SubjectError::Format));
 }
 
-// TN-130 (S-3): an exchange's AIS is remembered under the day it was signed, so the same
-// statement presented either side of midnight, within the skew, lands in the same slot and is
-// used once; another nonce is another slot
+// TN-130 (S-3)
 #[test]
 fn the_replay_slot_is_the_statements_own_day() {
     let midnight = 20_000 * 86_400_000_u64;

@@ -96,7 +96,7 @@ impl Target {
         let (host, port) = if let Some(v6) = authority.strip_prefix('[') {
             let (h, after) = v6.split_once(']').ok_or(OutboundError::Url)?;
             h.parse::<Ipv6Addr>().map_err(|_| OutboundError::Url)?;
-            // §14.3: after the bracket only `:port`, or nothing
+            // §14.3
             let port = match after {
                 "" => None,
                 _ => Some(after.strip_prefix(':').ok_or(OutboundError::Url)?),
@@ -194,7 +194,7 @@ fn embedded_v4(ip: Ipv6Addr) -> Option<Ipv4Addr> {
         s[7].to_be_bytes()[1],
     );
     match s {
-        // RFC 4291 §2.5.5 (compatible, mapped), RFC 6052 §2.1 (NAT64), RFC 7915 (SIIT translated)
+        // §2.5.5, §2.1
         [0, 0, 0, 0, 0, 0xffff | 0, _, _]
         | [0, 0, 0, 0, 0xffff, 0, _, _]
         | [0x64, 0xff9b, 0, 0, 0, 0, _, _] => Some(tail),

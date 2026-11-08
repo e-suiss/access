@@ -8,8 +8,7 @@
 use access_identity_oauth::adapters::outbound::{Target, post_request};
 use access_telemetry::trace::{TraceParent, adopt};
 
-// OP-67 m.1: inside a request's span the outbound head names the same trace; outside a trace it
-// carries none
+// OP-67 m.1
 #[test]
 fn outbound_requests_carry_the_trace() {
     let target = Target::parse("https://rp.example/logout").unwrap();

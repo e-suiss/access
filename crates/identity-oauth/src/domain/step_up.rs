@@ -85,8 +85,7 @@ mod tests {
 
     use super::*;
 
-    // §9.4 A, §12.2.3 TN-O3, TN-44: an actor-bound authentication term becomes the RFC 9470
-    // challenge with max_age mandatory and acr_values advisory
+    // §9.4, §12.2.3 TN-O3, TN-44
     #[test]
     fn a_strength_shortfall_becomes_a_challenge() {
         let c = challenge(&authentication_term(Tier::Ct1, false)).unwrap();
@@ -106,8 +105,7 @@ mod tests {
         );
     }
 
-    // TN-44 rule 3, §13.7.3: a CT2+ term bound to the intent digest has no RFC 9470 answer; it is
-    // met by REQUIRE_ACTION and an approval over H(AAS)
+    // TN-44 rule 3, §13.7.3
     #[test]
     fn intent_bound_terms_never_travel_the_bridge() {
         assert_eq!(challenge(&authentication_term(Tier::Ct2, false)), None);
@@ -117,8 +115,7 @@ mod tests {
         assert_eq!(challenge(&resource), None);
     }
 
-    // TN-44: max_age is mandatory, so a term without freshness, another class or another proof
-    // kind is no step-up
+    // TN-44
     #[test]
     fn only_fresh_authentication_terms_qualify() {
         let mut timeless = authentication_term(Tier::Ct1, false);

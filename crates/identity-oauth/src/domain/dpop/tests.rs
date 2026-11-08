@@ -3,7 +3,7 @@ use super::*;
 const A: Jkt = Jkt([1; 32]);
 const B: Jkt = Jkt([2; 32]);
 
-// AG-38, OP-144, MD-3: ES256 and Ed25519 by RFC 9864 names; EdDSA is never announced
+// AG-38, OP-144, MD-3
 #[test]
 fn signing_algorithms_use_fully_specified_names() {
     let values = DpopProfile::default().signing_alg_values();
@@ -13,7 +13,7 @@ fn signing_algorithms_use_fully_specified_names() {
     assert_eq!(es_only.signing_alg_values(), ["ES256"]);
 }
 
-// MD-3, TN-28: the allowlist holds asymmetric, fully-specified algorithms only
+// MD-3, TN-28
 #[test]
 fn profile_rejects_other_algorithms_and_bad_windows() {
     for alg in [Algorithm::Esp256, Algorithm::MlDsa65] {
@@ -37,7 +37,7 @@ fn profile_rejects_other_algorithms_and_bad_windows() {
     );
 }
 
-// TN-30: replay TTL = proof lifetime + 2 × clock skew (5 s + 2 × 5 s = 15 s)
+// TN-30
 #[test]
 fn replay_ttl_is_lifetime_plus_twice_the_skew() {
     let p = DpopProfile::new([Algorithm::Es256].into_iter().collect(), 5_000, 5_000).unwrap();
@@ -45,7 +45,7 @@ fn replay_ttl_is_lifetime_plus_twice_the_skew() {
     assert_eq!(DpopProfile::default().replay_ttl_ms(), Some(125_000));
 }
 
-// TN-29, IDP-11: AS answers 400, RS 401 with a DPoP challenge; state failure is 503
+// TN-29, IDP-11
 #[test]
 fn failures_map_to_as_and_rs_responses() {
     let profile = DpopProfile::default();
@@ -75,7 +75,7 @@ fn failures_map_to_as_and_rs_responses() {
     );
 }
 
-// TN-31, RFC 9449 §10: dpop_jkt binds the code to the key
+// TN-31, RFC 9449 §10
 #[test]
 fn dpop_jkt_binds_the_authorization_code() {
     assert_eq!(authorization_request_jkt(None), Ok(None));
@@ -101,8 +101,7 @@ fn dpop_jkt_binds_the_authorization_code() {
     );
 }
 
-// TN-31, §10.4.3 m.4: a public client's refresh token is bound to its DPoP key; a confidential
-// client's is not
+// TN-31, §10.4.3 m.4
 #[test]
 fn public_client_refresh_tokens_are_key_bound() {
     assert_eq!(refresh_binding(ClientType::Public, Some(A)), Ok(Some(A)));
@@ -124,7 +123,7 @@ fn public_client_refresh_tokens_are_key_bound() {
     assert_eq!(check_refresh(None, None), Ok(()));
 }
 
-// TN-27, PI-11: an identity plane access token is DPoP- or mTLS-bound, never bearer
+// TN-27, PI-11
 #[test]
 fn access_tokens_are_never_bearer() {
     assert_eq!(

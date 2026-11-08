@@ -169,14 +169,14 @@ pub fn authorization_server_of(issuer: &Issuer, served: &Served, facts: &RealmFa
         );
         m.insert("response_types_supported".into(), json!(["code"]));
         m.insert("response_modes_supported".into(), json!(["query"]));
-        // IDP-7, §11.4.5 #1
+        // IDP-7, §11.4.5
         m.insert("code_challenge_methods_supported".into(), json!(["S256"]));
         // RFC 9207, TN-11
         m.insert(
             "authorization_response_iss_parameter_supported".into(),
             Value::Bool(true),
         );
-        // MD-10, IDP-24: public only once a client of the realm opted in
+        // MD-10, IDP-24
         let subjects = if facts.public_sub {
             json!(["pairwise", "public"])
         } else {

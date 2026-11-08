@@ -677,10 +677,7 @@ fn claims(jwt: &str) -> Value {
     serde_json::from_slice(&b64url_decode(payload).unwrap()).unwrap()
 }
 
-// IDP-7, IDP-11, TN-27, TN-31, RFC 9207, MD-7, MD-10, OP-146 m.5 (c), §11.4.5 #20, CR-38: a
-// signed-out browser goes to the hosted login with the request stored, comes back, gets a code
-// with iss, and the code is exchanged once with PKCE and a DPoP proof for a cnf-bound access
-// token, a short ID token with the pairwise sub and a refresh token
+// IDP-7, IDP-11, TN-27, TN-31, RFC 9207, MD-7, MD-10, OP-146 m.5 (c), §11.4.5, CR-38
 #[tokio::test]
 async fn code_flow_with_pkce_and_dpop() {
     // G57, IDP-24, X41, K02, K03, IDI-7
@@ -699,7 +696,7 @@ async fn code_flow_with_pkce_and_dpop() {
     assert!(to.starts_with("https://shop.example/cb?code="), "{to}");
     assert_eq!(query(&to, "state"), "st");
     assert_eq!(query(&to, "iss"), ISSUER);
-    // RFC 9126 §4: the stored request is used once
+    // RFC 9126 §4
     let again = w.oauth.authorize(&w.realm, &back, Some(&w.cookie)).await;
     assert!(
         matches!(again, Reply::Problem { status: 400, .. }),
@@ -713,7 +710,7 @@ async fn code_flow_with_pkce_and_dpop() {
     assert_eq!(at["cnf"]["jkt"], w.jkt());
     assert_eq!(at["aud"], ISSUER);
     assert_eq!(at["client_id"], PUBLIC);
-    // OP-149 m.34 (a): the realm's own token names no tenant
+    // OP-149 m.34 (a)
     assert!(at.get("access_tenant").is_none());
     let id = claims(tokens["id_token"].as_str().unwrap());
     assert_eq!(id["aud"], PUBLIC);
@@ -725,12 +722,12 @@ async fn code_flow_with_pkce_and_dpop() {
     assert_eq!(at["sub"], sub);
     assert_eq!(id["sid"], at["sid"]);
 
-    // §11.4.5 #20, RFC 6749 §4.1.2: the code is single use; a second exchange revokes the grant
+    // §11.4.5, RFC 6749 §4.1.2
     assert_eq!(error(&w.exchange(&code).await), "invalid_grant");
     let refresh = tokens["refresh_token"].as_str().unwrap();
     assert_eq!(error(&w.refresh(refresh).await), "invalid_grant");
 
-    // MD-10: another client sees another pairwise sub
+    // MD-10
     let code = w.code(CONFIDENTIAL).await;
     let other = body(
         &w.token(
@@ -748,9 +745,7 @@ async fn code_flow_with_pkce_and_dpop() {
     assert_ne!(claims(other["id_token"].as_str().unwrap())["sub"], sub);
 }
 
-// U40, MD-10, IDP-24: two relying parties that did not opt in to the public sub get unrelated
-// pairwise subs for the same user, each stable for its own RP, neither derived from the
-// subject's id, and no correlating attribute rides along by default
+// U40, MD-10, IDP-24
 #[tokio::test]
 async fn two_relying_parties_cannot_link_a_user_by_sub() {
     let w = world().await;
@@ -792,17 +787,13 @@ fn tenant_id(w: &World) -> String {
         .unwrap()
 }
 
-// OP-149 m.26 (a), m.34 (a), RFC 8707, TN-27, PI-11, AG-8: a registered platform product client
-// is the one resource a protocol-scope token may name besides the realm; the token's aud is then
-// that client_id, it names the tenant in access_tenant, cnf and sid stay, the refresh keeps the
-// audience and the tenant, introspection reports both, the realm's own userinfo refuses the
-// token, and any other resource is invalid_target
+// OP-149 m.26 (a), m.34 (a), RFC 8707, TN-27, PI-11, AG-8
 #[tokio::test]
 async fn a_platform_product_client_is_a_resource() {
     let w = world().await;
     let to = location(&w.authorize(&[("resource", PRODUCT)], Some(&w.cookie)).await);
     let code = query(&to, "code");
-    // RFC 8707 §2.2: the token request may repeat the resource, never name another
+    // RFC 8707 §2.2
     assert_eq!(
         error(
             &w.token(
@@ -846,7 +837,7 @@ async fn a_platform_product_client_is_a_resource() {
     let id = claims(tokens["id_token"].as_str().unwrap());
     assert_eq!(id["aud"], PUBLIC);
     assert!(id.get("access_tenant").is_none());
-    // RFC 9068 §4: the realm is not this token's audience
+    // RFC 9068 §4
     assert!(matches!(
         w.userinfo(access).await,
         Reply::Json { status: 401, .. }
@@ -875,7 +866,6 @@ async fn a_platform_product_client_is_a_resource() {
     assert_eq!(again["aud"], PRODUCT);
     assert_eq!(again["access_tenant"], tenant_id(&w));
 
-    // introspection by a confidential client of its own token names the audience
     let code = w
         .authorize(
             &[("client_id", CONFIDENTIAL), ("resource", PRODUCT)],
@@ -905,7 +895,6 @@ async fn a_platform_product_client_is_a_resource() {
     let plain = w.introspect(access).await;
     assert_eq!(plain["active"], false);
 
-    // only a registered platform product client is a resource
     for other in [
         KEYED,
         "cli_0000000000000000000000000z",
@@ -918,10 +907,7 @@ async fn a_platform_product_client_is_a_resource() {
     assert!(realm.contains("code="), "{realm}");
 }
 
-// OP-150 m.3 (m), MUST-NEVER-13, XI-18: a third party's product registered with the
-// platform_product role is an RFC 8707 resource exactly as Suiss Work is; the token's aud is
-// its client_id, the realm's userinfo refuses it, and a grant for one product never answers
-// for the other
+// OP-150 m.3 (m), MUST-NEVER-13, XI-18
 #[tokio::test]
 async fn a_third_party_product_is_a_resource_like_a_first_party_one() {
     // OP-149 m.26 (a), (f), RFC 8707 §2.2, RFC 9068 §4, PI-13
@@ -983,8 +969,7 @@ async fn a_third_party_product_is_a_resource_like_a_first_party_one() {
     assert_eq!(shape(&tokens[0]), shape(&tokens[1]));
 }
 
-// IDP-7, CR-39, RFC 9449 §10, TN-27, §10.4.1: the exchange checks the exact redirect URI, the
-// PKCE verifier, the client and the DPoP key bound with dpop_jkt
+// IDP-7, CR-39, RFC 9449 §10, TN-27, §10.4.1
 #[tokio::test]
 async fn the_exchange_checks_redirect_pkce_client_and_key() {
     let w = world().await;
@@ -1015,7 +1000,6 @@ async fn the_exchange_checks_redirect_pkce_client_and_key() {
         let p: Vec<(&str, &str)> = pairs.iter().map(|(k, v)| (*k, v.as_str())).collect();
         assert_eq!(error(&w.token(&p, None).await), "invalid_grant", "{p:?}");
     }
-    // a code is another client's
     let p = [
         ("grant_type", "authorization_code"),
         ("code", code.as_str()),
@@ -1026,7 +1010,7 @@ async fn the_exchange_checks_redirect_pkce_client_and_key() {
         error(&w.token(&p, Some(&basic(CONFIDENTIAL, SECRET))).await),
         "invalid_grant"
     );
-    // TN-27: no proof, no token
+    // TN-27
     let p = Params::new(vec![
         ("grant_type".into(), "authorization_code".into()),
         ("client_id".into(), PUBLIC.into()),
@@ -1047,16 +1031,15 @@ async fn the_exchange_checks_redirect_pkce_client_and_key() {
         )
         .await;
     assert_eq!(error(&none), "invalid_dpop_proof");
-    // RFC 9449 §10: a code bound with dpop_jkt is redeemed only with that key
+    // RFC 9449 §10
     let other_key = "0ZcOCORZNYy-DWpqq30jZyJGHTN0d2HglBV3uiguA4I";
     let r = w
         .authorize(&[("dpop_jkt", other_key)], Some(&w.cookie))
         .await;
     let bound = query(&location(&r), "code");
     assert_eq!(error(&w.exchange(&bound).await), "invalid_dpop_proof");
-    // the right code still works after all of that
     assert!(body(&w.exchange(&code).await, 200)["access_token"].is_string());
-    // RFC 6749 §5.2, OP-146 m.6: no ROPC, no implicit; device code later
+    // RFC 6749 §5.2, OP-146 m.6
     for grant in [
         "password",
         "urn:ietf:params:oauth:grant-type:device_code",
@@ -1065,13 +1048,12 @@ async fn the_exchange_checks_redirect_pkce_client_and_key() {
         let p = [("grant_type", grant), ("client_id", PUBLIC)];
         assert_eq!(error(&w.token(&p, None).await), "unsupported_grant_type");
     }
-    // §10.4.1: client credentials only for a confidential client
+    // §10.4.1
     let p = [("grant_type", "client_credentials"), ("client_id", PUBLIC)];
     assert_eq!(error(&w.token(&p, None).await), "unauthorized_client");
 }
 
-// TN-31, RR-18, CR-38, TN-50, G57: the refresh token rotates; presenting a rotated one revokes
-// the grant and raises the session epoch, which ends the browser session too
+// TN-31, RR-18, CR-38, TN-50, G57
 #[tokio::test]
 async fn refresh_rotates_and_reuse_ends_everything() {
     // AS-M8, §12.2.1
@@ -1094,7 +1076,6 @@ async fn refresh_rotates_and_reuse_ends_everything() {
             .len(),
         43
     );
-    // reuse of r1
     assert_eq!(error(&w.refresh(r1).await), "invalid_grant");
     assert_eq!(error(&w.refresh(r2).await), "invalid_grant");
     assert!(matches!(
@@ -1105,7 +1086,7 @@ async fn refresh_rotates_and_reuse_ends_everything() {
     assert_eq!(query(&location(&gone), "error"), "login_required");
 }
 
-// TN-31, §10.4.3 m.4: a public client's refresh token is bound to its DPoP key
+// TN-31, §10.4.3 m.4
 #[tokio::test]
 async fn a_public_refresh_token_needs_its_key() {
     let mut w = world().await;
@@ -1118,8 +1099,7 @@ async fn a_public_refresh_token_needs_its_key() {
     );
 }
 
-// §11.4.5, RFC 7523 §3, §10.4.5, CR-38, RFC 6749 §2.3: none, client_secret_basic and
-// private_key_jwt each authenticate only by their registered method; an assertion is used once
+// §11.4.5, RFC 7523 §3, §10.4.5, CR-38, RFC 6749 §2.3
 #[tokio::test]
 async fn client_authentication_methods() {
     let world = world().await;
@@ -1196,9 +1176,7 @@ async fn client_authentication_methods() {
     );
 }
 
-// IDP-7, must-never #16, TN-104, X41, RFC 9207, CR-40, RFC 9126: a bad client or redirect URI is
-// shown, not redirected; everything else goes back with iss; loopback ports are free; PAR
-// requests are used once and only by their client
+// IDP-7, MUST-NEVER-16, TN-104, X41, RFC 9207, CR-40, RFC 9126
 #[tokio::test]
 async fn redirect_exactness_errors_and_par() {
     let w = world().await;
@@ -1230,11 +1208,11 @@ async fn redirect_exactness_errors_and_par() {
         assert_eq!(query(&to, "iss"), ISSUER);
         assert_eq!(query(&to, "state"), "st");
     }
-    // CR-40: prompt=none without a session answers login_required, account or not
+    // CR-40
     let to = location(&w.authorize(&[("prompt", "none")], None).await);
     assert_eq!(query(&to, "error"), "login_required");
     assert_eq!(query(&to, "iss"), ISSUER);
-    // §10.4.6: prompt=login sends a signed-in browser to the login once
+    // §10.4.6
     let login = location(&w.authorize(&[("prompt", "login")], Some(&w.cookie)).await);
     assert!(login.contains("reason=reauthenticate"), "{login}");
 
@@ -1332,12 +1310,9 @@ fn keyed_assertion(w: &World, aud: &str) -> String {
 
 const ASSERTION_TYPE: &str = "urn:ietf:params:oauth:client-assertion-type:jwt-bearer";
 
-// RFC 9126 §2.1, RFC 7523, RFC 9449 §10.1, IDP-11, TN-27: a private_key_jwt client pushes its
-// request; a DPoP proof sent with it binds the code to the proof key like dpop_jkt, so only that
-// key redeems it; a proof that does not match dpop_jkt or the endpoint is refused
+// RFC 9126 §2.1, RFC 7523, RFC 9449 §10.1, IDP-11, TN-27
 #[tokio::test]
 async fn par_with_private_key_jwt_and_dpop() {
-    // RFC 9126
     // IDP-11
     let w = world().await;
     let w = &w;
@@ -1384,7 +1359,7 @@ async fn par_with_private_key_jwt_and_dpop() {
         .await
     };
 
-    // RFC 7523 §3: the assertion's audience is the issuer or the endpoint it is sent to
+    // RFC 7523 §3
     for aud in [ISSUER, par_uri.as_str()] {
         let pushed = body(&push(keyed_assertion(w, aud), vec![], vec![]).await, 201);
         assert_eq!(pushed["expires_in"], 60);
@@ -1394,7 +1369,6 @@ async fn par_with_private_key_jwt_and_dpop() {
         "invalid_client"
     );
 
-    // the proof key at /par is the key the code is bound to
     let proof = w.proof("POST", &par_uri, None);
     let pushed = push(keyed_assertion(w, ISSUER), vec![], vec![proof]).await;
     let Reply::Json { dpop_nonce, .. } = &pushed else {
@@ -1420,7 +1394,7 @@ async fn par_with_private_key_jwt_and_dpop() {
         "invalid_dpop_proof"
     );
 
-    // RFC 9449 §10.1: dpop_jkt and the proof name one key
+    // RFC 9449 §10.1
     let proof = w.proof_by(&other, "POST", &par_uri, None);
     assert_eq!(
         error(
@@ -1450,18 +1424,15 @@ async fn par_with_private_key_jwt_and_dpop() {
     );
 }
 
-// RFC 9126 §6, §2.2, §4, §10.4.3: a client registered to require PAR is refused at /authorize
-// without a pushed request, and served with one; a pushed request past its expiry is refused
+// RFC 9126 §6, §2.2, §4, §10.4.3
 #[tokio::test]
 async fn par_required_per_client_and_expiry() {
-    // RFC 9126
     let w = world().await;
     let direct = location(&w.authorize(&[("client_id", PUSHED)], Some(&w.cookie)).await);
     assert!(direct.starts_with(CB), "{direct}");
     assert_eq!(query(&direct, "error"), "invalid_request");
     assert_eq!(query(&direct, "iss"), ISSUER);
     assert_eq!(query(&direct, "state"), "st");
-    // the other clients may still send their requests directly
     assert!(query(&location(&w.authorize(&[], Some(&w.cookie)).await), "code").len() > 10);
 
     let pushed = body(
@@ -1484,7 +1455,7 @@ async fn par_required_per_client_and_expiry() {
     assert_eq!(query(&to, "state"), "par");
     assert!(query(&to, "code").len() > 10);
 
-    // RFC 9126 §2.2: a request_uri is refused past its expiry
+    // RFC 9126 §2.2
     let handle: [u8; 32] = access_crypto::random::bytes().unwrap();
     let request = access_identity_oauth::domain::request::AuthRequest {
         client_id: String::from(CONFIDENTIAL),
@@ -1531,8 +1502,7 @@ async fn par_required_per_client_and_expiry() {
     assert!(matches!(r, Reply::Problem { status: 400, .. }), "{r:?}");
 }
 
-// RFC 7662, RFC 7009, MD-8, P-ID-8, PI-10: introspection answers for the caller's own live
-// tokens; revocation ends the grant; with the primary out of reach every token is inactive
+// RFC 7662, RFC 7009, MD-8, P-ID-8, PI-10
 #[tokio::test]
 async fn introspection_and_revocation() {
     // EP-3, CMP-15.1, U37, SAI-4
@@ -1607,9 +1577,7 @@ async fn introspection_and_revocation() {
     );
 }
 
-// §10.4.6, G57, MD-7, IDP-24, RP-Initiated Logout 1.0, Back-Channel Logout 1.0: a sign-out tied
-// to the session by id_token_hint ends it, revokes its grants and queues a signed logout token
-// with sid and no nonce; the post-logout redirect URI must match exactly
+// §10.4.6, G57, MD-7, IDP-24
 #[tokio::test]
 async fn logout_ends_the_session_and_notifies_clients() {
     let w = world().await;
@@ -1736,9 +1704,7 @@ async fn deliver(courier: &TestCourier, n: usize) -> Vec<(String, String)> {
     }
 }
 
-// TN-50, MD-7, §10.4.6, OP-73, Back-Channel Logout 1.0 §2.8: a session_epoch step (sign out
-// everywhere, disablement) revokes the grants and notifies their clients; a transient failure
-// is retried, a final refusal is recorded once and passed
+// TN-50, MD-7, §10.4.6, OP-73 §2.8
 #[tokio::test]
 async fn an_epoch_step_notifies_clients_and_records_refusals() {
     let w = world().await;
@@ -1774,8 +1740,7 @@ async fn an_epoch_step_notifies_clients_and_records_refusals() {
     assert_eq!(courier.delivery().sent().len(), 2);
 }
 
-// G57, §10.4.6: the hosted login's sign-out ends the session in the store, which revokes its
-// grants and queues their notices in the same transaction
+// G57, §10.4.6
 #[tokio::test]
 async fn a_session_end_notifies_clients() {
     let w = world().await;
@@ -1852,19 +1817,13 @@ async fn introspect_as(w: &World, client_id: &str, token: &str) -> Value {
     body(&w.oauth.introspect(&w.realm, &p, None).await, 200)
 }
 
-// OP-149 m.31 (a), m.26 (a), E39, MD-7, MD-10, AG-8, TN-27, RFC 8707 §2.2, RFC 9068: a
-// platform product naming another platform product as its resource gets an identity-assertion
-// service token: one audience (the other product), the caller, its tenant, the pairwise value
-// the audience reads of the caller's service Party, cnf-bound, at most 5 minutes, and nothing an
-// authority token carries; only products call products, never themselves; the target or the
-// caller introspects it; the realm's userinfo refuses it
+// OP-149 m.31 (a), m.26 (a), E39, MD-7, MD-10, AG-8, TN-27, RFC 8707 §2.2, RFC 9068
 #[tokio::test]
 async fn a_platform_product_gets_a_service_token_for_another_product() {
     // OP-150 m.3 (m), IDP-11, RFC 7523, RFC 9068 §4
     let w = world().await;
     let (party_a, party_b) = ([0xa1; 16], [0xb2; 16]);
 
-    // no Party here yet: the product has not paired with this realm
     assert_eq!(
         error(&service(&w, PRODUCT, &[("resource", THIRD)]).await),
         "unauthorized_client"
@@ -1887,7 +1846,6 @@ async fn a_platform_product_gets_a_service_token_for_another_product() {
     let header: Value =
         serde_json::from_slice(&b64url_decode(token.split('.').next().unwrap()).unwrap()).unwrap();
     assert_eq!(header["typ"], "at+jwt");
-    // the realm's own key signed it
     let jwks = w.oauth.env().signer.jwks(w.realm.realm).await.unwrap();
     let keys = access_identity_oauth::domain::jwt::realm_key_set(jwks.as_bytes()).unwrap();
     access_kernel::verify::jws::verify_compact(
@@ -1923,8 +1881,8 @@ async fn a_platform_product_gets_a_service_token_for_another_product() {
         assert!(c.get(absent).is_none(), "{absent}");
     }
 
-    // MD-10: the sub is stable for this pair, resolves back to the caller's Party for the
-    // target's sector (OP-149 m.19 (g)), and is not what the caller reads of the target
+    // MD-10
+    // OP-149
     let again = body(&service(&w, PRODUCT, &[("resource", THIRD)]).await, 200);
     assert_eq!(claims(again["access_token"].as_str().unwrap())["sub"], sub);
     let mut tx = TenantTx::begin(&w.db.app, w.realm.tenant, w.realm.realm)
@@ -1945,7 +1903,7 @@ async fn a_platform_product_gets_a_service_token_for_another_product() {
     assert_eq!(back["client_id"], THIRD);
     assert_ne!(back["sub"], sub);
 
-    // RFC 8707 §2, AG-8: never itself, never a non-product client, never an unknown value
+    // RFC 8707 §2, AG-8
     for (caller, resource) in [
         (PRODUCT, PRODUCT),
         (PRODUCT, KEYED),
@@ -1959,7 +1917,6 @@ async fn a_platform_product_gets_a_service_token_for_another_product() {
             "{caller} -> {resource}"
         );
     }
-    // the realm itself and no resource stay the projection path's refusals
     for pairs in [vec![("resource", ISSUER)], vec![]] {
         assert_eq!(
             error(&service(&w, PRODUCT, &pairs).await),
@@ -1967,7 +1924,7 @@ async fn a_platform_product_gets_a_service_token_for_another_product() {
             "{pairs:?}"
         );
     }
-    // TN-27: no proof, no token
+    // TN-27
     let a = product_assertion(&w, PRODUCT, ISSUER);
     let p = Params::new(vec![
         ("grant_type".into(), "client_credentials".into()),
@@ -1992,7 +1949,7 @@ async fn a_platform_product_gets_a_service_token_for_another_product() {
         "invalid_dpop_proof"
     );
 
-    // RFC 7662, MD-8: the target reads it, so does the caller; another client learns nothing
+    // RFC 7662, MD-8
     for asking in [THIRD, PRODUCT] {
         let i = introspect_as(&w, asking, token).await;
         assert_eq!(i["active"], true, "{asking}");
@@ -2007,12 +1964,12 @@ async fn a_platform_product_gets_a_service_token_for_another_product() {
         assert!(i.get("scope").is_none());
     }
     assert_eq!(w.introspect(token).await["active"], false);
-    // RFC 9068 §4, AG-8: the realm is not this token's audience
+    // RFC 9068 §4, AG-8
     assert!(matches!(
         w.userinfo(token).await,
         Reply::Json { status: 401, .. }
     ));
-    // RFC 7009 §2.2: there is no grant to revoke; the answer is 200 without effect
+    // RFC 7009 §2.2
     let p = Params::new(vec![("token".into(), token.into())]).unwrap();
     assert!(matches!(
         w.oauth
@@ -2023,13 +1980,7 @@ async fn a_platform_product_gets_a_service_token_for_another_product() {
     assert_eq!(introspect_as(&w, THIRD, token).await["active"], true);
 }
 
-// OP-149 m.34 (b), m.31 (a), MD-10, AG-8, TN-27, RFC 8707 §2.2, RFC 9068: a confidential
-// client of a tenant realm naming a registered platform product as its resource gets the same
-// identity-assertion service token: aud the product, client_id the caller, access_tenant the
-// caller's tenant, sub the pairwise pseudonym of the client itself (it has no service Party),
-// cnf-bound, at most 5 minutes, nothing an authority token carries; private_key_jwt and
-// client_secret_basic alike; a public client gets none, a non-product is no resource; the
-// product or the caller introspects it; the realm's userinfo refuses it
+// OP-149 m.34 (b), m.31 (a), MD-10, AG-8, TN-27, RFC 8707 §2.2, RFC 9068
 #[tokio::test]
 async fn a_tenant_api_client_gets_a_service_token_for_a_product() {
     // RFC 6749 §4.4, RFC 7523, RFC 7662, OP-150 m.9
@@ -2075,8 +2026,8 @@ async fn a_tenant_api_client_gets_a_service_token_for_a_product() {
         assert!(c.get(absent).is_none(), "{absent}");
     }
 
-    // MD-10: the sub is stable for this pair, resolves back to the client for the product's
-    // sector only (OP-149 m.19 (g)), and another product reads another pseudonym
+    // MD-10
+    // OP-149
     let again = body(&service(&w, KEYED, &[("resource", THIRD)]).await, 200);
     assert_eq!(claims(again["access_token"].as_str().unwrap())["sub"], sub);
     let mut tx = TenantTx::begin(&w.db.app, w.realm.tenant, w.realm.realm)
@@ -2097,7 +2048,6 @@ async fn a_tenant_api_client_gets_a_service_token_for_a_product() {
     assert_eq!(other["aud"], PRODUCT);
     assert_ne!(other["sub"], sub);
 
-    // client_secret_basic is as good as private_key_jwt; another client, another pseudonym
     let b = body(
         &w.token(
             &[("grant_type", "client_credentials"), ("resource", THIRD)],
@@ -2112,7 +2062,7 @@ async fn a_tenant_api_client_gets_a_service_token_for_a_product() {
     assert_eq!(b["access_tenant"], tenant);
     assert_ne!(b["sub"], sub);
 
-    // RFC 6749 §4.4: no public client; RFC 8707 §2: only a product is a resource
+    // RFC 6749 §4.4, §2
     assert_eq!(
         error(
             &w.token(
@@ -2135,7 +2085,7 @@ async fn a_tenant_api_client_gets_a_service_token_for_a_product() {
         );
     }
 
-    // RFC 7662, MD-8: the product reads it, so does the caller; another client learns nothing
+    // RFC 7662, MD-8
     for asking in [THIRD, KEYED] {
         let i = introspect_as(&w, asking, token).await;
         assert_eq!(i["active"], true, "{asking}");
@@ -2148,7 +2098,7 @@ async fn a_tenant_api_client_gets_a_service_token_for_a_product() {
     }
     assert_eq!(introspect_as(&w, PRODUCT, token).await["active"], false);
     assert_eq!(w.introspect(token).await["active"], false);
-    // RFC 9068 §4, AG-8: the realm is not this token's audience
+    // RFC 9068 §4, AG-8
     assert!(matches!(
         w.userinfo(token).await,
         Reply::Json { status: 401, .. }

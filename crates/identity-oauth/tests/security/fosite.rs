@@ -19,9 +19,7 @@ fn is_problem(r: &Reply) -> bool {
     matches!(r, Reply::Problem { status: 400, .. })
 }
 
-// IDP-7, must-never #16, TN-104, X41, AG-6, §11.4.5 #3, §17.9.6, OP-146 m.5 (h): a redirect URI
-// that is not byte-identical to a registered one is shown as a problem, never followed, whatever
-// the spelling trick; loopback frees only the port
+// IDP-7, MUST-NEVER-16, TN-104, X41, AG-6, §11.4.5, §17.9.6, OP-146 m.5 (h)
 #[tokio::test]
 async fn redirect_uri_tricks_are_never_followed() {
     let c = Cluster::new(&["fos-a"]).await;
@@ -71,8 +69,7 @@ async fn redirect_uri_tricks_are_never_followed() {
     }
 }
 
-// TN-104, X41, RFC 6749 §4.1.2.1, RFC 9126 §4: nothing is redirected before the client and
-// redirect URI are both known good, whatever else is wrong with the request
+// TN-104, X41, RFC 6749 §4.1.2.1, RFC 9126 §4
 #[tokio::test]
 async fn errors_never_open_a_redirect() {
     let c = Cluster::new(&["fos-b"]).await;
@@ -109,10 +106,10 @@ async fn errors_never_open_a_redirect() {
         let signed_out = a.authorize(&pairs, None).await;
         assert!(is_problem(&signed_out), "{pairs:?}: {signed_out:?}");
     }
-    // RFC 6749 §3.1: a repeated parameter is malformed before anything is looked up
+    // RFC 6749 §3.1
     assert!(Params::parse("client_id=a&client_id=b").is_err());
     assert!(Params::parse("redirect_uri=a&redirect_uri=b").is_err());
-    // §10.4.6: the post-logout redirect URI is exact too
+    // §10.4.6
     for uri in [
         "https://shop.example/bye/",
         "https://evil.example/bye",
@@ -131,10 +128,7 @@ async fn errors_never_open_a_redirect() {
     }
 }
 
-// IDP-7, TN-34, TN-101, §10.4.1, RFC 9700 §2.1.1, RFC 7636 §4.3, Kanidm GHSA-hh34: past the
-// redirect URI every malformed request goes back with error, state and iss; there is no
-// implicit or hybrid response, no plain or absent PKCE method, no other response mode, no
-// request object and no unknown scope
+// IDP-7, TN-34, TN-101, §10.4.1, RFC 9700 §2.1.1, RFC 7636 §4.3 GHSA-hh34
 #[tokio::test]
 async fn authorization_request_downgrades_are_refused() {
     let c = Cluster::new(&["fos-c"]).await;
@@ -227,8 +221,7 @@ async fn authorization_request_downgrades_are_refused() {
     }
 }
 
-// RFC 9207 §2, TN-11, RFC 6749 §4.1.2: state comes back exactly as sent, encoded once; iss is
-// this realm's issuer on success and on error, exactly once; no state is invented
+// RFC 9207 §2, TN-11, RFC 6749 §4.1.2
 #[tokio::test]
 async fn state_and_iss_resist_mix_up() {
     let c = Cluster::new(&["fos-d"]).await;
@@ -265,9 +258,7 @@ async fn state_and_iss_resist_mix_up() {
     assert_eq!(query(&to, "iss"), a.issuer());
 }
 
-// IDP-7, CR-39, RFC 7636 §4.1 and §4.6, Kanidm GHSA-hh34, RFC 6749 §4.1.3: the exchange
-// checks the verifier's form as well as its hash, the exact redirect URI and the client; a
-// short, long or ill-formed verifier is refused even when its hash matches
+// IDP-7, CR-39, RFC 7636 §4.1 and §4.6 GHSA-hh34, RFC 6749 §4.1.3
 #[tokio::test]
 async fn code_exchange_downgrades_are_refused() {
     // GHSA-hh34-7jqq-3f73
@@ -344,13 +335,13 @@ async fn code_exchange_downgrades_are_refused() {
         ("", "invalid_request"),
         ("password", "unsupported_grant_type"),
         ("implicit", "unsupported_grant_type"),
-        // §10.4.1: only a confidential client, and only for authority
+        // §10.4.1
         ("client_credentials", "unauthorized_client"),
         (
             "urn:ietf:params:oauth:grant-type:jwt-bearer",
             "unsupported_grant_type",
         ),
-        // TN-130: the exchange exists only for an Instance's AIS, never for a client's code
+        // TN-130
         (
             "urn:ietf:params:oauth:grant-type:token-exchange",
             "invalid_request",
@@ -391,8 +382,7 @@ async fn assert_dead(a: &At<'_>, tokens: &serde_json::Value) {
     assert_eq!(error(&a.refresh(refresh).await), "invalid_grant");
 }
 
-// §11.4.5 #20, RFC 6749 §4.1.2, OP-146 m.16 (h): a code is redeemed once, also when the
-// redemptions race; a second redemption revokes what the first one issued
+// §11.4.5, RFC 6749 §4.1.2, OP-146 m.16 (h)
 #[tokio::test]
 async fn code_reuse_and_races() {
     // GHSA-hh34-7jqq-3f73
@@ -423,10 +413,7 @@ async fn code_reuse_and_races() {
     }
 }
 
-// TN-31, RR-18, AS-M8, OP-146 m.16 (g), Refresh reuse'ta sunucu tarafı ardışık-kullanım
-// toleransı yok: refresh tokens rotate; concurrent presentations of one token are a reuse,
-// with no grace: the grant is revoked and the session epoch raised; the scope cannot grow and
-// another client cannot redeem it
+// TN-31, RR-18, OP-146
 #[tokio::test]
 async fn refresh_reuse_races_and_escalation() {
     let c = Cluster::new(&["fos-g"]).await;
@@ -452,7 +439,7 @@ async fn refresh_reuse_races_and_escalation() {
         )
         .await;
     assert_eq!(error(&wider), "invalid_scope");
-    // §2.2.2 #2, §7.1, L24, S-1, S-2
+    // §2.2.2, §7.1, S-1, S-2
     let resource = a
         .token(
             &[
@@ -515,9 +502,7 @@ async fn refresh_reuse_races_and_escalation() {
     );
 }
 
-// RFC 6749 §2.3, RFC 7523 §3, CR-38, §10.4.5, MD-3, CR-5, OP-146 m.13 (f): a client
-// authenticates only by its registered method; mixed, unsigned, symmetric, foreign, stale and
-// replayed credentials are all refused
+// RFC 6749 §2.3, RFC 7523 §3, CR-38, §10.4.5, MD-3, CR-5, OP-146 m.13 (f)
 #[tokio::test]
 async fn client_authentication_confusion() {
     let c = Cluster::new(&["fos-h"]).await;

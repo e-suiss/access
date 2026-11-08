@@ -307,10 +307,7 @@ async fn mutate(x: &At<'_>, which: u64) -> String {
     }
 }
 
-// MR7b, SA-45, SAI-6, MD-5, TN-2, TN-7, TN-8, INV-17, TN-23, §12.1.3: two realms in two tenants
-// answer the same script identically up to their own names, refuse each other's codes, tokens,
-// cookies, clients, stored requests, nonces and assertions, and random mutations in one leave
-// the other's decision vector bit for bit the same
+// MR7b, SA-45, SAI-6, MD-5, TN-2, TN-7, TN-8, INV-17, TN-23, §12.1.3
 #[tokio::test]
 async fn realms_are_isomorphic_and_never_cross() {
     // K05, X41

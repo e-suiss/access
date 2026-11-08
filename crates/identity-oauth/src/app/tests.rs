@@ -112,8 +112,7 @@ fn issuer_of(reply: &Reply) -> String {
     v["issuer"].as_str().unwrap().to_owned()
 }
 
-// TN-10, §17.9.6, OP-132 m.3: Host selects the realm; the issuer comes from the realm row,
-// byte for byte, whatever the Host header's case or default port
+// TN-10, §17.9.6, OP-132 m.3
 #[tokio::test]
 async fn host_selects_the_realm_and_the_row_names_the_issuer() {
     let s = service();
@@ -136,8 +135,7 @@ async fn host_selects_the_realm_and_the_row_names_the_issuer() {
     assert_eq!(issuer_of(&as_meta), "https://acme.id.example");
 }
 
-// §17.9.6: an unknown host, a host whose realm's issuer names another origin, or a foreign
-// port gets the same 404 that names no realm
+// §17.9.6
 #[tokio::test]
 async fn unknown_or_mismatched_hosts_find_no_realm() {
     let s = service();
@@ -164,8 +162,7 @@ async fn unknown_or_mismatched_hosts_find_no_realm() {
     }
 }
 
-// TN-10: a path issuer is found by slug on its own origin only; a host issuer is not served
-// under a path, nor a path issuer at the host root
+// TN-10
 #[tokio::test]
 async fn path_issuers_resolve_by_slug_on_their_origin() {
     let s = service();
@@ -188,7 +185,7 @@ async fn path_issuers_resolve_by_slug_on_their_origin() {
     }
 }
 
-// CR-19, CMP-22b: the JWKS is the realm's own; a signer outage is 503, never another realm's keys
+// CR-19, CMP-22b
 #[tokio::test]
 async fn jwks_is_the_realms_own_and_fails_closed() {
     let s = service();
@@ -222,8 +219,7 @@ async fn jwks_is_the_realms_own_and_fails_closed() {
     );
 }
 
-// OP-138, §17.9.7, CMP-22b: start-up fails when the signer is unreachable, the directory is
-// unreadable or a realm's JWKS cannot be loaded
+// OP-138, §17.9.7, CMP-22b
 #[tokio::test]
 async fn startup_checks_fail_fast() {
     let base = RealmBase::parse("https://id.example").unwrap();
@@ -279,7 +275,7 @@ fn metadata_of(reply: &Reply) -> serde_json::Value {
     serde_json::from_str(doc).unwrap()
 }
 
-// MD-10, IDP-24: public is a supported subject type only in a realm where a client opted in
+// MD-10, IDP-24
 #[tokio::test]
 async fn public_sub_is_declared_only_where_a_client_opted_in() {
     let s = service();
@@ -301,8 +297,7 @@ async fn public_sub_is_declared_only_where_a_client_opted_in() {
     );
 }
 
-// §9.15.1 k.2, MD-5, P60: the realm's AS metadata refers to its governing domain's Domain
-// Metadata on the ADP issuer; without the deployment's settings it names none
+// §9.15.1 k.2, MD-5, P60
 #[tokio::test]
 async fn as_metadata_refers_to_the_governing_domain_metadata() {
     let plain = metadata_of(

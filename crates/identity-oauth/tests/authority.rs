@@ -216,9 +216,7 @@ fn error(r: &Reply) -> String {
     }
 }
 
-// §9.9, P17, PI-11, AGI-3, §9.9.3 rules 1-3, §11.21.2, CMP-15.1, TN-27: client credentials is
-// the confidential client's own projection.issue; the token is the authority plane's,
-// DPoP-bound to the Exercise's own key, for one resource, with no refresh token
+// §9.9, P17, PI-11, AGI-3, §9.9.3, §11.21.2, CMP-15.1, TN-27
 #[tokio::test]
 async fn client_credentials_is_a_projection_issue_decision() {
     // IDP-11, AG-8, P48
@@ -258,8 +256,7 @@ async fn client_credentials_is_a_projection_issue_decision() {
     assert_eq!(s.family, None);
 }
 
-// §9.9.3 rules 1-3, §9.9.4, §9.13.5, RFC 9396, RFC 8707, AG-8, OP-39: a request that does not say
-// what its Exercise says is refused before anything is decided, and every refusal is audited
+// §9.9.3, §9.9.4, §9.13.5, RFC 9396, RFC 8707, AG-8, OP-39
 #[tokio::test]
 async fn a_mismatched_authority_request_is_refused_before_the_decision() {
     // P25, P48, IDP-11
@@ -273,7 +270,7 @@ async fn a_mismatched_authority_request_is_refused_before_the_decision() {
     let mut other = read();
     other.name = String::from("write");
     let cases: Vec<(Vec<(&str, String)>, &str)> = vec![
-        // AG-8: no default resource
+        // AG-8
         (
             vec![
                 ("authorization_details", rar.clone()),
@@ -297,7 +294,6 @@ async fn a_mismatched_authority_request_is_refused_before_the_decision() {
             ],
             "invalid_target",
         ),
-        // the details are what the bounds are, no more, no less
         (
             vec![
                 ("resource", String::from(RS)),
@@ -306,7 +302,7 @@ async fn a_mismatched_authority_request_is_refused_before_the_decision() {
             ],
             "invalid_authorization_details",
         ),
-        // P25: locations only as a hint consistent with the resource
+        // P25
         (
             vec![
                 ("resource", String::from(RS)),
@@ -337,7 +333,7 @@ async fn a_mismatched_authority_request_is_refused_before_the_decision() {
             ],
             "invalid_request",
         ),
-        // §9.9.4: cnf is the actor Instance's key, so the Exercise is the DPoP key's
+        // §9.9.4
         (
             vec![
                 ("resource", String::from(RS)),
@@ -349,7 +345,6 @@ async fn a_mismatched_authority_request_is_refused_before_the_decision() {
             ],
             "invalid_dpop_proof",
         ),
-        // only the realm's governing domain
         (
             vec![
                 ("resource", String::from(RS)),
@@ -367,7 +362,6 @@ async fn a_mismatched_authority_request_is_refused_before_the_decision() {
         let p: Vec<(&str, &str)> = pairs.iter().map(|(k, v)| (*k, v.as_str())).collect();
         assert_eq!(error(&credentials(&at, &p).await), want, "{pairs:?}");
     }
-    // a public client has no client credentials
     let r = at
         .token(
             &[
@@ -395,7 +389,7 @@ async fn a_mismatched_authority_request_is_refused_before_the_decision() {
     assert_eq!(refused, n + 1);
 }
 
-// §9.9.5, K17, G50: DENY and REQUIRE_ACTION are told apart; no decision is a 503
+// §9.9.5, K17, G50
 #[tokio::test]
 async fn the_authority_decision_is_answered_by_its_outcome() {
     // R2, A-7
@@ -494,7 +488,7 @@ async fn the_authority_decision_is_answered_by_its_outcome() {
     )
     .await;
     assert_eq!(body(&r, 400)["access_error"], "token-too-large");
-    // K17: the signer cannot be reached
+    // K17
     script(
         &at,
         Err(PlaneUnavailable(String::from(
@@ -514,9 +508,7 @@ async fn the_authority_decision_is_answered_by_its_outcome() {
     assert_eq!(r, Reply::Unavailable);
 }
 
-// §9.9.3 rule 6, L19, P50, PI-10, RFC 9396 §6.1, §11.4.5 #22, AS-M8: authority asked at
-// /authorize is decided at the token endpoint; every refresh is a new decision of the same
-// family; a reused refresh token ends the family and raises projection-invalidated
+// §9.9.3 rule 6, L19, P50, PI-10, RFC 9396 §6.1, §11.4.5, AS-M8
 #[tokio::test]
 async fn authority_refresh_is_a_new_decision_and_reuse_ends_the_family() {
     // OP-10, OP-24
@@ -524,7 +516,7 @@ async fn authority_refresh_is_a_new_decision_and_reuse_ends_the_family() {
     let at = c.at(0);
     let domain = governing(&at).await;
     let rar = details("bounds", &read(), "");
-    // RFC 9396 §6.1: authority is asked at /authorize with its resource
+    // RFC 9396 §6.1
     let cookie = at.sign_in(now() - 1000).await;
     let r = at
         .authorize(
@@ -557,7 +549,7 @@ async fn authority_refresh_is_a_new_decision_and_reuse_ends_the_family() {
     assert!(b["id_token"].is_string());
     let refresh = String::from(b["refresh_token"].as_str().unwrap());
     assert_eq!(asked(&at)[0].family, None);
-    // L19: a refresh without a new Exercise is no decision
+    // L19
     let r = at.refresh(&refresh).await;
     assert_eq!(error(&r), "invalid_request");
     let second = encode_exercise(&exercise(domain, vec![read()], RS, holder_kid(&at))).unwrap();
@@ -577,7 +569,7 @@ async fn authority_refresh_is_a_new_decision_and_reuse_ends_the_family() {
     let sent = asked(&at);
     assert_eq!(sent.len(), 1);
     assert_eq!(sent[0].family, Some([9; 16]));
-    // AS-M8: the rotated token presented again ends the family
+    // AS-M8
     let r = at
         .token(
             &[
@@ -594,7 +586,6 @@ async fn authority_refresh_is_a_new_decision_and_reuse_ends_the_family() {
         *at.c.oauth.env().plane.revoked.lock().unwrap(),
         vec![[9; 16]]
     );
-    // the outbox shows a transaction once every older one in the cluster has ended
     let mut ended = Vec::new();
     for _ in 0..100 {
         ended = access_store::identity::poll(
@@ -644,12 +635,11 @@ fn authority_token(at: &At<'_>, client: &str) -> (String, String) {
     (token, claims)
 }
 
-// §9.9.3 rule 5, MD-8, OPI-3, OP-45, P-ID-8, T24, OP-150 m.2: an authority token is introspected
-// by the authority plane at least at its head, with the Access members; what cannot be proven
-// is active=false, never 503; RFC 7009 on it ends its family (PI-10)
+// §9.9.3 rule 5, MD-8, OPI-3, OP-45, P-ID-8, T24, OP-150 m.2
+// PI-10
 #[tokio::test]
 async fn authority_tokens_are_introspected_and_revoked_by_the_authority_plane() {
-    // §11.4.5 #16, CMP-1
+    // §11.4.5, CMP-1
     let c = Cluster::new(&["intro"]).await;
     let at = c.at(0);
     let (token, claims) = authority_token(&at, &at.f.confidential);
@@ -660,12 +650,11 @@ async fn authority_tokens_are_introspected_and_revoked_by_the_authority_plane() 
     });
     let b = at.introspect(&token).await;
     assert_eq!(b["active"], true);
-    // a ledger position is a decimal string (OP-65)
+    // OP-65
     assert_eq!(b["as_of"], "42");
     assert_eq!(b["exercise"], b64url_encode(&[0xe1; 32]));
     assert_eq!(b["authorization_details"][0]["kind"], "bounds");
     assert_eq!(b["cnf"]["jkt"], at.jkt());
-    // another client's token is not this client's to read
     let (theirs, their_claims) = authority_token(&at, &at.f.public);
     *at.c.oauth.env().plane.introspection.lock().unwrap() = Some(Introspection {
         active: true,
@@ -673,7 +662,6 @@ async fn authority_tokens_are_introspected_and_revoked_by_the_authority_plane() 
         as_of: 42,
     });
     assert_eq!(at.introspect(&theirs).await["active"], false);
-    // inactive, and no answer at all, are both active=false
     *at.c.oauth.env().plane.introspection.lock().unwrap() = Some(Introspection {
         active: false,
         claims: None,
@@ -688,7 +676,6 @@ async fn authority_tokens_are_introspected_and_revoked_by_the_authority_plane() 
         at.introspect(&token).await,
         serde_json::json!({ "active": false })
     );
-    // RFC 7009: projection cleanup of the token's family
     let (_, claims) = authority_token(&at, &at.f.confidential);
     *at.c.oauth.env().plane.introspection.lock().unwrap() = Some(Introspection {
         active: true,

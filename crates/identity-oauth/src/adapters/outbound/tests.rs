@@ -8,7 +8,7 @@ use super::*;
 use crate::adapters::clients::{CachePolicy, classify};
 use crate::ports::oauth::PostFailure;
 
-// §14.3, RFC 7523: only https URLs without user info are requested
+// §14.3, RFC 7523
 #[test]
 fn targets_are_https_only() {
     let t = Target::parse("https://Shop.Example/jwks.json?v=1").unwrap();
@@ -36,8 +36,7 @@ fn targets_are_https_only() {
     }
 }
 
-// §14.3: no loopback, private, link-local (cloud metadata), shared, documentation, multicast
-// or reserved address, also wrapped in IPv6
+// §14.3
 #[test]
 fn only_public_addresses_are_reached() {
     for blocked in [
@@ -77,9 +76,7 @@ fn only_public_addresses_are_reached() {
     }
 }
 
-// §14.3 (S-5): an IPv4 address carried in an SIIT-translated address is checked as IPv4, the
-// local-use NAT64 prefix 64:ff9b:1::/48 is never public, and after a bracketed IPv6 host only
-// `:port` may follow
+// §14.3 (S-5)
 #[test]
 fn wrapped_and_bracketed_addresses_are_not_a_way_around() {
     for blocked in [
@@ -107,7 +104,7 @@ fn wrapped_and_bracketed_addresses_are_not_a_way_around() {
     assert_eq!(Target::parse("https://[2606:4700::1]").unwrap().port(), 443);
 }
 
-// §14.3: an address literal is checked without resolution
+// §14.3
 #[tokio::test]
 async fn literal_private_hosts_are_refused_before_connecting() {
     for url in [
@@ -120,7 +117,7 @@ async fn literal_private_hosts_are_refused_before_connecting() {
     }
 }
 
-// §14.3, OP-92: only port 443 is reached, and a client without trust anchors reaches nothing
+// §14.3, OP-92
 #[tokio::test]
 async fn other_ports_and_missing_anchors_reach_nothing() {
     let off = Outbound::disabled(Duration::from_secs(1));
@@ -143,7 +140,7 @@ async fn answer(raw: &'static [u8], max_body: usize) -> Result<Answer, OutboundE
     read_answer(&mut client, max_body).await
 }
 
-// §14.3: bodies are bounded by length, chunked or read to the close
+// §14.3
 #[tokio::test]
 async fn answers_are_bounded() {
     let a = answer(
@@ -191,7 +188,7 @@ async fn answers_are_bounded() {
     );
 }
 
-// §14.3: redirects are answers, not followed; a POST reads the head only
+// §14.3
 #[tokio::test]
 async fn redirects_are_not_followed() {
     let a = answer(
@@ -203,7 +200,7 @@ async fn redirects_are_not_followed() {
     assert_eq!((a.status, a.retry_after_s, a.body.len()), (302, Some(3), 0));
 }
 
-// OIDC Back-Channel Logout §2.8: 2xx delivered; 4xx and 501 final; 408, 429 and 5xx retried
+// OIDC §2.8
 #[test]
 fn backchannel_answers_are_classified() {
     assert_eq!(classify(200, None), Ok(()));
@@ -234,7 +231,7 @@ fn backchannel_answers_are_classified() {
     );
 }
 
-// RFC 7523, §11.3.6: a client's max-age is honoured within bounds
+// RFC 7523, §11.3.6
 #[test]
 fn jwks_cache_bounds_max_age() {
     let p = CachePolicy::default();
@@ -316,8 +313,7 @@ async fn deliver(outbound: &Outbound, url: &str) -> Result<u16, OutboundError> {
         .map(|a| a.status)
 }
 
-// OP-149 m.23, §14.3: a declared target is written as Access writes URLs, https only, without
-// user info or fragment
+// OP-149 m.23, §14.3
 #[test]
 fn declared_targets_are_canonical_urls() {
     assert!(DeclaredTarget::new("https://work-server:8443/v1/inbound/events", None).is_ok());
@@ -344,8 +340,7 @@ fn declared_targets_are_canonical_urls() {
     }
 }
 
-// OP-149 m.23, §14.3: an endpoint on a private address literal or another port than 443 is
-// accepted as a stream endpoint only when declared byte for byte
+// OP-149 m.23, §14.3
 #[test]
 fn only_declared_private_endpoints_are_accepted() {
     let url = "https://work-server:8443/v1/inbound/events";
@@ -372,8 +367,7 @@ fn only_declared_private_endpoints_are_accepted() {
     }
 }
 
-// OP-149 m.23, §14.3, TI-9: a declared target on a private address and another port is
-// reached over verified TLS; an undeclared one and every near miss are not
+// OP-149 m.23, §14.3, TI-9
 #[tokio::test]
 async fn a_declared_private_target_is_reached_and_near_misses_are_not() {
     let (port, anchors) = private_receiver().await;
@@ -419,7 +413,7 @@ async fn a_declared_private_target_is_reached_and_near_misses_are_not() {
     assert_eq!(deliver(&fallback, &url).await, Ok(202));
 }
 
-// OP-149 m.23, CR-12: TLS to a declared target is verified against its own anchors only
+// OP-149 m.23, CR-12
 #[tokio::test]
 async fn a_declared_target_with_the_wrong_anchor_is_unreachable() {
     let (port, anchors) = private_receiver().await;

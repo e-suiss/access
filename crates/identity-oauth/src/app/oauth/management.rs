@@ -122,7 +122,7 @@ impl<E: Env> OAuth<E> {
             }
         };
         let nonce = Some(proof.nonce.clone());
-        // TN-130: the token is bound to the Instance key that signed the statement
+        // TN-130
         if proof.jkt.0 != kid {
             return Ok(invalid_grant().with_nonce(nonce));
         }
@@ -140,7 +140,7 @@ impl<E: Env> OAuth<E> {
         let Ok(statement) = verify_subject(&ais, kid, &key, &Digest(domain), &intent, now) else {
             return Ok(invalid_grant().with_nonce(nonce));
         };
-        // TN-130: the slot is the statement's own day, so a replay across midnight is still one
+        // TN-130
         let (day, replay_key) = replay_slot(&statement).ok_or(Unavailable)?;
         match self
             .env

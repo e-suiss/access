@@ -186,7 +186,7 @@ impl<E: Env> OAuth<E> {
             return Ok(unauthorized("invalid_token"));
         };
         let now = self.now()?;
-        // RFC 9068 §4, AG-8: the realm serves only tokens addressed to it
+        // RFC 9068 §4, AG-8
         let Some((at, sid)) = self
             .access_token(realm, token, now, true)
             .await?
@@ -322,7 +322,7 @@ impl<E: Env> OAuth<E> {
         {
             tx.revoke_grant(grant.id, super::signed(now), "revoked")
                 .await?;
-            // §9.9 table, PI-10: the grant's authority tokens end with it
+            // §9.9, PI-10
             let details: GrantDetails =
                 serde_json::from_slice(&grant.details).map_err(|_| Unavailable)?;
             if let (Some(family), Some(domain)) = (details.family, tx.governing().await?) {
@@ -387,7 +387,7 @@ impl<E: Env> OAuth<E> {
         }
         let at = self.presented(realm, token, now).await?;
         if let Some(at) = at.as_ref().filter(|at| at.sid.is_none()) {
-            // OP-149 m.31 (a): a service token has no grant
+            // OP-149 m.31 (a)
             let reply = self
                 .introspect_service(&mut tx, realm, &client, at, now)
                 .await?;
@@ -425,11 +425,11 @@ impl<E: Env> OAuth<E> {
         };
         if let Some(at) = at {
             let expired = u64::try_from(at.exp).map_or(true, |e| e.saturating_mul(1000) <= now);
-            // OP-149 m.26 (a): the audience is the grant's resource, else the realm
+            // OP-149 m.26 (a)
             if at.client_id != client.id || expired || at.aud != details.audience(&realm.issuer) {
                 return Ok(active_false());
             }
-            // OP-149 m.34 (a): a product's token names this realm's tenant, the realm's own none
+            // OP-149 m.34 (a)
             let tenant = if details.resource.is_some() {
                 Some(self.tenant_name(realm)?)
             } else {

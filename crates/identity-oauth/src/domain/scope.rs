@@ -41,8 +41,7 @@ pub const RESOURCE_SCOPE: &str =
 mod tests {
     use super::*;
 
-    // §2.2.2 #2, §7.1, L24, S-1, S-2: OpenID Connect scopes are protocol scopes; any other
-    // scope, however named, would be resource access and is not one
+    // §2.2.2, §7.1, L24, S-1, S-2
     #[test]
     fn only_oidc_scopes_are_protocol_scopes() {
         for s in PROTOCOL_SCOPES {

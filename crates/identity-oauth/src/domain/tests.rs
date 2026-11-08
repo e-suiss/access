@@ -12,7 +12,7 @@ fn json(s: &str) -> serde_json::Map<String, Value> {
     }
 }
 
-// TN-10, §17.9.6: only a canonical https issuer is accepted; nothing is normalised
+// TN-10, §17.9.6
 #[test]
 fn issuers_are_canonical_https_urls() {
     for ok in [
@@ -42,7 +42,7 @@ fn issuers_are_canonical_https_urls() {
     assert_eq!(Issuer::parse(&long), Err(IssuerError::Length));
 }
 
-// TN-10, TN-16: a new realm's issuer is the subdomain by default, the path form when chosen
+// TN-10, TN-16
 #[test]
 fn realm_issuers_are_formed_from_the_slug() {
     let base = RealmBase::parse("https://id.example").unwrap();
@@ -70,7 +70,7 @@ fn realm_issuers_are_formed_from_the_slug() {
     }
 }
 
-// §17.9.6: an issuer serves only the origin it names; the default port is the same origin
+// §17.9.6
 #[test]
 fn an_issuer_serves_its_own_origin_only() {
     let i = Issuer::parse("https://acme.id.example").unwrap();
@@ -80,7 +80,7 @@ fn an_issuer_serves_its_own_origin_only() {
     assert!(!i.serves("evil.example"));
 }
 
-// RFC 9207, TN-11, AG-7: `iss` is appended byte-identical to the issuer, form-encoded
+// RFC 9207, TN-11, AG-7
 #[test]
 fn the_iss_parameter_carries_the_issuer() {
     let i = Issuer::parse("https://id.example/realms/acme").unwrap();
@@ -94,7 +94,7 @@ fn the_iss_parameter_carries_the_issuer() {
     );
 }
 
-// §10.4.6, §11.4.5: only the issuer and the JWKS are declared until endpoints are served
+// §10.4.6, §11.4.5
 const NONE: Served = Served {
     endpoints: &[],
     features: &[],
@@ -109,8 +109,7 @@ fn only_served_endpoints_are_declared() {
     assert_eq!(m["jwks_uri"], "https://acme.id.example/jwks.json");
 }
 
-// OP-146 I7, m.8 (d), §10.4.6: the served core declares its endpoints, DPoP and back-channel
-// logout, and no client ID metadata documents
+// OP-146 I7, m.8 (d), §10.4.6
 #[test]
 fn the_served_core_is_declared() {
     let i = Issuer::parse("https://acme.id.example").unwrap();
@@ -142,7 +141,7 @@ fn the_served_core_is_declared() {
     assert!(!m.contains_key("client_id_metadata_document_supported"));
 }
 
-// §11.4.5 Access corrections, MD-3, RFC 9207, TN-11: once served, the corrected fields appear
+// §11.4.5, MD-3, RFC 9207, TN-11
 #[test]
 fn served_endpoints_carry_the_access_corrections() {
     let all = Served {
@@ -195,7 +194,7 @@ fn served_endpoints_carry_the_access_corrections() {
     assert!(!text.contains("EdDSA"), "{text}");
 }
 
-// RFC 9728, §9.4 A: the realm's resource names the realm as its authorization server
+// RFC 9728, §9.4
 #[test]
 fn protected_resource_metadata_names_the_realm() {
     let i = Issuer::parse("https://acme.id.example").unwrap();
@@ -208,8 +207,7 @@ fn protected_resource_metadata_names_the_realm() {
     assert!(!m.contains_key("dpop_signing_alg_values_supported"));
 }
 
-// TN-10, §11.4.5: a path issuer serves both OIDC well-known variants and the inserted RFC 8414 and
-// RFC 9728 paths; a host issuer serves one path each
+// TN-10, §11.4.5
 #[test]
 fn path_issuers_serve_every_well_known_variant() {
     let p = Issuer::parse("https://id.example/realms/acme").unwrap();

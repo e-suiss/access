@@ -26,7 +26,7 @@ fn row(method: &str, jwks: Option<&str>, secret: Option<[u8; 32]>) -> ClientRow 
     }
 }
 
-// IDP-7, must-never #16, OP-146 m.5 (h), RFC 8252 §7.3: exact strings; loopback frees the port only
+// IDP-7, MUST-NEVER-16, OP-146 m.5 (h), RFC 8252 §7.3
 #[test]
 fn redirect_uris_match_exactly_with_the_loopback_port_free() {
     let c = Client::from_row(row("none", None, None)).unwrap();
@@ -59,7 +59,7 @@ fn redirect_uris_match_exactly_with_the_loopback_port_free() {
     assert!(!c.post_logout_allowed("https://shop.example/bye?x"));
 }
 
-// CR-38, TN-15: a stored row becomes a client only when its method and material agree
+// CR-38, TN-15
 #[test]
 fn rows_that_do_not_fit_the_model_are_no_client() {
     assert_eq!(
@@ -76,7 +76,7 @@ fn rows_that_do_not_fit_the_model_are_no_client() {
     assert!(Client::from_row(retired).is_none());
 }
 
-// OP-149 m.4, RFC 7523: private_key_jwt takes a JWKS URI or one registered key, never both
+// OP-149 m.4, RFC 7523
 #[test]
 fn private_key_jwt_takes_a_jwks_uri_or_one_key() {
     let one = ClientRow {
@@ -102,11 +102,10 @@ fn private_key_jwt_takes_a_jwks_uri_or_one_key() {
     assert!(Client::from_row(both).is_none());
 }
 
-// RFC 6749 §2.3, §2.3.1, CR-38, CR-39: one method only; Basic is form-decoded and the
-// secret is compared against its digest
+// RFC 6749 §2.3, §2.3.1, CR-38, CR-39
 #[test]
 fn client_credentials_are_one_method_only() {
-    let basic = "Basic Y2xpX3g6czMlMjBjcmV0"; // cli_x:s3%20cret
+    let basic = "Basic Y2xpX3g6czMlMjBjcmV0";
     let p = presented(Some(basic), None, None, None).unwrap().unwrap();
     assert_eq!(
         p,
@@ -150,8 +149,7 @@ fn client_credentials_are_one_method_only() {
     assert_eq!(ClientAuthError::Rejected.error(), "invalid_client");
 }
 
-// CR-38, OP-151 m.11 (g): during a rotation's overlap the previous secret is accepted for a
-// client_secret_basic client only, compared against its digest
+// CR-38, OP-151 m.11 (g)
 #[test]
 fn a_previous_secret_is_accepted_only_for_its_secret_client() {
     let old = access_crypto::oauth::secret_digest(b"old");
@@ -175,8 +173,7 @@ fn a_previous_secret_is_accepted_only_for_its_secret_client() {
     assert!(!previous_matches(&public, &old, &basic("old")));
 }
 
-// MD-10, IDP-24: a client's sub is kept under its own pairwise sector unless it opted in to
-// the realm's public sub, which every opted-in client shares and no pairwise client reads
+// MD-10, IDP-24
 #[test]
 fn only_an_opted_in_client_reads_the_public_sector() {
     let pairwise = Client::from_row(row("none", None, None)).unwrap();
@@ -190,7 +187,7 @@ fn only_an_opted_in_client_reads_the_public_sector() {
     assert_eq!(public.sector(), PUBLIC_SECTOR);
 }
 
-// OP-64 (S-4): a presented client credential never prints its secret or assertion
+// OP-64 (S-4)
 #[test]
 fn presented_credentials_do_not_print_their_secrets() {
     let basic = Presented::Basic {

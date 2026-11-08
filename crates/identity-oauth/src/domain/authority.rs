@@ -144,7 +144,7 @@ pub fn parse_details(
         if kind.replace(k).is_some_and(|prev| prev != k) {
             return Err(AuthorityError::Details);
         }
-        // §9.13.5, P25: `locations` is only a hint, consistent with `resource`
+        // §9.13.5, P25
         if let Some(l) = o.get("locations") {
             let Json::Array(l) = l else {
                 return Err(AuthorityError::Details);
@@ -271,7 +271,7 @@ pub fn encode_exercise(e: &TokenExercise) -> Result<String, AuthorityError> {
     if let Some(t) = &e.target {
         m.push((Value::text("target"), t.to_value()));
     }
-    // RFC 8949 §4.2.1: text keys, shorter first, then bytewise
+    // RFC 8949 §4.2.1
     m.sort_by(|(a, _), (b, _)| match (a, b) {
         (Value::Text(a), Value::Text(b)) => a.len().cmp(&b.len()).then_with(|| a.cmp(b)),
         _ => core::cmp::Ordering::Equal,
@@ -339,7 +339,7 @@ pub fn check(
     if !audience.contains(resource) {
         return Err(AuthorityError::Target);
     }
-    // §9.9.4: cnf is the actor Instance's KeyBinding
+    // §9.9.4
     if ais_kid(&e.ais) != Some(*jkt) {
         return Err(AuthorityError::Holder);
     }

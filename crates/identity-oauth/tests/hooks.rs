@@ -19,8 +19,7 @@ use access_identity_oauth::app::oauth::Reply;
 use serde_json::{Map, Value};
 use support::{Cluster, body, claims};
 
-// TN-135, MUST-NEVER-18: a token_issuance hook adds identity claims to the ID token, never to
-// the access token, and never over a claim the token already has
+// TN-135, MUST-NEVER-18
 #[tokio::test]
 async fn tn_135_token_issuance_hook_adds_identity_claims() {
     let c = Cluster::new(&["hookclaims"]).await;
@@ -40,8 +39,7 @@ async fn tn_135_token_issuance_hook_adds_identity_claims() {
     );
 }
 
-// TN-135, MD-8: a token_issuance hook that fails (and was not registered to continue) means no
-// token is issued; the code stays unspent for a retry
+// TN-135, MD-8
 #[tokio::test]
 async fn md_8_a_failing_token_hook_issues_no_token() {
     let c = Cluster::new(&["hookfail"]).await;

@@ -61,9 +61,7 @@ fn run_with(extra: &[(&str, &str)], product: Option<&str>) -> Result<AuthRequest
     stage_two(&p, &c, r, &issuer(), product)
 }
 
-// OP-149 m.26 (a), RFC 8707, AG-8: a registered platform product client is a resource, and
-// the request keeps it for the token's audience; the realm itself names none, anything else
-// is invalid_target; with authorization_details the resource server rules stay as they were
+// OP-149 m.26 (a), RFC 8707, AG-8
 #[test]
 fn a_registered_product_is_the_only_other_resource() {
     let named = run_with(&[("resource", "cli_work")], Some("cli_work")).unwrap();
@@ -100,8 +98,7 @@ fn a_registered_product_is_the_only_other_resource() {
     );
 }
 
-// IDP-7, TN-34, TN-101, §10.4.1, RFC 9700: code flow with S256 only; implicit, hybrid and
-// plain PKCE are refused
+// IDP-7, TN-34, TN-101, §10.4.1, RFC 9700
 #[test]
 fn only_the_code_flow_with_s256_is_accepted() {
     let r = run(&[]).unwrap();
@@ -146,8 +143,7 @@ fn only_the_code_flow_with_s256_is_accepted() {
     assert!(run(&[("scope", "")]).is_ok_and(|r| !r.openid()));
 }
 
-// §2.2.2 #2, §7.1, L24, S-1, S-2: a resource scope never reaches a token; resource access is
-// asked for as authorization_details and decided as grant.issue + projection.issue
+// §2.2.2, §7.1, L24, S-1, S-2
 #[test]
 fn a_resource_scope_is_not_a_protocol_scope() {
     let resource = run(&[("scope", "openid orders:write")]).unwrap_err();
@@ -158,7 +154,7 @@ fn a_resource_scope_is_not_a_protocol_scope() {
     assert_ne!(unserved.description, crate::domain::scope::RESOURCE_SCOPE);
 }
 
-// §10.4.6, RFC 9470, RFC 8707, RFC 9449 §10: prompt, max_age, acr_values, resource and dpop_jkt
+// §10.4.6, RFC 9470, RFC 8707, RFC 9449 §10
 #[test]
 fn oidc_and_extension_parameters() {
     assert_eq!(run(&[("prompt", "none")]).unwrap().prompt, Prompt::None);
@@ -180,8 +176,7 @@ fn oidc_and_extension_parameters() {
     assert!(run(&[("dpop_jkt", jkt)]).unwrap().dpop_jkt.is_some());
 }
 
-// RFC 6749 §4.1.2.1, TN-104, X41: a bad client or redirect URI is never redirected; repeated
-// parameters are refused
+// RFC 6749 §4.1.2.1, TN-104, X41
 #[test]
 fn bad_client_or_redirect_is_not_redirected() {
     let c = client();
@@ -205,7 +200,7 @@ fn bad_client_or_redirect_is_not_redirected() {
     assert_eq!(Params::parse("a=x+y%2B").unwrap().get("a"), Some("x y+"));
 }
 
-// RFC 9207, TN-11, AG-7: every response carries iss, errors included
+// RFC 9207, TN-11, AG-7
 #[test]
 fn responses_carry_iss() {
     let i = issuer();

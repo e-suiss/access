@@ -26,8 +26,7 @@ const OLD: Signed = Signed {
     aal: Aal::Aal1,
 };
 
-// §10.4.6, RFC 9470, TN-44: prompt=login, max_age and acr_values send the browser to the login
-// once; a sign-in after the request satisfies them
+// §10.4.6, RFC 9470, TN-44
 #[test]
 fn login_is_needed_once_per_request() {
     let created = NOW - 1_000;
@@ -103,9 +102,7 @@ fn claims(bytes: &[u8]) -> serde_json::Map<String, Value> {
     }
 }
 
-// MD-7, §10.4.5, RFC 9068, TN-27, PI-11, OP-146 m.5 (c), E39: ID token ≤ 5 minutes with one
-// audience; the access token names the realm as its single audience, is always cnf-bound and
-// carries no authority
+// MD-7, §10.4.5, RFC 9068, TN-27, PI-11, OP-146 m.5 (c), E39
 #[test]
 fn identity_assertions_have_their_profile() {
     let issuer = Issuer::parse("https://acme.id.test").unwrap();
@@ -133,8 +130,7 @@ fn identity_assertions_have_their_profile() {
     assert_eq!(at["aud"], "https://acme.id.test");
     assert_eq!(at["cnf"]["jkt"], "k");
     assert!(!at.contains_key("access_tenant"));
-    // OP-149 m.26 (a), m.34 (a): a grant that named a platform product as its resource
-    // addresses the token to that client and names the tenant; cnf and sid stay
+    // OP-149 m.26 (a), m.34 (a)
     let product = TokenFacts {
         audience: "cli_work",
         tenant: Some("tnt_acme"),
@@ -162,7 +158,7 @@ fn identity_assertions_have_their_profile() {
         ..details
     };
     assert_eq!(named.audience(&issuer), "cli_work");
-    // OP-21, CMP-15.2: the session epoch the token was issued under
+    // OP-21, CMP-15.2
     assert_eq!((at["rev"].as_i64(), id["rev"].as_i64()), (Some(3), Some(3)));
     assert_eq!(
         at["exp"].as_u64().unwrap() - at["iat"].as_u64().unwrap(),
@@ -176,9 +172,7 @@ fn identity_assertions_have_their_profile() {
     assert!(!lt.contains_key("nonce"));
 }
 
-// OP-149 m.31 (a), E39, MD-7, AG-8, TN-27, RFC 9068 §2.2: a product's service token names the
-// other product as its one audience, the caller, its tenant and the caller's pairwise service
-// Party; it is cnf-bound, lives at most 5 minutes and carries nothing an authority token does
+// OP-149 m.31 (a), E39, MD-7, AG-8, TN-27, RFC 9068 §2.2
 #[test]
 fn a_service_token_is_an_identity_assertion_without_authority() {
     let issuer = Issuer::parse("https://platform.id.test").unwrap();

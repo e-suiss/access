@@ -116,8 +116,7 @@ fn exercise(actions: &[ActionRef], target: Option<IntentEnvelope>) -> TokenExerc
     }
 }
 
-// RFC 9396 §2, §9.13.5, P25: Access types carry kind and schema; one kind per request; an intent
-// detail alone with its digest; the common members are ignored, locations only as the resource
+// RFC 9396 §2, §9.13.5, P25
 #[test]
 fn details_are_typed_and_common_members_bind_nothing() {
     let read = act("read");
@@ -162,7 +161,7 @@ fn details_are_typed_and_common_members_bind_nothing() {
     }
 }
 
-// §9.9, CMP-1: the token-exercise survives its encoding; anything else is refused
+// §9.9, CMP-1
 #[test]
 fn the_exercise_round_trips_and_nothing_else_parses() {
     let e = exercise(&[act("read")], None);
@@ -185,8 +184,7 @@ fn the_exercise_round_trips_and_nothing_else_parses() {
     );
 }
 
-// §9.9.3 rules 1-3, §9.9.4, §9.13.5: the request asks exactly what the Exercise asks, for its
-// audience, signed by the DPoP key
+// §9.9.3, §9.9.4, §9.13.5
 #[test]
 fn the_exercise_must_say_what_the_request_says() {
     let read = act("read");
@@ -218,7 +216,7 @@ fn the_exercise_must_say_what_the_request_says() {
         check(&renamed, k, &details, RS, &d, &[5; 32]),
         Err(AuthorityError::Exercise)
     );
-    // §9.9.1: an exact-intent token names its intent by digest
+    // §9.9.1
     let mut target = e.intent.clone();
     target.action = read.clone();
     target.opaque.clear();

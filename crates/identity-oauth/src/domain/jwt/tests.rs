@@ -43,8 +43,7 @@ const RULES: AssertionRules<'static> = AssertionRules {
     now_ms: NOW,
 };
 
-// RFC 7523 §3, §10.4.5, IDI-6, MD-3: iss = sub = client, one audience (issuer or endpoint),
-// exp required and short, jti required, the algorithm from the allowlist
+// RFC 7523 §3, §10.4.5, IDI-6, MD-3
 #[test]
 fn client_assertions_follow_the_profile() {
     let k = key();
@@ -137,8 +136,7 @@ fn client_assertions_follow_the_profile() {
     );
 }
 
-// §11.3.1, CR-38: a JWKS with private key material is refused whole; unknown key types are
-// skipped
+// §11.3.1, CR-38
 #[test]
 fn jwks_with_private_material_are_refused() {
     let doc = r#"{"keys":[{"kty":"EC","crv":"P-256","x":"AA","y":"AA","d":"AA"}]}"#;

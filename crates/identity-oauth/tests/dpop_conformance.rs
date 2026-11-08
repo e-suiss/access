@@ -103,7 +103,7 @@ fn is_replay(r: &Result<impl std::fmt::Debug, Failure>) -> bool {
     )
 }
 
-// K19, TN-30, IDP-11 step 9: a proof is accepted once at the token endpoint
+// K19, TN-30, IDP-11 step 9
 #[tokio::test]
 async fn token_endpoint_rejects_a_replayed_proof() {
     let db = db().await;
@@ -131,7 +131,7 @@ async fn token_endpoint_rejects_a_replayed_proof() {
     );
 }
 
-// K19, TN-28, TN-30: query, fragment and URI spelling do not make a replay new
+// K19, TN-28, TN-30
 #[tokio::test]
 async fn uri_variants_of_a_replay_are_still_replays() {
     let db = db().await;
@@ -158,7 +158,7 @@ async fn uri_variants_of_a_replay_are_still_replays() {
     }
 }
 
-// K19, TN-30: concurrent presentations of one proof on several nodes, exactly one wins
+// K19, TN-30
 #[tokio::test]
 async fn concurrent_replays_across_nodes_have_one_winner() {
     let db = db().await;
@@ -189,7 +189,7 @@ async fn concurrent_replays_across_nodes_have_one_winner() {
     assert_eq!(winners, 1);
 }
 
-// §10.4.3 m.5, K19: the resource server keeps its own replay check and nonce
+// §10.4.3 m.5, K19
 #[tokio::test]
 async fn resource_server_runs_its_own_replay_check() {
     let db = db().await;
@@ -225,7 +225,7 @@ async fn resource_server_runs_its_own_replay_check() {
     assert!(is_replay(&again), "{again:?}");
 }
 
-// K19, TN-29, TN-30: another realm's nonce is not accepted; realms keep separate caches
+// K19, TN-29, TN-30
 #[tokio::test]
 async fn realms_are_separate() {
     let db = db().await;
@@ -247,7 +247,7 @@ async fn realms_are_separate() {
     assert_eq!(err.error(), "use_dpop_nonce");
 }
 
-// TN-30, MD-8: a cache that cannot record the key rejects the proof
+// TN-30, MD-8
 #[tokio::test]
 async fn cache_failure_rejects() {
     let db = fresh().await.unwrap();

@@ -94,7 +94,7 @@ impl<E: Env> OAuth<E> {
             Ok(r) => r,
             Err(Unavailable) => return Reply::Unavailable,
         };
-        // OP-39: every refused token request, unsampled
+        // OP-39
         if let Some(error) = super::authority::error_of(&reply)
             && self.audit_refusal(realm, params, &error).await.is_err()
         {
@@ -196,7 +196,7 @@ impl<E: Env> OAuth<E> {
             }
         };
         if grant_type == Some("client_credentials") {
-            // OP-149 m.31 (a), m.34 (b): a client naming a product gets a service token
+            // OP-149 m.31 (a), m.34 (b)
             let reply = match self.service_target(realm, &client, params).await? {
                 Some(Ok(target)) => {
                     self.service_token(realm, &client, &target, proof.jkt, now)
@@ -372,7 +372,7 @@ impl<E: Env> OAuth<E> {
                 Signal::session_revoked(id, grant.subject, Initiator::Policy, now)
             })
             .await?;
-            // §9.9.3 rule 6, P50: the whole family of authority tokens ends
+            // §9.9.3 rule 6, P50
             if let (Some(family), Some(root), Some(domain)) =
                 (details.family, details.projection, tx.governing().await?)
             {
@@ -398,7 +398,7 @@ impl<E: Env> OAuth<E> {
             return Ok(invalid_target());
         }
         if let (Some(a), Some(family)) = (&details.authority, details.family) {
-            // §9.9.3 rule 6, L19: every refresh is a new decision of the family
+            // §9.9.3 rule 6, L19
             let asked = Asked {
                 params,
                 authorized: Some(a),
@@ -420,7 +420,7 @@ impl<E: Env> OAuth<E> {
         }
         if let Some(scope) = params.get("scope") {
             let mut asked = scope.split(' ').filter(|s| !s.is_empty());
-            // §2.2.2 #2, L24, S-1
+            // §2.2.2, S-1
             if asked
                 .clone()
                 .any(|s| scope::classify(s) == scope::ScopeClass::Resource)

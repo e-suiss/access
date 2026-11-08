@@ -89,9 +89,7 @@ fn metadata(reply: Reply) -> serde_json::Value {
     serde_json::from_str(&doc).unwrap()
 }
 
-// TN-10, §17.9.6, OP-132 m.3, CMP-22b, CR-19, OP-138: a subdomain realm and a path realm are
-// served from their stored issuers, each with its own JWKS from the signer; unknown hosts get
-// nothing; start-up checks pass with the signer up and fail without it
+// TN-10, §17.9.6, OP-132 m.3, CMP-22b, CR-19, OP-138
 #[tokio::test]
 async fn realms_are_served_from_their_rows_and_the_signer() {
     let db = fresh().await.unwrap();

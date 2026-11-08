@@ -365,7 +365,7 @@ impl<E: Env> OAuth<E> {
             return Ok(Err(ClientAuthError::Unknown));
         };
         if let Err(e) = check_method(&client, &presented) {
-            // CR-38: a rotated secret stays valid next to its successor for the overlap
+            // CR-38
             let previous = match e {
                 ClientAuthError::Rejected => tx.previous_secret(&client.id).await?,
                 _ => None,
