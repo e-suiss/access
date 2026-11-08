@@ -816,3 +816,56 @@ handler! {
         Ok(s.hosted.organization_sign_in(&entry, param(&p, "organization")).await)
     }
 }
+
+handler! {
+    /// `GET /v1/account/handovers` (TN-91).
+    handovers(s, entry, b, p, bytes, headers) false {
+        let _ = (&p, &bytes);
+        Ok(s.hosted.handovers(&entry, &b).await)
+    }
+}
+
+handler! {
+    /// `POST /v1/organizations/{organization}/handovers/{handover}/contribution` (TN-91).
+    contribute_handover(s, entry, b, p, bytes, headers) true {
+        let _ = &bytes;
+        Ok(s.hosted
+            .contribute_handover(&entry, &b, param(&p, "organization"), param(&p, "handover"))
+            .await)
+    }
+}
+
+handler! {
+    /// `DELETE /v1/organizations/{organization}/handovers/{handover}` (TN-91).
+    cancel_handover(s, entry, b, p, bytes, headers) true {
+        let _ = &bytes;
+        Ok(s.hosted
+            .cancel_handover(&entry, &b, param(&p, "organization"), param(&p, "handover"))
+            .await)
+    }
+}
+
+handler! {
+    /// `POST /v1/account/guardian-consents` (E53, E47).
+    ask_consent(s, entry, b, p, bytes, headers) true {
+        let _ = &p;
+        let req: access_identity_ui::app::household::ConsentAsk = body(&bytes)?;
+        Ok(s.hosted.ask_consent(&entry, &b, &req).await)
+    }
+}
+
+handler! {
+    /// `GET /v1/account/guardian-consents/{consent}` (E47).
+    consent(s, entry, b, p, bytes, headers) false {
+        let _ = &bytes;
+        Ok(s.hosted.consent(&entry, &b, param(&p, "consent")).await)
+    }
+}
+
+handler! {
+    /// `POST /v1/account/guardian-consents/{consent}` (E53, E47).
+    decide_consent(s, entry, b, p, bytes, headers) true {
+        let req: access_identity_ui::app::household::ConsentDecision = body(&bytes)?;
+        Ok(s.hosted.decide_consent(&entry, &b, param(&p, "consent"), &req).await)
+    }
+}

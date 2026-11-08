@@ -3928,3 +3928,166 @@ async fn autojoin_admits_a_verified_domains_people_never_a_consumer_domains_and_
         StatusCode::ACCEPTED
     );
 }
+
+// TN-91, OP-153 m.3 (p), m.17 (b), (gg), Ek B 3617, 3619
+#[tokio::test]
+async fn a_handovers_recipient_contributes_and_an_owner_or_the_recipient_cancels() {
+    let e = env(0x36, "lg-handover", AuthPolicy::DEFAULT).await;
+    let owner = e.account("owner@acme.example").await;
+    let bob = e.account("bob@acme.example").await;
+    e.account("eve@acme.example").await;
+    let org = org_with_invitation(
+        &e,
+        owner,
+        [0x7c; 16],
+        "x@acme.example",
+        ("tok-handover-0123456789abcdefghijkl", "HNDC2345"),
+    )
+    .await;
+    let mut t = TenantTx::begin(&e.db.app, e.tenant, e.realm).await.unwrap();
+    t.insert_membership(org, bob, access_store::orgs::Source::Invite, false, None)
+        .await
+        .unwrap();
+    let first = t
+        .insert_transfer(&access_store::org_authority::NewTransfer {
+            org,
+            from: owner,
+            to: bob,
+            to_party: [0x7d; 16],
+            nonce: &[1; 16],
+            payload_digest: &[0; 32],
+            effective_ms: 4_102_444_800_000,
+            dns_recovery: false,
+        })
+        .await
+        .unwrap();
+    t.commit().await.unwrap();
+    let base = format!(
+        "/v1/organizations/{}/handovers/{}",
+        b64url_encode(&[0x0a; 16]),
+        b64url_encode(&first)
+    );
+
+    let mut eve = e.browser("eve");
+    assert_eq!(eve.sign_in("eve@acme.example").await.step(), "complete");
+    // TN-91: someone neither owner nor recipient cannot act on it
+    assert_eq!(
+        eve.post(&format!("{base}/contribution"), None).await.status,
+        StatusCode::FORBIDDEN
+    );
+    let mut o = e.browser("o");
+    assert_eq!(o.sign_in("owner@acme.example").await.step(), "complete");
+    assert_eq!(
+        o.post(&format!("{base}/contribution"), None).await.status,
+        StatusCode::FORBIDDEN
+    );
+    let mut b = e.browser("b");
+    assert_eq!(b.sign_in("bob@acme.example").await.step(), "complete");
+    let listed = b.get("/v1/account/handovers").await.json();
+    assert_eq!(listed["items"][0]["as"], "recipient");
+    assert_eq!(listed["items"][0]["state"], "proposed");
+    assert_eq!(
+        o.get("/v1/account/handovers").await.json()["items"][0]["as"],
+        "owner"
+    );
+    let c = b.post(&format!("{base}/contribution"), None).await;
+    assert_eq!(c.status, StatusCode::OK, "{:?}", c.json());
+    assert_eq!(c.json()["state"], "contributed");
+    // TN-91: the owner cancels inside the delay; the record is kept
+    let key = o.key();
+    let x = o.send("DELETE", &base, Some(json!({})), Some(&key)).await;
+    assert_eq!(x.status, StatusCode::OK, "{:?}", x.json());
+    let key = b.key();
+    assert_eq!(
+        b.send("DELETE", &base, Some(json!({})), Some(&key))
+            .await
+            .status,
+        StatusCode::NOT_FOUND
+    );
+    let mut t = TenantTx::begin(&e.db.app, e.tenant, e.realm).await.unwrap();
+    let kept = t.transfer(first).await.unwrap().unwrap();
+    assert_eq!(
+        kept.state,
+        access_store::org_authority::TransferState::Cancelled
+    );
+    t.commit().await.unwrap();
+}
+
+// E53, E47, OP-153 m.3 (q), (gg), Ek B 3630, 3633
+#[tokio::test]
+async fn a_wards_request_waits_on_its_guardian_who_is_told_and_silence_is_never_consent() {
+    let e = env(0x37, "lg-consent", AuthPolicy::DEFAULT).await;
+    let parent = e.account("parent@family.example").await;
+    let child = e.account("child@family.example").await;
+    e.account("other@family.example").await;
+    let mut t = TenantTx::begin(&e.db.app, e.tenant, e.realm).await.unwrap();
+    let g = t
+        .insert_guardianship((parent, child), "parent", "TR", 4_102_444_800_000)
+        .await
+        .unwrap();
+    t.commit().await.unwrap();
+    let purpose = b64url_encode(&[0x11; 32]);
+
+    let mut p = e.browser("p");
+    assert_eq!(p.sign_in("parent@family.example").await.step(), "complete");
+    // E53: only the ward asks
+    assert_eq!(
+        p.post(
+            "/v1/account/guardian-consents",
+            Some(json!({ "purpose": purpose }))
+        )
+        .await
+        .status,
+        StatusCode::NOT_FOUND
+    );
+    let mut c = e.browser("c");
+    assert_eq!(c.sign_in("child@family.example").await.step(), "complete");
+    let asked = c
+        .post(
+            "/v1/account/guardian-consents",
+            Some(json!({ "purpose": purpose, "guardianship": b64url_encode(&g) })),
+        )
+        .await;
+    assert_eq!(asked.status, StatusCode::ACCEPTED, "{:?}", asked.json());
+    assert_eq!(asked.json()["outcome"], "require_action");
+    let consent = asked.json()["consent"].as_str().unwrap().to_owned();
+    let path = format!("/v1/account/guardian-consents/{consent}");
+    // E47: the guardian is told through Relay
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
+    loop {
+        let told = access_store::identity::poll(
+            &e.db.reader,
+            access_store::identity::Cursor::default(),
+            1000,
+        )
+        .await
+        .unwrap()
+        .into_iter()
+        .filter(|m| m.realm == e.realm && m.kind == "relay.message.guardian_consent.v1")
+        .count();
+        if told > 0 {
+            assert_eq!(told, 1);
+            break;
+        }
+        assert!(std::time::Instant::now() < deadline, "no consent notice");
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    // E47: silence is not consent
+    assert_eq!(c.get(&path).await.json()["outcome"], "require_action");
+    let mut o = e.browser("o");
+    assert_eq!(o.sign_in("other@family.example").await.step(), "complete");
+    assert_eq!(o.get(&path).await.status, StatusCode::NOT_FOUND);
+    // E53: the ward cannot answer for its guardian
+    assert_eq!(
+        c.post(&path, Some(json!({ "approve": true }))).await.status,
+        StatusCode::FORBIDDEN
+    );
+    let d = p.post(&path, Some(json!({ "approve": false }))).await;
+    assert_eq!(d.status, StatusCode::OK, "{:?}", d.json());
+    assert_eq!(d.json()["outcome"], "deny");
+    assert_eq!(
+        p.post(&path, Some(json!({ "approve": true }))).await.status,
+        StatusCode::CONFLICT
+    );
+    assert_eq!(c.get(&path).await.json()["outcome"], "deny");
+}

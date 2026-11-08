@@ -168,6 +168,25 @@ where
             .route(
                 &format!("{prefix}/v1/organizations/{{organization}}/access-requests"),
                 post(web::request_access::<D, K, KI, C, M>),
+            )
+            // TN-91, E53, E47
+            .route(
+                &format!("{prefix}/v1/organizations/{{organization}}/handovers/{{handover}}"),
+                delete(web::cancel_handover::<D, K, KI, C, M>),
+            )
+            .route(
+                &format!(
+                    "{prefix}/v1/organizations/{{organization}}/handovers/{{handover}}/contribution"
+                ),
+                post(web::contribute_handover::<D, K, KI, C, M>),
+            )
+            .route(
+                &format!("{prefix}/v1/account/guardian-consents"),
+                post(web::ask_consent::<D, K, KI, C, M>),
+            )
+            .route(
+                &format!("{prefix}/v1/account/guardian-consents/{{consent}}"),
+                post(web::decide_consent::<D, K, KI, C, M>),
             );
         reads = reads
             .route(
@@ -221,6 +240,14 @@ where
             .route(
                 &format!("{prefix}/v1/organizations/{{organization}}/sign-in"),
                 get(web::organization_sign_in::<D, K, KI, C, M>),
+            )
+            .route(
+                &format!("{prefix}/v1/account/handovers"),
+                get(web::handovers::<D, K, KI, C, M>),
+            )
+            .route(
+                &format!("{prefix}/v1/account/guardian-consents/{{consent}}"),
+                get(web::consent::<D, K, KI, C, M>),
             );
     }
     // OP-153 m.4
