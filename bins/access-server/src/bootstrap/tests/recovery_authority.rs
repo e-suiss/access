@@ -663,3 +663,73 @@ async fn the_grace_period_holds_the_remaining_surfaces() {
     assert_eq!(status, StatusCode::FORBIDDEN, "{body}");
     assert_eq!(body["code"], "recovery-grace");
 }
+
+/// A recovery of `email` (password and recovery codes enrolled) proved with a registered code
+/// and the password: the end of its objection window, `None` when the rebind opened at once.
+async fn two_channel_cooling(
+    c: &super::management::Console,
+    app: &axum::Router,
+    email: &str,
+) -> Option<u64> {
+    let subject = account(c, email, true).await;
+    let mut me = Page::default();
+    me.jar.insert(
+        String::from("__Host-access-session"),
+        session(c, subject).await,
+    );
+    let codes = me
+        .call(app, &Method::POST, "/v1/account/recovery-codes", None)
+        .await;
+    assert_eq!(codes.status, StatusCode::OK, "{}", codes.json);
+    let code = codes.json["recovery_codes"][0].as_str().unwrap().to_owned();
+    let mut page = Page::default();
+    let started = page
+        .call(
+            app,
+            &Method::POST,
+            "/v1/recovery",
+            Some(serde_json::json!({"identifier": email, "method": "registered_code"})),
+        )
+        .await;
+    let path = format!("/v1/recovery/{}", started.json["attempt"].as_str().unwrap());
+    let first = page
+        .call(
+            app,
+            &Method::POST,
+            &path,
+            Some(serde_json::json!({"code": code})),
+        )
+        .await;
+    assert_eq!(first.json["state"], "requested", "{}", first.json);
+    let second = page
+        .call(
+            app,
+            &Method::POST,
+            &path,
+            Some(serde_json::json!({"password": "correct horse battery staple"})),
+        )
+        .await;
+    if second.json["state"] == "rebind_open" {
+        return None;
+    }
+    assert_eq!(second.json["state"], "cooling_down", "{}", second.json);
+    access_identity_ui::domain::frontend::unix_ms(second.json["until"].as_str().unwrap())
+}
+
+// RR-45, TN-17, TN-55, OP-153 m.13 (e), (gg)
+#[tokio::test]
+async fn recovery_is_tightened_after_an_rp_id_change() {
+    let c = console("recovery-rp-id", false).await;
+    let app = super::recovery::hosted(&c, Recording::default());
+    // TN-55
+    assert_eq!(two_channel_cooling(&c, &app, "ann@example.com").await, None);
+    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.realm)
+        .await
+        .unwrap();
+    t.insert_rp_id_change(None, "access.test").await.unwrap();
+    t.commit().await.unwrap();
+    let after = two_channel_cooling(&c, &app, "ben@example.com")
+        .await
+        .unwrap();
+    assert!(after >= now() + DAY_MS - 60_000, "{after}");
+}

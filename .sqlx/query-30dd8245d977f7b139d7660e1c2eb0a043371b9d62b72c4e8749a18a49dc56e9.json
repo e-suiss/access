@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.realm_rp_id_changes (tenant_id, realm_id, previous, rp_id)\n             VALUES ($1, $2, $3, $4)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "30dd8245d977f7b139d7660e1c2eb0a043371b9d62b72c4e8749a18a49dc56e9"
+}

@@ -351,6 +351,10 @@ pub trait RecoveryTx: SessionTx {
         &mut self,
         subject: [u8; 16],
     ) -> impl Future<Output = Result<Option<[u8; 16]>, SessionError>> + Send;
+    /// When the realm's RP ID last changed, Unix ms (RR-45).
+    fn last_rp_id_change(
+        &mut self,
+    ) -> impl Future<Output = Result<Option<u64>, SessionError>> + Send;
     /// The Instance of the subject's first active device key, if any.
     fn subject_instance(
         &mut self,

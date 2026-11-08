@@ -738,10 +738,15 @@ where
         {
             live = None;
         }
+        // RR-45, TN-17
+        let rp_id_changed = access_identity_account::domain::recovery_policy::rp_id_change_tightens(
+            tx.last_rp_id_change().await?,
+            now,
+        );
         let (required, high_value) = match live {
             Some(s) => (
                 self.required(&mut tx, s, &policy).await?,
-                self.high_value(&mut tx, s).await?,
+                self.high_value(&mut tx, s).await? || rp_id_changed,
             ),
             None => (Aal::Aal1, false),
         };
@@ -1129,7 +1134,12 @@ where
         let dek = subject_key(&self.realm, &row)?;
         let mut ok = false;
         for c in tx.credentials(subject, PASSWORD).await? {
-            let secret = open(&self.realm, &dek, &subject, PASSWORD, &c.sealed)?;
+            let (secret, _) = access_identity_account::app::sealing::open_password(
+                &self.realm,
+                &dek,
+                &subject,
+                &c.sealed,
+            )?;
             if self.hasher.verify(&presented, secret).await?.matched {
                 ok = true;
                 break;

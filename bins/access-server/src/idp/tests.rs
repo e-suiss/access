@@ -884,6 +884,8 @@ async fn an_rp_id_change_is_a_ct3_exercise() {
         settings(&mut t).await.unwrap().unwrap().rp_id.as_deref(),
         Some("id.test")
     );
+    // RR-45, TN-17
+    assert!(t.last_rp_id_change().await.unwrap().is_some());
     t.commit().await.unwrap();
     let foreign = proposal(
         (tenant, realm),

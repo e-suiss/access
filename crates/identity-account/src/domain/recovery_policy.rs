@@ -57,6 +57,20 @@ pub struct CoolingTable {
     pub high_value_ms: u64,
 }
 
+/// RR-45, TN-17: how long after a change of the realm's RP ID every new recovery attempt is
+/// treated as a high-value account's: at least 24 hours of objection window whatever the path
+/// (PD).
+pub const RP_ID_CHANGE_WINDOW_MS: u64 = 30 * DAY_MS;
+
+/// RR-45: whether a change of the RP ID at `changed_ms` still tightens recovery at `now_ms`.
+#[must_use]
+pub const fn rp_id_change_tightens(changed_ms: Option<u64>, now_ms: u64) -> bool {
+    match changed_ms {
+        Some(at) => now_ms.saturating_sub(at) < RP_ID_CHANGE_WINDOW_MS,
+        None => false,
+    }
+}
+
 impl CoolingTable {
     /// OP-153 m.3 (e).
     pub const DEFAULT: Self = Self {

@@ -268,6 +268,14 @@ impl RecoveryTx for PgTx {
         Ok(access_store::idp::subject_party(&mut self.0, &subject).await?)
     }
 
+    async fn last_rp_id_change(&mut self) -> Result<Option<u64>, SessionError> {
+        Ok(self
+            .0
+            .last_rp_id_change()
+            .await?
+            .and_then(|v| u64::try_from(v).ok()))
+    }
+
     async fn subject_instance(
         &mut self,
         subject: [u8; 16],

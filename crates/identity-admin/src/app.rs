@@ -1274,6 +1274,13 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             }
             Change::CimdPolicy(_) | Change::JoseAlg(_) | Change::Argon2(_) | Change::RpId(_) => {
                 let s = idp::settings(t).await?.ok_or(AdminError::NoRealm)?;
+                // RR-45, TN-17
+                if let Change::RpId(r) = change
+                    && s.rp_id.as_deref() != Some(r.as_str())
+                {
+                    t.insert_rp_id_change(s.rp_id.as_deref(), r.as_str())
+                        .await?;
+                }
                 idp::update_settings(t, bound, &settings_with(s, change)).await?
             }
             Change::Branding(b) => {

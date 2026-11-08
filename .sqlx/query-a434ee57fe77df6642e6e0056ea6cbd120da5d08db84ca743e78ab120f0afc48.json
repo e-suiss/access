@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT max((extract(epoch FROM changed_at) * 1000)::bigint) AS at_ms\n                 FROM access.realm_rp_id_changes WHERE tenant_id = $1 AND realm_id = $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "at_ms",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "a434ee57fe77df6642e6e0056ea6cbd120da5d08db84ca743e78ab120f0afc48"
+}

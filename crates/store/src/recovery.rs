@@ -740,6 +740,46 @@ impl TenantTx {
         Ok(until)
     }
 
+    /// Records a change of the realm's RP ID (RR-45, TN-17); `previous` is the stored value it
+    /// replaces, `None` for the issuer's host.
+    ///
+    /// # Errors
+    /// [`StoreError`].
+    pub async fn insert_rp_id_change(
+        &mut self,
+        previous: Option<&str>,
+        rp_id: &str,
+    ) -> Result<(), StoreError> {
+        let (tenant, realm) = self.recovery_scope()?;
+        sqlx::query!(
+            "INSERT INTO access.realm_rp_id_changes (tenant_id, realm_id, previous, rp_id)
+             VALUES ($1, $2, $3, $4)",
+            tenant,
+            realm,
+            previous,
+            rp_id,
+        )
+        .execute(&mut *self.tx)
+        .await?;
+        Ok(())
+    }
+
+    /// When the realm's RP ID last changed, Unix ms (RR-45); `None` when it never did.
+    ///
+    /// # Errors
+    /// [`StoreError`].
+    pub async fn last_rp_id_change(&mut self) -> Result<Option<i64>, StoreError> {
+        let (tenant, realm) = self.recovery_scope()?;
+        Ok(sqlx::query_scalar!(
+            r#"SELECT max((extract(epoch FROM changed_at) * 1000)::bigint) AS at_ms
+                 FROM access.realm_rp_id_changes WHERE tenant_id = $1 AND realm_id = $2"#,
+            tenant,
+            realm,
+        )
+        .fetch_one(&mut *self.tx)
+        .await?)
+    }
+
     /// The attempt's transitions, in order.
     ///
     /// # Errors
