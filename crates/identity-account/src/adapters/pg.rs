@@ -113,6 +113,14 @@ impl AccountTx for PgTx {
         Ok(self.0.end_sessions(id).await?)
     }
 
+    async fn end_sessions_because(
+        &mut self,
+        id: [u8; 16],
+        reason: &'static str,
+    ) -> Result<Option<i64>, AccountError> {
+        Ok(self.0.end_sessions_because(id, reason).await?)
+    }
+
     async fn add_identifier(
         &mut self,
         subject: [u8; 16],

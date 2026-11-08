@@ -181,6 +181,44 @@ pub trait SessionTx: AccountTx + RiskTx {
         subject: [u8; 16],
         at_ms: u64,
     ) -> impl Future<Output = Result<u64, SessionError>> + Send;
+    /// N5: the subject's active sign-in methods (S11).
+    fn sign_in_methods(
+        &mut self,
+        subject: [u8; 16],
+    ) -> impl Future<Output = Result<Vec<access_store::accounts::MethodRow>, SessionError>> + Send;
+    /// N5: a session by id with its subject's current state, locked.
+    fn session_by_id(
+        &mut self,
+        id: [u8; 16],
+    ) -> impl Future<Output = Result<Option<SessionRow>, SessionError>> + Send;
+    /// N5: sets a live session's pending DBSC challenge (TN-33).
+    fn dbsc_challenge(
+        &mut self,
+        id: [u8; 16],
+        challenge: &[u8; 32],
+        expires_ms: i64,
+    ) -> impl Future<Output = Result<bool, SessionError>> + Send;
+    /// N5: ties a live, untied session to its DBSC key with its first bound cookie.
+    fn dbsc_bind(
+        &mut self,
+        id: [u8; 16],
+        key: &[u8; 65],
+        now_ms: i64,
+        cookie_hash: &[u8; 32],
+        cookie_expires_ms: i64,
+    ) -> impl Future<Output = Result<bool, SessionError>> + Send;
+    /// N5: replaces a tied session's bound cookie.
+    fn dbsc_refresh(
+        &mut self,
+        id: [u8; 16],
+        cookie_hash: &[u8; 32],
+        cookie_expires_ms: i64,
+    ) -> impl Future<Output = Result<bool, SessionError>> + Send;
+    /// N5: the device Instance a session's active binding names (X36).
+    fn session_instance(
+        &mut self,
+        session: [u8; 16],
+    ) -> impl Future<Output = Result<Option<[u8; 16]>, SessionError>> + Send;
 }
 
 /// Opens session transactions in one realm.

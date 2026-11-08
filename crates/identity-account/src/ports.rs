@@ -105,6 +105,13 @@ pub trait AccountTx: Send {
         &mut self,
         id: [u8; 16],
     ) -> impl Future<Output = Result<Option<i64>, AccountError>> + Send;
+    /// N5: [`Self::end_sessions`] with the reason the signed-out page reads: `password` or
+    /// `recovery` (OP-153 m.3 (y)).
+    fn end_sessions_because(
+        &mut self,
+        id: [u8; 16],
+        reason: &'static str,
+    ) -> impl Future<Output = Result<Option<i64>, AccountError>> + Send;
     /// Adds an identifier; false when the realm has it.
     fn add_identifier(
         &mut self,

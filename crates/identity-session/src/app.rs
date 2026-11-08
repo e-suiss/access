@@ -3,6 +3,7 @@
 //! account exists has one answer (CR-40, X34, TN-82); after it, the answer is honest.
 
 pub mod claims;
+pub mod dbsc;
 pub mod devices;
 pub mod epochs;
 pub mod mfa;
@@ -10,6 +11,7 @@ pub mod portability;
 pub mod recovery;
 pub mod registered;
 pub mod sessions;
+pub mod settings;
 pub mod signin;
 mod webauthn;
 

@@ -185,4 +185,57 @@ impl SessionTx for PgTx {
     ) -> Result<u64, SessionError> {
         crate::app::recovery::cancel(self, subject, at_ms).await
     }
+
+    async fn sign_in_methods(
+        &mut self,
+        subject: [u8; 16],
+    ) -> Result<Vec<access_store::accounts::MethodRow>, SessionError> {
+        Ok(self.0.sign_in_methods(subject).await?)
+    }
+
+    async fn session_by_id(&mut self, id: [u8; 16]) -> Result<Option<SessionRow>, SessionError> {
+        Ok(self.0.session_by_id(id).await?)
+    }
+
+    async fn dbsc_challenge(
+        &mut self,
+        id: [u8; 16],
+        challenge: &[u8; 32],
+        expires_ms: i64,
+    ) -> Result<bool, SessionError> {
+        Ok(self.0.dbsc_challenge(id, challenge, expires_ms).await?)
+    }
+
+    async fn dbsc_bind(
+        &mut self,
+        id: [u8; 16],
+        key: &[u8; 65],
+        now_ms: i64,
+        cookie_hash: &[u8; 32],
+        cookie_expires_ms: i64,
+    ) -> Result<bool, SessionError> {
+        Ok(self
+            .0
+            .dbsc_bind(id, key, now_ms, cookie_hash, cookie_expires_ms)
+            .await?)
+    }
+
+    async fn dbsc_refresh(
+        &mut self,
+        id: [u8; 16],
+        cookie_hash: &[u8; 32],
+        cookie_expires_ms: i64,
+    ) -> Result<bool, SessionError> {
+        Ok(self
+            .0
+            .dbsc_refresh(id, cookie_hash, cookie_expires_ms)
+            .await?)
+    }
+
+    async fn session_instance(
+        &mut self,
+        session: [u8; 16],
+    ) -> Result<Option<[u8; 16]>, SessionError> {
+        Ok(self.0.session_instance(session).await?)
+    }
 }

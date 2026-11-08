@@ -4,6 +4,7 @@ pub mod assurance;
 pub mod auth_context;
 pub mod codes;
 pub mod console;
+pub mod dbsc;
 pub mod device;
 pub mod epoch;
 pub mod flow;

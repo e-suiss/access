@@ -1546,8 +1546,9 @@ where
         RECOVERY_TRANSITIONS.incr([path_word(&a.path), State::GracePeriod.name()]);
         // TN-64
         let ended = tx.live_sessions(subject).await?;
+        // OP-153 m.3 (y)
         let epoch = tx
-            .end_sessions(subject)
+            .end_sessions_because(subject, "recovery")
             .await?
             .ok_or(SessionError::Corrupt)?;
         events::sessions_ended(tx, &self.realm, subject, epoch).await?;
