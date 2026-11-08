@@ -126,6 +126,17 @@ impl Run {
         basis: ExerciseBasis,
         payload: &Payload,
     ) -> Result<(Digest, Outcome), MetaError> {
+        self.act_in(Capacity::Own, party, instance, basis, payload)
+    }
+
+    fn act_in(
+        &mut self,
+        capacity: Capacity,
+        party: Id,
+        instance: Id,
+        basis: ExerciseBasis,
+        payload: &Payload,
+    ) -> Result<(Digest, Outcome), MetaError> {
         let exercise = exercise_id(&DOMAIN, &self.pos.to_be_bytes().repeat(2)).unwrap();
         let ctx = Context {
             domain: DOMAIN,
@@ -134,7 +145,7 @@ impl Run {
             now: self.now,
             actor: Actor { party, instance },
             basis,
-            capacity: Capacity::Own,
+            capacity,
             catalog: &self.catalog,
         };
         let out = apply(&ctx, payload, &self.state)?;
@@ -689,34 +700,36 @@ fn budget(grant: &Id, term: u64) -> Vec<u8> {
     .unwrap()
 }
 
+/// A Claim of `class` bound to `intent` (OP-141 m.28 (d)).
+fn bound_claim(class: &str, value: Option<crate::model::EqValue>, intent: Digest) -> Value {
+    crate::claim::ClaimState {
+        statement: crate::claim::Statement {
+            domain: DOMAIN,
+            issuer: ROOT,
+            subject: ALICE,
+            class: String::from(class),
+            value,
+            issued_at: 0,
+            validity: Window {
+                from: 0,
+                until: u64::MAX,
+            },
+            assurance: BTreeMap::new(),
+            bound_intent: Some(intent),
+            bound_instance: None,
+            bound_resource: None,
+            supersedes: None,
+        },
+        instance: None,
+        since: 1,
+        ended: None,
+    }
+    .to_value()
+}
+
 /// An Exercise of `SPENDER` that drew 1 from a count term and 100 EUR from an amount term of
 /// `grant`, and two Claims bound to its intent (OP-141 m.28).
 fn spent(state: &mut Mem, grant: &Id, exercise: &Digest) {
-    let claim = |class: &str, value: Option<crate::model::EqValue>, intent: Digest| {
-        crate::claim::ClaimState {
-            statement: crate::claim::Statement {
-                domain: DOMAIN,
-                issuer: ROOT,
-                subject: ALICE,
-                class: String::from(class),
-                value,
-                issued_at: 0,
-                validity: Window {
-                    from: 0,
-                    until: u64::MAX,
-                },
-                assurance: BTreeMap::new(),
-                bound_intent: Some(intent),
-                bound_instance: None,
-                bound_resource: None,
-                supersedes: None,
-            },
-            instance: None,
-            since: 1,
-            ended: None,
-        }
-        .to_value()
-    };
     let mut draws = alloc::vec![
         ExerciseDraw {
             key: budget(grant, 0),
@@ -748,7 +761,7 @@ fn spent(state: &mut Mem, grant: &Id, exercise: &Digest) {
         ),
         (
             key(kind::CLAIM, &Id([21; 16])),
-            Some(claim(
+            Some(bound_claim(
                 ACTUAL_AMOUNT,
                 Some(crate::model::EqValue::Int(30)),
                 SPENT,
@@ -756,11 +769,11 @@ fn spent(state: &mut Mem, grant: &Id, exercise: &Digest) {
         ),
         (
             key(kind::CLAIM, &Id([22; 16])),
-            Some(claim(NON_EXECUTION, None, SPENT)),
+            Some(bound_claim(NON_EXECUTION, None, SPENT)),
         ),
         (
             key(kind::CLAIM, &Id([23; 16])),
-            Some(claim(NON_EXECUTION, None, Digest([16; 32]))),
+            Some(bound_claim(NON_EXECUTION, None, Digest([16; 32]))),
         ),
     ]);
 }
@@ -2299,5 +2312,802 @@ fn meta_vectors_match() {
         "meta.json",
         include_str!("../../../../conformance/vectors/core/1/meta.json"),
         &json,
+    );
+}
+
+fn term(count: u64) -> RequirementTerm {
+    co_root(count)
+}
+
+fn envelope(
+    prefix: &[&str],
+    requirements: BTreeSet<RequirementTerm>,
+    pin: Option<HoldingRef>,
+) -> MandateEnvelope {
+    let a = authority(prefix, 0, 1_000_000);
+    MandateEnvelope {
+        authority: a.authority,
+        constraints: a.constraints,
+        requirements,
+        pin,
+    }
+}
+
+/// Root issues `holder` a Grant on the shop Anchor and returns its current holding.
+fn held(r: &mut Run, holder: Id, prefix: &[&str], depth: u64) -> HoldingRef {
+    let a = shop_anchor();
+    let (ex, _) = r
+        .act(
+            ROOT,
+            ROOT,
+            ExerciseBasis::Anchor(a),
+            &issue(holder, GrantBasis::Anchor(a), prefix, depth),
+        )
+        .unwrap();
+    let grant = object_id(&ex, kind::GRANT, 0);
+    HoldingRef {
+        grant,
+        holder,
+        since: r.grant(&grant).since,
+    }
+}
+
+/// Registers Alice and creates her Instance with an optional first Mandate.
+fn alice_instance(r: &mut Run, mandate: Option<MandateEnvelope>) -> Id {
+    let public = ExerciseBasis::Public(Id([9; 16]));
+    r.act(
+        ALICE,
+        ALICE,
+        public,
+        &Payload::PartyRegister {
+            party: ALICE,
+            root: Root::Sole(ALICE),
+            actor_kind: ActorKind::Human,
+        },
+    )
+    .unwrap();
+    let instance = object_id(
+        &exercise_id(&DOMAIN, &r.pos.to_be_bytes().repeat(2)).unwrap(),
+        kind::INSTANCE,
+        0,
+    );
+    r.act(
+        ALICE,
+        instance,
+        public,
+        &Payload::InstanceCreate {
+            party: ALICE,
+            key: p256_key(3),
+            mandate,
+        },
+    )
+    .unwrap();
+    instance
+}
+
+/// The `projection` payload with other bounds.
+fn projection_of(bounds: CanonicalAuthority) -> Payload {
+    match projection(&["eu"], 0, 1_000) {
+        Payload::ProjectionIssue {
+            audience,
+            class,
+            variant,
+            max_staleness_ms,
+            offline_slice,
+            ..
+        } => Payload::ProjectionIssue {
+            bounds,
+            audience,
+            class,
+            variant,
+            max_staleness_ms,
+            offline_slice,
+        },
+        other => other,
+    }
+}
+
+// OP-141 m.6, m.13: every meta-action of the closed list round-trips through its CBOR form
+#[test]
+#[allow(
+    clippy::too_many_lines,
+    reason = "one payload per meta-action of the closed list"
+)]
+fn every_payload_round_trips() {
+    let anchor = shop_anchor();
+    let g = Id([10; 16]);
+    let h = Id([11; 16]);
+    let pin = HoldingRef {
+        grant: g,
+        holder: ALICE,
+        since: 3,
+    };
+    let terms = BTreeSet::from([term(1)]);
+    let acceptance = map(acceptance(CAROL, "predicate-input", "kyc"));
+    let policy = map([
+        ("schema", Some(Value::text(RESTRICTION_SCHEMA))),
+        ("source", Some(Value::text("deny all"))),
+        ("target", Some(Value::text("domain"))),
+    ]);
+    let payloads = [
+        Payload::AnchorCreate {
+            scope: AnchorScope::Resource(shop(&["eu"])),
+            root: Root::Joint {
+                parties: BTreeSet::from([ALICE, BOB]),
+                k: 2,
+            },
+            root_terms: terms.clone(),
+        },
+        Payload::AnchorTransfer {
+            anchor,
+            root: Root::Sole(BOB),
+            disposition: BTreeMap::from([(g, Disposition::Keep), (h, Disposition::Revoke)]),
+        },
+        Payload::AnchorAmend {
+            anchor,
+            root: Some(Root::Sole(ALICE)),
+            root_terms: Some(BTreeSet::from([term(2)])),
+        },
+        Payload::AnchorRetire {
+            anchor,
+            disposition: BTreeMap::from([(g, Disposition::Revoke), (h, Disposition::Keep)]),
+        },
+        Payload::PartyRegister {
+            party: ALICE,
+            root: Root::Sole(ALICE),
+            actor_kind: ActorKind::Agent,
+        },
+        Payload::PartyDepart {
+            party: ALICE,
+            disposition: BTreeMap::from([(g, Disposition::Keep)]),
+        },
+        Payload::InstanceCreate {
+            party: ALICE,
+            key: p256_key(3),
+            mandate: Some(envelope(&["eu"], terms.clone(), Some(pin))),
+        },
+        Payload::InstanceRekey {
+            instance: h,
+            key: p256_key(4),
+        },
+        Payload::InstanceTerminate { instance: h },
+        Payload::InstanceRecover {
+            instance: h,
+            key: p256_key(5),
+        },
+        Payload::MandateBind {
+            instance: h,
+            envelope: envelope(&["eu"], terms.clone(), Some(pin)),
+        },
+        Payload::MandateRebind {
+            mandate: g,
+            envelope: envelope(&[], BTreeSet::new(), None),
+        },
+        Payload::MandateRevoke { mandate: g },
+        issue(ALICE, GrantBasis::Holding(pin), &["eu"], 1),
+        Payload::GrantAmend {
+            grant: g,
+            authority: authority(&["eu"], 1, 1_000),
+            agency: BTreeSet::from([Capacity::Own, Capacity::For(BOB)]),
+            named: Some((String::from("refunds"), 1, Digest([9; 32]))),
+        },
+        Payload::GrantRevoke { grant: g },
+        Payload::GrantRenounce { grant: g },
+        Payload::AcceptanceEstablish(acceptance.clone()),
+        Payload::AcceptanceAmend {
+            acceptance: g,
+            content: acceptance,
+        },
+        Payload::AcceptanceRevoke { acceptance: g },
+        Payload::PolicySet {
+            policy: Some(h),
+            content: policy,
+        },
+        Payload::PolicyRetire { policy: h },
+        Payload::ClaimIssue {
+            subject: ALICE,
+            class: String::from("member"),
+            value: crate::model::EqValue::Bool(true),
+            validity: Some(Window { from: 0, until: 10 }),
+            bound_intent: Some(Digest([8; 32])),
+            supersedes: Some(g),
+        },
+        Payload::Contribute {
+            target: Digest([9; 32]),
+            class: String::from("approve"),
+        },
+        Payload::ConsumptionRelease {
+            exercise: Digest([9; 32]),
+            grounds: BTreeSet::from([g, h]),
+        },
+        Payload::AuthoritySetDefine {
+            name: String::from("refunds"),
+            authority: authority(&["eu"], 0, 1_000).authority,
+        },
+        sliced(&["eu"], crate::validity::ProfileClass::Intermittent),
+    ];
+    let mut names = BTreeSet::new();
+    for p in &payloads {
+        assert_eq!(Payload::from_value(&p.to_value()).as_ref(), Ok(p), "{p:?}");
+        assert!(is_meta(NAMESPACE, p.action()));
+        names.insert(p.action());
+    }
+    assert_eq!(names.len(), NAMES.len());
+}
+
+// OP-143 m.12: an offline slice asks for a non-zero count, non-zero amounts, or both
+#[test]
+fn an_offline_slice_asks_for_something() {
+    let slice = |count: Option<u64>, amounts: &[(&str, u64)]| SliceRequest {
+        count,
+        amounts: amounts
+            .iter()
+            .map(|(u, a)| ((*u).to_string(), *a))
+            .collect(),
+    };
+    for ok in [
+        slice(Some(3), &[("eur", 500)]),
+        slice(Some(1), &[]),
+        slice(None, &[("eur", 1)]),
+    ] {
+        assert_eq!(SliceRequest::from_value(&ok.to_value()), Ok(ok));
+    }
+    for bad in [
+        slice(None, &[]),
+        slice(Some(0), &[]),
+        slice(Some(0), &[("eur", 1)]),
+        slice(Some(2), &[("eur", 0)]),
+        slice(None, &[("eur", 0)]),
+    ] {
+        assert_eq!(
+            SliceRequest::from_value(&bad.to_value()),
+            Err(ModelError::Range),
+            "{bad:?}"
+        );
+    }
+}
+
+// C9: a joint root names at least two Parties and a quorum k with 1 ≤ k ≤ n
+#[test]
+fn a_joint_root_has_a_reachable_quorum() {
+    let joint = |parties: &[Id], k: u64| Root::Joint {
+        parties: parties.iter().copied().collect(),
+        k,
+    };
+    for ok in [
+        joint(&[ALICE, BOB], 2),
+        joint(&[ALICE, BOB], 1),
+        joint(&[ALICE, BOB, CAROL], 3),
+        Root::Sole(ALICE),
+    ] {
+        assert_eq!(root(&root_value(&ok)), Ok(ok));
+    }
+    for bad in [
+        joint(&[ALICE], 1),
+        joint(&[ALICE, BOB], 0),
+        joint(&[ALICE, BOB], 3),
+        joint(&[ALICE, BOB, CAROL], 4),
+    ] {
+        assert_eq!(root(&root_value(&bad)), Err(ModelError::Range), "{bad:?}");
+    }
+}
+
+// L0-META-10: a member of a joint root of k acts with k − 1 co-root contributions; others are no root
+#[test]
+fn joint_root_requirements_count_the_other_members() {
+    let anchor = |parties: &[Id], k: u64| AnchorState {
+        scope: AnchorScope::Domain,
+        root: Root::Joint {
+            parties: parties.iter().copied().collect(),
+            k,
+        },
+        root_terms: BTreeSet::from([term(5)]),
+        since: 0,
+        ended: None,
+    };
+    let actor = |party: Id| Actor {
+        party,
+        instance: party,
+    };
+    let three = anchor(&[ALICE, BOB, CAROL], 3);
+    assert_eq!(
+        root_requirements(&three, &actor(BOB)),
+        Some(BTreeSet::from([term(5), co_root(2)]))
+    );
+    assert_eq!(root_requirements(&three, &actor(ROOT)), None);
+    let any = anchor(&[ALICE, BOB], 1);
+    assert_eq!(
+        root_requirements(&any, &actor(ALICE)),
+        Some(BTreeSet::from([term(5)]))
+    );
+    assert_eq!(root_requirements(&any, &actor(CAROL)), None);
+}
+
+// §7.9.2.3: a self-anchor covers the `access.party` resources named by the PartyID in hex
+#[test]
+fn a_self_anchor_covers_its_party_resources() {
+    let party = Id([
+        0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef, 0xfe, 0xdc, 0xba, 0x98, 0x76, 0x54, 0x32,
+        0x10,
+    ]);
+    let Some(ResourceSelector::Structural(s)) = scope_selector(&AnchorScope::Party(party)) else {
+        panic!("a self-anchor covers structural resources");
+    };
+    assert_eq!(s.namespace, "access.party");
+    assert_eq!(s.prefix, ["0123456789abcdeffedcba9876543210".to_string()]);
+    assert!(scope_selector(&AnchorScope::Domain).is_none());
+}
+
+fn acceptance(issuer: Id, use_: &str, class: &str) -> Vec<(&'static str, Option<Value>)> {
+    alloc::vec![
+        ("issuer", Some(issuer.to_value())),
+        ("use", Some(Value::text(use_))),
+        ("classes", Some(set_value([Value::text(class)]))),
+        ("subject", Some(SubjectSelector::Public.to_value())),
+        ("validity", Some(Window { from: 0, until: 10 }.to_value())),
+    ]
+}
+
+// OP-141 m.21 (a): an Acceptance names a known use and a quota of non-zero count and window
+#[test]
+fn an_acceptance_names_a_known_use_and_a_positive_quota() {
+    assert!(acceptance_content(&map(acceptance(CAROL, "predicate-input", "kyc"))).is_ok());
+    assert_eq!(
+        acceptance_content(&map(acceptance(CAROL, "anything-goes", "kyc"))),
+        Err(ModelError::Unknown)
+    );
+    let quota = |count: u64, window_s: u64| {
+        let mut c = acceptance(CAROL, "predicate-input", "kyc");
+        c.push((
+            "quota",
+            Some(map([
+                ("count", Some(Value::Unsigned(count))),
+                ("window_s", Some(Value::Unsigned(window_s))),
+            ])),
+        ));
+        acceptance_content(&map(c))
+    };
+    assert!(quota(1_000, 3_600).is_ok());
+    assert_eq!(quota(0, 3_600), Err(ModelError::Range));
+    assert_eq!(quota(1_000, 0), Err(ModelError::Range));
+}
+
+// OP-141 m.28, L1-ADP-13: an Exercise without draws omits them; an empty draw list is not canonical
+#[test]
+fn an_exercise_without_draws_omits_them() {
+    let base = || {
+        alloc::vec![
+            ("intent", Some(SPENT.to_value())),
+            ("actor", Some(SPENDER.to_value())),
+            ("since", Some(Value::Unsigned(1))),
+        ]
+    };
+    let e = ExerciseState::from_value(&map(base())).unwrap();
+    assert_eq!(e.to_value(), map(base()));
+    let mut empty = base();
+    empty.push(("draws", Some(Value::Array(Vec::new()))));
+    assert_eq!(
+        ExerciseState::from_value(&map(empty)),
+        Err(ModelError::Shape)
+    );
+}
+
+fn genesis_fields() -> BTreeMap<String, Value> {
+    let mut fields = BTreeMap::new();
+    fields.insert(
+        "meta_anchor".to_string(),
+        map([("root", Some(root_value(&Root::Sole(ROOT))))]),
+    );
+    fields.insert(
+        "anchors".to_string(),
+        set_value([map([
+            (
+                "scope",
+                Some(scope_value(&AnchorScope::Resource(shop(&[])))),
+            ),
+            ("root", Some(root_value(&Root::Sole(ROOT)))),
+        ])]),
+    );
+    fields
+}
+
+// C4, OP-141 m.6: a Genesis Grant derives from one of the Genesis Anchors, named by index
+#[test]
+fn genesis_grants_derive_from_a_genesis_anchor() {
+    let grant_on = |index: u64| {
+        let mut fields = genesis_fields();
+        fields.insert(
+            "grants".to_string(),
+            set_value([map([
+                ("anchor", Some(Value::Unsigned(index))),
+                ("holder", Some(SubjectSelector::Party(ALICE).to_value())),
+                ("authority", Some(authority(&["eu"], 0, 1_000).to_value())),
+            ])]),
+        );
+        genesis_effects(&DOMAIN, &fields)
+    };
+    let mut state = Mem(BTreeMap::new());
+    state.apply(&grant_on(1).unwrap());
+    let g = object_id(&DOMAIN, kind::GRANT, 0);
+    let stored: GrantState = read(&state, kind::GRANT, &g).unwrap();
+    assert_eq!(stored.content.basis, GrantBasis::Anchor(shop_anchor()));
+    assert_eq!(stored.content.holder, SubjectSelector::Party(ALICE));
+    assert_eq!(
+        ids(&state, kind::CHILDREN, &shop_anchor()).unwrap(),
+        BTreeSet::from([g])
+    );
+    assert!(grant_on(0).is_ok());
+    assert_eq!(
+        grant_on(2).unwrap_err(),
+        MetaError::Malformed(ModelError::Range)
+    );
+}
+
+// L0-META-5, OP-141 m.20 (e): Genesis indexes subject-selection Acceptances by class; one issuer
+// per class
+#[test]
+fn genesis_selection_acceptances_have_one_issuer_per_class() {
+    let with = |list: Vec<Value>| {
+        let mut fields = genesis_fields();
+        fields.insert("acceptances".to_string(), set_value(list));
+        genesis_effects(&DOMAIN, &fields)
+    };
+    let mut later = acceptance(CAROL, "subject-selection", "staff");
+    later.retain(|(k, _)| *k != "validity");
+    later.push(("validity", Some(Window { from: 0, until: 20 }.to_value())));
+    let effects = with(alloc::vec![
+        map(acceptance(CAROL, "subject-selection", "staff")),
+        map(later),
+        map(acceptance(BOB, "predicate-input", "kyc")),
+    ])
+    .unwrap();
+    let mut state = Mem(BTreeMap::new());
+    state.apply(&effects);
+    let all = BTreeSet::from([
+        object_id(&DOMAIN, kind::ACCEPTANCE, 0),
+        object_id(&DOMAIN, kind::ACCEPTANCE, 1),
+        object_id(&DOMAIN, kind::ACCEPTANCE, 2),
+    ]);
+    let staff = index_of(&state, &selection_key("staff")).unwrap();
+    assert_eq!(staff.len(), 2);
+    assert!(staff.is_subset(&all));
+    assert!(index_of(&state, &selection_key("kyc")).unwrap().is_empty());
+    assert_eq!(
+        with(alloc::vec![
+            map(acceptance(CAROL, "subject-selection", "staff")),
+            map(acceptance(BOB, "subject-selection", "staff")),
+        ])
+        .unwrap_err(),
+        MetaError::NotWithin
+    );
+}
+
+// C10, OP-141 m.3: the root transfers or amends the Anchor it acts on; KEEP leaves a dependent
+// Grant live on transfer; an amend that drops root terms or changes the root widens
+#[test]
+fn anchor_transfer_and_amend_act_on_the_named_anchor() {
+    let mut r = Run::new();
+    let a = shop_anchor();
+    let g = held(&mut r, ALICE, &["eu"], 0).grant;
+    let meta = ExerciseBasis::Anchor(meta_anchor(&DOMAIN));
+    let basis = ExerciseBasis::Anchor(a);
+    let transfer = Payload::AnchorTransfer {
+        anchor: a,
+        root: Root::Sole(BOB),
+        disposition: BTreeMap::from([(g, Disposition::Keep)]),
+    };
+    assert_eq!(r.act(ROOT, ROOT, meta, &transfer), Err(MetaError::Basis));
+    let (_, out) = r.act(ROOT, ROOT, basis, &transfer).unwrap();
+    assert!(out.expansion);
+    assert!(r.grant(&g).ended.is_none());
+    let anchor: AnchorState = read(&r.state, kind::ANCHOR, &a).unwrap();
+    assert_eq!(anchor.root, Root::Sole(BOB));
+
+    let amend =
+        |root: Option<Root>, terms: Option<BTreeSet<RequirementTerm>>| Payload::AnchorAmend {
+            anchor: a,
+            root,
+            root_terms: terms,
+        };
+    let add = amend(None, Some(BTreeSet::from([term(1)])));
+    assert_eq!(r.act(BOB, BOB, meta, &add), Err(MetaError::Basis));
+    let (_, out) = r.act(BOB, BOB, basis, &add).unwrap();
+    assert!(!out.expansion);
+    let (_, out) = r
+        .act(BOB, BOB, basis, &amend(None, Some(BTreeSet::new())))
+        .unwrap();
+    assert!(out.requirements.contains(&term(1)));
+    assert!(out.expansion);
+    let (_, out) = r
+        .act(BOB, BOB, basis, &amend(Some(Root::Sole(CAROL)), None))
+        .unwrap();
+    assert!(out.expansion);
+    let anchor: AnchorState = read(&r.state, kind::ANCHOR, &a).unwrap();
+    assert_eq!(anchor.root, Root::Sole(CAROL));
+}
+
+// C14: a Mandate's pin names the current holding episode of the actor's Party
+#[test]
+fn a_mandate_pin_names_the_actors_current_holding() {
+    let mut r = Run::new();
+    let instance = alice_instance(&mut r, None);
+    let mine = held(&mut r, ALICE, &["eu"], 0);
+    let bobs = held(&mut r, BOB, &["eu"], 0);
+    let public = ExerciseBasis::Public(Id([9; 16]));
+    let bind = |pin: HoldingRef| Payload::MandateBind {
+        instance,
+        envelope: envelope(&["eu"], BTreeSet::new(), Some(pin)),
+    };
+    for wrong in [
+        HoldingRef {
+            holder: BOB,
+            ..mine
+        },
+        HoldingRef {
+            since: mine.since.checked_add(1).unwrap(),
+            ..mine
+        },
+        HoldingRef {
+            holder: ALICE,
+            ..bobs
+        },
+    ] {
+        assert_eq!(
+            r.act(ALICE, instance, public, &bind(wrong)),
+            Err(MetaError::NotAuthorized),
+            "{wrong:?}"
+        );
+    }
+    let (ex, out) = r.act(ALICE, instance, public, &bind(mine)).unwrap();
+    assert!(out.expansion);
+    let mandate = object_id(&ex, kind::MANDATE, 0);
+    let stored: MandateState = read(&r.state, kind::MANDATE, &mandate).unwrap();
+    assert_eq!(stored.envelope.pin, Some(mine));
+
+    // C14: a rebind widens unless the new envelope is within the old one
+    let rebind = |prefix: &[&str]| Payload::MandateRebind {
+        mandate,
+        envelope: envelope(prefix, BTreeSet::new(), None),
+    };
+    let (_, out) = r
+        .act(ALICE, instance, public, &rebind(&["eu", "de"]))
+        .unwrap();
+    assert!(!out.expansion);
+    let (_, out) = r.act(ALICE, instance, public, &rebind(&["eu"])).unwrap();
+    assert!(out.expansion);
+}
+
+// C15, INV-3: a holder delegates only from its current holding episode, and an amend of a
+// delegated Grant stays within its parent
+#[test]
+fn delegation_and_amend_stay_within_the_current_holding() {
+    let mut r = Run::new();
+    let h = held(&mut r, ALICE, &["eu"], 2);
+    let stale = HoldingRef {
+        since: h.since.checked_add(1).unwrap(),
+        ..h
+    };
+    assert_eq!(
+        r.act(
+            ALICE,
+            ALICE,
+            ExerciseBasis::Holding(stale),
+            &issue(BOB, GrantBasis::Holding(stale), &["eu", "de"], 1)
+        ),
+        Err(MetaError::NotAuthorized)
+    );
+    let (ex, _) = r
+        .act(
+            ALICE,
+            ALICE,
+            ExerciseBasis::Holding(h),
+            &issue(BOB, GrantBasis::Holding(h), &["eu", "de"], 1),
+        )
+        .unwrap();
+    let g2 = object_id(&ex, kind::GRANT, 0);
+    let amend = |prefix: &[&str]| Payload::GrantAmend {
+        grant: g2,
+        authority: authority(prefix, 1, 1_000),
+        agency: BTreeSet::from([Capacity::Own]),
+        named: None,
+    };
+    let any = ExerciseBasis::Holding(h);
+    let (_, out) = r.act(ALICE, ALICE, any, &amend(&["eu", "fr"])).unwrap();
+    assert!(out.expansion);
+    assert_eq!(
+        r.grant(&g2).content.authority,
+        authority(&["eu", "fr"], 1, 1_000)
+    );
+    assert_eq!(
+        r.act(ALICE, ALICE, any, &amend(&[])),
+        Err(MetaError::NotWithin)
+    );
+}
+
+// OP-143 m.7, L0-META-35: a projection from a holding needs a live lineage, an allowed capacity
+// and the parent's requirements
+#[test]
+fn a_holding_projection_stays_within_its_lineage() {
+    let mut r = Run::new();
+    let h = held(&mut r, ALICE, &["eu"], 1);
+    let p = projection(&["eu"], 0, 1_000);
+    let mine = ExerciseBasis::Holding(h);
+    r.act(ALICE, ALICE, mine, &p).unwrap();
+    assert_eq!(
+        r.act_in(Capacity::For(CAROL), ALICE, ALICE, mine, &p),
+        Err(MetaError::NotWithin)
+    );
+    let (ex, _) = r
+        .act(
+            ALICE,
+            ALICE,
+            mine,
+            &issue(BOB, GrantBasis::Holding(h), &["eu"], 0),
+        )
+        .unwrap();
+    let g2 = object_id(&ex, kind::GRANT, 0);
+    let bobs = ExerciseBasis::Holding(HoldingRef {
+        grant: g2,
+        holder: BOB,
+        since: r.grant(&g2).since,
+    });
+    r.act(BOB, BOB, bobs, &p).unwrap();
+    r.act(
+        ROOT,
+        ROOT,
+        ExerciseBasis::Anchor(shop_anchor()),
+        &Payload::GrantRevoke { grant: h.grant },
+    )
+    .unwrap();
+    assert_eq!(r.act(BOB, BOB, bobs, &p), Err(MetaError::NotWithin));
+
+    let mut demanding = authority(&["eu"], 0, 1_000);
+    demanding.requirements.insert(term(1));
+    let (ex, _) = r
+        .act(
+            ROOT,
+            ROOT,
+            ExerciseBasis::Anchor(shop_anchor()),
+            &Payload::GrantIssue(GrantContent {
+                basis: GrantBasis::Anchor(shop_anchor()),
+                holder: SubjectSelector::Party(CAROL),
+                authority: demanding.clone(),
+                agency: BTreeSet::from([Capacity::Own]),
+                named: None,
+            }),
+        )
+        .unwrap();
+    let g3 = object_id(&ex, kind::GRANT, 0);
+    let carols = ExerciseBasis::Holding(HoldingRef {
+        grant: g3,
+        holder: CAROL,
+        since: r.grant(&g3).since,
+    });
+    assert_eq!(r.act(CAROL, CAROL, carols, &p), Err(MetaError::NotWithin));
+    r.act(CAROL, CAROL, carols, &projection_of(demanding))
+        .unwrap();
+}
+
+// OP-143 m.7: a root projects only within its Anchor's scope
+#[test]
+fn a_root_projection_stays_within_the_anchor_scope() {
+    let mut r = Run::new();
+    let anchor = ExerciseBasis::Anchor(shop_anchor());
+    r.act(ROOT, ROOT, anchor, &projection(&["eu"], 0, 1_000))
+        .unwrap();
+    let mut bounds = authority(&["eu"], 0, 1_000);
+    bounds.authority.resource = ResourceSelector::Structural(Structural {
+        namespace: "bank".to_string(),
+        prefix: alloc::vec!["eu".to_string()],
+        kind: None,
+        attrs: BTreeMap::new(),
+    });
+    assert_eq!(
+        r.act(ROOT, ROOT, anchor, &projection_of(bounds)),
+        Err(MetaError::NotWithin)
+    );
+}
+
+// OP-143 m.7: a projection stays within the actor Instance's Mandate, requirements included
+#[test]
+fn a_projection_stays_within_the_mandate() {
+    let mut r = Run::new();
+    let instance = alice_instance(
+        &mut r,
+        Some(envelope(&["eu"], BTreeSet::from([term(1)]), None)),
+    );
+    let h = held(&mut r, ALICE, &["eu"], 0);
+    let basis = ExerciseBasis::Holding(h);
+    assert_eq!(
+        r.act(ALICE, instance, basis, &projection(&["eu"], 0, 1_000)),
+        Err(MetaError::NotWithin)
+    );
+    let mut bounds = authority(&["eu"], 0, 1_000);
+    bounds.requirements.insert(term(1));
+    r.act(ALICE, instance, basis, &projection_of(bounds))
+        .unwrap();
+}
+
+// OP-143 m.7: a projection's horizon may be now but not in the past
+#[test]
+fn a_projection_horizon_may_be_now() {
+    let mut r = Run::new();
+    let h = held(&mut r, ALICE, &["eu"], 0);
+    let basis = ExerciseBasis::Holding(h);
+    r.now = 1_000;
+    r.act(ALICE, ALICE, basis, &projection(&["eu"], 0, 1_000))
+        .unwrap();
+    r.now = 1_001;
+    assert_eq!(
+        r.act(ALICE, ALICE, basis, &projection(&["eu"], 0, 1_000)),
+        Err(MetaError::NotWithin)
+    );
+}
+
+// OP-141 m.28 (d): grounds that state the actual amount must agree
+#[test]
+fn actual_amount_grounds_agree() {
+    let mut r = Run::new();
+    let g = held(&mut r, ALICE, &["eu"], 0).grant;
+    let spending = Digest([17; 32]);
+    spent(&mut r.state, &g, &spending);
+    r.state.apply(&[
+        (
+            key(kind::CLAIM, &Id([24; 16])),
+            Some(bound_claim(
+                ACTUAL_AMOUNT,
+                Some(crate::model::EqValue::Int(30)),
+                SPENT,
+            )),
+        ),
+        (
+            key(kind::CLAIM, &Id([25; 16])),
+            Some(bound_claim(
+                ACTUAL_AMOUNT,
+                Some(crate::model::EqValue::Int(40)),
+                SPENT,
+            )),
+        ),
+    ]);
+    let any = ExerciseBasis::Anchor(shop_anchor());
+    assert_eq!(
+        r.act(ALICE, ALICE, any, &release_of(spending, &[21, 25])),
+        Err(MetaError::NotWithin)
+    );
+    let (_, out) = r
+        .act(ALICE, ALICE, any, &release_of(spending, &[21, 24]))
+        .unwrap();
+    assert_eq!(out.releases, alloc::vec![(budget(&g, 1), 70)]);
+}
+
+// OP-141 m.28 (g): only a budget counter key names a Grant; its released counter does not
+#[test]
+fn only_budget_keys_name_a_grant() {
+    let g = Id([10; 16]);
+    assert_eq!(budget_grant(&budget(&g, 0)), Some(g));
+    assert_eq!(budget_grant(&released_key(&budget(&g, 0))), None);
+}
+
+// OP-141 m.27 (c): the restriction policies of a target are indexed together
+#[test]
+fn policies_of_a_target_are_indexed_together() {
+    let mut r = Run::new();
+    let meta = ExerciseBasis::Anchor(meta_anchor(&DOMAIN));
+    let policy = |source: &str| Payload::PolicySet {
+        policy: None,
+        content: map([
+            ("schema", Some(Value::text(RESTRICTION_SCHEMA))),
+            ("source", Some(Value::text(source))),
+            ("target", Some(Value::text("domain"))),
+        ]),
+    };
+    let (first, _) = r.act(ROOT, ROOT, meta, &policy("deny a")).unwrap();
+    let (second, _) = r.act(ROOT, ROOT, meta, &policy("deny b")).unwrap();
+    assert_eq!(
+        index_of(&r.state, &policies_key(&Value::text("domain"))).unwrap(),
+        BTreeSet::from([
+            object_id(&first, kind::POLICY, 0),
+            object_id(&second, kind::POLICY, 0)
+        ])
     );
 }
