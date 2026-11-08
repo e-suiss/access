@@ -2102,6 +2102,29 @@ mod provision {
             panic!("not a production realm");
         };
         assert_eq!(recovery, Recovery::NotAvailable);
+        // OP-149 m.29 (b), SI-5, §10.1.4 rule 3: the Genesis of a platform-created realm accepts
+        // its issuer for actor-binding and, as the local plan's realms, its authentication
+        // Claims as predicate input, so an approval on its surface proves with them (aas-binding)
+        let gates: Vec<access_kernel::claim::Gate> =
+            access_store::authority::state(&w.db.sequencer, &DomainId::from_bytes(domain.0))
+                .await
+                .unwrap()
+                .into_iter()
+                .filter_map(|r| r.value)
+                .filter_map(|v| {
+                    suiss_crypto::dcbor::decode(&v, suiss_crypto::dcbor::Limits::CEILING).ok()
+                })
+                .filter_map(|v| meta::ContentState::from_value(&v).ok())
+                .filter_map(|c| access_kernel::claim::Gate::of(&c.content).ok())
+                .collect();
+        let issuer = gates
+            .iter()
+            .find(|g| g.use_ == access_kernel::claim::ACTOR_BINDING && g.issuer.is_some())
+            .and_then(|g| g.issuer)
+            .unwrap();
+        assert!(gates.iter().any(|g| g.issuer == Some(issuer)
+            && g.use_ == access_kernel::claim::PREDICATE_INPUT
+            && g.classes == [String::from("authentication")]));
         let shop_route = route_by_slug(&w.db.router, "shop").await.unwrap().unwrap();
         assert!(shop_route.tenant == tenant && shop_route.realm == shop_realm);
         assert_ne!(domain.0, [0; 32]);

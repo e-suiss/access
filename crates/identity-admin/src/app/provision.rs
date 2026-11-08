@@ -7,6 +7,7 @@
 
 use access_identity_oauth::domain::issuer::{Issuer, IssuerStyle};
 use access_internal_api::idp::{Submission, Verdict};
+use access_kernel::claim::body::Class;
 use access_kernel::combinator::{Capacity, Decision};
 use access_kernel::digest::Digest;
 use access_kernel::intent::intent_digest;
@@ -320,7 +321,8 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                         ct3_delay_s: o.ct3_delay_s,
                         schemas: Vec::new(),
                         acceptances: Vec::new(),
-                        issuer_predicate_input: Vec::new(),
+                        // OP-149 m.29 (b), SI-5
+                        issuer_predicate_input: vec![Class::Authentication.name()],
                         provisioned_by: Some(*exercise),
                     })
                     .await?;
