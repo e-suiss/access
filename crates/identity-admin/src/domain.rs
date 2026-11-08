@@ -22,6 +22,7 @@ use suiss_crypto::dcbor::{self, Limits, Value};
 use suiss_crypto::digest::context_digest;
 use suiss_crypto::rotation::Policy;
 
+pub mod org;
 pub mod provision;
 pub use access_identity_risk::domain::mode::ProtectionMode;
 
