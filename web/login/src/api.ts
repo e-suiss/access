@@ -1,4 +1,12 @@
-import { flowsPath, parseUi, stepUpPath, type LoginUi, type Submission } from "./contract.js";
+import { under } from "./base.js";
+import {
+  flowsPath,
+  parseUi,
+  stepUpPath,
+  type FlowKind,
+  type LoginUi,
+  type Submission,
+} from "./contract.js";
 
 export type Answer =
   | { readonly kind: "ui"; readonly ui: LoginUi }
@@ -15,7 +23,7 @@ async function answer(response: Response): Promise<Answer> {
 
 async function call(path: string, init: RequestInit): Promise<Answer> {
   try {
-    const response = await fetch(path, {
+    const response = await fetch(under(path), {
       ...init,
       credentials: "same-origin",
       cache: "no-store",
@@ -32,8 +40,13 @@ function headers(): HeadersInit {
   return { "Content-Type": "application/json", "Idempotency-Key": crypto.randomUUID() };
 }
 
-export function createFlow(): Promise<Answer> {
-  return call(flowsPath, { method: "POST", headers: headers() });
+/** A new flow; a sign-up flow names its kind (OP-153 m.3 (g)). */
+export function createFlow(kind: FlowKind = "login"): Promise<Answer> {
+  return call(flowsPath, {
+    method: "POST",
+    headers: headers(),
+    ...(kind === "login" ? {} : { body: JSON.stringify({ kind }) }),
+  });
 }
 
 // TN-44, RFC 9470: re-authenticates the live session in place; `acr` is advisory

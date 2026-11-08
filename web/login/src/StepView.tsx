@@ -5,11 +5,17 @@ import type {
   InputNode,
   LoginUi,
   Method,
+  OptionName,
+  OptionNode,
   PasskeyCreateNode,
+  ProviderNode,
   SubmitNode,
   Submission,
   UiNode,
 } from "./contract.js";
+import { LOGIN, under } from "./base.js";
+import { follow } from "./http.js";
+import { t, text } from "./i18n.js";
 import {
   conditionalCreateAvailable,
   conditionalGetAvailable,
@@ -24,7 +30,12 @@ interface Props {
   readonly onSubmit: (submission: Submission) => void;
 }
 
+type Fields = Partial<Record<FieldName, string>>;
+
 const htmlType = { text: "text", password: "password", code: "text" } as const;
+
+/** Codes that are digits only get the numeric keyboard; recovery codes are not (TN-107). */
+const numeric = new Set<FieldName>(["totp_code", "email_code"]);
 
 function methodsInOrder(nodes: readonly UiNode[]): Method[] {
   const seen: Method[] = [];
@@ -36,11 +47,13 @@ function methodsInOrder(nodes: readonly UiNode[]): Method[] {
   return seen;
 }
 
+// TN-107: paste and autofill are never blocked; one pasteable field per code
 function Field({ node }: { readonly node: InputNode }) {
+  if (node.kind === "hidden") return null;
   const id = `field-${node.name}-${node.method}`;
   return (
     <div className="field">
-      <label htmlFor={id}>{node.label.text}</label>
+      <label htmlFor={id}>{text(node.label)}</label>
       <input
         id={id}
         name={node.name}
@@ -50,9 +63,10 @@ function Field({ node }: { readonly node: InputNode }) {
         maxLength={node.max_length}
         readOnly={node.read_only === true}
         defaultValue={node.value}
-        {...(node.kind === "code" ? { inputMode: "numeric" as const } : {})}
+        {...(numeric.has(node.name) ? { inputMode: "numeric" as const } : {})}
         spellCheck={false}
         autoCapitalize="none"
+        dir="auto"
       />
     </div>
   );
@@ -62,6 +76,7 @@ function MethodForm(props: {
   readonly method: Method;
   readonly nodes: readonly UiNode[];
   readonly busy: boolean;
+  readonly options: Fields;
   readonly onSubmit: (submission: Submission) => void;
 }) {
   const inputs = props.nodes.filter(
@@ -73,13 +88,13 @@ function MethodForm(props: {
   const handle = (event: SyntheticEvent<HTMLFormElement>) => {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
-    const fields: Partial<Record<FieldName, string>> = {};
+    const fields: Fields = {};
     for (const input of inputs) {
-      if (input.read_only === true) continue;
+      if (input.read_only === true || input.kind === "hidden") continue;
       const value = data.get(input.name);
       if (typeof value === "string") fields[input.name] = value;
     }
-    props.onSubmit({ method: props.method, fields });
+    props.onSubmit({ method: props.method, fields: { ...fields, ...props.options } });
   };
   return (
     <form className={`method method-${props.method}`} onSubmit={handle} noValidate={false}>
@@ -95,10 +110,41 @@ function MethodForm(props: {
           }
           disabled={props.busy}
         >
-          {node.label.text}
+          {text(node.label)}
         </button>
       ))}
     </form>
+  );
+}
+
+function Option(props: {
+  readonly node: OptionNode;
+  readonly checked: boolean;
+  readonly onChange: (name: OptionName, checked: boolean) => void;
+}) {
+  const id = `option-${props.node.name}`;
+  return (
+    <div className="option">
+      <input
+        id={id}
+        type="checkbox"
+        name={props.node.name}
+        checked={props.checked}
+        onChange={(e) => {
+          props.onChange(props.node.name, e.currentTarget.checked);
+        }}
+      />
+      <label htmlFor={id}>{text(props.node.label)}</label>
+    </div>
+  );
+}
+
+// OP-153 m.3 (l): a full-page navigation; the provider redirect is the server's
+function Provider({ node }: { readonly node: ProviderNode }) {
+  return (
+    <a className="provider" href={under(node.href)} data-provider={node.provider}>
+      {text(node.label)}
+    </a>
   );
 }
 
@@ -113,17 +159,44 @@ function credentialId(json: string): string {
   return typeof parsed.id === "string" ? parsed.id : "";
 }
 
-function follow(target: string) {
-  const url = new URL(target, window.location.origin);
-  if (url.protocol === "https:" || url.protocol === "http:") window.location.assign(url.href);
+function heading(ui: LoginUi): string {
+  if (ui.kind === "registration") return t("registration.title");
+  return ui.step === "complete" ? t("page.signing_in") : t("page.sign_in");
+}
+
+function initialOptions(nodes: readonly UiNode[]): Fields {
+  const out: Fields = {};
+  for (const n of nodes) if (n.type === "option" && n.checked) out[n.name] = "true";
+  return out;
 }
 
 export function StepView({ ui, busy, onSubmit }: Props) {
   const autofill = ui.nodes.find((n) => n.type === "passkey_autofill");
   const passkeyButton = ui.nodes.find((n) => n.type === "passkey_get");
   const create = ui.nodes.find((n): n is PasskeyCreateNode => n.type === "passkey_create");
+  const optionNodes = ui.nodes.filter((n): n is OptionNode => n.type === "option");
+  const providers = ui.nodes.filter((n): n is ProviderNode => n.type === "provider");
   const conditional = useRef<AbortController | null>(null);
+  const title = useRef<HTMLHeadingElement>(null);
+  const first = useRef(true);
   const [round, setRound] = useState(0);
+  const [options, setOptions] = useState<Fields>(() => initialOptions(ui.nodes));
+  const [shown, setShown] = useState(ui);
+
+  // X33, TN-36: the choices belong to the step they were offered on
+  if (shown !== ui) {
+    setShown(ui);
+    setOptions(initialOptions(ui.nodes));
+  }
+
+  // TN-107: a new step is announced by moving focus to its heading
+  useEffect(() => {
+    if (first.current) {
+      first.current = false;
+      return;
+    }
+    title.current?.focus();
+  }, [ui.flow, ui.step]);
 
   // TN-97
   useEffect(() => {
@@ -148,6 +221,11 @@ export function StepView({ ui, busy, onSubmit }: Props) {
     });
   }, [ui, create, onSubmit]);
 
+  const optionsRef = useRef(options);
+  useEffect(() => {
+    optionsRef.current = options;
+  }, [options]);
+
   // TN-99
   useEffect(() => {
     if (autofill === undefined) return;
@@ -157,7 +235,10 @@ export function StepView({ ui, busy, onSubmit }: Props) {
       if (!available || controller.signal.aborted) return;
       const credential = await getPasskey(autofill.options, "conditional", controller.signal);
       if (credential !== null && !refused.has(credentialId(credential))) {
-        onSubmit({ method: "passkey", fields: { passkey_credential: credential } });
+        onSubmit({
+          method: "passkey",
+          fields: { passkey_credential: credential, ...optionsRef.current },
+        });
       }
     });
     return () => {
@@ -177,7 +258,7 @@ export function StepView({ ui, busy, onSubmit }: Props) {
       setRound((r) => r + 1);
       return;
     }
-    onSubmit({ method: "passkey", fields: { passkey_credential: credential } });
+    onSubmit({ method: "passkey", fields: { passkey_credential: credential, ...options } });
   };
 
   const registerPasskey = async () => {
@@ -188,25 +269,49 @@ export function StepView({ ui, busy, onSubmit }: Props) {
     }
   };
 
+  const setOption = (name: OptionName, checked: boolean) => {
+    setOptions((o) => {
+      const rest = Object.fromEntries(Object.entries(o).filter(([k]) => k !== name)) as Fields;
+      return checked ? { ...rest, [name]: "true" } : rest;
+    });
+  };
+
   const errors = ui.messages.filter((m) => m.severity === "error");
   const infos = ui.messages.filter((m) => m.severity === "info");
-  const heading = ui.step === "complete" ? "Signing you in" : "Sign in";
+  const login = ui.kind === undefined || ui.kind === "login";
 
   return (
-    <section aria-labelledby="step-heading" data-step={ui.step}>
-      <h1 id="step-heading">{heading}</h1>
+    <section aria-labelledby="step-heading" data-step={ui.step} data-kind={ui.kind ?? "login"}>
+      <h1 id="step-heading" ref={title} tabIndex={-1}>
+        {heading(ui)}
+      </h1>
       <div role="alert" className="messages" data-testid="errors">
         {errors.map((m) => (
           <p key={m.id} data-message-id={m.id}>
-            {m.text}
+            {text(m)}
           </p>
         ))}
       </div>
-      {infos.map((m) => (
-        <p key={m.id} className="info" data-message-id={m.id}>
-          {m.text}
-        </p>
-      ))}
+      <div role="status" className="infos">
+        {infos.map((m) => (
+          <p key={m.id} className="info" data-message-id={m.id}>
+            {text(m)}
+          </p>
+        ))}
+      </div>
+      {optionNodes.length > 0 && (
+        <fieldset className="options">
+          <legend className="visually-hidden">{t("page.options")}</legend>
+          {optionNodes.map((node) => (
+            <Option
+              key={node.name}
+              node={node}
+              checked={options[node.name] === "true"}
+              onChange={setOption}
+            />
+          ))}
+        </fieldset>
+      )}
       {methodsInOrder(ui.nodes)
         .filter((m) => m !== "restart" && m !== "skip")
         .map((method) => (
@@ -215,6 +320,7 @@ export function StepView({ ui, busy, onSubmit }: Props) {
             method={method}
             nodes={ui.nodes}
             busy={busy}
+            options={options}
             onSubmit={onSubmit}
           />
         ))}
@@ -225,7 +331,7 @@ export function StepView({ ui, busy, onSubmit }: Props) {
           disabled={busy}
           onClick={() => void signInWithPasskey()}
         >
-          {passkeyButton.label.text}
+          {text(passkeyButton.label)}
         </button>
       )}
       {create?.mediation === "explicit" && (
@@ -235,8 +341,15 @@ export function StepView({ ui, busy, onSubmit }: Props) {
           disabled={busy}
           onClick={() => void registerPasskey()}
         >
-          {create.label.text}
+          {text(create.label)}
         </button>
+      )}
+      {providers.length > 0 && (
+        <nav className="providers" aria-label={t("page.providers")}>
+          {providers.map((node) => (
+            <Provider key={node.provider} node={node} />
+          ))}
+        </nav>
       )}
       {methodsInOrder(ui.nodes)
         .filter((m) => m === "restart" || m === "skip")
@@ -246,9 +359,21 @@ export function StepView({ ui, busy, onSubmit }: Props) {
             method={method}
             nodes={ui.nodes}
             busy={busy}
+            options={{}}
             onSubmit={onSubmit}
           />
         ))}
+      {login && (ui.step === "identifier" || ui.step === "authenticate") && (
+        <p className="links">
+          <a href={`${LOGIN}/recovery`}>{t("page.recover")}</a>{" "}
+          <a href={`${LOGIN}?reason=create`}>{t("page.create_account")}</a>
+        </p>
+      )}
+      {ui.kind === "registration" && ui.step !== "complete" && (
+        <p className="links">
+          <a href={LOGIN}>{t("action.have_account")}</a>
+        </p>
+      )}
     </section>
   );
 }

@@ -5,8 +5,26 @@ export const flowsPath = "/v1/login/flows";
 export const stepUpPath = "/v1/login/step-up";
 
 export type Step = "identifier" | "authenticate" | "second_factor" | "complete";
+export type FlowKind =
+  "login" | "registration" | "recovery" | "settings" | "consent" | "invitation" | "link";
 export type FieldName =
-  "identifier" | "password" | "totp_code" | "recovery_code" | "passkey_credential" | "email_code";
+  | "identifier"
+  | "password"
+  | "totp_code"
+  | "recovery_code"
+  | "passkey_credential"
+  | "email_code"
+  | "email"
+  | "new_password"
+  | "display_name"
+  | "acknowledged"
+  | "invitation_code"
+  | "link_code"
+  | "bot_token"
+  | "keep_signed_in"
+  | "remember_device";
+/** A step-wide choice, sent with every submission of the step when checked (X33, TN-36). */
+export type OptionName = "keep_signed_in" | "remember_device";
 export type Method =
   | "identifier"
   | "password"
@@ -17,7 +35,15 @@ export type Method =
   | "skip"
   | "restart"
   | "email_code"
-  | "magic_link";
+  | "magic_link"
+  | "register"
+  | "recover"
+  | "new_password"
+  | "share"
+  | "dont_share"
+  | "accept_invitation"
+  | "link"
+  | "acknowledge";
 
 export interface Text {
   readonly id: string;
@@ -56,7 +82,7 @@ export interface InputNode {
   readonly type: "input";
   readonly name: FieldName;
   readonly method: Method;
-  readonly kind: "text" | "password" | "code";
+  readonly kind: "text" | "password" | "code" | "hidden";
   readonly autocomplete: string;
   readonly required: boolean;
   readonly max_length: number;
@@ -95,8 +121,25 @@ export interface PasskeySignalNode {
   readonly signal: PasskeySignal;
 }
 
+export interface OptionNode {
+  readonly type: "option";
+  readonly name: OptionName;
+  readonly label: Text;
+  readonly checked: boolean;
+}
+
+/** A social sign-in: a full-page navigation to `href` (OP-153 m.3 (l)). */
+export interface ProviderNode {
+  readonly type: "provider";
+  readonly provider: string;
+  readonly label: Text;
+  readonly href: string;
+}
+
 export type UiNode =
   | InputNode
+  | OptionNode
+  | ProviderNode
   | SubmitNode
   | PasskeyGetNode
   | PasskeyAutofillNode
@@ -106,6 +149,7 @@ export type UiNode =
 export interface LoginUi {
   readonly version: number;
   readonly flow: string;
+  readonly kind?: FlowKind;
   readonly step: Step;
   readonly action: string;
   readonly requirements: readonly RequirementStatus[];
@@ -126,6 +170,8 @@ const nodeTypes = new Set<string>([
   "passkey_autofill",
   "passkey_create",
   "passkey_signal",
+  "option",
+  "provider",
 ]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -148,7 +194,18 @@ export function parseUi(body: unknown): LoginUi | null {
     return null;
   const known = nodes.filter(
     (n: unknown): n is UiNode =>
-      isRecord(n) && typeof n["type"] === "string" && nodeTypes.has(n["type"]),
+      isRecord(n) && typeof n["type"] === "string" && nodeTypes.has(n["type"]) && local(n),
   );
   return { ...(body as unknown as LoginUi), nodes: known };
+}
+
+/** A provider link leaves only for a path of this site; the redirect onward is the server's. */
+function local(node: Record<string, unknown>): boolean {
+  if (node["type"] !== "provider") return true;
+  return isLocalPath(node["href"]);
+}
+
+/** A path on this origin: starts with one `/`, never `//` or `/\`. */
+export function isLocalPath(href: unknown): href is string {
+  return typeof href === "string" && /^\/(?![/\\])/.test(href);
 }
