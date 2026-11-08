@@ -1,0 +1,27 @@
+[package]
+name = "access-identity-federation"
+description = "Social and upstream sign-in of the identity plane (CMP-15.10, IDP-31): presets as data, the OIDC/OAuth2 relying party, back-end token checks and the (issuer, subject) binding."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+access-crypto = { workspace = true }
+access-identity-oauth = { workspace = true }
+access-kernel = { workspace = true }
+serde = { workspace = true, features = ["derive", "std"] }
+serde_json = { workspace = true, features = ["std"] }
+suiss-crypto = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["fs"] }
+toml = { workspace = true, features = ["std", "parse", "serde"] }
+
+[dev-dependencies]
+aws-lc-rs = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+
+[lints]
+workspace = true

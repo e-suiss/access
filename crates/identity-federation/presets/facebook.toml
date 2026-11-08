@@ -1,0 +1,14 @@
+# IDP-31, OP-153 m.3 (l): the id is app scoped and the address carries no assurance
+id = "facebook"
+display_name = "Facebook"
+protocol = "oauth2"
+issuer = "https://www.facebook.com"
+authorization_endpoint = "https://www.facebook.com/v21.0/dialog/oauth"
+token_endpoint = "https://graph.facebook.com/v21.0/oauth/access_token"
+userinfo_endpoint = "https://graph.facebook.com/me?fields=id,name,email"
+scopes = ["public_profile", "email"]
+logo = "facebook"
+subject = ["id"]
+
+[email]
+kind = "none"

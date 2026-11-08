@@ -1,0 +1,90 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT link_id, subject_id, provider, identity_key, created_ms, verified_ms\n               FROM access.identity_federated\n              WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND ended_ms IS NULL\n              ORDER BY link_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "link_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.identity_federated",
+            "name": "link_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "subject_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.identity_federated",
+            "name": "subject_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "provider",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.identity_federated",
+            "name": "provider"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "identity_key",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.identity_federated",
+            "name": "identity_key"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "created_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.identity_federated",
+            "name": "created_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "verified_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.identity_federated",
+            "name": "verified_ms"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "12084b053f4988ebc41c6c4bbe906449688865ae327f99eb847d878e57f3b00e"
+}

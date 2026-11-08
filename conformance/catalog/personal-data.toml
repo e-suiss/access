@@ -138,3 +138,12 @@ basis = "contract"
 portable = "observed"
 export = true
 note = "Notice, recovery and recovery-contact addresses (TN-52, TN-57), sealed under the subject's contact key."
+
+[[field]]
+column = "access.identity_federated.identity_key"
+vault = "none"
+retention = "profile"
+basis = "contract"
+portable = "derived"
+export = false
+note = "Digest of (provider, provider subject); the provider's own id is never stored (P-ID-9)."

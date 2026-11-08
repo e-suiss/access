@@ -1,0 +1,15 @@
+# IDP-31, OP-153 m.3 (l): Sign In with LinkedIn using OpenID Connect
+id = "linkedin"
+display_name = "LinkedIn"
+protocol = "oidc"
+issuer = "https://www.linkedin.com/oauth"
+authorization_endpoint = "https://www.linkedin.com/oauth/v2/authorization"
+token_endpoint = "https://www.linkedin.com/oauth/v2/accessToken"
+jwks_uri = "https://www.linkedin.com/oauth/openid/jwks"
+scopes = ["openid", "email", "profile"]
+logo = "linkedin"
+subject = ["sub"]
+algorithms = ["RS256"]
+
+[email]
+kind = "verified_claim"

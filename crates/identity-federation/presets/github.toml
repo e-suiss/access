@@ -1,0 +1,15 @@
+# IDP-31, OP-153 m.3 (l): OAuth 2.0; only a verified primary address from /user/emails counts
+id = "github"
+display_name = "GitHub"
+protocol = "oauth2"
+issuer = "https://github.com"
+authorization_endpoint = "https://github.com/login/oauth/authorize"
+token_endpoint = "https://github.com/login/oauth/access_token"
+userinfo_endpoint = "https://api.github.com/user"
+emails_endpoint = "https://api.github.com/user/emails"
+scopes = ["read:user", "user:email"]
+logo = "github"
+subject = ["id"]
+
+[email]
+kind = "verified_primary"

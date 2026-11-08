@@ -1,0 +1,16 @@
+# IDP-31, OP-153 m.3 (l), TN-66, TN-87: personal and work accounts, keyed by (tid, oid)
+id = "microsoft"
+display_name = "Microsoft"
+protocol = "oidc"
+issuer = "https://login.microsoftonline.com/{tid}/v2.0"
+authorization_endpoint = "https://login.microsoftonline.com/common/oauth2/v2.0/authorize"
+token_endpoint = "https://login.microsoftonline.com/common/oauth2/v2.0/token"
+jwks_uri = "https://login.microsoftonline.com/common/discovery/v2.0/keys"
+scopes = ["openid", "email", "profile"]
+logo = "microsoft"
+subject = ["tid", "oid"]
+algorithms = ["RS256"]
+
+[email]
+kind = "claim"
+claim = "xms_edov"

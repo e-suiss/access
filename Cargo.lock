@@ -264,6 +264,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "access-identity-federation"
+version = "0.3.2"
+dependencies = [
+ "access-crypto",
+ "access-identity-oauth",
+ "aws-lc-rs",
+ "esuiss-access-kernel",
+ "esuiss-crypto",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+ "toml 1.1.6+spec-1.1.0",
+]
+
+[[package]]
 name = "access-identity-hooks"
 version = "0.3.2"
 dependencies = [

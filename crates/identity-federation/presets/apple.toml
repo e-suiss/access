@@ -1,0 +1,16 @@
+# IDP-31, OP-153 m.3 (l), TN-87: the subject is team scoped
+id = "apple"
+display_name = "Apple"
+protocol = "oidc"
+issuer = "https://appleid.apple.com"
+authorization_endpoint = "https://appleid.apple.com/auth/authorize"
+token_endpoint = "https://appleid.apple.com/auth/token"
+jwks_uri = "https://appleid.apple.com/auth/keys"
+scopes = ["openid", "email", "name"]
+logo = "apple"
+subject = ["sub"]
+algorithms = ["RS256"]
+response_mode = "form_post"
+
+[email]
+kind = "verified_claim"

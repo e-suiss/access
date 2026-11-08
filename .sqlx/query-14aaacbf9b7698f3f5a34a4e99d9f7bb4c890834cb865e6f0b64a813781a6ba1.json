@@ -1,0 +1,69 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.identity_social_attempts SET status = 'used', used_ms = $6\n              WHERE tenant_id = $1 AND realm_id = $2 AND state_hash = $3 AND device_hash = $4\n                AND provider = $5 AND status = 'open' AND expires_ms > $6\n             RETURNING provider, subject_id, nonce, verifier",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "provider",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.identity_social_attempts",
+            "name": "provider"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "subject_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.identity_social_attempts",
+            "name": "subject_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "nonce",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.identity_social_attempts",
+            "name": "nonce"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "verifier",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.identity_social_attempts",
+            "name": "verifier"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Bytea",
+        "Bytea",
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "14aaacbf9b7698f3f5a34a4e99d9f7bb4c890834cb865e6f0b64a813781a6ba1"
+}

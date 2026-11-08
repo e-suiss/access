@@ -682,6 +682,34 @@ impl Outbound {
             .await
     }
 
+    /// `GET url` with a bearer token: a social provider's user-info or address list
+    /// (OP-153 m.3 (l)). A token that cannot be carried in a header is [`OutboundError::Url`].
+    ///
+    /// # Errors
+    /// [`OutboundError`].
+    pub async fn get_bearer(
+        &self,
+        url: &str,
+        accept: &str,
+        token: &str,
+        max_body: usize,
+    ) -> Result<Answer, OutboundError> {
+        let target = Target::parse(url)?;
+        let authorization = format!("Bearer {token}");
+        if !header_ok("authorization", &authorization) {
+            return Err(OutboundError::Url);
+        }
+        let request = format!(
+            "GET {} HTTP/1.1\r\nHost: {}\r\nAccept: {accept}\r\nAuthorization: {authorization}\r\n\
+             User-Agent: access\r\nAccept-Encoding: identity\r\nConnection: close\r\n{}\r\n",
+            target.path,
+            target.host_header(),
+            traceparent(),
+        );
+        self.bounded(&target, request.into_bytes(), max_body, None)
+            .await
+    }
+
     /// `POST url` with `body` of `content_type` and extra `headers`: an event delivery
     /// (OP-149 m.4, m.7), one of the two requests a declared target is reached by (m.23), with
     /// [`Outbound::poll`]. Only the status and headers are read. A header name or value that is not a visible ASCII token,

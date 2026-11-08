@@ -1,0 +1,102 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT preset, client_id, client_secret_ref, status, previous_client_id,\n                    client_changed_ms, decision_pos\n               FROM access.idp_social_providers\n              WHERE tenant_id = $1 AND realm_id = $2 AND preset = $3",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "preset",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.idp_social_providers",
+            "name": "preset"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "client_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.idp_social_providers",
+            "name": "client_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "client_secret_ref",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.idp_social_providers",
+            "name": "client_secret_ref"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "status",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.idp_social_providers",
+            "name": "status"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "previous_client_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.idp_social_providers",
+            "name": "previous_client_id"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "client_changed_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.idp_social_providers",
+            "name": "client_changed_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "decision_pos",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.idp_social_providers",
+            "name": "decision_pos"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      true,
+      false,
+      true,
+      true,
+      false
+    ]
+  },
+  "hash": "ad51999cea2a7bd8767ea99a9d858c32bc9fb1b10ae606f929b29f9493e2578b"
+}

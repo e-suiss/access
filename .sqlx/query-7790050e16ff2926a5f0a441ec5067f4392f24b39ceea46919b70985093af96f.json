@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.identity_federated SET ended_ms = $5, end_reason = $6\n              WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND link_id = $4\n                AND ended_ms IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Int8",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "7790050e16ff2926a5f0a441ec5067f4392f24b39ceea46919b70985093af96f"
+}
