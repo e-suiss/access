@@ -1199,6 +1199,76 @@ async fn an_accepted_claim_meets_a_requirement() {
     fold_check(&db.sequencer, d).await.unwrap();
 }
 
+/// An `authentication` Claim ALICE issues about `subject` at `auth_time` with `assurance`.
+fn sign_in_claim(d: Digest, subject: Id, assurance: &[(&str, u64)], seed: u8) -> Vec<u8> {
+    sign_claim(
+        &access_kernel::claim::Statement {
+            domain: d,
+            issuer: ALICE,
+            subject,
+            class: "authentication".to_owned(),
+            value: Some(EqValue::Bytes(vec![seed; 32])),
+            issued_at: NOW - 1_000,
+            validity: Window {
+                from: NOW - 1_000,
+                until: NOW + 3_600_000,
+            },
+            assurance: assurance
+                .iter()
+                .map(|(k, v)| ((*k).to_owned(), *v))
+                .collect(),
+            bound_intent: None,
+            bound_instance: None,
+            bound_resource: None,
+            supersedes: None,
+        },
+        ALICE_KEY,
+    )
+}
+
+// E9, §13.7.3 CT0 footnote, N-45, SEC10, SEC26: an ordinary Exercise's own authentication term
+// asks for the tier's authenticator class even where the Grant asks for less; a password or an
+// OTP sign-in alone gets REQUIRE_ACTION for a phishing-resistant one, a passkey meets it
+#[tokio::test]
+async fn an_ordinary_exercise_needs_the_tiers_authenticator_class() {
+    let db = fresh().await.unwrap();
+    let authentication = term(ProofKind::Claim, "authentication", ProofBinding::None);
+    let (mut core, d) = setup_with(&db, gated(&[authentication])).await;
+    onboard(&mut core, d, ROOT, ROOT_KEY, (1, 2)).await;
+    onboard(&mut core, d, ALICE, ALICE_KEY, (3, 4)).await;
+    let shop = ExerciseBasis::Anchor(meta::object_id(&d, kind::ANCHOR, 1));
+    let password = [("aal", 1), ("phishing_resistant", 0)];
+    let totp = [("aal", 2), ("phishing_resistant", 0)];
+    for (nonce, levels, seed) in [(9, &password[..], 0xc1), (10, &totp[..], 0xc2)] {
+        let r = send(
+            &mut core,
+            with_proofs(
+                shop_request(d, nonce, Mode::Commit, shop),
+                vec![ProofRef::Claim(sign_in_claim(d, ROOT, levels, seed))],
+            ),
+            ROOT_KEY,
+        )
+        .await
+        .unwrap();
+        assert_eq!(r.decision.outcome, Outcome::RequireAction, "{levels:?}");
+        let unmet = &r.decision.unmet[0];
+        assert_eq!(unmet.term.class, "authentication");
+        assert_eq!(unmet.term.assurance.get("phishing_resistant"), Some(&1));
+    }
+    let passkey = send(
+        &mut core,
+        with_proofs(
+            shop_request(d, 11, Mode::Commit, shop),
+            vec![ProofRef::Claim(sign_in_claim(d, ROOT, &PASSKEY_UV, 0xc3))],
+        ),
+        ROOT_KEY,
+    )
+    .await
+    .unwrap();
+    allowed(&passkey);
+    fold_check(&db.sequencer, d).await.unwrap();
+}
+
 // TI-RT7, OP-141 m.30: a Claim with a recorded successor in its issuer line no longer asserts,
 // and a fork leaves neither side asserting
 #[tokio::test]

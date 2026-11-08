@@ -315,6 +315,29 @@ fn unresolved_basis() -> Decision {
     }
 }
 
+/// An `authentication` term of the actor raised to the authenticator class of `tier`: a term
+/// that asks for less is read as asking for the class, so a password, an OTP or a push alone
+/// never meets it, CT0 included (§13.7.3, N-45, SEC10, SEC26).
+fn with_tier_floors(
+    mut term: access_kernel::model::RequirementTerm,
+    tier: access_kernel::tier::Tier,
+) -> access_kernel::model::RequirementTerm {
+    let authentication = match term.proof_kind {
+        access_kernel::model::ProofKind::Authentication => true,
+        access_kernel::model::ProofKind::Claim => {
+            term.class == access_kernel::claim::body::Class::Authentication.name()
+        }
+        _ => false,
+    };
+    if authentication {
+        for (dim, floor) in access_kernel::assurance::floors(tier) {
+            let level = term.assurance.entry(dim).or_insert(floor);
+            *level = (*level).max(floor);
+        }
+    }
+    term
+}
+
 fn everything() -> Window {
     Window {
         from: 0,
@@ -1484,42 +1507,15 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
             }
         }
     }
-    let (mut bases, mandate) = if let Some(payload) = req.payload.as_ref().filter(|_| !contribute) {
-        let Some(actor) = actor else {
-            return Pass::Done(Evaluation {
-                decision: deny(
-                    BlockerClass::NoCoveringAuthority,
-                    "anonymous-meta",
-                    Resolver::Actor,
-                ),
-                effects,
-                draws: Vec::new(),
-                releases: Vec::new(),
-                expansion: false,
-                action: None,
-                foreign: None,
-                agency: Vec::new(),
-            });
-        };
-        let ctx = meta::Context {
-            domain: req.domain,
-            exercise,
-            pos,
-            now,
-            actor,
-            basis: req.basis,
-            capacity: req.capacity,
-            catalog,
-        };
-        let out = meta::apply(&ctx, payload, snapshot);
-        let missing = snapshot.missing();
-        if !missing.is_empty() {
-            return Pass::Need(missing);
-        }
-        match out {
-            Err(e) => {
+    let (mut bases, mut mandate) =
+        if let Some(payload) = req.payload.as_ref().filter(|_| !contribute) {
+            let Some(actor) = actor else {
                 return Pass::Done(Evaluation {
-                    decision: meta_denial(e),
+                    decision: deny(
+                        BlockerClass::NoCoveringAuthority,
+                        "anonymous-meta",
+                        Resolver::Actor,
+                    ),
                     effects,
                     draws: Vec::new(),
                     releases: Vec::new(),
@@ -1528,129 +1524,157 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
                     foreign: None,
                     agency: Vec::new(),
                 });
+            };
+            let ctx = meta::Context {
+                domain: req.domain,
+                exercise,
+                pos,
+                now,
+                actor,
+                basis: req.basis,
+                capacity: req.capacity,
+                catalog,
+            };
+            let out = meta::apply(&ctx, payload, snapshot);
+            let missing = snapshot.missing();
+            if !missing.is_empty() {
+                return Pass::Need(missing);
             }
-            Ok(out) => {
-                effects = out.effects;
-                releases = out.releases;
-                expansion = out.expansion;
-                // L0-META-13: a self-acting meta-action names a live Grant held by Public that
-                // covers it, like any other basis
-                let basis = if let ExerciseBasis::Public(g) = req.basis {
-                    let public = read::<GrantState>(snapshot, kind::GRANT, &g)
-                        .filter(|s| {
-                            s.content.holder == access_kernel::model::SubjectSelector::Public
+            match out {
+                Err(e) => {
+                    return Pass::Done(Evaluation {
+                        decision: meta_denial(e),
+                        effects,
+                        draws: Vec::new(),
+                        releases: Vec::new(),
+                        expansion: false,
+                        action: None,
+                        foreign: None,
+                        agency: Vec::new(),
+                    });
+                }
+                Ok(out) => {
+                    effects = out.effects;
+                    releases = out.releases;
+                    expansion = out.expansion;
+                    // L0-META-13: a self-acting meta-action names a live Grant held by Public that
+                    // covers it, like any other basis
+                    let basis = if let ExerciseBasis::Public(g) = req.basis {
+                        let public = read::<GrantState>(snapshot, kind::GRANT, &g)
+                            .filter(|s| {
+                                s.content.holder == access_kernel::model::SubjectSelector::Public
+                            })
+                            .and_then(|_| lineage_hops(snapshot, &g));
+                        let missing = snapshot.missing();
+                        if !missing.is_empty() {
+                            return Pass::Need(missing);
+                        }
+                        public.map(|(hops, capacities)| Basis {
+                            hops: hops.into_iter().map(Stored::Known).collect(),
+                            capacities,
                         })
-                        .and_then(|_| lineage_hops(snapshot, &g));
+                    } else {
+                        let mut hop = exact_hop(&req.intent, None, out.requirements);
+                        // OP-143 m.12: the offline slice is drawn from every lineage budget now
+                        if let (
+                            Some(Payload::ProjectionIssue {
+                                offline_slice: Some(slice),
+                                ..
+                            }),
+                            ExerciseBasis::Holding(h),
+                        ) = (&req.payload, req.basis)
+                        {
+                            let Some(d) = slice_budgets(snapshot, &h.grant, slice, now, &mut hop)
+                            else {
+                                return Pass::Need(snapshot.missing());
+                            };
+                            draws = d;
+                            let missing_counters = snapshot.missing_counters();
+                            if !missing_counters.is_empty() {
+                                return Pass::NeedCounters(missing_counters);
+                            }
+                        }
+                        Some(Basis {
+                            hops: vec![Stored::Known(hop)],
+                            capacities: BTreeSet::from([req.capacity]),
+                        })
+                    };
+                    // L0-EVAL-16: a Mandate bounds meta-actions like any other action
+                    let mandate = mandate(snapshot, Some(&actor));
                     let missing = snapshot.missing();
                     if !missing.is_empty() {
                         return Pass::Need(missing);
                     }
-                    public.map(|(hops, capacities)| Basis {
-                        hops: hops.into_iter().map(Stored::Known).collect(),
-                        capacities,
+                    (basis.into_iter().collect::<Vec<_>>(), mandate)
+                }
+            }
+        } else {
+            let hops = match req.basis {
+                ExerciseBasis::Anchor(a) => read::<AnchorState>(snapshot, kind::ANCHOR, &a)
+                    .filter(|s| s.ended.is_none())
+                    .and_then(|s| {
+                        let terms = meta::root_requirements(&s, actor.as_ref()?)?;
+                        Some((
+                            vec![exact_hop(&req.intent, anchor_selector(&s.scope), terms)],
+                            BTreeSet::from([Capacity::Own]),
+                        ))
                     })
-                } else {
-                    let mut hop = exact_hop(&req.intent, None, out.requirements);
-                    // OP-143 m.12: the offline slice is drawn from every lineage budget now
-                    if let (
-                        Some(Payload::ProjectionIssue {
-                            offline_slice: Some(slice),
-                            ..
-                        }),
-                        ExerciseBasis::Holding(h),
-                    ) = (&req.payload, req.basis)
-                    {
-                        let Some(d) = slice_budgets(snapshot, &h.grant, slice, now, &mut hop)
-                        else {
-                            return Pass::Need(snapshot.missing());
+                    .map(|hops| (hops, None)),
+                ExerciseBasis::Holding(h) => read::<GrantState>(snapshot, kind::GRANT, &h.grant)
+                    .filter(|g| {
+                        // OP-141 m.20 (c), (d): a predicate holder holds from its episode start
+                        let holds = match &g.content.holder {
+                            access_kernel::model::SubjectSelector::Party(p) => {
+                                *p == h.holder && g.since == h.since
+                            }
+                            access_kernel::model::SubjectSelector::Pred(_) => held == Some(h.since),
+                            // OP-143 m.13 (e)
+                            access_kernel::model::SubjectSelector::Foreign { .. } => {
+                                foreign_pap.is_some() && g.since == h.since
+                            }
+                            access_kernel::model::SubjectSelector::Public => false,
                         };
-                        draws = d;
-                        let missing_counters = snapshot.missing_counters();
-                        if !missing_counters.is_empty() {
-                            return Pass::NeedCounters(missing_counters);
-                        }
-                    }
-                    Some(Basis {
-                        hops: vec![Stored::Known(hop)],
-                        capacities: BTreeSet::from([req.capacity]),
+                        actor.is_some_and(|a| a.party == h.holder) && holds
                     })
-                };
-                // L0-EVAL-16: a Mandate bounds meta-actions like any other action
-                let mandate = mandate(snapshot, Some(&actor));
-                let missing = snapshot.missing();
-                if !missing.is_empty() {
-                    return Pass::Need(missing);
+                    .and_then(|_| lineage_hops(snapshot, &h.grant))
+                    .map(|hops| (hops, Some(h.grant))),
+                ExerciseBasis::Public(g) => read::<GrantState>(snapshot, kind::GRANT, &g)
+                    .filter(|s| s.content.holder == access_kernel::model::SubjectSelector::Public)
+                    .and_then(|_| lineage_hops(snapshot, &g))
+                    .map(|hops| (hops, Some(g))),
+            };
+            // OP-141 m.26: every hop's budget is drawn by this intent's demand, beside what a
+            // foreign slice drew (§9.15A.3)
+            let hops = match hops {
+                Some(((mut hops, capacities), Some(g))) => {
+                    match budgets(snapshot, &g, &req.intent, now, &mut hops) {
+                        Some(Ok(d)) => draws.extend(d),
+                        Some(Err(r)) => return Pass::Rejected(r),
+                        None => {}
+                    }
+                    Some((hops, capacities))
                 }
-                (basis.into_iter().collect::<Vec<_>>(), mandate)
+                Some((h, None)) => Some(h),
+                None => None,
+            };
+            let missing_counters = snapshot.missing_counters();
+            if !missing_counters.is_empty() {
+                return Pass::NeedCounters(missing_counters);
             }
-        }
-    } else {
-        let hops = match req.basis {
-            ExerciseBasis::Anchor(a) => read::<AnchorState>(snapshot, kind::ANCHOR, &a)
-                .filter(|s| s.ended.is_none())
-                .and_then(|s| {
-                    let terms = meta::root_requirements(&s, actor.as_ref()?)?;
-                    Some((
-                        vec![exact_hop(&req.intent, anchor_selector(&s.scope), terms)],
-                        BTreeSet::from([Capacity::Own]),
-                    ))
-                })
-                .map(|hops| (hops, None)),
-            ExerciseBasis::Holding(h) => read::<GrantState>(snapshot, kind::GRANT, &h.grant)
-                .filter(|g| {
-                    // OP-141 m.20 (c), (d): a predicate holder holds from its episode start
-                    let holds = match &g.content.holder {
-                        access_kernel::model::SubjectSelector::Party(p) => {
-                            *p == h.holder && g.since == h.since
-                        }
-                        access_kernel::model::SubjectSelector::Pred(_) => held == Some(h.since),
-                        // OP-143 m.13 (e)
-                        access_kernel::model::SubjectSelector::Foreign { .. } => {
-                            foreign_pap.is_some() && g.since == h.since
-                        }
-                        access_kernel::model::SubjectSelector::Public => false,
-                    };
-                    actor.is_some_and(|a| a.party == h.holder) && holds
-                })
-                .and_then(|_| lineage_hops(snapshot, &h.grant))
-                .map(|hops| (hops, Some(h.grant))),
-            ExerciseBasis::Public(g) => read::<GrantState>(snapshot, kind::GRANT, &g)
-                .filter(|s| s.content.holder == access_kernel::model::SubjectSelector::Public)
-                .and_then(|_| lineage_hops(snapshot, &g))
-                .map(|hops| (hops, Some(g))),
-        };
-        // OP-141 m.26: every hop's budget is drawn by this intent's demand, beside what a
-        // foreign slice drew (§9.15A.3)
-        let hops = match hops {
-            Some(((mut hops, capacities), Some(g))) => {
-                match budgets(snapshot, &g, &req.intent, now, &mut hops) {
-                    Some(Ok(d)) => draws.extend(d),
-                    Some(Err(r)) => return Pass::Rejected(r),
-                    None => {}
-                }
-                Some((hops, capacities))
+            let mandate = mandate(snapshot, actor.as_ref());
+            let missing = snapshot.missing();
+            if !missing.is_empty() {
+                return Pass::Need(missing);
             }
-            Some((h, None)) => Some(h),
-            None => None,
+            let bases = hops
+                .map(|(hops, capacities)| Basis {
+                    hops: hops.into_iter().map(Stored::Known).collect(),
+                    capacities,
+                })
+                .into_iter()
+                .collect::<Vec<_>>();
+            (bases, mandate)
         };
-        let missing_counters = snapshot.missing_counters();
-        if !missing_counters.is_empty() {
-            return Pass::NeedCounters(missing_counters);
-        }
-        let mandate = mandate(snapshot, actor.as_ref());
-        let missing = snapshot.missing();
-        if !missing.is_empty() {
-            return Pass::Need(missing);
-        }
-        let bases = hops
-            .map(|(hops, capacities)| Basis {
-                hops: hops.into_iter().map(Stored::Known).collect(),
-                capacities,
-            })
-            .into_iter()
-            .collect::<Vec<_>>();
-        (bases, mandate)
-    };
     // L0-EVAL-4, OP-141 m.33
     for hop in bases.iter_mut().flat_map(|b| b.hops.iter_mut()) {
         if let Stored::Known(h) = hop
@@ -1709,6 +1733,27 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
             foreign: None,
             agency: Vec::new(),
         });
+    }
+    // E9, §13.7.3, N-45, SEC10, SEC26
+    let tier = access_kernel::tier::of(
+        &req.intent,
+        req.payload.as_ref(),
+        expansion,
+        schema.as_deref(),
+    );
+    let terms = bases
+        .iter_mut()
+        .flat_map(|b| b.hops.iter_mut())
+        .filter_map(|h| match h {
+            Stored::Known(h) => Some(&mut h.authority.requirements),
+            Stored::NotUnderstood => None,
+        })
+        .chain(mandate.as_mut().map(|(_, m)| &mut m.requirements));
+    for t in terms {
+        *t = core::mem::take(t)
+            .into_iter()
+            .map(|term| with_tier_floors(term, tier))
+            .collect();
     }
     let input = EvaluationInput {
         mode: req.mode,
