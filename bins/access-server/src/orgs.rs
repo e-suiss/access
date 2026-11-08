@@ -1,6 +1,7 @@
 //! Organization domains outside the request path (TN-90, OP-153 m.3 (o)): the DNS-over-HTTPS,
 //! HTTPS and RDAP probe a domain verification reads, and the watch that runs over every live
-//! realm through the jobs table, one node per ten-minute slot (OP-129 m.2). Without a
+//! realm through the jobs table, one node per ten-minute slot (OP-129 m.2); the same pass ends
+//! the guardianships of wards who reached majority (E53). Without a
 //! configured resolver or RDAP service the probe answers nothing and no domain is verified or
 //! lapsed by it (TI-9).
 
@@ -161,6 +162,14 @@ pub(crate) async fn tick<P: DomainProbe>(
     for job in claim_kind(app, worker, DOMAINS, 2, LEASE).await? {
         let mut done = true;
         for route in routes(router).await? {
+            // E53, OP-153 m.3 (q)
+            if let Err(error) =
+                access_identity_admin::app::household::majorities(app, (route.tenant, route.realm))
+                    .await
+            {
+                done = false;
+                tracing::warn!(%error, job = DOMAINS, "realm majority pass failed; retried");
+            }
             match watch.realm((route.tenant, route.realm)).await {
                 Ok(p) => {
                     out.verified = out.verified.saturating_add(p.verified);

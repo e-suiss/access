@@ -1111,7 +1111,12 @@ async fn a_guardianship_ends_at_majority_and_a_parent_consent_is_never_silence()
     assert!(row.majority_ms > i64::try_from(now + 7 * year_ms).unwrap());
     assert!(row.majority_ms < i64::try_from(now + 9 * year_ms).unwrap());
     t.commit().await.unwrap();
-    assert_eq!(home.majorities(at).await.unwrap(), 0);
+    assert_eq!(
+        access_identity_admin::app::household::majorities(&w.db.app, at)
+            .await
+            .unwrap(),
+        0
+    );
 
     // E53, E47
     let consent = home.ask(at, g, &[7; 32]).await.unwrap();

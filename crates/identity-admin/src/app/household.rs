@@ -143,6 +143,39 @@ pub fn today(now_ms: u64) -> Date {
     }
 }
 
+/// Ends every guardianship whose ward reached majority and retracts its Claim (E53).
+///
+/// # Errors
+/// [`AdminError`].
+pub async fn majorities(
+    app: &Pool,
+    (tenant, realm): (TenantId, RealmId),
+) -> Result<u32, AdminError> {
+    let mut t = TenantTx::begin(app, tenant, realm).await?;
+    let now = t.server_time().await?;
+    let ended = t.end_majorities().await?;
+    let mut n = 0u32;
+    for id in ended {
+        let Some(g) = t.guardianship(id).await? else {
+            continue;
+        };
+        let mut order = ClaimOrder::registry(
+            g.ward,
+            IdentityClass::Guardianship,
+            suiss_crypto::dcbor::Value::text("ended"),
+            None,
+            (now, 0),
+            line(&[b"guardianship", &g.guardian]),
+        );
+        order.retract = true;
+        order.content = Content::Scalar(EqValue::Text(String::from("ended")));
+        super::domains::queue(&mut t, &order).await?;
+        n = n.saturating_add(1);
+    }
+    t.commit().await?;
+    Ok(n)
+}
+
 /// The household's use cases over the realm's rows.
 pub struct Household<'a> {
     /// The `access_app` pool.
@@ -229,39 +262,6 @@ impl Household<'_> {
         super::domains::queue(&mut t, &age).await?;
         t.commit().await?;
         Ok(id)
-    }
-
-    /// Ends every guardianship whose ward reached majority and retracts its Claim (E53).
-    ///
-    /// # Errors
-    /// [`AdminError`].
-    pub async fn majorities(
-        &self,
-        (tenant, realm): (TenantId, RealmId),
-    ) -> Result<u32, AdminError> {
-        let mut t = TenantTx::begin(self.app, tenant, realm).await?;
-        let now = t.server_time().await?;
-        let ended = t.end_majorities().await?;
-        let mut n = 0u32;
-        for id in ended {
-            let Some(g) = t.guardianship(id).await? else {
-                continue;
-            };
-            let mut order = ClaimOrder::registry(
-                g.ward,
-                IdentityClass::Guardianship,
-                suiss_crypto::dcbor::Value::text("ended"),
-                None,
-                (now, 0),
-                line(&[b"guardianship", &g.guardian]),
-            );
-            order.retract = true;
-            order.content = Content::Scalar(EqValue::Text(String::from("ended")));
-            super::domains::queue(&mut t, &order).await?;
-            n = n.saturating_add(1);
-        }
-        t.commit().await?;
-        Ok(n)
     }
 
     /// Asks the guardian of `guardianship` to consent to what `purpose` digests (E53, E47).
