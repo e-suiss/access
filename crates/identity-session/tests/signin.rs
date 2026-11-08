@@ -489,8 +489,7 @@ async fn identifier_first_does_not_tell_whether_the_account_exists() {
 }
 
 // TN-36, CR-38, TN-103, G57, EP-2, XI-23, §10.1.6
-// TN-135, MD-8, OP-151 m.3 (j): a post_login hook that refuses, or does not answer, refuses the
-// sign-in after every requirement is met and no session opens; one that allows changes nothing
+// TN-135, MD-8, OP-151 m.3 (j)
 #[tokio::test]
 async fn tn_135_a_post_login_hook_may_only_refuse() {
     let e = env(40, "is-hook").await;
@@ -548,8 +547,7 @@ async fn a_password_opens_a_session_and_sign_out_ends_it() {
         SessionStatus::Invalid(SessionCheck::Ended)
     );
     assert_eq!(status(&e, "not-a-cookie").await, SessionStatus::Unknown);
-    // §12.0.3, §7.1, X36, OP-150 L6: the sign-out ends the session's authentication line and
-    // nothing else; the login's Claim and the retraction share the line
+    // §12.0.3, §7.1, X36, OP-150 L6
     let orders = claim_orders(&e, |o| o.iter().any(|x| x.retract)).await;
     let line = authentication_line(&s.session);
     let signed = orders
@@ -982,7 +980,7 @@ async fn a_passkey_signs_in_phishing_resistant_and_steps_up() {
     let cookie = sign_in(&e, "alice@example.com").await;
     let mut key = Authenticator::new(Key::es256());
     let handle = register_passkey(&e, &cookie, &mut key).await;
-    // OP-151 m.3 (i): the registration queues credential.changed in its own transaction
+    // OP-151 m.3 (i)
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
     loop {
         let rows = access_store::identity::poll(
@@ -1142,8 +1140,7 @@ async fn device_instances_need_a_fresh_step_up(e: &Env, cookie: &str) {
         .unwrap();
     assert_eq!(context.step_up_time, Some(e.clock.now_ms()));
     assert_eq!(context.aal, Aal::Aal3);
-    // OP-149 m.30 (c): the session the identity plane looks the Instance up for is this one;
-    // the plane fills it in, so the artifact itself names none yet
+    // OP-149 m.30 (c)
     assert_eq!(session, proven.session.id);
     assert_eq!(context.instance, None);
 
@@ -1166,8 +1163,7 @@ async fn device_instances_need_a_fresh_step_up(e: &Env, cookie: &str) {
     );
 }
 
-// OP-149 m.6, m.8: a password session is AAL1: no device Instance; its auth_context has no
-// step-up time
+// OP-149 m.6, m.8
 #[tokio::test]
 async fn a_password_session_cannot_register_a_device() {
     use access_identity_session::app::devices::DeviceRefusal;
@@ -1343,12 +1339,8 @@ fn risk_names(orders: &[access_identity_account::domain::claims::ClaimOrder]) ->
         .collect()
 }
 
-// F17, TN-103, §10.1.2, §10.1.5, §10.1.6, TN-63, §10.2.4, IDI-3, IDI-5, IDP-2, CI-2, §7.6,
-// OP-150 L2: a login queues its authentication Claim, bound to the session, with the assurance
-// vector; a browser without a device marker, a second passkey of another AAGUID and a counter that
-// did not advance queue risk signals, and none of them stops the sign-in; a passkey's binding
-// names its identity credential row, carries only digests, binds no Instance, and its removal ends
-// the line
+// F17, TN-103, §10.1.2, §10.1.5, §10.1.6, TN-63, §10.2.4, IDI-3, IDI-5, IDP-2, CI-2, §7.6
+// OP-150 L2
 #[tokio::test]
 async fn sign_in_queues_its_claims_and_signals_never_gate() {
     use access_identity_account::app::accounts::{PASSKEY, remove_credential};
@@ -1470,8 +1462,7 @@ fn stored_signin(methods: &[&str], mfa: bool) -> Vec<u8> {
     .unwrap()
 }
 
-// TN-132, Ek B 3379: the realm's stored sign-in policy decides the first steps; a method it
-// did not enable is not offered and not accepted
+// TN-132, Ek B 3379
 #[tokio::test]
 async fn a_disabled_sign_in_method_is_neither_offered_nor_accepted() {
     use access_identity_session::app::STEP_NOT_ALLOWED;
@@ -1516,7 +1507,7 @@ async fn a_disabled_sign_in_method_is_neither_offered_nor_accepted() {
     );
 }
 
-// TN-132, §12.4.2: a realm that requires MFA in its stored policy never signs in on one factor
+// TN-132, §12.4.2
 #[tokio::test]
 async fn a_stored_mfa_requirement_cannot_be_skipped() {
     use access_identity_session::domain::realm_policy::RealmSignin;
@@ -1532,7 +1523,7 @@ async fn a_stored_mfa_requirement_cannot_be_skipped() {
     );
 }
 
-// OP-64 (S-4): a password step prints neither the password nor who or where it came from
+// OP-64 (S-4)
 #[test]
 fn password_steps_do_not_print_the_password() {
     let step = access_identity_session::app::signin::PasswordStep {

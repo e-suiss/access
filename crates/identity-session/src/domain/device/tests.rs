@@ -16,7 +16,7 @@ fn p256() -> SoftSigner {
     SoftSigner::generate_p256().unwrap().0
 }
 
-// OP-149 m.6, PD: AAL2 and an authentication within five minutes
+// OP-149 m.6, PD
 #[test]
 fn registration_needs_aal2_and_a_fresh_step_up() {
     let now = 10_000_000;
@@ -32,7 +32,7 @@ fn registration_needs_aal2_and_a_fresh_step_up() {
     );
 }
 
-// OP-149 m.6, m.14 (a), CR-24: Ed25519 and P-256 COSE_Keys round-trip and carry their RFC 7638 kid
+// OP-149 m.6, m.14 (a), CR-24, P-256
 #[test]
 fn ed25519_and_p256_keys_parse_and_round_trip() {
     for signer in [ed25519(), p256()] {
@@ -46,7 +46,7 @@ fn ed25519_and_p256_keys_parse_and_round_trip() {
     }
 }
 
-// OP-149 m.14 (a): only Ed25519 and P-256 are Instance keys; the algorithm must fit the curve
+// OP-149 m.14 (a), P-256
 #[test]
 fn other_keys_are_refused() {
     let x = ed25519().public_key();
@@ -92,9 +92,7 @@ fn other_keys_are_refused() {
     assert_eq!(instance_key(b"not cbor"), Err(KeyRejection::Key));
 }
 
-// OP-149 m.32, m.6, CR-9: a known device's proof is its key's COSE_Sign1 over the challenge
-// under the pop content type; another key, another challenge, an AIS content type or a kid
-// that is not the key's thumbprint proves nothing
+// OP-149 m.32, m.6, CR-9
 #[test]
 fn a_known_device_proves_its_key_over_the_challenge() {
     let challenge = [0x5a; 32];

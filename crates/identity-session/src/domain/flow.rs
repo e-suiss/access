@@ -419,7 +419,7 @@ mod tests {
         );
     }
 
-    // TN-102 rules 1-4, TNI-9
+    // TN-102, TNI-9
     #[test]
     fn resuming_completes_only_the_declared_step() {
         let mut f = login();

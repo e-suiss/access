@@ -19,7 +19,7 @@ fn facts(binding: Binding) -> ConsoleFacts {
     }
 }
 
-// TN-129, OP-151 m.3 (f): 12 hours absolute, 15 minutes idle
+// TN-129, OP-151 m.3 (f)
 #[test]
 fn lifetimes_are_twelve_hours_and_fifteen_minutes() {
     assert_eq!(ABSOLUTE_MS, 12 * HOUR);
@@ -42,7 +42,7 @@ fn lifetimes_are_twelve_hours_and_fifteen_minutes() {
     assert_eq!(ends_ms(&busy), 12 * HOUR);
 }
 
-// TN-129, OP-151 m.1 (b): without a `GeoResolver` source the binding is the /24 or /48 prefix
+// TN-129, OP-151 m.1 (b)
 #[test]
 fn prefix_binding_without_a_geoip_source() {
     let p = BindingPolicy::default();
@@ -59,8 +59,7 @@ fn prefix_binding_without_a_geoip_source() {
     assert!(b.holds(mapped, None, p));
 }
 
-// TN-129, OP-151 m.1 (b), TI-9: the ASN when a source answers; a source that appears or
-// disappears never widens a session
+// TN-129, OP-151 m.1 (b), TI-9
 #[test]
 fn asn_binding_and_source_changes_end_the_session() {
     let p = BindingPolicy::default();
@@ -79,7 +78,7 @@ fn asn_binding_and_source_changes_end_the_session() {
     );
 }
 
-// TN-129: the realm's optional full address binding is the strictest
+// TN-129
 #[test]
 fn full_address_binding_from_the_realm_policy() {
     let p = BindingPolicy { full_ip: true };
@@ -92,7 +91,7 @@ fn full_address_binding_from_the_realm_policy() {
     assert_eq!(Binding::of(six, None, p), Binding::Address(six));
 }
 
-// TN-129: the stored binding reads back; anything else is refused
+// TN-129
 #[test]
 fn binding_encoding_round_trips() {
     let all = [
@@ -116,7 +115,7 @@ fn binding_encoding_round_trips() {
     }
 }
 
-// TN-50, G57: an ended or revoked session is never valid, whatever its age
+// TN-50, G57
 #[test]
 fn ended_and_revoked_sessions_serve_nothing() {
     let ip = v4(192, 0, 2, 10);
@@ -129,7 +128,7 @@ fn ended_and_revoked_sessions_serve_nothing() {
     assert_eq!(ConsoleCheck::BindingMismatch.code(), "binding-mismatch");
 }
 
-// TN-131: the CSRF token is the session's and both copies must match it
+// TN-131
 #[test]
 fn csrf_token_is_bound_to_the_session() {
     let a = Secret::new([7u8; 32]);
@@ -142,7 +141,7 @@ fn csrf_token_is_bound_to_the_session() {
     assert!(!csrf_ok(&a, "not base64url!", &t));
 }
 
-// TN-128, TN-131, TN-33: host-only, Secure, HttpOnly, SameSite=Strict, no lifetime of its own
+// TN-128, TN-131, TN-33
 #[test]
 fn cookies_are_strict_and_host_only() {
     let c = session_cookie("v");
@@ -158,8 +157,7 @@ fn cookies_are_strict_and_host_only() {
     }
 }
 
-// TN-129, OP-151 m.3 (f), m.11 (d): the realm's stored session policy decides the full-address
-// binding; a row that does not decode, or names no binding the console takes, is no policy
+// TN-129, OP-151 m.3 (f), m.11 (d)
 #[test]
 fn the_realm_session_policy_names_the_binding() {
     use suiss_crypto::dcbor::{self, Limits, Value};

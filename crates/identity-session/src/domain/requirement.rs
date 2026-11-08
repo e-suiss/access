@@ -175,8 +175,7 @@ mod tests {
         Factor::password(T)
     }
 
-    // TN-46, MD-8: an SL2 step-up adds a second step a marker cannot skip, never offers
-    // enrolment to a password-only sign-in, and adds nothing once two factors are proven
+    // TN-46, MD-8
     #[test]
     fn sl2_step_up_adds_a_second_step() {
         let e = Enrolled {

@@ -129,8 +129,7 @@ mod tests {
         .unwrap_or_default()
     }
 
-    // TN-132, OP-151 m.11 (d): no stored policy is e-mail and passkey without required MFA,
-    // which is the flows' default
+    // TN-132, OP-151 m.11 (d)
     #[test]
     fn the_default_policy_keeps_the_default_flows() {
         assert_eq!(
@@ -139,7 +138,7 @@ mod tests {
         );
     }
 
-    // TN-132: a method the realm did not enable is not offered; required MFA is required
+    // TN-132
     #[test]
     fn the_stored_policy_narrows_the_flows() {
         let p = RealmSignin::decode(&stored(&["passkey"], true, &[], &[])).unwrap();
@@ -152,7 +151,7 @@ mod tests {
         assert_eq!(a.mfa, MfaPolicy::WhenEnrolled);
     }
 
-    // MD-8: a stored row that is not the written form is not read as the defaults
+    // MD-8
     #[test]
     fn a_malformed_policy_does_not_decode() {
         assert_eq!(RealmSignin::decode(b"\xa0"), None);
@@ -160,7 +159,7 @@ mod tests {
         assert_eq!(RealmSignin::decode(b"not cbor"), None);
     }
 
-    // TN-132: registration domain allow and deny lists
+    // TN-132
     #[test]
     fn registration_follows_the_domain_lists() {
         let p = RealmSignin::decode(&stored(

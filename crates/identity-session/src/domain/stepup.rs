@@ -105,8 +105,7 @@ mod tests {
 
     use super::*;
 
-    // §8.5, §8.17.5.4, TN-O3, X29, OP-111 m.4: the step-up is driven by the term: its freshness
-    // is max_age, its floors the AAL and UV, its binding whether a statement is needed
+    // §8.5, §8.17.5.4, TN-O3, X29, OP-111 m.4
     #[test]
     fn a_requirement_term_drives_the_step_up() {
         let ct1 = Ask::from_term(&authentication_term(Tier::Ct1, false), None).unwrap();
@@ -127,15 +126,14 @@ mod tests {
 
         let ct3 = Ask::from_term(&authentication_term(Tier::Ct3, true), Some(h)).unwrap();
         assert_eq!(ct3.min_aal, Aal::Aal3);
-        // TN-44 rule 3: an intent-bound term without its digest cannot be stepped up
+        // TN-44 rule 3
         assert_eq!(
             Ask::from_term(&authentication_term(Tier::Ct2, false), None),
             None
         );
     }
 
-    // §8.17.5.4, X-L3: only an authentication term or the session policy asks; another term,
-    // or one without freshness, asks for no re-authentication
+    // §8.17.5.4, X-L3
     #[test]
     fn only_authentication_terms_with_freshness_ask() {
         let mut other = authentication_term(Tier::Ct1, false);
@@ -153,7 +151,7 @@ mod tests {
         assert_eq!(policy.max_age_ms, 300_000);
     }
 
-    // §13.7.3: an explicit AAL floor is kept when it is above what the flags imply
+    // §13.7.3
     #[test]
     fn the_aal_floor_is_the_higher_of_flags_and_the_term() {
         let mut term = authentication_term(Tier::Ct1, false);

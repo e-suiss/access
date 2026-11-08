@@ -16,7 +16,7 @@ fn passkey() -> AssuranceVector {
     )])
 }
 
-// OP-149 m.8: the session is named only by a domain-separated digest
+// OP-149 m.8
 #[test]
 fn the_session_id_never_appears() {
     let a = AuthContext::of(ISSUER, &SESSION, &passkey(), None, None, None).unwrap();
@@ -26,7 +26,7 @@ fn the_session_id_never_appears() {
     assert_ne!(session_ref(&SESSION), session_ref(&[2; 16]));
 }
 
-// OP-149 m.8: deterministic CBOR; the digest is SHA-256 under suiss/auth-context/v1
+// OP-149 m.8, SHA-256
 #[test]
 fn encoding_and_digest_are_deterministic() {
     let content = Content::new("application/work-record+cbor", [9; 32]).unwrap();
@@ -77,8 +77,7 @@ fn encoding_and_digest_are_deterministic() {
     assert_ne!(bare.digest().unwrap(), a.digest().unwrap());
 }
 
-// OP-149 m.30 (c): a session bound to a device Instance names it; the field, the encoding and
-// the digest move with it, and a session without one has no `instance` member
+// OP-149 m.30 (c)
 #[test]
 fn the_instance_is_carried_when_the_session_has_one() {
     const INSTANCE: [u8; 16] = [3; 16];
@@ -105,7 +104,7 @@ fn the_instance_is_carried_when_the_session_has_one() {
     assert_ne!(other.digest().unwrap(), bound.digest().unwrap());
 }
 
-// §10.1.6, OP-149 m.8: flags are the set flags of the vector, bytewise ascending
+// §10.1.6, OP-149 m.8
 #[test]
 fn flags_form_a_sorted_set() {
     let f = flags(&passkey());
@@ -119,7 +118,7 @@ fn flags_form_a_sorted_set() {
     assert_eq!(aal_name(passkey().aal), "aal2");
 }
 
-// OP-149 m.8: the AIS digest moves with any part of the assurance
+// OP-149 m.8
 #[test]
 fn ais_digest_commits_to_the_whole_vector() {
     let v = passkey();
@@ -132,7 +131,7 @@ fn ais_digest_commits_to_the_whole_vector() {
     assert_ne!(d, ais_digest(&eidas).unwrap());
 }
 
-// OP-149 m.8: a content binding names a lower-case type/subtype without parameters
+// OP-149 m.8
 #[test]
 fn content_types_are_checked() {
     assert!(Content::new("application/json", [0; 32]).is_ok());

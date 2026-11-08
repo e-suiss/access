@@ -133,8 +133,7 @@ async fn login_from(e: &mut Env, who: &str, client: u8) -> Step {
     password(e, &flow, who, PW).await
 }
 
-// MD-8: with no source the level is unavailable; it neither blocks a sign-in SL1 lets through
-// nor drops a second step SL1 asks for
+// MD-8
 #[tokio::test]
 async fn unavailable_risk_neither_blocks_nor_allows() {
     let mut e = env(0x61, "sl2-md8").await;
@@ -160,8 +159,7 @@ async fn unavailable_risk_neither_blocks_nor_allows() {
     assert_eq!(reviews(&e).await.len(), 0);
 }
 
-// TN-46, IDP-39, OP-151 m.3 (o): impossible travel in the default shadow mode asks nothing of
-// the user, opens a review item and never locks the account
+// TN-46, IDP-39, OP-151 m.3 (o)
 #[tokio::test]
 async fn shadow_reviews_but_asks_nothing() {
     let mut e = with_atlas(env(0x62, "sl2-shadow").await);
@@ -178,9 +176,7 @@ async fn shadow_reviews_but_asks_nothing() {
     assert_eq!(status_of(&e, alice).await, "active");
 }
 
-// TN-46, OP-151 m.3 (o), m.7 (h): in step-up mode a high level asks a second step the account
-// is not offered to enrol, goes out as CAEP risk-level-change in step-up+CAEP mode, and is never
-// a lock
+// TN-46, OP-151 m.3 (o), m.7 (h)
 #[tokio::test]
 async fn stepup_asks_a_second_step_and_signals_caep() {
     let mut e = with_atlas(env(0x63, "sl2-stepup").await);
@@ -217,8 +213,7 @@ async fn stepup_asks_a_second_step_and_signals_caep() {
     assert_eq!(status_of(&e, alice).await, "active");
 }
 
-// §4.4: a canary credential that matches never obtains a session; the flow ends with the
-// generic failure and a review item is opened
+// §4.4
 #[tokio::test]
 async fn a_canary_never_gets_a_session() {
     let mut e = env(0x64, "sl2-canary").await;
@@ -237,8 +232,7 @@ async fn a_canary_never_gets_a_session() {
     assert!(r[0].signals.contains(&String::from("canary_hit")));
 }
 
-// EI-25, TN-110: the protection mode is written only against a committed ALLOW of its own
-// action
+// EI-25, TN-110
 #[tokio::test]
 async fn protection_mode_needs_its_own_committed_allow() {
     let e = env(0x65, "sl2-mode").await;
