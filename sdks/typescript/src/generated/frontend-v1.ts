@@ -4,7 +4,7 @@
  */
 
 export interface paths {
-    "/csp-reports": {
+    "/v1/login/flows": {
         parameters: {
             query?: never;
             header?: never;
@@ -13,15 +13,33 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Receives CSP reports, 100 a minute per realm (OP-153 m.3 (t)). */
-        post: operations["reportCsp"];
+        /** Starts a flow; its kind is login unless the body names another. */
+        post: operations["createFlow"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/v1/account/combine": {
+    "/v1/login/flows/{flow}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The flow's current step. */
+        get: operations["getFlow"];
+        put?: never;
+        /** Submits one method of the current step. */
+        post: operations["submitFlow"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/login/step-up": {
         parameters: {
             query?: never;
             header?: never;
@@ -30,23 +48,57 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Combines two re-authenticated accounts, irreversibly (OP-153 m.3 (m)). */
-        post: operations["combineAccounts"];
+        /** Starts a step-up for an exact action and reason (X29). */
+        post: operations["stepUp"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/v1/account/connected-apps": {
+    "/v1/login/link/preview": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** The apps the person shares claims with (OP-153 m.3 (z)). */
-        get: operations["listConnectedApps"];
+        get?: never;
+        put?: never;
+        /** What a sign-in link would do, before it is confirmed. */
+        post: operations["previewLink"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/login/link/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Confirms a sign-in link on the device that asked for it. */
+        post: operations["confirmLink"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/sessions/current": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** This device's sign-in. */
+        get: operations["getCurrentSignIn"];
         put?: never;
         post?: never;
         delete?: never;
@@ -55,78 +107,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/account/connected-apps/{client}": {
+    "/v1/sessions": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** Where the account is signed in. */
+        get: operations["listSignIns"];
         put?: never;
         post?: never;
-        /** Stops sharing claims with an app. */
-        delete: operations["stopSharing"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/account/data-requests": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** The person's export and deletion requests. */
-        get: operations["listDataRequests"];
-        put?: never;
-        /** Asks for the person's export: idp.account.export (OP-153 m.3 (cc)). */
-        post: operations["requestExport"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/v1/account/deletion": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Whether the account is scheduled for deletion, and when. */
-        get: operations["getDeletion"];
-        put?: never;
-        post?: never;
-        /** Cancels a scheduled deletion inside its window. */
-        delete: operations["cancelDeletion"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/account/documents": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** The documents the person accepted and those awaiting acceptance. */
-        get: operations["listDocuments"];
-        put?: never;
-        /** Accepts one version of a document. */
-        post: operations["acceptDocument"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/account/email": {
+    "/v1/sessions/current/sign-out": {
         parameters: {
             query?: never;
             header?: never;
@@ -135,15 +133,15 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Starts changing the e-mail address after a step-up (OP-153 m.3 (i)). */
-        post: operations["startEmailChange"];
+        /** Signs out on this device. */
+        post: operations["signOut"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/v1/account/email/{change}": {
+    "/v1/sessions/sign-out-everywhere": {
         parameters: {
             query?: never;
             header?: never;
@@ -152,15 +150,15 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Confirms the new address with its out-of-band code. */
-        post: operations["confirmEmailChange"];
+        /** Signs out on every device; delegations remain. */
+        post: operations["signOutEverywhere"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/v1/account/link-codes": {
+    "/v1/account/totp": {
         parameters: {
             query?: never;
             header?: never;
@@ -169,33 +167,15 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Makes a cross-device link code, never sent by e-mail (OP-153 m.3 (d)). */
-        post: operations["createLinkCode"];
+        /** Starts adding an authenticator app. */
+        post: operations["beginTotp"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/v1/account/linked": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** The account's linked sign-ins. */
-        get: operations["listLinkedSignIns"];
-        put?: never;
-        /** Links another sign-in after re-authentication (OP-153 m.3 (m)). */
-        post: operations["startLink"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/account/linked/{link}": {
+    "/v1/account/totp/{enrollment}": {
         parameters: {
             query?: never;
             header?: never;
@@ -204,25 +184,25 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        post?: never;
-        /** Ends a linked sign-in; the record is kept. */
-        delete: operations["unlink"];
+        /** Confirms an authenticator app with its first code. */
+        post: operations["confirmTotp"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/v1/account/organizations": {
+    "/v1/account/recovery-codes": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** The organizations the person belongs to. */
-        get: operations["listOrganizations"];
+        get?: never;
         put?: never;
-        post?: never;
+        /** Makes new recovery codes, shown once. */
+        post: operations["regenerateRecoveryCodes"];
         delete?: never;
         options?: never;
         head?: never;
@@ -281,7 +261,78 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/account/recovery-codes": {
+    "/v1/account/documents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The documents the person accepted and those awaiting acceptance. */
+        get: operations["listDocuments"];
+        put?: never;
+        /** Accepts one version of a document. */
+        post: operations["acceptDocument"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/account/security-history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The account's security history, 90 days, address prefixes only. */
+        get: operations["getSecurityHistory"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/account/deletion": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Whether the account is scheduled for deletion, and when. */
+        get: operations["getDeletion"];
+        put?: never;
+        post?: never;
+        /** Cancels a scheduled deletion inside its window. */
+        delete: operations["cancelDeletion"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/account/data-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The person's export and deletion requests. */
+        get: operations["listDataRequests"];
+        put?: never;
+        /** Asks for the person's export: idp.account.export (OP-153 m.3 (cc)). */
+        post: operations["requestExport"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/login/guest": {
         parameters: {
             query?: never;
             header?: never;
@@ -290,8 +341,94 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Makes new recovery codes, shown once. */
-        post: operations["regenerateRecoveryCodes"];
+        /** Opens a guest sign-in for a client that allows guests (OP-153 m.3 (k)). */
+        post: operations["createGuest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/account/email": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Starts changing the e-mail address after a step-up (OP-153 m.3 (i)). */
+        post: operations["startEmailChange"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/account/email/{change}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Confirms the new address with its out-of-band code. */
+        post: operations["confirmEmailChange"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/recovery": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Starts a recovery attempt; the answer is the same whether or not an account exists (OP-153 m.3 (d)). */
+        post: operations["startRecovery"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/recovery/{attempt}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** A recovery attempt's state. */
+        get: operations["getRecovery"];
+        put?: never;
+        /** Submits one proof to a recovery attempt. */
+        post: operations["proveRecovery"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/recovery/intents/{token}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Opens the credential-only sign-in of a reset intent (TN-61). */
+        post: operations["redeemResetIntent"];
         delete?: never;
         options?: never;
         head?: never;
@@ -316,24 +453,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/account/security-history": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** The account's security history, 90 days, address prefixes only. */
-        get: operations["getSecurityHistory"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/account/totp": {
+    "/v1/account/link-codes": {
         parameters: {
             query?: never;
             header?: never;
@@ -342,59 +462,8 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Starts adding an authenticator app. */
-        post: operations["beginTotp"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/account/totp/{enrollment}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Confirms an authenticator app with its first code. */
-        post: operations["confirmTotp"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/dbsc/refresh": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Refreshes a device-tied sign-in. */
-        post: operations["refreshBoundSignIn"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/dbsc/register": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Ties this sign-in to the device (DBSC, OP-153 m.3 (y)). */
-        post: operations["registerBoundSignIn"];
+        /** Makes a cross-device link code, never sent by e-mail (OP-153 m.3 (d)). */
+        post: operations["createLinkCode"];
         delete?: never;
         options?: never;
         head?: never;
@@ -419,137 +488,17 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/login/flows": {
+    "/v1/account/organizations": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get?: never;
-        put?: never;
-        /** Starts a flow; its kind is login unless the body names another. */
-        post: operations["createFlow"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/login/flows/{flow}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** The flow's current step. */
-        get: operations["getFlow"];
-        put?: never;
-        /** Submits one method of the current step. */
-        post: operations["submitFlow"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/login/guest": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Opens a guest sign-in for a client that allows guests (OP-153 m.3 (k)). */
-        post: operations["createGuest"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/login/link/confirm": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Confirms a sign-in link on the device that asked for it. */
-        post: operations["confirmLink"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/login/link/preview": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** What a sign-in link would do, before it is confirmed. */
-        post: operations["previewLink"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/login/social/{provider}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Starts sign-in with a social provider (OP-153 m.3 (l)). */
-        get: operations["startSocial"];
+        /** The organizations the person belongs to. */
+        get: operations["listOrganizations"];
         put?: never;
         post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/login/social/{provider}/callback": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** The provider's redirect back; checked in the back end. */
-        get: operations["finishSocial"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/login/step-up": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Starts a step-up for an exact action and reason (X29). */
-        post: operations["stepUp"];
         delete?: never;
         options?: never;
         head?: never;
@@ -590,67 +539,15 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/recovery": {
+    "/v1/login/social/{provider}": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get?: never;
-        put?: never;
-        /** Starts a recovery attempt; the answer is the same whether or not an account exists (OP-153 m.3 (d)). */
-        post: operations["startRecovery"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/recovery/intents/{token}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Opens the credential-only sign-in of a reset intent (TN-61). */
-        post: operations["redeemResetIntent"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/recovery/{attempt}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** A recovery attempt's state. */
-        get: operations["getRecovery"];
-        put?: never;
-        /** Submits one proof to a recovery attempt. */
-        post: operations["proveRecovery"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/sessions": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Where the account is signed in. */
-        get: operations["listSignIns"];
+        /** Starts sign-in with a social provider (OP-153 m.3 (l)). */
+        get: operations["startSocial"];
         put?: never;
         post?: never;
         delete?: never;
@@ -659,15 +556,15 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/sessions/current": {
+    "/v1/login/social/{provider}/callback": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** This device's sign-in. */
-        get: operations["getCurrentSignIn"];
+        /** The provider's redirect back; checked in the back end. */
+        get: operations["finishSocial"];
         put?: never;
         post?: never;
         delete?: never;
@@ -676,24 +573,25 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/sessions/current/sign-out": {
+    "/v1/account/linked": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** The account's linked sign-ins. */
+        get: operations["listLinkedSignIns"];
         put?: never;
-        /** Signs out on this device. */
-        post: operations["signOut"];
+        /** Links another sign-in after re-authentication (OP-153 m.3 (m)). */
+        post: operations["startLink"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/v1/sessions/sign-out-everywhere": {
+    "/v1/account/linked/{link}": {
         parameters: {
             query?: never;
             header?: never;
@@ -702,9 +600,60 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Signs out on every device; delegations remain. */
-        post: operations["signOutEverywhere"];
+        post?: never;
+        /** Ends a linked sign-in; the record is kept. */
+        delete: operations["unlink"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/account/combine": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Combines two re-authenticated accounts, irreversibly (OP-153 m.3 (m)). */
+        post: operations["combineAccounts"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/account/connected-apps": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The apps the person shares claims with (OP-153 m.3 (z)). */
+        get: operations["listConnectedApps"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/account/connected-apps/{client}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Stops sharing claims with an app. */
+        delete: operations["stopSharing"];
         options?: never;
         head?: never;
         patch?: never;
@@ -727,21 +676,72 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/dbsc/register": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Ties this sign-in to the device (DBSC, OP-153 m.3 (y)). */
+        post: operations["registerBoundSignIn"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/dbsc/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Refreshes a device-tied sign-in. */
+        post: operations["refreshBoundSignIn"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/csp-reports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Receives CSP reports, 100 a minute per realm (OP-153 m.3 (t)). */
+        post: operations["reportCsp"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
         Problem: {
+            type: string;
+            title: string;
+            status: number;
             code: string;
             reason?: string;
-            status: number;
-            title: string;
-            type: string;
         };
     };
     responses: {
-        /** @description The route is declared and not served yet (OP-153 m.4). */
-        NotYetServed: {
+        /** @description An RFC 9457 problem. */
+        Problem: {
             headers: {
                 [name: string]: unknown;
             };
@@ -749,8 +749,8 @@ export interface components {
                 "application/problem+json": components["schemas"]["Problem"];
             };
         };
-        /** @description An RFC 9457 problem. */
-        Problem: {
+        /** @description The route is declared and not served yet (OP-153 m.4). */
+        NotYetServed: {
             headers: {
                 [name: string]: unknown;
             };
@@ -766,7 +766,7 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
-    reportCsp: {
+    createFlow: {
         parameters: {
             query?: never;
             header?: never;
@@ -779,64 +779,29 @@ export interface operations {
             };
         };
         responses: {
-            501: components["responses"]["NotYetServed"];
-            default: components["responses"]["Problem"];
-        };
-    };
-    combineAccounts: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: {
-            content: {
-                "application/json": Record<string, never>;
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
             };
-        };
-        responses: {
-            501: components["responses"]["NotYetServed"];
             default: components["responses"]["Problem"];
         };
     };
-    listConnectedApps: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            501: components["responses"]["NotYetServed"];
-            default: components["responses"]["Problem"];
-        };
-    };
-    stopSharing: {
+    getFlow: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                client: string;
+                flow: string;
             };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            501: components["responses"]["NotYetServed"];
-            default: components["responses"]["Problem"];
-        };
-    };
-    listDataRequests: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
             /** @description OK */
             200: {
                 headers: {
@@ -849,142 +814,12 @@ export interface operations {
             default: components["responses"]["Problem"];
         };
     };
-    requestExport: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: {
-            content: {
-                "application/json": Record<string, never>;
-            };
-        };
-        responses: {
-            501: components["responses"]["NotYetServed"];
-            default: components["responses"]["Problem"];
-        };
-    };
-    getDeletion: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": Record<string, never>;
-                };
-            };
-            default: components["responses"]["Problem"];
-        };
-    };
-    cancelDeletion: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": Record<string, never>;
-                };
-            };
-            default: components["responses"]["Problem"];
-        };
-    };
-    listDocuments: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": Record<string, never>;
-                };
-            };
-            default: components["responses"]["Problem"];
-        };
-    };
-    acceptDocument: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: {
-            content: {
-                "application/json": Record<string, never>;
-            };
-        };
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": Record<string, never>;
-                };
-            };
-            default: components["responses"]["Problem"];
-        };
-    };
-    startEmailChange: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: {
-            content: {
-                "application/json": Record<string, never>;
-            };
-        };
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": Record<string, never>;
-                };
-            };
-            default: components["responses"]["Problem"];
-        };
-    };
-    confirmEmailChange: {
+    submitFlow: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                change: string;
+                flow: string;
             };
             cookie?: never;
         };
@@ -1006,7 +841,7 @@ export interface operations {
             default: components["responses"]["Problem"];
         };
     };
-    createLinkCode: {
+    stepUp: {
         parameters: {
             query?: never;
             header?: never;
@@ -1031,7 +866,57 @@ export interface operations {
             default: components["responses"]["Problem"];
         };
     };
-    listLinkedSignIns: {
+    previewLink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    confirmLink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getCurrentSignIn: {
         parameters: {
             query?: never;
             header?: never;
@@ -1040,11 +925,40 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            501: components["responses"]["NotYetServed"];
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
             default: components["responses"]["Problem"];
         };
     };
-    startLink: {
+    listSignIns: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    signOut: {
         parameters: {
             query?: never;
             header?: never;
@@ -1057,35 +971,117 @@ export interface operations {
             };
         };
         responses: {
-            501: components["responses"]["NotYetServed"];
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
             default: components["responses"]["Problem"];
         };
     };
-    unlink: {
+    signOutEverywhere: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    beginTotp: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    confirmTotp: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                link: string;
+                enrollment: string;
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
         responses: {
-            501: components["responses"]["NotYetServed"];
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
             default: components["responses"]["Problem"];
         };
     };
-    listOrganizations: {
+    regenerateRecoveryCodes: {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
         responses: {
-            501: components["responses"]["NotYetServed"];
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
             default: components["responses"]["Problem"];
         };
     };
@@ -1187,32 +1183,7 @@ export interface operations {
             default: components["responses"]["Problem"];
         };
     };
-    regenerateRecoveryCodes: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: {
-            content: {
-                "application/json": Record<string, never>;
-            };
-        };
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": Record<string, never>;
-                };
-            };
-            default: components["responses"]["Problem"];
-        };
-    };
-    getRecoveryContacts: {
+    listDocuments: {
         parameters: {
             query?: never;
             header?: never;
@@ -1233,7 +1204,7 @@ export interface operations {
             default: components["responses"]["Problem"];
         };
     };
-    setRecoveryContacts: {
+    acceptDocument: {
         parameters: {
             query?: never;
             header?: never;
@@ -1279,158 +1250,11 @@ export interface operations {
             default: components["responses"]["Problem"];
         };
     };
-    beginTotp: {
+    getDeletion: {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
-            cookie?: never;
-        };
-        requestBody?: {
-            content: {
-                "application/json": Record<string, never>;
-            };
-        };
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": Record<string, never>;
-                };
-            };
-            default: components["responses"]["Problem"];
-        };
-    };
-    confirmTotp: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                enrollment: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: {
-            content: {
-                "application/json": Record<string, never>;
-            };
-        };
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": Record<string, never>;
-                };
-            };
-            default: components["responses"]["Problem"];
-        };
-    };
-    refreshBoundSignIn: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: {
-            content: {
-                "application/json": Record<string, never>;
-            };
-        };
-        responses: {
-            501: components["responses"]["NotYetServed"];
-            default: components["responses"]["Problem"];
-        };
-    };
-    registerBoundSignIn: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: {
-            content: {
-                "application/json": Record<string, never>;
-            };
-        };
-        responses: {
-            501: components["responses"]["NotYetServed"];
-            default: components["responses"]["Problem"];
-        };
-    };
-    getInvitation: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                code: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            501: components["responses"]["NotYetServed"];
-            default: components["responses"]["Problem"];
-        };
-    };
-    acceptInvitation: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                code: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: {
-            content: {
-                "application/json": Record<string, never>;
-            };
-        };
-        responses: {
-            501: components["responses"]["NotYetServed"];
-            default: components["responses"]["Problem"];
-        };
-    };
-    createFlow: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: {
-            content: {
-                "application/json": Record<string, never>;
-            };
-        };
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": Record<string, never>;
-                };
-            };
-            default: components["responses"]["Problem"];
-        };
-    };
-    getFlow: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                flow: string;
-            };
             cookie?: never;
         };
         requestBody?: never;
@@ -1447,20 +1271,14 @@ export interface operations {
             default: components["responses"]["Problem"];
         };
     };
-    submitFlow: {
+    cancelDeletion: {
         parameters: {
             query?: never;
             header?: never;
-            path: {
-                flow: string;
-            };
+            path?: never;
             cookie?: never;
         };
-        requestBody?: {
-            content: {
-                "application/json": Record<string, never>;
-            };
-        };
+        requestBody?: never;
         responses: {
             /** @description OK */
             200: {
@@ -1471,6 +1289,44 @@ export interface operations {
                     "application/json": Record<string, never>;
                 };
             };
+            default: components["responses"]["Problem"];
+        };
+    };
+    listDataRequests: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    requestExport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            501: components["responses"]["NotYetServed"];
             default: components["responses"]["Problem"];
         };
     };
@@ -1491,7 +1347,7 @@ export interface operations {
             default: components["responses"]["Problem"];
         };
     };
-    confirmLink: {
+    startEmailChange: {
         parameters: {
             query?: never;
             header?: never;
@@ -1516,11 +1372,13 @@ export interface operations {
             default: components["responses"]["Problem"];
         };
     };
-    previewLink: {
+    confirmEmailChange: {
         parameters: {
             query?: never;
             header?: never;
-            path?: never;
+            path: {
+                change: string;
+            };
             cookie?: never;
         };
         requestBody?: {
@@ -1538,97 +1396,6 @@ export interface operations {
                     "application/json": Record<string, never>;
                 };
             };
-            default: components["responses"]["Problem"];
-        };
-    };
-    startSocial: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                provider: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            501: components["responses"]["NotYetServed"];
-            default: components["responses"]["Problem"];
-        };
-    };
-    finishSocial: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                provider: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            501: components["responses"]["NotYetServed"];
-            default: components["responses"]["Problem"];
-        };
-    };
-    stepUp: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: {
-            content: {
-                "application/json": Record<string, never>;
-            };
-        };
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": Record<string, never>;
-                };
-            };
-            default: components["responses"]["Problem"];
-        };
-    };
-    createOrganization: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: {
-            content: {
-                "application/json": Record<string, never>;
-            };
-        };
-        responses: {
-            501: components["responses"]["NotYetServed"];
-            default: components["responses"]["Problem"];
-        };
-    };
-    requestAccess: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                organization: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: {
-            content: {
-                "application/json": Record<string, never>;
-            };
-        };
-        responses: {
-            501: components["responses"]["NotYetServed"];
             default: components["responses"]["Problem"];
         };
     };
@@ -1637,33 +1404,6 @@ export interface operations {
             query?: never;
             header?: never;
             path?: never;
-            cookie?: never;
-        };
-        requestBody?: {
-            content: {
-                "application/json": Record<string, never>;
-            };
-        };
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": Record<string, never>;
-                };
-            };
-            default: components["responses"]["Problem"];
-        };
-    };
-    redeemResetIntent: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                token: string;
-            };
             cookie?: never;
         };
         requestBody?: {
@@ -1734,7 +1474,34 @@ export interface operations {
             default: components["responses"]["Problem"];
         };
     };
-    listSignIns: {
+    redeemResetIntent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getRecoveryContacts: {
         parameters: {
             query?: never;
             header?: never;
@@ -1755,28 +1522,7 @@ export interface operations {
             default: components["responses"]["Problem"];
         };
     };
-    getCurrentSignIn: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": Record<string, never>;
-                };
-            };
-            default: components["responses"]["Problem"];
-        };
-    };
-    signOut: {
+    setRecoveryContacts: {
         parameters: {
             query?: never;
             header?: never;
@@ -1801,7 +1547,7 @@ export interface operations {
             default: components["responses"]["Problem"];
         };
     };
-    signOutEverywhere: {
+    createLinkCode: {
         parameters: {
             query?: never;
             header?: never;
@@ -1823,6 +1569,209 @@ export interface operations {
                     "application/json": Record<string, never>;
                 };
             };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getInvitation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            501: components["responses"]["NotYetServed"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    acceptInvitation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            501: components["responses"]["NotYetServed"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    listOrganizations: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            501: components["responses"]["NotYetServed"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    createOrganization: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            501: components["responses"]["NotYetServed"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    requestAccess: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                organization: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            501: components["responses"]["NotYetServed"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    startSocial: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            501: components["responses"]["NotYetServed"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    finishSocial: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            501: components["responses"]["NotYetServed"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    listLinkedSignIns: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            501: components["responses"]["NotYetServed"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    startLink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            501: components["responses"]["NotYetServed"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    unlink: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                link: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            501: components["responses"]["NotYetServed"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    combineAccounts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            501: components["responses"]["NotYetServed"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    listConnectedApps: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            501: components["responses"]["NotYetServed"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    stopSharing: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                client: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            501: components["responses"]["NotYetServed"];
             default: components["responses"]["Problem"];
         };
     };
@@ -1833,6 +1782,57 @@ export interface operations {
             path: {
                 instance: string;
             };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            501: components["responses"]["NotYetServed"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    registerBoundSignIn: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            501: components["responses"]["NotYetServed"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    refreshBoundSignIn: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            501: components["responses"]["NotYetServed"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    reportCsp: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
             cookie?: never;
         };
         requestBody?: {

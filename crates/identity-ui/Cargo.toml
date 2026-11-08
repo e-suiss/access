@@ -27,5 +27,9 @@ serde_json = { workspace = true, features = ["std"] }
 thiserror = { workspace = true }
 zeroize = { workspace = true, features = ["alloc"] }
 
+[dev-dependencies]
+# OP-65: contract files keep insertion order whether built alone or in the workspace
+serde_json = { workspace = true, features = ["std", "preserve_order"] }
+
 [lints]
 workspace = true
