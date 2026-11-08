@@ -30,8 +30,7 @@ fn joint(k: u64, n: u8) -> Root {
     }
 }
 
-// TN-111, §13.7.7, TN-60: a sole root is refused unless the caller acknowledges that the domain
-// cannot be recovered
+// TN-111, §13.7.7, TN-60
 #[test]
 fn a_sole_root_needs_the_no_recovery_acknowledgement() {
     assert_eq!(
@@ -41,8 +40,7 @@ fn a_sole_root_needs_the_no_recovery_acknowledgement() {
     assert_eq!(order(Root::Sole(Id([1; 16])), true).check(), Ok(()));
 }
 
-// TN-111, §13.7.7: the recommended root is Joint(k >= 2); a joint root below two or above its
-// Parties is no root
+// TN-111, §13.7.7
 #[test]
 fn a_joint_root_needs_two_of_its_parties_at_least() {
     assert_eq!(order(joint(2, 3), false).check(), Ok(()));
@@ -61,8 +59,7 @@ fn a_joint_root_needs_two_of_its_parties_at_least() {
     );
 }
 
-// TN-111, §13.7.7, N-14: with no `domain.recover` entry every new domain says "Recovery not
-// available", whatever its root
+// TN-111, §13.7.7, N-14
 #[test]
 fn recovery_is_declared_not_available() {
     for root in [Root::Sole(Id([1; 16])), joint(2, 3)] {
@@ -71,7 +68,7 @@ fn recovery_is_declared_not_available() {
     }
 }
 
-// TN-16, OP-40: slugs, placements and the time-lock are checked before any decision
+// TN-16, OP-40
 #[test]
 fn orders_are_checked_before_a_decision() {
     let mut o = order(joint(2, 2), false);
@@ -90,7 +87,7 @@ fn orders_are_checked_before_a_decision() {
     assert_eq!(t.check(), Err(ProvisionInvalid::Placement));
 }
 
-// EI-25: the intent binds the change; another root or another sandbox flag is another intent
+// EI-25
 #[test]
 fn the_intent_binds_the_change() {
     let w = Window { from: 1, until: 2 };
@@ -112,7 +109,7 @@ fn the_intent_binds_the_change() {
     );
 }
 
-// OP-151 m.3 (m), X21: no authority flows across the sandbox line, either way
+// OP-151 m.3 (m), X21
 #[test]
 fn nothing_flows_across_the_sandbox_line() {
     assert!(flows(Regime::Production, Regime::Production));
@@ -121,7 +118,7 @@ fn nothing_flows_across_the_sandbox_line() {
     assert!(!flows(Regime::Sandbox, Regime::Production));
 }
 
-// OP-141 m.35 (c), INV-29: the platform catalog is not one every realm's Genesis publishes
+// OP-141 m.35 (c), INV-29
 #[test]
 fn only_the_platform_realm_publishes_the_platform_catalog() {
     assert!(!NAMESPACES.contains(&NAMESPACE));

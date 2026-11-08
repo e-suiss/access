@@ -771,7 +771,7 @@ mod tests {
 
     use super::*;
 
-    // OP-149 m.15 (j), OP-65: realm and stream ids are canonical lower-case UUIDs
+    // OP-149 m.15 (j), OP-65
     #[test]
     fn uuids_round_trip_in_canonical_form() {
         let id = [0xab; 16];

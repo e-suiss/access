@@ -248,8 +248,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             },
         )
         .await?;
-        // TN-110, TN-16: the first application of a decision fits the state it changes; only a
-        // retry of a bound one finds its own realm
+        // TN-110, TN-16
         if bound.is_some()
             && let Err(e) = Self::fits(p, order.change).await
         {
@@ -298,7 +297,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                 let gov = idp::governance(&mut tx).await?.ok_or(AdminError::NoRealm)?;
                 let opener = tenancy::provisioned_by(&mut tx).await?;
                 tx.commit().await?;
-                // TN-16, INV-32: a retry finishes only the realm its own Exercise opened
+                // TN-16, INV-32
                 if opener != Some(exercise.0) {
                     return Err(ProvisionInvalid::SlugTaken.into());
                 }

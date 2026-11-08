@@ -848,7 +848,7 @@ impl Client {
                 Value::Bool(true),
             ));
         }
-        // MD-10: only an opt-in changes the digest of a client registration
+        // MD-10
         if self.subject.public {
             m.push((Value::text("subject_type"), Value::text("public")));
         }

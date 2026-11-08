@@ -276,7 +276,7 @@ fn client(id: ClientId, m: &Map<String, Json>) -> Result<Client, Invalid> {
             "sector_identifier_uri",
         ],
     )?;
-    // OP-149 m.4: platform product fields are read-only here
+    // OP-149 m.4
     if m.get("platform_product").is_some_and(|v| !v.is_null()) {
         return Err(Invalid::PlatformTenant);
     }
@@ -513,7 +513,7 @@ pub fn compile(op: Op, key: Option<&str>, body: &Json, ids: &IdKey) -> Result<Ch
             only(m, &["rp_id", "acknowledge_passkey_loss"])?;
             Change::RpId(RpId::parse(text(m, "rp_id")?)?)
         }
-        // OP-150 m.11 (b), TN-61: declared, reserved, never applied; nothing is compiled
+        // OP-150 m.11 (b), TN-61
         Op::DeleteAccount | Op::RehomeRealm | Op::ResetIntent => return Err(Invalid::Reserved),
         Op::PutJoseAlg => {
             only(m, &["alg"])?;
@@ -636,7 +636,6 @@ pub fn compile(op: Op, key: Option<&str>, body: &Json, ids: &IdKey) -> Result<Ch
         Op::RotateWebhookKey => {
             only(m, &[])?;
             let id = extension_id(ids, WEBHOOK_PREFIX, key_of(key)?, Invalid::NoWebhook)?;
-            // the URL and events are the webhook's own, filled in by `resolve`
             Change::Webhook(WebhookChange::Update {
                 id,
                 url: String::new(),
@@ -949,7 +948,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             {
                 Change::UpstreamUpdate(u)
             }
-            // OP-151 m.14 (f): CT1 when it only tightens, CT2 when anything loosens
+            // OP-151 m.14 (f)
             Change::ProtectionMode { mode, .. } => {
                 let tier = access_identity_risk::app::settings::change_tier(&mut t, &mode)
                     .await
@@ -962,7 +961,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                     loosens: tier == access_identity_risk::domain::mode::Tier::Ct2,
                 }
             }
-            // TN-136: a key rotation keeps the webhook's URL and events
+            // TN-136
             Change::Webhook(WebhookChange::Update {
                 id, rotate: true, ..
             }) => match access_store::extensions::webhook(&mut t, &id).await? {
@@ -1134,7 +1133,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                         .collect(),
                 }
             }
-            // §8.13, OP-151 m.7 (g), m.19 (e): no verifier report is stored yet, so none is listed
+            // §8.13, OP-151 m.7 (g), m.19 (e)
             (Kind::Signals, _) => {
                 let now = t.server_time().await?;
                 let rows = t.transmitters().await?;
@@ -1158,7 +1157,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                     last: None,
                 }
             }
-            // IDP-36, OP-151 m.14 (i): counters only, read in the realm's own transaction
+            // IDP-36, OP-151 m.14 (i)
             (Kind::Analytics, _) => {
                 let today = u32::try_from(t.server_time().await? / 86_400_000)
                     .map_err(|_| AdminError::Unavailable(String::from("time")))?;
@@ -1171,7 +1170,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                     last: None,
                 }
             }
-            // TN-136, OP-151 m.19 (e): only a webhook of this realm has a log
+            // TN-136, OP-151 m.19 (e)
             (Kind::Deliveries, Some(k)) => {
                 let Ok(id) = self.ids.decode(WEBHOOK_PREFIX, k) else {
                     return Err(Invalid::NoWebhook.into());
@@ -1212,7 +1211,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                     "mappers": mappers.iter().map(|(c, s)| json!({"claim": c, "source": s}))
                         .collect::<Vec<_>>(),
                     "protection_mode": protection_view(&protection),
-                    // TN-124, OP-151 m.17 (d): no section is marked managed until the marking lands
+                    // TN-124, OP-151 m.17 (d)
                     "managed": [],
                 });
                 Read {

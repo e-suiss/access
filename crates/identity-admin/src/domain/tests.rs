@@ -23,8 +23,7 @@ fn client(uris: &[&str]) -> Client {
     }
 }
 
-// IDP-7, RFC 9700 §4.1.3, RFC 8252 §7: redirect URIs are exact strings of allowed shapes;
-// patterns, fragments and non-loopback http are refused
+// IDP-7, RFC 9700 §4.1.3, RFC 8252 §7
 #[test]
 fn redirect_uris_are_exact_and_constrained() {
     // IDP-7, SA-45, AS-M5, LFP-25
@@ -66,7 +65,7 @@ fn redirect_uris_are_exact_and_constrained() {
     );
 }
 
-// TN-15, OP-137: the client_id is the opaque `cli_` form only
+// TN-15, OP-137
 #[test]
 fn client_ids_are_opaque() {
     // TN-20
@@ -81,7 +80,7 @@ fn client_ids_are_opaque() {
     }
 }
 
-// must-never #18, §9.9.4 k.1, P55: reserved protocol claims cannot be defined by a tenant
+// MUST-NEVER-18, §9.9.4 k.1, P55
 #[test]
 fn reserved_claims_are_refused() {
     // E39, F23, PI-8, TN-117
@@ -92,7 +91,7 @@ fn reserved_claims_are_refused() {
     assert_eq!(ClaimName::parse("Department"), Err(Invalid::Claim));
 }
 
-// IDP-5, WebAuthn §5.1.4: the RP ID is the issuer's host or a parent domain of it
+// IDP-5 §5.1.4
 #[test]
 fn an_rp_id_covers_the_issuer_host() {
     // IDI-4
@@ -104,7 +103,7 @@ fn an_rp_id_covers_the_issuer_host() {
     assert_eq!(RpId::parse("test"), Err(Invalid::Host));
 }
 
-// OP-33, OP-146 m.4 (f): realm Argon2 parameters never go below the canonical or current ones
+// OP-33, OP-146 m.4 (f)
 #[test]
 fn argon2_parameters_only_rise() {
     // CR-36
@@ -120,7 +119,7 @@ fn argon2_parameters_only_rise() {
     assert_eq!(low.check(&DeclaredTargets::default()), Err(Invalid::Argon2));
 }
 
-// EI-25: the intent binds the change by digest; another change is another intent
+// EI-25
 #[test]
 fn the_intent_binds_the_change() {
     // MD-14, TN-110
@@ -139,11 +138,9 @@ fn the_intent_binds_the_change() {
     assert_ne!(a.digest().unwrap(), update.digest().unwrap());
 }
 
-// OP-149 m.4: a platform client's suiss_event_receiver is an absolute https URL Access may push
-// to, and it is part of what the registration's intent authorizes
+// OP-149 m.4
 #[test]
 fn the_event_receiver_is_an_https_url_in_the_change() {
-    // RFC 8935
     let mut base = [0x66; 32];
     base[0] = 0x58;
     let key = PublicKey::Ed25519(base);
@@ -181,8 +178,7 @@ fn the_event_receiver_is_an_https_url_in_the_change() {
     assert_ne!(Change::ClientRegister(c).digest().unwrap(), with);
 }
 
-// OP-149 m.23, §14.3: a suiss_event_receiver on a private address literal or another port than
-// 443 is accepted only when the operator declared that exact URL
+// OP-149 m.23, §14.3
 #[test]
 fn a_private_event_receiver_must_be_declared() {
     let url = "https://work-server:8443/v1/inbound/events";
@@ -252,11 +248,9 @@ fn a_client_key_is_p256_because_assertions_are_es256() {
     assert!(c.auth.jwks().unwrap().contains(r#""crv":"P-256""#));
 }
 
-// RFC 9126 §6, §10.4.3: requiring pushed authorization requests is part of what the
-// registration's intent authorizes; a client that does not require them keeps its digest
+// RFC 9126 §6, §10.4.3
 #[test]
 fn requiring_par_is_in_the_change() {
-    // RFC 9126
     let c = client(&["https://shop.example/cb"]);
     let without = Change::ClientRegister(c.clone()).digest().unwrap();
     let required = Client {
@@ -267,8 +261,7 @@ fn requiring_par_is_in_the_change() {
     assert_ne!(Change::ClientRegister(required).digest().unwrap(), without);
 }
 
-// §13.7.7, SEC9: the issuer cutoff is 24 hours before a known compromise, or 7 days before the
-// declaration when the compromise time is unknown or claimed to be later
+// §13.7.7, SEC9
 #[test]
 fn the_issuer_cutoff_follows_the_margins() {
     let day = 24 * 3_600_000;
@@ -278,8 +271,7 @@ fn the_issuer_cutoff_follows_the_margins() {
     assert_eq!(issuer_cutoff(None, day), 0);
 }
 
-// TN-106: branding is data; colours are #rrggbb, CSP origins are bare https origins, the logo
-// comes from one of them, and the names are bounded
+// TN-106
 #[test]
 fn branding_is_bounded_data() {
     let ok = Branding {
@@ -320,8 +312,7 @@ fn branding_is_bounded_data() {
     assert_eq!(many.check(), Err(Invalid::Branding));
 }
 
-// TN-118, §13.2, §13.7.1, OP-73: key policy and rotation are reserved, a drop is narrowing, and
-// permanent account deletion is declared reserved; the key changes address the realm's keys
+// TN-118, §13.2, §13.7.1, OP-73
 #[test]
 fn key_changes_and_deletion_are_declared() {
     let drop = Change::KeyDrop {
@@ -341,9 +332,7 @@ fn key_changes_and_deletion_are_declared() {
     assert_ne!(drop.digest().unwrap(), other.digest().unwrap());
 }
 
-// OP-150 m.3 (m), MUST-NEVER-13, XI-18, PI-13: platform_product is a role; a third party's
-// product is checked by the same rules as Suiss Work, with the same refusals, and the name is
-// part of the authorized change, not a switch the code reads
+// OP-150 m.3 (m), MUST-NEVER-13, XI-18, PI-13
 #[test]
 fn a_third_party_platform_product_is_checked_like_a_first_party_one() {
     // EI-13
@@ -386,8 +375,7 @@ fn a_third_party_platform_product_is_checked_like_a_first_party_one() {
     assert_ne!(digests[0], digests[1]);
 }
 
-// EI-25, TN-135, TN-136, OP-151 m.4, m.10 (d): a hook or webhook change is authorized by the
-// same intent M6's own change builds, under the merged idp.* catalogue
+// EI-25, TN-135, TN-136, OP-151 m.4, m.10 (d)
 #[test]
 fn extension_changes_bind_the_same_intent_as_their_own_contract() {
     let window = Window {
@@ -438,8 +426,7 @@ fn extension_changes_bind_the_same_intent_as_their_own_contract() {
     assert!(access_internal_api::idp::NAMESPACES.contains(&"idp.webhook"));
 }
 
-// OP-151 m.10 (e): the extension policy is realm configuration at the realm resource; its
-// default allows no private target and no disclosure
+// OP-151 m.10 (e)
 #[test]
 fn the_extension_policy_defaults_closed() {
     let p = ExtensionPolicy::default();

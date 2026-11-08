@@ -18,8 +18,7 @@ fn ids() -> IdKey {
 
 const CLIENT: &str = "cli_0123456789abcdefghjkmnpqrs";
 
-// TN-110, OP-151 m.2 M1: each write operation compiles into exactly one idp.* change of its own
-// action
+// TN-110, OP-151 m.2 M1
 #[test]
 fn each_operation_compiles_into_its_one_change() {
     let ids = ids();
@@ -138,8 +137,8 @@ fn each_operation_compiles_into_its_one_change() {
     }
 }
 
-// TN-61, TNI-6, CR-38: no body sets a credential; an unknown member, a secret or a password
-// is refused, and the platform product fields are read-only (OP-149 m.4)
+// TN-61, TNI-6, CR-38
+// OP-149
 #[test]
 fn no_body_sets_a_credential() {
     let ids = ids();
@@ -176,7 +175,7 @@ fn no_body_sets_a_credential() {
     );
 }
 
-// TN-117: a group's members are issued by the administration or by one upstream provider
+// TN-117
 #[test]
 fn a_group_names_its_one_membership_issuer() {
     let ids = ids();
@@ -203,8 +202,7 @@ fn a_group_names_its_one_membership_issuer() {
     }
 }
 
-// TN-129, OP-151 m.3 (f): the console session lives at most 12 h, idles at most 15 min, and is
-// always bound; `none` is refused for the management surface
+// TN-129, OP-151 m.3 (f)
 #[test]
 fn the_console_session_policy_only_tightens() {
     let ok = SessionPolicy::DEFAULT;
@@ -232,8 +230,7 @@ fn the_console_session_policy_only_tightens() {
     }
 }
 
-// TN-132: methods are from the closed set, at least one; fields from the profile; the domain
-// lists are DNS names and disjoint
+// TN-132
 #[test]
 fn sign_in_requirements_are_checked() {
     let mut p = default_signin();
@@ -250,7 +247,7 @@ fn sign_in_requirements_are_checked() {
     assert_eq!(r.check(), Err(Invalid::SigninPolicy));
 }
 
-// TN-110, OP-65: a write's intent validity is RFC 3339, ordered and at most 15 minutes
+// TN-110, OP-65
 #[test]
 fn the_validity_is_bounded() {
     let now = 1_800_000_000_000;
@@ -271,7 +268,7 @@ fn the_validity_is_bounded() {
     assert_eq!(validity(&json!({})), Err(Invalid::Validity));
 }
 
-// CR-38, TN-61: a client's view carries no secret
+// CR-38, TN-61
 #[test]
 fn a_client_view_has_no_secret() {
     let row = ClientRow {
@@ -300,8 +297,7 @@ fn a_client_view_has_no_secret() {
     );
 }
 
-// MD-10: a client reads pairwise subs; public needs subject_type public and the explicit
-// public_sub_opt_in, both or neither
+// MD-10
 #[test]
 fn public_sub_needs_the_explicit_opt_in() {
     let ids = ids();
@@ -341,8 +337,7 @@ fn public_sub_needs_the_explicit_opt_in() {
     );
 }
 
-// MD-10, OIDC Core §8.1: the sector document is a JSON array of https URIs listing every
-// redirect URI
+// MD-10, OIDC §8.1
 #[test]
 fn a_sector_document_lists_every_redirect_uri() {
     use crate::domain::{RedirectUri, sector_covers};
@@ -366,10 +361,7 @@ fn a_sector_document_lists_every_redirect_uri() {
     );
 }
 
-// MUST-NEVER-17, TN-61, TNI-6: an administrator never sets or chooses a user's credential: no
-// idp.account action carries one, the account operations take no credential member, and the
-// reset intent (the only way to help a user back in) carries no credential and is never
-// applied here
+// MUST-NEVER-17, TN-61, TNI-6
 #[test]
 fn an_administrator_never_sets_a_users_credential() {
     use access_internal_api::idp::IdpAction;

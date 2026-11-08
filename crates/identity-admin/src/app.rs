@@ -394,7 +394,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                     .await?
                     .filter(|g| g.active);
                 let current = current.ok_or(Invalid::NoGroup)?;
-                // TN-117: the one membership issuer is fixed
+                // TN-117
                 if current.membership_issuer != g.issuer.text() {
                     return Err(Invalid::MembershipIssuer.into());
                 }
@@ -412,7 +412,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                     .await?
                     .filter(|g| g.active);
                 let g = g.ok_or(Invalid::NoGroup)?;
-                // TN-117: members change here only when the administration issues them
+                // TN-117
                 if g.membership_issuer != MembershipIssuer::Admin.text() {
                     return Err(Invalid::UpstreamMembership.into());
                 }
@@ -452,7 +452,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                 }
             }
             Change::ProtectionMode { mode, loosens } => {
-                // OP-151 m.14 (f): the action follows the tier against the current mode
+                // OP-151 m.14 (f)
                 let tier = access_identity_risk::app::settings::change_tier(t, mode)
                     .await
                     .map_err(risk)?;
@@ -570,7 +570,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             }
             Verdict::Refused { code, .. } => return Err(AdminError::Refused(code)),
         };
-        // EI-25: the decision is about this very intent, nonce and domain
+        // EI-25
         if committed.intent != prepared.digest
             || committed.domain != prepared.domain
             || committed.nonce != p.nonce
@@ -631,7 +631,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
         let moved = account_move(&mut t.0, &p.change).await?;
         let secret = self.write(&mut t.0, bound, &p.change).await?;
         if let Some((subject, from, to)) = moved {
-            // TN-49, TN-41, OP-150 L2: a decided move does what any status move does
+            // TN-49, TN-41, OP-150 L2
             let correlation = access_kernel::json::b64url_encode(&exercise.0);
             let who = access_identity_account::app::Actor {
                 actor: DECIDED_BY,
