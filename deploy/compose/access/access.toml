@@ -43,6 +43,10 @@ dist_dir = "/usr/share/access/login"
 [console]
 dist_dir = "/usr/share/access/console"
 
+# OP-153 m.3 (w): the account pages' built app, from the image
+[account]
+dist_dir = "/usr/share/access/account"
+
 # OP-149 m.3, m.15 (g)
 [suiss]
 region = "local"

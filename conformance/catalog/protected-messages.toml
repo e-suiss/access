@@ -61,4 +61,11 @@ keys = [
   "outcome-couldnt_reach",
   "outcome-busy_retry",
   "outcome-unavailable_time_check",
+  "hub-not_shown_unconnected",
+  "hub-some_unknown",
+  "domain-unreachable",
+  "status-needs_refresh",
+  "root-sole_confirm",
+  "hub-owner",
+  "aftermath-recorded_at",
 ]

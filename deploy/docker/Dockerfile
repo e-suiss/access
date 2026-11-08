@@ -42,17 +42,22 @@ RUN cargo build --release --locked --target wasm32-unknown-unknown -p access-ker
  && wasm-bindgen --target web --out-dir sdks/typescript/wasm \
       target/wasm32-unknown-unknown/release/access_kernel_wasm.wasm
 
-# TN-128, OP-146 m.12 (f): the console and the hosted login, built from their lockfiles without
+# TN-128, OP-146 m.12 (f), OP-153 m.3 (w): the console, the hosted login and the account pages, built from their lockfiles without
 # install scripts (OP-97); the server reads each dist directory once before its lockdown
 FROM ${NODE_IMAGE} AS web
 WORKDIR /src
 COPY sdks/typescript sdks/typescript
 COPY --from=wasm /src/sdks/typescript/wasm sdks/typescript/wasm
+COPY web/components web/components
 COPY web/console web/console
 COPY web/login web/login
+COPY web/account web/account
+COPY locales locales
 RUN cd sdks/typescript && npm ci --ignore-scripts \
+ && cd /src/web/components && npm ci --ignore-scripts \
  && cd /src/web/console && npm ci --ignore-scripts && npm run build \
- && cd /src/web/login && npm ci --ignore-scripts && npm run build
+ && cd /src/web/login && npm ci --ignore-scripts && npm run build \
+ && cd /src/web/account && npm ci --ignore-scripts && npm run build
 
 # OP-69, CR-28: the same binaries with SoftHSM as the local PKCS#11 token, provisioning for a
 # local deployment (deploy/compose/access.yaml), the database administrator's setup and the
@@ -81,6 +86,7 @@ COPY --chmod=0644 crates/store/bootstrap/roles.sql crates/store/bootstrap/databa
 COPY --chmod=0755 deploy/compose/access/postgres-init.sh /usr/share/access/postgres/
 COPY --from=web /src/web/console/dist /usr/share/access/console
 COPY --from=web /src/web/login/dist /usr/share/access/login
+COPY --from=web /src/web/account/dist /usr/share/access/account
 LABEL org.opencontainers.image.title="access-local" \
       org.opencontainers.image.source="https://github.com/e-suiss/access" \
       org.opencontainers.image.licenses="Apache-2.0"
@@ -97,6 +103,7 @@ COPY --from=builder /src/target/release/access-server /src/target/release/access
      /src/target/release/access-identity-signer /src/target/release/access-cli /usr/local/bin/
 COPY --from=web /src/web/console/dist /usr/share/access/console
 COPY --from=web /src/web/login/dist /usr/share/access/login
+COPY --from=web /src/web/account/dist /usr/share/access/account
 # §14.5, RAUTHY-008
 USER 65532:65532
 EXPOSE 8443

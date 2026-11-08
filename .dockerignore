@@ -15,6 +15,8 @@ web
 sdks/typescript
 !web/console
 !web/login
+!web/account
+!web/components
 !sdks/typescript
 **/node_modules
 **/dist

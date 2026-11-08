@@ -1228,3 +1228,675 @@ surface = "mail"
 class = "notice"
 owner = "identity_plane"
 protected = false
+
+[[message]]
+key = "hub-not_shown_unconnected"
+surface = "hub"
+class = "notice"
+owner = "access"
+protected = true
+
+[[message]]
+key = "hub-some_unknown"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = true
+
+[[message]]
+key = "domain-current"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = false
+
+[[message]]
+key = "domain-unreachable"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = true
+
+[[message]]
+key = "status-current"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = false
+
+[[message]]
+key = "status-needs_refresh"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = true
+
+[[message]]
+key = "capacity-own_use"
+surface = "hub"
+class = "label"
+owner = "access"
+protected = false
+
+[[message]]
+key = "capacity-on_behalf_of"
+surface = "hub"
+class = "label"
+owner = "access"
+protected = false
+
+[[message]]
+key = "capacity-as_yourself"
+surface = "hub"
+class = "label"
+owner = "access"
+protected = false
+
+[[message]]
+key = "validity-valid_until"
+surface = "hub"
+class = "label"
+owner = "access"
+protected = false
+
+[[message]]
+key = "who_can-grantor"
+surface = "hub"
+class = "label"
+owner = "access"
+protected = false
+
+[[message]]
+key = "root-sole_confirm"
+surface = "hub"
+class = "notice"
+owner = "access"
+protected = true
+
+[[message]]
+key = "root-joint_confirm"
+surface = "hub"
+class = "notice"
+owner = "access"
+protected = false
+
+[[message]]
+key = "activity-by_you"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = false
+
+[[message]]
+key = "activity-for_you"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = false
+
+[[message]]
+key = "change-grant"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = false
+
+[[message]]
+key = "change-grant_ended"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = false
+
+[[message]]
+key = "change-anchor"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = false
+
+[[message]]
+key = "change-anchor_ended"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = false
+
+[[message]]
+key = "change-party"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = false
+
+[[message]]
+key = "change-party_ended"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = false
+
+[[message]]
+key = "change-instance"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = false
+
+[[message]]
+key = "change-instance_ended"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = false
+
+[[message]]
+key = "change-mandate"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = false
+
+[[message]]
+key = "change-mandate_ended"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = false
+
+[[message]]
+key = "change-acceptance"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = false
+
+[[message]]
+key = "change-acceptance_ended"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = false
+
+[[message]]
+key = "change-policy"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = false
+
+[[message]]
+key = "change-policy_ended"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = false
+
+[[message]]
+key = "change-authority_set"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = false
+
+[[message]]
+key = "change-authority_set_ended"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = false
+
+[[message]]
+key = "change-key_event"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = false
+
+[[message]]
+key = "change-key_event_ended"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = false
+
+[[message]]
+key = "hub-title"
+surface = "hub"
+class = "label"
+owner = "access"
+protected = false
+
+[[message]]
+key = "hub-your_authority"
+surface = "hub"
+class = "label"
+owner = "access"
+protected = false
+
+[[message]]
+key = "hub-acting_for_you"
+surface = "hub"
+class = "label"
+owner = "access"
+protected = false
+
+[[message]]
+key = "hub-shared_from_you"
+surface = "hub"
+class = "label"
+owner = "access"
+protected = false
+
+[[message]]
+key = "hub-roots"
+surface = "hub"
+class = "label"
+owner = "access"
+protected = false
+
+[[message]]
+key = "hub-activity"
+surface = "hub"
+class = "label"
+owner = "access"
+protected = false
+
+[[message]]
+key = "hub-changes"
+surface = "hub"
+class = "label"
+owner = "access"
+protected = false
+
+[[message]]
+key = "hub-empty"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = false
+
+[[message]]
+key = "hub-owner"
+surface = "hub"
+class = "label"
+owner = "access"
+protected = true
+
+[[message]]
+key = "hub-changes_note"
+surface = "hub"
+class = "notice"
+owner = "access"
+protected = false
+
+[[message]]
+key = "hub-activity_note"
+surface = "hub"
+class = "notice"
+owner = "access"
+protected = false
+
+[[message]]
+key = "action-read_again"
+surface = "hub"
+class = "action"
+owner = "access"
+protected = false
+
+[[message]]
+key = "action-revoke"
+surface = "hub"
+class = "action"
+owner = "access"
+protected = false
+
+[[message]]
+key = "action-why"
+surface = "hub"
+class = "action"
+owner = "access"
+protected = false
+
+[[message]]
+key = "revoke-title"
+surface = "hub"
+class = "label"
+owner = "access"
+protected = false
+
+[[message]]
+key = "revoke-impact"
+surface = "hub"
+class = "label"
+owner = "access"
+protected = false
+
+[[message]]
+key = "revoke-impact_none"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = false
+
+[[message]]
+key = "revoke-impact_count"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = false
+
+[[message]]
+key = "action-keep"
+surface = "hub"
+class = "action"
+owner = "access"
+protected = false
+
+[[message]]
+key = "aftermath-title"
+surface = "hub"
+class = "label"
+owner = "access"
+protected = false
+
+[[message]]
+key = "aftermath-past_uses"
+surface = "hub"
+class = "notice"
+owner = "access"
+protected = false
+
+[[message]]
+key = "aftermath-recorded_at"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = true
+
+[[message]]
+key = "device-title"
+surface = "hub"
+class = "label"
+owner = "access"
+protected = false
+
+[[message]]
+key = "device-explain"
+surface = "hub"
+class = "notice"
+owner = "access"
+protected = false
+
+[[message]]
+key = "action-set_up_device"
+surface = "hub"
+class = "action"
+owner = "access"
+protected = false
+
+[[message]]
+key = "device-step_up"
+surface = "hub"
+class = "step_up"
+owner = "access"
+protected = false
+
+[[message]]
+key = "device-unsupported"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = false
+
+[[message]]
+key = "sign-title"
+surface = "hub"
+class = "label"
+owner = "access"
+protected = false
+
+[[message]]
+key = "sign-action"
+surface = "hub"
+class = "label"
+owner = "access"
+protected = false
+
+[[message]]
+key = "sign-resource"
+surface = "hub"
+class = "label"
+owner = "access"
+protected = false
+
+[[message]]
+key = "action-sign"
+surface = "hub"
+class = "action"
+owner = "access"
+protected = false
+
+[[message]]
+key = "action-cancel"
+surface = "hub"
+class = "action"
+owner = "access"
+protected = false
+
+[[message]]
+key = "why-title"
+surface = "hub"
+class = "label"
+owner = "access"
+protected = false
+
+[[message]]
+key = "why-from_root"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = false
+
+[[message]]
+key = "why-from_delegation"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = false
+
+[[message]]
+key = "nav-account"
+surface = "account"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "nav-authority"
+surface = "account"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "shell-loading"
+surface = "account"
+class = "status"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "shell-unavailable"
+surface = "account"
+class = "status"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "shell-signed_out"
+surface = "account"
+class = "status"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "privacy-title"
+surface = "account"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "privacy-preferences"
+surface = "account"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "privacy-channel-email"
+surface = "account"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "privacy-channel-sms"
+surface = "account"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "privacy-channel-call"
+surface = "account"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "privacy-channel-push"
+surface = "account"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "privacy-topic-campaign"
+surface = "account"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "privacy-topic-newsletter"
+surface = "account"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "privacy-topic-product_news"
+surface = "account"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "privacy-preference_history"
+surface = "account"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "privacy-documents"
+surface = "account"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "privacy-no_documents"
+surface = "account"
+class = "status"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "privacy-security_history"
+surface = "account"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "privacy-no_history"
+surface = "account"
+class = "status"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "privacy-deletion"
+surface = "account"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "privacy-deletion_none"
+surface = "account"
+class = "status"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "action-cancel_deletion"
+surface = "account"
+class = "action"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "privacy-data_requests"
+surface = "account"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "privacy-no_requests"
+surface = "account"
+class = "status"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "action-save"
+surface = "account"
+class = "action"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "privacy-saved"
+surface = "account"
+class = "status"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "action-narrow"
+surface = "hub"
+class = "action"
+owner = "access"
+protected = false
+
+[[message]]
+key = "action-suspend"
+surface = "hub"
+class = "action"
+owner = "access"
+protected = false
