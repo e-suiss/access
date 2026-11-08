@@ -3303,6 +3303,9 @@ async fn an_invitation_is_read_without_consuming_it_and_accepted_by_its_invitee(
     assert_eq!(items[0]["source"], "invite");
     assert_eq!(items[0]["owner"], false);
     assert_eq!(items[0]["role"]["version"], 1);
+    // §8.17.7.6, Ek B 3600
+    assert_eq!(items[0]["roots"], 1);
+    assert_eq!(items[0]["role_grant"], "pending");
     assert_eq!(
         b.post(&path, Some(json!({ "confirm": true }))).await.status,
         StatusCode::NOT_FOUND

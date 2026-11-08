@@ -289,7 +289,10 @@ where
         )
     }
 
-    /// `GET /v1/account/organizations`: the organizations the signed-in person belongs to.
+    /// `GET /v1/account/organizations`: the organizations the signed-in person belongs to, as
+    /// the hub's organization lens reads them (§8.17.7.6): whom the person acts for, whether it
+    /// is one of the organization's roots and how many roots it has, and its role with the
+    /// state of the role's Grant.
     pub async fn organizations(&self, entry: &RealmEntry, b: &Browser<'_>) -> Reply {
         let (kit, me) = match self.me(entry, b).await {
             Ok(m) => m,
@@ -303,21 +306,27 @@ where
             Ok(r) => r,
             Err(e) => return store_failed(&e),
         };
+        let mut items = Vec::with_capacity(rows.len());
+        for (o, m) in rows {
+            // §8.17.7.6
+            let members = match t.members(o.id).await {
+                Ok(m) => m,
+                Err(e) => return store_failed(&e),
+            };
+            let mine = members.iter().find(|x| x.subject == me);
+            items.push(json!({
+                "id": b64url_encode(&o.party),
+                "display_name": o.display_name,
+                "owner": m.owner,
+                "source": m.source.word(),
+                "role": m.role.map(|(n, v)| json!({ "name": n, "version": v })),
+                "role_grant": mine.and_then(|x| x.grant_state.clone()),
+                "roots": members.iter().filter(|x| x.owner).count(),
+            }));
+        }
         if let Err(e) = t.commit().await {
             return store_failed(&e);
         }
-        let items: Vec<_> = rows
-            .into_iter()
-            .map(|(o, m)| {
-                json!({
-                    "id": b64url_encode(&o.party),
-                    "display_name": o.display_name,
-                    "owner": m.owner,
-                    "source": m.source.word(),
-                    "role": m.role.map(|(n, v)| json!({ "name": n, "version": v })),
-                })
-            })
-            .collect();
         Reply::json(200, json!({ "items": items }))
     }
 
