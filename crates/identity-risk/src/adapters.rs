@@ -47,6 +47,10 @@ impl IpPseudonyms for NoPseudonyms {
     fn pseudonym(&self, _: &[u8; 16], _: &[u8; 16], _: IpAddr) -> Option<[u8; 32]> {
         None
     }
+
+    fn prefix(&self, _: &[u8; 16], _: &[u8; 16], _: IpAddr) -> Option<[u8; 32]> {
+        None
+    }
 }
 
 /// Pseudonyms under the cell's key in the token.
@@ -55,6 +59,10 @@ pub struct KeyedPseudonyms(pub IpPseudonymKey);
 impl IpPseudonyms for KeyedPseudonyms {
     fn pseudonym(&self, tenant: &[u8; 16], realm: &[u8; 16], ip: IpAddr) -> Option<[u8; 32]> {
         self.0.pseudonym(tenant, realm, &octets(ip)).ok()
+    }
+
+    fn prefix(&self, tenant: &[u8; 16], realm: &[u8; 16], ip: IpAddr) -> Option<[u8; 32]> {
+        self.0.prefix_pseudonym(tenant, realm, &octets(ip)).ok()
     }
 }
 

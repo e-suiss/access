@@ -67,6 +67,9 @@ pub(crate) struct Realms<P> {
     pub(crate) vault: KekSealer<RealmKeks>,
     /// The process's `GeoIP` source, whose state the signals read states (OP-151 m.3 (o)).
     pub(crate) geo: Arc<dyn GeoResolver>,
+    /// The cell's address pseudonyms: a console device registration's bootstrap rate context
+    /// (OP-152 m.5 (b)).
+    pub(crate) ips: Arc<dyn access_identity_risk::ports::IpPseudonyms>,
 }
 
 /// The `GeoIP` source's state as the signals read names it (§8.13): never `configured` unless

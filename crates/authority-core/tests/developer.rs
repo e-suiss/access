@@ -377,6 +377,7 @@ fn incoming(request: Request, seed: u8) -> Incoming {
         requester: None,
         explain: false,
         status: None,
+        context: None,
     }
 }
 

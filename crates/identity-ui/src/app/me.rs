@@ -11,6 +11,7 @@ use access_identity_session::domain::auth_context::{CONTENT_TYPE, Content};
 use access_identity_session::domain::device::{Assurance, KeyRejection, verify_pop};
 use access_identity_session::domain::session::{SESSION_COOKIE, clear_cookie};
 use access_identity_session::ports::Clock;
+use access_internal_api::context::RateContext;
 use access_internal_api::idp::Verdict;
 use access_internal_api::instances::{
     Registrant, Registration, RegistrationVerdict, SelfSigned, Termination, bootstrap_basis,
@@ -481,6 +482,12 @@ where
                     ais,
                 },
                 pep: devices.pep.clone(),
+                // OP-152 m.5 (b)
+                context: self
+                    .risk
+                    .ips
+                    .prefix(kit.tenant.as_bytes(), kit.realm.as_bytes(), b.ip)
+                    .map(|p| RateContext::address(&p)),
             })
             .await;
         if let (Ok(RegistrationVerdict::Registered(_)), None, Some(proof)) =

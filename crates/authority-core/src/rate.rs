@@ -37,6 +37,27 @@ pub fn request_rate_key(party: &Id, len: u64, now: u64) -> Vec<u8> {
     .unwrap_or_default()
 }
 
+/// Allowed bootstrap Grant Exercises per PEP and context in one window: window in milliseconds
+/// and limit (§13.7.4, OP-152 m.5 (b), PD).
+pub const BOOTSTRAP_RATE: (u64, u64) = (3_600_000, 10);
+
+/// The recorded counter of bootstrap Exercises `pep` forwards for `context` in the window of
+/// length `len` holding `now`; without a context the PEP's own (OP-152 m.5 (b)).
+#[must_use]
+pub fn bootstrap_rate_key(
+    pep: &str,
+    context: Option<&access_internal_api::context::RateContext>,
+    len: u64,
+    now: u64,
+) -> Vec<u8> {
+    use suiss_crypto::dcbor::{self, Limits, Value};
+    let start = now.saturating_sub(now.checked_rem(len).unwrap_or(0));
+    let mut key = vec![Value::text("bootstrap-rate"), Value::text(pep)];
+    key.extend(context.map(|c| Value::text(c.name())));
+    key.extend([Value::Unsigned(len), Value::Unsigned(start)]);
+    dcbor::encode(&Value::Array(key), Limits::CEILING).unwrap_or_default()
+}
+
 /// Entries kept before idle ones are dropped.
 const KEEP: usize = 100_000;
 

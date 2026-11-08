@@ -21,6 +21,7 @@ use access_authority_sequencer::app::Leader;
 use access_authority_sequencer::ports::Clock;
 use access_crypto::event_id::EventKey;
 use access_crypto::secret::Secret;
+use access_internal_api::context::RateContext;
 use access_kernel::aas::{Act, ApprovalAct};
 use access_kernel::ais::{CONTENT_TYPE, Statement};
 use access_kernel::codec::Canonical;
@@ -398,6 +399,7 @@ fn incoming(request: Request, seed: u8) -> Incoming {
         requester: None,
         explain: false,
         status: None,
+        context: None,
     }
 }
 
@@ -483,6 +485,60 @@ async fn an_unresolvable_basis_is_a_recorded_denial() {
     unresolved(&missing);
     assert_eq!(not_root.decision, missing.decision);
 
+    fold_check(&db.sequencer, d).await.unwrap();
+}
+
+/// A `party_register` of `Id([seed; 16])` under the bootstrap Grant, forwarded for `context`.
+async fn register_for(
+    core: &mut Core,
+    d: Digest,
+    (seed, nonce): (u8, u8),
+    context: Option<&str>,
+) -> Response {
+    let party = Id([seed; 16]);
+    let register = Payload::PartyRegister {
+        party,
+        root: Root::Sole(party),
+        actor_kind: ActorKind::Human,
+    };
+    let basis = ExerciseBasis::Public(meta::object_id(&d, kind::GRANT, 0));
+    let mut inc = incoming(meta_request(d, nonce, basis, register), seed);
+    inc.context = context.map(|c| RateContext::parse(c).unwrap());
+    core.exercise(&inc, NOW).await.unwrap()
+}
+
+// §13.7.4, OP-152 m.5 (b): bootstrap Grants are counted per PEP, context and hour; the
+// eleventh is a recorded restricted/policy:bootstrap-rate, other contexts are not touched
+#[tokio::test]
+async fn bootstrap_grants_are_limited_per_context() {
+    let db = fresh().await.unwrap();
+    let d = create_genesis(&db.sequencer, TENANT, genesis(), 1_000)
+        .await
+        .unwrap();
+    let log = PgLog::new(db.sequencer.clone(), d, TENANT, "t".to_owned(), TTL);
+    let leader = Leader::acquire(log, d, EventKey::new(Secret::new([5; 32])))
+        .await
+        .unwrap();
+    let reader = PgReader::new(db.app.clone(), DomainId::from_bytes(d.0));
+    let mut keys = binding().0;
+    for s in 40..54 {
+        keys.insert(thumbprint(&public(s)), (Id([s; 16]), public(s)));
+    }
+    let mut core: Core = Authority::new(leader, reader, Bound(keys), Counter(0), d);
+    for (i, s) in (40..50).enumerate() {
+        let nonce = 100 + u8::try_from(i).unwrap();
+        allowed(&register_for(&mut core, d, (s, nonce), Some("ip:aa")).await);
+    }
+    let over = register_for(&mut core, d, (50, 120), Some("ip:aa")).await;
+    assert_eq!(over.decision.outcome, Outcome::Deny, "{over:?}");
+    assert!(over.record.is_some());
+    assert_eq!(
+        over.decision.blockers[0].subcode.as_deref(),
+        Some("policy:bootstrap-rate")
+    );
+    assert_eq!(over.decision.blockers[0].class, BlockerClass::Restricted);
+    allowed(&register_for(&mut core, d, (51, 121), Some("ip:bb")).await);
+    allowed(&register_for(&mut core, d, (52, 122), None).await);
     fold_check(&db.sequencer, d).await.unwrap();
 }
 
@@ -4129,6 +4185,7 @@ fn incoming_at(request: Request, seed: u8, iat: u64) -> Incoming {
         requester: None,
         explain: false,
         status: None,
+        context: None,
     }
 }
 
@@ -4789,6 +4846,7 @@ async fn an_eligibility_check_records_nothing() {
         requester: None,
         explain: false,
         status: None,
+        context: None,
     };
     let root = a.eligible(&inc, ROOT).await.unwrap();
     allowed(&root);

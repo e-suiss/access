@@ -56,6 +56,10 @@ pub trait GeoResolver: Send + Sync {
 pub trait IpPseudonyms: Send + Sync {
     /// The pseudonym of `ip` in `realm`; `None` when no key is available.
     fn pseudonym(&self, tenant: &[u8; 16], realm: &[u8; 16], ip: IpAddr) -> Option<[u8; 32]>;
+
+    /// The pseudonym of the IPv4 /24 or IPv6 /48 holding `ip` in `realm`, the bootstrap rate
+    /// context (OP-152 m.5 (b)); `None` when no key is available.
+    fn prefix(&self, tenant: &[u8; 16], realm: &[u8; 16], ip: IpAddr) -> Option<[u8; 32]>;
 }
 
 /// The breached-password check of a sign-in (IDP-3, OP-151 m.3 (o)).

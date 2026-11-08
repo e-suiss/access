@@ -14,6 +14,7 @@ use access_identity_session::domain::device::instance_key;
 use access_identity_ui::app::devices::{DeviceKey, bind_party, record_device_key};
 use access_identity_ui::domain::frontend::{IDENTITY_PEP, InstanceRegistration, rfc3339, unix_ms};
 use access_identity_ui::ports::DeviceInstances;
+use access_internal_api::context::RateContext;
 use access_internal_api::instances::{
     Registrant, Registration, RegistrationVerdict, SelfSigned, bootstrap_basis, register_nonce,
     self_signed_intent,
@@ -101,6 +102,8 @@ fn bytes(text: &str, min: usize, max: usize) -> Option<Vec<u8>> {
 pub(crate) struct ConsoleDevices<I> {
     pub(crate) app: Pool,
     pub(crate) instances: I,
+    /// The cell's address pseudonyms, for the bootstrap rate context (OP-152 m.5 (b)).
+    pub(crate) ips: std::sync::Arc<dyn access_identity_risk::ports::IpPseudonyms>,
 }
 
 impl<I: DeviceInstances> ConsoleDevices<I> {
@@ -142,7 +145,28 @@ impl<I: DeviceInstances> ConsoleDevices<I> {
             register,
             create,
             pep: String::from(IDENTITY_PEP),
+            context: None,
         }
+    }
+
+    /// The bootstrap rate context of a console session (OP-152 m.5 (b)): the pseudonym of the
+    /// address prefix its network binding names, or its autonomous system as a class.
+    fn context(&self, row: &ConsoleSessionRow, session: &ConsoleSession) -> Option<RateContext> {
+        use access_identity_session::domain::console::Binding;
+        use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+        let ip = match session.facts.binding {
+            Binding::Asn(asn) => return RateContext::attestation(&format!("asn.{asn}")),
+            Binding::V4Prefix([a, b, c]) => IpAddr::V4(Ipv4Addr::new(a, b, c, 0)),
+            Binding::V6Prefix(p) => {
+                let mut o = [0; 16];
+                o[..6].copy_from_slice(&p);
+                IpAddr::V6(Ipv6Addr::from(o))
+            }
+            Binding::Address(ip) => ip,
+        };
+        self.ips
+            .prefix(row.tenant.as_bytes(), row.realm.as_bytes(), ip)
+            .map(|p| RateContext::address(&p))
     }
 
     async fn recorded(
@@ -375,7 +399,7 @@ impl<I: DeviceInstances> Devices for ConsoleDevices<I> {
                 "The Party is not this user's",
             ));
         }
-        let registration = Self::registration(
+        let mut registration = Self::registration(
             &row,
             party,
             key.clone(),
@@ -390,6 +414,7 @@ impl<I: DeviceInstances> Devices for ConsoleDevices<I> {
                 ais: a.clone(),
             }),
         );
+        registration.context = self.context(&row, session);
         let verdict = self.instances.register(registration).await.map_err(down)?;
         let registered = match verdict {
             RegistrationVerdict::Registered(r) => r,

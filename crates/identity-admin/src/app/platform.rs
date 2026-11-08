@@ -24,6 +24,7 @@ use access_identity_oauth::domain::jwt::{
 };
 use access_identity_oauth::ports::Directory;
 use access_identity_oauth::ports::oauth::ClientKeys;
+use access_internal_api::context::RateContext;
 use access_internal_api::instances::{
     PlatformProduct, Registrant, Registration, RegistrationVerdict, SelfSigned, bootstrap_basis,
     register_nonce, self_signed_intent,
@@ -625,6 +626,8 @@ where
                     ais,
                 },
                 pep: self.pep.clone(),
+                // OP-152 m.5 (b)
+                context: RateContext::attestation(&format!("product.{}", caller.product.name())),
             })
             .await
             .map_err(|_| PlatformError::Unavailable)?;

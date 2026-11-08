@@ -152,6 +152,7 @@ impl<P: Pdp> Service<P> {
                 requester: requester.clone(),
                 explain: true,
                 status: None,
+                context: decoded.context,
             };
             return match self.pdp.explain_recorded(inc.clone(), record, scope).await {
                 Ok(r) => {
@@ -208,6 +209,7 @@ impl<P: Pdp> Service<P> {
             requester,
             explain: false,
             status: None,
+            context: None,
         };
         match self.pdp.eligible(inc, subject).await {
             Ok(r) => Reply::Decision(serde_json::json!({
@@ -241,6 +243,7 @@ impl<P: Pdp> Service<P> {
             requester,
             explain: false,
             status: None,
+            context: None,
         };
         let first = page.is_none();
         match self.pdp.search(inc, query, page).await {
@@ -265,6 +268,7 @@ impl<P: Pdp> Service<P> {
             requester,
             explain,
             status: None,
+            context: decoded.context,
         };
         match self.pdp.evaluate(inc).await {
             Ok(r) => {

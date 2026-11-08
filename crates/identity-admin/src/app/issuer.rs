@@ -4,6 +4,9 @@
 //! self-signed `party_register` and `instance_create` (OP-149 m.16 (a)).
 
 use access_identity_signer::issuer::{Registration as Ais, Step};
+use std::fmt::Write as _;
+
+use access_internal_api::context::RateContext;
 use access_internal_api::instances::{
     Registrant, Registration, RegistrationVerdict, SelfSigned, register_nonce,
 };
@@ -130,6 +133,14 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                     ais,
                 },
                 pep: String::from(self.pep),
+                // OP-152 m.5 (b)
+                context: RateContext::attestation(&format!(
+                    "claim-issuer.{}",
+                    realm.as_bytes().iter().fold(String::new(), |mut s, b| {
+                        let _ = write!(s, "{b:02x}");
+                        s
+                    })
+                )),
             })
             .await
             .map_err(|e| AdminError::Unavailable(e.0))?;

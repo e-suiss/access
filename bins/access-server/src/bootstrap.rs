@@ -1590,6 +1590,7 @@ where
                 ais: Vec::new(),
             },
             pep: String::from(IDENTITY_PEP),
+            context: None,
         };
         let instance = r.instance().ok_or(BootstrapError::Encode)?;
         let signed = |nonce: &[u8], payload: &meta::Payload| -> Result<Vec<u8>, BootstrapError> {

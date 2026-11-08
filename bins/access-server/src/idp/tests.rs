@@ -496,6 +496,7 @@ fn registration(d: Digest, registrant: Registrant, party: Id, seed: u8, new: boo
             ais: Vec::new(),
         },
         pep: String::from(PEP),
+        context: None,
     };
     r.create.ais = self_signed(d, &challenge, &r.create_payload(), party, seed);
     if new {
@@ -1359,4 +1360,41 @@ async fn self_signed_registration_binds_only_the_signing_key() {
     for seed in [13, 14, 15, 16, 17] {
         assert!(w.plane.actors.bound(&thumbprint(&public(seed))).is_none());
     }
+}
+
+// §13.7.4, OP-152 m.5 (b): the identity plane forwards a registration's rate context; ten
+// bootstrap Exercises (five new users) fill one context's hour, another context is untouched
+#[tokio::test]
+async fn registrations_are_limited_per_context() {
+    use access_internal_api::context::RateContext;
+    let w = World::new().await;
+    let (_, _, d) = w.realm("bootstrap-rate").await;
+    let with = |seed: u8, context: &str| {
+        let mut r = registration(d, device(), Id([seed; 16]), seed, true);
+        r.context = RateContext::parse(context);
+        r
+    };
+    for seed in 60..65 {
+        let v = Instances::register(&w.plane, with(seed, "ip:aa"))
+            .await
+            .unwrap();
+        assert!(matches!(v, RegistrationVerdict::Registered(_)), "{v:?}");
+    }
+    let over = Instances::register(&w.plane, with(65, "ip:aa"))
+        .await
+        .unwrap();
+    assert_eq!(
+        over,
+        RegistrationVerdict::Refused {
+            code: String::from("denied")
+        }
+    );
+    let other = Instances::register(&w.plane, with(66, "ip:bb"))
+        .await
+        .unwrap();
+    assert!(
+        matches!(other, RegistrationVerdict::Registered(_)),
+        "{other:?}"
+    );
+    fold_check(&w.db.sequencer, d).await.unwrap();
 }

@@ -2238,6 +2238,7 @@ mod provision {
                 w.keys.clone(),
             )),
             geo: Arc::new(access_identity_risk::adapters::NoGeoSource),
+            ips: Arc::new(access_identity_risk::adapters::NoPseudonyms),
         }
     }
 

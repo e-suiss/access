@@ -115,6 +115,31 @@ fn proofs_and_the_continued_exercise_decode() {
     }
 }
 
+// OP-152 m.5 (b): the PEP's pseudonymous rate context travels in `rate_context`
+#[test]
+fn a_rate_context_is_decoded_or_refused() {
+    let d = decode(body("", CARRIERS).as_bytes(), MAX).unwrap();
+    assert_eq!(d.context, None);
+    let with = decode(
+        body(r#", "rate_context": "ip:0a1b""#, CARRIERS).as_bytes(),
+        MAX,
+    )
+    .unwrap();
+    assert_eq!(with.context, RateContext::parse("ip:0a1b"));
+    for bad in [r#""""#, r#""192.0.2.0/24""#, "7"] {
+        let extra = format!(r#", "rate_context": {bad}"#);
+        assert_eq!(
+            decode(body(&extra, CARRIERS).as_bytes(), MAX).unwrap_err(),
+            AdpError("rate_context"),
+            "{bad}"
+        );
+    }
+    assert_eq!(
+        pointer(Body::Context, "rate_context").as_deref(),
+        Some("#/context/rate_context")
+    );
+}
+
 #[test]
 fn an_unknown_context_member_is_a_protocol_error() {
     let e = decode(body(r#", "hint": 1"#, CARRIERS).as_bytes(), MAX).unwrap_err();

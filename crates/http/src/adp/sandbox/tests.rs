@@ -90,6 +90,7 @@ fn incoming(home: Digest, payload: Option<Payload>) -> Incoming {
         requester: None,
         explain: false,
         status: None,
+        context: None,
     }
 }
 

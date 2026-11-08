@@ -211,6 +211,7 @@ pub(crate) fn router<P: RealmPlane>(
         platform: realms.platform.clone(),
     });
     let (app, ids, plane) = (realms.app.clone(), realms.ids.clone(), realms.plane.clone());
+    let ips = Arc::clone(&realms.ips);
     let api = Api::new(
         ServerApi::new(
             app.clone(),
@@ -247,6 +248,7 @@ pub(crate) fn router<P: RealmPlane>(
         devices: crate::console::devices::ConsoleDevices {
             app,
             instances: plane,
+            ips,
         },
         grants: tokens::ConsoleGrants(tokens),
     };

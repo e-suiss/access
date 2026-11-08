@@ -8,6 +8,7 @@ use access_authority_core::app::impact::{Compromised, Revoked};
 use access_authority_core::app::{Response, Scope};
 use access_authority_core::domain::{ProofRef, Request};
 use access_authority_core::query::{Change, Hit, Query};
+use access_internal_api::context::RateContext;
 use access_kernel::codec::Canonical;
 use access_kernel::combinator::codec::decision_value;
 use access_kernel::combinator::{Capacity, Mode, Outcome};
@@ -31,6 +32,8 @@ pub struct Decoded {
     pub request: Request,
     /// The AIS bytes.
     pub ais: Option<Vec<u8>>,
+    /// The PEP's pseudonymous rate context (§13.7.4, OP-152 m.5 (b)).
+    pub context: Option<RateContext>,
 }
 
 type R<T> = Result<T, AdpError>;
@@ -60,7 +63,8 @@ pub fn pointer(body: Body, code: &str) -> Option<String> {
         (
             _,
             "domain" | "nonce" | "payload" | "mode" | "basis" | "capacity" | "proofs" | "exercise"
-            | "consistency_token" | "ais" | "intent" | "query" | "record" | "scope",
+            | "consistency_token" | "ais" | "intent" | "query" | "record" | "scope"
+            | "rate_context",
         ) => code,
         (_, "aas-binding") => "proofs",
         (_, "intent-validity" | "window") => "intent/validity",
@@ -487,13 +491,14 @@ fn decode_value(root: &Json) -> R<Decoded> {
 }
 
 /// What an eligibility body's `set` may not carry: it is always an anonymous `check`.
-const NOT_IN_SET: [&str; 6] = [
+const NOT_IN_SET: [&str; 7] = [
     "mode",
     "nonce",
     "payload",
     "exercise",
     "consistency_token",
     "ais",
+    "rate_context",
 ];
 
 /// Decodes an eligibility body `{subject, set, as_of?}` (OP-149 m.10): `set` is the context
@@ -712,7 +717,20 @@ fn context(ctx: &mut Obj<'_>, intent: IntentEnvelope) -> R<Decoded> {
             .transpose()?,
     };
     let ais = ctx.opt("ais").map(|a| bytes(a, "ais")).transpose()?;
-    Ok(Decoded { request, ais })
+    // OP-152 m.5 (b)
+    let context = ctx
+        .opt("rate_context")
+        .map(|c| {
+            c.as_str()
+                .and_then(RateContext::parse)
+                .ok_or(AdpError("rate_context"))
+        })
+        .transpose()?;
+    Ok(Decoded {
+        request,
+        ais,
+        context,
+    })
 }
 
 /// A dCBOR value as JSON: binaries base64url, a digest `[-16, h]` as `h` (L1-ADP-6).

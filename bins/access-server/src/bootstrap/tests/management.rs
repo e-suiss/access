@@ -266,6 +266,7 @@ async fn console(label: &str, with_adp: bool) -> Console {
                 w.keys.clone(),
             )),
             geo: std::sync::Arc::new(access_identity_risk::adapters::NoGeoSource),
+            ips: std::sync::Arc::new(access_identity_risk::adapters::NoPseudonyms),
         },
         crate::admin::InProcessRoutes {
             oauth: oauth.clone(),

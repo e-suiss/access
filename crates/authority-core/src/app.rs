@@ -91,6 +91,10 @@ pub struct Incoming {
     /// before deciding it (OP-150 m.10 (a), §11.20): the PAP's contract names it, so the entry
     /// is committed with the PAP digest. `None` for every other request.
     pub status: Option<access_kernel::status::StatusRef>,
+    /// The pseudonymous context the PEP names the request by (address-prefix pseudonym or
+    /// attestation class): bootstrap Grants are counted per PEP, context and hour, and under the
+    /// PEP alone without one (§13.7.4, OP-152 m.5 (b)).
+    pub context: Option<access_internal_api::context::RateContext>,
 }
 
 const BOOTSTRAP: [&str; 2] = ["party_register", "instance_create"];
@@ -1228,6 +1232,59 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         Ok(())
     }
 
+    /// The bootstrap rate: an allowed Exercise of the Public bootstrap Grant draws on its PEP's
+    /// and context's hourly counter; over [`crate::rate::BOOTSTRAP_RATE`] it is denied
+    /// (§13.7.4, OP-152 m.5 (b)).
+    async fn bootstrap_rate(
+        &self,
+        inc: &Incoming,
+        evaluation: &mut Evaluation,
+        now: u64,
+    ) -> Result<(), CoreError> {
+        let req = &inc.request;
+        let bootstrap = matches!(req.basis, meta::ExerciseBasis::Public(g)
+                if g == meta::object_id(&self.domain, kind::GRANT, crate::genesis::BOOTSTRAP_GRANT))
+            && req
+                .payload
+                .as_ref()
+                .is_some_and(|p| BOOTSTRAP.contains(&p.action()));
+        if !bootstrap || evaluation.decision.outcome != Outcome::Allow {
+            return Ok(());
+        }
+        let (len, limit) = crate::rate::BOOTSTRAP_RATE;
+        let key = crate::rate::bootstrap_rate_key(&inc.pep, inc.context.as_ref(), len, now);
+        if self.counter(&key).await? >= limit {
+            REQUESTER_THROTTLED.incr(["bootstrap"]);
+            tracing::warn!(
+                event = "api.throttled",
+                outcome = "deny",
+                surface = "bootstrap",
+                "bootstrap rate reached; the request is denied (§13.7.4)"
+            );
+            evaluation.decision = Decision {
+                outcome: Outcome::Deny,
+                blockers: vec![Blocker {
+                    class: BlockerClass::Restricted,
+                    subcode: Some(String::from("policy:bootstrap-rate")),
+                    position: Position::ActorSide,
+                    resolver: Resolver::Time,
+                    remediation: Remediation::WaitUntil(
+                        now.saturating_sub(now.checked_rem(len).unwrap_or(0))
+                            .saturating_add(len),
+                    ),
+                }],
+                unmet: Vec::new(),
+                relied_on: Vec::new(),
+            };
+            evaluation.effects.clear();
+            evaluation.draws.clear();
+            evaluation.releases.clear();
+            return Ok(());
+        }
+        evaluation.draws.push((key, limit, 1, None));
+        Ok(())
+    }
+
     /// A `check` of `inc` as if `subject` asked it, without an AIS: the single-subject
     /// eligibility check (OP-149 m.10, §9.5.2 rule 1). Nothing is recorded.
     ///
@@ -1356,6 +1413,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                 .await?;
             self.requester_rules(req, &mut evaluation, actor, open, now)
                 .await?;
+            self.bootstrap_rate(inc, &mut evaluation, now).await?;
             observe(&evaluation.decision);
             if req.mode == Mode::Check {
                 return Ok(answer(evaluation.decision, None, None, false));

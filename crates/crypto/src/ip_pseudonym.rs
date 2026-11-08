@@ -12,6 +12,24 @@ use crate::dit::DitGuard;
 use crate::secret::Secret;
 
 const CONTEXT: &[u8] = b"access/ip-pseudonym/v1\0";
+const PREFIX_CONTEXT: &[u8] = b"access/ip-prefix-pseudonym/v1\0";
+
+/// The address prefix a bootstrap rate context names: an IPv4 address (IPv4-mapped form) to
+/// its /24, any other address to its /48; the rest is zeroed (§13.7.4, OP-152 m.5 (b)).
+#[must_use]
+pub fn prefix(address: &[u8; 16]) -> [u8; 16] {
+    let mapped = address
+        .iter()
+        .enumerate()
+        .take(12)
+        .all(|(i, b)| *b == if i < 10 { 0 } else { 0xff });
+    let keep = if mapped { 15 } else { 6 };
+    let mut out = [0; 16];
+    for (o, a) in out.iter_mut().zip(address).take(keep) {
+        *o = *a;
+    }
+    out
+}
 
 /// The token label of the cell's address pseudonym key.
 pub const LABEL: &str = "access/risk/ip-pseudonym";
@@ -50,7 +68,31 @@ impl IpPseudonymKey {
         realm: &[u8; 16],
         address: &[u8; 16],
     ) -> Result<[u8; 32], HsmError> {
-        let mut message = CONTEXT.to_vec();
+        self.mac(CONTEXT, tenant, realm, address)
+    }
+
+    /// `HMAC-SHA-256(K, "access/ip-prefix-pseudonym/v1" ‖ 0x00 ‖ tenant ‖ realm ‖ prefix)`, where
+    /// the prefix is [`prefix`] of the address: the bootstrap rate context (OP-152 m.5 (b)).
+    ///
+    /// # Errors
+    /// [`HsmError`] when the token refuses.
+    pub fn prefix_pseudonym(
+        &self,
+        tenant: &[u8; 16],
+        realm: &[u8; 16],
+        address: &[u8; 16],
+    ) -> Result<[u8; 32], HsmError> {
+        self.mac(PREFIX_CONTEXT, tenant, realm, &prefix(address))
+    }
+
+    fn mac(
+        &self,
+        context: &[u8],
+        tenant: &[u8; 16],
+        realm: &[u8; 16],
+        address: &[u8; 16],
+    ) -> Result<[u8; 32], HsmError> {
+        let mut message = context.to_vec();
         message.extend_from_slice(tenant);
         message.extend_from_slice(realm);
         message.extend_from_slice(address);
@@ -84,5 +126,32 @@ mod tests {
         assert_ne!(one, a.pseudonym(&[1; 16], &[3; 16], &ip).unwrap());
         assert_ne!(one, b.pseudonym(&[1; 16], &[2; 16], &ip).unwrap());
         assert_ne!(one, a.pseudonym(&[1; 16], &[2; 16], &[8; 16]).unwrap());
+    }
+
+    // OP-152 m.5 (b): one context per IPv4 /24 or IPv6 /48, apart from the address pseudonym
+    #[test]
+    fn prefix_pseudonyms_name_the_prefix() {
+        let k = IpPseudonymKey::new(Secret::new([1; 32]));
+        let v4 = |last: u8, third: u8| {
+            let mut a = [0; 16];
+            a[10] = 0xff;
+            a[11] = 0xff;
+            a[12..].copy_from_slice(&[192, 0, third, last]);
+            a
+        };
+        let mut v6 = [0x20; 16];
+        let p = |a: &[u8; 16]| k.prefix_pseudonym(&[1; 16], &[2; 16], a).unwrap();
+        assert_eq!(p(&v4(1, 2)), p(&v4(200, 2)));
+        assert_ne!(p(&v4(1, 2)), p(&v4(1, 3)));
+        let one = p(&v6);
+        v6[6] = 0;
+        v6[15] = 1;
+        assert_eq!(one, p(&v6));
+        v6[5] = 0;
+        assert_ne!(one, p(&v6));
+        assert_ne!(
+            p(&v4(1, 2)),
+            k.pseudonym(&[1; 16], &[2; 16], &prefix(&v4(1, 2))).unwrap()
+        );
     }
 }

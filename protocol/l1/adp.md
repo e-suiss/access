@@ -69,8 +69,11 @@ The CBOR form of a body is the dCBOR of the same members with media type `applic
 | `proofs` | array of 1 to 64 proof objects (L1-ADP-12) | no |
 | `exercise` | digest: the ExerciseID continued | `continue` |
 | `consistency_token` | text: a token from an earlier response; the answer is given at or after the position it names, else the domain answers 503 | no; ignored by `commit` and `continue` |
+| `rate_context` | text, 1 to 96 of `A-Z a-z 0-9 - _ . :`: the PEP's pseudonymous context of the request, `ip:` and a keyed pseudonym of the client's IPv4 /24 or IPv6 /48, or `att:` and an attestation class; never an address | no |
 
-A request without `ais` has an anonymous actor and can only use Public Grants.
+A request without `ais` has an anonymous actor and can only use Public Grants. A `commit` or `continue` whose basis does not resolve (the actor is not the root or the holder, `since` does not match, or there is no such Grant) is a recorded `DENY` `no_covering_authority` that the actor resolves; the answer is the same in every case, so it does not say whether the Grant exists (OP-152 m.5 (a)).
+
+<a id="L1-ADP-7a"></a>**L1-ADP-7a. Bootstrap rate.** An allowed Exercise of the Genesis bootstrap Grant (`party_register`, `instance_create`) draws on a recorded counter per PEP, `rate_context` and hour; the eleventh in one hour is a recorded `DENY` `restricted` / `policy:bootstrap-rate` that the actor resolves by waiting until the next hour. A request without `rate_context` is counted under its PEP alone (§13.7.4, OP-152 m.5 (b)). A malformed `rate_context` is the protocol error `rate_context`; an eligibility check never carries one.
 
 <a id="L1-ADP-8"></a>**L1-ADP-8. Intent object.** The intent object has the members of `intent-envelope` with the same names. Their JSON forms:
 

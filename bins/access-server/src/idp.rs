@@ -23,6 +23,7 @@ use access_identity_ui::ports::{Approvals, DeviceInstances};
 use access_internal_api::approvals::{
     Contribution, Opening, contribute_intent, contribute_payload,
 };
+use access_internal_api::context::RateContext;
 use access_internal_api::instances::{
     Registered, Registration, RegistrationVerdict, SelfSigned, Termination, bootstrap_basis,
     self_signed_intent, terminate_intent, terminate_payload,
@@ -266,7 +267,7 @@ where
             exercise: None,
             consistency: None,
         };
-        self.commit(request, s.ais, s.pep).await
+        self.commit(request, s.ais, (s.pep, None)).await
     }
 
     async fn signer(&self, domain: Digest, ais: &[u8]) -> Result<Option<Id>, Unavailable> {
@@ -293,7 +294,7 @@ where
         &self,
         request: Request,
         ais: Vec<u8>,
-        pep: String,
+        (pep, context): (String, Option<RateContext>),
     ) -> Result<Verdict, Unavailable> {
         let domain = request.domain;
         let nonce = request.nonce.clone();
@@ -304,6 +305,7 @@ where
             requester: None,
             explain: false,
             status: None,
+            context,
         };
         let r = match self.domains.exercise(&inc).await {
             Ok(r) => r,
@@ -381,7 +383,9 @@ where
             exercise: None,
             consistency: None,
         };
-        self.commit(request, e.ais.clone(), r.pep.clone()).await
+        // OP-152 m.5 (b)
+        self.commit(request, e.ais.clone(), (r.pep.clone(), r.context.clone()))
+            .await
     }
 
     /// OP-149 m.16 (a), L0-META-7: binds the new key to the checked Party, commits
@@ -449,7 +453,7 @@ where
         ais: Vec<u8>,
         pep: String,
     ) -> Result<Verdict, Unavailable> {
-        self.commit(request, ais, pep).await
+        self.commit(request, ais, (pep, None)).await
     }
 
     async fn lead(&self, domain: Digest) -> Result<(), Unavailable> {
@@ -492,7 +496,7 @@ where
             exercise: None,
             consistency: None,
         };
-        self.commit(request, t.ais, t.pep).await
+        self.commit(request, t.ais, (t.pep, None)).await
     }
 }
 
@@ -543,7 +547,7 @@ where
             exercise: None,
             consistency: None,
         };
-        self.commit(request, c.ais, c.pep).await
+        self.commit(request, c.ais, (c.pep, None)).await
     }
 }
 

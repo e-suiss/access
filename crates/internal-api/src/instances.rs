@@ -148,6 +148,9 @@ pub struct Registration {
     pub create: SelfSigned,
     /// The identity plane as PEP.
     pub pep: String,
+    /// The pseudonymous context the bootstrap rate counts the Exercises under; `None` counts
+    /// them under the PEP (§13.7.4, OP-152 m.5 (b)).
+    pub context: Option<crate::context::RateContext>,
 }
 
 impl Registration {
