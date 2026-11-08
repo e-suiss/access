@@ -83,6 +83,8 @@ const PRODUCT: &str = "cli_0000000000000000000000000e";
 /// A third party's product registered with the same `platform_product` role (OP-150 m.3 (m)).
 const THIRD: &str = "cli_0000000000000000000000000f";
 const SECRET: &str = "shop-secret-shop-secret-shop-secret-shop-se";
+/// A public client the realm registered as a third party (OP-153 m.3 (z)).
+const SHARING: &str = "cli_0000000000000000000000000g";
 
 struct SysClock;
 
@@ -378,6 +380,7 @@ fn client(n: u8, id: &str, method: &str) -> ClientRow {
         require_par: false,
         public_sub: false,
         sector_identifier_uri: None,
+        third_party: false,
     }
 }
 
@@ -407,7 +410,7 @@ async fn world() -> World {
         open_dpop_replay_day(&db.archive, d).await.unwrap();
     }
     let t = create_tenant(&db.app, "pool-default").await.unwrap();
-    let d = domain(&db, t, 6).await;
+    let d = domain(&db, t, 7).await;
     let mut tx = TenantTx::begin_tenant(&db.app, t).await.unwrap();
     let r = create_realm(&mut tx, &d, "acme", "pool-default")
         .await
@@ -429,6 +432,7 @@ async fn world() -> World {
         (PUSHED, "client_secret_basic"),
         (PRODUCT, "private_key_jwt"),
         (THIRD, "private_key_jwt"),
+        (SHARING, "none"),
     ]
     .into_iter()
     .enumerate()
@@ -452,6 +456,7 @@ async fn world() -> World {
             require_par: id == PUSHED,
             public_sub: false,
             sector_identifier_uri: None,
+            third_party: id == SHARING,
             ..client(n, id, method)
         };
         if id == PRODUCT || id == THIRD {
@@ -2273,4 +2278,84 @@ async fn an_address_the_account_never_proved_is_not_released() {
     assert!(id.get("email").is_none() && id.get("email_verified").is_none());
     let info = body(&w.userinfo(t["access_token"].as_str().unwrap()).await, 200);
     assert!(info.get("email").is_none());
+}
+
+// OP-153 m.3 (z), OIDC Core §3.1.2.6
+#[tokio::test]
+async fn a_third_party_asks_before_it_receives_claims_and_stopping_ends_the_release() {
+    let w = world().await;
+    w.identity("ada@example.com", true).await;
+    let ask = [("client_id", SHARING), ("scope", "openid email")];
+    let to = location(&w.authorize(&ask, Some(&w.cookie)).await);
+    assert!(
+        to.starts_with(&format!("{ISSUER}/login?return_to=")) && to.contains("reason=share"),
+        "{to}"
+    );
+    let silent = location(
+        &w.authorize(
+            &[
+                ("client_id", SHARING),
+                ("scope", "openid email"),
+                ("prompt", "none"),
+            ],
+            Some(&w.cookie),
+        )
+        .await,
+    );
+    assert_eq!(query(&silent, "error"), "consent_required");
+    let plain = location(
+        &w.authorize(&[("client_id", SHARING)], Some(&w.cookie))
+            .await,
+    );
+    assert!(
+        plain.starts_with("https://shop.example/cb?code="),
+        "nothing to share, nothing to ask: {plain}"
+    );
+
+    let client = [7_u8; 16];
+    let mut tx = TenantTx::begin(&w.db.app, w.realm.tenant, w.realm.realm)
+        .await
+        .unwrap();
+    tx.put_consent(
+        w.subject,
+        client,
+        &[String::from("email"), String::from("email_verified")],
+        now(),
+    )
+    .await
+    .unwrap();
+    tx.commit().await.unwrap();
+    let to = location(&w.authorize(&ask, Some(&w.cookie)).await);
+    let code = query(&to, "code");
+    let tokens = body(
+        &w.token(
+            &[
+                ("grant_type", "authorization_code"),
+                ("client_id", SHARING),
+                ("code", &code),
+                ("redirect_uri", CB),
+                ("code_verifier", VERIFIER),
+            ],
+            None,
+        )
+        .await,
+        200,
+    );
+    let id = claims(tokens["id_token"].as_str().unwrap());
+    assert_eq!(id["email"], "ada@example.com");
+    let access = tokens["access_token"].as_str().unwrap();
+    assert_eq!(
+        body(&w.userinfo(access).await, 200)["email"],
+        "ada@example.com"
+    );
+
+    let mut tx = TenantTx::begin(&w.db.app, w.realm.tenant, w.realm.realm)
+        .await
+        .unwrap();
+    assert!(tx.stop_consent(w.subject, SHARING, now()).await.unwrap());
+    assert!(!tx.stop_consent(w.subject, SHARING, now()).await.unwrap());
+    tx.commit().await.unwrap();
+    let info = body(&w.userinfo(access).await, 200);
+    assert!(info.get("email").is_none(), "{info}");
+    assert!(info["sub"].is_string());
 }

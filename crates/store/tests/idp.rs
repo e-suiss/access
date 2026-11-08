@@ -133,6 +133,7 @@ fn client_row(seed: u8) -> ClientRow {
         require_par: false,
         public_sub: false,
         sector_identifier_uri: None,
+        third_party: false,
     }
 }
 

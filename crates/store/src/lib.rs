@@ -16,6 +16,7 @@ pub mod bodies;
 pub mod challenges;
 pub mod claims;
 pub mod connect;
+pub mod consents;
 pub mod console;
 pub mod derived;
 pub mod dpop;

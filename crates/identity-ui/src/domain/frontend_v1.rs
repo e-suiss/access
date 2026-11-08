@@ -432,19 +432,33 @@ pub const ROUTES: &[Route] = &[
         "combineAccounts",
         "Combines two re-authenticated accounts, irreversibly (OP-153 m.3 (m)).",
     ),
-    planned(
+    live(
         Owner::N4,
         Verb::Get,
         "/v1/account/connected-apps",
         "listConnectedApps",
         "The apps the person shares claims with (OP-153 m.3 (z)).",
     ),
-    planned(
+    live(
         Owner::N4,
         Verb::Delete,
         "/v1/account/connected-apps/{client}",
         "stopSharing",
         "Stops sharing claims with an app.",
+    ),
+    live(
+        Owner::N4,
+        Verb::Post,
+        "/v1/account/connected-apps/preview",
+        "previewSharing",
+        "What a waiting third-party request asks the person to share (OP-153 m.3 (z)).",
+    ),
+    live(
+        Owner::N4,
+        Verb::Post,
+        "/v1/account/connected-apps",
+        "shareWithApp",
+        "Shares the claims a waiting third-party request asks for (OP-153 m.3 (z)).",
     ),
     planned(
         Owner::N5,

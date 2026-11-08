@@ -785,6 +785,7 @@ impl ProductPlan {
             }),
             require_par: false,
             subject: access_identity_admin::domain::Subject::default(),
+            third_party: false,
         }
     }
 }
@@ -1773,6 +1774,7 @@ where
             require_par: false,
             platform: None,
             subject: access_identity_admin::domain::Subject::default(),
+            third_party: false,
         };
         self.change(
             admin,

@@ -123,6 +123,37 @@ pub fn parse(raw: &str) -> Result<Requested, InvalidClaims> {
     })
 }
 
+/// The profile claims the `profile` scope stands for.
+pub const PROFILE_CLAIMS: [&str; 5] = ["name", "given_name", "family_name", "locale", "zoneinfo"];
+
+/// Every claim a grant of `scopes` and `requested` may release, to any target: what a third
+/// party's consent must cover (OP-153 m.3 (z)).
+#[must_use]
+pub fn shared_set(scopes: &[&str], requested: &Requested) -> BTreeSet<&'static str> {
+    let mut out: BTreeSet<&'static str> = requested
+        .id_token
+        .iter()
+        .chain(requested.userinfo.iter())
+        .copied()
+        .collect();
+    if scopes.contains(&"email") {
+        out.extend(["email", "email_verified"]);
+    }
+    if scopes.contains(&"profile") {
+        out.extend(PROFILE_CLAIMS);
+    }
+    if out.contains("email_verified") || out.contains("email") {
+        out.extend(["email", "email_verified"]);
+    }
+    out
+}
+
+/// Whether a consent to `consented` covers `wanted`.
+#[must_use]
+pub fn covers(consented: &[String], wanted: &BTreeSet<&'static str>) -> bool {
+    wanted.iter().all(|w| consented.iter().any(|c| c == w))
+}
+
 /// What the account holds to release.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Held {
@@ -207,5 +238,25 @@ mod tests {
             release(&["email"], &Requested::default(), Target::Userinfo, &held).len(),
             2
         );
+    }
+
+    // OP-153 m.3 (z)
+    #[test]
+    fn a_consent_covers_every_claim_a_grant_may_release() {
+        let r = parse(r#"{"userinfo":{"locale":null}}"#).unwrap();
+        let set = shared_set(&["openid", "email"], &r);
+        assert_eq!(
+            set.iter().copied().collect::<Vec<_>>(),
+            ["email", "email_verified", "locale"]
+        );
+        let given = vec![String::from("email"), String::from("email_verified")];
+        assert!(!covers(&given, &set));
+        let more = vec![
+            String::from("email"),
+            String::from("email_verified"),
+            String::from("locale"),
+        ];
+        assert!(covers(&more, &set));
+        assert!(shared_set(&["openid"], &Requested::default()).is_empty());
     }
 }

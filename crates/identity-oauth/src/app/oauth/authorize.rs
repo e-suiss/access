@@ -169,25 +169,26 @@ impl<E: Env> OAuth<E> {
             if req.prompt == Prompt::None {
                 return Ok(back(AuthError::LOGIN_REQUIRED));
             }
-            if let Some((d, hash)) = l.stored
-                && !tx.use_request(d, &hash, signed(now)).await?
-            {
-                return Ok(problem(Unredirectable::RequestUri));
-            }
-            let uri = self
-                .store_request(&mut tx, &l.client, req, false, now, INTERACTIVE_TTL_MS)
-                .await?;
-            tx.commit().await?;
-            let back_to = return_to(&realm.issuer, &l.client.id, &uri);
-            return Ok(Reply::Redirect(self.env.pages().login(
-                &realm.issuer,
-                &back_to,
-                reason,
-            )));
+            return self.to_login(tx, realm, &l, now, reason).await;
         }
         let (Some(session), Some(s)) = (session, signed_in) else {
             return Ok(back(AuthError::LOGIN_REQUIRED));
         };
+        // OP-153 m.3 (z)
+        if self.unshared(&mut tx, &l, session.subject).await? {
+            if req.prompt == Prompt::None {
+                return Ok(back(AuthError::CONSENT_REQUIRED));
+            }
+            return self
+                .to_login(
+                    tx,
+                    realm,
+                    &l,
+                    now,
+                    crate::domain::tokens::LoginReason::Share,
+                )
+                .await;
+        }
         if let Some((d, hash)) = l.stored
             && !tx.use_request(d, &hash, signed(now)).await?
         {
@@ -229,6 +230,66 @@ impl<E: Env> OAuth<E> {
             req.state.as_deref(),
             &realm.issuer,
         )))
+    }
+
+    /// To the hosted login with the request stored for `reason`.
+    async fn to_login(
+        &self,
+        mut tx: <E::Db as crate::ports::oauth::OAuthDb>::Tx,
+        realm: &Realm,
+        l: &Loaded,
+        now: u64,
+        reason: crate::domain::tokens::LoginReason,
+    ) -> Result<Reply, Unavailable> {
+        if let Some((d, hash)) = l.stored
+            && !tx.use_request(d, &hash, signed(now)).await?
+        {
+            return Ok(problem(Unredirectable::RequestUri));
+        }
+        let uri = self
+            .store_request(
+                &mut tx,
+                &l.client,
+                &l.request,
+                false,
+                now,
+                INTERACTIVE_TTL_MS,
+            )
+            .await?;
+        tx.commit().await?;
+        let back_to = return_to(&realm.issuer, &l.client.id, &uri);
+        Ok(Reply::Redirect(self.env.pages().login(
+            &realm.issuer,
+            &back_to,
+            reason,
+        )))
+    }
+
+    /// Whether a third-party client asks for claims the person has not shared with it
+    /// (OP-153 m.3 (z)); a first-party client is never asked.
+    async fn unshared(
+        &self,
+        tx: &mut <E::Db as crate::ports::oauth::OAuthDb>::Tx,
+        l: &Loaded,
+        subject: [u8; 16],
+    ) -> Result<bool, Unavailable> {
+        use crate::domain::claims_request::{ClaimsAsk, covers, shared_set};
+        if !l.client.third_party {
+            return Ok(false);
+        }
+        let scopes: Vec<&str> = l.request.scope.iter().map(String::as_str).collect();
+        let requested = l
+            .request
+            .claims
+            .as_ref()
+            .map(ClaimsAsk::requested)
+            .unwrap_or_default();
+        let wanted = shared_set(&scopes, &requested);
+        if wanted.is_empty() {
+            return Ok(false);
+        }
+        let given = tx.consent(subject, l.client.uuid).await?;
+        Ok(!given.as_deref().is_some_and(|g| covers(g, &wanted)))
     }
 
     async fn store_request(

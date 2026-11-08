@@ -597,6 +597,213 @@ where
     }
 }
 
+/// No third-party request waits at that `return_to`, or no consent by that client.
+const NO_SHARE: Problem = Problem {
+    status: 404,
+    code: "no-such-app",
+    title: "That app isn't asking for anything here",
+    retry_after_s: None,
+};
+
+/// The claims a waiting authorization request of a third-party client asks the person to share
+/// (OP-153 m.3 (z)): the request `return_to` names, still open.
+struct Pending {
+    client: access_store::idp::ClientRow,
+    claims: Vec<String>,
+}
+
+impl<K, C, M> Hosted<K, C, M>
+where
+    K: Kits,
+    C: Clock + Sync,
+    M: Messages,
+{
+    async fn pending(&self, kit: &RealmKit, return_to: &str) -> Result<Pending, Reply> {
+        use access_identity_oauth::domain::claims_request::{ClaimsAsk, shared_set};
+        use access_identity_oauth::domain::request::{AuthRequest, REQUEST_URI_PREFIX};
+        let issuer = access_identity_oauth::domain::issuer::Issuer::parse(&kit.issuer)
+            .map_err(|_| unavailable())?;
+        if !access_identity_oauth::domain::login::return_to_ok(&issuer, return_to) {
+            return Err(Reply::problem(NO_SHARE));
+        }
+        let query = return_to.split_once('?').map_or("", |(_, q)| q);
+        let params = access_identity_oauth::domain::request::Params::parse(query)
+            .map_err(|_| Reply::problem(NO_SHARE))?;
+        let handle = params
+            .get("request_uri")
+            .and_then(|u| u.strip_prefix(REQUEST_URI_PREFIX))
+            .and_then(|h| b64url_decode(h).ok())
+            .ok_or_else(|| Reply::problem(NO_SHARE))?;
+        let hash = access_crypto::oauth::opaque_digest(
+            access_identity_oauth::app::oauth::REQUEST_CONTEXT,
+            &handle,
+        );
+        let now = self.clock.now_ms();
+        let from_day = i32::try_from((now / 86_400_000).saturating_sub(1)).unwrap_or(i32::MAX);
+        let mut t = TenantTx::begin(&self.db, kit.tenant, kit.realm)
+            .await
+            .map_err(|_| unavailable())?;
+        let row = t
+            .oauth_request(from_day, &hash)
+            .await
+            .map_err(|_| unavailable())?
+            .filter(|r| r.used_ms.is_none() && u64::try_from(r.expires_ms).is_ok_and(|e| e > now));
+        let Some(row) = row else {
+            t.commit().await.map_err(|_| unavailable())?;
+            return Err(Reply::problem(NO_SHARE));
+        };
+        let client = access_store::idp::client_by_uuid(&mut t, row.client)
+            .await
+            .map_err(|_| unavailable())?
+            .filter(|c| c.active && c.third_party);
+        t.commit().await.map_err(|_| unavailable())?;
+        let (Some(client), Ok(req)) = (client, serde_json::from_slice::<AuthRequest>(&row.params))
+        else {
+            return Err(Reply::problem(NO_SHARE));
+        };
+        if params.get("client_id") != Some(client.client_id.as_str()) {
+            return Err(Reply::problem(NO_SHARE));
+        }
+        let scopes: Vec<&str> = req.scope.iter().map(String::as_str).collect();
+        let requested = req
+            .claims
+            .as_ref()
+            .map(ClaimsAsk::requested)
+            .unwrap_or_default();
+        let claims = shared_set(&scopes, &requested)
+            .into_iter()
+            .map(String::from)
+            .collect();
+        Ok(Pending { client, claims })
+    }
+
+    /// `POST /v1/account/connected-apps/preview` (OP-153 m.3 (z)): what the waiting third-party
+    /// request asks the person to share, for the "Share with *App*" screen. Identity claims
+    /// only; authority is asked for through RAR and S1, never here.
+    pub async fn share_preview(
+        &self,
+        entry: &RealmEntry,
+        b: &Browser<'_>,
+        return_to: &str,
+    ) -> Reply {
+        let kit = match self.kit(entry).await {
+            Ok(k) => k,
+            Err(r) => return r,
+        };
+        if let Err(r) = self.fresh(&kit, b, None).await {
+            return r;
+        }
+        match self.pending(&kit, return_to).await {
+            Ok(p) => Reply::json(
+                200,
+                json!({
+                    "client_id": p.client.client_id,
+                    "app": p.client.display_name,
+                    "claims": p.claims,
+                }),
+            ),
+            Err(r) => r,
+        }
+    }
+
+    /// `POST /v1/account/connected-apps` (OP-153 m.3 (z)): the person shares the claims the
+    /// waiting request asks for; the consent is kept per (person, app, claim set) and the
+    /// browser goes back to the request.
+    pub async fn share(&self, entry: &RealmEntry, b: &Browser<'_>, return_to: &str) -> Reply {
+        let kit = match self.kit(entry).await {
+            Ok(k) => k,
+            Err(r) => return r,
+        };
+        let (subject, _) = match self.fresh(&kit, b, None).await {
+            Ok(s) => s,
+            Err(r) => return r,
+        };
+        let p = match self.pending(&kit, return_to).await {
+            Ok(p) => p,
+            Err(r) => return r,
+        };
+        let stored = async {
+            let mut t = TenantTx::begin(&self.db, kit.tenant, kit.realm).await?;
+            t.put_consent(
+                subject,
+                p.client.client_uuid,
+                &p.claims,
+                self.clock.now_ms(),
+            )
+            .await?;
+            t.commit().await
+        };
+        match stored.await {
+            Ok(()) => Reply::json(200, json!({ "redirect_to": return_to })),
+            Err(_) => unavailable(),
+        }
+    }
+
+    /// `GET /v1/account/connected-apps` (S11 "Connected apps", OP-153 m.3 (z)): the apps the
+    /// person shares identity claims with, and which claims.
+    pub async fn connected_apps(&self, entry: &RealmEntry, b: &Browser<'_>) -> Reply {
+        let kit = match self.kit(entry).await {
+            Ok(k) => k,
+            Err(r) => return r,
+        };
+        let (subject, _) = match self.fresh(&kit, b, None).await {
+            Ok(s) => s,
+            Err(r) => return r,
+        };
+        let rows = async {
+            let mut t = TenantTx::begin(&self.db, kit.tenant, kit.realm).await?;
+            let rows = t.consents_of(subject).await?;
+            t.commit().await?;
+            Ok::<_, access_store::StoreError>(rows)
+        };
+        match rows.await {
+            Ok(rows) => Reply::json(
+                200,
+                json!({
+                    "apps": rows.iter().map(|r| json!({
+                        "client_id": r.client_id,
+                        "app": r.display_name,
+                        "claims": r.claims,
+                        "since_ms": r.created_ms,
+                    })).collect::<Vec<_>>(),
+                }),
+            ),
+            Err(_) => unavailable(),
+        }
+    }
+
+    /// `DELETE /v1/account/connected-apps/{client}` (OP-153 m.3 (z)): stops sharing with the
+    /// app; it receives no identity claims until the person shares again. The record stays.
+    pub async fn stop_sharing(
+        &self,
+        entry: &RealmEntry,
+        b: &Browser<'_>,
+        client_id: &str,
+    ) -> Reply {
+        let kit = match self.kit(entry).await {
+            Ok(k) => k,
+            Err(r) => return r,
+        };
+        let (subject, _) = match self.fresh(&kit, b, None).await {
+            Ok(s) => s,
+            Err(r) => return r,
+        };
+        let stopped = async {
+            let mut t = TenantTx::begin(&self.db, kit.tenant, kit.realm).await?;
+            let done = t
+                .stop_consent(subject, client_id, self.clock.now_ms())
+                .await?;
+            t.commit().await?;
+            Ok::<_, access_store::StoreError>(done)
+        };
+        match stopped.await {
+            Ok(true) => Reply::new(204, Body::Empty),
+            Ok(false) => Reply::problem(NO_SHARE),
+            Err(_) => unavailable(),
+        }
+    }
+}
+
 fn federation<H: ProviderHttp, S: SocialSecrets>(s: &Social<H, S>) -> Federation<'_, H, S> {
     Federation {
         http: &s.http,

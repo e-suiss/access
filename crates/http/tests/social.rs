@@ -1317,3 +1317,162 @@ async fn a_registered_upstream_and_an_operator_preset_sign_in_through_the_generi
             .is_some()
     );
 }
+
+impl Env {
+    /// Registers the third-party client `cli_…g` and stores a waiting authorization request of
+    /// it for `scope`; answers the request's `return_to` (OP-153 m.3 (z)).
+    async fn waiting_third_party(&self, scope: &str) -> String {
+        let client_id = "cli_0000000000000000000000000g";
+        let (mut tx, bound) = self.decision("idp.client.register").await;
+        access_store::idp::insert_client(
+            &mut tx,
+            &bound,
+            &access_store::idp::ClientRow {
+                client_uuid: [0x67; 16],
+                client_id: client_id.to_owned(),
+                display_name: "Ledgerly".into(),
+                auth_method: "none".into(),
+                jwks_uri: None,
+                redirect_uris: vec![String::from("https://ledgerly.example/cb")],
+                active: true,
+                secret_hash: None,
+                post_logout_redirect_uris: vec![],
+                backchannel_logout_uri: None,
+                jwks: None,
+                platform_product: None,
+                service_key: None,
+                event_receiver: None,
+                require_par: false,
+                public_sub: false,
+                sector_identifier_uri: None,
+                third_party: true,
+            },
+        )
+        .await
+        .unwrap();
+        let req = access_identity_oauth::domain::request::AuthRequest {
+            client_id: client_id.to_owned(),
+            redirect_uri: String::from("https://ledgerly.example/cb"),
+            scope: scope.split(' ').map(String::from).collect(),
+            state: None,
+            nonce: None,
+            code_challenge: [1; 32],
+            prompt: access_identity_oauth::domain::request::Prompt::default(),
+            max_age_s: None,
+            acr_values: Vec::new(),
+            dpop_jkt: None,
+            authority: None,
+            resource: None,
+            claims: Some(access_identity_oauth::domain::claims_request::ClaimsAsk {
+                id_token: Vec::new(),
+                userinfo: vec![String::from("locale")],
+            }),
+        };
+        let handle = [0x42_u8; 32];
+        let hash = access_crypto::oauth::opaque_digest(
+            access_identity_oauth::app::oauth::REQUEST_CONTEXT,
+            &handle,
+        );
+        let day = i32::try_from(T0 / 86_400_000).unwrap();
+        tx.insert_oauth_request(&access_store::oauth::NewRequest {
+            day,
+            hash: &hash,
+            client: [0x67; 16],
+            pushed: false,
+            params: &serde_json::to_vec(&req).unwrap(),
+            created_ms: i64::try_from(T0).unwrap(),
+            expires_ms: i64::try_from(T0 + 600_000).unwrap(),
+        })
+        .await
+        .unwrap();
+        tx.commit().await.unwrap();
+        access_identity_oauth::domain::login::return_to(
+            &Issuer::parse(&format!("https://{HOST}")).unwrap(),
+            client_id,
+            &format!(
+                "{}{}",
+                access_identity_oauth::domain::request::REQUEST_URI_PREFIX,
+                b64url_encode(&handle)
+            ),
+        )
+    }
+}
+
+// OP-153 m.3 (z), §8.5 S11
+#[tokio::test]
+async fn a_person_shares_claims_with_a_third_party_and_stops_from_connected_apps() {
+    let e = env(0x4a, "soc-j").await;
+    e.account("ada@example.org").await;
+    let return_to = e.waiting_third_party("openid email").await;
+    let mut anon = e.browser(9);
+    let refused = anon
+        .send(
+            "POST",
+            "/v1/account/connected-apps/preview",
+            Some(json!({ "return_to": return_to })),
+        )
+        .await;
+    assert_eq!(refused.status, StatusCode::UNAUTHORIZED);
+
+    let mut w = e.browser(1);
+    w.sign_in("ada@example.org").await;
+    let preview = w
+        .send(
+            "POST",
+            "/v1/account/connected-apps/preview",
+            Some(json!({ "return_to": return_to })),
+        )
+        .await;
+    assert_eq!(preview.status, StatusCode::OK, "{}", preview.code());
+    assert_eq!(
+        preview.json(),
+        json!({ "client_id": "cli_0000000000000000000000000g", "app": "Ledgerly",
+                "claims": ["email", "email_verified", "locale"] })
+    );
+    let bogus = w
+        .send(
+            "POST",
+            "/v1/account/connected-apps/preview",
+            Some(json!({ "return_to": "/authorize?client_id=x&request_uri=y" })),
+        )
+        .await;
+    assert_eq!(
+        (bogus.status, bogus.code().as_str()),
+        (StatusCode::NOT_FOUND, "no-such-app")
+    );
+
+    let shared = w
+        .send(
+            "POST",
+            "/v1/account/connected-apps",
+            Some(json!({ "return_to": return_to })),
+        )
+        .await;
+    assert_eq!(shared.status, StatusCode::OK, "{}", shared.code());
+    assert_eq!(shared.json()["redirect_to"], return_to);
+    let list = w.send("GET", "/v1/account/connected-apps", None).await;
+    assert_eq!(list.json()["apps"][0]["app"], "Ledgerly");
+    assert_eq!(
+        list.json()["apps"][0]["claims"],
+        json!(["email", "email_verified", "locale"])
+    );
+
+    let stop = w
+        .send(
+            "DELETE",
+            "/v1/account/connected-apps/cli_0000000000000000000000000g",
+            None,
+        )
+        .await;
+    assert_eq!(stop.status, StatusCode::NO_CONTENT);
+    let list = w.send("GET", "/v1/account/connected-apps", None).await;
+    assert_eq!(list.json()["apps"], json!([]));
+    let again = w
+        .send(
+            "DELETE",
+            "/v1/account/connected-apps/cli_0000000000000000000000000g",
+            None,
+        )
+        .await;
+    assert_eq!(again.status, StatusCode::NOT_FOUND);
+}

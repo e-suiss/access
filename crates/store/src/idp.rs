@@ -218,6 +218,10 @@ pub async fn new_uuid(pool: &sqlx::PgPool) -> Result<[u8; 16], StoreError> {
 
 /// A client as stored (TN-15, IDP-7).
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "each flag is its own registered column"
+)]
 pub struct ClientRow {
     /// Internal id.
     pub client_uuid: [u8; 16],
@@ -253,6 +257,9 @@ pub struct ClientRow {
     pub public_sub: bool,
     /// Its sector identifier URI, checked when it was registered (OIDC Core §8.1).
     pub sector_identifier_uri: Option<String>,
+    /// Whether the realm registered it as a third party, which asks before it receives identity
+    /// claims (OP-153 m.3 (z)).
+    pub third_party: bool,
 }
 
 /// Inserts a client under `bound`.
@@ -270,9 +277,9 @@ pub async fn insert_client(
                 auth_method, jwks_uri, redirect_uris, domain_id, decision_pos, secret_hash,
                 post_logout_redirect_uris, backchannel_logout_uri, jwks, platform_product,
                 service_key, suiss_event_receiver, require_pushed_authorization_requests,
-                subject_type, sector_identifier_uri)
+                subject_type, sector_identifier_uri, third_party)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18,
-                 $19, $20)",
+                 $19, $20, $21)",
         tenant,
         realm,
         Uuid::from_bytes(c.client_uuid),
@@ -293,6 +300,7 @@ pub async fn insert_client(
         c.require_par,
         subject_type(c.public_sub),
         c.sector_identifier_uri,
+        c.third_party,
     )
     .execute(&mut *t.tx)
     .await?;
@@ -315,7 +323,7 @@ pub async fn update_client(
                 post_logout_redirect_uris = $11, backchannel_logout_uri = $12, jwks = $13,
                 platform_product = $14, service_key = $15, suiss_event_receiver = $16,
                 require_pushed_authorization_requests = $17, subject_type = $18,
-                sector_identifier_uri = $19
+                sector_identifier_uri = $19, third_party = $20
           WHERE tenant_id = $1 AND realm_id = $2 AND client_id = $3 AND status = 'active'",
         tenant,
         realm,
@@ -336,6 +344,7 @@ pub async fn update_client(
         c.require_par,
         subject_type(c.public_sub),
         c.sector_identifier_uri,
+        c.third_party,
     )
     .execute(&mut *t.tx)
     .await?
@@ -383,7 +392,8 @@ pub async fn client(t: &mut TenantTx, client_id: &str) -> Result<Option<ClientRo
         "SELECT client_uuid, client_id, display_name, auth_method, jwks_uri, redirect_uris, status,
                 secret_hash, post_logout_redirect_uris, backchannel_logout_uri, jwks,
                 platform_product, service_key, suiss_event_receiver,
-                require_pushed_authorization_requests, subject_type, sector_identifier_uri
+                require_pushed_authorization_requests, subject_type, sector_identifier_uri,
+                third_party
            FROM access.idp_clients WHERE tenant_id = $1 AND realm_id = $2 AND client_id = $3",
         tenant,
         realm,
@@ -413,6 +423,7 @@ pub async fn client(t: &mut TenantTx, client_id: &str) -> Result<Option<ClientRo
             require_par: r.require_pushed_authorization_requests,
             public_sub: r.subject_type == "public",
             sector_identifier_uri: r.sector_identifier_uri,
+            third_party: r.third_party,
         })
     })
     .transpose()

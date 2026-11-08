@@ -173,6 +173,13 @@ impl AuthError {
     /// `login_required`: the same answer whether or not any account exists (CR-40).
     pub const LOGIN_REQUIRED: Self = Self::new("login_required", "the user is not signed in");
 
+    /// `consent_required`: a third party asks for claims the person has not shared (OIDC Core
+    /// §3.1.2.6, OP-153 m.3 (z)).
+    pub const CONSENT_REQUIRED: Self = Self::new(
+        "consent_required",
+        "the person has not shared these claims with this app",
+    );
+
     /// `access_denied`.
     pub const ACCESS_DENIED: Self = Self::new("access_denied", "the request was denied");
 

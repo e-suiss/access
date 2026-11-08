@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.identity_claim_consents k SET ended_ms = $5, end_reason = 'stopped'\n               FROM access.idp_clients c\n              WHERE k.tenant_id = $1 AND k.realm_id = $2 AND k.subject_id = $3\n                AND c.tenant_id = k.tenant_id AND c.realm_id = k.realm_id\n                AND c.client_uuid = k.client_uuid AND c.client_id = $4 AND k.ended_ms IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "454c8eff66062eb9e52d4e52dea359f35331520e057a015a20c12cfa7807753d"
+}

@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.identity_claim_consents (tenant_id, realm_id, subject_id,\n                    client_uuid, claims, created_ms)\n             VALUES ($1, $2, $3, $4, $5, $6)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "TextArray",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "fafaff9abb85277ea68e5a370724c4693056ac36a9e10bcce74e25775a468491"
+}

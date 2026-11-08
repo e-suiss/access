@@ -77,6 +77,8 @@ pub enum LoginReason {
     Create,
     /// Reach at least this AAL (`acr_values`, RFC 9470).
     StepUp(Aal),
+    /// Ask whether to share identity claims with a third-party client (OP-153 m.3 (z)).
+    Share,
 }
 
 /// The live session facts the request is held against.

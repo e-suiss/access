@@ -1,0 +1,78 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT k.client_uuid, c.client_id, c.display_name, k.claims, k.created_ms\n               FROM access.identity_claim_consents k\n               JOIN access.idp_clients c\n                 ON c.tenant_id = k.tenant_id AND c.realm_id = k.realm_id\n                AND c.client_uuid = k.client_uuid\n              WHERE k.tenant_id = $1 AND k.realm_id = $2 AND k.subject_id = $3\n                AND k.ended_ms IS NULL\n              ORDER BY k.consent_id DESC",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "client_uuid",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.identity_claim_consents",
+            "name": "client_uuid"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "client_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.idp_clients",
+            "name": "client_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "display_name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.idp_clients",
+            "name": "display_name"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "claims",
+        "type_info": "TextArray",
+        "origin": {
+          "Table": {
+            "table": "access.identity_claim_consents",
+            "name": "claims"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "created_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.identity_claim_consents",
+            "name": "created_ms"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "366ad27f0d79c477c47bc81b5157e4b68c2cbcddfc307778cbcefbc3810ded16"
+}

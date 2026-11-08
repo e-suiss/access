@@ -606,6 +606,7 @@ async fn new_client(w: &World) -> Client {
         backchannel_logout_uri: None,
         require_par: false,
         subject: access_identity_admin::domain::Subject::default(),
+        third_party: false,
         platform: None,
     }
 }
@@ -1006,6 +1007,7 @@ fn platform_client(id: ClientId, product: PlatformProduct, seed: u8) -> Client {
         backchannel_logout_uri: None,
         require_par: false,
         subject: access_identity_admin::domain::Subject::default(),
+        third_party: false,
         platform: Some(Platform {
             product,
             service_key: public(seed.wrapping_add(1)),

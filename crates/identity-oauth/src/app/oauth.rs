@@ -503,7 +503,7 @@ impl<E: Env> OAuth<E> {
         });
         if details.openid {
             let claims = self
-                .id_claims(realm, &facts, details, grant.subject, nonce)
+                .id_claims(realm, client, &facts, details, grant.subject, nonce)
                 .await?;
             let id = self
                 .env
@@ -546,7 +546,7 @@ impl<E: Env> OAuth<E> {
         };
         let alg = tx.jose_alg().await?;
         let claims = self
-            .id_claims(realm, &facts, details, grant.subject, nonce)
+            .id_claims(realm, client, &facts, details, grant.subject, nonce)
             .await?;
         self.env
             .signer()
@@ -559,6 +559,7 @@ impl<E: Env> OAuth<E> {
     pub(crate) async fn released(
         &self,
         realm: &Realm,
+        client: &Client,
         details: &GrantDetails,
         subject: [u8; 16],
         target: crate::domain::claims_request::Target,
@@ -576,14 +577,28 @@ impl<E: Env> OAuth<E> {
         if asked.is_empty() && !scopes.iter().any(|s| matches!(*s, "email" | "profile")) {
             return Ok(serde_json::Map::new());
         }
+        // OP-153 m.3 (z)
+        let consented = if client.third_party {
+            let mut tx = self.begin(realm).await?;
+            let given = tx.consent(subject, client.uuid).await?;
+            tx.commit().await?;
+            match given {
+                Some(g) => Some(g),
+                None => return Ok(serde_json::Map::new()),
+            }
+        } else {
+            None
+        };
         let held = self
             .env
             .claims()
             .held(realm.tenant, realm.realm, subject)
             .await?;
-        Ok(crate::domain::claims_request::release(
-            &scopes, &requested, target, &held,
-        ))
+        let mut out = crate::domain::claims_request::release(&scopes, &requested, target, &held);
+        if let Some(given) = consented {
+            out.retain(|name, _| given.iter().any(|g| g == name));
+        }
+        Ok(out)
     }
 
     /// The ID token claims with what the realm's `token_issuance` hook adds (TN-135, OP-151
@@ -592,6 +607,7 @@ impl<E: Env> OAuth<E> {
     async fn id_claims(
         &self,
         realm: &Realm,
+        client: &Client,
         facts: &TokenFacts<'_>,
         details: &GrantDetails,
         subject: [u8; 16],
@@ -601,6 +617,7 @@ impl<E: Env> OAuth<E> {
         let released = self
             .released(
                 realm,
+                client,
                 details,
                 subject,
                 crate::domain::claims_request::Target::IdToken,

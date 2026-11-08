@@ -52,6 +52,8 @@ pub struct Client {
     pub platform_product: Option<String>,
     /// Whether it opted in to the realm's public `sub` (MD-10).
     pub public_sub: bool,
+    /// Whether the realm registered it as a third party (OP-153 m.3 (z)).
+    pub third_party: bool,
 }
 
 /// The sector of the realm's public `sub` (MD-10): no client has the nil id, so its values are
@@ -91,6 +93,7 @@ impl Client {
             require_par: row.require_par,
             platform_product: row.platform_product,
             public_sub: row.public_sub,
+            third_party: row.third_party,
         })
     }
 

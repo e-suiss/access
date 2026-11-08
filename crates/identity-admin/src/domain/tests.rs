@@ -20,6 +20,7 @@ fn client(uris: &[&str]) -> Client {
         require_par: false,
         subject: crate::domain::Subject::default(),
         platform: None,
+        third_party: false,
     }
 }
 

@@ -485,6 +485,7 @@ pub fn client_row(uuid: [u8; 16], id: &str, method: &str, secret: &str, jwks: &s
         require_par: false,
         public_sub: false,
         sector_identifier_uri: None,
+        third_party: false,
     }
 }
 

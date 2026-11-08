@@ -85,6 +85,18 @@ where
             .route(
                 &format!("{prefix}/v1/account/combine"),
                 post(combine::<D, K, KI, C, M, H, S>),
+            )
+            .route(
+                &format!("{prefix}/v1/account/connected-apps"),
+                post(share::<D, K, KI, C, M, H, S>),
+            )
+            .route(
+                &format!("{prefix}/v1/account/connected-apps/preview"),
+                post(share_preview::<D, K, KI, C, M, H, S>),
+            )
+            .route(
+                &format!("{prefix}/v1/account/connected-apps/{{client}}"),
+                delete(stop_sharing::<D, K, KI, C, M, H, S>),
             );
         reads = reads
             .route(
@@ -98,6 +110,10 @@ where
             .route(
                 &format!("{prefix}/v1/account/linked"),
                 get(linked::<D, K, KI, C, M, H, S>),
+            )
+            .route(
+                &format!("{prefix}/v1/account/connected-apps"),
+                get(connected::<D, K, KI, C, M, H, S>),
             );
     }
     let cache = Arc::new(idempotency::Cache::default());
@@ -283,5 +299,51 @@ handler! {
         };
         let ticket = req.ticket.as_deref().map(|t| bounded(t, 64)).transpose()?;
         Ok(s.login.hosted.combine(&entry, &jar.browser(), ticket).await)
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ShareBody {
+    return_to: String,
+}
+
+/// Longest `return_to`.
+const MAX_RETURN_TO: usize = 2048;
+
+handler! {
+    /// `GET /v1/account/connected-apps` (OP-153 m.3 (z)).
+    connected(s, entry, jar, p, bytes, headers, uri) false {
+        let _ = (&p, &bytes, &uri);
+        Ok(s.login.hosted.connected_apps(&entry, &jar.browser()).await)
+    }
+}
+
+handler! {
+    /// `POST /v1/account/connected-apps/preview` (OP-153 m.3 (z)).
+    share_preview(s, entry, jar, p, bytes, headers, uri) true {
+        let _ = (&p, &uri);
+        let req: ShareBody = serde_json::from_slice(&bytes).map_err(|_| bad())?;
+        let to = bounded(&req.return_to, MAX_RETURN_TO)?;
+        Ok(s.login.hosted.share_preview(&entry, &jar.browser(), to).await)
+    }
+}
+
+handler! {
+    /// `POST /v1/account/connected-apps` (OP-153 m.3 (z)).
+    share(s, entry, jar, p, bytes, headers, uri) true {
+        let _ = (&p, &uri);
+        let req: ShareBody = serde_json::from_slice(&bytes).map_err(|_| bad())?;
+        let to = bounded(&req.return_to, MAX_RETURN_TO)?;
+        Ok(s.login.hosted.share(&entry, &jar.browser(), to).await)
+    }
+}
+
+handler! {
+    /// `DELETE /v1/account/connected-apps/{client}` (OP-153 m.3 (z)).
+    stop_sharing(s, entry, jar, p, bytes, headers, uri) true {
+        let _ = (&bytes, &uri);
+        let client = bounded(p.get("client").map(String::as_str).unwrap_or_default(), 255)?;
+        Ok(s.login.hosted.stop_sharing(&entry, &jar.browser(), client).await)
     }
 }

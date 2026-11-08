@@ -195,6 +195,13 @@ pub trait OAuthTx: Send {
         sector: [u8; 16],
         candidate: &str,
     ) -> impl Future<Output = Result<Option<String>, Unavailable>> + Send;
+    /// The claims `subject` shares with the third-party client `client` (OP-153 m.3 (z)),
+    /// sorted; `None` without a live consent.
+    fn consent(
+        &mut self,
+        subject: [u8; 16],
+        client: [u8; 16],
+    ) -> impl Future<Output = Result<Option<Vec<String>>, Unavailable>> + Send;
     /// Writes an identity audit row in this transaction (OP-10, OP-39): identifiers only.
     fn audit(
         &mut self,

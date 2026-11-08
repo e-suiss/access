@@ -119,7 +119,10 @@ fn the_served_core_is_declared() {
         "https://acme.id.example/end-session"
     );
     assert_eq!(m["backchannel_logout_supported"], true);
-    assert_eq!(m["scopes_supported"], serde_json::json!(["openid", "email", "profile"]));
+    assert_eq!(
+        m["scopes_supported"],
+        serde_json::json!(["openid", "email", "profile"])
+    );
     assert_eq!(
         m["claims_supported"],
         serde_json::json!([

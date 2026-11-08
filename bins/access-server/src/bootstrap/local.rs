@@ -488,6 +488,7 @@ where
             backchannel_logout_uri: None,
             require_par: false,
             subject: access_identity_admin::domain::Subject::default(),
+            third_party: false,
             platform: None,
         };
         let id = String::from(client.id.as_str());

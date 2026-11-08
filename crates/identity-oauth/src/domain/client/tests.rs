@@ -23,6 +23,7 @@ fn row(method: &str, jwks: Option<&str>, secret: Option<[u8; 32]>) -> ClientRow 
         require_par: false,
         public_sub: false,
         sector_identifier_uri: None,
+        third_party: false,
     }
 }
 

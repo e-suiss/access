@@ -239,6 +239,14 @@ impl OAuthTx for PgOAuthTx {
         self.0.rotate_refresh(hash, at_ms).await.map_err(down)
     }
 
+    async fn consent(
+        &mut self,
+        subject: [u8; 16],
+        client: [u8; 16],
+    ) -> Result<Option<Vec<String>>, Unavailable> {
+        self.0.consent(subject, client).await.map_err(down)
+    }
+
     async fn pairwise(
         &mut self,
         subject: [u8; 16],
@@ -413,6 +421,7 @@ pub const fn reason_name(reason: LoginReason) -> &'static str {
         LoginReason::Reauthenticate => "reauthenticate",
         LoginReason::Create => "create",
         LoginReason::StepUp(_) => "step_up",
+        LoginReason::Share => "share",
     }
 }
 

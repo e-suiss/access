@@ -1257,6 +1257,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                 require_par: c.require_par,
                 public_sub: c.subject.public,
                 sector_identifier_uri: c.subject.sector_identifier_uri.clone(),
+                third_party: c.third_party,
             },
             secret,
         ))

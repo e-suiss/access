@@ -295,6 +295,7 @@ fn a_client_view_has_no_secret() {
         require_par: false,
         public_sub: false,
         sector_identifier_uri: None,
+        third_party: false,
     };
     let text = client_view(&row).to_string();
     assert!(

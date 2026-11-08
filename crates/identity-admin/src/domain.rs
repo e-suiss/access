@@ -853,6 +853,9 @@ pub struct Client {
     pub platform: Option<Platform>,
     /// The `sub` it reads (MD-10).
     pub subject: Subject,
+    /// Whether it is a third party, asked about before it receives identity claims
+    /// (OP-153 m.3 (z)).
+    pub third_party: bool,
 }
 
 impl Client {
@@ -977,6 +980,10 @@ impl Client {
         }
         if let Some(u) = &self.subject.sector_identifier_uri {
             m.push((Value::text("sector_identifier_uri"), Value::text(u)));
+        }
+        // OP-153 m.3 (z)
+        if self.third_party {
+            m.push((Value::text("third_party"), Value::Bool(true)));
         }
         Value::Map(m)
     }

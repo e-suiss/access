@@ -316,6 +316,7 @@ fn client(id: ClientId, m: &Map<String, Json>) -> Result<Client, Invalid> {
             "subject_type",
             "public_sub_opt_in",
             "sector_identifier_uri",
+            "third_party",
         ],
     )?;
     // OP-149 m.4
@@ -333,6 +334,7 @@ fn client(id: ClientId, m: &Map<String, Json>) -> Result<Client, Invalid> {
         require_par: flag(m, "require_pushed_authorization_requests")?,
         platform: None,
         subject: subject_of(m)?,
+        third_party: flag(m, "third_party")?,
     })
 }
 
@@ -938,6 +940,7 @@ pub fn client_view(c: &ClientRow) -> Json {
         "platform_product": c.platform_product,
         "subject_type": if c.public_sub { "public" } else { "pairwise" },
         "public_sub_opt_in": c.public_sub,
+        "third_party": c.third_party,
         "sector_identifier_uri": c.sector_identifier_uri,
         "status": if c.active { "active" } else { "retired" },
     })

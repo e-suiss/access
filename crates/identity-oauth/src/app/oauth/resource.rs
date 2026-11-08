@@ -229,10 +229,17 @@ impl<E: Env> OAuth<E> {
         };
         let details: GrantDetails =
             serde_json::from_slice(&grant.details).map_err(|_| Unavailable)?;
+        let mut tx = self.begin(realm).await?;
+        let client = tx.client_by_uuid(grant.client).await?;
+        tx.commit().await?;
+        let Some(client) = client.and_then(crate::domain::client::Client::from_row) else {
+            return Ok(unauthorized("invalid_token"));
+        };
         // §10.4.6, OIDC Core §5.3.2
         let mut body = self
             .released(
                 realm,
+                &client,
                 &details,
                 grant.subject,
                 crate::domain::claims_request::Target::Userinfo,

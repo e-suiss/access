@@ -652,7 +652,8 @@ export interface paths {
         /** The apps the person shares claims with (OP-153 m.3 (z)). */
         get: operations["listConnectedApps"];
         put?: never;
-        post?: never;
+        /** Shares the claims a waiting third-party request asks for (OP-153 m.3 (z)). */
+        post: operations["shareWithApp"];
         delete?: never;
         options?: never;
         head?: never;
@@ -671,6 +672,23 @@ export interface paths {
         post?: never;
         /** Stops sharing claims with an app. */
         delete: operations["stopSharing"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/account/connected-apps/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** What a waiting third-party request asks the person to share (OP-153 m.3 (z)). */
+        post: operations["previewSharing"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -1876,7 +1894,40 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            501: components["responses"]["NotYetServed"];
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    shareWithApp: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
             default: components["responses"]["Problem"];
         };
     };
@@ -1891,7 +1942,40 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            501: components["responses"]["NotYetServed"];
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    previewSharing: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
             default: components["responses"]["Problem"];
         };
     };

@@ -1343,14 +1343,48 @@
         "operationId": "listConnectedApps",
         "summary": "The apps the person shares claims with (OP-153 m.3 (z)).",
         "responses": {
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      },
+      "post": {
+        "operationId": "shareWithApp",
+        "summary": "Shares the claims a waiting third-party request asks for (OP-153 m.3 (z)).",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           },
           "default": {
             "$ref": "#/components/responses/Problem"
           }
         },
-        "x-suiss-status": "planned"
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        }
       }
     },
     "/v1/account/connected-apps/{client}": {
@@ -1358,8 +1392,15 @@
         "operationId": "stopSharing",
         "summary": "Stops sharing claims with an app.",
         "responses": {
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           },
           "default": {
             "$ref": "#/components/responses/Problem"
@@ -1374,8 +1415,37 @@
               "type": "string"
             }
           }
-        ],
-        "x-suiss-status": "planned"
+        ]
+      }
+    },
+    "/v1/account/connected-apps/preview": {
+      "post": {
+        "operationId": "previewSharing",
+        "summary": "What a waiting third-party request asks the person to share (OP-153 m.3 (z)).",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        }
       }
     },
     "/v1/sessions/{instance}/end": {
