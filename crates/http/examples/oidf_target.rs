@@ -1,6 +1,6 @@
 //! The OpenID Foundation conformance target (OP-146 I11, §14.8 SA-T2, B9): one realm `acme`
-//! seeded on the PostgreSQL at `DATABASE_URL` with the two clients of
-//! `conformance/oidf/access-oidcc.json`, served over TLS 1.3 at `https://acme.id.test:9443`
+//! seeded on the PostgreSQL at `DATABASE_URL` with the clients of
+//! `conformance/oidf/access-oidcc.json` and `access-fapi2.json`, served over TLS 1.3 at `https://acme.id.test:9443`
 //! with the realm, authorization server routes and a fixture sign-in page that starts a
 //! session for the realm's one user. The nightly workflow points the conformance suite at it.
 //! It is a test fixture: the sign-in page signs in without a credential.
@@ -52,12 +52,14 @@ fn read(name: &str) -> Value {
     serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap()
 }
 
-/// The suite's clients: `client_secret_basic`, redirecting to the suite's callback.
+/// The suite's clients: `client_secret_basic` for the OIDC Core plans and `private_key_jwt`
+/// with the suite's public keys for the FAPI 2.0 plan (OP-152 m.5 (j)), each redirecting to
+/// its plan's callback.
 fn clients() -> Vec<Extra> {
     let plans = read("plans.json");
-    let config = read("access-oidcc.json");
     let redirect = plans["redirect_uri"].as_str().unwrap().to_owned();
-    ["client", "client2"]
+    let config = read("access-oidcc.json");
+    let mut out: Vec<Extra> = ["client", "client2"]
         .iter()
         .map(|k| {
             (
@@ -67,7 +69,34 @@ fn clients() -> Vec<Extra> {
                 vec![redirect.clone()],
             )
         })
-        .collect()
+        .collect();
+    let fapi = plans["plans"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|p| p["config"] == "access-fapi2.json")
+        .unwrap();
+    let fapi_redirect = fapi["redirect_uri"].as_str().unwrap().to_owned();
+    let config = read("access-fapi2.json");
+    for k in ["client", "client2"] {
+        let keys: Vec<Value> = config[k]["jwks"]["keys"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|key| {
+                let mut public = key.clone();
+                public.as_object_mut().unwrap().remove("d");
+                public
+            })
+            .collect();
+        out.push((
+            config[k]["client_id"].as_str().unwrap().to_owned(),
+            String::from("private_key_jwt"),
+            serde_json::json!({ "keys": keys }).to_string(),
+            vec![fapi_redirect.clone()],
+        ));
+    }
+    out
 }
 
 /// `GET {issuer}/login?return_to=…`: a new session for the realm's user, then back to the

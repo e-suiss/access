@@ -511,7 +511,8 @@ pub fn new_key() -> EcdsaKeyPair {
     EcdsaKeyPair::generate(&ECDSA_P256_SHA256_FIXED_SIGNING).unwrap()
 }
 
-/// An extra client: `client_id`, method, secret and redirect URIs.
+/// An extra client: `client_id`, method, secret (the public JWKS for `private_key_jwt`) and
+/// redirect URIs.
 pub type Extra = (String, String, String, Vec<String>);
 
 impl Cluster {
@@ -577,13 +578,18 @@ impl Cluster {
             ];
             for (i, (id, method, s, uris)) in extra.iter().enumerate() {
                 let k = u8::try_from(i + 4).unwrap();
+                let jwks = format!("https://suite.example/{slug}/{id}/jwks.json");
                 let mut row = client_row(
                     [seed, k, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, k],
                     id,
                     method,
                     s,
-                    &keyed_jwks,
+                    &jwks,
                 );
+                if method == "private_key_jwt" {
+                    row.require_par = true;
+                    keys.0.lock().unwrap().insert(jwks, s.clone().into_bytes());
+                }
                 row.redirect_uris.clone_from(uris);
                 rows.push(row);
             }

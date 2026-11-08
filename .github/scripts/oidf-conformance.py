@@ -20,6 +20,7 @@ import urllib.request
 MODULE_TIMEOUT_S = 300
 POLL_S = 2
 FINAL = {"FINISHED", "INTERRUPTED"}
+PASS = ("PASSED", "WARNING")
 
 CONTEXT = ssl.create_default_context()
 CONTEXT.check_hostname = False
@@ -134,18 +135,9 @@ def main(argv):
     (out / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
     expected_path = directory / "expected.json"
     expected = json.loads(expected_path.read_text())["plans"] if expected_path.exists() else {}
-    ok = ("PASSED", "WARNING", "REVIEW", "SKIPPED")
-    bad = []
-    for p in summary:
-        known = expected.get(p["plan"], {})
-        for m in p["modules"]:
-            passed = m["status"] == "FINISHED" and m["result"] in ok
-            if passed and m["module"] in known:
-                print(f"::warning::{p['plan']}/{m['module']} now passes; remove it from expected.json")
-            elif not passed and m["module"] in known:
-                print(f"{p['plan']}/{m['module']}: expected failure ({known[m['module']]})")
-            elif not passed:
-                bad.append(f"{p['plan']}/{m['module']}: {m['status']} {m['result']}")
+    bad, notes = classify(summary, expected)
+    for line in notes:
+        print(line)
     total = sum(len(p["modules"]) for p in summary)
     print(f"{total - len(bad)} of {total} modules passed or failed as expected")
     if not bad:
@@ -154,6 +146,23 @@ def main(argv):
         print(f"::warning::{line}" if report_only else f"::error::{line}")
     if not report_only:
         sys.exit(1)
+
+
+def classify(summary, expected):
+    """OP-152 m.5 (j): a module passes only when it finished PASSED or WARNING; SKIPPED, REVIEW
+    and every other outcome fail unless expected.json lists the module with its reason."""
+    bad, notes = [], []
+    for p in summary:
+        known = expected.get(p["plan"], {})
+        for m in p["modules"]:
+            passed = m["status"] == "FINISHED" and m["result"] in PASS
+            if passed and m["module"] in known:
+                notes.append(f"::warning::{p['plan']}/{m['module']} now passes; remove it from expected.json")
+            elif not passed and m["module"] in known:
+                notes.append(f"{p['plan']}/{m['module']}: expected failure ({known[m['module']]})")
+            elif not passed:
+                bad.append(f"{p['plan']}/{m['module']}: {m['status']} {m['result']}")
+    return bad, notes
 
 
 if __name__ == "__main__":

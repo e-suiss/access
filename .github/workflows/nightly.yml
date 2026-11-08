@@ -355,8 +355,9 @@ jobs:
           retention-days: 90
           if-no-files-found: error
 
-  # OP-146 I11, §14.8 SA-T2, B9: the OIDF Basic OP and Config OP plans against one seeded
-  # realm. Report-only until the plans' expected failures are recorded.
+  # OP-146 I11, §14.8 SA-T2, B9, OP-152 m.5 (j): the OIDF Basic OP and Config OP plans and the
+  # PKCE-capable FAPI 2.0 Security Profile plan (PAR, PKCE S256, DPoP, private_key_jwt) against
+  # one seeded realm; SKIPPED and REVIEW fail unless expected.json lists the module.
   oidf-conformance:
     name: oidf-conformance
     runs-on: ubuntu-24.04
@@ -403,7 +404,7 @@ jobs:
           done
           cat "$RUNNER_TEMP/oidf/target.log"
           exit 1
-      - name: Basic OP and Config OP plans
+      - name: Basic OP, Config OP and FAPI 2.0 plans
         run: >-
           python3 -I .github/scripts/oidf-conformance.py
           https://localhost.emobix.co.uk:8443 conformance/oidf "$RUNNER_TEMP/oidf"

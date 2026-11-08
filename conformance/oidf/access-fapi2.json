@@ -1,0 +1,58 @@
+{
+  "alias": "access-fapi2",
+  "description": "Access realm acme, nightly OIDF FAPI 2.0 Security Profile run: PAR, PKCE S256, DPoP, private_key_jwt (OP-152 m.5 (j)); the keys are CI-only test keys",
+  "server": {
+    "discoveryUrl": "https://acme.id.test:9443/.well-known/openid-configuration"
+  },
+  "client": {
+    "client_id": "cli_c0nfcccccccccccccccccccccc",
+    "scope": "openid",
+    "jwks": {
+      "keys": [
+        {
+          "kty": "EC",
+          "crv": "P-256",
+          "alg": "ES256",
+          "use": "sig",
+          "kid": "oidf-ci-1",
+          "x": "hK4g5rIFuwmPkIGc2VPNzpUVR6c2IIIMITK6bgoLyI0",
+          "y": "i2T_niHGBHz4WGjzB0HzMDz0Xd0Ff7vPkEtmJEZCQg8",
+          "d": "-iVF93oLLJZlCk4dak51h8qQU_aW7vVNlDprmJ-rujs"
+        }
+      ]
+    }
+  },
+  "client2": {
+    "client_id": "cli_c0nfdddddddddddddddddddddd",
+    "scope": "openid",
+    "jwks": {
+      "keys": [
+        {
+          "kty": "EC",
+          "crv": "P-256",
+          "alg": "ES256",
+          "use": "sig",
+          "kid": "oidf-ci-2",
+          "x": "EolFqdlUKj87Ll3m4tiJ5mjWPKS9vIW2RAMWA0N9fVI",
+          "y": "TOlGemeiI5cEQLByNwFKlDxR2-pz0K58CxnGVuIn4OY",
+          "d": "T0Wk1iLLcfdJRXHEzM21WmRXBjqY1RnAhiO6SLNcFbY"
+        }
+      ]
+    }
+  },
+  "resource": {
+    "resourceUrl": "https://acme.id.test:9443/userinfo"
+  },
+  "browser": [
+    {
+      "match": "https://acme.id.test:9443/authorize*",
+      "tasks": [
+        {
+          "task": "Verify Complete",
+          "match": "*/test/a/access-fapi2/callback*",
+          "commands": [["wait", "id", "submission_complete", 10]]
+        }
+      ]
+    }
+  ]
+}
