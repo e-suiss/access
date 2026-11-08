@@ -166,11 +166,10 @@ async fn an_audit_row_reaches_a_signed_checkpoint() {
     write_rows(&db).await;
     let deadline = Instant::now() + Duration::from_secs(20);
     loop {
-        let t = audit_tick(&db.checkpointer, &down, NOW).await;
+        let t = audit_tick(&db.checkpointer, "a", &down, NOW).await;
         assert_eq!((t.identity, t.operational), (0, 0));
-        assert!(last_checkpoint(&db.checkpointer).await.unwrap().is_none());
         // the watermark is cluster-wide (OP-131 m.4): rows count once every older transaction ends
-        let t = audit_tick(&db.checkpointer, &signer, NOW).await;
+        let t = audit_tick(&db.checkpointer, "a", &signer, NOW).await;
         assert_eq!(t.failed, 0);
         let identity = last_checkpoint(&db.checkpointer).await.unwrap();
         let operational = last_operational_checkpoint(&db.checkpointer).await.unwrap();
@@ -197,8 +196,45 @@ async fn an_audit_row_reaches_a_signed_checkpoint() {
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
     // nothing new ended: a second tick appends nothing
-    let again = audit_tick(&db.checkpointer, &signer, NOW + 1).await;
+    let again = audit_tick(&db.checkpointer, "a", &signer, NOW + 1).await;
     assert_eq!(again, AuditTick::default());
+}
+
+// OP-152 m.5 (k), OP-38, OP-44: one writer per cell audit chain; a second replica's checkpointer
+// stays on standby while the first holds both chains' leases, and signs nothing
+#[tokio::test]
+async fn only_the_lease_holding_replica_signs_the_cell_chains() {
+    let db = fresh().await.unwrap();
+    let signer = SignerNotes(identity_signer("lease"));
+    write_rows(&db).await;
+    let first = audit_tick(&db.checkpointer, "a", &signer, NOW).await;
+    assert_eq!((first.standby, first.failed), (0, 0));
+    let deadline = Instant::now() + Duration::from_secs(20);
+    loop {
+        let other = audit_tick(&db.checkpointer, "b", &signer, NOW).await;
+        assert_eq!(
+            other,
+            AuditTick {
+                standby: 2,
+                ..AuditTick::default()
+            }
+        );
+        let t = audit_tick(&db.checkpointer, "a", &signer, NOW).await;
+        assert_eq!((t.standby, t.failed), (0, 0));
+        if last_checkpoint(&db.checkpointer).await.unwrap().is_some() {
+            break;
+        }
+        assert!(Instant::now() < deadline, "no checkpoint after 20 s");
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    let other = audit_tick(&db.checkpointer, "b", &signer, NOW + 1).await;
+    assert_eq!(
+        other,
+        AuditTick {
+            standby: 2,
+            ..AuditTick::default()
+        }
+    );
 }
 
 /// A domain whose head is at position 1, with the Genesis versions the server writes.

@@ -1134,6 +1134,7 @@ async fn serve(
             sequencer: sequencer.clone(),
             identity_signer: identity_section.signer.clone(),
             authority_signer: config.signer.clone().ok_or("no signer")?,
+            holder: holder()?,
         },
         move || led.led(),
     );

@@ -1,0 +1,21 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access_ops.authority_audit_checkpoint (size, root, frontier, xid, id, note)\n             SELECT $1, $2, $3, $4::bigint::text::xid8, $5, $6\n              WHERE EXISTS (SELECT 1 FROM access_ops.audit_checkpoint_lease\n                             WHERE chain = $7 AND holder = $8 AND expires_at > now())",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Bytea",
+        "ByteaArray",
+        "Int8",
+        "Int8",
+        "Text",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "36578b96eedf5bc1c4271f18c9424f68719aeafe3649c6f818a1b5d0c62340e9"
+}

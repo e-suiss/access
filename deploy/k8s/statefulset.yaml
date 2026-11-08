@@ -1,5 +1,5 @@
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
   name: access-server
   labels:
@@ -7,14 +7,18 @@ metadata:
     app.kubernetes.io/part-of: access
   annotations:
     ignore-check.kube-linter.io/no-anti-affinity: "Host spreading uses topologySpreadConstraints (OP-50)"
+# OP-152 m.5 (k): a StatefulSet so that each pod's signers keep their sealed keys on a volume
+# of their own across restarts
 spec:
   replicas: 3
   revisionHistoryLimit: 5
-  strategy:
+  serviceName: access-server-pods
+  podManagementPolicy: Parallel
+  updateStrategy:
     type: RollingUpdate
-    rollingUpdate:
-      maxUnavailable: 0
-      maxSurge: 1
+  persistentVolumeClaimRetentionPolicy:
+    whenDeleted: Retain
+    whenScaled: Retain
   selector:
     matchLabels:
       app.kubernetes.io/name: access-server
@@ -45,14 +49,14 @@ spec:
           labelSelector:
             matchLabels:
               app.kubernetes.io/name: access-server
-          matchLabelKeys: [pod-template-hash]
+          matchLabelKeys: [controller-revision-hash]
         - maxSkew: 1
           topologyKey: kubernetes.io/hostname
           whenUnsatisfiable: ScheduleAnyway
           labelSelector:
             matchLabels:
               app.kubernetes.io/name: access-server
-          matchLabelKeys: [pod-template-hash]
+          matchLabelKeys: [controller-revision-hash]
       containers:
         - name: access-server
           # OP-49
@@ -200,13 +204,6 @@ spec:
           emptyDir:
             medium: Memory
             sizeLimit: 1Mi
-        # CR-21, CMP-22: each signer's sealed keys (sealed by its HSM KEK)
-        - name: signer-vault
-          emptyDir:
-            sizeLimit: 64Mi
-        - name: identity-signer-vault
-          emptyDir:
-            sizeLimit: 64Mi
         - name: config
           configMap:
             name: access-server
@@ -229,3 +226,24 @@ spec:
             readOnly: true
             volumeAttributes:
               secretProviderClass: access-server
+  # CR-21, CMP-22, OP-152 m.5 (k): each signer's sealed keys (sealed by its HSM KEK), one volume
+  # per pod
+  volumeClaimTemplates:
+    - metadata:
+        name: signer-vault
+        labels:
+          app.kubernetes.io/name: access-server
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests:
+            storage: 64Mi
+    - metadata:
+        name: identity-signer-vault
+        labels:
+          app.kubernetes.io/name: access-server
+      spec:
+        accessModes: [ReadWriteOnce]
+        resources:
+          requests:
+            storage: 64Mi

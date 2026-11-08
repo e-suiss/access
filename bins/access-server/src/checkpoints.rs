@@ -13,7 +13,7 @@ use access_authority_sequencer::adapters::{PgHeads, SocketSigner, SourcesClock};
 use access_authority_sequencer::checkpoint::{CheckpointError, checkpoint};
 use access_authority_sequencer::ports::{Clock as _, Heads, NoteSigner as DomainSigner};
 use access_identity_audit::AuditError;
-use access_identity_audit::adapters::{PgAudit, PgOperational, SignerNotes};
+use access_identity_audit::adapters::{Held, PgAudit, PgOperational, SignerNotes};
 use access_identity_audit::app::step;
 use access_identity_audit::ports::{AuditLog, NoteSigner};
 use access_kernel::codec::Canonical as _;
@@ -21,6 +21,7 @@ use access_kernel::digest::Digest;
 use access_kernel::record::RecordEnvelope;
 use access_kernel::verify::key_scope::SpecVersions;
 use access_store::Pool;
+use access_store::audit_lease::{AuditChain, acquire_audit_lease};
 use access_store::authority_checkpoint::{AuthorityCheckpoint, append};
 use access_store::scope::DomainId;
 
@@ -29,6 +30,9 @@ pub(crate) const AUDIT_INTERVAL: Duration = Duration::from_secs(1);
 
 /// The domain checkpoint cadence (T16 POLICY DEFAULT 60 s).
 pub(crate) const DOMAIN_INTERVAL: Duration = Duration::from_secs(60);
+
+/// How long a replica's lease on a cell audit chain lasts unless renewed (PD; OP-152 m.5 (k)).
+pub(crate) const AUDIT_LEASE: Duration = Duration::from_secs(10);
 
 /// Most checkpoints one chain appends per tick.
 const STEPS: u32 = 16;
@@ -42,6 +46,8 @@ pub(crate) struct AuditTick {
     pub(crate) operational: u32,
     /// Chains whose step failed.
     pub(crate) failed: u32,
+    /// Chains whose lease another replica holds (OP-152 m.5 (k)).
+    pub(crate) standby: u32,
 }
 
 async fn drain<L: AuditLog + Sync, S: NoteSigner + Sync>(
@@ -56,25 +62,54 @@ async fn drain<L: AuditLog + Sync, S: NoteSigner + Sync>(
     Ok(n)
 }
 
-/// Integrates and signs what ended on both audit chains since their last checkpoints, at `now`.
+/// Integrates and signs what ended on both audit chains since their last checkpoints, at `now`,
+/// on each chain whose lease `holder` takes or renews; another replica's live lease leaves that
+/// chain to it (OP-152 m.5 (k)).
 pub(crate) async fn audit_tick<S: NoteSigner + Sync>(
     checkpointer: &Pool,
+    holder: &str,
     signer: &S,
     now: u64,
 ) -> AuditTick {
     let mut out = AuditTick::default();
-    match drain(&PgAudit(checkpointer.clone()), signer, now).await {
-        Ok(n) => out.identity = n,
+    match acquire_audit_lease(checkpointer, AuditChain::Identity, holder, AUDIT_LEASE).await {
+        Ok(true) => {
+            let log = Held {
+                log: PgAudit(checkpointer.clone()),
+                holder: holder.to_owned(),
+            };
+            match drain(&log, signer, now).await {
+                Ok(n) => out.identity = n,
+                Err(error) => {
+                    out.failed = out.failed.saturating_add(1);
+                    tracing::warn!(%error, chain = "identity-audit", "audit checkpoint not appended");
+                }
+            }
+        }
+        Ok(false) => out.standby = out.standby.saturating_add(1),
         Err(error) => {
             out.failed = out.failed.saturating_add(1);
-            tracing::warn!(%error, chain = "identity-audit", "audit checkpoint not appended");
+            tracing::warn!(%error, chain = "identity-audit", "audit checkpoint lease not taken");
         }
     }
-    match drain(&PgOperational(checkpointer.clone()), signer, now).await {
-        Ok(n) => out.operational = n,
+    match acquire_audit_lease(checkpointer, AuditChain::Operational, holder, AUDIT_LEASE).await {
+        Ok(true) => {
+            let log = Held {
+                log: PgOperational(checkpointer.clone()),
+                holder: holder.to_owned(),
+            };
+            match drain(&log, signer, now).await {
+                Ok(n) => out.operational = n,
+                Err(error) => {
+                    out.failed = out.failed.saturating_add(1);
+                    tracing::warn!(%error, chain = "authority-operational", "audit checkpoint not appended");
+                }
+            }
+        }
+        Ok(false) => out.standby = out.standby.saturating_add(1),
         Err(error) => {
             out.failed = out.failed.saturating_add(1);
-            tracing::warn!(%error, chain = "authority-operational", "audit checkpoint not appended");
+            tracing::warn!(%error, chain = "authority-operational", "audit checkpoint lease not taken");
         }
     }
     out
@@ -137,6 +172,8 @@ pub(crate) struct Inputs {
     pub(crate) identity_signer: PathBuf,
     /// The authority signer's socket (operational keys, usage `checkpoint`).
     pub(crate) authority_signer: PathBuf,
+    /// This process's lease holder name for the cell audit chains (OP-152 m.5 (k)).
+    pub(crate) holder: String,
 }
 
 impl Checkpointers {
@@ -151,6 +188,7 @@ impl Checkpointers {
             sequencer,
             identity_signer,
             authority_signer,
+            holder,
         } = inputs;
         let audit = tokio::spawn(async move {
             let signer = SignerNotes(identity_signer);
@@ -158,7 +196,7 @@ impl Checkpointers {
             every.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
             loop {
                 every.tick().await;
-                audit_tick(&checkpointer, &signer, wall_ms()).await;
+                audit_tick(&checkpointer, &holder, &signer, wall_ms()).await;
             }
         });
         let led = Arc::new(led);

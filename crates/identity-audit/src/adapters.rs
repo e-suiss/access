@@ -8,6 +8,7 @@ use access_identity_signer::protocol::{Request, Response};
 
 use access_store::Pool;
 use access_store::audit::{AuditRow, CheckpointRow, append_checkpoint, last_checkpoint, pending};
+use access_store::audit_lease::{AuditChain, append_held_checkpoint};
 use access_store::identity::Cursor;
 use access_store::operational::{
     OperationalRow, append_operational_checkpoint, last_operational_checkpoint, pending_operational,
@@ -59,6 +60,60 @@ impl AuditLog for PgAudit {
 
     async fn append(&self, checkpoint: &CheckpointRow) -> Result<(), AuditError> {
         Ok(append_checkpoint(&self.0, checkpoint).await?)
+    }
+}
+
+/// A chain whose checkpoints are appended only while `holder` holds its lease, so one replica
+/// writes each cell chain (OP-152 m.5 (k)).
+pub struct Held<L> {
+    /// The chain.
+    pub log: L,
+    /// This process's lease holder name.
+    pub holder: String,
+}
+
+impl AuditLog for Held<PgAudit> {
+    type Row = AuditRow;
+
+    async fn last(&self) -> Result<Option<CheckpointRow>, AuditError> {
+        self.log.last().await
+    }
+
+    async fn pending(&self, after: Cursor, limit: u32) -> Result<Vec<AuditRow>, AuditError> {
+        self.log.pending(after, limit).await
+    }
+
+    async fn append(&self, checkpoint: &CheckpointRow) -> Result<(), AuditError> {
+        Ok(
+            append_held_checkpoint(&self.log.0, AuditChain::Identity, &self.holder, checkpoint)
+                .await?,
+        )
+    }
+}
+
+impl AuditLog for Held<PgOperational> {
+    type Row = OperationalRow;
+
+    fn chain(&self) -> Option<&'static str> {
+        self.log.chain()
+    }
+
+    async fn last(&self) -> Result<Option<CheckpointRow>, AuditError> {
+        self.log.last().await
+    }
+
+    async fn pending(&self, after: Cursor, limit: u32) -> Result<Vec<OperationalRow>, AuditError> {
+        self.log.pending(after, limit).await
+    }
+
+    async fn append(&self, checkpoint: &CheckpointRow) -> Result<(), AuditError> {
+        Ok(append_held_checkpoint(
+            &self.log.0,
+            AuditChain::Operational,
+            &self.holder,
+            checkpoint,
+        )
+        .await?)
     }
 }
 

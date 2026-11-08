@@ -33,3 +33,22 @@ spec:
       port: 443
       targetPort: management
       protocol: TCP
+---
+# OP-152 m.5 (k): the StatefulSet's governing Service; pods get stable names, nothing is routed
+apiVersion: v1
+kind: Service
+metadata:
+  name: access-server-pods
+  labels:
+    app.kubernetes.io/name: access-server
+    app.kubernetes.io/part-of: access
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: false
+  selector:
+    app.kubernetes.io/name: access-server
+  ports:
+    - name: https
+      port: 8443
+      targetPort: https
+      protocol: TCP
