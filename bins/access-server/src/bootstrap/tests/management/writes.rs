@@ -763,3 +763,50 @@ async fn a_bulk_job_revokes_grants_one_exercise_each() {
         "one Exercise per item: {before} → {after}"
     );
 }
+
+// OP-152 m.9 (d), OP-152 m.7 (b), IA-5, C11
+#[tokio::test]
+async fn a_delegated_admin_signs_a_meta_write_on_its_own_holding() {
+    let c = console("mgmt-holding", true).await;
+    let admin = AuthoritySet {
+        actions: ActionSet {
+            exact: std::iter::once(kmeta::core_action("grant_revoke")).collect(),
+            prefix: std::collections::BTreeSet::new(),
+        },
+        resource: ResourceSelector::Structural(Structural {
+            namespace: String::from("access.grant"),
+            prefix: Vec::new(),
+            kind: None,
+            attrs: std::collections::BTreeMap::new(),
+        }),
+        params: std::collections::BTreeMap::new(),
+        recipient: None,
+        purpose: None,
+    };
+    let issue = serde_json::json!({ "grant_issue": {
+        "basis": { "anchor": b64url_encode(&kmeta::meta_anchor(&c.domain).0) },
+        "holder": { "party": b64url_encode(&c.root.0) },
+        "authority": canonical_authority_to_json(&canonical(admin)).unwrap(),
+    } });
+    let w = c.meta_write("grant_issue", issue, c.meta_anchor()).await;
+    assert_eq!(w.body["decision"], true, "{}", w.body);
+    let held = kmeta::object_id(&exercise_of(&w), kind::GRANT, 0);
+    assert!(c.w.domains.derive().await.is_empty());
+    let since = c.search("holdings", serde_json::json!({})).await["results"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|h| h["grant"] == b64url_encode(&held.0))
+        .and_then(|h| h["since"].as_u64())
+        .unwrap();
+    let target = c.issue_to_founder().await;
+    let holding = ExerciseBasis::Holding(kmeta::HoldingRef {
+        grant: held,
+        holder: c.root,
+        since,
+    });
+    let revoke = serde_json::json!({ "grant_revoke": { "grant": b64url_encode(&target.0) } });
+    let w = c.meta_write("grant_revoke", revoke, holding).await;
+    assert_eq!(w.status, StatusCode::OK, "{}", w.body);
+    assert_eq!(w.body["decision"], true, "{}", w.body);
+}

@@ -12,7 +12,7 @@ use access_kernel::combinator::{Capacity, Mode};
 use access_kernel::digest::Digest;
 use access_kernel::intent::IntentEnvelope;
 use access_kernel::json::b64url_encode;
-use access_kernel::meta::{ExerciseBasis, basis_value, exercise_basis};
+use access_kernel::meta::{ExerciseBasis, HoldingRef, basis_value, exercise_basis};
 use access_kernel::model::{Id, PurposeRef};
 use access_kernel::render::param_text;
 use access_kernel::verify::cose::PublicKey;
@@ -111,16 +111,27 @@ pub(crate) fn statement(
     Ok(out)
 }
 
-/// The canonical CBOR of the basis "the public holding of Grant `grant`" or "the Anchor
-/// `anchor`".
+/// The canonical CBOR of the basis "the public holding of Grant `grant`", "the Anchor
+/// `anchor`" or, with `holder` and `since`, "the holding of Grant `grant` by Party `holder` in
+/// the episode opened at `since`" (OP-152 m.9 (d), IA-5).
 ///
 /// # Errors
-/// `input`.
-pub(crate) fn basis(kind: &str, id: &[u8]) -> Result<Vec<u8>, Refused> {
+/// `input`, also for a holder or episode given to another kind or missing from a holding.
+pub(crate) fn basis(
+    kind: &str,
+    id: &[u8],
+    holder: Option<&[u8]>,
+    since: Option<u64>,
+) -> Result<Vec<u8>, Refused> {
     let id = id16(id)?;
-    let b = match kind {
-        "public" => ExerciseBasis::Public(id),
-        "anchor" => ExerciseBasis::Anchor(id),
+    let b = match (kind, holder, since) {
+        ("public", None, None) => ExerciseBasis::Public(id),
+        ("anchor", None, None) => ExerciseBasis::Anchor(id),
+        ("holding", Some(holder), Some(since)) => ExerciseBasis::Holding(HoldingRef {
+            grant: id,
+            holder: id16(holder)?,
+            since,
+        }),
         _ => return Err("input"),
     };
     dcbor::encode(&basis_value(&b), Limits::CEILING).map_err(|_| "input")
@@ -360,8 +371,13 @@ pub fn ais_statement(
 /// # Errors
 /// `input`.
 #[wasm_bindgen(js_name = exerciseBasis)]
-pub fn exercise_basis_cbor(kind: &str, id: &[u8]) -> Result<Vec<u8>, JsError> {
-    basis(kind, id).map_err(js)
+pub fn exercise_basis_cbor(
+    kind: &str,
+    id: &[u8],
+    holder: Option<Vec<u8>>,
+    since: Option<u64>,
+) -> Result<Vec<u8>, JsError> {
+    basis(kind, id, holder.as_deref(), since).map_err(js)
 }
 
 /// See [`protected`].

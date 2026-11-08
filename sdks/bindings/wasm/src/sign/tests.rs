@@ -57,7 +57,7 @@ fn a_webcrypto_style_signature_makes_a_verifiable_ais() {
     assert_eq!(kid, thumbprint(&key.public_key()).to_vec());
     let env = envelope();
     let intent = intent_digest(&env).unwrap();
-    let basis_cbor = basis("public", &[1; 16]).unwrap();
+    let basis_cbor = basis("public", &[1; 16], None, None).unwrap();
     let payload = statement(
         &[3; 32],
         &[9; 16],
@@ -108,7 +108,7 @@ fn a_webcrypto_style_signature_makes_a_verifiable_ais() {
 // OP-151 m.3 (e)
 #[test]
 fn malformed_input_is_refused() {
-    let basis_cbor = basis("anchor", &[1; 16]).unwrap();
+    let basis_cbor = basis("anchor", &[1; 16], None, None).unwrap();
     for (domain, nonce, mode) in [
         (&[3u8; 31][..], &[9u8; 16][..], "check"),
         (&[3; 32], &[9; 8], "check"),
@@ -144,7 +144,9 @@ fn malformed_input_is_refused() {
         )
         .is_err()
     );
-    assert!(basis("holding", &[1; 16]).is_err());
+    assert!(basis("holding", &[1; 16], None, None).is_err());
+    assert!(basis("holding", &[1; 16], Some(&[2; 15]), Some(7)).is_err());
+    assert!(basis("anchor", &[1; 16], Some(&[2; 16]), Some(7)).is_err());
     assert!(protected(-7, &[0; 32]).is_err());
     assert!(protected(-9, &[0; 31]).is_err());
     assert!(sign1(&[0xa0], b"x", &[0; 63]).is_err());
@@ -160,4 +162,34 @@ fn oversized_sig_structure_is_refused() {
     let big = vec![0_u8; Limits::MAX_STRING + 1];
     assert_eq!(sig_structure(&prot, &big), Err("input"));
     assert_ne!(sig_structure(&prot, b"p").unwrap(), Vec::<u8>::new());
+}
+
+// OP-152 m.9 (d), IA-5
+#[test]
+fn a_holding_basis_names_the_grant_holder_and_episode() {
+    let cbor = basis("holding", &[1; 16], Some(&[2; 16]), Some(7)).unwrap();
+    let v = dcbor::decode(&cbor, Limits::CEILING).unwrap();
+    assert_eq!(
+        exercise_basis(&v).unwrap(),
+        ExerciseBasis::Holding(HoldingRef {
+            grant: Id([1; 16]),
+            holder: Id([2; 16]),
+            since: 7,
+        })
+    );
+    let s = statement(
+        &[3; 32],
+        &[9; 16],
+        &[4; 32],
+        "commit",
+        "p",
+        &[],
+        &cbor,
+        1,
+        &[],
+    )
+    .unwrap();
+    let shown = describe_statement(&s).unwrap();
+    assert!(shown.contains("\"holding\":{\"grant\""), "{shown}");
+    assert!(shown.contains("\"since\":\"7\""), "{shown}");
 }

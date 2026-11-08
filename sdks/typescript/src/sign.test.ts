@@ -60,5 +60,38 @@ describe("AIS signing helpers", () => {
     expect(() => k.aisProtected(-7, new Uint8Array(32))).toThrow("algorithm not allowed");
     expect(() => k.describeStatement(new Uint8Array([0]))).toThrow("input");
     expect(() => k.exerciseBasis("holding", new Uint8Array(16))).toThrow("input");
+    expect(() => k.exerciseBasis("anchor", new Uint8Array(16), new Uint8Array(16), 7n)).toThrow(
+      "input",
+    );
+  });
+
+  // OP-152 m.9 (d), IA-5: a delegated admin signs on its own holding
+  it("encode a holding basis the statement shows with its episode", async () => {
+    const k = await kernel();
+    const basis = k.exerciseBasis(
+      "holding",
+      new Uint8Array(16).fill(1),
+      new Uint8Array(16).fill(2),
+      7n,
+    );
+    const statement = k.aisStatement(
+      new Uint8Array(32).fill(3),
+      new Uint8Array(16).fill(9),
+      new Uint8Array(32).fill(4),
+      "commit",
+      "access-console",
+      new Uint8Array(),
+      basis,
+      1_500n,
+      new Uint8Array(),
+    );
+    const shown = JSON.parse(k.describeStatement(statement)) as {
+      basis: { holding?: { grant: string; holder: string; since: string } };
+    };
+    expect(shown.basis.holding).toEqual({
+      grant: b64url(new Uint8Array(16).fill(1)),
+      holder: b64url(new Uint8Array(16).fill(2)),
+      since: "7",
+    });
   });
 });

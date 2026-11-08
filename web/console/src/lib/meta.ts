@@ -3,9 +3,11 @@
 // drafts the intent with the payload digest and answers the payload bytes, the Kernel decodes
 // the drafted intent for the signature screen, and only after the user signs is the commit sent
 // to ADP as one Exercise. A bulk change is one Exercise per item, all shown on one screen.
-import { loadKernel } from "@esuiss/access";
+import { type Kernel, loadKernel } from "@esuiss/access";
 
+import { search } from "./adp.js";
 import { API, b64url, call, fromB64url, json, Problem } from "./api.js";
+import { draft } from "./intents.js";
 import {
   ADP_PEP,
   type Confirm,
@@ -29,6 +31,76 @@ interface MetaDraft {
   readonly envelope: string;
   readonly payload: string;
   readonly basis?: { readonly anchor: string };
+}
+
+/** A holding episode as ADP names it: the Grant, its holder and the position that opened it. */
+export interface HoldingRef {
+  readonly grant: string;
+  readonly holder: string;
+  readonly since: number;
+}
+
+/** The basis a meta write is signed on: a root Anchor, or one of the viewer's own holdings. */
+export type Basis = { readonly anchor: string } | { readonly holding: HoldingRef };
+
+interface HeldGrant extends HoldingRef {
+  readonly actions: readonly { readonly namespace?: string; readonly name?: string }[];
+}
+
+async function eligibleOn(subject: string, set: unknown): Promise<boolean> {
+  const r = await call("/proxy/adp/eligibility:check", { method: "POST", body: { subject, set } });
+  if (!r.ok) return false;
+  const v = (await r.json()) as { eligible?: unknown };
+  return v.eligible === true;
+}
+
+/**
+ * OP-152 m.9 (d), IA-5, OP-152 m.7 (b): the basis a meta write is signed on. The family's root
+ * Anchor when the viewer is eligible on it; otherwise the first of the viewer's own holdings that
+ * names the action and is eligible; otherwise the root Anchor, which the core then refuses.
+ */
+export async function basisFor(
+  instance: Instance,
+  name: string,
+  resource: { readonly namespace: string; readonly path: readonly string[] },
+  anchor: string,
+): Promise<Basis> {
+  const root: Basis = { anchor };
+  const subject = instance.party;
+  if (subject === undefined) return root;
+  try {
+    const d = await draft(
+      instance,
+      { action: { namespace: "access", name, major: 1 }, resources: [resource] },
+      "check",
+    );
+    if (d.probe === undefined) return root;
+    if (await eligibleOn(subject, { ...d.probe, intent: d.intent })) return root;
+    const held = await search<HeldGrant>(instance, "holdings", {});
+    for (const h of held.results) {
+      if (!h.actions.some((a) => a.namespace === "access" && a.name === name)) continue;
+      const holding = { grant: h.grant, holder: h.holder, since: h.since };
+      if (await eligibleOn(subject, { ...d.probe, basis: { holding }, intent: d.intent })) {
+        return { holding };
+      }
+    }
+  } catch {
+    return root;
+  }
+  return root;
+}
+
+/** The Kernel's canonical CBOR of `basis`. */
+export function basisCbor(k: Kernel, basis: Basis): Uint8Array {
+  if ("anchor" in basis) return k.exerciseBasis("anchor", fromB64url(basis.anchor));
+  const h = basis.holding;
+  return k.exerciseBasis("holding", fromB64url(h.grant), fromB64url(h.holder), BigInt(h.since));
+}
+
+/** The holding a `grant_issue` payload derives from, when it re-delegates one (C11). */
+function issuedFrom(payload: MetaPayload): HoldingRef | undefined {
+  const issue = payload["grant_issue"] as { basis?: { holding?: HoldingRef } } | undefined;
+  return issue?.basis?.holding;
 }
 
 /** The meta-action a payload names. */
@@ -85,11 +157,26 @@ export async function metaWrites(
   if (payloads.length === 0) return [];
   const k = await loadKernel();
   const prepared = await Promise.all(payloads.map((p) => prepare(instance, p)));
-  const signed = prepared.map((p) => {
+  const bases = await Promise.all(
+    prepared.map(async (p, i): Promise<Basis> => {
+      const anchor = p.draft.basis?.anchor;
+      const payload = payloads[i];
+      const from = payload === undefined ? undefined : issuedFrom(payload);
+      if (anchor === undefined) {
+        // C11: a re-delegation is signed on the holding it derives from
+        if (from === undefined) throw new NotSigned("mismatch");
+        return { holding: from };
+      }
+      const resource = p.draft.intent.resources[0];
+      if (resource === undefined) throw new NotSigned("mismatch");
+      return basisFor(instance, p.name, resource, anchor);
+    }),
+  );
+  const signed = prepared.map((p, i) => {
     const n = nonce();
-    const anchor = p.draft.basis?.anchor;
-    if (anchor === undefined) throw new NotSigned("mismatch");
-    const basis = k.exerciseBasis("anchor", fromB64url(anchor));
+    const chosen = bases[i];
+    if (chosen === undefined) throw new NotSigned("mismatch");
+    const basis = basisCbor(k, chosen);
     const statement = k.aisStatement(
       instance.domain,
       n,
@@ -103,7 +190,7 @@ export async function metaWrites(
     );
     const shown = decodedStatement(k, statement);
     if (shown.intent !== p.decoded.digest) throw new NotSigned("mismatch");
-    return { p, n, anchor, statement, shown };
+    return { p, n, chosen, statement, shown };
   });
   const first = signed[0];
   if (first === undefined) return [];
@@ -123,7 +210,7 @@ export async function metaWrites(
         nonce: b64url(s.n),
         intent: s.p.draft.intent,
         payload: s.p.draft.payload,
-        basis: { anchor: s.anchor },
+        basis: s.chosen,
         capacity: "own",
         ais: await sign(instance.key, k, instance.kid, s.statement),
       },
