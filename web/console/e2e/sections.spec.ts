@@ -433,6 +433,10 @@ test("integrations name OAuth terms only as protocol terms", async ({ page, bff 
     expect(text.slice(Math.max(0, m.index - 6), m.index)).toBe("OAuth ");
   }
   await expect(page.getByRole("heading", { name: "Delivery log" })).toBeVisible();
+  // TN-136, Ek B 3108
+  await expect(page.getByTestId("deliveries")).toContainText(
+    "account.created · delivered · 1 attempts · HTTP 200",
+  );
 });
 
 // OP-151 m.8 (d), (e), Ek B 3088, 3357: audit depth, pseudonyms and the two-part reason

@@ -533,4 +533,5 @@ export const tr: Record<Key, string> = {
   publishButton: "Yayımla",
   publishKept: "Şu parmak iziyle yayımlandı",
   publishAcceptedIn: "Kabul edildiği yerler: {domains}",
+  deliveryAttempts: "{n} deneme",
 };

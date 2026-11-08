@@ -316,6 +316,55 @@ interface Webhook {
   readonly status?: string;
 }
 
+interface Delivery {
+  readonly event_id: string;
+  readonly event: string;
+  readonly state: string;
+  readonly attempts: number;
+  readonly last_status?: number | null;
+  readonly occurred_at: string;
+}
+
+/** TN-136, OP-151 m.20 (e), Ek B 3108: a webhook's delivery log, newest first, never a body. */
+function Deliveries({
+  ctx,
+  base,
+  webhook,
+}: {
+  readonly ctx: Ctx;
+  readonly base: string;
+  readonly webhook: string;
+}): ReactElement {
+  const l = useLoad(() =>
+    adminGet<Items<Delivery>>(
+      ctx.instance,
+      `${base}/webhooks/${encodeURIComponent(webhook)}/deliveries`,
+    ),
+  );
+  return (
+    <Show l={l}>
+      {(v) =>
+        v.items.length === 0 ? (
+          <p>{t("webhookDeliveriesNone")}</p>
+        ) : (
+          <ul data-testid="deliveries">
+            {v.items.map((d) => (
+              <li key={d.event_id}>
+                <span className="mono">{d.event}</span> · {d.state} ·{" "}
+                {t("deliveryAttempts", { n: String(d.attempts) })}
+                {d.last_status !== undefined && d.last_status !== null
+                  ? ` · HTTP ${String(d.last_status)}`
+                  : ""}{" "}
+                · {d.occurred_at}
+              </li>
+            ))}
+          </ul>
+        )
+      }
+    </Show>
+  );
+}
+
 /** §8.11, Ek B 3109: OAuth terms only as "OAuth grant type"; hooks and webhooks of the realm. */
 export function Integrations({ ctx }: { readonly ctx: Ctx }): ReactElement {
   const base = `realms/${encodeURIComponent(ctx.session.realm)}`;
@@ -382,7 +431,7 @@ export function Integrations({ ctx }: { readonly ctx: Ctx }): ReactElement {
                   <span className="mono">{h.url}</span> · {t("webhookEvents")}:{" "}
                   <span className="mono">{h.events.join(", ")}</span>
                   <h4>{t("webhookDeliveries")}</h4>
-                  <p>{t("webhookDeliveriesNone")}</p>
+                  <Deliveries ctx={ctx} base={base} webhook={h.webhook_id} />
                 </li>
               ))}
             </ul>

@@ -524,6 +524,7 @@ export const en = {
   publishButton: "Publish",
   publishKept: "Published as fingerprint",
   publishAcceptedIn: "Accepted in: {domains}",
+  deliveryAttempts: "{n} attempts",
 } as const;
 
 export type Key = keyof typeof en;

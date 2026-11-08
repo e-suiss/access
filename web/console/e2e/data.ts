@@ -66,6 +66,19 @@ export function seed(bff: ConsoleMock): void {
   bff.admin.set("realms/acme/webhooks", {
     items: [{ webhook_id: "whk_1", url: "https://hooks.example/w", events: ["account.created"] }],
   });
+  bff.admin.set("realms/acme/webhooks/whk_1/deliveries", {
+    items: [
+      {
+        event_id: "evt_1",
+        event: "account.created",
+        state: "delivered",
+        attempts: 1,
+        last_status: 200,
+        occurred_at: "2026-11-07T10:00:00Z",
+        queued_at: "2026-11-07T10:00:00Z",
+      },
+    ],
+  });
   bff.admin.set("realms/acme/analytics", {
     days: [
       {
