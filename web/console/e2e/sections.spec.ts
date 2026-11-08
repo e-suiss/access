@@ -37,10 +37,11 @@ test("Sign-in settings and authority admin are separate screens", async ({ page,
 // §8.17.9.2, X20, Ek B 3098: the change-impact preview sentence
 test("a role move shows who gains and who loses an ability", async ({ page, bff }) => {
   await open(page, bff, "/console/admin/roles");
-  await page.getByLabel("Role", { exact: true }).fill("finance-approver");
-  await page.getByLabel("Current version").fill("4");
-  await page.getByLabel("New version").fill("5");
-  await page.getByRole("button", { name: "Show" }).click();
+  const preview = page.getByRole("region", { name: "Change-impact preview" });
+  await preview.getByLabel("Role", { exact: true }).fill("finance-approver");
+  await preview.getByLabel("Current version").fill("4");
+  await preview.getByLabel("New version").fill("5");
+  await preview.getByRole("button", { name: "Show" }).click();
   await expect(page.getByTestId("impact-sentence")).toHaveText(
     "Moving 3 role delegations to v5 gives 41 people a new ability: commerce.refund; removes 1 ability from 12 people: commerce.void.",
   );
@@ -55,26 +56,157 @@ test("a role move shows who gains and who loses an ability", async ({ page, bff 
   });
 });
 
-// §8.17.9.2, E11, Ek B 3097, 3355, 3100, 3354: the role editor, "as of catalog vN" and
-// protected meta-actions listed one by one, apart
-test("the role editor names what is not included and protected actions stand apart", async ({
-  page,
-  bff,
-}) => {
+// §8.17.9.2, E11, C28, OP-151 m.20 (b), Ek B 3097, 3355, 3354: the role editor saves a version
+test("the role editor saves a new version as one signed change", async ({ page, bff }) => {
   await open(page, bff, "/console/admin/roles");
-  await page.getByLabel("Catalog version").fill("12");
-  await expect(page.getByTestId("role-covers")).toContainText(
+  const editor = page.getByRole("region", { name: "Role editor" });
+  await editor.getByLabel("Role name").fill("helpdesk");
+  await editor.getByRole("button", { name: "Open" }).click();
+  await expect(page.getByTestId("role-version")).toContainText("Editing from v1");
+  await expect(page.getByTestId("role-covers")).toHaveText(
     "All non-protected actions in commerce as of catalog v12 — future actions not included.",
   );
   await expect(page.getByTestId("not-included")).toContainText(
     "Only delegations that name it can include a protected action.",
   );
+  await editor.getByLabel("idp.account.reactivate").check();
+  await editor.getByRole("button", { name: "Save as a new version" }).click();
+  const dialog = page.getByRole("dialog", { name: "Review and sign" });
+  await expect(dialog).toContainText("access.authority_set_define v1");
+  expect(bff.metaCommits).toEqual([]);
+  await dialog.getByRole("button", { name: "Sign" }).click();
+  await expect(editor.getByRole("status")).toContainText("Recorded as change");
+  expect(bff.metaCommits).toHaveLength(1);
+  const define = bff.metaCommits[0]?.payload as {
+    authority_set_define: { name: string; authority: { actions: { exact: unknown[] } } };
+  };
+  expect(define.authority_set_define.name).toBe("helpdesk");
+  expect(define.authority_set_define.authority.actions.exact).toHaveLength(2);
+});
+
+// X20, §8.17.9.8, INV-10, Ek B 3098: the move is an explicit bulk grant_amend, one Exercise each
+test("moving role delegations signs one amend per delegation", async ({ page, bff }) => {
+  await open(page, bff, "/console/admin/roles");
+  const preview = page.getByRole("region", { name: "Change-impact preview" });
+  await preview.getByLabel("Role", { exact: true }).fill("finance-approver");
+  await preview.getByLabel("Current version").fill("4");
+  await preview.getByLabel("New version").fill("5");
+  await preview.getByRole("button", { name: "Show" }).click();
+  await page.getByTestId("move-delegations").click();
+  const dialog = page.getByRole("dialog", { name: "Review and sign" });
+  await expect(dialog).toContainText("access.grant_amend v1");
+  await dialog.getByRole("button", { name: "Sign" }).click();
+  await expect(page.getByTestId("moved").getByRole("listitem")).toHaveCount(3);
+  expect(bff.metaCommits.map((c) => c.action)).toEqual([
+    "grant_amend",
+    "grant_amend",
+    "grant_amend",
+  ]);
+});
+
+// INV-10, XI-4: a held widening move says it is held, never done
+test("a held move says it waits", async ({ page, bff }) => {
+  await open(page, bff, "/console/admin/roles");
+  bff.metaOutcome = "require_action";
+  const preview = page.getByRole("region", { name: "Change-impact preview" });
+  await preview.getByLabel("Role", { exact: true }).fill("finance-approver");
+  await preview.getByLabel("Current version").fill("4");
+  await preview.getByLabel("New version").fill("5");
+  await preview.getByRole("button", { name: "Show" }).click();
+  await page.getByTestId("move-delegations").click();
+  await page.getByRole("dialog").getByRole("button", { name: "Sign" }).click();
+  await expect(page.getByTestId("moved")).toContainText("Not done yet");
+  expect(bff.metaCommits).toHaveLength(1);
+});
+
+// §8.17.9.2, Ek B 3100, 3354: an admin delegation's meta-actions one by one, protected apart
+test("an admin delegation lists its meta-actions with protected ones apart", async ({
+  page,
+  bff,
+}) => {
+  await open(page, bff, "/console/admin/roles");
+  const region = page.getByRole("region", { name: "What an admin delegation can cover" });
+  await region.getByLabel("Admin delegation ID").fill("grant");
+  await region.getByRole("button", { name: "Show" }).click();
+  await expect(page.getByTestId("meta-ordinary").getByRole("listitem")).toHaveCount(2);
   const reserved = page.getByTestId("meta-reserved").getByRole("listitem");
-  await expect(reserved).toHaveCount(7);
-  await expect(reserved.first()).toContainText(
-    "Protected action — Only delegations that name this action explicitly can include it.",
+  await expect(reserved).toHaveCount(2);
+  await expect(reserved.first()).toContainText("Protected action");
+  await expect(reserved.first()).toContainText("needs 2 approvals");
+  await expect(region).not.toContainText("grant_amend");
+  expect(bff.queries.find((q) => q.kind === "admin-grant")?.query).toEqual({ grant: "grant" });
+});
+
+// IA-5, OP-152 m.7 (b): a delegated admin sees a section through its own holding
+test("a delegated admin sees the roles screen through its own holding", async ({ page, bff }) => {
+  bff.heldActions.add("access/grant_amend");
+  await open(page, bff, "/console/admin/roles", ["idp.realm/branding"]);
+  const screens = page.getByRole("navigation", { name: "Screens in this section" });
+  await expect(screens.getByRole("link", { name: "Roles & templates" })).toBeVisible();
+  expect(bff.queries.some((q) => q.kind === "holdings" && q.ais)).toBe(true);
+});
+
+// §8.17.9.6, E6, EI-8: every direct delegation needs an explicit choice; no default
+test("offboarding asks for a choice per delegation and labels only a recorded departure", async ({
+  page,
+  bff,
+}) => {
+  await open(page, bff, "/console/admin/offboarding");
+  await page.getByLabel("Party ID").fill("cGFydHk");
+  await page.getByLabel(/Delegations given directly/).fill("Z3JhbnQx\nZ3JhbnQy");
+  const depart = page.getByTestId("depart");
+  await expect(depart).toBeDisabled();
+  await expect(page.getByTestId("offboarded")).toHaveCount(0);
+  await page.getByRole("group", { name: "Z3JhbnQx" }).getByLabel("Keep").check();
+  await expect(depart).toBeDisabled();
+  await page.getByRole("group", { name: "Z3JhbnQy" }).getByLabel("Revoke").check();
+  await depart.click();
+  await page.getByRole("dialog").getByRole("button", { name: "Sign" }).click();
+  await expect(page.getByTestId("offboarded")).toHaveText("Offboarded");
+  expect(bff.metaCommits[0]?.payload).toEqual({
+    party_depart: {
+      party: "cGFydHk",
+      disposition: [
+        { grant: "Z3JhbnQx", disposition: "keep" },
+        { grant: "Z3JhbnQy", disposition: "revoke" },
+      ],
+    },
+  });
+});
+
+// IA-2: Changes is information only
+test("changes lists what changed and asks nothing", async ({ page, bff }) => {
+  await open(page, bff, "/console/admin/changes");
+  const rows = page.getByTestId("changes").getByRole("listitem");
+  await expect(rows).toHaveCount(2);
+  await expect(rows.first()).toContainText("Role version helpdesk v2 · by you");
+  await expect(rows.nth(1)).toContainText("ended");
+  await expect(page.getByText(/action required/i)).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /accept|approve/i })).toHaveCount(0);
+});
+
+// §8.17.10.2, X21, E10, E12, L1-ADP-18, Ek B 3104, 3105, 3106, 3107
+test("publishing names unmapped parameters, then shows where the version waits", async ({
+  page,
+  bff,
+}) => {
+  await open(page, bff, "/console/developer/schemas");
+  const region = page.getByRole("region", { name: "Publish a version" });
+  await region.getByRole("textbox", { name: "Namespace" }).fill("commerce");
+  await region.getByLabel("Catalog version").fill("3");
+  await region.getByLabel(/^Actions/).fill("refund irreversible");
+  await region.getByLabel(/^Parameters/).fill("refund.note text recipient");
+  await region.getByRole("button", { name: "Publish" }).click();
+  await expect(page.getByTestId("publish-warnings")).toHaveText(
+    "note affects recipient — map it to a recipient type or it will be rejected",
   );
-  await expect(page.getByTestId("meta-ordinary")).not.toContainText("authority root");
+  expect(bff.published).toEqual([]);
+  await region.getByLabel(/^Parameters/).fill("refund.note text opaque");
+  await region.getByRole("button", { name: "Publish" }).click();
+  await expect(page.getByTestId("published-pending")).toHaveText("Pending acceptance in: acme");
+  await expect(page.getByTestId("published-unchanged")).toBeVisible();
+  await expect(page.getByRole("button", { name: /accept/i })).toHaveCount(0);
+  expect(bff.published).toHaveLength(1);
 });
 
 // TN-110, MD-14, X11: an account change is drafted, shown as decoded and signed before it is sent
@@ -153,7 +285,7 @@ for (const path of ["/console/admin/sources", "/console/developer/schemas"]) {
     bff,
   }) => {
     await open(page, bff, path);
-    await page.getByRole("textbox", { name: "Namespace" }).fill("commerce");
+    await page.getByRole("textbox", { name: "Namespace", exact: true }).last().fill("commerce");
     await page.getByRole("button", { name: "Show" }).click();
     await expect(page.getByTestId("fingerprint")).toHaveText(
       Buffer.alloc(32, 8).toString("base64url"),

@@ -2,6 +2,7 @@
 // viewer can exercise at least one action of it, as the eligibility check answers through the
 // BFF's ADP read path for a drafted intent. No answer, an error or a refusal shows nothing
 // (fail closed); there are no disabled stubs.
+import { search } from "./adp.js";
 import { call } from "./api.js";
 import type { Instance } from "./instance.js";
 import { draft, type Wanted } from "./intents.js";
@@ -61,9 +62,10 @@ export const PROBES: Readonly<Record<Screen, readonly Probe[]>> = {
     idp("client", "register"),
     idp("upstream", "register"),
   ],
-  schemas: [{ namespace: "access.schema", name: "publish", major: 1, resource: "domain" }],
+  // L1-ADP-18: any Party may publish; the screen shows where versions stand, which auditors read
+  schemas: [AUDIT, meta("acceptance_amend")],
   integrations: [idp("client", "register"), idp("client", "update")],
-  lab: [{ namespace: "access.schema", name: "publish", major: 1, resource: "domain" }, AUDIT],
+  lab: [AUDIT],
   logs: [AUDIT],
   records: [AUDIT],
   replay: [AUDIT],
@@ -87,7 +89,30 @@ export function probeIntent(realm: string, probe: Probe): Wanted {
   };
 }
 
-async function eligible(instance: Instance, realm: string, probe: Probe): Promise<boolean> {
+/** One of the viewer's own holdings, as the `holdings` search answers (IA-5). */
+interface Holding {
+  readonly grant: string;
+  readonly holder: string;
+  readonly since: number;
+  readonly actions: readonly { readonly namespace?: string; readonly name?: string }[];
+}
+
+async function asks(subject: string, set: unknown): Promise<boolean> {
+  const r = await call("/proxy/adp/eligibility:check", {
+    method: "POST",
+    body: { subject, set },
+  });
+  if (!r.ok) return false;
+  const v = (await r.json()) as { eligible?: unknown };
+  return v.eligible === true;
+}
+
+async function eligible(
+  instance: Instance,
+  realm: string,
+  probe: Probe,
+  holdings: () => Promise<readonly Holding[]>,
+): Promise<boolean> {
   // OP-149 m.10: the subject is the Party the device Instance acts for; without it, nothing
   const subject = instance.party;
   if (subject === undefined) return false;
@@ -95,13 +120,16 @@ async function eligible(instance: Instance, realm: string, probe: Probe): Promis
     const d = await draft(instance, probeIntent(realm, probe), "check");
     // OP-151 m.20 (d): the set is the drafted probe, its domain, root basis and capacity
     if (d.probe === undefined) return false;
-    const r = await call("/proxy/adp/eligibility:check", {
-      method: "POST",
-      body: { subject, set: { ...d.probe, intent: d.intent } },
-    });
-    if (!r.ok) return false;
-    const v = (await r.json()) as { eligible?: unknown };
-    return v.eligible === true;
+    if (await asks(subject, { ...d.probe, intent: d.intent })) return true;
+    // OP-152 m.7 (b): a delegated admin is asked on each of its own holdings naming the action
+    for (const h of await holdings()) {
+      if (!h.actions.some((a) => a.namespace === probe.namespace && a.name === probe.name)) {
+        continue;
+      }
+      const basis = { holding: { grant: h.grant, holder: h.holder, since: h.since } };
+      if (await asks(subject, { ...d.probe, basis, intent: d.intent })) return true;
+    }
+    return false;
   } catch {
     return false;
   }
@@ -114,11 +142,19 @@ export async function visibleScreens(
 ): Promise<ReadonlySet<Screen>> {
   const all = Object.keys(PROBES) as Screen[];
   const probes = new Map<string, Promise<boolean>>();
+  let held: Promise<readonly Holding[]> | undefined;
+  const holdings = (): Promise<readonly Holding[]> => {
+    held ??= search<Holding>(instance, "holdings", {}).then(
+      (a) => a.results,
+      () => [],
+    );
+    return held;
+  };
   const ask = (p: Probe) => {
     const key = `${p.namespace}/${p.name}/${String(p.major)}/${p.resource}`;
     let answer = probes.get(key);
     if (answer === undefined) {
-      answer = eligible(instance, realm, p);
+      answer = eligible(instance, realm, p, holdings);
       probes.set(key, answer);
     }
     return answer;

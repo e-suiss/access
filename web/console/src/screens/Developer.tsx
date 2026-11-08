@@ -8,9 +8,23 @@ import { t } from "../i18n/index.js";
 import { adminGet } from "../lib/admin.js";
 import { check, explain, type Explained, search, type SearchAnswer } from "../lib/adp.js";
 import type { Wanted } from "../lib/intents.js";
+import {
+  type PackageDraft,
+  publicationStatus,
+  type PublicationStatus,
+  publish,
+  type Published,
+} from "../lib/meta.js";
 import { Explanation } from "./Explanation.js";
 import { Advisory, type Ctx, Field, Panel, Show, useLoad, useRun } from "./parts.js";
 import { type Publication, PublicationView } from "./Reports.js";
+
+function lines(text: string): string[] {
+  return text
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l !== "");
+}
 
 interface DraftParam {
   readonly name: string;
@@ -42,6 +56,192 @@ function PrePublish(): ReactElement {
   );
 }
 
+const PARAM_TYPES = ["amount", "int", "text", "bool", "bytes", "id", "opaque"] as const;
+const EFFECTS = ["none", "reversible", "irreversible"] as const;
+
+/** The package a publish form describes, or why it does not describe one. */
+export function packageOf(
+  namespace: string,
+  version: string,
+  actionLines: readonly string[],
+  paramLines: readonly string[],
+): PackageDraft | undefined {
+  const catalog = Number(version);
+  if (namespace === "" || !Number.isInteger(catalog) || catalog < 0) return undefined;
+  const actions = new Map<
+    string,
+    { name: string; effect: string; params: Record<string, string> }
+  >();
+  for (const l of actionLines) {
+    const [name, effect] = l.split(/\s+/);
+    if (name === undefined || !EFFECTS.includes(effect as (typeof EFFECTS)[number])) {
+      return undefined;
+    }
+    actions.set(name, { name, effect: effect ?? "", params: {} });
+  }
+  const classes: { action: string; parameter: string; class: string }[] = [];
+  for (const l of paramLines) {
+    const [path, type, cls] = l.split(/\s+/);
+    const [action, parameter] = (path ?? "").split(".");
+    const a = action === undefined ? undefined : actions.get(action);
+    if (
+      a === undefined ||
+      parameter === undefined ||
+      !PARAM_TYPES.includes(type as (typeof PARAM_TYPES)[number]) ||
+      cls === undefined
+    ) {
+      return undefined;
+    }
+    a.params[parameter] = type ?? "";
+    classes.push({ action: a.name, parameter, class: cls });
+  }
+  return {
+    namespace,
+    catalog_version: catalog,
+    actions: [...actions.values()].map((a) => ({
+      name: a.name,
+      major: 1,
+      effect_class: a.effect,
+      ...(Object.keys(a.params).length > 0 ? { params: a.params } : {}),
+    })),
+    classes,
+  };
+}
+
+/**
+ * §8.17.10.2, X21, E10–E12, Ek B 3104–3107: publish a version to the domains named; then where
+ * it stands: "Pending acceptance in: …". There is no accept control: each domain accepts on its
+ * own, by its own protected change.
+ */
+function Publish({ ctx }: { readonly ctx: Ctx }): ReactElement {
+  const [namespace, setNamespace] = useState("");
+  const [version, setVersion] = useState("1");
+  const [actionsText, setActions] = useState("");
+  const [paramsText, setParams] = useState("");
+  const [domainsText, setDomains] = useState(ctx.session.domain);
+  const [l, run] = useRun<{ published: Published; status?: PublicationStatus }>();
+  const pkg = packageOf(namespace, version, lines(actionsText), lines(paramsText));
+  const domains = lines(domainsText);
+  const name = (d: string) => (d === ctx.session.domain ? ctx.session.realm : d);
+  return (
+    <Panel id="publish" title={t("publishTitle")}>
+      <p className="hint">{t("publishIntro")}</p>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (pkg === undefined) return;
+          run(async () => {
+            const published = await publish(ctx.instance, pkg, domains);
+            if (!published.kept) return { published };
+            const status = await publicationStatus(
+              ctx.instance,
+              pkg.namespace,
+              published.fingerprint,
+              domains,
+            );
+            return { published, status };
+          });
+        }}
+      >
+        <Field
+          id="publish-ns"
+          label={t("pendingNamespace")}
+          value={namespace}
+          onChange={setNamespace}
+        />
+        <Field
+          id="publish-version"
+          label={t("publishVersion")}
+          value={version}
+          onChange={setVersion}
+          type="number"
+        />
+        <p className="field">
+          <label htmlFor="publish-actions">{t("publishActions")}</label>
+          <textarea
+            id="publish-actions"
+            value={actionsText}
+            onChange={(e) => {
+              setActions(e.target.value);
+            }}
+          />
+        </p>
+        <p className="field">
+          <label htmlFor="publish-params">{t("publishParams")}</label>
+          <textarea
+            id="publish-params"
+            value={paramsText}
+            onChange={(e) => {
+              setParams(e.target.value);
+            }}
+          />
+        </p>
+        <p className="field">
+          <label htmlFor="publish-domains">{t("publishDomains")}</label>
+          <textarea
+            id="publish-domains"
+            value={domainsText}
+            onChange={(e) => {
+              setDomains(e.target.value);
+            }}
+          />
+        </p>
+        <button type="submit" disabled={pkg === undefined || domains.length === 0}>
+          {t("publishButton")}
+        </button>
+      </form>
+      <Show l={l}>
+        {({ published, status }) =>
+          published.kept ? (
+            <>
+              <p>
+                {t("publishKept")}{" "}
+                <span className="mono" data-testid="published-fingerprint">
+                  {published.fingerprint}
+                </span>
+              </p>
+              <p data-testid="published-unchanged">{t("pubExisting")}</p>
+              {published.new_actions.length > 0 && (
+                <p>
+                  {t("pubNewActions", {
+                    namespace: pkg?.namespace ?? namespace,
+                    actions: published.new_actions.join(", "),
+                  })}
+                </p>
+              )}
+              <p data-testid="published-pending">
+                {(status?.pending_acceptance.length ?? 0) === 0
+                  ? t("schemasNoPending")
+                  : t("schemasPendingIn", {
+                      domains: (status?.pending_acceptance ?? []).map(name).join(", "),
+                    })}
+              </p>
+              {(status?.accepted_in.length ?? 0) > 0 && (
+                <p>
+                  {t("publishAcceptedIn", {
+                    domains: (status?.accepted_in ?? []).map(name).join(", "),
+                  })}
+                </p>
+              )}
+            </>
+          ) : (
+            <ul data-testid="publish-warnings">
+              {published.warnings.map((w) => (
+                <li key={w.parameter} role="alert">
+                  {t("schemasUnmapped", {
+                    param: w.parameter,
+                    affects: w.reason.replace("affects_", ""),
+                  })}
+                </li>
+              ))}
+            </ul>
+          )
+        }
+      </Show>
+    </Panel>
+  );
+}
+
 /** §8.17.10.2, X21: where each published version stands; "Pending acceptance in: …", no accept. */
 export function Schemas({ ctx }: { readonly ctx: Ctx }): ReactElement {
   const [namespace, setNamespace] = useState("");
@@ -50,6 +250,7 @@ export function Schemas({ ctx }: { readonly ctx: Ctx }): ReactElement {
     <>
       <p>{t("schemasIntro")}</p>
       <PrePublish />
+      <Publish ctx={ctx} />
       <Panel id="publications" title={t("pendingNamespace")}>
         <form
           onSubmit={(e) => {

@@ -88,6 +88,13 @@ export function seed(bff: ConsoleMock): void {
         pin: { name: "finance-approver", version: 5, digest: digest(4) },
         relation: "incomparable",
         moves: [id(1), id(2), id(3)],
+        amends: [1, 2, 3].map((n) => ({
+          grant_amend: {
+            grant: id(n),
+            authority: { authority: {}, constraints: {}, delegation: {}, requirements: [] },
+            named: { name: "finance-approver", version: 5, digest: digest(4) },
+          },
+        })),
         holders: { parties: 53, everyone: false, upper_bound: false },
         abilities: [
           {
@@ -197,6 +204,98 @@ export function seed(bff: ConsoleMock): void {
       },
     ],
     page: { next_token: "", total: 1 },
+    context: { advisory: true },
+  });
+  const action = (name: string) => ({
+    namespace: "idp.account",
+    name,
+    major: 1,
+    schema: digest(7),
+  });
+  bff.searches.set("role", {
+    results: [
+      {
+        type: "role",
+        name: "helpdesk",
+        version: 1,
+        latest: 1,
+        digest: digest(4),
+        since: 7,
+        authority: {
+          actions: { exact: [action("suspend")] },
+          resource: { namespace: "idp", prefix: ["acme"] },
+        },
+        not_included: {
+          reserved: [{ namespace: "commerce", name: "payout", major: 1, schema: digest(6) }],
+          catalogs: [{ namespace: "commerce", catalog: digest(5), catalog_version: 12, newer: [] }],
+        },
+        advisory: true,
+      },
+    ],
+    page: { next_token: "" },
+    context: { advisory: true },
+  });
+  bff.searches.set("holdings", {
+    results: [
+      {
+        type: "holding",
+        grant: id(11),
+        holder: id(2),
+        since: 4,
+        actions: [action("reactivate"), { ...action("grant_amend"), namespace: "access" }],
+        resource: { namespace: "idp", prefix: ["acme"] },
+        advisory: true,
+      },
+    ],
+    page: { next_token: "" },
+    context: { advisory: true },
+  });
+  const line = (a: string, tier: string) => ({
+    action: a,
+    tier_when_widening: tier,
+    grant_quorum: 0,
+    joint_root_quorum: tier === "ct3" ? 2 : 0,
+  });
+  bff.searches.set("admin-grant", {
+    results: [
+      {
+        type: "admin_grant",
+        grant: id(12),
+        role: { name: "admins", version: 2 },
+        actions: [line("grant_issue", "ct2"), line("grant_amend", "ct3")],
+        reserved: [line("anchor_amend", "ct3"), line("acceptance_amend", "ct3")],
+        advisory: true,
+      },
+    ],
+    page: { next_token: "" },
+    context: { advisory: true },
+  });
+  bff.searches.set("changes", {
+    results: [
+      {
+        type: "change",
+        position: "42",
+        at: Date.UTC(2026, 10, 7, 11, 2),
+        kind: "authority_set",
+        id: "helpdesk",
+        version: 2,
+        ended: false,
+        own: true,
+        advisory: true,
+      },
+      {
+        type: "change",
+        position: "41",
+        at: Date.UTC(2026, 10, 6, 9, 0),
+        kind: "grant",
+        id: id(3),
+        version: null,
+        ended: true,
+        own: false,
+        advisory: true,
+      },
+    ],
+    page: { next_token: "" },
     context: { advisory: true },
   });
   bff.searches.set("subject", {

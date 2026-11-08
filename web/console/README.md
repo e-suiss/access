@@ -64,22 +64,32 @@ schema digest the domain pinned, on a resource of its own namespace. A `check` d
 the eligibility check it belongs to (the domain, the root that covers the action's family as
 basis, and capacity), and a screen appears when the eligibility check, run by the decision point
 for your own Party, answers yes; a meta-action is asked without its payload and answered by
-coverage alone. Changes that are ADP Exercises (the audit export) go to ADP as a `commit` signed
-in this browser; the BFF forwards `evaluation` and `audit/export` only when your device
-key signed that commit, and never signs anything itself.
+coverage alone. When you hold authority only by delegation, the console also asks on each of your
+own holdings (the `holdings` search), so a delegated admin sees the screens its delegations cover.
+
+Changes to authority are ADP Exercises. For a role version, a delegation's amend or revoke, a
+departure, an Acceptance amend, a policy or an Instance end, the screen names the payload in its
+JSON form; the BFF drafts the intent with the payload's digest and answers the payload bytes, the
+Kernel decodes the drafted intent for the signature screen, and only then is the `commit` signed
+in this browser and sent. A bulk change, such as moving role delegations to a new version, is one
+Exercise per delegation, all shown on one signature screen, using the amend payloads the
+change-impact preview lists. The BFF forwards `evaluation` and `audit/export` only when your
+device key signed that commit, and never signs anything itself. Publishing a schema version is a
+statement, not a change: it is sent with a `check` signed in this browser, and there is no accept
+control anywhere — each domain accepts only by its own protected change.
 
 | Section   | Screen                          | Reads and changes                                                         | Spec                       |
 | --------- | ------------------------------- | ------------------------------------------------------------------------- | -------------------------- |
-| Admin     | Roles & templates               | role editor with "Not included"; `change-impact` preview; meta-actions    | §8.17.9.2, X20, E11        |
+| Admin     | Roles & templates               | role editor that saves versions; preview and bulk move; admin delegation  | §8.17.9.2, X20, E11        |
 | Admin     | People & agents                 | accounts (suspend, reactivate); own holdings; running copies' impact      | X31, §8.17.7.4, OP-142     |
 | Admin     | Sources                         | uses of a source; `schema-publications` waiting here, no accept control   | §8.17.9.3, §8.17.10.2, X21 |
 | Admin     | Restrictions & requirements     | what restrictions and requirements are; no stop-all control               | §8.17.7.5                  |
 | Admin     | Protected actions & break-glass | protected actions, emergency access as a delegation                       | §8.17.9.4                  |
-| Admin     | Offboarding                     | every channel needs an explicit choice                                    | §8.17.9.6                  |
+| Admin     | Offboarding                     | keep or revoke for each delegation, no default; end running copies        | §8.17.9.6, E6              |
 | Admin     | Domain                          | constitution, provider, partner authority ceilings                        | §8.17.9.7, §5.13           |
-| Admin     | Changes                         | information only                                                          | IA-2                       |
+| Admin     | Changes                         | what changed, at your depth; information only                             | IA-2                       |
 | Admin     | Sign-in settings                | settings, branding, RP ID, apps, upstreams, keys, signals, analytics      | E34, TN-17, TN-111, §8.13  |
-| Developer | Namespaces & schemas            | pre-publication check; where each version stands; no accept control       | §8.17.10.2, E10–E12, X21   |
+| Developer | Namespaces & schemas            | publish a version; "Pending acceptance in: …"; no accept control          | §8.17.10.2, E10–E12, X21   |
 | Developer | Integrations                    | apps, hooks, webhooks                                                     | §8.11                      |
 | Developer | Decision lab                    | advisory Check and Explain; sandbox domains listed as domains             | §8.17.10.4, E-2, D7        |
 | Developer | Logs                            | a recorded event at viewer depth; audit-only chain link warning           | §8.17.10.3, §9.9.2         |

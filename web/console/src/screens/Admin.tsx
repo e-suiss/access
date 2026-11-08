@@ -3,11 +3,12 @@
 // "stop everything" control (§8.17.7.5), and revoke is never offered as reversible (§8.10).
 import { useEffect, useState, type ReactElement } from "react";
 
-import { t } from "../i18n/index.js";
+import { type Key, t } from "../i18n/index.js";
 import { adminGet, change, type WriteResult } from "../lib/admin.js";
 import { search, type SearchAnswer } from "../lib/adp.js";
-import { META } from "../lib/text.js";
-import { type Ctx, Field, PageCount, Panel, Show, useLoad, useRun } from "./parts.js";
+import { type MetaPayload, type MetaResult, metaWrite, metaWrites } from "../lib/meta.js";
+import { META_BY_ACTION } from "../lib/text.js";
+import { at, type Ctx, Field, PageCount, Panel, Show, useLoad, useRun } from "./parts.js";
 import {
   type ChangeImpact,
   ChangeImpactView,
@@ -24,55 +25,193 @@ function lines(text: string): string[] {
     .filter((l) => l !== "");
 }
 
-/** §8.17.9.2, E11, C28: a typed role editor with its "Not included" block. */
-function RoleEditor(): ReactElement {
-  const [namespace, setNamespace] = useState("commerce");
-  const [version, setVersion] = useState("1");
-  const [named, setNamed] = useState("");
-  const explicit = lines(named);
+/** An action reference as a role version or a holding names it (L1-ADP-17). */
+interface ActionRef {
+  readonly namespace: string;
+  readonly name: string;
+  readonly major: number;
+  readonly schema: string;
+}
+
+interface RoleVersion {
+  readonly name: string;
+  readonly version: number;
+  readonly latest: number;
+  readonly authority: {
+    readonly actions: { readonly exact?: readonly ActionRef[] };
+    readonly resource: unknown;
+  };
+  readonly not_included: {
+    readonly reserved: readonly ActionRef[];
+    readonly catalogs: readonly {
+      readonly namespace: string;
+      readonly catalog_version: number | null;
+      readonly newer: readonly ActionRef[];
+    }[];
+  };
+}
+
+interface HoldingView {
+  readonly grant: string;
+  readonly actions: readonly ActionRef[];
+}
+
+const key = (a: ActionRef) => `${a.namespace}.${a.name}/${String(a.major)}`;
+
+/**
+ * §8.17.9.2, E11, C28, Ek B 3097: the typed role editor. A version starts from the role's
+ * latest one; actions come from it and from what the viewer itself holds, so every action is a
+ * typed reference. Saving is the signed `authority_set_define` of a new version.
+ */
+function RoleEditor({ ctx }: { readonly ctx: Ctx }): ReactElement {
+  const [name, setName] = useState("");
+  const [current, load] = useRun<RoleVersion | undefined>();
+  const [held, loadHeld] = useRun<readonly ActionRef[]>();
+  const [chosen, setChosen] = useState<ReadonlySet<string>>(new Set());
+  const [w, write] = useRun<MetaResult>();
+  const open = () => {
+    load(() =>
+      search<RoleVersion>(ctx.instance, "role", { name }).then((a) => {
+        const v = a.results[0];
+        setChosen(new Set((v?.authority.actions.exact ?? []).map(key)));
+        return v;
+      }),
+    );
+    loadHeld(() =>
+      search<HoldingView>(ctx.instance, "holdings", {}).then((a) =>
+        a.results.flatMap((h) => h.actions),
+      ),
+    );
+  };
+  const options = (v: RoleVersion | undefined, own: readonly ActionRef[]) => {
+    const all = new Map<string, ActionRef>();
+    for (const a of [...(v?.authority.actions.exact ?? []), ...own]) all.set(key(a), a);
+    return [...all.values()];
+  };
+  const save = (v: RoleVersion | undefined, own: readonly ActionRef[]) => {
+    const exact = options(v, own).filter((a) => chosen.has(key(a)));
+    const resource = v?.authority.resource ?? {
+      namespace: "idp",
+      prefix: [ctx.session.realm],
+    };
+    write(() =>
+      metaWrite(ctx.instance, ctx.confirm, ctx.instance.party ?? "", {
+        authority_set_define: { name, authority: { actions: { exact }, resource } },
+      }),
+    );
+  };
+  const own = held.status === "done" ? held.value : [];
   return (
     <Panel id="role-editor" title={t("roleEditorTitle")}>
       <p className="hint">{t("roleEditorIntro")}</p>
-      <Field id="role-ns" label={t("roleNamespace")} value={namespace} onChange={setNamespace} />
-      <Field
-        id="role-catalog"
-        label={t("roleCatalog")}
-        value={version}
-        onChange={setVersion}
-        type="number"
-      />
-      <p className="field">
-        <label htmlFor="role-named">{t("roleNamed")}</label>
-        <textarea
-          id="role-named"
-          value={named}
-          onChange={(e) => {
-            setNamed(e.target.value);
-          }}
-        />
-      </p>
-      <h4>{t("roleCovers")}</h4>
-      <ul data-testid="role-covers">
-        <li>{t("roleCoversLine", { namespace, version })}</li>
-        {explicit.map((a) => (
-          <li key={a}>{t("roleNamedLine", { action: a })}</li>
-        ))}
-      </ul>
-      <h4>{t("notIncludedTitle")}</h4>
-      <ul data-testid="not-included">
-        <li>{t("notIncludedProtected", { namespace })}</li>
-        <li>{t("notIncludedFuture", { namespace, version })}</li>
-      </ul>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          open();
+        }}
+      >
+        <Field id="role-name" label={t("roleName")} value={name} onChange={setName} />
+        <button type="submit">{t("roleOpen")}</button>
+      </form>
+      <Show l={current}>
+        {(v) => (
+          <>
+            {v === undefined ? (
+              <p>{t("roleNew")}</p>
+            ) : (
+              <p data-testid="role-version">
+                {t("roleVersionLine", { version: String(v.version), latest: String(v.latest) })}
+              </p>
+            )}
+            <fieldset>
+              <legend>{t("roleCovers")}</legend>
+              {options(v, own).map((a) => (
+                <p key={key(a)} className="field">
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={chosen.has(key(a))}
+                      onChange={(e) => {
+                        const next = new Set(chosen);
+                        if (e.target.checked) next.add(key(a));
+                        else next.delete(key(a));
+                        setChosen(next);
+                      }}
+                    />{" "}
+                    <span className="mono">{`${a.namespace}.${a.name}`}</span>
+                  </label>
+                </p>
+              ))}
+              {(v?.not_included.catalogs ?? []).map((c) => (
+                <p key={c.namespace} data-testid="role-covers">
+                  {t("roleCoversLine", {
+                    namespace: c.namespace,
+                    version: c.catalog_version === null ? "?" : String(c.catalog_version),
+                  })}
+                </p>
+              ))}
+            </fieldset>
+            <h4>{t("notIncludedTitle")}</h4>
+            <ul data-testid="not-included">
+              {(v?.not_included.reserved ?? []).map((a) => (
+                <li key={key(a)}>
+                  <strong>{t("protectedBadge")}</strong> {`${a.namespace}.${a.name}`} —{" "}
+                  {t("reservedOnlyNamed")}
+                </li>
+              ))}
+              {(v?.not_included.catalogs ?? []).map((c) => (
+                <li key={c.namespace}>
+                  {t("notIncludedFuture", {
+                    namespace: c.namespace,
+                    version: c.catalog_version === null ? "?" : String(c.catalog_version),
+                  })}
+                </li>
+              ))}
+              {(v?.not_included.reserved.length ?? 0) + (v?.not_included.catalogs.length ?? 0) ===
+                0 && <li>{t("notIncludedNothing")}</li>}
+            </ul>
+            <button
+              type="button"
+              disabled={name === "" || chosen.size === 0}
+              onClick={() => {
+                save(v, own);
+              }}
+            >
+              {t("roleSave")}
+            </button>
+          </>
+        )}
+      </Show>
+      <Show l={w}>{(r) => <WriteOutcome r={r} />}</Show>
     </Panel>
   );
 }
 
-/** §8.17.9.2, X20: the preview before role delegations move to a new version. */
+/** The outcome of a signed change, in words; a held change says it is held, never "done". */
+function WriteOutcome({ r }: { readonly r: MetaResult }): ReactElement {
+  if (r.decision) {
+    return <p role="status">{t("changeRecorded", { exercise: r.exercise ?? "" })}</p>;
+  }
+  return (
+    <p role="status">{r.outcome === "require_action" ? t("changeHeld") : t("changeRefused")}</p>
+  );
+}
+
+interface Moveable extends ChangeImpact {
+  readonly amends?: readonly MetaPayload[];
+}
+
+/**
+ * §8.17.9.2, X20, Ek B 3098: the preview before role delegations move to a new version, then
+ * the explicit bulk `grant_amend`: one Exercise per delegation, all on one signature screen. A
+ * widening move carries its expansion requirements and may be held.
+ */
 function ImpactPreview({ ctx }: { readonly ctx: Ctx }): ReactElement {
   const [role, setRole] = useState("");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
-  const [l, run] = useRun<SearchAnswer<ChangeImpact>>();
+  const [l, run] = useRun<SearchAnswer<Moveable>>();
+  const [w, move] = useRun<readonly MetaResult[]>();
   return (
     <Panel id="impact" title={t("impactTitle")}>
       <p className="hint">{t("impactIntro")}</p>
@@ -80,7 +219,7 @@ function ImpactPreview({ ctx }: { readonly ctx: Ctx }): ReactElement {
         onSubmit={(e) => {
           e.preventDefault();
           run(() =>
-            search<ChangeImpact>(ctx.instance, "change-impact", {
+            search<Moveable>(ctx.instance, "change-impact", {
               role,
               from: Number(from),
               to: Number(to),
@@ -104,37 +243,118 @@ function ImpactPreview({ ctx }: { readonly ctx: Ctx }): ReactElement {
           a.results.length === 0 ? (
             <p>{t("resultsNone")}</p>
           ) : (
-            a.results.map((c, i) => <ChangeImpactView key={String(i)} c={c} />)
+            a.results.map((c, i) => (
+              <div key={String(i)}>
+                <ChangeImpactView c={c} />
+                {(c.amends ?? []).length > 0 && (
+                  <button
+                    type="button"
+                    data-testid="move-delegations"
+                    onClick={() => {
+                      move(() =>
+                        metaWrites(
+                          ctx.instance,
+                          ctx.confirm,
+                          ctx.instance.party ?? "",
+                          c.amends ?? [],
+                        ),
+                      );
+                    }}
+                  >
+                    {t("impactMove", { n: String(c.amends?.length ?? 0), to })}
+                  </button>
+                )}
+              </div>
+            ))
           )
         }
+      </Show>
+      <Show l={w}>
+        {(rs) => (
+          <ul data-testid="moved">
+            {rs.map((r, i) => (
+              <li key={String(i)}>
+                <WriteOutcome r={r} />
+              </li>
+            ))}
+          </ul>
+        )}
       </Show>
     </Panel>
   );
 }
 
+interface MetaLine {
+  readonly action: string;
+  readonly tier_when_widening: string;
+  readonly grant_quorum: number;
+  readonly joint_root_quorum: number;
+}
+
+interface AdminGrantView {
+  readonly grant: string;
+  readonly role?: { readonly name: string; readonly version: number } | null;
+  readonly actions: readonly MetaLine[];
+  readonly reserved: readonly MetaLine[];
+}
+
+/** A meta-action's plain label (OP-151 m.19 (c)); never its canonical id. */
+function metaLabel(action: string): string {
+  const m = META_BY_ACTION[action];
+  return m === undefined ? t("metaOther") : t(m);
+}
+
 /** §8.17.9.2, Ek B 3100: an admin delegation's meta-actions one by one; protected apart. */
-function AdminMeta(): ReactElement {
-  const ordinary = META.filter((m) => !m.reserved);
-  const reserved = META.filter((m) => m.reserved);
+function AdminMeta({ ctx }: { readonly ctx: Ctx }): ReactElement {
+  const [grant, setGrant] = useState("");
+  const [l, run] = useRun<AdminGrantView | undefined>();
   return (
     <Panel id="admin-meta" title={t("adminMetaTitle")}>
       <p className="hint">{t("adminMetaIntro")}</p>
-      <h4>{t("adminMetaOrdinary")}</h4>
-      <ul data-testid="meta-ordinary">
-        {ordinary.map((m) => (
-          <li key={m.label}>
-            {t(m.label)} · {t("adminMetaTier", { tier: m.tier.toUpperCase() })}
-          </li>
-        ))}
-      </ul>
-      <h4>{t("adminMetaReserved")}</h4>
-      <ul data-testid="meta-reserved">
-        {reserved.map((m) => (
-          <li key={m.label}>
-            {t(m.label)} · <strong>{t("protectedBadge")}</strong> — {t("protectedText")}
-          </li>
-        ))}
-      </ul>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          run(() =>
+            search<AdminGrantView>(ctx.instance, "admin-grant", { grant }).then(
+              (a) => a.results[0],
+            ),
+          );
+        }}
+      >
+        <Field id="admin-grant" label={t("adminMetaGrant")} value={grant} onChange={setGrant} />
+        <button type="submit">{t("run")}</button>
+      </form>
+      <Show l={l}>
+        {(g) =>
+          g === undefined ? (
+            <p>{t("resultsNone")}</p>
+          ) : (
+            <>
+              {g.role !== undefined && g.role !== null && (
+                <p>{t("adminMetaRole", { role: g.role.name, version: String(g.role.version) })}</p>
+              )}
+              <h4>{t("adminMetaOrdinary")}</h4>
+              <ul data-testid="meta-ordinary">
+                {g.actions.map((m) => (
+                  <li key={m.action}>
+                    {metaLabel(m.action)} ·{" "}
+                    {t("adminMetaTier", { tier: m.tier_when_widening.toUpperCase() })}
+                  </li>
+                ))}
+              </ul>
+              <h4>{t("adminMetaReserved")}</h4>
+              <ul data-testid="meta-reserved">
+                {g.reserved.map((m) => (
+                  <li key={m.action}>
+                    {metaLabel(m.action)} · <strong>{t("protectedBadge")}</strong> —{" "}
+                    {t("adminMetaQuorum", { quorum: String(m.grant_quorum + m.joint_root_quorum) })}
+                  </li>
+                ))}
+              </ul>
+            </>
+          )
+        }
+      </Show>
     </Panel>
   );
 }
@@ -143,9 +363,9 @@ export function Roles({ ctx }: { readonly ctx: Ctx }): ReactElement {
   return (
     <>
       <p>{t("rolesIntro")}</p>
-      <RoleEditor />
+      <RoleEditor ctx={ctx} />
       <ImpactPreview ctx={ctx} />
-      <AdminMeta />
+      <AdminMeta ctx={ctx} />
     </>
   );
 }
@@ -408,17 +628,6 @@ export function Protected(): ReactElement {
   );
 }
 
-export function Offboarding(): ReactElement {
-  return (
-    <>
-      <p>{t("offboardingIntro")}</p>
-      <p>{t("offboardingChannels")}</p>
-      <p>{t("offboardingSurvive")}</p>
-      <p>{t("offboardingLabel")}</p>
-    </>
-  );
-}
-
 interface Surface {
   readonly domain?: string;
   readonly sandbox?: boolean;
@@ -468,12 +677,179 @@ export function Domain({ ctx }: { readonly ctx: Ctx }): ReactElement {
   );
 }
 
+type Choice = "keep" | "revoke";
+
+/**
+ * §8.17.9.6, E6, EI-8: departure needs an explicit choice for every direct delegation (no
+ * default), and running copies are ended one by one. "Offboarded" is shown only once the
+ * departure Exercise is recorded.
+ */
+export function Offboarding({ ctx }: { readonly ctx: Ctx }): ReactElement {
+  const [party, setParty] = useState("");
+  const [grantsText, setGrantsText] = useState("");
+  const [instancesText, setInstancesText] = useState("");
+  const [choices, setChoices] = useState<Readonly<Record<string, Choice>>>({});
+  const [w, write] = useRun<readonly MetaResult[]>();
+  const grants = lines(grantsText);
+  const instances = lines(instancesText);
+  const decided = grants.every((g) => choices[g] !== undefined);
+  const depart = () => {
+    const payloads: MetaPayload[] = instances.map((instance) => ({
+      instance_terminate: { instance },
+    }));
+    payloads.push({
+      party_depart: {
+        party,
+        disposition: grants.map((g) => ({ grant: g, disposition: choices[g] })),
+      },
+    });
+    write(() => metaWrites(ctx.instance, ctx.confirm, ctx.instance.party ?? "", payloads));
+  };
+  const done = w.status === "done" && w.value.length > 0 && w.value.every((r) => r.decision);
+  return (
+    <>
+      <p>{t("offboardingIntro")}</p>
+      <p>{t("offboardingChannels")}</p>
+      <Panel id="offboard" title={t("offboardingTitle")}>
+        <Field id="off-party" label={t("offboardingParty")} value={party} onChange={setParty} />
+        <p className="field">
+          <label htmlFor="off-grants">{t("offboardingGrants")}</label>
+          <textarea
+            id="off-grants"
+            value={grantsText}
+            onChange={(e) => {
+              setGrantsText(e.target.value);
+            }}
+          />
+        </p>
+        {grants.length > 0 && <p role="note">{t("offboardingSurvive")}</p>}
+        {grants.map((g) => (
+          <fieldset key={g}>
+            <legend className="mono">{g}</legend>
+            {(["keep", "revoke"] as const).map((c) => (
+              <label key={c}>
+                <input
+                  type="radio"
+                  name={`off-${g}`}
+                  checked={choices[g] === c}
+                  onChange={() => {
+                    setChoices({ ...choices, [g]: c });
+                  }}
+                />{" "}
+                {c === "keep" ? t("offboardingKeep") : t("offboardingRevoke")}
+              </label>
+            ))}
+          </fieldset>
+        ))}
+        <p className="field">
+          <label htmlFor="off-instances">{t("offboardingInstances")}</label>
+          <textarea
+            id="off-instances"
+            value={instancesText}
+            onChange={(e) => {
+              setInstancesText(e.target.value);
+            }}
+          />
+        </p>
+        <button
+          type="button"
+          data-testid="depart"
+          disabled={party === "" || !decided}
+          onClick={depart}
+        >
+          {t("offboardingDepart")}
+        </button>
+        {!decided && grants.length > 0 && <p className="hint">{t("offboardingChooseAll")}</p>}
+        <Show l={w}>
+          {(rs) => (
+            <>
+              {rs.map((r, i) => (
+                <WriteOutcome key={String(i)} r={r} />
+              ))}
+              {done && <p data-testid="offboarded">{t("offboardingDone")}</p>}
+            </>
+          )}
+        </Show>
+      </Panel>
+      <p>{t("offboardingLabel")}</p>
+    </>
+  );
+}
+
+interface ChangeRow {
+  readonly position: string;
+  readonly at: number;
+  readonly kind: string;
+  readonly id: string;
+  readonly version?: number | null;
+  readonly ended: boolean;
+  readonly own: boolean;
+}
+
+const CHANGE_KINDS: Readonly<Record<string, Key>> = {
+  grant: "changeKindGrant",
+  anchor: "changeKindAnchor",
+  party: "changeKindParty",
+  instance: "changeKindInstance",
+  mandate: "changeKindMandate",
+  acceptance: "changeKindAcceptance",
+  policy: "changeKindPolicy",
+  authority_set: "changeKindRole",
+};
+
 /** IA-2: Changes is information only; no row claims "action required". */
-export function Changes(): ReactElement {
+export function Changes({ ctx }: { readonly ctx: Ctx }): ReactElement {
+  const [rows, setRows] = useState<readonly ChangeRow[]>([]);
+  const [token, setToken] = useState<string | undefined>(undefined);
+  const [l, run] = useRun<SearchAnswer<ChangeRow>>();
+  const more = (after?: string) => {
+    run(() =>
+      search<ChangeRow>(ctx.instance, "changes", {}, after).then((a) => {
+        setRows((r) => (after === undefined ? a.results : [...r, ...a.results]));
+        setToken(a.page.next_token === "" ? undefined : a.page.next_token);
+        return a;
+      }),
+    );
+  };
+  useEffect(() => {
+    more();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   return (
     <>
       <p>{t("changesIntro")}</p>
-      <p>{t("changesNone")}</p>
+      <Show l={l}>
+        {() =>
+          rows.length === 0 ? (
+            <p>{t("changesNone")}</p>
+          ) : (
+            <ul data-testid="changes">
+              {rows.map((r) => (
+                <li key={`${r.position}/${r.kind}/${r.id}`}>
+                  {at(r.at)} · {t(CHANGE_KINDS[r.kind] ?? "changeKindOther")}{" "}
+                  <span className="mono">
+                    {r.version === undefined || r.version === null
+                      ? r.id
+                      : `${r.id} v${String(r.version)}`}
+                  </span>
+                  {r.ended && ` · ${t("changeEnded")}`}
+                  {r.own && ` · ${t("changeByYou")}`}
+                </li>
+              ))}
+            </ul>
+          )
+        }
+      </Show>
+      {token !== undefined && (
+        <button
+          type="button"
+          onClick={() => {
+            more(token);
+          }}
+        >
+          {t("changesOlder")}
+        </button>
+      )}
     </>
   );
 }

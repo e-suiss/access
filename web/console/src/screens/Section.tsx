@@ -57,11 +57,11 @@ function body(screen: Screen, ctx: Ctx): ReactElement {
     case "protected":
       return <A.Protected />;
     case "offboarding":
-      return <A.Offboarding />;
+      return <A.Offboarding ctx={ctx} />;
     case "domain":
       return <A.Domain ctx={ctx} />;
     case "changes":
-      return <A.Changes />;
+      return <A.Changes ctx={ctx} />;
     case "sign-in":
       return <SignInSettings ctx={ctx} />;
     case "schemas":

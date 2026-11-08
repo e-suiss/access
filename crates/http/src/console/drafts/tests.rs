@@ -28,6 +28,10 @@ fn a_meta_write_is_drafted_with_its_payload_for_the_commit() {
     assert_eq!(d.envelope.resources[0].namespace, "access.grant");
     assert_eq!(d.probe, None);
     let answer = d.answer(&Digest([3; 32]));
+    assert_eq!(
+        answer["basis"]["anchor"],
+        b64url_encode(&meta::meta_anchor(&Digest([3; 32])).0)
+    );
     let body = json!({
         "subject": { "type": "access_party", "id": b64url_encode(&[1; 16]) },
         "action": { "name": "grant_revoke" },

@@ -132,6 +132,37 @@ export const META: readonly {
   { label: "metaProjectionIssue", reserved: false, tier: "ct1" },
 ];
 
+/** Each core meta-action's plain label, by its canonical id (OP-151 m.19 (c)). */
+export const META_BY_ACTION: Readonly<Record<string, Key>> = {
+  anchor_create: "metaAnchorCreate",
+  anchor_transfer: "metaAnchorHandover",
+  anchor_amend: "metaAnchorAmend",
+  anchor_retire: "metaAnchorRetire",
+  party_register: "metaPartyRegister",
+  party_depart: "metaPartyDepart",
+  instance_create: "metaInstanceCreate",
+  instance_rekey: "metaInstanceRekey",
+  instance_terminate: "metaInstanceTerminate",
+  instance_recover: "metaInstanceRecover",
+  mandate_bind: "metaLimitsBind",
+  mandate_rebind: "metaLimitsRebind",
+  mandate_revoke: "metaLimitsRevoke",
+  grant_issue: "metaGrantIssue",
+  grant_amend: "metaGrantAmend",
+  grant_revoke: "metaGrantRevoke",
+  grant_renounce: "metaGrantRenounce",
+  acceptance_establish: "metaAcceptanceEstablish",
+  acceptance_amend: "metaAcceptanceAmend",
+  acceptance_revoke: "metaAcceptanceRevoke",
+  policy_set: "metaPolicySet",
+  policy_retire: "metaPolicyRetire",
+  claim_issue: "metaClaimIssue",
+  contribute: "metaContribute",
+  consumption_release: "metaConsumptionRelease",
+  authority_set_define: "metaAuthoritySetDefine",
+  projection_issue: "metaProjectionIssue",
+};
+
 /** The publisher's compatibility relation as words (§9.13.4); never "safe" or "equivalent" as fact. */
 export function compatKey(relation: string): Key {
   if (relation === "narrowing" || relation === "narrows") return "compatNarrows";

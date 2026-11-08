@@ -174,6 +174,16 @@ export class ConsoleMock {
   passkeys = 3;
   /** Draft a different action than asked (a compromised draft). */
   tamper = false;
+  /** The draft requests the BFF received, as the console sent them. */
+  readonly drafts: Record<string, unknown>[] = [];
+  /** The meta-action commits forwarded to ADP: their intent action and payload bytes. */
+  readonly metaCommits: { action: string; payload: unknown }[] = [];
+  /** What a meta commit decides (OP-151 m.20 (b)). */
+  metaOutcome: "allow" | "require_action" = "allow";
+  /** Actions (`namespace/name`) the eligibility check answers yes for on a holding basis. */
+  readonly heldActions = new Set<string>();
+  /** The publications received (L1-ADP-18). */
+  readonly published: { package: unknown; domains: unknown }[] = [];
 
   /** A signed-in session, as the hosted login hand-off leaves it, in `context`. */
   async signIn(context: BrowserContext, baseURL: string, account = "acc_ada"): Promise<string> {
@@ -357,10 +367,24 @@ export class ConsoleMock {
       if (st.intent !== readIntent("POST", "/console/api/intents")) {
         return problem(403, "read-proof-rejected");
       }
-      const w = body() as unknown as Wanted;
+      const b = body();
+      this.drafts.push(b);
+      // OP-151 m.20 (b): a meta write's resource is the object its payload names
+      const meta = b["payload"] !== undefined;
+      const w = (meta
+        ? { ...b, resources: [{ namespace: "access.grant", path: ["g"] }] }
+        : b) as unknown as Wanted;
       const asked = this.tamper ? { ...w, action: { ...w.action, name: "grant_issue" } } : w;
       const d = envelopeOf(asked);
       const mode = (body() as { mode?: unknown }).mode;
+      if (meta) {
+        return reply(200, {
+          intent: d.intent,
+          envelope: Buffer.from(d.envelope).toString("base64url"),
+          payload: Buffer.from(JSON.stringify(b["payload"])).toString("base64url"),
+          basis: { anchor: "AAAAAAAAAAAAAAAAAAAAAA" },
+        });
+      }
       // OP-151 m.20 (d): a check draft carries the eligibility set it belongs to
       const probe =
         mode === "check"
@@ -436,6 +460,29 @@ export class ConsoleMock {
         return problem(403, "commit-ais-rejected");
       }
       const nonce = String(ctx["nonce"]);
+      if (path === "/proxy/adp/evaluation" && ctx["payload"] !== undefined) {
+        const intent = ctx["intent"] as { action?: { name?: string } } | undefined;
+        this.commits.push(nonce);
+        this.metaCommits.push({
+          action: intent?.action?.name ?? "",
+          payload: JSON.parse(
+            Buffer.from(
+              typeof ctx["payload"] === "string" ? ctx["payload"] : "",
+              "base64url",
+            ).toString(),
+          ) as unknown,
+        });
+        const allowed = this.metaOutcome === "allow";
+        return reply(200, {
+          decision: allowed,
+          context: {
+            outcome: this.metaOutcome,
+            ...(allowed
+              ? { exercise: Buffer.alloc(32, this.commits.length).toString("base64url") }
+              : {}),
+          },
+        });
+      }
       if (path === "/proxy/adp/evaluation") {
         this.commits.push(nonce);
         return reply(200, {
@@ -460,12 +507,69 @@ export class ConsoleMock {
       }
       const intent = set.intent;
       const act = intent === undefined ? "" : `${intent.action.namespace}/${intent.action.name}`;
+      // OP-152 m.7 (b): a delegated admin's probe names its own holding
+      if (typeof set.basis === "object" && set.basis !== null && "holding" in set.basis) {
+        return reply(200, { eligible: s.kid !== undefined && this.heldActions.has(act) });
+      }
       const yes =
         s.kid !== undefined &&
         this.eligible.has(s.account) &&
         intent !== undefined &&
         (this.eligibleActions.size === 0 || this.eligibleActions.has(act));
       return reply(200, { eligible: yes });
+    }
+    // L1-ADP-18: publication, with the browser's own check AIS; nothing here accepts
+    if (path === "/proxy/adp/publications" || path === "/proxy/adp/publications:status") {
+      const b = body();
+      const ctx = (b["context"] ?? {}) as Record<string, unknown>;
+      const ais = typeof ctx["ais"] === "string" ? ctx["ais"] : undefined;
+      if ((await this.statement(s, ais, "check")) === undefined)
+        return problem(401, "ais-required");
+      if (path === "/proxy/adp/publications:status") {
+        return reply(200, {
+          fingerprint: b["fingerprint"],
+          pending_acceptance: b["domains"],
+          accepted_in: [],
+          existing_grants_unchanged: true,
+          new_actions: [],
+          text: [],
+        });
+      }
+      const pkg = b["package"] as {
+        actions: { name: string; params?: Record<string, string> }[];
+        classes: { action: string; parameter: string; class: string }[];
+      };
+      const types: Record<string, readonly string[]> = {
+        recipient: ["id"],
+        amount: ["amount"],
+        count: ["int"],
+        choice: ["text", "int", "bool", "id"],
+        flag: ["bool"],
+      };
+      const warnings = pkg.classes
+        .filter((c) => c.class !== "opaque")
+        .filter((c) => {
+          const ty = pkg.actions.find((a) => a.name === c.action)?.params?.[c.parameter] ?? "";
+          return !(types[c.class] ?? []).includes(ty);
+        })
+        .map((c) => ({
+          action: c.action,
+          parameter: c.parameter,
+          reason: `affects_${c.class}`,
+          suggestion: types[c.class]?.[0] ?? "id",
+        }));
+      if (warnings.length > 0) {
+        return reply(422, { code: "publication-unmappable", status: 422, warnings });
+      }
+      this.published.push({ package: pkg, domains: b["domains"] });
+      return reply(201, {
+        fingerprint: Buffer.alloc(32, 9).toString("base64url"),
+        publisher: PARTY,
+        new: true,
+        existing_grants_unchanged: true,
+        new_actions: [],
+        text: [],
+      });
     }
     if (path.startsWith("/proxy/adp/search/")) {
       const kind = path.slice("/proxy/adp/search/".length);

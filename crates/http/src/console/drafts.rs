@@ -166,6 +166,20 @@ impl Drafted {
             json!({ "intent": wire(&self.envelope), "envelope": b64url_encode(&self.bytes) });
         if let (Some(p), Value::Object(o)) = (&self.payload, &mut out) {
             o.insert(String::from("payload"), Value::from(b64url_encode(p)));
+            // OP-141 m.3
+            let anchor = match Payload::from_bytes(p) {
+                Ok(Payload::GrantIssue(c)) => match c.basis {
+                    meta::GrantBasis::Anchor(a) => Some(a),
+                    meta::GrantBasis::Holding(_) => None,
+                },
+                _ => Some(meta::meta_anchor(domain)),
+            };
+            if let Some(a) = anchor {
+                o.insert(
+                    String::from("basis"),
+                    json!({ "anchor": b64url_encode(&a.0) }),
+                );
+            }
         }
         if let (Some(root), Value::Object(o)) = (self.probe, &mut out) {
             o.insert(
