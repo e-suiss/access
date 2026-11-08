@@ -2,6 +2,7 @@
 //! the e-mail factor of a login flow for the new account, which then completes like any other.
 //! A realm that requires a second step leaves the flow at that step, with nothing enrolled yet.
 
+use access_identity_account::notify::message::{Address, Body, Message, Notice};
 use access_identity_webauthn::ports::{CredentialRegistry, SignalSink};
 use access_store::sessions::NewFlow;
 
@@ -84,5 +85,43 @@ where
             device,
             step,
         })
+    }
+
+    /// Queues `notice` to the account's own address, with its mailbox proof time (E42, §8.15.2,
+    /// OP-153 m.3 (i)); an account with no address gets nothing.
+    ///
+    /// # Errors
+    /// [`SessionError`].
+    pub(crate) async fn account_notice(
+        &self,
+        tx: &mut D::Tx,
+        subject: [u8; 16],
+        notice: Notice,
+        at_ms: u64,
+    ) -> Result<(), SessionError> {
+        let to = match tx.contact(subject).await? {
+            Some((kind, value)) if kind == "email" => Address::Email(value),
+            Some((kind, value)) if kind == "phone" => Address::Phone(value),
+            _ => return Ok(()),
+        };
+        let valid_since_ms = match to {
+            Address::Email(_) => Some(tx.mailbox_since(subject).await?.unwrap_or(1)),
+            Address::Phone(_) => None,
+        };
+        tx.notify(
+            self.notifier,
+            &Message {
+                subject,
+                to,
+                locale: None,
+                valid_since_ms,
+                body: Body::Notice {
+                    notice,
+                    at_ms,
+                    until_ms: None,
+                },
+            },
+        )
+        .await
     }
 }

@@ -334,6 +334,14 @@ where
             correlation,
         )
         .await?;
+        // OP-148, §7.9.8, E42
+        self.account_notice(
+            &mut tx,
+            subject,
+            access_identity_account::notify::message::Notice::SecondFactorEnabled,
+            now,
+        )
+        .await?;
         audit(
             &mut tx,
             "session.ended_others",
@@ -398,6 +406,14 @@ where
             &target,
             &target,
             correlation,
+        )
+        .await?;
+        // OP-148, §7.9.8, E42, OP-153 m.3 (d)
+        self.account_notice(
+            &mut tx,
+            subject,
+            access_identity_account::notify::message::Notice::RecoveryCodesRegenerated,
+            now,
         )
         .await?;
         tx.commit().await?;

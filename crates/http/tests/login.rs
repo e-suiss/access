@@ -3106,3 +3106,29 @@ async fn an_email_change_needs_a_fresh_step_up() {
         .await;
     assert_eq!(a.json()["code"], "session-required");
 }
+
+// OP-148, §7.9.8, E42, OP-153 m.3 (d), (i), m.9 (d)
+#[tokio::test]
+async fn a_second_step_and_new_recovery_codes_are_told_to_the_account() {
+    let e = env(39, "su-i", AuthPolicy::DEFAULT).await;
+    let subject = e.account("told@example.com").await;
+    let mut b = e.browser("su-i");
+    b.sign_in("told@example.com").await;
+    let started = b
+        .post("/v1/account/totp", Some(json!({ "label": "told" })))
+        .await;
+    let s = started.json();
+    let seed = base32_decode(s["secret"].as_str().unwrap());
+    let path = format!("/v1/account/totp/{}", s["enrollment"].as_str().unwrap());
+    let ok = b.post(&path, Some(json!({ "code": e.totp(&seed) }))).await;
+    assert_eq!(ok.status, StatusCode::OK);
+    let enabled = *e.sent().last().unwrap();
+    assert_eq!(enabled.0, "relay.message.second_factor_enabled.v1");
+    assert_eq!(enabled.2, subject);
+    assert!(enabled.1.is_some());
+    let fresh = b.post("/v1/account/recovery-codes", None).await;
+    assert_eq!(fresh.status, StatusCode::OK);
+    let regenerated = *e.sent().last().unwrap();
+    assert_eq!(regenerated.0, "relay.message.recovery_codes_regenerated.v1");
+    assert_eq!(regenerated.2, subject);
+}
