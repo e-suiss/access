@@ -59,7 +59,7 @@ describe("fluent", () => {
     const c = catalogs();
     const k = "login-failed";
     expect(c.isProtected(k)).toBe(true);
-    const realm = new Map([["en", new Map([[k, "Wrong password."]])]]);
+    const realm = new Map([["en", new Map([[k, "Another text."]])]]);
     expect(() => {
       c.check(realm);
     }).toThrow(FluentError);
