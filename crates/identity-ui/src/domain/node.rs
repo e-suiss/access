@@ -24,17 +24,35 @@ pub enum FieldName {
     PasskeyCredential,
     /// A code sent by e-mail (TN-102).
     EmailCode,
+    /// The e-mail address of a new account (OP-153 m.3 (g)).
+    Email,
+    /// A new password, at registration or reset.
+    NewPassword,
+    /// The display name of a new account.
+    DisplayName,
+    /// The "I saved them" acknowledgement of new recovery codes (OP-153 m.3 (d)).
+    Acknowledged,
+    /// An invitation's magic code (OP-153 m.3 (o)).
+    InvitationCode,
+    /// The cross-device link code shown on the other device (OP-153 m.3 (d)).
+    LinkCode,
 }
 
 impl FieldName {
     /// All names.
-    pub const ALL: [Self; 6] = [
+    pub const ALL: [Self; 12] = [
         Self::Identifier,
         Self::Password,
         Self::TotpCode,
         Self::RecoveryCode,
         Self::PasskeyCredential,
         Self::EmailCode,
+        Self::Email,
+        Self::NewPassword,
+        Self::DisplayName,
+        Self::Acknowledged,
+        Self::InvitationCode,
+        Self::LinkCode,
     ];
 
     /// The wire name.
@@ -47,6 +65,12 @@ impl FieldName {
             Self::RecoveryCode => "recovery_code",
             Self::PasskeyCredential => "passkey_credential",
             Self::EmailCode => "email_code",
+            Self::Email => "email",
+            Self::NewPassword => "new_password",
+            Self::DisplayName => "display_name",
+            Self::Acknowledged => "acknowledged",
+            Self::InvitationCode => "invitation_code",
+            Self::LinkCode => "link_code",
         }
     }
 
@@ -60,14 +84,19 @@ impl FieldName {
     #[must_use]
     pub const fn max_length(self) -> u32 {
         match self {
-            Self::Identifier => 320,
+            Self::Identifier | Self::Email => 320,
             // OP-146 m.10 (c)
-            Self::Password => 128,
+            Self::Password | Self::NewPassword => 128,
             Self::TotpCode => 10,
             Self::RecoveryCode => 64,
             // CR-10
             Self::PasskeyCredential => 16_384,
-            Self::EmailCode => 16,
+            // OP-153 m.3 (o)
+            Self::EmailCode | Self::InvitationCode => 16,
+            Self::DisplayName => 200,
+            Self::Acknowledged => 8,
+            // OP-153 m.3 (d)
+            Self::LinkCode => 32,
         }
     }
 
@@ -76,7 +105,13 @@ impl FieldName {
     pub const fn secret(self) -> bool {
         matches!(
             self,
-            Self::Password | Self::TotpCode | Self::RecoveryCode | Self::EmailCode
+            Self::Password
+                | Self::TotpCode
+                | Self::RecoveryCode
+                | Self::EmailCode
+                | Self::NewPassword
+                | Self::InvitationCode
+                | Self::LinkCode
         )
     }
 }
@@ -105,11 +140,27 @@ pub enum Method {
     EmailCode,
     /// Send a sign-in link by e-mail (TN-102).
     MagicLink,
+    /// Create an account (OP-153 m.3 (g)).
+    Register,
+    /// Start or continue a recovery (OP-153 m.3 (d)).
+    Recover,
+    /// Set a new password.
+    NewPassword,
+    /// Share the listed claims with the app (OP-153 m.3 (z)).
+    Share,
+    /// Decline to share.
+    DontShare,
+    /// Accept an invitation (OP-153 m.3 (o)).
+    AcceptInvitation,
+    /// Link another sign-in to the account (OP-153 m.3 (m)).
+    Link,
+    /// Acknowledge new recovery codes (OP-153 m.3 (d)).
+    Acknowledge,
 }
 
 impl Method {
     /// All methods.
-    pub const ALL: [Self; 10] = [
+    pub const ALL: [Self; 18] = [
         Self::Identifier,
         Self::Password,
         Self::Passkey,
@@ -120,6 +171,14 @@ impl Method {
         Self::Restart,
         Self::EmailCode,
         Self::MagicLink,
+        Self::Register,
+        Self::Recover,
+        Self::NewPassword,
+        Self::Share,
+        Self::DontShare,
+        Self::AcceptInvitation,
+        Self::Link,
+        Self::Acknowledge,
     ];
 
     /// The wire name.
@@ -136,6 +195,14 @@ impl Method {
             Self::Restart => "restart",
             Self::EmailCode => "email_code",
             Self::MagicLink => "magic_link",
+            Self::Register => "register",
+            Self::Recover => "recover",
+            Self::NewPassword => "new_password",
+            Self::Share => "share",
+            Self::DontShare => "dont_share",
+            Self::AcceptInvitation => "accept_invitation",
+            Self::Link => "link",
+            Self::Acknowledge => "acknowledge",
         }
     }
 }
@@ -170,6 +237,15 @@ pub enum Autocomplete {
     /// No autofill.
     #[serde(rename = "off")]
     Off,
+    /// A new password (OP-153 m.3 (g)).
+    #[serde(rename = "new-password")]
+    NewPassword,
+    /// An e-mail address.
+    #[serde(rename = "email")]
+    Email,
+    /// A person's name.
+    #[serde(rename = "name")]
+    Name,
 }
 
 /// WebAuthn options in their JSON form (`parseRequestOptionsFromJSON` /

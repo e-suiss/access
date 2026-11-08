@@ -75,6 +75,47 @@ impl From<FlowId> for String {
     }
 }
 
+/// What a flow is for (OP-153 m.2 N0). A step names its kind; `login` is the default and is
+/// left out on the wire, so a login step reads as it did before.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FlowKind {
+    /// Sign in (TN-96).
+    #[default]
+    Login,
+    /// Create an account (OP-153 m.3 (g)).
+    Registration,
+    /// Get back into an account (OP-153 m.3 (d)).
+    Recovery,
+    /// Change the account's own settings (S11).
+    Settings,
+    /// Share claims with an app (OP-153 m.3 (z)).
+    Consent,
+    /// Accept an organization's invitation (OP-153 m.3 (o)).
+    Invitation,
+    /// Link another sign-in (OP-153 m.3 (m)).
+    Link,
+}
+
+impl FlowKind {
+    /// Every kind.
+    pub const ALL: [Self; 7] = [
+        Self::Login,
+        Self::Registration,
+        Self::Recovery,
+        Self::Settings,
+        Self::Consent,
+        Self::Invitation,
+        Self::Link,
+    ];
+
+    /// Whether this is the default kind, left out on the wire.
+    #[must_use]
+    pub fn is_login(&self) -> bool {
+        *self == Self::Login
+    }
+}
+
 /// Where the flow is. Informational: the server's rules depend on the requirement list, not
 /// on the order of steps (TN-132).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -177,6 +218,9 @@ pub struct Ui {
     pub version: u32,
     /// Flow handle.
     pub flow: FlowId,
+    /// What the flow is for.
+    #[serde(default, skip_serializing_if = "FlowKind::is_login")]
+    pub kind: FlowKind,
     /// Where the flow is.
     pub step: Step,
     /// Path to `POST` a submission to.
@@ -228,6 +272,7 @@ impl Ui {
             version: CONTRACT_VERSION,
             action: flow.path(),
             flow,
+            kind: FlowKind::Login,
             step,
             requirements: requirements(policy, step),
             nodes,

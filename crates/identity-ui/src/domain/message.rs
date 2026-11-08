@@ -72,11 +72,194 @@ pub enum TextId {
     /// An e-mail step is waiting; the same words whether or not anything was sent (TN-102).
     #[serde(rename = "email.sent")]
     EmailSent,
+    /// Text `registration.title` (OP-153 m.3 (g)).
+    #[serde(rename = "registration.title")]
+    RegistrationTitle,
+    /// Field label `label.email` (TN-106).
+    #[serde(rename = "label.email")]
+    EmailLabel,
+    /// Field label `label.new_password` (TN-106).
+    #[serde(rename = "label.new_password")]
+    NewPasswordLabel,
+    /// Field label `label.display_name` (TN-106).
+    #[serde(rename = "label.display_name")]
+    DisplayNameLabel,
+    /// Button caption `action.create_account` (TN-106).
+    #[serde(rename = "action.create_account")]
+    CreateAccount,
+    /// Text `registration.code_sent` (OP-153 m.3 (g)).
+    #[serde(rename = "registration.code_sent")]
+    RegistrationCodeSent,
+    /// Text `registration.failed` (OP-153 m.3 (g)).
+    #[serde(rename = "registration.failed")]
+    RegistrationFailed,
+    /// Button caption `action.have_account` (TN-106).
+    #[serde(rename = "action.have_account")]
+    HaveAccount,
+    /// Text `registration.complete` (OP-153 m.3 (g)).
+    #[serde(rename = "registration.complete")]
+    RegistrationComplete,
+    /// Text `recovery.title` (OP-153 m.3 (d), (e)).
+    #[serde(rename = "recovery.title")]
+    RecoveryTitle,
+    /// Button caption `action.recovery_start` (TN-106).
+    #[serde(rename = "action.recovery_start")]
+    RecoveryStart,
+    /// Text `recovery.requested` (OP-153 m.3 (d), (e)).
+    #[serde(rename = "recovery.requested")]
+    RecoveryRequested,
+    /// Text `recovery.cooling` (OP-153 m.3 (d), (e)).
+    #[serde(rename = "recovery.cooling")]
+    RecoveryCooling,
+    /// Text `recovery.denied` (OP-153 m.3 (d), (e)).
+    #[serde(rename = "recovery.denied")]
+    RecoveryDenied,
+    /// Text `recovery.complete` (OP-153 m.3 (d), (e)).
+    #[serde(rename = "recovery.complete")]
+    RecoveryComplete,
+    /// Text `recovery.locked` (OP-153 m.3 (d), (e)).
+    #[serde(rename = "recovery.locked")]
+    RecoveryLocked,
+    /// Text `recovery_codes.title` (OP-153 m.3 (d)).
+    #[serde(rename = "recovery_codes.title")]
+    RecoveryCodesTitle,
+    /// Text `recovery_codes.save` (OP-153 m.3 (d)).
+    #[serde(rename = "recovery_codes.save")]
+    RecoveryCodesSave,
+    /// Button caption `action.codes_saved` (TN-106).
+    #[serde(rename = "action.codes_saved")]
+    CodesSaved,
+    /// Field label `label.link_code` (TN-106).
+    #[serde(rename = "label.link_code")]
+    LinkCodeLabel,
+    /// Text `settings.title` (S11, OP-153 m.3 (y)).
+    #[serde(rename = "settings.title")]
+    SettingsTitle,
+    /// Text `settings.sign_in_methods` (S11, OP-153 m.3 (y)).
+    #[serde(rename = "settings.sign_in_methods")]
+    SignInMethods,
+    /// Text `settings.sign_ins` (S11, OP-153 m.3 (y)).
+    #[serde(rename = "settings.sign_ins")]
+    SignIns,
+    /// Text `settings.tied_to_device` (S11, OP-153 m.3 (y)).
+    #[serde(rename = "settings.tied_to_device")]
+    TiedToDevice,
+    /// Button caption `action.end_sign_in` (TN-106).
+    #[serde(rename = "action.end_sign_in")]
+    EndSignIn,
+    /// Button caption `action.sign_out` (TN-106).
+    #[serde(rename = "action.sign_out")]
+    SignOut,
+    /// Text `settings.connected_apps` (S11, OP-153 m.3 (y)).
+    #[serde(rename = "settings.connected_apps")]
+    ConnectedApps,
+    /// Button caption `action.stop_sharing` (TN-106).
+    #[serde(rename = "action.stop_sharing")]
+    StopSharing,
+    /// Text `settings.linked_sign_ins` (S11, OP-153 m.3 (y)).
+    #[serde(rename = "settings.linked_sign_ins")]
+    LinkedSignIns,
+    /// Text `notice.email_changed` (§8.15.2, OP-153 m.3 (i)).
+    #[serde(rename = "notice.email_changed")]
+    EmailChangedNotice,
+    /// Text `notice.new_method` (§8.15.2, OP-153 m.3 (i)).
+    #[serde(rename = "notice.new_method")]
+    NewMethodNotice,
+    /// Button caption `action.secure_account` (TN-106).
+    #[serde(rename = "action.secure_account")]
+    SecureAccount,
+    /// Text `signed_out.password_changed` (OP-153 m.3 (y)).
+    #[serde(rename = "signed_out.password_changed")]
+    SignedOutPasswordChanged,
+    /// Text `signed_out.device_mismatch` (OP-153 m.3 (y)).
+    #[serde(rename = "signed_out.device_mismatch")]
+    SignedOutDeviceMismatch,
+    /// Text `signed_out.admin_ended` (OP-153 m.3 (y)).
+    #[serde(rename = "signed_out.admin_ended")]
+    SignedOutAdminEnded,
+    /// Text `signed_out.recovery` (OP-153 m.3 (y)).
+    #[serde(rename = "signed_out.recovery")]
+    SignedOutRecovery,
+    /// Text `signed_out.expired` (OP-153 m.3 (y)).
+    #[serde(rename = "signed_out.expired")]
+    SignedOutExpired,
+    /// Text `signed_out.delegations_remain` (OP-153 m.3 (y)).
+    #[serde(rename = "signed_out.delegations_remain")]
+    SignedOutDelegationsRemain,
+    /// Text `account.sign_in_turned_off` (OP-153 m.3 (bb), (cc)).
+    #[serde(rename = "account.sign_in_turned_off")]
+    SignInTurnedOff,
+    /// Text `account.deletion_scheduled` (OP-153 m.3 (bb), (cc)).
+    #[serde(rename = "account.deletion_scheduled")]
+    DeletionScheduled,
+    /// Text `account.deleted` (OP-153 m.3 (bb), (cc)).
+    #[serde(rename = "account.deleted")]
+    AccountDeleted,
+    /// Text `account.export_ready` (OP-153 m.3 (bb), (cc)).
+    #[serde(rename = "account.export_ready")]
+    ExportReady,
+    /// Text `account.email_confirmed` (OP-153 m.3 (bb), (cc)).
+    #[serde(rename = "account.email_confirmed")]
+    ConfirmedEmail,
+    /// Text `consent.title` (OP-153 m.3 (z)).
+    #[serde(rename = "consent.title")]
+    ConsentTitle,
+    /// Text `consent.claims` (OP-153 m.3 (z)).
+    #[serde(rename = "consent.claims")]
+    ConsentClaims,
+    /// Button caption `action.share` (TN-106).
+    #[serde(rename = "action.share")]
+    Share,
+    /// Button caption `action.dont_share` (TN-106).
+    #[serde(rename = "action.dont_share")]
+    DontShare,
+    /// Text `delegation.check_note` (X8, §8.8).
+    #[serde(rename = "delegation.check_note")]
+    DelegationCheckNote,
+    /// Text `delegation.created` (X8, §8.8).
+    #[serde(rename = "delegation.created")]
+    DelegationCreated,
+    /// Text `invitation.title` (OP-153 m.3 (o)).
+    #[serde(rename = "invitation.title")]
+    InvitationTitle,
+    /// Button caption `action.accept_invitation` (TN-106).
+    #[serde(rename = "action.accept_invitation")]
+    AcceptInvitation,
+    /// Text `invitation.expired` (OP-153 m.3 (o)).
+    #[serde(rename = "invitation.expired")]
+    InvitationExpired,
+    /// Field label `label.invitation_code` (TN-106).
+    #[serde(rename = "label.invitation_code")]
+    InvitationCodeLabel,
+    /// Text `link.title` (OP-153 m.3 (m)).
+    #[serde(rename = "link.title")]
+    LinkTitle,
+    /// Text `link.combine_warning` (OP-153 m.3 (m)).
+    #[serde(rename = "link.combine_warning")]
+    CombineWarning,
+    /// Text `error.reference` (X41, OP-153 m.3 (jj)).
+    #[serde(rename = "error.reference")]
+    ErrorReference,
+    /// Text `error.app_owner` (X41, OP-153 m.3 (jj)).
+    #[serde(rename = "error.app_owner")]
+    ErrorAppOwner,
+    /// Text `error.upstream_owner` (X41, OP-153 m.3 (jj)).
+    #[serde(rename = "error.upstream_owner")]
+    ErrorUpstreamOwner,
+    /// Text `error.access_owner` (X41, OP-153 m.3 (jj)).
+    #[serde(rename = "error.access_owner")]
+    ErrorAccessOwner,
+    /// Text `step_up.required` (X29, §8.15.2).
+    #[serde(rename = "step_up.required")]
+    StepUpRequired,
+    /// Text `claim.issuer_says` (§13.8, INV-14).
+    #[serde(rename = "claim.issuer_says")]
+    IssuerSays,
 }
 
 impl TextId {
     /// All ids, in declaration order.
-    pub const ALL: [Self; 22] = [
+    pub const ALL: [Self; 83] = [
         Self::LoginFailed,
         Self::TooManyAttempts,
         Self::Unavailable,
@@ -99,6 +282,67 @@ impl TextId {
         Self::SendEmailCode,
         Self::SendMagicLink,
         Self::EmailSent,
+        Self::RegistrationTitle,
+        Self::EmailLabel,
+        Self::NewPasswordLabel,
+        Self::DisplayNameLabel,
+        Self::CreateAccount,
+        Self::RegistrationCodeSent,
+        Self::RegistrationFailed,
+        Self::HaveAccount,
+        Self::RegistrationComplete,
+        Self::RecoveryTitle,
+        Self::RecoveryStart,
+        Self::RecoveryRequested,
+        Self::RecoveryCooling,
+        Self::RecoveryDenied,
+        Self::RecoveryComplete,
+        Self::RecoveryLocked,
+        Self::RecoveryCodesTitle,
+        Self::RecoveryCodesSave,
+        Self::CodesSaved,
+        Self::LinkCodeLabel,
+        Self::SettingsTitle,
+        Self::SignInMethods,
+        Self::SignIns,
+        Self::TiedToDevice,
+        Self::EndSignIn,
+        Self::SignOut,
+        Self::ConnectedApps,
+        Self::StopSharing,
+        Self::LinkedSignIns,
+        Self::EmailChangedNotice,
+        Self::NewMethodNotice,
+        Self::SecureAccount,
+        Self::SignedOutPasswordChanged,
+        Self::SignedOutDeviceMismatch,
+        Self::SignedOutAdminEnded,
+        Self::SignedOutRecovery,
+        Self::SignedOutExpired,
+        Self::SignedOutDelegationsRemain,
+        Self::SignInTurnedOff,
+        Self::DeletionScheduled,
+        Self::AccountDeleted,
+        Self::ExportReady,
+        Self::ConfirmedEmail,
+        Self::ConsentTitle,
+        Self::ConsentClaims,
+        Self::Share,
+        Self::DontShare,
+        Self::DelegationCheckNote,
+        Self::DelegationCreated,
+        Self::InvitationTitle,
+        Self::AcceptInvitation,
+        Self::InvitationExpired,
+        Self::InvitationCodeLabel,
+        Self::LinkTitle,
+        Self::CombineWarning,
+        Self::ErrorReference,
+        Self::ErrorAppOwner,
+        Self::ErrorUpstreamOwner,
+        Self::ErrorAccessOwner,
+        Self::StepUpRequired,
+        Self::IssuerSays,
     ];
 
     /// The stable id on the wire.
@@ -127,11 +371,73 @@ impl TextId {
             Self::SendEmailCode => "action.email_code",
             Self::SendMagicLink => "action.magic_link",
             Self::EmailSent => "email.sent",
+            Self::RegistrationTitle => "registration.title",
+            Self::EmailLabel => "label.email",
+            Self::NewPasswordLabel => "label.new_password",
+            Self::DisplayNameLabel => "label.display_name",
+            Self::CreateAccount => "action.create_account",
+            Self::RegistrationCodeSent => "registration.code_sent",
+            Self::RegistrationFailed => "registration.failed",
+            Self::HaveAccount => "action.have_account",
+            Self::RegistrationComplete => "registration.complete",
+            Self::RecoveryTitle => "recovery.title",
+            Self::RecoveryStart => "action.recovery_start",
+            Self::RecoveryRequested => "recovery.requested",
+            Self::RecoveryCooling => "recovery.cooling",
+            Self::RecoveryDenied => "recovery.denied",
+            Self::RecoveryComplete => "recovery.complete",
+            Self::RecoveryLocked => "recovery.locked",
+            Self::RecoveryCodesTitle => "recovery_codes.title",
+            Self::RecoveryCodesSave => "recovery_codes.save",
+            Self::CodesSaved => "action.codes_saved",
+            Self::LinkCodeLabel => "label.link_code",
+            Self::SettingsTitle => "settings.title",
+            Self::SignInMethods => "settings.sign_in_methods",
+            Self::SignIns => "settings.sign_ins",
+            Self::TiedToDevice => "settings.tied_to_device",
+            Self::EndSignIn => "action.end_sign_in",
+            Self::SignOut => "action.sign_out",
+            Self::ConnectedApps => "settings.connected_apps",
+            Self::StopSharing => "action.stop_sharing",
+            Self::LinkedSignIns => "settings.linked_sign_ins",
+            Self::EmailChangedNotice => "notice.email_changed",
+            Self::NewMethodNotice => "notice.new_method",
+            Self::SecureAccount => "action.secure_account",
+            Self::SignedOutPasswordChanged => "signed_out.password_changed",
+            Self::SignedOutDeviceMismatch => "signed_out.device_mismatch",
+            Self::SignedOutAdminEnded => "signed_out.admin_ended",
+            Self::SignedOutRecovery => "signed_out.recovery",
+            Self::SignedOutExpired => "signed_out.expired",
+            Self::SignedOutDelegationsRemain => "signed_out.delegations_remain",
+            Self::SignInTurnedOff => "account.sign_in_turned_off",
+            Self::DeletionScheduled => "account.deletion_scheduled",
+            Self::AccountDeleted => "account.deleted",
+            Self::ExportReady => "account.export_ready",
+            Self::ConfirmedEmail => "account.email_confirmed",
+            Self::ConsentTitle => "consent.title",
+            Self::ConsentClaims => "consent.claims",
+            Self::Share => "action.share",
+            Self::DontShare => "action.dont_share",
+            Self::DelegationCheckNote => "delegation.check_note",
+            Self::DelegationCreated => "delegation.created",
+            Self::InvitationTitle => "invitation.title",
+            Self::AcceptInvitation => "action.accept_invitation",
+            Self::InvitationExpired => "invitation.expired",
+            Self::InvitationCodeLabel => "label.invitation_code",
+            Self::LinkTitle => "link.title",
+            Self::CombineWarning => "link.combine_warning",
+            Self::ErrorReference => "error.reference",
+            Self::ErrorAppOwner => "error.app_owner",
+            Self::ErrorUpstreamOwner => "error.upstream_owner",
+            Self::ErrorAccessOwner => "error.access_owner",
+            Self::StepUpRequired => "step_up.required",
+            Self::IssuerSays => "claim.issuer_says",
         }
     }
 
     /// The default English text.
     #[must_use]
+    #[expect(clippy::too_many_lines, reason = "one text per id, read top to bottom")]
     pub const fn default_text(self) -> &'static str {
         match self {
             // X-L1
@@ -157,6 +463,93 @@ impl TextId {
             Self::SendEmailCode => "Email me a code",
             Self::SendMagicLink => "Email me a sign-in link",
             Self::EmailSent => "If these details match an account, we've sent an email.",
+            Self::RegistrationTitle => "Create your account",
+            Self::EmailLabel => "Email",
+            Self::NewPasswordLabel => "New password",
+            Self::DisplayNameLabel => "Your name",
+            Self::CreateAccount => "Create account",
+            Self::RegistrationCodeSent => "If this address can be used, we've sent a code to it.",
+            Self::RegistrationFailed => "We couldn't create an account with these details.",
+            Self::HaveAccount => "Sign in instead",
+            Self::RegistrationComplete => "Your account is ready.",
+            Self::RecoveryTitle => "Get back into your account",
+            Self::RecoveryStart => "Start recovery",
+            Self::RecoveryRequested => {
+                "If an account exists for these details, we've sent instructions."
+            }
+            Self::RecoveryCooling => {
+                "For your safety, recovery finishes after a waiting period. We'll email you when it can finish."
+            }
+            Self::RecoveryDenied => {
+                "Recovery stopped because someone signed in to this account normally."
+            }
+            Self::RecoveryComplete => {
+                "You're signed in. Your delegations remain. Some sensitive actions are available again after a waiting period. Your devices need to sign in again."
+            }
+            Self::RecoveryLocked => "Too many tries for this recovery. Start a new one later.",
+            Self::RecoveryCodesTitle => "Recovery codes",
+            Self::RecoveryCodesSave => "Save these codes somewhere safe. Each code works once.",
+            Self::CodesSaved => "I saved them",
+            Self::LinkCodeLabel => "Code shown on your other device",
+            Self::SettingsTitle => "Account",
+            Self::SignInMethods => "Sign-in methods",
+            Self::SignIns => "Where you're signed in",
+            Self::TiedToDevice => "This sign-in is tied to this device",
+            Self::EndSignIn => "End this sign-in",
+            Self::SignOut => "Sign out",
+            Self::ConnectedApps => "Connected apps",
+            Self::StopSharing => "Stop sharing",
+            Self::LinkedSignIns => "Linked sign-ins",
+            Self::EmailChangedNotice => {
+                "Your email address was changed. If this wasn't you: Secure your account."
+            }
+            Self::NewMethodNotice => {
+                "A new sign-in method was added. If this wasn't you: Secure your account."
+            }
+            Self::SecureAccount => "Secure your account",
+            Self::SignedOutPasswordChanged => "Signed out because your password changed.",
+            Self::SignedOutDeviceMismatch => {
+                "Signed out because this device didn't match the sign-in."
+            }
+            Self::SignedOutAdminEnded => "Signed out because an administrator ended this sign-in.",
+            Self::SignedOutRecovery => "Signed out because the account was recovered.",
+            Self::SignedOutExpired => "Signed out because the sign-in expired.",
+            Self::SignedOutDelegationsRemain => {
+                "Apps and agents you connected keep their access until you revoke it."
+            }
+            Self::SignInTurnedOff => "Your account's sign-in is turned off by this organization.",
+            Self::DeletionScheduled => {
+                "Your account will be deleted on the date shown. You can cancel until then."
+            }
+            Self::AccountDeleted => {
+                "Your account is deleted. Some records are kept until the date shown for legal reasons; history entries are redacted, not removed."
+            }
+            Self::ExportReady => "Your data export is ready. The download link works for 24 hours.",
+            Self::ConfirmedEmail => "Confirmed you can receive email at this address.",
+            Self::ConsentTitle => "Share with this app",
+            Self::ConsentClaims => "This app will receive:",
+            Self::Share => "Share",
+            Self::DontShare => "Don't share",
+            Self::DelegationCheckNote => "Access will still check the request.",
+            Self::DelegationCreated => "Delegation created",
+            Self::InvitationTitle => "You're invited to join an organization",
+            Self::AcceptInvitation => "Join",
+            Self::InvitationExpired => "This invitation has expired or was already used.",
+            Self::InvitationCodeLabel => "Invitation code",
+            Self::LinkTitle => "Link another sign-in",
+            Self::CombineWarning => {
+                "Combining accounts can't be reversed. Delegations must be given again afterwards."
+            }
+            Self::ErrorReference => "Reference",
+            Self::ErrorAppOwner => {
+                "This app isn't set up correctly for sign-in. The app's developer can fix this."
+            }
+            Self::ErrorUpstreamOwner => {
+                "The sign-in provider couldn't complete this request. Try again later."
+            }
+            Self::ErrorAccessOwner => "Access couldn't complete this request. Try again shortly.",
+            Self::StepUpRequired => "Confirm it's you to continue with this action.",
+            Self::IssuerSays => "Issuer says (signed)",
         }
     }
 
@@ -164,7 +557,54 @@ impl TextId {
     /// about whether an account exists or what state it is in (X34, XI-24).
     #[must_use]
     pub const fn pre_auth(self) -> bool {
-        !matches!(self, Self::SecondFactorFailed | Self::PasskeyNotRegistered)
+        !matches!(
+            self,
+            Self::SecondFactorFailed
+                | Self::PasskeyNotRegistered
+                | Self::RegistrationComplete
+                | Self::RecoveryCooling
+                | Self::RecoveryDenied
+                | Self::RecoveryComplete
+                | Self::RecoveryLocked
+                | Self::RecoveryCodesTitle
+                | Self::RecoveryCodesSave
+                | Self::CodesSaved
+                | Self::SettingsTitle
+                | Self::SignInMethods
+                | Self::SignIns
+                | Self::TiedToDevice
+                | Self::EndSignIn
+                | Self::SignOut
+                | Self::ConnectedApps
+                | Self::StopSharing
+                | Self::LinkedSignIns
+                | Self::EmailChangedNotice
+                | Self::NewMethodNotice
+                | Self::SecureAccount
+                | Self::SignedOutPasswordChanged
+                | Self::SignedOutDeviceMismatch
+                | Self::SignedOutAdminEnded
+                | Self::SignedOutRecovery
+                | Self::SignedOutExpired
+                | Self::SignedOutDelegationsRemain
+                | Self::SignInTurnedOff
+                | Self::DeletionScheduled
+                | Self::AccountDeleted
+                | Self::ExportReady
+                | Self::ConfirmedEmail
+                | Self::ConsentTitle
+                | Self::ConsentClaims
+                | Self::Share
+                | Self::DontShare
+                | Self::DelegationCheckNote
+                | Self::DelegationCreated
+                | Self::InvitationTitle
+                | Self::AcceptInvitation
+                | Self::LinkTitle
+                | Self::CombineWarning
+                | Self::StepUpRequired
+                | Self::IssuerSays
+        )
     }
 }
 
