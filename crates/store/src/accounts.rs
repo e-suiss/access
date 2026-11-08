@@ -44,7 +44,8 @@ pub struct SealedSecret {
     pub nonce: [u8; 12],
     /// Ciphertext and tag.
     pub ciphertext: Vec<u8>,
-    /// Pepper version, reserved (CR-37, OP-146 m.5 (l)).
+    /// The pepper version of a password hash; `None` only for one sealed before the pepper (CR-37,
+    /// OP-150 m.3 (f)).
     pub pepper_version: Option<i16>,
 }
 

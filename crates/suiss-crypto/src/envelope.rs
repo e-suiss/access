@@ -108,6 +108,31 @@ pub trait Kek {
     /// # Errors
     /// [`EnvelopeError::Wrap`].
     fn unwrap(&self, wrapped: &[u8]) -> Result<Dek, EnvelopeError>;
+
+    /// Applies the password pepper that goes with this KEK (CR-37, OP-150 m.3 (f)): AES-GCM
+    /// under a key that never leaves the token, returning its version and `nonce ‖ ciphertext`.
+    /// A KEK with no pepper refuses.
+    ///
+    /// # Errors
+    /// [`EnvelopeError::Seal`].
+    fn pepper(&self, context: &[u8], plaintext: &[u8]) -> Result<(u16, Vec<u8>), EnvelopeError> {
+        let _ = (context, plaintext);
+        Err(EnvelopeError::Seal)
+    }
+
+    /// Removes the pepper version `version` applied by [`Kek::pepper`].
+    ///
+    /// # Errors
+    /// [`EnvelopeError::Open`].
+    fn unpepper(
+        &self,
+        version: u16,
+        context: &[u8],
+        sealed: &[u8],
+    ) -> Result<Zeroizing<Vec<u8>>, EnvelopeError> {
+        let _ = (version, context, sealed);
+        Err(EnvelopeError::Open)
+    }
 }
 
 fn kw_wrap(key: &Secret<[u8; 32]>, dek: &Dek) -> Result<Vec<u8>, EnvelopeError> {
@@ -200,6 +225,44 @@ impl Kek for SoftKek {
     fn unwrap(&self, wrapped: &[u8]) -> Result<Dek, EnvelopeError> {
         kw_unwrap(&self.key, wrapped)
     }
+
+    fn pepper(&self, context: &[u8], plaintext: &[u8]) -> Result<(u16, Vec<u8>), EnvelopeError> {
+        let s = seal_with(&soft_pepper(&self.key)?, context, plaintext)?;
+        Ok((1, [s.nonce.as_slice(), &s.ciphertext].concat()))
+    }
+
+    fn unpepper(
+        &self,
+        version: u16,
+        context: &[u8],
+        sealed: &[u8],
+    ) -> Result<Zeroizing<Vec<u8>>, EnvelopeError> {
+        if version != 1 || sealed.len() < NONCE_LEN {
+            return Err(EnvelopeError::Open);
+        }
+        let (n, body) = sealed.split_at(NONCE_LEN);
+        let mut nonce = [0_u8; NONCE_LEN];
+        nonce.copy_from_slice(n);
+        open_with(
+            &soft_pepper(&self.key)?,
+            context,
+            &Sealed {
+                nonce,
+                ciphertext: body.to_vec(),
+            },
+        )
+    }
+}
+
+#[cfg(any(test, feature = "testing"))]
+fn soft_pepper(key: &Secret<[u8; 32]>) -> Result<LessSafeKey, EnvelopeError> {
+    let d = aws_lc_rs::digest::digest(
+        &aws_lc_rs::digest::SHA256,
+        &[b"access/pepper/v1\0".as_slice(), key.expose()].concat(),
+    );
+    Ok(LessSafeKey::new(
+        UnboundKey::new(&AES_256_GCM, d.as_ref()).map_err(|_| EnvelopeError::Seal)?,
+    ))
 }
 
 /// A ciphertext with its nonce.

@@ -390,6 +390,70 @@ async fn weaker_hashes_are_upgraded_on_sign_in() {
     );
 }
 
+// CR-37, OP-150 m.3 (f), TI-9: every password hash is sealed under the realm's pepper; one
+// sealed before the pepper is resealed under it at the next sign-in
+#[tokio::test]
+async fn password_hashes_are_always_peppered() {
+    use access_identity_account::app::sealing::{open, seal, subject_key};
+    let e = env(9, "ia-p").await;
+    let s = e.active("pia@example.com", "correct horse battery").await;
+    let stored = async || {
+        let mut tx = TenantTx::begin(&e.db.app, e.tenant, e.realm).await.unwrap();
+        let row = tx.subject(s, false).await.unwrap().unwrap();
+        let creds = tx.credentials(s, PASSWORD).await.unwrap();
+        tx.commit().await.unwrap();
+        (row, creds.into_iter().next().unwrap())
+    };
+    let (row, cred) = stored().await;
+    assert_eq!(cred.sealed.pepper_version, Some(1));
+    let realm = e.realm();
+    let dek = subject_key(&realm, &row).unwrap();
+    assert!(
+        open(&realm, &dek, &s, PASSWORD, &cred.sealed)
+            .map_or(true, |p| !p.expose().starts_with("$argon2"))
+    );
+    let phc = e
+        .hasher
+        .hash(
+            &access_identity_account::domain::password::Password::new("correct horse battery")
+                .unwrap(),
+            [7; 16],
+        )
+        .await
+        .unwrap();
+    let legacy = seal(&realm, &dek, &s, PASSWORD, phc.expose().as_bytes()).unwrap();
+    assert_eq!(legacy.pepper_version, None);
+    let mut tx = TenantTx::begin(&e.db.app, e.tenant, e.realm).await.unwrap();
+    assert!(
+        tx.reseal_credential(cred.id, &cred.algorithm, &legacy)
+            .await
+            .unwrap()
+    );
+    tx.commit().await.unwrap();
+    let r = e
+        .login(&e.hasher, "pia@example.com", "correct horse battery", 1)
+        .await;
+    assert!(
+        matches!(r, PasswordLogin::Accepted { rehashed: true, .. }),
+        "{r:?}"
+    );
+    assert_eq!(stored().await.1.sealed.pepper_version, Some(1));
+    e.clock.advance(60_000);
+    let r = e
+        .login(&e.hasher, "pia@example.com", "correct horse battery", 1)
+        .await;
+    assert!(
+        matches!(
+            r,
+            PasswordLogin::Accepted {
+                rehashed: false,
+                ..
+            }
+        ),
+        "{r:?}"
+    );
+}
+
 // IDP-3, G50, OP-146
 #[tokio::test]
 async fn breached_or_unchecked_passwords_are_refused() {

@@ -24,7 +24,8 @@ use access_store::Pool;
 use access_store::identity::{RealmId, TenantId, TenantTx};
 use access_store::tenancy::realm_tenant;
 use suiss_crypto::envelope::{Dek, EnvelopeError, Kek};
-use suiss_crypto::pkcs11::{HsmKek, KeyStore};
+use suiss_crypto::pkcs11::{HsmAead, HsmKek, KeyStore};
+use zeroize::Zeroizing;
 
 /// The root of the cell's opaque-id key in the token (OP-137).
 pub(crate) const ID_KEY_ROOT: &str = "access/opaque-id";
@@ -47,6 +48,15 @@ pub(crate) fn kek_label(realm: &[u8; 16]) -> String {
     out
 }
 
+/// The token label of a realm's password pepper: `access/realm-pepper/<RealmID hex>` (CR-37,
+/// OP-150 m.3 (f)).
+pub(crate) fn pepper_label(realm: &[u8; 16]) -> String {
+    kek_label(realm).replacen("realm-kek", "realm-pepper", 1)
+}
+
+/// The pepper version the token's pepper key applies; rotation adds the next.
+const PEPPER_VERSION: u16 = 1;
+
 /// The id of a realm's KEK as sealed rows record it (`kek_id`): `access:realm-kek:<RealmID
 /// hex>`, the label in the alphabet the tables' checks allow.
 pub(crate) fn kek_id(realm: &[u8; 16]) -> String {
@@ -57,6 +67,7 @@ pub(crate) fn kek_id(realm: &[u8; 16]) -> String {
 struct LockedKek {
     id: String,
     inner: Mutex<HsmKek>,
+    pepper: HsmAead,
 }
 
 impl Kek for LockedKek {
@@ -77,6 +88,28 @@ impl Kek for LockedKek {
             .map_err(|_| EnvelopeError::Wrap)?
             .unwrap(wrapped)
     }
+
+    fn pepper(&self, context: &[u8], plaintext: &[u8]) -> Result<(u16, Vec<u8>), EnvelopeError> {
+        self.pepper
+            .seal(context, plaintext)
+            .map(|s| (PEPPER_VERSION, s))
+            .map_err(|_| EnvelopeError::Seal)
+    }
+
+    fn unpepper(
+        &self,
+        version: u16,
+        context: &[u8],
+        sealed: &[u8],
+    ) -> Result<Zeroizing<Vec<u8>>, EnvelopeError> {
+        if version != PEPPER_VERSION {
+            return Err(EnvelopeError::Open);
+        }
+        self.pepper
+            .open(context, sealed)
+            .map(Zeroizing::new)
+            .map_err(|_| EnvelopeError::Open)
+    }
 }
 
 /// A shared [`LockedKek`].
@@ -93,6 +126,19 @@ impl Kek for SharedKek {
 
     fn unwrap(&self, wrapped: &[u8]) -> Result<Dek, EnvelopeError> {
         self.0.unwrap(wrapped)
+    }
+
+    fn pepper(&self, context: &[u8], plaintext: &[u8]) -> Result<(u16, Vec<u8>), EnvelopeError> {
+        self.0.pepper(context, plaintext)
+    }
+
+    fn unpepper(
+        &self,
+        version: u16,
+        context: &[u8],
+        sealed: &[u8],
+    ) -> Result<Zeroizing<Vec<u8>>, EnvelopeError> {
+        self.0.unpepper(version, context, sealed)
     }
 }
 
@@ -118,9 +164,16 @@ impl RealmKeks {
             return Ok(k.clone());
         }
         let label = kek_label(realm);
+        let pepper = pepper_label(realm);
+        let pepper = self
+            .keys
+            .aead(&pepper)
+            .or_else(|_| self.keys.generate_aead(&pepper))
+            .map_err(|e| e.to_string())?;
         let kek = Arc::new(LockedKek {
             inner: Mutex::new(self.keys.kek(&label).map_err(|e| e.to_string())?),
             id: kek_id(realm),
+            pepper,
         });
         loaded.insert(*realm, kek.clone());
         Ok(kek)

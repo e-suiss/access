@@ -8,7 +8,7 @@ use access_store::audit::AuditEvent;
 use crate::AccountError;
 use crate::app::events;
 use crate::app::hasher::Hasher;
-use crate::app::sealing::{new_subject_key, seal, subject_key};
+use crate::app::sealing::{new_subject_key, seal_password, subject_key};
 use crate::app::signal::{emit as signal, fresh_id};
 use crate::app::{Actor, Naming, Realm, breach};
 use crate::domain::events::CredentialChange;
@@ -324,7 +324,7 @@ pub async fn set_password<D: AccountDb, B: BreachRanges, E: Entropy>(
         return Err(AccountError::NotFound);
     }
     let dek = subject_key(realm, &row)?;
-    let sealed = seal(realm, &dek, &subject, PASSWORD, phc.expose().as_bytes())?;
+    let sealed = seal_password(realm, &dek, &subject, phc.expose().as_bytes())?;
     let old = tx.credentials(subject, PASSWORD).await?;
     let replaced = if old.is_empty() {
         CredentialChange::Added

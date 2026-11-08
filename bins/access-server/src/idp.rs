@@ -35,7 +35,7 @@ use access_kernel::verify::key_scope::thumbprint;
 use access_store::identity::RealmId;
 use suiss_crypto::pkcs11::{HsmError, KeyStore};
 
-use crate::login::kek_label;
+use crate::login::{kek_label, pepper_label};
 use crate::oauth::NONCE_GENERATION;
 use access_internal_api::idp::{
     ACTOR_BINDING, Committed, GenesisOpened, GenesisOrder, Submission, Unavailable, Verdict,
@@ -571,6 +571,11 @@ impl RealmKeyring {
         let kek = kek_label(realm);
         if self.keys.kek(&kek).is_err() {
             self.keys.generate_kek(&kek)?;
+        }
+        // CR-37, OP-150 m.3 (f)
+        let pepper = pepper_label(realm);
+        if self.keys.aead(&pepper).is_err() {
+            self.keys.generate_aead(&pepper)?;
         }
         let mut macs = vec![decoy_label(realm)];
         for role in [NonceRole::AuthorizationServer, NonceRole::ResourceServer] {

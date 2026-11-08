@@ -16,7 +16,7 @@ use crate::AccountError;
 use crate::app::accounts::PASSWORD;
 use crate::app::hasher::Hasher;
 use crate::app::local::LocalLimiter;
-use crate::app::sealing::{open, seal, subject_key};
+use crate::app::sealing::{open_password, seal_password, subject_key};
 use crate::app::{Actor, Realm};
 use crate::domain::identifier::normalize;
 use crate::domain::login::{PasswordLogin, ceil_seconds, counter_key, network};
@@ -423,18 +423,18 @@ async fn verify<C: Clock, E: Entropy>(
     };
     let subject = c.subject.id;
     let dek = subject_key(realm, &c.subject)?;
-    let phc = open(realm, &dek, &subject, PASSWORD, &cred.sealed)?;
+    let (phc, unpeppered) = open_password(realm, &dek, &subject, &cred.sealed)?;
     let v = services.hasher.verify(pw, phc).await?;
     if !v.matched {
         return Ok(None);
     }
-    let reseal = if v.rehash {
+    // CR-37, OP-150 m.3 (f)
+    let reseal = if v.rehash || unpeppered {
         let fresh = services.hasher.hash(pw, services.entropy.salt()?).await?;
-        Some(seal(
+        Some(seal_password(
             realm,
             &dek,
             &subject,
-            PASSWORD,
             fresh.expose().as_bytes(),
         )?)
     } else {
