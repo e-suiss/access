@@ -290,6 +290,21 @@ where
         provider: &str,
         social: &Social<H, S>,
     ) -> Reply {
+        // TN-56, OP-153 m.3 (e)
+        let kit = match self.kit(entry).await {
+            Ok(k) => k,
+            Err(r) => return r,
+        };
+        if let Some(r) = self
+            .grace_refusal(
+                &kit,
+                b,
+                access_identity_session::domain::recovery::Restricted::IdpLink,
+            )
+            .await
+        {
+            return r;
+        }
         match self.begin_social(entry, b, provider, true, social).await {
             Ok((url, cookie)) => Reply::json(200, json!({ "redirect_to": url })).cookie(cookie),
             Err(r) => r,
@@ -474,6 +489,17 @@ where
             Ok(k) => k,
             Err(r) => return r,
         };
+        // TN-56, OP-153 m.3 (e)
+        if let Some(r) = self
+            .grace_refusal(
+                &kit,
+                b,
+                access_identity_session::domain::recovery::Restricted::IdpLink,
+            )
+            .await
+        {
+            return r;
+        }
         let (subject, _) = match self.fresh(&kit, b, Some(LINK_FRESHNESS_MS)).await {
             Ok(s) => s,
             Err(r) => return r,

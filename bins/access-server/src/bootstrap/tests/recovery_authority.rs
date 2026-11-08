@@ -626,7 +626,7 @@ async fn graced(c: &super::management::Console, subject: [u8; 16]) {
 #[tokio::test]
 async fn the_grace_period_holds_the_remaining_surfaces() {
     let c = console("recovery-grace-surfaces", false).await;
-    let app = super::recovery::hosted(&c, Recording::default());
+    let app = hosted_with_devices(&c, Recording::default());
     let ids = crate::ids::CellIds::new(c.w.keys.clone()).key().unwrap();
     let founder = ids
         .encode(access_identity_account::app::SUBJECT_PREFIX, c.subject)
@@ -650,6 +650,16 @@ async fn the_grace_period_holds_the_remaining_surfaces() {
     assert_eq!(change.status, StatusCode::FORBIDDEN, "{}", change.json);
     assert_eq!(change.json["code"], "recovery-grace");
     assert!(change.retry_after.unwrap() > 86_000);
+    let unlink = me
+        .call(
+            &app,
+            &Method::DELETE,
+            &format!("/v1/account/linked/{}", b64url_encode(&[7; 16])),
+            None,
+        )
+        .await;
+    assert_eq!(unlink.status, StatusCode::FORBIDDEN, "{}", unlink.json);
+    assert_eq!(unlink.json["code"], "recovery-grace");
 
     // TN-56
     let (status, body) = super::recovery::admin_write(

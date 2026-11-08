@@ -196,17 +196,60 @@ fn routes(c: &Console, messages: Recording, devices: bool) -> axum::Router {
     if !devices {
         return login;
     }
-    login.merge(access_http::login::me_router(
-        discovery(),
-        hosted,
-        access_identity_ui::app::Devices {
-            signer: SignerKeys::new(w.identity_signer.clone()),
-            instances: w.plane.clone(),
-            approvals: w.plane.clone(),
-            claims: Arc::new(courier(c)),
-            pep: String::from(access_identity_ui::domain::frontend::IDENTITY_PEP),
-        },
-    ))
+    let social = access_identity_ui::app::social::Social {
+        http: NoProviders,
+        secrets: access_identity_federation::adapters::FileSecrets(None),
+        dev: BTreeMap::new(),
+        presets: access_identity_federation::app::presets().unwrap(),
+    };
+    login
+        .merge(access_http::login::social_router(
+            discovery(),
+            hosted.clone(),
+            social,
+        ))
+        .merge(access_http::login::me_router(
+            discovery(),
+            hosted,
+            access_identity_ui::app::Devices {
+                signer: SignerKeys::new(w.identity_signer.clone()),
+                instances: w.plane.clone(),
+                approvals: w.plane.clone(),
+                claims: Arc::new(courier(c)),
+                pep: String::from(access_identity_ui::domain::frontend::IDENTITY_PEP),
+            },
+        ))
+}
+
+/// No provider answers: the social routes are mounted for their account side only.
+struct NoProviders;
+
+impl access_identity_federation::ports::ProviderHttp for NoProviders {
+    fn get_json(
+        &self,
+        _: &str,
+        _: Option<&str>,
+    ) -> impl Future<
+        Output = Result<
+            access_identity_federation::ports::Answer,
+            access_identity_federation::ports::Unreachable,
+        >,
+    > + Send {
+        std::future::ready(Err(access_identity_federation::ports::Unreachable))
+    }
+
+    fn post_form(
+        &self,
+        _: &str,
+        _: &str,
+    ) -> impl Future<
+        Output = Result<
+            access_identity_federation::ports::Answer,
+            access_identity_federation::ports::Unreachable,
+        >,
+    > + Send {
+        std::future::ready(Err(access_identity_federation::ports::Unreachable))
+    }
 }
 
 /// The realm issuer's courier of this process over the token's issuer keys (OP-150 L2).
