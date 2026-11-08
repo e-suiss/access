@@ -175,3 +175,48 @@ async fn eddsa_is_refused_and_ed25519_accepted() {
         }
     }
 }
+
+// TN-33, OP-153 m.3 (y)
+#[tokio::test]
+async fn a_dbsc_bound_session_does_not_authorize_without_its_bound_cookie() {
+    use access_identity_session::domain::session::cookie_digest;
+    use access_kernel::json::b64url_decode;
+    let c = Cluster::new(&["bnd-dbsc"]).await;
+    let a = c.at(0);
+    let cookie = a.sign_in(now() - 1000).await;
+    assert!(
+        location(&a.authorize(&[], Some(&cookie)).await).contains("code="),
+        "untied sessions need no bound cookie"
+    );
+    let value = <[u8; 32]>::try_from(b64url_decode(&cookie).unwrap()).unwrap();
+    let bound = [0x42_u8; 32];
+    let mut tx =
+        access_store::identity::TenantTx::begin(&c.db.app, a.f.realm.tenant, a.f.realm.realm)
+            .await
+            .unwrap();
+    let row = tx
+        .session_by_cookie(&cookie_digest(&value))
+        .await
+        .unwrap()
+        .unwrap();
+    let mut key = [4_u8; 65];
+    key[1] = 1;
+    assert!(
+        tx.dbsc_bind(
+            row.id,
+            &key,
+            i64::try_from(now()).unwrap(),
+            &cookie_digest(&bound),
+            i64::try_from(now() + 600_000).unwrap(),
+        )
+        .await
+        .unwrap()
+    );
+    tx.commit().await.unwrap();
+    let replayed = location(&a.authorize(&[], Some(&cookie)).await);
+    assert!(!replayed.contains("code="), "{replayed}");
+    let carried = format!("{cookie}.{}", b64url_encode(&bound));
+    assert!(location(&a.authorize(&[], Some(&carried)).await).contains("code="));
+    let wrong = format!("{cookie}.{}", b64url_encode(&[0x43_u8; 32]));
+    assert!(!location(&a.authorize(&[], Some(&wrong)).await).contains("code="));
+}

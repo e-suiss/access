@@ -232,6 +232,23 @@ pub(crate) fn active(status: &str) -> bool {
 }
 
 /// Whether a login session is live now (TN-36, TN-50, G57).
+/// N5: whether a session tied to a DBSC key came with its live bound cookie (TN-33,
+/// OP-153 m.3 (y)); `cookie` is the session cookie, followed by `.` and the bound cookie when
+/// the request carried both.
+pub(crate) fn bound_live(r: &SessionRow, cookie: &str, now: u64) -> bool {
+    use access_identity_session::domain::dbsc::{bound_ok, split_cookie};
+    let bound = split_cookie(cookie)
+        .1
+        .and_then(decode32)
+        .map(|b| access_identity_session::domain::session::cookie_digest(&b));
+    bound_ok(
+        r.dbsc_key.is_some(),
+        r.dbsc_cookie.as_ref().map(|(d, e)| (d.as_slice(), *e)),
+        bound,
+        now,
+    )
+}
+
 pub(crate) fn session_live(r: &SessionRow, now: u64) -> bool {
     let facts = SessionFacts {
         session_epoch: r.session_epoch,

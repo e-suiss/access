@@ -106,7 +106,10 @@ impl<E: Env> OAuth<E> {
             },
             None => self.env.pages().signed_out(&realm.issuer),
         };
-        let session = match cookie.and_then(decode32) {
+        let session = match cookie
+            .map(|c| access_identity_session::domain::dbsc::split_cookie(c).0)
+            .and_then(decode32)
+        {
             Some(v) => tx
                 .session_by_cookie(&cookie_digest(&v))
                 .await?

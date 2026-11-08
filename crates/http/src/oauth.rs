@@ -109,7 +109,19 @@ fn session_cookie(headers: &HeaderMap) -> Option<String> {
     if found.next().is_some() {
         return None;
     }
-    first
+    // TN-33
+    let bound = headers
+        .get_all(header::COOKIE)
+        .iter()
+        .filter_map(|v| v.to_str().ok())
+        .flat_map(|v| v.split(';'))
+        .filter_map(|c| c.trim().split_once('='))
+        .find(|(k, _)| *k == access_identity_session::domain::dbsc::BOUND_COOKIE)
+        .map(|(_, v)| v);
+    match (first, bound) {
+        (Some(s), Some(b)) if !s.contains('.') && !b.contains('.') => Some(format!("{s}.{b}")),
+        (first, _) => first,
+    }
 }
 
 fn bad_request() -> Response {

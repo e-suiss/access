@@ -2,6 +2,7 @@
 
 use access_crypto::dpop::Role;
 use access_crypto::oauth::opaque_digest;
+use access_identity_session::domain::dbsc::split_cookie;
 use access_identity_session::domain::session::cookie_digest;
 use access_kernel::json::b64url_encode;
 use access_store::oauth::{NewCode, NewRequest};
@@ -140,11 +141,12 @@ impl<E: Env> OAuth<E> {
             Ok(l) => l,
             Err(reply) => return Ok(reply),
         };
-        let session = match cookie.and_then(decode32) {
-            Some(value) => tx
+        // TN-33, OP-153 m.3 (y)
+        let session = match cookie.and_then(|c| decode32(split_cookie(c).0).map(|v| (c, v))) {
+            Some((c, value)) => tx
                 .session_by_cookie(&cookie_digest(&value))
                 .await?
-                .filter(|s| session_live(s, now)),
+                .filter(|s| session_live(s, now) && super::bound_live(s, c, now)),
             None => None,
         };
         let signed_in = session
