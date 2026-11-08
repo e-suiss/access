@@ -546,6 +546,7 @@ OPERATIONS = {
 # operation F0 does not know fails the run.
 NOT_IMPLEMENTED = {
     "webhook.sign": "transport signature profile (TN-136, E42), not Kernel semantics; checked by crates/crypto webhook tests",
+    "meta_payload.json": "JSON transport form of Kernel meta payloads (L1-ADP-17); the CBOR semantics are checked by the core vectors, the JSON mapping by crates/http payload tests",
 }
 
 # Third-party raw data sets without an `operation`; the Kernel's own tests read them.
