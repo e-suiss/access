@@ -1,6 +1,8 @@
 //! Architecture and code rules (OP-62, OP-63, OP-64, OP-66, OP-73, TI-9, R-2,
 //! SA-21, CR-3, CR-11, CR-13, SA-32, U48, TI-10, INV-26, INV-36, §9.7A.7, OP-150 (e), TN-113, OP-47, OP-67). Each check lives in a `rules_*` module.
 
+#[path = "rules_comments.rs"]
+mod comments;
 #[path = "rules_crypto.rs"]
 mod crypto;
 #[path = "rules_custody.rs"]
@@ -76,6 +78,10 @@ pub(crate) fn checks() -> Vec<Check> {
         Check {
             name: "todo-has-issue",
             run: source::check_todo,
+        },
+        Check {
+            name: "comment-ids",
+            run: comments::check,
         },
         Check {
             name: "panic-profile",
