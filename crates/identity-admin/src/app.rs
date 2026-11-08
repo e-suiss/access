@@ -16,6 +16,7 @@ use access_identity_oauth::adapters::outbound::DeclaredTargets;
 use access_identity_oauth::domain::issuer::{Issuer, IssuerStyle, RealmBase};
 use access_internal_api::idp::{ACTOR_BINDING, GenesisOrder, Submission, Verdict};
 use access_internal_api::instances::PlatformProduct;
+use access_kernel::claim::body::Class;
 use access_kernel::combinator::{Capacity, Decision};
 use access_kernel::digest::Digest;
 use access_kernel::intent::{IntentEnvelope, intent_digest};
@@ -78,8 +79,8 @@ pub struct NewRealm<'a> {
     /// Further Acceptances its Genesis establishes, each an `acceptance-content` (L0-META-5,
     /// OP-149 m.26 (c)).
     pub acceptances: Vec<suiss_crypto::dcbor::Value>,
-    /// Classes of the realm issuer's Claims its Genesis accepts as predicate input too, for
-    /// hosted approvals (SI-5, OP-149 m.29 (b)).
+    /// Classes of the realm issuer's Claims its Genesis accepts as predicate input besides
+    /// `authentication`, which every realm accepts (SI-5, OP-149 m.29 (b), OP-152 m.5 (i)).
     pub issuer_predicate_input: Vec<String>,
     /// The `idp.platform.*` Exercise that opens it, recorded with it (TN-110, EI-25); `None`
     /// for a realm the local plan opens.
@@ -203,6 +204,17 @@ pub struct Admin<'a, D, G, K> {
     pub vault: Option<&'a dyn KeyVault>,
 }
 
+/// `classes` with `authentication` first and no repeats (OP-152 m.5 (i), OP-149 m.29 (b)).
+fn predicate_input(classes: &[String]) -> Vec<String> {
+    let mut out = vec![Class::Authentication.name()];
+    for c in classes {
+        if !out.contains(c) {
+            out.push(c.clone());
+        }
+    }
+    out
+}
+
 fn host_of(authority: &str) -> &str {
     authority
         .rsplit_once(':')
@@ -231,7 +243,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                 schemas: r.schemas.clone(),
                 issuer: Some(access_kernel::model::Id(claim_issuer)),
                 acceptances: r.acceptances.clone(),
-                issuer_predicate_input: r.issuer_predicate_input.clone(),
+                issuer_predicate_input: predicate_input(&r.issuer_predicate_input),
             })
             .await
             .map_err(|e| AdminError::Unavailable(e.0))?;

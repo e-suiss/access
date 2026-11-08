@@ -1062,6 +1062,36 @@ async fn admin_realm_creation_opens_the_domain_keys() {
     w.domains.release().await;
 }
 
+// OP-152 m.5 (i), OP-149 m.29 (b), SI-5, §10.1.4 rule 3: a realm created through the admin
+// path with no further predicate-input classes is still born accepting its issuer's
+// authentication Claims as predicate input
+#[tokio::test]
+async fn admin_realms_accept_issuer_authentication_by_default() {
+    let (w, _) = World::open("bs-predicate", false).await;
+    let (_, created) = w.admin_realm("defaults").await;
+    let gates: Vec<access_kernel::claim::Gate> =
+        access_store::authority::state(&w.db.sequencer, &DomainId::from_bytes(created.domain.0))
+            .await
+            .unwrap()
+            .into_iter()
+            .filter_map(|r| r.value)
+            .filter_map(|v| {
+                suiss_crypto::dcbor::decode(&v, suiss_crypto::dcbor::Limits::CEILING).ok()
+            })
+            .filter_map(|v| meta::ContentState::from_value(&v).ok())
+            .filter_map(|c| access_kernel::claim::Gate::of(&c.content).ok())
+            .collect();
+    let issuer = gates
+        .iter()
+        .find(|g| g.use_ == access_kernel::claim::ACTOR_BINDING && g.issuer.is_some())
+        .and_then(|g| g.issuer)
+        .unwrap();
+    assert!(gates.iter().any(|g| g.issuer == Some(issuer)
+        && g.use_ == access_kernel::claim::PREDICATE_INPUT
+        && g.classes == [String::from("authentication")]));
+    w.domains.release().await;
+}
+
 // OP-149 m.5, SAI-46, CR-25, CR-59, OP-146 m.16 (m): a realm created through the admin path
 // opens its domain's keyring at Genesis, where its founding operational key signs at once, so
 // signed key lookups are answered from the realm's creation on, with no schedule round between
