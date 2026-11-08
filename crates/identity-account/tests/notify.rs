@@ -239,7 +239,7 @@ fn otp(subject: [u8; 16], expires_at_ms: u64) -> Message {
         subject,
         to: Address::Email(EMAIL.to_owned()),
         locale: Some("tr-TR".to_owned()),
-        valid_since_ms: None,
+        valid_since_ms: Some(START_MS - 86_400_000),
         body: Body::Otp {
             code: Secret::new(CODE.to_owned()),
             purpose: OtpPurpose::SignIn,
@@ -253,7 +253,7 @@ fn notice(subject: [u8; 16], at_ms: u64) -> Message {
         subject,
         to: Address::Email(EMAIL.to_owned()),
         locale: None,
-        valid_since_ms: None,
+        valid_since_ms: Some(START_MS - 86_400_000),
         body: Body::NewSignIn {
             at_ms,
             method: SignInMethod::Passkey,
@@ -710,6 +710,13 @@ fn the_contract_validates_its_fields() {
     m.to = Address::Phone("05551112233".to_owned());
     assert!(m.validate().is_err());
     m.to = Address::Phone("+905551112233".to_owned());
+    // OP-153 m.9 (d)
+    assert!(m.validate().is_err());
+    m.valid_since_ms = None;
+    assert!(m.validate().is_ok());
+    m.to = Address::Email("a@example.com".to_owned());
+    assert!(m.validate().is_err());
+    m.to = Address::Phone("+905551112233".to_owned());
     m.locale = Some("tr TR".to_owned());
     assert!(m.validate().is_err());
     m.locale = None;
@@ -829,7 +836,7 @@ fn every_kind_matches_the_json_schema() {
             subject: s,
             to: to(),
             locale: None,
-            valid_since_ms: None,
+            valid_since_ms: Some(START_MS - 86_400_000),
             body: Body::PasswordChanged { at_ms: START_MS },
         },
         notice(s, START_MS),
@@ -861,7 +868,7 @@ fn every_kind_matches_the_json_schema() {
             subject: s,
             to: to(),
             locale: None,
-            valid_since_ms: None,
+            valid_since_ms: Some(START_MS - 86_400_000),
             body: Body::Link {
                 purpose,
                 link: Secret::new("https://id.example/r/abc".to_owned()),
@@ -873,7 +880,7 @@ fn every_kind_matches_the_json_schema() {
         subject: s,
         to: to(),
         locale: Some("tr".to_owned()),
-        valid_since_ms: None,
+        valid_since_ms: Some(START_MS - 86_400_000),
         body: Body::Invitation {
             link: Secret::new("https://id.example/i/abc".to_owned()),
             organization: "Acme <a href=x>".to_owned(),

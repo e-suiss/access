@@ -46,6 +46,7 @@
         "relay.message.deletion_scheduled.v1",
         "relay.message.deletion_completed.v1",
         "relay.message.inactivity_notice.v1",
+        "relay.message.signup_existing.v1",
         "relay.message.reset_intent.v1",
         "relay.message.export_ready.v1",
         "relay.message.invitation.v1"
@@ -359,6 +360,22 @@
         "properties": {
           "data": {
             "$ref": "#/$defs/relay.message.invitation.v1"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "relay.message.signup_existing.v1"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/relay.message.signup_existing.v1"
           }
         }
       }
@@ -899,6 +916,29 @@
           "description": "Attacker input: rendered as text, never as a link (OP-153 m.3 (o))."
         },
         "expires_at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "relay.message.signup_existing.v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "recipient",
+        "at"
+      ],
+      "properties": {
+        "recipient": {
+          "$ref": "#/$defs/recipient"
+        },
+        "locale": {
+          "$ref": "#/$defs/locale"
+        },
+        "recipient_valid_since": {
+          "$ref": "#/$defs/recipient_valid_since"
+        },
+        "at": {
           "type": "string",
           "format": "date-time"
         }

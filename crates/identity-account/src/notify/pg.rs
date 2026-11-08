@@ -39,9 +39,24 @@ impl CourierStore for PgCourierStore {
     ) -> Result<SubjectKey, NotifyError> {
         let mut tx = TenantTx::begin(&self.app, tenant, realm).await?;
         let row = tx.subject(subject, false).await?;
+        // OP-153 m.3 (g)
+        let challenge = if row.is_none() {
+            tx.challenge_key(subject).await?
+        } else {
+            None
+        };
         tx.commit().await?;
         Ok(match row {
-            None => SubjectKey::Missing,
+            None => match challenge {
+                None => SubjectKey::Missing,
+                Some(c) => match c.wrapped_dek {
+                    None => SubjectKey::Shredded,
+                    Some(wrapped) => SubjectKey::Wrapped {
+                        kek_id: c.kek_id,
+                        wrapped,
+                    },
+                },
+            },
             Some(r) => match r.wrapped_dek {
                 None => SubjectKey::Shredded,
                 Some(wrapped) => SubjectKey::Wrapped {

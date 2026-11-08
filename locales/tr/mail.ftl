@@ -18,3 +18,4 @@ mail-deletion_scheduled-subject = Hesabınızın silinmesi planlandı
 mail-export_ready-subject = Veri dışa aktarımınız hazır
 mail-inactivity_notice-subject = Hesabınız kullanılmadığı için kapatılacak
 mail-signup_code-subject = Kayıt kodunuz
+mail-signup_existing-subject = Biri e-posta adresinizle hesap oluşturmaya çalıştı

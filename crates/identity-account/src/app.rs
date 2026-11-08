@@ -8,6 +8,7 @@ pub mod hasher;
 pub mod local;
 pub mod login;
 pub mod privacy;
+pub mod registration;
 pub mod sealing;
 pub mod signal;
 pub mod vault;

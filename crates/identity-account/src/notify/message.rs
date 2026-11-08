@@ -191,11 +191,14 @@ pub enum Notice {
     DeletionCompleted,
     /// The account will be turned off for inactivity; `until` is when (OP-153 m.3 (dd)).
     InactivityNotice,
+    /// N1: someone asked to create an account with this address, which already has one; sent to
+    /// the account's own address instead of saying so on the page (§10.2.1 m.6, CR-40, TN-80).
+    SignUpExisting,
 }
 
 impl Notice {
     /// Every notice.
-    pub const ALL: [Self; 10] = [
+    pub const ALL: [Self; 11] = [
         Self::RecoveryRequested,
         Self::RecoveryCooling,
         Self::RecoveryCompleted,
@@ -206,6 +209,7 @@ impl Notice {
         Self::DeletionScheduled,
         Self::DeletionCompleted,
         Self::InactivityNotice,
+        Self::SignUpExisting,
     ];
 
     /// Its outbox kind and `CloudEvents` `type`.
@@ -222,6 +226,7 @@ impl Notice {
             Self::DeletionScheduled => "relay.message.deletion_scheduled.v1",
             Self::DeletionCompleted => "relay.message.deletion_completed.v1",
             Self::InactivityNotice => "relay.message.inactivity_notice.v1",
+            Self::SignUpExisting => "relay.message.signup_existing.v1",
         }
     }
 
@@ -401,7 +406,7 @@ impl fmt::Debug for Body {
 }
 
 /// Every kind of the contract, as outbox kind and `CloudEvents` `type`.
-pub const KINDS: [&str; 18] = [
+pub const KINDS: [&str; 19] = [
     "relay.message.otp.v1",
     "relay.message.magic_link.v1",
     "relay.message.password_changed.v1",
@@ -417,6 +422,7 @@ pub const KINDS: [&str; 18] = [
     "relay.message.deletion_scheduled.v1",
     "relay.message.deletion_completed.v1",
     "relay.message.inactivity_notice.v1",
+    "relay.message.signup_existing.v1",
     "relay.message.reset_intent.v1",
     "relay.message.export_ready.v1",
     "relay.message.invitation.v1",
@@ -434,7 +440,7 @@ impl Body {
             Self::AccountStatus { .. } => KINDS[4],
             Self::Notice { notice, .. } => notice.kind(),
             Self::Link { purpose, .. } => purpose.kind(),
-            Self::Invitation { .. } => KINDS[17],
+            Self::Invitation { .. } => KINDS[18],
         }
     }
 
@@ -514,7 +520,8 @@ pub struct Message {
     /// BCP 47 language tag for Relay's template, when the person has one.
     pub locale: Option<String>,
     /// Since when the recipient has owned the mailbox (`mailbox_owner_since`), Unix ms: Relay
-    /// sends it as RFC 7293 `Require-Recipient-Valid-Since` (OP-153 m.3 (i)). E-mail only.
+    /// sends it as RFC 7293 `Require-Recipient-Valid-Since` (OP-153 m.3 (i)). Required on every
+    /// e-mail and absent on every other channel (OP-153 m.9 (d)).
     pub valid_since_ms: Option<u64>,
     /// What it says.
     pub body: Body,
@@ -537,7 +544,8 @@ impl Message {
         if self.locale.as_deref().is_some_and(|l| !valid_locale(l)) {
             return Err(Invalid("locale"));
         }
-        if self.valid_since_ms.is_some() && !matches!(self.to, Address::Email(_)) {
+        // OP-153 m.3 (i), m.9 (d)
+        if self.valid_since_ms.is_some() != matches!(self.to, Address::Email(_)) {
             return Err(Invalid("valid_since"));
         }
         self.body.validate()
