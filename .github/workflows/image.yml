@@ -299,6 +299,7 @@ jobs:
           exit 1
       - name: Account pages (@live)
         run: |
+          echo "127.0.0.1 access-server" | sudo tee -a /etc/hosts
           cd web/account
           npm ci
           npx playwright install --with-deps chromium
