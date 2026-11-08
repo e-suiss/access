@@ -1132,7 +1132,7 @@ fn foreign_status(
         .map_err(|_| "foreign-status")?;
     let token = ListToken::from_bytes(&verified.payload).map_err(|_| "foreign-status")?;
     let iat = token.iat.checked_mul(1_000).ok_or("foreign-status")?;
-    // TI-RT5: the list is as old as the metadata may be, at most
+    // TI-RT5
     if iat.saturating_add(access_kernel::foreign::FRESHNESS_MS) < now {
         return Err("foreign-status");
     }
@@ -1205,7 +1205,7 @@ fn bridge_proof(
             refusal = code;
             continue;
         }
-        // OP-143 m.13 (f), §9.15A.3: the home budget is drawn at home, as the slice
+        // OP-143 m.13 (f), §9.15A.3
         if consumption && verified.validity.offline_slice.is_empty() {
             refusal = "foreign-consumption";
             continue;
@@ -1286,7 +1286,7 @@ fn bridge(
         if foreign::claimed_domain(pap).as_ref() != Some(domain) {
             continue;
         }
-        // §9.15A.3: what is left of the home slice here, one counter per term
+        // §9.15A.3
         let mut remaining = BTreeMap::new();
         if let Some(claimed) = claimed_pap(pap) {
             for s in &claimed.validity.offline_slice {
@@ -1421,7 +1421,7 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
     let mut draws = Vec::new();
     let mut releases = Vec::new();
     let mut expansion = false;
-    // L0-META-30: a contribution is authorized like a domain action and records itself
+    // L0-META-30
     let contribute = matches!(req.payload, Some(Payload::Contribute { .. }));
     if let Some(payload) = req.payload.as_ref().filter(|_| contribute) {
         let Some(actor) = actor else {
@@ -1557,8 +1557,7 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
                     effects = out.effects;
                     releases = out.releases;
                     expansion = out.expansion;
-                    // L0-META-13: a self-acting meta-action names a live Grant held by Public that
-                    // covers it, like any other basis
+                    // L0-META-13
                     let basis = if let ExerciseBasis::Public(g) = req.basis {
                         let public = read::<GrantState>(snapshot, kind::GRANT, &g)
                             .filter(|s| {
@@ -1575,7 +1574,7 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
                         })
                     } else {
                         let mut hop = exact_hop(&req.intent, None, out.requirements);
-                        // OP-143 m.12: the offline slice is drawn from every lineage budget now
+                        // OP-143 m.12
                         if let (
                             Some(Payload::ProjectionIssue {
                                 offline_slice: Some(slice),
@@ -1599,7 +1598,7 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
                             capacities: BTreeSet::from([req.capacity]),
                         })
                     };
-                    // L0-EVAL-16: a Mandate bounds meta-actions like any other action
+                    // L0-EVAL-16
                     let mandate = mandate(snapshot, Some(&actor));
                     let missing = snapshot.missing();
                     if !missing.is_empty() {
@@ -1622,7 +1621,7 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
                     .map(|hops| (hops, None)),
                 ExerciseBasis::Holding(h) => read::<GrantState>(snapshot, kind::GRANT, &h.grant)
                     .filter(|g| {
-                        // OP-141 m.20 (c), (d): a predicate holder holds from its episode start
+                        // OP-141 m.20 (c), (d)
                         let holds = match &g.content.holder {
                             access_kernel::model::SubjectSelector::Party(p) => {
                                 *p == h.holder && g.since == h.since
@@ -1643,8 +1642,8 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
                     .and_then(|_| lineage_hops(snapshot, &g))
                     .map(|hops| (hops, Some(g))),
             };
-            // OP-141 m.26: every hop's budget is drawn by this intent's demand, beside what a
-            // foreign slice drew (§9.15A.3)
+            // OP-141 m.26
+            // §9
             let hops = match hops {
                 Some(((mut hops, capacities), Some(g))) => {
                     match budgets(snapshot, &g, &req.intent, now, &mut hops) {
@@ -1696,7 +1695,7 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
     if !missing.is_empty() {
         return Pass::Need(missing);
     }
-    // OP-141 m.27 (c): the live policies of the domain, the Anchor, the Party and the Instance
+    // OP-141 m.27 (c)
     let applicable = applicable_policies(snapshot, &req.basis, actor.as_ref());
     let missing = snapshot.missing();
     if !missing.is_empty() {

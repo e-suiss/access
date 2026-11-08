@@ -77,14 +77,14 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             .actor(inc, &digest, now)
             .await?
             .ok_or(CoreError::Protocol("export-exercise"))?;
-        // §13.7.4, OP-141 m.23: an export is counted with explanations
+        // §13.7.4, OP-141 m.23
         if !self
             .limiter
             .admit(Class::Explain, who(inc, Some(actor)), now)
         {
             return Err(CoreError::Limited);
         }
-        // PI-4: only the actor's own allowed Exercise of this very intent
+        // PI-4
         let allowed = self.reader.nonce(&req.nonce).await?.is_some_and(|n| {
             n.intent_digest == digest.0
                 && n.actor == actor.instance.0.to_vec()
@@ -104,7 +104,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             Some(ParamValue::Enum(e)) if e == "full" => Coverage::Full,
             Some(_) => return Err(CoreError::Protocol("export-scope")),
         };
-        // OP-141 m.38 (d): full records only for who audits the domain
+        // OP-141 m.38 (d)
         if coverage == Coverage::Full && !self.audits(&actor.party, now).await? {
             return Err(CoreError::Protocol("export-scope"));
         }
@@ -117,7 +117,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                 _ => CoreError::Unavailable("export"),
             },
         )?;
-        // INV-27: what leaves verifies with the open Kernel alone
+        // INV-27
         export::verify(&package).map_err(|_| CoreError::Unavailable("export-verify"))?;
         Ok(Exported {
             package,

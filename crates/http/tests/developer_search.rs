@@ -203,7 +203,7 @@ fn a_revocation_report_carries_exposure_and_aftermath() {
     assert_eq!(r["orphan_tuples"], 1);
     assert_eq!(r["index_lag"], 2);
     assert_eq!(r["aftermath"]["running_copies"], 3);
-    // E15, E30: the PEPs that acknowledged applying it, per exposure and in the aftermath
+    // E15, E30
     assert_eq!(r["exposed"][0]["pep"], "pos-7");
     assert_eq!(r["exposed"][0]["applied_at"], 150);
     assert_eq!(r["acknowledged"][0]["basis"], 12);

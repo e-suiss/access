@@ -227,7 +227,7 @@ fn genesis() -> BTreeMap<String, Opened> {
             "acceptances".to_owned(),
             opened(Value::Array(vec![shop_schemas()])),
         ),
-        // OP-141 m.34 (d): the scenarios below run without the CT3 time-lock
+        // OP-141 m.34 (d)
         (
             "policy".to_owned(),
             opened(Value::Map(vec![(
@@ -448,7 +448,7 @@ fn unresolved(r: &Response) {
     assert_eq!(b.subcode, None);
 }
 
-// OP-152 m.5 (a): an unresolvable basis is a recorded DENY, the same for a missing Grant
+// OP-152 m.5 (a)
 #[tokio::test]
 async fn an_unresolvable_basis_is_a_recorded_denial() {
     let db = fresh().await.unwrap();
@@ -507,8 +507,7 @@ async fn register_for(
     core.exercise(&inc, NOW).await.unwrap()
 }
 
-// §13.7.4, OP-152 m.5 (b): bootstrap Grants are counted per PEP, context and hour; the
-// eleventh is a recorded restricted/policy:bootstrap-rate, other contexts are not touched
+// §13.7.4, OP-152 m.5 (b)
 #[tokio::test]
 async fn bootstrap_grants_are_limited_per_context() {
     let db = fresh().await.unwrap();
@@ -591,7 +590,6 @@ async fn a_grant_allows_until_it_is_revoked() {
     onboard(&mut core, d, ALICE, ALICE_KEY, (3, 4)).await;
 
     let shop = meta::object_id(&d, kind::ANCHOR, 1);
-    // registered and authenticated, Alice holds nothing yet
     let before = send(
         &mut core,
         shop_request(d, 30, Mode::Check, ExerciseBasis::Anchor(shop)),
@@ -815,9 +813,7 @@ fn unavailable(r: Result<Response, CoreError>) -> &'static str {
     }
 }
 
-// OP-141 m.18 (a), (d), OP-31: a process leads a domain from its first request until it
-// releases it; an unknown domain, a domain led elsewhere and a domain without its key are
-// unavailable
+// OP-141 m.18 (a), (d), OP-31
 #[tokio::test]
 async fn a_process_leads_a_domain_from_its_first_request() {
     // TI-5, SAI-3, G48, MUST-NEVER-11
@@ -863,11 +859,11 @@ async fn a_process_leads_a_domain_from_its_first_request() {
     }
     let first = a.exercise(&read(4)).await.unwrap();
     allowed(&first);
-    // OP-141 m.22 (e): the record is named by an opaque reference
+    // OP-141 m.22 (e)
     let reference = first.basis_ref.clone().unwrap();
     assert!(reference.len() >= 48);
 
-    // OP-141 m.22 (f): a reader is answered at or after what it has seen, never before
+    // OP-141 m.22 (f)
     let mut seen = read(40);
     seen.request.mode = Mode::Check;
     seen.request.consistency = first.consistency.clone();
@@ -897,7 +893,7 @@ async fn a_process_leads_a_domain_from_its_first_request() {
     assert_eq!(unavailable(a.exercise(&keyless).await), "event-key");
 }
 
-// ---------------------------------------------------------------- D5a (OP-141 m.19)
+// OP-141
 
 fn term(kind: ProofKind, class: &str, binding: ProofBinding) -> RequirementTerm {
     RequirementTerm {
@@ -982,7 +978,7 @@ fn gated_with(terms: &[RequirementTerm], quota: u64) -> BTreeMap<String, Opened>
             ]),
         ),
     ]);
-    // OP-150 L6: ALICE also issues `authentication` Claims about herself, for her approvals
+    // OP-150 L6
     let authentication = Value::Map(vec![
         (Value::text("issuer"), ALICE.to_value()),
         (Value::text("use"), Value::text("predicate-input")),
@@ -1096,8 +1092,7 @@ fn with_proofs(mut r: Request, proofs: Vec<ProofRef>) -> Request {
     r
 }
 
-// OP-149 m.8, L0-EVAL-30: the commit path derives actor_is_agent from the actor Party's
-// actor_kind, so a human-presence term is not satisfiable by an agent actor
+// OP-149 m.8, L0-EVAL-30
 #[tokio::test]
 async fn an_agent_party_cannot_satisfy_human_presence_itself() {
     let mut present = term(ProofKind::Authentication, "presence", ProofBinding::None);
@@ -1116,8 +1111,7 @@ async fn an_agent_party_cannot_satisfy_human_presence_itself() {
     }
 }
 
-// OP-141 m.19 (a)–(d), (h), L2-CLM-3, L2-CLM-4: an accepted Claim meets the requirement on the
-// same nonce; a Claim no Acceptance covers is recorded in quarantine and meets nothing
+// OP-141 m.19, (h), L2-CLM-3, L2-CLM-4
 #[tokio::test]
 async fn an_accepted_claim_meets_a_requirement() {
     // INV-14, G7, G8, SI-3, PI-3, EI-21, MUST-NEVER-3, MUST-NEVER-9, EI-3, EI-22
@@ -1171,7 +1165,6 @@ async fn an_accepted_claim_meets_a_requirement() {
             .is_some()
     );
 
-    // the recorded Claim is referenced by its id on a new nonce
     let by_ref = send(
         &mut core,
         with_proofs(
@@ -1184,7 +1177,7 @@ async fn an_accepted_claim_meets_a_requirement() {
     .unwrap();
     allowed(&by_ref);
 
-    // L2-CLM-2: a Claim signed by a key the domain does not know is a protocol error
+    // L2-CLM-2
     let forged = claim(d, ALICE, 77, "kyc");
     let refused = send(
         &mut core,
@@ -1226,9 +1219,7 @@ fn sign_in_claim(d: Digest, subject: Id, assurance: &[(&str, u64)], seed: u8) ->
     )
 }
 
-// E9, §13.7.3 CT0 footnote, N-45, SEC10, SEC26: an ordinary Exercise's own authentication term
-// asks for the tier's authenticator class even where the Grant asks for less; a password or an
-// OTP sign-in alone gets REQUIRE_ACTION for a phishing-resistant one, a passkey meets it
+// E9, §13.7.3 CT0, N-45, SEC10, SEC26
 #[tokio::test]
 async fn an_ordinary_exercise_needs_the_tiers_authenticator_class() {
     let db = fresh().await.unwrap();
@@ -1269,8 +1260,7 @@ async fn an_ordinary_exercise_needs_the_tiers_authenticator_class() {
     fold_check(&db.sequencer, d).await.unwrap();
 }
 
-// TI-RT7, OP-141 m.30: a Claim with a recorded successor in its issuer line no longer asserts,
-// and a fork leaves neither side asserting
+// TI-RT7, OP-141 m.30
 #[tokio::test]
 async fn a_superseded_claim_no_longer_asserts() {
     // G36
@@ -1330,8 +1320,7 @@ async fn a_superseded_claim_no_longer_asserts() {
     fold_check(&db.sequencer, d).await.unwrap();
 }
 
-// SEC12, OP-141 m.31: an accepted party_compromise Claim restricts the Party's Instances set up
-// at or after its occurredAt; a later Claim in the issuer's line moves occurredAt
+// SEC12, OP-141 m.31
 #[tokio::test]
 async fn a_compromise_restricts_instances_set_up_after_it() {
     // SI-8, SI-9, INV-23, G22
@@ -1405,8 +1394,7 @@ async fn a_compromise_restricts_instances_set_up_after_it() {
     fold_check(&db.sequencer, d).await.unwrap();
 }
 
-// L0-EVAL-4, OP-141 m.33: a Grant held while a Claim is held lapses until the Claim is
-// recorded under the named Acceptance, and while-instance-alive needs a live Instance
+// L0-EVAL-4, OP-141 m.33
 #[tokio::test]
 #[allow(
     clippy::too_many_lines,
@@ -1482,7 +1470,6 @@ async fn while_conditions_are_prepared_on_the_commit_path() {
             .iter()
             .any(|b| b.subcode.as_deref() == Some("ended/lapsed"))
     );
-    // the Claim arrives with another request and is recorded under the Acceptance
     send(
         &mut core,
         with_proofs(
@@ -1521,8 +1508,7 @@ async fn while_conditions_are_prepared_on_the_commit_path() {
     fold_check(&db.sequencer, d).await.unwrap();
 }
 
-// SEC26, OP-141 m.34: a CT3 meta-action waits out the time-lock on its nonce, counted from the
-// nonce's first decision; a narrowing one does not
+// SEC26, OP-141 m.34
 #[tokio::test]
 async fn a_ct3_expansion_waits_out_the_time_lock() {
     use access_kernel::combinator::{BlockerClass, Remediation};
@@ -1581,7 +1567,7 @@ async fn a_ct3_expansion_waits_out_the_time_lock() {
     fold_check(&db.sequencer, d).await.unwrap();
 }
 
-// §13.7.3, OP-141 m.34 (b): an intent valid for longer than its tier allows is refused
+// §13.7.3, OP-141 m.34 (b)
 #[tokio::test]
 async fn an_intent_beyond_its_tier_ceiling_is_refused() {
     // TI-RT3
@@ -1601,8 +1587,7 @@ async fn an_intent_beyond_its_tier_ceiling_is_refused() {
     ));
 }
 
-// OP-141 m.35 (e): a domain action is evaluated only when an accepted SPP of its namespace
-// publishes exactly that action and schema
+// OP-141 m.35 (e)
 #[tokio::test]
 async fn an_action_without_an_accepted_schema_is_denied() {
     // G11, EI-16, PI-19
@@ -1635,8 +1620,7 @@ async fn an_action_without_an_accepted_schema_is_denied() {
     ));
 }
 
-// L1-ADP-15, OP-141 m.36: a recorded decision is explained by evaluating its request again on
-// the state and counters just before it, also after the state has moved on
+// L1-ADP-15, OP-141 m.36
 #[tokio::test]
 #[allow(
     clippy::too_many_lines,
@@ -1696,7 +1680,6 @@ async fn a_recorded_decision_is_explained_as_it_was() {
     .await
     .unwrap();
     assert_eq!(second.decision.outcome, Outcome::Deny);
-    // the Grant is revoked afterwards; both decisions still explain as recorded
     allowed(
         &send(
             &mut core,
@@ -1727,7 +1710,6 @@ async fn a_recorded_decision_is_explained_as_it_was() {
         .await
         .unwrap();
     assert_eq!(again.decision, second.decision);
-    // the request must be the recorded one, from its actor
     let (inc, _) = explain(11, 0);
     assert!(matches!(
         core.explain_recorded(&inc, second.record.unwrap(), Scope::Requester, NOW)
@@ -1740,8 +1722,7 @@ async fn a_recorded_decision_is_explained_as_it_was() {
             .await,
         Err(CoreError::Protocol("explain-record"))
     ));
-    // OP-141 m.38: the root of the lineage views it and, as the meta-anchor's root, audits it;
-    // the holder audits nothing
+    // OP-141 m.38
     for scope in [Scope::Viewer, Scope::Audit] {
         let other = incoming(shop_request(d, 12, Mode::Commit, holding), ROOT_KEY);
         let seen = core
@@ -1756,7 +1737,6 @@ async fn a_recorded_decision_is_explained_as_it_was() {
             .await,
         Err(CoreError::Protocol("explain-scope"))
     ));
-    // the request repeats the recorded basis
     let shop = ExerciseBasis::Anchor(meta::object_id(&d, kind::ANCHOR, 1));
     let moved = incoming(shop_request(d, 12, Mode::Commit, shop), ROOT_KEY);
     assert!(matches!(
@@ -1928,9 +1908,7 @@ fn approved_at(
     )
 }
 
-// OP-141 m.19 (e)–(h), L0-META-30, §9.14.1 A: an approval is a contribution bound to the intent,
-// made with the approver's statement and the authentication bound to it; it meets the
-// requirement once and is consumed
+// OP-141 m.19, L0-META-30, §9.14.1
 #[tokio::test]
 async fn a_contribution_approves_once() {
     // G12, G13, SI-5, SI-17, EI-18, XI-19, INV-20, CI-14
@@ -1960,7 +1938,7 @@ async fn a_contribution_approves_once() {
     .unwrap();
     allowed(&given);
     let approval = given.exercise.unwrap();
-    // SI-5, §13.7.3: the contribution carries H(AAS) and the bound Claim's assurance
+    // SI-5, §13.7.3
     let state = state_of(&db, d, &meta::exercise_key(kind::CONTRIBUTION, &approval))
         .await
         .map(|b| {
@@ -1981,7 +1959,6 @@ async fn a_contribution_approves_once() {
     .unwrap();
     allowed(&done);
 
-    // consumed: the same contribution does not approve the same intent on a new nonce
     let reused = send(
         &mut core,
         with_proofs(
@@ -1994,7 +1971,7 @@ async fn a_contribution_approves_once() {
     .unwrap();
     assert_eq!(reused.decision.outcome, Outcome::RequireAction);
 
-    // SEC11: a contribution from an Instance that has since ended approves nothing
+    // SEC11
     let again = send(
         &mut core,
         approved(d, 22, digest, render, &PASSKEY_UV, NOW - 5_000),
@@ -2035,7 +2012,7 @@ async fn a_contribution_approves_once() {
     .unwrap();
     assert_eq!(ended_approval.decision.outcome, Outcome::RequireAction);
 
-    // L0-META-30: without a Grant over the class, a contribution is denied
+    // L0-META-30
     let mut other = contribute(d, 21, digest);
     other.basis = ExerciseBasis::Anchor(meta::object_id(&d, kind::ANCHOR, 1));
     let denied = send(&mut core, other, ROOT_KEY).await.unwrap();
@@ -2059,10 +2036,7 @@ fn unbound(r: Result<Response, CoreError>) -> Vec<BindingFacet> {
     }
 }
 
-// §9.14.1 A step 4, §9.14.2, L2-AAS-3, L2-AAS-4, §13.7.3 "AAS expires_at": a contribute without
-// its statement, with a statement over another render ("The request changed after you
-// approved…"), another target, another nonce or beyond the tier's expiry ceiling, or without
-// the authentication bound to H(AAS), is refused before any decision
+// §9.14.1 step 4, §9.14.2, L2-AAS-3, L2-AAS-4, §13.7.3
 #[tokio::test]
 async fn an_approval_must_fit_the_request_it_answers() {
     // XI-7, SI-5
@@ -2082,12 +2056,10 @@ async fn an_approval_must_fit_the_request_it_answers() {
     let asked = send(&mut core, target.clone(), ROOT_KEY).await.unwrap();
     assert_eq!(asked.decision.outcome, Outcome::RequireAction);
 
-    // no statement at all
     assert_eq!(
         protocol(send(&mut core, contribute(d, 20, digest), ALICE_KEY).await),
         "aas"
     );
-    // a statement over a render the decision point never produced: the request changed
     let changed = approval_act(d, 20, digest, Digest([0xcc; 32]), NOW - 1_000, NOW + 60_000);
     let h = access_kernel::aas::digest(&changed).unwrap();
     let r = with_proofs(
@@ -2098,7 +2070,6 @@ async fn an_approval_must_fit_the_request_it_answers() {
         ],
     );
     assert_eq!(protocol(send(&mut core, r, ALICE_KEY).await), "aas-render");
-    // a target no REQUIRE_ACTION ever opened
     let nowhere = Digest([0xdd; 32]);
     assert_eq!(
         protocol(
@@ -2111,7 +2082,6 @@ async fn an_approval_must_fit_the_request_it_answers() {
         ),
         "aas-target"
     );
-    // the statement names another contribution nonce
     let other = approval_act(d, 21, digest, render, NOW - 1_000, NOW + 60_000);
     let h = access_kernel::aas::digest(&other).unwrap();
     let r = with_proofs(
@@ -2122,7 +2092,7 @@ async fn an_approval_must_fit_the_request_it_answers() {
         ],
     );
     assert_eq!(protocol(send(&mut core, r, ALICE_KEY).await), "aas-nonce");
-    // a statement valid longer than the tier allows (CT1: 15 minutes)
+    // CT1
     let long = approval_act(d, 20, digest, render, NOW - 1_000, NOW + 16 * 60_000);
     let h = access_kernel::aas::digest(&long).unwrap();
     let r = with_proofs(
@@ -2133,7 +2103,6 @@ async fn an_approval_must_fit_the_request_it_answers() {
         ],
     );
     assert_eq!(protocol(send(&mut core, r, ALICE_KEY).await), "aas-expiry");
-    // a statement nobody authenticated to: aas-binding, naming the whole binding expected
     // (OP-149 m.30 (b))
     let nobody = approval_act(d, 20, digest, render, NOW - 1_000, NOW + 60_000);
     let r = with_proofs(
@@ -2144,8 +2113,6 @@ async fn an_approval_must_fit_the_request_it_answers() {
         unbound(send(&mut core, r, ALICE_KEY).await),
         BindingFacet::ALL
     );
-    // a Claim bound to a different statement than the one presented: only the binding to
-    // H(AAS) is named, the approver's Claim was found
     let r = with_proofs(
         contribute(d, 20, digest),
         vec![
@@ -2162,7 +2129,6 @@ async fn an_approval_must_fit_the_request_it_answers() {
         unbound(send(&mut core, r, ALICE_KEY).await),
         vec![BindingFacet::BoundIntent]
     );
-    // the same statement, bound and fresh: approved
     allowed(
         &send(
             &mut core,
@@ -2175,10 +2141,7 @@ async fn an_approval_must_fit_the_request_it_answers() {
     fold_check(&db.sequencer, d).await.unwrap();
 }
 
-// TI-RT7, OP-141 m.30 (e), OP-150 L6 (f): the realm issuer's `authentication` Claims about one
-// subject are one per sign-in, each in a line of its own; a recorded session-bound one with
-// another body digest is no fork of the statement-bound one, so the approval still finds the
-// Claim bound to H(AAS).
+// TI-RT7, OP-141 m.30 (e), OP-150 L6 (f)
 #[tokio::test]
 async fn a_sign_in_claim_does_not_fork_the_approvals_authentication() {
     let db = fresh().await.unwrap();
@@ -2196,8 +2159,6 @@ async fn a_sign_in_claim_does_not_fork_the_approvals_authentication() {
     let render = render_of(&target);
     let asked = send(&mut core, target, ROOT_KEY).await.unwrap();
     assert_eq!(asked.decision.outcome, Outcome::RequireAction);
-    // the sign-ins before the approval: the same issuer, subject and class, other bodies, bound
-    // to the session's Instance, unordered against the approval's Claim
     for (seed, at) in [(0xb1, NOW - 9_000), (0xb2, NOW - 3_000)] {
         let signed_in = sign_claim(
             &access_kernel::claim::Statement {
@@ -2246,10 +2207,9 @@ async fn a_sign_in_claim_does_not_fork_the_approvals_authentication() {
     fold_check(&db.sequencer, d).await.unwrap();
 }
 
-// §13.7.3 "Authenticator class", "Human presence", "Step-up freshness"; N-45, SEC10, SEC26,
-// IDP-8: an approval authenticated with a password or TOTP, without a present human, or longer
-// ago than the tier's ceiling is not an approval; the decision asks for the authentication
-// term, it grants nothing (X29)
+// §13.7.3, N-45
+// IDP-8
+// X29
 #[tokio::test]
 async fn a_weak_or_stale_approval_asks_for_the_tiers_authentication() {
     let db = fresh().await.unwrap();
@@ -2298,7 +2258,6 @@ async fn a_weak_or_stale_approval_asks_for_the_tiers_authentication() {
         assert!(unmet.satisfiable_by_actor);
         nonce += 1;
     }
-    // a fresh phishing-resistant assertion from a present human, within 15 minutes: approved
     let edge = NOW + 15 * 60_000;
     let fresh_enough = send_at(
         &mut core,
@@ -2312,9 +2271,7 @@ async fn a_weak_or_stale_approval_asks_for_the_tiers_authentication() {
     fold_check(&db.sequencer, d).await.unwrap();
 }
 
-// SI-5, §6.6, §13.7.3: a contribution term that asks for assurance is met by the approver's
-// H(AAS)-bound authentication: human presence travels with the contribution, a floor the
-// approval did not reach does not
+// SI-5, §6.6, §13.7.3
 #[tokio::test]
 async fn a_contribution_carries_the_approvers_assurance() {
     let db = fresh().await.unwrap();
@@ -2341,7 +2298,6 @@ async fn a_contribution_carries_the_approvers_assurance() {
     assert_eq!(asked.decision.outcome, Outcome::RequireAction);
     assert_eq!(asked.decision.unmet.len(), 2);
 
-    // a synced passkey: present human, not hardware-bound
     let synced = send(
         &mut core,
         approved(d, 20, digest, render, &PASSKEY_UV, NOW - 5_000),
@@ -2370,7 +2326,6 @@ async fn a_contribution_carries_the_approvers_assurance() {
         Some(&1)
     );
 
-    // a device-bound passkey with UV: both terms
     let device = [
         ("aal", 3),
         ("phishing_resistant", 1),
@@ -2404,8 +2359,7 @@ async fn a_contribution_carries_the_approvers_assurance() {
     fold_check(&db.sequencer, d).await.unwrap();
 }
 
-// §13.7.4, SEC28, OP-141 m.40: a requester opens at most 20 approval requests an hour; the
-// next is denied and records no draw, and reopening a nonce is not a new request
+// §13.7.4, SEC28, OP-141 m.40
 #[tokio::test]
 async fn approval_requests_are_throttled_per_requester() {
     // SI-8
@@ -2443,7 +2397,7 @@ async fn approval_requests_are_throttled_per_requester() {
     fold_check(&db.sequencer, d).await.unwrap();
 }
 
-// OP-141 m.19 (i), L1-ADP-13: a continuation names the Exercise it continues
+// OP-141 m.19 (i), L1-ADP-13
 #[tokio::test]
 async fn a_continuation_names_its_exercise() {
     let db = fresh().await.unwrap();
@@ -2477,8 +2431,7 @@ async fn a_continuation_names_its_exercise() {
     fold_check(&db.sequencer, d).await.unwrap();
 }
 
-// §13.4 G31, L1-ADP-13: after the Grant is revoked, a continuation of an allowed Exercise is
-// a new decision against the current state and is denied
+// §13.4 G31, L1-ADP-13
 #[tokio::test]
 async fn a_continuation_after_revocation_is_denied() {
     // G4, CI-9
@@ -2548,7 +2501,7 @@ async fn a_continuation_after_revocation_is_denied() {
     fold_check(&db.sequencer, d).await.unwrap();
 }
 
-// ---------------------------------------------------------------- D5b (OP-141 m.20)
+// OP-141
 
 /// Genesis where ALICE is the membership issuer of `staff` and members of `staff` hold a Grant
 /// to read the shop.
@@ -2595,7 +2548,7 @@ fn grouped() -> BTreeMap<String, Opened> {
     g
 }
 
-// OP-141 m.20 (a)–(d): a member of a group holds the group's Grant from its episode start
+// OP-141 m.20
 #[tokio::test]
 #[allow(
     clippy::too_many_lines,
@@ -2616,7 +2569,7 @@ async fn a_member_holds_the_groups_grant_from_its_episode() {
         })
     };
 
-    // OP-152 m.5 (a): a holding the actor does not hold is a recorded no_covering_authority
+    // OP-152 m.5 (a)
     unresolved(
         &send(
             &mut core,
@@ -2660,8 +2613,7 @@ async fn a_member_holds_the_groups_grant_from_its_episode() {
         .unwrap(),
     );
 
-    // OP-141 m.42: a cutoff closes the episode; lifting it widens the Acceptance and the closed
-    // episode does not come back, a new one starts at the widening
+    // OP-141 m.42
     let index = state_of(&db, d, &meta::key(kind::ACCEPTANCES, &ALICE))
         .await
         .unwrap();
@@ -2741,7 +2693,6 @@ async fn a_member_holds_the_groups_grant_from_its_episode() {
         }
     }
 
-    // a Claim from an issuer that is not the group's makes no member
     let outsider = claim(d, ROOT, ROOT_KEY, "staff");
     let id = access_kernel::claim::claim_id(&outsider);
     send(
@@ -2762,8 +2713,7 @@ async fn a_member_holds_the_groups_grant_from_its_episode() {
     fold_check(&db.sequencer, d).await.unwrap();
 }
 
-// OP-141 m.21 (a): an issuer admits twice its declared quota per window; the rest wait in
-// quarantine
+// OP-141 m.21 (a)
 #[tokio::test]
 async fn an_issuer_quota_quarantines_the_excess() {
     // G44
@@ -2794,7 +2744,7 @@ async fn an_issuer_quota_quarantines_the_excess() {
     fold_check(&db.sequencer, d).await.unwrap();
 }
 
-// ---------------------------------------------------------------- D6 (OP-141 m.22)
+// OP-141
 
 fn search_request(d: Digest, nonce: u8, kind: &str) -> Request {
     Request {
@@ -2811,8 +2761,7 @@ fn search_request(d: Digest, nonce: u8, kind: &str) -> Request {
     }
 }
 
-// OP-141 m.22 (g), (j), m.41 (c), E26: the index names candidates; a viewer sees who can act
-// on the Grants it views, a Party sees what it reaches itself, and nobody sees more
+// OP-141 m.22 (g), (j), m.41 (c), E26
 #[tokio::test]
 #[allow(
     clippy::too_many_lines,
@@ -2855,7 +2804,7 @@ async fn search_shows_what_the_reader_may_see() {
         }
     }
     let shop = meta::object_id(&d, kind::ANCHOR, 1);
-    // OP-141 m.39 (c): a prefix Grant resolves against the accepted catalog
+    // OP-141 m.39 (c)
     let mut prefixed = authority(Vec::new(), selector("shop"));
     prefixed
         .authority
@@ -2908,10 +2857,9 @@ async fn search_shows_what_the_reader_may_see() {
         )
         .await
         .unwrap();
-    // OP-141 m.41 (c): a holder views the Grants of its own lineage
+    // OP-141 m.41 (c)
     assert_eq!(hits, [Hit::Party(ALICE)]);
-    // SAI-43, G62: a reader who views nothing gets the same answer for what exists and what
-    // does not
+    // SAI-43, G62
     let nowhere = Query::Subject {
         action: action("shop", "read"),
         resource: ResourceRef {
@@ -2964,7 +2912,7 @@ async fn search_shows_what_the_reader_may_see() {
     let mut anonymous = incoming(search_request(d, 54, "resource"), ALICE_KEY);
     anonymous.ais = None;
     assert_eq!(a.search(&anonymous, &mine, None).await.unwrap().0, []);
-    // §13.7.4, OP-141 m.23: ten searches a minute per reader
+    // §13.7.4, OP-141 m.23
     for n in 0..7 {
         a.search(
             &incoming(search_request(d, 60 + n, "resource"), ALICE_KEY),
@@ -2983,8 +2931,7 @@ async fn search_shows_what_the_reader_may_see() {
         .await,
         Err(CoreError::Limited)
     ));
-    // OP-141 m.23 (a), OP-151 m.12 (e) (W-5): a PEP that names the end user it forwards for has
-    // that user's anonymous reads counted apart, so one user never spends another's limit
+    // OP-141 m.23 (a), OP-151 m.12 (e) (W-5)
     let as_user = |nonce: u8, user: &str| {
         let mut inc = incoming(search_request(d, nonce, "resource"), ALICE_KEY);
         inc.ais = None;
@@ -3003,7 +2950,6 @@ async fn search_shows_what_the_reader_may_see() {
     a.search(&as_user(111, "session-2"), &mine, None)
         .await
         .unwrap();
-    // the search intent must name the search kind
     assert!(matches!(
         a.search(
             &incoming(search_request(d, 55, "action"), ALICE_KEY),
@@ -3013,8 +2959,7 @@ async fn search_shows_what_the_reader_may_see() {
         .await,
         Err(CoreError::Protocol("search"))
     ));
-    // §13.4 Check/List: a party the subject search lists is allowed by a check, one it does not
-    // list is not
+    // §13.4
     let holding = ExerciseBasis::Holding(HoldingRef {
         grant: meta::object_id(&issued.exercise.unwrap(), kind::GRANT, 0),
         holder: ALICE,
@@ -3039,14 +2984,14 @@ async fn search_shows_what_the_reader_may_see() {
         .outcome,
         Outcome::Allow
     );
-    // OP-141 m.39 (a): the core namespace holds meta-actions and read actions only
+    // OP-141 m.39 (a)
     let mut other = search_request(d, 83, "subject");
     other.intent.action = action("access", "audit");
     assert!(matches!(
         a.exercise(&incoming(other, ALICE_KEY)).await,
         Err(CoreError::Protocol("action"))
     ));
-    // OP-141 m.37: the eligible approvers of a class are the subject search for `contribute`
+    // OP-141 m.37
     let meta_anchor = meta::meta_anchor(&d);
     let approve = meta_request(
         d,
@@ -3084,10 +3029,9 @@ async fn search_shows_what_the_reader_may_see() {
     assert_eq!(hits, [Hit::Party(ALICE)]);
 }
 
-// ---------------------------------------------------------------- budgets (OP-141 m.26)
+// OP-141
 
-// L0-EVAL-15, OP-141 m.26, m.28: a Grant's budget is drawn by each allow and exhausts, and a
-// grounded release returns a draw once
+// L0-EVAL-15, OP-141 m.26, m.28
 #[tokio::test]
 #[allow(
     clippy::too_many_lines,
@@ -3153,7 +3097,6 @@ async fn a_budget_is_drawn_until_it_is_exhausted() {
             .iter()
             .any(|b| b.class == BlockerClass::BudgetExhausted)
     );
-    // check does not draw
     let checked = send(
         &mut core,
         shop_request(d, 23, Mode::Check, holding),
@@ -3162,7 +3105,7 @@ async fn a_budget_is_drawn_until_it_is_exhausted() {
     .await
     .unwrap();
     assert_eq!(checked.decision.outcome, Outcome::Deny);
-    // OP-141 m.28: a grounded release returns the draw once
+    // OP-141 m.28
     let (exercise, intent) = spent.unwrap();
     let ground = send(
         &mut core,
@@ -3222,7 +3165,7 @@ async fn a_budget_is_drawn_until_it_is_exhausted() {
     fold_check(&db.sequencer, d).await.unwrap();
 }
 
-// ---------------------------------------------------------------- restrictions (OP-141 m.27)
+// OP-141
 
 fn policy_set(
     d: Digest,
@@ -3253,8 +3196,7 @@ fn policy_set(
     )
 }
 
-// L0-EVAL-18, OP-141 m.27: a domain policy denies, a @require policy asks for its requirement,
-// a policy that does not compile is never set, and a retired policy stops applying
+// L0-EVAL-18, OP-141 m.27
 #[tokio::test]
 #[allow(
     clippy::too_many_lines,
@@ -3308,7 +3250,6 @@ async fn restriction_policies_narrow_the_commit_path() {
             .any(|b| b.class == access_kernel::combinator::BlockerClass::Restricted)
     );
 
-    // replace it with a policy that asks for a kyc Claim
     let policy = meta::object_id(&set.exercise.unwrap(), kind::POLICY, 0);
     let kyc = term(ProofKind::Claim, "kyc", ProofBinding::None);
     let requirements = Value::Map(vec![(
@@ -3370,8 +3311,7 @@ async fn restriction_policies_narrow_the_commit_path() {
     fold_check(&db.sequencer, d).await.unwrap();
 }
 
-// §6.9 INV-34, §9.7A.1, OP-141 m.41: index differential; over generated Grants, some revoked,
-// the subject search lists exactly the Parties a check allows on some Grant they hold
+// §6.9 INV-34, §9.7A.1, OP-141 m.41
 #[tokio::test]
 #[allow(
     clippy::too_many_lines,
@@ -3503,8 +3443,7 @@ async fn search_and_check_agree_over_generated_grants() {
     assert_eq!(outcomes, [true, true]);
 }
 
-// INV-37, TNI-1, EI-27: the tenant is no decision input; the same Genesis content under two
-// tenants decides alike
+// INV-37, TNI-1, EI-27
 #[tokio::test]
 async fn the_tenant_is_not_a_decision_input() {
     let db = fresh().await.unwrap();
@@ -3692,9 +3631,7 @@ async fn onboard_signed(
     }
 }
 
-// L2-PAP-1 to L2-PAP-3, OP-143 m.7, m.11: an allowed projection.issue records its PAP's digest,
-// the signer signs it after the commit, and a verifier accepts the holder's presentation for an
-// intent within the bounds and refuses one outside them
+// L2-PAP-1 to L2-PAP-3, OP-143 m.7, m.11
 #[tokio::test]
 #[allow(
     clippy::too_many_lines,
@@ -3809,9 +3746,7 @@ async fn a_projection_carries_a_signed_pap() {
     );
 }
 
-// §9.8, L2-RCP-1 to L2-RCP-3, TI-12, OP-143 m.5: an ALLOW commit records its receipt's digest,
-// the signer signs it after the commit and a PEP verifies it offline against the domain's
-// metadata
+// §9.8, L2-RCP-1 to L2-RCP-3, TI-12, OP-143 m.5
 #[tokio::test]
 #[allow(
     clippy::too_many_lines,
@@ -3865,7 +3800,6 @@ async fn an_allow_carries_a_signed_receipt() {
             .await
             .unwrap();
         allowed(&first);
-        // the first ALLOW opens the keyring; its key may sign once the schedule has run
         for _ in 0..2 {
             service.lock().unwrap().tick(NOW, 1);
         }
@@ -3896,7 +3830,7 @@ async fn an_allow_carries_a_signed_receipt() {
     .unwrap();
     assert_eq!(receipt.exercise, r.exercise.unwrap());
     assert_eq!(Some(receipt.record), r.record);
-    // TI-12: the decision record named the receipt before it was signed
+    // TI-12
     let log = access_store::authority::read_log(
         &db.app,
         &DomainId::from_bytes(d.0),
@@ -3915,8 +3849,7 @@ async fn an_allow_carries_a_signed_receipt() {
     );
 }
 
-// OP-149 m.11, m.14 (d), L2-RCP-1, INV-4, C14: an agent acting FOR its principal under its
-// Instance's Mandate gets a receipt naming the chain; acting without a Mandate names none
+// OP-149 m.11, m.14 (d), L2-RCP-1, INV-4, C14
 #[tokio::test]
 #[allow(
     clippy::too_many_lines,
@@ -4025,7 +3958,7 @@ async fn a_receipt_names_the_agency_chain_of_a_mandated_agent() {
         }]
     );
 
-    // OP-149 m.14 (d): a link needs a Mandate; without one the receipt carries no chain
+    // OP-149 m.14 (d)
     let unmandated = send(&mut core, on_behalf(10, holdings[1]), BOB_KEY)
         .await
         .unwrap();
@@ -4035,8 +3968,7 @@ async fn a_receipt_names_the_agency_chain_of_a_mandated_agent() {
     fold_check(&db.sequencer, d).await.unwrap();
 }
 
-// OP-143 m.12, INV-21, G3: an offline slice is drawn from the lineage budget when the
-// projection commits; the PAP names it; a slice the budget cannot cover is denied
+// OP-143 m.12, INV-21, G3
 #[tokio::test]
 async fn an_offline_slice_is_drawn_in_advance() {
     use access_kernel::combinator::BlockerClass;
@@ -4049,7 +3981,7 @@ async fn an_offline_slice_is_drawn_in_advance() {
     onboard_process(&a, d, ROOT, ROOT_KEY, (1, 2)).await;
     onboard_process(&a, d, ALICE, ALICE_KEY, (3, 4)).await;
     let holding = grant_alice(&a, d, 5, vec![action("shop", "read")], 5).await;
-    // §9.12.1: the verifier declared a tamper-evident counter, so it may hold a slice
+    // §9.12.1
     let body = access_kernel::claim::body::Body::VerifierProfile(verifier_profile(ROBOT, true));
     admitted(
         &a.ingest(&body_claim(d, "verifier_profile", &body, NOW))
@@ -4078,7 +4010,6 @@ async fn an_offline_slice_is_drawn_in_advance() {
     let pap = access_kernel::pap::Pap::from_bytes(&first.pap.unwrap()).unwrap();
     let entry = pap.validity.offline_slice.iter().next().unwrap();
     assert_eq!((entry.amount, entry.unit.as_str()), (3, "count"));
-    // 2 of 5 remain: a second slice of 3 is denied, a slice of 2 is allowed
     let over = a
         .exercise(&incoming(
             meta_request(d, 7, holding, project(3)),
@@ -4104,8 +4035,7 @@ async fn an_offline_slice_is_drawn_in_advance() {
     fold_check(&db.sequencer, d).await.unwrap();
 }
 
-// §9.15.1, OP-143 m.4: a process serves a domain's Domain Metadata only as the signer signed it;
-// without a signer, or before the signer opened the domain, there is none
+// §9.15.1, OP-143 m.4
 #[tokio::test]
 async fn domain_metadata_comes_only_from_the_signer() {
     let db = fresh().await.unwrap();
@@ -4362,7 +4292,7 @@ async fn home_pap(
             .unwrap(),
         );
     }
-    // §9.12.1, PI-12: the target domain is the verifier; its profile is accepted at home
+    // §9.12.1, PI-12
     let audience = access_kernel::foreign::domain_text(&to);
     let body = access_kernel::claim::body::Body::VerifierProfile(verifier_profile(&audience, true));
     admitted(
@@ -4406,7 +4336,7 @@ async fn home_pap(
             from: NOW,
             until: NOW + 7_200_000,
         };
-        // §9.15A.3: the home budget is drawn at home, as the slice the PAP carries
+        // §9.15A.3
         let project = Payload::ProjectionIssue {
             bounds,
             audience: BTreeSet::from([audience.clone()]),
@@ -4456,14 +4386,7 @@ fn blocked(r: &Response) -> (access_kernel::combinator::BlockerClass, String) {
     (b.class, b.subcode.clone().unwrap_or_default())
 }
 
-// OP-143 m.13, §9.15A.2–4, §9.12.4, PI-3, INV-17, INV-21, G52, 2337–2339, 2455, 2494: a PAP of
-// the home domain lets its holder hold a bridging Grant in another domain while a
-// foreign-authority Acceptance pins the home domain's binding key; a consumption-bearing action
-// spends the slice the home domain drew, never more; the home domain's revocation reaches the
-// target through the PAP's status entry, and without a fresh list the foreign status is unknown
-// and denied; an identity issuer is no authority issuer; under unpinned binding keys, without the
-// PAP, outside the ceiling, under another holder key, outside the class, with stale metadata and
-// after the Acceptance is revoked, it is denied
+// OP-143 m.13, §9.15A.2–4, §9.12.4, PI-3, INV-17, INV-21, G52, 2337–2339, 2455, 2494
 #[tokio::test]
 #[allow(
     clippy::too_many_lines,
@@ -4586,15 +4509,14 @@ async fn a_foreign_pap_holds_a_bridging_grant() {
         .await
         .unwrap(),
     );
-    // §9.16: an Acceptance revoked is an acceptance-changed re-query signal
+    // §9.16
     let revoked = meta::object_id(&unpinned.exercise.unwrap(), kind::ACCEPTANCE, 0);
     assert!(outbox_events(&db, b).await.iter().any(|e| {
         e.kind == access_internal_api::events::Kind::AcceptanceChanged
             && e.subject == access_internal_api::events::Subject::Acceptance(revoked)
     }));
 
-    // 2455, L26, OP-143 m.13 (a): an identity issuer (a Party) cannot be a foreign authority
-    // issuer, and a Party's `predicate-input` Acceptance opens no bridge
+    // 2455, L26, OP-143 m.13 (a)
     let party_issuer = Value::Map(vec![(
         Value::text("acceptance_establish"),
         Value::Map(vec![
@@ -4648,8 +4570,7 @@ async fn a_foreign_pap_holds_a_bridging_grant() {
     .await
     .unwrap();
     allowed(&accepted);
-    // 2494, §9.12.4: the PAP names a status entry; without the home domain's list the foreign
-    // status is unknown and nothing is allowed on the PAP alone
+    // 2494, §9.12.4
     let mut blind = home.clone();
     blind.status = None;
     assert_eq!(
@@ -4712,8 +4633,7 @@ async fn a_foreign_pap_holds_a_bridging_grant() {
         refusal(&mut core, home.present(request, ALICE_KEY, NOW), ALICE_KEY).await,
         named(BlockerClass::NoCoveringAuthority, "foreign-class"),
     );
-    // §9.15A.3, INV-21: the consumption-bearing action spends the slice the home domain drew;
-    // the read above took one of two, the purchase the other, and the third use is denied
+    // §9.15A.3, INV-21
     let mut purchase = read(26, ALICE);
     purchase.intent.action = buy();
     let bought = send(&mut core, home.present(purchase, ALICE_KEY, NOW), ALICE_KEY)
@@ -4729,8 +4649,7 @@ async fn a_foreign_pap_holds_a_bridging_grant() {
         .await,
         named(BlockerClass::NoCoveringAuthority, "pap-slice"),
     );
-    // 2339, §9.15A.3: the home domain's revocation reaches this domain through the status
-    // list; the list the holder fetched before it is the declared window, no more
+    // 2339, §9.15A.3
     allowed(
         &send(
             &mut core,
@@ -4828,7 +4747,7 @@ async fn a_foreign_pap_holds_a_bridging_grant() {
     fold_check(&db.sequencer, b).await.unwrap();
 }
 
-// P52, MD-10, OP-143 m.15 (d): a PAP names a Party only by its domain-pairwise pseudonym
+// P52, MD-10, OP-143 m.15 (d)
 #[tokio::test]
 async fn a_pap_names_parties_by_pseudonym() {
     // P52, MD-10
@@ -4894,8 +4813,7 @@ async fn onboard_both(a: &Domains<Listed, Bound, Counter, Fixed>, d: Digest, ali
     }
 }
 
-// OP-149 m.10, §9.5.2 rule 1, INV-22: the eligibility check is a `check` for its subject; it
-// records nothing, not even its nonce, and answers with the head it read
+// OP-149 m.10, §9.5.2 rule 1, INV-22
 #[tokio::test]
 async fn an_eligibility_check_records_nothing() {
     // G28
@@ -4952,10 +4870,7 @@ async fn an_eligibility_check_records_nothing() {
     fold_check(&db.sequencer, d).await.unwrap();
 }
 
-// OP-151 m.20 (d), OP-152 m.5, IA-5: an eligibility check may name a core meta-action without
-// its payload and is answered by the basis's coverage alone: the meta-anchor's root is eligible,
-// another Party, or a basis that does not cover the domain, is not; nothing is recorded, and the
-// same payload-less meta-action is still refused as a check with an AIS or as a commit
+// OP-151 m.20 (d), OP-152 m.5, IA-5
 #[tokio::test]
 async fn a_payload_less_meta_action_probe_is_answered_by_coverage() {
     let db = fresh().await.unwrap();
@@ -5017,9 +4932,7 @@ async fn a_payload_less_meta_action_probe_is_answered_by_coverage() {
     fold_check(&db.sequencer, d).await.unwrap();
 }
 
-// OP-149 m.5, OP-149 m.8, CR-24, CMP-9, SEC12: keys are read from the derived index at a ledger
-// position with their Party's actor kind and the `party_compromise` overlay as declared by then;
-// nothing is recorded
+// OP-149 m.5, OP-149 m.8, CR-24, CMP-9, SEC12
 #[tokio::test]
 #[allow(clippy::too_many_lines, reason = "one key through its lookups")]
 async fn keys_are_looked_up_at_a_ledger_position() {
@@ -5062,7 +4975,7 @@ async fn keys_are_looked_up_at_a_ledger_position() {
         (root_kid, ROOT, public(ROOT_KEY))
     );
     assert_eq!((alice.kid, alice.party), (alice_kid, ALICE));
-    // OP-149 m.8: each key names its Party's actor kind
+    // OP-149 m.8
     assert_eq!(
         (root.actor_kind, alice.actor_kind),
         (ActorKind::Human, ActorKind::Agent)
@@ -5071,7 +4984,6 @@ async fn keys_are_looked_up_at_a_ledger_position() {
     assert!(alice.since.pos > root.since.pos && alice.since.pos <= first.pos);
     assert_eq!(alice.since.at, NOW);
 
-    // a position before Alice's Instance does not know her key
     let early = a
         .lookup_keys(
             d,
@@ -5109,7 +5021,6 @@ async fn keys_are_looked_up_at_a_ledger_position() {
         (0, claim_id, NOW)
     );
     assert_eq!(after.lookup.keys[0].state, KeyState::Active);
-    // the earlier position does not see the later declaration
     let then = a
         .lookup_keys(d, &all, AsOf::Position(first.pos), false)
         .await
@@ -5118,7 +5029,6 @@ async fn keys_are_looked_up_at_a_ledger_position() {
     assert_eq!(then.lookup.keys[1].actor_kind, ActorKind::Agent);
     assert_eq!(then.lookup.pos, first.pos);
 
-    // a time is the last position recorded by then; before Genesis there is none
     let late = a
         .lookup_keys(d, &[root_kid], AsOf::Time(u64::MAX), false)
         .await
@@ -5144,7 +5054,6 @@ async fn keys_are_looked_up_at_a_ledger_position() {
         ),
         "consistency"
     );
-    // no signer, no canonical answer
     assert_eq!(
         unavailable(
             a.lookup_keys(d, &[root_kid], AsOf::Head, true)
@@ -5181,8 +5090,7 @@ async fn outbox_events(db: &TestDb, d: Digest) -> Vec<access_internal_api::event
         .collect()
 }
 
-// OP-149 m.7, §9.16, OP-130 m.9: an allowed revoke, terminate and depart write their events
-// with the record; a denied request writes none
+// OP-149 m.7, §9.16, OP-130 m.9
 #[tokio::test]
 #[allow(
     clippy::too_many_lines,
@@ -5306,9 +5214,7 @@ async fn committed_meta_actions_derive_semantic_events() {
     fold_check(&db.sequencer, d).await.unwrap();
 }
 
-// OP-149 m.7, m.17 (d), SI-9, OP-141 m.31: a compromise declaration names the Party's Instances
-// set up inside the window, from occurred_at, or 72 hours before the Claim's issued_at (0 for a
-// domain-issued Claim, as in the overlay), to its commit; the event carries that start
+// OP-149 m.7, m.17 (d), SI-9, OP-141 m.31
 #[tokio::test]
 async fn a_compromise_declaration_derives_party_compromised() {
     use access_internal_api::events::{Detail, Kind, Subject};
@@ -5485,10 +5391,7 @@ async fn head_of(db: &TestDb, d: Digest) -> u64 {
         .pos
 }
 
-// §9.9, P17, PI-11, INV-38, §9.9.3 rules 1, 2, 3, 7, TN-14, TN-27: every authority token is the
-// ALLOW of its holder's projection.issue; the at+jwt is signed by the domain's operational key,
-// holder bound, for one resource server, its authority only in RAR, its exp the contract's
-// horizon
+// §9.9, P17, PI-11, INV-38, §9.9.3, TN-14, TN-27
 #[tokio::test]
 async fn an_authority_token_is_a_projection_issue_decision() {
     use access_authority_core::adapters::{Projected, TokenAuthority};
@@ -5513,7 +5416,6 @@ async fn an_authority_token_is_a_projection_issue_decision() {
     let Projected::Issued(t) = a.project(&order).await.unwrap() else {
         panic!("not issued");
     };
-    // the issuance is a recorded decision
     assert!(head_of(&db, d).await > before);
     assert_eq!(t.expires_at, NOW.checked_add(600_000).unwrap());
     let metadata = signer_metadata(&socket, d).await;
@@ -5558,14 +5460,13 @@ async fn an_authority_token_is_a_projection_issue_decision() {
             .and_then(access_kernel::json::Json::as_str),
         Some(access_kernel::verify::projection::digest_text(&t.exercise).as_str())
     );
-    // the sub is a pseudonym, never the PartyID (MD-10)
+    // MD-10
     assert_ne!(
         claims
             .get("sub")
             .and_then(access_kernel::json::Json::as_str),
         Some(access_kernel::json::b64url_encode(&ROOT.0).as_str())
     );
-    // one audience, holder bound
     assert!(verify("https://other.example", &cnf).is_err());
     assert!(
         verify(
@@ -5574,15 +5475,14 @@ async fn an_authority_token_is_a_projection_issue_decision() {
         )
         .is_err()
     );
-    // P50: the family is opened by the first token
+    // P50
     let f = a.family(d, t.family).await.unwrap().unwrap();
     assert_eq!(f.client_id, "cli_shop");
     assert_eq!(f.root_exercise, t.exercise.0);
     assert!(f.revoked_pos.is_none());
 }
 
-// §9.9.3 rules 1, 4, OP-150 m.3 (s): what cannot become a token is refused before anything is
-// decided: another resource, a horizon past the ceiling, a meta-action, CT2+ in a bounds token
+// §9.9.3, OP-150 m.3 (s)
 #[tokio::test]
 #[allow(
     clippy::too_many_lines,
@@ -5648,7 +5548,7 @@ async fn an_unprojectable_token_is_refused_before_the_decision() {
             ),
             "projection-authority",
         ),
-        // §9.9.3 rule 4: CT2+ only as an exact-intent token
+        // §9.9.3 rule 4
         (
             token_order(
                 d,
@@ -5665,7 +5565,6 @@ async fn an_unprojectable_token_is_refused_before_the_decision() {
     for (order, code) in cases {
         assert_eq!(refused(a.project(&order).await.unwrap()), code);
     }
-    // the exact intent of a CT2 action has the shorter ceiling
     let mut target = shop_request(d, 34, Mode::Commit, ExerciseBasis::Anchor(Id([0; 16]))).intent;
     target.action = ship();
     let long = token_order(
@@ -5681,7 +5580,6 @@ async fn an_unprojectable_token_is_refused_before_the_decision() {
         refused(a.project(&long).await.unwrap()),
         "projection-horizon"
     );
-    // and another action than the one in its bounds is no exact intent
     let other = token_order(
         d,
         36,
@@ -5698,8 +5596,7 @@ async fn an_unprojectable_token_is_refused_before_the_decision() {
     assert_eq!(head_of(&db, d).await, before);
 }
 
-// §9.9.1, P17: an exact-intent token carries one intent digest, kind=intent, ≤ 5 minutes, even
-// for a CT2 action
+// §9.9.1, P17
 #[tokio::test]
 async fn an_exact_intent_token_carries_its_intent() {
     use access_authority_core::adapters::{Projected, TokenAuthority};
@@ -5757,8 +5654,7 @@ async fn an_exact_intent_token_carries_its_intent() {
     );
 }
 
-// §9.9.3 rule 6, L19, P50, PI-10: a refresh is a new decision of the same family; after the
-// family is revoked no refresh is decided
+// §9.9.3 rule 6, L19, P50, PI-10
 #[tokio::test]
 async fn a_refresh_is_a_new_decision_until_its_family_is_revoked() {
     use access_authority_core::adapters::{Projected, TokenAuthority};
@@ -5804,7 +5700,6 @@ async fn a_refresh_is_a_new_decision_until_its_family_is_revoked() {
     assert_eq!(second.family, first.family);
     assert_ne!(second.exercise, first.exercise);
     assert!(second.position > head);
-    // replaying the same nonce makes no second token
     assert_eq!(
         a.project(&token_order(
             d,
@@ -5853,7 +5748,7 @@ async fn a_refresh_is_a_new_decision_until_its_family_is_revoked() {
     );
 }
 
-// K17, §16.7.1: without the signer there is no token, and no other key signs one
+// K17, §16.7.1
 #[tokio::test]
 async fn no_signer_no_token() {
     use access_authority_core::adapters::{Projected, TokenAuthority};
@@ -5882,9 +5777,7 @@ async fn no_signer_no_token() {
     );
 }
 
-// §9.9.3 rule 5, MD-8, OPI-3, P50, OP-150 m.2: the authority plane's introspection answers at
-// least at the head; a token is active only signed by the domain's token key, within its
-// horizon and while its family stands
+// §9.9.3 rule 5, MD-8, OPI-3, P50, OP-150 m.2
 #[tokio::test]
 async fn introspection_reflects_signature_horizon_and_family() {
     use access_authority_core::adapters::{FAMILY_CLAIM, Projected, TokenAuthority};
@@ -5918,14 +5811,12 @@ async fn introspection_reflects_signature_horizon_and_family() {
             .and_then(access_kernel::json::Json::as_str),
         Some(access_kernel::json::b64url_encode(&t.family).as_str())
     );
-    // past the horizon
     let late = NOW.checked_add(61_000).unwrap();
     assert!(!a.introspect(d, &t.jws, late).await.unwrap().0);
-    // a token whose payload was changed is not the domain's
     let mut parts: Vec<String> = t.jws.split('.').map(str::to_owned).collect();
     parts[1] = access_kernel::json::b64url_encode(br#"{"exp":99999999999}"#);
     assert!(!a.introspect(d, &parts.join("."), NOW).await.unwrap().0);
-    // P50: the family revoked, no token of it is active
+    // P50
     assert!(a.revoke_family(d, t.family).await.unwrap());
     assert!(!a.introspect(d, &t.jws, NOW).await.unwrap().0);
 }
@@ -5964,10 +5855,7 @@ fn alice_order(
     }
 }
 
-// §5.3, §5.17, INV-33, S-1, OP-141 m.32, OP-148 carry-over: a role in an authority token is the
-// projection of the Grant that pins a Named AuthoritySet; the token names the role only when
-// its decided bounds cover the whole named version, so the role never says more than the
-// token's authority; a Grant without a pin, or bounds narrower than the role, name none
+// §5.3, §5.17, INV-33, S-1, OP-141 m.32, OP-148
 #[tokio::test]
 #[allow(
     clippy::too_many_lines,
@@ -6146,10 +6034,7 @@ fn entry(uri: &str, idx: u64) -> access_kernel::status::StatusRef {
     }
 }
 
-// OP-150 m.3 (a), (s), m.10 (a), (b), §11.20, T24, G43, L2-STL-3: every family a real issuance
-// opens takes the next entry of the domain's newest list and the token names it in the IETF
-// Token Status List `status` claim; a refresh keeps the family's entry; the published list has
-// the bit clear until the family is revoked and set once the head has moved past the revocation
+// OP-150 m.3 (a), (s), m.10 (a), (b), §11.20, T24, G43, L2-STL-3
 #[tokio::test]
 async fn a_token_names_its_status_list_entry() {
     use access_authority_core::adapters::{Projected, STATUS_CLAIM, TokenAuthority};
@@ -6197,7 +6082,6 @@ async fn a_token_names_its_status_list_entry() {
     );
     let second = issued(issue(81, None)).await;
     assert_eq!(second.status, Some(entry(&uri, 1)));
-    // a refresh is a new token of the same family, with the family's entry
     let refreshed = issued(issue(82, Some(first.family))).await;
     assert_eq!(refreshed.family, first.family);
     assert_eq!(refreshed.status, Some(entry(&uri, 0)));
@@ -6222,8 +6106,7 @@ async fn a_token_names_its_status_list_entry() {
     assert_eq!(t.as_of, head_of(&db, d).await);
     assert!(!lookup(&t, &raw, &entry(&uri, 0)).unwrap());
     assert!(!lookup(&t, &raw, &entry(&uri, 1)).unwrap());
-    // the authorization server's revocation sets the entry at the head; the list is signed
-    // again only at a newer position (G43), here the next issuance
+    // G43
     assert!(a.revoke_family(d, second.family).await.unwrap());
     assert_eq!(publisher.publish(d, NOW).await.unwrap(), Vec::new());
     let third = issued(issue(83, None)).await;
@@ -6236,10 +6119,7 @@ async fn a_token_names_its_status_list_entry() {
     assert!(!lookup(&t, &raw, &entry(&uri, 2)).unwrap());
 }
 
-// §9.9.3 k.6, §9.16, P50, OP-150 m.9 (d), m.10 (g): an instance.terminate revokes every live
-// family of the holder at its own record and writes one projection-invalidated per family with
-// that record, the family's first projection.issue as the subject; a replay of the terminate
-// adds nothing; the revoked families refuse refresh, introspect inactive and have their bits set
+// §9.9.3 k.6, §9.16, P50, OP-150 m.9 (d), m.10 (g)
 #[tokio::test]
 async fn ending_a_holder_revokes_its_families_with_one_event_each() {
     use access_authority_core::adapters::{Projected, TokenAuthority};
@@ -6274,7 +6154,6 @@ async fn ending_a_holder_revokes_its_families_with_one_event_each() {
     let second = issued(issue(91, None)).await;
     let before = outbox_events(&db, d).await.len();
 
-    // ROOT's Instance and self-anchor, from its registration (nonce 1) and instance (nonce 2)
     let instance = meta::object_id(&meta::exercise_id(&d, &[2; 16]).unwrap(), kind::INSTANCE, 0);
     let anchor = ExerciseBasis::Anchor(meta::object_id(
         &meta::exercise_id(&d, &[1; 16]).unwrap(),
@@ -6318,14 +6197,11 @@ async fn ending_a_holder_revokes_its_families_with_one_event_each() {
             .iter()
             .all(|e| e.source == Source::Exercise(ended.exercise.unwrap()) && e.at == NOW)
     );
-    // the terminated key is no longer an actor: the same terminate again decides nothing and
-    // nothing ends twice
     assert!(matches!(
         a.exercise(&terminate).await,
         Err(CoreError::Ais(_))
     ));
     assert_eq!(outbox_events(&db, d).await.len(), events.len());
-    // the families are over
     assert_eq!(
         a.project(&issue(93, Some(first.family))).await.unwrap(),
         Projected::Refused("family-revoked")
@@ -6345,7 +6221,7 @@ async fn ending_a_holder_revokes_its_families_with_one_event_each() {
     assert!(lookup(&t, &raw, &entry(&uri, 1)).unwrap());
 }
 
-// ---------------------------------------------------------------- offline and cross-domain (OP-150 L8)
+// OP-150
 
 /// The verifier a robot or edge device presents itself as (§9.12.1).
 const ROBOT: &str = "robot.example";
@@ -6724,13 +6600,8 @@ fn family_of(exercise: &Digest) -> [u8; 16] {
     f
 }
 
-// L2-PAP-1 to L2-PAP-3, L2-RPT-1 to L2-RPT-3, §9.10, §9.12, §9.12.1, §9.12.2, §7.9.4.1, §13.7.2,
-// PI-12, INV-21, OP-150 m.7 (a), m.10 (a): the PAP the core signs for a verifier that declared
-// its profile is accepted by the Reference Verifier's SDK byte for byte, within the horizon and
-// the slice drawn at issuance; the contract names its Token Status List entry and the profile;
-// the verifier's chained report comes back as a Claim through Claim Ingest, is bound to the
-// projection and its contract, counts its entries inside and outside the contract and changes
-// nothing of what remains of the budget; a family opened for a denied projection is closed
+// L2-PAP-1 to L2-PAP-3, L2-RPT-1 to L2-RPT-3, §9.10, §9.12, §9.12.1, §9.12.2, §7.9.4.1, §13.7.2
+// PI-12, INV-21, OP-150 m.7 (a), m.10 (a)
 #[tokio::test]
 #[allow(
     clippy::too_many_lines,
@@ -6765,7 +6636,7 @@ async fn a_core_pap_is_accepted_and_reported_by_the_verifier_sdk() {
             Some(slice),
         )
     };
-    // §9.12.1: without the verifier's profile no offline contract is issued
+    // §9.12.1
     policy_denied(
         &a.exercise(&incoming(
             meta_request(d, 6, holding, offline(2)),
@@ -6782,7 +6653,7 @@ async fn a_core_pap_is_accepted_and_reported_by_the_verifier_sdk() {
             .unwrap()
             .verdict,
     );
-    // §13.7.2: a slice over a tenth of the lineage term is denied; its family is closed
+    // §13.7.2
     policy_denied(
         &a.exercise(&incoming(
             meta_request(d, 7, holding, offline(6)),
@@ -6809,8 +6680,7 @@ async fn a_core_pap_is_accepted_and_reported_by_the_verifier_sdk() {
         pap.validity.clock_source,
         access_verifier::caps::SECURE_CLOCK_CLASS
     );
-    // OP-150 m.10 (a): the third entry of the list; the two denied projections took the first
-    // two and their families are revoked at the decisions that denied them
+    // OP-150 m.10 (a)
     assert_eq!(pap.validity.status, Some(entry(&uri, 2)));
     let row = a
         .family(d, family_of(&pap.projection_exercise))
@@ -6830,7 +6700,6 @@ async fn a_core_pap_is_accepted_and_reported_by_the_verifier_sdk() {
     assert_eq!(dead.status, Some((uri.clone(), 1)));
     assert!(dead.revoked_pos.is_some());
 
-    // the Reference Verifier's SDK, as the robot runs it
     let mut device = OfflineVerifier::new(
         Identity {
             audience: ROBOT.to_owned(),
@@ -6874,13 +6743,12 @@ async fn a_core_pap_is_accepted_and_reported_by_the_verifier_sdk() {
     assert_eq!(first.seq, 0);
     assert_eq!(first.drawn.iter().map(|s| s.amount).sum::<u64>(), 1);
     assert!(matches!(device.verify(&use_), Verdict::Allow(_)));
-    // the slice of two is spent: the third use is a local DENY, chained like the others
     let Verdict::Deny(denied) = device.verify(&use_) else {
         panic!("slice");
     };
     assert_eq!(denied.code(), "pap-slice");
 
-    // §9.12.2: the report is a Claim; it binds to the projection and its contract
+    // §9.12.2
     let cut = device.report(&pap.projection_exercise).unwrap().unwrap();
     assert_eq!(cut.report.contract, contract_digest(&pap));
     assert_eq!(cut.report.entries.len(), 3);
@@ -6900,7 +6768,7 @@ async fn a_core_pap_is_accepted_and_reported_by_the_verifier_sdk() {
     assert_eq!(rec.len(), 1);
     assert!(rec[0].bound && rec[0].continuous && !rec[0].late, "{rec:?}");
     assert_eq!((rec[0].in_contract, rec[0].out_of_contract), (3, 0));
-    // §9.12.2, 2546: the report changed nothing of what remains; 48 of 50 are left
+    // §9.12.2, 2546
     let intermittent = |slice| {
         projection(
             vec![action("shop", "read")],
@@ -6931,8 +6799,7 @@ async fn a_core_pap_is_accepted_and_reported_by_the_verifier_sdk() {
         .unwrap(),
     );
 
-    // §7.9.14, 2727: past the horizon the device denies; the use is chained and reported as
-    // out of contract, continuing the chain
+    // §7.9.14, 2727
     device.clock().advance(2 * hour);
     let late = presentation(&pap_sign1, &read, ROBOT, &nonce, ALICE_KEY, NOW + 2 * hour);
     let Verdict::Deny(expired) = device.verify(&Use {
@@ -6956,7 +6823,7 @@ async fn a_core_pap_is_accepted_and_reported_by_the_verifier_sdk() {
         .unwrap()
         .verdict,
     );
-    // L2-RPT-2: a report that skips the chain is recorded as a gap, never as a continuation
+    // L2-RPT-2
     let gap = Report {
         verifier_profile: cut.report.verifier_profile,
         verifier_instance: None,
@@ -7005,10 +6872,7 @@ async fn a_core_pap_is_accepted_and_reported_by_the_verifier_sdk() {
     fold_check(&db.sequencer, d).await.unwrap();
 }
 
-// §13.7.2, §9.12, §9.12.1, PI-12, SEC13, 2506, 2517, 2533, 2537, 2539, 2547: the issuance
-// policy admits a contract only where the variant, tier and ceilings allow it, the audience's
-// profile covers it and a slice goes to one verifier; CT2 and CT3 get no intermittent or offline
-// projection; consumption leaves the online class only against a slice
+// §13.7.2, §9.12, §9.12.1, PI-12, SEC13, 2506, 2517, 2533, 2537, 2539, 2547
 #[tokio::test]
 #[allow(
     clippy::too_many_lines,
@@ -7045,8 +6909,7 @@ async fn the_issuance_policy_admits_only_what_the_ceilings_and_profile_allow() {
             None,
         )
     };
-    // §9.12.1: no profile, no intermittent contract; an online one still issues against the
-    // audience digest
+    // §9.12.1
     policy_denied(
         &issue(bounded(hour, Some(60_000))).await,
         policy::VERIFIER_PROFILE,
@@ -7072,7 +6935,7 @@ async fn the_issuance_policy_admits_only_what_the_ceilings_and_profile_allow() {
         );
     }
     allowed(&issue(bounded(hour, Some(60_000))).await);
-    // §13.7.2 bounded-staleness at CT1: Δ ≤ 5 min and present, horizon ≤ 8 h
+    // §13.7.2 CT1
     policy_denied(&issue(bounded(hour, None)).await, policy::PARAMETER);
     policy_denied(
         &issue(bounded(hour, Some(6 * 60_000))).await,
@@ -7082,7 +6945,6 @@ async fn the_issuance_policy_admits_only_what_the_ceilings_and_profile_allow() {
         &issue(bounded(9 * hour, Some(60_000))).await,
         policy::HORIZON,
     );
-    // Δ belongs to bounded-staleness only; a variant outside its class is refused
     policy_denied(
         &issue(projection(
             read(),
@@ -7110,8 +6972,7 @@ async fn the_issuance_policy_admits_only_what_the_ceilings_and_profile_allow() {
         .await,
         policy::PROFILE,
     );
-    // §13.7.2: CT2 (irreversible) has no intermittent projection; a checkpoint interval
-    // cannot be declared yet, so no continuation contract
+    // §13.7.2
     policy_denied(
         &issue(projection(
             vec![ship()],
@@ -7136,8 +6997,6 @@ async fn the_issuance_policy_admits_only_what_the_ceilings_and_profile_allow() {
         .await,
         policy::PARAMETER,
     );
-    // 2506, 2517, 2537: consumption off line needs a slice; the CT1 offline variant needs the
-    // hardware triple; a slice goes to one verifier whose profile holds a counter
     let offline = |actions, audience: &[&str], slice| {
         projection(
             actions,
@@ -7169,7 +7028,6 @@ async fn the_issuance_policy_admits_only_what_the_ceilings_and_profile_allow() {
         &issue(offline(vec![buy()], &[ROBOT], Some(6))).await,
         policy::SLICE_SHARE,
     );
-    // the contract of an admitted online projection names the audience's profile once it exists
     let online = issue(projection(
         read(),
         &[ROBOT],
@@ -7190,10 +7048,7 @@ async fn the_issuance_policy_admits_only_what_the_ceilings_and_profile_allow() {
     fold_check(&db.sequencer, d).await.unwrap();
 }
 
-// §13.7.4, SEC14, 2591, 2556: `projection.issue` is limited to 30 an hour per Instance and
-// action class and to 3 open offline PAPs per Instance, each a recorded `restricted` DENY with a
-// stable subcode; a verifier that did not report a `checkpointed-offline` projection within
-// horizon + 24 h gets no new contract until it does
+// §13.7.4, SEC14, 2591, 2556
 #[tokio::test]
 #[allow(
     clippy::too_many_lines,
@@ -7245,7 +7100,6 @@ async fn projection_issuance_limits_are_decisions() {
             .await
             .unwrap()
     };
-    // 3 open offline PAPs, the fourth is denied
     let lone = at(10, offline("lone.example", NOW), NOW).await;
     allowed(&lone);
     allowed(&at(11, offline(ROBOT, NOW), NOW).await);
@@ -7254,7 +7108,6 @@ async fn projection_issuance_limits_are_decisions() {
         &at(13, offline(ROBOT, NOW), NOW).await,
         policy::OPEN_OFFLINE,
     );
-    // 30 an hour per Instance and action class: the three above count; 27 more online ones pass
     let online = |from: u64| {
         projection(
             read(),
@@ -7274,12 +7127,10 @@ async fn projection_issuance_limits_are_decisions() {
         over.decision.blockers[0].remediation,
         Remediation::WaitUntil(NOW + hour)
     );
-    // an hour later the window has moved on
     let later = NOW + hour + 1;
     clock.set(later);
     allowed(&at(42, online(later), later).await);
-    // SEC14: past horizon + 24 h without a report, the lone verifier gets no new contract while
-    // a verifier that owes none still does; once the lone one reports, it does again
+    // SEC14
     let overdue = NOW + hour + 24 * hour + 1;
     clock.set(overdue);
     policy_denied(
@@ -7374,7 +7225,7 @@ async fn projection_issuance_limits_are_decisions() {
     fold_check(&db.sequencer, d).await.unwrap();
 }
 
-// ---------------------------------------------------------------- M11 (OP-151 m.2): audit
+// M11 (OP-151 m.2)
 
 /// The rows of the operational audit stream of event `event`.
 async fn operational(db: &TestDb, event: &str) -> Vec<access_store::operational::OperationalRow> {
@@ -7486,8 +7337,7 @@ async fn audited_domain(db: &TestDb) -> (Led, Digest, ExerciseBasis, u64) {
     (a, d, holding, used.record.unwrap())
 }
 
-// U53, OP-44, PI-4, §17.6.11: audit is never sampled: N audit-depth reads are N rows of the
-// operational stream, written before each answer; a viewer-depth read is not an audit read
+// U53, OP-44, PI-4, §17.6.11
 #[tokio::test]
 async fn u53_op_44_every_audit_read_is_one_row() {
     let db = fresh().await.unwrap();
@@ -7511,16 +7361,14 @@ async fn u53_op_44_every_audit_read_is_one_row() {
         && r.tenant == Some(TENANT)
         && r.domain == Some(d.0)
         && r.occurred_at_ms == NOW));
-    // OP-41: the common txn is the request's nonce, as the record carries it
+    // OP-41
     assert_eq!(
         reads[0].correlation,
         access_kernel::json::b64url_encode(&[20; 16])
     );
 }
 
-// §9.6, §9.6.1, §17.1.1, OP-148: at audit scope the answer opens `basis_ref` into the domain,
-// q − 1 and the version vector digest, with the StateBasis and `reason_admin`; at viewer scope
-// there is no `reason_admin` at all
+// §9.6, §9.6.1, §17.1.1, OP-148
 #[tokio::test]
 async fn audit_answers_expand_basis_ref_and_state_basis() {
     let db = fresh().await.unwrap();
@@ -7565,9 +7413,7 @@ async fn audit_answers_expand_basis_ref_and_state_basis() {
     assert!(own.explained.is_none());
 }
 
-// AP-14, INV-27, PI-6, PI-4, U53: an export is an allowed `access.audit_export` Exercise; its
-// package names that Exercise, re-folds to the checkpoint root and, full from Genesis, folds
-// into state; every export is one row; a redacted one declares digest-level replay
+// AP-14, INV-27, PI-6, PI-4, U53
 #[tokio::test]
 #[allow(
     clippy::too_many_lines,
@@ -7582,9 +7428,8 @@ async fn ap_14_an_export_is_an_audited_exercise_that_verifies_itself() {
     let db = fresh().await.unwrap();
     let (a, d, _, _) = audited_domain(&db).await;
     let meta_anchor = meta::meta_anchor(&d);
-    // ROOT roots the meta-anchor and so audits the domain (OP-141 m.38 (d))
+    // OP-141
     let audit_basis = ExerciseBasis::Anchor(meta_anchor);
-    // without committing the export first there is nothing to export
     let early = incoming(export_request(d, 31, audit_basis, "full"), ROOT_KEY);
     assert!(matches!(
         a.export(&early).await,
@@ -7601,12 +7446,10 @@ async fn ap_14_an_export_is_an_audited_exercise_that_verifies_itself() {
     assert!(v.folded);
     let bytes = p.to_bytes().unwrap();
     assert_eq!(&Package::from_bytes(&bytes).unwrap(), p);
-    // the same request exported again is one more row, never sampled
     a.export(&early).await.unwrap();
     let rows = operational(&db, "audit.export").await;
     assert_eq!(rows.len(), 2);
     assert!(rows[0].reason == "full" && rows[0].target.starts_with("records:0-"));
-    // a redacted export: commitments only, digest-level replay
     let redacted = incoming(export_request(d, 32, audit_basis, "redacted"), ROOT_KEY);
     allowed(&a.exercise(&redacted).await.unwrap());
     let r = a.export(&redacted).await.unwrap().package;
@@ -7617,7 +7460,6 @@ async fn ap_14_an_export_is_an_audited_exercise_that_verifies_itself() {
             .all(|rec| rec.opened.keys().all(|k| k == "versions"))
     );
     assert_eq!(verify(&r).unwrap().size, r.range.1 + 1);
-    // BOB roots nothing: his export intent is not allowed and there is no package
     let bob = incoming(export_request(d, 33, audit_basis, "full"), BOB_KEY);
     assert_ne!(
         a.exercise(&bob).await.map(|r| r.decision.outcome).ok(),
@@ -7628,7 +7470,7 @@ async fn ap_14_an_export_is_an_audited_exercise_that_verifies_itself() {
         Err(CoreError::Protocol("export-exercise"))
     ));
     assert_eq!(operational(&db, "audit.export").await.len(), 3);
-    // OP-151 m.19 (d): the export is `audit_export`; the dotted concept name is no action
+    // OP-151 m.19 (d)
     let mut dotted = export_request(d, 34, audit_basis, "full");
     dotted.intent.action = action("access", "audit.export");
     assert!(matches!(
@@ -7637,9 +7479,7 @@ async fn ap_14_an_export_is_an_audited_exercise_that_verifies_itself() {
     ));
 }
 
-// OP-39, OP-44, carry-over of OP-142: a protocol rejection makes no record but is one row of
-// the operational stream, unsampled: a statement for another nonce, and a nonce replayed for
-// another intent
+// OP-39, OP-44 OP-142
 #[tokio::test]
 async fn protocol_rejections_go_to_the_operational_stream() {
     let db = fresh().await.unwrap();
@@ -7708,9 +7548,7 @@ async fn records(db: &TestDb, d: Digest) -> Vec<Vec<u8>> {
         .collect()
 }
 
-// §9.7.1, §9.16.3, C30: explain traces are operator telemetry, sampled at will and never the
-// record: the same commits with every trace on and explanations in between, and with no trace
-// at all, leave byte-identical records
+// §9.7.1, §9.16.3, C30
 #[tokio::test]
 async fn traces_never_reach_the_record() {
     let traced_db = fresh().await.unwrap();
@@ -7751,8 +7589,6 @@ async fn traces_never_reach_the_record() {
     assert_eq!(traced, records(&quiet_db, d).await);
 }
 
-// ---------------------------------------------------------------- review fixes (F1)
-
 /// The outcome of `req` signed by `seed`, `None` when it is rejected before a decision.
 async fn outcome_of(a: &Led, req: Request, seed: u8) -> Option<Outcome> {
     a.exercise(&incoming(req, seed))
@@ -7778,9 +7614,7 @@ fn hex(id: Id) -> String {
     })
 }
 
-// E6, §7.9.2.5: a Party's self-anchor covers its own `access.party:[hex]` subtree only; a
-// domain action on another namespace, another Party's subtree or the audit export is not
-// covered by it
+// E6, §7.9.2.5
 #[tokio::test]
 async fn e6_a_self_anchor_covers_only_its_party() {
     let db = fresh().await.unwrap();
@@ -7820,8 +7654,7 @@ async fn e6_a_self_anchor_covers_only_its_party() {
     assert_eq!(outcome_of(&a, own, ALICE_KEY).await, Some(Outcome::Allow));
 }
 
-// E6, §7.9.2.5: a Resource Anchor covers its selector only; the Domain meta-anchor covers
-// the domain's actions
+// E6, §7.9.2.5
 #[tokio::test]
 async fn e6_resource_anchor_stays_scoped_domain_anchor_covers_the_domain() {
     // EI-14
@@ -7891,8 +7724,7 @@ fn audit_selector() -> ResourceSelector {
     selector("access.audit")
 }
 
-// OP-141 m.38 (d), m.39 (b): a Grant a Party issues itself on its self-anchor never makes it
-// an auditor, even when it names `access:audit_export`
+// OP-141 m.38 (d), m.39 (b)
 #[tokio::test]
 async fn op_141_m38_d_a_self_issued_audit_grant_audits_nothing() {
     let db = fresh().await.unwrap();
@@ -7910,9 +7742,7 @@ async fn op_141_m38_d_a_self_issued_audit_grant_audits_nothing() {
     assert!(!alice_audits(&a, d, holding, record).await);
 }
 
-// OP-141 m.38 (d): an audit Grant out of its validity window, or with conditions or
-// requirements an audit read cannot satisfy, makes no auditor; a clean one from the
-// meta-anchor does
+// OP-141 m.38 (d)
 #[tokio::test]
 async fn op_141_m38_d_an_audit_grant_must_hold_now() {
     let db = fresh().await.unwrap();
@@ -7935,8 +7765,7 @@ async fn op_141_m38_d_an_audit_grant_must_hold_now() {
     assert!(alice_audits(&a, d, holding, record).await);
 }
 
-// OP-141 m.38 (d), m.39 (b), AP-14: a Grant from the meta-anchor naming
-// `access:audit_export` commits the export intent and gets the full package
+// OP-141 m.38 (d), m.39 (b), AP-14
 #[tokio::test]
 async fn op_141_m38_d_a_meta_anchor_audit_grant_exports() {
     let db = fresh().await.unwrap();
@@ -7954,9 +7783,7 @@ async fn op_141_m38_d_a_meta_anchor_audit_grant_exports() {
     );
 }
 
-// OP-141 m.39 (a), §9.13.7: an export intent carries only its typed range and disclosure; an
-// amount (which would move its tier), an unknown name or a wrongly typed range is refused
-// before any decision
+// OP-141 m.39 (a), §9.13.7
 #[tokio::test]
 async fn op_141_m39_a_an_export_carries_only_its_typed_parameters() {
     use access_kernel::intent::ParamValue;
@@ -8009,8 +7836,7 @@ fn report_request(d: Digest, nonce: u8, kind: &str) -> Request {
     }
 }
 
-// U53, OP-44, §8.17.10: every developer report served to an auditor is one `audit.read` row
-// of the operational stream, never sampled; a caller who gets no report makes no row
+// U53, OP-44, §8.17.10
 #[tokio::test]
 async fn u53_op_44_every_report_served_is_one_audit_read() {
     use access_authority_core::app::impact::{Compromised, Revoked};
@@ -8052,7 +7878,6 @@ async fn u53_op_44_every_report_served_is_one_audit_read() {
             nonce += 1;
             let inc = incoming(report_request(d, nonce, kind), ROOT_KEY);
             let (hits, _) = a.search(&inc, query, None).await.unwrap();
-            // no publication is offered to `shop`: an empty report is still an audit read
             assert_eq!(hits.len(), usize::from(*kind != "schema-publications"));
         }
     }
@@ -8075,9 +7900,7 @@ async fn u53_op_44_every_report_served_is_one_audit_read() {
     );
 }
 
-// §9.10, Ek B 2517: an action whose requirement the verifier cannot check itself never enters
-// the bounds: a contribution, a foreign authority or an intent-bound proof is a `restricted`
-// DENY of the issuance policy; a local authentication or a holder-bound Claim is projected
+// §9.10, Ek B 2517
 #[tokio::test]
 async fn s9_10_a_requirement_the_verifier_cannot_check_stays_online() {
     use access_kernel::combinator::BlockerClass;

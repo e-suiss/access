@@ -812,10 +812,10 @@ async fn admin_proxy<E: ConsoleEnv>(
         headers: pick(headers, &ADMIN_FORWARDED),
         body,
     };
-    // OP-151 m.11 (a): drafting an intent is a read, by a read proof over the POST
+    // OP-151 m.11 (a)
     let drafting = *method == Method::POST && rest.ends_with("/intents");
     if unsafe_method(method) && !drafting {
-        // MD-14: the write is the browser's statement; the BFF only checks it is the session's
+        // MD-14
         match crate::api::domain::caller::ais_kid(&ais) {
             Ok(kid) if kid == instance.kid => {}
             _ => return problems::proof_rejected().into_response(),
@@ -956,7 +956,7 @@ async fn adp_proxy<E: ConsoleEnv>(
         headers: pick(headers, &ADP_FORWARDED),
         body,
     };
-    // OP-141 m.23 (a): each session is its own requester under the console's PEP
+    // OP-141 m.23 (a)
     let requester = b64url_encode(&live.session.id);
     match c.env.upstream().adp(forward, requester).await {
         Ok(f) => forwarded(f),
@@ -1001,7 +1001,7 @@ async fn intents<E: ConsoleEnv>(
         Err(ProofError::NoInstance) => return problems::instance_required().into_response(),
         Err(ProofError::Rejected) => return problems::proof_rejected().into_response(),
     }
-    // OP-151 m.20 (a): an action outside this build's catalogue may be one the domain accepted
+    // OP-151 m.20 (a)
     let tenant = match super::drafts::asked_action(&body) {
         Some((namespace, name, major)) => match c
             .env

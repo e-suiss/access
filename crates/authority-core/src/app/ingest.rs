@@ -102,7 +102,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         let issuer = v.statement.issuer;
         let class = v.statement.class.clone();
         let until = v.statement.validity.until;
-        // L2-CLM-4: an admitted Claim is recorded once
+        // L2-CLM-4
         if let Some(state) = self
             .get(&mut snap, &meta::key(kind::CLAIM, &id))
             .await?
@@ -229,14 +229,14 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         v: &Verified,
         now: u64,
     ) -> Result<(Disposition, Option<(Vec<u8>, u64)>, Option<(u64, u64)>), CoreError> {
-        // SEC9: past its key's cutoff a Claim is held and draws no quota
+        // SEC9
         if v.cut_off {
             return Ok((Disposition::SourceNotAccepted, None, None));
         }
         let s = &v.statement;
         let gates = self.gates(snap, &s.issuer).await?;
         let mut disposition = claim::disposition(s, &gates, now);
-        // P21: Acceptance and designation together
+        // P21
         if disposition == Disposition::Admit && !self.designated(snap, s, now).await? {
             disposition = Disposition::SourceNotAccepted;
         }
@@ -248,7 +248,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         };
         let key = claim::quota_key(&s.issuer, window, now);
         if self.counter(&key).await? >= limit {
-            // G44: over quota a qualifying Claim is held and opens no episode
+            // G44
             return Ok((
                 Disposition::Quota,
                 None,

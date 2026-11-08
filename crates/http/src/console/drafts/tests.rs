@@ -22,9 +22,7 @@ fn wanted(namespace: &str, name: &str, rns: &str, path: &[&str], mode: &str) -> 
     })
 }
 
-// OP-151 m.19 (a), PI-7, L1-ADP-8: a catalogued action on the session's realm is drafted with
-// its pinned schema digest and the write path's validity; the wire JSON is what ADP decodes to
-// the same envelope, and the envelope's bytes are what the Kernel reads back
+// OP-151 m.19 (a), PI-7, L1-ADP-8
 #[test]
 fn a_catalogued_action_is_drafted_as_adp_reads_it() {
     let d = ask(&wanted("idp.account", "suspend", "idp", &["acme"], "check")).unwrap();
@@ -46,9 +44,7 @@ fn a_catalogued_action_is_drafted_as_adp_reads_it() {
     );
 }
 
-// OP-151 m.20 (d), IA-5: a check draft names the eligibility set it belongs to, the root of its
-// family as basis (the meta-anchor for core meta-actions and the audit read); a commit draft
-// names none
+// OP-151 m.20 (d), IA-5
 #[test]
 fn a_check_draft_carries_its_probe_set() {
     let d = ask(&wanted(
@@ -79,8 +75,7 @@ fn a_check_draft_carries_its_probe_set() {
     assert!(c.answer(&Digest([3; 32])).get("probe").is_none());
 }
 
-// OP-151 m.8 (b), m.19 (a), (d): the export is `access`/`audit_export` on the realm's audit
-// resource with typed range and disclosure, draftable for commit
+// OP-151 m.8 (b), m.19 (a), (d)
 #[test]
 fn the_export_is_drafted_with_its_typed_parameters() {
     let mut w = wanted(
@@ -110,9 +105,7 @@ fn the_export_is_drafted_with_its_typed_parameters() {
     assert_eq!(ask(&w), Err(DraftError::Params));
 }
 
-// OP-151 m.19 (a), (d), fail closed: nothing outside the catalogue, the session's realm or the
-// action's resources is drafted; the dotted export name the Kernel cannot read is not
-// catalogued; reads and meta-actions without a payload are never drafted for commit
+// OP-151 m.19 (a), (d)
 #[test]
 #[allow(clippy::too_many_lines, reason = "one table of refusals")]
 fn anything_else_is_refused() {
@@ -225,10 +218,7 @@ fn anything_else_is_refused() {
     assert_eq!(draft(b"[]", "acme", NOW), Err(DraftError::Malformed));
 }
 
-// OP-151 m.20 (a), Ek B 3115, 3116: an action outside the build's catalogue is drafted only as
-// the domain's accepted tenant action, with the schema digest the domain pinned, for a check on
-// a resource of its own namespace; a commit, another action, a foreign resource, or a tenant
-// action claiming the core's or the identity plane's namespace is refused
+// OP-151 m.20 (a), Ek B 3115, 3116
 #[test]
 fn an_accepted_tenant_action_is_drafted_for_a_check_only() {
     let accepted = ActionRef {

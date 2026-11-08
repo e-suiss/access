@@ -1363,9 +1363,7 @@ async fn intents_are_drafted_for_a_read_proof() {
     assert!(h.env().up.take().is_empty());
 }
 
-// OP-151 m.20 (a), Ek B 3115, 3116: the decision lab drafts the domain's accepted tenant
-// action through the BFF, with the schema digest the domain pinned and the eligibility set it
-// belongs to; an action the domain did not accept, or a commit of one, is not drafted
+// OP-151 m.20 (a), Ek B 3115, 3116
 #[tokio::test]
 #[allow(
     clippy::many_single_char_names,

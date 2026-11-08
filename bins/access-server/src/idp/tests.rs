@@ -1343,8 +1343,7 @@ async fn self_signed_registration_binds_only_the_signing_key() {
     }
 }
 
-// §13.7.4, OP-152 m.5 (b): the identity plane forwards a registration's rate context; ten
-// bootstrap Exercises (five new users) fill one context's hour, another context is untouched
+// §13.7.4, OP-152 m.5 (b)
 #[tokio::test]
 async fn registrations_are_limited_per_context() {
     use access_internal_api::context::RateContext;

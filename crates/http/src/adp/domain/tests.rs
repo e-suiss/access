@@ -116,7 +116,7 @@ fn proofs_and_the_continued_exercise_decode() {
     }
 }
 
-// OP-152 m.5 (b): the PEP's pseudonymous rate context travels in `rate_context`
+// OP-152 m.5 (b)
 #[test]
 fn a_rate_context_is_decoded_or_refused() {
     let d = decode(body("", CARRIERS).as_bytes(), MAX).unwrap();

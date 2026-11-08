@@ -226,7 +226,7 @@ fn allowed(family: Family, r: &[ResourceRef], realm: &str) -> bool {
                     && first.is_some_and(|k| SEARCH_KINDS.contains(&k)))
         }
         Family::Meta => one.namespace.starts_with("access.") && one.namespace.len() <= MAX_SEGMENT,
-        // OP-151 m.20 (a): a tenant action names a resource of its own namespace
+        // OP-151 m.20 (a)
         Family::Tenant => tenant_resource(&one.namespace, realm),
     }
 }
@@ -375,7 +375,7 @@ pub fn draft_with(
         },
     };
     let bytes = envelope.to_bytes().map_err(|_| DraftError::Malformed)?;
-    // PI-7: what is drafted is what the Kernel reads back, or nothing is drafted
+    // PI-7
     let probe = (mode == Mode::Check).then_some(if family == Family::Idp {
         ProbeRoot::Idp
     } else {

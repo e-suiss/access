@@ -834,11 +834,7 @@ async fn a_console_commit_goes_to_adp_only_with_the_browsers_ais() {
     assert_ne!(package, Vec::<u8>::new());
 }
 
-// OP-151 m.20 (d), m.19 (a), IA-5, OP-149 m.10, TN-128: the console's section probes work on a
-// real server: the BFF drafts each probe's `check` with the eligibility `set` it belongs to, the
-// browser sends `{subject, set}` as drafted, and the real decision point answers the founder's
-// payload-less meta-action, `idp.*` and audit probes by coverage; another Party is refused at
-// the BFF, and nothing is recorded
+// OP-151 m.20 (d), m.19 (a), IA-5, OP-149 m.10, TN-128
 #[tokio::test]
 async fn the_consoles_section_probes_are_answered_by_the_real_decision_point() {
     let Console {
@@ -920,11 +916,7 @@ async fn the_consoles_section_probes_are_answered_by_the_real_decision_point() {
     assert_eq!(w.domains.head(domain).await.unwrap().0, before);
 }
 
-// OP-41, OP-44, U53, §17.6.8, X22, Ek B 3157, 3171, 3209: the realm's full-taxonomy audit
-// stream (channel B) is served on the management surface to a read proof of the console: the
-// realm's own audit rows as OCSF events, CEF lines or SET claims, each with its three times
-// (occurred, recorded, checkpointed once a checkpoint reaches it); every read is first written
-// as an `audit.read` row of the operational stream, and an unknown rendering is refused
+// OP-41, OP-44, U53, §17.6.8, X22, Ek B 3157, 3171, 3209
 #[tokio::test]
 async fn the_audit_stream_is_served_in_three_renderings_and_each_read_is_audited() {
     let Console {

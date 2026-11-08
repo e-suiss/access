@@ -47,8 +47,7 @@ fn set(actions: &[&str], max: Option<i64>) -> AuthoritySet {
     }
 }
 
-// X20, §8.17.9.2: a new action and a raised limit are gains for every holder; a dropped action
-// is a loss
+// X20, §8.17.9.2
 #[test]
 fn abilities_name_what_each_holder_gains_and_loses() {
     let old = set(&["read", "refund"], Some(5_000));
@@ -81,7 +80,7 @@ fn abilities_name_what_each_holder_gains_and_loses() {
     assert_eq!(abilities(&old, &old, &Catalog::default(), 41), []);
 }
 
-// C28, §5.8: the closed algebra decides the relation of two versions exactly
+// C28, §5.8
 #[test]
 fn role_versions_relate_by_the_closed_algebra() {
     let cat = Catalog::default();
@@ -102,7 +101,7 @@ fn role_versions_relate_by_the_closed_algebra() {
     assert!(SetRelation::Incomparable.widens() && !SetRelation::Narrowing.widens());
 }
 
-// §5.4: the member index prefix of a class is a prefix of every member key of it
+// §5.4
 #[test]
 fn the_member_prefix_covers_every_member_of_its_class() {
     let p = member_class_prefix("finance");

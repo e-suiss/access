@@ -128,7 +128,7 @@ mod tests {
         assert_ne!(one, a.pseudonym(&[1; 16], &[2; 16], &[8; 16]).unwrap());
     }
 
-    // OP-152 m.5 (b): one context per IPv4 /24 or IPv6 /48, apart from the address pseudonym
+    // OP-152 m.5 (b)
     #[test]
     fn prefix_pseudonyms_name_the_prefix() {
         let k = IpPseudonymKey::new(Secret::new([1; 32]));

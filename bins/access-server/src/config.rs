@@ -604,7 +604,7 @@ mod tests {
         with_tls().validate().unwrap();
     }
 
-    // TN-36, OP-146 m.14 (c): lifetimes stay in range; a completed sign-in stays on the origin
+    // TN-36, OP-146 m.14 (c)
     #[test]
     fn login_settings_are_checked() {
         let long = Config {
@@ -633,7 +633,7 @@ mod tests {
         }
     }
 
-    // CR-12, OP-52: no TLS, no start
+    // CR-12, OP-52
     #[test]
     fn tls_is_required() {
         let config = Config {
@@ -651,7 +651,7 @@ mod tests {
         }
     }
 
-    // OP-151 m.3 (b), CMP-15.5, §17.9.6: both listeners are required, with no default address
+    // OP-151 m.3 (b), CMP-15.5, §17.9.6
     #[test]
     fn the_management_and_internal_listeners_are_required() {
         assert!(matches!(
@@ -671,8 +671,7 @@ mod tests {
         }
     }
 
-    // OP-148, §17.9.6, Ek B admin address check: the admin interface never shares the public
-    // listener, and never binds beyond loopback without TLS
+    // OP-148, §17.9.6
     #[test]
     fn the_admin_address_is_checked_at_start_up() {
         for (m, i) in [
@@ -701,8 +700,7 @@ mod tests {
         assert!(matches!(config.validate(), Err(ConfigError::NoTls)));
     }
 
-    // TI-9, OP-152 m.5 (g): the internal listener always speaks TLS; there is no key to turn
-    // it into plain HTTP, and a configuration naming one does not load
+    // TI-9, OP-152 m.5 (g)
     #[test]
     fn the_internal_listener_has_no_plain_text_switch() {
         for key in ["internal_plain = true", "internal_plain = false"] {
@@ -747,8 +745,7 @@ mod tests {
         }
     }
 
-    // OP-138, TN-10, §17.9.6, CMP-22b: the identity plane is not optional and its realm base
-    // is a bare https origin
+    // OP-138, TN-10, §17.9.6, CMP-22b
     #[test]
     fn the_identity_plane_is_not_optional() {
         let none = Config {
@@ -778,7 +775,7 @@ mod tests {
         }
     }
 
-    // OP-149 m.3, E42: the Suiss section is not optional; its URLs are https bases
+    // OP-149 m.3, E42
     #[test]
     fn the_suiss_section_is_checked() {
         let none = Config {
@@ -803,8 +800,7 @@ mod tests {
         }));
     }
 
-    // OP-69, OP-149 m.21, OP-55: the local deployment's configuration is valid and names the
-    // migration role
+    // OP-69, OP-149 m.21, OP-55
     #[test]
     fn the_local_deployment_configuration_is_valid() {
         let path = concat!(
@@ -819,8 +815,7 @@ mod tests {
         assert!(config.database.and_then(|d| d.migrator).is_some());
     }
 
-    // OP-149 m.23, TI-9, OP-69: declared delivery targets are empty by default, the same
-    // setting in every deployment, settable from the environment, and exact canonical URLs
+    // OP-149 m.23, TI-9, OP-69
     #[test]
     fn delivery_targets_are_declared_exactly() {
         assert!(with_tls().delivery_targets.is_empty());
@@ -875,8 +870,7 @@ mod tests {
         assert!(result.is_err());
     }
 
-    // A-9, OP-53: every role's pool has a connection, the archive, outbox reader and
-    // checkpointer pools too
+    // A-9, OP-53
     #[test]
     fn every_pool_has_a_connection() {
         let empty = |f: fn(&mut Database)| {
@@ -902,8 +896,7 @@ mod tests {
         }));
     }
 
-    // A-3, OP-143 m.5, CMP-22a, MD-8: without the authority signer the server does not start,
-    // so it is never ready with receipts, lists and checkpoints unsigned
+    // A-3, OP-143 m.5, CMP-22a, MD-8
     #[test]
     fn the_authority_signer_is_required() {
         let config = Config {

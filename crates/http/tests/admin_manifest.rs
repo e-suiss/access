@@ -68,7 +68,7 @@ async fn code_of(router: &axum::Router, request: Request<Body>) -> (StatusCode, 
     (r.status(), body["code"].as_str().unwrap_or("").to_owned())
 }
 
-// TN-113, TN-119, TN-130, OP-151 m.3 (c): every row without its permission
+// TN-113, TN-119, TN-130, OP-151 m.3 (c)
 async fn deny_matrix(h: &Harness, router: &axum::Router, rows: &[Route]) {
     for row in rows {
         let path = concrete(row, REALM);
@@ -243,14 +243,14 @@ async fn deny_matrix(h: &Harness, router: &axum::Router, rows: &[Route]) {
     }
 }
 
-// TN-113: every production row, without its permission
+// TN-113
 #[tokio::test]
 async fn every_manifest_row_refuses_a_caller_without_its_permission() {
     let h = Harness::new();
     deny_matrix(&h, &h.router(), MANIFEST).await;
 }
 
-// TN-113: the router serves the manifest's rows and nothing else
+// TN-113
 #[tokio::test]
 async fn the_router_serves_only_manifest_rows() {
     let h = Harness::new();
@@ -281,7 +281,7 @@ async fn the_router_serves_only_manifest_rows() {
     assert_eq!(body["code"], "method-not-allowed");
 }
 
-// TN-113: a manifest row without a handler, or a handler outside the manifest, fails the build
+// TN-113
 #[test]
 fn the_builder_holds_the_router_to_the_manifest() {
     let h = Harness::new();
@@ -304,7 +304,7 @@ fn the_builder_holds_the_router_to_the_manifest() {
     check(MANIFEST).unwrap();
 }
 
-// TN-113, OP-151 m.3 (a): rows stay on their surface; reads are scoped in its namespace
+// TN-113, OP-151 m.3 (a)
 #[test]
 fn manifest_rows_stay_on_their_surface() {
     static CROSS: &[Route] = &[Route {

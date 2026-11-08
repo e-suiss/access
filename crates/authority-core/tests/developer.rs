@@ -1040,9 +1040,7 @@ async fn op_105_the_change_impact_report_asks_the_wired_analysis() {
     ));
 }
 
-// OP-151 m.20 (a), OP-141 m.35 (e), Ek B 3115, 3116: the decision lab drafts the domain's
-// accepted tenant actions with the schema digest the domain pinned; an action no live
-// `schema-definition` Acceptance declares, another major or another namespace is not accepted
+// OP-151 m.20 (a), OP-141 m.35 (e), Ek B 3115, 3116
 #[tokio::test]
 async fn the_domains_accepted_tenant_actions_are_read_with_their_schema() {
     let db = fresh().await.unwrap();
@@ -1180,9 +1178,7 @@ async fn with_ack_issuer(db: &TestDb) -> (Core, Digest) {
     (Authority::new(leader, reader, binding(), Counter(0), d), d)
 }
 
-// E15, §9.12.3, §7.9.8.3, E30, INV-21: a PEP's authority-state acknowledgement of a state at or
-// after a recorded revocation feeds its staleness exposure view; an older one, or any before the
-// revocation is recorded, does not
+// E15, §9.12.3, §7.9.8.3, E30, INV-21
 #[tokio::test]
 async fn authority_state_acks_feed_the_revocation_view() {
     let db = fresh().await.unwrap();

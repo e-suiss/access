@@ -41,7 +41,7 @@ fn signed(signer: &SoftSigner, payload: &[u8]) -> Vec<u8> {
     .unwrap()
 }
 
-// TN-128, OP-151 m.3 (e): a read proof is a CT0 AIS by the session's Instance over this request
+// TN-128, OP-151 m.3 (e)
 #[test]
 fn read_proof_binds_instance_mode_domain_request_and_time() {
     let (key, _) = SoftSigner::generate_p256().unwrap();
@@ -83,7 +83,7 @@ fn read_proof_binds_instance_mode_domain_request_and_time() {
     }
 }
 
-// TN-131: state-changing requests name the configured origin; Host is never consulted
+// TN-131
 #[test]
 fn origin_gate_uses_configuration_only() {
     let mut h = HeaderMap::new();
@@ -104,7 +104,7 @@ fn origin_gate_uses_configuration_only() {
     assert_eq!(gate(&x, &Method::GET, ORIGIN), Gate::Pass);
 }
 
-// TN-128: the ADP proxy reaches reads only; nothing it forwards is recorded or committed
+// TN-128
 #[test]
 fn adp_proxy_reaches_reads_only() {
     for ok in [
@@ -128,7 +128,7 @@ fn adp_proxy_reaches_reads_only() {
     }
 }
 
-// TN-131: the admin proxy names plain paths under /admin/v1 only
+// TN-131
 #[test]
 fn admin_proxy_paths_are_plain() {
     assert!(admin_path("realms/acme/clients"));
@@ -146,7 +146,7 @@ fn admin_proxy_paths_are_plain() {
     }
 }
 
-// TN-131: strict CSP, no referrer, isolation and minimal permissions on every answer
+// TN-131
 #[test]
 fn security_headers_are_strict() {
     let mut h = HeaderMap::new();
@@ -176,7 +176,7 @@ fn security_headers_are_strict() {
     );
 }
 
-// TN-128: credentials never cross the proxies
+// TN-128
 #[test]
 fn proxies_pass_on_no_credentials() {
     for name in ["cookie", "authorization", "dpop", "host", "x-forwarded-for"] {

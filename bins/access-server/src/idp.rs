@@ -146,8 +146,7 @@ impl<K, B: Binding, S: Salts, C> Plane<K, B, S, C> {
 }
 
 fn refused(e: &CoreError) -> Verdict {
-    // OP-149 m.12, m.30 (b): a protocol rejection travels with its reason and what it expected,
-    // as the ADP's does
+    // OP-149 m.12, m.30 (b)
     Verdict::Refused {
         code: String::from(e.reason().unwrap_or_else(|| e.code())),
         errors: e.expected(),
@@ -176,7 +175,7 @@ fn verdict(e: &CoreError) -> Result<Verdict, Unavailable> {
     }
 }
 
-// OP-151 m.6 (e): a management write's AIS verifies with a live Instance key of the domain
+// OP-151 m.6 (e)
 // OP-151 m.20 (a)
 impl<K, B, S, C> access_http::console::ports::AcceptedActions for Plane<K, B, S, C>
 where
@@ -320,7 +319,7 @@ where
         let (Some(exercise), Some(_)) = (r.exercise, r.record) else {
             return Err(Unavailable(String::from("allow-without-record")));
         };
-        // EI-25: what is bound is the nonce's recorded ALLOW, read back from the log
+        // EI-25
         let row = find_nonce(&self.app, &DomainId::from_bytes(domain.0), &nonce)
             .await
             .map_err(|e| Unavailable(e.to_string()))?
@@ -512,7 +511,7 @@ where
         domain: Digest,
         intent: Digest,
     ) -> Result<Option<Opening>, Unavailable> {
-        // §9.14.1 step 1, §9.14.5: what the decision point kept for the approval
+        // §9.14.1 step 1, §9.14.5
         match self.domains.asked(domain, &intent).await {
             Ok(Some(a)) => Ok(Some(Opening {
                 render_digest: a.render,
@@ -525,7 +524,7 @@ where
     }
 
     async fn contribute(&self, c: Contribution) -> Result<Verdict, Unavailable> {
-        // §9.14.1 A step 4: the statement and the bound Claim are the proofs
+        // §9.14.1 step 4
         let Some(intent) = contribute_intent(c.target, &c.class, c.validity) else {
             return Ok(Verdict::Refused {
                 code: String::from("protocol"),

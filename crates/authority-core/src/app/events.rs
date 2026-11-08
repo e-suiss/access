@@ -148,7 +148,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         };
         let mut events: Vec<Event> = Vec::new();
         match &req.payload {
-            // §9.16: grant.revoke / renounce
+            // §9.16
             Some(Payload::GrantRevoke { grant } | Payload::GrantRenounce { grant }) => {
                 events.push(base(
                     Kind::AuthorityRevoked,
@@ -156,7 +156,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                     Detail::None,
                 ));
             }
-            // §9.16: grant.amend
+            // §9.16
             Some(Payload::GrantAmend { grant, .. }) => {
                 events.push(base(
                     Kind::AuthorityNarrowed,
@@ -164,7 +164,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                     Detail::None,
                 ));
             }
-            // §9.16: policy change
+            // §9.16
             Some(
                 Payload::PolicySet {
                     policy: Some(policy),
@@ -216,7 +216,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                     events.push(base(Kind::AuthorityRevoked, g, Detail::None));
                 }
             }
-            // OP-149 m.7: a domain's own declaration
+            // OP-149 m.7
             Some(Payload::ClaimIssue {
                 subject,
                 class,
@@ -273,7 +273,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                 }
                 ended.extend(holders);
             }
-            // OP-149 m.7, m.19 (f), TN-49: a narrowing account status disables the Party
+            // OP-149 m.7, m.19 (f), TN-49
             if c.disposition == claim::Disposition::Admit
                 && c.statement.class == "account_status"
                 && matches!(&c.statement.value, Some(EqValue::Text(t))

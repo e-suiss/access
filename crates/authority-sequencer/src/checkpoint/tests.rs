@@ -176,8 +176,7 @@ fn versions() -> SpecVersions {
     default_template(DOMAIN).adopted
 }
 
-// T20, §16.4.4 m.18, L2-CKP-1, L2-CKP-3: the operational key signs the committed head's size and
-// RFC 9162 root; the note verifies against the published key and names the domain as origin
+// T20, §16.4.4 m.18, L2-CKP-1, L2-CKP-3
 #[tokio::test]
 async fn a_checkpoint_of_the_committed_head_verifies() {
     let (signer, trusted, now) = signer();
@@ -189,7 +188,7 @@ async fn a_checkpoint_of_the_committed_head_verifies() {
     assert_eq!((cp.size, cp.root), (3, root(&LEAVES)));
     assert_eq!(cp, made.checkpoint);
     assert_eq!(cp.origin, origin(&DOMAIN));
-    // OP-152 m.5 (h): the checkpoint names the signed Domain Metadata current at its head
+    // OP-152 m.5 (h)
     let held = NoteSigner::metadata(&signer, DOMAIN).await.unwrap();
     assert_eq!(
         ext,
@@ -217,8 +216,7 @@ async fn a_checkpoint_of_the_committed_head_verifies() {
     ));
 }
 
-// OP-152 m.5 (h), L2-CKP-5: a checkpoint written before the metadata line still reads, without
-// a metadata digest; a malformed metadata line is refused
+// OP-152 m.5 (h), L2-CKP-5
 #[test]
 fn the_metadata_line_is_optional_but_well_formed() {
     let mut cp = body(
@@ -238,8 +236,7 @@ fn the_metadata_line_is_optional_but_well_formed() {
     assert!(matches!(extensions(&cp), Err(CheckpointError::Extension)));
 }
 
-// CR-23, G42: an unreachable signer, or one without a key that may sign, delays the checkpoint;
-// no unsigned checkpoint is emitted
+// CR-23, G42
 #[tokio::test]
 async fn no_signature_no_checkpoint() {
     let (mut signer, _, now) = signer();
@@ -255,7 +252,7 @@ async fn no_signature_no_checkpoint() {
     ));
 }
 
-// CMP-6: without a committed head nothing is sent to the signer
+// CMP-6
 #[tokio::test]
 async fn only_a_committed_head_is_checkpointed() {
     let (signer, _, now) = signer();
@@ -266,7 +263,7 @@ async fn only_a_committed_head_is_checkpointed() {
     assert_eq!(*signer.calls.lock().unwrap(), 0);
 }
 
-// §16.4.4 m.18: the Access lines are exactly recorded_at, versions and issued_at
+// §16.4.4 m.18
 #[test]
 fn extension_lines_are_strict() {
     let mut cp = Checkpoint {

@@ -303,9 +303,7 @@ fn feed(path: &str, token: &str) -> Request<Body> {
         .unwrap()
 }
 
-// OP-41, OP-44, §17.6.8, Ek B 3157, 3171, 3209: the audit stream is a realm read: a read token
-// of the realm reads it in the asked rendering (OCSF by default), with the token's subject as
-// the reader the audit.read event names; an unknown rendering or an AIS is refused
+// OP-41, OP-44, §17.6.8, Ek B 3157, 3171, 3209
 #[tokio::test]
 async fn the_audit_stream_is_read_in_its_renderings() {
     let h = Harness::new();

@@ -427,7 +427,7 @@ async fn seed(
 }
 
 fn serve_main(config: &Config, telemetry: &access_telemetry::Telemetry) -> ExitCode {
-    // CR-12, OP-52: the TLS files are read before the lockdown closes the file system
+    // CR-12, OP-52
     let tls = match tls_config(config) {
         Ok(tls) => tls,
         Err(error) => {
@@ -444,7 +444,7 @@ fn serve_main(config: &Config, telemetry: &access_telemetry::Telemetry) -> ExitC
         }
     };
 
-    // §14.5, OP-151 m.3 (b): the three listeners are bound before the lockdown closes bind
+    // §14.5, OP-151 m.3 (b)
     let listeners = match Listeners::bind(config) {
         Ok(listeners) => listeners,
         Err(error) => {
@@ -517,7 +517,7 @@ fn prepare(config: &Config, tls: Arc<access_http::tls::ServerConfig>) -> Result<
         Arc::new(KeyStore::open(&hsm.module, &hsm.token, pin.value()).map_err(|e| e.to_string())?);
     let identity_keys =
         Arc::new(KeyStore::open(&hsm.module, &hsm.token, pin.value()).map_err(|e| e.to_string())?);
-    // OP-146 m.12 (f): the built login app is read before the lockdown closes the file system
+    // OP-146 m.12 (f)
     let assets = config
         .login
         .dist_dir
@@ -525,7 +525,7 @@ fn prepare(config: &Config, tls: Arc<access_http::tls::ServerConfig>) -> Result<
         .map(Assets::load)
         .transpose()
         .map_err(|e| e.to_string())?;
-    // TN-128: the built console, read before the lockdown as well
+    // TN-128
     let console_assets = config
         .console
         .dist_dir
@@ -643,7 +643,7 @@ fn lockdown(config: &Config) -> Lockdown {
             lockdown = lockdown.allow_read_write(path);
         }
     }
-    // OP-151 m.1 (b): the MMDB file is read again when replaced, so its directory stays readable
+    // OP-151 m.1 (b)
     if let Some(dir) = config.risk.geo_mmdb_path.as_deref().and_then(Path::parent) {
         lockdown = lockdown.allow_read(dir);
     }
@@ -680,7 +680,7 @@ async fn pools(config: &Config, prepared: &Prepared) -> Result<Pools, String> {
     };
     let sequencer = open(&db.sequencer, &prepared.sequencer_password).await?;
     let app = open(&db.app, &prepared.app_password).await?;
-    // OP-27: only admin search and listing read from the replica
+    // OP-27
     let reads = match &db.replica_host {
         Some(host) => {
             let target = Target {
@@ -752,13 +752,13 @@ async fn identity(
     let suiss = config.suiss.as_ref().ok_or("no suiss section")?;
     let api_base = config.issuer.as_deref().ok_or("no issuer")?;
     // OP-149 m.3
-    // MD-10, §9.15.1 k.2: discovery also reads the realm's public sub opt-ins and its domain
+    // MD-10, §9.15.1 k.2
     let discovery = RealmDiscovery::new(
         PgDirectory::new(router).with_facts(app),
         SignerKeys::new(identity.signer.clone()),
     )
     .with_suiss(suiss.settings(api_base));
-    // OP-148, OP-138, MD-8: one report of every start-up check; any failure stops the start
+    // OP-148, OP-138, MD-8
     let mut report = startup::Report::default();
     report.record(
         "listeners",
@@ -806,7 +806,7 @@ where
             pep: String::from(IDENTITY_PEP),
         },
     );
-    // OP-65, OP-67 m.1: the Frontend API answers with Request-Id too
+    // OP-65, OP-67 m.1
     Ok(me.layer(axum::middleware::from_fn_with_state(
         RequestIds::new(Arc::new(admin::OsEntropy)),
         request_id,
@@ -950,7 +950,7 @@ impl Background {
         let identity = config.identity.as_ref().ok_or("no identity section")?;
         let logout = courier(config, pools, outbound.clone())?;
         let ready = readiness(config, pools);
-        // OP-67 m.3: unset again as soon as any courier or consumer task ends
+        // OP-67 m.3
         let consumers = ready.flag("outbox.consumers");
         // OP-149 m.4, m.7, m.17
         let events = events::Delivery::outbound(
@@ -1056,7 +1056,7 @@ async fn serve(
     let admin_outbound = prepared.outbound.clone();
     let admin_geo = risk_services.geo.clone();
     let admin_pseudonyms = risk_services.ips.clone();
-    // OP-146 m.5 (f): today's day partitions exist before anything writes to them
+    // OP-146 m.5 (f)
     jobs::open_now(&all.app, &all.archive, &holder()?).await;
     let background = Background::start(
         config,
@@ -1101,7 +1101,7 @@ async fn serve(
     let tenants_pool = router_pool.clone();
     let sandbox_pool = router_pool.clone();
     let realms = identity(config, router_pool, app.clone(), prepared.tls_names.clone()).await?;
-    // OP-67 m.3, OP-138: the start-up checks loaded every realm's JWKS
+    // OP-67 m.3, OP-138
     background.jwks.set(true);
     let (idp_sequencer, idp_app, product_app) = (sequencer.clone(), app.clone(), app.clone());
     let (issuer, limits) = (config.issuer.clone().ok_or("no issuer")?, Limits::default());
@@ -1138,7 +1138,7 @@ async fn serve(
         },
         move || led.led(),
     );
-    // OP-62, MD-14, TN-111: the identity plane's idp.* write path and realm Genesis
+    // OP-62, MD-14, TN-111
     let idp_plane = idp::Plane::new(
         domains.clone(),
         idp_app,
@@ -1153,7 +1153,7 @@ async fn serve(
         idp_plane.clone(),
         issuer.clone(),
     );
-    // OP-150 m.2: authority tokens are the authority plane's projection.issue decisions
+    // OP-150 m.2
     let authorize = authorization(
         config,
         oauth_inputs,
@@ -1161,7 +1161,7 @@ async fn serve(
         cell_ids.clone(),
         hooks,
     )?;
-    // OP-151 m.3 (m): no request brings authority across the sandbox line
+    // OP-151 m.3 (m)
     let adp = adp_router(
         Service::new(
             access_http::adp::sandbox::SandboxLine {
@@ -1172,9 +1172,7 @@ async fn serve(
         ),
         Discovery { issuer },
     );
-    // OP-151 m.3 (b)-(d), m.2 M1, m.12: the management API and the console, on their own
-    // listener; the console signs in through the realms' authorization servers and forwards its
-    // ADP reads, both in process
+    // OP-151 m.3, m.2 M1, m.12
     let management_origin = config
         .suiss
         .as_ref()
@@ -1470,8 +1468,7 @@ mod commands {
         a.iter().map(OsString::from).collect()
     }
 
-    // OP-2, OP-55, OP-69, TI-9: no argument serves; the one-shot commands take exactly their own
-    // arguments and nothing else is a mode
+    // OP-2, OP-55, OP-69, TI-9
     #[test]
     fn the_commands_are_closed() {
         assert!(matches!(command(&args(&[])), Some(Command::Serve)));

@@ -159,7 +159,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                 .await?
                 .and_then(|v| InstanceState::from_value(&v).ok())
                 .map(|i| i.since);
-            // §10.1.5: a new Instance is required after a break
+            // §10.1.5
             if breaks.iter().any(|b| since.is_none_or(|s| s < b.since)) {
                 return Ok(Some("party-identity-break"));
             }

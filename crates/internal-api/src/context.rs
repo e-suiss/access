@@ -56,7 +56,7 @@ impl RateContext {
 mod tests {
     use super::*;
 
-    // OP-152 m.5 (b): a context is a short token of a closed alphabet
+    // OP-152 m.5 (b)
     #[test]
     fn a_context_is_a_pseudonym_or_a_class() {
         let a = RateContext::address(&[0xab; 32]);

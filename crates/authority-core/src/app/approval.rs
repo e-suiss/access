@@ -195,7 +195,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         let [bytes] = statements.as_slice() else {
             return Err(CoreError::Protocol("aas"));
         };
-        // §9.14.1 step 1: the approval answers a REQUIRE_ACTION of the target intent
+        // §9.14.1 step 1
         let Opening { render, tier } = self
             .reader
             .opening(target)
@@ -218,11 +218,11 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         if act.nonce != req.nonce {
             return Err(CoreError::Protocol("aas-nonce"));
         }
-        // §13.7.3 "AAS expires_at"
+        // §13.7.3
         if !assurance::aas_within_ceiling(tier, act.issued_at, act.expires_at) {
             return Err(CoreError::Protocol("aas-expiry"));
         }
-        // SI-5: the `authentication` Claim bound to H(AAS)
+        // SI-5
         let class_name = Class::Authentication.name();
         let bound = resolved
             .proofs

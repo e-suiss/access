@@ -454,7 +454,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         }
         let log = self.reader.log(0, record).await?;
         let (past, at, recorded, opening) = Past::before(&log, record, &req.nonce, &digest)?;
-        // OP-141 m.38 (e): the request repeats the recorded basis and capacity
+        // OP-141 m.38 (e)
         if opening.basis != meta::basis_value(&req.basis)
             || opening.capacity != meta::capacity_value(req.capacity)
         {
@@ -489,7 +489,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             .ok_or(CoreError::Protocol("explain-record"))?;
         let evaluation = rebuilt?;
         trace_rebuilt(scope, &evaluation.decision);
-        // X25: a rebuilt outcome that differs is a determinism event, not an explanation
+        // X25
         if evaluation.decision.outcome != recorded {
             return Err(CoreError::Protocol("explain-mismatch"));
         }
@@ -786,7 +786,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                 {
                     return Err(CoreError::Protocol("payload"));
                 }
-                // OP-141 m.27 (e): a policy that does not compile is never set
+                // OP-141 m.27 (e)
                 if let Payload::PolicySet { content, .. } = p
                     && crate::restrict::compile(content).is_err()
                 {
@@ -804,7 +804,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                     }
                 }
             }
-            // OP-151 m.20 (d): no effect is evaluated, so only the basis's coverage answers
+            // OP-151 m.20 (d)
             None if is_meta && probe && req.mode == Mode::Check => {}
             None if is_meta => return Err(CoreError::Protocol("payload")),
             // OP-141 m.39 (a), OP-151 m.19 (d)
@@ -816,8 +816,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             {
                 return Err(CoreError::Protocol("action"));
             }
-            // OP-141 m.39 (a), §9.13.7: an export is CT1 whatever it carries, so it carries
-            // only its typed range and disclosure
+            // OP-141 m.39 (a), §9.13.7
             None if req.intent.action.namespace == meta::NAMESPACE
                 && req.intent.action.name == crate::domain::export::EXPORT_ACTION
                 && !req.intent.params.iter().all(|(k, v)| {
@@ -1068,7 +1067,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             instance: actor.instance,
             key,
         };
-        // §9.12.1, PI-12: the contract is issued against the audience's profile
+        // §9.12.1, PI-12
         let (verifier_profile_ref, clock_source) =
             self.contract_profile(audience, fixed.now).await?;
         let validity = ValidityContract {
@@ -1099,7 +1098,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             clock_source,
             clock_skew_ms: access_kernel::ais::SKEW_MS,
             must_understand: BTreeSet::new(),
-            // OP-150 m.10 (a): the entry the decision point opened for this projection
+            // OP-150 m.10 (a)
             status: inc.status.clone(),
         };
         let pap = access_kernel::pap::Pap {
@@ -1454,8 +1453,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                     );
                     response.receipt = receipt.map(|r| r.1);
                     response.pap = pap.map(|p| p.1);
-                    // §9.9.3 k.6: a Claim ends its holders whatever the decision, the
-                    // decision only when allowed
+                    // §9.9.3 k.6
                     response.ended = derived.ended_by_claims;
                     if allowed {
                         response.ended.extend(derived.ended);
@@ -1681,13 +1679,13 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                 render_digest: Some(shape.render.0),
                 tier: Some(approval::tier_code(shape.tier)),
             }),
-            // OP-130 m.9, OP-149 m.7: only a committed ALLOW changes state
+            // OP-130 m.9, OP-149 m.7
             events: if allowed {
                 derived.decision.clone()
             } else {
                 Vec::new()
             },
-            // OP-143 m.13 (g); §9.14.5: the render a REQUIRE_ACTION showed, kept by its digest
+            // OP-143 m.13 (g); §9.14.5
             proofs: foreign
                 .map(|(d, b)| (d.0, b))
                 .into_iter()

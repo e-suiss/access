@@ -133,21 +133,18 @@ fn pseudonym_key() -> PseudonymKey {
     PseudonymKey::new(Secret::new([9; 32]))
 }
 
-// §9.6.1, §13.7.5, SEC29, TI-RT10: a viewer sees its own lineage and the Grants it gave in
-// clear; identities two or more hops below it only as its own stable pseudonyms
+// §9.6.1, §13.7.5, SEC29, TI-RT10
 #[test]
 fn identities_two_hops_below_the_viewer_are_pseudonymous() {
     let s = state();
     let k = pseudonym_key();
     let root = viewed_lineage(&s, &basis(), &ROOT, false, Some(&k)).unwrap();
     assert_eq!(root.len(), 3);
-    // hop 2 = ALICE (one below ROOT), hop 1 = BOB, hop 0 = CAROL
     assert_eq!(root[2].holder, Some(Named::Clear(ALICE)));
     assert_eq!(root[2].grant, Named::Clear(G_ALICE));
     assert!(matches!(root[1].holder, Some(Named::Pseudonym(_))));
     assert!(matches!(root[0].holder, Some(Named::Pseudonym(_))));
     assert!(matches!(root[0].grant, Named::Pseudonym(_)));
-    // stable for one viewer, different for another
     let again = viewed_lineage(&s, &basis(), &ROOT, false, Some(&k)).unwrap();
     assert_eq!(again, root);
     let alice = viewed_lineage(&s, &basis(), &ALICE, false, Some(&k)).unwrap();
@@ -162,8 +159,7 @@ fn identities_two_hops_below_the_viewer_are_pseudonymous() {
     );
 }
 
-// §13.7.5: with the audit Grant every identity is in clear; without a pseudonym key nothing
-// that needs one is shown (fail closed)
+// §13.7.5
 #[test]
 fn the_audit_scope_sees_identities_in_clear() {
     let s = state();
@@ -180,7 +176,6 @@ fn the_audit_scope_sees_identities_in_clear() {
         viewed_lineage(&s, &basis(), &ROOT, false, None),
         Err(CoreError::Unavailable("pseudonym-key"))
     ));
-    // a stranger to the lineage sees every identity pseudonymous
     let stranger =
         viewed_lineage(&s, &basis(), &Id([9; 16]), false, Some(&pseudonym_key())).unwrap();
     assert!(
@@ -229,8 +224,7 @@ fn decision() -> Decision {
     }
 }
 
-// P41, §9.6.1: `reason_user` carries only closed codes; `reason_admin` follows the table and
-// discloses a subcode only where its row does
+// P41, §9.6.1
 #[test]
 fn p41_reason_user_and_reason_admin_follow_the_table() {
     let d = decision();
@@ -245,8 +239,7 @@ fn p41_reason_user_and_reason_admin_follow_the_table() {
     assert_eq!(admin[2].category, "requirement missing: approval");
 }
 
-// §17.1.1, OP-148: at audit scope `basis_ref` opens into the domain, q − 1 and the digest of
-// the version vector; the StateBasis and the cited proofs come from the record
+// §17.1.1, OP-148
 #[test]
 fn basis_ref_expands_to_domain_q_minus_1_and_version_digest() {
     let versions = Value::Map(vec![

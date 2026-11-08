@@ -295,8 +295,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                         .await?
                         .and_then(|v| ContributionState::from_value(&v).ok())
                         .ok_or(CoreError::Protocol("proof"))?;
-                    // OP-141 m.19 (g): a consumed contribution is no proof; SEC11: neither is
-                    // one whose Instance has ended since
+                    // OP-141 m.19 (g)
                     let live = self
                         .get(&mut snap, &meta::key(kind::INSTANCE, &c.instance))
                         .await?
@@ -306,8 +305,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                         continue;
                     }
                     let id = first16(e);
-                    // SI-5, §13.7.3: the approver's H(AAS)-bound authentication is what the
-                    // contribution proves
+                    // SI-5, §13.7.3
                     out.proofs.push(Proof {
                         id,
                         kind: ProofKind::Contribution,
@@ -327,12 +325,12 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                     });
                     out.contributions.insert(id, (k, c));
                 }
-                // §9.14.1 (the statement is checked after the evaluation), OP-143 m.13 (d)
+                // §9.14.1, OP-143
                 ProofRef::Aas(_) | ProofRef::ForeignPap { .. } => {}
             }
         }
         out.held = self.held(&mut snap, &req.basis, party, now).await?;
-        // TI-4: every key read, except those the new Claim records write
+        // TI-4
         let new: Vec<Vec<u8>> = out
             .claims
             .iter()
@@ -408,7 +406,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         let Some(actor) = actor else {
             return Ok(None);
         };
-        // §9.13, E5: the regime and account status overlays (restriction only)
+        // §9.13, E5
         if let Some(code) = self.overlaid(actor, now).await? {
             return Ok(Some(code));
         }
@@ -430,7 +428,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         let Some(since) = since else {
             return Ok(None);
         };
-        // §7.9.2.4: an Instance created after the Party's recovery is not covered
+        // §7.9.2.4
         if self.recovered_before(&actor.party, since, now).await? {
             return Ok(None);
         }

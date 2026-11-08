@@ -249,11 +249,11 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             return Err(CoreError::Protocol("payload"));
         };
         let refuse = |code| Ok(Err((code, Remediation::NewRequestRequired)));
-        // §9.10, Ek B 2517: an action whose requirement the verifier cannot check stays online
+        // §9.10, Ek B 2517
         if !bounds.requirements.iter().all(locally_verifiable) {
             return refuse(policy::LOCAL_REQUIREMENT);
         }
-        // §9.9.3 rule 4, OP-141 m.35 (g): the tier of what is projected
+        // §9.9.3 rule 4, OP-141 m.35 (g)
         let Some(actions) = self.bounded_actions(bounds) else {
             return refuse(policy::TIER);
         };
@@ -263,8 +263,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         if variant.class() != *class {
             return refuse(policy::PROFILE);
         }
-        // §13.7.2: CT3 never, CT2 only where the table says; the CT2 offline extension needs a
-        // Domain Metadata ceiling this issuer does not declare yet
+        // §13.7.2
         let Some(ceil) = ceiling::policy(*variant, tier) else {
             return refuse(policy::CLASS_CAP);
         };
@@ -279,7 +278,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             }
             (_, None, _) => {}
         }
-        // §13.7.2: a checkpoint interval the payload cannot declare yet
+        // §13.7.2
         if ceil.checkpoint_ms.is_some() {
             return refuse(policy::PARAMETER);
         }
@@ -291,11 +290,11 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                     .any(|s| s.consumption_bearing)
             })
             .await?;
-        // §5.10, §9.10 (2506, 2517): consumption off line only against a slice
+        // §5.10, §9.10 (2506, 2517)
         if *class != ProfileClass::Online && consuming && offline_slice.is_none() {
             return refuse(policy::SLICE_REQUIRED);
         }
-        // §9.12.1, PI-12: the audience's profile, one for the whole audience
+        // §9.12.1, PI-12
         let mut profiles: Vec<(Digest, VerifierProfile)> = Vec::new();
         for a in audience {
             match self.reader.verifier_profile(a, now).await? {
@@ -328,12 +327,11 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             }
         }
         if let Some(slice) = offline_slice {
-            // SEC13, OP-150 m.3 (s): a shared counter is only a capability declaration, so a
-            // slice goes to one verifier
+            // SEC13, OP-150 m.3 (s)
             if audience.len() != 1 {
                 return refuse(policy::SLICE_AUDIENCE);
             }
-            // §13.7.2: a CT1 offline slice takes at most a tenth of each lineage term
+            // §13.7.2
             if *variant == ProfileVariant::CheckpointedOffline
                 && tier == Tier::Ct1
                 && let ExerciseBasis::Holding(h) = req.basis
@@ -349,7 +347,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                 }
             }
         }
-        // §13.7.4: the issuance limits, as RestrictionPolicy denials
+        // §13.7.4
         let names = namespaces(&bounds.authority);
         if self
             .reader
@@ -367,7 +365,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         {
             return refuse(policy::OPEN_OFFLINE);
         }
-        // §13.7.2, SEC14: no new contract to a verifier that did not report in time
+        // §13.7.2, SEC14
         for a in audience {
             if self.reader.unreported_overdue(a, now).await? {
                 return Ok(Err((

@@ -1,16 +1,1 @@
 # OP-99
-crates/authority-core/src/app.rs
-crates/authority-core/src/app/approval.rs
-crates/authority-core/src/app/audit/tests.rs
-crates/authority-core/src/app/events.rs
-crates/authority-core/src/app/export.rs
-crates/authority-core/src/app/impact/tests.rs
-crates/authority-core/src/app/ingest.rs
-crates/authority-core/src/app/projection.rs
-crates/authority-core/src/app/proofs.rs
-crates/authority-core/src/app/publishing/tests.rs
-crates/authority-core/src/app/regime.rs
-crates/http/src/console/app.rs
-crates/http/src/console/domain/tests.rs
-crates/http/src/console/drafts.rs
-crates/http/src/console/drafts/tests.rs

@@ -42,13 +42,13 @@ fn check_file(name: &str, expected: &str) {
     );
 }
 
-// OP-65 m.3, TN-112, OP-151 m.4: generated from code, never edited by hand
+// OP-65 m.3, TN-112, OP-151 m.4
 #[test]
 fn committed_admin_openapi_matches_the_code() {
     check_file("admin-v1.json", &pretty(&openapi()));
 }
 
-// OP-65, OP-149 m.12, OP-152 m.5 (g): the problem code catalogue is the registry, codes kebab-case
+// OP-65, OP-149 m.12, OP-152 m.5 (g)
 #[test]
 fn committed_problem_catalogue_matches_the_registry() {
     check_file("problems.json", &pretty(&catalogue()));
@@ -64,7 +64,7 @@ fn committed_problem_catalogue_matches_the_registry() {
     }
 }
 
-// TN-113: every manifest row is an operation of the contract, with its surface and scope
+// TN-113
 #[test]
 fn every_manifest_row_is_in_the_contract() {
     let doc = openapi();
@@ -149,8 +149,7 @@ fn walk(node: &Value, path: &str, out: &mut Vec<String>) {
     }
 }
 
-// OP-65 m.4, OP-8: snake_case fields, RFC 3339 times as date-time, 64-bit integers as strings,
-// across every committed API contract
+// OP-65 m.4, OP-8
 #[test]
 fn every_contract_keeps_the_api_formats() {
     let mut problems = Vec::new();

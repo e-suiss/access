@@ -55,8 +55,7 @@ fn refund_v1() -> Draft {
     )
 }
 
-// E12, §8.17.10.2: an authority-relevant parameter without a closed type is refused, with the
-// structured warning the console shows before publishing
+// E12, §8.17.10.2
 #[test]
 fn an_unmappable_relevant_parameter_is_refused_with_its_warning() {
     let d = draft(
@@ -93,7 +92,7 @@ fn an_unmappable_relevant_parameter_is_refused_with_its_warning() {
     ));
 }
 
-// E12: every declared parameter has a class, and no class names an undeclared one
+// E12
 #[test]
 fn every_parameter_is_classified_once() {
     let mut d = refund_v1();
@@ -113,8 +112,7 @@ fn every_parameter_is_classified_once() {
     ));
 }
 
-// E10: a published version is immutable, the next one follows it, and every answer says the
-// existing delegations are unchanged
+// E10
 #[test]
 fn versions_only_move_forward_and_existing_grants_stay() {
     let v1 = publish(PUBLISHER, refund_v1(), None, 1).unwrap();
@@ -139,7 +137,7 @@ fn versions_only_move_forward_and_existing_grants_stay() {
     );
 }
 
-// E11: actions new in a version are named as not included in pinned catalogs
+// E11
 #[test]
 fn new_actions_are_noted_as_not_included() {
     let v1 = publish(PUBLISHER, refund_v1(), None, 1).unwrap();
@@ -160,7 +158,7 @@ fn new_actions_are_noted_as_not_included() {
     assert!(d.removed.is_empty() && d.reserved_removed.is_empty());
 }
 
-// E10: the kept bytes round-trip exactly, so the fingerprint a domain pins is the published one
+// E10
 #[test]
 fn a_publication_round_trips_its_bytes() {
     let mut d = refund_v1();
@@ -178,7 +176,7 @@ fn a_publication_round_trips_its_bytes() {
     assert_eq!(back.fingerprint(), p.fingerprint());
 }
 
-// E11: dropping a reserved flag is shown as broadening
+// E11
 #[test]
 fn a_dropped_reserved_flag_is_shown() {
     let v1 = publish(

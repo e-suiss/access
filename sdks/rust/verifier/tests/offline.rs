@@ -300,7 +300,7 @@ fn metadata_freshness_comes_from_a_witness() {
     let mut fresh =
         access_verifier::metadata::MetadataView::new(metadata(), support::SIGNED_METADATA);
     assert!(!fresh.fresh(NOW, None));
-    // OP-152 m.5 (h): a cosigned checkpoint of other metadata, or of none, refreshes nothing
+    // OP-152 m.5 (h)
     for other in [
         support::checkpoint_of(Some(b"older metadata"), Some(NOW / 1_000 - 60)),
         support::checkpoint_of(None, Some(NOW / 1_000 - 60)),
