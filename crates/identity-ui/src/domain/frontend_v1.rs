@@ -334,6 +334,13 @@ pub const ROUTES: &[Route] = &[
         "proveRecovery",
         "Submits one proof to a recovery attempt.",
     ),
+    live(
+        Owner::N1,
+        Verb::Post,
+        "/v1/recovery/{attempt}/extension",
+        "extendRecovery",
+        "Extends the attempt's recovery contact codes once by 24 hours (OP-153 m.3 (d)).",
+    ),
     lane(
         Owner::N2,
         Verb::Post,

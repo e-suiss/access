@@ -1006,6 +1006,29 @@ impl TenantTx {
         Ok(n == 1)
     }
 
+    /// Extends every live, not yet extended recovery contact code of `attempt` by 24 hours;
+    /// returns how many (OP-153 m.3 (d)).
+    ///
+    /// # Errors
+    /// [`StoreError`].
+    pub async fn extend_contact_codes(&mut self, attempt: [u8; 16]) -> Result<u64, StoreError> {
+        let (tenant, realm) = self.recovery_scope()?;
+        let n = sqlx::query!(
+            "UPDATE access.recovery_evidence
+                SET expires_at = expires_at + interval '24 hours', extended_at = clock_timestamp()
+              WHERE tenant_id = $1 AND realm_id = $2 AND attempt_id = $3
+                AND class = 'recovery_contact' AND consumed_at IS NULL AND extended_at IS NULL
+                AND expires_at > clock_timestamp()",
+            tenant,
+            realm,
+            uuid(attempt),
+        )
+        .execute(&mut *self.tx)
+        .await?
+        .rows_affected();
+        Ok(n)
+    }
+
     /// Counts one wrong try against a code.
     ///
     /// # Errors

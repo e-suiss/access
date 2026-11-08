@@ -326,6 +326,11 @@ pub trait RecoveryTx: SessionTx {
     ) -> impl Future<Output = Result<bool, SessionError>> + Send;
     /// Counts a wrong try.
     fn spend_try(&mut self, id: [u8; 16]) -> impl Future<Output = Result<(), SessionError>> + Send;
+    /// Extends the attempt's live recovery contact codes once by 24 hours; how many.
+    fn extend_contact_codes(
+        &mut self,
+        attempt: [u8; 16],
+    ) -> impl Future<Output = Result<u64, SessionError>> + Send;
     /// Stores a single-use token; `None` for a second live pass of the user (TN-62).
     fn insert_token(
         &mut self,

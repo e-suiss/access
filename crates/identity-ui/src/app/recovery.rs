@@ -238,6 +238,28 @@ where
         }
     }
 
+    /// `POST /v1/recovery/{attempt}/extension`: the contact codes' one 24-hour extension.
+    pub async fn extend_recovery(
+        &self,
+        entry: &RealmEntry,
+        b: &Browser<'_>,
+        c: RecoveryCookies<'_>,
+        attempt: &str,
+    ) -> Reply {
+        let kit = match self.kit(entry).await {
+            Ok(k) => k,
+            Err(r) => return r,
+        };
+        signin!(self, kit, auth, Some(b.ip));
+        match auth
+            .extend_recovery(c.attempt, attempt, b.correlation)
+            .await
+        {
+            Ok(a) => answered(a, 200),
+            Err(e) => failed(&e),
+        }
+    }
+
     /// `POST /v1/recovery/{attempt}`: one proof or step (TN-54).
     pub async fn prove_recovery(
         &self,

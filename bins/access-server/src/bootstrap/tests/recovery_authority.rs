@@ -1195,3 +1195,70 @@ async fn recovery_starts_answer_alike_for_live_unknown_and_deleted_accounts() {
     assert_eq!(to_live, 3);
     assert!(sent.sent().iter().all(|s| s.to != "gone@example.com"));
 }
+
+// 3541, OP-153 m.3 (d), TN-52, CR-40, OP-153 m.3 (gg)
+#[tokio::test]
+async fn a_contact_code_is_extended_once_by_a_day_before_it_runs_out() {
+    let c = console("recovery-extend", false).await;
+    let sent = Recording::default();
+    let app = super::recovery::hosted(&c, sent.clone());
+    let lea = account(&c, "lea@example.com", true).await;
+    let mut me = Page::default();
+    me.jar.insert(
+        String::from("__Host-access-session"),
+        session(&c, lea).await,
+    );
+    let setup = me
+        .call(
+            &app,
+            &Method::PUT,
+            "/v1/account/recovery-contacts",
+            Some(serde_json::json!({
+                "recovery_email": "lea.alt@example.net",
+                "contacts": ["pal@example.org"],
+            })),
+        )
+        .await;
+    assert_eq!(setup.status, StatusCode::OK, "{}", setup.json);
+    let mut p = Page::default();
+    let started = p
+        .call(
+            &app,
+            &Method::POST,
+            "/v1/recovery",
+            Some(start_body("lea@example.com", "recovery_contact")),
+        )
+        .await;
+    assert_eq!(started.status, StatusCode::CREATED, "{}", started.json);
+    let attempt = started.json["attempt"].as_str().unwrap().to_owned();
+    let id = <[u8; 16]>::try_from(b64url_decode(&attempt).unwrap()).unwrap();
+    let expiry = |c: &super::management::Console| {
+        let db = c.w.db.app.clone();
+        let (tenant, realm) = (c.route.tenant, c.route.realm);
+        async move {
+            let mut t = TenantTx::begin(&db, tenant, realm).await.unwrap();
+            let e = t.recovery_evidence(id).await.unwrap();
+            t.commit().await.unwrap();
+            e.into_iter().map(|e| e.expires_ms).collect::<Vec<_>>()
+        }
+    };
+    let before = expiry(&c).await;
+    assert_eq!(before.len(), 1, "one code for the one contact");
+    let path = format!("/v1/recovery/{attempt}/extension");
+    let first = p.call(&app, &Method::POST, &path, None).await;
+    assert_eq!(first.status, StatusCode::OK, "{}", first.json);
+    let after = expiry(&c).await;
+    assert_eq!(after[0] - before[0], 86_400_000);
+    let second = p.call(&app, &Method::POST, &path, None).await;
+    assert_eq!(second.status, StatusCode::OK);
+    assert_eq!(second.json, first.json, "CR-40: the same view either way");
+    assert_eq!(expiry(&c).await, after, "only once");
+    assert_eq!(
+        super::recovery::audited(&c, "recovery.contact_extended")
+            .await
+            .len(),
+        1
+    );
+    let stranger = Page::default().call(&app, &Method::POST, &path, None).await;
+    assert_eq!(stranger.status, StatusCode::GONE);
+}

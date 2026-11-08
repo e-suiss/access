@@ -220,6 +220,10 @@ impl RecoveryTx for PgTx {
         Ok(self.0.consume_recovery_evidence(id, at_ms).await?)
     }
 
+    async fn extend_contact_codes(&mut self, attempt: [u8; 16]) -> Result<u64, SessionError> {
+        Ok(self.0.extend_contact_codes(attempt).await?)
+    }
+
     async fn spend_try(&mut self, id: [u8; 16]) -> Result<(), SessionError> {
         Ok(self.0.spend_recovery_try(id).await?)
     }

@@ -128,6 +128,16 @@ route! {
 }
 
 route! {
+    /// `POST /v1/recovery/{attempt}/extension` (`extendRecovery`).
+    extend(s, entry, b, p, bytes, headers) true {
+        let _ = &bytes;
+        let (attempt, rebind) = recovery_cookies(&headers);
+        let c = RecoveryCookies { attempt: attempt.as_deref(), rebind: rebind.as_deref() };
+        Ok(s.hosted.extend_recovery(&entry, &b, c, param(&p, "attempt")?).await)
+    }
+}
+
+route! {
     /// `POST /v1/recovery/{attempt}` (`proveRecovery`).
     prove(s, entry, b, p, bytes, headers) true {
         let body: StepBody = parse(&bytes)?;

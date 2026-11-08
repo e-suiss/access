@@ -452,6 +452,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/recovery/{attempt}/extension": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Extends the attempt's recovery contact codes once by 24 hours (OP-153 m.3 (d)). */
+        post: operations["extendRecovery"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/recovery/intents/{token}": {
         parameters: {
             query?: never;
@@ -1636,6 +1653,33 @@ export interface operations {
         };
     };
     proveRecovery: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                attempt: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    extendRecovery: {
         parameters: {
             query?: never;
             header?: never;

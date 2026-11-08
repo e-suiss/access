@@ -888,6 +888,45 @@ where
         })))
     }
 
+    /// `POST /v1/recovery/{attempt}/extension` (OP-153 m.3 (d), TN-52): extends the attempt's
+    /// recovery contact codes once by 24 hours, before they run out. The answer is the attempt's
+    /// view whether or not anything was extended (CR-40).
+    ///
+    /// # Errors
+    /// [`SessionError`].
+    pub async fn extend_recovery(
+        &self,
+        handle: Option<&str>,
+        reference: &str,
+        correlation: &str,
+    ) -> Result<Answer, SessionError> {
+        let mut tx = self.begin().await?;
+        let Some(a) = self.attempt_of(&mut tx, handle, reference).await? else {
+            return Ok(Answer::Refused(RECOVERY_GONE));
+        };
+        let ts = tx.transitions(a.id).await?;
+        let v = Self::public_view(&a, &ts)?;
+        if !v.state.terminal() && tx.extend_contact_codes(a.id).await? > 0 {
+            let target = match a.subject {
+                Some(s) => self.external(s)?,
+                None => String::from(super::signin::UNKNOWN),
+            };
+            audit(
+                &mut tx,
+                "recovery.contact_extended",
+                ANONYMOUS,
+                &target,
+                correlation,
+            )
+            .await?;
+        }
+        tx.commit().await?;
+        Ok(Answer::Done(Box::new(Recovered {
+            view: Some(v),
+            ..Recovered::default()
+        })))
+    }
+
     /// The view an attempt shows its browser: before the evidence is met the required AAL is
     /// not told, so a missing account looks like a present one (CR-40).
     fn public_view(a: &AttemptRow, ts: &[TransitionRow]) -> Result<AttemptView, SessionError> {

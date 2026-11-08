@@ -922,6 +922,46 @@
         }
       }
     },
+    "/v1/recovery/{attempt}/extension": {
+      "post": {
+        "operationId": "extendRecovery",
+        "summary": "Extends the attempt's recovery contact codes once by 24 hours (OP-153 m.3 (d)).",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "parameters": [
+          {
+            "name": "attempt",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/recovery/intents/{token}": {
       "post": {
         "operationId": "redeemResetIntent",

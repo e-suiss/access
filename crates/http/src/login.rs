@@ -146,6 +146,10 @@ where
                 post(recovery::prove::<D, K, KI, C, M>),
             )
             .route(
+                &format!("{prefix}/v1/recovery/{{attempt}}/extension"),
+                post(recovery::extend::<D, K, KI, C, M>),
+            )
+            .route(
                 &format!("{prefix}/v1/recovery/intents/{{token}}"),
                 post(recovery::redeem::<D, K, KI, C, M>),
             )
