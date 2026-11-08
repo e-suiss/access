@@ -10,7 +10,7 @@ fn needs_two_sources_that_agree() {
     assert_eq!(c.read(&[3_000, 2_900, 2_950], 2_000), Ok(2_950));
 }
 
-// TI-RT2, U29: Δrecorded_at ≤ Δmonotonic + U
+// TI-RT2, U29
 #[test]
 fn bounds_advance_by_the_monotonic_clock() {
     let mut c = TrustedClock::default();
@@ -20,7 +20,7 @@ fn bounds_advance_by_the_monotonic_clock() {
     assert_eq!(c.read(&[11_300, 11_300], 1_000), Err(TimeError::Monotonic));
 }
 
-// TI-19: a reading may go back; the sequencer keeps recorded_at monotone
+// TI-19
 #[test]
 fn a_backward_reading_is_returned_as_is() {
     let mut c = TrustedClock::default();
@@ -28,7 +28,6 @@ fn a_backward_reading_is_returned_as_is() {
     assert_eq!(c.read(&[9_900, 9_900], 10), Ok(9_900));
 }
 
-// a rejected reading does not move the reference point
 #[test]
 fn rejected_readings_leave_the_last_one() {
     let mut c = TrustedClock::default();
@@ -37,7 +36,7 @@ fn rejected_readings_leave_the_last_one() {
     assert_eq!(c.read(&[10_300, 10_300], 100), Ok(10_300));
 }
 
-// TI-RT2, OP-140 m.5: the log clock may not run ahead of a witness by more than U
+// TI-RT2, OP-140 m.5
 #[test]
 fn witness_time_bounds_the_log_clock() {
     assert_eq!(check_against_witness(10_999, 10, 0), Ok(()));

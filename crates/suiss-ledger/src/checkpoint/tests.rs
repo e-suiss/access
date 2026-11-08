@@ -19,7 +19,7 @@ fn head(leaves: &[&[u8]]) -> Head {
     }
 }
 
-// OP-86, L2-CKP-1: the checkpoint names the size and the RFC 9162 root of the head
+// OP-86, L2-CKP-1
 #[test]
 fn checkpoint_of_the_head() {
     let leaves: [&[u8]; 3] = [b"a", b"b", b"c"];
@@ -39,7 +39,7 @@ fn checkpoint_of_the_head() {
     assert!(of_head("example.com/log", &wrong, vec![]).is_err());
 }
 
-// T21, TI-13: a checkpoint goes to witnesses only after the replica holds it
+// T21, TI-13
 #[test]
 fn mirror_before_witness() {
     let mut p = Publication::default();

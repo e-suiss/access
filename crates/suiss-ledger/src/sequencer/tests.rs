@@ -121,7 +121,7 @@ fn position_overflow_is_an_error() {
     assert_eq!(s.plan(0, &[Rec(1)]).unwrap_err(), PlanError::Overflow);
 }
 
-// §17.1.1 step 9: a refused batch leaves the leader in place
+// §17.1.1 step 9
 #[test]
 fn an_abandoned_batch_keeps_the_leader() {
     let mut s = Sequencer::lead(1, genesis());
@@ -158,9 +158,7 @@ fn op() -> impl proptest::strategy::Strategy<Value = Op> {
 }
 
 proptest::proptest! {
-    // OP-8, TI-2: against a reference model, under any order of outcomes, the head moves only
-    // on the commit of the batch in flight, positions are gapless and never reused, and a
-    // sequencer that stepped down plans nothing again
+    // OP-8, TI-2
     #[test]
     fn the_engine_follows_its_model(ops in proptest::collection::vec(op(), 1..60)) {
         let mut s = Sequencer::lead(1, genesis());
@@ -209,7 +207,6 @@ proptest::proptest! {
                 }
                 Op::Stale => {
                     if let Some(b) = stale.take() {
-                        // an outcome for a batch that is not in flight steps the sequencer down
                         proptest::prop_assert!(s.committed(b).is_err());
                         down = true;
                         in_flight = None;

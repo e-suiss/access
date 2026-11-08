@@ -14,7 +14,7 @@ fn cp(size: u64, root: Hash) -> Checkpoint {
     }
 }
 
-// T21, TI-13: the replica accepts only what its own copy of the leaves proves
+// T21, TI-13
 #[test]
 fn the_replica_checks_size_root_and_consistency() {
     let data: [&[u8]; 4] = [b"a", b"b", b"c", b"d"];
@@ -29,7 +29,7 @@ fn the_replica_checks_size_root_and_consistency() {
     assert_eq!(f.accept(&other, &[]), Err(ReplicaError::Origin));
     f.accept(&cp(3, root(&data[..3])), &[]).unwrap();
     f.append(leaf_hash(data[3])).unwrap();
-    // RFC 9162 §2.1.4 proof from 3 to 4: [c, ab, d] reduced to the nodes the verifier needs
+    // RFC 9162 §2.1.4
     let proof = [
         leaf_hash(data[2]),
         leaf_hash(data[3]),

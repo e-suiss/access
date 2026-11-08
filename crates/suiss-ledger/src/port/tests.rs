@@ -71,7 +71,7 @@ fn store(answer: u8) -> Store {
     }
 }
 
-// TI-6, §17.1.1 steps 10–12: a durable append moves the head and the fence together
+// TI-6, §17.1.1 10–12
 #[test]
 fn a_durable_append_moves_head_and_fence() {
     let mut seq = Sequencer::lead(1, genesis());
@@ -87,7 +87,7 @@ fn a_durable_append_moves_head_and_fence() {
     assert_eq!((pos, seq.head().pos, fence.durable()), (2, 2, Some(2)));
 }
 
-// §17.1.1 step 9: a refused batch keeps the leader and the head
+// §17.1.1 step 9
 #[test]
 fn a_refused_append_keeps_the_leader() {
     let mut seq = Sequencer::lead(1, genesis());
@@ -105,7 +105,7 @@ fn a_refused_append_keeps_the_leader() {
     );
 }
 
-// TI-2, TI-9: a failed append steps the writer down and nothing becomes durable
+// TI-2, TI-9
 #[test]
 fn a_failed_append_steps_down() {
     let mut seq = Sequencer::lead(1, genesis());
@@ -123,7 +123,7 @@ fn a_failed_append_steps_down() {
     ));
 }
 
-// OP-140 m.5: the batch limit can be lowered and not raised
+// OP-140 m.5
 #[test]
 fn batch_parameters_only_narrow() {
     let p = Params::default().with_max_batch(2).unwrap();

@@ -94,7 +94,7 @@ impl TrustedClock {
         let now = sorted.get(mid).copied().ok_or(TimeError::TooFewSources)?;
         if let Some((last_now, last_mono)) = self.last {
             let elapsed = mono.checked_sub(last_mono).ok_or(TimeError::Monotonic)?;
-            // TI-RT2: Δrecorded_at ≤ Δmonotonic + U
+            // TI-RT2
             if now.saturating_sub(last_now) > elapsed.saturating_add(self.uncertainty) {
                 return Err(TimeError::Jump);
             }

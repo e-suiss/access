@@ -4,7 +4,7 @@ const fn c(pos: u64, idx: u32) -> Cursor {
     Cursor { pos, idx }
 }
 
-// TI-6, Work OP-3: an event leaves only once its record is durable
+// TI-6 OP-3
 #[test]
 fn events_wait_for_durability() {
     let mut f = Fence::default();
@@ -18,7 +18,7 @@ fn events_wait_for_durability() {
     assert_eq!(f.releasable(Some(c(2, 0)), &pending), &pending[3..]);
 }
 
-// TI-6: the durable position never goes back
+// TI-6
 #[test]
 fn the_fence_only_moves_forward() {
     let mut f = Fence::at(5);
