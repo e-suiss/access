@@ -43,7 +43,7 @@ fn the_runner_passes_the_reference_and_flags_the_leaky_control() {
     assert!(text.contains("LEAK      adp-timeout"), "{text}");
 }
 
-// OP-150 m.2 L10, CMP-17, X21, TI-9: the Rust PEP SDK passes every case
+// OP-150 m.2 L10, CMP-17, X21, TI-9
 #[test]
 fn the_runner_passes_the_sdk_adapter() {
     let ok = runner(env!("CARGO_BIN_EXE_pep-sdk"));

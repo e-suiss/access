@@ -139,7 +139,7 @@ mod tests {
                 Verdict::Fail { .. }
             ));
         }
-        // §9.9.1 count = 1, §13.4 U55: a repeated presentation must not add an effect
+        // §9.9.1, §13.4 U55
         assert!(matches!(
             judge(Expect::Effect, Some(Outcome::Allow), 2),
             Verdict::Leak { .. }

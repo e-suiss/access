@@ -233,7 +233,7 @@ fn the_cases_cover_every_named_fault_and_a_control_per_mode() {
         c.status_list,
         Some(Reply::List { stale: true, .. })
     )));
-    // §9.9.3 k.2, §13.4 U55, §9.9.1, OP-150 m.3 (s): the token-side faults
+    // §9.9.3 k.2, §13.4 U55, §9.9.1, OP-150 m.3 (s)
     assert!(has(
         &|c| c.dpop == Some(Dpop::Missing) && c.expect == Expect::Deny
     ));

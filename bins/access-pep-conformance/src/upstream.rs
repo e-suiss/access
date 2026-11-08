@@ -516,7 +516,7 @@ impl Upstream {
                     "versions": { "core": 1, "meta_schema": 1 },
                 });
                 if *receipt && let Some(m) = context.as_object_mut() {
-                    // L1-ADP-7: a request without a nonce is a protocol error, 400
+                    // L1-ADP-7
                     let Some((sign1, excerpt)) = self.receipt(body)? else {
                         return Ok((
                             StatusCode::BAD_REQUEST,

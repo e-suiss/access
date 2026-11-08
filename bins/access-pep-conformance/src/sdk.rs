@@ -241,7 +241,7 @@ impl Sdk {
             content_position: None,
             satisfied: &[],
         };
-        // §9.9.1: a bounds token is evaluated against the envelope of this intent
+        // §9.9.1
         let intent: Intent<Door, Open> = unhex(&self.msg.request.envelope)
             .and_then(|b| IntentEnvelope::from_bytes(&b).ok())
             .and_then(|e| Intent::of(e).ok())
