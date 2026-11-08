@@ -764,7 +764,7 @@ async fn a_bulk_job_revokes_grants_one_exercise_each() {
     );
 }
 
-// OP-152 m.9 (d), OP-152 m.7 (b), IA-5, C11
+// OP-152 m.9 (d), OP-152 m.7 (b), IA-5, C11, OP-153 m.10 (e)
 #[tokio::test]
 async fn a_delegated_admin_signs_a_meta_write_on_its_own_holding() {
     let c = console("mgmt-holding", true).await;
@@ -800,12 +800,26 @@ async fn a_delegated_admin_signs_a_meta_write_on_its_own_holding() {
         .and_then(|h| h["since"].as_u64())
         .unwrap();
     let target = c.issue_to_founder().await;
+    let revoke = serde_json::json!({ "grant_revoke": { "grant": b64url_encode(&target.0) } });
+    // OP-153 m.10 (e), OP-152 m.5 (a): an episode that is not the holder's does not resolve
+    let stale = ExerciseBasis::Holding(kmeta::HoldingRef {
+        grant: held,
+        holder: c.root,
+        since: since + 1,
+    });
+    let w = c.meta_write("grant_revoke", revoke.clone(), stale).await;
+    assert_eq!(w.body["decision"], false, "{}", w.body);
+    assert!(
+        w.body.to_string().contains("no-covering-authority")
+            || w.body.to_string().contains("no_covering_authority"),
+        "{}",
+        w.body
+    );
     let holding = ExerciseBasis::Holding(kmeta::HoldingRef {
         grant: held,
         holder: c.root,
         since,
     });
-    let revoke = serde_json::json!({ "grant_revoke": { "grant": b64url_encode(&target.0) } });
     let w = c.meta_write("grant_revoke", revoke, holding).await;
     assert_eq!(w.status, StatusCode::OK, "{}", w.body);
     assert_eq!(w.body["decision"], true, "{}", w.body);

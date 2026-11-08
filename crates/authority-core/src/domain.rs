@@ -315,6 +315,18 @@ fn unresolved_basis() -> Decision {
     }
 }
 
+/// Whether holding `h` names Grant `g` as its holder holds it now: the Party and episode of a
+/// Party holder, the actor's episode of a predicate holder, or a bridged foreign holder
+/// (OP-141 m.20 (c), (d), OP-143 m.13 (e)).
+fn holding_matches(g: &GrantState, h: &meta::HoldingRef, held: Option<u64>, bridged: bool) -> bool {
+    match &g.content.holder {
+        access_kernel::model::SubjectSelector::Party(p) => *p == h.holder && g.since == h.since,
+        access_kernel::model::SubjectSelector::Pred(_) => held == Some(h.since),
+        access_kernel::model::SubjectSelector::Foreign { .. } => bridged && g.since == h.since,
+        access_kernel::model::SubjectSelector::Public => false,
+    }
+}
+
 /// An `authentication` term of the actor raised to the authenticator class of `tier`: a term
 /// that asks for less is read as asking for the class, so a password, an OTP or a push alone
 /// never meets it, CT0 included (§13.7.3, N-45, SEC10, SEC26).
@@ -1554,6 +1566,29 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
                     });
                 }
                 Ok(out) => {
+                    // OP-153 m.10 (e), OP-152 m.5 (a)
+                    if let ExerciseBasis::Holding(h) = req.basis {
+                        let resolves = read::<GrantState>(snapshot, kind::GRANT, &h.grant)
+                            .is_some_and(|g| {
+                                actor.party == h.holder && holding_matches(&g, &h, held, false)
+                            });
+                        let missing = snapshot.missing();
+                        if !missing.is_empty() {
+                            return Pass::Need(missing);
+                        }
+                        if !resolves {
+                            return Pass::Done(Evaluation {
+                                decision: unresolved_basis(),
+                                effects: Vec::new(),
+                                draws: Vec::new(),
+                                releases: Vec::new(),
+                                expansion: false,
+                                action: None,
+                                foreign: None,
+                                agency: Vec::new(),
+                            });
+                        }
+                    }
                     effects = out.effects;
                     releases = out.releases;
                     expansion = out.expansion;
@@ -1621,19 +1656,8 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
                     .map(|hops| (hops, None)),
                 ExerciseBasis::Holding(h) => read::<GrantState>(snapshot, kind::GRANT, &h.grant)
                     .filter(|g| {
-                        // OP-141 m.20 (c), (d)
-                        let holds = match &g.content.holder {
-                            access_kernel::model::SubjectSelector::Party(p) => {
-                                *p == h.holder && g.since == h.since
-                            }
-                            access_kernel::model::SubjectSelector::Pred(_) => held == Some(h.since),
-                            // OP-143 m.13 (e)
-                            access_kernel::model::SubjectSelector::Foreign { .. } => {
-                                foreign_pap.is_some() && g.since == h.since
-                            }
-                            access_kernel::model::SubjectSelector::Public => false,
-                        };
-                        actor.is_some_and(|a| a.party == h.holder) && holds
+                        actor.is_some_and(|a| a.party == h.holder)
+                            && holding_matches(g, &h, held, foreign_pap.is_some())
                     })
                     .and_then(|_| lineage_hops(snapshot, &h.grant))
                     .map(|hops| (hops, Some(h.grant))),
