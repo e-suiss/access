@@ -340,9 +340,7 @@ pub fn terminate_intent(instance: Id, validity: Window) -> Option<IntentEnvelope
 mod tests {
     use super::*;
 
-    // OP-150 m.3 (m), MUST-NEVER-13, XI-18: a platform product is any name within the grammar;
-    // the first-party names are ordinary members of it and no name is refused or favoured for
-    // who owns it
+    // OP-150 m.3 (m), MUST-NEVER-13, XI-18
     #[test]
     fn a_platform_product_is_any_registered_name() {
         // OP-149 m.4, PI-13

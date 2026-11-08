@@ -110,7 +110,7 @@ impl Epochs for Unserved {
 mod tests {
     use super::*;
 
-    // MD-7, OPI-3, OP-150 m.2: the stub is the typed unavailable; a key window is closed
+    // MD-7, OPI-3, OP-150 m.2
     #[test]
     fn unserved_epochs_are_unavailable() {
         let d = Digest([1; 32]);

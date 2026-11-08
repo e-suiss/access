@@ -155,7 +155,7 @@ impl ClaimIngest for Unserved {
 mod tests {
     use super::*;
 
-    // OP-150 m.2, CMP-8: the stub answers with the typed unavailable, never a verdict
+    // OP-150 m.2, CMP-8
     #[test]
     fn unserved_ingest_is_unavailable() {
         let submission = ClaimSubmission {

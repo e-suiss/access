@@ -469,7 +469,7 @@ mod tests {
         }
     }
 
-    // OP-149 m.7, §9.16, §9.9.3 k.6, P50: the shared constructors give the kinds' one shape
+    // OP-149 m.7, §9.16, §9.9.3 k.6, P50
     #[test]
     fn invalidated_and_expired_have_one_shape() {
         let d = Digest([7; 32]);

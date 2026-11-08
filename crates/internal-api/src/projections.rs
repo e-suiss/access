@@ -216,7 +216,7 @@ mod tests {
     use super::*;
     use crate::instances::core_action;
 
-    // OP-64 (A-13): an issued token never prints the token itself
+    // OP-64 (A-13)
     #[test]
     fn issued_tokens_do_not_print_the_token() {
         let issued = IssuedToken {
@@ -233,7 +233,7 @@ mod tests {
         assert!(printed.contains("position: 7"));
     }
 
-    // OP-150 m.2, m.3 (s): the stub is the typed unavailable; the token ceiling is 8 KiB
+    // OP-150 m.2, m.3 (s)
     #[test]
     fn unserved_projection_is_unavailable() {
         let request = TokenProjectionRequest {
