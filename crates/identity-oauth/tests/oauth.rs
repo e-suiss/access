@@ -1215,6 +1215,12 @@ async fn redirect_exactness_errors_and_par() {
     // §10.4.6
     let login = location(&w.authorize(&[("prompt", "login")], Some(&w.cookie)).await);
     assert!(login.contains("reason=reauthenticate"), "{login}");
+    // OP-148, §10.4.6, OP-153 m.3 (g)
+    for cookie in [None, Some(w.cookie.as_str())] {
+        let create = location(&w.authorize(&[("prompt", "create")], cookie).await);
+        assert!(create.starts_with(&format!("{ISSUER}/login?")), "{create}");
+        assert_eq!(query(&create, "reason"), "create");
+    }
 
     let p = Params::new(
         [
