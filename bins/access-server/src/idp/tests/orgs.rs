@@ -861,13 +861,12 @@ async fn an_accepted_invitations_role_is_issued_by_the_inviters_current_authorit
     )
     .await
     .unwrap();
-    let Applied::Written { exercise, .. } = applied else {
-        panic!("{applied:?}");
-    };
+    assert!(matches!(applied, Applied::Written { .. }), "{applied:?}");
     let mut t = TenantTx::begin(&w.db.app, at.0, at.1).await.unwrap();
     let m = t.member(org, bob).await.unwrap().unwrap();
     assert_eq!(m.grant_state.as_deref(), Some("issued"));
-    assert_eq!(m.grant, Some(meta::object_id(&exercise, kind::GRANT, 0).0));
+    let origin = meta::exercise_id(&d, &[0x54; 16]).unwrap();
+    assert_eq!(m.grant, Some(meta::object_id(&origin, kind::GRANT, 0).0));
     t.commit().await.unwrap();
 
     // TN-89 (3)
@@ -929,4 +928,211 @@ async fn membership_claims_wait_for_the_autojoin_cooling() {
     assert!(issued.iter().any(|o| o.subject == carol));
     assert!(issued.iter().any(|o| o.subject == founder));
     assert!(!issued.iter().any(|o| o.subject == bob));
+}
+
+// TN-120, OP-153 m.3 (p), (gg), Ek B 3625
+#[tokio::test]
+async fn the_connection_manager_template_only_drafts_for_seven_days_and_never_delegates() {
+    use access_identity_admin::domain::org::{
+        SSO_MANAGER_ROLE, sso_manager_grant, sso_manager_set,
+    };
+    let (w, at, d, founder) = ready("org-sso").await;
+    let org = create_org(&w, at, d, founder).await;
+    onboard(&w.plane, d, ALICE, ALICE_KEY).await;
+    let bob = account(&w, at, "it@acme.example").await;
+    let mut t = TenantTx::begin(&w.db.app, at.0, at.1).await.unwrap();
+    assert!(
+        access_store::idp::bind_subject_party(&mut t, &bob, &ALICE.0)
+            .await
+            .unwrap()
+    );
+    t.commit().await.unwrap();
+    let define = Payload::AuthoritySetDefine {
+        name: String::from(SSO_MANAGER_ROLE),
+        authority: sso_manager_set("org-sso", ORG),
+    };
+    let meta_anchor = ExerciseBasis::Anchor(meta::meta_anchor(&d));
+    assert!(matches!(
+        w.admin()
+            .meta(at, meta_write(d, 0x70, define, meta_anchor, ROOT_KEY))
+            .await
+            .unwrap(),
+        Applied::Written { .. }
+    ));
+    let idp = meta::object_id(&d, kind::ANCHOR, IDP_ANCHOR);
+    let content = sso_manager_grant(
+        ("org-sso", ORG),
+        ALICE,
+        access_kernel::meta::GrantBasis::Anchor(idp),
+        1,
+        0,
+    );
+    let validity = content.authority.constraints.validity;
+    assert_eq!(validity.until - validity.from, 7 * 86_400_000);
+    assert_eq!(content.authority.delegation.depth, 0);
+    let issued = w
+        .admin()
+        .meta(
+            at,
+            meta_write(
+                d,
+                0x71,
+                Payload::GrantIssue(content.clone()),
+                ExerciseBasis::Anchor(idp),
+                ROOT_KEY,
+            ),
+        )
+        .await
+        .unwrap();
+    let Applied::Written { position, .. } = issued else {
+        panic!("{issued:?}");
+    };
+    let holding = ExerciseBasis::Holding(access_kernel::meta::HoldingRef {
+        grant: meta::object_id(&meta::exercise_id(&d, &[0x71; 16]).unwrap(), kind::GRANT, 0),
+        holder: ALICE,
+        since: position,
+    });
+    let draft = compile(
+        Op::DraftOrganizationConnection,
+        Some(&b64url_encode(&ORG)),
+        &json!({ "issuer": "https://login.acme.example", "client_id": "access" }),
+        &w.ids,
+    )
+    .unwrap();
+    let mut p = as_founder(at, d, draft, 0x72, founder);
+    p.subject = Some(founder);
+    written(&exercise(&w, &p, ROOT_KEY).await.unwrap());
+    let mut t = TenantTx::begin(&w.db.app, at.0, at.1).await.unwrap();
+    let drafts = t.sso_drafts(org).await.unwrap();
+    assert_eq!(drafts.len(), 1);
+    assert_eq!(drafts[0].issuer, "https://login.acme.example");
+    assert_eq!(drafts[0].drafted_by, ROOT.0);
+    t.commit().await.unwrap();
+
+    // TN-120
+    let rename = compile(
+        Op::PatchOrganization,
+        Some(&b64url_encode(&ORG)),
+        &json!({ "display_name": "Taken" }),
+        &w.ids,
+    )
+    .unwrap();
+    let mut p = proposal(at, rename, 0x73, holding, 1);
+    p.subject = Some(bob);
+    assert!(matches!(
+        exercise(&w, &p, ALICE_KEY).await.unwrap(),
+        Applied::NotAllowed { .. }
+    ));
+    let mut onward = content;
+    onward.basis = access_kernel::meta::GrantBasis::Holding(access_kernel::meta::HoldingRef {
+        grant: meta::object_id(&meta::exercise_id(&d, &[0x71; 16]).unwrap(), kind::GRANT, 0),
+        holder: ALICE,
+        since: position,
+    });
+    onward.holder = access_kernel::model::SubjectSelector::Party(Id([0x0e; 16]));
+    assert!(matches!(
+        w.admin()
+            .meta(
+                at,
+                meta_write(d, 0x74, Payload::GrantIssue(onward), holding, ALICE_KEY)
+            )
+            .await
+            .unwrap(),
+        Applied::NotAllowed { .. }
+    ));
+}
+
+// E53, E47, OP-153 m.3 (q), (gg), Ek B 3630, 3631, 3632, 3633
+#[tokio::test]
+async fn a_guardianship_ends_at_majority_and_a_parent_consent_is_never_silence() {
+    use access_identity_account::domain::claim_classes::GuardianshipBasis;
+    use access_identity_admin::app::household::Household;
+    let w = World::new().await;
+    let (tenant, realm, _d) = w.realm("household").await;
+    let at = (tenant, realm);
+    let parent = account(&w, at, "parent@family.example").await;
+    let child = account(&w, at, "child@family.example").await;
+    let adult = account(&w, at, "adult@family.example").await;
+    let v = vault_of(&w, realm);
+    let mut t = TenantTx::begin(&w.db.app, tenant, realm).await.unwrap();
+    assert!(
+        access_store::idp::bind_subject_party(&mut t, &parent, &ROOT.0)
+            .await
+            .unwrap()
+    );
+    assert!(
+        access_store::idp::bind_subject_party(&mut t, &child, &ALICE.0)
+            .await
+            .unwrap()
+    );
+    assert!(
+        access_store::idp::bind_subject_party(&mut t, &adult, &[0x0e; 16])
+            .await
+            .unwrap()
+    );
+    let now = t.server_time().await.unwrap();
+    let year_ms: u64 = 365 * 86_400_000;
+    let born = |years_ago: u16| {
+        let d = access_identity_admin::app::household::today(now);
+        format!(
+            "{:04}-{:02}-{:02}",
+            d.year - years_ago,
+            d.month,
+            d.day.min(28)
+        )
+    };
+    access_identity_account::app::vault::set_profile(&mut t, &v, child, "birthdate", &born(10))
+        .await
+        .unwrap();
+    access_identity_account::app::vault::set_profile(&mut t, &v, adult, "birthdate", &born(30))
+        .await
+        .unwrap();
+    t.commit().await.unwrap();
+    let home = Household {
+        app: &w.db.app,
+        vault: &v,
+    };
+
+    // E53
+    assert!(matches!(
+        home.guardianship(at, (parent, adult), GuardianshipBasis::Parent, "TR")
+            .await,
+        Err(AdminError::Invalid(Invalid::AccountState))
+    ));
+    let g = home
+        .guardianship(at, (parent, child), GuardianshipBasis::Parent, "TR")
+        .await
+        .unwrap();
+    let issued = identity_events(&w.db, "claim.", 2).await;
+    assert!(issued.iter().any(|e| e.kind == "claim.guardianship"));
+    assert!(issued.iter().any(|e| e.kind == "claim.age_range"));
+    let mut t = TenantTx::begin(&w.db.app, tenant, realm).await.unwrap();
+    let row = t.guardianship(g).await.unwrap().unwrap();
+    assert!(row.majority_ms > i64::try_from(now + 7 * year_ms).unwrap());
+    assert!(row.majority_ms < i64::try_from(now + 9 * year_ms).unwrap());
+    t.commit().await.unwrap();
+    assert_eq!(home.majorities(at).await.unwrap(), 0);
+
+    // E53, E47
+    let consent = home.ask(at, g, &[7; 32]).await.unwrap();
+    assert_eq!(
+        home.outcome(at, consent).await.unwrap(),
+        access_kernel::combinator::Outcome::RequireAction
+    );
+    assert!(matches!(
+        home.decide(at, consent, child, true).await,
+        Err(AdminError::Refused(c)) if c == "not-the-guardian"
+    ));
+    assert_eq!(
+        home.decide(at, consent, parent, true).await.unwrap(),
+        access_kernel::combinator::Outcome::Allow
+    );
+    let declined = home.ask(at, g, &[8; 32]).await.unwrap();
+    assert_eq!(
+        home.decide(at, declined, parent, false).await.unwrap(),
+        access_kernel::combinator::Outcome::Deny
+    );
+    let mut t = TenantTx::begin(&w.db.app, tenant, realm).await.unwrap();
+    assert!(t.insert_consent(g, &[9; 32], 73 * 3_600).await.is_err());
+    t.rollback().await.unwrap();
 }

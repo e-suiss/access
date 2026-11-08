@@ -2,6 +2,7 @@
 //! write path (MD-14, EI-25), and the platform product API (OP-149 m.4).
 
 pub mod domains;
+pub mod household;
 pub mod issuer;
 pub mod org_flows;
 pub mod orgs;
