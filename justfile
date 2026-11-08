@@ -569,6 +569,18 @@ bench-ffi iters="5000":
 mutants *args:
     cargo mutants --package esuiss-access-kernel --test-tool nextest {{args}}
 
+# SA-59, OP-152 m.5 (c): mutants on the lines a change touches in the Kernel and the authority
+# core's decision paths, against `base` (a missed or timed-out mutant fails)
+mutants-diff base="origin/main":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    diff="$(mktemp)"
+    git diff "{{base}}...HEAD" -- crates/kernel/src crates/authority-core/src \
+      ':(exclude)crates/authority-core/src/adapters' ':(exclude)crates/authority-core/src/adapters.rs' > "$diff"
+    if [ ! -s "$diff" ]; then echo "no Kernel or authority-core decision change"; exit 0; fi
+    DATABASE_URL="${DATABASE_URL:-$(scripts/pg-local.sh up)}" cargo mutants --in-diff "$diff" \
+      --package esuiss-access-kernel --package access-authority-core --test-tool nextest
+
 # SA-23, §14.5, OP-127 m.1: every test binary runs (--no-fail-fast); reports that are not defects are
 # suppressed with their reasons in scripts/sanitizers/; frame pointers give the leak reports whole stacks
 sanitize kind:
