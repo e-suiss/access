@@ -112,10 +112,16 @@ pub struct SessionRow {
     pub assurance: Vec<u8>,
     /// End time, when ended.
     pub ended_ms: Option<i64>,
-    /// `logout`, `epoch` or `admin`.
+    /// `logout`, `epoch`, `admin`, `password`, `device`, `recovery` or `ended` (OP-153 m.3 (y)).
     pub end_reason: Option<String>,
     /// When the session last stepped up, if it did (OP-149 m.8).
     pub step_up_ms: Option<i64>,
+    /// The DBSC key it is tied to, an uncompressed P-256 point (TN-33).
+    pub dbsc_key: Option<Vec<u8>>,
+    /// The pending DBSC challenge's digest and end.
+    pub dbsc_challenge: Option<(Vec<u8>, i64)>,
+    /// The bound cookie's digest and end.
+    pub dbsc_cookie: Option<(Vec<u8>, i64)>,
 }
 
 /// A stored device marker.
@@ -129,6 +135,25 @@ pub struct MarkerRow {
     pub expires_ms: i64,
     /// Revocation time.
     pub revoked_ms: Option<i64>,
+}
+
+/// A CSP violation report of a hosted page (OP-153 m.3 (t), IDP-36).
+#[derive(Clone, Copy, Debug)]
+pub struct CspReport<'a> {
+    /// When it arrived.
+    pub received_ms: i64,
+    /// When it lapses (30 days on).
+    pub expires_ms: i64,
+    /// `enforce` or `report`.
+    pub disposition: &'a str,
+    /// The violated directive.
+    pub directive: &'a str,
+    /// The blocked origin, or a keyword (`inline`, `eval`).
+    pub blocked: &'a str,
+    /// The page's path.
+    pub page_path: &'a str,
+    /// The reporting address's keyed pseudonym.
+    pub source_pseudonym: &'a [u8; 32],
 }
 
 /// A subject whose `session_epoch` moved.
@@ -166,6 +191,11 @@ struct SessionRecord {
     ended_ms: Option<i64>,
     end_reason: Option<String>,
     step_up_ms: Option<i64>,
+    dbsc_key: Option<Vec<u8>>,
+    dbsc_challenge: Option<Vec<u8>>,
+    dbsc_challenge_expires_ms: Option<i64>,
+    dbsc_cookie_hash: Option<Vec<u8>>,
+    dbsc_cookie_expires_ms: Option<i64>,
 }
 
 impl SessionRecord {
@@ -186,6 +216,9 @@ impl SessionRecord {
             ended_ms: self.ended_ms,
             end_reason: self.end_reason,
             step_up_ms: self.step_up_ms,
+            dbsc_key: self.dbsc_key,
+            dbsc_challenge: self.dbsc_challenge.zip(self.dbsc_challenge_expires_ms),
+            dbsc_cookie: self.dbsc_cookie_hash.zip(self.dbsc_cookie_expires_ms),
         }
     }
 }
@@ -370,7 +403,8 @@ impl TenantTx {
             "SELECT l.session_id, l.subject_id, l.session_epoch, s.session_epoch AS subject_epoch,
                     s.status AS subject_status, l.keep_signed_in, l.created_ms, l.auth_time_ms,
                     l.last_seen_ms, l.idle_ms, l.expires_ms, l.assurance, l.ended_ms, l.end_reason,
-                    l.step_up_ms
+                    l.step_up_ms, l.dbsc_key, l.dbsc_challenge, l.dbsc_challenge_expires_ms,
+                    l.dbsc_cookie_hash, l.dbsc_cookie_expires_ms
                FROM access.login_sessions l
                JOIN access.identity_subjects s
                  ON s.tenant_id = l.tenant_id AND s.realm_id = l.realm_id AND s.subject_id = l.subject_id
@@ -396,7 +430,8 @@ impl TenantTx {
             "SELECT l.session_id, l.subject_id, l.session_epoch, s.session_epoch AS subject_epoch,
                     s.status AS subject_status, l.keep_signed_in, l.created_ms, l.auth_time_ms,
                     l.last_seen_ms, l.idle_ms, l.expires_ms, l.assurance, l.ended_ms, l.end_reason,
-                    l.step_up_ms
+                    l.step_up_ms, l.dbsc_key, l.dbsc_challenge, l.dbsc_challenge_expires_ms,
+                    l.dbsc_cookie_hash, l.dbsc_cookie_expires_ms
                FROM access.login_sessions l
                JOIN access.identity_subjects s
                  ON s.tenant_id = l.tenant_id AND s.realm_id = l.realm_id AND s.subject_id = l.subject_id
@@ -425,7 +460,8 @@ impl TenantTx {
             "SELECT l.session_id, l.subject_id, l.session_epoch, s.session_epoch AS subject_epoch,
                     s.status AS subject_status, l.keep_signed_in, l.created_ms, l.auth_time_ms,
                     l.last_seen_ms, l.idle_ms, l.expires_ms, l.assurance, l.ended_ms, l.end_reason,
-                    l.step_up_ms
+                    l.step_up_ms, l.dbsc_key, l.dbsc_challenge, l.dbsc_challenge_expires_ms,
+                    l.dbsc_cookie_hash, l.dbsc_cookie_expires_ms
                FROM access.login_sessions l
                JOIN access.identity_subjects s
                  ON s.tenant_id = l.tenant_id AND s.realm_id = l.realm_id AND s.subject_id = l.subject_id
@@ -510,6 +546,167 @@ impl TenantTx {
         .await?;
         self.queue_backchannel_logout(&notify).await?;
         Ok(true)
+    }
+
+    /// Sets a live session's pending DBSC challenge (TN-33); false when it is ended.
+    ///
+    /// # Errors
+    /// [`StoreError`].
+    pub async fn dbsc_challenge(
+        &mut self,
+        id: [u8; 16],
+        challenge: &[u8; 32],
+        expires_ms: i64,
+    ) -> Result<bool, StoreError> {
+        let (tenant, realm) = self.realm_scope()?;
+        let n = sqlx::query!(
+            "UPDATE access.login_sessions SET dbsc_challenge = $4, dbsc_challenge_expires_ms = $5
+              WHERE tenant_id = $1 AND realm_id = $2 AND session_id = $3 AND ended_ms IS NULL",
+            tenant,
+            realm,
+            uuid(id),
+            challenge.as_slice(),
+            expires_ms,
+        )
+        .execute(&mut *self.tx)
+        .await?
+        .rows_affected();
+        Ok(n == 1)
+    }
+
+    /// Ties a live, untied session to its DBSC key, uses up the challenge and sets the first
+    /// bound cookie (TN-33); false when it is ended or already tied.
+    ///
+    /// # Errors
+    /// [`StoreError`].
+    pub async fn dbsc_bind(
+        &mut self,
+        id: [u8; 16],
+        key: &[u8; 65],
+        now_ms: i64,
+        cookie_hash: &[u8; 32],
+        cookie_expires_ms: i64,
+    ) -> Result<bool, StoreError> {
+        let (tenant, realm) = self.realm_scope()?;
+        let n = sqlx::query!(
+            "UPDATE access.login_sessions
+                SET dbsc_key = $4, dbsc_bound_ms = $5, dbsc_challenge = NULL,
+                    dbsc_challenge_expires_ms = NULL, dbsc_cookie_hash = $6,
+                    dbsc_cookie_expires_ms = $7
+              WHERE tenant_id = $1 AND realm_id = $2 AND session_id = $3 AND ended_ms IS NULL
+                AND dbsc_key IS NULL",
+            tenant,
+            realm,
+            uuid(id),
+            key.as_slice(),
+            now_ms,
+            cookie_hash.as_slice(),
+            cookie_expires_ms,
+        )
+        .execute(&mut *self.tx)
+        .await?
+        .rows_affected();
+        Ok(n == 1)
+    }
+
+    /// Replaces a tied session's bound cookie after a proof and uses up the challenge (TN-33);
+    /// false when it is ended or not tied.
+    ///
+    /// # Errors
+    /// [`StoreError`].
+    pub async fn dbsc_refresh(
+        &mut self,
+        id: [u8; 16],
+        cookie_hash: &[u8; 32],
+        cookie_expires_ms: i64,
+    ) -> Result<bool, StoreError> {
+        let (tenant, realm) = self.realm_scope()?;
+        let n = sqlx::query!(
+            "UPDATE access.login_sessions
+                SET dbsc_challenge = NULL, dbsc_challenge_expires_ms = NULL,
+                    dbsc_cookie_hash = $4, dbsc_cookie_expires_ms = $5
+              WHERE tenant_id = $1 AND realm_id = $2 AND session_id = $3 AND ended_ms IS NULL
+                AND dbsc_key IS NOT NULL",
+            tenant,
+            realm,
+            uuid(id),
+            cookie_hash.as_slice(),
+            cookie_expires_ms,
+        )
+        .execute(&mut *self.tx)
+        .await?
+        .rows_affected();
+        Ok(n == 1)
+    }
+
+    /// The device Instance a session's active binding names, if any (OP-149 m.32, X36).
+    ///
+    /// # Errors
+    /// [`StoreError`].
+    pub async fn session_instance(
+        &mut self,
+        session: [u8; 16],
+    ) -> Result<Option<[u8; 16]>, StoreError> {
+        let (tenant, realm) = self.realm_scope()?;
+        let found = sqlx::query_scalar!(
+            r#"SELECT instance_id AS "instance_id!" FROM (
+                 SELECT instance_id, 0 AS rank FROM access.session_instances
+                  WHERE tenant_id = $1 AND realm_id = $2 AND session_id = $3 AND status = 'active'
+                 UNION ALL
+                 SELECT instance_id, 1 AS rank FROM access.device_keys
+                  WHERE tenant_id = $1 AND realm_id = $2 AND session_id = $3 AND status = 'active'
+               ) b ORDER BY rank LIMIT 1"#,
+            tenant,
+            realm,
+            uuid(session),
+        )
+        .fetch_optional(&mut *self.tx)
+        .await?;
+        found
+            .map(|v| <[u8; 16]>::try_from(v).map_err(|_| StoreError::Corrupt))
+            .transpose()
+    }
+
+    /// How many CSP reports the realm received since `since_ms` (OP-153 m.3 (t)).
+    ///
+    /// # Errors
+    /// [`StoreError`].
+    pub async fn csp_reports_since(&mut self, since_ms: i64) -> Result<i64, StoreError> {
+        let (tenant, realm) = self.realm_scope()?;
+        Ok(sqlx::query_scalar!(
+            r#"SELECT count(*) AS "n!" FROM access.csp_reports
+                WHERE tenant_id = $1 AND realm_id = $2 AND received_ms > $3"#,
+            tenant,
+            realm,
+            since_ms,
+        )
+        .fetch_one(&mut *self.tx)
+        .await?)
+    }
+
+    /// Stores one CSP report (OP-153 m.3 (t), IDP-36).
+    ///
+    /// # Errors
+    /// [`StoreError`].
+    pub async fn insert_csp_report(&mut self, r: &CspReport<'_>) -> Result<(), StoreError> {
+        let (tenant, realm) = self.realm_scope()?;
+        sqlx::query!(
+            "INSERT INTO access.csp_reports (tenant_id, realm_id, received_ms, expires_ms,
+                    disposition, directive, blocked, page_path, source_pseudonym)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
+            tenant,
+            realm,
+            r.received_ms,
+            r.expires_ms,
+            r.disposition,
+            r.directive,
+            r.blocked,
+            r.page_path,
+            r.source_pseudonym.as_slice(),
+        )
+        .execute(&mut *self.tx)
+        .await?;
+        Ok(())
     }
 
     /// Carries a live session from epoch `from` to epoch `to` with a new authentication

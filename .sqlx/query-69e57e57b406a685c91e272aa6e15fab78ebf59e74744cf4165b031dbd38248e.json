@@ -1,0 +1,25 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT instance_id AS \"instance_id!\" FROM (\n                 SELECT instance_id, 0 AS rank FROM access.session_instances\n                  WHERE tenant_id = $1 AND realm_id = $2 AND session_id = $3 AND status = 'active'\n                 UNION ALL\n                 SELECT instance_id, 1 AS rank FROM access.device_keys\n                  WHERE tenant_id = $1 AND realm_id = $2 AND session_id = $3 AND status = 'active'\n               ) b ORDER BY rank LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "instance_id!",
+        "type_info": "Bytea",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "69e57e57b406a685c91e272aa6e15fab78ebf59e74744cf4165b031dbd38248e"
+}

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT l.session_id, l.subject_id, l.session_epoch, s.session_epoch AS subject_epoch,\n                    s.status AS subject_status, l.keep_signed_in, l.created_ms, l.auth_time_ms,\n                    l.last_seen_ms, l.idle_ms, l.expires_ms, l.assurance, l.ended_ms, l.end_reason,\n                    l.step_up_ms\n               FROM access.login_sessions l\n               JOIN access.identity_subjects s\n                 ON s.tenant_id = l.tenant_id AND s.realm_id = l.realm_id AND s.subject_id = l.subject_id\n              WHERE l.tenant_id = $1 AND l.realm_id = $2 AND l.cookie_hash = $3\n              FOR UPDATE OF l",
+  "query": "SELECT l.session_id, l.subject_id, l.session_epoch, s.session_epoch AS subject_epoch,\n                    s.status AS subject_status, l.keep_signed_in, l.created_ms, l.auth_time_ms,\n                    l.last_seen_ms, l.idle_ms, l.expires_ms, l.assurance, l.ended_ms, l.end_reason,\n                    l.step_up_ms, l.dbsc_key, l.dbsc_challenge, l.dbsc_challenge_expires_ms,\n                    l.dbsc_cookie_hash, l.dbsc_cookie_expires_ms\n               FROM access.login_sessions l\n               JOIN access.identity_subjects s\n                 ON s.tenant_id = l.tenant_id AND s.realm_id = l.realm_id AND s.subject_id = l.subject_id\n              WHERE l.tenant_id = $1 AND l.realm_id = $2 AND l.subject_id = $3 AND l.ended_ms IS NULL\n              ORDER BY l.session_id DESC",
   "describe": {
     "columns": [
       {
@@ -167,13 +167,68 @@
             "name": "step_up_ms"
           }
         }
+      },
+      {
+        "ordinal": 15,
+        "name": "dbsc_key",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.login_sessions",
+            "name": "dbsc_key"
+          }
+        }
+      },
+      {
+        "ordinal": 16,
+        "name": "dbsc_challenge",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.login_sessions",
+            "name": "dbsc_challenge"
+          }
+        }
+      },
+      {
+        "ordinal": 17,
+        "name": "dbsc_challenge_expires_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.login_sessions",
+            "name": "dbsc_challenge_expires_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 18,
+        "name": "dbsc_cookie_hash",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.login_sessions",
+            "name": "dbsc_cookie_hash"
+          }
+        }
+      },
+      {
+        "ordinal": 19,
+        "name": "dbsc_cookie_expires_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.login_sessions",
+            "name": "dbsc_cookie_expires_ms"
+          }
+        }
       }
     ],
     "parameters": {
       "Left": [
         "Uuid",
         "Uuid",
-        "Bytea"
+        "Uuid"
       ]
     },
     "nullable": [
@@ -191,8 +246,13 @@
       false,
       true,
       true,
+      true,
+      true,
+      true,
+      true,
+      true,
       true
     ]
   },
-  "hash": "adf8ebd3dfd1439523cce7e3f1d5775572be3f66d168292c72dbb5729ba36d6b"
+  "hash": "6bc2185f8376cbf46fa78b1e666f98b7bc11042cf2d131717477b147be62311c"
 }

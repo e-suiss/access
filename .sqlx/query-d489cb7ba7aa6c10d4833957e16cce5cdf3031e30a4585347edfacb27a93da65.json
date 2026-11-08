@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.csp_reports (tenant_id, realm_id, received_ms, expires_ms,\n                    disposition, directive, blocked, page_path, source_pseudonym)\n             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Int8",
+        "Int8",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d489cb7ba7aa6c10d4833957e16cce5cdf3031e30a4585347edfacb27a93da65"
+}

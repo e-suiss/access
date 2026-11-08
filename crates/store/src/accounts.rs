@@ -136,6 +136,19 @@ pub struct CredentialRow {
     pub sealed: SealedSecret,
 }
 
+/// N5: one active sign-in method as S11 lists it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MethodRow {
+    /// Internal id.
+    pub id: [u8; 16],
+    /// `password`, `webauthn`, `totp` or `recovery_code`.
+    pub kind: String,
+    /// When it was added, Unix ms.
+    pub created_ms: i64,
+    /// For a passkey: whether it is synced (backup eligible).
+    pub synced: Option<bool>,
+}
+
 /// Outcome of removing a credential.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Revoke {
@@ -277,19 +290,33 @@ impl TenantTx {
     /// # Errors
     /// [`StoreError`].
     pub async fn end_sessions(&mut self, id: [u8; 16]) -> Result<Option<i64>, StoreError> {
+        self.end_sessions_because(id, "epoch").await
+    }
+
+    /// [`Self::end_sessions`], with the reason the signed-out page reads: `epoch`, `password`
+    /// or `recovery` (OP-153 m.3 (y)).
+    ///
+    /// # Errors
+    /// [`StoreError`].
+    pub async fn end_sessions_because(
+        &mut self,
+        id: [u8; 16],
+        reason: &str,
+    ) -> Result<Option<i64>, StoreError> {
         let Some(epoch) = self.bump_session_epoch(id).await? else {
             return Ok(None);
         };
         let (tenant, realm) = self.scope()?;
         sqlx::query!(
             "UPDATE access.login_sessions
-                SET ended_ms = (extract(epoch FROM clock_timestamp()) * 1000)::bigint, end_reason = 'epoch'
+                SET ended_ms = (extract(epoch FROM clock_timestamp()) * 1000)::bigint, end_reason = $5
               WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND ended_ms IS NULL
                 AND session_epoch < $4",
             tenant,
             realm,
             uuid(id),
             epoch,
+            reason,
         )
         .execute(&mut *self.tx)
         .await?;
@@ -725,6 +752,44 @@ impl TenantTx {
         .fetch_one(&mut *self.tx)
         .await?;
         Ok(*id.as_bytes())
+    }
+
+    /// N5: the subject's active sign-in methods for S11, oldest first (TN-99, OP-148): kind,
+    /// creation time and, for a passkey, whether it is synced (backup eligible).
+    ///
+    /// # Errors
+    /// [`StoreError`].
+    pub async fn sign_in_methods(
+        &mut self,
+        subject: [u8; 16],
+    ) -> Result<Vec<MethodRow>, StoreError> {
+        let (tenant, realm) = self.scope()?;
+        let rows = sqlx::query!(
+            r#"SELECT c.credential_id, c.kind,
+                      (extract(epoch FROM c.created_at) * 1000)::bigint AS "created_ms!",
+                      w.backup_eligible AS "backup_eligible?"
+                 FROM access.identity_credentials c
+                 LEFT JOIN access.webauthn_credentials w
+                   ON w.tenant_id = c.tenant_id AND w.realm_id = c.realm_id
+                  AND w.credential_id = c.credential_id
+                WHERE c.tenant_id = $1 AND c.realm_id = $2 AND c.subject_id = $3
+                  AND c.status = 'active'
+                ORDER BY c.credential_id"#,
+            tenant,
+            realm,
+            uuid(subject),
+        )
+        .fetch_all(&mut *self.tx)
+        .await?;
+        Ok(rows
+            .into_iter()
+            .map(|r| MethodRow {
+                id: *r.credential_id.as_bytes(),
+                kind: r.kind,
+                created_ms: r.created_ms,
+                synced: r.backup_eligible,
+            })
+            .collect())
     }
 
     /// The subject's active credentials of `kind`, oldest first.
