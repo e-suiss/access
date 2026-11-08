@@ -220,7 +220,7 @@ async fn commit<E: Env>(
             resource,
             ..
         } => (exercise_id, position, resource),
-        Written::NotAllowed => return Err(&codes::EXERCISE_NOT_ALLOWED),
+        Written::NotAllowed | Written::Accepted { .. } => return Err(&codes::EXERCISE_NOT_ALLOWED),
         Written::Rejected(code) => return Err(code),
     };
     let mut out = Map::new();

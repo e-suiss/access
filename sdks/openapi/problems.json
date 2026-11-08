@@ -709,6 +709,27 @@
       "status": 400,
       "title": "Bad Request",
       "description": "An audit stream rendering other than ocsf, cef or set (OP-41)."
+    },
+    {
+      "code": "owner-only",
+      "type": "urn:suiss:access:problem:owner-only",
+      "status": 403,
+      "title": "Forbidden",
+      "description": "Only an owner proposes or completes an ownership handover, and only its own client signs it (TN-91)."
+    },
+    {
+      "code": "handover-waiting",
+      "type": "urn:suiss:access:problem:handover-waiting",
+      "status": 409,
+      "title": "Conflict",
+      "description": "The handover waits for its recipient's contribution or its 24-hour delay (TN-91)."
+    },
+    {
+      "code": "not-the-handover",
+      "type": "urn:suiss:access:problem:not-the-handover",
+      "status": 409,
+      "title": "Conflict",
+      "description": "The signed change is not this organization's handover to that recipient (TN-91)."
     }
   ]
 }

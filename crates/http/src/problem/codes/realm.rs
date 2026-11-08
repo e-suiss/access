@@ -448,3 +448,25 @@ pub const INVALID_CONNECTION_DRAFT: Code = code(
     "Bad Request",
     "A connection draft whose issuer is not an https URL or whose client id is empty or too long (TN-120).",
 );
+/// Only an owner proposes or completes an ownership handover, and only its own client signs it
+/// (TN-91).
+pub const OWNER_ONLY: Code = code(
+    "owner-only",
+    403,
+    "Forbidden",
+    "Only an owner proposes or completes an ownership handover, and only its own client signs it (TN-91).",
+);
+/// The handover waits for its recipient's contribution or its 24-hour delay (TN-91).
+pub const HANDOVER_WAITING: Code = code(
+    "handover-waiting",
+    409,
+    "Conflict",
+    "The handover waits for its recipient's contribution or its 24-hour delay (TN-91).",
+);
+/// The signed change is not this organization's handover to that recipient (TN-91).
+pub const NOT_THE_HANDOVER: Code = code(
+    "not-the-handover",
+    409,
+    "Conflict",
+    "The signed change is not this organization's handover to that recipient (TN-91).",
+);

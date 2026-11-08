@@ -459,6 +459,9 @@ pub const CODES: &[Code] = &[
     codes::realm::DOMAIN_NOT_VERIFIED,
     codes::realm::INVALID_CONNECTION_DRAFT,
     codes::realm::INVALID_AUDIT_FORMAT,
+    codes::realm::OWNER_ONLY,
+    codes::realm::HANDOVER_WAITING,
+    codes::realm::NOT_THE_HANDOVER,
 ];
 
 /// The type URI of `code`.

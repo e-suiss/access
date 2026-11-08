@@ -46,11 +46,42 @@ pub const JOB_CONTEXT: &str = "access/admin-job/v1";
 const IF_MATCH: &str = "if_match";
 
 /// The job operations that are core meta-action writes (E17), with their meta-action.
-pub const META_OPERATIONS: [(&str, &str); 3] = [
+pub const META_OPERATIONS: [(&str, &str); 5] = [
     ("revokeGrant", "grant_revoke"),
     ("amendGrant", "grant_amend"),
     ("issueRoleGrant", "grant_issue"),
+    ("proposeOwnershipHandover", "anchor_transfer"),
+    ("completeOwnershipHandover", "anchor_transfer"),
 ];
+
+fn id16(text: &str) -> Option<[u8; 16]> {
+    b64url_decode(text)
+        .ok()
+        .and_then(|b| <[u8; 16]>::try_from(b.as_slice()).ok())
+}
+
+/// The record an item names by its key (TN-89 (3), TN-91): `org:account` for a role Grant,
+/// `org:from:to` for a handover's proposal and `org:handover` for its completion.
+#[must_use]
+pub fn meta_target(operation: &str, key: &str) -> Option<crate::api::ports::MetaTarget> {
+    use crate::api::ports::MetaTarget;
+    let mut parts = key.split(':');
+    let org = id16(parts.next()?)?;
+    let target = match operation {
+        "issueRoleGrant" => {
+            let (_, account) = role_key(key)?;
+            MetaTarget::Role(org, account.to_owned())
+        }
+        "proposeOwnershipHandover" => {
+            let from = parts.next().filter(|a| !a.is_empty())?;
+            let to = parts.next().filter(|a| !a.is_empty())?;
+            MetaTarget::ProposeHandover(org, from.to_owned(), to.to_owned())
+        }
+        "completeOwnershipHandover" => MetaTarget::CompleteHandover(org, id16(parts.next()?)?),
+        _ => return None,
+    };
+    (operation == "issueRoleGrant" || parts.next().is_none()).then_some(target)
+}
 
 /// The key of an `issueRoleGrant` item: the organization's id and the member's `account_id`
 /// (TN-89 (3)).
@@ -187,7 +218,7 @@ fn meta_item(op: &mut Map<String, Value>) -> Result<Option<Item>, &'static Code>
     };
     op.remove("operation");
     let key = match op.remove("key") {
-        Some(Value::String(k)) if k.len() <= 64 => k,
+        Some(Value::String(k)) if k.len() <= 160 => k,
         _ => return Err(&codes::realm::INVALID_JOB),
     };
     let Some(Value::Object(mut body)) = op.remove("body") else {
@@ -208,7 +239,20 @@ fn meta_item(op: &mut Map<String, Value>) -> Result<Option<Item>, &'static Code>
     let decoded = crate::adp::domain::decode_context(&raw, 1 << 20)
         .map_err(|_| &codes::realm::INVALID_JOB)?;
     let request = decoded.request;
-    let (grant, named) = if *action == "grant_issue" {
+    let (grant, named) = if *action == "anchor_transfer" {
+        // TN-91
+        meta_target(operation, &key).ok_or(&codes::realm::INVALID_JOB)?;
+        if !matches!(
+            &request.payload,
+            Some(access_kernel::meta::Payload::AnchorTransfer { .. })
+        ) {
+            return Err(&codes::realm::JOB_OPERATION_NOT_ALLOWED);
+        }
+        (
+            access_kernel::model::Id([0; 16]),
+            access_kernel::model::Id([0; 16]),
+        )
+    } else if *action == "grant_issue" {
         // TN-89 (3)
         role_key(&key).ok_or(&codes::realm::INVALID_JOB)?;
         if !matches!(
@@ -408,12 +452,10 @@ async fn meta_one<E: Env>(
     request.domain = ctx.domain;
     let write = crate::api::ports::MetaWrite {
         slug: slug(ctx),
-        role: item
+        target: item
             .key
             .as_deref()
-            .filter(|_| item.operation == "issueRoleGrant")
-            .and_then(role_key)
-            .map(|(o, a)| (o, a.to_owned())),
+            .and_then(|k| meta_target(item.operation, k)),
         request,
     };
     match ctx.api.env().realm().exercise(write, caller).await {
@@ -428,6 +470,10 @@ async fn meta_one<E: Env>(
         },
         Ok(crate::api::ports::Written::NotAllowed) => {
             refused(index, item, &codes::EXERCISE_NOT_ALLOWED)
+        }
+        // TN-91
+        Ok(crate::api::ports::Written::Accepted { .. }) => {
+            outcome(index, item, "accepted", 202, None)
         }
         Ok(crate::api::ports::Written::Rejected(code)) => refused(index, item, code),
         Err(_) => refused(index, item, &codes::UNAVAILABLE),
@@ -553,7 +599,7 @@ async fn run<E: Env>(ctx: Ctx<E>, id: String, job: Submitted) {
         } else {
             one(&ctx, index, item, actor).await
         };
-        if result.status == "committed" {
+        if result.status == "committed" || result.status == "accepted" {
             committed = committed.saturating_add(1);
         } else if job.mode == "sequential" {
             blocked = true;
@@ -778,5 +824,42 @@ mod tests {
             parse(&body(&json!([no_ais]))).err(),
             Some(&codes::AIS_REQUIRED)
         );
+    }
+
+    // TN-91, TN-89 (3): a meta item's key names the record it belongs to, and nothing else
+    #[test]
+    fn a_meta_items_key_names_its_role_or_handover() {
+        use crate::api::ports::MetaTarget;
+        let org = access_kernel::json::b64url_encode(&[0x0a; 16]);
+        let h = access_kernel::json::b64url_encode(&[0x0b; 16]);
+        assert_eq!(
+            meta_target("issueRoleGrant", &format!("{org}:usr_1")),
+            Some(MetaTarget::Role([0x0a; 16], String::from("usr_1")))
+        );
+        assert_eq!(
+            meta_target("proposeOwnershipHandover", &format!("{org}:usr_1:usr_2")),
+            Some(MetaTarget::ProposeHandover(
+                [0x0a; 16],
+                String::from("usr_1"),
+                String::from("usr_2")
+            ))
+        );
+        assert_eq!(
+            meta_target("completeOwnershipHandover", &format!("{org}:{h}")),
+            Some(MetaTarget::CompleteHandover([0x0a; 16], [0x0b; 16]))
+        );
+        assert_eq!(
+            meta_target("proposeOwnershipHandover", &format!("{org}:usr_1")),
+            None
+        );
+        assert_eq!(
+            meta_target("proposeOwnershipHandover", &format!("{org}:a:b:c")),
+            None
+        );
+        assert_eq!(
+            meta_target("completeOwnershipHandover", &format!("{org}:x")),
+            None
+        );
+        assert_eq!(meta_target("revokeGrant", &org), None);
     }
 }

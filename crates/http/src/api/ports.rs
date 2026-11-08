@@ -291,6 +291,12 @@ pub enum Written {
         /// or a hook's or webhook's verification key (TN-135, TN-136).
         secret: Option<String>,
     },
+    /// Recorded by the identity plane and not yet decided: an ownership handover's proposal
+    /// waits for its recipient and its delay (TN-91).
+    Accepted {
+        /// The identity-plane record, base64url.
+        record: String,
+    },
     /// Decided and not allowed; nothing changed.
     NotAllowed,
     /// Refused before a decision with this problem; nothing changed.
@@ -303,11 +309,24 @@ pub enum Written {
 pub struct MetaWrite {
     /// The realm's slug.
     pub slug: String,
-    /// For an accepted invitation's role Grant, the organization's id and the member's
-    /// `account_id` (TN-89 (3)).
-    pub role: Option<([u8; 16], String)>,
+    /// What the write is for beyond its meta-action, when the identity plane keeps a record of
+    /// it.
+    pub target: Option<MetaTarget>,
     /// The request: domain, nonce, intent, payload, basis and capacity.
     pub request: access_authority_core::domain::Request,
+}
+
+/// The identity-plane record a meta-action item of a job belongs to.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum MetaTarget {
+    /// An accepted invitation's role Grant: the organization's id and the member's
+    /// `account_id` (TN-89 (3)).
+    Role([u8; 16], String),
+    /// An ownership handover's proposal: the organization's Party and the proposing owner's
+    /// and the recipient's `account_id` (TN-91).
+    ProposeHandover([u8; 16], String, String),
+    /// A contributed handover's completion: the organization's Party and the handover (TN-91).
+    CompleteHandover([u8; 16], [u8; 16]),
 }
 
 /// What a draft found.
@@ -565,7 +584,7 @@ pub struct JobItem {
     pub operation: String,
     /// The natural key it names.
     pub key: Option<String>,
-    /// `pending`, `committed`, `not_allowed`, `rejected`, `throttled`, `failed_dependency` or
+    /// `pending`, `committed`, `accepted`, `not_allowed`, `rejected`, `throttled`, `failed_dependency` or
     /// `unavailable`.
     pub status: String,
     /// The status the write answered with.

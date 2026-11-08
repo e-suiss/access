@@ -441,7 +441,7 @@ pub(super) async fn commit<E: Env>(
             resource,
             secret,
         } => (exercise_id, position, resource, secret),
-        Written::NotAllowed => return Err(&codes::EXERCISE_NOT_ALLOWED),
+        Written::NotAllowed | Written::Accepted { .. } => return Err(&codes::EXERCISE_NOT_ALLOWED),
         Written::Rejected(code) => return Err(code),
     };
     let committed = Committed {

@@ -435,7 +435,7 @@ pub const ROWS: &[Route] = &[
         Verb::Post,
         "/admin/v1/realms/{slug}/jobs",
         "createJob",
-        "Starts a bulk job: each item is its own write under its own AIS, and `revokeGrant` or `amendGrant` items are Grant revokes or amends, each its own Exercise (E17); answers 202.",
+        "Starts a bulk job: each item is its own write under its own AIS, and `revokeGrant` or `amendGrant` items are Grant revokes or amends, each its own Exercise (E17); `issueRoleGrant` issues an accepted invitation's role (TN-89), and `proposeOwnershipHandover` (accepted, nothing decided yet) and `completeOwnershipHandover` carry an organization's `anchor_transfer` (TN-91); answers 202.",
     ),
     read(
         "/admin/v1/realms/{slug}/jobs/{job_id}",
@@ -856,6 +856,10 @@ pub fn problem_of(e: &AdminError) -> &'static Code {
             | Invalid::NoDomain => &codes::NOT_FOUND,
         },
         AdminError::Issuer(_) | AdminError::NoRealm => &codes::NOT_FOUND,
+        // TN-91
+        AdminError::Refused(c) if c == "owner-only" => &r::OWNER_ONLY,
+        AdminError::Refused(c) if c == "transfer-waiting" => &r::HANDOVER_WAITING,
+        AdminError::Refused(c) if c == "not-the-transfer" => &r::NOT_THE_HANDOVER,
         AdminError::Refused(_) => &codes::EXERCISE_REFUSED,
         AdminError::Conflict => &r::CONFLICT,
         AdminError::Unbound => &codes::INTERNAL,

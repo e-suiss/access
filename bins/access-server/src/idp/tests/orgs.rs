@@ -1161,3 +1161,179 @@ async fn a_guardianship_ends_at_majority_and_a_parent_consent_is_never_silence()
     assert!(t.insert_consent(g, &[9; 32], 73 * 3_600).await.is_err());
     t.rollback().await.unwrap();
 }
+
+fn refusal<T: std::fmt::Debug>(r: Result<T, AdminError>, code: &str) {
+    assert!(
+        matches!(&r, Err(AdminError::Refused(c)) if c == code),
+        "{r:?}"
+    );
+}
+
+/// The organization Anchor's `anchor_transfer` to `to`, signed by the key `seed`.
+fn handover(
+    d: Digest,
+    anchor: [u8; 16],
+    to: Id,
+    nonce: u8,
+    seed: u8,
+) -> access_internal_api::idp::Submission {
+    let payload = Payload::AnchorTransfer {
+        anchor: Id(anchor),
+        root: Root::Sole(to),
+        disposition: std::collections::BTreeMap::new(),
+    };
+    meta_write(d, nonce, payload, ExerciseBasis::Anchor(Id(anchor)), seed)
+}
+
+// TN-91, TN-92, OP-153 m.3 (p), m.17 (b), (f), (gg), Ek B 3617, 3618, 3619, 3620, 3621
+#[tokio::test]
+async fn an_ownership_handover_waits_for_its_recipient_and_delay_and_any_party_can_cancel() {
+    use access_identity_admin::app::transfers::{NOT_THE_TRANSFER, OWNER_ONLY, TRANSFER_WAITING};
+    let (w, at, d, founder) = ready_with("org-handover", Some(0)).await;
+    let org = create_org(&w, at, d, founder).await;
+    onboard(&w.plane, d, ALICE, ALICE_KEY).await;
+    let bob = account(&w, at, "bob@acme.example").await;
+    let mut t = TenantTx::begin(&w.db.app, at.0, at.1).await.unwrap();
+    assert!(
+        access_store::idp::bind_subject_party(&mut t, &bob, &ALICE.0)
+            .await
+            .unwrap()
+    );
+    t.open_member((org, bob), Source::Invite, None, None, None)
+        .await
+        .unwrap();
+    let anchor = t.party_anchor(ORG).await.unwrap().unwrap();
+    t.commit().await.unwrap();
+
+    // TN-91: only an owner proposes, with its own client's signature
+    refusal(
+        w.admin()
+            .propose_transfer(
+                at,
+                ORG,
+                (bob, founder),
+                &handover(d, anchor, ROOT, 0x90, ALICE_KEY),
+            )
+            .await,
+        OWNER_ONLY,
+    );
+    refusal(
+        w.admin()
+            .propose_transfer(
+                at,
+                ORG,
+                (founder, bob),
+                &handover(d, anchor, ALICE, 0x90, ALICE_KEY),
+            )
+            .await,
+        OWNER_ONLY,
+    );
+    refusal(
+        w.admin()
+            .propose_transfer(
+                at,
+                ORG,
+                (founder, bob),
+                &handover(d, anchor, ROOT, 0x90, ROOT_KEY),
+            )
+            .await,
+        NOT_THE_TRANSFER,
+    );
+    let first = w
+        .admin()
+        .propose_transfer(
+            at,
+            ORG,
+            (founder, bob),
+            &handover(d, anchor, ALICE, 0x90, ROOT_KEY),
+        )
+        .await
+        .unwrap();
+    // TN-91, OP-153 m.17 (f): every owner and the recipient are told
+    realm_events(&w, at.1, "relay.message.ownership_handover.v1", 2).await;
+    refusal(
+        Box::pin(w.admin().complete_transfer(
+            at,
+            ORG,
+            first.transfer,
+            handover(d, anchor, ALICE, 0x90, ROOT_KEY),
+        ))
+        .await,
+        TRANSFER_WAITING,
+    );
+    refusal(
+        w.admin()
+            .contribute_transfer(at, ORG, first.transfer, founder)
+            .await,
+        NOT_THE_TRANSFER,
+    );
+    w.admin()
+        .contribute_transfer(at, ORG, first.transfer, bob)
+        .await
+        .unwrap();
+    // TN-91: contributed but inside the 24-hour delay
+    refusal(
+        Box::pin(w.admin().complete_transfer(
+            at,
+            ORG,
+            first.transfer,
+            handover(d, anchor, ALICE, 0x90, ROOT_KEY),
+        ))
+        .await,
+        TRANSFER_WAITING,
+    );
+    // TN-91: a handover inside its delay is cancellable, here by its recipient
+    w.admin()
+        .cancel_transfer(at, ORG, first.transfer, bob)
+        .await
+        .unwrap();
+    assert!(matches!(
+        w.admin()
+            .contribute_transfer(at, ORG, first.transfer, bob)
+            .await,
+        Err(AdminError::Invalid(Invalid::NoMember))
+    ));
+
+    let second = handover(d, anchor, ALICE, 0x91, ROOT_KEY);
+    let digest = second.payload.as_deref().unwrap().digest().unwrap().0;
+    let mut t = TenantTx::begin(&w.db.app, at.0, at.1).await.unwrap();
+    let id = t
+        .insert_transfer_ago(
+            &access_store::org_authority::NewTransfer {
+                org,
+                from: founder,
+                to: bob,
+                to_party: ALICE.0,
+                nonce: &second.nonce,
+                payload_digest: &digest,
+                effective_ms: 0,
+                dns_recovery: false,
+            },
+            25 * 3_600,
+        )
+        .await
+        .unwrap();
+    t.commit().await.unwrap();
+    w.admin()
+        .contribute_transfer(at, ORG, id, bob)
+        .await
+        .unwrap();
+    written(
+        &Box::pin(w.admin().complete_transfer(at, ORG, id, second))
+            .await
+            .unwrap(),
+    );
+    let mut t = TenantTx::begin(&w.db.app, at.0, at.1).await.unwrap();
+    let members = t.members(org).await.unwrap();
+    assert!(members.iter().any(|m| m.subject == bob && m.owner));
+    assert!(!members.iter().any(|m| m.subject == founder && m.owner));
+    // TN-92: no DNS ownership recovery without a declaration
+    assert!(
+        t.transfers(org)
+            .await
+            .unwrap()
+            .iter()
+            .all(|h| !h.dns_recovery)
+    );
+    t.commit().await.unwrap();
+}

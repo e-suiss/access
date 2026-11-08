@@ -10,8 +10,8 @@ use access_http::api::domain::SurfaceScope;
 use access_http::api::domain::caller::WriteCaller;
 use access_http::api::ports::{
     AuditFormat, AuditProofQuery, AuditQuery, Draft, Drafted, Item, JobItem, JobView, Jobs,
-    Listing, NewJob, Pending, RealmResources, ResourceKind, ResourceQuery, ResourceWrite, Surfaces,
-    Unavailable, Written,
+    Listing, MetaTarget, NewJob, Pending, RealmResources, ResourceKind, ResourceQuery,
+    ResourceWrite, Surfaces, Unavailable, Written,
 };
 use access_http::api::realm::problem_of;
 use access_http::problem::codes;
@@ -361,15 +361,39 @@ impl<P: Decider + Governance + Instances + Clone + Send + Sync + 'static> Realms
             pep: IDENTITY_PEP.to_owned(),
             actor: None,
         };
-        let applied = match &w.role {
+        let subject = |account: &str| {
+            ids.decode(access_identity_account::app::SUBJECT_PREFIX, account)
+                .ok()
+        };
+        let applied = match &w.target {
             // TN-89 (3)
-            Some((org, account)) => {
-                let Ok(subject) = ids.decode(access_identity_account::app::SUBJECT_PREFIX, account)
-                else {
+            Some(MetaTarget::Role(org, account)) => {
+                let Some(subject) = subject(account) else {
                     return Ok(Written::Rejected(&codes::NOT_FOUND));
                 };
                 self.admin(&ids)
                     .issue_role_grant(place, (*org, subject), submission)
+                    .await
+            }
+            // TN-91
+            Some(MetaTarget::ProposeHandover(org, from, to)) => {
+                let (Some(from), Some(to)) = (subject(from), subject(to)) else {
+                    return Ok(Written::Rejected(&codes::NOT_FOUND));
+                };
+                return match self
+                    .admin(&ids)
+                    .propose_transfer(place, *org, (from, to), &submission)
+                    .await
+                {
+                    Ok(p) => Ok(Written::Accepted {
+                        record: access_kernel::json::b64url_encode(&p.transfer),
+                    }),
+                    Err(e) => refusal(&e).map(Written::Rejected),
+                };
+            }
+            Some(MetaTarget::CompleteHandover(org, handover)) => {
+                self.admin(&ids)
+                    .complete_transfer(place, *org, *handover, submission)
                     .await
             }
             None => self.admin(&ids).meta(place, submission).await,
