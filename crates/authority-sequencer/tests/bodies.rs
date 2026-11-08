@@ -60,7 +60,7 @@ async fn read(db: &TestDb, d: &DomainId, kek: &SoftKek, commit: [u8; 32]) -> Opt
     )
 }
 
-// T39: a body is stored encrypted and read back with the domain KEK
+// T39
 #[tokio::test]
 async fn bodies_round_trip_encrypted() {
     let db = fresh().await.unwrap();
@@ -80,7 +80,7 @@ async fn bodies_round_trip_encrypted() {
     );
 }
 
-// OP-73, OP-74, INV-30: shredding removes the key and the ciphertext; the row and commitment stay
+// OP-73, OP-74, INV-30
 #[tokio::test]
 async fn a_shredded_body_cannot_be_read_or_revived() {
     let db = fresh().await.unwrap();
@@ -92,7 +92,6 @@ async fn a_shredded_body_cannot_be_read_or_revived() {
     let body = get(&db.app, &d, &[4; 32]).await.unwrap().unwrap();
     assert!(body.sealed.is_none());
     assert!(read(&db, &d, &kek, [4; 32]).await.is_none());
-    // the same commitment cannot be stored again to bring the body back
     store(&db, &d, &kek, [4; 32], b"personal data").await;
     assert!(
         get(&db.app, &d, &[4; 32])
@@ -104,7 +103,7 @@ async fn a_shredded_body_cannot_be_read_or_revived() {
     );
 }
 
-// §17.10.4: every body moves to the new KEK; the old one is no longer needed
+// §17.10.4
 #[tokio::test]
 async fn kek_rotation_rewraps_live_bodies() {
     let db = fresh().await.unwrap();
@@ -140,7 +139,7 @@ async fn kek_rotation_rewraps_live_bodies() {
     assert_eq!(read(&db, &d, &new, [10; 32]).await.unwrap(), [10]);
 }
 
-// OP-73: the application cannot write bodies, and no role deletes them
+// OP-73
 #[tokio::test]
 async fn only_the_sequencer_writes_bodies() {
     let db = fresh().await.unwrap();

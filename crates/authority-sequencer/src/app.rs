@@ -130,7 +130,7 @@ impl<L: DomainLog> Leader<L> {
                 ))
             }
             Err(e) if e.is_retry() => {
-                // §17.1.1 step 9: nothing was written; the leader stays
+                // §17.1.1 step 9
                 self.seq.abandoned(&batch)?;
                 Err(e)
             }

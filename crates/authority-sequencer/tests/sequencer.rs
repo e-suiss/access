@@ -144,7 +144,6 @@ async fn domain_id_is_the_genesis_digest() {
             .unwrap(),
         d
     );
-    // a second Genesis for the same content is the same domain and is refused
     assert!(
         create_genesis(&db.sequencer, TENANT, genesis_fields("g"), 1_000)
             .await
@@ -169,7 +168,6 @@ async fn records_chain_and_the_frontier_root_is_the_tree_head() {
     let last = l.head().pos;
     assert_eq!(last, 10);
     verify_chain(&db.app, d, 0, last).await.unwrap();
-    // RFC 9162 tree head over the stored leaf cores equals the frontier's root
     let log = read_log(&db.app, &DomainId::from_bytes(d.0), 0, last)
         .await
         .unwrap();
@@ -186,7 +184,7 @@ async fn records_chain_and_the_frontier_root_is_the_tree_head() {
         .collect();
     let refs: Vec<&[u8]> = cores.iter().map(Vec::as_slice).collect();
     assert_eq!(l.head().frontier.root(), digest::root(&refs));
-    // TI-19: time never goes back, even when the clock does
+    // TI-19
     l.commit(1, &[item("late", None)]).await.unwrap();
     let back = read_log(&db.app, &DomainId::from_bytes(d.0), last + 1, last + 1)
         .await
@@ -205,7 +203,6 @@ async fn a_fenced_leader_steps_down_and_writes_nothing() {
         lead(&db, d, "b").await,
         Err(SequencerError::Store(StoreError::LeaseHeld))
     ));
-    // the old leader's lease lapses (simulated by a release it does not notice)
     let id = DomainId::from_bytes(d.0);
     access_store::authority::release_lease(
         &db.sequencer,
@@ -241,12 +238,11 @@ async fn a_nonce_retry_replays_and_a_reuse_conflicts() {
     else {
         panic!()
     };
-    // §9.5 k.5: same nonce, intent and actor
+    // §9.5 k.5
     assert_eq!(
         l.commit(2_001, &[item("x", Some((1, 7)))]).await.unwrap(),
         Outcome::Replayed(first[0])
     );
-    // same nonce, other intent
     assert!(matches!(
         l.commit(2_002, &[item("x", Some((1, 8)))]).await,
         Err(SequencerError::NonceConflict)
@@ -282,7 +278,7 @@ async fn outbox_ids_are_keyed_per_domain_position_and_index() {
     }
 }
 
-// OP-129 m.1: the process and server clocks of a local cluster agree within U
+// OP-129 m.1
 #[tokio::test]
 async fn trusted_time_from_two_sources() {
     use access_authority_sequencer::adapters::SourcesClock;
@@ -295,7 +291,7 @@ async fn trusted_time_from_two_sources() {
     assert!(b + 250 >= a);
 }
 
-// §17.1.1 step 9, TI-4: a stale read refuses the batch, the leader stays and goes on
+// §17.1.1 step 9, TI-4
 #[tokio::test]
 async fn a_stale_read_keeps_the_leader() {
     // G41
@@ -315,7 +311,7 @@ async fn a_stale_read_keeps_the_leader() {
     verify_chain(&db.app, d, 0, 2).await.unwrap();
 }
 
-// §17.1.1 step 9: a record that read what an earlier record of its batch writes waits
+// §17.1.1 step 9
 #[tokio::test]
 async fn a_record_depending_on_its_batch_is_refused() {
     let db = fresh().await.unwrap();
@@ -366,7 +362,7 @@ fn set(key: &[u8], v: u64) -> Value {
     Value::Array(vec![Value::Bytes(key.to_vec()), Value::Unsigned(v)])
 }
 
-// L2-REC-3, TI-RT1, TI-1, TI-16, TI-RT4: the stored state is the fold of the log, and the arbiter sees a change
+// L2-REC-3, TI-RT1, TI-1, TI-16, TI-RT4
 #[tokio::test]
 async fn the_state_is_the_fold_of_the_log() {
     // G19
@@ -405,12 +401,11 @@ async fn the_state_is_the_fold_of_the_log() {
             .collect::<Vec<_>>(),
         [(3, true), (3, false)]
     );
-    // an effect bumps the key's version, so a read of it is validated like any other
     assert_eq!(
         versions(&db.app, &id, &[b"k1".to_vec()]).await.unwrap(),
         [3]
     );
-    // §17.6.12: a stored state that no record explains is caught by the fold from Genesis
+    // §17.6.12
     db.corrupt_state(&id, b"k1", &[0x05]).await.unwrap();
     assert!(matches!(
         fold_check(&db.app, d).await,
@@ -418,7 +413,7 @@ async fn the_state_is_the_fold_of_the_log() {
     ));
 }
 
-// L2-REC-2: malformed effects never reach the log
+// L2-REC-2
 #[tokio::test]
 async fn malformed_effects_are_refused_before_planning() {
     let db = fresh().await.unwrap();
@@ -444,8 +439,7 @@ async fn malformed_effects_are_refused_before_planning() {
     assert_eq!(l.head().pos, 0);
 }
 
-// CR-57, CVE-2022-23555 (authentik: an invitation token reused across flows), INV-21: a
-// single-use flag consumed by one decision cannot be consumed by another, whatever the flow
+// CR-57, CVE-2022-23555, INV-21
 #[tokio::test]
 async fn cve_2022_23555_single_use_is_at_most_once() {
     let db = fresh().await.unwrap();
@@ -464,17 +458,15 @@ async fn cve_2022_23555_single_use_is_at_most_once() {
     assert_eq!(l.head().pos, 1);
 }
 
-// CR-57, GHSA-5278-rrxc-mgf7 (OpenFGA: a `but not` exclusion failed open), INV-7, INV-26: an
-// SI-6: ALLOW that relied on the absence of a revocation is not committed once the revocation exists
+// CR-57, GHSA-5278-rrxc-mgf7, INV-7, INV-26
+// SI-6
 #[tokio::test]
 async fn ghsa_5278_rrxc_mgf7_an_exclusion_cannot_fail_open() {
     let db = fresh().await.unwrap();
     let d = domain(&db, "g").await;
     let mut l = lead(&db, d, "a").await.unwrap();
-    // the evaluation read `revoked@g1` as absent (version 0) and allowed
     let mut allow = item("allow", Some((3, 3)));
     allow.reads = vec![(b"revoked@g1".to_vec(), 0)];
-    // before it commits, the revocation lands
     let mut revoke = item("revoke", Some((4, 4)));
     revoke.writes = vec![b"revoked@g1".to_vec()];
     l.commit(2_000, &[revoke]).await.unwrap();
@@ -501,7 +493,7 @@ impl NoteSigner for NoteKey {
     }
 }
 
-// CMP-6, L2-CKP-1, T20: the checkpoint names the committed size and the RFC 9162 root of the log
+// CMP-6, L2-CKP-1, T20
 #[tokio::test]
 async fn a_checkpoint_names_the_committed_log() {
     let db = fresh().await.unwrap();

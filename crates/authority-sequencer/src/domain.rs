@@ -97,9 +97,9 @@ impl Entry for Bound<'_> {
     type Error = RecordError;
 
     fn seal(&self, slot: &Slot) -> Result<(Hash, SealedRecord), RecordError> {
-        // L0-ENC-27: every record after Genesis carries `domain` and `prev`
+        // L0-ENC-27
         let mut fields = self.draft.fields.clone();
-        // OP-141 m.10: the state basis is the position before this record
+        // OP-141 m.10
         if let Some(Opened {
             value: Value::Map(entries),
             ..
@@ -309,7 +309,7 @@ pub fn rows(
         out.draws.extend(item.draws.iter().cloned());
         out.single_use
             .extend(item.single_use.iter().map(|k| (k.clone(), pos)));
-        // L2-REC-3: the effects come from the sealed record itself
+        // L2-REC-3
         let sealed_envelope = RecordEnvelope::from_bytes(&sealed.record.envelope)
             .map_err(|_| SequencerError::Diverged)?;
         for (state_key, value) in fold::effects(&sealed_envelope)? {
