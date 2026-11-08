@@ -154,6 +154,12 @@ pub trait SessionTx: AccountTx + RiskTx {
         since_ms: i64,
         limit: i64,
     ) -> impl Future<Output = Result<Vec<EpochChange>, SessionError>> + Send;
+    /// N1: since when the subject has owned the mailbox its messages go to, Unix ms (TN-66,
+    /// OP-153 m.3 (i)).
+    fn mailbox_since(
+        &mut self,
+        subject: [u8; 16],
+    ) -> impl Future<Output = Result<Option<u64>, SessionError>> + Send;
 }
 
 /// Opens session transactions in one realm.

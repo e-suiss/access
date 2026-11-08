@@ -157,4 +157,12 @@ impl SessionTx for PgTx {
     ) -> Result<Vec<EpochChange>, SessionError> {
         Ok(self.0.epochs_since(since_ms, limit).await?)
     }
+
+    async fn mailbox_since(&mut self, subject: [u8; 16]) -> Result<Option<u64>, SessionError> {
+        Ok(self
+            .0
+            .mailbox_since(subject)
+            .await?
+            .and_then(|v| u64::try_from(v).ok()))
+    }
 }

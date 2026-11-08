@@ -741,6 +741,10 @@ where
     ///
     /// # Errors
     /// [`SessionError::Invalid`] when the realm does not offer `method`; [`SessionError`].
+    #[expect(
+        clippy::too_many_lines,
+        reason = "one suspension: state, audit, cap and message"
+    )]
     pub async fn send_email(
         &self,
         flow: &FlowRef<'_>,
@@ -823,16 +827,35 @@ where
             correlation,
         )
         .await?;
-        if let Some(subject) = live
+        // TN-83 (6), IDP-3
+        let capped = match live {
+            Some(subject) => {
+                !access_identity_account::app::registration::account_mail_allowed(
+                    &mut tx,
+                    self.realm.tenant.as_bytes(),
+                    self.realm.realm.as_bytes(),
+                    subject,
+                    now,
+                )
+                .await?
+            }
+            None => true,
+        };
+        if let Some(subject) = live.filter(|_| !capped)
             && let Some(to) = address(tx.contact(subject).await?)
         {
+            // OP-153 m.3 (i), m.9 (d)
+            let valid_since_ms = match to {
+                Address::Email(_) => Some(tx.mailbox_since(subject).await?.unwrap_or(1)),
+                Address::Phone(_) => None,
+            };
             tx.notify(
                 self.notifier,
                 &Message {
                     subject,
                     to,
                     locale: None,
-                    valid_since_ms: None,
+                    valid_since_ms,
                     body,
                 },
             )

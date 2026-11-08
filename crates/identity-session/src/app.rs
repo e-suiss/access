@@ -6,6 +6,7 @@ pub mod claims;
 pub mod devices;
 pub mod epochs;
 pub mod mfa;
+pub mod registered;
 pub mod sessions;
 pub mod signin;
 mod webauthn;

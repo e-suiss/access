@@ -20,6 +20,12 @@ pub struct RealmSignin {
     pub domain_allow: BTreeSet<String>,
     /// Email domains registration is refused for.
     pub domain_deny: BTreeSet<String>,
+    /// Profile fields required at registration (TN-132).
+    pub required_fields: BTreeSet<String>,
+    /// Identifier and password on one screen, with no branching (OP-153 m.3 (j)).
+    pub strict: bool,
+    /// Days a given-up e-mail address stays taken; `None` never frees it (OP-153 m.3 (i)).
+    pub email_keep_days: Option<u32>,
 }
 
 impl Default for RealmSignin {
@@ -31,6 +37,9 @@ impl Default for RealmSignin {
             mfa_required: false,
             domain_allow: BTreeSet::new(),
             domain_deny: BTreeSet::new(),
+            required_fields: BTreeSet::from([String::from("email")]),
+            strict: false,
+            email_keep_days: None,
         }
     }
 }
@@ -65,11 +74,30 @@ impl RealmSignin {
             _ => return None,
         };
         let methods = texts(get("methods")).filter(|m| !m.is_empty())?;
+        // OP-153 m.3 (i), (j)
+        let strict = match get("enumeration") {
+            None => false,
+            Some(Value::Text(t)) if t == "uniform" => false,
+            Some(Value::Text(t)) if t == "strict" => true,
+            Some(_) => return None,
+        };
+        let email_keep_days = match get("email_keep_days") {
+            None => None,
+            Some(Value::Unsigned(d)) => Some(u32::try_from(*d).ok().filter(|d| *d >= 365)?),
+            Some(_) => return None,
+        };
+        let required_fields = match get("required_fields") {
+            None => BTreeSet::from([String::from("email")]),
+            v => texts(v)?,
+        };
         Some(Self {
             methods,
             mfa_required,
             domain_allow: texts(get("domain_allow"))?,
             domain_deny: texts(get("domain_deny"))?,
+            required_fields,
+            strict,
+            email_keep_days,
         })
     }
 
@@ -95,6 +123,12 @@ impl RealmSignin {
             magic_link: base.magic_link && email,
             ..base
         }
+    }
+
+    /// Whether registration asks for the display name (TN-132).
+    #[must_use]
+    pub fn name_required(&self) -> bool {
+        self.required_fields.contains("name")
     }
 
     /// Whether an account may be registered with `email` (TN-132): its domain is not denied
