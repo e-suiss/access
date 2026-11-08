@@ -3506,6 +3506,61 @@ async fn a_second_step_and_new_recovery_codes_are_told_to_the_account() {
     assert_eq!(anonymous.status, StatusCode::UNAUTHORIZED);
 }
 
+// 3571, 3991, 3863, TN-86, B19, MKT-D9, TN-56
+#[tokio::test]
+async fn the_owner_exports_the_password_hash_and_app_seeds_after_a_fresh_step_up() {
+    let e = env(43, "ex-a", AuthPolicy::DEFAULT).await;
+    e.account("exp@example.com").await;
+    let mut b = e.browser("ex-a");
+    b.sign_in("exp@example.com").await;
+    let started = b
+        .post("/v1/account/totp", Some(json!({ "label": "exp" })))
+        .await;
+    let s = started.json();
+    let secret = s["secret"].as_str().unwrap().to_owned();
+    let seed = base32_decode(&secret);
+    let path = format!("/v1/account/totp/{}", s["enrollment"].as_str().unwrap());
+    assert_eq!(
+        b.post(&path, Some(json!({ "code": e.totp(&seed) })))
+            .await
+            .status,
+        StatusCode::OK
+    );
+    let x = b.post("/v1/account/credential-export", None).await;
+    assert_eq!(
+        x.status,
+        StatusCode::OK,
+        "{}",
+        String::from_utf8_lossy(&x.body)
+    );
+    let v = x.json();
+    assert_eq!(v["password"]["algorithm"], "argon2id");
+    let phc = v["password"]["hash"].as_str().unwrap();
+    assert!(phc.starts_with("$argon2id$v=19$"), "{phc}");
+    let reimported = access_identity_account::domain::legacy::classify(phc, None).unwrap();
+    assert_eq!(reimported.algorithm, "argon2id");
+    assert_eq!(
+        v["totp"][0]["secret"].as_str().unwrap(),
+        secret.trim_end_matches('=')
+    );
+    assert_eq!(v["totp"][0]["digits"], 6);
+    assert_eq!(
+        x.headers
+            .get(header::CACHE_CONTROL)
+            .map(|h| h.to_str().unwrap()),
+        Some("no-store")
+    );
+    e.advance(301_000);
+    let stale = b.post("/v1/account/credential-export", None).await;
+    assert_eq!(stale.status, StatusCode::UNAUTHORIZED);
+    assert_eq!(stale.json()["code"], "step-up-required");
+    let anonymous = e
+        .browser("ex-anon")
+        .post("/v1/account/credential-export", None)
+        .await;
+    assert_eq!(anonymous.status, StatusCode::UNAUTHORIZED);
+}
+
 // OP-153 m.3 (j), TN-96, TN-82, CR-40
 #[tokio::test]
 async fn strict_mode_takes_identifier_and_password_on_one_screen() {

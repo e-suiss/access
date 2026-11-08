@@ -419,6 +419,56 @@ where
         Ok(v.subject)
     }
 
+    /// `POST /v1/account/credential-export` (TN-86, B19): after a fresh step-up, the owner's
+    /// password hash and authenticator app seeds; refused in a recovery's grace period (TN-56).
+    pub async fn export_credentials(&self, entry: &RealmEntry, b: &Browser<'_>) -> Reply {
+        let kit = match self.kit(entry).await {
+            Ok(k) => k,
+            Err(r) => return r,
+        };
+        // TN-56, OP-153 m.3 (e)
+        if let Some(r) = self
+            .grace_refusal(
+                &kit,
+                b,
+                access_identity_session::domain::recovery::Restricted::Export,
+            )
+            .await
+        {
+            return r;
+        }
+        let subject = match self.fresh_subject(&kit, b).await {
+            Ok(s) => s,
+            Err(r) => return r,
+        };
+        signin!(self, kit, auth);
+        match auth.export_credentials(subject, b.correlation).await {
+            Ok(x) => {
+                let password = x.password.map(|p| {
+                    json!({
+                        "algorithm": p.algorithm,
+                        "hash": p.hash.expose(),
+                        "hash_transform": p.transform.as_ref().map(|t| t.expose().clone()),
+                    })
+                });
+                let totp: Vec<_> = x
+                    .totp
+                    .iter()
+                    .map(|s| {
+                        json!({
+                            "secret": s.expose(),
+                            "algorithm": "SHA1",
+                            "digits": 6,
+                            "period": 30,
+                        })
+                    })
+                    .collect();
+                Reply::json(200, json!({ "password": password, "totp": totp }))
+            }
+            Err(e) => failed(&e),
+        }
+    }
+
     /// `POST /v1/account/email` (OP-153 m.3 (i)): after a fresh step-up, a code goes to the new
     /// address; the answer is the same whether or not another account holds it.
     pub async fn start_email_change(

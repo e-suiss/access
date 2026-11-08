@@ -561,6 +561,14 @@ handler! {
 }
 
 handler! {
+    /// `POST /v1/account/credential-export`.
+    export_credentials(s, entry, b, p, bytes, headers) true {
+        let _ = (&p, &bytes);
+        Ok(s.hosted.export_credentials(&entry, &b).await)
+    }
+}
+
+handler! {
     /// `POST /v1/account/passkeys`.
     begin_passkey(s, entry, b, p, bytes, headers) true {
         let _ = &p;

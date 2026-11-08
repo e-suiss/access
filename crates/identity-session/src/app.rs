@@ -6,6 +6,7 @@ pub mod claims;
 pub mod devices;
 pub mod epochs;
 pub mod mfa;
+pub mod portability;
 pub mod recovery;
 pub mod registered;
 pub mod sessions;

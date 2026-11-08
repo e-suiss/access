@@ -105,6 +105,10 @@ where
                 post(web::acknowledge_recovery_codes::<D, K, KI, C, M>),
             )
             .route(
+                &format!("{prefix}/v1/account/credential-export"),
+                post(web::export_credentials::<D, K, KI, C, M>),
+            )
+            .route(
                 &format!("{prefix}/v1/account/passkeys"),
                 post(web::begin_passkey::<D, K, KI, C, M>),
             )

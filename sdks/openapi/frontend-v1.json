@@ -397,6 +397,36 @@
         }
       }
     },
+    "/v1/account/credential-export": {
+      "post": {
+        "operationId": "exportCredentials",
+        "summary": "The owner's password hash and authenticator app seeds, after a fresh step-up (TN-86).",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/account/recovery-codes/acknowledgement": {
       "post": {
         "operationId": "acknowledgeRecoveryCodes",

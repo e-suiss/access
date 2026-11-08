@@ -221,6 +221,13 @@ pub const ROUTES: &[Route] = &[
     live(
         Owner::N1,
         Verb::Post,
+        "/v1/account/credential-export",
+        "exportCredentials",
+        "The owner's password hash and authenticator app seeds, after a fresh step-up (TN-86).",
+    ),
+    live(
+        Owner::N1,
+        Verb::Post,
         "/v1/account/recovery-codes/acknowledgement",
         "acknowledgeRecoveryCodes",
         "Records the owner's \"I saved them\" for the newest recovery codes (TN-59).",
