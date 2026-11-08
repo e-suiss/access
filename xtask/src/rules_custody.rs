@@ -116,6 +116,7 @@ mod tests {
     use super::*;
 
     // OP-150, SEC17, SEC19, SI-13, CR-31: a custody key label, seal context or switch is refused
+    // U14, U15
     #[test]
     fn custody_keys_are_refused() {
         for atom in [

@@ -83,7 +83,7 @@ async fn credential(tx: &mut TenantTx, s: [u8; 16], kind: &str) -> [u8; 16] {
     .unwrap()
 }
 
-// MD-5, OP-12, TN-2, §17.2.2
+// MD-5, OP-12, TN-2, §17.2.2, IDI-2
 #[tokio::test]
 async fn identifiers_are_case_insensitive_and_realm_scoped() {
     let db = fresh().await.unwrap();

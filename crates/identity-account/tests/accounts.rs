@@ -316,7 +316,7 @@ async fn missing_wrong_suspended_and_deactivated_answer_alike() {
     assert_eq!(failed, cases.len());
 }
 
-// SA-30, OP-35, TN-59
+// SA-30, OP-35, TN-59, U46, OP-54-RL8
 #[tokio::test]
 async fn a_hundred_failures_lock_the_account() {
     let e = env(4, "ia-d").await;
@@ -549,7 +549,7 @@ async fn a_taken_identifier_creates_nothing() {
     tx.commit().await.unwrap();
 }
 
-// CR-36, OP-33, OP-36, K14
+// CR-36, OP-33, OP-36, K14, U47
 #[tokio::test]
 async fn a_full_semaphore_sheds_with_503() {
     let mut config = HasherConfig::sized(Argon2Params::CANONICAL, 1, None);

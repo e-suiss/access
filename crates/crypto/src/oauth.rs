@@ -124,7 +124,7 @@ pub fn verify_client_signature(
 mod tests {
     use super::*;
 
-    // CR-38: a secret matches only its own digest; no Argon2, a fixed-length digest
+    // CR-38, U69: a secret matches only its own digest; no Argon2, a fixed-length digest
     #[test]
     fn secrets_match_their_digest_only() {
         let d = secret_digest(b"s3cret");

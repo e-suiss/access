@@ -99,7 +99,7 @@ fn verify(ring: &Keyring, signed: &Signed, now: u64) -> Result<(), KeyScopeError
 // operational key and the artefact verifies through them
 #[test]
 fn an_artefact_verifies_through_metadata_and_excerpt() {
-    // G35, HL-8
+    // G35, HL-8, SAI-9
     let mut ring = keyring();
     let mut factory = Factory { down: false };
     let now = Policy::AUTHORITY.publish_lead_ms + 2 * MINUTE;
@@ -128,7 +128,7 @@ fn an_artefact_verifies_through_metadata_and_excerpt() {
 // under usage `token`; it must be holder-bound and must not outlive the key's publication
 #[test]
 fn a_token_is_holder_bound_and_within_the_key_publication() {
-    // CR-24, MD-7
+    // CR-24, MD-7, U41
     let mut ring = keyring();
     let mut factory = Factory { down: false };
     let now = Policy::AUTHORITY.publish_lead_ms + 2 * MINUTE;

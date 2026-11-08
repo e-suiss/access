@@ -35,7 +35,7 @@ fn compatibility_forms_hash_alike() {
     assert!(verify(&b, &ha, &LIGHT).unwrap().matched);
 }
 
-// CR-36, CR-37
+// CR-36, CR-37, U69
 #[test]
 fn phc_round_trip_and_rehash() {
     let pw = Password::new("correct horse").unwrap();

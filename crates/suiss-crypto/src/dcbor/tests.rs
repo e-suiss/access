@@ -24,7 +24,7 @@ fn bad(h: &str, e: DecodeError) {
     assert_eq!(decode(&hex(h), Limits::CEILING), Err(e), "{h}");
 }
 
-// RFC 8949 Appendix A, items inside the profile.
+// OP-3-G4, OP-56: RFC 8949 Appendix A, items inside the profile.
 #[test]
 fn rfc8949_appendix_a() {
     ok("00", &Value::Unsigned(0));
@@ -128,7 +128,7 @@ fn encoder_rejects_duplicate_keys() {
     assert_eq!(encode(&v, Limits::CEILING), Err(EncodeError::DuplicateKey));
 }
 
-// §14.6, OP-106 m.5
+// §14.6, OP-106 m.5, SAI-2
 #[test]
 fn limits_are_enforced_and_cannot_be_raised() {
     let mut nested = Value::Array(vec![]);

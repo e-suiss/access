@@ -683,7 +683,7 @@ fn claims(jwt: &str) -> Value {
 // token, a short ID token with the pairwise sub and a refresh token
 #[tokio::test]
 async fn code_flow_with_pkce_and_dpop() {
-    // G57, IDP-24, X41, K02, K03
+    // G57, IDP-24, X41, K02, K03, IDI-7
     let w = world().await;
     let login = location(&w.authorize(&[("dpop_jkt", &w.jkt())], None).await);
     let prefix = format!("{ISSUER}/login?return_to=");
@@ -1535,7 +1535,7 @@ async fn par_required_per_client_and_expiry() {
 // tokens; revocation ends the grant; with the primary out of reach every token is inactive
 #[tokio::test]
 async fn introspection_and_revocation() {
-    // EP-3, CMP-15.1
+    // EP-3, CMP-15.1, U37, SAI-4
     let w = world().await;
     let code = w.code(CONFIDENTIAL).await;
     let t = body(

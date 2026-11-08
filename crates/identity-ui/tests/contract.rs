@@ -176,7 +176,7 @@ fn submissions_validate_against_the_schema() {
     let _: Submission = serde_json::from_value(body).unwrap();
 }
 
-// X27, §8.11, TN-105
+// X27, §8.11, TN-105, MUST-NEVER-15
 #[test]
 fn the_contract_has_no_scope_list_consent_button_or_script() {
     fn words(v: &Value, out: &mut Vec<String>) {

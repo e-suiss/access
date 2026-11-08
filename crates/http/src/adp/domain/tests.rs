@@ -37,6 +37,7 @@ fn body(context_extra: &str, carriers: &str) -> String {
 
 const CARRIERS: &str = r#""subject": {"type": "user", "id": "ignored", "properties": {"x": 1}}, "action": {"name": "read"}, "resource": {"type": "shop", "id": "items/1"}"#;
 
+// PI-1
 #[test]
 fn a_request_decodes_into_the_core_terms() {
     let d = decode(body("", CARRIERS).as_bytes(), MAX).unwrap();
@@ -146,6 +147,7 @@ fn an_unknown_context_member_is_a_protocol_error() {
     assert_eq!(e, AdpError("unknown-member"));
 }
 
+// PI-2
 #[test]
 fn the_carriers_must_name_the_intent() {
     let wrong = CARRIERS.replace("items/1", "items/2");

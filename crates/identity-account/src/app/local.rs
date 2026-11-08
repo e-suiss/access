@@ -76,7 +76,7 @@ mod tests {
 
     use super::*;
 
-    // OP-35, SA-30, MD-8
+    // OP-35, SA-30, MD-8, U46
     #[test]
     fn per_network_and_closed_when_full() {
         let l = LocalLimiter::new(

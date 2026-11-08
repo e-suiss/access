@@ -462,7 +462,7 @@ fn kyc(d: Digest, issuer: Id, n: u8) -> Statement {
     statement(d, issuer, ROOT, "kyc", EqValue::Int(i64::from(n)))
 }
 
-// CMP-8, L2-CLM-3, L2-CLM-4, INV-2, §9.13 rule 3: an accepted Claim is admitted once and a
+// CMP-8, L2-CLM-3, L2-CLM-4, INV-2, PI-22, §9.13 rule 3: an accepted Claim is admitted once and a
 // resubmission answers with its record; an issuer without an Acceptance is held, a Claim that
 // does not verify is refused and not recorded
 #[tokio::test]
@@ -927,6 +927,7 @@ fn status(d: Digest, party: Id, value: &str, issued_at: u64, supersedes: Option<
 // TN-49, TN-50, SEC12, X36, E5, CI-2, TI-RT7, G36: a narrowing account status denies the Party's
 // Instances from its ingest on, as a restriction; a newer status in the issuer line lifts it,
 // and one without an order keeps it (the disqualifying side wins)
+// PI-22
 #[tokio::test]
 async fn account_status_overlays_the_party_until_superseded() {
     let db = fresh().await.unwrap();

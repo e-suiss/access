@@ -168,6 +168,7 @@ async fn send(req: Request<Body>) -> axum::response::Response {
 // issuer; a body that is not a form is refused before anything is read; when the realm's rows
 // cannot be read the answer is 503 with Retry-After and no-store, never invalid_grant; an
 // unknown host gets 404
+// OP-54-RL11
 #[tokio::test]
 async fn routes_forms_and_outages() {
     let json = send(

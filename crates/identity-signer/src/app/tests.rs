@@ -471,6 +471,7 @@ fn a_decided_policy_is_checked() {
 // §10.4.5, §12.1.2, TI-RT6: a realm key never signs an access token carrying authority, in
 // any spelling of the type, nor one whose claims cannot be read; a protocol-scope-only access
 // token and other types are signed
+// TNI-2
 #[test]
 fn a_realm_key_refuses_authority_tokens() {
     let mut ring = Keyring::new(JwsAlg::Es256, Policy::REALM).unwrap();

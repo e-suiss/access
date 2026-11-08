@@ -1643,7 +1643,7 @@ async fn an_action_without_an_accepted_schema_is_denied() {
     reason = "two recorded decisions through every scope"
 )]
 async fn a_recorded_decision_is_explained_as_it_was() {
-    // INV-22, PI-16, G27, SI-14, EI-24
+    // INV-22, PI-16, G27, SI-14, EI-24, TI-3
     use access_kernel::model::{BudgetDimension, BudgetTerm, BudgetWindow};
     let db = fresh().await.unwrap();
     let (mut core, d) = setup(&db).await;
@@ -1933,7 +1933,7 @@ fn approved_at(
 // requirement once and is consumed
 #[tokio::test]
 async fn a_contribution_approves_once() {
-    // G12, G13, SI-5, SI-17, EI-18, XI-19
+    // G12, G13, SI-5, SI-17, EI-18, XI-19, INV-20
     let db = fresh().await.unwrap();
     let approve = term(
         ProofKind::Contribution,
@@ -2602,7 +2602,7 @@ fn grouped() -> BTreeMap<String, Opened> {
     reason = "one membership from its first episode through a cutoff and its lifting"
 )]
 async fn a_member_holds_the_groups_grant_from_its_episode() {
-    // INV-16, INV-31, G5, G9, SI-10, TI-RT9, U34
+    // INV-16, INV-31, G5, G9, SI-10, TI-RT9, U34, INV-25
     let db = fresh().await.unwrap();
     let (mut core, d) = setup_with(&db, grouped()).await;
     onboard(&mut core, d, ROOT, ROOT_KEY, (1, 2)).await;
