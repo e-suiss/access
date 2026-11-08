@@ -883,9 +883,32 @@ async fn polling_a_declared_transmitter_takes_its_sets() {
     }))
     .unwrap();
     let mut t = w.tx().await;
-    declare(&mut t, &sealer(), [8; 16], &cfg, Some(b"poll-bearer"), None)
-        .await
-        .unwrap();
+    let domain = DomainId::from_bytes([7; 32]);
+    let bound = bind(
+        &mut t,
+        &Decision {
+            domain: &domain,
+            position: 2,
+            nonce: &[2; 16],
+            intent: [9; 32],
+            change: [6; 32],
+            action: "idp.upstream.register",
+        },
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    declare(
+        &mut t,
+        &bound,
+        &sealer(),
+        [8; 16],
+        &cfg,
+        Some(b"poll-bearer"),
+        Some([6; 32]),
+    )
+    .await
+    .unwrap();
     t.link_upstream_subject(&subject_digest(UPSTREAM, "up-1"), w.subject)
         .await
         .unwrap();
