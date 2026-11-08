@@ -301,8 +301,8 @@ fn metadata_freshness_comes_from_a_witness() {
     assert!(!fresh.fresh(NOW, None));
     // OP-152 m.5 (h): a cosigned checkpoint of other metadata, or of none, refreshes nothing
     for other in [
-        support::checkpoint_of(b"older metadata", Some(NOW / 1_000 - 60)),
-        support::checkpoint(Some(NOW / 1_000 - 60)).replacen("metadata sha-256:", "x-other ", 1),
+        support::checkpoint_of(Some(b"older metadata"), Some(NOW / 1_000 - 60)),
+        support::checkpoint_of(None, Some(NOW / 1_000 - 60)),
     ] {
         assert_eq!(
             fresh.witness(&other, LOG, &log_verifier(), &[witness_verifier()]),

@@ -396,16 +396,18 @@ pub(crate) const SIGNED_METADATA: &[u8] = b"signed domain metadata";
 
 /// A checkpoint of the domain log signed by the log and, at `cosigned_s` seconds, the witness.
 pub(crate) fn checkpoint(cosigned_s: Option<u64>) -> String {
-    checkpoint_of(SIGNED_METADATA, cosigned_s)
+    checkpoint_of(Some(SIGNED_METADATA), cosigned_s)
 }
 
-/// A checkpoint naming the metadata `signed`, cosigned at `cosigned_s` seconds.
-pub(crate) fn checkpoint_of(signed: &[u8], cosigned_s: Option<u64>) -> String {
-    let body = format!(
-        "{LOG}\n7\n{}\nmetadata sha-256:{}\n",
-        note::base64_encode(&[7; 32]),
-        access_kernel::json::b64url_encode(&access_verifier::metadata::metadata_digest(signed)),
-    );
+/// A checkpoint naming the metadata `signed`, or none, cosigned at `cosigned_s` seconds.
+pub(crate) fn checkpoint_of(signed: Option<&[u8]>, cosigned_s: Option<u64>) -> String {
+    let named = signed.map_or_else(String::new, |s| {
+        format!(
+            "metadata sha-256:{}\n",
+            access_kernel::json::b64url_encode(&access_verifier::metadata::metadata_digest(s))
+        )
+    });
+    let body = format!("{LOG}\n7\n{}\n{named}", note::base64_encode(&[7; 32]));
     let log = log_verifier();
     let mut sig = log.id().to_be_bytes().to_vec();
     sig.extend(log_key().sign(body.as_bytes()).to_bytes());
