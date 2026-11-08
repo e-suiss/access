@@ -129,8 +129,7 @@ fn matching_rules() {
     assert!(source_rejected(&sourced, &[p]));
 }
 
-// OP-111 m.8: only a proof of the term's kind and class from an issuer outside the source is
-// source-not-accepted
+// OP-111 m.8
 #[test]
 fn source_rejection_needs_the_terms_kind_and_class() {
     let mut t = term(1, Independence::None, Consumption::Reusable);

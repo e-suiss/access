@@ -985,7 +985,7 @@ fn new_families_have_their_kind() {
     );
 }
 
-// OP-116 m.1: every COSE rejection has the family of its stable name
+// OP-116 m.1
 #[test]
 fn cose_rejections_have_their_kind() {
     let cases = [
@@ -1010,7 +1010,7 @@ fn cose_rejections_have_their_kind() {
     }
 }
 
-// RFC 9901, RFC 8259 §7, CR-55 m.7: control characters in disclosed claims come back escaped
+// RFC 9901, RFC 8259 §7, CR-55 m.7
 #[test]
 fn sd_jwt_claims_escape_control_characters() {
     let issuer = ed25519_dalek::SigningKey::from_bytes(&[7; 32]);
