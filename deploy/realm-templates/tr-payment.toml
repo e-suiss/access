@@ -1,0 +1,31 @@
+# Realm template `tr-payment` (OP-153 m.3 (r), §10.9.2): realm policy defaults as data.
+# `access-cli realm apply-template` commits each step as its own Exercise and stops at the
+# first failure.
+
+name = "tr-payment"
+description = "Turkish payment and e-money institutions (BDDK/TCMB GKD): passkeys only, MFA required, short sessions bound to the address."
+# Rules this template carries that the realm settings cannot express yet; the command
+# prints them for the operator.
+notes = [
+  "The second factor is app-controlled; biometrics alone never authenticate.",
+  "SMS is used only at enrolment, never as a sign-in factor.",
+  "A phone number's SIM must be at least 90 days old before it is trusted.",
+  "Transaction codes are signed with the customer's own key.",
+  "Mother's maiden name and identity card data are never a factor.",
+]
+
+[[step]]
+resource = "settings/signin-policy"
+
+[step.body]
+methods = ["passkey"]
+required_fields = ["email", "phone_number"]
+mfa_required = true
+
+[[step]]
+resource = "settings/session-policy"
+
+[step.body]
+absolute_ms = 900000
+idle_ms = 300000
+binding = "ip"

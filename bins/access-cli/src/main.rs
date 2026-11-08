@@ -56,6 +56,8 @@ enum Command {
     Apply(commands::apply::ApplyArgs),
     /// Re-evaluates a recorded decision with the Kernel (INV-21).
     Replay(commands::replay::ReplayArgs),
+    /// Applies a realm template, one Exercise per setting (OP-153 m.3 (r)).
+    Realm(commands::realm::RealmArgs),
 }
 
 fn main() -> ExitCode {
@@ -90,6 +92,7 @@ fn main() -> ExitCode {
                     Command::Export(a) => Box::pin(commands::export::run(a)).await,
                     Command::Diff(a) => Box::pin(commands::diff::run(a)).await,
                     Command::Apply(a) => Box::pin(commands::apply::run(a)).await,
+                    Command::Realm(a) => Box::pin(commands::realm::run(a)).await,
                     Command::Migrate(a) => commands::migrate::run(&cli.config, &a),
                     Command::Replay(a) => commands::replay::run(&a),
                 }

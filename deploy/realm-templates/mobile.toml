@@ -1,0 +1,22 @@
+# Realm template `mobile` (OP-153 m.3 (r), §10.9.2): realm policy defaults as data.
+# `access-cli realm apply-template` commits each step as its own Exercise and stops at the
+# first failure.
+
+name = "mobile"
+description = "Mobile apps: passkeys and phone numbers, MFA optional."
+
+[[step]]
+resource = "settings/signin-policy"
+
+[step.body]
+methods = ["passkey", "phone"]
+required_fields = ["phone_number"]
+mfa_required = false
+
+[[step]]
+resource = "settings/session-policy"
+
+[step.body]
+absolute_ms = 43200000
+idle_ms = 900000
+binding = "asn"

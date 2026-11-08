@@ -1,0 +1,22 @@
+# Realm template `b2b-saas` (OP-153 m.3 (r), §10.9.2): realm policy defaults as data.
+# `access-cli realm apply-template` commits each step as its own Exercise and stops at the
+# first failure.
+
+name = "b2b-saas"
+description = "Business SaaS: e-mail and passkeys, MFA required, organizations invite their members."
+
+[[step]]
+resource = "settings/signin-policy"
+
+[step.body]
+methods = ["email", "passkey"]
+required_fields = ["email"]
+mfa_required = true
+
+[[step]]
+resource = "settings/session-policy"
+
+[step.body]
+absolute_ms = 43200000
+idle_ms = 900000
+binding = "asn"

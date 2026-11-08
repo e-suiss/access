@@ -192,7 +192,7 @@ pub(crate) async fn run(args: AdminArgs) -> Code {
     }
 }
 
-async fn write<T: crate::http::Transport, E: crate::client::Env>(
+pub(crate) async fn write<T: crate::http::Transport, E: crate::client::Env>(
     client: &Client<'_, T, E>,
     op: &Operation,
     key: Option<&str>,

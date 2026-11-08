@@ -34,6 +34,7 @@ tracing = { workspace = true, features = ["std"] }
 access-telemetry = { workspace = true }
 
 [dev-dependencies]
+access-identity-admin = { workspace = true }
 access-identity-oauth = { workspace = true }
 access-store = { workspace = true, features = ["testing"] }
 tokio = { workspace = true, features = ["macros", "rt", "sync"] }

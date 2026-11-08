@@ -71,6 +71,7 @@ name = "access-cli"
 version = "0.3.2"
 dependencies = [
  "access-crypto",
+ "access-identity-admin",
  "access-identity-oauth",
  "access-identity-risk",
  "access-internal-api",
