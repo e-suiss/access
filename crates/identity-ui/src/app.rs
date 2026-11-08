@@ -15,6 +15,7 @@ mod approve;
 mod credential;
 pub mod devices;
 mod me;
+pub mod orgs;
 pub mod privacy;
 pub mod recovery;
 pub mod shell;

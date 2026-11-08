@@ -146,6 +146,14 @@ where
             .route(
                 &format!("{prefix}/v1/account/link-codes"),
                 post(recovery::link_code::<D, K, KI, C, M>),
+            )
+            .route(
+                &format!("{prefix}/v1/invitations/{{code}}"),
+                post(web::accept_invitation::<D, K, KI, C, M>),
+            )
+            .route(
+                &format!("{prefix}/v1/organizations/{{organization}}/access-requests"),
+                post(web::request_access::<D, K, KI, C, M>),
             );
         reads = reads
             .route(
@@ -187,6 +195,14 @@ where
             .route(
                 &format!("{prefix}/v1/account/recovery-contacts"),
                 get(recovery::contacts::<D, K, KI, C, M>),
+            )
+            .route(
+                &format!("{prefix}/v1/invitations/{{code}}"),
+                get(web::invitation::<D, K, KI, C, M>),
+            )
+            .route(
+                &format!("{prefix}/v1/account/organizations"),
+                get(web::organizations::<D, K, KI, C, M>),
             );
     }
     // OP-153 m.4

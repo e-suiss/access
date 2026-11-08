@@ -642,6 +642,52 @@ impl TenantTx {
             .collect()
     }
 
+    /// The blind indexes of `subject`'s live sealed e-mail identifiers (TN-89 (5): an invitation
+    /// is accepted only with a verified identifier of its invitee).
+    ///
+    /// # Errors
+    /// [`StoreError`].
+    pub async fn email_indexes(&mut self, subject: [u8; 16]) -> Result<Vec<[u8; 32]>, StoreError> {
+        let (tenant, realm) = self.org_scope()?;
+        let rows = sqlx::query_scalar!(
+            r#"SELECT value_index AS "index!" FROM access.identity_identifiers
+                WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND status = 'active'
+                  AND kind = 'email' AND value_index IS NOT NULL
+                ORDER BY identifier_id"#,
+            tenant,
+            realm,
+            uuid(subject),
+        )
+        .fetch_all(&mut *self.tx)
+        .await?;
+        rows.into_iter()
+            .map(|i| <[u8; 32]>::try_from(i).map_err(|_| StoreError::Corrupt))
+            .collect()
+    }
+
+    /// Whether `subject` has an open access request to `org`.
+    ///
+    /// # Errors
+    /// [`StoreError`].
+    pub async fn access_requested(
+        &mut self,
+        org: [u8; 16],
+        subject: [u8; 16],
+    ) -> Result<bool, StoreError> {
+        let (tenant, realm) = self.org_scope()?;
+        Ok(sqlx::query_scalar!(
+            r#"SELECT EXISTS (SELECT 1 FROM access.org_access_requests
+                WHERE tenant_id = $1 AND realm_id = $2 AND org_id = $3 AND subject_id = $4
+                  AND decided_at IS NULL) AS "e!""#,
+            tenant,
+            realm,
+            uuid(org),
+            uuid(subject),
+        )
+        .fetch_one(&mut *self.tx)
+        .await?)
+    }
+
     /// The organizations `subject` is an active member of, with whether it owns them.
     ///
     /// # Errors

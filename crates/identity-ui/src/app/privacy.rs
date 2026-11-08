@@ -68,7 +68,7 @@ where
     M: Messages,
 {
     /// The realm kit and the live session's subject; `401` without one (G57).
-    async fn me(
+    pub(super) async fn me(
         &self,
         entry: &RealmEntry,
         b: &Browser<'_>,

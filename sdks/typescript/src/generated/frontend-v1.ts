@@ -477,7 +477,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** An invitation's organization and inviter, as text; a scanner's GET does not consume it. */
+        /** An invitation's organization and role, as text; a scanner's GET does not consume it. */
         get: operations["getInvitation"];
         put?: never;
         /** Accepts an invitation (OP-153 m.3 (o)). */
@@ -1583,7 +1583,15 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            501: components["responses"]["NotYetServed"];
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
             default: components["responses"]["Problem"];
         };
     };
@@ -1602,7 +1610,15 @@ export interface operations {
             };
         };
         responses: {
-            501: components["responses"]["NotYetServed"];
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
             default: components["responses"]["Problem"];
         };
     };
@@ -1615,7 +1631,15 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            501: components["responses"]["NotYetServed"];
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
             default: components["responses"]["Problem"];
         };
     };
@@ -1651,7 +1675,15 @@ export interface operations {
             };
         };
         responses: {
-            501: components["responses"]["NotYetServed"];
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
             default: components["responses"]["Problem"];
         };
     };

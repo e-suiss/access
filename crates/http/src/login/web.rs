@@ -728,3 +728,59 @@ handler! {
         Ok(s.hosted.data_requests(&entry, &b).await)
     }
 }
+
+handler! {
+    /// `POST /v1/invitations/{code}` (TN-89, OP-153 m.3 (o)).
+    accept_invitation(s, entry, b, p, bytes, headers) true {
+        let req: access_identity_ui::app::orgs::AcceptBody = if bytes.is_empty() {
+            access_identity_ui::app::orgs::AcceptBody::default()
+        } else {
+            body(&bytes)?
+        };
+        Ok(s.hosted.accept_invitation(&entry, &b, param(&p, "code"), &req).await)
+    }
+}
+
+handler! {
+    /// `GET /v1/account/organizations` (OP-153 m.3 (o)).
+    organizations(s, entry, b, p, bytes, headers) false {
+        let _ = (&p, &bytes);
+        Ok(s.hosted.organizations(&entry, &b).await)
+    }
+}
+
+handler! {
+    /// `POST /v1/organizations/{organization}/access-requests` (TN-90).
+    request_access(s, entry, b, p, bytes, headers) true {
+        let _ = &bytes;
+        Ok(s.hosted.request_access(&entry, &b, param(&p, "organization")).await)
+    }
+}
+
+/// `GET /v1/invitations/{code}` (TN-89 (8), (9)): no session needed; a scanner's fetch is
+/// counted and consumes nothing; the answer is never sent on as a referrer.
+pub(super) async fn invitation<D, K, KI, C, M>(
+    State(s): St<D, K, KI, C, M>,
+    Path(p): Params,
+    uri: Uri,
+    headers: HeaderMap,
+) -> Response
+where
+    D: Directory,
+    K: Keys,
+    KI: Kits,
+    C: Clock + Sync,
+    M: Messages,
+{
+    let entry = match realm(&s, &p, &uri, &headers).await {
+        Ok(e) => e,
+        Err(r) => return r,
+    };
+    let reply = s.hosted.invitation(&entry, param(&p, "code")).await;
+    let mut r = send(reply, &headers).await;
+    r.headers_mut().insert(
+        HeaderName::from_static("referrer-policy"),
+        HeaderValue::from_static("no-referrer"),
+    );
+    r
+}

@@ -383,6 +383,7 @@ version = "0.3.2"
 dependencies = [
  "access-crypto",
  "access-identity-account",
+ "access-identity-events",
  "access-identity-hooks",
  "access-identity-oauth",
  "access-identity-session",

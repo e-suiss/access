@@ -984,10 +984,17 @@
     "/v1/invitations/{code}": {
       "get": {
         "operationId": "getInvitation",
-        "summary": "An invitation's organization and inviter, as text; a scanner's GET does not consume it.",
+        "summary": "An invitation's organization and role, as text; a scanner's GET does not consume it.",
         "responses": {
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           },
           "default": {
             "$ref": "#/components/responses/Problem"
@@ -1002,15 +1009,21 @@
               "type": "string"
             }
           }
-        ],
-        "x-suiss-status": "planned"
+        ]
       },
       "post": {
         "operationId": "acceptInvitation",
         "summary": "Accepts an invitation (OP-153 m.3 (o)).",
         "responses": {
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           },
           "default": {
             "$ref": "#/components/responses/Problem"
@@ -1034,8 +1047,7 @@
               }
             }
           }
-        },
-        "x-suiss-status": "planned"
+        }
       }
     },
     "/v1/account/organizations": {
@@ -1043,14 +1055,20 @@
         "operationId": "listOrganizations",
         "summary": "The organizations the person belongs to.",
         "responses": {
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           },
           "default": {
             "$ref": "#/components/responses/Problem"
           }
-        },
-        "x-suiss-status": "planned"
+        }
       }
     },
     "/v1/organizations": {
@@ -1082,8 +1100,15 @@
         "operationId": "requestAccess",
         "summary": "Asks an organization's administrators for access.",
         "responses": {
-          "501": {
-            "$ref": "#/components/responses/NotYetServed"
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
           },
           "default": {
             "$ref": "#/components/responses/Problem"
@@ -1107,8 +1132,7 @@
               }
             }
           }
-        },
-        "x-suiss-status": "planned"
+        }
       }
     },
     "/v1/login/social/{provider}": {

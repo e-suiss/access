@@ -3188,3 +3188,165 @@ async fn strict_mode_takes_identifier_and_password_on_one_screen() {
         String::from_utf8_lossy(&done.body)
     );
 }
+
+/// An organization with `owner` bound to Party `party` as its founder, and an invitation from
+/// that Party to `invitee` with link token `token` and magic code `code` (TN-89).
+async fn org_with_invitation(
+    e: &Env,
+    owner: [u8; 16],
+    party: [u8; 16],
+    invitee: &str,
+    (token, code): (&str, &str),
+) -> [u8; 16] {
+    use access_identity_account::domain::invitation::{code_hash, token_hash};
+    let mut t = TenantTx::begin(&e.db.app, e.tenant, e.realm).await.unwrap();
+    assert!(
+        access_store::idp::bind_subject_party(&mut t, &owner, &party)
+            .await
+            .unwrap()
+    );
+    let org = t.insert_org([0x0a; 16], "Acme", &[1; 32]).await.unwrap();
+    t.insert_membership(org, owner, access_store::orgs::Source::Founder, true, None)
+        .await
+        .unwrap();
+    let index = e
+        .kit
+        .vault()
+        .index_of(e.tenant.as_bytes(), e.realm.as_bytes(), invitee)
+        .unwrap();
+    t.insert_invitation(&access_store::orgs::NewInvitation {
+        org,
+        token_hash: &token_hash(token),
+        code_hash: &code_hash(code),
+        invitee_index: &index,
+        invitee_domain: &invitee.rsplit_once('@').unwrap().1.to_ascii_lowercase(),
+        inviter: party,
+        role: ("member", 1),
+        exercise: None,
+        ttl_s: 86_400,
+    })
+    .await
+    .unwrap();
+    t.commit().await.unwrap();
+    org
+}
+
+// TN-89, OP-153 m.3 (o), (gg), HL-39, Ek B 3604, 3606, 4038
+#[tokio::test]
+async fn an_invitation_is_read_without_consuming_it_and_accepted_by_its_invitee() {
+    let e = env(0x31, "lg-invite", AuthPolicy::DEFAULT).await;
+    let owner = e.account("owner@acme.example").await;
+    e.account("alice@acme.example").await;
+    e.account("mallory@evil.example").await;
+    let token = "tok-0123456789abcdefghijklmnopqrstuv";
+    let org = org_with_invitation(
+        &e,
+        owner,
+        [0x77; 16],
+        "Alice@ACME.example",
+        (token, "ABCD2345"),
+    )
+    .await;
+    let path = format!("/v1/invitations/{token}");
+
+    // TN-89 (8), (9): no session needed, never sent on as a referrer, and a scanner's fetch is
+    // counted and consumes nothing
+    let mut scanner = e.browser("s");
+    for _ in 0..2 {
+        let a = scanner.get(&path).await;
+        assert_eq!(a.status, StatusCode::OK);
+        assert_eq!(a.headers["referrer-policy"], "no-referrer");
+        assert_eq!(a.json()["organization"]["display_name"], "Acme");
+        assert_eq!(a.json()["role"]["name"], "member");
+    }
+    let mut t = TenantTx::begin(&e.db.app, e.tenant, e.realm).await.unwrap();
+    let listed = t.invitations(org).await.unwrap();
+    assert!(listed[0].open);
+    assert_eq!(listed[0].scanner_clicks, 2);
+    t.commit().await.unwrap();
+    assert_eq!(
+        scanner.post(&path, Some(json!({}))).await.status,
+        StatusCode::UNAUTHORIZED
+    );
+
+    // TN-89 (5): only the invitee's verified identifier accepts it
+    let mut m = e.browser("m");
+    assert_eq!(m.sign_in("mallory@evil.example").await.step(), "complete");
+    let a = m.post(&path, Some(json!({ "confirm": true }))).await;
+    assert_eq!(a.status, StatusCode::FORBIDDEN);
+    assert_eq!(a.json()["code"], "invitation-mismatch");
+
+    // TN-89 (10): an invitee domain the organization has not verified needs a confirmation
+    let mut b = e.browser("a");
+    assert_eq!(b.sign_in("alice@acme.example").await.step(), "complete");
+    let a = b.post(&path, Some(json!({}))).await;
+    assert_eq!(a.status, StatusCode::CONFLICT);
+    assert_eq!(a.json()["organization"]["display_name"], "Acme");
+    let a = b.post(&path, Some(json!({ "confirm": true }))).await;
+    assert_eq!(a.status, StatusCode::OK, "{:?}", a.json());
+    // TN-89 (10), OP-153 m.3 (o): never owner at first acceptance
+    assert_eq!(a.json()["owner"], false);
+    let mine = b.get("/v1/account/organizations").await;
+    assert_eq!(mine.status, StatusCode::OK);
+    let items = mine.json()["items"].clone();
+    assert_eq!(items.as_array().unwrap().len(), 1);
+    assert_eq!(items[0]["source"], "invite");
+    assert_eq!(items[0]["owner"], false);
+    assert_eq!(items[0]["role"]["version"], 1);
+    // accepted once
+    assert_eq!(
+        b.post(&path, Some(json!({ "confirm": true }))).await.status,
+        StatusCode::NOT_FOUND
+    );
+    assert_eq!(scanner.get(&path).await.status, StatusCode::NOT_FOUND);
+
+    // TN-90: an access request is asked once
+    let ask = format!(
+        "/v1/organizations/{}/access-requests",
+        b64url_encode(&[0x0a; 16])
+    );
+    assert_eq!(
+        m.post(&ask, Some(json!({}))).await.status,
+        StatusCode::ACCEPTED
+    );
+    assert_eq!(
+        m.post(&ask, Some(json!({}))).await.status,
+        StatusCode::CONFLICT
+    );
+    assert_eq!(
+        b.post(&ask, Some(json!({}))).await.status,
+        StatusCode::CONFLICT
+    );
+}
+
+// TN-89 (3), OP-153 m.3 (o): acceptance re-checks the inviter
+#[tokio::test]
+async fn an_invitation_from_an_inviter_who_left_grants_nothing() {
+    let e = env(0x32, "lg-invite-gone", AuthPolicy::DEFAULT).await;
+    let owner = e.account("owner@acme.example").await;
+    let other = e.account("carol@acme.example").await;
+    e.account("alice@acme.example").await;
+    let token = "tok-inviter-left-0123456789abcdefghij";
+    let org = org_with_invitation(
+        &e,
+        owner,
+        [0x78; 16],
+        "alice@acme.example",
+        (token, "WXYZ2345"),
+    )
+    .await;
+    let mut t = TenantTx::begin(&e.db.app, e.tenant, e.realm).await.unwrap();
+    t.insert_membership(org, other, access_store::orgs::Source::Invite, true, None)
+        .await
+        .unwrap();
+    assert!(t.end_membership(org, owner, "remove").await.unwrap());
+    t.commit().await.unwrap();
+    let mut b = e.browser("a");
+    assert_eq!(b.sign_in("alice@acme.example").await.step(), "complete");
+    // TN-89: the magic code is the link's fallback, for its invitee only
+    let a = b
+        .post("/v1/invitations/wxyz2345", Some(json!({ "confirm": true })))
+        .await;
+    assert_eq!(a.status, StatusCode::FORBIDDEN);
+    assert_eq!(a.json()["code"], "inviter-not-authorized");
+}

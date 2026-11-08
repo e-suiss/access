@@ -348,21 +348,21 @@ pub const ROUTES: &[Route] = &[
         "createLinkCode",
         "Makes a cross-device link code, never sent by e-mail (OP-153 m.3 (d)).",
     ),
-    planned(
+    live(
         Owner::N3,
         Verb::Get,
         "/v1/invitations/{code}",
         "getInvitation",
-        "An invitation's organization and inviter, as text; a scanner's GET does not consume it.",
+        "An invitation's organization and role, as text; a scanner's GET does not consume it.",
     ),
-    planned(
+    live(
         Owner::N3,
         Verb::Post,
         "/v1/invitations/{code}",
         "acceptInvitation",
         "Accepts an invitation (OP-153 m.3 (o)).",
     ),
-    planned(
+    live(
         Owner::N3,
         Verb::Get,
         "/v1/account/organizations",
@@ -376,7 +376,7 @@ pub const ROUTES: &[Route] = &[
         "createOrganization",
         "Creates an organization: party_register and idp.org.create (OP-153 m.3 (b)).",
     ),
-    planned(
+    live(
         Owner::N3,
         Verb::Post,
         "/v1/organizations/{organization}/access-requests",
