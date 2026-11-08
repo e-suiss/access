@@ -25,6 +25,7 @@ mod login;
 mod oauth;
 mod platform;
 mod product;
+mod retention;
 mod risk;
 mod startup;
 mod status;
@@ -933,6 +934,7 @@ struct Background {
     delivering: tokio::task::JoinHandle<()>,
     events: events::Delivery,
     opening: tokio::task::JoinHandle<()>,
+    retaining: tokio::task::JoinHandle<()>,
     sampling: tokio::task::JoinHandle<()>,
     ready: Readiness,
     /// Every realm's JWKS loaded at start-up (OP-138, §17.9.7).
@@ -957,7 +959,7 @@ impl Background {
             &event_pools(pools, ids, &outbound),
             outbound,
             SignerKeys::new(identity.signer.clone()),
-            keks,
+            keks.clone(),
             &consumers,
         );
         let (stop, stopped) = tokio::sync::watch::channel(false);
@@ -973,12 +975,21 @@ impl Background {
             pools.router.clone(),
             holder()?,
         ));
+        // OP-153 m.3 (bb), (dd)
+        let retaining = tokio::spawn(retention::run(
+            pools.app.clone(),
+            pools.router.clone(),
+            keks,
+            ids.clone(),
+            holder()?,
+        ));
         consumers.set(true);
         Ok(Self {
             stop,
             delivering,
             events,
             opening,
+            retaining,
             // §17.8.2, OP-53
             sampling: tokio::spawn(sample_pools(PoolGauges::of(pools))),
             jwks: ready.flag("jwks.realms"),
@@ -992,6 +1003,7 @@ impl Background {
         let _ = self.delivering.await;
         self.events.stop().await;
         self.opening.abort();
+        self.retaining.abort();
         self.sampling.abort();
     }
 }

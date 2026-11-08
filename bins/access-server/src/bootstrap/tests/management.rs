@@ -44,7 +44,7 @@ const ORIGIN: &str = "https://manage.access.test:9443";
 const HOST: &str = "access.test";
 const SESSION: &str = "__Host-access-session";
 
-fn now() -> u64 {
+pub(super) fn now() -> u64 {
     u64::try_from(
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -54,7 +54,10 @@ fn now() -> u64 {
     .unwrap()
 }
 
-async fn send(router: &axum::Router, request: Request<Body>) -> (Response<Body>, Vec<u8>) {
+pub(super) async fn send(
+    router: &axum::Router,
+    request: Request<Body>,
+) -> (Response<Body>, Vec<u8>) {
     let r = router.clone().oneshot(request).await.unwrap();
     let (parts, body) = r.into_parts();
     let bytes = to_bytes(body, 1 << 22).await.unwrap().to_vec();
@@ -83,14 +86,19 @@ fn path_of(url: &str) -> String {
 }
 
 /// The browser: its console cookies, CSRF token and device key.
-struct Browser {
-    jar: Vec<(String, String)>,
-    csrf: String,
-    key: SoftSigner,
+pub(super) struct Browser {
+    pub(super) jar: Vec<(String, String)>,
+    pub(super) csrf: String,
+    pub(super) key: SoftSigner,
 }
 
 impl Browser {
-    fn request(&self, method: &Method, path: &str, body: &str) -> axum::http::request::Builder {
+    pub(super) fn request(
+        &self,
+        method: &Method,
+        path: &str,
+        body: &str,
+    ) -> axum::http::request::Builder {
         let cookie = self
             .jar
             .iter()
@@ -113,7 +121,7 @@ impl Browser {
         b
     }
 
-    fn ais(
+    pub(super) fn ais(
         &self,
         domain: Digest,
         nonce: &[u8],
@@ -157,27 +165,27 @@ impl Browser {
     }
 }
 
-fn envelope_digest(b64: &str) -> Digest {
+pub(super) fn envelope_digest(b64: &str) -> Digest {
     let bytes = b64url_decode(b64).unwrap();
     let v = dcbor::decode(&bytes, Limits::CEILING).unwrap();
     intent_digest(&IntentEnvelope::from_value(&v).unwrap()).unwrap()
 }
 
 /// What a signed-in console with a registered browser Instance holds.
-struct Console {
-    w: World,
-    management: axum::Router,
-    browser: Browser,
-    domain: Digest,
-    root: access_kernel::model::Id,
-    route: access_store::tenancy::RealmRoute,
-    subject: [u8; 16],
+pub(super) struct Console {
+    pub(super) w: World,
+    pub(super) management: axum::Router,
+    pub(super) browser: Browser,
+    pub(super) domain: Digest,
+    pub(super) root: access_kernel::model::Id,
+    pub(super) route: access_store::tenancy::RealmRoute,
+    pub(super) subject: [u8; 16],
 }
 
 /// A bootstrapped realm `acme` whose founder signed in to the console at the realm's own
 /// authorization server and registered the browser's key as the session's device Instance; the
 /// console's ADP proxy reaches the real decision point when `with_adp`.
-async fn console(label: &str, with_adp: bool) -> Console {
+pub(super) async fn console(label: &str, with_adp: bool) -> Console {
     let w = World::new(label).await;
     let declared = DeclaredTargets::default();
     Bootstrap {

@@ -2372,3 +2372,4 @@ mod provision {
 
 mod catalog;
 mod management;
+mod privacy;
