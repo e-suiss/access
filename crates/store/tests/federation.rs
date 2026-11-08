@@ -216,3 +216,59 @@ async fn an_attempt_and_a_ticket_are_used_once_by_their_own_browser() {
     );
     tx.commit().await.unwrap();
 }
+
+// §12.1.3, OP-73, OP-153 m.3 (m)
+#[tokio::test]
+async fn a_binding_half_is_committed_once_and_never_deleted() {
+    let db = fresh().await.unwrap();
+    let (t, r) = realm(&db).await;
+    let mut tx = TenantTx::begin(&db.app, t, r).await.unwrap();
+    let a = tx.insert_subject("active", "k:1", &[1; 40]).await.unwrap();
+    let half = access_store::federation::NewHalf {
+        binding: [3; 16],
+        subject: a,
+        role: "offer",
+        proof: "invite_token",
+        secret_hash: &[4; 32],
+        peer_evidence: None,
+        now_ms: 1_000,
+        expires_ms: 601_000,
+    };
+    assert!(tx.insert_binding_half(&half).await.unwrap());
+    assert!(
+        !tx.insert_binding_half(&half).await.unwrap(),
+        "one half per realm"
+    );
+    assert!(
+        !tx.commit_binding_half([3; 16], a, &[5; 32], 700_000)
+            .await
+            .unwrap(),
+        "lapsed"
+    );
+    assert!(
+        tx.commit_binding_half([3; 16], a, &[5; 32], 2_000)
+            .await
+            .unwrap()
+    );
+    assert!(
+        !tx.commit_binding_half([3; 16], a, &[6; 32], 3_000)
+            .await
+            .unwrap()
+    );
+    let rows = tx.binding_halves_of(a).await.unwrap();
+    assert_eq!(
+        (rows[0].state.as_str(), rows[0].committed_ms),
+        ("committed", Some(2_000))
+    );
+    tx.commit().await.unwrap();
+    let changed = sqlx::query(
+        "UPDATE access.identity_binding_halves SET peer_evidence = decode(repeat('07', 32), 'hex')",
+    )
+    .execute(&db.owner)
+    .await;
+    assert!(changed.is_err(), "a committed half keeps its evidence");
+    let deleted = sqlx::query("DELETE FROM access.identity_binding_halves")
+        .execute(&db.owner)
+        .await;
+    assert!(deleted.is_err());
+}

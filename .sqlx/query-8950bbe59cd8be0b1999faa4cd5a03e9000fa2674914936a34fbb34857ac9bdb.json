@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.identity_binding_halves\n                SET state = 'committed', peer_evidence = $5, committed_ms = $6\n              WHERE tenant_id = $1 AND realm_id = $2 AND binding_id = $3 AND subject_id = $4\n                AND state = 'offered' AND role = 'offer' AND expires_ms > $6",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "8950bbe59cd8be0b1999faa4cd5a03e9000fa2674914936a34fbb34857ac9bdb"
+}

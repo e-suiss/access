@@ -97,6 +97,18 @@ where
             .route(
                 &format!("{prefix}/v1/account/connected-apps/{{client}}"),
                 delete(stop_sharing::<D, K, KI, C, M, H, S>),
+            )
+            .route(
+                &format!("{prefix}/v1/account/bindings"),
+                post(offer_binding::<D, K, KI, C, M, H, S>),
+            )
+            .route(
+                &format!("{prefix}/v1/account/bindings/accept"),
+                post(accept_binding::<D, K, KI, C, M, H, S>),
+            )
+            .route(
+                &format!("{prefix}/v1/account/bindings/complete"),
+                post(complete_binding::<D, K, KI, C, M, H, S>),
             );
         reads = reads
             .route(
@@ -114,6 +126,10 @@ where
             .route(
                 &format!("{prefix}/v1/account/connected-apps"),
                 get(connected::<D, K, KI, C, M, H, S>),
+            )
+            .route(
+                &format!("{prefix}/v1/account/bindings"),
+                get(bindings::<D, K, KI, C, M, H, S>),
             );
     }
     let cache = Arc::new(idempotency::Cache::default());
@@ -345,5 +361,47 @@ handler! {
         let _ = (&bytes, &uri);
         let client = bounded(p.get("client").map(String::as_str).unwrap_or_default(), 255)?;
         Ok(s.login.hosted.stop_sharing(&entry, &jar.browser(), client).await)
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct TokenBody {
+    token: String,
+}
+
+handler! {
+    /// `GET /v1/account/bindings` (§12.1.3).
+    bindings(s, entry, jar, p, bytes, headers, uri) false {
+        let _ = (&p, &bytes, &uri);
+        Ok(s.login.hosted.bindings(&entry, &jar.browser()).await)
+    }
+}
+
+handler! {
+    /// `POST /v1/account/bindings` (§12.1.3, TN-65).
+    offer_binding(s, entry, jar, p, bytes, headers, uri) true {
+        let _ = (&p, &bytes, &uri);
+        Ok(s.login.hosted.offer_binding(&entry, &jar.browser()).await)
+    }
+}
+
+handler! {
+    /// `POST /v1/account/bindings/accept` (§12.1.3).
+    accept_binding(s, entry, jar, p, bytes, headers, uri) true {
+        let _ = (&p, &uri);
+        let req: TokenBody = serde_json::from_slice(&bytes).map_err(|_| bad())?;
+        let token = bounded(&req.token, 128)?;
+        Ok(s.login.hosted.bind_half(&entry, &jar.browser(), token, true).await)
+    }
+}
+
+handler! {
+    /// `POST /v1/account/bindings/complete` (§12.1.3).
+    complete_binding(s, entry, jar, p, bytes, headers, uri) true {
+        let _ = (&p, &uri);
+        let req: TokenBody = serde_json::from_slice(&bytes).map_err(|_| bad())?;
+        let token = bounded(&req.token, 128)?;
+        Ok(s.login.hosted.bind_half(&entry, &jar.browser(), token, false).await)
     }
 }

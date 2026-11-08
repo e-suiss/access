@@ -599,3 +599,141 @@ impl TenantTx {
         Ok(n == 1)
     }
 }
+
+/// One half of a cross-realm `IdentityBinding`, as this realm keeps it (§12.1.3).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BindingHalf {
+    /// The id both halves share.
+    pub binding: [u8; 16],
+    /// `offer` or `accept`.
+    pub role: String,
+    /// The proof the person gave.
+    pub proof: String,
+    /// `offered`, `committed` or `ended`.
+    pub state: String,
+    /// When it was made.
+    pub created_ms: u64,
+    /// When it was committed.
+    pub committed_ms: Option<u64>,
+}
+
+/// A half to write.
+pub struct NewHalf<'a> {
+    /// The id both halves share.
+    pub binding: [u8; 16],
+    /// The account.
+    pub subject: [u8; 16],
+    /// `offer` or `accept`.
+    pub role: &'a str,
+    /// The proof the person gave.
+    pub proof: &'a str,
+    /// Digest of this half's own secret.
+    pub secret_hash: &'a [u8; 32],
+    /// Digest of what the other realm handed over; an accepting half is committed with it.
+    pub peer_evidence: Option<&'a [u8; 32]>,
+    /// Now.
+    pub now_ms: u64,
+    /// When an offer lapses.
+    pub expires_ms: u64,
+}
+
+impl TenantTx {
+    /// Writes a half: an offer waits, an acceptance is committed with its peer evidence; false
+    /// when this realm already keeps a half of the binding.
+    ///
+    /// # Errors
+    /// [`StoreError`].
+    pub async fn insert_binding_half(&mut self, h: &NewHalf<'_>) -> Result<bool, StoreError> {
+        let (tenant, realm) = scope(self)?;
+        let committed = h.peer_evidence.is_some();
+        let n = sqlx::query!(
+            "INSERT INTO access.identity_binding_halves (tenant_id, realm_id, binding_id,
+                    subject_id, role, proof, secret_hash, peer_evidence, state, created_ms,
+                    expires_ms, committed_ms)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8,
+                     CASE WHEN $9::boolean THEN 'committed' ELSE 'offered' END, $10::bigint, $11,
+                     CASE WHEN $9::boolean THEN $10::bigint END)
+             ON CONFLICT (tenant_id, realm_id, binding_id) DO NOTHING",
+            tenant,
+            realm,
+            Uuid::from_bytes(h.binding),
+            Uuid::from_bytes(h.subject),
+            h.role,
+            h.proof,
+            h.secret_hash.as_slice(),
+            h.peer_evidence.map(|e| e.to_vec()),
+            committed,
+            i64_of(h.now_ms)?,
+            i64_of(h.expires_ms)?,
+        )
+        .execute(&mut *self.tx)
+        .await?
+        .rows_affected();
+        Ok(n == 1)
+    }
+
+    /// Commits `subject`'s unexpired offer `binding` with the digest of what the other realm
+    /// handed over; false when there is none.
+    ///
+    /// # Errors
+    /// [`StoreError`].
+    pub async fn commit_binding_half(
+        &mut self,
+        binding: [u8; 16],
+        subject: [u8; 16],
+        peer_evidence: &[u8; 32],
+        now_ms: u64,
+    ) -> Result<bool, StoreError> {
+        let (tenant, realm) = scope(self)?;
+        let n = sqlx::query!(
+            "UPDATE access.identity_binding_halves
+                SET state = 'committed', peer_evidence = $5, committed_ms = $6
+              WHERE tenant_id = $1 AND realm_id = $2 AND binding_id = $3 AND subject_id = $4
+                AND state = 'offered' AND role = 'offer' AND expires_ms > $6",
+            tenant,
+            realm,
+            Uuid::from_bytes(binding),
+            Uuid::from_bytes(subject),
+            peer_evidence.as_slice(),
+            i64_of(now_ms)?,
+        )
+        .execute(&mut *self.tx)
+        .await?
+        .rows_affected();
+        Ok(n == 1)
+    }
+
+    /// The binding halves of `subject`, oldest first.
+    ///
+    /// # Errors
+    /// [`StoreError`].
+    pub async fn binding_halves_of(
+        &mut self,
+        subject: [u8; 16],
+    ) -> Result<Vec<BindingHalf>, StoreError> {
+        let (tenant, realm) = scope(self)?;
+        let rows = sqlx::query!(
+            "SELECT binding_id, role, proof, state, created_ms, committed_ms
+               FROM access.identity_binding_halves
+              WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3
+              ORDER BY created_ms, binding_id",
+            tenant,
+            realm,
+            Uuid::from_bytes(subject),
+        )
+        .fetch_all(&mut *self.tx)
+        .await?;
+        rows.into_iter()
+            .map(|r| {
+                Ok(BindingHalf {
+                    binding: *r.binding_id.as_bytes(),
+                    role: r.role,
+                    proof: r.proof,
+                    state: r.state,
+                    created_ms: u64_of(r.created_ms)?,
+                    committed_ms: r.committed_ms.map(u64_of).transpose()?,
+                })
+            })
+            .collect()
+    }
+}

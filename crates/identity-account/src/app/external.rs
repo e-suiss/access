@@ -103,7 +103,7 @@ async fn audit(
 }
 
 impl Externals<'_> {
-    async fn begin(&self) -> Result<PgTx, AccountError> {
+    pub(crate) async fn begin(&self) -> Result<PgTx, AccountError> {
         Ok(PgTx(
             TenantTx::begin(self.pool, self.realm.tenant, self.realm.realm).await?,
             Some(self.vault.clone()),

@@ -1448,6 +1448,115 @@
         }
       }
     },
+    "/v1/account/bindings": {
+      "get": {
+        "operationId": "listBindings",
+        "summary": "This realm's halves of the account's cross-realm bindings (§12.1.3).",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        }
+      },
+      "post": {
+        "operationId": "offerBinding",
+        "summary": "Offers to bind the account to one in another realm, after re-authentication (§12.1.3, TN-65).",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/account/bindings/accept": {
+      "post": {
+        "operationId": "acceptBinding",
+        "summary": "Commits this realm's half with the other realm's offer token (§12.1.3).",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/account/bindings/complete": {
+      "post": {
+        "operationId": "completeBinding",
+        "summary": "Commits the offering realm's half with the accepting realm's token (§12.1.3).",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/sessions/{instance}/end": {
       "post": {
         "operationId": "endSignIn",

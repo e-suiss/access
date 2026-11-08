@@ -804,6 +804,130 @@ where
     }
 }
 
+/// The binding token was refused: no such offer, a lapsed one, or a half this realm keeps.
+const BINDING_REFUSED: Problem = Problem {
+    status: 409,
+    code: "binding-refused",
+    title: "That code didn't work. Start again from the other account.",
+    retry_after_s: None,
+};
+
+impl<K, C, M> Hosted<K, C, M>
+where
+    K: Kits,
+    C: Clock + Sync,
+    M: Messages,
+{
+    /// `POST /v1/account/bindings` (§12.1.3, TN-65): after a fresh re-authentication, an offer
+    /// to bind this account to one in another realm; the token goes to the other realm.
+    pub async fn offer_binding(&self, entry: &RealmEntry, b: &Browser<'_>) -> Reply {
+        let kit = match self.kit(entry).await {
+            Ok(k) => k,
+            Err(r) => return r,
+        };
+        let (subject, _) = match self.fresh(&kit, b, Some(LINK_FRESHNESS_MS)).await {
+            Ok(s) => s,
+            Err(r) => return r,
+        };
+        let realm = kit.realm();
+        let vault = kit.vault();
+        let externals = Externals {
+            pool: &self.db,
+            realm: &realm,
+            vault: &vault,
+        };
+        match externals.offer_binding(subject, self.clock.now_ms()).await {
+            Ok(token) => Reply::json(
+                201,
+                json!({
+                    "token": token,
+                    "expires_in_s": access_identity_account::app::binding::OFFER_TTL_MS / 1000,
+                }),
+            ),
+            Err(e) => failed(&e.into()),
+        }
+    }
+
+    /// `POST /v1/account/bindings/accept` and `/complete` (§12.1.3): this realm's half is
+    /// committed with the other realm's token and its Claim stated; an acceptance answers with
+    /// the token to carry back. A matching address never binds anything (MD-5).
+    pub async fn bind_half(
+        &self,
+        entry: &RealmEntry,
+        b: &Browser<'_>,
+        token: &str,
+        accept: bool,
+    ) -> Reply {
+        use access_identity_account::app::binding::Bound;
+        let kit = match self.kit(entry).await {
+            Ok(k) => k,
+            Err(r) => return r,
+        };
+        let (subject, _) = match self.fresh(&kit, b, Some(LINK_FRESHNESS_MS)).await {
+            Ok(s) => s,
+            Err(r) => return r,
+        };
+        let realm = kit.realm();
+        let vault = kit.vault();
+        let externals = Externals {
+            pool: &self.db,
+            realm: &realm,
+            vault: &vault,
+        };
+        let actor_ref = realm.external(subject).unwrap_or_default();
+        let who = Actor {
+            actor: &actor_ref,
+            correlation: b.correlation,
+        };
+        let now = self.clock.now_ms();
+        let done = if accept {
+            externals.accept_binding(subject, token, now, &who).await
+        } else {
+            externals.complete_binding(subject, token, now, &who).await
+        };
+        match done {
+            Ok(Bound::Committed(Some(back))) => Reply::json(200, json!({ "token": back })),
+            Ok(Bound::Committed(None)) => Reply::json(200, json!({ "bound": true })),
+            Ok(Bound::Refused) => Reply::problem(BINDING_REFUSED),
+            Err(e) => failed(&e.into()),
+        }
+    }
+
+    /// `GET /v1/account/bindings`: this realm's halves of the account's cross-realm bindings.
+    pub async fn bindings(&self, entry: &RealmEntry, b: &Browser<'_>) -> Reply {
+        let kit = match self.kit(entry).await {
+            Ok(k) => k,
+            Err(r) => return r,
+        };
+        let (subject, _) = match self.fresh(&kit, b, None).await {
+            Ok(s) => s,
+            Err(r) => return r,
+        };
+        let realm = kit.realm();
+        let vault = kit.vault();
+        let externals = Externals {
+            pool: &self.db,
+            realm: &realm,
+            vault: &vault,
+        };
+        match externals.binding_halves(subject).await {
+            Ok(rows) => Reply::json(
+                200,
+                json!({
+                    "bindings": rows.iter().map(|h| json!({
+                        "binding": b64url_encode(&h.binding),
+                        "role": h.role,
+                        "proof": h.proof,
+                        "state": h.state,
+                        "committed_at_ms": h.committed_ms,
+                    })).collect::<Vec<_>>(),
+                }),
+            ),
+            Err(e) => failed(&e.into()),
+        }
+    }
+}
+
 fn federation<H: ProviderHttp, S: SocialSecrets>(s: &Social<H, S>) -> Federation<'_, H, S> {
     Federation {
         http: &s.http,

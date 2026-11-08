@@ -1476,3 +1476,116 @@ async fn a_person_shares_claims_with_a_third_party_and_stops_from_connected_apps
         .await;
     assert_eq!(again.status, StatusCode::NOT_FOUND);
 }
+
+impl Env {
+    /// The `identity_binding_person` Claims queued for `subject` (OP-153 m.3 (m)).
+    async fn binding_claims(&self) -> usize {
+        TenantTx::begin(&self.db.app, self.tenant, self.realm)
+            .await
+            .unwrap()
+            .raw_rows(
+                "SELECT 1 FROM access.identity_outbox WHERE kind LIKE '%identity_binding_person%'",
+            )
+            .await
+            .unwrap()
+            .len()
+    }
+
+    async fn halves(&self, subject: [u8; 16]) -> Vec<access_store::federation::BindingHalf> {
+        let mut t = TenantTx::begin(&self.db.app, self.tenant, self.realm)
+            .await
+            .unwrap();
+        let rows = t.binding_halves_of(subject).await.unwrap();
+        t.commit().await.unwrap();
+        rows
+    }
+}
+
+// §12.1.1, §12.1.3, TN-2, TN-65, MD-5, OP-153 m.3 (m), Ek B 3459
+#[tokio::test]
+async fn a_cross_realm_binding_is_two_halves_each_committed_in_its_own_realm() {
+    let a = env(0x4b, "bind-a").await;
+    let b = env(0x4c, "bind-b").await;
+    let ada_a = a.account("ada@example.org").await;
+    let ada_b = b.account("ada@example.org").await;
+    let mut wa = a.browser(1);
+    let mut wb = b.browser(2);
+
+    let none = wa.send("POST", "/v1/account/bindings", None).await;
+    assert_eq!(none.status, StatusCode::UNAUTHORIZED);
+    wa.sign_in("ada@example.org").await;
+    wb.sign_in("ada@example.org").await;
+    assert_eq!(
+        (a.links_of(ada_a).await.len(), b.binding_claims().await),
+        (0, 0),
+        "the same address binds nothing"
+    );
+
+    let offer = wa.send("POST", "/v1/account/bindings", None).await;
+    assert_eq!(offer.status, StatusCode::CREATED, "{}", offer.code());
+    let token_a = offer.json()["token"].as_str().unwrap().to_owned();
+    assert_eq!(a.halves(ada_a).await[0].state, "offered");
+    assert_eq!(a.binding_claims().await, 0, "an offer alone states nothing");
+
+    let accepted = wb
+        .send(
+            "POST",
+            "/v1/account/bindings/accept",
+            Some(json!({ "token": token_a })),
+        )
+        .await;
+    assert_eq!(accepted.status, StatusCode::OK, "{}", accepted.code());
+    let token_b = accepted.json()["token"].as_str().unwrap().to_owned();
+    let half_b = b.halves(ada_b).await;
+    assert_eq!(
+        (
+            half_b[0].role.as_str(),
+            half_b[0].state.as_str(),
+            half_b[0].proof.as_str()
+        ),
+        ("accept", "committed", "invite_token")
+    );
+    assert_eq!(b.binding_claims().await, 1);
+    let twice = wb
+        .send(
+            "POST",
+            "/v1/account/bindings/accept",
+            Some(json!({ "token": token_a })),
+        )
+        .await;
+    assert_eq!(twice.code(), "binding-refused");
+
+    let forged = wa
+        .send(
+            "POST",
+            "/v1/account/bindings/complete",
+            Some(json!({ "token": b64url_encode(&[7_u8; 48]) })),
+        )
+        .await;
+    assert_eq!(forged.code(), "binding-refused");
+    let done = wa
+        .send(
+            "POST",
+            "/v1/account/bindings/complete",
+            Some(json!({ "token": token_b })),
+        )
+        .await;
+    assert_eq!(done.status, StatusCode::OK, "{}", done.code());
+    let half_a = a.halves(ada_a).await;
+    assert_eq!(
+        (half_a[0].role.as_str(), half_a[0].state.as_str()),
+        ("offer", "committed")
+    );
+    assert_eq!(half_a[0].binding, half_b[0].binding);
+    assert_eq!(a.binding_claims().await, 1);
+    let list = wa.send("GET", "/v1/account/bindings", None).await;
+    assert_eq!(list.json()["bindings"][0]["state"], "committed");
+    let again = wa
+        .send(
+            "POST",
+            "/v1/account/bindings/complete",
+            Some(json!({ "token": token_b })),
+        )
+        .await;
+    assert_eq!(again.code(), "binding-refused", "a half is committed once");
+}
