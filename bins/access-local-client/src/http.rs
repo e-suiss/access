@@ -362,8 +362,7 @@ mod tests {
 
     use super::*;
 
-    // OP-149 m.22, m.26 (b): only https, the port and path kept; the host header carries the
-    // port unless it is 443
+    // OP-149 m.22, m.26 (b)
     #[test]
     fn urls_are_https_only() {
         let u = Url::parse("https://access-server:8443/realms/acme/authorize?a=1").unwrap();
@@ -386,7 +385,6 @@ mod tests {
         }
     }
 
-    // a chunked or content-length body is read whole; headers are lower-cased
     #[test]
     fn answers_are_parsed() {
         let r = parse(

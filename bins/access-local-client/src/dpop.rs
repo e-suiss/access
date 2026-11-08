@@ -196,8 +196,7 @@ mod tests {
 
     use super::*;
 
-    // RFC 7636 §4.2, RFC 9449 §4.2, RFC 7638: the challenge is the verifier's S256, the proof
-    // names its key and the thumbprint is of that key
+    // RFC 7636 §4.2, RFC 9449 §4.2, RFC 7638
     #[test]
     fn proofs_and_challenges_follow_the_rfcs() {
         let (verifier, challenge) = pkce().unwrap();

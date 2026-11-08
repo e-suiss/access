@@ -113,8 +113,7 @@ mod tests {
 
     use super::*;
 
-    // L2-CLM-5, OP-149 m.26 (c): the bytes read back as an unsigned party_compromise Claim for
-    // the domain over the PEP channel of that very certificate, and no other
+    // L2-CLM-5, OP-149 m.26 (c)
     #[test]
     fn the_claim_reads_back_over_its_channel() {
         let leaf = [0xc3_u8; 40];

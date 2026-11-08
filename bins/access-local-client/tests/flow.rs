@@ -329,11 +329,7 @@ fn claims(jwt: &str) -> Value {
     serde_json::from_slice(&b64url_decode(payload).unwrap()).unwrap()
 }
 
-// OP-149 m.26 (b), RFC 6749 §4.1, RFC 7636, RFC 9449, RFC 9207, TN-27, OP-69: the client signs
-// the test user in through the Frontend API's JSON steps, returns to /authorize, exchanges the
-// code with PKCE and a DPoP proof (taking the server's nonce once) and gets cnf-bound tokens;
-// the realm's own issuer is the one resource it may name without a product; a wrong password
-// or an unknown client is reported, not worked around; plain http is refused
+// OP-149 m.26 (b), RFC 6749 §4.1, RFC 7636, RFC 9449, RFC 9207, TN-27, OP-69
 #[tokio::test]
 async fn the_headless_client_runs_the_code_flow() {
     let c = Cluster::new(&["acme"]).await;
@@ -358,7 +354,7 @@ async fn the_headless_client_runs_the_code_flow() {
         hooks: std::sync::Arc::new(access_identity_hooks::ports::NoHooks),
         risk: access_identity_session::app::RiskServices::without_sources(),
     });
-    // the test user, as the bootstrap makes it (OP-149 m.26 (b))
+    // OP-149
     let accounts = PgAccounts(c.db.app.clone());
     let who = Actor {
         actor: "test",
@@ -437,7 +433,6 @@ async fn the_headless_client_runs_the_code_flow() {
     assert_eq!(id["sub"], at["sub"]);
     assert!(tokens["refresh_token"].is_string());
 
-    // RFC 8707: the realm itself may be named as the resource
     let again = login(
         &http,
         &Login {
@@ -451,7 +446,6 @@ async fn the_headless_client_runs_the_code_flow() {
         claims(again["access_token"].as_str().unwrap())["aud"],
         issuer
     );
-    // anything else is invalid_target, reported from the authorization response
     let wrong = login(
         &http,
         &Login {
@@ -464,7 +458,7 @@ async fn the_headless_client_runs_the_code_flow() {
     .to_string();
     assert!(wrong.contains("invalid_target"), "{wrong}");
 
-    // CR-40: a wrong password is the neutral refusal, never a token
+    // CR-40
     let refused = login(
         &http,
         &Login {
@@ -493,7 +487,7 @@ async fn the_headless_client_runs_the_code_flow() {
         unknown.contains("authorize") && unknown.contains("400"),
         "{unknown}"
     );
-    // TI-9, OP-69: only https, and only the trusted CA
+    // TI-9, OP-69
     assert!(
         login(
             &http,
@@ -510,9 +504,7 @@ async fn the_headless_client_runs_the_code_flow() {
     let tls_error = login(&untrusted, &l).await.unwrap_err().to_string();
     assert!(tls_error.starts_with("tls"), "{tls_error}");
 
-    // OP-149 m.26 (e), §10.2.4: the software passkey, registered through the step the hosted
-    // registration finishes with, signs the user in identifier-first (AAL2, no userHandle
-    // needed); another key under the same relying party is refused, never a token
+    // OP-149 m.26 (e), §10.2.4
     let (key, _) = SoftSigner::generate_ed25519().unwrap();
     register_passkey(&c.db.app, &kit, subject, &key, &issuer).await;
     let (rp_id, origin) = access_local_client::passkey::relying_party(&issuer).unwrap();
@@ -556,10 +548,7 @@ async fn the_headless_client_runs_the_code_flow() {
         "{refused}"
     );
 
-    // OP-149 m.32, m.28 (b), INV-13, §5.1 eki: the test user's device key, recorded by the
-    // bootstrap without a session, binds the new passkey session (AAL2) to its existing
-    // Instance through the real endpoints, and the client prints it; a key no device of the
-    // user holds is refused and no token is printed
+    // OP-149 m.32, m.28 (b), INV-13, §5.1
     let (device, _) = SoftSigner::generate_ed25519().unwrap();
     let mut tx = PgTx(
         TenantTx::begin(&c.db.app, kit.tenant, kit.realm)

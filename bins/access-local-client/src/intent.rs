@@ -221,8 +221,7 @@ mod tests {
 
     use super::*;
 
-    // L1-ADP-8: the JSON intent reads into the envelope the decision point digests, every
-    // parameter tag included; a missing resource or a wrong digest is named
+    // L1-ADP-8
     #[test]
     fn the_adp_intent_reads_into_the_envelope() {
         let v = json!({

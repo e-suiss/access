@@ -492,7 +492,6 @@ mod tests {
 
     use super::*;
 
-    // the form coding round-trips and the redirect's query is read decoded
     #[test]
     fn forms_and_queries_round_trip() {
         let f = form(&[("a b", "x&y=z"), ("c", "~")]);
@@ -521,7 +520,7 @@ mod tests {
             body: Vec::new(),
         });
         assert_eq!(jar.header(), "__Host-a=1");
-        // RFC 6749 §4.1.2.1: an error in the redirect is reported, not followed
+        // RFC 6749 §4.1.2.1
         let r = Response {
             status: 303,
             headers: vec![(

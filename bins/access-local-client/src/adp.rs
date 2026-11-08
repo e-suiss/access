@@ -163,9 +163,7 @@ mod tests {
 
     use super::*;
 
-    // L1-ADP-5, L1-ADP-8, L2-SIG-1, OP-141 m.18 (b): the carriers name the intent's action and
-    // first resource, the context carries the holding and a commit, and the AIS is the device
-    // key's COSE_Sign1 over the statement that names this PEP by its leaf thumbprint
+    // L1-ADP-5, L1-ADP-8, L2-SIG-1, OP-141 m.18 (b)
     #[test]
     fn the_evaluation_body_carries_a_signed_commit() {
         let (device, _) = SoftSigner::generate_ed25519().unwrap();

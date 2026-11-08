@@ -484,9 +484,8 @@ pub async fn approve(http: &Http, a: &Approve<'_>) -> Result<Value, ClientError>
     let intent = crate::intent::parse(a.intent)?;
     let digest = intent_digest(&intent).map_err(|_| ClientError::Encode)?;
     let now = now_ms();
-    // the approver signs in with the passkey (AAL2) and keeps the session
     let mut jar = sign_in(http, a.issuer, a.identifier, Credential::Passkey(a.passkey)).await?;
-    // OP-149 m.32: the approval session carries the device's existing Instance
+    // OP-149 m.32
     let instance = attach_device(http, a.issuer, &mut jar, a.device).await?;
     let (request, opening) = opened(http, a, &intent, digest, now).await?;
     let request_uri = push(http, a, request, digest, now).await?;
@@ -494,8 +493,7 @@ pub async fn approve(http: &Http, a: &Approve<'_>) -> Result<Value, ClientError>
     let mine =
         render::of(None, &intent, render::DEFAULT_LOCALE).map_err(|_| ClientError::Encode)?;
     let started = start(http, a, &mut jar, &request_uri, &state, &mine).await?;
-    // §8.17.5.4, §13.7.3: the one passkey assertion over H(AAS) is the approval and, bound to
-    // the approver's Instance, the step-up of the same actor
+    // §8.17.5.4, §13.7.3
     let finished = finish(http, a, &mut jar, &started, &state).await?;
     let render_digest = at(&finished, &["render_digest"]).clone();
     let my_digest = render::digest(&mine).map_err(|_| ClientError::Encode)?;
@@ -551,8 +549,7 @@ mod tests {
 
     use super::*;
 
-    // §9.14.5 WYSIWYS, OP-149 m.9: the request names the REQUIRE_ACTION it answers and the
-    // render check accepts the decision point's fields only as this intent renders them
+    // §9.14.5, OP-149 m.9
     #[test]
     fn requests_and_renders_follow_the_intent() {
         let intent = IntentEnvelope {
@@ -595,8 +592,7 @@ mod tests {
         );
     }
 
-    // OP-149 m.33 (c), §8.17.5.4: an unmet authentication Claim term in the REQUIRE_ACTION is
-    // the step-up the approval also meets; an approval term alone is not
+    // OP-149 m.33 (c), §8.17.5.4
     #[test]
     fn a_step_up_is_an_unmet_authentication_term() {
         let approval = json!({ "term": { "proof_kind": "contribution", "class": "approve", "binding": "intent_digest" }, "missing": 1, "position": "anchor", "satisfiable_by_actor": true });
