@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.3.2
+
+No changes; released with `esuiss-access-kernel` 0.3.2 (causal-bound allowances in the Genesis policy; an organization Party has no Instance, C6).
+
 ## 0.3.1
 
 No changes; released with `esuiss-access-kernel` 0.3.1 (explanation scopes and the contribute intent in the Kernel).

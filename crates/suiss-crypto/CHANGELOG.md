@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.3.2
+
+No changes; released with `esuiss-access-kernel` 0.3.2 (causal-bound allowances in the Genesis policy; an organization Party has no Instance, C6).
+
 ### Fixed
 
 - **Breaking.** `cose::to_be_signed` returns `Result` and refuses a part above the profile limits with the new `CoseError::Encode`; it used to return an empty `Sig_structure`, so a signature over the empty byte string verified any detached payload above 64 KiB. `verify_sign1_with` and `sign_sign1` refuse such a payload (CR-10).
