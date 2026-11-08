@@ -45,7 +45,7 @@ fn exported() -> Value {
     export(contract(), "acme", &runtime(), ExportOptions::default()).unwrap()
 }
 
-// TN-123 item 1: deterministic export (golden), generated members and retired resources left out
+// TN-123 item 1
 #[test]
 fn the_export_is_deterministic_sorted_and_without_generated_members() {
     let text = yaml::to_string(&exported(), None);
@@ -106,7 +106,7 @@ upstream_idps:
     assert_eq!(all["clients"][0]["status"], "retired");
 }
 
-// TN-123 item 2: secrets by reference only, on export and on read
+// TN-123 item 2
 #[test]
 fn a_secret_value_is_refused_and_a_reference_is_kept() {
     let mut r = runtime();
@@ -131,7 +131,7 @@ fn a_secret_value_is_refused_and_a_reference_is_kept() {
     ));
 }
 
-// TN-123 item 4: the exported document is in sync; an unset member is never drift
+// TN-123 item 4
 #[test]
 fn an_exported_document_has_no_drift_and_unset_members_are_not_drift() {
     let steps = plan(
@@ -162,7 +162,7 @@ fn an_exported_document_has_no_drift_and_unset_members_are_not_drift() {
     );
 }
 
-// TN-123 item 3, TN-110: a change is one write, carrying the unmanaged members as they are
+// TN-123 item 3, TN-110
 #[test]
 fn a_changed_member_is_one_write_that_keeps_the_rest() {
     let mut doc = exported();
@@ -203,7 +203,7 @@ fn a_changed_member_is_one_write_that_keeps_the_rest() {
     assert_eq!(writes[2].1.as_deref(), Some("dev"));
 }
 
-// TN-122, E11: the reconciler's Grant has no reserved action; reserved changes are proposals
+// TN-122, E11
 #[test]
 fn a_reserved_change_is_only_proposed() {
     let mut doc = exported();
@@ -227,7 +227,7 @@ fn a_reserved_change_is_only_proposed() {
     assert_eq!(p["tier"], "CT3");
 }
 
-// TN-124: a resource retired at runtime is a restriction; the plan never brings it back
+// TN-124
 #[test]
 fn the_reconciler_does_not_undo_a_retirement() {
     let mut doc = exported();
@@ -247,7 +247,7 @@ fn the_reconciler_does_not_undo_a_retirement() {
     assert!(!steps.iter().any(|s| matches!(s, Step::Write { .. })));
 }
 
-// TN-124: the emergency escape is the resource's retire (CT1), a proposal, not an unmanage flag
+// TN-124
 #[test]
 fn a_release_is_a_restriction_exercise_proposal() {
     let step = release("clients/c-1").unwrap();
@@ -261,7 +261,7 @@ fn a_release_is_a_restriction_exercise_proposal() {
     assert!(release("accounts/a-1").is_err());
 }
 
-// TN-123 item 3: full CRUD with --prune; without it, unnamed resources are left alone
+// TN-123 item 3
 #[test]
 fn prune_retires_what_the_document_does_not_name() {
     let doc = json!({"realm": "acme", "clients": [{"client_id": "c-1"}]});
@@ -330,7 +330,7 @@ fn another_realms_or_an_unknown_document_is_refused() {
     );
 }
 
-// OP-151 m.3 (o): a protection mode change is planned and names its tier
+// OP-151 m.3 (o)
 #[test]
 fn a_protection_mode_change_names_its_tier() {
     let mut r = runtime();

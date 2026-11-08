@@ -127,7 +127,7 @@ mod tests {
         Value::Object(b)
     }
 
-    // INV-21, P41: a recorded decision replays to the same bytes; a changed one does not
+    // INV-21, P41
     #[test]
     fn a_recorded_decision_replays_to_a_match_and_a_tampered_one_does_not() {
         let b = decision_vector();

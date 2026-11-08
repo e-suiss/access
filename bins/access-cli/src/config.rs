@@ -127,8 +127,7 @@ mod tests {
             .map_err(Box::new)
     }
 
-    // A-9, OP-63, TI-9: the server's own database section reads, and a misspelt key in it or in
-    // a login is refused rather than ignored
+    // A-9, OP-63, TI-9
     #[test]
     fn unknown_database_keys_are_refused() {
         let server = include_str!("../../../deploy/compose/access/access.toml");

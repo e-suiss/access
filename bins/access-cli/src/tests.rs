@@ -7,7 +7,7 @@
 use super::*;
 use crate::config::{ConfigError, Durability, File};
 
-// OP-151 m.3 (h): `migrate` is a subcommand; the configuration is named by path
+// OP-151 m.3 (h)
 #[test]
 fn the_command_line_names_files_not_secrets() {
     let cli =
@@ -68,7 +68,7 @@ root_cert_file = "/run/tls/db-root.pem"
 durability = "single-node"
 "#;
 
-// OP-55: the server's own configuration serves the job; the migration role must be named
+// OP-55
 #[test]
 fn the_job_reads_the_servers_configuration() {
     let without = config(DATABASE);
@@ -91,8 +91,7 @@ fn the_job_reads_the_servers_configuration() {
     ));
 }
 
-// OP-55: a configuration that cannot be used stops the job with its own exit code, before any
-// connection
+// OP-55
 #[test]
 fn an_unusable_configuration_exits_with_the_config_code() {
     let missing = std::env::temp_dir().join(format!("access-cli-none-{}.toml", std::process::id()));
@@ -107,7 +106,7 @@ fn an_unusable_configuration_exits_with_the_config_code() {
     );
 }
 
-// OP-55, OP-65: the job prints one JSON line; versions are strings
+// OP-55, OP-65
 #[test]
 fn the_report_is_one_json_line() {
     let applied = [access_store::connect::Applied {
@@ -148,7 +147,7 @@ mod management {
         v
     }
 
-    // TN-130, MD-14, Ek B 3315: there is no bearer management token; clap rejects any token option
+    // TN-130, MD-14, Ek B 3315
     #[test]
     fn no_bearer_or_token_option_exists() {
         for flag in ["--bearer", "--token", "--access-token", "--read-token"] {
@@ -170,7 +169,7 @@ mod management {
         }
     }
 
-    // TN-130, PI-11: automation is an Instance: exactly one key source, a file or PKCS#11
+    // TN-130, PI-11
     #[test]
     fn the_instance_key_is_required_and_comes_from_one_source() {
         assert!(Cli::try_parse_from(args(&["list", "clients"])).is_err());
@@ -197,8 +196,7 @@ mod management {
         );
     }
 
-    // TN-130, OP-151 m.18 (b): every read is exchanged for an AIS, so the basis is always
-    // required, and there is no client id: the exchange takes no client authentication
+    // TN-130, OP-151 m.18 (b)
     #[test]
     fn the_basis_is_required_and_no_client_id_exists() {
         let without: Vec<&str> = CONNECT

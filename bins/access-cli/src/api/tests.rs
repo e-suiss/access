@@ -2,7 +2,7 @@
 
 use super::*;
 
-// TN-112 item 8: the command line knows the realm surface from the generated contract
+// TN-112 item 8
 #[test]
 fn the_contract_names_the_realm_resources_and_their_operations() {
     let c = contract();
@@ -40,7 +40,7 @@ fn the_contract_names_the_realm_resources_and_their_operations() {
     assert!(!c.read_only("Client", "display_name"));
 }
 
-// TN-122, E11: reserved writes are known by their idp.* action; an unknown one is reserved
+// TN-122, E11
 #[test]
 fn reserved_operations_follow_the_idp_catalog_and_unknown_ones_fail_closed() {
     assert!(reserved("putUpstreamIdp", false));
@@ -51,7 +51,7 @@ fn reserved_operations_follow_the_idp_catalog_and_unknown_ones_fail_closed() {
     assert!(!reserved("createClient", false));
     assert!(!reserved("retireUpstreamIdp", true));
     assert!(reserved("deleteEverything", true));
-    // OP-150 m.11 (b): routes declared but answered 501 are reserved
+    // OP-150 m.11 (b)
     for op in ["deleteAccount", "rehomeRealm", "createResetIntent"] {
         assert!(reserved(op, true), "{op}");
     }
@@ -73,8 +73,7 @@ fn reserved_operations_follow_the_idp_catalog_and_unknown_ones_fail_closed() {
     }
 }
 
-// OP-151 m.3 (o): tightening the protection mode is protection_mode (CT1), loosening
-// protection_mode_loosen (CT2), as the server's tier rule decides
+// OP-151 m.3 (o)
 #[test]
 fn the_protection_mode_action_follows_the_tier_rule() {
     use serde_json::json;
@@ -100,7 +99,7 @@ fn the_protection_mode_action_follows_the_tier_rule() {
     );
 }
 
-// TN-125: a bulk job is refused by `access admin`; every listed write is placed
+// TN-125
 #[test]
 fn every_contract_write_is_placed_or_refused_explicitly() {
     for op in &contract().operations {

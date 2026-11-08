@@ -4,7 +4,7 @@ use serde_json::json;
 
 use super::*;
 
-// TN-123 item 1: the same value always gives the same text, keys sorted, strings quoted
+// TN-123 item 1
 #[test]
 fn writing_is_deterministic_and_reads_back() {
     let a = json!({"b": [{"z": 1, "a": "no"}, "x"], "a": {"y": true, "x": null}, "c": [], "d": {}});

@@ -144,7 +144,7 @@ pub(crate) async fn run(args: AdminArgs) -> Code {
         Ok(x) => x,
         Err(c) => return c,
     };
-    // TN-125: a job bundles Exercises the command line already makes one at a time
+    // TN-125
     if api::UNSUPPORTED.contains(&op.id.as_str()) {
         note(&format!(
             "access-cli: `{}` is not supported; send each write on its own (`access-cli apply` does)",
@@ -223,7 +223,7 @@ async fn write<T: crate::http::Transport, E: crate::client::Env>(
         None
     };
     let exists = exists || etag.is_some();
-    // TN-122, E11: a reserved write needs a quorum; this command line only proposes it
+    // TN-122, E11
     if api::reserved(&op.id, exists) {
         note(&format!(
             "access-cli: `{}` is reserved (CT3); write a proposal with `access-cli apply` and have the quorum sign it",

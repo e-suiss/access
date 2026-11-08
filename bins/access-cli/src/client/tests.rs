@@ -276,7 +276,7 @@ fn body() -> Map<String, Value> {
         .unwrap()
 }
 
-// TN-110, TN-126, PI-7: a write is the AIS over the drafted digest, keyed by its nonce
+// TN-110, TN-126, PI-7
 #[tokio::test(flavor = "current_thread")]
 async fn a_write_signs_the_drafted_intent_and_sends_the_nonce_as_idempotency_key() {
     let fake = Fake::new();
@@ -318,14 +318,13 @@ async fn a_write_signs_the_drafted_intent_and_sends_the_nonce_as_idempotency_key
     let sent: Value = serde_json::from_slice(&write.body.as_ref().unwrap().1).unwrap();
     assert_eq!(sent["display_name"], "Acme 2");
     assert!(sent.get("validity").is_some());
-    // every read carried a DPoP proof with the token
     for r in seen.iter().filter(|r| r.header("authorization").is_some()) {
         assert!(r.header("authorization").unwrap().starts_with("DPoP "));
         assert!(r.header("dpop").is_some());
     }
 }
 
-// TN-110: the client signs only what it computed; a draft that lies is refused before signing
+// TN-110
 #[tokio::test(flavor = "current_thread")]
 async fn a_draft_whose_digest_or_body_differs_is_refused_and_nothing_is_written() {
     for tamper in [0, 1] {
@@ -344,7 +343,7 @@ async fn a_draft_whose_digest_or_body_differs_is_refused_and_nothing_is_written(
     }
 }
 
-// TN-130, TN-27: the read token must be DPoP-bound and live at most 60 minutes
+// TN-130, TN-27
 #[tokio::test(flavor = "current_thread")]
 async fn a_bearer_or_long_lived_read_token_is_refused() {
     let fake = Fake::new();
@@ -374,9 +373,7 @@ fn token_requests(fake: &Fake) -> Vec<Request> {
         .collect()
 }
 
-// TN-130, TN-27, OP-151 m.18 (b): the read token is an RFC 8693 exchange of the Instance's own
-// check AIS over audience‖0‖scope in the realm's governing domain, with no client authentication
-// and a DPoP proof by the same Instance key
+// TN-130, TN-27, OP-151 m.18 (b)
 #[tokio::test(flavor = "current_thread")]
 async fn tn_130_the_read_token_is_exchanged_for_the_instances_own_check_statement() {
     let fake = Fake::new();
@@ -443,7 +440,7 @@ async fn tn_130_the_read_token_is_exchanged_for_the_instances_own_check_statemen
     assert_eq!(&proof.jkt, k.kid(), "the DPoP key is the Instance key");
 }
 
-// OP-151 m.18 (b), (c): the realm token endpoint asks for a DPoP nonce; the retry carries it
+// OP-151 m.18 (b), (c)
 #[tokio::test(flavor = "current_thread")]
 async fn the_exchange_retries_once_with_the_token_endpoints_dpop_nonce() {
     let fake = Fake::new();
@@ -458,8 +455,7 @@ async fn the_exchange_retries_once_with_the_token_endpoints_dpop_nonce() {
     assert_eq!(retry["nonce"], "n-1");
 }
 
-// MD-8, OP-151 m.18 (b): a realm whose metadata names no governing domain gets no statement and
-// no token request
+// MD-8, OP-151 m.18 (b)
 #[tokio::test(flavor = "current_thread")]
 async fn no_governing_domain_in_the_metadata_means_no_token() {
     let fake = Fake::new();
@@ -474,7 +470,7 @@ async fn no_governing_domain_in_the_metadata_means_no_token() {
     assert_eq!(token_requests(&fake).len(), 0);
 }
 
-// OP-151 m.18 (b): the exchange's intent and names are the identity plane's
+// OP-151 m.18 (b)
 #[test]
 fn the_exchange_matches_the_identity_planes_contract() {
     use access_identity_oauth::domain::management as server;
@@ -494,7 +490,7 @@ fn the_exchange_matches_the_identity_planes_contract() {
     assert_eq!(REALM_READ, server::REALM_READ);
 }
 
-// §9.15.1 k.2: the governing domain is the DomainID the Domain Metadata address ends with
+// §9.15.1 k.2
 #[test]
 fn the_governing_domain_is_read_from_the_domain_metadata_address() {
     let id = b64url_encode(&DOMAIN);
@@ -511,7 +507,7 @@ fn the_governing_domain_is_read_from_the_domain_metadata_address() {
     }
 }
 
-// TN-122: the reconciler applies a CT2 change as one Exercise and only proposes the reserved one
+// TN-122
 #[tokio::test(flavor = "current_thread")]
 async fn the_reconciler_applies_one_exercise_per_change_and_proposes_reserved_ones() {
     let fake = Fake::new();
@@ -538,7 +534,7 @@ async fn the_reconciler_applies_one_exercise_per_change_and_proposes_reserved_on
     assert_eq!(drafted[0]["operation"], "putBranding");
 }
 
-// TN-124, fail closed: a plan with a conflict applies nothing
+// TN-124
 #[tokio::test(flavor = "current_thread")]
 async fn a_plan_with_a_conflict_applies_nothing() {
     let fake = Fake::new();

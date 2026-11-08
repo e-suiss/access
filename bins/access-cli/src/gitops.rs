@@ -376,7 +376,7 @@ fn plan_kind(
                 exists: false,
                 what: format!("create {at}"),
             }),
-            // TN-124: a retired resource is a restriction; the reconciler does not undo it
+            // TN-124
             Some(c) if retired(c) => out.push(Step::Conflict {
                 at,
                 reason: String::from(
@@ -505,7 +505,7 @@ fn plan_settings(desired: &Value, runtime: &Runtime, out: &mut Vec<Step>) -> Res
         for (k, v) in section {
             body.insert(k.clone(), v.clone());
         }
-        // OP-151 m.3 (o): a protection mode change names the tier the server compiles it to
+        // OP-151 m.3 (o)
         let what = if name == "protection_mode" {
             format!(
                 "update {at}: {} ({})",

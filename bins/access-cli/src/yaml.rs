@@ -21,8 +21,6 @@ fn err<T>(line: usize, what: &'static str) -> Result<T, YamlError> {
     Err(YamlError { line, what })
 }
 
-// ---------------------------------------------------------------- writing
-
 fn scalar(v: &Value) -> String {
     match v {
         Value::Null => String::from("null"),
@@ -117,8 +115,6 @@ pub(crate) fn to_string(v: &Value, comment: Option<&str>) -> String {
     }
     out
 }
-
-// ---------------------------------------------------------------- reading
 
 #[derive(Clone, Debug)]
 struct Line {

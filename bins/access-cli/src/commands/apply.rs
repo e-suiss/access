@@ -137,7 +137,7 @@ pub(crate) async fn reconcile<T: Transport, E: Env>(
         let Some(op) = api::contract().operation(operation) else {
             return Err(fail(ClientError::Unexpected("operation"), outcome));
         };
-        // OP-65: an update names the version it replaces; read it just before writing
+        // OP-65
         let tag = if *exists && matches!(op.method, Method::Put) && op.keyed() && if_match.is_none()
         {
             match client
