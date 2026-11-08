@@ -444,9 +444,11 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
     }
 
     /// Whether the subject's current key-state designates the issuer for the class (§9.13.1
-    /// rule 2, P21). Without an accepted key-state the Acceptance alone decides; with one, every
-    /// current key-state in its issuer line must name the issuer for the class, and a key-state
-    /// whose body cannot be read designates nobody (fail closed).
+    /// rule 2, P21). A key-state counts only when its issuer is a controller a current accepted
+    /// `controller_of` Claim about the subject names (OP-152 m.7 (d) E20). Without such a
+    /// key-state the Acceptance alone decides; with one, every current key-state in its issuer
+    /// line must name the issuer for the class, and a key-state whose body cannot be read
+    /// designates nobody (fail closed).
     pub(crate) async fn designated(
         &self,
         snap: &mut Snapshot,
@@ -456,6 +458,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         if !DESIGNATED.contains(&s.class.as_str()) {
             return Ok(true);
         }
+        let controllers = self.controllers(snap, &s.subject, now).await?;
         let class = Class::PartyKeyState.name();
         for (_, value, _) in self.scan(&claim::member_prefix(&class, &s.subject)).await? {
             let Some(id) = value.and_then(|v| Id::from_value(&v).ok()) else {
@@ -469,6 +472,10 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             else {
                 continue;
             };
+            // OP-152 m.7 (d) E20
+            if !controllers.contains(&state.statement.issuer) {
+                continue;
+            }
             let gates = self.gates(snap, &state.statement.issuer).await?;
             let accepted = gates.iter().any(|g| {
                 g.admits_for(claim::ACTOR_BINDING, &state.statement, now)
@@ -482,6 +489,47 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             }
         }
         Ok(true)
+    }
+
+    /// The Parties a current, accepted and unsuperseded `controller_of` Claim about `subject`
+    /// names (§9.13.1, §10.1.5, OP-152 m.7 (d) E20): only their key-state is the subject's
+    /// controller designation.
+    async fn controllers(
+        &self,
+        snap: &mut Snapshot,
+        subject: &Id,
+        now: u64,
+    ) -> Result<std::collections::BTreeSet<Id>, CoreError> {
+        let class = Class::ControllerOf.name();
+        let mut out = std::collections::BTreeSet::new();
+        for (_, value, _) in self.scan(&claim::member_prefix(&class, subject)).await? {
+            let Some(id) = value.and_then(|v| Id::from_value(&v).ok()) else {
+                continue;
+            };
+            let Some(state) = self
+                .get(snap, &meta::key(kind::CLAIM, &id))
+                .await?
+                .and_then(|v| ClaimState::from_value(&v).ok())
+                .filter(|c| current(c, now) && c.statement.subject == *subject)
+            else {
+                continue;
+            };
+            let Some(EqValue::Bytes(b)) = &state.statement.value else {
+                continue;
+            };
+            let Ok(controller) = <[u8; 16]>::try_from(b.as_slice()) else {
+                continue;
+            };
+            let gates = self.gates(snap, &state.statement.issuer).await?;
+            let accepted = gates.iter().any(|g| {
+                g.admits_for(claim::ACTOR_BINDING, &state.statement, now)
+                    || g.admits(&state.statement, now)
+            });
+            if accepted && self.unsuperseded(snap, &id, &state.statement).await? {
+                out.insert(Id(controller));
+            }
+        }
+        Ok(out)
     }
 
     /// Whether the key-state `k` designates `issuer` for `class`.

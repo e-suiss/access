@@ -606,7 +606,21 @@ fn passkey(d: Digest, issuer: Id, seed: u8) -> ClaimSubmission {
     sub
 }
 
-// P21, §9.13.1 and, E18, U26
+/// BOB's `controller_of` Claim about ROOT naming `controller`.
+fn controller_of(d: Digest, controller: Id) -> ClaimSubmission {
+    signed(
+        &statement(
+            d,
+            BOB,
+            ROOT,
+            "controller_of",
+            EqValue::Bytes(controller.0.to_vec()),
+        ),
+        BOB_KEY,
+    )
+}
+
+// P21, §9.13.1 and, E18, U26, OP-152 m.7 (d)
 #[tokio::test]
 async fn designation_and_acceptance_must_both_hold() {
     let db = fresh().await.unwrap();
@@ -614,7 +628,12 @@ async fn designation_and_acceptance_must_both_hold() {
         &db,
         vec![
             acceptance(ALICE, "actor-binding", &["authenticator_binding"], vec![]),
-            acceptance(BOB, "actor-binding", &["authenticator_binding"], vec![]),
+            acceptance(
+                BOB,
+                "actor-binding",
+                &["controller_of", "authenticator_binding"],
+                vec![],
+            ),
             acceptance(REGIME, "actor-binding", &["party_key_state"], vec![]),
         ],
     )
@@ -624,6 +643,8 @@ async fn designation_and_acceptance_must_both_hold() {
         .await
         .unwrap();
     assert!(matches!(v.verdict, ClaimVerdict::Admitted { .. }), "{v:?}");
+    let c = core.ingest(&controller_of(d, REGIME), NOW).await.unwrap();
+    assert!(matches!(c.verdict, ClaimVerdict::Admitted { .. }), "{c:?}");
     let ks = core.ingest(&key_state(d, &[BOB]), NOW).await.unwrap();
     assert!(
         matches!(ks.verdict, ClaimVerdict::Admitted { .. }),
@@ -651,6 +672,43 @@ async fn designation_and_acceptance_must_both_hold() {
         ClaimVerdict::Rejected {
             code: "claim-carrier".to_owned()
         }
+    );
+}
+
+// OP-152 m.7 (d), §9.13.1, §10.1.5
+#[tokio::test]
+async fn only_the_named_controllers_key_state_designates() {
+    let db = fresh().await.unwrap();
+    let (mut core, d) = setup(
+        &db,
+        vec![
+            acceptance(ALICE, "actor-binding", &["authenticator_binding"], vec![]),
+            acceptance(BOB, "actor-binding", &["controller_of"], vec![]),
+            acceptance(REGIME, "actor-binding", &["party_key_state"], vec![]),
+        ],
+    )
+    .await;
+    let ks = core.ingest(&key_state(d, &[BOB]), NOW).await.unwrap();
+    assert!(
+        matches!(ks.verdict, ClaimVerdict::Admitted { .. }),
+        "{ks:?}"
+    );
+    let v = core
+        .ingest(&passkey(d, ALICE, ALICE_KEY), NOW)
+        .await
+        .unwrap();
+    assert!(
+        matches!(v.verdict, ClaimVerdict::Admitted { .. }),
+        "no controller named: the key-state designates nobody, {v:?}"
+    );
+    let c = core.ingest(&controller_of(d, ALICE), NOW).await.unwrap();
+    assert!(matches!(c.verdict, ClaimVerdict::Admitted { .. }), "{c:?}");
+    let mut again = passkey(d, ALICE, ALICE_KEY);
+    again.claim = passkey_variant(d, ALICE, ALICE_KEY);
+    let v = core.ingest(&again, NOW).await.unwrap();
+    assert!(
+        matches!(v.verdict, ClaimVerdict::Admitted { .. }),
+        "another Party's key-state is no designation, {v:?}"
     );
 }
 
