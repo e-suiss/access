@@ -27,6 +27,10 @@ pub(crate) fn checks() -> Vec<Check> {
             run: check_io_uring,
         },
         Check {
+            name: "op-54-red-lines",
+            run: check_red_lines,
+        },
+        Check {
             name: "serde-json-depth",
             run: check_serde_json_depth,
         },
@@ -63,6 +67,24 @@ const BACKTRACKING_REGEX: &[&str] = &["fancy-regex", "pcre2", "pcre2-sys", "onig
 /// OP-4, SA-22: `io_uring` bypasses seccomp; it is not used.
 const IO_URING: &[&str] = &["io-uring", "tokio-uring", "rio", "glommio", "monoio"];
 
+/// OP-54 red lines 1 and 9, OP-129 m.5: no Redis client (no pub/sub revocation broadcast,
+/// no Redis on the security path) and no Bloom filter (no Bloom-filter revocation list).
+const RED_LINE_CRATES: &[&str] = &[
+    "redis",
+    "fred",
+    "redis-async",
+    "deadpool-redis",
+    "bb8-redis",
+    "mobc-redis",
+    "rustis",
+    "bloomfilter",
+    "bloom",
+    "fastbloom",
+    "fastbloom-rs",
+    "growable-bloom-filter",
+    "probabilistic-collections",
+];
+
 /// Locked packages whose name is in `banned`.
 pub(crate) fn banned_in_lock(
     lock: &str,
@@ -98,6 +120,15 @@ fn check_io_uring(root: &Path) -> Result<Vec<Violation>, String> {
         IO_URING,
         "no-io-uring",
         "io_uring is forbidden (OP-4, SA-22)",
+    )
+}
+
+fn check_red_lines(root: &Path) -> Result<Vec<Violation>, String> {
+    banned_in_lock(
+        &read(&root.join("Cargo.lock"))?,
+        RED_LINE_CRATES,
+        "op-54-red-lines",
+        "Redis carries no revocation and Bloom filters hold no revocation list (OP-54, OP-129)",
     )
 }
 
@@ -331,6 +362,18 @@ mod tests {
                 .unwrap_or_default()
                 .len(),
             1
+        );
+    }
+
+    // OP-54-RL1, OP-54-RL9
+    #[test]
+    fn redis_clients_and_bloom_filters_in_lockfile_are_rejected() {
+        let lock = "[[package]]\nname = \"redis\"\nversion = \"0.27.0\"\n[[package]]\nname = \"bloomfilter\"\nversion = \"3.0.0\"\n[[package]]\nname = \"tokio\"\nversion = \"1.0.0\"\n";
+        assert_eq!(
+            banned_in_lock(lock, RED_LINE_CRATES, "r", "x")
+                .unwrap_or_default()
+                .len(),
+            2
         );
     }
 

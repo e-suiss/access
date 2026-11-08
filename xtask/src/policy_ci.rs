@@ -177,6 +177,28 @@ pub(crate) fn schedule_findings(codeql: &str, nightly: &str) -> Vec<String> {
     out
 }
 
+/// OP-3 merge gates: cargo-deny and cargo-vet run on every CI run, the OIDF suite every night.
+pub(crate) fn op_3_findings(ci: &str, nightly: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let supply = job(ci, "supply-chain").unwrap_or_default();
+    for (run, tool) in [
+        ("run: just deny", "cargo-deny"),
+        ("run: just vet", "cargo-vet"),
+    ] {
+        if !supply.contains(run) {
+            out.push(format!(
+                "ci.yml `supply-chain` must run {tool} (`{run}`, OP-3)"
+            ));
+        }
+    }
+    if !job(nightly, "oidf-conformance")
+        .is_some_and(|j| j.contains(".github/scripts/oidf-conformance.py"))
+    {
+        out.push("the nightly must run the OIDF conformance suite (OP-3)".to_owned());
+    }
+    out
+}
+
 fn read(root: &Path, file: &str) -> Result<String, String> {
     std::fs::read_to_string(root.join(file)).map_err(|e| format!("{file}: {e}"))
 }
@@ -202,6 +224,7 @@ fn ci_gates(root: &Path) -> Result<Vec<Violation>, String> {
             "nightly.yml",
             schedule_findings(&wf("codeql.yml")?, &wf("nightly.yml")?),
         ),
+        ("ci.yml", op_3_findings(&ci, &wf("nightly.yml")?)),
     ];
     Ok(groups
         .into_iter()
@@ -255,7 +278,18 @@ mod tests {
         );
     }
 
-    // T-10, T-17: the image binaries are auditable and hardened; hidden entries stay out
+    // OP-3-G3, OP-3-G5
+    #[test]
+    fn deny_and_vet_gate_ci_and_the_oidf_suite_runs_nightly() {
+        let ci = "jobs:\n  supply-chain:\n    steps:\n      - name: cargo-deny (F-1)\n        run: just deny\n      - name: cargo-vet (F-1)\n        run: just vet\n";
+        let nightly = "jobs:\n  oidf-conformance:\n    steps:\n      - run: >-\n          python3 -I .github/scripts/oidf-conformance.py\n";
+        assert_eq!(op_3_findings(ci, nightly), Vec::<String>::new());
+        let no_vet = ci.replace("run: just vet", "run: just audit");
+        assert_eq!(op_3_findings(&no_vet, nightly).len(), 1);
+        assert_eq!(op_3_findings("jobs:\n", "jobs:\n").len(), 3);
+    }
+
+    // T-10, T-17, OP-3-G3: the image binaries are auditable and hardened; hidden entries stay out
     #[test]
     fn the_image_is_auditable_hardened_and_its_context_hides_dot_entries() {
         let good = "FROM x AS builder\nRUN cargo auditable build --release --locked \\\n      --package a \\\n && scripts/checksec.sh target/release/a\n";

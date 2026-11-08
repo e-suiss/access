@@ -1006,9 +1006,57 @@ fn workspace_forbids_unsafe(root_manifest: &str) -> bool {
         .unwrap_or(false)
 }
 
+/// R-2: a file may hold `unsafe` only inside an allowlisted crate.
+fn unsafe_allowed(rel_path: &str) -> bool {
+    UNSAFE_ALLOWED
+        .iter()
+        .any(|d| rel_path.starts_with(&format!("{d}/")))
+}
+
+/// OP-3, OP-4: the request-path lints the workspace denies.
+const REQUEST_PATH_LINTS: &[&str] = &[
+    "unwrap_used",
+    "expect_used",
+    "indexing_slicing",
+    "panic",
+    "arithmetic_side_effects",
+];
+
+/// The request-path lints `[workspace.lints.clippy]` does not set to `deny`.
+fn undenied_request_path_lints(root_manifest: &str) -> Vec<&'static str> {
+    let clippy = root_manifest.parse::<toml::Table>().ok().and_then(|t| {
+        t.get("workspace")?
+            .get("lints")?
+            .get("clippy")?
+            .as_table()
+            .cloned()
+    });
+    REQUEST_PATH_LINTS
+        .iter()
+        .copied()
+        .filter(|lint| {
+            let level = clippy.as_ref().and_then(|c| c.get(*lint));
+            let level = level.and_then(|v| {
+                v.as_str()
+                    .or_else(|| v.get("level").and_then(toml::Value::as_str))
+            });
+            level != Some("deny")
+        })
+        .collect()
+}
+
 pub(crate) fn check_unsafe(root: &Path) -> Result<Vec<Violation>, String> {
     let mut out = Vec::new();
-    let ws_forbids = workspace_forbids_unsafe(&read(&root.join("Cargo.toml"))?);
+    let root_manifest = read(&root.join("Cargo.toml"))?;
+    for lint in undenied_request_path_lints(&root_manifest) {
+        out.push(violation(
+            UNSAFE,
+            "Cargo.toml",
+            1,
+            format!("[workspace.lints.clippy] must set {lint} = \"deny\" (OP-3, OP-4)"),
+        ));
+    }
+    let ws_forbids = workspace_forbids_unsafe(&root_manifest);
     if !ws_forbids {
         out.push(violation(
             UNSAFE,
@@ -1040,9 +1088,7 @@ pub(crate) fn check_unsafe(root: &Path) -> Result<Vec<Violation>, String> {
     }
     let mut budget_used = 0_usize;
     for (rel_path, path) in rust_files(root)? {
-        let allowed = UNSAFE_ALLOWED
-            .iter()
-            .any(|d| rel_path.starts_with(&format!("{d}/")));
+        let allowed = unsafe_allowed(&rel_path);
         for u in unsafe_uses(&read(&path)?) {
             if !u.justified {
                 out.push(violation(
@@ -1330,6 +1376,47 @@ mod tests {
         assert!(workspace_forbids_unsafe(
             "[workspace.lints.rust]\nunsafe_code = \"forbid\"\n"
         ));
+    }
+
+    // OP-3-G1, R-2
+    #[test]
+    fn unsafe_is_allowed_only_in_the_allowlisted_crates() {
+        assert!(unsafe_allowed("crates/crypto/src/aws.rs"));
+        assert!(unsafe_allowed("crates/suiss-sandbox/src/linux/mod.rs"));
+        assert!(!unsafe_allowed("crates/kernel/src/lib.rs"));
+        assert!(!unsafe_allowed("crates/crypto-extra/src/lib.rs"));
+        assert!(!unsafe_allowed("crates/crypto"));
+    }
+
+    // OP-3-G2, OP-1
+    #[test]
+    fn pure_code_names_no_async_runtime_database_or_http_client() {
+        for src in [
+            "async fn f() {}",
+            "fn f() { tokio::spawn(g()); }",
+            "fn f() { sqlx::query(\"q\"); }",
+            "fn f() { reqwest::get(\"u\"); }",
+        ] {
+            for path in [
+                "crates/kernel/src/a.rs",
+                "crates/authority-core/src/domain/a.rs",
+            ] {
+                assert!(!purity_violations(path, src).is_empty(), "{path}: {src}");
+            }
+        }
+    }
+
+    // OP-3-G6, OP-4, R-3
+    #[test]
+    fn the_workspace_denies_the_request_path_lints() {
+        let all = "[workspace.lints.clippy]\nunwrap_used = \"deny\"\nexpect_used = \"deny\"\nindexing_slicing = \"deny\"\npanic = { level = \"deny\" }\narithmetic_side_effects = \"deny\"\n";
+        assert_eq!(undenied_request_path_lints(all), Vec::<&str>::new());
+        let warned = all.replace("panic = { level = \"deny\" }", "panic = \"warn\"");
+        assert_eq!(undenied_request_path_lints(&warned), ["panic"]);
+        assert_eq!(
+            undenied_request_path_lints("[workspace]\n").len(),
+            REQUEST_PATH_LINTS.len()
+        );
     }
 }
 
