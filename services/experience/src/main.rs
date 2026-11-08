@@ -32,13 +32,13 @@ impl Clock for SystemClock {
     }
 }
 
-struct SystemRandom(std::sync::Arc<rustls::crypto::CryptoProvider>);
+struct SystemRandom(aws_lc_rs::rand::SystemRandom);
 
 impl Random for SystemRandom {
     fn nonce(&self) -> Option<[u8; 16]> {
-        let mut out = [0u8; 16];
-        self.0.secure_random.fill(&mut out).ok()?;
-        Some(out)
+        aws_lc_rs::rand::generate::<[u8; 16]>(&self.0)
+            .ok()
+            .map(aws_lc_rs::rand::Random::expose)
     }
 }
 
@@ -100,9 +100,7 @@ async fn run() -> Result<(), Startup> {
     let experience = Experience::new(
         upstream,
         SystemClock,
-        SystemRandom(std::sync::Arc::new(
-            rustls::crypto::aws_lc_rs::default_provider(),
-        )),
+        SystemRandom(aws_lc_rs::rand::SystemRandom::new()),
         pep,
     );
     let app = router(experience, Beacon::default());
