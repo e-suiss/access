@@ -175,4 +175,127 @@ mod tests {
         assert!(ct2_offline_extension(HOUR_MS).hardware);
         assert_eq!(report_deadline(10), 10 + REPORT_GRACE_MS);
     }
+
+    // §13.7.2, OP-150 m.7 (c): a declared horizon of exactly 4 h is kept, one below it too
+    #[test]
+    fn the_ct2_offline_extension_keeps_a_declared_horizon_up_to_four_hours() {
+        assert_eq!(ct2_offline_extension(14_400_000).horizon_ms, 14_400_000);
+        assert_eq!(ct2_offline_extension(14_399_999).horizon_ms, 14_399_999);
+        assert_eq!(ct2_offline_extension(14_400_001).horizon_ms, 14_400_000);
+    }
+
+    // §13.7.2, TI-RT5, SEC14, EP-7: the default durations in milliseconds
+    #[test]
+    fn the_default_durations_are_the_policy_values() {
+        assert_eq!(MINUTE_MS, 60_000);
+        assert_eq!(HOUR_MS, 3_600_000);
+        assert_eq!(METADATA_FRESHNESS_MS, 3_600_000);
+        assert_eq!(REPORT_GRACE_MS, 86_400_000);
+        assert_eq!(EXACT_INTENT_HORIZON_MS, 300_000);
+        assert_eq!(CT2_OFFLINE_EXTENSION_MS, 14_400_000);
+        assert_eq!(report_deadline(1_000), 86_401_000);
+        assert_eq!(report_deadline(u64::MAX), u64::MAX);
+    }
+
+    fn row(horizon_ms: u64, staleness_ms: Option<u64>, checkpoint_ms: Option<u64>) -> Ceiling {
+        Ceiling {
+            horizon_ms,
+            staleness_ms,
+            checkpoint_ms,
+            hardware: false,
+        }
+    }
+
+    // §13.7.2, T20, U25, CR-K1: every open cell of the connectivity table, in milliseconds
+    #[test]
+    fn every_open_cell_matches_the_connectivity_table() {
+        const M: u64 = 60_000;
+        const H: u64 = 3_600_000;
+        let cases = [
+            (
+                ProfileVariant::OnlineStrict,
+                Tier::Ct0,
+                row(24 * H, None, None),
+            ),
+            (
+                ProfileVariant::OnlineStrict,
+                Tier::Ct1,
+                row(24 * H, None, None),
+            ),
+            (
+                ProfileVariant::OnlineStrict,
+                Tier::Ct2,
+                row(5 * M, None, None),
+            ),
+            (
+                ProfileVariant::BoundedStaleness,
+                Tier::Ct0,
+                row(24 * H, Some(15 * M), None),
+            ),
+            (
+                ProfileVariant::BoundedStaleness,
+                Tier::Ct1,
+                row(8 * H, Some(5 * M), None),
+            ),
+            (
+                ProfileVariant::RevalidateOnReconnect,
+                Tier::Ct0,
+                row(24 * H, None, None),
+            ),
+            (
+                ProfileVariant::RevalidateOnReconnect,
+                Tier::Ct1,
+                row(8 * H, None, None),
+            ),
+            (
+                ProfileVariant::CheckpointedOffline,
+                Tier::Ct0,
+                row(72 * H, None, None),
+            ),
+            (
+                ProfileVariant::CheckpointedOffline,
+                Tier::Ct1,
+                Ceiling {
+                    hardware: true,
+                    ..row(24 * H, None, None)
+                },
+            ),
+            (
+                ProfileVariant::CheckpointContinuation,
+                Tier::Ct0,
+                row(24 * H, None, Some(60 * M)),
+            ),
+            (
+                ProfileVariant::CheckpointContinuation,
+                Tier::Ct1,
+                row(8 * H, None, Some(15 * M)),
+            ),
+            (
+                ProfileVariant::CheckpointContinuation,
+                Tier::Ct2,
+                row(2 * H, None, Some(0)),
+            ),
+        ];
+        for (variant, tier, want) in cases {
+            assert_eq!(policy(variant, tier), Some(want), "{variant:?} {tier:?}");
+        }
+    }
+
+    // §13.7.2, C33: the claim clock skew is 2 min at CT0 and CT1, 1 min at CT2 and CT3
+    #[test]
+    fn the_skew_tolerance_narrows_with_the_tier() {
+        assert_eq!(skew_ms(Tier::Ct0), 120_000);
+        assert_eq!(skew_ms(Tier::Ct1), 120_000);
+        assert_eq!(skew_ms(Tier::Ct2), 60_000);
+        assert_eq!(skew_ms(Tier::Ct3), 60_000);
+    }
+
+    // §13.7.2, T20: `cap_horizon` and Domain Metadata ceilings key each tier by its number
+    #[test]
+    fn each_tier_has_its_own_ceiling_key() {
+        assert_eq!(
+            [Tier::Ct0, Tier::Ct1, Tier::Ct2, Tier::Ct3].map(ct),
+            [0, 1, 2, 3]
+        );
+    }
 }

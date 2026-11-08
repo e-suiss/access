@@ -74,6 +74,35 @@ fn a_meta_action_is_tiered_by_its_class() {
     assert_eq!(validity_ceiling(Tier::Ct1), 86_400_000);
 }
 
+// §13.7.1, OP-141 m.34: the thresholds are inclusive, so exactly 100,000 EUR is still CT2
+#[test]
+fn an_amount_at_the_ct2_threshold_stays_ct2() {
+    assert_eq!(
+        of(&intent(Some((CT2_MAX, "eur"))), None, false, None),
+        Tier::Ct2
+    );
+}
+
+// OP-143 m.7: contributing and issuing a projection are CT1 even when they widen authority
+#[test]
+fn contribute_and_projection_issue_are_ct1_when_widening() {
+    let i = intent(None);
+    let contribute = Payload::Contribute {
+        target: crate::digest::Digest([1; 32]),
+        class: "approve".to_string(),
+    };
+    assert_eq!(of(&i, Some(&contribute), true, None), Tier::Ct1);
+    assert_eq!(meta_tier(&contribute, true), Tier::Ct1);
+}
+
+// OP-141 m.35 (g): a reversible action without amounts keeps the CT1 default
+#[test]
+fn a_reversible_action_is_ct1() {
+    let mut s = crate::schema::tests::refund();
+    s.effect = EffectClass::Reversible;
+    assert_eq!(of(&intent(None), None, false, Some(&s)), Tier::Ct1);
+}
+
 // OP-141 m.35 (g): a reserved action is CT3, an irreversible one at least CT2, one without
 // effect CT0
 #[test]

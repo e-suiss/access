@@ -219,6 +219,29 @@ fn a_report_continues_only_the_last_head() {
     assert!(!continues(&s, &forked));
 }
 
+// L2-RPT-3: the period is closed; entries at either end lie in it, one before it does not
+#[test]
+fn entries_at_the_period_ends_lie_in_the_period() {
+    let at = |times: &[u64]| {
+        verify(&sealed(Report {
+            entries: times
+                .iter()
+                .map(|&time| Entry {
+                    time,
+                    ..entry(10, LocalOutcome::Allow, 1)
+                })
+                .collect(),
+            ..first()
+        }))
+        .map(|s| s.next_seq)
+    };
+    assert_eq!(at(&[1_000, 9_000]), Ok(2));
+    assert_eq!(at(&[1_000]), Ok(1));
+    assert_eq!(at(&[9_000]), Ok(1));
+    assert_eq!(at(&[999]), Err(ReportError::Period));
+    assert_eq!(at(&[9_001]), Err(ReportError::Period));
+}
+
 // L2-RPT-1 to L2-RPT-3
 #[test]
 fn report_vectors_match() {

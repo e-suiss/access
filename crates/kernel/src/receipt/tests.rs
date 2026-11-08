@@ -287,6 +287,55 @@ fn receipts_verify_or_name_their_failure() {
     );
 }
 
+// L2-RCP-3: a receipt names the PEP it is for; an empty audience names none
+#[test]
+fn a_receipt_without_audience_is_malformed() {
+    let r = Receipt {
+        audience: String::new(),
+        ..receipt()
+    };
+    assert_eq!(Receipt::from_value(&r.to_value()), Err(ModelError::Shape));
+}
+
+// L2-RCP-3: a receipt signed exactly at now plus the AIS skew is still on time
+#[test]
+fn a_receipt_at_the_skew_edge_verifies() {
+    let mut c = Case::of(&receipt());
+    c.now = receipt().iat - crate::ais::SKEW_MS;
+    assert_eq!(c.run(), Ok(receipt()));
+    c.now -= 1;
+    assert_eq!(c.run(), Err(ReceiptError::Future));
+}
+
+// §9.8, CR-58 m.5: a provider key in scope for the receipt's domain does not let another
+// domain's metadata verify it
+#[test]
+fn the_metadata_must_be_the_expected_domains() {
+    let mut m = metadata();
+    m.domain = d(2);
+    for b in m.binding.values_mut() {
+        b.scope = BindingScope::Provider(BTreeSet::from([d(1)]));
+    }
+    let c = Case::of(&receipt());
+    let run = |m: &DomainMetadata| {
+        verify(
+            &PureBackend,
+            m,
+            &c.receipt,
+            &c.excerpt,
+            &Expected {
+                domain: &c.domain,
+                audience: c.audience,
+                intent: &c.intent,
+                now: c.now,
+            },
+        )
+    };
+    assert_eq!(run(&m), Err(ReceiptError::Domain));
+    m.domain = d(1);
+    assert_eq!(run(&m), Ok(receipt()));
+}
+
 // L2-RCP-3
 #[test]
 fn receipt_vectors_match() {

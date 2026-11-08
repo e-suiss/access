@@ -53,6 +53,67 @@ fn reference_and_token_round_trip() {
     assert_eq!(ListToken::from_bytes(&bytes), Err(StatusError::Malformed));
 }
 
+fn uri_of(len: usize) -> String {
+    "u".repeat(len)
+}
+
+// L2-STL-1: a reference names a list by a non-empty URI of at most 2048 bytes
+#[test]
+fn a_reference_uri_is_non_empty_and_bounded() {
+    let at = |uri: String| StatusRef::from_value(&StatusRef { idx: 1, uri }.to_value());
+    assert_eq!(at(String::new()), Err(ModelError::Range));
+    assert!(at(uri_of(1)).is_ok());
+    assert!(at(uri_of(MAX_URI)).is_ok());
+    assert_eq!(at(uri_of(MAX_URI + 1)), Err(ModelError::Range));
+}
+
+fn token_with(uri: String) -> Result<ListToken, StatusError> {
+    let v = Value::Map(vec![
+        (Value::Unsigned(2), Value::Text(uri)),
+        (Value::Unsigned(6), Value::Unsigned(1)),
+        (
+            Value::Unsigned(65_533),
+            Value::Map(vec![
+                (Value::text("bits"), Value::Unsigned(1)),
+                (Value::text("lst"), Value::Bytes(vec![1])),
+            ]),
+        ),
+        (Value::text("as_of"), Value::Unsigned(1)),
+    ]);
+    ListToken::from_bytes(&dcbor::encode(&v, Limits::CEILING).unwrap())
+}
+
+// L2-STL-2: the list token's subject is a non-empty URI of at most 2048 bytes
+#[test]
+fn a_list_token_subject_is_non_empty_and_bounded() {
+    assert_eq!(token_with(String::new()), Err(StatusError::Malformed));
+    assert_eq!(token_with(uri_of(1)).map(|t| t.uri), Ok(uri_of(1)));
+    assert_eq!(
+        token_with(uri_of(MAX_URI)).map(|t| t.uri.len()),
+        Ok(MAX_URI)
+    );
+    assert_eq!(token_with(uri_of(MAX_URI + 1)), Err(StatusError::Malformed));
+}
+
+// L2-STL-2: a text claim other than `as_of` is not part of a list token
+#[test]
+fn a_list_token_rejects_an_unknown_text_claim() {
+    let mut v = token().to_value();
+    if let Value::Map(m) = &mut v {
+        m.push((Value::text("as_at"), Value::Unsigned(1)));
+    }
+    let bytes = dcbor::encode(&v, Limits::CEILING).unwrap();
+    assert_eq!(ListToken::from_bytes(&bytes), Err(StatusError::Malformed));
+}
+
+// L2-STL-3: an unset bit reads as valid even when every lower bit of its byte is set
+#[test]
+fn an_unset_bit_above_set_bits_is_valid() {
+    assert_eq!(is_set(&[0b0000_0111], 3), Ok(false));
+    assert_eq!(is_set(&[0b0111_1111], 7), Ok(false));
+    assert_eq!(is_set(&[0b1111_1111], 7), Ok(true));
+}
+
 fn cases() -> Vec<(
     &'static str,
     &'static [&'static str],

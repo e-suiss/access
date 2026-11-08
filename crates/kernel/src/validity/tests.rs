@@ -130,6 +130,27 @@ fn round_trips_and_class_must_match_variant() {
     );
 }
 
+// §9.12: the audience is a required field; a contract without one is valid for no verifier
+#[test]
+fn a_contract_without_audience_is_missing_a_field() {
+    let vc = contract(ProfileVariant::OnlineStrict);
+    let Value::Map(mut entries) = vc.to_value() else {
+        panic!("contract is a map")
+    };
+    entries.retain(|(k, _)| *k != Value::text("audience"));
+    let bytes =
+        suiss_crypto::dcbor::encode(&Value::Map(entries), suiss_crypto::dcbor::Limits::CEILING)
+            .unwrap();
+    assert_eq!(
+        ValidityContract::from_bytes(&bytes),
+        Err(ModelError::Missing)
+    );
+    assert_eq!(
+        ValidityContract::from_bytes(&vc.to_bytes().unwrap()),
+        Ok(vc)
+    );
+}
+
 // §9.12, OP-108 m.2, PI-12
 #[test]
 fn use_rules() {
