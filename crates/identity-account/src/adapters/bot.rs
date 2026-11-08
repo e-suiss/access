@@ -104,17 +104,19 @@ pub fn verify_request(p: &ScoreProvider, token: &str) -> Vec<u8> {
     let (content_type, body, auth) = match p.provider {
         BotProvider::Turnstile => (
             "application/x-www-form-urlencoded",
-            format!(
-                "secret={}&response={}",
-                form_escape(p.secret.expose()),
-                form_escape(token)
-            ),
+            [
+                "secret=",
+                &form_escape(p.secret.expose()),
+                "&response=",
+                &form_escape(token),
+            ]
+            .concat(),
             String::new(),
         ),
         _ => (
             "application/json",
             serde_json::json!({ "response": token, "sitekey": p.site_key }).to_string(),
-            format!("X-API-Key: {}\r\n", p.secret.expose()),
+            ["X-API-Key: ", p.secret.expose(), "\r\n"].concat(),
         ),
     };
     format!(

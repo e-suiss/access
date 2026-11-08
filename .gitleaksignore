@@ -1,2 +1,9 @@
 # F-13: a Debug-redaction test value (base64 of "cli:secret"), replaced in the next commit
 13c3e5e025dfa17b81dad3b36ea647f5eb093904:crates/identity-oauth/src/app/dpop/tests.rs:generic-api-key:313
+# F-13: a PEM header in a doc line and parser test inputs with no key body, split in a later commit
+2a865358ca3f2cf934d7f9f36f040af17df68d1c:crates/identity-federation/src/domain/apple.rs:private-key:10
+2a865358ca3f2cf934d7f9f36f040af17df68d1c:crates/identity-federation/src/domain/apple.rs:private-key:135
+2a865358ca3f2cf934d7f9f36f040af17df68d1c:crates/identity-federation/src/domain/apple.rs:private-key:183
+# F-13: invitation tokens a test seeds into its own throwaway database
+518498146d548a1c8280e07a1cbb2f371736a65f:crates/http/tests/login.rs:generic-api-key:3241
+518498146d548a1c8280e07a1cbb2f371736a65f:crates/http/tests/login.rs:generic-api-key:3329
