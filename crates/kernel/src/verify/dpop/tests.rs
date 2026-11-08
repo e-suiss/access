@@ -126,6 +126,12 @@ fn jkt_text_round_trips() {
     assert_eq!(parse_jkt("not base64!"), Err(DpopError::Jkt));
 }
 
+// CR-43, IDP-11
+#[test]
+fn the_proof_ceiling_is_the_eight_kib_header_budget() {
+    assert_eq!(MAX_PROOF, 8192);
+}
+
 // IDP-11 step 1, TN-28
 #[test]
 fn step_1_shape_and_required_claims() {
