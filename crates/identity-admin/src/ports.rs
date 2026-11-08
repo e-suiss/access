@@ -77,6 +77,13 @@ pub trait RealmKeys: Send + Sync {
         party: [u8; 16],
     ) -> impl Future<Output = Result<PublicKey, Unavailable>> + Send;
 
+    /// The realm's PII vault keys, its KEK and blind index key (OP-153 m.3 (aa)); `None` when
+    /// the token refuses them, and nothing personal is written then (TI-9).
+    fn vault(&self, realm: RealmId) -> Option<access_identity_account::app::vault::Vault> {
+        let _ = realm;
+        None
+    }
+
     /// The AIS of one self-signed registration Exercise of the issuer Party, by the realm's
     /// Claim issuer key (OP-149 m.16 (a)).
     fn sign_issuer_registration(

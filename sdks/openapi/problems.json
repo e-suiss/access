@@ -627,6 +627,20 @@
       "description": "Nobody issues a reset intent or a temporary access pass for their own account (TN-62)."
     },
     {
+      "code": "not-an-organization",
+      "type": "urn:suiss:access:problem:not-an-organization",
+      "status": 409,
+      "title": "Conflict",
+      "description": "The Party is not a live organization Party of the realm's governing domain (OP-153 m.3 (b))."
+    },
+    {
+      "code": "invalid-invitation",
+      "type": "urn:suiss:access:problem:invalid-invitation",
+      "status": 400,
+      "title": "Bad Request",
+      "description": "An invitee address, inviter name, role or lifetime outside the rules (TN-89, OP-153 m.3 (o))."
+    },
+    {
       "code": "invalid-audit-format",
       "type": "urn:suiss:access:problem:invalid-audit-format",
       "status": 400,

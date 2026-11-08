@@ -23,9 +23,9 @@ use crate::domain::realm::{Binding, EnumerationMode};
 use crate::domain::{
     Attribute, AuthMethod, Branding, Change, CimdPolicy, ClaimName, Client, ClientId, Color,
     Disclosure, ExtensionPolicy, Group, HOOK_PREFIX, HookChange, HookPoint, HookSpec, Invalid,
-    JoseAlg, Members, MembershipIssuer, Name, OnNoAnswer, OrgCreate, OrgMember, ProtectionMode,
-    RedirectUri, RpId, SessionPolicy, SigninMethod, SigninPolicy, Signing, Subject, Upstream,
-    UpstreamLink, WEBHOOK_PREFIX, WebhookChange, WebhookSpec,
+    JoseAlg, Members, MembershipIssuer, Name, OnNoAnswer, OrgCreate, OrgInvite, OrgMember,
+    ProtectionMode, RedirectUri, RpId, SessionPolicy, SigninMethod, SigninPolicy, Signing, Subject,
+    Upstream, UpstreamLink, WEBHOOK_PREFIX, WebhookChange, WebhookSpec,
 };
 use crate::ports::{Decider, Governance, Instances, RealmKeys};
 use access_identity_events::domain::webhook::event_names;
@@ -115,6 +115,10 @@ pub enum Op {
     CreateOrganization,
     /// `removeOrganizationMember`: `idp.org.member_remove` (OP-153 m.3 (p)).
     RemoveOrganizationMember,
+    /// `createInvitation`: `idp.org.invite` (TN-89, OP-153 m.3 (o)).
+    CreateInvitation,
+    /// `revokeInvitation`: `idp.org.invite_revoke` (OP-153 m.3 (o)).
+    RevokeInvitation,
 }
 
 impl Op {
@@ -158,6 +162,8 @@ impl Op {
             "putExtensionPolicy" | "patchExtensionPolicy" => Self::PutExtensionPolicy,
             "createOrganization" => Self::CreateOrganization,
             "removeOrganizationMember" => Self::RemoveOrganizationMember,
+            "createInvitation" => Self::CreateInvitation,
+            "revokeInvitation" => Self::RevokeInvitation,
             _ => return None,
         })
     }
@@ -333,6 +339,9 @@ fn subject(ids: &IdKey, s: &str) -> Result<[u8; 16], Invalid> {
         .map_err(|_| Invalid::NoAccount)
 }
 
+/// Prefix of an invitation's external id (OP-137).
+pub const INVITATION_PREFIX: &str = "inv";
+
 /// An organization's Party from its external id, the base64url of its 16 bytes (TN-3).
 fn party_of(s: &str, missing: Invalid) -> Result<[u8; 16], Invalid> {
     b64url_decode(s)
@@ -400,6 +409,39 @@ pub fn compile(op: Op, key: Option<&str>, body: &Json, ids: &IdKey) -> Result<Ch
                 org: party_of(key_of(key)?, Invalid::NoOrg)?,
                 subject: subject(ids, text(m, "account_id")?)?,
             })
+        }
+        Op::CreateInvitation => {
+            only(
+                m,
+                &["email", "inviter_name", "role", "role_version", "days"],
+            )?;
+            let version = m
+                .get("role_version")
+                .and_then(Json::as_u64)
+                .ok_or(Invalid::Invitation)?;
+            let days = match m.get("days") {
+                None | Some(Json::Null) => crate::domain::INVITATION_DEFAULT_DAYS,
+                Some(d) => d
+                    .as_u64()
+                    .and_then(|d| u32::try_from(d).ok())
+                    .ok_or(Invalid::Invitation)?,
+            };
+            Change::OrgInvite(OrgInvite {
+                org: party_of(key_of(key)?, Invalid::NoOrg)?,
+                email: access_identity_account::app::vault::folded(text(m, "email")?),
+                inviter_name: String::from(text(m, "inviter_name")?),
+                role: (Name::parse(text(m, "role")?)?, version),
+                days,
+            })
+        }
+        Op::RevokeInvitation => {
+            only(m, &["invitation_id"])?;
+            Change::OrgInviteRevoke {
+                org: party_of(key_of(key)?, Invalid::NoOrg)?,
+                invitation: ids
+                    .decode(INVITATION_PREFIX, text(m, "invitation_id")?)
+                    .map_err(|_| Invalid::NoInvitation)?,
+            }
         }
         Op::CreateClient => {
             let id = ClientId::parse(text(m, "client_id")?)?;

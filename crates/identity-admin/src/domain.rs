@@ -359,6 +359,15 @@ pub enum Invalid {
     /// The founder created as many organizations today as allowed (OP-153 m.3 (o)).
     #[error("organization limit")]
     OrgLimit,
+    /// The organization sent as many invitations this hour or day as allowed (OP-153 m.3 (o)).
+    #[error("invitation limit")]
+    InviteLimit,
+    /// An invitee address, inviter name, role or lifetime outside the rules (TN-89).
+    #[error("invalid invitation")]
+    Invitation,
+    /// The invitation does not exist, was accepted or revoked, or expired.
+    #[error("no such invitation")]
+    NoInvitation,
 }
 
 impl Invalid {
@@ -373,6 +382,9 @@ impl Invalid {
             Self::LastOwner => "last-owner",
             Self::NotOrganization => "not-an-organization",
             Self::OrgLimit => "organization-limit",
+            Self::InviteLimit => "invitation-limit",
+            Self::Invitation => "invalid-invitation",
+            Self::NoInvitation => "no-such-invitation",
             Self::DisplayName => "invalid-display-name",
             Self::RedirectUri | Self::RedirectUris => "invalid-redirect-uri",
             Self::JwksUri => "invalid-jwks-uri",
@@ -1291,6 +1303,97 @@ pub enum Change {
     OrgCreate(OrgCreate),
     /// `idp.org.member_remove` (OP-153 m.3 (p)).
     OrgMemberRemove(OrgMember),
+    /// `idp.org.invite` (TN-89, OP-153 m.3 (o)).
+    OrgInvite(OrgInvite),
+    /// `idp.org.invite_revoke` (OP-153 m.3 (o)).
+    OrgInviteRevoke {
+        /// The organization's Party.
+        org: [u8; 16],
+        /// The invitation.
+        invitation: [u8; 16],
+    },
+}
+
+/// Days an invitation lives by default (OP-153 m.3 (o), PD).
+pub const INVITATION_DEFAULT_DAYS: u32 = 7;
+
+/// An invitation into an organization (TN-89, OP-153 m.3 (o)). The invitee's address is folded
+/// (NFKC, lower case) and never enters the intent or the ledger: the change names it by its
+/// SHA-256 only, and the identity plane keeps the realm's blind index of it. The inviter's name
+/// and the organization's name are attacker input, sent as text.
+#[derive(Clone, PartialEq, Eq)]
+pub struct OrgInvite {
+    /// The organization's Party.
+    pub org: [u8; 16],
+    /// The invitee's folded e-mail address.
+    pub email: String,
+    /// The inviter's name as the mail shows it.
+    pub inviter_name: String,
+    /// The role: a Named `AuthoritySet` and its version (§5.17).
+    pub role: (Name, u64),
+    /// Days it lives, at most [`crate::domain::org::INVITATION_MAX_DAYS`].
+    pub days: u32,
+}
+
+impl core::fmt::Debug for OrgInvite {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("OrgInvite")
+            .field("org", &self.org)
+            .field("email", &"[redacted]")
+            .field("role", &self.role)
+            .field("days", &self.days)
+            .finish_non_exhaustive()
+    }
+}
+
+impl OrgInvite {
+    /// The domain part of the invitee's address.
+    #[must_use]
+    pub fn domain(&self) -> &str {
+        self.email.rsplit_once('@').map_or("", |(_, d)| d)
+    }
+
+    fn check(&self) -> Result<(), Invalid> {
+        let Some((local, domain)) = self.email.rsplit_once('@') else {
+            return Err(Invalid::Invitation);
+        };
+        let domain_ok = (1..=253).contains(&domain.len())
+            && domain.contains('.')
+            && domain
+                .bytes()
+                .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'.' || b == b'-');
+        let n = self.inviter_name.chars().count();
+        if local.is_empty()
+            || self.email.len() > 254
+            || self
+                .email
+                .chars()
+                .any(|c| c.is_control() || c.is_whitespace())
+            || !domain_ok
+            || n == 0
+            || n > 200
+            || self.inviter_name.chars().any(char::is_control)
+            || self.role.1 == 0
+            || self.days == 0
+            || self.days > crate::domain::org::INVITATION_MAX_DAYS
+        {
+            return Err(Invalid::Invitation);
+        }
+        Ok(())
+    }
+
+    fn to_value(&self) -> Value {
+        Value::Map(vec![
+            (Value::text("org"), Value::Bytes(self.org.to_vec())),
+            (
+                Value::text("invitee"),
+                Value::Bytes(suiss_crypto::digest::sha256(self.email.as_bytes()).to_vec()),
+            ),
+            (Value::text("role"), Value::text(self.role.0.as_str())),
+            (Value::text("role_version"), Value::Unsigned(self.role.1)),
+            (Value::text("days"), uint(self.days)),
+        ])
+    }
 }
 
 /// An organization bound to the Party its founder's client registered (TN-5, OP-153 m.3 (b)).
@@ -1429,6 +1532,8 @@ impl Change {
             Self::UpstreamLink(_) => IdpAction::UpstreamLink,
             Self::OrgCreate(_) => IdpAction::OrgCreate,
             Self::OrgMemberRemove(_) => IdpAction::OrgMemberRemove,
+            Self::OrgInvite(_) => IdpAction::OrgInvite,
+            Self::OrgInviteRevoke { .. } => IdpAction::OrgInviteRevoke,
         }
     }
 
@@ -1470,7 +1575,9 @@ impl Change {
                 policy.validate().map_err(|_| Invalid::RecoveryPolicy)
             }
             Self::OrgCreate(o) => o.check(),
-            Self::OrgMemberRemove(_)
+            Self::OrgInvite(i) => i.check(),
+            Self::OrgInviteRevoke { .. }
+            | Self::OrgMemberRemove(_)
             | Self::Hook(_)
             | Self::Webhook(_)
             | Self::ClientRetire(_)
@@ -1565,6 +1672,11 @@ impl Change {
                 Value::text("policy"),
                 Value::Bytes(policy.to_bytes().unwrap_or_default()),
             )]),
+            Self::OrgInvite(i) => i.to_value(),
+            Self::OrgInviteRevoke { org, invitation } => Value::Map(vec![
+                (Value::text("org"), Value::Bytes(org.to_vec())),
+                (Value::text("invitation"), Value::Bytes(invitation.to_vec())),
+            ]),
         }
     }
 
@@ -1638,7 +1750,9 @@ impl Change {
                 path.push(String::from("keys"));
             }
             Self::OrgCreate(OrgCreate { party: org, .. })
-            | Self::OrgMemberRemove(OrgMember { org, .. }) => {
+            | Self::OrgMemberRemove(OrgMember { org, .. })
+            | Self::OrgInvite(OrgInvite { org, .. })
+            | Self::OrgInviteRevoke { org, .. } => {
                 path.extend([String::from("org"), b64url_encode(org)]);
             }
         }

@@ -752,6 +752,11 @@ impl RealmKeys for RealmKeyring {
             .await
             .map_err(|_| Unavailable(String::from("identity-signer")))
     }
+
+    fn vault(&self, realm: RealmId) -> Option<access_identity_account::app::vault::Vault> {
+        // OP-153 m.3 (aa)
+        crate::login::RealmKeks::new(self.keys.clone()).vault(realm)
+    }
 }
 
 mod projections;

@@ -1,0 +1,99 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT invitation_id, invitee_domain, role_name, role_version, scanner_clicks,\n                      (accepted_at IS NULL AND revoked_at IS NULL\n                       AND expires_at > clock_timestamp()) AS \"open!\",\n                      accepted_at IS NOT NULL AS \"accepted!\",\n                      (extract(epoch FROM expires_at) * 1000)::bigint AS \"expires_ms!\"\n                 FROM access.org_invitations\n                WHERE tenant_id = $1 AND realm_id = $2 AND org_id = $3\n                ORDER BY created_at DESC, invitation_id DESC\n                LIMIT 100",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "invitation_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.org_invitations",
+            "name": "invitation_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "invitee_domain",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.org_invitations",
+            "name": "invitee_domain"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "role_name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.org_invitations",
+            "name": "role_name"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "role_version",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.org_invitations",
+            "name": "role_version"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "scanner_clicks",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "access.org_invitations",
+            "name": "scanner_clicks"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "open!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 6,
+        "name": "accepted!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 7,
+        "name": "expires_ms!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "2ff0f00223dea08d3dbfa91c051674748e94090b8f8009be710e2a1a59900c5d"
+}

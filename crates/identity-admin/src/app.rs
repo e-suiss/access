@@ -2,7 +2,7 @@
 //! write path (MD-14, EI-25), and the platform product API (OP-149 m.4).
 
 pub mod issuer;
-mod orgs;
+pub mod orgs;
 pub mod platform;
 pub mod provision;
 pub mod rest;
@@ -364,6 +364,13 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                 }
             }
             Change::OrgMemberRemove(m) => org_member_current(t, *m).await?,
+            Change::OrgInvite(i) => orgs::invite_current(t, i).await?,
+            Change::OrgInviteRevoke { org, invitation } => {
+                let org = orgs::live_org(t, *org).await?;
+                if t.invitation_org(*invitation).await? != Some((org.id, true)) {
+                    return Err(Invalid::NoInvitation.into());
+                }
+            }
             Change::ClientRegister(c) => {
                 if idp::client(t, c.id.as_str()).await?.is_some() {
                     return Err(Invalid::ClientExists.into());
@@ -918,12 +925,54 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                 .await?
                 .or(secret);
         }
+        if let Change::OrgInvite(i) = &p.change {
+            // TN-89, OP-153 m.3 (o)
+            self.invite(&mut t.0, p, &g, i, exercise).await?;
+        }
         declare_transmitter(&mut t.0, bound, &p.change, exercise).await?;
         self.announce(&mut t.0, p, exercise).await?;
         let at = access_store::authority::server_time(self.app).await?;
         signals::queue_for(&mut t.0, &p.change, at).await?;
         t.0.commit().await?;
         Ok(secret)
+    }
+
+    /// Writes a committed invitation and queues its mail (TN-89, OP-153 m.3 (o)): the inviter
+    /// is the session's subject and its Party, and the realm's vault keys must be at hand.
+    async fn invite(
+        &self,
+        t: &mut TenantTx,
+        p: &Proposal,
+        g: &Governing,
+        i: &crate::domain::OrgInvite,
+        exercise: &Digest,
+    ) -> Result<(), AdminError> {
+        let inviter = p
+            .subject
+            .ok_or_else(|| AdminError::Refused(String::from(ACTOR_BINDING)))?;
+        let party = idp::subject_party(t, &inviter)
+            .await?
+            .ok_or_else(|| AdminError::Refused(String::from(ACTOR_BINDING)))?;
+        let vault = self
+            .keys
+            .vault(p.realm)
+            .ok_or_else(|| AdminError::Unavailable(String::from("vault")))?;
+        let issuer = g.issuer.as_deref().ok_or(AdminError::NoRealm)?;
+        let at = access_store::authority::server_time(self.app).await?;
+        orgs::invite(
+            t,
+            &orgs::Invite {
+                vault: &vault,
+                ids: self.ids,
+                inviter: (inviter, party),
+                issuer,
+                exercise: &exercise.0,
+                at,
+            },
+            i,
+        )
+        .await
+        .map(drop)
     }
 
     /// The Party the session subject of `p` is bound to (§13.4 G54, OP-149 m.16 (a)); a subject
@@ -1233,8 +1282,10 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             }
             Change::AccountDelete(_)
             | Change::OrgCreate(_)
+            | Change::OrgInvite(_)
             | Change::AccountResetIntent { .. }
             | Change::AccountTapIssue(_) => true,
+            Change::OrgInviteRevoke { invitation, .. } => t.revoke_invitation(*invitation).await?,
             Change::OrgMemberRemove(m) => {
                 let org = t
                     .org_by_party(m.org)

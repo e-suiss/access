@@ -1,0 +1,37 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT org_id,\n                      (accepted_at IS NULL AND revoked_at IS NULL\n                       AND expires_at > clock_timestamp()) AS \"open!\"\n                 FROM access.org_invitations\n                WHERE tenant_id = $1 AND realm_id = $2 AND invitation_id = $3",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "org_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.org_invitations",
+            "name": "org_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "open!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      null
+    ]
+  },
+  "hash": "4c835ba20d23d016f6d2cf2c9f090deb5d76a06abe42d4f4963dd9937d199751"
+}

@@ -139,6 +139,25 @@ pub struct InvitationRow {
     pub scanner_clicks: i32,
 }
 
+/// An invitation as the organization's list shows it: never its invitee's address.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct InvitationListed {
+    /// Its id.
+    pub id: [u8; 16],
+    /// The invitee's domain.
+    pub invitee_domain: String,
+    /// The role.
+    pub role: (String, u64),
+    /// Still open.
+    pub open: bool,
+    /// Accepted.
+    pub accepted: bool,
+    /// When it expires, Unix ms.
+    pub expires_ms: i64,
+    /// Browser and mail-scanner fetches seen.
+    pub scanner_clicks: i32,
+}
+
 /// One domain claim.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DomainRow {
@@ -524,6 +543,142 @@ impl TenantTx {
             })
         })
         .transpose()
+    }
+
+    /// The organization's invitations, newest first, at most 100 (OP-153 m.3 (o)).
+    ///
+    /// # Errors
+    /// [`StoreError`].
+    pub async fn invitations(
+        &mut self,
+        org: [u8; 16],
+    ) -> Result<Vec<InvitationListed>, StoreError> {
+        let (tenant, realm) = self.org_scope()?;
+        let rows = sqlx::query!(
+            r#"SELECT invitation_id, invitee_domain, role_name, role_version, scanner_clicks,
+                      (accepted_at IS NULL AND revoked_at IS NULL
+                       AND expires_at > clock_timestamp()) AS "open!",
+                      accepted_at IS NOT NULL AS "accepted!",
+                      (extract(epoch FROM expires_at) * 1000)::bigint AS "expires_ms!"
+                 FROM access.org_invitations
+                WHERE tenant_id = $1 AND realm_id = $2 AND org_id = $3
+                ORDER BY created_at DESC, invitation_id DESC
+                LIMIT 100"#,
+            tenant,
+            realm,
+            uuid(org),
+        )
+        .fetch_all(&mut *self.tx)
+        .await?;
+        rows.into_iter()
+            .map(|r| {
+                Ok(InvitationListed {
+                    id: *r.invitation_id.as_bytes(),
+                    invitee_domain: r.invitee_domain,
+                    role: (
+                        r.role_name,
+                        u64::try_from(r.role_version).map_err(|_| StoreError::Corrupt)?,
+                    ),
+                    open: r.open,
+                    accepted: r.accepted,
+                    expires_ms: r.expires_ms,
+                    scanner_clicks: r.scanner_clicks,
+                })
+            })
+            .collect()
+    }
+
+    /// The organization of invitation `id` and whether it is still open.
+    ///
+    /// # Errors
+    /// [`StoreError`].
+    pub async fn invitation_org(
+        &mut self,
+        id: [u8; 16],
+    ) -> Result<Option<([u8; 16], bool)>, StoreError> {
+        let (tenant, realm) = self.org_scope()?;
+        let row = sqlx::query!(
+            r#"SELECT org_id,
+                      (accepted_at IS NULL AND revoked_at IS NULL
+                       AND expires_at > clock_timestamp()) AS "open!"
+                 FROM access.org_invitations
+                WHERE tenant_id = $1 AND realm_id = $2 AND invitation_id = $3"#,
+            tenant,
+            realm,
+            uuid(id),
+        )
+        .fetch_optional(&mut *self.tx)
+        .await?;
+        Ok(row.map(|r| (*r.org_id.as_bytes(), r.open)))
+    }
+
+    /// The open invitations whose magic code hashes to `code_hash` and whose invitee is one of
+    /// `invitees` (TN-89: the code is a fallback for the link, and only its invitee may use it).
+    ///
+    /// # Errors
+    /// [`StoreError`].
+    pub async fn invitations_by_code(
+        &mut self,
+        code_hash: &[u8; 32],
+        invitees: &[[u8; 32]],
+    ) -> Result<Vec<[u8; 32]>, StoreError> {
+        let (tenant, realm) = self.org_scope()?;
+        let invitees: Vec<Vec<u8>> = invitees.iter().map(|i| i.to_vec()).collect();
+        let rows = sqlx::query_scalar!(
+            r#"SELECT token_hash FROM access.org_invitations
+                WHERE tenant_id = $1 AND realm_id = $2 AND code_hash = $3
+                  AND invitee_index = ANY($4)
+                  AND accepted_at IS NULL AND revoked_at IS NULL AND expires_at > clock_timestamp()
+                ORDER BY invitation_id"#,
+            tenant,
+            realm,
+            code_hash.as_slice(),
+            &invitees,
+        )
+        .fetch_all(&mut *self.tx)
+        .await?;
+        rows.into_iter()
+            .map(|t| <[u8; 32]>::try_from(t).map_err(|_| StoreError::Corrupt))
+            .collect()
+    }
+
+    /// The organizations `subject` is an active member of, with whether it owns them.
+    ///
+    /// # Errors
+    /// [`StoreError`].
+    pub async fn orgs_of(
+        &mut self,
+        subject: [u8; 16],
+    ) -> Result<Vec<(OrgRow, MembershipRow)>, StoreError> {
+        let (tenant, realm) = self.org_scope()?;
+        let ids = sqlx::query_scalar!(
+            r#"SELECT m.org_id FROM access.org_memberships m
+                 JOIN access.organizations o
+                   ON o.tenant_id = m.tenant_id AND o.realm_id = m.realm_id AND o.org_id = m.org_id
+                WHERE m.tenant_id = $1 AND m.realm_id = $2 AND m.subject_id = $3
+                  AND m.ended_at IS NULL AND o.ended_at IS NULL
+                ORDER BY m.membership_id"#,
+            tenant,
+            realm,
+            uuid(subject),
+        )
+        .fetch_all(&mut *self.tx)
+        .await?;
+        let mut out = Vec::with_capacity(ids.len());
+        for id in ids {
+            let id = *id.as_bytes();
+            let (Some(org), Some(m)) = (
+                self.org(id).await?,
+                self.memberships(id)
+                    .await?
+                    .into_iter()
+                    .find(|m| m.subject == subject),
+            ) else {
+                continue;
+            };
+            out.push((org, m));
+        }
+        Ok(out)
     }
 
     /// Counts a browser or mail-scanner fetch of the link; it consumes nothing (TN-89).

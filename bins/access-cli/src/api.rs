@@ -273,6 +273,8 @@ pub(crate) fn action_of(operation: &str, exists: bool) -> Option<IdpAction> {
         "linkUpstreamSubject" => IdpAction::UpstreamLink,
         "createOrganization" => IdpAction::OrgCreate,
         "removeOrganizationMember" => IdpAction::OrgMemberRemove,
+        "createInvitation" => IdpAction::OrgInvite,
+        "revokeInvitation" => IdpAction::OrgInviteRevoke,
         "putSigninPolicy" | "patchSigninPolicy" => IdpAction::RealmSigninPolicy,
         "putSessionPolicy" | "patchSessionPolicy" => IdpAction::RealmSessionPolicy,
         "putBranding" | "patchBranding" => IdpAction::RealmBranding,

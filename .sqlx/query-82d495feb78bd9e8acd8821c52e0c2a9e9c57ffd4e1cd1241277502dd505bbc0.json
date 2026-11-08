@@ -1,0 +1,31 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT token_hash FROM access.org_invitations\n                WHERE tenant_id = $1 AND realm_id = $2 AND code_hash = $3\n                  AND invitee_index = ANY($4)\n                  AND accepted_at IS NULL AND revoked_at IS NULL AND expires_at > clock_timestamp()\n                ORDER BY invitation_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "token_hash",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.org_invitations",
+            "name": "token_hash"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Bytea",
+        "ByteaArray"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "82d495feb78bd9e8acd8821c52e0c2a9e9c57ffd4e1cd1241277502dd505bbc0"
+}

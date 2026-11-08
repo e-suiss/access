@@ -228,6 +228,13 @@ impl Opened {
 }
 
 impl RealmKeys for Opened {
+    fn vault(&self, _: RealmId) -> Option<access_identity_account::app::vault::Vault> {
+        Some(access_identity_account::app::vault::Vault::in_memory(
+            std::sync::Arc::new(SoftKek::new("realm-kek", [5; 32])),
+            [9; 32],
+        ))
+    }
+
     fn open(
         &self,
         realm: RealmId,

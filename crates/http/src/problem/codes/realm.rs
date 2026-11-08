@@ -375,3 +375,10 @@ pub const NOT_AN_ORGANIZATION: Code = code(
     "Conflict",
     "The Party is not a live organization Party of the realm's governing domain (OP-153 m.3 (b)).",
 );
+/// An invitee address, inviter name, role or lifetime outside the rules (TN-89, OP-153 m.3 (o)).
+pub const INVALID_INVITATION: Code = code(
+    "invalid-invitation",
+    400,
+    "Bad Request",
+    "An invitee address, inviter name, role or lifetime outside the rules (TN-89, OP-153 m.3 (o)).",
+);

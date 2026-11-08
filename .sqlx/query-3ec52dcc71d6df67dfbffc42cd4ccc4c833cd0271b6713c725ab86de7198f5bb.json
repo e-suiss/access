@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT m.org_id FROM access.org_memberships m\n                 JOIN access.organizations o\n                   ON o.tenant_id = m.tenant_id AND o.realm_id = m.realm_id AND o.org_id = m.org_id\n                WHERE m.tenant_id = $1 AND m.realm_id = $2 AND m.subject_id = $3\n                  AND m.ended_at IS NULL AND o.ended_at IS NULL\n                ORDER BY m.membership_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "org_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.org_memberships",
+            "name": "org_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "3ec52dcc71d6df67dfbffc42cd4ccc4c833cd0271b6713c725ab86de7198f5bb"
+}

@@ -8,6 +8,7 @@ pub mod consumer_domains;
 pub mod events;
 pub mod gcra;
 pub mod identifier;
+pub mod invitation;
 pub mod login;
 pub mod password;
 pub mod recovery_policy;

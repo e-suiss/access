@@ -54,12 +54,47 @@ async fn register_org(
         .await
 }
 
+/// The realm's vault keys as the test world's realm keys hand them out.
+fn vault_of(w: &World, realm: RealmId) -> access_identity_account::app::vault::Vault {
+    access_identity_admin::ports::RealmKeys::vault(&w.keys, realm).unwrap()
+}
+
+/// A real account of the realm with the e-mail `email`, sealed under the realm's vault.
+async fn account(w: &World, (tenant, realm): (TenantId, RealmId), email: &str) -> [u8; 16] {
+    use access_identity_account::domain::identifier::{Identifier, IdentifierKind};
+    let v = vault_of(w, realm);
+    let named = access_identity_account::app::Realm {
+        tenant,
+        realm,
+        kek: &*v.kek,
+        ids: &w.ids,
+    };
+    let db = access_identity_account::adapters::pg::PgAccounts::sealed(w.db.app.clone(), v.clone());
+    let who = access_identity_account::app::Actor {
+        actor: "test",
+        correlation: "test",
+    };
+    let email = Identifier::new(IdentifierKind::Email, email).unwrap();
+    let subject = access_identity_account::app::accounts::create(&db, &named, &[email], &who)
+        .await
+        .unwrap();
+    for to in [
+        access_identity_account::domain::status::AccountStatus::PendingUserAction,
+        access_identity_account::domain::status::AccountStatus::Active,
+    ] {
+        access_identity_account::app::accounts::change_status(&db, &named, subject, to, &who)
+            .await
+            .unwrap();
+    }
+    subject
+}
+
 async fn ready(slug: &str) -> (World, (TenantId, RealmId), Digest, [u8; 16]) {
     let w = World::new().await;
     let (tenant, realm, d) = w.realm(slug).await;
     onboard(&w.plane, d, ROOT, ROOT_KEY).await;
+    let founder = account(&w, (tenant, realm), "founder@acme.example").await;
     let mut t = TenantTx::begin(&w.db.app, tenant, realm).await.unwrap();
-    let founder = t.insert_subject("active", "kek-1", &[1; 40]).await.unwrap();
     assert!(
         access_store::idp::bind_subject_party(&mut t, &founder, &ROOT.0)
             .await
@@ -246,5 +281,116 @@ async fn an_organization_is_created_through_commit_and_keeps_its_last_owner() {
     assert_eq!(
         refused(&w, &as_founder(at, d, remove(bob), 6, founder)).await,
         Invalid::NoMember
+    );
+}
+
+fn invite(w: &World, body: &serde_json::Value) -> Change {
+    compile(
+        Op::CreateInvitation,
+        Some(&b64url_encode(&ORG)),
+        body,
+        &w.ids,
+    )
+    .unwrap()
+}
+
+async fn create_org(w: &World, at: (TenantId, RealmId), d: Digest, founder: [u8; 16]) -> [u8; 16] {
+    let create = compile(
+        Op::CreateOrganization,
+        None,
+        &json!({ "party": b64url_encode(&ORG), "display_name": "Acme" }),
+        &w.ids,
+    )
+    .unwrap();
+    written(
+        &exercise(w, &as_founder(at, d, create, 0xc0, founder), ROOT_KEY)
+            .await
+            .unwrap(),
+    );
+    let mut t = TenantTx::begin(&w.db.app, at.0, at.1).await.unwrap();
+    let org = t.org_by_party(ORG).await.unwrap().unwrap().id;
+    t.commit().await.unwrap();
+    org
+}
+
+// TN-89, OP-153 m.3 (o), HL-39, Ek B 3606, 3607, 3829
+#[tokio::test]
+async fn an_invitation_is_committed_mailed_limited_and_revoked() {
+    let (w, at, d, founder) = ready("org-invite").await;
+    let org = create_org(&w, at, d, founder).await;
+    let body = json!({
+        "email": "Bob@ACME.example",
+        "inviter_name": "Ada from Acme",
+        "role": "member",
+        "role_version": 1,
+    });
+    // TN-89: the change names the invitee by digest only; the address never enters the intent
+    let change = invite(&w, &body);
+    assert!(!format!("{change:?}").contains("acme.example"));
+    written(
+        &exercise(&w, &as_founder(at, d, change, 1, founder), ROOT_KEY)
+            .await
+            .unwrap(),
+    );
+    let mut t = TenantTx::begin(&w.db.app, at.0, at.1).await.unwrap();
+    let listed = t.invitations(org).await.unwrap();
+    assert_eq!(listed.len(), 1);
+    assert!(listed[0].open && !listed[0].accepted);
+    assert_eq!(listed[0].invitee_domain, "acme.example");
+    assert_eq!(listed[0].role, (String::from("member"), 1));
+    t.commit().await.unwrap();
+    // OP-153 m.3 (o): the mail goes through Relay in the same transaction
+    realm_events(&w, at.1, "relay.message.invitation.v1", 1).await;
+
+    // TN-89: lifetime at most 30 days, a role version
+    for bad in [
+        json!({ "email": "x@acme.example", "inviter_name": "A", "role": "member", "role_version": 1, "days": 31 }),
+        json!({ "email": "x@acme.example", "inviter_name": "A", "role": "member", "role_version": 0 }),
+        json!({ "email": "not-an-address", "inviter_name": "A", "role": "member", "role_version": 1 }),
+    ] {
+        assert_eq!(
+            refused(&w, &as_founder(at, d, invite(&w, &bad), 2, founder)).await,
+            Invalid::Invitation
+        );
+    }
+
+    let revoke = compile(
+        Op::RevokeInvitation,
+        Some(&b64url_encode(&ORG)),
+        &json!({ "invitation_id": w.ids.encode("inv", listed[0].id).unwrap() }),
+        &w.ids,
+    )
+    .unwrap();
+    written(
+        &exercise(&w, &as_founder(at, d, revoke.clone(), 3, founder), ROOT_KEY)
+            .await
+            .unwrap(),
+    );
+    assert_eq!(
+        refused(&w, &as_founder(at, d, revoke, 4, founder)).await,
+        Invalid::NoInvitation
+    );
+
+    // HL-39, OP-153 m.3 (o): at most 50 invitations an hour per organization
+    let mut t = TenantTx::begin(&w.db.app, at.0, at.1).await.unwrap();
+    for i in 0..49u8 {
+        t.insert_invitation(&access_store::orgs::NewInvitation {
+            org,
+            token_hash: &[i; 32],
+            code_hash: &[i; 32],
+            invitee_index: &[i; 32],
+            invitee_domain: "acme.example",
+            inviter: ROOT.0,
+            role: ("member", 1),
+            exercise: None,
+            ttl_s: 3_600,
+        })
+        .await
+        .unwrap();
+    }
+    t.commit().await.unwrap();
+    assert_eq!(
+        refused(&w, &as_founder(at, d, invite(&w, &body), 5, founder)).await,
+        Invalid::InviteLimit
     );
 }

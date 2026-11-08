@@ -240,6 +240,18 @@ pub const ROWS: &[Route] = &[
     ),
     write(
         Verb::Post,
+        "/admin/v1/realms/{slug}/organizations/{organization}/invitations",
+        "createInvitation",
+        "Invites a person into an organization by e-mail: the link and its magic code go only in the mail, the role comes from the invitation (TN-89).",
+    ),
+    write(
+        Verb::Post,
+        "/admin/v1/realms/{slug}/organizations/{organization}/invitations/revoke",
+        "revokeInvitation",
+        "Revokes an open invitation (OP-153 m.3 (o)).",
+    ),
+    write(
+        Verb::Post,
         "/admin/v1/realms/{slug}/upstream-idps/{name}/links",
         "linkUpstreamSubject",
         "Links a subject of the upstream identity provider to an account; its inbound signals then reach the account.",
@@ -623,7 +635,9 @@ pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
         | "createResetIntent"
         | "createOrganization"
         | "removeOrganizationMember"
-        | "createTemporaryAccessPass" => (Accounts, w(false)),
+        | "createTemporaryAccessPass"
+        | "createInvitation"
+        | "revokeInvitation" => (Accounts, w(false)),
         "listUpstreamIdps" => (UpstreamIdps, Shape::List(&["name", "issuer", "status"])),
         "getUpstreamIdp" => (UpstreamIdps, Shape::Get),
         "putUpstreamIdp" => (UpstreamIdps, w(true)),
@@ -738,7 +752,8 @@ pub fn problem_of(e: &AdminError) -> &'static Code {
             Invalid::RecoveryOption => &r::RECOVERY_OPTION_OFF,
             Invalid::SelfIssue => &r::SELF_ISSUE_REFUSED,
             Invalid::NotOrganization => &r::NOT_AN_ORGANIZATION,
-            Invalid::OrgLimit => &codes::RATE_LIMITED,
+            Invalid::OrgLimit | Invalid::InviteLimit => &codes::RATE_LIMITED,
+            Invalid::Invitation => &r::INVALID_INVITATION,
             Invalid::NoClient
             | Invalid::NoKey
             | Invalid::NoGroup
@@ -747,7 +762,8 @@ pub fn problem_of(e: &AdminError) -> &'static Code {
             | Invalid::NoHook
             | Invalid::NoWebhook
             | Invalid::NoOrg
-            | Invalid::NoMember => &codes::NOT_FOUND,
+            | Invalid::NoMember
+            | Invalid::NoInvitation => &codes::NOT_FOUND,
         },
         AdminError::Issuer(_) | AdminError::NoRealm => &codes::NOT_FOUND,
         AdminError::Refused(_) => &codes::EXERCISE_REFUSED,
