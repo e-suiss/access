@@ -375,13 +375,6 @@ fn param<'a>(p: &'a HashMap<String, String>, name: &str) -> &'a str {
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-struct CreateBody {
-    #[serde(default)]
-    kind: access_identity_ui::domain::flow::FlowKind,
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
 struct EmailBody {
     email: String,
 }
@@ -391,12 +384,12 @@ handler! {
     /// `kind: registration` (OP-153 m.3 (g)).
     create(s, entry, b, p, bytes, headers) true {
         let _ = &p;
-        let req: CreateBody = if bytes.is_empty() {
-            CreateBody { kind: access_identity_ui::domain::flow::FlowKind::Login }
-        } else {
-            body(&bytes)?
-        };
-        Ok(match req.kind {
+        let kind = serde_json::from_slice::<serde_json::Value>(&bytes)
+            .ok()
+            .and_then(|v| v.get("kind").cloned())
+            .map_or(Ok(access_identity_ui::domain::flow::FlowKind::Login), serde_json::from_value)
+            .map_err(|_| problem(StatusCode::BAD_REQUEST, "invalid-request", "Bad Request"))?;
+        Ok(match kind {
             access_identity_ui::domain::flow::FlowKind::Login => s.hosted.create(&entry, &b).await,
             access_identity_ui::domain::flow::FlowKind::Registration => {
                 s.hosted.create_signup(&entry, &b).await

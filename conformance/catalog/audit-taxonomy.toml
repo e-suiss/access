@@ -454,3 +454,47 @@ ocsf_class = 3001
 ocsf_activity = 99
 caep = ""
 webhook = true
+
+[[event]]
+event = "account.registered"
+plane = "identity"
+class = "account"
+outcome = "success"
+fields = ["actor", "target"]
+ocsf_class = 3001
+ocsf_activity = 1
+caep = ""
+webhook = false
+
+[[event]]
+event = "account.email_change.started"
+plane = "identity"
+class = "account"
+outcome = "success"
+fields = ["actor", "target"]
+ocsf_class = 3001
+ocsf_activity = 99
+caep = ""
+webhook = false
+
+[[event]]
+event = "account.email_changed"
+plane = "identity"
+class = "account"
+outcome = "success"
+fields = ["actor", "target"]
+ocsf_class = 3001
+ocsf_activity = 3
+caep = ""
+webhook = false
+
+[[event]]
+event = "auth.registration.started"
+plane = "identity"
+class = "authentication"
+outcome = "success"
+fields = ["actor", "target"]
+ocsf_class = 3001
+ocsf_activity = 99
+caep = ""
+webhook = false
