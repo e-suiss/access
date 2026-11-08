@@ -61,8 +61,7 @@ fn verify(
     )
 }
 
-// L2-JOS-1 to L2-JOS-4, §9.9.4 k.2, OP-150 m.9 (b), (d), (f): the RS reads its authority from
-// RAR + cnf + ValidityContract
+// L2-JOS-1 to L2-JOS-4, §9.9.4 k.2, OP-150 m.9 (b), (d), (f)
 #[test]
 fn a_dpop_bound_exact_intent_token_for_this_server_and_intent_is_verified() {
     let token = TokenSpec::intent_token().signed();
@@ -89,7 +88,7 @@ fn a_dpop_bound_exact_intent_token_for_this_server_and_intent_is_verified() {
     assert_eq!(v.authorized.as_of(), BASIS_POS);
 }
 
-// §9.9.1 count = 1, OP-150 m.9 (j): exact-intent single use at the RS
+// §9.9.1, OP-150 m.9 (j)
 #[test]
 fn an_exact_intent_token_is_accepted_once() {
     let token = TokenSpec::intent_token().signed();
@@ -103,7 +102,7 @@ fn an_exact_intent_token_is_accepted_once() {
     assert!(Denied::Reused.is_decision());
 }
 
-// §10.4.3 m.3, m.5, §13.4 U55, IDP-11, TN-30, MD-18: the RS keeps its own replay state
+// §10.4.3 m.3, m.5, §13.4 U55, IDP-11, TN-30, MD-18
 #[test]
 fn a_replayed_dpop_proof_is_refused_and_a_dead_replay_store_refuses_too() {
     let token = TokenSpec::bounds_token().signed();
@@ -120,7 +119,7 @@ fn a_replayed_dpop_proof_is_refused_and_a_dead_replay_store_refuses_too() {
     );
 }
 
-// §9.9.3 rule 2, §12.2.1, PI-11, TN-27, TN-28, TN-29: no bearer, the proof binds this request
+// §9.9.3 rule 2, §12.2.1, PI-11, TN-27, TN-28, TN-29
 #[test]
 fn a_missing_mismatched_or_misbound_proof_is_refused() {
     let token = TokenSpec::intent_token().signed();
@@ -183,7 +182,7 @@ fn a_missing_mismatched_or_misbound_proof_is_refused() {
     assert!(verify(&s, &token, &with_nonce, &m).is_ok());
 }
 
-// §9.9.3 rule 1, rule 7, AG-8, RFC 8707, TI-RT6: one audience, this one, this issuer, this domain
+// §9.9.3 rule 1, rule 7, AG-8, RFC 8707, TI-RT6
 #[test]
 fn tokens_for_another_audience_issuer_or_domain_are_refused() {
     let m = support::Memory::healthy();
@@ -225,7 +224,7 @@ fn tokens_for_another_audience_issuer_or_domain_are_refused() {
     );
 }
 
-// OP-150 m.3 (s), §9.9.6: 8 KiB ceiling, checked before any port is touched
+// OP-150 m.3 (s), §9.9.6
 #[test]
 fn a_token_over_8_kib_is_refused_before_anything_else() {
     let mut spec = TokenSpec::intent_token();
@@ -239,8 +238,7 @@ fn a_token_over_8_kib_is_refused_before_anything_else() {
     assert!(m.seen.borrow().is_empty());
 }
 
-// §9.11.2, §13.11 EP-4, MD-6, MD-7, U36, U39: the domain's keys within key_epoch, default 1 h,
-// ceiling 24 h
+// §9.11.2, §13.11 EP-4, MD-6, MD-7, U36, U39
 #[test]
 fn the_keys_serve_within_the_key_epoch_and_every_fetch_fault_is_deny() {
     let token = TokenSpec::intent_token().signed();
@@ -282,7 +280,7 @@ fn the_keys_serve_within_the_key_epoch_and_every_fetch_fault_is_deny() {
     assert!(ResourceServer::new(c).is_ok());
 }
 
-// L2-STL-1 to L2-STL-3, §9.12.4, PI-9, OP-150 m.7 (e), m.10: set bit, stale list, no list
+// L2-STL-1 to L2-STL-3, §9.12.4, PI-9, OP-150 m.7 (e), m.10
 #[test]
 fn a_set_stale_unreadable_or_missing_status_list_is_deny() {
     let s = server(Profile::Fast);
@@ -313,7 +311,7 @@ fn a_set_stale_unreadable_or_missing_status_list_is_deny() {
         verify(&s, &token, &proof(&token, "p-5"), &m).unwrap_err(),
         Denied::StatusSignature
     );
-    // the CWT form under the domain's status-list key (OP-150 m.10 (b))
+    // OP-150
     *m.list.borrow_mut() = Some(Answer::Response(list_cwt(NOW / 1000 - 60, false)));
     assert!(verify(&s, &token, &proof(&token, "p-6"), &m).is_ok());
     *m.list.borrow_mut() = Some(Answer::Response(list_cwt(NOW / 1000 - 60, true)));
@@ -333,7 +331,6 @@ fn a_set_stale_unreadable_or_missing_status_list_is_deny() {
         verify(&s, &token2, &proof(&token2, "p-8"), &m).unwrap_err(),
         Denied::StatusKey
     );
-    // the contract's Δ bounds the list's age (m.7 (e))
     let mut spec = TokenSpec::bounds_token();
     spec.max_staleness_ms = Some(30_000);
     let bounded = spec.signed();
@@ -342,7 +339,6 @@ fn a_set_stale_unreadable_or_missing_status_list_is_deny() {
         verify(&s, &bounded, &proof(&bounded, "p-9"), &m).unwrap_err(),
         Denied::StatusStale
     );
-    // no reference at all
     let mut spec = TokenSpec::intent_token();
     spec.status_json = None;
     let unreferenced = spec.signed();
@@ -350,7 +346,6 @@ fn a_set_stale_unreadable_or_missing_status_list_is_deny() {
         verify(&s, &unreferenced, &proof(&unreferenced, "p-10"), &m).unwrap_err(),
         Denied::StatusMissing
     );
-    // the contract's own reference must agree
     let mut spec = TokenSpec::intent_token();
     spec.contract_status_json = Some(format!(
         r#"{{"status_list":{{"idx":7,"uri":"{}"}}}}"#,
@@ -363,9 +358,7 @@ fn a_set_stale_unreadable_or_missing_status_list_is_deny() {
     );
 }
 
-// §13.7.9, §9.9.3 rule 5, §13.4 G48, HL-22, U39, MD-7, MD-8, OP-150 m.3 (g): strict introspects
-// every request, fast lives within 5 minutes and never learns of a revocation before its
-// horizon, neither skips the signature
+// §13.7.9, §9.9.3 rule 5, §13.4 G48, HL-22, U39, MD-7, MD-8, OP-150 m.3 (g)
 #[test]
 fn the_strict_profile_introspects_every_request_and_the_fast_profile_bounds_the_horizon() {
     let token = TokenSpec::intent_token().signed();
@@ -420,7 +413,6 @@ fn the_strict_profile_introspects_every_request_and_the_fast_profile_bounds_the_
         verify(&fast, &long, &proof(&long, "p-3"), &m).unwrap_err(),
         Denied::ProfileHorizon
     );
-    // no profile skips the signature
     let mut tampered = token.clone();
     tampered.replace_range(tampered.len() - 4.., "AAAA");
     for s in [&strict, &fast] {
@@ -432,8 +424,7 @@ fn the_strict_profile_introspects_every_request_and_the_fast_profile_bounds_the_
     }
 }
 
-// §9.9.4, P53, §9.9.4 k.1, P55: sub/act/may_act are hints with fixed shapes; reserved claims
-// keep their shapes
+// §9.9.4, P53, §9.9.4 k.1, P55
 #[test]
 fn capacity_is_read_from_sub_and_act_and_reserved_claims_keep_their_shape() {
     let s = server(Profile::Fast);
@@ -477,7 +468,7 @@ fn capacity_is_read_from_sub_and_act_and_reserved_claims_keep_their_shape() {
     }
 }
 
-// §13.4 U60, §9.7A.3, P44, OP-150 m.3 (l): plain as_of in the projection
+// §13.4 U60, §9.7A.3, P44, OP-150 m.3 (l)
 #[test]
 fn a_projection_older_than_the_protected_content_is_refused() {
     let token = TokenSpec::bounds_token().signed();
@@ -501,7 +492,7 @@ fn a_projection_older_than_the_protected_content_is_refused() {
     );
 }
 
-// §9.9.3 rule 9, L24, RS-M8, RS-M10: the verified value carries no token to pass through
+// §9.9.3 rule 9, L24, RS-M8, RS-M10
 #[test]
 fn a_verified_token_is_never_re_emitted() {
     let token = TokenSpec::intent_token().signed();
@@ -515,7 +506,7 @@ fn a_verified_token_is_never_re_emitted() {
     assert!(!shown.contains(&token));
 }
 
-// §9.9.1, §5.10: a bounds token names the action; without the action nothing is decided
+// §9.9.1, §5.10
 #[test]
 fn a_bounds_token_must_name_this_action() {
     let s = server(Profile::Fast);
@@ -554,7 +545,7 @@ fn a_bounds_token_must_name_this_action() {
     );
 }
 
-// §9.9.3 rule 5, RFC 7662, OP-150 m.9 (i): an opaque token is only introspection, only strict
+// §9.9.3 rule 5, RFC 7662, OP-150 m.9 (i)
 #[test]
 fn an_opaque_token_is_verified_by_introspection_under_the_strict_profile_only() {
     let token = "opaque.handle";
@@ -586,7 +577,7 @@ fn an_opaque_token_is_verified_by_introspection_under_the_strict_profile_only() 
     );
 }
 
-// §9.16, OP-150 m.9 (d), m.10 (g): a family the RS learned was ended
+// §9.16, OP-150 m.9 (d), m.10 (g)
 #[test]
 fn a_family_ended_by_a_received_event_is_refused_and_family_is_required() {
     let s = server(Profile::Fast);
@@ -615,16 +606,11 @@ fn a_family_ended_by_a_received_event_is_refused_and_family_is_required() {
     let _ = Response::new(200, Vec::new());
 }
 
-// §10.4.5, §12.1.2, TI-RT6, MD-6 (supersedes OP-150 m.9 (b)'s thumbprint-only key rule): the
-// token key resolves only through the domain's binding-signed Domain Metadata, for usage
-// `token`, live at the token's `iat`; a realm JWKS key, another usage's key, a key outside its
-// window, metadata the pinned binding keys did not sign, another domain's or an older one all
-// verify nothing
+// §10.4.5, §12.1.2, TI-RT6, MD-6 OP-150 m.9 rule
 #[test]
 fn only_the_domains_token_key_live_at_iat_verifies_a_token() {
     let s = server(Profile::Fast);
     let spec = TokenSpec::intent_token();
-    // a realm key, served as a JWKS: not Domain Metadata at all
     let m = support::Memory::healthy();
     *m.keys.borrow_mut() = Some(Keys::Fetched(ok(support::jwks_of(OTHER_SEED))));
     let token = spec.signed();
@@ -632,14 +618,12 @@ fn only_the_domains_token_key_live_at_iat_verifies_a_token() {
         verify(&s, &token, &proof(&token, "k-1"), &m).unwrap_err(),
         Denied::KeysMalformed
     );
-    // a realm key signing the same claims: not declared by the metadata
     let m = support::Memory::healthy();
     let realm_signed = jws(OTHER_SEED, "at+jwt", &spec.claims());
     assert!(matches!(
         verify(&s, &realm_signed, &proof(&realm_signed, "k-2"), &m).unwrap_err(),
         Denied::Projection(ProjectionError::Jws(_))
     ));
-    // the domain's receipt and status-list keys: declared, but not for `token`
     for (i, seed) in [support::RECEIPT_SEED, support::LIST_SEED]
         .into_iter()
         .enumerate()
@@ -656,7 +640,6 @@ fn only_the_domains_token_key_live_at_iat_verifies_a_token() {
             Denied::Projection(ProjectionError::Jws(_))
         ));
     }
-    // the token key, but the token says it was signed before the key's window
     let mut early = TokenSpec::intent_token();
     early.iat_s = (11 * HOUR) / 1000;
     let early = early.signed();
@@ -667,14 +650,12 @@ fn only_the_domains_token_key_live_at_iat_verifies_a_token() {
     assert!(Denied::TokenKey.is_decision());
 }
 
-// §10.4.5, CR-58, TI-RT5, TI-RT6: the metadata itself must come from a pinned binding key, for
-// this domain, no older than the pinned one, and declare a token key
+// §10.4.5, CR-58, TI-RT5, TI-RT6
 #[test]
 fn metadata_from_another_binding_domain_or_time_verifies_nothing() {
     let s = server(Profile::Fast);
     let spec = TokenSpec::intent_token();
     let m = support::Memory::healthy();
-    // metadata signed by a binding key the server does not pin
     *m.keys.borrow_mut() = Some(Keys::Fetched(ok(signed_metadata_by(
         OTHER_SEED,
         &metadata(),
@@ -684,7 +665,6 @@ fn metadata_from_another_binding_domain_or_time_verifies_nothing() {
         verify(&s, &token, &proof(&token, "k-5"), &m).unwrap_err(),
         Denied::KeysMalformed
     );
-    // another domain's metadata, signed by the pinned binding key
     let mut other_domain = metadata();
     other_domain.domain = d(2);
     *m.keys.borrow_mut() = Some(Keys::Fetched(ok(signed_metadata_by(
@@ -695,7 +675,6 @@ fn metadata_from_another_binding_domain_or_time_verifies_nothing() {
         verify(&s, &token, &proof(&token, "k-6"), &m).unwrap_err(),
         Denied::KeysMalformed
     );
-    // metadata older than the pinned one (TI-RT5)
     let mut older = metadata();
     older.issued_at -= 1;
     *m.keys.borrow_mut() = Some(Keys::Fetched(ok(signed_metadata_by(
@@ -706,7 +685,6 @@ fn metadata_from_another_binding_domain_or_time_verifies_nothing() {
         verify(&s, &token, &proof(&token, "k-7"), &m).unwrap_err(),
         Denied::KeysMalformed
     );
-    // metadata that declares no token key
     let mut no_token_key = metadata();
     no_token_key.operational_keys.retain(|k| {
         !k.usage
@@ -720,7 +698,6 @@ fn metadata_from_another_binding_domain_or_time_verifies_nothing() {
         verify(&s, &token, &proof(&token, "k-8"), &m).unwrap_err(),
         Denied::TokenKey
     );
-    // a status list signed by the token key or a realm key: only `status-list` keys sign lists
     for (i, seed) in [support::TOKEN_SEED, OTHER_SEED].into_iter().enumerate() {
         let m = support::Memory::healthy();
         *m.list.borrow_mut() = Some(ok(support::list_jwt_by(seed, NOW / 1000 - 60, false)));
@@ -730,8 +707,6 @@ fn metadata_from_another_binding_domain_or_time_verifies_nothing() {
             Denied::StatusSignature
         );
     }
-    // a key whose window opens inside the token's `iat` second still signed it (JOSE times
-    // are whole seconds, rounded down)
     let mut mid_second = metadata();
     for k in &mut mid_second.operational_keys {
         if k.usage
@@ -747,7 +722,6 @@ fn metadata_from_another_binding_domain_or_time_verifies_nothing() {
     ))));
     let token = spec.signed();
     assert!(verify(&s, &token, &proof(&token, "k-10"), &m).is_ok());
-    // the pinned metadata must be the configured domain's
     let mut c = config(Profile::Fast);
     c.metadata.domain = d(2);
     assert_eq!(ResourceServer::new(c).unwrap_err(), ConfigError::Domain);
@@ -784,10 +758,7 @@ fn verify_for(
     s.verify(&presented, intent, &FixedClock(NOW), &m.ports())
 }
 
-// §9.9.1, §5.3, OP-109 m.7, OP-150 m.9 (b), MD-8: a bounds token is evaluated with the Kernel's
-// covers: a token for store A does not open a door in store B, a parameter outside its range
-// is refused, and what the SDK cannot evaluate (no intent envelope, a party selector it only
-// knows by pseudonym, details that differ from the contract's bounds) is refused
+// §9.9.1, §5.3, OP-109 m.7, OP-150 m.9 (b), MD-8
 #[test]
 fn a_bounds_token_covers_its_resource_scope_and_parameters_only() {
     let s = server(Profile::Fast);
@@ -886,8 +857,7 @@ fn a_bounds_token_covers_its_resource_scope_and_parameters_only() {
     );
 }
 
-// OP-150 m.9 (b), MD-8: every bounds detail repeats the contract's bounds, and a bounds token
-// without readable bounds is refused
+// OP-150 m.9 (b), MD-8
 #[test]
 fn bounds_details_must_repeat_readable_contract_bounds() {
     let s = server(Profile::Fast);
@@ -931,9 +901,7 @@ fn bounds_details_must_repeat_readable_contract_bounds() {
     );
 }
 
-// TN-44, RFC 9470, §12.2.3, Ek B 2293: a local requirement that is only the user's
-// authentication strength or freshness answers `insufficient_user_authentication` with
-// `max_age` and `acr_values`; one bound to the intent has no RFC 9470 answer
+// TN-44, RFC 9470, §12.2.3, Ek B 2293
 #[test]
 fn an_unmet_authentication_term_is_an_rfc_9470_challenge() {
     let s = server(Profile::Fast);
@@ -989,8 +957,7 @@ fn an_unmet_authentication_term_is_an_rfc_9470_challenge() {
     assert!(denied.www_authenticate().is_none());
 }
 
-// OP-150 m.8 (b), §9.12, MD-8: a contract's local requirement, such as an approval, must be one
-// this server satisfied; an extension the SDK must understand is refused
+// OP-150 m.8 (b), §9.12, MD-8
 #[test]
 fn a_contract_local_requirement_this_server_did_not_satisfy_is_refused() {
     let s = server(Profile::Fast);

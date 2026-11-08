@@ -230,7 +230,7 @@ pub fn validate_id_token(
         },
     )
     .map_err(|_| IdTokenError::Claims)?;
-    // OIDC Core §3.1.3.7 items 4 and 5
+    // §3.1.3.7
     let several = matches!(claims.get("aud"), Some(Json::Array(a)) if a.len() > 1);
     match claims.get("azp").map(Json::as_str) {
         Some(Some(azp)) if azp == rules.client_id => {}

@@ -85,7 +85,6 @@ fn client() -> Client<'static> {
     }
 }
 
-// RFC 7636 Appendix B
 #[test]
 fn the_pkce_challenge_is_s256_of_the_verifier() {
     let v = Verifier::from_text("dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk").unwrap();
@@ -94,7 +93,7 @@ fn the_pkce_challenge_is_s256_of_the_verifier() {
     assert_eq!(format!("{v:?}"), "Verifier(..)");
 }
 
-// RFC 8414 §3.3, RFC 9700 §2.1.1: mix-up defence and no plain PKCE
+// RFC 8414 §3.3, RFC 9700 §2.1.1
 #[test]
 fn discovery_refuses_another_issuer_a_server_without_s256_and_non_https_endpoints() {
     assert_eq!(metadata().token_endpoint, format!("{ISSUER}/token"));
@@ -126,7 +125,7 @@ fn discovery_refuses_another_issuer_a_server_without_s256_and_non_https_endpoint
     );
 }
 
-// OIDC Core §3.1.2.1, RFC 7636, RFC 9449 §10
+// §3.1.2.1, §10
 #[test]
 fn the_authorization_request_carries_s256_state_nonce_and_dpop_jkt() {
     let req = request::authorize(&metadata(), &client(), Some("jkt-1"), &rng()).unwrap();
@@ -158,7 +157,7 @@ fn query_param(url: &str, name: &str) -> String {
         .to_owned()
 }
 
-// RFC 9700 §4.7 (CSRF), RFC 9207 (mix-up), P15 (unknown OAuth error → parent class)
+// §4.7
 #[test]
 fn the_callback_needs_this_state_this_issuer_and_a_code() {
     let req = request::authorize(&metadata(), &client(), None, &rng()).unwrap();
@@ -211,7 +210,7 @@ fn answer(status: u16, body: &str) -> Answer {
     Answer::Response(Response::new(status, body.as_bytes().to_vec()))
 }
 
-// RFC 9449 §5, P15: a Bearer token is refused where DPoP was asked; unknown codes → parent
+// RFC 9449 §5, P15
 #[test]
 fn the_token_response_is_refused_unbound_or_with_its_error_class() {
     let ok = r#"{"access_token":"at","token_type":"DPoP","expires_in":300,"refresh_token":"rt","id_token":"x.y.z"}"#;
@@ -276,7 +275,7 @@ fn rules<'a>(client_id: &'a str, nonce: &'a str) -> IdTokenRules<'a> {
     }
 }
 
-// OIDC Core §3.1.3.7, §8.1 (pairwise sub)
+// §3.1.3.7, §8.1
 #[test]
 fn the_id_token_is_verified_and_its_subject_is_scoped_to_the_client() {
     let keys = key_set(&jwks_of(ID_SEED), &id_token_algorithms()).unwrap();
@@ -346,7 +345,7 @@ impl ProofKey for DeadKey {
     }
 }
 
-// RFC 9449 §4.2, §4.3: a proof the SDK builds passes the Kernel check a server runs
+// RFC 9449 §4.2, §4.3
 #[test]
 fn a_dpop_proof_built_here_verifies_with_the_kernel() {
     let key = EdKey(ed_pub(HOLDER_SEED), HOLDER_SEED);
@@ -399,8 +398,8 @@ fn a_dpop_proof_built_here_verifies_with_the_kernel() {
     );
 }
 
-// §10.4.3 m.5, IDP-11 step 9, TN-30: the RS SDK refuses a replayed proof with the in-memory
-// store, and a full store refuses instead of accepting unrecorded (MD-8)
+// §10.4.3 m.5, IDP-11 step 9, TN-30
+// MD-8
 #[test]
 fn the_rs_sdk_refuses_a_replayed_dpop_proof_with_the_memory_store() {
     let token = TokenSpec::bounds_token().signed();
@@ -452,7 +451,7 @@ fn the_rs_sdk_refuses_a_replayed_dpop_proof_with_the_memory_store() {
     assert_eq!(verify(&proof(100)).unwrap_err(), Denied::ReplayStore);
 }
 
-// P50, §9.9.3 k.6: N concurrent callers → one refresh, one result
+// P50, §9.9.3 k.6
 #[tokio::test(flavor = "current_thread")]
 async fn concurrent_refreshes_make_one_network_call() {
     const N: usize = 16;
@@ -499,7 +498,7 @@ async fn concurrent_refreshes_make_one_network_call() {
     );
 }
 
-// P50: a failed refresh fails every waiter; an abandoned one fails closed and the next starts
+// P50
 #[tokio::test(flavor = "current_thread")]
 async fn a_failed_or_abandoned_refresh_gives_no_token() {
     let refresher: Rc<Refresher<String, OAuthClass>> = Rc::new(Refresher::new());
@@ -538,7 +537,7 @@ async fn a_failed_or_abandoned_refresh_gives_no_token() {
     assert_eq!(again.unwrap(), "fresh");
 }
 
-// P15: an unknown subcode is read as its parent class; there is no unknown class
+// P15
 #[test]
 fn an_unknown_subcode_is_read_as_its_parent_class() {
     let r = reason::reason("ended", Some("ended/revoked")).unwrap();

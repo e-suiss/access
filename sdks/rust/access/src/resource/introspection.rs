@@ -65,7 +65,7 @@ pub fn active(
         Some(Json::Bool(false)) => return Err(Denied::Inactive),
         _ => return Err(Denied::IntrospectionMalformed),
     }
-    // AG-8, §9.9.3 rule 1: one audience, this one
+    // AG-8, §9.9.3 rule 1
     if claims.get("aud").and_then(Json::as_str) != Some(audience) {
         return Err(Denied::IntrospectionAudience);
     }

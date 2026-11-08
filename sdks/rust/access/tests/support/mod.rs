@@ -228,8 +228,6 @@ pub(crate) fn text_digest(d: &Digest) -> String {
     format!("sha-256:{}", b64url_encode(&d.0))
 }
 
-// ---------------------------------------------------------------- receipts
-
 pub(crate) fn receipt_for(nonce: &[u8], audience: &str, intent: &Digest) -> Receipt {
     Receipt {
         domain: domain(),
@@ -290,8 +288,6 @@ pub(crate) fn ask<'a>(
         content_position: None,
     }
 }
-
-// ---------------------------------------------------------------- tokens
 
 /// A model value in the token's JSON form: digests as `sha-256:` text, bytes as base64url.
 pub(crate) fn value_json(v: &Value) -> String {
@@ -582,8 +578,6 @@ pub(crate) fn proof(token: &str, jti: &str) -> String {
     proof_with(HOLDER_SEED, token, jti, "POST", REQUEST_URI, None)
 }
 
-// ---------------------------------------------------------------- status lists
-
 pub(crate) fn zlib(bits: &[u8]) -> Vec<u8> {
     miniz_oxide::deflate::compress_to_vec_zlib(bits, 6)
 }
@@ -619,8 +613,6 @@ pub(crate) fn list_cwt(iat_s: u64, revoked: bool) -> Response {
     }
 }
 
-// ---------------------------------------------------------------- introspection
-
 pub(crate) fn introspection_body(spec: &TokenSpec, active: bool, as_of: u64) -> Vec<u8> {
     if !active {
         return br#"{"active":false}"#.to_vec();
@@ -629,8 +621,6 @@ pub(crate) fn introspection_body(spec: &TokenSpec, active: bool, as_of: u64) -> 
     let inner = &claims[1..claims.len() - 1];
     format!(r#"{{"active":true,"token_type":"DPoP","as_of":"{as_of}",{inner}}}"#).into_bytes()
 }
-
-// ---------------------------------------------------------------- ports
 
 #[derive(Default)]
 pub(crate) struct Memory {

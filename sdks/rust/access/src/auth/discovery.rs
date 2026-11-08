@@ -136,7 +136,7 @@ pub fn parse_document(body: &[u8], issuer: &str) -> Result<Metadata, DiscoveryEr
     if doc.get("issuer").and_then(Json::as_str) != Some(issuer) || !is_https(issuer) {
         return Err(DiscoveryError::Issuer);
     }
-    // RFC 9700 §2.1.1: a server that does not say it offers S256 is not used
+    // RFC 9700 §2.1.1
     if !strings(&doc, "code_challenge_methods_supported")
         .is_some_and(|m| m.iter().any(|x| x == pkce::METHOD))
     {

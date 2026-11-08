@@ -145,7 +145,7 @@ impl LocalProfile {
         tier: Tier,
         metadata: Option<&VerifierCaps>,
     ) -> Result<Ceiling, ProfileError> {
-        // §9.12 verifier_profile_ref
+        // §9.12
         if contract.verifier_profile_ref != self.digest {
             return Err(ProfileError::Reference);
         }

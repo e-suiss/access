@@ -106,7 +106,7 @@ fn the_executed_body_must_be_the_approved_digest() {
     assert!(!ran);
 }
 
-// CR-52: the proof is built only here and cannot be duplicated
+// CR-52
 #[test]
 fn authorized_is_not_clone_and_has_no_public_constructor() {
     trait Probe {
@@ -124,7 +124,7 @@ fn authorized_is_not_clone_and_has_no_public_constructor() {
     }
 }
 
-// §9.5 "Access-unavailable", §9.5.2 k.8, MD-8, X21, TI-9, INV-26
+// §9.5, §9.5.2, MD-8, X21, TI-9, INV-26
 #[test]
 fn every_fault_is_a_denial_and_never_an_allow() {
     let cases: Vec<(Answer, Denied)> = vec![
@@ -180,7 +180,7 @@ fn every_fault_is_a_denial_and_never_an_allow() {
     assert_eq!(Denied::NoReceipt.class(), Class::Unverified);
 }
 
-// T25: no trusted time, no decision
+// T25
 #[test]
 fn without_trusted_time_nothing_is_authorized() {
     let (i, n, b) = (intent(), nonce(), basis());
@@ -191,7 +191,7 @@ fn without_trusted_time_nothing_is_authorized() {
     assert!(port.seen.borrow().is_none(), "nothing was asked");
 }
 
-// L2-RCP-3, §9.8, G18: one intent, one PEP, one Exercise
+// L2-RCP-3, §9.8, G18
 #[test]
 fn a_receipt_for_another_intent_audience_or_nonce_is_denied() {
     let other_intent = receipt_for(nonce().as_bytes(), PEP, &Digest([8; 32]));
@@ -217,7 +217,7 @@ fn a_receipt_for_another_intent_audience_or_nonce_is_denied() {
     );
 }
 
-// §9.9.2, §13.4 U8, E17, EI-17: the upstream receipt is a causal reference, never authority
+// §9.9.2, §13.4 U8, E17, EI-17
 #[test]
 fn an_upstream_receipt_is_only_a_causal_reference_for_a_downstream_pep() {
     let upstream = run(healthy()).unwrap();
@@ -231,7 +231,6 @@ fn an_upstream_receipt_is_only_a_causal_reference_for_a_downstream_pep() {
     let i: Intent<Door, Open> = Intent::of(e).unwrap();
     let n = Nonce::new(vec![0x11; 32]).unwrap();
     let (b, actor) = (basis(), Actor::Anonymous);
-    // the upstream PEP's receipt, replayed to the downstream PEP
     let replayed = Scripted::new(ok(allow_body(
         &receipt_for(nonce().as_bytes(), PEP, &intent_hash()),
         "",
@@ -243,7 +242,6 @@ fn an_upstream_receipt_is_only_a_causal_reference_for_a_downstream_pep() {
         r#""upstream_exercise":"{}""#,
         b64url_encode(&upstream.exercise().0)
     )));
-    // the downstream PEP's own decision names the link
     let own = receipt_for(n.as_bytes(), "downstream.example", i.digest());
     let port = Scripted::new(ok(allow_body(&own, r#","causal_binding":"audit-only""#)));
     let a = downstream
@@ -289,8 +287,7 @@ fn statement(nonce: &[u8], pep: &str, intent: &Digest) -> Actor {
     ))
 }
 
-// §9.5 k.2, k.3, §8.17.10.3, E17, EI-17, X21, PI-7: the actor is the Instance that signed; the
-// PEP forwards the statement and cannot bind it to another request
+// §9.5 k.2, k.3, §8.17.10.3, E17, EI-17, X21, PI-7
 #[test]
 fn the_actor_statement_is_forwarded_as_signed_and_must_be_this_requests() {
     let (i, n, b) = (intent(), nonce(), basis());
@@ -366,7 +363,7 @@ fn the_request_body_carries_the_access_members_in_context() {
     assert_eq!(adp_body(&without_envelope), None);
 }
 
-// K08: the proof is typed by the resource and the action of its intent
+// K08
 #[test]
 fn an_envelope_of_another_action_or_resource_is_not_this_intent() {
     use access_sdk::authorize::IntentError;

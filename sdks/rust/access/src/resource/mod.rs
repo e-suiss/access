@@ -517,7 +517,7 @@ impl ResourceServer {
             (None, None) => Err(Denied::Confirmation("missing")),
             (None, Some(cert)) => Ok(Confirmation::X5tS256(cert)),
             (Some(proof), None) => {
-                // IDP-11 steps 1 to 8, 11
+                // IDP-11
                 let rules = ProofRules {
                     method: presented.method,
                     uri: presented.uri,
@@ -534,7 +534,7 @@ impl ResourceServer {
                 if !nonces.accept(proof.nonce.as_deref()) {
                     return Err(Denied::DpopNonce);
                 }
-                // IDP-11 step 9, TN-30: TTL = lifetime + 2 × skew
+                // IDP-11 step 9, TN-30
                 let until = proof
                     .iat
                     .saturating_add(self.proof_lifetime_ms)
@@ -557,7 +557,7 @@ impl ResourceServer {
         status: &S,
     ) -> Result<Verdict, Denied> {
         let metadata = keys::resolve(keys.metadata(), &self.metadata, now, self.key_epoch_ms)?;
-        // §10.4.5, TI-RT6: only the domain's operational keys for `token`, never a realm key
+        // §10.4.5, TI-RT6
         let key_set = keys::usage_keys(&metadata, KeyUsage::Token, &self.algorithms);
         if key_set.keys.is_empty() {
             return Err(Denied::TokenKey);
@@ -575,7 +575,7 @@ impl ResourceServer {
             .map_err(Denied::Projection)?;
         let signed_with = token.token.kid;
         let claims = token.claims;
-        // §9.10 step 1: the key was live when the token was signed
+        // §9.10 step 1
         let iat_s = claims::time_ms(&claims, "iat")? / 1000;
         if !keys::live_at(&metadata, &signed_with, KeyUsage::Token, iat_s) {
             return Err(Denied::TokenKey);
@@ -584,7 +584,7 @@ impl ResourceServer {
         claims::reserved_shapes(&claims)?;
         let details = claims::details(&claims, &self.domain)?;
         let contract = claims::contract(&claims, claims::validity(&claims)?)?;
-        // §9.9.3 rule 4, §13.7.9: the fast profile lives within 5 minutes
+        // §9.9.3 rule 4, §13.7.9
         if self.profile == Profile::Fast {
             let iat = claims::time_ms(&claims, "iat")?;
             let exp = claims::time_ms(&claims, "exp")?;
@@ -629,7 +629,7 @@ impl ResourceServer {
             now,
             self.claims_skew_ms,
         )?;
-        // PI-11: the answer names the key the request was made with
+        // PI-11
         let (member, thumbprint) = claims::confirmation_thumbprint(&active.claims)
             .map_err(|_| Denied::IntrospectionConfirmation)?;
         if member != confirmation.member() || thumbprint != *confirmation.thumbprint() {
@@ -704,7 +704,7 @@ impl ResourceServer {
         } else {
             self.opaque(presented, &confirmation, now, ports.introspection)?
         };
-        // §9.9.3 rule 5, §13.7.9: strict confirms every request
+        // §9.9.3 rule 5, §13.7.9
         if self.profile == Profile::Strict && verdict.introspected_as_of.is_none() {
             let active = self.introspected(presented, &confirmation, now, ports.introspection)?;
             verdict.introspected_as_of = Some(active.as_of);
@@ -720,7 +720,7 @@ impl ResourceServer {
             return Err(Denied::Claim("exercise"));
         }
         let as_of = first.basis_position;
-        // §9.9.1: an exact-intent token is this intent; a bounds token names this action
+        // §9.9.1
         match kind {
             Kind::Intent => {
                 if first.intent.as_ref() != Some(intent.digest()) {
@@ -738,7 +738,7 @@ impl ResourceServer {
         }
         // OP-150 m.8 (b)
         bounds::contract(claims::validity(claims)?, presented.satisfied)?;
-        // §9.12: the contract names this verifier and has not ended
+        // §9.12
         if !verdict.contract.audience.contains(&self.audience) {
             return Err(Denied::ContractAudience);
         }
@@ -763,7 +763,7 @@ impl ResourceServer {
         {
             return Err(Denied::IntrospectionStale);
         }
-        // §9.9.1: count = 1
+        // §9.9.1
         if kind == Kind::Intent {
             let until = claims::time_ms(claims, "exp")?.saturating_add(self.claims_skew_ms);
             match ports.replay.record(&single_use_key(&exercise), until) {

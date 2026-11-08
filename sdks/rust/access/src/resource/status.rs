@@ -181,7 +181,7 @@ pub fn check(
     } else {
         jwt(&response, keys)?
     };
-    // PI-9, T24: freshness is measured from the position's recorded_at, never the fetch
+    // PI-9, T24
     let recorded_at = token.iat.checked_mul(1000).ok_or(Denied::StatusMalformed)?;
     let age = now.checked_sub(recorded_at).ok_or(Denied::StatusStale)?;
     if age > freshness_ms(&token, max_staleness_ms)? {

@@ -530,7 +530,7 @@ impl Pep {
             pep: &self.audience,
             exercise: ask.continued,
         };
-        // §9.5 k.3: a forwarded statement bound to another intent, nonce or PEP is no actor
+        // §9.5 k.3
         if let Actor::Statement(bytes) = ask.actor {
             statement_matches(bytes, &request, now)?;
         }
@@ -572,7 +572,7 @@ impl Pep {
         let receipt: Receipt =
             receipt::verify(&PureBackend, &self.metadata, &sign1, &excerpt, &expected)
                 .map_err(Denied::Receipt)?;
-        // OP-141 m.6: the Exercise is this nonce's
+        // OP-141 m.6
         let exercise = match ask.continued {
             Some(e) => *e,
             None => {
@@ -604,8 +604,6 @@ impl Pep {
         ))
     }
 }
-
-// ---------------------------------------------------------------- request body
 
 struct Out(String);
 

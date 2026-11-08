@@ -212,8 +212,7 @@ fn an_unavailable_clock_or_a_reset_monotonic_clock_gives_no_time() {
     assert_eq!(guard.now(&clock), Err(ClockError::MonotonicWentBack));
 }
 
-// TI-RT2, FA-3, U29: steps each within the fixed tolerance do not add up; the tolerance grows
-// with the monotonic time elapsed since the anchor, never beyond fixed + drift
+// TI-RT2, FA-3, U29
 #[test]
 fn small_steps_do_not_add_up_and_the_tolerance_grows_with_elapsed_time() {
     let clock = EmulatedClock::new(IAT);
@@ -247,8 +246,7 @@ fn small_steps_do_not_add_up_and_the_tolerance_grows_with_elapsed_time() {
     assert_eq!(guard.accept(ahead), Err(ClockError::JumpedAhead));
 }
 
-// TI-RT2, TI-RT5, TI-19: a refusing guard recovers only by re-anchoring on an attested time;
-// a reboot's monotonic restart is re-anchored the same way; never backwards
+// TI-RT2, TI-RT5, TI-19
 #[test]
 fn a_refusing_guard_re_anchors_only_on_an_attested_time() {
     let clock = EmulatedClock::new(IAT);
