@@ -30,7 +30,7 @@ fn decodes_cose_key_shapes() {
     assert_eq!(dec("3bffffffffffffffff").unwrap().as_i64(), None);
 }
 
-// CR-10: external encoders, so key order and shortest form are not enforced
+// CR-10
 #[test]
 fn accepts_unsorted_keys_and_long_forms() {
     assert!(dec("a2036161016162").is_ok());
@@ -55,7 +55,7 @@ fn rejects_out_of_profile_input() {
     assert_eq!(dec("9b0000000100000000"), Err(CborError::Items));
 }
 
-// CR-10 m.3, m.5: depth is checked before recursing
+// CR-10 m.3, m.5
 #[test]
 fn depth_items_and_size_limits() {
     let deep = |n: usize| {
@@ -96,7 +96,7 @@ fn prefix_reports_consumed_length() {
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(1024))]
 
-    // CR-10 m.4: arbitrary input never panics and never reads past the input
+    // CR-10 m.4
     #[test]
     fn arbitrary_bytes_never_panic(bytes in proptest::collection::vec(any::<u8>(), 0..2048)) {
         if let Ok((_, used)) = decode_prefix(&bytes, Limits::CEILING) {

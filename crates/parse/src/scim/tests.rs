@@ -14,7 +14,7 @@ fn cmp(attr: &'static str, op: Op, value: Value) -> Filter {
     Filter::Compare { attr, op, value }
 }
 
-// TN-112: the subset's operators, grouping and precedence (`and` binds tighter than `or`)
+// TN-112
 #[test]
 fn the_subset_parses_with_scim_precedence() {
     assert_eq!(
@@ -55,7 +55,7 @@ fn the_subset_parses_with_scim_precedence() {
     );
 }
 
-// TN-112, §12.5.1 k.5: an unknown attribute is a 400, never ignored
+// TN-112, §12.5.1 k.5
 #[test]
 fn an_unknown_attribute_is_refused() {
     for f in [
@@ -72,7 +72,7 @@ fn an_unknown_attribute_is_refused() {
     );
 }
 
-// TN-112: anything outside the subset is a syntax error
+// TN-112
 #[test]
 fn constructs_outside_the_subset_are_refused() {
     for f in [
@@ -98,7 +98,7 @@ fn constructs_outside_the_subset_are_refused() {
     }
 }
 
-// CR-10, OP-8, GHSA-r5fr-9gmv-jggh: size, depth and term limits hold before recursion
+// CR-10, OP-8, GHSA-r5fr-9gmv-jggh
 #[test]
 fn limits_are_enforced() {
     let deep = format!("{}active pr{}", "(".repeat(64), ")".repeat(64));
@@ -112,7 +112,7 @@ fn limits_are_enforced() {
 }
 
 proptest! {
-    // CR-10: arbitrary input never panics
+    // CR-10
     #[test]
     fn arbitrary_input_never_panics(s in ".{0,300}") {
         let _ = parse(&s, ATTRS);
