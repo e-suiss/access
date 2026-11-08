@@ -19,4 +19,6 @@ mail-export_ready-subject = Veri dışa aktarımınız hazır
 mail-inactivity_notice-subject = Hesabınız kullanılmadığı için kapatılacak
 mail-signup_code-subject = Kayıt kodunuz
 mail-ownership_handover-subject = Kuruluşunuzun sahibinin değişmesi önerildi
+mail-membership_cooling-subject = Bir kuruluşa katıldınız; bazı erişimleri 24 saat sonra başlar
+mail-guardian_consent-subject = Onayınız isteniyor; yanıt vermezseniz geçersiz olur
 mail-signup_existing-subject = Biri e-posta adresinizle hesap oluşturmaya çalıştı

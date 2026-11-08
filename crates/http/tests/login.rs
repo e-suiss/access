@@ -3826,7 +3826,7 @@ async fn home_realm_discovery_routes_by_organization_id_only_when_turned_on() {
     );
 }
 
-// TN-90, TN-109, OP-153 m.1 (d), m.3 (o), (gg), Ek B 3612, 3613, 4039
+// TN-90, TN-109, SI-21, OP-153 m.1 (d), m.3 (o), (gg), Ek B 3612, 3613, 4039
 #[tokio::test]
 async fn autojoin_admits_a_verified_domains_people_never_a_consumer_domains_and_cools() {
     let e = env(0x34, "lg-autojoin", AuthPolicy::DEFAULT).await;
@@ -3882,6 +3882,26 @@ async fn autojoin_admits_a_verified_domains_people_never_a_consumer_domains_and_
         .unwrap();
     assert!(cooled.cooling_until_ms.unwrap() > now + 23 * 3_600_000);
     t.commit().await.unwrap();
+    // SI-21, TN-109, Ek B 3613: the expansion about the person is told to the person
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
+    loop {
+        let told = access_store::identity::poll(
+            &e.db.reader,
+            access_store::identity::Cursor::default(),
+            1000,
+        )
+        .await
+        .unwrap()
+        .into_iter()
+        .filter(|m| m.realm == e.realm && m.kind == "relay.message.membership_cooling.v1")
+        .count();
+        if told > 0 {
+            assert_eq!(told, 1);
+            break;
+        }
+        assert!(std::time::Instant::now() < deadline, "no cooling notice");
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
 
     // OP-153 m.1 (d), Ek B 4039
     let mut g = e.browser("g");

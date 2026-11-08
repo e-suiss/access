@@ -19,4 +19,6 @@ mail-export_ready-subject = Your data export is ready
 mail-inactivity_notice-subject = Your account will be turned off for inactivity
 mail-signup_code-subject = Your sign-up code
 mail-ownership_handover-subject = A change of your organization's owner was proposed
+mail-membership_cooling-subject = You joined an organization; some of its access starts in 24 hours
+mail-guardian_consent-subject = Your consent is asked for; it lapses unless you answer
 mail-signup_existing-subject = Someone tried to create an account with your email address

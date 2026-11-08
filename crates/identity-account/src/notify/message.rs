@@ -197,11 +197,17 @@ pub enum Notice {
     /// N3: an ownership transfer of an organization the person owns or receives was proposed;
     /// `until` is the earliest it can complete (TN-91).
     OwnershipHandover,
+    /// N3: the person joined an organization by its domain rule, and what the membership gives
+    /// that is reserved or CT3 waits until `until` (TN-109, SI-21).
+    MembershipCooling,
+    /// N3: a ward asked for the guardian's consent; it lapses at `until`, and silence is not
+    /// consent (E53, E47).
+    GuardianConsent,
 }
 
 impl Notice {
     /// Every notice.
-    pub const ALL: [Self; 12] = [
+    pub const ALL: [Self; 14] = [
         Self::RecoveryRequested,
         Self::RecoveryCooling,
         Self::RecoveryCompleted,
@@ -214,6 +220,8 @@ impl Notice {
         Self::InactivityNotice,
         Self::SignUpExisting,
         Self::OwnershipHandover,
+        Self::MembershipCooling,
+        Self::GuardianConsent,
     ];
 
     /// Its outbox kind and `CloudEvents` `type`.
@@ -232,6 +240,8 @@ impl Notice {
             Self::InactivityNotice => "relay.message.inactivity_notice.v1",
             Self::SignUpExisting => "relay.message.signup_existing.v1",
             Self::OwnershipHandover => "relay.message.ownership_handover.v1",
+            Self::MembershipCooling => "relay.message.membership_cooling.v1",
+            Self::GuardianConsent => "relay.message.guardian_consent.v1",
         }
     }
 
@@ -245,6 +255,8 @@ impl Notice {
                 | Self::DeletionCompleted
                 | Self::InactivityNotice
                 | Self::OwnershipHandover
+                | Self::MembershipCooling
+                | Self::GuardianConsent
         )
     }
 
@@ -412,7 +424,7 @@ impl fmt::Debug for Body {
 }
 
 /// Every kind of the contract, as outbox kind and `CloudEvents` `type`.
-pub const KINDS: [&str; 20] = [
+pub const KINDS: [&str; 22] = [
     "relay.message.otp.v1",
     "relay.message.magic_link.v1",
     "relay.message.password_changed.v1",
@@ -430,6 +442,8 @@ pub const KINDS: [&str; 20] = [
     "relay.message.inactivity_notice.v1",
     "relay.message.signup_existing.v1",
     "relay.message.ownership_handover.v1",
+    "relay.message.membership_cooling.v1",
+    "relay.message.guardian_consent.v1",
     "relay.message.reset_intent.v1",
     "relay.message.export_ready.v1",
     "relay.message.invitation.v1",
@@ -447,7 +461,7 @@ impl Body {
             Self::AccountStatus { .. } => KINDS[4],
             Self::Notice { notice, .. } => notice.kind(),
             Self::Link { purpose, .. } => purpose.kind(),
-            Self::Invitation { .. } => KINDS[19],
+            Self::Invitation { .. } => KINDS[21],
         }
     }
 

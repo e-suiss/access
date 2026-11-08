@@ -48,6 +48,8 @@
         "relay.message.inactivity_notice.v1",
         "relay.message.signup_existing.v1",
         "relay.message.ownership_handover.v1",
+        "relay.message.membership_cooling.v1",
+        "relay.message.guardian_consent.v1",
         "relay.message.reset_intent.v1",
         "relay.message.export_ready.v1",
         "relay.message.invitation.v1"
@@ -297,6 +299,38 @@
         "properties": {
           "data": {
             "$ref": "#/$defs/relay.message.ownership_handover.v1"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "relay.message.membership_cooling.v1"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/relay.message.membership_cooling.v1"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "relay.message.guardian_consent.v1"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/relay.message.guardian_consent.v1"
           }
         }
       }
@@ -779,6 +813,62 @@
       }
     },
     "relay.message.ownership_handover.v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "recipient",
+        "at",
+        "until"
+      ],
+      "properties": {
+        "recipient": {
+          "$ref": "#/$defs/recipient"
+        },
+        "locale": {
+          "$ref": "#/$defs/locale"
+        },
+        "recipient_valid_since": {
+          "$ref": "#/$defs/recipient_valid_since"
+        },
+        "at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "until": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "relay.message.membership_cooling.v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "recipient",
+        "at",
+        "until"
+      ],
+      "properties": {
+        "recipient": {
+          "$ref": "#/$defs/recipient"
+        },
+        "locale": {
+          "$ref": "#/$defs/locale"
+        },
+        "recipient_valid_since": {
+          "$ref": "#/$defs/recipient_valid_since"
+        },
+        "at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "until": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "relay.message.guardian_consent.v1": {
       "type": "object",
       "additionalProperties": false,
       "required": [

@@ -416,7 +416,7 @@ where
         }
         // TN-90, TN-109
         match autojoin_domain(&mut t, &kit, me, org.id).await {
-            Ok(Some(_)) => {
+            Ok(Some(address)) => {
                 let joined = t
                     .open_member(
                         (org.id, me),
@@ -430,6 +430,10 @@ where
                     return store_failed(&e);
                 }
                 if let Err(e) = membership_added(&mut t, &kit, me, org.id).await {
+                    return store_failed(&e);
+                }
+                // TN-109, SI-21
+                if let Err(e) = cooling_notice(&mut t, &kit, me, address).await {
                     return store_failed(&e);
                 }
                 if let Err(e) = t.commit().await {
@@ -457,7 +461,55 @@ where
 /// (TN-109, PD).
 pub const AUTOJOIN_COOLING_S: i64 = 86_400;
 
-/// The domain of one of `subject`'s live e-mail identifiers on which `org` runs an autojoin
+/// Tells `subject` at `address` that it joined by a domain rule and that what the membership
+/// gives that is reserved or CT3 waits [`AUTOJOIN_COOLING_S`] (TN-109, SI-21: an expansion
+/// about you is told to you).
+async fn cooling_notice(
+    t: &mut TenantTx,
+    kit: &RealmKit,
+    subject: [u8; 16],
+    address: String,
+) -> Result<(), StoreError> {
+    use access_identity_account::adapters::system::{SystemClock, SystemEntropy};
+    use access_identity_account::notify::message::{Address, Body, Message, Notice};
+    use access_identity_account::notify::ports::Notifier as _;
+    let realm = kit.realm();
+    let notifier = access_identity_account::notify::notifier::OutboxNotifier::new(
+        &realm,
+        &SystemEntropy,
+        &SystemClock,
+    );
+    let now = t.server_time().await?;
+    let since = t.mailbox_since(subject).await?;
+    let cooling_ms = u64::try_from(AUTOJOIN_COOLING_S)
+        .map_err(|_| StoreError::Range)?
+        .saturating_mul(1000);
+    notifier
+        .notify(
+            t,
+            &Message {
+                subject,
+                to: Address::Email(address),
+                locale: None,
+                valid_since_ms: Some(
+                    since
+                        .and_then(|v| u64::try_from(v).ok())
+                        .unwrap_or(1)
+                        .max(1),
+                ),
+                body: Body::Notice {
+                    notice: Notice::MembershipCooling,
+                    at_ms: now,
+                    until_ms: Some(now.saturating_add(cooling_ms)),
+                },
+            },
+        )
+        .await
+        .map(|_| ())
+        .map_err(|_| StoreError::Range)
+}
+
+/// The address of one of `subject`'s live e-mail identifiers on which `org` runs an autojoin
 /// rule: verified, claimed by no other organization, not a consumer domain (TN-90).
 async fn autojoin_domain(
     t: &mut TenantTx,
@@ -496,7 +548,7 @@ async fn autojoin_domain(
         if claims.iter().any(|c| c.domain == domain) {
             let others = t.domain_claims(&domain).await?;
             if others.iter().all(|c| c.org == org) {
-                return Ok(Some(domain));
+                return Ok(Some(address));
             }
         }
     }
