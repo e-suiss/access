@@ -409,12 +409,14 @@ where
 }
 
 /// Declares an inbound transmitter in `t`, as the `idp.upstream.register` Exercise `exercise`
-/// carries its SSF fields; a poll transmitter's credential is sealed under the realm KEK.
+/// carries its SSF fields, under that decision bound in `t` (EI-25); a poll transmitter's
+/// credential is sealed under the realm KEK.
 ///
 /// # Errors
 /// [`Unavailable`].
 pub async fn declare<S: Sealer>(
     t: &mut TenantTx,
+    bound: &access_store::idp::Bound,
     sealer: &S,
     id: [u8; 16],
     cfg: &TransmitterConfig,
@@ -446,5 +448,5 @@ pub async fn declare<S: Sealer>(
         created_ms: 0,
         disabled: false,
     };
-    t.register_transmitter(&row).await.map_err(down)
+    t.register_transmitter(bound, &row).await.map_err(down)
 }

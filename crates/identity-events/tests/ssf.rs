@@ -165,47 +165,51 @@ impl World {
         create_domain(&db.sequencer, &domain, *tenant.as_bytes(), &genesis, &[])
             .await
             .unwrap();
-        let (lease, head) = acquire_lease(&db.sequencer, &domain, "a", Duration::from_secs(10))
+        let (lease, mut head) = acquire_lease(&db.sequencer, &domain, "a", Duration::from_secs(10))
             .await
             .unwrap();
-        let next = HeadRow {
-            pos: head.pos + 1,
-            epoch: lease.epoch,
-            leaf_hash: [1; 32],
-            recorded_at: 2,
-            frontier: vec![[1; 32]],
-        };
-        let batch = CommitBatch {
-            epoch: lease.epoch,
-            after: head.pos,
-            records: vec![LogRecord {
+        // two ALLOWs: the client's registration and the upstream's (EI-25)
+        for n in 1..=2_u8 {
+            let next = HeadRow {
                 pos: head.pos + 1,
-                kind: "decision",
+                epoch: lease.epoch,
+                leaf_hash: [n; 32],
                 recorded_at: 2,
-                leaf_hash: [1; 32],
-                envelope: vec![0xa1, 1],
-            }],
-            head: next,
-            nonces: vec![NonceRow {
-                nonce: vec![1; 16],
-                actor: vec![1],
-                intent_digest: [9; 32],
-                decision_pos: head.pos + 1,
-                outcome: String::from("allow"),
-                render_digest: None,
-                tier: None,
-            }],
-            outbox: vec![],
-            proofs: vec![],
-            reads: vec![],
-            writes: vec![],
-            draws: vec![],
-            single_use: vec![],
-            effects: vec![],
-        };
-        commit_batch(&db.sequencer, &domain, *tenant.as_bytes(), &batch)
-            .await
-            .unwrap();
+                frontier: vec![[n; 32]],
+            };
+            let batch = CommitBatch {
+                epoch: lease.epoch,
+                after: head.pos,
+                records: vec![LogRecord {
+                    pos: head.pos + 1,
+                    kind: "decision",
+                    recorded_at: 2,
+                    leaf_hash: [n; 32],
+                    envelope: vec![0xa1, n],
+                }],
+                head: next.clone(),
+                nonces: vec![NonceRow {
+                    nonce: vec![n; 16],
+                    actor: vec![1],
+                    intent_digest: [9; 32],
+                    decision_pos: head.pos + 1,
+                    outcome: String::from("allow"),
+                    render_digest: None,
+                    tier: None,
+                }],
+                outbox: vec![],
+                proofs: vec![],
+                reads: vec![],
+                writes: vec![],
+                draws: vec![],
+                single_use: vec![],
+                effects: vec![],
+            };
+            commit_batch(&db.sequencer, &domain, *tenant.as_bytes(), &batch)
+                .await
+                .unwrap();
+            head = next;
+        }
         let mut t = TenantTx::begin_tenant(&db.app, tenant).await.unwrap();
         let realm = create_realm(&mut t, &domain, "shop", "pool-default")
             .await
@@ -518,9 +522,32 @@ impl World {
         }))
         .unwrap();
         let mut t = self.tx().await;
-        declare(&mut t, &sealer(), [8; 16], &cfg, None, Some([6; 32]))
-            .await
-            .unwrap();
+        let domain = DomainId::from_bytes([7; 32]);
+        let bound = bind(
+            &mut t,
+            &Decision {
+                domain: &domain,
+                position: 2,
+                nonce: &[2; 16],
+                intent: [9; 32],
+                change: [6; 32],
+                action: "idp.upstream.register",
+            },
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        declare(
+            &mut t,
+            &bound,
+            &sealer(),
+            [8; 16],
+            &cfg,
+            None,
+            Some([6; 32]),
+        )
+        .await
+        .unwrap();
         if link {
             t.link_upstream_subject(&subject_digest(UPSTREAM, "up-1"), self.subject)
                 .await

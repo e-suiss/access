@@ -410,3 +410,86 @@ async fn a_client_id_is_global() {
         }
     }
 }
+
+fn transmitter() -> access_store::ssf::TransmitterRow {
+    access_store::ssf::TransmitterRow {
+        id: [8; 16],
+        issuer: String::from("https://upstream.example"),
+        jwks_uri: String::from("https://upstream.example/jwks"),
+        audience: String::from("https://acme.example"),
+        events: vec![String::from(
+            "https://schemas.openid.net/secevent/caep/event-type/session-revoked",
+        )],
+        delivery: String::from("push"),
+        poll_endpoint: None,
+        secret: None,
+        expected_interval_s: 3_600,
+        exercise: Some([6; 32]),
+        last_seen_ms: None,
+        created_ms: 0,
+        disabled: false,
+    }
+}
+
+// EI-25, MD-14, TN-110, OP-151 m.3 (l): an inbound transmitter is declared only under the
+// idp.upstream.register ALLOW bound in its transaction and ended only under idp.upstream.retire;
+// a direct insert, an ALLOW of another action or a direct end is refused by the database, while
+// its reception time moves freely
+#[tokio::test]
+async fn an_inbound_transmitter_is_bound_to_its_decisions() {
+    let db = fresh().await.unwrap();
+    let t = create_tenant(&db.app, "pool-default").await.unwrap();
+    let d = domain(&db, t, 60, 3).await;
+    let r = realm(&db, t, &d, "acme-ssf").await;
+
+    let mut tx = TenantTx::begin(&db.app, t, r).await.unwrap();
+    let b = bind(
+        &mut tx,
+        &decision(&d, 1, &ALLOW_NONCE, "idp.client.register"),
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    assert!(tx.register_transmitter(&b, &transmitter()).await.is_err());
+
+    let tx = TenantTx::begin(&db.app, t, r).await.unwrap();
+    assert!(
+        tx.raw_rows(
+            "INSERT INTO access.ssf_transmitter (tenant_id, realm_id, transmitter_id, issuer,
+               jwks_uri, audience, events, delivery, expected_interval_s)
+             SELECT tenant_id, realm_id, '019a0000-0000-7000-8000-000000000009',
+               'https://other.example', 'https://other.example/jwks', 'a', '{}', 'push', 3600
+               FROM access.realms"
+        )
+        .await
+        .is_err()
+    );
+
+    let mut tx = TenantTx::begin(&db.app, t, r).await.unwrap();
+    let b = bind(&mut tx, &decision(&d, 2, &[2; 16], "idp.upstream.register"))
+        .await
+        .unwrap()
+        .unwrap();
+    tx.register_transmitter(&b, &transmitter()).await.unwrap();
+    tx.commit().await.unwrap();
+
+    let tx = TenantTx::begin(&db.app, t, r).await.unwrap();
+    assert!(
+        tx.raw_rows("UPDATE access.ssf_transmitter SET disabled_at = now()")
+            .await
+            .is_err()
+    );
+    let mut tx = TenantTx::begin(&db.app, t, r).await.unwrap();
+    tx.transmitter_seen([8; 16], 5_000).await.unwrap();
+    tx.commit().await.unwrap();
+
+    let mut tx = TenantTx::begin(&db.app, t, r).await.unwrap();
+    let b = bind(&mut tx, &decision(&d, 3, &[3; 16], "idp.upstream.retire"))
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(tx.disable_transmitter(&b, [8; 16]).await.unwrap());
+    let row = tx.transmitter([8; 16]).await.unwrap().unwrap();
+    tx.commit().await.unwrap();
+    assert!(row.disabled);
+}

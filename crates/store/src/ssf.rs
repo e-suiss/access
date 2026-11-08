@@ -8,6 +8,7 @@ use sqlx::types::Uuid;
 use crate::StoreError;
 use crate::events::SealedKey;
 use crate::identity::{RealmId, TenantTx};
+use crate::idp::Bound;
 
 fn uuid(b: &[u8; 16]) -> Uuid {
     Uuid::from_bytes(*b)
@@ -274,18 +275,24 @@ impl TenantTx {
         .await?)
     }
 
-    /// Declares an inbound transmitter of this realm.
+    /// Declares an inbound transmitter of this realm under the `idp.upstream.register` decision
+    /// `bound` (EI-25, MD-14).
     ///
     /// # Errors
-    /// [`StoreError`]; a second live transmitter with the same issuer is a unique violation.
-    pub async fn register_transmitter(&mut self, t: &TransmitterRow) -> Result<(), StoreError> {
+    /// [`StoreError`]; a second live transmitter with the same issuer is a unique violation, and
+    /// a decision of another action is refused by the database.
+    pub async fn register_transmitter(
+        &mut self,
+        bound: &Bound,
+        t: &TransmitterRow,
+    ) -> Result<(), StoreError> {
         let (tenant, realm) = scope(self)?;
         sqlx::query!(
             "INSERT INTO access.ssf_transmitter
                 (tenant_id, realm_id, transmitter_id, issuer, jwks_uri, audience, events, delivery,
                  poll_endpoint, secret_kek_id, secret_wrapped_dek, secret_nonce, secret_ciphertext,
-                 expected_interval_s, exercise)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)",
+                 expected_interval_s, exercise, domain_id, decision_pos)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)",
             tenant,
             realm,
             uuid(&t.id),
@@ -301,24 +308,33 @@ impl TenantTx {
             t.secret.as_ref().map(|k| k.ciphertext.clone()),
             i32::try_from(t.expected_interval_s).map_err(|_| StoreError::Range)?,
             t.exercise.map(|e| e.to_vec()),
+            bound.domain().as_bytes().as_slice(),
+            bound.raw_position(),
         )
         .execute(&mut *self.tx)
         .await?;
         Ok(())
     }
 
-    /// Ends a transmitter (OP-73: nothing is deleted); false when it was not live.
+    /// Ends a transmitter under the `idp.upstream.retire` decision `bound` (EI-25, OP-73:
+    /// nothing is deleted); false when it was not live.
     ///
     /// # Errors
-    /// [`StoreError`].
-    pub async fn disable_transmitter(&mut self, id: [u8; 16]) -> Result<bool, StoreError> {
+    /// [`StoreError`]; a decision of another action is refused by the database.
+    pub async fn disable_transmitter(
+        &mut self,
+        bound: &Bound,
+        id: [u8; 16],
+    ) -> Result<bool, StoreError> {
         let (tenant, realm) = scope(self)?;
         let n = sqlx::query!(
-            "UPDATE access.ssf_transmitter SET disabled_at = now()
+            "UPDATE access.ssf_transmitter SET disabled_at = now(), domain_id = $4, decision_pos = $5
               WHERE tenant_id = $1 AND realm_id = $2 AND transmitter_id = $3 AND disabled_at IS NULL",
             tenant,
             realm,
             uuid(&id),
+            bound.domain().as_bytes().as_slice(),
+            bound.raw_position(),
         )
         .execute(&mut *self.tx)
         .await?

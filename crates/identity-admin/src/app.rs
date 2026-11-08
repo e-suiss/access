@@ -633,7 +633,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                 .await
                 .map_err(account)?;
         }
-        declare_transmitter(&mut t.0, &p.change, exercise).await?;
+        declare_transmitter(&mut t.0, bound, &p.change, exercise).await?;
         self.announce(&mut t.0, p, exercise).await?;
         let at = access_store::authority::server_time(self.app).await?;
         signals::queue_for(&mut t.0, &p.change, at).await?;
@@ -1198,12 +1198,19 @@ impl access_identity_events::ports::Sealer for NoCredential {
 }
 
 /// OP-151 m.7 (g): an `idp.upstream.register` with SSF fields declares the provider as an
-/// inbound transmitter in the write's transaction, bound to the Exercise.
+/// inbound transmitter in the write's transaction, bound to the decision (EI-25); an
+/// `idp.upstream.retire` ends it under its own decision.
 async fn declare_transmitter(
     t: &mut TenantTx,
+    bound: &idp::Bound,
     change: &Change,
     exercise: &Digest,
 ) -> Result<(), AdminError> {
+    if let Change::UpstreamRetire(name) = change {
+        t.disable_transmitter(bound, transmitter_id(name.as_str()))
+            .await?;
+        return Ok(());
+    }
     let Change::UpstreamRegister(Upstream {
         name,
         ssf: Some(cfg),
@@ -1214,6 +1221,7 @@ async fn declare_transmitter(
     };
     access_identity_events::app::receiver::declare(
         t,
+        bound,
         &NoCredential,
         transmitter_id(name.as_str()),
         cfg,

@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.ssf_transmitter SET disabled_at = now(), domain_id = $4, decision_pos = $5\n              WHERE tenant_id = $1 AND realm_id = $2 AND transmitter_id = $3 AND disabled_at IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "0fa9dd2dc219641b32c6c9f031ce2891515b032acd303daaf82ac0835fcf0db0"
+}

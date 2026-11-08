@@ -126,6 +126,14 @@ async fn a_group_keeps_its_one_membership_issuer() {
         .unwrap();
     assert_eq!(groups.items.len(), 2);
     assert_eq!(groups.items[0].0["membership_issuer"], "admin");
+    // EI-25, OP-151 m.3 (l): retiring the provider ends its transmitter under that decision
+    let retire = compile(Op::RetireUpstream, Some("google"), &json!({}), &w.ids).unwrap();
+    written(&run(&w, at, d, retire, 7).await.unwrap());
+    let mut t = TenantTx::begin(&w.db.app, at.0, at.1).await.unwrap();
+    let transmitters = t.transmitters().await.unwrap();
+    t.commit().await.unwrap();
+    assert_eq!(transmitters.len(), 1);
+    assert!(transmitters[0].disabled);
 }
 
 // §12.3.1, TN-49: a suspension ends the account's sessions and is reversed only by a
