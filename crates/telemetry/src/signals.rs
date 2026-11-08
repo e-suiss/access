@@ -229,3 +229,18 @@ pub static RISK_FP_RATIO: Gauge<0> = Gauge::new(
     "SL2 false-positive ratio of step-up requests over 30 days, parts per million (OP-151 m.3 (o))",
     [],
 );
+
+/// TN-81, OP-153 m.3 (h): registration requests by abuse score band (`low`, `medium`, `high`);
+/// a score feeds step-up only, never a refusal.
+pub static REGISTRATION_SCORES: Counter<1> = Counter::new(
+    "access_registration_scores_total",
+    "Registration requests by abuse score band (TN-81; step-up only, never a refusal)",
+    [Label::Outcome],
+);
+
+/// TN-85, CR-37: accounts whose password is still a legacy hash waiting for lazy migration.
+pub static LEGACY_HASH_ACCOUNTS: Gauge<0> = Gauge::new(
+    "access_legacy_hash_accounts",
+    "Accounts whose password is still an imported legacy hash (TN-85, CR-37)",
+    [],
+);

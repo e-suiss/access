@@ -9,6 +9,7 @@ pub mod jose;
 pub mod oauth;
 pub mod opaque_id;
 pub mod platform;
+pub mod privacy_pass;
 pub mod projection;
 pub mod pseudonym;
 pub mod random;
