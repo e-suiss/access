@@ -111,7 +111,7 @@ pub fn sign_compact(
     typ: &str,
     payload: &[u8],
 ) -> Result<String, JoseError> {
-    sign(signer, Some(kid), typ, payload)
+    sign(signer, Kid::Thumbprint(kid), Some(typ), payload)
 }
 
 /// A compact JWS whose protected header is exactly `{"alg","typ"}`: a key binding JWT, which
@@ -124,16 +124,39 @@ pub fn sign_compact_unkeyed(
     typ: &str,
     payload: &[u8],
 ) -> Result<String, JoseError> {
-    sign(signer, None, typ, payload)
+    sign(signer, Kid::None, Some(typ), payload)
+}
+
+/// A compact JWS whose protected header is exactly `{"alg","kid"}` with a `kid` another party
+/// assigned (1 to 64 ASCII letters and digits): the client assertion a provider such as Apple
+/// expects from a key it issued (OP-153 m.3 (l)).
+///
+/// # Errors
+/// [`JoseError`]; [`JoseError::Key`] for a `kid` outside that shape.
+pub fn sign_compact_assigned(
+    signer: &dyn Signer,
+    kid: &str,
+    payload: &[u8],
+) -> Result<String, JoseError> {
+    if !(1..=64).contains(&kid.len()) || !kid.bytes().all(|b| b.is_ascii_alphanumeric()) {
+        return Err(JoseError::Key);
+    }
+    sign(signer, Kid::Assigned(kid), None, payload)
+}
+
+enum Kid<'a> {
+    None,
+    Thumbprint(&'a [u8; 32]),
+    Assigned(&'a str),
 }
 
 fn sign(
     signer: &dyn Signer,
-    kid: Option<&[u8; 32]>,
-    typ: &str,
+    kid: Kid<'_>,
+    typ: Option<&str>,
     payload: &[u8],
 ) -> Result<String, JoseError> {
-    if !typ_ok(typ) {
+    if typ.is_some_and(|t| !typ_ok(t)) {
         return Err(JoseError::Type);
     }
     if !matches!(json::parse(payload, MAX_PAYLOAD), Ok(Json::Object(_))) {
@@ -148,13 +171,15 @@ fn sign(
     if !consistent {
         return Err(JoseError::Key);
     }
-    let header = match kid {
-        Some(kid) => format!(
+    let header = match (kid, typ) {
+        (Kid::Thumbprint(kid), Some(typ)) => format!(
             r#"{{"alg":"{}","kid":"{}","typ":"{typ}"}}"#,
             alg.name(),
             b64url_encode(kid)
         ),
-        None => format!(r#"{{"alg":"{}","typ":"{typ}"}}"#, alg.name()),
+        (Kid::None, Some(typ)) => format!(r#"{{"alg":"{}","typ":"{typ}"}}"#, alg.name()),
+        (Kid::Assigned(kid), None) => format!(r#"{{"alg":"{}","kid":"{kid}"}}"#, alg.name()),
+        _ => return Err(JoseError::Type),
     };
     let mut out = b64url_encode(header.as_bytes());
     out.push('.');

@@ -887,7 +887,13 @@ fn social(
     >,
     String,
 > {
-    let presets = access_identity_federation::app::presets().map_err(|e| e.to_string())?;
+    let mut presets = access_identity_federation::app::presets().map_err(|e| e.to_string())?;
+    if let Some(dir) = &config.social.presets_dir {
+        let own = access_identity_federation::adapters::presets_from_dir(dir)?;
+        presets = presets.with(own).map_err(|e| e.to_string())?;
+    }
+    // IDP-31 (1)
+    drop(presets.clone().install());
     let dev = config
         .social
         .dev_clients

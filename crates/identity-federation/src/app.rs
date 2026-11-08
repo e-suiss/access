@@ -8,8 +8,9 @@ use access_crypto::Secret;
 use access_identity_oauth::domain::jwt::parse_jwks;
 use serde_json::Value;
 
+use crate::domain::apple::AppleKey;
 use crate::domain::key::identity_key;
-use crate::domain::preset::{EmailAssurance, Preset, Presets, Protocol, ResponseMode};
+use crate::domain::preset::{ClientAuth, EmailAssurance, Preset, Presets, Protocol, ResponseMode};
 use crate::domain::rules::{ClientRefusal, client_allowed};
 use crate::domain::token::{
     Expect, MAX_ANSWER, ProviderEmail, Secrets, TokenError, check_id_token, email_of, token_answer,
@@ -146,13 +147,15 @@ impl<H: ProviderHttp, S: SocialSecrets> Federation<'_, H, S> {
         s: &Secrets,
         now_ms: u64,
     ) -> Result<External, FederationError> {
-        let form = token_form(
-            &client.id,
-            client.secret.expose(),
-            redirect_uri,
-            code,
-            &s.verifier,
-        );
+        let secret = match p.client_auth {
+            ClientAuth::SecretPost => Secret::new(client.secret.expose().clone()),
+            ClientAuth::AppleJwt => Secret::new(
+                AppleKey::parse(&client.secret)
+                    .and_then(|k| k.client_secret(&client.id, now_ms / 1000))
+                    .map_err(|_| FederationError::Unavailable)?,
+            ),
+        };
+        let form = token_form(&client.id, secret.expose(), redirect_uri, code, &s.verifier);
         let (status, body) = self.http.post_form(&p.token_endpoint, &form).await?;
         let answer = token_answer(status, &body)?;
         let (claims, emails) = match p.protocol {
@@ -245,6 +248,7 @@ impl<H: ProviderHttp, S: SocialSecrets> Federation<'_, H, S> {
             subject: vec!["sub".into()],
             algorithms: vec!["RS256".into(), "ES256".into()],
             response_mode: ResponseMode::Query,
+            client_auth: ClientAuth::SecretPost,
             email: EmailAssurance::None,
         };
         if [&p.authorization_endpoint, &p.token_endpoint]

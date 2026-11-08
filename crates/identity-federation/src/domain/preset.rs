@@ -54,6 +54,18 @@ pub enum ResponseMode {
     FormPost,
 }
 
+/// How Access authenticates to the provider's token endpoint.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ClientAuth {
+    /// `client_secret_post` with the stored secret.
+    #[default]
+    SecretPost,
+    /// `client_secret_post` with a fresh ES256 assertion signed by the realm's Sign in with
+    /// Apple key (`crate::domain::apple`).
+    AppleJwt,
+}
+
 /// One preset.
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -88,6 +100,9 @@ pub struct Preset {
     /// How the authorization response comes back.
     #[serde(default)]
     pub response_mode: ResponseMode,
+    /// How the client authenticates at the token endpoint.
+    #[serde(default)]
+    pub client_auth: ClientAuth,
     /// What the address is worth.
     pub email: EmailAssurance,
 }
@@ -156,7 +171,9 @@ impl Preset {
             EmailAssurance::AuthoritativeDomains { domains, .. } => !domains.is_empty(),
             _ => true,
         };
+        let auth_ok = self.client_auth == ClientAuth::SecretPost || self.protocol == Protocol::Oidc;
         let ok = name_ok(&self.id)
+            && auth_ok
             && !self.display_name.is_empty()
             && self.display_name.chars().count() <= 64
             && !self.subject.is_empty()
@@ -232,7 +249,42 @@ impl Presets {
     pub fn iter(&self) -> impl Iterator<Item = &Preset> {
         self.0.values()
     }
+
+    /// These presets with the operator's `others` (the generic connector, IDP-31 (1)); an id
+    /// already taken is refused.
+    ///
+    /// # Errors
+    /// [`PresetError::Duplicate`].
+    pub fn with(mut self, others: Self) -> Result<Self, PresetError> {
+        for (id, p) in others.0 {
+            if self.0.contains_key(&id) {
+                return Err(PresetError::Duplicate(id));
+            }
+            self.0.insert(id, p);
+        }
+        Ok(self)
+    }
+
+    /// Makes `self` the process's preset set, which `idp.social.*` checks names against; set
+    /// once at start-up.
+    ///
+    /// # Errors
+    /// The presets back, when a set is already installed.
+    pub fn install(self) -> Result<(), Self> {
+        INSTALLED.set(self)
+    }
+
+    /// The installed preset set, or the shipped presets when none is installed.
+    #[must_use]
+    pub fn installed() -> Option<&'static Self> {
+        INSTALLED
+            .get()
+            .or_else(|| SHIPPED_SET.get_or_init(|| Self::shipped().ok()).as_ref())
+    }
 }
+
+static INSTALLED: std::sync::OnceLock<Presets> = std::sync::OnceLock::new();
+static SHIPPED_SET: std::sync::OnceLock<Option<Presets>> = std::sync::OnceLock::new();
 
 #[cfg(test)]
 mod tests {

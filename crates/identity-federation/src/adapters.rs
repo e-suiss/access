@@ -41,6 +41,26 @@ impl ProviderHttp for OutboundProviders {
     }
 }
 
+/// The operator's own presets: every `*.toml` file directly under `dir`, in the shipped
+/// format (the generic OIDC and OAuth 2.0 connector, IDP-31 (1)); read once at start-up.
+///
+/// # Errors
+/// A message naming the file that could not be read or is outside the format.
+pub fn presets_from_dir(dir: &std::path::Path) -> Result<crate::domain::preset::Presets, String> {
+    let mut files = Vec::new();
+    for entry in std::fs::read_dir(dir).map_err(|e| format!("{}: {e}", dir.display()))? {
+        let path = entry.map_err(|e| e.to_string())?.path();
+        if path.extension().is_some_and(|x| x == "toml") && path.is_file() {
+            let text =
+                std::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+            files.push((path.display().to_string(), text));
+        }
+    }
+    files.sort();
+    crate::domain::preset::Presets::from_files(files.iter().map(|(f, t)| (f.as_str(), t.as_str())))
+        .map_err(|e| e.to_string())
+}
+
 /// Secrets as files under one directory: `secret://social/google` is `<dir>/social/google`.
 /// No directory configured answers [`Unreachable`] for every reference (MD-8).
 pub struct FileSecrets(pub Option<PathBuf>);

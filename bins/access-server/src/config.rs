@@ -87,6 +87,10 @@ pub(crate) struct Social {
     /// Shared development clients by preset id (`social.dev_clients`).
     #[serde(default)]
     pub(crate) dev_clients: BTreeMap<String, DevClient>,
+    /// The operator's own presets, `*.toml` in the shipped format: the generic OIDC and
+    /// OAuth 2.0 connector (IDP-31 (1)); read once at start-up.
+    #[serde(default)]
+    pub(crate) presets_dir: Option<PathBuf>,
 }
 
 /// One shared development client.

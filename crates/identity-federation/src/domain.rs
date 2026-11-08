@@ -1,5 +1,6 @@
 //! Social and upstream sign-in, sans I/O (OP-63).
 
+pub mod apple;
 pub mod key;
 pub mod preset;
 pub mod rules;

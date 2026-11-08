@@ -11,6 +11,7 @@ logo = "apple"
 subject = ["sub"]
 algorithms = ["RS256"]
 response_mode = "form_post"
+client_auth = "apple_jwt"
 
 [email]
 kind = "verified_claim"

@@ -176,7 +176,9 @@ struct Says {
     sub: String,
     email: Option<(String, bool)>,
     aud: Option<String>,
+    iss: Option<String>,
     forms: Vec<String>,
+    bearers: Vec<String>,
 }
 
 /// An OpenID provider that signs with one ES256 key; its token endpoint answers the code
@@ -206,7 +208,7 @@ impl Provider {
     fn id_token(&self, client_id: &str) -> String {
         let s = self.says.lock().unwrap();
         let mut claims = json!({
-            "iss": ISS,
+            "iss": s.iss.clone().unwrap_or_else(|| ISS.to_owned()),
             "aud": s.aud.clone().unwrap_or_else(|| client_id.to_owned()),
             "sub": s.sub,
             "exp": T0 / 1000 + 600,
@@ -232,12 +234,43 @@ impl Provider {
 }
 
 impl ProviderHttp for Provider {
-    async fn get_json(&self, url: &str, _: Option<&str>) -> Result<ProviderAnswer, Unreachable> {
-        if url == "https://idp.test/jwks" {
-            Ok((200, self.jwks()))
-        } else {
-            Ok((404, Vec::new()))
+    async fn get_json(
+        &self,
+        url: &str,
+        bearer: Option<&str>,
+    ) -> Result<ProviderAnswer, Unreachable> {
+        let mut s = self.says.lock().unwrap();
+        if let Some(b) = bearer {
+            s.bearers.push(b.to_owned());
         }
+        let email = s.email.clone();
+        let body = match (url, bearer) {
+            ("https://idp.test/jwks", None) => return Ok((200, self.jwks())),
+            ("https://idp.test/up/.well-known/openid-configuration", None) => json!({
+                "issuer": "https://idp.test/up",
+                "authorization_endpoint": "https://idp.test/authorize",
+                "token_endpoint": "https://idp.test/token",
+                "jwks_uri": "https://idp.test/jwks",
+            }),
+            ("https://idp.test/user", Some("at")) => {
+                json!({ "id": s.sub.parse::<u64>().unwrap(), "login": "ada" })
+            }
+            ("https://idp.test/user/emails", Some("at")) => {
+                json!(email.map_or_else(Vec::new, |(e, v)| vec![
+                    json!({ "email": "old@example.org", "primary": false, "verified": true }),
+                    json!({ "email": e, "primary": true, "verified": v }),
+                ]))
+            }
+            ("https://idp.test/me", Some("at")) => {
+                let mut me = json!({ "id": s.sub, "name": "Ada" });
+                if let Some((e, _)) = email {
+                    me["email"] = json!(e);
+                }
+                me
+            }
+            _ => return Ok((404, Vec::new())),
+        };
+        Ok((200, body.to_string().into_bytes()))
     }
 
     async fn post_form(&self, url: &str, form: &str) -> Result<ProviderAnswer, Unreachable> {
@@ -256,6 +289,75 @@ impl ProviderHttp for Provider {
         ))
     }
 }
+
+const GITHUB: &str = r#"
+id = "github"
+display_name = "GitHub"
+protocol = "oauth2"
+issuer = "https://github.com"
+authorization_endpoint = "https://idp.test/authorize"
+token_endpoint = "https://idp.test/token"
+userinfo_endpoint = "https://idp.test/user"
+emails_endpoint = "https://idp.test/user/emails"
+scopes = ["read:user", "user:email"]
+logo = "github"
+subject = ["id"]
+
+[email]
+kind = "verified_primary"
+"#;
+
+const FACEBOOK: &str = r#"
+id = "facebook"
+display_name = "Facebook"
+protocol = "oauth2"
+issuer = "https://www.facebook.com"
+authorization_endpoint = "https://idp.test/authorize"
+token_endpoint = "https://idp.test/token"
+userinfo_endpoint = "https://idp.test/me"
+scopes = ["public_profile", "email"]
+logo = "facebook"
+subject = ["id"]
+
+[email]
+kind = "none"
+"#;
+
+const APPLE: &str = r#"
+id = "apple"
+display_name = "Apple"
+protocol = "oidc"
+issuer = "https://appleid.apple.com"
+authorization_endpoint = "https://idp.test/authorize"
+token_endpoint = "https://idp.test/token"
+jwks_uri = "https://idp.test/jwks"
+scopes = ["openid", "email", "name"]
+logo = "apple"
+subject = ["sub"]
+algorithms = ["ES256"]
+response_mode = "form_post"
+client_auth = "apple_jwt"
+
+[email]
+kind = "verified_claim"
+"#;
+
+/// An operator's own OAuth 2.0 provider, as a file of `social.presets_dir`.
+const OPERATOR: &str = r#"
+id = "acme-sso"
+display_name = "Acme SSO"
+protocol = "oauth2"
+issuer = "https://sso.acme.example"
+authorization_endpoint = "https://idp.test/authorize"
+token_endpoint = "https://idp.test/token"
+userinfo_endpoint = "https://idp.test/me"
+scopes = ["profile"]
+logo = "acme"
+subject = ["id"]
+
+[email]
+kind = "none"
+"#;
 
 /// The shipped Google preset at the in-process provider's endpoints, signing with ES256.
 fn presets() -> Presets {
@@ -277,7 +379,20 @@ kind = "authoritative_domains"
 domains = ["gmail.com", "googlemail.com"]
 hosted_domain_claim = "hd"
 "#;
-    Presets::from_files([("google", google)]).unwrap()
+    let dir = secrets_dir().join("presets");
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("acme-sso.toml"), OPERATOR).unwrap();
+    std::fs::write(dir.join("notes.txt"), "not a preset").unwrap();
+    let own = access_identity_federation::adapters::presets_from_dir(&dir).unwrap();
+    Presets::from_files([
+        ("google", google),
+        ("github", GITHUB),
+        ("facebook", FACEBOOK),
+        ("apple", APPLE),
+    ])
+    .unwrap()
+    .with(own)
+    .unwrap()
 }
 
 struct Env {
@@ -303,8 +418,30 @@ fn secrets_dir() -> std::path::PathBuf {
     ));
     std::fs::create_dir_all(dir.join("social")).unwrap();
     std::fs::write(dir.join("social/google"), "s3cret\n").unwrap();
+    let b64 = b64url_encode(APPLE_KEY.as_ref())
+        .replace('-', "+")
+        .replace('_', "/");
+    let lines: Vec<&str> = b64
+        .as_bytes()
+        .chunks(64)
+        .map(|c| std::str::from_utf8(c).unwrap())
+        .collect();
+    std::fs::write(
+        dir.join("social/apple"),
+        format!(
+            "team_id=TEAM123456\nkey_id=KEY1234567\n-----BEGIN PRIVATE KEY-----\n{}\n-----END PRIVATE KEY-----\n",
+            lines.join("\n")
+        ),
+    )
+    .unwrap();
     dir
 }
+
+static APPLE_KEY: std::sync::LazyLock<aws_lc_rs::pkcs8::Document> =
+    std::sync::LazyLock::new(|| {
+        EcdsaKeyPair::generate_pkcs8(&ECDSA_P256_SHA256_FIXED_SIGNING, &SystemRandom::new())
+            .unwrap()
+    });
 
 async fn env(seed: u8, slug: &str) -> Env {
     let db = fresh().await.unwrap();
@@ -429,6 +566,11 @@ impl Env {
     /// Writes the realm's Google preset under a committed `idp.social.enable` ALLOW (EI-25);
     /// `client` `None` names the shared development client.
     async fn enable(&self, client: Option<&str>) {
+        self.enable_preset("google", client).await;
+    }
+
+    /// A committed ALLOW of `action` bound to the realm (EI-25).
+    async fn decision(&self, action: &str) -> (TenantTx, access_store::idp::Bound) {
         let (lease, head) = acquire_lease(
             &self.db.sequencer,
             &self.domain,
@@ -493,18 +635,25 @@ impl Env {
                 nonce: &nonce,
                 intent: [9; 32],
                 change: [5; 32],
-                action: "idp.social.enable",
+                action,
             },
         )
         .await
         .unwrap()
         .unwrap();
+        (tx, bound)
+    }
+
+    /// Writes the realm's `preset` under a committed `idp.social.enable` ALLOW.
+    async fn enable_preset(&self, preset: &str, client: Option<&str>) {
+        let (mut tx, bound) = self.decision("idp.social.enable").await;
+        let secret = if preset == "apple" { "apple" } else { "google" };
         tx.put_social_provider(
             &bound,
             &SocialRow {
-                preset: String::from("google"),
+                preset: String::from(preset),
                 client_id: client.map(String::from),
-                client_secret_ref: client.map(|_| String::from("secret://social/google")),
+                client_secret_ref: client.map(|_| format!("secret://social/{secret}")),
                 active: true,
                 previous_client_id: None,
                 client_changed_ms: None,
@@ -533,11 +682,34 @@ impl Env {
         t.commit().await.unwrap();
     }
 
+    /// Registers the generic OpenID provider `name` at `https://idp.test/up` under a committed
+    /// `idp.upstream.register` ALLOW (TN-95).
+    async fn upstream(&self, name: &str) {
+        let (mut tx, bound) = self.decision("idp.upstream.register").await;
+        let row = access_store::idp::realm::UpstreamRow {
+            name: name.to_owned(),
+            issuer: String::from("https://idp.test/up"),
+            client_id: String::from("up-client"),
+            client_secret_ref: Some(String::from("secret://social/google")),
+            jwks_uri: String::from("https://idp.test/jwks"),
+            ssf: None,
+            active: true,
+            position: 0,
+        };
+        assert!(
+            access_store::idp::realm::put_upstream(&mut tx, &bound, &row, true)
+                .await
+                .unwrap()
+        );
+        tx.commit().await.unwrap();
+    }
+
     fn says(&self, sub: &str, email: Option<(&str, bool)>) {
         let mut s = self.provider.says.lock().unwrap();
         s.sub = sub.to_owned();
         s.email = email.map(|(e, v)| (e.to_owned(), v));
         s.aud = None;
+        s.iss = None;
     }
 
     fn browser(&self, n: u8) -> Web {
@@ -551,7 +723,12 @@ impl Env {
 
     /// The account the provider's subject `sub` is linked to.
     async fn link_of(&self, sub: &str) -> Option<[u8; 16]> {
-        let key = access_identity_federation::domain::key::identity_key(ISS, sub);
+        self.link_at(ISS, sub).await
+    }
+
+    /// The account `issuer`'s subject `sub` is linked to.
+    async fn link_at(&self, issuer: &str, sub: &str) -> Option<[u8; 16]> {
+        let key = access_identity_federation::domain::key::identity_key(issuer, sub);
         let mut t = TenantTx::begin(&self.db.app, self.tenant, self.realm)
             .await
             .unwrap();
@@ -706,6 +883,10 @@ impl Web {
 
     /// Follows the provider round trip of `start` (a `303` to the provider) back to the callback.
     async fn round_trip(&mut self, e: &Env, start: &Answer) -> Answer {
+        self.round_trip_as(e, start, "google").await
+    }
+
+    async fn round_trip_as(&mut self, e: &Env, start: &Answer, provider: &str) -> Answer {
         let to = if start.status == StatusCode::SEE_OTHER {
             start.location()
         } else {
@@ -713,24 +894,30 @@ impl Web {
         };
         assert!(to.starts_with("https://idp.test/authorize?"), "{to}");
         let p = Params::parse(to.split_once('?').unwrap().1).unwrap();
-        e.provider.says.lock().unwrap().nonce = p.get("nonce").unwrap().to_owned();
+        e.provider.says.lock().unwrap().nonce = p.get("nonce").unwrap_or_default().to_owned();
         let state = p.get("state").unwrap().to_owned();
         assert_eq!(
             p.get("redirect_uri").unwrap(),
-            format!("https://{HOST}/v1/login/social/google/callback")
+            format!("https://{HOST}/v1/login/social/{provider}/callback")
         );
         self.send(
             "GET",
-            &format!("/v1/login/social/google/callback?code=c-1&state={state}"),
+            &format!("/v1/login/social/{provider}/callback?code=c-1&state={state}"),
             None,
         )
         .await
     }
 
     async fn social(&mut self, e: &Env) -> Answer {
-        let start = self.send("GET", "/v1/login/social/google", None).await;
+        self.social_at(e, "google").await
+    }
+
+    async fn social_at(&mut self, e: &Env, provider: &str) -> Answer {
+        let start = self
+            .send("GET", &format!("/v1/login/social/{provider}"), None)
+            .await;
         assert_eq!(start.status, StatusCode::SEE_OTHER, "{}", start.code());
-        self.round_trip(e, &start).await
+        self.round_trip_as(e, &start, provider).await
     }
 }
 
@@ -998,4 +1185,135 @@ async fn combining_moves_identities_only_after_a_snapshot_and_nothing_of_the_aut
         )
         .await;
     assert_eq!(reused.status, StatusCode::CONFLICT);
+}
+
+// IDP-31, §10.2.6, P-ID-9, OP-153 m.3 (l)
+#[tokio::test]
+async fn github_and_facebook_sign_in_through_user_info_read_with_the_codes_token() {
+    let e = env(0x47, "soc-g").await;
+    e.enable_preset("github", Some("gh-client")).await;
+    e.enable_preset("facebook", Some("fb-client")).await;
+    e.says("4242", Some(("ada@example.org", true)));
+    let mut w = e.browser(1);
+    let a = w.social_at(&e, "github").await;
+    assert_eq!(a.status, StatusCode::SEE_OTHER, "{}", a.code());
+    let gh = e.link_at("https://github.com", "4242").await.unwrap();
+    assert_eq!(
+        e.live_identifiers(gh).await,
+        1,
+        "the verified primary address of /user/emails is vouched for"
+    );
+    assert_eq!(e.provider.says.lock().unwrap().bearers, ["at", "at"]);
+
+    e.says("4243", Some(("bob@example.org", false)));
+    let mut w = e.browser(2);
+    let b = w.social_at(&e, "github").await;
+    assert_eq!(b.status, StatusCode::SEE_OTHER, "{}", b.code());
+    let unverified = e.link_at("https://github.com", "4243").await.unwrap();
+    assert_eq!(e.live_identifiers(unverified).await, 0);
+
+    e.says("fb-77", Some(("cyd@example.org", true)));
+    let mut w = e.browser(3);
+    let c = w.social_at(&e, "facebook").await;
+    assert_eq!(c.status, StatusCode::SEE_OTHER, "{}", c.code());
+    let fb = e
+        .link_at("https://www.facebook.com", "fb-77")
+        .await
+        .unwrap();
+    assert_eq!(
+        e.live_identifiers(fb).await,
+        0,
+        "a Facebook address is never vouched for"
+    );
+    assert_ne!(fb, gh);
+}
+
+// IDP-31, OP-153 m.3 (l)
+#[tokio::test]
+async fn apple_exchanges_the_code_with_a_fresh_es256_assertion_of_the_realms_key() {
+    let e = env(0x48, "soc-h").await;
+    e.enable_preset("apple", Some("com.acme.web")).await;
+    e.says("001234.abcd", Some(("ada@privaterelay.appleid.com", true)));
+    e.provider.says.lock().unwrap().iss = Some(String::from("https://appleid.apple.com"));
+    let mut w = e.browser(1);
+    let a = w.social_at(&e, "apple").await;
+    assert_eq!(a.status, StatusCode::SEE_OTHER, "{}", a.code());
+    assert!(
+        e.link_at("https://appleid.apple.com", "001234.abcd")
+            .await
+            .is_some()
+    );
+    let form = e.provider.says.lock().unwrap().forms[0].clone();
+    let p = Params::parse(&form).unwrap();
+    let jwt = p.get("client_secret").unwrap().to_owned();
+    let parts: Vec<&str> = jwt.split('.').collect();
+    let header: Value =
+        serde_json::from_slice(&access_kernel::json::b64url_decode(parts[0]).unwrap()).unwrap();
+    assert_eq!(header, json!({ "alg": "ES256", "kid": "KEY1234567" }));
+    let claims: Value =
+        serde_json::from_slice(&access_kernel::json::b64url_decode(parts[1]).unwrap()).unwrap();
+    assert_eq!(
+        (&claims["iss"], &claims["sub"], &claims["aud"]),
+        (
+            &json!("TEAM123456"),
+            &json!("com.acme.web"),
+            &json!("https://appleid.apple.com")
+        )
+    );
+    assert_eq!(
+        claims["exp"].as_u64().unwrap() - claims["iat"].as_u64().unwrap(),
+        300
+    );
+    let pair =
+        EcdsaKeyPair::from_pkcs8(&ECDSA_P256_SHA256_FIXED_SIGNING, APPLE_KEY.as_ref()).unwrap();
+    aws_lc_rs::signature::UnparsedPublicKey::new(
+        &aws_lc_rs::signature::ECDSA_P256_SHA256_FIXED,
+        pair.public_key().as_ref(),
+    )
+    .verify(
+        format!("{}.{}", parts[0], parts[1]).as_bytes(),
+        &access_kernel::json::b64url_decode(parts[2]).unwrap(),
+    )
+    .unwrap();
+}
+
+// IDP-31 (1), TN-95, §10.2.6
+#[tokio::test]
+async fn a_registered_upstream_and_an_operator_preset_sign_in_through_the_generic_connector() {
+    let e = env(0x49, "soc-i").await;
+    e.upstream("partner").await;
+    e.says("p-1", Some(("ada@partner.example", true)));
+    e.provider.says.lock().unwrap().iss = Some(String::from("https://idp.test/up"));
+    let mut w = e.browser(1);
+    let a = w.social_at(&e, "partner").await;
+    assert_eq!(a.status, StatusCode::SEE_OTHER, "{}", a.code());
+    let up = e.link_at("https://idp.test/up", "p-1").await.unwrap();
+    assert_eq!(
+        e.live_identifiers(up).await,
+        0,
+        "an upstream's address carries no assurance"
+    );
+    let form = e.provider.says.lock().unwrap().forms[0].clone();
+    assert!(form.contains("client_id=up-client"));
+
+    e.says("p-2", None);
+    e.provider.says.lock().unwrap().iss = Some(String::from("https://idp.test/other"));
+    let mut w = e.browser(2);
+    let b = w.social_at(&e, "partner").await;
+    assert_eq!(
+        (b.status, b.code().as_str()),
+        (StatusCode::UNAUTHORIZED, "social-sign-in-failed"),
+        "an ID token of another issuer is refused"
+    );
+
+    e.enable_preset("acme-sso", Some("acme-client")).await;
+    e.says("emp-9", Some(("dee@acme.example", true)));
+    let mut w = e.browser(3);
+    let c = w.social_at(&e, "acme-sso").await;
+    assert_eq!(c.status, StatusCode::SEE_OTHER, "{}", c.code());
+    assert!(
+        e.link_at("https://sso.acme.example", "emp-9")
+            .await
+            .is_some()
+    );
 }

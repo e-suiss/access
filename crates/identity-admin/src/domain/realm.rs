@@ -358,8 +358,8 @@ impl Social {
     /// # Errors
     /// [`Invalid::Social`].
     pub fn check(&self) -> Result<(), Invalid> {
-        let known = access_identity_federation::domain::preset::Presets::shipped()
-            .is_ok_and(|p| p.get(self.preset.as_str()).is_some());
+        let known = access_identity_federation::domain::preset::Presets::installed()
+            .is_some_and(|p| p.get(self.preset.as_str()).is_some());
         let client_ok = self.client.as_ref().is_none_or(|c| {
             (1..=255).contains(&c.client_id.len())
                 && c.client_id.bytes().all(|b| b.is_ascii_graphic())

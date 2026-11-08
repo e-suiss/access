@@ -37,3 +37,18 @@ combines accounts; linking is an explicit action of a signed-in user who just re
 The operator may configure shared development clients. A sandbox realm can use them, so social
 sign-in works right away. Any other realm must bring its own client: a shared client is refused
 both when the provider is enabled and at every sign-in.
+
+## Apple's client secret
+
+Apple takes no stored client secret. The realm's secret reference names its Sign in with Apple
+key: the `.p8` file as Apple issues it, after two lines `team_id=…` and `key_id=…`. Access signs
+a fresh five-minute ES256 assertion with it for every code exchange.
+
+## Any other provider
+
+- An OpenID provider a realm registers (`idp.upstream.register`) is found through its discovery
+  document, whose `issuer` must be the registered one; its ID tokens are checked against the
+  registered JWKS. Its addresses carry no assurance.
+- An OAuth 2.0 provider without ID tokens is one more preset file: the operator puts it in the
+  directory `social.presets_dir` names, and realms enable it like a shipped preset. A file whose
+  id is already taken stops the server at start-up.
