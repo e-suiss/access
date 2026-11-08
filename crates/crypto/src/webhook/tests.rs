@@ -6,7 +6,7 @@ const TS: u64 = 1_614_265_330;
 const BODY: &[u8] = br#"{"test": 2432232314}"#;
 const EXPECTED: &str = "v1,g0hM9SsE+OTPJTGt/tmIKtSyZlE3uFJELVlNIOLJ1OE=";
 
-// OP-149 m.4: the Standard Webhooks reference vector
+// OP-149 m.4
 #[test]
 fn standard_webhooks_known_answer() {
     let s = WebhookSecret::parse(SECRET).unwrap();
@@ -51,7 +51,7 @@ fn base64_round_trips() {
     assert!(b64_decode("Zm9").is_none());
 }
 
-// TN-136, SA-26: an Ed25519 key round-trips, never prints, and a rotated key overlaps
+// TN-136, SA-26
 #[test]
 fn tn_136_ed25519_keys_round_trip_and_overlap() {
     let old = WebhookSigningKey::generate().unwrap();

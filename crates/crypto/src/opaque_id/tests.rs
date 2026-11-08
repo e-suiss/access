@@ -14,7 +14,7 @@ fn uuidv7(ms: u64, seq: u16) -> [u8; 16] {
     id
 }
 
-// OP-137: round trip, type prefix, fixed length
+// OP-137
 #[test]
 fn round_trips_with_its_prefix() {
     let k = key(1);
@@ -26,7 +26,7 @@ fn round_trips_with_its_prefix() {
     assert_eq!(k.decode("ten", &text), Err(OpaqueIdError::Prefix));
 }
 
-// MD-18: consecutive UUIDv7 values share their time prefix; their external forms share nothing
+// MD-18
 #[test]
 fn hides_time_and_order() {
     let k = key(1);
@@ -45,7 +45,6 @@ fn hides_time_and_order() {
     );
 }
 
-// one spelling per id: other lengths, characters and the unused top bits are refused
 #[test]
 fn refuses_non_canonical_text() {
     let k = key(1);

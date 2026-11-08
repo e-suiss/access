@@ -122,7 +122,7 @@ impl ProjectionError {
     }
 }
 
-// MD-10: SubjectSelector::Party, ParamValue::Subject and Capacity::For
+// MD-10
 const PARTY_TAGS: [&str; 3] = ["party", "subject", "for"];
 
 fn pseudonymize(v: &mut Value, parties: &dyn PartyRefs) -> Result<(), ProjectionError> {

@@ -95,7 +95,7 @@ impl PseudonymKey {
 mod tests {
     use super::*;
 
-    // P52, OP-143 m.15 (d), INV-38, G52: stable per key, different across keys and parties
+    // P52, OP-143 m.15 (d), INV-38, G52
     #[test]
     fn pseudonyms_are_pairwise() {
         let a = PseudonymKey::new(Secret::new([1; 32]));
@@ -108,8 +108,7 @@ mod tests {
         assert_eq!(label(&[0xab; 32]).len(), "access/pseudonym/".len() + 64);
     }
 
-    // §13.7.5, SEC29, TI-RT10: a viewer's pseudonym of an identity is stable for that viewer,
-    // differs across viewers and from the projection pseudonym
+    // §13.7.5, SEC29, TI-RT10
     #[test]
     fn viewer_pseudonyms_are_per_viewer() {
         let k = PseudonymKey::new(Secret::new([1; 32]));

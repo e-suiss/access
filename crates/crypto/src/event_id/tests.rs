@@ -25,7 +25,7 @@ fn matches_the_documented_construction() {
     );
 }
 
-// TI-RT10: ids differ per domain, position, index and key
+// TI-RT10
 #[test]
 fn every_input_changes_the_id() {
     let base = id(1, 7, 5, 2);

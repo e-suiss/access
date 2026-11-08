@@ -48,7 +48,7 @@ fn sub(a: &[u8; 32], b: &[u8; 32]) -> [u8; 32] {
     out
 }
 
-// CR-9 m.4: external ECDSA signatures are accepted with high S
+// CR-9 m.4
 #[test]
 fn es256_accepts_both_s_forms() {
     let key = p256();
@@ -69,7 +69,7 @@ fn es256_accepts_both_s_forms() {
     );
 }
 
-// CR-9: non-DER and out-of-range signatures are rejected
+// CR-9
 #[test]
 fn es256_rejects_malformed_der() {
     let key = p256();
@@ -137,7 +137,7 @@ pub(super) fn rsa_parts(pkcs1: &[u8]) -> (Vec<u8>, Vec<u8>) {
     (n.to_vec(), e.to_vec())
 }
 
-// CR-9 m.5, §10.2.4: RS256 for legacy authenticators, 2048–8192-bit keys
+// CR-9 m.5, §10.2.4
 #[test]
 fn rs256_verifies_and_bounds_the_key() {
     let key = RsaKeyPair::generate(KeySize::Rsa2048).unwrap();
@@ -157,7 +157,7 @@ fn rs256_verifies_and_bounds_the_key() {
     assert!(rsa_key_valid(&parts.n, &[1, 0, 1]));
 }
 
-// TN-97, CR-3 (a): decoy IDs are stable per key and input, and differ across keys
+// TN-97, CR-3 (a)
 #[test]
 fn decoy_key_is_deterministic() {
     let a = DecoyKey::new(Secret::new([7; 32]));

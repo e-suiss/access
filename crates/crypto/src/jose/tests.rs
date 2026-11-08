@@ -16,7 +16,7 @@ fn keys(signer: &dyn Signer, alg: JwsAlg) -> ([u8; 32], KeySet) {
     (kid, set)
 }
 
-// CR-5, CR-9, CR-55 m.8: ES256 and Ed25519 tokens verify on the Kernel's path as native tokens
+// CR-5, CR-9, CR-55 m.8
 #[test]
 fn signed_tokens_verify_in_the_kernel() {
     let (p256, _) = SoftSigner::generate_p256().unwrap();
@@ -33,7 +33,7 @@ fn signed_tokens_verify_in_the_kernel() {
     }
 }
 
-// CR-5: the header names the fully-specified algorithm, never EdDSA
+// CR-5
 #[test]
 fn the_header_is_alg_kid_typ() {
     let (ed, _) = SoftSigner::generate_ed25519().unwrap();
@@ -50,7 +50,7 @@ fn the_header_is_alg_kid_typ() {
     assert!(!token.contains("EdDSA"));
 }
 
-// CR-56 row 16: a token for another typ does not verify
+// CR-56 row 16
 #[test]
 fn another_typ_is_rejected() {
     let (p256, _) = SoftSigner::generate_p256().unwrap();
@@ -62,7 +62,7 @@ fn another_typ_is_rejected() {
     );
 }
 
-// OP-117 m.14: header injection through typ and non-object payloads are refused
+// OP-117 m.14
 #[test]
 fn bad_typ_and_payload_are_refused() {
     let (ed, _) = SoftSigner::generate_ed25519().unwrap();
@@ -80,7 +80,7 @@ fn bad_typ_and_payload_are_refused() {
     }
 }
 
-// CR-24, RFC 7638: the JWK carries the thumbprint members, kid, alg and use
+// CR-24, RFC 7638
 #[test]
 fn public_jwks_name_their_key() {
     let (p256, _) = SoftSigner::generate_p256().unwrap();
@@ -116,7 +116,7 @@ fn public_jwks_name_their_key() {
     assert!(jwk.contains(r#""alg":"Ed25519""#));
 }
 
-// MD-3, CR-6 a: AKP keys are not published while the PQ profile is closed
+// MD-3, CR-6
 #[test]
 fn akp_keys_are_not_published() {
     let key = PublicKey::MlDsa(Algorithm::MlDsa65, vec![0; 1952]);

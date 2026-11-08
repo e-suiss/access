@@ -124,7 +124,7 @@ pub fn verify_client_signature(
 mod tests {
     use super::*;
 
-    // CR-38, U69: a secret matches only its own digest; no Argon2, a fixed-length digest
+    // CR-38, U69
     #[test]
     fn secrets_match_their_digest_only() {
         let d = secret_digest(b"s3cret");
@@ -134,7 +134,7 @@ mod tests {
         assert_ne!(opaque_digest("ab", b""), opaque_digest("a", b"b"));
     }
 
-    // RFC 7636 appendix B, CR-39
+    // CR-39
     #[test]
     fn pkce_s256_vector() {
         let challenge =
@@ -151,7 +151,7 @@ mod tests {
         ));
     }
 
-    // MD-3: the key type must match the algorithm
+    // MD-3
     #[test]
     fn mismatched_key_type_is_rejected() {
         let key = ClientKey::Ed25519([0; 32]);

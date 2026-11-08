@@ -56,7 +56,7 @@ fn refuses_empty_multi_line_and_large_files() {
     }
 }
 
-// OP-52: rotation is picked up on the next check
+// OP-52
 #[test]
 fn reloads_when_the_file_changes() {
     let p = file("rotate", "one", 0o600);
@@ -67,7 +67,7 @@ fn reloads_when_the_file_changes() {
     assert_eq!(s.value().expose(), "two-longer");
 }
 
-// OP-129 m.3: secrets never come from the environment
+// OP-129 m.3
 #[test]
 fn refuses_secret_environment_variables() {
     let names = |v: &[&str]| v.iter().map(|s| (*s).to_owned()).collect::<Vec<_>>();

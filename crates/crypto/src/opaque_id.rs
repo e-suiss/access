@@ -98,7 +98,6 @@ impl IdKey {
                 .iter()
                 .position(|a| *a == c)
                 .ok_or(OpaqueIdError::Encoding)?;
-            // 26 × 5 = 130 bits: the first character carries only 3 (canonical form)
             if i == 0 && digit > 7 {
                 return Err(OpaqueIdError::Encoding);
             }

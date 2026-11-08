@@ -115,7 +115,7 @@ impl IpPseudonymKey {
 mod tests {
     use super::*;
 
-    // OP-151 m.1 (b): stable per key and realm, unlinkable across realms and keys
+    // OP-151 m.1 (b)
     #[test]
     fn pseudonyms_are_per_realm() {
         let a = IpPseudonymKey::new(Secret::new([1; 32]));

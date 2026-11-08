@@ -1,6 +1,6 @@
 use super::*;
 
-// IDP-3: the protocol's published example, "P@ssw0rd"
+// IDP-3
 #[test]
 fn matches_the_range_protocol() {
     assert_eq!(

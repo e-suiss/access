@@ -49,7 +49,7 @@ pub const fn signer_host(target: Target) -> Result<(), UnsafeHost> {
 mod tests {
     use super::*;
 
-    // CR-39, OP-150: only aarch64-apple is refused; other targets start
+    // CR-39, OP-150
     #[test]
     fn the_signer_refuses_apple_silicon() {
         let refused = Target {

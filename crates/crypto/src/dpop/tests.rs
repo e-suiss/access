@@ -18,7 +18,7 @@ fn ring(role: Role) -> NonceRing {
     )
 }
 
-// TN-30, OP-146 m.3: fixed-length SHA-256 replay key, unambiguous over its parts
+// TN-30, OP-146 m.3, SHA-256
 #[test]
 fn replay_key_is_sha256_and_unambiguous() {
     let k = replay_key("POST", "https://a.example/token", "j1");
@@ -40,7 +40,7 @@ fn replay_key_is_sha256_and_unambiguous() {
     );
 }
 
-// TN-29, MD-18: an issued nonce is accepted for its window, the next one and the stale tolerance
+// TN-29, MD-18
 #[test]
 fn nonce_sliding_window_and_stale_tolerance() {
     let r = ring(Role::AuthorizationServer);
@@ -63,7 +63,7 @@ fn nonce_sliding_window_and_stale_tolerance() {
     assert_eq!(r.check(Some(&n), start - 1), Err(NonceError::Future));
 }
 
-// TN-29: a nonce-less proof is rejected; tampered or foreign nonces fail
+// TN-29
 #[test]
 fn nonce_missing_malformed_or_forged() {
     let r = ring(Role::AuthorizationServer);
@@ -87,7 +87,7 @@ fn nonce_missing_malformed_or_forged() {
     assert_eq!(other_realm.check(Some(&n), T0), Err(NonceError::Mismatch));
 }
 
-// TN-29, CR-3 (b): authorization server and resource server nonces are separate
+// TN-29, CR-3 (b)
 #[test]
 fn as_and_rs_nonces_are_separate() {
     let a = ring(Role::AuthorizationServer);
@@ -107,7 +107,7 @@ fn as_and_rs_nonces_are_separate() {
     );
 }
 
-// TN-29: rotation keeps the previous generation accepted and drops the one before
+// TN-29
 #[test]
 fn nonce_key_rotation() {
     let mut r = ring(Role::AuthorizationServer);
@@ -122,7 +122,7 @@ fn nonce_key_rotation() {
     assert_eq!(r.check(Some(&second), T0), Ok(()));
 }
 
-// TN-29, MD-18: the stale tolerance is at most 5 minutes; there is no 60 s nonce model
+// TN-29, MD-18
 #[test]
 fn nonce_policy_bounds() {
     assert_eq!(

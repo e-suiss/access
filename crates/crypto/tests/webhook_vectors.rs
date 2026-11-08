@@ -24,7 +24,7 @@ mod vectors {
         v[k].as_str().unwrap()
     }
 
-    // TN-136, E42: v1a (Ed25519) and v1 (HMAC) signatures are exact and verify
+    // TN-136, E42
     #[test]
     fn tn_136_webhook_signatures_match_the_shared_vectors() {
         let v = load();
@@ -51,7 +51,7 @@ mod vectors {
         }
     }
 
-    // TN-135, TN-136: tampering, another id, a stale timestamp and swapped tags are refused
+    // TN-135, TN-136
     #[test]
     fn tn_136_webhook_rejections_match_the_shared_vectors() {
         let v = load();

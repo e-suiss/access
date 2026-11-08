@@ -164,14 +164,14 @@ fn payload_of(jwt: &str) -> String {
     String::from_utf8(b64url_decode(p).unwrap()).unwrap()
 }
 
-// MD-10: no internal PartyID leaves the domain
+// MD-10
 fn assert_no_party_ids(payload: &str) {
     for id in [ACTOR, PRINCIPAL, RECIPIENT] {
         assert!(!payload.contains(&b64url_encode(&id.0)), "{payload}");
     }
 }
 
-// OP-143 m.6 (a), L0-SIG-50…52: the PAP container verifies in the Kernel, bound to its holder
+// OP-143 m.6 (a), L0-SIG-50…52
 #[test]
 fn pap_sd_jwt_verifies_in_the_kernel() {
     for domain_key in signers() {
@@ -249,7 +249,7 @@ fn pap_sd_jwt_verifies_in_the_kernel() {
     }
 }
 
-// MD-10, INV-38, L0-ENC-21: parties are pseudonyms, digests are tagged
+// MD-10, INV-38, L0-ENC-21
 #[test]
 fn pap_claims_map_the_pap() {
     let [p256, _] = signers();
@@ -283,7 +283,7 @@ fn pap_claims_map_the_pap() {
     );
 }
 
-// MD-10: a party without a pseudonym is never projected
+// MD-10
 #[test]
 fn a_party_without_pseudonym_is_refused() {
     let [p256, _] = signers();
@@ -388,7 +388,7 @@ fn verify_token(
     )
 }
 
-// §9.9.1, §9.9.4, §9.13.5, RFC 9068: exact-intent and bounds tokens verify in the Kernel
+// §9.9.1, §9.9.4, §9.13.5, RFC 9068
 #[test]
 fn access_tokens_verify_in_the_kernel() {
     let f = fixture(false);
@@ -450,7 +450,7 @@ fn access_tokens_verify_in_the_kernel() {
     }
 }
 
-// §9.9.3 rule 1, §9.13.5: one audience from the contract; RAR types name exact actions
+// §9.9.3 rule 1, §9.13.5
 #[test]
 fn access_token_inputs_are_checked() {
     let f = fixture(false);
@@ -491,7 +491,7 @@ fn access_token_inputs_are_checked() {
     );
 }
 
-// L0-ENC-21, RFC 7493: digests tagged, integers within I-JSON, no tags
+// L0-ENC-21, RFC 7493
 #[test]
 fn cbor_maps_to_i_json() {
     assert_eq!(
@@ -532,9 +532,7 @@ fn cbor_maps_to_i_json() {
     );
 }
 
-// TNI-13, MD-9, TN-70: support acting for a subject is a for(P) projection of the one access
-// token type: `sub` is the subject and `act` names the operator; a token naming the subject
-// as `sub` without `act` comes only from the subject's own capacity, never from an operator
+// TNI-13, MD-9, TN-70
 #[test]
 fn support_names_the_subject_and_the_operator() {
     let f = fixture(false);

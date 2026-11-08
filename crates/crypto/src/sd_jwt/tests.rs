@@ -62,7 +62,7 @@ fn names(n: &[&str]) -> BTreeSet<String> {
     n.iter().map(|s| String::from(*s)).collect()
 }
 
-// RFC 9901, L0-SIG-50: the Kernel applies exactly the revealed disclosures
+// RFC 9901, L0-SIG-50
 #[test]
 fn sd_jwts_verify_in_the_kernel() {
     let (issuer, _) = SoftSigner::generate_p256().unwrap();
@@ -98,7 +98,7 @@ fn sd_jwts_verify_in_the_kernel() {
     assert!(v.claims.get("_sd").is_none());
 }
 
-// L0-SIG-50: a domain always writes _sd_alg; _sd is sorted and only digests
+// L0-SIG-50
 #[test]
 fn the_payload_carries_sorted_digests_and_sd_alg() {
     let (issuer, _) = SoftSigner::generate_ed25519().unwrap();
@@ -127,7 +127,7 @@ fn the_payload_carries_sorted_digests_and_sd_alg() {
     assert!(payload.get("given_name").is_none());
 }
 
-// RFC 9901 §4.3, L0-SIG-52: the key binding JWT is accepted with either holder algorithm
+// RFC 9901 §4.3, L0-SIG-52
 #[test]
 fn holder_bound_presentations_verify() {
     let (issuer, _) = SoftSigner::generate_ed25519().unwrap();
@@ -172,7 +172,7 @@ fn holder_bound_presentations_verify() {
     }
 }
 
-// RFC 9901 §4.2, L0-SIG-51: reserved, repeated and verifier-checked claims are refused
+// RFC 9901 §4.2, L0-SIG-51
 #[test]
 fn bad_claim_sets_are_refused() {
     let (issuer, _) = SoftSigner::generate_ed25519().unwrap();

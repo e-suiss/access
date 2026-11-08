@@ -138,7 +138,7 @@ mod tests {
         TokenKey::new(Secret::new([7; 32]))
     }
 
-    // OP-141 m.22 (d), TI-RT10: a token opens only for its domain and kind
+    // OP-141 m.22 (d), TI-RT10
     #[test]
     fn a_token_opens_for_its_domain_and_kind_only() {
         let t = key().seal(&[1; 32], "basis_ref", b"17").unwrap();
