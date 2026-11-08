@@ -126,8 +126,7 @@ fn header<'a>(s: &'a Seen, name: &str) -> &'a str {
     &s.headers.iter().find(|(k, _)| k == name).unwrap().1
 }
 
-// TN-135, TN-136, E42: a call is signed v1a over webhook-id.webhook-timestamp.body, verifiable
-// with the registration's public key by any Standard Webhooks verifier
+// TN-135, TN-136, E42
 #[tokio::test]
 async fn tn_135_calls_are_signed_per_standard_webhooks() {
     let shared = Arc::new(Mutex::new(Seen::default()));
@@ -166,8 +165,7 @@ async fn tn_135_calls_are_signed_per_standard_webhooks() {
     assert_eq!(body["data"]["account"], "usr_01jc4x0f8c2q4a7r5w3v9y6k1m");
 }
 
-// TN-135, MD-8: a hook that does not answer within 3 s refuses the sign-in; a token_issuance
-// hook with continue_without_claims lets the token through without claims
+// TN-135, MD-8
 #[tokio::test(start_paused = true)]
 async fn md_8_a_silent_hook_refuses() {
     let (t, r) = ids();
@@ -192,7 +190,7 @@ async fn md_8_a_silent_hook_refuses() {
     assert_eq!(lenient.call(t, r, token()).await, Outcome::proceed());
 }
 
-// TN-135, MD-8: no live hook changes nothing; a registry that cannot answer refuses
+// TN-135, MD-8
 #[tokio::test]
 async fn md_8_no_hook_changes_nothing_and_an_unreadable_registry_refuses() {
     let (t, r) = ids();

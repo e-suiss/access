@@ -14,9 +14,7 @@ fn refused(o: &Outcome) -> Option<&Refusal> {
     }
 }
 
-// TN-135, MD-8, OP-151 m.3 (j): the fail-closed matrix. A timeout, a non-2xx answer or an
-// answer outside its schema refuses at every call point; only token_issuance with
-// continue_without_claims lets a missing answer through, and never a violation
+// TN-135, MD-8, OP-151 m.3 (j)
 #[test]
 fn tn_135_md_8_hooks_fail_closed() {
     use HookPoint::{PostLogin, PreRegistration, TokenIssuance};
@@ -74,7 +72,7 @@ fn tn_135_md_8_hooks_fail_closed() {
     );
 }
 
-// TN-135: a refusing call point may only refuse; an allow goes on with no claims
+// TN-135
 #[test]
 fn tn_135_refusing_points_only_refuse() {
     for point in [HookPoint::PreRegistration, HookPoint::PostLogin] {
@@ -110,8 +108,7 @@ fn tn_135_refusing_points_only_refuse() {
     }
 }
 
-// MUST-NEVER-18, TN-135, OP-150 m.11 (e), INV-12: a hook never writes a reserved protocol claim
-// or an authority claim; one bad name drops the whole answer and fails closed
+// MUST-NEVER-18, TN-135, OP-150 m.11 (e), INV-12
 #[test]
 fn must_never_18_hook_claims_are_identity_only() {
     for name in RESERVED_CLAIMS.into_iter().chain(AUTHORITY_CLAIMS) {
@@ -168,8 +165,7 @@ fn must_never_18_hook_claims_are_identity_only() {
     assert_eq!(out["plan"], "pro");
 }
 
-// TN-135, §14.3: a hook target is https on a DNS name; no IP literal, user info or fragment, and
-// no private name or other port unless the realm allows private targets
+// TN-135, §14.3
 #[test]
 fn tn_135_private_targets_are_refused() {
     for ok in [
@@ -213,8 +209,7 @@ fn tn_135_private_targets_are_refused() {
     assert_eq!(spec.check(false), Err(Invalid("disclose")));
 }
 
-// TN-135, OP-73: the request carries pseudonymous ids; the e-mail only when disclosed and the
-// realm allows it
+// TN-135, OP-73
 #[test]
 fn tn_135_requests_carry_pseudonymous_ids_only() {
     let mut reg = Registration {
@@ -253,8 +248,7 @@ fn tn_135_requests_carry_pseudonymous_ids_only() {
     );
 }
 
-// EI-25, OP-151 m.3 (j): a hook change is bound by its digest; a URL change is a different
-// change
+// EI-25, OP-151 m.3 (j)
 #[test]
 fn ei_25_hook_changes_are_digested() {
     let spec = HookSpec {
@@ -287,9 +281,7 @@ fn ei_25_hook_changes_are_digested() {
     assert_eq!(r.action(), ExtensionAction::HookRetire);
 }
 
-// OP-151 m.10 (e), OP-149 m.23, MD-8: a private target needs the realm's permission and the
-// operator's declaration; the stored policy round-trips, nothing stored is closed, and a
-// malformed one is refused rather than read as open
+// OP-151 m.10 (e), OP-149 m.23, MD-8
 #[test]
 fn extension_policy_is_closed_by_default_and_strict_when_stored() {
     let closed = ExtensionPolicy::from_stored(None).unwrap();

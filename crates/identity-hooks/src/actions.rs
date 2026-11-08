@@ -108,8 +108,7 @@ pub fn spp(namespace: &str, publisher: Id) -> Spp {
 mod tests {
     use super::*;
 
-    // OP-151 m.3 (i), (j), m.4, m.10 (d): the names are exactly these, merged into the idp.*
-    // catalogue; registration is CT2 and retiring narrows
+    // OP-151 m.3 (i), (j), m.4, m.10 (d)
     #[test]
     fn extension_actions_are_named_and_tiered() {
         let labels: Vec<String> = ExtensionAction::ALL.iter().map(|a| a.label()).collect();

@@ -42,7 +42,7 @@ impl<K: KeyVault> HookRegistry for PgRegistry<K> {
             .await
             .map_err(down)?;
         t.commit().await.map_err(down)?;
-        // OP-151 m.10 (e): an unreadable policy refuses the call (MD-8)
+        // OP-151 m.10 (e), MD-8
         let policy = ExtensionPolicy::from_stored(stored.extension.as_deref()).map_err(down)?;
         let Some(row) = row else {
             return Ok(None);
