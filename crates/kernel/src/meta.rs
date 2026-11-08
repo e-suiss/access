@@ -521,8 +521,6 @@ impl From<ModelError> for MetaError {
     }
 }
 
-// ---------------------------------------------------------------- encoding
-
 fn id(v: &Value) -> Result<Id, ModelError> {
     Id::from_value(v)
 }
@@ -1233,7 +1231,7 @@ fn acceptance_content(v: &Value) -> Result<Value, ModelError> {
     set_of(f.req("classes")?, true, crate::codec::ident)?;
     SubjectSelector::from_value(f.req("subject")?)?;
     f.opt("anchor").map(id).transpose()?;
-    // OP-150: a pinned key-set issuer is a Party of this domain
+    // OP-150
     if let Some(p) = f.opt("pinned") {
         if foreign {
             return Err(ModelError::Shape);
@@ -1313,8 +1311,6 @@ impl Payload {
         Ok(context_label("access/meta/v1", &self.to_bytes()?))
     }
 }
-
-// ---------------------------------------------------------------- identifiers and keys
 
 /// `SHA-256("access/exercise/v1" ‖ 0x00 ‖ dCBOR([DomainID, nonce]))` (OP-141 m.6).
 ///
@@ -1440,8 +1436,6 @@ pub trait View {
     /// The value of `key`, if present.
     fn get(&self, key: &[u8]) -> Option<Value>;
 }
-
-// ---------------------------------------------------------------- stored objects
 
 /// How an object ended.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1996,8 +1990,6 @@ fn live<T>(ended: Option<Ended>, t: T) -> Result<T, MetaError> {
     }
 }
 
-// ---------------------------------------------------------------- genesis
-
 /// The objects Genesis creates, as effects (C4, OP-141 m.6). The meta-anchor is the first Anchor.
 ///
 /// # Errors
@@ -2198,8 +2190,6 @@ pub fn sorted(effects: Vec<Effect>) -> Vec<Effect> {
 pub fn meta_anchor(domain: &Digest) -> Id {
     object_id(domain, kind::ANCHOR, 0)
 }
-
-// ---------------------------------------------------------------- powers
 
 /// Who is acting.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -3096,7 +3086,7 @@ pub fn apply(ctx: &Context<'_>, payload: &Payload, view: &dyn View) -> Result<Ou
             offline_slice,
             ..
         } => {
-            // OP-143 m.12: a slice is for offline or intermittent use, from a holding
+            // OP-143 m.12
             if offline_slice.is_some()
                 && (!matches!(
                     class,
