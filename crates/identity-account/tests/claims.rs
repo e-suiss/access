@@ -226,9 +226,7 @@ fn statements(plane: &Plane) -> Vec<Statement> {
         .collect()
 }
 
-// TN-49, §12.3.1, OP-150 L2, OP-10, E3: a status change queues the realm issuer's account_status
-// Claim in its own transaction; the courier issues it about the subject's Party in the realm's
-// governing domain, and the next status supersedes it
+// TN-49, §12.3.1, OP-150 L2, OP-10, E3
 #[tokio::test]
 async fn status_changes_become_superseding_status_claims() {
     let e = Env::new(0x31, true).await;
@@ -270,8 +268,7 @@ async fn status_changes_become_superseding_status_claims() {
     assert!(plane.got.lock().unwrap().iter().all(|s| s.body.is_none()));
 }
 
-// E5, §10.1.1 seam, K17: an order whose subject has no Party, or whose realm has no issuer, is no
-// Claim; an outage of Claim Ingest leaves the order queued and the identity event done
+// E5, §10.1.1, K17
 #[tokio::test]
 async fn orders_wait_for_the_plane_and_need_a_party_and_an_issuer() {
     let e = Env::new(0x32, true).await;
@@ -315,8 +312,7 @@ async fn orders_wait_for_the_plane_and_need_a_party_and_an_issuer() {
     ));
 }
 
-// §10.1.5 binding, F17, TN-103: an authentication bound to the session is bound to the device
-// Instance that session registered, and carries its assurance in the envelope
+// §10.1.5, F17, TN-103
 #[tokio::test]
 async fn session_authentications_bind_the_registered_instance() {
     let e = Env::new(0x34, true).await;
@@ -379,9 +375,7 @@ impl access_identity_account::ports::BreachRanges for NoBreaches {
     }
 }
 
-// §10.1.3, OP-150 m.12 (j), OP-152 m.5 (l), K04: a password is an authenticator bound by an
-// authenticator_binding Claim; a new password ends the old one's line and opens its own, naming
-// the credential by digest and never its hash
+// §10.1.3, OP-150 m.12 (j), OP-152 m.5 (l), K04
 #[tokio::test]
 async fn password_changes_become_authenticator_binding_claims() {
     use access_identity_account::adapters::system::SystemEntropy;

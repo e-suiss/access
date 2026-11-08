@@ -418,8 +418,7 @@ pub async fn remove_credential<D: AccountDb>(
         Revoke::LastMethod => return Err(AccountError::LastMethod),
     }
     credential_signal(&mut tx, subject, signal_kind, ChangeType::Revoke).await?;
-    // IDP-2, OP-150 L2, OP-150 m.12 (j): the authenticator's binding line ends; no Instance
-    // changes
+    // IDP-2, OP-150 L2, OP-150 m.12 (j)
     let bound = match kind {
         PASSKEY => Some(AuthenticatorKind::Passkey),
         PASSWORD => Some(AuthenticatorKind::Password),

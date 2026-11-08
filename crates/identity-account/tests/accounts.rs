@@ -390,8 +390,7 @@ async fn weaker_hashes_are_upgraded_on_sign_in() {
     );
 }
 
-// CR-37, OP-150 m.3 (f), TI-9: every password hash is sealed under the realm's pepper; one
-// sealed before the pepper is resealed under it at the next sign-in
+// CR-37, OP-150 m.3 (f), TI-9
 #[tokio::test]
 async fn password_hashes_are_always_peppered() {
     use access_identity_account::app::sealing::{open, seal, subject_key};
@@ -575,9 +574,7 @@ async fn a_full_semaphore_sheds_with_503() {
     assert_eq!(hasher.metrics().shed(), busy);
 }
 
-// §10.2.1, CR-36, IDP-3, MD-18, OP-33, SA-31, TN-83: no dummy Argon2; a missing, suspended or
-// deactivated account takes a semaphore permit but computes no hash; only an account with a
-// stored hash costs one
+// §10.2.1, CR-36, IDP-3, MD-18, OP-33, SA-31, TN-83
 #[tokio::test]
 async fn no_dummy_argon2_for_absent_or_inactive_accounts() {
     let e = env(4, "ia-d").await;

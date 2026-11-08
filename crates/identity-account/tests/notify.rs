@@ -273,7 +273,7 @@ impl Env {
         )
         .await
         .unwrap();
-        // OP-151 m.3 (i): account.created belongs to the webhook fan-out; the courier passes it
+        // OP-151 m.3 (i)
         let deadline = Instant::now() + Duration::from_secs(20);
         while access_store::identity::poll(&self.db.reader, Cursor::default(), 1_000)
             .await
@@ -360,8 +360,7 @@ impl Env {
     }
 }
 
-// E42, OP-10, OP-131, OP-146 m.4 (b): queued with the business change, delivered as a
-// CloudEvent once the transaction commits
+// E42, OP-10, OP-131, OP-146 m.4 (b)
 #[tokio::test]
 async fn a_committed_message_reaches_relay_as_a_cloud_event() {
     let e = env(1, "rn-a").await;
@@ -394,7 +393,7 @@ async fn a_committed_message_reaches_relay_as_a_cloud_event() {
     assert_eq!(e.relay.posts().len(), 1);
 }
 
-// OP-10, E42: a rolled-back transaction leaves no message
+// OP-10, E42
 #[tokio::test]
 async fn a_rolled_back_message_is_never_sent() {
     let e = env(2, "rn-b").await;
@@ -423,7 +422,7 @@ async fn a_rolled_back_message_is_never_sent() {
     );
 }
 
-// E42 m.5, OP-131: while Relay is down the message waits with growing backoff, then goes
+// E42 m.5, OP-131
 #[tokio::test]
 async fn messages_wait_in_the_outbox_while_relay_is_down() {
     let e = env(3, "rn-c").await;
@@ -458,8 +457,7 @@ async fn messages_wait_in_the_outbox_while_relay_is_down() {
     assert_eq!(e.relay.accepted().len(), 1);
 }
 
-// OP-131, OP-63: a crash between Relay's acceptance and the cursor write sends the same event
-// id again; Relay's deduplication makes the redelivery harmless
+// OP-131, OP-63
 #[tokio::test]
 async fn redelivery_after_a_lost_acknowledgement_carries_the_same_id() {
     let e = env(4, "rn-d").await;
@@ -492,8 +490,7 @@ impl Env {
     }
 }
 
-// OP-131, E42 m.5: a subject's messages arrive in the order they were committed, also across
-// a Relay outage
+// OP-131, E42 m.5
 #[tokio::test]
 async fn messages_keep_their_commit_order() {
     let e = env(5, "rn-e").await;
@@ -517,8 +514,7 @@ async fn messages_keep_their_commit_order() {
     assert_eq!(order, want);
 }
 
-// OP-73, OP-131: a message Relay refuses for good is recorded and passed; the outbox row
-// stays and later messages still go
+// OP-73, OP-131
 #[tokio::test]
 async fn a_poison_message_is_recorded_and_passed_without_loss() {
     let e = env(6, "rn-f").await;
@@ -546,7 +542,7 @@ async fn a_poison_message_is_recorded_and_passed_without_loss() {
     assert_eq!(e.outbox_rows(2).await.len(), 2, "nothing left the outbox");
 }
 
-// E42 m.5: a code that expired while Relay was down is not sent late
+// E42 m.5
 #[tokio::test]
 async fn an_expired_code_is_not_sent() {
     let e = env(7, "rn-g").await;
@@ -559,8 +555,7 @@ async fn an_expired_code_is_not_sent() {
     assert_eq!(e.undelivered().await[0].1, "expired");
 }
 
-// OP-73, OP-74 m.6: shredding the subject makes its queued messages unreadable; the courier
-// records them and moves on
+// OP-73, OP-74 m.6
 #[tokio::test]
 async fn a_shredded_subject_gets_nothing() {
     let e = env(8, "rn-h").await;
@@ -584,7 +579,7 @@ async fn a_shredded_subject_gets_nothing() {
     assert_eq!(e.undelivered().await[0].1, "shredded");
 }
 
-// OP-131: other consumers' events are passed
+// OP-131
 #[tokio::test]
 async fn other_outbox_kinds_are_skipped() {
     let e = env(9, "rn-i").await;
@@ -600,7 +595,7 @@ async fn other_outbox_kinds_are_skipped() {
     assert_ne!(c, Cursor::default());
 }
 
-// OP-12: a message is queued only for a subject of the transaction's realm
+// OP-12
 #[tokio::test]
 async fn a_message_needs_a_subject_of_the_realm() {
     let e = env(10, "rn-j").await;
@@ -612,7 +607,7 @@ async fn a_message_needs_a_subject_of_the_realm() {
     tx.rollback().await.unwrap();
 }
 
-// OP-64, OP-74 m.6, E42: addresses and codes self-redact, and the outbox holds them sealed
+// OP-64, OP-74 m.6, E42
 #[tokio::test]
 async fn secrets_and_addresses_never_show() {
     let e = env(11, "rn-k").await;
@@ -662,7 +657,7 @@ async fn secrets_and_addresses_never_show() {
     );
 }
 
-// OP-74 m.6: the envelope opens only with the subject's key and unchanged
+// OP-74 m.6
 #[test]
 fn the_envelope_is_bound_to_its_header_and_key() {
     let s = [7; 16];
@@ -696,7 +691,7 @@ fn the_envelope_is_bound_to_its_header_and_key() {
     assert!(parse(&sealed[..40]).is_err());
 }
 
-// OP-146 m.4 (b): the contract refuses what it cannot carry
+// OP-146 m.4 (b)
 #[test]
 fn the_contract_validates_its_fields() {
     let mut m = otp([1; 16], 1);
@@ -722,7 +717,7 @@ fn the_contract_validates_its_fields() {
     assert!(m.validate().is_err());
 }
 
-// OP-131, E42 m.5: Relay answers and backoff (PD values)
+// OP-131, E42 m.5
 #[test]
 fn relay_answers_are_classified_and_backoff_grows_to_a_ceiling() {
     assert_eq!(classify(202, None), Ok(()));
@@ -795,7 +790,7 @@ fn check(schema: &Value, root: &Value, v: &Value, path: &str) -> Vec<String> {
     errs
 }
 
-// OP-146 m.4 (b): every message kind matches the published JSON Schema
+// OP-146 m.4 (b)
 #[test]
 fn every_kind_matches_the_json_schema() {
     let schema: Value =
@@ -946,8 +941,7 @@ fn sample_event() -> CloudEvent {
     cloud_event(&header, "usr_x", &notice([4; 16], START_MS)).unwrap()
 }
 
-// E42, OP-146 m.4 (b), CR-35, OP-63: the HTTPS adapter posts the CloudEvent with the bearer
-// credential from its file and the event id as Idempotency-Key, and maps Relay's answers
+// E42, OP-146 m.4 (b), CR-35, OP-63
 #[tokio::test]
 async fn the_https_adapter_posts_and_classifies() {
     for (status, extra, want) in [
@@ -987,7 +981,7 @@ async fn the_https_adapter_posts_and_classifies() {
     }
 }
 
-// E42 m.5: an unreachable Relay is a transient failure; only https endpoints exist (TI-9)
+// E42 m.5, TI-9
 #[tokio::test]
 async fn an_unreachable_relay_is_transient() {
     let srv = relay_server("202 Accepted", "").await;

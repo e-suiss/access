@@ -462,7 +462,7 @@ mod tests {
         }
     }
 
-    // TI-RT10, OP-73: the outbox form holds ids and codes; it round-trips
+    // TI-RT10, OP-73
     #[test]
     fn signals_round_trip_through_the_outbox() {
         let s = Signal::credential_change(
@@ -482,7 +482,7 @@ mod tests {
         assert!(Signal::from_outbox("signal.other", b"{}").is_err());
     }
 
-    // §12.2.4: an assurance step names its direction
+    // §12.2.4
     #[test]
     fn assurance_levels_name_the_direction() {
         let s = Signal::assurance_level([0; 32], [0; 16], "aal2", Some("aal1"), 0);

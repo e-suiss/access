@@ -86,7 +86,7 @@ fn all() -> Vec<ClaimOrder> {
     ]
 }
 
-// OP-150 L2, CMP-8, OP-10: every order survives the outbox
+// OP-150 L2, CMP-8, OP-10
 #[test]
 fn orders_survive_the_outbox() {
     for o in all() {
@@ -97,9 +97,7 @@ fn orders_survive_the_outbox() {
     assert_eq!(ClaimOrder::from_bytes(b"junk"), Err(BadOrder));
 }
 
-// L2-CLB-1, L2-CLB-2, L2-CLB-3, §10.1.2, §10.1.5: each order becomes a statement whose value
-// fits its class and whose disclosed body matches the value; a withheld body leaves the Claim
-// digest-valued
+// L2-CLB-1, L2-CLB-2, L2-CLB-3, §10.1.2, §10.1.5
 #[test]
 fn prepared_claims_fit_their_classes() {
     for o in all() {
@@ -123,8 +121,7 @@ fn prepared_claims_fit_their_classes() {
     assert!(matches!(posture.statement.value, Some(EqValue::Bytes(ref d)) if d.len() == 32));
 }
 
-// §10.1.5 binding, §9.14.1: a session binding resolves to the Instance the session registered,
-// a statement binding carries H(AAS) in the envelope and in the body
+// §10.1.5, §9.14.1
 #[test]
 fn bindings_reach_the_envelope() {
     let s = login(Bind::Session([8; 16]))
@@ -151,7 +148,7 @@ fn bindings_reach_the_envelope() {
     .prepare(&placement(150))
     .unwrap();
     assert_eq!(p.statement.bound_intent, Some(Digest([9; 32])));
-    // OP-149 m.33 (c): the approval's Claim is bound to the approver's Instance too
+    // OP-149 m.33 (c)
     assert_eq!(p.statement.bound_instance, Some(Id([3; 16])));
     let body = check(&p.statement, p.body.as_deref()).unwrap();
     assert!(matches!(
@@ -164,8 +161,7 @@ fn contains(hay: &[u8], needle: &[u8]) -> bool {
     hay.windows(needle.len()).any(|w| w == needle)
 }
 
-// K16, E26, §7.9.15.1, §10.1.2 rule 1, §16.3.1 CMP-15.7: a passkey Claim carries only the digest
-// of its public material; the credential id and the public key never leave the identity plane
+// K16, E26, §7.9.15.1, §10.1.2 rule 1, §16.3.1 CMP-15.7
 #[test]
 fn claims_carry_digests_not_material() {
     // EI-15
@@ -182,8 +178,7 @@ fn claims_carry_digests_not_material() {
     }
 }
 
-// §10.1.3 IDP-2, §10.1.5, E26: the binding of a subject to its Party is an identity_binding_person
-// Claim on the subject's binding line that carries only the digest of its proof
+// §10.1.3 IDP-2, §10.1.5, E26
 #[test]
 fn identity_binding_carries_the_proof_digest_only() {
     let o = identity_binding(SUBJECT, BindingKind::Person, &PROOF, 100);
@@ -200,8 +195,7 @@ fn identity_binding_carries_the_proof_digest_only() {
     }
 }
 
-// §7.1, §12.0.3, X36, XI-23, OP-150 L6: a session's authentications form one line; signing out
-// ends it with a Claim that holds for no time, and nothing else
+// §7.1, §12.0.3, X36, XI-23, OP-150 L6
 #[test]
 fn sign_out_ends_the_sessions_authentication_line() {
     let session = [0x5e; 16];
@@ -228,9 +222,7 @@ fn sign_out_ends_the_sessions_authentication_line() {
     assert_eq!(back, ended);
 }
 
-// IDP-2, K04, IDI-3: adding and removing an authenticator are lines of authenticator_binding
-// Claims about the Party; a removal supersedes the last Claim and holds for no time, and neither
-// binds a new Instance
+// IDP-2, K04, IDI-3
 #[test]
 fn removal_ends_the_authenticator_line() {
     let added = passkey();
@@ -248,9 +240,7 @@ fn removal_ends_the_authenticator_line() {
     assert_eq!(added.prepare(&p).unwrap().statement.bound_instance, None);
 }
 
-// §10.1.3 IDI-3, §7.6 TN-O4: an attestation is a posture signal, never an Instance or a key
-// binding; only a verified statement is compliant, none or self attestation says nothing, and a
-// risk signal is a scalar Claim that binds nothing and holds for a day
+// §10.1.3 IDI-3, §7.6 TN-O4
 #[test]
 fn attestation_is_a_posture_signal_only() {
     assert_eq!(
@@ -296,7 +286,7 @@ fn attestation_is_a_posture_signal_only() {
     }
 }
 
-// TN-49, §12.3.1: a status Claim is the scalar status, open-ended, on the subject's status line
+// TN-49, §12.3.1
 #[test]
 fn status_claims_hold_until_superseded() {
     let s = account_status(SUBJECT, "deactivated", 100)

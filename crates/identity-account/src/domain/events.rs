@@ -225,8 +225,7 @@ impl EventOrder {
 mod tests {
     use super::*;
 
-    // OP-151 m.3 (i), TN-49: every status move names one event or none; a terminal move after
-    // deprovisioning names none
+    // OP-151 m.3 (i), TN-49
     #[test]
     fn status_moves_name_their_event() {
         use AccountStatus as S;
@@ -258,7 +257,7 @@ mod tests {
         }
     }
 
-    // OP-73, TN-136: a payload carries ids only
+    // OP-73, TN-136
     #[test]
     fn payloads_hold_ids_only() {
         let e = EventOrder::credential(
