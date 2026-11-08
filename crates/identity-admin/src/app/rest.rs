@@ -1140,6 +1140,9 @@ pub enum Kind {
     Deliveries,
     /// The social presets the realm enabled, with their warnings (IDP-31, TN-87).
     Socials,
+    /// Organizations by their Party's base64url, each with its members and roots, domain
+    /// claims, ownership handovers and connection drafts (§8.5 S7, §12.3.8, OP-153 m.10 (c)).
+    Organizations,
 }
 
 /// How many days the analytics read covers, today included (PD).
@@ -1196,6 +1199,20 @@ fn delivery_view(d: &access_store::extensions::DeliveryLogRow) -> Json {
     })
 }
 
+/// A stored signed Unix-ms time as RFC 3339.
+fn at_ms(ms: i64) -> String {
+    rfc3339(u64::try_from(ms).unwrap_or(0))
+}
+
+/// An organization in a list (OP-153 m.10 (c)): its external id is its Party's base64url.
+fn organization_summary(o: &access_store::orgs::OrgRow) -> Json {
+    json!({
+        "organization": b64url_encode(&o.party),
+        "display_name": o.display_name,
+        "hrd": o.hrd,
+    })
+}
+
 /// A delivery log cursor: the queue time as stored and the event id.
 fn delivery_cursor(after: &str) -> Option<(&str, &str)> {
     after.split_once('|')
@@ -1222,6 +1239,63 @@ fn full<T>(rows: &[T], limit: u32, key: impl Fn(&T) -> String) -> Option<String>
 }
 
 impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
+    /// One organization as S7 reads it (§8.5 S7, §8.17.7.6, TN-91, TN-90, TN-120): its roots
+    /// and members with how each joined (the membership source, apart from any sign-in source),
+    /// its role's versioned Grant and any autojoin cooling, its domain claims with their watch
+    /// state, its ownership handovers and its connection drafts. Ownership is root standing,
+    /// never billing.
+    async fn organization_view(
+        &self,
+        t: &mut TenantTx,
+        org: &access_store::orgs::OrgRow,
+    ) -> Result<Json, AdminError> {
+        let account = |s: [u8; 16]| self.ids.encode(SUBJECT_PREFIX, s).unwrap_or_default();
+        let members = t.members(org.id).await?;
+        let domains = t.open_domain_claims(Some(org.id)).await?;
+        let handovers = t.transfers(org.id).await?;
+        let drafts = t.sso_drafts(org.id).await?;
+        Ok(json!({
+            "organization": b64url_encode(&org.party),
+            "display_name": org.display_name,
+            "hrd": org.hrd,
+            "roots": members.iter().filter(|m| m.owner).count(),
+            "members": members.iter().map(|m| json!({
+                "account_id": account(m.subject),
+                "owner": m.owner,
+                "membership_source": m.source.word(),
+                "role": m.role.as_ref().map(|(n, v)| json!({ "name": n, "version": v })),
+                "role_grant": m.grant_state,
+                "grant": m.grant.map(|g| b64url_encode(&g)),
+                "cooling_until": m.cooling_until_ms.map(at_ms),
+                "joined_at": at_ms(m.joined_ms),
+            })).collect::<Vec<_>>(),
+            "domains": domains.iter().map(|d| json!({
+                "domain": d.domain,
+                "method": d.method,
+                "verified_at": d.verified_ms.map(at_ms),
+                "reverify_by": d.reverify_ms.map(at_ms),
+                "changed_at": d.changed_ms.map(at_ms),
+                "contested_at": d.contested_ms.map(at_ms),
+                "autojoin": d.autojoin,
+                "claimed": d.claimed,
+            })).collect::<Vec<_>>(),
+            "handovers": handovers.iter().map(|h| json!({
+                "handover": b64url_encode(&h.id),
+                "from": account(h.from),
+                "to": account(h.to),
+                "state": h.state.word(),
+                "effective_at": at_ms(h.effective_ms),
+                "dns_recovery": h.dns_recovery,
+            })).collect::<Vec<_>>(),
+            "connection_drafts": drafts.iter().filter(|d| !d.withdrawn).map(|d| json!({
+                "protocol": d.protocol,
+                "issuer": d.issuer,
+                "client_id": d.client_id,
+                "drafted_by": b64url_encode(&d.drafted_by),
+            })).collect::<Vec<_>>(),
+        }))
+    }
+
     /// A `PUT` upsert by natural key (OP-65): a group or upstream provider that exists is
     /// updated, otherwise created. Prepare and commit resolve alike; a state change between
     /// them changes the intent, and the commit is refused.
@@ -1404,6 +1478,35 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                         .map(|r| (social_view(r, apple), r.position))
                         .collect(),
                     last: None,
+                }
+            }
+            (Kind::Organizations, Some(k)) => {
+                let Some(party) = b64url_decode(k)
+                    .ok()
+                    .and_then(|b| <[u8; 16]>::try_from(b).ok())
+                else {
+                    return Ok(Read::default());
+                };
+                let Some(org) = t.org_by_party(party).await?.filter(|o| !o.ended) else {
+                    return Ok(Read::default());
+                };
+                Read {
+                    items: vec![(self.organization_view(t, &org).await?, 0)],
+                    last: None,
+                }
+            }
+            (Kind::Organizations, None) => {
+                let start = after
+                    .and_then(|a| b64url_decode(a).ok())
+                    .and_then(|b| <[u8; 16]>::try_from(b).ok());
+                let rows = t.orgs_page(start, i64::from(limit)).await?;
+                let mut items = Vec::with_capacity(rows.len());
+                for o in &rows {
+                    items.push((organization_summary(o), 0));
+                }
+                Read {
+                    last: full(&rows, limit, |o| b64url_encode(&o.id)),
+                    items,
                 }
             }
             (Kind::Accounts, Some(k)) => {

@@ -593,7 +593,7 @@ async fn a_publisher_publishes_and_sees_pending_acceptance_without_an_accept() {
 
 impl Console {
     /// A management read through the BFF with the browser's read proof.
-    async fn admin_get(&self, target: &str) -> Written {
+    pub(super) async fn admin_get(&self, target: &str) -> Written {
         let proof = self.browser.ais(
             self.domain,
             &access_crypto::random::bytes::<16>().unwrap(),

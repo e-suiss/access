@@ -2753,6 +2753,82 @@
       }
     },
     "/admin/v1/realms/{slug}/organizations": {
+      "get": {
+        "operationId": "listOrganizations",
+        "summary": "The realm's live organizations (§8.5 S7).",
+        "tags": [
+          "realm"
+        ],
+        "security": [
+          {
+            "read_token": [
+              "realm.read"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Slug"
+          },
+          {
+            "$ref": "#/components/parameters/PageSize"
+          },
+          {
+            "$ref": "#/components/parameters/Cursor"
+          },
+          {
+            "$ref": "#/components/parameters/Filter"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The resource.",
+            "headers": {
+              "Request-Id": {
+                "$ref": "#/components/headers/Request-Id"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              },
+              "Link": {
+                "$ref": "#/components/headers/Link"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        },
+        "deprecated": false,
+        "x-access-surface": "realm",
+        "x-access-scope": "realm.read",
+        "x-access-visibility": "hidden"
+      },
       "post": {
         "operationId": "createOrganization",
         "summary": "Creates an organization bound to the Party its founder's client registered; the founder becomes its first owner (TN-5).",
@@ -2841,10 +2917,84 @@
         }
       }
     },
-    "/admin/v1/realms/{slug}/organizations/{organization}/members/remove": {
-      "post": {
-        "operationId": "removeOrganizationMember",
-        "summary": "Removes a member from an organization; its last active owner is kept (TN-91).",
+    "/admin/v1/realms/{slug}/organizations/{organization}": {
+      "get": {
+        "operationId": "getOrganization",
+        "summary": "One organization: its roots and members with each membership source and role, its domain claims, ownership handovers and connection drafts (§8.5 S7, TN-91).",
+        "tags": [
+          "realm"
+        ],
+        "security": [
+          {
+            "read_token": [
+              "realm.read"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Traceparent"
+          },
+          {
+            "$ref": "#/components/parameters/Slug"
+          },
+          {
+            "name": "organization",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 255
+            },
+            "description": "The resource's natural key."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The resource.",
+            "headers": {
+              "Request-Id": {
+                "$ref": "#/components/headers/Request-Id"
+              },
+              "RateLimit-Policy": {
+                "$ref": "#/components/headers/RateLimit-Policy"
+              },
+              "RateLimit": {
+                "$ref": "#/components/headers/RateLimit"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Organization"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        },
+        "deprecated": false,
+        "x-access-surface": "realm",
+        "x-access-scope": "realm.read",
+        "x-access-visibility": "hidden"
+      },
+      "patch": {
+        "operationId": "patchOrganization",
+        "summary": "Renames an organization or turns home realm discovery to it on or off; on needs a verified domain no other organization claims (TN-98).",
         "tags": [
           "realm"
         ],
@@ -2940,10 +3090,10 @@
         }
       }
     },
-    "/admin/v1/realms/{slug}/organizations/{organization}": {
-      "patch": {
-        "operationId": "patchOrganization",
-        "summary": "Renames an organization or turns home realm discovery to it on or off; on needs a verified domain no other organization claims (TN-98).",
+    "/admin/v1/realms/{slug}/organizations/{organization}/members/remove": {
+      "post": {
+        "operationId": "removeOrganizationMember",
+        "summary": "Removes a member from an organization; its last active owner is kept (TN-91).",
         "tags": [
           "realm"
         ],
@@ -8359,6 +8509,133 @@
               "retired"
             ],
             "readOnly": true
+          }
+        }
+      },
+      "Organization": {
+        "type": "object",
+        "description": "An organization as S7 reads it (§8.5 S7, §12.3.8): its id is its Party's base64url; its roots and members, each with how the membership began (apart from any sign-in source) and its role's versioned Grant; its domain claims with their watch state; its ownership handovers, which are root standing and never billing (TN-91); its connection drafts, which nothing puts into effect but idp.upstream.register (TN-120). The list form carries only `organization`, `display_name` and `hrd`.",
+        "properties": {
+          "organization": {
+            "type": "string",
+            "readOnly": true
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "hrd": {
+            "type": "boolean"
+          },
+          "roots": {
+            "type": "integer",
+            "minimum": 0,
+            "readOnly": true
+          },
+          "members": {
+            "type": "array",
+            "readOnly": true,
+            "items": {
+              "type": "object",
+              "properties": {
+                "account_id": {
+                  "type": "string"
+                },
+                "owner": {
+                  "type": "boolean"
+                },
+                "membership_source": {
+                  "type": "string",
+                  "enum": [
+                    "founder",
+                    "invite",
+                    "scim",
+                    "jit",
+                    "domain_autojoin"
+                  ]
+                },
+                "role": {
+                  "type": [
+                    "object",
+                    "null"
+                  ]
+                },
+                "role_grant": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "enum": [
+                    "pending",
+                    "issued",
+                    "denied",
+                    null
+                  ]
+                },
+                "grant": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "cooling_until": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "format": "date-time"
+                },
+                "joined_at": {
+                  "$ref": "#/components/schemas/Time"
+                }
+              }
+            }
+          },
+          "domains": {
+            "type": "array",
+            "readOnly": true,
+            "items": {
+              "type": "object"
+            }
+          },
+          "handovers": {
+            "type": "array",
+            "readOnly": true,
+            "items": {
+              "type": "object",
+              "properties": {
+                "handover": {
+                  "type": "string"
+                },
+                "from": {
+                  "type": "string"
+                },
+                "to": {
+                  "type": "string"
+                },
+                "state": {
+                  "type": "string",
+                  "enum": [
+                    "proposed",
+                    "contributed",
+                    "cancelled",
+                    "completed"
+                  ]
+                },
+                "effective_at": {
+                  "$ref": "#/components/schemas/Time"
+                },
+                "dns_recovery": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          "connection_drafts": {
+            "type": "array",
+            "readOnly": true,
+            "items": {
+              "type": "object"
+            }
           }
         }
       },

@@ -254,6 +254,16 @@ pub const ROWS: &[Route] = &[
         "disableSocialProvider",
         "Stops offering a social preset; linked sign-ins stay (idp.social.disable).",
     ),
+    list(
+        "/admin/v1/realms/{slug}/organizations",
+        "listOrganizations",
+        "The realm's live organizations (§8.5 S7).",
+    ),
+    read(
+        "/admin/v1/realms/{slug}/organizations/{organization}",
+        "getOrganization",
+        "One organization: its roots and members with each membership source and role, its domain claims, ownership handovers and connection drafts (§8.5 S7, TN-91).",
+    ),
     write(
         Verb::Post,
         "/admin/v1/realms/{slug}/organizations",
@@ -646,7 +656,7 @@ const fn put(section: &'static str) -> Shape {
 #[must_use]
 pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
     use ResourceKind::{
-        Accounts, Analytics, Clients, Deliveries, Groups, Hooks, Settings, Signals,
+        Accounts, Analytics, Clients, Deliveries, Groups, Hooks, Organizations, Settings, Signals,
         SocialProviders, UpstreamIdps, Webhooks,
     };
     const CREATE: Shape = Shape::Write {
@@ -700,6 +710,11 @@ pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
         "putUpstreamIdp" => (UpstreamIdps, w(true)),
         "patchUpstreamIdp" => (UpstreamIdps, patch(UPSTREAM_PATCH, None)),
         "retireUpstreamIdp" | "linkUpstreamSubject" => (UpstreamIdps, w(false)),
+        "listOrganizations" => (
+            Organizations,
+            Shape::List(&["organization", "display_name"]),
+        ),
+        "getOrganization" => (Organizations, Shape::Get),
         "listSocialProviders" => (SocialProviders, Shape::List(&["preset", "status"])),
         "getSocialProvider" => (SocialProviders, Shape::Get),
         "putSocialProvider" => (SocialProviders, w(true)),

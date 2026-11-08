@@ -183,6 +183,8 @@ pub enum ResourceKind {
     Deliveries,
     /// Social presets, by preset id (IDP-31).
     SocialProviders,
+    /// Organizations, by their Party's base64url (§8.5 S7, OP-153 m.10 (c)).
+    Organizations,
 }
 
 impl ResourceKind {
@@ -201,6 +203,7 @@ impl ResourceKind {
             Self::Analytics => "analytics",
             Self::Deliveries => "deliveries",
             Self::SocialProviders => "social-providers",
+            Self::Organizations => "organizations",
         }
     }
 }

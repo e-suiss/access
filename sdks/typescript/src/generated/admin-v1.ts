@@ -394,7 +394,8 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** The realm's live organizations (§8.5 S7). */
+        get: operations["listOrganizations"];
         put?: never;
         /** Creates an organization bound to the Party its founder's client registered; the founder becomes its first owner (TN-5). */
         post: operations["createOrganization"];
@@ -402,6 +403,24 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/admin/v1/realms/{slug}/organizations/{organization}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** One organization: its roots and members with each membership source and role, its domain claims, ownership handovers and connection drafts (§8.5 S7, TN-91). */
+        get: operations["getOrganization"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Renames an organization or turns home realm discovery to it on or off; on needs a verified domain no other organization claims (TN-98). */
+        patch: operations["patchOrganization"];
         trace?: never;
     };
     "/admin/v1/realms/{slug}/organizations/{organization}/members/remove": {
@@ -419,23 +438,6 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
-        trace?: never;
-    };
-    "/admin/v1/realms/{slug}/organizations/{organization}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        /** Renames an organization or turns home realm discovery to it on or off; on needs a verified domain no other organization claims (TN-98). */
-        patch: operations["patchOrganization"];
         trace?: never;
     };
     "/admin/v1/realms/{slug}/organizations/{organization}/invitations": {
@@ -1316,6 +1318,37 @@ export interface components {
             ssf?: Record<string, never> | null;
             /** @enum {string} */
             readonly status?: "active" | "retired";
+        };
+        /** @description An organization as S7 reads it (§8.5 S7, §12.3.8): its id is its Party's base64url; its roots and members, each with how the membership began (apart from any sign-in source) and its role's versioned Grant; its domain claims with their watch state; its ownership handovers, which are root standing and never billing (TN-91); its connection drafts, which nothing puts into effect but idp.upstream.register (TN-120). The list form carries only `organization`, `display_name` and `hrd`. */
+        Organization: {
+            readonly organization?: string;
+            display_name?: string;
+            hrd?: boolean;
+            readonly roots?: number;
+            readonly members?: {
+                account_id?: string;
+                owner?: boolean;
+                /** @enum {string} */
+                membership_source?: "founder" | "invite" | "scim" | "jit" | "domain_autojoin";
+                role?: Record<string, never> | null;
+                /** @enum {string|null} */
+                role_grant?: "pending" | "issued" | "denied" | null;
+                grant?: string | null;
+                /** Format: date-time */
+                cooling_until?: string | null;
+                joined_at?: components["schemas"]["Time"];
+            }[];
+            readonly domains?: Record<string, never>[];
+            readonly handovers?: {
+                handover?: string;
+                from?: string;
+                to?: string;
+                /** @enum {string} */
+                state?: "proposed" | "contributed" | "cancelled" | "completed";
+                effective_at?: components["schemas"]["Time"];
+                dns_recovery?: boolean;
+            }[];
+            readonly connection_drafts?: Record<string, never>[];
         };
         /** @description A social preset the realm enabled (IDP-31, OP-153 m.3 (l)): its client secret only by `secret://` reference; no client means the operator's shared development client, which only a sandbox realm may use. Warnings never refuse anything (TN-87, IDP-31 (5)). */
         SocialProvider: {
@@ -3081,6 +3114,46 @@ export interface operations {
             503: components["responses"]["Unavailable"];
         };
     };
+    listOrganizations: {
+        parameters: {
+            query?: {
+                "page[size]"?: components["parameters"]["PageSize"];
+                /** @description Opaque; from the `Link` of the previous page. */
+                cursor?: components["parameters"]["Cursor"];
+                /** @description SCIM filter subset: eq, ne, co, sw, pr, and, or, parentheses; an attribute the endpoint does not name is 400 (TN-112). */
+                filter?: components["parameters"]["Filter"];
+            };
+            header?: {
+                /** @description W3C Trace Context; its trace id becomes `Request-Id`. */
+                traceparent?: components["parameters"]["Traceparent"];
+            };
+            path: {
+                slug: components["parameters"]["Slug"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The resource. */
+            200: {
+                headers: {
+                    "Request-Id": components["headers"]["Request-Id"];
+                    "RateLimit-Policy": components["headers"]["RateLimit-Policy"];
+                    RateLimit: components["headers"]["RateLimit"];
+                    Link: components["headers"]["Link"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
     createOrganization: {
         parameters: {
             query?: never;
@@ -3125,7 +3198,42 @@ export interface operations {
             503: components["responses"]["Unavailable"];
         };
     };
-    removeOrganizationMember: {
+    getOrganization: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description W3C Trace Context; its trace id becomes `Request-Id`. */
+                traceparent?: components["parameters"]["Traceparent"];
+            };
+            path: {
+                slug: components["parameters"]["Slug"];
+                /** @description The resource's natural key. */
+                organization: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The resource. */
+            200: {
+                headers: {
+                    "Request-Id": components["headers"]["Request-Id"];
+                    "RateLimit-Policy": components["headers"]["RateLimit-Policy"];
+                    RateLimit: components["headers"]["RateLimit"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Organization"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    patchOrganization: {
         parameters: {
             query?: never;
             header: {
@@ -3171,7 +3279,7 @@ export interface operations {
             503: components["responses"]["Unavailable"];
         };
     };
-    patchOrganization: {
+    removeOrganizationMember: {
         parameters: {
             query?: never;
             header: {

@@ -156,6 +156,42 @@ fn schemas() -> Value {
                 "status": { "type": "string", "enum": ["active", "retired"], "readOnly": true },
             },
         },
+        "Organization": {
+            "type": "object",
+            "description": "An organization as S7 reads it (§8.5 S7, §12.3.8): its id is its Party's base64url; its roots and members, each with how the membership began (apart from any sign-in source) and its role's versioned Grant; its domain claims with their watch state; its ownership handovers, which are root standing and never billing (TN-91); its connection drafts, which nothing puts into effect but idp.upstream.register (TN-120). The list form carries only `organization`, `display_name` and `hrd`.",
+            "properties": {
+                "organization": { "type": "string", "readOnly": true },
+                "display_name": { "type": "string" },
+                "hrd": { "type": "boolean" },
+                "roots": { "type": "integer", "minimum": 0, "readOnly": true },
+                "members": { "type": "array", "readOnly": true, "items": {
+                    "type": "object",
+                    "properties": {
+                        "account_id": { "type": "string" },
+                        "owner": { "type": "boolean" },
+                        "membership_source": { "type": "string", "enum": ["founder", "invite", "scim", "jit", "domain_autojoin"] },
+                        "role": { "type": ["object", "null"] },
+                        "role_grant": { "type": ["string", "null"], "enum": ["pending", "issued", "denied", null] },
+                        "grant": { "type": ["string", "null"] },
+                        "cooling_until": { "type": ["string", "null"], "format": "date-time" },
+                        "joined_at": r("schemas", "Time"),
+                    },
+                } },
+                "domains": { "type": "array", "readOnly": true, "items": { "type": "object" } },
+                "handovers": { "type": "array", "readOnly": true, "items": {
+                    "type": "object",
+                    "properties": {
+                        "handover": { "type": "string" },
+                        "from": { "type": "string" },
+                        "to": { "type": "string" },
+                        "state": { "type": "string", "enum": ["proposed", "contributed", "cancelled", "completed"] },
+                        "effective_at": r("schemas", "Time"),
+                        "dns_recovery": { "type": "boolean" },
+                    },
+                } },
+                "connection_drafts": { "type": "array", "readOnly": true, "items": { "type": "object" } },
+            },
+        },
         "SocialProvider": {
             "type": "object",
             "additionalProperties": false,
@@ -573,6 +609,7 @@ fn body_of(row: &Route) -> &'static str {
             ResourceKind::Analytics => "Analytics",
             ResourceKind::Deliveries => "Page",
             ResourceKind::SocialProviders => "SocialProvider",
+            ResourceKind::Organizations => "Organization",
         },
         _ => "ExerciseRef",
     }
