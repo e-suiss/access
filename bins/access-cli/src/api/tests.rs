@@ -52,9 +52,12 @@ fn reserved_operations_follow_the_idp_catalog_and_unknown_ones_fail_closed() {
     assert!(!reserved("retireUpstreamIdp", true));
     assert!(reserved("deleteEverything", true));
     // OP-150 m.11 (b)
-    for op in ["deleteAccount", "rehomeRealm", "createResetIntent"] {
+    for op in ["deleteAccount", "rehomeRealm", "putRecoveryPolicy"] {
         assert!(reserved(op, true), "{op}");
     }
+    // TN-61, TN-62
+    assert!(!reserved("createResetIntent", true));
+    assert!(!reserved("createTemporaryAccessPass", true));
     assert!(!reserved("markCanaryAccount", true));
     assert!(!reserved("putJoseAlg", true));
     assert!(!reserved("patchCimdPolicy", true));

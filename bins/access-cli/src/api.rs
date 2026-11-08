@@ -241,8 +241,8 @@ impl Contract {
 }
 
 /// Writes the contract declares but no server applies yet (answered `501`): reserved (CT3)
-/// and never sent by the command line (OP-150 m.11 (b), TN-61, TN-118).
-pub(crate) const DECLARED_RESERVED: [&str; 1] = ["createResetIntent"];
+/// and never sent by the command line (OP-150 m.11 (b), TN-118).
+pub(crate) const DECLARED_RESERVED: [&str; 0] = [];
 
 /// Writes `access admin` refuses: a bulk job is a set of Exercises the command line already
 /// makes one at a time (TN-125, X20); `apply` sends one write per change.
@@ -290,6 +290,9 @@ pub(crate) fn action_of(operation: &str, exists: bool) -> Option<IdpAction> {
         "retireWebhook" => IdpAction::WebhookRetire,
         "deleteAccount" => IdpAction::AccountDelete,
         "rehomeRealm" => IdpAction::RealmRehome,
+        "createResetIntent" => IdpAction::AccountResetIntent,
+        "createTemporaryAccessPass" => IdpAction::AccountTapIssue,
+        "putRecoveryPolicy" => IdpAction::AccountRecoveryPolicyLoosen,
         _ => return None,
     })
 }

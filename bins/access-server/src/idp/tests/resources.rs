@@ -560,9 +560,13 @@ async fn a_party_whose_account_cannot_act_changes_nothing() {
 fn reserved_operations_compile_to_nothing() {
     let ids = access_crypto::opaque_id::IdKey::new(access_crypto::Secret::new([7; 32]));
     let account = ids.encode(SUBJECT_PREFIX, [1; 16]).unwrap();
+    // TN-61
     assert_eq!(
         compile(Op::ResetIntent, Some(&account), &json!({}), &ids),
-        Err(Invalid::Reserved)
+        Ok(Change::AccountResetIntent {
+            subject: [1; 16],
+            ttl_ms: 3_600_000
+        })
     );
     // OP-153 m.3 (bb)
     assert_eq!(

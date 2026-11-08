@@ -1220,6 +1220,27 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
     }
 }
 
+/// The RFC 7293 time of a message to the account's own address: e-mail only (OP-153 m.3 (i)).
+async fn mailbox_since(
+    t: &mut TenantTx,
+    subject: [u8; 16],
+    to: &access_identity_account::notify::message::Address,
+) -> Result<Option<u64>, AdminError> {
+    if !matches!(
+        to,
+        access_identity_account::notify::message::Address::Email(_)
+    ) {
+        return Ok(None);
+    }
+    let since = t.mailbox_since(subject).await?;
+    Ok(Some(
+        since
+            .and_then(|v| u64::try_from(v).ok())
+            .unwrap_or(1)
+            .max(1),
+    ))
+}
+
 /// The realm's recovery policy, or the default one (OP-153 m.3 (e)).
 async fn recovery_policy(t: &mut TenantTx) -> Result<RecoveryPolicy, AdminError> {
     match t.recovery_realm_policy().await? {
@@ -1288,6 +1309,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                 } else {
                     Address::Email(value)
                 };
+                let valid_since_ms = mailbox_since(&mut t.0, *subject, &to).await?;
                 let token = access_kernel::json::b64url_encode(
                     &access_crypto::random::bytes::<32>()
                         .map_err(|_| AdminError::Unavailable(String::from("random")))?,
@@ -1319,7 +1341,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                             subject: *subject,
                             to,
                             locale: None,
-                            valid_since_ms: None,
+                            valid_since_ms,
                             body: Body::Link {
                                 purpose: LinkPurpose::ResetIntent,
                                 link: access_crypto::Secret::new(link),
@@ -1383,6 +1405,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             } else {
                 Address::Email(value)
             };
+            let valid_since_ms = mailbox_since(&mut t.0, subject, &to).await?;
             notifier
                 .notify(
                     &mut t.0,
@@ -1390,7 +1413,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                         subject,
                         to,
                         locale: None,
-                        valid_since_ms: None,
+                        valid_since_ms,
                         body: Body::Notice {
                             notice: Notice::RecoveryRequested,
                             at_ms: now,

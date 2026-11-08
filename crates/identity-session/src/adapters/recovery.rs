@@ -61,6 +61,7 @@ impl RecoveryTx for PgTx {
                 to,
                 recovery_target: r.recovery_target,
                 recovery_contact: r.recovery_contact,
+                since_ms: u64::try_from(r.since_ms).map_err(|_| SessionError::Corrupt)?,
             });
         }
         Ok(out)

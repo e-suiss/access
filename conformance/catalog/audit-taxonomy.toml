@@ -599,3 +599,25 @@ ocsf_class = 3001
 ocsf_activity = 99
 caep = ""
 webhook = true
+
+[[event]]
+event = "recovery.reset_intent.issued"
+plane = "identity"
+class = "account"
+outcome = "success"
+fields = ["actor", "target"]
+ocsf_class = 3001
+ocsf_activity = 99
+caep = ""
+webhook = true
+
+[[event]]
+event = "recovery.tap.issued"
+plane = "identity"
+class = "account"
+outcome = "success"
+fields = ["actor", "target"]
+ocsf_class = 3001
+ocsf_activity = 99
+caep = ""
+webhook = true

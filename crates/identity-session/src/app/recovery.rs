@@ -409,6 +409,12 @@ pub async fn grace_until<T: RecoveryTx>(
     Ok(out)
 }
 
+/// The RFC 7293 `Require-Recipient-Valid-Since` time of a message to `to`: e-mail only, never
+/// before the epoch's first millisecond (OP-153 m.3 (i)).
+fn valid_since(to: &Address, proved_ms: u64) -> Option<u64> {
+    matches!(to, Address::Email(_)).then_some(proved_ms.max(1))
+}
+
 /// TN-56: `Ok(())` when the grace period lets `action` through at `now`, else the refusal
 /// with the time left.
 ///
@@ -509,17 +515,24 @@ where
         &self,
         tx: &mut D::Tx,
         subject: [u8; 16],
-    ) -> Result<Vec<Address>, SessionError> {
+    ) -> Result<Vec<(Address, Option<u64>)>, SessionError> {
         let rows = tx.notice_addresses(subject).await?;
-        let notices: Vec<Address> = rows
+        let notices: Vec<(Address, Option<u64>)> = rows
             .into_iter()
             .filter(|a| !a.recovery_target)
-            .map(|a| a.to)
+            .map(|a| {
+                let since = valid_since(&a.to, a.since_ms);
+                (a.to, since)
+            })
             .collect();
         if !notices.is_empty() {
             return Ok(notices);
         }
-        Ok(address(tx.contact(subject).await?).into_iter().collect())
+        let Some(to) = address(tx.contact(subject).await?) else {
+            return Ok(Vec::new());
+        };
+        let since = valid_since(&to, tx.mailbox_since(subject).await?.unwrap_or(1));
+        Ok(vec![(to, since)])
     }
 
     async fn notice(
@@ -530,14 +543,14 @@ where
         until_ms: Option<u64>,
         now: u64,
     ) -> Result<(), SessionError> {
-        for to in self.notice_targets(tx, subject).await? {
+        for (to, valid_since_ms) in self.notice_targets(tx, subject).await? {
             tx.notify(
                 self.notifier,
                 &Message {
                     subject,
                     to,
                     locale: None,
-                    valid_since_ms: None,
+                    valid_since_ms,
                     body: Body::Notice {
                         notice,
                         at_ms: now,
@@ -588,13 +601,14 @@ where
                 i64_of(expires)?,
             )
             .await?;
+            let valid_since_ms = valid_since(&t.to, t.since_ms);
             tx.notify(
                 self.notifier,
                 &Message {
                     subject,
                     to: t.to,
                     locale: None,
-                    valid_since_ms: None,
+                    valid_since_ms,
                     body: Body::Otp {
                         code: Secret::new(code),
                         purpose: OtpPurpose::Recovery,
@@ -1364,13 +1378,14 @@ where
         self.notice(tx, subject, Notice::RecoveryCompleted, None, now)
             .await?;
         if let Some(to) = address(tx.contact(subject).await?) {
+            let valid_since_ms = valid_since(&to, tx.mailbox_since(subject).await?.unwrap_or(1));
             tx.notify(
                 self.notifier,
                 &Message {
                     subject,
                     to,
                     locale: None,
-                    valid_since_ms: None,
+                    valid_since_ms,
                     body: Body::PasswordChanged { at_ms: now },
                 },
             )
@@ -1663,6 +1678,7 @@ where
                     to,
                     recovery_target: false,
                     recovery_contact: false,
+                    since_ms: 0,
                 },
             )
             .await?;
@@ -1676,6 +1692,7 @@ where
                         to,
                         recovery_target: true,
                         recovery_contact: false,
+                        since_ms: 0,
                     },
                 )
                 .await?;
@@ -1696,6 +1713,7 @@ where
                         to,
                         recovery_target: true,
                         recovery_contact: true,
+                        since_ms: 0,
                     },
                 )
                 .await?;

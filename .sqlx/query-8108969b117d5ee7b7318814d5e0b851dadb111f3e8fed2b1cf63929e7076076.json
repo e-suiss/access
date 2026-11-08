@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT address_id, kind, identifier_id, nonce, ciphertext, recovery_target,\n                    recovery_contact\n               FROM access.notification_addresses\n              WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND retired_at IS NULL\n              ORDER BY address_id",
+  "query": "SELECT address_id, kind, identifier_id, nonce, ciphertext, recovery_target,\n                    recovery_contact,\n                    (extract(epoch FROM created_at) * 1000)::bigint AS \"since_ms!\"\n               FROM access.notification_addresses\n              WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND retired_at IS NULL\n              ORDER BY address_id",
   "describe": {
     "columns": [
       {
@@ -79,6 +79,12 @@
             "name": "recovery_contact"
           }
         }
+      },
+      {
+        "ordinal": 7,
+        "name": "since_ms!",
+        "type_info": "Int8",
+        "origin": "Expression"
       }
     ],
     "parameters": {
@@ -95,8 +101,9 @@
       true,
       true,
       false,
-      false
+      false,
+      null
     ]
   },
-  "hash": "4948baf79379f6570a61a7b7af72cbe1d57c6aec60b061ae028b562353663710"
+  "hash": "8108969b117d5ee7b7318814d5e0b851dadb111f3e8fed2b1cf63929e7076076"
 }

@@ -189,6 +189,8 @@ pub struct NoticeAddress {
     pub recovery_target: bool,
     /// A recovery contact's.
     pub recovery_contact: bool,
+    /// Since when its owner has proved it, Unix ms (RFC 7293); 0 before it is stored.
+    pub since_ms: u64,
 }
 
 impl core::fmt::Debug for NoticeAddress {

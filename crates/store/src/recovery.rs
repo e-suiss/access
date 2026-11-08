@@ -39,6 +39,8 @@ pub struct AddressRow {
     pub recovery_target: bool,
     /// Whether it is a recovery contact's (TN-52).
     pub recovery_contact: bool,
+    /// When it was added, Unix ms: its owner proved it then (RFC 7293).
+    pub since_ms: i64,
 }
 
 impl core::fmt::Debug for AddressRow {
@@ -333,11 +335,12 @@ impl TenantTx {
     ) -> Result<Vec<AddressRow>, StoreError> {
         let (tenant, realm) = self.recovery_scope()?;
         let rows = sqlx::query!(
-            "SELECT address_id, kind, identifier_id, nonce, ciphertext, recovery_target,
-                    recovery_contact
+            r#"SELECT address_id, kind, identifier_id, nonce, ciphertext, recovery_target,
+                    recovery_contact,
+                    (extract(epoch FROM created_at) * 1000)::bigint AS "since_ms!"
                FROM access.notification_addresses
               WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND retired_at IS NULL
-              ORDER BY address_id",
+              ORDER BY address_id"#,
             tenant,
             realm,
             uuid(subject),
@@ -360,6 +363,7 @@ impl TenantTx {
                     sealed,
                     recovery_target: r.recovery_target,
                     recovery_contact: r.recovery_contact,
+                    since_ms: r.since_ms,
                 })
             })
             .collect()
