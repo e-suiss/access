@@ -574,6 +574,64 @@ async fn the_account_pages_read_and_revoke_only_with_the_browsers_key() {
     )
     .unwrap());
 
+    // §8.17.7.3, X12, OP-153 m.8 (b)
+    let ask_impact = json!({ "action": { "namespace": "access", "name": "read", "major": 1 }, "resources": [{ "namespace": "access.search", "path": ["revocation-impact"] }], "mode": "check" });
+    let (r, body) = send(
+        &app,
+        page.request(&Method::POST, &format!("{BASE}/intents"))
+            .header("x-access-ais", proof(&me))
+            .body(Body::from(ask_impact.to_string()))
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(
+        r.status(),
+        StatusCode::OK,
+        "{}",
+        String::from_utf8_lossy(&body)
+    );
+    let search_draft = json_of(&body);
+    let impact_nonce = access_crypto::random::bytes::<16>().unwrap();
+    let impact = json!({ "context": {
+        "domain": b64url_encode(&domain.0),
+        "mode": "check",
+        "nonce": b64url_encode(&impact_nonce),
+        "intent": search_draft["intent"],
+        "basis": { "anchor": b64url_encode(&meta_anchor(&domain).0) },
+        "capacity": "own",
+        "ais": me.ais_for(
+            ACCOUNT_PEP,
+            domain,
+            &impact_nonce,
+            envelope_digest(search_draft["envelope"].as_str().unwrap()),
+            Mode::Check,
+            ExerciseBasis::Anchor(meta_anchor(&domain)),
+        ),
+        "query": { "grant": grant_text },
+    }});
+    let (r, body) = send(
+        &app,
+        page.post(
+            &format!("{BASE}/proxy/adp/search/revocation-impact"),
+            &impact,
+        ),
+    )
+    .await;
+    assert_eq!(
+        r.status(),
+        StatusCode::OK,
+        "{}",
+        String::from_utf8_lossy(&body)
+    );
+    let preview = json_of(&body);
+    assert!(
+        preview["results"][0]["subtree"]
+            .as_array()
+            .is_some_and(|s| s.iter().any(|g| *g == json!(grant_text))),
+        "{preview}"
+    );
+    assert_eq!(c.w.domains.head(domain).await.unwrap().0, head);
+
     // TN-110, MD-14
     let nonce = access_crypto::random::bytes::<16>().unwrap();
     let commit = |who: &Browser, mode: Mode| {
