@@ -552,6 +552,57 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
         })
     }
 
+    /// Has the realm's governing domain commit one core meta-action write `w`, such as a Grant
+    /// revoke or amend of a bulk job (E17, TN-125): the signer's account must still be able to
+    /// act in the realm (§13.4 G54), and the plane decides it like any other Exercise. Nothing
+    /// is written on the identity side.
+    ///
+    /// # Errors
+    /// [`AdminError`]; a DENY or a pending decision is [`Applied::NotAllowed`].
+    pub async fn meta(
+        &self,
+        (tenant, realm): (TenantId, RealmId),
+        w: Submission,
+    ) -> Result<Applied, AdminError> {
+        if w.payload.is_none() {
+            return Err(AdminError::Encode);
+        }
+        self.standing((tenant, realm), w.domain, &w.ais, None)
+            .await?;
+        let nonce = w.nonce.clone();
+        let verdict = self
+            .decider
+            .decide(Submission {
+                actor: None,
+                pep: String::from(self.pep),
+                ..w
+            })
+            .await
+            .map_err(|e| AdminError::Unavailable(e.0))?;
+        match verdict {
+            Verdict::Committed(c) if c.nonce == nonce => Ok(if c.replayed {
+                Applied::AlreadyWritten {
+                    exercise: c.exercise,
+                    position: c.position,
+                }
+            } else {
+                Applied::Written {
+                    exercise: c.exercise,
+                    position: c.position,
+                    secret: None,
+                }
+            }),
+            Verdict::Committed(_) => Err(AdminError::Unbound),
+            Verdict::NotAllowed { decision, position } => {
+                Ok(Applied::NotAllowed { decision, position })
+            }
+            Verdict::Refused { code, .. } if code == "unavailable" => {
+                Err(AdminError::Unavailable(code))
+            }
+            Verdict::Refused { code, .. } => Err(AdminError::Refused(code)),
+        }
+    }
+
     /// Has the realm's governing domain commit `p` with the actor's `ais`, then writes the
     /// change against the committed ALLOW in one transaction (MD-14, EI-25, TN-110).
     ///
@@ -569,6 +620,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                 domain: prepared.domain,
                 nonce: p.nonce.clone(),
                 intent: prepared.intent,
+                payload: None,
                 basis: p.basis,
                 capacity: p.capacity,
                 ais,

@@ -569,7 +569,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Starts a bulk job: each item is its own write under its own AIS; answers 202. */
+        /** Starts a bulk job: each item is its own write under its own AIS, and `revokeGrant` or `amendGrant` items are Grant revokes or amends, each its own Exercise (E17); answers 202. */
         post: operations["createJob"];
         delete?: never;
         options?: never;

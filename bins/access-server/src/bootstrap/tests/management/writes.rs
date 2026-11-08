@@ -570,3 +570,176 @@ async fn a_publisher_publishes_and_sees_pending_acceptance_without_an_accept() {
     assert_eq!(offers["results"][0]["standing"], "pending_acceptance");
     assert_eq!(c.w.domains.head(c.domain).await.unwrap().0, before);
 }
+
+impl Console {
+    /// A management read through the BFF with the browser's read proof.
+    async fn admin_get(&self, target: &str) -> Written {
+        let proof = self.browser.ais(
+            self.domain,
+            &access_crypto::random::bytes::<16>().unwrap(),
+            read_intent(&Method::GET, target),
+            Mode::Check,
+            self.idp_anchor(),
+        );
+        let (r, out) = send(
+            &self.management,
+            self.browser
+                .request(
+                    &Method::GET,
+                    &target.replacen("/admin/v1/", "/console/api/proxy/admin/", 1),
+                    "",
+                )
+                .header("x-access-ais", proof)
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await;
+        Written {
+            status: r.status(),
+            body: serde_json::from_slice(&out).unwrap_or(serde_json::Value::Null),
+        }
+    }
+
+    /// A Grant of `v1`-shaped authority to the founder, issued from the realm's `idp` Anchor.
+    async fn issue_to_founder(&self) -> Id {
+        let idp = kmeta::object_id(&self.domain, kind::ANCHOR, IDP_ANCHOR);
+        let issue = serde_json::json!({ "grant_issue": {
+            "basis": { "anchor": b64url_encode(&idp.0) },
+            "holder": { "party": b64url_encode(&self.root.0) },
+            "authority": canonical_authority_to_json(&canonical(role(&[IdpAction::AccountSuspend]))).unwrap(),
+        } });
+        let w = self
+            .meta_write("grant_issue", issue, self.idp_anchor())
+            .await;
+        assert_eq!(w.body["decision"], true, "{}", w.body);
+        kmeta::object_id(&exercise_of(&w), kind::GRANT, 0)
+    }
+}
+
+// E17, TN-125, X20, §8.17.9.8, Ek B 3080
+#[tokio::test]
+async fn a_bulk_job_revokes_grants_one_exercise_each() {
+    let c = console("mgmt-bulk", true).await;
+    let grants = [c.issue_to_founder().await, c.issue_to_founder().await];
+    let mut operations = Vec::new();
+    for g in grants {
+        let payload = serde_json::json!({ "grant_revoke": { "grant": b64url_encode(&g.0) } });
+        let (status, draft) = c
+            .draft(&serde_json::json!({
+                "action": { "namespace": "access", "name": "grant_revoke", "major": 1 },
+                "payload": payload,
+                "mode": "commit",
+            }))
+            .await;
+        assert_eq!(status, StatusCode::OK, "{draft}");
+        let nonce = access_crypto::random::bytes::<16>().unwrap();
+        let digest = envelope_digest(draft["envelope"].as_str().unwrap());
+        let ais = c
+            .browser
+            .ais(c.domain, &nonce, digest, Mode::Commit, c.idp_anchor());
+        operations.push(serde_json::json!({
+            "operation": "revokeGrant",
+            "key": b64url_encode(&g.0),
+            "body": {
+                "ais": ais,
+                "intent": draft["intent"],
+                "payload": draft["payload"],
+                "nonce": b64url_encode(&nonce),
+                "basis": basis_json(c.idp_anchor()),
+                "capacity": "own",
+            },
+        }));
+    }
+    let job = serde_json::json!({ "mode": "sequential", "operations": operations });
+    let drafts = "/admin/v1/realms/acme/intents";
+    let proof = c.browser.ais(
+        c.domain,
+        &access_crypto::random::bytes::<16>().unwrap(),
+        read_intent(&Method::POST, drafts),
+        Mode::Check,
+        c.idp_anchor(),
+    );
+    let (r, body) = send(
+        &c.management,
+        c.browser
+            .request(
+                &Method::POST,
+                "/console/api/proxy/admin/realms/acme/intents",
+                "x",
+            )
+            .header("x-access-ais", proof)
+            .body(Body::from(
+                serde_json::json!({ "operation": "createJob", "body": job }).to_string(),
+            ))
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(
+        r.status(),
+        StatusCode::OK,
+        "{}",
+        String::from_utf8_lossy(&body)
+    );
+    let drafted: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    let digest = Digest(
+        <[u8; 32]>::try_from(b64url_decode(drafted["intent_digest"].as_str().unwrap()).unwrap())
+            .unwrap(),
+    );
+    let before = c.w.domains.head(c.domain).await.unwrap().0;
+    let nonce = access_crypto::random::bytes::<16>().unwrap();
+    let envelope_ais = c
+        .browser
+        .ais(c.domain, &nonce, digest, Mode::Commit, c.idp_anchor());
+    let (r, body) = send(
+        &c.management,
+        c.browser
+            .request(
+                &Method::POST,
+                "/console/api/proxy/admin/realms/acme/jobs",
+                "x",
+            )
+            .header("x-access-ais", envelope_ais)
+            .header("idempotency-key", b64url_encode(&nonce))
+            .body(Body::from(job.to_string()))
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(
+        r.status(),
+        StatusCode::ACCEPTED,
+        "{}",
+        String::from_utf8_lossy(&body)
+    );
+    let id = serde_json::from_slice::<serde_json::Value>(&body).unwrap()["job_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let mut done = serde_json::Value::Null;
+    for _ in 0..2_000 {
+        done = c
+            .admin_get(&format!("/admin/v1/realms/acme/jobs/{id}"))
+            .await
+            .body;
+        if done["status"] != "running" {
+            break;
+        }
+        tokio::task::yield_now().await;
+    }
+    let items = c
+        .admin_get(&format!("/admin/v1/realms/acme/jobs/{id}/items"))
+        .await
+        .body;
+    assert_eq!(done["status"], "succeeded", "{done} {items}");
+    assert_eq!(done["committed"], 2, "{done}");
+    let items = items["items"].as_array().unwrap();
+    assert!(
+        items.iter().all(|i| i["exercise_id"].is_string()),
+        "{items:?}"
+    );
+    assert_ne!(items[0]["exercise_id"], items[1]["exercise_id"]);
+    let after = c.w.domains.head(c.domain).await.unwrap().0;
+    assert!(
+        after >= before + 2,
+        "one Exercise per item: {before} → {after}"
+    );
+}

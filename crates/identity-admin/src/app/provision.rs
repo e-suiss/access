@@ -208,6 +208,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                 actor: None,
                 domain: Digest(*domain.as_bytes()),
                 nonce: order.nonce.clone(),
+                payload: None,
                 intent,
                 basis: order.basis,
                 capacity: order.capacity,

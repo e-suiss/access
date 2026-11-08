@@ -337,6 +337,45 @@ impl<P: Decider + Governance + Instances + Clone + Send + Sync + 'static> Realms
         }))
     }
 
+    /// E17, TN-125: one meta-action item of a bulk job, its own Exercise.
+    async fn exercise_inner(
+        &self,
+        w: access_http::api::ports::MetaWrite,
+        caller: WriteCaller,
+    ) -> Result<Written, Unavailable> {
+        let Some(place) = self.locate(&w.slug).await? else {
+            return Ok(Written::Rejected(&codes::NOT_FOUND));
+        };
+        let ids = self.ids.key().ok_or(Unavailable)?;
+        let r = w.request;
+        let submission = access_internal_api::idp::Submission {
+            domain: r.domain,
+            nonce: r.nonce,
+            intent: r.intent,
+            payload: r.payload.map(Box::new),
+            basis: r.basis,
+            capacity: r.capacity,
+            ais: caller.ais,
+            pep: IDENTITY_PEP.to_owned(),
+            actor: None,
+        };
+        match self.admin(&ids).meta(place, submission).await {
+            Ok(
+                Applied::Written {
+                    exercise, position, ..
+                }
+                | Applied::AlreadyWritten { exercise, position },
+            ) => Ok(Written::Committed {
+                exercise_id: exercise,
+                position,
+                resource: None,
+                secret: None,
+            }),
+            Ok(Applied::NotAllowed { .. }) => Ok(Written::NotAllowed),
+            Err(e) => refusal(&e).map(Written::Rejected),
+        }
+    }
+
     async fn commit_inner(
         &self,
         w: ResourceWrite,
@@ -502,6 +541,14 @@ impl<P: Decider + Governance + Instances + Clone + Send + Sync + 'static> RealmR
 
     fn audit_proof(&self, query: AuditProofQuery) -> Pending<'_, Option<Value>> {
         Box::pin(self.audit_proof_inner(query))
+    }
+
+    fn exercise(
+        &self,
+        write: access_http::api::ports::MetaWrite,
+        caller: WriteCaller,
+    ) -> Pending<'_, Written> {
+        Box::pin(self.exercise_inner(write, caller))
     }
 }
 

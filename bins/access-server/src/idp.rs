@@ -259,7 +259,7 @@ where
             mode: Mode::Commit,
             nonce: s.nonce,
             intent: s.intent,
-            payload: None,
+            payload: s.payload.map(|p| *p),
             basis: s.basis,
             capacity: s.capacity,
             proofs: Vec::new(),

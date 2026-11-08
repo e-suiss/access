@@ -291,6 +291,16 @@ pub enum Written {
     Rejected(&'static crate::problem::Code),
 }
 
+/// One core meta-action write of a bulk job (E17, TN-125): a Grant revoke or amend, decoded
+/// as ADP decodes a `commit`, with its own AIS.
+#[derive(Clone, Debug)]
+pub struct MetaWrite {
+    /// The realm's slug.
+    pub slug: String,
+    /// The request: domain, nonce, intent, payload, basis and capacity.
+    pub request: access_authority_core::domain::Request,
+}
+
 /// What a draft found.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Drafted {
@@ -326,6 +336,13 @@ pub trait RealmResources: Send + Sync {
     /// event is not in a signed realm checkpoint yet. None by default.
     fn audit_proof(&self, query: AuditProofQuery) -> Pending<'_, Option<serde_json::Value>> {
         let _ = query;
+        Box::pin(async { Err(Unavailable) })
+    }
+
+    /// Commits one meta-action write of a bulk job with the caller's verified AIS, as its own
+    /// Exercise (E17, TN-125). None by default.
+    fn exercise(&self, write: MetaWrite, caller: WriteCaller) -> Pending<'_, Written> {
+        let _ = (write, caller);
         Box::pin(async { Err(Unavailable) })
     }
 }

@@ -345,8 +345,12 @@ pub struct Submission {
     pub domain: Digest,
     /// The Exercise nonce.
     pub nonce: Vec<u8>,
-    /// The intent; its `opaque["change"]` is the change digest (EI-25).
+    /// The intent; its `opaque["change"]` is the change digest (EI-25), or for a meta-action
+    /// its `opaque["payload"]` the payload digest.
     pub intent: IntentEnvelope,
+    /// The meta payload of a core meta-action write, such as one Grant revoke or amend of a
+    /// bulk job (E17, TN-125); `None` for an `idp.*` change.
+    pub payload: Option<Box<access_kernel::meta::Payload>>,
     /// Declared basis.
     pub basis: ExerciseBasis,
     /// Declared capacity.

@@ -337,7 +337,7 @@ pub const ROWS: &[Route] = &[
         Verb::Post,
         "/admin/v1/realms/{slug}/jobs",
         "createJob",
-        "Starts a bulk job: each item is its own write under its own AIS; answers 202.",
+        "Starts a bulk job: each item is its own write under its own AIS, and `revokeGrant` or `amendGrant` items are Grant revokes or amends, each its own Exercise (E17); answers 202.",
     ),
     read(
         "/admin/v1/realms/{slug}/jobs/{job_id}",

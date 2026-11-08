@@ -3927,7 +3927,7 @@
     "/admin/v1/realms/{slug}/jobs": {
       "post": {
         "operationId": "createJob",
-        "summary": "Starts a bulk job: each item is its own write under its own AIS; answers 202.",
+        "summary": "Starts a bulk job: each item is its own write under its own AIS, and `revokeGrant` or `amendGrant` items are Grant revokes or amends, each its own Exercise (E17); answers 202.",
         "tags": [
           "realm"
         ],

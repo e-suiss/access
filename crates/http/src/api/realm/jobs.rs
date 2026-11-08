@@ -9,6 +9,11 @@
 //! counted on the envelope (never a `200` with hidden `429`s). `GET …/jobs/{job_id}` is the
 //! envelope, `GET …/jobs/{job_id}/items` the per-item file: each line is the Exercise reference
 //! or the problem that refused it. Jobs are shown for 7 days and never deleted (OP-73).
+//!
+//! A job may also revoke or amend Grants (E17, §8.17.9.8): an item `revokeGrant` or
+//! `amendGrant` keyed by the Grant carries the ADP `commit` of its own meta-action (the intent
+//! and the payload the console drafted, the nonce, basis and capacity) and its own AIS, and is
+//! decided as its own Exercise; the preview of the set is the `bulk-impact` search.
 
 use access_kernel::json::b64url_decode;
 use axum::body::{Bytes, to_bytes};
@@ -40,6 +45,12 @@ pub const JOB_CONTEXT: &str = "access/admin-job/v1";
 /// The member of an item that carries its `If-Match`.
 const IF_MATCH: &str = "if_match";
 
+/// The job operations that are core meta-action writes (E17), with their meta-action.
+pub const META_OPERATIONS: [(&str, &str); 2] = [
+    ("revokeGrant", "grant_revoke"),
+    ("amendGrant", "grant_amend"),
+];
+
 /// One item as submitted.
 #[derive(Clone, Debug)]
 struct Item {
@@ -48,6 +59,7 @@ struct Item {
     body: Map<String, Value>,
     if_match: Option<String>,
     ais: Vec<u8>,
+    meta: Option<access_authority_core::domain::Request>,
 }
 
 /// A job as submitted.
@@ -100,6 +112,10 @@ fn parse(raw: &[u8]) -> Result<Submitted, &'static Code> {
             let Value::Object(mut op) = op else {
                 return Err(&codes::realm::INVALID_JOB);
             };
+            // E17
+            if let Some(item) = meta_item(&mut op)? {
+                return Ok(item);
+            }
             // TN-125
             let row = op
                 .remove("operation")
@@ -139,11 +155,91 @@ fn parse(raw: &[u8]) -> Result<Submitted, &'static Code> {
                 body,
                 if_match,
                 ais,
+                meta: None,
             })
         })
         .collect::<Result<Vec<_>, _>>()?;
     Ok(Submitted { mode, items })
 }
+
+/// A meta-action item (E17): `{operation, key, body: {ais, intent, payload, nonce, basis,
+/// capacity}}`, its intent the meta-action of the operation on the Grant `key`, its payload
+/// that Grant's revoke or amend, and the intent's `opaque.payload` that payload's digest.
+fn meta_item(op: &mut Map<String, Value>) -> Result<Option<Item>, &'static Code> {
+    let Some((operation, action)) = op
+        .get("operation")
+        .and_then(Value::as_str)
+        .and_then(|o| META_OPERATIONS.iter().find(|(n, _)| *n == o))
+    else {
+        return Ok(None);
+    };
+    op.remove("operation");
+    let key = match op.remove("key") {
+        Some(Value::String(k)) if k.len() <= 64 => k,
+        _ => return Err(&codes::realm::INVALID_JOB),
+    };
+    let Some(Value::Object(mut body)) = op.remove("body") else {
+        return Err(&codes::realm::INVALID_JOB);
+    };
+    if !op.is_empty() {
+        return Err(&codes::realm::INVALID_JOB);
+    }
+    let ais = body
+        .remove(AIS_FIELD)
+        .and_then(|a| a.as_str().and_then(|a| b64url_decode(a).ok()))
+        .filter(|a| !a.is_empty())
+        .ok_or(&codes::AIS_REQUIRED)?;
+    let mut context = body.clone();
+    context.insert(String::from("mode"), Value::from("commit"));
+    context.insert(String::from("domain"), Value::from(DOMAIN_PLACEHOLDER));
+    let raw = serde_json::to_vec(&json!({ "context": context })).map_err(|_| &codes::INTERNAL)?;
+    let decoded = crate::adp::domain::decode_context(&raw, 1 << 20)
+        .map_err(|_| &codes::realm::INVALID_JOB)?;
+    let request = decoded.request;
+    let grant = b64url_decode(&key)
+        .ok()
+        .and_then(|b| <[u8; 16]>::try_from(b.as_slice()).ok())
+        .map(access_kernel::model::Id)
+        .ok_or(&codes::realm::INVALID_JOB)?;
+    let named = match &request.payload {
+        Some(
+            access_kernel::meta::Payload::GrantRevoke { grant: g }
+            | access_kernel::meta::Payload::GrantAmend { grant: g, .. },
+        ) => *g,
+        _ => return Err(&codes::realm::JOB_OPERATION_NOT_ALLOWED),
+    };
+    let digest = request
+        .payload
+        .as_ref()
+        .and_then(|p| p.digest().ok())
+        .ok_or(&codes::realm::INVALID_JOB)?;
+    if named != grant
+        || request
+            .payload
+            .as_ref()
+            .map(access_kernel::meta::Payload::action)
+            != Some(*action)
+        || request.intent.action != access_kernel::meta::core_action(action)
+        || request
+            .intent
+            .opaque
+            .get(access_kernel::meta::PAYLOAD_PARAM)
+            != Some(&digest)
+    {
+        return Err(&codes::realm::JOB_OPERATION_NOT_ALLOWED);
+    }
+    Ok(Some(Item {
+        operation,
+        key: Some(key),
+        body,
+        if_match: None,
+        ais,
+        meta: Some(request),
+    }))
+}
+
+/// The domain a meta item is decoded with before the realm's own replaces it.
+const DOMAIN_PLACEHOLDER: &str = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
 
 /// The intent digest a job's envelope AIS signs, for `POST …/intents` (TN-110).
 ///
@@ -272,6 +368,38 @@ fn refused(index: u32, item: &Item, code: &Code) -> JobItem {
     outcome(index, item, status, code.status, Some(code.code))
 }
 
+/// Runs one meta-action item (E17): its own Exercise under its own verified AIS.
+async fn meta_one<E: Env>(
+    ctx: &Ctx<E>,
+    index: u32,
+    item: &Item,
+    request: &access_authority_core::domain::Request,
+    caller: crate::api::domain::caller::WriteCaller,
+) -> JobItem {
+    let mut request = request.clone();
+    request.domain = ctx.domain;
+    let write = crate::api::ports::MetaWrite {
+        slug: slug(ctx),
+        request,
+    };
+    match ctx.api.env().realm().exercise(write, caller).await {
+        Ok(crate::api::ports::Written::Committed {
+            exercise_id,
+            position,
+            ..
+        }) => JobItem {
+            exercise_id: Some(access_kernel::json::b64url_encode(&exercise_id.0)),
+            position: Some(position),
+            ..outcome(index, item, "committed", 200, None)
+        },
+        Ok(crate::api::ports::Written::NotAllowed) => {
+            refused(index, item, &codes::EXERCISE_NOT_ALLOWED)
+        }
+        Ok(crate::api::ports::Written::Rejected(code)) => refused(index, item, code),
+        Err(_) => refused(index, item, &codes::UNAVAILABLE),
+    }
+}
+
 /// Runs one item as its own write under its own AIS (TN-125).
 async fn one<E: Env>(ctx: &Ctx<E>, index: u32, item: &Item, actor: [u8; 32]) -> JobItem {
     let Caller::Write(_) = &ctx.caller else {
@@ -281,9 +409,14 @@ async fn one<E: Env>(ctx: &Ctx<E>, index: u32, item: &Item, actor: [u8; 32]) -> 
     let Ok(now_ms) = env.clock().now_ms() else {
         return refused(index, item, &codes::UNAVAILABLE);
     };
-    // TN-127
-    let Some(row) = ROWS.iter().find(|r| r.operation_id == item.operation) else {
-        return refused(index, item, &codes::realm::JOB_OPERATION_NOT_ALLOWED);
+    // TN-127, E17
+    let row = match (
+        &item.meta,
+        ROWS.iter().find(|r| r.operation_id == item.operation),
+    ) {
+        (Some(_), _) => ctx.row,
+        (None, Some(row)) => row,
+        (None, None) => return refused(index, item, &codes::realm::JOB_OPERATION_NOT_ALLOWED),
     };
     let bucket = BucketKey {
         layer: "actor",
@@ -314,6 +447,10 @@ async fn one<E: Env>(ctx: &Ctx<E>, index: u32, item: &Item, actor: [u8; 32]) -> 
     let Ok(caller) = verify_ais(item.ais.clone(), kid, &key, &ctx.domain, now_ms) else {
         return refused(index, item, &codes::AIS_REJECTED);
     };
+    // E17
+    if let Some(request) = &item.meta {
+        return meta_one(ctx, index, item, request, caller).await;
+    }
     let Some((resource, shape)) = spec(item.operation) else {
         return refused(index, item, &codes::realm::JOB_OPERATION_NOT_ALLOWED);
     };
@@ -534,6 +671,78 @@ mod tests {
         assert_eq!(
             base,
             d(json!([item(&a, "k1"), item(&b, "k2")]), "sequential")
+        );
+    }
+
+    fn revoke_item(key: [u8; 16], payload_grant: [u8; 16], action: &str) -> Value {
+        let payload = access_kernel::meta::Payload::GrantRevoke {
+            grant: access_kernel::model::Id(payload_grant),
+        };
+        let intent = access_kernel::intent::IntentEnvelope {
+            action: access_kernel::meta::core_action(action),
+            resources: vec![access_kernel::model::ResourceRef {
+                namespace: String::from("access.grant"),
+                path: vec![String::from("g")],
+                incarnation: 0,
+            }],
+            params: std::collections::BTreeMap::new(),
+            opaque: std::collections::BTreeMap::from([(
+                String::from("payload"),
+                payload.digest().unwrap(),
+            )]),
+            recipient: None,
+            purpose: None,
+            context: access_kernel::intent::ContextRefs::default(),
+            validity: access_kernel::model::Window { from: 0, until: 9 },
+        };
+        let mut wire = crate::console::drafts::wire(&intent);
+        wire["validity"] = json!({ "from": 0, "until": 9 });
+        json!({
+            "operation": "revokeGrant",
+            "key": b64url_encode(&key),
+            "body": {
+                "ais": b64url_encode(b"x"),
+                "intent": wire,
+                "payload": b64url_encode(&access_kernel::codec::Canonical::to_bytes(&payload).unwrap()),
+                "nonce": b64url_encode(&[7; 16]),
+                "basis": { "anchor": b64url_encode(&[1; 16]) },
+                "capacity": "own",
+            },
+        })
+    }
+
+    // E17, TN-125, TN-110
+    #[test]
+    fn a_grant_item_names_its_own_meta_action_on_its_grant() {
+        let ok = json!([revoke_item([5; 16], [5; 16], "grant_revoke")]);
+        let job = parse(&body(&ok)).unwrap();
+        assert_eq!(job.items[0].operation, "revokeGrant");
+        assert!(
+            job.items[0]
+                .meta
+                .as_ref()
+                .is_some_and(|r| r.payload.is_some())
+        );
+        for refused in [
+            revoke_item([6; 16], [5; 16], "grant_revoke"),
+            revoke_item([5; 16], [5; 16], "grant_amend"),
+        ] {
+            assert_eq!(
+                parse(&body(&json!([refused]))).err(),
+                Some(&codes::realm::JOB_OPERATION_NOT_ALLOWED)
+            );
+        }
+        let mut amend = revoke_item([5; 16], [5; 16], "grant_revoke");
+        amend["operation"] = json!("amendGrant");
+        assert_eq!(
+            parse(&body(&json!([amend]))).err(),
+            Some(&codes::realm::JOB_OPERATION_NOT_ALLOWED)
+        );
+        let mut no_ais = revoke_item([5; 16], [5; 16], "grant_revoke");
+        no_ais["body"].as_object_mut().unwrap().remove("ais");
+        assert_eq!(
+            parse(&body(&json!([no_ais]))).err(),
+            Some(&codes::AIS_REQUIRED)
         );
     }
 }
