@@ -1,0 +1,54 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT last_at_ms, ip_prefix, country FROM access.risk_subject\n              WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "last_at_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.risk_subject",
+            "name": "last_at_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "ip_prefix",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.risk_subject",
+            "name": "ip_prefix"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "country",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.risk_subject",
+            "name": "country"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "0ec96ffd1b080241d83790b54d2be157b5efb27b928cf7d3aaf63c08b0983dab"
+}

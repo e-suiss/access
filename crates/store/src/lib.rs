@@ -35,6 +35,7 @@ pub mod offline;
 pub mod operational;
 pub mod passkeys;
 pub mod platform;
+pub mod privacy;
 pub mod projections;
 pub mod publications;
 pub mod realm_binding;

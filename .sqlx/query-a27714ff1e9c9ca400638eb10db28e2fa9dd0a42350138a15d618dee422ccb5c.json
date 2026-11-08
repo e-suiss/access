@@ -1,0 +1,39 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT (extract(epoch FROM at) * 1000)::bigint AS \"at_ms!\", event_type\n                 FROM access.identity_audit\n                WHERE tenant_id = $1 AND realm_id = $2 AND (target = $3 OR actor = $3)\n                  AND at >= to_timestamp($4::bigint / 1000.0)\n                ORDER BY at DESC, id DESC LIMIT $5",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "at_ms!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "event_type",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.identity_audit",
+            "name": "event_type"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      null,
+      false
+    ]
+  },
+  "hash": "a27714ff1e9c9ca400638eb10db28e2fa9dd0a42350138a15d618dee422ccb5c"
+}

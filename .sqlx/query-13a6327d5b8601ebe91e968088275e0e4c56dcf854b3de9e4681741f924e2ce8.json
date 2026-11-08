@@ -1,0 +1,108 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT deletion_id, subject_id, source, destruction_proof,\n                      (extract(epoch FROM requested_at) * 1000)::bigint AS requested_ms,\n                      (extract(epoch FROM effective_at) * 1000)::bigint AS effective_ms,\n                      (extract(epoch FROM cancelled_at) * 1000)::bigint AS cancelled_ms,\n                      (extract(epoch FROM deleted_at) * 1000)::bigint AS deleted_ms,\n                      (extract(epoch FROM destroy_after) * 1000)::bigint AS destroy_after_ms,\n                      (extract(epoch FROM destroyed_at) * 1000)::bigint AS destroyed_ms\n                 FROM access.identity_deletion_facts\n                WHERE tenant_id = $1 AND realm_id = $2 AND cancelled_at IS NULL AND deleted_at IS NULL\n                  AND effective_at <= clock_timestamp()\n                ORDER BY effective_at LIMIT $3 FOR UPDATE SKIP LOCKED",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "deletion_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.identity_deletion_facts",
+            "name": "deletion_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "subject_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.identity_deletion_facts",
+            "name": "subject_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "source",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.identity_deletion_facts",
+            "name": "source"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "destruction_proof",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.identity_deletion_facts",
+            "name": "destruction_proof"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "requested_ms",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 5,
+        "name": "effective_ms",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 6,
+        "name": "cancelled_ms",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 7,
+        "name": "deleted_ms",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 8,
+        "name": "destroy_after_ms",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 9,
+        "name": "destroyed_ms",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "13a6327d5b8601ebe91e968088275e0e4c56dcf854b3de9e4681741f924e2ce8"
+}

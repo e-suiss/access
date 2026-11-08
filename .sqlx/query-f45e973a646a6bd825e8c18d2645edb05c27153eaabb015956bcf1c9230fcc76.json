@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.retention_holds SET until = clock_timestamp()\n              WHERE tenant_id = $1 AND hold_id = $2 AND until IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "f45e973a646a6bd825e8c18d2645edb05c27153eaabb015956bcf1c9230fcc76"
+}

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT subject_id, status,\n                  (extract(epoch FROM status_at) * 1000)::float8 AS \"status_at_ms\",\n                  (extract(epoch FROM created_at) * 1000)::float8 AS \"created_at_ms\"\n             FROM access.identity_subjects\n            WHERE tenant_id = $1 AND realm_id = $2 AND subject_id > $3\n            ORDER BY subject_id LIMIT $4",
+  "query": "SELECT subject_id, status,\n                  (extract(epoch FROM status_at) * 1000)::float8 AS \"status_at_ms\",\n                  (extract(epoch FROM created_at) * 1000)::float8 AS \"created_at_ms\"\n             FROM access.identity_subjects\n            WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3\n              AND status NOT IN ('tombstone', 'purging')",
   "describe": {
     "columns": [
       {
@@ -42,8 +42,7 @@
       "Left": [
         "Uuid",
         "Uuid",
-        "Uuid",
-        "Int8"
+        "Uuid"
       ]
     },
     "nullable": [
@@ -53,5 +52,5 @@
       null
     ]
   },
-  "hash": "300a52996aefd6df6f04e9b3595ba7c3d9f64afe90f187be1140c6ba239b1af1"
+  "hash": "62b3b9c1908c3157c59ade2fe78b0009b364f47922fae54ced50d9a07216e8aa"
 }

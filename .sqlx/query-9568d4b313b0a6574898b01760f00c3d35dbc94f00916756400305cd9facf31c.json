@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.identity_deletion_facts\n                  SET deleted_at = clock_timestamp(),\n                      destroy_after = clock_timestamp() + make_interval(secs => $4::bigint)\n                WHERE tenant_id = $1 AND realm_id = $2 AND deletion_id = $3\n                  AND deleted_at IS NULL AND cancelled_at IS NULL\n                RETURNING (extract(epoch FROM destroy_after) * 1000)::bigint AS \"ms!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "ms!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "9568d4b313b0a6574898b01760f00c3d35dbc94f00916756400305cd9facf31c"
+}

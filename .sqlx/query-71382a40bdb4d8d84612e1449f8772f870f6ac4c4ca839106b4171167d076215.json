@@ -1,0 +1,67 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT created_ms, auth_time_ms, ended_ms, end_reason FROM access.login_sessions\n              WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3\n              ORDER BY session_id DESC LIMIT $4",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "created_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.login_sessions",
+            "name": "created_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "auth_time_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.login_sessions",
+            "name": "auth_time_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "ended_ms",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.login_sessions",
+            "name": "ended_ms"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "end_reason",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.login_sessions",
+            "name": "end_reason"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "71382a40bdb4d8d84612e1449f8772f870f6ac4c4ca839106b4171167d076215"
+}

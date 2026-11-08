@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.identity_data_requests SET answered_at = clock_timestamp(), outcome = $4\n              WHERE tenant_id = $1 AND realm_id = $2 AND request_id = $3 AND answered_at IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "b6b7ba884ddb88f0d36bd28bf1c7a858957ba9c2f9fd7eb0d043710b0840d998"
+}

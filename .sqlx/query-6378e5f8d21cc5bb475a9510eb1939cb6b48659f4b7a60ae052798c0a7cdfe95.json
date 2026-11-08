@@ -1,0 +1,32 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.identity_data_requests (tenant_id, realm_id, subject_id, kind, due_at)\n               VALUES ($1, $2, $3, $4, clock_timestamp() + make_interval(days => $5))\n               RETURNING request_id AS \"id!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.identity_data_requests",
+            "name": "request_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "6378e5f8d21cc5bb475a9510eb1939cb6b48659f4b7a60ae052798c0a7cdfe95"
+}

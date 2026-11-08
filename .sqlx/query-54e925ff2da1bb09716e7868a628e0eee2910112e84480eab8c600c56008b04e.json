@@ -1,0 +1,34 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.identity_deletion_facts\n                 (tenant_id, realm_id, subject_id, source, requested_by, exercise_id, effective_at)\n               VALUES ($1, $2, $3, $4, $5, $6,\n                       greatest(clock_timestamp(), to_timestamp($7::bigint / 1000.0)))\n               ON CONFLICT (tenant_id, realm_id, subject_id) WHERE cancelled_at IS NULL DO NOTHING\n               RETURNING deletion_id AS \"id!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.identity_deletion_facts",
+            "name": "deletion_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Text",
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "54e925ff2da1bb09716e7868a628e0eee2910112e84480eab8c600c56008b04e"
+}

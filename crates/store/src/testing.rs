@@ -397,3 +397,57 @@ mod tests {
         assert!(!sweepable_template(current, current, false, 10.0 * day));
     }
 }
+
+/// A step of a deletion a test moves into the past (OP-153 m.3 (bb)).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DeletionStep {
+    /// The end of the cancellation window.
+    Effective,
+    /// The end of the destruction delay.
+    DestroyAfter,
+}
+
+/// Moves `step` of the subject's deletion one second into the past, as time would: the table
+/// lets each step be written once, so the owner lifts its trigger for the change.
+///
+/// # Errors
+/// [`TestDbError`].
+pub async fn age_deletion(
+    db: &TestDb,
+    subject: [u8; 16],
+    step: DeletionStep,
+) -> Result<(), TestDbError> {
+    let column = match step {
+        DeletionStep::Effective => {
+            "requested_at = clock_timestamp() - interval '2 seconds', effective_at"
+        }
+        DeletionStep::DestroyAfter => {
+            "deleted_at = clock_timestamp() - interval '25 hours', destroy_after"
+        }
+    };
+    let mut c = db.owner.acquire().await.at("acquire owner")?;
+    exec(
+        &mut c,
+        String::from(
+            "ALTER TABLE access.identity_deletion_facts DISABLE TRIGGER deletion_fact_transition",
+        ),
+        "lift trigger",
+    )
+    .await?;
+    sqlx::query(AssertSqlSafe(format!(
+        "UPDATE access.identity_deletion_facts SET {column} = clock_timestamp() - interval '1 second' \
+         WHERE subject_id = $1"
+    )))
+    .bind(sqlx::types::Uuid::from_bytes(subject))
+    .execute(&mut *c)
+    .await
+    .at("age deletion")?;
+    exec(
+        &mut c,
+        String::from(
+            "ALTER TABLE access.identity_deletion_facts ENABLE TRIGGER deletion_fact_transition",
+        ),
+        "restore trigger",
+    )
+    .await
+}

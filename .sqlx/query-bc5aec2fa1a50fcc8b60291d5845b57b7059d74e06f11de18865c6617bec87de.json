@@ -1,0 +1,109 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT document_type, version, document_digest, locale, method, client, record_digest,\n                      (extract(epoch FROM accepted_at) * 1000)::bigint AS \"ms!\"\n                 FROM access.identity_document_acceptances\n                WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3\n                ORDER BY acceptance_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "document_type",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.identity_document_acceptances",
+            "name": "document_type"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "version",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.identity_document_acceptances",
+            "name": "version"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "document_digest",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.identity_document_acceptances",
+            "name": "document_digest"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "locale",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.identity_document_acceptances",
+            "name": "locale"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "method",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.identity_document_acceptances",
+            "name": "method"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "client",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.identity_document_acceptances",
+            "name": "client"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "record_digest",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.identity_document_acceptances",
+            "name": "record_digest"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "ms!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      null
+    ]
+  },
+  "hash": "bc5aec2fa1a50fcc8b60291d5845b57b7059d74e06f11de18865c6617bec87de"
+}

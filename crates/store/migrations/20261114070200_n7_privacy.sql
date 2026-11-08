@@ -48,28 +48,40 @@ CREATE TABLE access.identity_document_acceptances (
 CREATE INDEX identity_document_acceptances_subject
   ON access.identity_document_acceptances (tenant_id, realm_id, subject_id, document_type, acceptance_id);
 
--- OP-42, TN-78, OP-153 m.3 (bb): the one immutable deletion fact of a subject; the destruction
--- completes it once with its proof
+-- OP-42, TN-78, OP-153 m.3 (bb): the deletion of a subject. The request takes effect after its
+-- cancellation window (the CT3 delay); the tombstone is written once, the destruction completes
+-- it once with its proof. A cancelled request stays as it was.
 CREATE TABLE access.identity_deletion_facts (
   tenant_id uuid NOT NULL,
   realm_id uuid NOT NULL,
+  deletion_id uuid NOT NULL DEFAULT uuidv7(),
   -- pii:none
   subject_id uuid NOT NULL,
   source text NOT NULL CHECK (source IN ('admin', 'self_service', 'scim', 'inactivity')),
   requested_by text NOT NULL CHECK (char_length(requested_by) BETWEEN 1 AND 255),
   exercise_id bytea CHECK (exercise_id IS NULL OR octet_length(exercise_id) = 32),
-  deleted_at timestamptz NOT NULL DEFAULT clock_timestamp(),
-  destroy_after timestamptz NOT NULL,
+  requested_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  effective_at timestamptz NOT NULL,
+  cancelled_at timestamptz,
+  deleted_at timestamptz,
+  destroy_after timestamptz,
   destroyed_at timestamptz,
   destruction_proof bytea CHECK (destruction_proof IS NULL OR octet_length(destruction_proof) = 32),
-  CHECK (destroy_after >= deleted_at + interval '24 hours'),
+  CHECK (effective_at >= requested_at),
+  CHECK (cancelled_at IS NULL OR deleted_at IS NULL),
+  CHECK ((deleted_at IS NULL) = (destroy_after IS NULL)),
+  CHECK (destroy_after IS NULL OR destroy_after >= deleted_at + interval '24 hours'),
+  CHECK (destroyed_at IS NULL OR deleted_at IS NOT NULL),
   CHECK ((destroyed_at IS NULL) = (destruction_proof IS NULL)),
-  PRIMARY KEY (tenant_id, realm_id, subject_id),
+  PRIMARY KEY (tenant_id, realm_id, deletion_id),
   FOREIGN KEY (tenant_id, realm_id, subject_id)
     REFERENCES access.identity_subjects (tenant_id, realm_id, subject_id)
 );
+CREATE UNIQUE INDEX identity_deletion_facts_open
+  ON access.identity_deletion_facts (tenant_id, realm_id, subject_id) WHERE cancelled_at IS NULL;
 CREATE INDEX identity_deletion_facts_due
-  ON access.identity_deletion_facts (tenant_id, realm_id, destroy_after) WHERE destroyed_at IS NULL;
+  ON access.identity_deletion_facts (tenant_id, realm_id, effective_at)
+  WHERE cancelled_at IS NULL AND destroyed_at IS NULL;
 
 CREATE FUNCTION access.deletion_fact_transition() RETURNS trigger
   LANGUAGE plpgsql
@@ -79,12 +91,14 @@ BEGIN
   IF TG_OP <> 'UPDATE' THEN
     RAISE EXCEPTION 'identity_deletion_facts: % is not allowed', TG_OP USING ERRCODE = 'insufficient_privilege';
   END IF;
-  IF OLD.destroyed_at IS NOT NULL OR NEW.destroyed_at IS NULL
-     OR (NEW.tenant_id, NEW.realm_id, NEW.subject_id, NEW.source, NEW.requested_by, NEW.exercise_id,
-         NEW.deleted_at, NEW.destroy_after)
-        IS DISTINCT FROM (OLD.tenant_id, OLD.realm_id, OLD.subject_id, OLD.source, OLD.requested_by,
-                          OLD.exercise_id, OLD.deleted_at, OLD.destroy_after) THEN
-    RAISE EXCEPTION 'identity_deletion_facts: a deletion fact is only completed, once' USING ERRCODE = 'insufficient_privilege';
+  IF (NEW.tenant_id, NEW.realm_id, NEW.deletion_id, NEW.subject_id, NEW.source, NEW.requested_by,
+      NEW.exercise_id, NEW.requested_at, NEW.effective_at)
+     IS DISTINCT FROM (OLD.tenant_id, OLD.realm_id, OLD.deletion_id, OLD.subject_id, OLD.source,
+                       OLD.requested_by, OLD.exercise_id, OLD.requested_at, OLD.effective_at)
+     OR (OLD.cancelled_at IS NOT NULL AND NEW.cancelled_at IS DISTINCT FROM OLD.cancelled_at)
+     OR (OLD.deleted_at IS NOT NULL AND (NEW.deleted_at, NEW.destroy_after) IS DISTINCT FROM (OLD.deleted_at, OLD.destroy_after))
+     OR (OLD.destroyed_at IS NOT NULL AND (NEW.destroyed_at, NEW.destruction_proof) IS DISTINCT FROM (OLD.destroyed_at, OLD.destruction_proof)) THEN
+    RAISE EXCEPTION 'identity_deletion_facts: each step of a deletion is written once' USING ERRCODE = 'insufficient_privilege';
   END IF;
   RETURN NEW;
 END
@@ -217,7 +231,8 @@ REVOKE ALL ON FUNCTION access.data_request_transition() FROM PUBLIC;
 REVOKE ALL ON FUNCTION access.hold_transition() FROM PUBLIC;
 GRANT SELECT, INSERT ON access.identity_preferences, access.identity_document_acceptances,
   access.identity_deletion_facts, access.identity_data_requests, access.retention_holds TO access_app;
-GRANT UPDATE (destroyed_at, destruction_proof) ON access.identity_deletion_facts TO access_app;
+GRANT UPDATE (cancelled_at, deleted_at, destroy_after, destroyed_at, destruction_proof)
+  ON access.identity_deletion_facts TO access_app;
 GRANT UPDATE (answered_at, outcome) ON access.identity_data_requests TO access_app;
 GRANT UPDATE (until) ON access.retention_holds TO access_app;
 

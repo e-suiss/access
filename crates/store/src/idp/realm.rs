@@ -606,7 +606,8 @@ pub async fn account(
                   (extract(epoch FROM status_at) * 1000)::float8 AS "status_at_ms",
                   (extract(epoch FROM created_at) * 1000)::float8 AS "created_at_ms"
              FROM access.identity_subjects
-            WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3"#,
+            WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3
+              AND status NOT IN ('tombstone', 'purging')"#,
         tenant,
         realm,
         Uuid::from_bytes(subject),
@@ -640,6 +641,7 @@ pub async fn accounts(
                   (extract(epoch FROM created_at) * 1000)::float8 AS "created_at_ms"
              FROM access.identity_subjects
             WHERE tenant_id = $1 AND realm_id = $2 AND subject_id > $3
+              AND status NOT IN ('tombstone', 'purging')
             ORDER BY subject_id LIMIT $4"#,
         tenant,
         realm,

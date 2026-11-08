@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.identity_deletion_facts\n                SET destroyed_at = clock_timestamp(), destruction_proof = $4\n              WHERE tenant_id = $1 AND realm_id = $2 AND deletion_id = $3\n                AND deleted_at IS NOT NULL AND destroyed_at IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "4a402d84c7c266d8b0f771a88cc89e04c009e828f841c6c186eca0f2e170b2f1"
+}

@@ -1,0 +1,39 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "WITH seen AS (\n                 SELECT s.subject_id,\n                        greatest(\n                          (extract(epoch FROM s.created_at) * 1000)::bigint,\n                          coalesce((SELECT max(l.last_seen_ms) FROM access.login_sessions l\n                                     WHERE l.tenant_id = s.tenant_id AND l.realm_id = s.realm_id\n                                       AND l.subject_id = s.subject_id), 0),\n                          coalesce((SELECT (extract(epoch FROM max(c.last_used_at)) * 1000)::bigint\n                                      FROM access.identity_credentials c\n                                     WHERE c.tenant_id = s.tenant_id AND c.realm_id = s.realm_id\n                                       AND c.subject_id = s.subject_id), 0)) AS last_ms\n                   FROM access.identity_subjects s\n                  WHERE s.tenant_id = $1 AND s.realm_id = $2 AND s.status = ANY($3))\n               SELECT subject_id, last_ms AS \"last_ms!\" FROM seen\n                WHERE last_ms < (extract(epoch FROM clock_timestamp()) * 1000)::bigint - $4::bigint * 1000\n                ORDER BY last_ms LIMIT $5",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "subject_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.identity_subjects",
+            "name": "subject_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "last_ms!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "TextArray",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      null
+    ]
+  },
+  "hash": "76b47d8bcf67f07043d5c9afca5c9c064f204b95847a5785931a269890949dd4"
+}
