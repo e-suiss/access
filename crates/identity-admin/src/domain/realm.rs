@@ -370,6 +370,40 @@ impl SigninMethod {
     }
 }
 
+/// How the sign-in screens answer about accounts (TN-96, OP-153 m.3 (j)).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum EnumerationMode {
+    /// Identifier first, identical answers whether or not an account exists (the default).
+    #[default]
+    Uniform,
+    /// Identifier and password on one screen, no branching at all.
+    Strict,
+}
+
+impl EnumerationMode {
+    /// The stored name.
+    #[must_use]
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::Uniform => "uniform",
+            Self::Strict => "strict",
+        }
+    }
+
+    /// From the stored name.
+    #[must_use]
+    pub fn parse(s: &str) -> Option<Self> {
+        match s {
+            "uniform" => Some(Self::Uniform),
+            "strict" => Some(Self::Strict),
+            _ => None,
+        }
+    }
+}
+
+/// The shortest "keep N days" an e-mail reuse policy may name (OP-153 m.3 (i), TN-76 m.5).
+pub const MIN_EMAIL_KEEP_DAYS: u32 = 365;
+
 /// The realm's sign-in requirements (TN-132): what must be complete, never the order. The
 /// server keeps the rules no order breaks: unverified data activates nothing, required MFA is
 /// never skipped.
@@ -385,6 +419,11 @@ pub struct SigninPolicy {
     pub domain_allow: BTreeSet<String>,
     /// Email domains registration is refused for.
     pub domain_deny: BTreeSet<String>,
+    /// The enumeration mode (OP-153 m.3 (j)).
+    pub enumeration: EnumerationMode,
+    /// Days a given-up e-mail address stays taken before it can be registered again; `None`
+    /// never frees it, the default (OP-153 m.3 (i)).
+    pub email_keep_days: Option<u32>,
 }
 
 impl SigninPolicy {
@@ -402,17 +441,21 @@ impl SigninPolicy {
             .all(|l| l.len() <= MAX_DOMAIN_LIST && l.iter().all(|d| super::host(d)))
             && self.domain_allow.is_disjoint(&self.domain_deny);
         let methods_ok = !self.methods.is_empty();
-        if fields_ok && lists_ok && methods_ok {
+        let keep_ok = self
+            .email_keep_days
+            .is_none_or(|d| d >= MIN_EMAIL_KEEP_DAYS);
+        if fields_ok && lists_ok && methods_ok && keep_ok {
             Ok(())
         } else {
             Err(Invalid::SigninPolicy)
         }
     }
 
-    /// The deterministic CBOR the change and its stored form carry.
+    /// The deterministic CBOR the change and its stored form carry; the N1 fields only when
+    /// they differ from their defaults, so earlier policies keep their bytes.
     #[must_use]
     pub fn to_value(&self) -> Value {
-        Value::Map(vec![
+        let mut m = vec![
             (
                 Value::text("methods"),
                 Value::Array(
@@ -435,7 +478,20 @@ impl SigninPolicy {
                 Value::text("domain_deny"),
                 text_array(self.domain_deny.iter().map(String::as_str)),
             ),
-        ])
+        ];
+        if self.enumeration != EnumerationMode::Uniform {
+            m.push((
+                Value::text("enumeration"),
+                Value::text(self.enumeration.name()),
+            ));
+        }
+        if let Some(d) = self.email_keep_days {
+            m.push((
+                Value::text("email_keep_days"),
+                Value::Unsigned(u64::from(d)),
+            ));
+        }
+        Value::Map(m)
     }
 }
 

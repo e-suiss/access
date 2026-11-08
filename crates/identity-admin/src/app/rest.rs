@@ -18,7 +18,7 @@ use suiss_crypto::dcbor::{self, Limits, Value};
 
 use super::Admin;
 use crate::AdminError;
-use crate::domain::realm::Binding;
+use crate::domain::realm::{Binding, EnumerationMode};
 use crate::domain::{
     Attribute, AuthMethod, Branding, Change, CimdPolicy, ClaimName, Client, ClientId, Color,
     Disclosure, ExtensionPolicy, Group, HOOK_PREFIX, HookChange, HookPoint, HookSpec, Invalid,
@@ -498,6 +498,8 @@ pub fn compile(op: Op, key: Option<&str>, body: &Json, ids: &IdKey) -> Result<Ch
                     "mfa_required",
                     "domain_allow",
                     "domain_deny",
+                    "enumeration",
+                    "email_keep_days",
                 ],
             )?;
             let set = |k| -> Result<BTreeSet<String>, Invalid> {
@@ -512,6 +514,22 @@ pub fn compile(op: Op, key: Option<&str>, body: &Json, ids: &IdKey) -> Result<Ch
                 mfa_required: flag(m, "mfa_required")?,
                 domain_allow: set("domain_allow")?,
                 domain_deny: set("domain_deny")?,
+                // OP-153 m.3 (i), (j)
+                enumeration: match m.get("enumeration") {
+                    None => EnumerationMode::Uniform,
+                    Some(Json::String(s)) => {
+                        EnumerationMode::parse(s).ok_or(Invalid::SigninPolicy)?
+                    }
+                    Some(_) => return Err(Invalid::SigninPolicy),
+                },
+                email_keep_days: match m.get("email_keep_days") {
+                    None | Some(Json::Null) => None,
+                    Some(v) => Some(
+                        v.as_u64()
+                            .and_then(|d| u32::try_from(d).ok())
+                            .ok_or(Invalid::SigninPolicy)?,
+                    ),
+                },
             })
         }
         Op::PutSessionPolicy => {
@@ -847,6 +865,8 @@ pub fn default_signin() -> SigninPolicy {
         mfa_required: false,
         domain_allow: BTreeSet::new(),
         domain_deny: BTreeSet::new(),
+        enumeration: EnumerationMode::Uniform,
+        email_keep_days: None,
     }
 }
 
