@@ -301,18 +301,11 @@ jobs:
         with:
           cache-key: test
           tools: nextest mutants
-      # SA-59
-      - name: cargo-mutants (report only)
+      # SA-59, OP-152 m.5 (c): a missed (2) or timed-out (3) mutant fails the shard
+      - name: cargo-mutants
         env:
           SHARD: ${{ matrix.shard }}
-        run: |
-          status=0
-          just mutants --shard "$SHARD/12" || status=$?
-          case "$status" in
-            0) ;;
-            2|3) echo "::warning::cargo-mutants found missed or timed-out mutants (report-only until stage 1)" ;;
-            *) exit "$status" ;;
-          esac
+        run: just mutants --shard "$SHARD/12"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: always()
         with:

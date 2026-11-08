@@ -1,0 +1,9 @@
+# SA-59, OP-152 m.5 (c)
+exclude_re = [
+  'algebra\.rs:\d+:\d+: replace > with >= in child_within_parent$',
+  'json\.rs:\d+:\d+: replace \| with \^ in b64url_decode$',
+  'combinator/codec\.rs:\d+:\d+: replace order_unmet with \(\)$',
+  'validity/ceiling\.rs:\d+:\d+: replace < with <= in ct2_offline_extension$',
+  'verify/sd_jwt\.rs:\d+:\d+: replace \|\| with && in confirmation_key$',
+  'meta\.rs:\d+:\d+: replace > with >= in apply$',
+]
