@@ -44,6 +44,10 @@ fn session_json(kit: &RealmKit, v: &SessionView, current: Option<[u8; 16]>) -> V
         "expires_at": rfc3339(v.expires_ms),
         "keep_signed_in": v.keep_signed_in,
         "assurance": serde_json::to_value(&v.assurance).unwrap_or(Value::Null),
+        // TN-33
+        "device": Value::Null,
+        "instance": v.instance.map(|i| access_kernel::json::b64url_encode(&i)),
+        "bound": v.bound,
     });
     if let (Some(c), Some(map)) = (current, out.as_object_mut()) {
         map.insert("current".to_owned(), Value::Bool(c == v.id));
@@ -108,7 +112,12 @@ where
                 }
                 Reply::json(200, body)
             }
-            Ok(other) => ended(&other),
+            Ok(other) => {
+                let mut r = ended(&other);
+                // OP-153 m.3 (y)
+                r.reason = auth.signed_out_reason(cookie).await.ok().flatten();
+                r
+            }
             Err(e) => failed(&e),
         }
     }

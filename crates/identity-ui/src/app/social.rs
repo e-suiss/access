@@ -202,7 +202,7 @@ where
         t.commit().await
     }
 
-    async fn fresh(
+    pub(crate) async fn fresh(
         &self,
         kit: &RealmKit,
         b: &Browser<'_>,
@@ -636,6 +636,8 @@ struct Pending {
     client: access_store::idp::ClientRow,
     claims: Vec<String>,
     authority: Option<access_identity_oauth::domain::request::AuthorityAsk>,
+    redirect_uri: String,
+    state: Option<String>,
 }
 
 impl<K, C, M> Hosted<K, C, M>
@@ -704,6 +706,8 @@ where
             client,
             claims,
             authority: req.authority,
+            redirect_uri: req.redirect_uri,
+            state: req.state,
         })
     }
 
@@ -809,6 +813,34 @@ where
             Ok(()) => Reply::json(200, json!({ "redirect_to": return_to })),
             Err(_) => unavailable(),
         }
+    }
+
+    /// N5: `POST /v1/account/connected-apps/decline` (OP-153 m.3 (z), X-L8): the person chose
+    /// not to share; the waiting request goes back to the app as `access_denied` with its
+    /// `state` and `iss` (RFC 6749 §4.1.2.1, RFC 9207). Nothing is stored.
+    pub async fn decline(&self, entry: &RealmEntry, b: &Browser<'_>, return_to: &str) -> Reply {
+        use access_identity_oauth::domain::request::{AuthError, error_redirect};
+        let kit = match self.kit(entry).await {
+            Ok(k) => k,
+            Err(r) => return r,
+        };
+        if let Err(r) = self.fresh(&kit, b, None).await {
+            return r;
+        }
+        let p = match self.pending(&kit, return_to).await {
+            Ok(p) => p,
+            Err(r) => return r,
+        };
+        let Ok(issuer) = access_identity_oauth::domain::issuer::Issuer::parse(&kit.issuer) else {
+            return unavailable();
+        };
+        let to = error_redirect(
+            &p.redirect_uri,
+            AuthError::ACCESS_DENIED,
+            p.state.as_deref(),
+            &issuer,
+        );
+        Reply::json(200, json!({ "redirect_to": to }))
     }
 
     /// `GET /v1/account/connected-apps` (S11 "Connected apps", OP-153 m.3 (z)): the apps the

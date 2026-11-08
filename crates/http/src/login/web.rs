@@ -75,17 +75,26 @@ impl Jar {
                 .unwrap_or("-")
                 .to_owned(),
         };
+        let mut bound: Option<String> = None;
         for (name, value) in cookies(headers) {
             let slot = match name {
                 FLOW_COOKIE => &mut jar.flow,
                 SESSION_COOKIE => &mut jar.session,
                 MARKER_COOKIE => &mut jar.marker,
                 LOGIN_COOKIE => &mut jar.login,
+                access_identity_session::domain::dbsc::BOUND_COOKIE => &mut bound,
                 _ => continue,
             };
             if slot.is_none() {
                 *slot = Some(value.to_owned());
             }
+        }
+        // TN-33
+        if let (Some(s), Some(b)) = (&jar.session, bound)
+            && !s.contains('.')
+            && !b.contains('.')
+        {
+            jar.session = Some(format!("{s}.{b}"));
         }
         jar
     }
@@ -151,7 +160,9 @@ pub(crate) async fn send(reply: Reply, headers: &HeaderMap) -> Response {
     let mut response = match reply.body {
         Body::Ui(ui) => json_response(code, serde_json::to_vec(&ui).unwrap_or_default()),
         Body::Json(v) => json_response(code, serde_json::to_vec(&v).unwrap_or_default()),
-        Body::Problem(p) => Problem::new(code, p.code, p.title).into_response(),
+        Body::Problem(p) => Problem::new(code, p.code, p.title)
+            .with_reason(reply.reason)
+            .into_response(),
         Body::Html(page) => hosted(code, page, "text/html; charset=utf-8", "no-store"),
         Body::Script(source) => hosted(code, source, "text/javascript; charset=utf-8", "no-cache"),
         Body::Empty => code.into_response(),
@@ -173,6 +184,14 @@ pub(crate) async fn send(reply: Reply, headers: &HeaderMap) -> Response {
     }
     if let Some(s) = reply.retry_after_s {
         h.insert(header::RETRY_AFTER, HeaderValue::from(s));
+    }
+    for (name, value) in reply.headers {
+        if let (Ok(n), Ok(v)) = (
+            HeaderName::from_bytes(name.as_bytes()),
+            HeaderValue::from_str(&value),
+        ) {
+            h.append(n, v);
+        }
     }
     if let Some(id) = headers.get(&REQUEST_ID) {
         h.insert(REQUEST_ID, id.clone());
@@ -304,6 +323,7 @@ macro_rules! handler {
             State($s): St<D, K, KI, C, M>,
             Path($p): Params,
             peer: Option<Extension<Peer>>,
+            method: axum::http::Method,
             uri: Uri,
             $headers: HeaderMap,
             $bytes: Bytes,
@@ -319,7 +339,11 @@ macro_rules! handler {
                 Ok(e) => e,
                 Err(r) => return r,
             };
-            if $write && let Err(r) = same_origin(&$headers).and_then(|()| json_only(&$headers)) {
+            let bodiless_delete = method == axum::http::Method::DELETE && $bytes.is_empty();
+            if $write
+                && let Err(r) = same_origin(&$headers)
+                    .and_then(|()| if bodiless_delete { Ok(()) } else { json_only(&$headers) })
+            {
                 return r;
             }
             let jar = Jar::of(&$headers, peer);
@@ -593,6 +617,146 @@ handler! {
     }
 }
 
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PasswordBody {
+    new_password: String,
+}
+
+handler! {
+    /// `POST /v1/sessions/{session}/end` (X36, OP-153 m.3 (y)).
+    end_sign_in(s, entry, b, p, bytes, headers) true {
+        let _ = &bytes;
+        let session = bounded(param(&p, "session"), MAX_TEXT)?;
+        Ok(s.hosted.end_sign_in(&entry, &b, session).await)
+    }
+}
+
+handler! {
+    /// `GET /v1/account/methods` (S11, TN-99).
+    sign_in_methods(s, entry, b, p, bytes, headers) false {
+        let _ = (&p, &bytes);
+        Ok(s.hosted.sign_in_methods(&entry, &b).await)
+    }
+}
+
+handler! {
+    /// `DELETE /v1/account/methods/{credential}` (TN-68).
+    remove_sign_in_method(s, entry, b, p, bytes, headers) true {
+        let _ = &bytes;
+        let credential = bounded(param(&p, "credential"), MAX_TEXT)?;
+        Ok(s.hosted.remove_sign_in_method(&entry, &b, credential).await)
+    }
+}
+
+handler! {
+    /// `PUT /v1/account/password` (§10.2.1, TN-50).
+    set_password(s, entry, b, p, bytes, headers) true {
+        let _ = &p;
+        let req: PasswordBody = body(&bytes)?;
+        if req.new_password.chars().count() > 128 {
+            return Err(problem(StatusCode::BAD_REQUEST, "invalid-request", "Bad Request"));
+        }
+        Ok(s.hosted.set_password(&entry, &b, &req.new_password).await)
+    }
+}
+
+handler! {
+    /// `GET /v1/login/branding` (TN-106).
+    branding(s, entry, b, p, bytes, headers) false {
+        let _ = (&b, &p, &bytes);
+        Ok(s.hosted.branding(&entry).await)
+    }
+}
+
+/// The DBSC proof of a request, when it carries exactly one.
+fn dbsc_proof(headers: &HeaderMap) -> Option<&str> {
+    let mut all = headers
+        .get_all(access_identity_session::domain::dbsc::RESPONSE_HEADER)
+        .iter();
+    let first = all.next()?.to_str().ok()?;
+    if all.next().is_some() {
+        return None;
+    }
+    Some(first.trim().trim_matches('"'))
+}
+
+handler! {
+    /// `POST /v1/dbsc/register` (TN-33): the browser posts its proof in a header, no body.
+    dbsc_register(s, entry, b, p, bytes, headers) false {
+        let _ = (&p, &bytes);
+        same_origin(&headers)?;
+        Ok(s.hosted.dbsc_register(&entry, &b, dbsc_proof(&headers)).await)
+    }
+}
+
+handler! {
+    /// `POST /v1/dbsc/refresh` (TN-33).
+    dbsc_refresh(s, entry, b, p, bytes, headers) false {
+        let _ = (&p, &bytes);
+        same_origin(&headers)?;
+        Ok(s.hosted.dbsc_refresh(&entry, &b, dbsc_proof(&headers)).await)
+    }
+}
+
+/// Largest CSP report body read.
+const MAX_CSP_REPORT: usize = 64 * 1024;
+
+handler! {
+    /// `POST /csp-reports` (OP-153 m.3 (t)): `application/csp-report` or
+    /// `application/reports+json`.
+    csp_report(s, entry, b, p, bytes, headers) false {
+        let _ = &p;
+        let kind = headers
+            .get(header::CONTENT_TYPE)
+            .and_then(|v| v.to_str().ok())
+            .and_then(|v| v.split(';').next())
+            .map(str::trim)
+            .unwrap_or_default();
+        if !matches!(kind, "application/csp-report" | "application/reports+json" | "application/json") {
+            return Err(problem(StatusCode::UNSUPPORTED_MEDIA_TYPE, "json-required", "Unsupported Media Type"));
+        }
+        if bytes.len() > MAX_CSP_REPORT {
+            return Err(problem(StatusCode::PAYLOAD_TOO_LARGE, "too-large", "Payload Too Large"));
+        }
+        Ok(s.hosted.csp_report(&entry, &b, &bytes).await)
+    }
+}
+
+/// `GET /login/theme.css`: the realm's colours as CSS custom properties (TN-106).
+pub(super) async fn theme_css<D, K, KI, C, M>(
+    State(s): St<D, K, KI, C, M>,
+    Path(p): Params,
+    uri: Uri,
+    headers: HeaderMap,
+) -> Response
+where
+    D: Directory,
+    K: Keys,
+    KI: Kits,
+    C: Clock + Sync,
+    M: Messages,
+{
+    let entry = match realm(&s, &p, &uri, &headers).await {
+        Ok(e) => e,
+        Err(r) => return r,
+    };
+    match s.hosted.theme(&entry).await {
+        Ok(theme) => {
+            let mut r = (StatusCode::OK, theme.css()).into_response();
+            let h = r.headers_mut();
+            h.insert(
+                header::CONTENT_TYPE,
+                HeaderValue::from_static("text/css; charset=utf-8"),
+            );
+            h.insert(header::CACHE_CONTROL, HeaderValue::from_static("no-cache"));
+            assets::secure(h);
+            r
+        }
+        Err(r) => send(r, &headers).await,
+    }
+}
+
 /// `GET /.well-known/webauthn`: the realm's Related Origins document (TN-18).
 pub(super) async fn related_origins<D, K, KI, C, M>(
     State(s): St<D, K, KI, C, M>,
@@ -655,13 +819,38 @@ where
     C: Clock + Sync,
     M: Messages,
 {
-    if let Err(r) = realm(&s, &p, &uri, &headers).await {
-        return r;
+    let entry = match realm(&s, &p, &uri, &headers).await {
+        Ok(e) => e,
+        Err(r) => return r,
+    };
+    let Some(mut page) = s.assets.as_ref().and_then(assets::Assets::page) else {
+        return not_found();
+    };
+    // TN-106, IDP-36, OP-153 m.3 (t)
+    let (Ok(theme), Ok(base)) = (
+        s.hosted.theme(&entry).await,
+        s.hosted.base_path(&entry).await,
+    ) else {
+        return problem(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "unavailable",
+            "Service Unavailable",
+        );
+    };
+    let (enforced, report_only) = theme.csp(&base);
+    let h = page.headers_mut();
+    if let Ok(v) = HeaderValue::from_str(&enforced) {
+        h.insert(header::CONTENT_SECURITY_POLICY, v);
     }
-    s.assets
-        .as_ref()
-        .and_then(assets::Assets::page)
-        .unwrap_or_else(not_found)
+    if let Some(v) = report_only.and_then(|r| HeaderValue::from_str(&r).ok()) {
+        h.insert(header::CONTENT_SECURITY_POLICY_REPORT_ONLY, v);
+    }
+    if let Ok(v) = HeaderValue::from_str(
+        &access_identity_ui::domain::branding::reporting_endpoints(&base),
+    ) {
+        h.insert(HeaderName::from_static("reporting-endpoints"), v);
+    }
+    page
 }
 
 /// A built asset of the login app.

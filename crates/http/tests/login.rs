@@ -1177,7 +1177,12 @@ async fn the_login_app_carries_its_security_headers() {
         .lines()
         .filter_map(|l| l.trim().strip_prefix('"')?.strip_suffix("\","))
         .collect();
-    assert_eq!(page.headers["content-security-policy"], csp.join("; "));
+    // OP-153 m.3 (t)
+    assert_eq!(
+        page.headers["content-security-policy"],
+        format!("{}; report-uri /csp-reports; report-to csp", csp.join("; "))
+    );
+    assert_eq!(page.headers["reporting-endpoints"], "csp=\"/csp-reports\"");
     for (name, value) in [
         ("x-content-type-options", "nosniff"),
         ("referrer-policy", "no-referrer"),
@@ -4086,4 +4091,456 @@ async fn a_wards_request_waits_on_its_guardian_who_is_told_and_silence_is_never_
         StatusCode::CONFLICT
     );
     assert_eq!(c.get(&path).await.json()["outcome"], "deny");
+}
+/// N5: a `dbsc+jwt` proof by `key` answering `jti`, carrying the key when `with_key`.
+fn dbsc_proof(key: &SoftSigner, jti: &str, with_key: bool) -> String {
+    let suiss_crypto::cose::PublicKey::P256(point) = key.public_key() else {
+        panic!("P-256");
+    };
+    let mut payload = json!({ "jti": jti, "iat": 1 });
+    if with_key {
+        payload["key"] = json!({
+            "kty": "EC", "crv": "P-256",
+            "x": b64url_encode(&point[1..33]), "y": b64url_encode(&point[33..]),
+        });
+    }
+    let input = format!(
+        "{}.{}",
+        b64url_encode(
+            json!({ "alg": "ES256", "typ": "dbsc+jwt" })
+                .to_string()
+                .as_bytes()
+        ),
+        b64url_encode(payload.to_string().as_bytes())
+    );
+    let sig = key.sign(input.as_bytes()).unwrap();
+    format!("{input}.{}", b64url_encode(&sig))
+}
+
+fn first_quoted(header: &str) -> String {
+    let start = header.find('"').unwrap() + 1;
+    let end = start + header[start..].find('"').unwrap();
+    header[start..end].to_owned()
+}
+
+fn quoted<'a>(header: &'a str, name: &str) -> &'a str {
+    let at = header.find(&format!("{name}=\"")).unwrap() + name.len() + 2;
+    let rest = &header[at..];
+    &rest[..rest.find('"').unwrap()]
+}
+
+fn node_types(a: &Answer) -> Vec<String> {
+    a.json()["nodes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|n| n["type"].as_str().unwrap().to_owned())
+        .collect()
+}
+
+// TN-36, OP-148
+#[tokio::test]
+async fn n5_keep_signed_in_and_the_second_step_option_reach_the_session() {
+    let e = env(51, "n5-a", AuthPolicy::DEFAULT).await;
+    e.account("ann@example.com").await;
+    let mut b = e.browser("b");
+    let first = b.start().await;
+    let option = first.json()["nodes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|n| n["type"] == "option")
+        .cloned()
+        .unwrap();
+    assert_eq!(option["name"], "keep_signed_in");
+    assert_eq!(option["checked"], false);
+    assert_eq!(option["label"]["id"], "label.keep_signed_in");
+    let at = b
+        .submit(
+            &first,
+            "identifier",
+            json!({ "identifier": "ann@example.com", "keep_signed_in": "true" }),
+        )
+        .await;
+    assert!(node_types(&at).contains(&String::from("option")));
+    let done = b
+        .submit(
+            &at,
+            "password",
+            json!({ "password": PW, "keep_signed_in": "true" }),
+        )
+        .await;
+    assert_eq!(done.step(), "complete");
+    let cookie = done
+        .headers
+        .get_all(header::SET_COOKIE)
+        .iter()
+        .map(|v| v.to_str().unwrap().to_owned())
+        .find(|c| c.starts_with("__Host-access-session="))
+        .unwrap();
+    assert!(cookie.contains("Max-Age="), "{cookie}");
+    assert_eq!(
+        b.get("/v1/sessions/current").await.json()["keep_signed_in"],
+        true
+    );
+
+    let mut plain = e.browser("p");
+    let done = plain.sign_in("ann@example.com").await;
+    let cookie = done
+        .headers
+        .get_all(header::SET_COOKIE)
+        .iter()
+        .map(|v| v.to_str().unwrap().to_owned())
+        .find(|c| c.starts_with("__Host-access-session="))
+        .unwrap();
+    assert!(!cookie.contains("Max-Age="), "{cookie}");
+    assert_eq!(
+        plain.get("/v1/sessions/current").await.json()["keep_signed_in"],
+        false
+    );
+
+    let started = b
+        .post("/v1/account/totp", Some(json!({ "label": "ann" })))
+        .await;
+    let s = started.json();
+    let seed = base32_decode(s["secret"].as_str().unwrap());
+    let path = format!("/v1/account/totp/{}", s["enrollment"].as_str().unwrap());
+    assert_eq!(
+        b.post(&path, Some(json!({ "code": e.totp(&seed) })))
+            .await
+            .status,
+        StatusCode::OK
+    );
+    let mut c = e.browser("c");
+    let second = c.sign_in("ann@example.com").await;
+    assert_eq!(second.step(), "second_factor");
+    let remember = second.json()["nodes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|n| n["type"] == "option")
+        .cloned()
+        .unwrap();
+    assert_eq!(remember["name"], "remember_device");
+    assert_eq!(remember["checked"], false);
+    e.advance(30_000);
+    let done = c
+        .submit(
+            &second,
+            "totp",
+            json!({ "totp_code": e.totp(&seed), "remember_device": "true" }),
+        )
+        .await;
+    assert_eq!(done.step(), "complete");
+    let marker = access_identity_ui::app::MARKER_COOKIE;
+    assert!(c.jar.contains_key(marker), "{:?}", c.jar.keys());
+    let mut again = e.browser("again");
+    again
+        .jar
+        .insert(String::from(marker), c.jar[marker].clone());
+    assert_eq!(again.sign_in("ann@example.com").await.step(), "complete");
+    let action = again.start().await.action();
+    let refused = again
+        .post(
+            &action,
+            Some(json!({ "method": "identifier",
+                "fields": { "identifier": "x", "remember_device": "true" } })),
+        )
+        .await;
+    assert_eq!(refused.status, StatusCode::BAD_REQUEST);
+}
+
+// TN-33, IDP-22, OP-153 m.3 (y)
+#[tokio::test]
+async fn n5_a_dbsc_bound_cookie_replayed_without_a_proof_is_refused() {
+    let e = env(52, "n5-b", AuthPolicy::DEFAULT).await;
+    e.account("bo@example.com").await;
+    let mut b = e.browser("b");
+    let done = b.sign_in("bo@example.com").await;
+    assert_eq!(done.step(), "complete");
+    let offer = done.headers["secure-session-registration"]
+        .to_str()
+        .unwrap()
+        .to_owned();
+    assert!(
+        offer.starts_with("(ES256);path=\"/v1/dbsc/register\""),
+        "{offer}"
+    );
+    let challenge = quoted(&offer, "challenge").to_owned();
+    let (key, _) = SoftSigner::generate_p256().unwrap();
+    let (thief, _) = SoftSigner::generate_p256().unwrap();
+
+    let wrong_jti = dbsc_proof(&key, "not-the-challenge", true);
+    let r = b
+        .send_with(
+            "POST",
+            "/v1/dbsc/register",
+            None,
+            None,
+            &[("secure-session-response", &wrong_jti)],
+        )
+        .await;
+    assert_eq!(r.status, StatusCode::BAD_REQUEST);
+    let proof = dbsc_proof(&key, &challenge, true);
+    let r = b
+        .send_with(
+            "POST",
+            "/v1/dbsc/register",
+            None,
+            None,
+            &[("secure-session-response", &proof)],
+        )
+        .await;
+    assert_eq!(
+        r.status,
+        StatusCode::OK,
+        "{}",
+        String::from_utf8_lossy(&r.body)
+    );
+    let config = r.json();
+    assert_eq!(config["refresh_url"], "/v1/dbsc/refresh");
+    assert_eq!(config["credentials"][0]["name"], "__Host-access-bound");
+    let id = config["session_identifier"].as_str().unwrap().to_owned();
+    assert!(b.jar.contains_key("__Host-access-bound"));
+    let again = b
+        .send_with(
+            "POST",
+            "/v1/dbsc/register",
+            None,
+            None,
+            &[("secure-session-response", &proof)],
+        )
+        .await;
+    assert_eq!(again.status, StatusCode::BAD_REQUEST);
+
+    let me = b.get("/v1/sessions").await;
+    assert_eq!(me.status, StatusCode::OK);
+    assert_eq!(me.json()["sessions"][0]["bound"], true);
+
+    let mut replay = e.browser("r");
+    replay.jar.insert(
+        String::from("__Host-access-session"),
+        b.jar["__Host-access-session"].clone(),
+    );
+    assert_eq!(
+        replay.get("/v1/sessions/current").await.status,
+        StatusCode::UNAUTHORIZED
+    );
+
+    e.advance(access_identity_session::domain::dbsc::COOKIE_TTL_MS);
+    assert_eq!(
+        b.get("/v1/sessions/current").await.status,
+        StatusCode::UNAUTHORIZED
+    );
+    let ask = b.post("/v1/dbsc/refresh", None).await;
+    assert_eq!(ask.status, StatusCode::FORBIDDEN);
+    let header = ask.headers["secure-session-challenge"]
+        .to_str()
+        .unwrap()
+        .to_owned();
+    assert!(header.ends_with(&format!(";id=\"{id}\"")), "{header}");
+    let c = first_quoted(&header);
+    let renewed = b
+        .send_with(
+            "POST",
+            "/v1/dbsc/refresh",
+            None,
+            None,
+            &[("secure-session-response", &dbsc_proof(&key, &c, false))],
+        )
+        .await;
+    assert_eq!(
+        renewed.status,
+        StatusCode::OK,
+        "{}",
+        String::from_utf8_lossy(&renewed.body)
+    );
+    assert_eq!(b.get("/v1/sessions/current").await.status, StatusCode::OK);
+
+    let ask = b.post("/v1/dbsc/refresh", None).await;
+    let header = ask.headers["secure-session-challenge"]
+        .to_str()
+        .unwrap()
+        .to_owned();
+    let c = first_quoted(&header);
+    let stolen = b
+        .send_with(
+            "POST",
+            "/v1/dbsc/refresh",
+            None,
+            None,
+            &[("secure-session-response", &dbsc_proof(&thief, &c, false))],
+        )
+        .await;
+    assert_eq!(stolen.status, StatusCode::UNAUTHORIZED);
+    assert_eq!(stolen.json()["reason"], "device_mismatch");
+    let mut gone = e.browser("g");
+    gone.jar.insert(
+        String::from("__Host-access-session"),
+        replay.jar["__Host-access-session"].clone(),
+    );
+    let after = gone.get("/v1/sessions/current").await;
+    assert_eq!(after.status, StatusCode::UNAUTHORIZED);
+    assert_eq!(after.json()["reason"], "device_mismatch");
+}
+
+// OP-153 m.3 (y)
+#[tokio::test]
+async fn n5_end_this_sign_in_ends_only_the_other_device() {
+    let e = env(53, "n5-c", AuthPolicy::DEFAULT).await;
+    e.account("cy@example.com").await;
+    let mut here = e.browser("h");
+    let mut there = e.browser("t");
+    assert_eq!(here.sign_in("cy@example.com").await.step(), "complete");
+    assert_eq!(there.sign_in("cy@example.com").await.step(), "complete");
+    let list = here.get("/v1/sessions").await.json();
+    let rows = list["sessions"].as_array().unwrap().clone();
+    assert_eq!(rows.len(), 2);
+    for r in &rows {
+        assert!(r["expires_at"].as_str().is_some());
+        assert_eq!(r["bound"], false);
+        assert!(r["instance"].is_null());
+    }
+    let mine = rows.iter().find(|r| r["current"] == true).unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let theirs = rows.iter().find(|r| r["current"] == false).unwrap()["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let own = here.post(&format!("/v1/sessions/{mine}/end"), None).await;
+    assert_eq!(own.status, StatusCode::NOT_FOUND);
+    let ended = here.post(&format!("/v1/sessions/{theirs}/end"), None).await;
+    assert_eq!(
+        ended.status,
+        StatusCode::OK,
+        "{}",
+        String::from_utf8_lossy(&ended.body)
+    );
+    assert!(ended.json()["instance"].is_null());
+    let out = there.get("/v1/sessions/current").await;
+    assert_eq!(out.status, StatusCode::UNAUTHORIZED);
+    assert!(out.json().get("reason").is_none());
+    assert_eq!(
+        here.get("/v1/sessions/current").await.status,
+        StatusCode::OK
+    );
+    let twice = here.post(&format!("/v1/sessions/{theirs}/end"), None).await;
+    assert_eq!(twice.status, StatusCode::NOT_FOUND);
+    let stranger = e
+        .browser("s")
+        .post(&format!("/v1/sessions/{mine}/end"), None)
+        .await;
+    assert_eq!(stranger.status, StatusCode::UNAUTHORIZED);
+
+    e.advance(SessionPolicy::DEFAULT.idle_ms);
+    let expired = here.get("/v1/sessions/current").await;
+    assert_eq!(expired.status, StatusCode::UNAUTHORIZED);
+    assert_eq!(expired.json()["reason"], "expired");
+}
+
+// TN-99, TN-68, OP-148
+#[tokio::test]
+async fn n5_sign_in_methods_are_managed_in_s11() {
+    let e = env(54, "n5-d", AuthPolicy::DEFAULT).await;
+    e.account("di@example.com").await;
+    let mut b = e.browser("b");
+    assert_eq!(b.sign_in("di@example.com").await.step(), "complete");
+    let m = b.get("/v1/account/methods").await;
+    assert_eq!(m.status, StatusCode::OK);
+    let m = m.json();
+    assert_eq!(m["password"]["set"], true);
+    assert_eq!(m["passkeys"].as_array().unwrap().len(), 0);
+    assert_eq!(m["totp"].as_array().unwrap().len(), 0);
+    assert_eq!(m["recovery_codes"]["set"], false);
+    let started = b
+        .post("/v1/account/totp", Some(json!({ "label": "di" })))
+        .await;
+    let s = started.json();
+    let seed = base32_decode(s["secret"].as_str().unwrap());
+    let path = format!("/v1/account/totp/{}", s["enrollment"].as_str().unwrap());
+    assert_eq!(
+        b.post(&path, Some(json!({ "code": e.totp(&seed) })))
+            .await
+            .status,
+        StatusCode::OK
+    );
+    let m = b.get("/v1/account/methods").await.json();
+    let totp = m["totp"][0]["id"].as_str().unwrap().to_owned();
+    assert!(totp.starts_with("crd_"));
+    assert_eq!(m["recovery_codes"]["set"], true);
+    assert_eq!(m["recovery_codes"]["acknowledged"], false);
+
+    let path = format!("/v1/account/methods/{totp}");
+    let key = b.key();
+    let removed = b.send("DELETE", &path, None, Some(&key)).await;
+    assert_eq!(
+        removed.status,
+        StatusCode::NO_CONTENT,
+        "{}",
+        String::from_utf8_lossy(&removed.body)
+    );
+    assert_eq!(
+        b.get("/v1/account/methods").await.json()["totp"]
+            .as_array()
+            .unwrap()
+            .len(),
+        0
+    );
+    let password = b.get("/v1/account/methods").await.json();
+    assert_eq!(password["password"]["set"], true);
+
+    let key = b.key();
+    let rejected = b
+        .send(
+            "PUT",
+            "/v1/account/password",
+            Some(json!({ "new_password": "another long passphrase" })),
+            Some(&key),
+        )
+        .await;
+    assert_eq!(rejected.status, StatusCode::SERVICE_UNAVAILABLE);
+
+    e.advance(access_identity_ui::app::signup::STEP_UP_MAX_AGE_MS + 1);
+    let key = b.key();
+    let stale = b.send("DELETE", &path, None, Some(&key)).await;
+    assert_eq!(stale.status, StatusCode::UNAUTHORIZED);
+    assert_eq!(stale.json()["code"], "step-up-required");
+    let key = b.key();
+    let missing = b
+        .send("DELETE", "/v1/account/methods/crd_nope", None, Some(&key))
+        .await;
+    assert_eq!(missing.status, StatusCode::UNAUTHORIZED);
+}
+
+// TN-68
+#[tokio::test]
+async fn n5_the_last_sign_in_method_stays() {
+    let e = env(55, "n5-e", AuthPolicy::DEFAULT).await;
+    let subject = e.account("ed@example.com").await;
+    let mut b = e.browser("b");
+    assert_eq!(b.sign_in("ed@example.com").await.step(), "complete");
+    let m = b.get("/v1/account/methods").await.json();
+    assert_eq!(m["password"]["set"], true);
+    let mut t = TenantTx::begin(&e.db.app, e.tenant, e.realm).await.unwrap();
+    let rows = t.sign_in_methods(subject).await.unwrap();
+    t.commit().await.unwrap();
+    let id = e.kit.ids.encode("crd", rows[0].id).unwrap();
+    let key = b.key();
+    let last = b
+        .send(
+            "DELETE",
+            &format!("/v1/account/methods/{id}"),
+            None,
+            Some(&key),
+        )
+        .await;
+    assert_eq!(
+        last.status,
+        StatusCode::CONFLICT,
+        "{}",
+        String::from_utf8_lossy(&last.body)
+    );
+    assert_eq!(last.json()["code"], "last-sign-in-method");
 }

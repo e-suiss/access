@@ -17,6 +17,7 @@ pub mod devices;
 pub mod household;
 mod me;
 pub mod orgs;
+pub mod pages;
 pub mod privacy;
 pub mod recovery;
 pub mod shell;
@@ -117,6 +118,10 @@ pub struct Reply {
     pub retry_after_s: Option<u64>,
     /// Wait this long before answering (adaptive delay, TN-82); never on the wire.
     pub pad_ms: u64,
+    /// N5: further response headers (DBSC, TN-33), lower-case names.
+    pub headers: Vec<(&'static str, String)>,
+    /// N5: the problem's stable `reason` member ("Signed out because …", OP-153 m.3 (y)).
+    pub reason: Option<&'static str>,
 }
 
 impl Reply {
@@ -127,6 +132,8 @@ impl Reply {
             cookies: Vec::new(),
             retry_after_s: None,
             pad_ms: 0,
+            headers: Vec::new(),
+            reason: None,
         }
     }
 
@@ -158,6 +165,11 @@ impl Reply {
 
     pub(crate) fn cookie(mut self, c: Option<String>) -> Self {
         self.cookies.extend(c);
+        self
+    }
+
+    pub(crate) fn header(mut self, name: &'static str, value: String) -> Self {
+        self.headers.push((name, value));
         self
     }
 }
@@ -398,9 +410,10 @@ fn with_options(kit: &RealmKit, mut ui: Ui) -> Ui {
         Step::Identifier | Step::Authenticate => ui
             .nodes
             .push(option(FieldName::KeepSignedIn, TextId::KeepSignedInLabel)),
-        Step::SecondFactor if kit.auth.remember_device_days.is_some() => ui
-            .nodes
-            .push(option(FieldName::RememberDevice, TextId::RememberDeviceLabel)),
+        Step::SecondFactor if kit.auth.remember_device_days.is_some() => ui.nodes.push(option(
+            FieldName::RememberDevice,
+            TextId::RememberDeviceLabel,
+        )),
         _ => {}
     }
     ui
@@ -512,8 +525,8 @@ where
             return reply;
         }
         let rows = async {
-            let mut t = access_store::identity::TenantTx::begin(&self.db, kit.tenant, kit.realm)
-                .await?;
+            let mut t =
+                access_store::identity::TenantTx::begin(&self.db, kit.tenant, kit.realm).await?;
             let rows = t.social_providers().await?;
             t.commit().await?;
             Ok::<_, access_store::StoreError>(rows)
@@ -720,10 +733,9 @@ where
             .map_err(|_| Reply::problem(INVALID_SUBMISSION))?;
         let (keep, remember) = offered_options(&step, &checked);
         // TN-36, X33
-        if !matches!(checked.method, Method::Identifier | Method::Restart)
-            && !(checked.method == Method::Password && kit.signin.strict)
-            && (keep.is_some() || remember.is_some())
-        {
+        let opens_flow = matches!(checked.method, Method::Identifier | Method::Restart)
+            || (checked.method == Method::Password && kit.signin.strict);
+        if !opens_flow && (keep.is_some() || remember.is_some()) {
             auth.options(&fref, keep, remember)
                 .await
                 .map_err(|e| failed(&e))?;
@@ -899,15 +911,15 @@ where
             Outcome::Suspended { .. } => Current::Email(EmailWait::Code),
             Outcome::SignedIn(s) => {
                 let flow = flow_id(fref.handle)?;
-                Current::Done(
-                    Reply::ui(
-                        200,
-                        Ui::complete(flow, self.redirect_to.clone(), &policy(kit)),
-                    )
-                    .cookie(s.set_cookie)
-                    .cookie(s.marker_cookie)
-                    .cookie(Some(clear_cookie(LOGIN_COOKIE))),
+                let reply = Reply::ui(
+                    200,
+                    Ui::complete(flow, self.redirect_to.clone(), &policy(kit)),
                 )
+                .cookie(s.set_cookie)
+                .cookie(s.marker_cookie)
+                .cookie(Some(clear_cookie(LOGIN_COOKIE)));
+                // TN-33, OP-153 m.3 (y)
+                Current::Done(self.offer_dbsc(auth, kit, s.session, reply).await)
             }
             Outcome::Throttled { retry_after_s } => {
                 let mut r = Reply::problem(Problem {
@@ -1067,13 +1079,17 @@ where
                 };
                 Ok(Reply::ui(200, Ui::email_sent(flow.clone(), wait, &reqs)))
             }
-            Outcome::SignedIn(s) => Ok(Reply::ui(
-                200,
-                Ui::complete(flow.clone(), self.redirect_to.clone(), &reqs),
-            )
-            .cookie(s.set_cookie)
-            .cookie(s.marker_cookie)
-            .cookie(Some(clear_cookie(LOGIN_COOKIE)))),
+            Outcome::SignedIn(s) => {
+                let reply = Reply::ui(
+                    200,
+                    Ui::complete(flow.clone(), self.redirect_to.clone(), &reqs),
+                )
+                .cookie(s.set_cookie)
+                .cookie(s.marker_cookie)
+                .cookie(Some(clear_cookie(LOGIN_COOKIE)));
+                // TN-33, OP-153 m.3 (y)
+                Ok(self.offer_dbsc(auth, kit, s.session, reply).await)
+            }
             Outcome::Throttled { retry_after_s } => {
                 let current = self.current(auth, kit, b, fref).await?;
                 let mut reply = self.render(auth, kit, flow, fref, current, 429).await?;

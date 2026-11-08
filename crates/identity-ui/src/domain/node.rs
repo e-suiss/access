@@ -107,11 +107,10 @@ impl FieldName {
             // OP-153 m.3 (o)
             Self::EmailCode | Self::InvitationCode => 16,
             Self::DisplayName => 200,
-            Self::Acknowledged => 8,
+            Self::Acknowledged | Self::KeepSignedIn | Self::RememberDevice => 8,
             // OP-153 m.3 (d)
             Self::LinkCode => 32,
             Self::BotToken => 4096,
-            Self::KeepSignedIn | Self::RememberDevice => 8,
         }
     }
 

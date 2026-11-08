@@ -94,6 +94,11 @@ where
                 &format!("{prefix}/v1/account/connected-apps/preview"),
                 post(share_preview::<D, K, KI, C, M, H, S>),
             )
+            // OP-153 m.2 N5
+            .route(
+                &format!("{prefix}/v1/account/connected-apps/decline"),
+                post(decline::<D, K, KI, C, M, H, S>),
+            )
             .route(
                 &format!("{prefix}/v1/account/connected-apps/{{client}}"),
                 delete(stop_sharing::<D, K, KI, C, M, H, S>),
@@ -346,6 +351,16 @@ handler! {
         let req: ShareBody = serde_json::from_slice(&bytes).map_err(|_| bad())?;
         let to = bounded(&req.return_to, MAX_RETURN_TO)?;
         Ok(s.login.hosted.share_preview(&entry, &jar.browser(), to).await)
+    }
+}
+
+handler! {
+    /// `POST /v1/account/connected-apps/decline` (OP-153 m.3 (z), X-L8).
+    decline(s, entry, jar, p, bytes, headers, uri) true {
+        let _ = (&p, &uri);
+        let req: ShareBody = serde_json::from_slice(&bytes).map_err(|_| bad())?;
+        let to = bounded(&req.return_to, MAX_RETURN_TO)?;
+        Ok(s.login.hosted.decline(&entry, &jar.browser(), to).await)
     }
 }
 

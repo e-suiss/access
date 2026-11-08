@@ -171,7 +171,10 @@ async fn handle<E: Env>(State(s): Shared<E>, endpoint: Endpoint, req: Incoming) 
     };
     let cookie = session_cookie(&req.headers);
     let reply = match endpoint {
-        Endpoint::Authorize => s.authorize(&realm, &p, cookie.as_deref()).await,
+        Endpoint::Authorize => {
+            let reply = s.authorize(&realm, &p, cookie.as_deref()).await;
+            return render(error_page(&realm, &req.headers, reply));
+        }
         Endpoint::Par => {
             let proofs: Vec<&str> = req
                 .headers
@@ -204,6 +207,35 @@ async fn handle<E: Env>(State(s): Shared<E>, endpoint: Endpoint, req: Incoming) 
         _ => Reply::NotFound,
     };
     render(reply)
+}
+
+/// N5: a browser's authorization request that cannot go back to the app sees the hosted
+/// error page, which names who can fix it and shows the request's reference, never the raw
+/// code (§8.10, §8.15.2, X-L8, OP-153 m.3 (jj)). A client that does not ask for HTML keeps the
+/// RFC 9457 problem.
+fn error_page(realm: &Realm, headers: &HeaderMap, reply: Reply) -> Reply {
+    use access_identity_ui::domain::error_page::{Owner, location};
+    let html = headers
+        .get(header::ACCEPT)
+        .and_then(|v| v.to_str().ok())
+        .is_some_and(|a| a.contains("text/html"));
+    if !html {
+        return reply;
+    }
+    let id = crate::api::app::request_id_of(headers)
+        .or_else(|| header_text(headers, "x-request-id").map(String::from))
+        .unwrap_or_default();
+    let base = realm.issuer.as_str().trim_end_matches('/');
+    match reply {
+        Reply::Problem { code, .. } => Reply::Redirect(location(base, code, Owner::App, &id)),
+        Reply::Unavailable => Reply::Redirect(location(
+            base,
+            "temporarily_unavailable",
+            Owner::Access,
+            &id,
+        )),
+        other => other,
+    }
 }
 
 fn no_store(r: &mut Response) {

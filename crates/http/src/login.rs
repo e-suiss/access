@@ -187,6 +187,19 @@ where
             .route(
                 &format!("{prefix}/v1/account/guardian-consents/{{consent}}"),
                 post(web::decide_consent::<D, K, KI, C, M>),
+            )
+            // OP-153 m.2 N5
+            .route(
+                &format!("{prefix}/v1/sessions/{{session}}/end"),
+                post(web::end_sign_in::<D, K, KI, C, M>),
+            )
+            .route(
+                &format!("{prefix}/v1/account/methods/{{credential}}"),
+                delete(web::remove_sign_in_method::<D, K, KI, C, M>),
+            )
+            .route(
+                &format!("{prefix}/v1/account/password"),
+                put(web::set_password::<D, K, KI, C, M>),
             );
         reads = reads
             .route(
@@ -248,6 +261,31 @@ where
             .route(
                 &format!("{prefix}/v1/account/guardian-consents/{{consent}}"),
                 get(web::consent::<D, K, KI, C, M>),
+            )
+            // OP-153 m.2 N5
+            .route(
+                &format!("{prefix}/v1/account/methods"),
+                get(web::sign_in_methods::<D, K, KI, C, M>),
+            )
+            .route(
+                &format!("{prefix}/v1/login/branding"),
+                get(web::branding::<D, K, KI, C, M>),
+            )
+            .route(
+                &format!("{prefix}/v1/dbsc/register"),
+                post(web::dbsc_register::<D, K, KI, C, M>),
+            )
+            .route(
+                &format!("{prefix}/v1/dbsc/refresh"),
+                post(web::dbsc_refresh::<D, K, KI, C, M>),
+            )
+            .route(
+                &format!("{prefix}/csp-reports"),
+                post(web::csp_report::<D, K, KI, C, M>),
+            )
+            .route(
+                &format!("{prefix}/login/theme.css"),
+                get(web::theme_css::<D, K, KI, C, M>),
             );
     }
     // OP-153 m.4
@@ -269,7 +307,17 @@ where
         )
         .route("/login", get(web::page::<D, K, KI, C, M>))
         .route("/login/{*rest}", get(web::page::<D, K, KI, C, M>))
-        .route("/assets/{*path}", get(web::asset::<D, K, KI, C, M>));
+        .route("/assets/{*path}", get(web::asset::<D, K, KI, C, M>))
+        // OP-153 m.2
+        .route("/realms/{slug}/login", get(web::page::<D, K, KI, C, M>))
+        .route(
+            "/realms/{slug}/login/{*rest}",
+            get(web::page::<D, K, KI, C, M>),
+        )
+        .route(
+            "/realms/{slug}/assets/{*path}",
+            get(web::asset::<D, K, KI, C, M>),
+        );
     let cache = Arc::new(idempotency::Cache::default());
     writes
         .route_layer(axum::middleware::from_fn_with_state(

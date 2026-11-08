@@ -558,63 +558,63 @@ pub const ROUTES: &[Route] = &[
         "completeBinding",
         "Commits the offering realm's half with the accepting realm's token (§12.1.3).",
     ),
-    planned(
+    live(
         Owner::N5,
         Verb::Post,
         "/v1/sessions/{session}/end",
         "endSignIn",
         "Ends another device's sign-in; names the device Instance whose instance.terminate the page then signs (OP-153 m.3 (y)).",
     ),
-    planned(
+    live(
         Owner::N5,
         Verb::Post,
         "/v1/dbsc/register",
         "registerBoundSignIn",
         "Ties this sign-in to the device (DBSC, OP-153 m.3 (y)).",
     ),
-    planned(
+    live(
         Owner::N5,
         Verb::Post,
         "/v1/dbsc/refresh",
         "refreshBoundSignIn",
         "Refreshes a device-tied sign-in.",
     ),
-    planned(
+    live(
         Owner::N5,
         Verb::Post,
         "/csp-reports",
         "reportCsp",
         "Receives CSP reports, 100 a minute per realm (OP-153 m.3 (t)).",
     ),
-    planned(
+    live(
         Owner::N5,
         Verb::Get,
         "/v1/login/branding",
         "getBranding",
         "The realm's branding record as the hosted pages draw it: name and logo URL (TN-106, OP-153 m.3 (t)).",
     ),
-    planned(
+    live(
         Owner::N5,
         Verb::Post,
         "/v1/account/connected-apps/decline",
         "declineSharing",
         "The person chose not to share: the waiting request goes back to the app with access_denied (X-L8).",
     ),
-    planned(
+    live(
         Owner::N5,
         Verb::Get,
         "/v1/account/methods",
         "listSignInMethods",
         "The account's sign-in methods for S11: password, passkeys, authenticator apps, recovery codes (TN-99, OP-148).",
     ),
-    planned(
+    live(
         Owner::N5,
         Verb::Delete,
         "/v1/account/methods/{credential}",
         "removeSignInMethod",
         "Removes a sign-in method after a recent re-authentication; never the last one (TN-68).",
     ),
-    planned(
+    live(
         Owner::N5,
         Verb::Put,
         "/v1/account/password",
