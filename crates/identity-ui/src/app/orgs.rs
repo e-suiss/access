@@ -370,7 +370,10 @@ where
     }
 
     /// `POST /v1/organizations/{organization}/access-requests` (TN-90): asks the
-    /// organization's administrators for access; they decide it once.
+    /// organization's administrators for access; they decide it once. A person whose verified
+    /// e-mail is on a domain the organization verified, claims alone and turned autojoin on
+    /// joins at once instead, never on a consumer domain; the membership's Claim, and with it
+    /// any rule-shaped Grant's new holding episode, waits [`AUTOJOIN_COOLING_S`] (TN-109).
     pub async fn request_access(&self, entry: &RealmEntry, b: &Browser<'_>, org: &str) -> Reply {
         let (kit, me) = match self.me(entry, b).await {
             Ok(m) => m,
@@ -402,6 +405,35 @@ where
         if member || asked {
             return Reply::problem(ALREADY_MEMBER);
         }
+        // TN-90, TN-109
+        match autojoin_domain(&mut t, &kit, me, org.id).await {
+            Ok(Some(_)) => {
+                let joined = t
+                    .open_member(
+                        (org.id, me),
+                        Source::DomainAutojoin,
+                        None,
+                        None,
+                        Some(AUTOJOIN_COOLING_S),
+                    )
+                    .await;
+                if let Err(e) = joined {
+                    return store_failed(&e);
+                }
+                if let Err(e) = membership_added(&mut t, &kit, me, org.id).await {
+                    return store_failed(&e);
+                }
+                if let Err(e) = t.commit().await {
+                    return store_failed(&e);
+                }
+                return Reply::json(
+                    201,
+                    json!({ "status": "joined", "cooling_s": AUTOJOIN_COOLING_S }),
+                );
+            }
+            Ok(None) => {}
+            Err(e) => return store_failed(&e),
+        }
         if let Err(e) = t.insert_access_request(org.id, me).await {
             return store_failed(&e);
         }
@@ -410,6 +442,56 @@ where
         }
         Reply::json(202, json!({ "status": "requested" }))
     }
+}
+
+/// How long an autojoined membership waits before its `membership` Claim is issued: 24 hours
+/// (TN-109, PD).
+pub const AUTOJOIN_COOLING_S: i64 = 86_400;
+
+/// The domain of one of `subject`'s live e-mail identifiers on which `org` runs an autojoin
+/// rule: verified, claimed by no other organization, not a consumer domain (TN-90).
+async fn autojoin_domain(
+    t: &mut TenantTx,
+    kit: &RealmKit,
+    subject: [u8; 16],
+    org: [u8; 16],
+) -> Result<Option<String>, StoreError> {
+    let claims: Vec<_> = t
+        .open_domain_claims(Some(org))
+        .await?
+        .into_iter()
+        .filter(|c| c.autojoin && c.verified_ms.is_some() && c.contested_ms.is_none())
+        .collect();
+    if claims.is_empty() {
+        return Ok(None);
+    }
+    let consumer = access_identity_account::domain::consumer_domains::ConsumerDomains::embedded()
+        .map_err(|_| StoreError::Range)?;
+    let vault = kit.vault();
+    for row in t.identifiers(subject).await? {
+        if row.kind != "email" || !row.live {
+            continue;
+        }
+        let Ok(Some(address)) =
+            access_identity_account::app::vault::reveal(t, &vault, subject, &row.stored).await
+        else {
+            continue;
+        };
+        let domain = address
+            .rsplit_once('@')
+            .map(|(_, d)| d.to_ascii_lowercase())
+            .unwrap_or_default();
+        if consumer.contains(&domain) {
+            continue;
+        }
+        if claims.iter().any(|c| c.domain == domain) {
+            let others = t.domain_claims(&domain).await?;
+            if others.iter().all(|c| c.org == org) {
+                return Ok(Some(domain));
+            }
+        }
+    }
+    Ok(None)
 }
 
 /// Queues `membership.added` (OP-153 m.4).

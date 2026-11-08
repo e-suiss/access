@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.org_memberships SET claim_queued_at = clock_timestamp()\n                WHERE tenant_id = $1 AND realm_id = $2 AND membership_id = $3\n                  AND claim_queued_at IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "5d60c4ff066d91c201c922829cfd78b52440ecb7d952e6e01f39a6920929cf14"
+}

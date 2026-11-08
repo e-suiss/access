@@ -212,6 +212,42 @@ pub struct Consent {
 }
 
 impl TenantTx {
+    /// A page of the realm's live organizations after `after`, by id.
+    ///
+    /// # Errors
+    /// [`StoreError`].
+    pub async fn orgs_page(
+        &mut self,
+        after: Option<[u8; 16]>,
+        limit: i64,
+    ) -> Result<Vec<crate::orgs::OrgRow>, StoreError> {
+        let (tenant, realm) = self.org_scope()?;
+        let rows = sqlx::query!(
+            r#"SELECT org_id, party, display_name, hrd
+                 FROM access.organizations
+                WHERE tenant_id = $1 AND realm_id = $2 AND ended_at IS NULL
+                  AND ($3::uuid IS NULL OR org_id > $3)
+                ORDER BY org_id LIMIT $4"#,
+            tenant,
+            realm,
+            after.map(uuid),
+            limit,
+        )
+        .fetch_all(&mut *self.tx)
+        .await?;
+        rows.into_iter()
+            .map(|r| {
+                Ok(crate::orgs::OrgRow {
+                    id: *r.org_id.as_bytes(),
+                    party: id16(r.party)?,
+                    display_name: r.display_name,
+                    hrd: r.hrd,
+                    ended: false,
+                })
+            })
+            .collect()
+    }
+
     /// Records the Anchor `party_register` opened for organization Party `party`.
     ///
     /// # Errors
@@ -559,6 +595,49 @@ impl TenantTx {
                 })
             })
             .collect()
+    }
+
+    /// Whether the membership's `membership` Claim was queued already.
+    ///
+    /// # Errors
+    /// [`StoreError`].
+    pub async fn membership_claim_queued(
+        &mut self,
+        membership: &[u8; 16],
+    ) -> Result<bool, StoreError> {
+        let (tenant, realm) = self.org_scope()?;
+        Ok(sqlx::query_scalar!(
+            r#"SELECT claim_queued_at IS NOT NULL AS "queued!" FROM access.org_memberships
+                WHERE tenant_id = $1 AND realm_id = $2 AND membership_id = $3"#,
+            tenant,
+            realm,
+            uuid(*membership),
+        )
+        .fetch_optional(&mut *self.tx)
+        .await?
+        .unwrap_or(true))
+    }
+
+    /// Notes that the membership's `membership` Claim was queued.
+    ///
+    /// # Errors
+    /// [`StoreError`].
+    pub async fn mark_membership_claim_queued(
+        &mut self,
+        membership: &[u8; 16],
+    ) -> Result<(), StoreError> {
+        let (tenant, realm) = self.org_scope()?;
+        sqlx::query!(
+            r#"UPDATE access.org_memberships SET claim_queued_at = clock_timestamp()
+                WHERE tenant_id = $1 AND realm_id = $2 AND membership_id = $3
+                  AND claim_queued_at IS NULL"#,
+            tenant,
+            realm,
+            uuid(*membership),
+        )
+        .execute(&mut *self.tx)
+        .await?;
+        Ok(())
     }
 
     /// Settles a pending role Grant once: issued as `grant` by `exercise`, or denied.

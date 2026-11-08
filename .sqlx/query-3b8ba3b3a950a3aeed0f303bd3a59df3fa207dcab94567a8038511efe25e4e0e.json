@@ -1,0 +1,67 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT org_id, party, display_name, hrd\n                 FROM access.organizations\n                WHERE tenant_id = $1 AND realm_id = $2 AND ended_at IS NULL\n                  AND ($3::uuid IS NULL OR org_id > $3)\n                ORDER BY org_id LIMIT $4",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "org_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.organizations",
+            "name": "org_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "party",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.organizations",
+            "name": "party"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "display_name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.organizations",
+            "name": "display_name"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "hrd",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "access.organizations",
+            "name": "hrd"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "3b8ba3b3a950a3aeed0f303bd3a59df3fa207dcab94567a8038511efe25e4e0e"
+}

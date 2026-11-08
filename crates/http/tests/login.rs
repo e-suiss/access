@@ -3293,8 +3293,9 @@ async fn an_invitation_is_read_without_consuming_it_and_accepted_by_its_invitee(
     assert_eq!(a.json()["organization"]["display_name"], "Acme");
     let a = b.post(&path, Some(json!({ "confirm": true }))).await;
     assert_eq!(a.status, StatusCode::OK, "{:?}", a.json());
-    // TN-89 (10), OP-153 m.3 (o)
+    // TN-89 (3), (10), OP-153 m.3 (o)
     assert_eq!(a.json()["owner"], false);
+    assert_eq!(a.json()["role_grant"], "pending");
     let mine = b.get("/v1/account/organizations").await;
     assert_eq!(mine.status, StatusCode::OK);
     let items = mine.json()["items"].clone();
@@ -3401,5 +3402,88 @@ async fn home_realm_discovery_routes_by_organization_id_only_when_turned_on() {
     assert_eq!(
         b.get("/v1/organizations/acme.example/sign-in").await.status,
         StatusCode::NOT_FOUND
+    );
+}
+
+// TN-90, TN-109, OP-153 m.1 (d), m.3 (o), (gg), Ek B 3612, 3613, 4039
+#[tokio::test]
+async fn autojoin_admits_a_verified_domains_people_never_a_consumer_domains_and_cools() {
+    let e = env(0x34, "lg-autojoin", AuthPolicy::DEFAULT).await;
+    let owner = e.account("owner@acme.example").await;
+    e.account("dave@acme.example").await;
+    e.account("gina@gmail.com").await;
+    e.account("erin@acme.example").await;
+    let org = org_with_invitation(
+        &e,
+        owner,
+        [0x7a; 16],
+        "x@acme.example",
+        ("tok-autojoin-0123456789abcdefghijklm", "AJNC2345"),
+    )
+    .await;
+    let mut t = TenantTx::begin(&e.db.app, e.tenant, e.realm).await.unwrap();
+    for domain in ["acme.example", "gmail.com"] {
+        let claim = t
+            .insert_domain_claim(org, domain, "dns_txt", &[1; 32])
+            .await
+            .unwrap();
+        assert!(
+            t.verify_domain(claim, 86_400, &[2; 32], &[3; 32])
+                .await
+                .unwrap()
+        );
+        assert!(t.set_autojoin(claim, true).await.unwrap());
+    }
+    t.commit().await.unwrap();
+    let ask = format!(
+        "/v1/organizations/{}/access-requests",
+        b64url_encode(&[0x0a; 16])
+    );
+
+    // TN-90, TN-109
+    let mut d = e.browser("d");
+    assert_eq!(d.sign_in("dave@acme.example").await.step(), "complete");
+    let a = d.post(&ask, Some(json!({}))).await;
+    assert_eq!(a.status, StatusCode::CREATED, "{:?}", a.json());
+    assert_eq!(a.json()["status"], "joined");
+    assert_eq!(a.json()["cooling_s"], 86_400);
+    let mine = d.get("/v1/account/organizations").await.json();
+    assert_eq!(mine["items"][0]["source"], "domain_autojoin");
+    assert_eq!(mine["items"][0]["owner"], false);
+    let mut t = TenantTx::begin(&e.db.app, e.tenant, e.realm).await.unwrap();
+    let now = i64::try_from(t.server_time().await.unwrap()).unwrap();
+    let cooled = t
+        .members(org)
+        .await
+        .unwrap()
+        .into_iter()
+        .find(|m| m.source == access_store::orgs::Source::DomainAutojoin)
+        .unwrap();
+    assert!(cooled.cooling_until_ms.unwrap() > now + 23 * 3_600_000);
+    t.commit().await.unwrap();
+
+    // OP-153 m.1 (d), Ek B 4039
+    let mut g = e.browser("g");
+    assert_eq!(g.sign_in("gina@gmail.com").await.step(), "complete");
+    assert_eq!(
+        g.post(&ask, Some(json!({}))).await.status,
+        StatusCode::ACCEPTED
+    );
+
+    // TN-90
+    let mut t = TenantTx::begin(&e.db.app, e.tenant, e.realm).await.unwrap();
+    let other = t
+        .insert_org([0x0b; 16], "Not Acme", &[4; 32])
+        .await
+        .unwrap();
+    t.insert_domain_claim(other, "acme.example", "dns_txt", &[5; 32])
+        .await
+        .unwrap();
+    t.commit().await.unwrap();
+    let mut r = e.browser("r");
+    assert_eq!(r.sign_in("erin@acme.example").await.step(), "complete");
+    assert_eq!(
+        r.post(&ask, Some(json!({}))).await.status,
+        StatusCode::ACCEPTED
     );
 }

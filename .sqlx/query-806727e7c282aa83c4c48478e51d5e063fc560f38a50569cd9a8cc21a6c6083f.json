@@ -1,0 +1,25 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT claim_queued_at IS NOT NULL AS \"queued!\" FROM access.org_memberships\n                WHERE tenant_id = $1 AND realm_id = $2 AND membership_id = $3",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "queued!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "806727e7c282aa83c4c48478e51d5e063fc560f38a50569cd9a8cc21a6c6083f"
+}

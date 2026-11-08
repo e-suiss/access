@@ -9,7 +9,7 @@
 use std::collections::BTreeSet;
 
 use access_identity_account::domain::claim_classes::{
-    DomainVerification, IdentityClass, VerificationMethod,
+    DomainVerification, IdentityClass, Membership, VerificationMethod,
 };
 use access_identity_account::domain::claims::{ClaimOrder, line};
 use access_kernel::model::Id;
@@ -45,6 +45,14 @@ pub struct WatchPass {
     pub contested: u32,
     /// Probes that could not answer; nothing changed for them.
     pub unavailable: u32,
+    /// `membership` Claims queued.
+    pub memberships: u32,
+}
+
+/// The Claim line of a membership of organization `org`.
+#[must_use]
+pub fn membership_line(org: [u8; 16]) -> [u8; 32] {
+    line(&[b"membership", &org])
 }
 
 /// The realm issuer's `domain_verification` order for `c`, or its retraction.
@@ -207,7 +215,68 @@ impl<P: DomainProbe> DomainWatch<'_, P> {
             }
         }
         out.lapsed = self.lapse(at).await?;
+        out.memberships = self.membership_claims(at).await?;
         Ok(out)
+    }
+
+    /// Issues the realm issuer's `membership` Claim of every open membership that has none yet
+    /// and whose TN-109 cooling ended (OP-153 m.3 (o), (p)).
+    async fn membership_claims(&self, at: (TenantId, RealmId)) -> Result<u32, AdminError> {
+        let mut t = TenantTx::begin(self.app, at.0, at.1).await?;
+        let now = t.server_time().await?;
+        let Some(g) = access_store::idp::governance(&mut t).await? else {
+            t.commit().await?;
+            return Ok(0);
+        };
+        let mut n = 0u32;
+        let mut after = None;
+        loop {
+            let orgs = t.orgs_page(after, 100).await?;
+            let Some(last) = orgs.last() else {
+                break;
+            };
+            after = Some(last.id);
+            for org in &orgs {
+                for m in t.members(org.id).await? {
+                    let cooled = m
+                        .cooling_until_ms
+                        .is_none_or(|c| c <= i64::try_from(now).unwrap_or(i64::MAX));
+                    let Some(party) = access_store::idp::subject_party(&mut t, &m.subject).await?
+                    else {
+                        continue;
+                    };
+                    let line = membership_line(org.id);
+                    if !cooled
+                        || access_store::issuer::last_in_line(&mut t, &m.subject, &g.domain, &line)
+                            .await?
+                            .is_some()
+                        || t.membership_claim_queued(&m.id).await?
+                    {
+                        continue;
+                    }
+                    let body = Membership {
+                        organization: Id(org.party),
+                        member: Id(party),
+                        root: m.owner,
+                        since: u64::try_from(m.joined_ms).unwrap_or(0),
+                    }
+                    .to_value();
+                    let order = ClaimOrder::registry(
+                        m.subject,
+                        IdentityClass::Membership,
+                        body,
+                        None,
+                        (now, access_identity_account::domain::claims::BINDING_TTL_MS),
+                        line,
+                    );
+                    queue(&mut t, &order).await?;
+                    t.mark_membership_claim_queued(&m.id).await?;
+                    n = n.saturating_add(1);
+                }
+            }
+        }
+        t.commit().await?;
+        Ok(n)
     }
 
     /// Withdraws verifications past their re-verification time or 72 hours past an unconfirmed

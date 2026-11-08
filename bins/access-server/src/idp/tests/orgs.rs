@@ -889,3 +889,37 @@ async fn an_accepted_invitations_role_is_issued_by_the_inviters_current_authorit
         Err(AdminError::Invalid(Invalid::NoMember))
     ));
 }
+
+// TN-109, TN-90, OP-153 m.3 (o), (p), (gg), Ek B 3613, 3604
+#[tokio::test]
+async fn membership_claims_wait_for_the_autojoin_cooling() {
+    let (w, at, d, founder) = ready("org-cool").await;
+    let org = create_org(&w, at, d, founder).await;
+    let bob = account(&w, at, "bob@acme.example").await;
+    let carol = account(&w, at, "carol@acme.example").await;
+    let mut t = TenantTx::begin(&w.db.app, at.0, at.1).await.unwrap();
+    assert!(
+        access_store::idp::bind_subject_party(&mut t, &bob, &ALICE.0)
+            .await
+            .unwrap()
+    );
+    assert!(
+        access_store::idp::bind_subject_party(&mut t, &carol, &[0x0e; 16])
+            .await
+            .unwrap()
+    );
+    t.open_member((org, bob), Source::DomainAutojoin, None, None, Some(86_400))
+        .await
+        .unwrap();
+    t.open_member((org, carol), Source::DomainAutojoin, None, None, Some(-1))
+        .await
+        .unwrap();
+    t.commit().await.unwrap();
+    let probe = Probe::default();
+    assert_eq!(watch_pass(&w, at, &probe).await.memberships, 2);
+    assert_eq!(watch_pass(&w, at, &probe).await.memberships, 0);
+    let issued = orders(&identity_events(&w.db, "claim.membership", 2).await);
+    assert!(issued.iter().any(|o| o.subject == carol));
+    assert!(issued.iter().any(|o| o.subject == founder));
+    assert!(!issued.iter().any(|o| o.subject == bob));
+}

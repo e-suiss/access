@@ -31,6 +31,7 @@ ALTER TABLE access.org_memberships
   ADD COLUMN grant_state text CHECK (grant_state IS NULL OR grant_state IN ('pending', 'issued', 'denied')),
   ADD COLUMN grant_exercise bytea CHECK (grant_exercise IS NULL OR octet_length(grant_exercise) = 32),
   ADD COLUMN cooling_until timestamptz,
+  ADD COLUMN claim_queued_at timestamptz,
   ADD CONSTRAINT org_membership_grant_state CHECK (
     (role_name IS NULL AND grant_state IS NULL)
     OR (role_name IS NOT NULL AND grant_state IS NOT NULL)
@@ -219,7 +220,7 @@ GRANT SELECT, INSERT ON access.org_party_anchors, access.org_transfers, access.o
   access.guardianships, access.parent_consents TO access_app;
 GRANT UPDATE (checked_at, contested_at, claim_issued_at, claim_retracted_at)
   ON access.org_domains TO access_app;
-GRANT UPDATE (grant_state, grant_exercise) ON access.org_memberships TO access_app;
+GRANT UPDATE (grant_state, grant_exercise, claim_queued_at) ON access.org_memberships TO access_app;
 GRANT UPDATE (contributed_at, cancelled_at, cancelled_by, completed_at, completed_exercise)
   ON access.org_transfers TO access_app;
 GRANT UPDATE (withdrawn_at) ON access.org_sso_drafts TO access_app;
