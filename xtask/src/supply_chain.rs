@@ -113,6 +113,11 @@ const RED_LINE_CRATES: &[&str] = &[
     "fastbloom",
     "fastbloom-rs",
     "growable-bloom-filter",
+    "hazelcast",
+    "infinispan",
+    "memberlist",
+    "chitchat",
+    "foca",
     "probabilistic-collections",
 ];
 
@@ -159,7 +164,8 @@ fn check_red_lines(root: &Path) -> Result<Vec<Violation>, String> {
         &read(&root.join("Cargo.lock"))?,
         RED_LINE_CRATES,
         "op-54-red-lines",
-        "Redis carries no revocation and Bloom filters hold no revocation list (OP-54, OP-129)",
+        "Redis carries no revocation, Bloom filters hold no revocation list and no embedded \
+         distributed cache or gossip membership runs in the process (OP-54, OP-129)",
     )
 }
 
@@ -416,15 +422,15 @@ mod tests {
         );
     }
 
-    // OP-54-RL1, OP-54-RL9
+    // OP-54-RL1, OP-54-RL7, OP-54-RL9
     #[test]
     fn redis_clients_and_bloom_filters_in_lockfile_are_rejected() {
-        let lock = "[[package]]\nname = \"redis\"\nversion = \"0.27.0\"\n[[package]]\nname = \"bloomfilter\"\nversion = \"3.0.0\"\n[[package]]\nname = \"tokio\"\nversion = \"1.0.0\"\n";
+        let lock = "[[package]]\nname = \"redis\"\nversion = \"0.27.0\"\n[[package]]\nname = \"bloomfilter\"\nversion = \"3.0.0\"\n[[package]]\nname = \"memberlist\"\nversion = \"0.6.0\"\n[[package]]\nname = \"tokio\"\nversion = \"1.0.0\"\n";
         assert_eq!(
             banned_in_lock(lock, RED_LINE_CRATES, "r", "x")
                 .unwrap_or_default()
                 .len(),
-            2
+            3
         );
     }
 

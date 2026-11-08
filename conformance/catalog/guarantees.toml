@@ -6,6 +6,7 @@ family = "G"
 section = "13.4"
 status = "canonical"
 class = "BS"
+stage = 3
 title = "Positive authority originates only via meta-Exercise in Anchor lineage"
 tests = []
 
@@ -15,6 +16,7 @@ family = "G"
 section = "13.4"
 status = "canonical"
 class = "BS"
+stage = 3
 title = "Non-amplification: child within parent, projection within source"
 tests = []
 
@@ -24,6 +26,7 @@ family = "G"
 section = "13.4"
 status = "canonical"
 class = "BS"
+stage = 3
 title = "Every Exercise draws from all lineage budgets; units consumed at most once"
 tests = []
 
@@ -33,6 +36,7 @@ family = "G"
 section = "13.4"
 status = "canonical"
 class = "BS"
+stage = 3
 title = "Revocation denies every later online commit, continue or projection"
 tests = []
 
@@ -42,6 +46,7 @@ family = "G"
 section = "13.4"
 status = "canonical"
 class = "BS"
+stage = 3
 title = "Invalidity is terminal and cascading; nothing revives"
 tests = []
 
@@ -51,6 +56,7 @@ family = "G"
 section = "13.4"
 status = "canonical"
 class = "BS"
+stage = 3
 title = "Restrictions only narrow; removing or loosening one is widening"
 tests = []
 
@@ -60,6 +66,7 @@ family = "G"
 section = "13.4"
 status = "canonical"
 class = "BS"
+stage = 3
 title = "A Claim is a decision input only within its Acceptance use"
 tests = []
 
@@ -69,6 +76,7 @@ family = "G"
 section = "13.4"
 status = "canonical"
 class = "BS"
+stage = 3
 title = "Issuer compromise yields only the declared effect of its use"
 tests = []
 
@@ -78,6 +86,7 @@ family = "G"
 section = "13.4"
 status = "canonical"
 class = "BS"
+stage = 3
 title = "Ingest-time cutoff narrows and terminally closes dependent episodes"
 tests = []
 
@@ -87,6 +96,7 @@ family = "G"
 section = "13.4"
 status = "canonical"
 class = "BS"
+stage = 4
 title = "Foreign authority only via foreign Acceptance and bridging ceiling"
 tests = []
 
@@ -96,6 +106,7 @@ family = "G"
 section = "13.4"
 status = "canonical"
 class = "BS"
+stage = 3
 title = "Unaccepted schema versions or mappings never change Grant scope"
 tests = []
 
@@ -105,6 +116,7 @@ family = "G"
 section = "13.4"
 status = "canonical"
 class = "BS"
+stage = 3
 title = "Approval is a single-use contribution Exercise bound to exact digest"
 tests = []
 
@@ -114,6 +126,7 @@ family = "G"
 section = "13.4"
 status = "canonical"
 class = "BS"
+stage = 3
 title = "Approved digest equals the Exercise's surface-independent intent digest"
 tests = []
 
@@ -123,6 +136,7 @@ family = "G"
 section = "13.4"
 status = "canonical"
 class = "BS"
+stage = 3
 title = "Actor attribution only via actor Instance KeyBinding-signed AIS"
 tests = []
 
@@ -132,6 +146,7 @@ family = "G"
 section = "13.4"
 status = "canonical"
 class = "BS"
+stage = 3
 title = "Capacity lies within basis Grant agency; Anonymous holds nothing"
 tests = []
 
@@ -141,6 +156,7 @@ family = "G"
 section = "13.4"
 status = "canonical"
 class = "BS"
+stage = 3
 title = "Access decisions are never UNKNOWN; protocol errors produce no effect"
 tests = []
 
@@ -150,6 +166,7 @@ family = "G"
 section = "13.4"
 status = "canonical"
 class = "BS"
+stage = 1
 title = "Same records and inputs yield same decision and consumption"
 tests = []
 
@@ -169,6 +186,7 @@ family = "G"
 section = "13.4"
 status = "canonical"
 class = "BS"
+stage = 3
 title = "Events, event loss or reordering never widen authority"
 tests = []
 
@@ -178,6 +196,7 @@ family = "G"
 section = "13.4"
 status = "canonical"
 class = "BS"
+stage = 1
 title = "Must-understand fails closed; downgrade counts as widening"
 tests = []
 
@@ -197,6 +216,7 @@ family = "G"
 section = "13.4"
 status = "canonical"
 class = "BS"
+stage = 3
 title = "Authority cannot be backdated"
 tests = []
 
@@ -206,6 +226,7 @@ family = "G"
 section = "13.4"
 status = "canonical"
 class = "BS"
+stage = 2
 title = "Record existence, attribution, lineage, digest and time are undeletable"
 tests = []
 
@@ -215,6 +236,7 @@ family = "G"
 section = "13.4"
 status = "canonical"
 class = "BS"
+stage = 3
 title = "First party, hosting, custody or operator carry no special authority"
 tests = []
 
@@ -224,6 +246,7 @@ family = "G"
 section = "13.4"
 status = "canonical"
 class = "BS"
+stage = 4
 title = "In-envelope use within open ValidityContract window classed as in-authority"
 tests = []
 
@@ -233,6 +256,7 @@ family = "G"
 section = "13.4"
 status = "canonical"
 class = "BS"
+stage = 3
 title = "Batches are not atomic; each item is its own Exercise"
 tests = []
 
@@ -242,6 +266,7 @@ family = "G"
 section = "13.4"
 status = "canonical"
 class = "BS"
+stage = 3
 title = "Explanations, search and events never exceed viewer authority"
 tests = []
 
@@ -281,6 +306,7 @@ family = "G"
 section = "13.4"
 status = "canonical"
 class = "BS"
+stage = 3
 title = "Revocation is not stop; continuation DENY is semantic"
 tests = []
 
@@ -310,6 +336,7 @@ family = "G"
 section = "13.4"
 status = "canonical"
 class = "BS"
+stage = 2
 title = "Record corruption never alters log content; identity is commitment"
 tests = []
 
@@ -319,6 +346,7 @@ family = "G"
 section = "13.4"
 status = "canonical"
 class = "BS"
+stage = 1
 title = "Artifacts signed with another domain's operational key are rejected"
 tests = []
 
@@ -338,6 +366,7 @@ family = "G"
 section = "13.4"
 status = "canonical"
 class = "BS"
+stage = 3
 title = "No implicit leakage; position identifiers opaque to sub-audit viewers"
 tests = []
 
@@ -347,6 +376,7 @@ family = "G"
 section = "13.4"
 status = "canonical"
 class = "BS"
+stage = 1
 title = "Spec wins over implementation on divergence"
 tests = [
   "xtask/src/catalog.rs::g38_ti_rt12_regeneration_follows_the_spec_and_keeps_curation",
@@ -368,6 +398,7 @@ family = "G"
 section = "13.4"
 status = "canonical"
 class = "BS"
+stage = 2
 title = "Retry with same nonce never creates a duplicate Exercise"
 tests = []
 
@@ -377,6 +408,7 @@ family = "G"
 section = "13.4"
 status = "canonical"
 class = "BS"
+stage = 3
 title = "No ALLOW without commit"
 tests = []
 
@@ -386,6 +418,7 @@ family = "G"
 section = "13.4"
 status = "canonical"
 class = "BS"
+stage = 4
 title = "No unsigned artifact is published"
 tests = []
 
@@ -425,6 +458,7 @@ family = "G"
 section = "13.4"
 status = "canonical"
 class = "BS"
+stage = 1
 title = "Authority artifacts valid only with domain-bound operational or binding key"
 tests = []
 
@@ -434,6 +468,7 @@ family = "G"
 section = "13.4"
 status = "canonical"
 class = "BS"
+stage = 1
 title = "DomainID is must-understand; cross-domain signed keys rejected"
 tests = []
 
@@ -453,6 +488,7 @@ family = "G"
 section = "13.4"
 status = "canonical"
 class = "BS"
+stage = 5
 title = "Never-cached subjects are not valid without canonical lookup"
 tests = []
 
@@ -462,6 +498,7 @@ family = "G"
 section = "13.4"
 status = "canonical"
 class = "BS"
+stage = 5
 title = "Identity login and refresh return 503 when backend unreachable"
 tests = []
 
@@ -511,6 +548,7 @@ family = "G"
 section = "13.4"
 status = "canonical"
 class = "BS"
+stage = 1
 title = "Algorithm allowlist from metadata; none and JWS EdDSA rejected"
 tests = []
 
@@ -520,6 +558,7 @@ family = "G"
 section = "13.4"
 status = "canonical"
 class = "BS"
+stage = 1
 title = "Arithmetic overflow in authority evaluation yields DENY"
 tests = []
 
@@ -529,6 +568,7 @@ family = "G"
 section = "13.4"
 status = "canonical"
 class = "BS"
+stage = 5
 title = "No new tokens or assertions after identity session termination"
 tests = []
 
@@ -538,6 +578,7 @@ family = "G"
 section = "13.4"
 status = "canonical"
 class = "BS"
+stage = 4
 title = "No splicing of delegation chains from two valid tokens"
 tests = []
 
@@ -557,6 +598,7 @@ family = "G"
 section = "13.4"
 status = "canonical"
 class = "BS"
+stage = 1
 title = "Non-canonical CBOR, signatures or oversized input rejected"
 tests = []
 
@@ -566,6 +608,7 @@ family = "G"
 section = "13.4"
 status = "canonical"
 class = "BS"
+stage = 4
 title = "No artifacts signed with unpublished keys"
 tests = []
 
@@ -575,6 +618,7 @@ family = "G"
 section = "13.4"
 status = "canonical"
 class = "BS"
+stage = 3
 title = "Unauthorized requesters get identical responses for existing and nonexistent"
 tests = []
 
@@ -734,6 +778,7 @@ family = "U"
 section = "13.4"
 status = "canonical"
 class = "UDC"
+stage = 6
 title = "Actor key used only by the actor"
 tests = []
 
@@ -743,6 +788,7 @@ family = "U"
 section = "13.4"
 status = "canonical"
 class = "UDC"
+stage = 6
 title = "Custodian cannot impersonate without the user's act"
 tests = []
 
@@ -762,6 +808,7 @@ family = "U"
 section = "13.4"
 status = "canonical"
 class = "UDC"
+stage = 3
 title = "Approvers are distinct people, devices and surfaces"
 tests = []
 
@@ -771,6 +818,7 @@ family = "U"
 section = "13.4"
 status = "canonical"
 class = "UDC"
+stage = 12
 title = "Rate, throttling, oracle and structuring controls"
 tests = []
 
@@ -820,6 +868,7 @@ family = "U"
 section = "13.4"
 status = "canonical"
 class = "UDC"
+stage = 2
 title = "Central PEP replay yields a single effect"
 tests = []
 
@@ -879,6 +928,7 @@ family = "U"
 section = "13.4"
 status = "canonical"
 class = "UDC"
+stage = 2
 title = "Time-bound terms do not drift with clock jumps"
 tests = []
 
@@ -888,6 +938,7 @@ family = "U"
 section = "13.4"
 status = "canonical"
 class = "UDC"
+stage = 2
 title = "No decisions on corrupted rows after silent corruption is detected"
 tests = []
 
@@ -897,6 +948,7 @@ family = "U"
 section = "13.4"
 status = "canonical"
 class = "UDC"
+stage = 3
 title = "Timed-out result fixed at end of intent validity window"
 tests = []
 
@@ -926,6 +978,7 @@ family = "U"
 section = "13.4"
 status = "canonical"
 class = "UDC"
+stage = 3
 title = "Bulk meta-Exercise does not lock the domain"
 tests = []
 
@@ -955,6 +1008,7 @@ family = "U"
 section = "13.4"
 status = "canonical"
 class = "UDC"
+stage = 5
 title = "Strict introspection returns active=false when freshness unprovable"
 tests = []
 
@@ -994,6 +1048,7 @@ family = "U"
 section = "13.4"
 status = "canonical"
 class = "UDC"
+stage = 4
 title = "Stolen operational key impact bounded by key lifetime and verifier ceiling"
 tests = []
 
@@ -1033,6 +1088,7 @@ family = "U"
 section = "13.4"
 status = "canonical"
 class = "UDC"
+stage = 1
 title = "Secret comparisons are constant-time"
 tests = []
 
@@ -1042,6 +1098,7 @@ family = "U"
 section = "13.4"
 status = "canonical"
 class = "UDC"
+stage = 5
 title = "Brute-force ceiling holds even if global rate store fails"
 tests = []
 
@@ -1051,6 +1108,7 @@ family = "U"
 section = "13.4"
 status = "canonical"
 class = "UDC"
+stage = 5
 title = "Argon2 password hashing load does not starve other endpoints"
 tests = []
 
@@ -1060,6 +1118,7 @@ family = "U"
 section = "13.4"
 status = "canonical"
 class = "UDC"
+stage = 1
 title = "Parser resource use bounded by input size"
 tests = []
 
@@ -1079,6 +1138,7 @@ family = "U"
 section = "13.4"
 status = "canonical"
 class = "UDC"
+stage = 0
 title = "Reproducible builds yield identical digests (goal, not guarantee)"
 tests = []
 
@@ -1088,6 +1148,7 @@ family = "U"
 section = "13.4"
 status = "canonical"
 class = "UDC"
+stage = 2
 title = "Acknowledged security events are never lost"
 tests = []
 
@@ -1167,6 +1228,7 @@ family = "U"
 section = "13.4"
 status = "canonical"
 class = "UDC"
+stage = 2
 title = "Database queries without domain or tenant scope cannot compile or run"
 tests = []
 
@@ -1266,6 +1328,7 @@ family = "U"
 section = "13.4"
 status = "canonical"
 class = "UDC"
+stage = 5
 title = "Leaked database secrets and opaque tokens not directly reusable"
 tests = []
 
@@ -1275,6 +1338,7 @@ family = "U"
 section = "13.4"
 status = "canonical"
 class = "UDC"
+stage = 2
 title = "Detection of identity audit log changes before published checkpoint"
 tests = []
 
@@ -1884,6 +1948,7 @@ family = "HL"
 section = "13.5"
 status = "canonical"
 class = "NG"
+stage = 0
 title = "Per-domain throughput limited by single sequencer"
 tests = []
 
@@ -1893,6 +1958,7 @@ family = "HL"
 section = "13.5"
 status = "canonical"
 class = "NG"
+stage = 0
 title = "Wrong decisions by provider or operator cannot be prevented"
 tests = []
 
@@ -1902,6 +1968,7 @@ family = "HL"
 section = "13.5"
 status = "canonical"
 class = "NG"
+stage = 0
 title = "Revocation delayed during offline window"
 tests = []
 
@@ -1911,6 +1978,7 @@ family = "HL"
 section = "13.5"
 status = "canonical"
 class = "NG"
+stage = 0
 title = "Lost suffix in forced recovery, including slice double-spend"
 tests = []
 
@@ -1930,6 +1998,7 @@ family = "HL"
 section = "13.5"
 status = "canonical"
 class = "NG"
+stage = 0
 title = "Drift if all time sources and witnesses lie together"
 tests = []
 
@@ -1939,6 +2008,7 @@ family = "HL"
 section = "13.5"
 status = "canonical"
 class = "PU"
+stage = 13
 title = "Equivocation detectable but not preventable"
 tests = []
 
@@ -1968,6 +2038,7 @@ family = "HL"
 section = "13.5"
 status = "canonical"
 class = "NG"
+stage = 14
 title = "Merkle index reveals position"
 tests = []
 
@@ -1977,6 +2048,7 @@ family = "HL"
 section = "13.5"
 status = "canonical"
 class = "NG"
+stage = 14
 title = "Status list herd privacy bounded by list size"
 tests = []
 
@@ -1986,6 +2058,7 @@ family = "HL"
 section = "13.5"
 status = "canonical"
 class = "NG"
+stage = 14
 title = "Cross-implementation determinism limited to test vector coverage"
 tests = []
 
@@ -1995,6 +2068,7 @@ family = "HL"
 section = "13.5"
 status = "canonical"
 class = "PU"
+stage = 3
 title = "Revocation does not stop an already running effect"
 tests = []
 
@@ -2004,6 +2078,7 @@ family = "HL"
 section = "13.5"
 status = "canonical"
 class = "NG"
+stage = 0
 title = "TEE/SE side channels and hardware lying about secure clock"
 tests = []
 
@@ -2043,6 +2118,7 @@ family = "HL"
 section = "13.5"
 status = "canonical"
 class = "NG"
+stage = 0
 title = "Residual cross-domain linkability via KeyBinding, timing, network"
 tests = []
 
@@ -2062,6 +2138,7 @@ family = "HL"
 section = "13.5"
 status = "canonical"
 class = "NG"
+stage = 0
 title = "HSM/KMS throughput ceiling and correlated shared quota exhaustion"
 tests = []
 
@@ -2071,6 +2148,7 @@ family = "HL"
 section = "13.5"
 status = "canonical"
 class = "NG"
+stage = 0
 title = "In-memory secrets readable on host compromise beyond zeroize"
 tests = []
 
@@ -2090,6 +2168,7 @@ family = "HL"
 section = "13.5"
 status = "canonical"
 class = "NG"
+stage = 0
 title = "Phishing-resistant authentication does not prevent session or token theft"
 tests = []
 
@@ -2099,6 +2178,7 @@ family = "HL"
 section = "13.5"
 status = "canonical"
 class = "NG"
+stage = 0
 title = "No registry publisher signatures; supply chain attacks only detectable and containable"
 tests = []
 
@@ -2180,6 +2260,7 @@ family = "HL"
 section = "13.5"
 status = "canonical"
 class = "NG"
+stage = 2
 title = "Postgres superuser and RLS-exempt roles escape DB-level protections"
 tests = []
 
@@ -2189,6 +2270,7 @@ family = "HL"
 section = "13.5"
 status = "canonical"
 class = "NG"
+stage = 14
 title = "Binding re-anchor must precede old binding key compromise"
 tests = []
 
@@ -2198,6 +2280,7 @@ family = "HL"
 section = "13.5"
 status = "canonical"
 class = "NG"
+stage = 14
 title = "Leaked realm signing key enables Golden SAML-style forgery"
 tests = []
 
@@ -2207,6 +2290,7 @@ family = "HL"
 section = "13.5"
 status = "canonical"
 class = "NG"
+stage = 14
 title = "Client identity takeover via expired or resold CIMD domain"
 tests = []
 
@@ -2216,6 +2300,7 @@ family = "HL"
 section = "13.5"
 status = "canonical"
 class = "NG"
+stage = 0
 title = "MCP server tenant isolation logic bugs cause cross-tenant disclosure"
 tests = []
 
@@ -2225,6 +2310,7 @@ family = "HL"
 section = "13.5"
 status = "canonical"
 class = "NG"
+stage = 8
 title = "Help desk social engineering and contact channel loss"
 tests = []
 
@@ -2234,6 +2320,7 @@ family = "HL"
 section = "13.5"
 status = "canonical"
 class = "NG"
+stage = 8
 title = "Product invitation email abused as phishing channel"
 tests = []
 
@@ -2253,6 +2340,7 @@ family = "HL"
 section = "13.5"
 status = "canonical"
 class = "NG"
+stage = 8
 title = "New tenants can configure CT2+ without SEC18 cooling"
 tests = []
 

@@ -44,3 +44,1153 @@ reason = "T-5: the Stage 6 PAP item lists SI-11 among its sources, but the rule 
 id = "U26"
 stage = 8
 reason = "T-5: the Ek B Stage 6 item 'Regime key-event ingest' is half served: custodian-signed party_key_state Claims are ingested under the regime's actor-binding Acceptance (the P21, E18 ingest test), but their visibility in the Party's Changes view needs the Authority hub, a Stage 8 item no Stage 6 or 7 code serves"
+
+[[rule_overrides]]
+id = "CVE-2026-4633"
+stage = 5
+reason = "OP-152 m.5 (e): Ek B line 1634, stage 5 item 'Identity-first login yalnız varlık sızdırmama koşuluyla'"
+
+[[rule_overrides]]
+id = "GHSA-53hj-r94p-8c8f"
+stage = 1
+reason = "OP-152 m.5 (e): Ek B line 341, stage 1 item 'Sabit zamanlı karşılaştırma disiplini'; the advisory's mitigation is the `==` ban on secrets, which the secret-compare rule enforces; client secrets go through `secret_matches` (ct_eq)"
+
+[[rule_overrides]]
+id = "GHSA-75rw-34q6-72cr"
+stage = 1
+reason = "OP-152 m.5 (e): Ek B line 332, stage 1 item 'Kripto çevikliği: algoritma kimliği imzalı içeriğin parçası'; alg and kid live in the signed protected header; kid-in-unprotected and key-type-mismatch vectors are refused"
+
+[[rule_overrides]]
+id = "GHSA-84jc-3hj2-hwc7"
+stage = 13
+reason = "OP-152 m.5 (e): Ek B line 6129, stage 13 item 'İstek katman sırası; pahalı extractor'dan önce auth'; the Stage 3 item \"İstek katman sırası; pahalı extractor'dan önce auth\" moved to Stage 13 (OP-142) and no Stage 7 code orders auth before expensive extractors (there is no image validator yet); the panic half is MD-2, already tested"
+
+[[rule_overrides]]
+id = "GHSA-gpxg-fx2g-qxj2"
+stage = 5
+reason = "OP-152 m.5 (e): Ek B line 1970, stage 5 item 'Tarayıcı tarafı sertleştirme'; the Stage 5 part (strict CSP with Trusted Types on the hosted login) is served; SVG sanitising is the Stage 8 remainder"
+
+[[rule_overrides]]
+id = "GHSA-h395-gr6q-cpjc"
+stage = 1
+reason = "OP-152 m.5 (e): Ek B line 328, stage 1 item 'JOSE 18 saldırı sınıfı regresyonu'; the 18-class JOSE regression vectors"
+
+[[rule_overrides]]
+id = "GHSA-hh34-7jqq-3f73"
+stage = 5
+reason = "OP-152 m.5 (e): Ek B line 1758, stage 5 item 'Authorization code tek kullanım ve kısa PKCE verifier reddi'"
+
+[[rule_overrides]]
+id = "GHSA-j4gj-f54h-56j5"
+stage = 0
+reason = "OP-152 m.5 (e): Ek B line 72, stage 0 item 'Log ve `Debug` redaksiyonu + CI canary testi'"
+
+[[rule_overrides]]
+id = "GHSA-qcxq-75wr-5cm8"
+stage = 10
+reason = "OP-152 m.5 (e): Ek B line 5102, stage 10 item 'LDAP BER ve SCIM filtre sınırları'; there is no LDAP BER decoder yet; the Stage 5 parser item left the LDAP BER limits to Stage 10 (OP-148)"
+
+[[rule_overrides]]
+id = "GHSA-r5fr-9gmv-jggh"
+stage = 7
+reason = "OP-152 m.5 (e): Ek B line 3065, stage 7 item 'REST: SCIM filtre alt kümesi, bilinmeyen alan → 400'; the admin REST SCIM filter subset checks depth, size and terms before recursing"
+
+[[rule_overrides]]
+id = "GHSA-x8cg-3c8h-gw55"
+stage = 10
+reason = "OP-152 m.5 (e): Ek B line 4737, stage 10 item 'Birleştirme anahtarı `(iss, sub)` / Entra `(tid, oid)`'; upstream federation account linking by (iss, sub) is the Stage 10 item; no Stage 7 code links federated identities"
+
+[[rule_overrides]]
+id = "GHSA-xxwr-vvr3-2g9f"
+stage = 14
+reason = "OP-152 m.5 (e): Ek B line 6355, stage 14 item 'Test katmanları SA-T1…SA-T18'; the mitigation is stateful PBT plus the MR4 permutation relation, part of the test-layer item moved to Stage 14 (OP-138); the kernel vector two-exclusions-reordered is an MR4-style case the kernel lane could cite"
+
+[[rule_overrides]]
+id = "RAUTHY-001"
+stage = 1
+reason = "OP-152 m.5 (e): Ek B line 413, stage 1 item 'Authority artefaktları asla RSA veya realm JOSE/SAML anahtarıyla imzalanmaz; `rsa` crate kullanılmaz'; the `rsa` crate is a banned provider in the built graph"
+
+[[rule_overrides]]
+id = "RAUTHY-004"
+stage = 7
+reason = "OP-152 m.5 (e): Ek B line 3067, stage 7 item 'Opak imleçli sayfalama + `Link` başlığı'; page[size] is 1 to 100 and 0 is refused before any arithmetic"
+
+[[rule_overrides]]
+id = "RAUTHY-006"
+stage = 0
+reason = "OP-152 m.5 (e): Ek B line 187, stage 0 item 'Ağ süreçlerinde `panic=\"abort\"` yok; request path'te panic yok'"
+
+[[rule_overrides]]
+id = "RAUTHY-008"
+stage = 0
+reason = "OP-152 m.5 (e): Ek B line 82, stage 0 item 'Geliştirme portları varsayılan loopback'"
+
+[[rule_overrides]]
+id = "RAUTHY-009"
+stage = 0
+reason = "OP-152 m.5 (e): Ek B line 157, stage 0 item 'Depo ve geliştirme güvenliği (SA-60)'; gitleaks runs in CI; the new xtask committed-private-keys check refuses PEM/OpenSSH/PGP private key blocks in the tree"
+
+[[rule_overrides]]
+id = "RUSTSEC-2024-0437"
+stage = 10
+reason = "OP-152 m.5 (e): Ek B line 4776, stage 10 item 'SAML imza doğrulama kuralları'; Access uses neither the protobuf crate nor an XML parser (prost is only a transitive OTLP encoder); quick-xml >= 0.41 and the XML depth limit arrive with the SAML item"
+
+[[rule_overrides]]
+id = "RUSTSEC-2026-0003"
+stage = 1
+reason = "OP-152 m.5 (e): Ek B line 341, stage 1 item 'Sabit zamanlı karşılaştırma disiplini'; ctgrind catches a compiled branch on secret bytes, the cmov class"
+
+[[rule_overrides]]
+id = "CI-1"
+stage = 3
+reason = "OP-152 m.5 (e): Ek B line 797, stage 3 item 'Grant: pozitif yetkinin tek kaynağı'; CI-1 is canonical as INV-1"
+
+[[rule_overrides]]
+id = "CI-10"
+stage = 4
+reason = "OP-152 m.5 (e): Ek B line 1585, stage 4 item 'Foreign authority'nin yalnız `foreign-authority` Acceptance ve bridging ceiling ile kullanımı'; CI-10 is canonical as INV-17"
+
+[[rule_overrides]]
+id = "CI-11"
+stage = 3
+reason = "OP-152 m.5 (e): Ek B line 862, stage 3 item 'Bir grup = bir üyelik issuer'ı'; CI-11 is canonical as INV-25"
+
+[[rule_overrides]]
+id = "CI-12"
+stage = 1
+reason = "OP-152 m.5 (e): Ek B line 350, stage 1 item 'Fail-closed her yerde'; CI-12 is canonical as INV-26"
+
+[[rule_overrides]]
+id = "CI-14"
+stage = 3
+reason = "OP-152 m.5 (e): Ek B line 1155, stage 3 item 'Approval = contribution Exercise'; CI-14 is canonical as INV-20"
+
+[[rule_overrides]]
+id = "CI-3"
+stage = 6
+reason = "OP-152 m.5 (e): Ek B line 2515, stage 6 item 'Projection ⊆ source'; CI-3 is canonical as INV-3; the PAP carries exactly the projected authority and an intent outside it is refused"
+
+[[rule_overrides]]
+id = "CI-4"
+stage = 3
+reason = "OP-152 m.5 (e): Ek B line 911, stage 3 item 'Prospektif revocation (commit anından itibaren)'; CI-4 is canonical as INV-5 and INV-23"
+
+[[rule_overrides]]
+id = "CI-5"
+stage = 3
+reason = "OP-152 m.5 (e): Ek B line 983, stage 3 item 'Statement'sız istek = Anonymous'; CI-5 is canonical as INV-11"
+
+[[rule_overrides]]
+id = "CI-6"
+stage = 3
+reason = "OP-152 m.5 (e): Ek B line 854, stage 3 item 'AgencyTerms ve ExerciseCapacity (OWN / FOR)'; CI-6 is canonical as INV-4"
+
+[[rule_overrides]]
+id = "CI-7"
+stage = 3
+reason = "OP-152 m.5 (e): Ek B line 992, stage 3 item 'Effect yalnız Claim olarak'; CI-7 is canonical as INV-18; covered by the effect-guaranteed honest-wording claim"
+
+[[rule_overrides]]
+id = "CI-8"
+stage = 3
+reason = "OP-152 m.5 (e): Ek B line 1054, stage 3 item 'ALLOW envelope-bound'; CI-8 is canonical as INV-19"
+
+[[rule_overrides]]
+id = "CI-9"
+stage = 3
+reason = "OP-152 m.5 (e): Ek B line 1138, stage 3 item 'Revocation guarantee sınıfları'; CI-9 is canonical as INV-23 and INV-24"
+
+[[rule_overrides]]
+id = "EI-1"
+stage = 3
+reason = "OP-152 m.5 (e): Ek B line 862, stage 3 item 'Bir grup = bir üyelik issuer'ı'; one membership issuer per group is the fact-owner rule"
+
+[[rule_overrides]]
+id = "EI-10"
+stage = 9
+reason = "OP-152 m.5 (e): Ek B line 4278, stage 9 item 'Effect attestation, outcome state ve post-hoc conformance'; no Stage 7 code ingests effect attestations or derives conformance from them; Stage 3 only types effect Claims in the Kernel"
+
+[[rule_overrides]]
+id = "EI-11"
+stage = 3
+reason = "OP-152 m.5 (e): Ek B line 1442, stage 3 item 'Effect'in gerçekleştiğini/doğru olduğunu/durduğunu vaat etmez (\"Revoked ⇒ stopped\" yok)'"
+
+[[rule_overrides]]
+id = "EI-12"
+stage = 4
+reason = "OP-152 m.5 (e): Ek B line 1585, stage 4 item 'Foreign authority'nin yalnız `foreign-authority` Acceptance ve bridging ceiling ile kullanımı'"
+
+[[rule_overrides]]
+id = "EI-13"
+stage = 6
+reason = "OP-152 m.5 (e): Ek B line 2744, stage 6 item 'First-party nötrlüğü'"
+
+[[rule_overrides]]
+id = "EI-14"
+stage = 3
+reason = "OP-152 m.5 (e): Ek B line 1447, stage 3 item 'Referans sahiplik değildir'; naming a resource covers nothing; coverage comes from the Anchor scope"
+
+[[rule_overrides]]
+id = "EI-15"
+stage = 6
+reason = "OP-152 m.5 (e): Ek B line 2701, stage 6 item 'Authority-relevance minimization'"
+
+[[rule_overrides]]
+id = "EI-16"
+stage = 3
+reason = "OP-152 m.5 (e): Ek B line 949, stage 3 item 'Immutable schema sürümleri ve exact digest pin'i'"
+
+[[rule_overrides]]
+id = "EI-19"
+stage = 3
+reason = "OP-152 m.5 (e): Ek B line 1048, stage 3 item 'Risk ADP'de Claim olarak, yalnız daraltır'"
+
+[[rule_overrides]]
+id = "EI-2"
+stage = 3
+reason = "OP-152 m.5 (e): Ek B line 797, stage 3 item 'Grant: pozitif yetkinin tek kaynağı'"
+
+[[rule_overrides]]
+id = "EI-21"
+stage = 3
+reason = "OP-152 m.5 (e): Ek B line 1233, stage 3 item 'UNKNOWN raporlama'"
+
+[[rule_overrides]]
+id = "EI-22"
+stage = 3
+reason = "OP-152 m.5 (e): Ek B line 1127, stage 3 item 'Domain predicate uydurulmaz'; a missing domain Claim leaves the term unmet (REQUIRE_ACTION, never ALLOW)"
+
+[[rule_overrides]]
+id = "EI-25"
+stage = 5
+reason = "OP-152 m.5 (e): Ek B line 2002, stage 5 item 'Config değerinin committed ALLOW digest'ine bağlanması'"
+
+[[rule_overrides]]
+id = "EI-27"
+stage = 3
+reason = "OP-152 m.5 (e): Ek B line 772, stage 3 item 'Tenant / Realm / Cell authority girdisi değildir'"
+
+[[rule_overrides]]
+id = "EI-3"
+stage = 3
+reason = "OP-152 m.5 (e): Ek B line 1127, stage 3 item 'Domain predicate uydurulmaz'"
+
+[[rule_overrides]]
+id = "EI-7"
+stage = 6
+reason = "OP-152 m.5 (e): Ek B line 2417, stage 6 item 'Party Identity Regime Claim'lerinin tüketimi'; regime Claims act only as restrictions"
+
+[[rule_overrides]]
+id = "EI-8"
+stage = 3
+reason = "OP-152 m.5 (e): Ek B line 817, stage 3 item 'Domain admission (`party.register` + self-anchor)'"
+
+[[rule_overrides]]
+id = "G1"
+stage = 3
+reason = "OP-152 m.5 (e): Ek B line 797, stage 3 item 'Grant: pozitif yetkinin tek kaynağı'"
+
+[[rule_overrides]]
+id = "G10"
+stage = 4
+reason = "OP-152 m.5 (e): Ek B line 1585, stage 4 item 'Foreign authority'nin yalnız `foreign-authority` Acceptance ve bridging ceiling ile kullanımı'"
+
+[[rule_overrides]]
+id = "G11"
+stage = 3
+reason = "OP-152 m.5 (e): Ek B line 953, stage 3 item 'Schema sürüm/mapping kontrolü'"
+
+[[rule_overrides]]
+id = "G12"
+stage = 3
+reason = "OP-152 m.5 (e): Ek B line 895, stage 3 item 'Exact-intent approval (intent digest'ine bağlı contribution)'"
+
+[[rule_overrides]]
+id = "G13"
+stage = 3
+reason = "OP-152 m.5 (e): Ek B line 895, stage 3 item 'Exact-intent approval (intent digest'ine bağlı contribution)'"
+
+[[rule_overrides]]
+id = "G14"
+stage = 3
+reason = "OP-152 m.5 (e): Ek B line 982, stage 3 item 'Actor Intent Statement (AIS) ile actor attribution'"
+
+[[rule_overrides]]
+id = "G15"
+stage = 3
+reason = "OP-152 m.5 (e): Ek B line 854, stage 3 item 'AgencyTerms ve ExerciseCapacity (OWN / FOR)'"
+
+[[rule_overrides]]
+id = "G16"
+stage = 3
+reason = "OP-152 m.5 (e): Ek B line 987, stage 3 item 'Üç outcome; UNKNOWN yok'"
+
+[[rule_overrides]]
+id = "G17"
+stage = 1
+reason = "OP-152 m.5 (e): Ek B line 260, stage 1 item 'Deterministik karar'"
+
+[[rule_overrides]]
+id = "G19"
+stage = 3
+reason = "OP-152 m.5 (e): Ek B line 994, stage 3 item 'Event'ler authority genişletmez'"
+
+[[rule_overrides]]
+id = "G2"
+stage = 3
+reason = "OP-152 m.5 (e): Ek B line 836, stage 3 item 'Attenuation ve non-amplification'"
+
+[[rule_overrides]]
+id = "G20"
+stage = 1
+reason = "OP-152 m.5 (e): Ek B line 255, stage 1 item 'Must-understand fail closed; downgrade genişletmedir'"
+
+[[rule_overrides]]
+id = "G22"
+stage = 3
+reason = "OP-152 m.5 (e): Ek B line 804, stage 3 item 'Normatif zaman = domain trusted time; backdate yok'"
+
+[[rule_overrides]]
+id = "G23"
+stage = 2
+reason = "OP-152 m.5 (e): Ek B line 529, stage 2 item 'Append-only, silinemez kayıt defteri'"
+
+[[rule_overrides]]
+id = "G24"
+stage = 3
+reason = "OP-152 m.5 (e): Ek B line 820, stage 3 item 'First-party ayrıcalığı yok'"
+
+[[rule_overrides]]
+id = "G25"
+stage = 4
+reason = "OP-152 m.5 (e): Ek B line 1601, stage 4 item 'Revocation guarantee sınıfları (pencere içi kullanım, SSF teslimi)'; use within the contract window is the classification half of the revocation guarantee classes"
+
+[[rule_overrides]]
+id = "G26"
+stage = 3
+reason = "OP-152 m.5 (e): Ek B line 993, stage 3 item 'Batch atomik değil'"
+
+[[rule_overrides]]
+id = "G27"
+stage = 3
+reason = "OP-152 m.5 (e): Ek B line 1120, stage 3 item 'Explain / advisory check / search sınırları'"
+
+[[rule_overrides]]
+id = "G3"
+stage = 3
+reason = "OP-152 m.5 (e): Ek B line 874, stage 3 item 'Consumption-bearing state'in at-most-once commit'i'"
+
+[[rule_overrides]]
+id = "G31"
+stage = 3
+reason = "OP-152 m.5 (e): Ek B line 912, stage 3 item 'Revocation ≠ stop; continuation DENY'"
+
+[[rule_overrides]]
+id = "G34"
+stage = 2
+reason = "OP-152 m.5 (e): Ek B line 544, stage 2 item 'Kayıt kimliği = commitment; sessiz bozulma tespiti'"
+
+[[rule_overrides]]
+id = "G35"
+stage = 1
+reason = "OP-152 m.5 (e): Ek B line 337, stage 1 item 'DomainID must-understand / binding key kapsamı (Storm-0558 sınıfı koruma)'"
+
+[[rule_overrides]]
+id = "G37"
+stage = 3
+reason = "OP-152 m.5 (e): Ek B line 1227, stage 3 item 'Opaque `basis_ref` ve HMAC event id (örtük bilgi sızıntısı yok)'"
+
+[[rule_overrides]]
+id = "G38"
+stage = 1
+reason = "OP-152 m.5 (e): Ek B line 393, stage 1 item 'Spec kazanır'"
+
+[[rule_overrides]]
+id = "G4"
+stage = 3
+reason = "OP-152 m.5 (e): Ek B line 911, stage 3 item 'Prospektif revocation (commit anından itibaren)'"
+
+[[rule_overrides]]
+id = "G40"
+stage = 2
+reason = "OP-152 m.5 (e): Ek B line 436, stage 2 item 'Aynı nonce ile retry çift Exercise üretmez'"
+
+[[rule_overrides]]
+id = "G41"
+stage = 3
+reason = "OP-152 m.5 (e): Ek B line 1046, stage 3 item 'Commit'siz ALLOW yok'"
+
+[[rule_overrides]]
+id = "G42"
+stage = 4
+reason = "OP-152 m.5 (e): Ek B line 1552, stage 4 item 'Kesinti modları: signer ≠ HSM; imzasız artefakt yayınlanmaz'"
+
+[[rule_overrides]]
+id = "G46"
+stage = 1
+reason = "OP-152 m.5 (e): Ek B line 413, stage 1 item 'Authority artefaktları asla RSA veya realm JOSE/SAML anahtarıyla imzalanmaz; `rsa` crate kullanılmaz'"
+
+[[rule_overrides]]
+id = "G47"
+stage = 1
+reason = "OP-152 m.5 (e): Ek B line 337, stage 1 item 'DomainID must-understand / binding key kapsamı (Storm-0558 sınıfı koruma)'"
+
+[[rule_overrides]]
+id = "G49"
+stage = 5
+reason = "OP-152 m.5 (e): Ek B line 1851, stage 5 item '\"Önbellek bu kullanıcıyı hiç görmedi\" fail-closed'"
+
+[[rule_overrides]]
+id = "G5"
+stage = 3
+reason = "OP-152 m.5 (e): Ek B line 910, stage 3 item 'Terminal invalidity ve cascade revocation'"
+
+[[rule_overrides]]
+id = "G50"
+stage = 5
+reason = "OP-152 m.5 (e): Ek B line 1632, stage 5 item 'Login yolunda fail-closed'"
+
+[[rule_overrides]]
+id = "G55"
+stage = 1
+reason = "OP-152 m.5 (e): Ek B line 314, stage 1 item 'Yasak JOSE algoritmaları'"
+
+[[rule_overrides]]
+id = "G56"
+stage = 1
+reason = "OP-152 m.5 (e): Ek B line 247, stage 1 item 'Checked arithmetic: taşma = DENY'"
+
+[[rule_overrides]]
+id = "G57"
+stage = 5
+reason = "OP-152 m.5 (e): Ek B line 1842, stage 5 item 'Logout sonrası yeni token yok'"
+
+[[rule_overrides]]
+id = "G58"
+stage = 4
+reason = "OP-152 m.5 (e): Ek B line 1603, stage 4 item 'PAP'ta holder tarafı offline attenuation olmaması'; a PAP verifies only under the domain's PAP key and for its holder (key-not-for-paps, other-holder, signature-tampered vectors), so a holder cannot re-sign or splice one"
+
+[[rule_overrides]]
+id = "G6"
+stage = 3
+reason = "OP-152 m.5 (e): Ek B line 881, stage 3 item 'Restriction overlay (suspend, containment) yalnız daraltır'"
+
+[[rule_overrides]]
+id = "G60"
+stage = 1
+reason = "OP-152 m.5 (e): Ek B line 325, stage 1 item 'Kanonik olmayan CBOR / imza kodlaması reddi'"
+
+[[rule_overrides]]
+id = "G61"
+stage = 4
+reason = "OP-152 m.5 (e): Ek B line 1548, stage 4 item 'Publish-before-use'"
+
+[[rule_overrides]]
+id = "G62"
+stage = 3
+reason = "OP-152 m.5 (e): Ek B line 1260, stage 3 item 'Yetkisiz ≡ var olmayan (cevap içeriği aynı)'"
+
+[[rule_overrides]]
+id = "G7"
+stage = 3
+reason = "OP-152 m.5 (e): Ek B line 924, stage 3 item 'Ingest ≠ Acceptance (use-scoped Claim kabulü)'"
+
+[[rule_overrides]]
+id = "G8"
+stage = 3
+reason = "OP-152 m.5 (e): Ek B line 933, stage 3 item 'Issuer compromise blast radius sınırı'"
+
+[[rule_overrides]]
+id = "G9"
+stage = 3
+reason = "OP-152 m.5 (e): Ek B line 915, stage 3 item 'Ingest-time cutoff'"
+
+[[rule_overrides]]
+id = "HL-1"
+stage = 0
+reason = "OP-152 m.5 (e): Ek B line 201, stage 0 item 'NG/PU sınıfı vaat edilmeyenler'; the hard-limit side of N-20, B15, which the item lists; covered by the honest-wording claim throughput-guarantee"
+
+[[rule_overrides]]
+id = "HL-10"
+stage = 14
+reason = "OP-152 m.5 (e): Ek B line 6253, stage 14 item 'Known Hard Limits listesi (HL-1…HL-40)'; no honest-wording claim names this limit and no Stage 7 test can show it; the hard-limits list item is where it is stated"
+
+[[rule_overrides]]
+id = "HL-11"
+stage = 14
+reason = "OP-152 m.5 (e): Ek B line 6253, stage 14 item 'Known Hard Limits listesi (HL-1…HL-40)'; no honest-wording claim names this limit and no Stage 7 test can show it; the hard-limits list item is where it is stated"
+
+[[rule_overrides]]
+id = "HL-12"
+stage = 14
+reason = "OP-152 m.5 (e): Ek B line 6253, stage 14 item 'Known Hard Limits listesi (HL-1…HL-40)'; no honest-wording claim names this limit and no Stage 7 test can show it; the hard-limits list item is where it is stated"
+
+[[rule_overrides]]
+id = "HL-13"
+stage = 3
+reason = "OP-152 m.5 (e): Ek B line 1442, stage 3 item 'Effect'in gerçekleştiğini/doğru olduğunu/durduğunu vaat etmez (\"Revoked ⇒ stopped\" yok)'"
+
+[[rule_overrides]]
+id = "HL-14"
+stage = 0
+reason = "OP-152 m.5 (e): Ek B line 201, stage 0 item 'NG/PU sınıfı vaat edilmeyenler'; the hard-limit side of N-15, which the item lists; covered by the honest-wording claim n15-verifier-reports-true"
+
+[[rule_overrides]]
+id = "HL-18"
+stage = 0
+reason = "OP-152 m.5 (e): Ek B line 201, stage 0 item 'NG/PU sınıfı vaat edilmeyenler'; the hard-limit side of N-31, which the item lists; covered by the honest-wording claim cross-app-unlinkable"
+
+[[rule_overrides]]
+id = "HL-2"
+stage = 0
+reason = "OP-152 m.5 (e): Ek B line 201, stage 0 item 'NG/PU sınıfı vaat edilmeyenler'; the hard-limit side of N-13, N-29, which the item lists; covered by the honest-wording claim n13-provider-cannot-equivocate, n29-storage-corruption"
+
+[[rule_overrides]]
+id = "HL-20"
+stage = 0
+reason = "OP-152 m.5 (e): Ek B line 201, stage 0 item 'NG/PU sınıfı vaat edilmeyenler'; the hard-limit side of N-43, which the item lists; covered by the honest-wording claim n43-unlimited-signing"
+
+[[rule_overrides]]
+id = "HL-21"
+stage = 0
+reason = "OP-152 m.5 (e): Ek B line 201, stage 0 item 'NG/PU sınıfı vaat edilmeyenler'; the hard-limit side of N-33, N-34, which the item lists; covered by the honest-wording claim n33-memory-key-theft, n34-zeroize-all-copies"
+
+[[rule_overrides]]
+id = "HL-23"
+stage = 0
+reason = "OP-152 m.5 (e): Ek B line 201, stage 0 item 'NG/PU sınıfı vaat edilmeyenler'; the hard-limit side of N-41, which the item lists; covered by the honest-wording claim passkey-takeover-proof"
+
+[[rule_overrides]]
+id = "HL-24"
+stage = 0
+reason = "OP-152 m.5 (e): Ek B line 201, stage 0 item 'NG/PU sınıfı vaat edilmeyenler'; the hard-limit side of N-44, which the item lists; covered by the honest-wording claim n44-verified-publishers"
+
+[[rule_overrides]]
+id = "HL-3"
+stage = 0
+reason = "OP-152 m.5 (e): Ek B line 201, stage 0 item 'NG/PU sınıfı vaat edilmeyenler'; the hard-limit side of N-4, which the item lists; covered by the honest-wording claim n04-offline-instant-revocation"
+
+[[rule_overrides]]
+id = "HL-33"
+stage = 2
+reason = "OP-152 m.5 (e): Ek B line 461, stage 2 item 'Kapsamsız sorgu derlenmez (tipte kiracı/domain/realm kapsamı)'"
+
+[[rule_overrides]]
+id = "HL-34"
+stage = 14
+reason = "OP-152 m.5 (e): Ek B line 6253, stage 14 item 'Known Hard Limits listesi (HL-1…HL-40)'; no honest-wording claim names this limit and no Stage 7 test can show it; the hard-limits list item is where it is stated"
+
+[[rule_overrides]]
+id = "HL-35"
+stage = 14
+reason = "OP-152 m.5 (e): Ek B line 6253, stage 14 item 'Known Hard Limits listesi (HL-1…HL-40)'; no honest-wording claim names this limit and no Stage 7 test can show it; the hard-limits list item is where it is stated"
+
+[[rule_overrides]]
+id = "HL-36"
+stage = 14
+reason = "OP-152 m.5 (e): Ek B line 6253, stage 14 item 'Known Hard Limits listesi (HL-1…HL-40)'; no honest-wording claim names this limit and no Stage 7 test can show it; the hard-limits list item is where it is stated"
+
+[[rule_overrides]]
+id = "HL-37"
+stage = 0
+reason = "OP-152 m.5 (e): Ek B line 201, stage 0 item 'NG/PU sınıfı vaat edilmeyenler'; the hard-limit side of N-53, which the item lists; covered by the honest-wording claim n53-non-sdk-pep"
+
+[[rule_overrides]]
+id = "HL-38"
+stage = 8
+reason = "OP-152 m.5 (e): Ek B line 3555, stage 8 item 'Yönetici credential belirleyemez; yalnız tek kullanımlık reset intent'; the limit is what the single-use reset intent does not cover (TN-61), a Stage 8 item no Stage 7 code serves"
+
+[[rule_overrides]]
+id = "HL-39"
+stage = 8
+reason = "OP-152 m.5 (e): Ek B line 3607, stage 8 item 'Kiracı oluşturma / toplu davet hız sınırı ve itibar kontrolü'; the bound on invitation phishing is the tenant-creation and bulk-invitation rate limit and reputation check (TN-89, TN-95), a Stage 8 item"
+
+[[rule_overrides]]
+id = "HL-4"
+stage = 0
+reason = "OP-152 m.5 (e): Ek B line 201, stage 0 item 'NG/PU sınıfı vaat edilmeyenler'; the hard-limit side of N-14, which the item lists; covered by the honest-wording claim nothing-lost"
+
+[[rule_overrides]]
+id = "HL-41"
+stage = 8
+reason = "OP-152 m.5 (e): Ek B line 3607, stage 8 item 'Kiracı oluşturma / toplu davet hız sınırı ve itibar kontrolü'; the cost bound on a poisoned tenant is the tenant-creation rate limit and reputation check (TN-89), a Stage 8 item"
+
+[[rule_overrides]]
+id = "HL-6"
+stage = 0
+reason = "OP-152 m.5 (e): Ek B line 201, stage 0 item 'NG/PU sınıfı vaat edilmeyenler'; the hard-limit side of N-28, which the item lists; covered by the honest-wording claim n28-time-lies"
+
+[[rule_overrides]]
+id = "HL-7"
+stage = 13
+reason = "OP-152 m.5 (e): Ek B line 5845, stage 13 item 'Equivocation tespiti'; the honest limit is the equivocation detection item; nothing before Stage 13 detects or claims to prevent equivocation"
+
+[[rule_overrides]]
+id = "IDI-2"
+stage = 5
+reason = "OP-152 m.5 (e): Ek B line 1924, stage 5 item 'Realm-yerel kullanıcı, credential ve benzersizlik'"
+
+[[rule_overrides]]
+id = "IDI-5"
+stage = 5
+reason = "OP-152 m.5 (e): Ek B line 1667, stage 5 item 'BE/BS bayrak politikası'"
+
+[[rule_overrides]]
+id = "IDI-6"
+stage = 1
+reason = "OP-152 m.5 (e): Ek B line 316, stage 1 item 'Algoritma allowlist'i yalnız client/Domain/Realm metadata'dan'"
+
+[[rule_overrides]]
+id = "IDI-7"
+stage = 5
+reason = "OP-152 m.5 (e): Ek B line 2065, stage 5 item 'İmzalı kimlik çıktısı yalnız tamamlanmış authN'den'"
+
+[[rule_overrides]]
+id = "INV-1"
+stage = 3
+reason = "OP-152 m.5 (e): Ek B line 797, stage 3 item 'Grant: pozitif yetkinin tek kaynağı'"
+
+[[rule_overrides]]
+id = "INV-11"
+stage = 3
+reason = "OP-152 m.5 (e): Ek B line 983, stage 3 item 'Statement'sız istek = Anonymous'"
+
+[[rule_overrides]]
+id = "INV-14"
+stage = 3
+reason = "OP-152 m.5 (e): Ek B line 923, stage 3 item 'Claim modeli'"
+
+[[rule_overrides]]
+id = "INV-20"
+stage = 3
+reason = "OP-152 m.5 (e): Ek B line 1155, stage 3 item 'Approval = contribution Exercise'"
+
+[[rule_overrides]]
+id = "INV-25"
+stage = 3
+reason = "OP-152 m.5 (e): Ek B line 1446, stage 3 item 'Başka sistemin anlamsal gerçeğinin sahibi değil'; the group membership fact stays with its one issuer and enters only as that issuer's Claim"
+
+[[rule_overrides]]
+id = "INV-34"
+stage = 3
+reason = "OP-152 m.5 (e): Ek B line 1109, stage 3 item 'Derived cevapların uyumu (Check/List tutarlılığı)'"
+
+[[rule_overrides]]
+id = "INV-6"
+stage = 1
+reason = "OP-152 m.5 (e): Ek B line 401, stage 1 item 'Restriction pozitif yetki üretemez'"
+
+[[rule_overrides]]
+id = "INV-7"
+stage = 1
+reason = "OP-152 m.5 (e): Ek B line 403, stage 1 item 'Positive authority'de negation, serbest predicate, Turing-complete ifade ve dış çağrı yok'"
+
+[[rule_overrides]]
+id = "INV-9"
+stage = 1
+reason = "OP-152 m.5 (e): Ek B line 404, stage 1 item 'Wildcard-subject delegation yok; reserved action'lar wildcard/prefix ile kapsanmaz'"
+
+[[rule_overrides]]
+id = "MUST-NEVER-1"
+stage = 3
+reason = "OP-152 m.5 (e): Ek B line 1364, stage 3 item 'Login, token, grup üyeliği, oturum, risk skoru veya posture yetki üretmez; identity plane authority üretmez'"
+
+[[rule_overrides]]
+id = "MUST-NEVER-10"
+stage = 3
+reason = "OP-152 m.5 (e): Ek B line 1442, stage 3 item 'Effect'in gerçekleştiğini/doğru olduğunu/durduğunu vaat etmez (\"Revoked ⇒ stopped\" yok)'; covered by the effect-guaranteed forbidden claim"
+
+[[rule_overrides]]
+id = "MUST-NEVER-11"
+stage = 1
+reason = "OP-152 m.5 (e): Ek B line 350, stage 1 item 'Fail-closed her yerde'"
+
+[[rule_overrides]]
+id = "MUST-NEVER-12"
+stage = 3
+reason = "OP-152 m.5 (e): Ek B line 1055, stage 3 item 'Her consequential effect kendi ALLOW'u (Txn-Token tek başına ALLOW değil)'"
+
+[[rule_overrides]]
+id = "MUST-NEVER-15"
+stage = 5
+reason = "OP-152 m.5 (e): Ek B line 2174, stage 5 item 'Kiracı kodu sunucuda/IdP sürecinde çalışmaz'"
+
+[[rule_overrides]]
+id = "MUST-NEVER-16"
+stage = 5
+reason = "OP-152 m.5 (e): Ek B line 1797, stage 5 item 'redirect_uri yalnız tam dizge eşleşmesi'"
+
+[[rule_overrides]]
+id = "MUST-NEVER-18"
+stage = 5
+reason = "OP-152 m.5 (e): Ek B line 1752, stage 5 item 'Rezerve protokol claim'lerinin korunması; claim eşleme yetki üretemez'"
+
+[[rule_overrides]]
+id = "MUST-NEVER-2"
+stage = 1
+reason = "OP-152 m.5 (e): Ek B line 401, stage 1 item 'Restriction pozitif yetki üretemez'"
+
+[[rule_overrides]]
+id = "MUST-NEVER-3"
+stage = 3
+reason = "OP-152 m.5 (e): Ek B line 1364, stage 3 item 'Login, token, grup üyeliği, oturum, risk skoru veya posture yetki üretmez; identity plane authority üretmez'"
+
+[[rule_overrides]]
+id = "MUST-NEVER-4"
+stage = 3
+reason = "OP-152 m.5 (e): Ek B line 836, stage 3 item 'Attenuation ve non-amplification'"
+
+[[rule_overrides]]
+id = "MUST-NEVER-5"
+stage = 3
+reason = "OP-152 m.5 (e): Ek B line 1446, stage 3 item 'Başka sistemin anlamsal gerçeğinin sahibi değil'"
+
+[[rule_overrides]]
+id = "MUST-NEVER-9"
+stage = 3
+reason = "OP-152 m.5 (e): Ek B line 924, stage 3 item 'Ingest ≠ Acceptance (use-scoped Claim kabulü)'"
+
+[[rule_overrides]]
+id = "OP-3-G1"
+stage = 5
+reason = "OP-152 m.5 (e): Ek B line 2122, stage 5 item 'OP-3 CI kapıları'; the xtask unsafe-allowlist check stands in for cargo geiger"
+
+[[rule_overrides]]
+id = "OP-3-G2"
+stage = 5
+reason = "OP-152 m.5 (e): Ek B line 2122, stage 5 item 'OP-3 CI kapıları'"
+
+[[rule_overrides]]
+id = "OP-3-G3"
+stage = 5
+reason = "OP-152 m.5 (e): Ek B line 2122, stage 5 item 'OP-3 CI kapıları'"
+
+[[rule_overrides]]
+id = "OP-3-G4"
+stage = 1
+reason = "OP-152 m.5 (e): Ek B line 382, stage 1 item 'Golden vector CI kapısı'"
+
+[[rule_overrides]]
+id = "OP-3-G5"
+stage = 5
+reason = "OP-152 m.5 (e): Ek B line 2122, stage 5 item 'OP-3 CI kapıları'; the nightly OIDF job is checked by ci-gates; it reports only until its first run (OP-146 m.18 (b))"
+
+[[rule_overrides]]
+id = "OP-3-G6"
+stage = 5
+reason = "OP-152 m.5 (e): Ek B line 2122, stage 5 item 'OP-3 CI kapıları'"
+
+[[rule_overrides]]
+id = "OP-54-RL1"
+stage = 3
+reason = "OP-152 m.5 (e): Ek B line 1430, stage 3 item 'Dağıtık cache doğruluk kaynağı değil; LISTEN/NOTIFY ve Redis pub/sub iptal taşıyıcısı değil'; no Redis client is built (OP-129 m.5)"
+
+[[rule_overrides]]
+id = "OP-54-RL10"
+stage = 12
+reason = "OP-152 m.5 (e): Ek B line 5654, stage 12 item 'DB'de duran acil durum admin hesabı yok'"
+
+[[rule_overrides]]
+id = "OP-54-RL11"
+stage = 5
+reason = "OP-152 m.5 (e): Ek B line 2162, stage 5 item 'Backend kesintisinde/failover'da refresh invalid_grant dönmez'"
+
+[[rule_overrides]]
+id = "OP-54-RL12"
+stage = 13
+reason = "OP-152 m.5 (e): Ek B line 5992, stage 13 item 'Region kaybında iki yazar yok'; the cross-cell fence is the region-loss item"
+
+[[rule_overrides]]
+id = "OP-54-RL2"
+stage = 13
+reason = "OP-152 m.5 (e): Ek B line 6094, stage 13 item 'Asenkron replica'dan güvenlik okuması yok'; Stage 13 Kırmızı çizgiler item for OP-27/OPI-2"
+
+[[rule_overrides]]
+id = "OP-54-RL3"
+stage = 13
+reason = "OP-152 m.5 (e): Ek B line 6090, stage 13 item 'Active-active canonical yazma ve aynı domain için iki eşzamanlı authoritative writer yok'"
+
+[[rule_overrides]]
+id = "OP-54-RL4"
+stage = 13
+reason = "OP-152 m.5 (e): Ek B line 6090, stage 13 item 'Active-active canonical yazma ve aynı domain için iki eşzamanlı authoritative writer yok'"
+
+[[rule_overrides]]
+id = "OP-54-RL5"
+stage = 13
+reason = "OP-152 m.5 (e): Ek B line 6090, stage 13 item 'Active-active canonical yazma ve aynı domain için iki eşzamanlı authoritative writer yok'"
+
+[[rule_overrides]]
+id = "OP-54-RL6"
+stage = 13
+reason = "OP-152 m.5 (e): Ek B line 6093, stage 13 item 'Tek standby ile synchronous_commit=on yok; güvenlik yazmalarında local yok'"
+
+[[rule_overrides]]
+id = "OP-54-RL7"
+stage = 2
+reason = "OP-152 m.5 (e): Ek B line 708, stage 2 item 'Gömülü dağıtık cache (Infinispan/Hazelcast) yok'; the op-54-red-lines check keeps embedded distributed cache and gossip membership crates out of Cargo.lock"
+
+[[rule_overrides]]
+id = "OP-54-RL8"
+stage = 5
+reason = "OP-152 m.5 (e): Ek B line 2207, stage 5 item 'Node-yerel hesap bazlı limit yok'; the account counter lives in PostgreSQL (layer B)"
+
+[[rule_overrides]]
+id = "OP-54-RL9"
+stage = 3
+reason = "OP-152 m.5 (e): Ek B line 1430, stage 3 item 'Dağıtık cache doğruluk kaynağı değil; LISTEN/NOTIFY ve Redis pub/sub iptal taşıyıcısı değil'; no Bloom filter crate is built"
+
+[[rule_overrides]]
+id = "OPI-1"
+stage = 2
+reason = "OP-152 m.5 (e): Ek B line 566, stage 2 item 'Identity outbox polling'"
+
+[[rule_overrides]]
+id = "OPI-6"
+stage = 2
+reason = "OP-152 m.5 (e): Ek B line 550, stage 2 item 'Atomik denetim outbox'ı (identity) + Merkle checkpointer'"
+
+[[rule_overrides]]
+id = "PI-1"
+stage = 3
+reason = "OP-152 m.5 (e): Ek B line 980, stage 3 item 'Dört mesaj türü'"
+
+[[rule_overrides]]
+id = "PI-16"
+stage = 3
+reason = "OP-152 m.5 (e): Ek B line 1226, stage 3 item 'Kapsamlı açıklama ve disclosure'"
+
+[[rule_overrides]]
+id = "PI-18"
+stage = 14
+reason = "OP-152 m.5 (e): Ek B line 6291, stage 14 item 'Vendor-neutral protocol governance (neutral vakıf/SDO)'; governance of the layers shared with Work is the neutral foundation/SDO item; no Stage 7 or earlier code serves governance"
+
+[[rule_overrides]]
+id = "PI-2"
+stage = 3
+reason = "OP-152 m.5 (e): Ek B line 1064, stage 3 item 'AuthZEN subject türetilir'"
+
+[[rule_overrides]]
+id = "PI-21"
+stage = 1
+reason = "OP-152 m.5 (e): Ek B line 332, stage 1 item 'Kripto çevikliği: algoritma kimliği imzalı içeriğin parçası'"
+
+[[rule_overrides]]
+id = "PI-22"
+stage = 3
+reason = "OP-152 m.5 (e): Ek B line 924, stage 3 item 'Ingest ≠ Acceptance (use-scoped Claim kabulü)'"
+
+[[rule_overrides]]
+id = "PI-23"
+stage = 3
+reason = "OP-152 m.5 (e): Ek B line 1091, stage 3 item 'Batch semantiği'"
+
+[[rule_overrides]]
+id = "PI-5"
+stage = 3
+reason = "OP-152 m.5 (e): Ek B line 1037, stage 3 item 'Üç karar sonucu: ALLOW / DENY / REQUIRE_ACTION'"
+
+[[rule_overrides]]
+id = "SAI-1"
+stage = 0
+reason = "OP-152 m.5 (e): Ek B line 143, stage 0 item 'SAI-1 eşleme kontrolü'"
+
+[[rule_overrides]]
+id = "SAI-2"
+stage = 1
+reason = "OP-152 m.5 (e): Ek B line 345, stage 1 item 'Parser ve DoS limitleri'"
+
+[[rule_overrides]]
+id = "SAI-3"
+stage = 3
+reason = "OP-152 m.5 (e): Ek B line 1126, stage 3 item 'Fail-closed karar yolu'"
+
+[[rule_overrides]]
+id = "SAI-4"
+stage = 5
+reason = "OP-152 m.5 (e): Ek B line 1851, stage 5 item '\"Önbellek bu kullanıcıyı hiç görmedi\" fail-closed'"
+
+[[rule_overrides]]
+id = "SAI-40"
+stage = 1
+reason = "OP-152 m.5 (e): Ek B line 316, stage 1 item 'Algoritma allowlist'i yalnız client/Domain/Realm metadata'dan'"
+
+[[rule_overrides]]
+id = "SAI-41"
+stage = 1
+reason = "OP-152 m.5 (e): Ek B line 317, stage 1 item 'İmza sıkılık profili'"
+
+[[rule_overrides]]
+id = "SAI-42"
+stage = 1
+reason = "OP-152 m.5 (e): Ek B line 341, stage 1 item 'Sabit zamanlı karşılaştırma disiplini'"
+
+[[rule_overrides]]
+id = "SAI-43"
+stage = 3
+reason = "OP-152 m.5 (e): Ek B line 1122, stage 3 item 'Yetkisiz ≡ var olmayan (görülemeyen kaynakta DENY = yokluk)'"
+
+[[rule_overrides]]
+id = "SAI-45"
+stage = 13
+reason = "OP-152 m.5 (e): Ek B line 6146, stage 13 item 'Operasyonel anahtarların gizli bellekte (memfd_secret) tutulması ve CR-34 sertleştirme modları'; the Stage 4 separate-signer item is done only in part; unwrapped keys in protected memory (memfd_secret) is its remainder, moved to Stage 13 (OP-144), and no Stage 7 or earlier code keeps operational keys there"
+
+[[rule_overrides]]
+id = "SAI-46"
+stage = 4
+reason = "OP-152 m.5 (e): Ek B line 1548, stage 4 item 'Publish-before-use'"
+
+[[rule_overrides]]
+id = "SAI-7"
+stage = 0
+reason = "OP-152 m.5 (e): Ek B line 135, stage 0 item 'Tekrarlanabilirliği kolaylaştıran build'; the item makes second builds informational, never a release gate (OP-79)"
+
+[[rule_overrides]]
+id = "SAI-8"
+stage = 0
+reason = "OP-152 m.5 (e): Ek B line 71, stage 0 item 'Sır tipleri (Secret<T>, secrecy, zeroize) ve bellek hijyeni'"
+
+[[rule_overrides]]
+id = "SAI-9"
+stage = 4
+reason = "OP-152 m.5 (e): Ek B line 1535, stage 4 item 'Anahtar ailesi ayrımı'"
+
+[[rule_overrides]]
+id = "SI-1"
+stage = 3
+reason = "OP-152 m.5 (e): Ek B line 1061, stage 3 item 'Actor Intent Statement (AIS)'"
+
+[[rule_overrides]]
+id = "SI-10"
+stage = 3
+reason = "OP-152 m.5 (e): Ek B line 915, stage 3 item 'Ingest-time cutoff'"
+
+[[rule_overrides]]
+id = "SI-14"
+stage = 3
+reason = "OP-152 m.5 (e): Ek B line 1226, stage 3 item 'Kapsamlı açıklama ve disclosure'"
+
+[[rule_overrides]]
+id = "SI-17"
+stage = 3
+reason = "OP-152 m.5 (e): Ek B line 1056, stage 3 item 'Proof binding'"
+
+[[rule_overrides]]
+id = "SI-19"
+stage = 3
+reason = "OP-152 m.5 (e): Ek B line 1160, stage 3 item 'Approver bağımsızlığı (independence kontrolü)'"
+
+[[rule_overrides]]
+id = "SI-2"
+stage = 3
+reason = "OP-152 m.5 (e): Ek B line 1421, stage 3 item 'Hosting provider, operatör ve custodian root değildir; varsayılan authority'leri yok'"
+
+[[rule_overrides]]
+id = "SI-20"
+stage = 1
+reason = "OP-152 m.5 (e): Ek B line 273, stage 1 item 'Sınırlı evaluation ve zorunlu kotalar'"
+
+[[rule_overrides]]
+id = "SI-3"
+stage = 3
+reason = "OP-152 m.5 (e): Ek B line 1265, stage 3 item 'Compromise patlama yarıçapı = beyan edilen use'"
+
+[[rule_overrides]]
+id = "SI-6"
+stage = 1
+reason = "OP-152 m.5 (e): Ek B line 350, stage 1 item 'Fail-closed her yerde'"
+
+[[rule_overrides]]
+id = "SI-9"
+stage = 3
+reason = "OP-152 m.5 (e): Ek B line 1266, stage 3 item 'Prospektif compromise işleme'; the open Stage 6 party.compromised event item (line 2843) also cites it"
+
+[[rule_overrides]]
+id = "TI-10"
+stage = 1
+reason = "OP-152 m.5 (e): Ek B line 354, stage 1 item 'Semantik timer yok'"
+
+[[rule_overrides]]
+id = "TI-11"
+stage = 1
+reason = "OP-152 m.5 (e): Ek B line 324, stage 1 item 'Verbatim imzalar ve deterministic CBOR digest'leri'"
+
+[[rule_overrides]]
+id = "TI-14"
+stage = 1
+reason = "OP-152 m.5 (e): Ek B line 251, stage 1 item 'RestrictionPolicy dili: Cedar forbid-only alt kümesi'"
+
+[[rule_overrides]]
+id = "TI-17"
+stage = 1
+reason = "OP-152 m.5 (e): Ek B line 360, stage 1 item 'Provider-neutrality'"
+
+[[rule_overrides]]
+id = "TI-19"
+stage = 2
+reason = "OP-152 m.5 (e): Ek B line 602, stage 2 item 'Trusted time / zaman bütünlüğü'"
+
+[[rule_overrides]]
+id = "TI-20"
+stage = 3
+reason = "OP-152 m.5 (e): Ek B line 1121, stage 3 item 'Disclosure filtresi'"
+
+[[rule_overrides]]
+id = "TI-3"
+stage = 2
+reason = "OP-152 m.5 (e): Ek B line 495, stage 2 item 'Stale state ALLOW üretemez'"
+
+[[rule_overrides]]
+id = "TI-4"
+stage = 2
+reason = "OP-152 m.5 (e): Ek B line 498, stage 2 item 'Koleksiyon key'leriyle read-set tamlığı'"
+
+[[rule_overrides]]
+id = "TI-7"
+stage = 2
+reason = "OP-152 m.5 (e): Ek B line 627, stage 2 item 'Tek commit, tüm effect'ler + outbox'"
+
+[[rule_overrides]]
+id = "TI-RT8"
+stage = 3
+reason = "OP-152 m.5 (e): Ek B line 875, stage 3 item 'Grounded budget release (Σrelease ≤ draw)'"
+
+[[rule_overrides]]
+id = "TNI-1"
+stage = 3
+reason = "OP-152 m.5 (e): Ek B line 1018, stage 3 item 'Tenant asla authority girdisi değil'"
+
+[[rule_overrides]]
+id = "TNI-10"
+stage = 2
+reason = "OP-152 m.5 (e): Ek B line 442, stage 2 item 'Tanımlayıcılar asla yeniden kullanılmaz; mezar taşı (tombstone)'"
+
+[[rule_overrides]]
+id = "TNI-2"
+stage = 4
+reason = "OP-152 m.5 (e): Ek B line 1535, stage 4 item 'Anahtar ailesi ayrımı'"
+
+[[rule_overrides]]
+id = "TNI-3"
+stage = 2
+reason = "OP-152 m.5 (e): Ek B line 589, stage 2 item 'Veri izolasyonu (RLS)'"
+
+[[rule_overrides]]
+id = "TNI-7"
+stage = 3
+reason = "OP-152 m.5 (e): Ek B line 836, stage 3 item 'Attenuation ve non-amplification'"
+
+[[rule_overrides]]
+id = "TNI-9"
+stage = 5
+reason = "OP-152 m.5 (e): Ek B line 1708, stage 5 item 'Askıya alınabilir kimlik doğrulamanın kuralları'"
+
+[[rule_overrides]]
+id = "U14"
+stage = 6
+reason = "OP-152 m.5 (e): Ek B line 2888, stage 6 item 'Custodial anahtarlar yalnız user-gated (custody signer)'; the Stage 4 item (line 1511) moved here (OP-144); it holds because no custodial key mode exists (OP-150 m.3 (e)), which the no-custody-key rule checks"
+
+[[rule_overrides]]
+id = "U15"
+stage = 6
+reason = "OP-152 m.5 (e): Ek B line 2888, stage 6 item 'Custodial anahtarlar yalnız user-gated (custody signer)'; the Stage 4 item (line 1511) moved here (OP-144); it holds because no custodial key mode exists (OP-150 m.3 (e)), which the no-custody-key rule checks"
+
+[[rule_overrides]]
+id = "U17"
+stage = 3
+reason = "OP-152 m.5 (e): Ek B line 1160, stage 3 item 'Approver bağımsızlığı (independence kontrolü)'"
+
+[[rule_overrides]]
+id = "U18"
+stage = 12
+reason = "OP-152 m.5 (e): Ek B line 5670, stage 12 item 'Structuring / abuse guard'ları (Party toplamı, eşik-bitişik tekrar, kitlesel seçim)'; the Stage 3 Structuring / abuse guards item (line 1166) moved here (OP-142); rate and oracle limits exist earlier but the structuring controls the row bundles are this open item"
+
+[[rule_overrides]]
+id = "U23"
+stage = 2
+reason = "OP-152 m.5 (e): Ek B line 504, stage 2 item 'Idempotent nonce ve aynı-nonce retry'"
+
+[[rule_overrides]]
+id = "U29"
+stage = 2
+reason = "OP-152 m.5 (e): Ek B line 602, stage 2 item 'Trusted time / zaman bütünlüğü'"
+
+[[rule_overrides]]
+id = "U30"
+stage = 2
+reason = "OP-152 m.5 (e): Ek B line 544, stage 2 item 'Kayıt kimliği = commitment; sessiz bozulma tespiti'"
+
+[[rule_overrides]]
+id = "U31"
+stage = 3
+reason = "OP-152 m.5 (e): Ek B line 760, stage 3 item 'Pending/queued revoke yok; timeout'ta sonuç sabitlenir'"
+
+[[rule_overrides]]
+id = "U34"
+stage = 3
+reason = "OP-152 m.5 (e): Ek B line 1308, stage 3 item 'Sınırlı commit işi; toplu meta-Exercise domain'i kilitlemez'"
+
+[[rule_overrides]]
+id = "U37"
+stage = 5
+reason = "OP-152 m.5 (e): Ek B line 1880, stage 5 item 'Fail-closed token introspection'"
+
+[[rule_overrides]]
+id = "U41"
+stage = 4
+reason = "OP-152 m.5 (e): Ek B line 1532, stage 4 item 'Domain-scoped operasyonel imza anahtarı ve plane başına ömür'"
+
+[[rule_overrides]]
+id = "U45"
+stage = 1
+reason = "OP-152 m.5 (e): Ek B line 341, stage 1 item 'Sabit zamanlı karşılaştırma disiplini'"
+
+[[rule_overrides]]
+id = "U46"
+stage = 5
+reason = "OP-152 m.5 (e): Ek B line 1689, stage 5 item 'Brute-force tavanı (NIST 800-63B-4)'"
+
+[[rule_overrides]]
+id = "U47"
+stage = 5
+reason = "OP-152 m.5 (e): Ek B line 1682, stage 5 item 'Argon2 eşzamanlılık semaforu ve yük atma'"
+
+[[rule_overrides]]
+id = "U48"
+stage = 1
+reason = "OP-152 m.5 (e): Ek B line 345, stage 1 item 'Parser ve DoS limitleri'"
+
+[[rule_overrides]]
+id = "U50"
+stage = 0
+reason = "OP-152 m.5 (e): Ek B line 135, stage 0 item 'Tekrarlanabilirliği kolaylaştıran build'; the item makes second builds informational, never a release gate (OP-79)"
+
+[[rule_overrides]]
+id = "U51"
+stage = 2
+reason = "OP-152 m.5 (e): Ek B line 545, stage 2 item 'Ack edilmiş security event kaybolmaz'"
+
+[[rule_overrides]]
+id = "U59"
+stage = 2
+reason = "OP-152 m.5 (e): Ek B line 461, stage 2 item 'Kapsamsız sorgu derlenmez (tipte kiracı/domain/realm kapsamı)'"
+
+[[rule_overrides]]
+id = "U69"
+stage = 5
+reason = "OP-152 m.5 (e): Ek B line 1678, stage 5 item 'Parola hash'i Argon2id (kanonik parametreler)'"
+
+[[rule_overrides]]
+id = "U70"
+stage = 2
+reason = "OP-152 m.5 (e): Ek B line 549, stage 2 item 'Tamper-evident identity plane audit'"
+
+[[rule_overrides]]
+id = "XI-24"
+stage = 5
+reason = "OP-152 m.5 (e): Ek B line 2085, stage 5 item 'Kimliği doğrulanmamış viewer'a hesap bilgisi sızdırılmaz'"
+
+[[rule_overrides]]
+id = "XI-6"
+stage = 3
+reason = "OP-152 m.5 (e): Ek B line 1161, stage 3 item 'Approve hiçbir şeyi ezmez'"

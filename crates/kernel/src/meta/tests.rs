@@ -975,7 +975,7 @@ fn acceptances_are_indexed_by_issuer() {
     assert_eq!((c.statement.issuer, c.statement.subject), (ROOT, ALICE));
 }
 
-// OP-141 m.20 (e): a group has one membership issuer
+// OP-141 m.20 (e), CI-11, EI-1: a group has one membership issuer
 #[test]
 fn a_group_has_one_membership_issuer() {
     let mut r = Run::new();
