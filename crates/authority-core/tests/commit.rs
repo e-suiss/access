@@ -7979,3 +7979,129 @@ async fn s9_10_a_requirement_the_verifier_cannot_check_stays_online() {
     let pap = access_kernel::pap::Pap::from_bytes(&projected.pap.unwrap()).unwrap();
     assert_eq!(pap.local_requirements, local.into_iter().collect());
 }
+
+/// Genesis declaring causal-bound allowances, or not.
+fn causal_genesis(declared: bool) -> BTreeMap<String, Opened> {
+    let mut g = genesis();
+    let mut policy = vec![(Value::text("ct3_delay_s"), Value::Unsigned(0))];
+    if declared {
+        policy.push((Value::text(meta::CAUSAL_BINDING), Value::Bool(true)));
+    }
+    g.insert(
+        "policy".to_owned(),
+        Opened {
+            value: Value::Map(policy),
+            salt: [9; 32],
+        },
+    );
+    g
+}
+
+/// ALICE's holding of `shop:read` on the shop Anchor, issued by the root.
+async fn alice_reads(core: &mut Core, d: Digest) -> ExerciseBasis {
+    onboard(core, d, ROOT, ROOT_KEY, (1, 2)).await;
+    onboard(core, d, ALICE, ALICE_KEY, (3, 4)).await;
+    let shop = meta::object_id(&d, kind::ANCHOR, 1);
+    let issue = Payload::GrantIssue(GrantContent {
+        basis: GrantBasis::Anchor(shop),
+        holder: SubjectSelector::Party(ALICE),
+        authority: authority(vec![action("shop", "read")], selector("shop")),
+        agency: BTreeSet::from([Capacity::Own]),
+        named: None,
+    });
+    let issued = send(
+        core,
+        meta_request(d, 5, ExerciseBasis::Anchor(shop), issue),
+        ROOT_KEY,
+    )
+    .await
+    .unwrap();
+    allowed(&issued);
+    ExerciseBasis::Holding(HoldingRef {
+        grant: meta::object_id(&issued.exercise.unwrap(), kind::GRANT, 0),
+        holder: ALICE,
+        since: issued.record.unwrap(),
+    })
+}
+
+fn downstream(d: Digest, nonce: u8, mode: Mode, basis: ExerciseBasis, up: u8) -> Request {
+    let mut r = shop_request(d, nonce, mode, basis);
+    r.intent.context.upstream_exercise = Some(Digest([up; 32]));
+    r
+}
+
+#[tokio::test]
+async fn a_declared_causal_bound_allowance_backs_one_downstream_exercise() {
+    // OP-152 m.7 (d), §7.9.7.4, E17, EI-17, U8
+    let db = fresh().await.unwrap();
+    let (mut core, d) = setup_with(&db, causal_genesis(true)).await;
+    let holding = alice_reads(&mut core, d).await;
+    let check = send(
+        &mut core,
+        downstream(d, 6, Mode::Check, holding, 0x70),
+        ALICE_KEY,
+    )
+    .await
+    .unwrap();
+    allowed(&check);
+    assert_eq!(check.causal, Some(true));
+    let first = send(
+        &mut core,
+        downstream(d, 7, Mode::Commit, holding, 0x70),
+        ALICE_KEY,
+    )
+    .await
+    .unwrap();
+    allowed(&first);
+    assert_eq!(first.causal, Some(true));
+    let second = send(
+        &mut core,
+        downstream(d, 8, Mode::Commit, holding, 0x70),
+        ALICE_KEY,
+    )
+    .await
+    .unwrap();
+    assert_eq!(second.decision.outcome, Outcome::Deny, "{second:?}");
+    assert_eq!(
+        second.decision.blockers[0].subcode.as_deref(),
+        Some("policy:causal-bound")
+    );
+    assert!(second.record.is_some());
+    let other = send(
+        &mut core,
+        downstream(d, 9, Mode::Commit, holding, 0x71),
+        ALICE_KEY,
+    )
+    .await
+    .unwrap();
+    allowed(&other);
+    let plain = send(
+        &mut core,
+        shop_request(d, 10, Mode::Commit, holding),
+        ALICE_KEY,
+    )
+    .await
+    .unwrap();
+    allowed(&plain);
+    assert_eq!(plain.causal, None);
+    fold_check(&db.sequencer, d).await.unwrap();
+}
+
+#[tokio::test]
+async fn an_undeclared_causal_ref_is_audit_only() {
+    // OP-152 m.7 (d), §9.9.2, E17
+    let db = fresh().await.unwrap();
+    let (mut core, d) = setup_with(&db, causal_genesis(false)).await;
+    let holding = alice_reads(&mut core, d).await;
+    for nonce in [6, 7] {
+        let r = send(
+            &mut core,
+            downstream(d, nonce, Mode::Commit, holding, 0x70),
+            ALICE_KEY,
+        )
+        .await
+        .unwrap();
+        allowed(&r);
+        assert_eq!(r.causal, Some(false));
+    }
+}

@@ -393,6 +393,7 @@ fn schemas() -> Value {
                 "placement": text("Its placement; `pool-default` when omitted (OP-40)."),
                 "root": r("schemas", "FoundingRoot"),
                 "ct3_delay_s": { "type": "integer", "minimum": 3600, "maximum": 2_592_000 },
+                "causal_binding": { "type": "boolean", "default": false, "description": "Declare causal-bound allowances: an upstream ExerciseID backs at most one downstream Exercise, and chained decisions answer `causal_binding: enforced` (§7.9.7.4, E17)." },
                 "acknowledge_no_recovery": { "type": "boolean", "default": false },
                 "sandbox": { "type": "boolean", "description": "Open the governing domain from the sandbox template, a separate AuthorityDomain with its fixed budget (OP-151 m.3 (m)); always true on `sandbox-domains`." },
                 "validity": r("schemas", "Validity"),

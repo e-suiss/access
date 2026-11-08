@@ -28,7 +28,16 @@ use http_body_util::BodyExt as _;
 use serde_json::Value;
 use tower::ServiceExt as _;
 
+/// The upstream Exercise the scripted decision point treats as a declared causal-bound one.
+const ENFORCED_UPSTREAM: Digest = Digest([7; 32]);
+
 fn scripted(s: &Scripted, inc: Incoming) -> Result<Response, CoreError> {
+    let causal = inc
+        .request
+        .intent
+        .context
+        .upstream_exercise
+        .map(|u| u == ENFORCED_UPSTREAM);
     s.seen.lock().unwrap().push(inc);
     s.outcome.map_err(|f| f()).map(|outcome| Response {
         decision: Decision {
@@ -48,6 +57,7 @@ fn scripted(s: &Scripted, inc: Incoming) -> Result<Response, CoreError> {
         signed_pap: None,
         ended: Vec::new(),
         explained: None,
+        causal,
     })
 }
 
@@ -784,9 +794,21 @@ async fn an_upstream_causal_ref_is_marked_audit_only() {
         s = b64url_encode(&[5; 32]),
         u = b64url_encode(&[6; 32]),
     );
-    let (status, _, body) = post(app(Ok(Outcome::Allow), Some("pep-1")), upstream, None).await;
+    let (status, _, body) = post(
+        app(Ok(Outcome::Allow), Some("pep-1")),
+        upstream.clone(),
+        None,
+    )
+    .await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body["context"]["causal_binding"], "audit-only");
+    // OP-152 m.7 (d)
+    let declared = upstream.replace(
+        &b64url_encode(&[6; 32]),
+        &b64url_encode(&ENFORCED_UPSTREAM.0),
+    );
+    let (_, _, body) = post(app(Ok(Outcome::Allow), Some("pep-1")), declared, None).await;
+    assert_eq!(body["context"]["causal_binding"], "enforced");
     let (_, _, body) = post(
         app(Ok(Outcome::Allow), Some("pep-1")),
         evaluation("commit", ""),

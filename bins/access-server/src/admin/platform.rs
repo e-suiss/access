@@ -47,6 +47,7 @@ const REALM_BODY: &[&str] = &[
     "placement",
     "root",
     "ct3_delay_s",
+    "causal_binding",
     "acknowledge_no_recovery",
     "sandbox",
     rest::VALIDITY,
@@ -152,6 +153,12 @@ fn change(
         ct3_delay_s: match body.get("ct3_delay_s") {
             None | Some(Value::Null) => None,
             Some(v) => Some(v.as_u64().ok_or(&codes::platform::INVALID_TIME_LOCK)?),
+        },
+        // OP-152 m.7 (d) E11
+        causal_binding: match body.get("causal_binding") {
+            None | Some(Value::Null) => false,
+            Some(Value::Bool(b)) => *b,
+            Some(_) => return Err(&codes::realm::INVALID_BODY),
         },
         acknowledge_no_recovery: match body.get("acknowledge_no_recovery") {
             None | Some(Value::Null) => false,

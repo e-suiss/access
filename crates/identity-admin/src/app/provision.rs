@@ -317,6 +317,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                         placement: &o.placement,
                         root: o.root.clone(),
                         ct3_delay_s: o.ct3_delay_s,
+                        causal_binding: o.causal_binding,
                         schemas: Vec::new(),
                         acceptances: Vec::new(),
                         issuer_predicate_input: Vec::new(),

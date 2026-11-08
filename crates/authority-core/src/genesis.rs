@@ -272,12 +272,16 @@ pub fn realm(
             ]),
         ),
     ];
-    // OP-141 m.34 (d)
+    // OP-141 m.34 (d), OP-152 m.7 (d) E11
+    let mut policy = Vec::new();
     if let Some(delay) = order.ct3_delay_s {
-        fields.push((
-            "policy",
-            Value::Map(vec![(Value::text("ct3_delay_s"), Value::Unsigned(delay))]),
-        ));
+        policy.push((Value::text(meta::CT3_DELAY), Value::Unsigned(delay)));
+    }
+    if order.causal_binding {
+        policy.push((Value::text(meta::CAUSAL_BINDING), Value::Bool(true)));
+    }
+    if !policy.is_empty() {
+        fields.push(("policy", Value::Map(policy)));
     }
     fields
         .into_iter()

@@ -441,6 +441,7 @@ async fn a_commit_is_checked_against_the_state_on_first_application() {
             placement: "pool-default",
             root: Root::Sole(ROOT),
             ct3_delay_s: None,
+            causal_binding: false,
             schemas: Vec::new(),
             acceptances: Vec::new(),
             issuer_predicate_input: Vec::new(),

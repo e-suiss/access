@@ -19,6 +19,7 @@ fn order(root: Root, ack: bool) -> RealmOrder {
         placement: String::from(DEFAULT_PLACEMENT),
         root,
         ct3_delay_s: None,
+        causal_binding: false,
         acknowledge_no_recovery: ack,
     }
 }

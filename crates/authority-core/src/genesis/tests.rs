@@ -37,6 +37,7 @@ fn order(root: Root) -> GenesisOrder {
         slug: String::from("acme"),
         root,
         ct3_delay_s: None,
+        causal_binding: false,
         schemas: Vec::new(),
         issuer: None,
         acceptances: Vec::new(),

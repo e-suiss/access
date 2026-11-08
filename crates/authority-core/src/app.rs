@@ -70,6 +70,10 @@ pub struct Response {
     /// What an explanation of a recorded decision shows a viewer or an auditor beyond the
     /// requester's view (§9.6.1, §13.7.5); `None` for every other answer.
     pub explained: Option<Box<audit::Explained>>,
+    /// For a request naming an upstream Exercise, whether its causal-bound allowance was
+    /// enforced (§9.9.2, OP-152 m.7 (d) E11): `Some(true)` only when the domain declares it;
+    /// `None` when the request names none or the answer was not evaluated now.
+    pub causal: Option<bool>,
 }
 
 /// One request with what came with it on the wire.
@@ -513,6 +517,10 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             false,
         );
         response.explained = explained;
+        // OP-152 m.7 (d) E11
+        if req.intent.context.upstream_exercise.is_some() {
+            response.causal = Some(self.causal_declared().await?);
+        }
         Ok(response)
     }
 
@@ -744,6 +752,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             signed_pap: None,
             ended: Vec::new(),
             explained: None,
+            causal: None,
         })))
     }
 
@@ -1284,6 +1293,57 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         Ok(())
     }
 
+    /// Whether the domain declares causal-bound allowances (§7.9.7.4, OP-152 m.7 (d) E11).
+    async fn causal_declared(&self) -> Result<bool, CoreError> {
+        let key = meta::policy_default_key(meta::CAUSAL_BINDING);
+        Ok(self
+            .fetch(std::slice::from_ref(&key))
+            .await?
+            .into_iter()
+            .any(|(_, v, _)| v == Some(Value::Bool(true))))
+    }
+
+    /// The count=1 causal-bound allowance of a request naming an upstream Exercise, in a domain
+    /// that declares it: an allowed Exercise draws on the upstream `ExerciseID`'s counter, and a
+    /// second downstream Exercise of the same upstream one is denied (§7.9.7.4, E17, EI-17,
+    /// OP-152 m.7 (d) E11). Returns whether the link was enforced; `None` without an upstream.
+    async fn causal_bound(
+        &self,
+        req: &Request,
+        evaluation: &mut Evaluation,
+    ) -> Result<Option<bool>, CoreError> {
+        let Some(upstream) = req.intent.context.upstream_exercise else {
+            return Ok(None);
+        };
+        if !self.causal_declared().await? {
+            return Ok(Some(false));
+        }
+        if evaluation.decision.outcome != Outcome::Allow {
+            return Ok(Some(true));
+        }
+        let key = crate::rate::causal_key(&upstream);
+        if self.counter(&key).await? >= 1 {
+            evaluation.decision = Decision {
+                outcome: Outcome::Deny,
+                blockers: vec![Blocker {
+                    class: BlockerClass::Restricted,
+                    subcode: Some(String::from("policy:causal-bound")),
+                    position: Position::ActorSide,
+                    resolver: Resolver::Actor,
+                    remediation: Remediation::NewRequestRequired,
+                }],
+                unmet: Vec::new(),
+                relied_on: Vec::new(),
+            };
+            evaluation.effects.clear();
+            evaluation.draws.clear();
+            evaluation.releases.clear();
+            return Ok(Some(true));
+        }
+        evaluation.draws.push((key, 1, 1, None));
+        Ok(Some(true))
+    }
+
     /// A `check` of `inc` as if `subject` asked it, without an AIS: the single-subject
     /// eligibility check (OP-149 m.10, §9.5.2 rule 1). Nothing is recorded.
     ///
@@ -1368,6 +1428,10 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
     }
 
     /// The commit path; an eligibility check names its `subject`.
+    #[expect(
+        clippy::too_many_lines,
+        reason = "the commit path in its order: resolve, evaluate, tier, approve, rules, record"
+    )]
     async fn run(
         &mut self,
         inc: &Incoming,
@@ -1413,9 +1477,11 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             self.requester_rules(req, &mut evaluation, actor, open, now)
                 .await?;
             self.bootstrap_rate(inc, &mut evaluation, now).await?;
+            let causal = self.causal_bound(req, &mut evaluation).await?;
             observe(&evaluation.decision);
             if req.mode == Mode::Check {
-                return Ok(answer(evaluation.decision, None, None, false));
+                let answered = answer(evaluation.decision, None, None, false);
+                return Ok(Response { causal, ..answered });
             }
             let allowed = evaluation.decision.outcome == Outcome::Allow;
             let continued = req.exercise.unwrap_or(exercise);
@@ -1453,6 +1519,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                     );
                     response.receipt = receipt.map(|r| r.1);
                     response.pap = pap.map(|p| p.1);
+                    response.causal = causal;
                     // §9.9.3 k.6
                     response.ended = derived.ended_by_claims;
                     if allowed {
@@ -1874,6 +1941,7 @@ const fn answer(
         signed_pap: None,
         ended: Vec::new(),
         explained: None,
+        causal: None,
     }
 }
 

@@ -225,6 +225,7 @@ impl World {
                 placement: PLACEMENT,
                 root: Root::Sole(root),
                 ct3_delay_s: None,
+                causal_binding: false,
                 schemas: Vec::new(),
                 acceptances: Vec::new(),
                 issuer_predicate_input: Vec::new(),
@@ -1029,6 +1030,7 @@ async fn admin_realm_creation_opens_the_domain_keys() {
             placement: PLACEMENT,
             root: Root::Sole(Id([4; 16])),
             ct3_delay_s: None,
+            causal_binding: false,
             schemas: Vec::new(),
             acceptances: Vec::new(),
             issuer_predicate_input: Vec::new(),
@@ -1987,6 +1989,7 @@ mod provision {
             placement: String::from(PLACEMENT),
             root,
             ct3_delay_s: None,
+            causal_binding: false,
             acknowledge_no_recovery: ack,
         }
     }

@@ -160,7 +160,7 @@ impl<P: Pdp> Service<P> {
                     if let Some(ctx) = v.get_mut("context").and_then(Value::as_object_mut) {
                         ctx.insert(String::from("kind"), Value::from("recorded"));
                         ctx.insert(String::from("record"), Value::from(record));
-                        causal(ctx, &inc.request.intent);
+                        causal(ctx, &inc.request.intent, r.causal);
                         ctx.extend(extra);
                     }
                     Reply::Decision(v)
@@ -273,7 +273,7 @@ impl<P: Pdp> Service<P> {
             Ok(r) => {
                 let mut v = encode(&r, mode);
                 if upstream && let Some(ctx) = v.get_mut("context").and_then(Value::as_object_mut) {
-                    ctx.insert(String::from(CAUSAL_BINDING), Value::from(AUDIT_ONLY));
+                    ctx.insert(String::from(CAUSAL_BINDING), Value::from(binding(r.causal)));
                 }
                 Reply::Decision(v)
             }
@@ -332,14 +332,27 @@ pub const CAUSAL_BINDING: &str = "causal_binding";
 /// §9.9.2, E17: the upstream link was not enforced, only recorded for audit and detection.
 pub const AUDIT_ONLY: &str = "audit-only";
 
-/// §9.9.2: a request naming an upstream Exercise says whether that link was enforced. No
-/// causal-bound allowance is evaluated yet, so the link is never claimed `enforced`.
+/// §9.9.2, E17: the domain declares causal-bound allowances and this one was evaluated.
+pub const ENFORCED: &str = "enforced";
+
+/// `enforced` only when the decision point evaluated the declared causal-bound allowance
+/// (OP-152 m.7 (d) E11); anything else is `audit-only`.
+const fn binding(causal: Option<bool>) -> &'static str {
+    if matches!(causal, Some(true)) {
+        ENFORCED
+    } else {
+        AUDIT_ONLY
+    }
+}
+
+/// §9.9.2: a request naming an upstream Exercise says whether that link was enforced.
 fn causal(
     ctx: &mut serde_json::Map<String, Value>,
     intent: &access_kernel::intent::IntentEnvelope,
+    enforced: Option<bool>,
 ) {
     if intent.context.upstream_exercise.is_some() {
-        ctx.insert(String::from(CAUSAL_BINDING), Value::from(AUDIT_ONLY));
+        ctx.insert(String::from(CAUSAL_BINDING), Value::from(binding(enforced)));
     }
 }
 

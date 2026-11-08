@@ -74,6 +74,8 @@ pub struct NewRealm<'a> {
     pub root: Root,
     /// The CT3 time-lock; `None` keeps the default.
     pub ct3_delay_s: Option<u64>,
+    /// Whether its governing domain declares causal-bound allowances (OP-152 m.7 (d) E11).
+    pub causal_binding: bool,
     /// Further catalogs its Genesis publishes, by the founding root (OP-141 m.35 (c)).
     pub schemas: Vec<Spp>,
     /// Further Acceptances its Genesis establishes, each an `acceptance-content` (L0-META-5,
@@ -240,6 +242,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                 slug: String::from(r.slug),
                 root: r.root.clone(),
                 ct3_delay_s: r.ct3_delay_s,
+                causal_binding: r.causal_binding,
                 schemas: r.schemas.clone(),
                 issuer: Some(access_kernel::model::Id(claim_issuer)),
                 acceptances: r.acceptances.clone(),

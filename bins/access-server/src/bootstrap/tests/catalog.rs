@@ -83,6 +83,7 @@ async fn old_realm(w: &World, slug: &str, delay_s: Option<u64>) -> Digest {
             placement: PLACEMENT,
             root: Root::Sole(root),
             ct3_delay_s: None,
+            causal_binding: false,
             schemas: Vec::new(),
             acceptances: Vec::new(),
             issuer_predicate_input: Vec::new(),

@@ -416,6 +416,9 @@ pub struct GenesisOrder {
     pub root: Root,
     /// The CT3 time-lock in seconds; `None` keeps the default (OP-141 m.34 (d)).
     pub ct3_delay_s: Option<u64>,
+    /// Whether the domain declares causal-bound allowances: an upstream `ExerciseID` then backs
+    /// at most one downstream Exercise (§7.9.7.4, E17, OP-152 m.7 (d) E11).
+    pub causal_binding: bool,
     /// Further catalogs the founder publishes in the Genesis besides the `idp.*` ones (OP-141
     /// m.35 (c)); each one's publisher is the founder.
     pub schemas: Vec<Spp>,

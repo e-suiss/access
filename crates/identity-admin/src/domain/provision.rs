@@ -266,6 +266,8 @@ pub struct RealmOrder {
     pub root: Root,
     /// The CT3 time-lock in seconds; `None` keeps the default.
     pub ct3_delay_s: Option<u64>,
+    /// Whether its governing domain declares causal-bound allowances (OP-152 m.7 (d) E11).
+    pub causal_binding: bool,
     /// Whether the caller acknowledged that the domain cannot be recovered.
     pub acknowledge_no_recovery: bool,
 }
@@ -307,6 +309,9 @@ impl RealmOrder {
         ];
         if let Some(d) = self.ct3_delay_s {
             fields.push((Value::text("ct3_delay_s"), Value::Unsigned(d)));
+        }
+        if self.causal_binding {
+            fields.push((Value::text("causal_binding"), Value::Bool(true)));
         }
         Value::Map(fields)
     }

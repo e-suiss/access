@@ -1561,6 +1561,7 @@ where
                 placement: PLACEMENT,
                 root: Root::Sole(root),
                 ct3_delay_s: None,
+                causal_binding: false,
                 schemas,
                 acceptances,
                 issuer_predicate_input,

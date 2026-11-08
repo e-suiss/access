@@ -58,6 +58,21 @@ pub fn bootstrap_rate_key(
     dcbor::encode(&Value::Array(key), Limits::CEILING).unwrap_or_default()
 }
 
+/// The recorded count=1 causal-bound allowance keyed on the upstream `ExerciseID` (§7.9.7.4,
+/// E17, OP-152 m.7 (d) E11): the downstream Exercises it backed.
+#[must_use]
+pub fn causal_key(upstream: &access_kernel::digest::Digest) -> Vec<u8> {
+    use suiss_crypto::dcbor::{self, Limits, Value};
+    dcbor::encode(
+        &Value::Array(vec![
+            Value::text("causal-bound"),
+            Value::Bytes(upstream.0.to_vec()),
+        ]),
+        Limits::CEILING,
+    )
+    .unwrap_or_default()
+}
+
 /// Entries kept before idle ones are dropped.
 const KEEP: usize = 100_000;
 
