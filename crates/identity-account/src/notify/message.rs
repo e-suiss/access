@@ -194,11 +194,14 @@ pub enum Notice {
     /// N1: someone asked to create an account with this address, which already has one; sent to
     /// the account's own address instead of saying so on the page (§10.2.1 m.6, CR-40, TN-80).
     SignUpExisting,
+    /// N3: an ownership transfer of an organization the person owns or receives was proposed;
+    /// `until` is the earliest it can complete (TN-91).
+    OwnershipHandover,
 }
 
 impl Notice {
     /// Every notice.
-    pub const ALL: [Self; 11] = [
+    pub const ALL: [Self; 12] = [
         Self::RecoveryRequested,
         Self::RecoveryCooling,
         Self::RecoveryCompleted,
@@ -210,6 +213,7 @@ impl Notice {
         Self::DeletionCompleted,
         Self::InactivityNotice,
         Self::SignUpExisting,
+        Self::OwnershipHandover,
     ];
 
     /// Its outbox kind and `CloudEvents` `type`.
@@ -227,6 +231,7 @@ impl Notice {
             Self::DeletionCompleted => "relay.message.deletion_completed.v1",
             Self::InactivityNotice => "relay.message.inactivity_notice.v1",
             Self::SignUpExisting => "relay.message.signup_existing.v1",
+            Self::OwnershipHandover => "relay.message.ownership_handover.v1",
         }
     }
 
@@ -239,6 +244,7 @@ impl Notice {
                 | Self::DeletionScheduled
                 | Self::DeletionCompleted
                 | Self::InactivityNotice
+                | Self::OwnershipHandover
         )
     }
 
@@ -406,7 +412,7 @@ impl fmt::Debug for Body {
 }
 
 /// Every kind of the contract, as outbox kind and `CloudEvents` `type`.
-pub const KINDS: [&str; 19] = [
+pub const KINDS: [&str; 20] = [
     "relay.message.otp.v1",
     "relay.message.magic_link.v1",
     "relay.message.password_changed.v1",
@@ -426,6 +432,7 @@ pub const KINDS: [&str; 19] = [
     "relay.message.reset_intent.v1",
     "relay.message.export_ready.v1",
     "relay.message.invitation.v1",
+    "relay.message.ownership_handover.v1",
 ];
 
 impl Body {

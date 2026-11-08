@@ -394,6 +394,14 @@ impl World {
     }
 
     async fn realm(&self, slug: &str) -> (TenantId, RealmId, Digest) {
+        self.realm_with(slug, None).await
+    }
+
+    async fn realm_with(
+        &self,
+        slug: &str,
+        ct3_delay_s: Option<u64>,
+    ) -> (TenantId, RealmId, Digest) {
         let tenant = create_tenant(&self.db.app, "pool-default").await.unwrap();
         let created = self
             .admin()
@@ -403,7 +411,7 @@ impl World {
                 style: IssuerStyle::Subdomain,
                 placement: "pool-default",
                 root: Root::Sole(ROOT),
-                ct3_delay_s: None,
+                ct3_delay_s,
                 causal_binding: false,
                 schemas: Vec::new(),
                 acceptances: Vec::new(),

@@ -725,6 +725,42 @@ impl TenantTx {
         Ok(*id.as_bytes())
     }
 
+    /// Records `t` as if proposed `ago_s` seconds ago, its delay from then; for the transfer
+    /// tests only.
+    ///
+    /// # Errors
+    /// [`StoreError`].
+    #[cfg(feature = "testing")]
+    pub async fn insert_transfer_ago(
+        &mut self,
+        t: &NewTransfer<'_>,
+        ago_s: i64,
+    ) -> Result<[u8; 16], StoreError> {
+        let (tenant, realm) = self.org_scope()?;
+        let id = sqlx::query_scalar!(
+            r#"INSERT INTO access.org_transfers
+                 (tenant_id, realm_id, org_id, from_subject, to_subject, to_party, nonce,
+                  payload_digest, proposed_at, effective_at, dns_recovery)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8,
+                       clock_timestamp() - make_interval(secs => $9),
+                       clock_timestamp() - make_interval(secs => $9) + interval '24 hours', $10)
+               RETURNING transfer_id"#,
+            tenant,
+            realm,
+            uuid(t.org),
+            uuid(t.from),
+            uuid(t.to),
+            t.to_party.as_slice(),
+            t.nonce,
+            t.payload_digest.as_slice(),
+            secs(ago_s)?,
+            t.dns_recovery,
+        )
+        .fetch_one(&mut *self.tx)
+        .await?;
+        Ok(*id.as_bytes())
+    }
+
     /// One transfer of the realm.
     ///
     /// # Errors

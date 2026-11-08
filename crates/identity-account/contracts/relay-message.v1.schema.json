@@ -49,7 +49,8 @@
         "relay.message.signup_existing.v1",
         "relay.message.reset_intent.v1",
         "relay.message.export_ready.v1",
-        "relay.message.invitation.v1"
+        "relay.message.invitation.v1",
+        "relay.message.ownership_handover.v1"
       ]
     },
     "subject": {
@@ -280,6 +281,22 @@
         "properties": {
           "data": {
             "$ref": "#/$defs/relay.message.deletion_scheduled.v1"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "relay.message.ownership_handover.v1"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "data": {
+            "$ref": "#/$defs/relay.message.ownership_handover.v1"
           }
         }
       }
@@ -734,6 +751,34 @@
       }
     },
     "relay.message.deletion_scheduled.v1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "recipient",
+        "at",
+        "until"
+      ],
+      "properties": {
+        "recipient": {
+          "$ref": "#/$defs/recipient"
+        },
+        "locale": {
+          "$ref": "#/$defs/locale"
+        },
+        "recipient_valid_since": {
+          "$ref": "#/$defs/recipient_valid_since"
+        },
+        "at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "until": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "relay.message.ownership_handover.v1": {
       "type": "object",
       "additionalProperties": false,
       "required": [

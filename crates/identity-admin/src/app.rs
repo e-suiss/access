@@ -9,6 +9,7 @@ pub mod platform;
 pub mod provision;
 pub mod rest;
 mod signals;
+pub mod transfers;
 
 use access_crypto::opaque_id::IdKey;
 use access_identity_account::adapters::pg::PgTx;
@@ -721,6 +722,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
         if today >= ORGS_PER_FOUNDER_PER_DAY {
             return Err(Invalid::OrgLimit.into());
         }
+        let register_nonce = register.nonce.clone();
         let verdict = self
             .governance
             .register_organization(crate::ports::OrgRegistration {
@@ -734,6 +736,17 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             })
             .await
             .map_err(|e| AdminError::Unavailable(e.0))?;
+        if matches!(verdict, crate::ports::OrgRegistered::Registered { .. }) {
+            // TN-91, OP-153 m.3 (b), (p)
+            let exercise =
+                access_kernel::meta::exercise_id(&Digest(*g.domain.as_bytes()), &register_nonce)
+                    .map_err(|_| AdminError::Encode)?;
+            let anchor =
+                access_kernel::meta::object_id(&exercise, access_kernel::meta::kind::ANCHOR, 0);
+            let mut t = TenantTx::begin(self.app, tenant, realm).await?;
+            t.record_party_anchor(party.0, anchor.0).await?;
+            t.commit().await?;
+        }
         match verdict {
             crate::ports::OrgRegistered::Registered { replayed } => Ok(replayed),
             crate::ports::OrgRegistered::Refused { code } => Err(AdminError::Refused(code)),
@@ -1556,7 +1569,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
 }
 
 /// The RFC 7293 time of a message to the account's own address: e-mail only (OP-153 m.3 (i)).
-async fn mailbox_since(
+pub(crate) async fn mailbox_since(
     t: &mut TenantTx,
     subject: [u8; 16],
     to: &access_identity_account::notify::message::Address,

@@ -1223,6 +1223,13 @@ owner = "identity_plane"
 protected = false
 
 [[message]]
+key = "mail-ownership_handover-subject"
+surface = "mail"
+class = "notice"
+owner = "identity_plane"
+protected = false
+
+[[message]]
 key = "mail-signup_existing-subject"
 surface = "mail"
 class = "notice"

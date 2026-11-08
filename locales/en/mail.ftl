@@ -18,4 +18,5 @@ mail-deletion_scheduled-subject = Your account is scheduled for deletion
 mail-export_ready-subject = Your data export is ready
 mail-inactivity_notice-subject = Your account will be turned off for inactivity
 mail-signup_code-subject = Your sign-up code
+mail-ownership_handover-subject = A change of your organization's owner was proposed
 mail-signup_existing-subject = Someone tried to create an account with your email address

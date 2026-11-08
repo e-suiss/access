@@ -91,8 +91,15 @@ async fn account(w: &World, (tenant, realm): (TenantId, RealmId), email: &str) -
 }
 
 async fn ready(slug: &str) -> (World, (TenantId, RealmId), Digest, [u8; 16]) {
+    ready_with(slug, None).await
+}
+
+async fn ready_with(
+    slug: &str,
+    ct3_delay_s: Option<u64>,
+) -> (World, (TenantId, RealmId), Digest, [u8; 16]) {
     let w = World::new().await;
-    let (tenant, realm, d) = w.realm(slug).await;
+    let (tenant, realm, d) = w.realm_with(slug, ct3_delay_s).await;
     onboard(&w.plane, d, ROOT, ROOT_KEY).await;
     let founder = account(&w, (tenant, realm), "founder@acme.example").await;
     let mut t = TenantTx::begin(&w.db.app, tenant, realm).await.unwrap();
