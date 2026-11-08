@@ -462,6 +462,13 @@ pub const ROUTES: &[Route] = &[
     ),
     live(
         Owner::N4,
+        Verb::Post,
+        "/v1/account/connect/preview",
+        "previewConnect",
+        "The S1 draft a waiting third-party request's typed bounds open (§8.17.4.3, X27).",
+    ),
+    live(
+        Owner::N4,
         Verb::Get,
         "/v1/account/bindings",
         "listBindings",

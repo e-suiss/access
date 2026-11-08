@@ -610,6 +610,7 @@ const NO_SHARE: Problem = Problem {
 struct Pending {
     client: access_store::idp::ClientRow,
     claims: Vec<String>,
+    authority: Option<access_identity_oauth::domain::request::AuthorityAsk>,
 }
 
 impl<K, C, M> Hosted<K, C, M>
@@ -674,7 +675,11 @@ where
             .into_iter()
             .map(String::from)
             .collect();
-        Ok(Pending { client, claims })
+        Ok(Pending {
+            client,
+            claims,
+            authority: req.authority,
+        })
     }
 
     /// `POST /v1/account/connected-apps/preview` (OP-153 m.3 (z)): what the waiting third-party
@@ -703,6 +708,48 @@ where
                 }),
             ),
             Err(r) => r,
+        }
+    }
+
+    /// `POST /v1/account/connect/preview` (§8.17.4.3, X27, OP-153 m.3 (x)): the S1 draft the
+    /// waiting third-party request's typed bounds open, for the hosted Delegation sheet. A draft
+    /// only: what is committed is the `grant.issue` of the exact preview the person signs with
+    /// the browser's device key.
+    pub async fn connect_preview(
+        &self,
+        entry: &RealmEntry,
+        b: &Browser<'_>,
+        return_to: &str,
+    ) -> Reply {
+        use access_identity_oauth::domain::authority::{connect_draft, parse_details};
+        let kit = match self.kit(entry).await {
+            Ok(k) => k,
+            Err(r) => return r,
+        };
+        if let Err(r) = self.fresh(&kit, b, None).await {
+            return r;
+        }
+        let p = match self.pending(&kit, return_to).await {
+            Ok(p) => p,
+            Err(r) => return r,
+        };
+        let Some(ask) = p.authority else {
+            return Reply::problem(NO_SHARE);
+        };
+        let draft = parse_details(&ask.details, &ask.resource).and_then(|(kind, details)| {
+            connect_draft(&p.client.display_name, kind, &details, self.clock.now_ms())
+        });
+        match draft {
+            Ok(draft) => Reply::json(
+                200,
+                json!({
+                    "client_id": p.client.client_id,
+                    "app": p.client.display_name,
+                    "resource": ask.resource,
+                    "draft": draft,
+                }),
+            ),
+            Err(_) => Reply::problem(NO_SHARE),
         }
     }
 

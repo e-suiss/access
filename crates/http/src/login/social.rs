@@ -103,6 +103,10 @@ where
                 post(offer_binding::<D, K, KI, C, M, H, S>),
             )
             .route(
+                &format!("{prefix}/v1/account/connect/preview"),
+                post(connect_preview::<D, K, KI, C, M, H, S>),
+            )
+            .route(
                 &format!("{prefix}/v1/account/bindings/accept"),
                 post(accept_binding::<D, K, KI, C, M, H, S>),
             )
@@ -403,5 +407,15 @@ handler! {
         let req: TokenBody = serde_json::from_slice(&bytes).map_err(|_| bad())?;
         let token = bounded(&req.token, 128)?;
         Ok(s.login.hosted.bind_half(&entry, &jar.browser(), token, false).await)
+    }
+}
+
+handler! {
+    /// `POST /v1/account/connect/preview` (§8.17.4.3, X27).
+    connect_preview(s, entry, jar, p, bytes, headers, uri) true {
+        let _ = (&p, &uri);
+        let req: ShareBody = serde_json::from_slice(&bytes).map_err(|_| bad())?;
+        let to = bounded(&req.return_to, MAX_RETURN_TO)?;
+        Ok(s.login.hosted.connect_preview(&entry, &jar.browser(), to).await)
     }
 }

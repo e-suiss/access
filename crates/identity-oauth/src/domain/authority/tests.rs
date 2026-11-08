@@ -255,3 +255,26 @@ fn the_exercise_must_say_what_the_request_says() {
     .unwrap();
     assert!(!within(&more, &details));
 }
+
+// §2.2.2 #2, X27, OP-153 m.3 (x)
+#[test]
+fn a_connect_draft_is_typed_bounds_only_and_an_intent_is_not_a_delegation() {
+    let (kind, details) = parse_details(
+        r#"[{"type":"pay:refund:1","kind":"bounds","schema":"sha-256:AA"}]"#,
+        "https://pay.example",
+    )
+    .unwrap();
+    let d = connect_draft("Ledgerly", kind, &details, 1_000).unwrap();
+    assert_eq!(d["canDo"], serde_json::json!(["pay.refund"]));
+    assert_eq!(d["canPassOn"], false);
+    assert_eq!(d["valid"]["atMs"], 1_000 + CONNECT_DEFAULT_MS);
+    let (kind, details) = parse_details(
+        r#"[{"type":"pay:refund:1","kind":"intent","schema":"sha-256:AA","intent":"sha-256:BB"}]"#,
+        "https://pay.example",
+    )
+    .unwrap();
+    assert_eq!(
+        connect_draft("Ledgerly", kind, &details, 1_000),
+        Err(AuthorityError::Details)
+    );
+}

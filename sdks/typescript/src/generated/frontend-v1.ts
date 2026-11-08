@@ -694,6 +694,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/account/connect/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** The S1 draft a waiting third-party request's typed bounds open (§8.17.4.3, X27). */
+        post: operations["previewConnect"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/account/bindings": {
         parameters: {
             query?: never;
@@ -2007,6 +2024,31 @@ export interface operations {
         };
     };
     previewSharing: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    previewConnect: {
         parameters: {
             query?: never;
             header?: never;

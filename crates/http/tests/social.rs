@@ -1322,34 +1322,52 @@ impl Env {
     /// Registers the third-party client `cli_…g` and stores a waiting authorization request of
     /// it for `scope`; answers the request's `return_to` (OP-153 m.3 (z)).
     async fn waiting_third_party(&self, scope: &str) -> String {
+        self.waiting_request(scope, None).await
+    }
+
+    async fn waiting_request(
+        &self,
+        scope: &str,
+        authority: Option<access_identity_oauth::domain::request::AuthorityAsk>,
+    ) -> String {
         let client_id = "cli_0000000000000000000000000g";
+        let mut tx = TenantTx::begin(&self.db.app, self.tenant, self.realm)
+            .await
+            .unwrap();
+        let known = access_store::idp::client(&mut tx, client_id)
+            .await
+            .unwrap()
+            .is_some();
+        tx.commit().await.unwrap();
         let (mut tx, bound) = self.decision("idp.client.register").await;
-        access_store::idp::insert_client(
-            &mut tx,
-            &bound,
-            &access_store::idp::ClientRow {
-                client_uuid: [0x67; 16],
-                client_id: client_id.to_owned(),
-                display_name: "Ledgerly".into(),
-                auth_method: "none".into(),
-                jwks_uri: None,
-                redirect_uris: vec![String::from("https://ledgerly.example/cb")],
-                active: true,
-                secret_hash: None,
-                post_logout_redirect_uris: vec![],
-                backchannel_logout_uri: None,
-                jwks: None,
-                platform_product: None,
-                service_key: None,
-                event_receiver: None,
-                require_par: false,
-                public_sub: false,
-                sector_identifier_uri: None,
-                third_party: true,
-            },
-        )
-        .await
-        .unwrap();
+        if !known {
+            access_store::idp::insert_client(
+                &mut tx,
+                &bound,
+                &access_store::idp::ClientRow {
+                    client_uuid: [0x67; 16],
+                    client_id: client_id.to_owned(),
+                    display_name: "Ledgerly".into(),
+                    auth_method: "none".into(),
+                    jwks_uri: None,
+                    redirect_uris: vec![String::from("https://ledgerly.example/cb")],
+                    active: true,
+                    secret_hash: None,
+                    post_logout_redirect_uris: vec![],
+                    backchannel_logout_uri: None,
+                    jwks: None,
+                    platform_product: None,
+                    service_key: None,
+                    event_receiver: None,
+                    require_par: false,
+                    public_sub: false,
+                    sector_identifier_uri: None,
+                    third_party: true,
+                },
+            )
+            .await
+            .unwrap();
+        }
         let req = access_identity_oauth::domain::request::AuthRequest {
             client_id: client_id.to_owned(),
             redirect_uri: String::from("https://ledgerly.example/cb"),
@@ -1361,14 +1379,14 @@ impl Env {
             max_age_s: None,
             acr_values: Vec::new(),
             dpop_jkt: None,
-            authority: None,
+            authority,
             resource: None,
             claims: Some(access_identity_oauth::domain::claims_request::ClaimsAsk {
                 id_token: Vec::new(),
                 userinfo: vec![String::from("locale")],
             }),
         };
-        let handle = [0x42_u8; 32];
+        let handle = [u8::try_from(self.pos.load(Ordering::SeqCst)).unwrap(); 32];
         let hash = access_crypto::oauth::opaque_digest(
             access_identity_oauth::app::oauth::REQUEST_CONTEXT,
             &handle,
@@ -1588,4 +1606,59 @@ async fn a_cross_realm_binding_is_two_halves_each_committed_in_its_own_realm() {
         )
         .await;
     assert_eq!(again.code(), "binding-refused", "a half is committed once");
+}
+
+// §8.17.4.3, §2.2.2 #2, X27, OP-153 m.3 (x), Ek B 3450, 3451, 3774
+#[tokio::test]
+async fn connecting_an_app_opens_an_s1_draft_of_its_typed_bounds_and_nothing_more() {
+    let e = env(0x4d, "soc-k").await;
+    e.account("ada@example.org").await;
+    let details = json!([
+        { "type": "pay:refund:1", "kind": "bounds", "schema": "sha-256:AAAA",
+          "locations": ["https://pay.example"] },
+        { "type": "pay:read:1", "kind": "bounds", "schema": "sha-256:BBBB" },
+    ])
+    .to_string();
+    let return_to = e
+        .waiting_request(
+            "openid",
+            Some(access_identity_oauth::domain::request::AuthorityAsk {
+                resource: String::from("https://pay.example"),
+                details,
+            }),
+        )
+        .await;
+    let mut w = e.browser(1);
+    w.sign_in("ada@example.org").await;
+    let a = w
+        .send(
+            "POST",
+            "/v1/account/connect/preview",
+            Some(json!({ "return_to": return_to })),
+        )
+        .await;
+    assert_eq!(a.status, StatusCode::OK, "{}", a.code());
+    let draft = &a.json()["draft"];
+    assert_eq!(draft["to"], json!({ "name": "Ledgerly", "kind": "agent" }));
+    assert_eq!(draft["canDo"], json!(["pay.read", "pay.refund"]));
+    assert_eq!(draft["canPassOn"], false);
+    assert!(
+        draft["capacity"].is_null(),
+        "the person chooses the capacity (X10)"
+    );
+    assert_eq!(draft["valid"]["atMs"], json!(T0 + 30 * 86_400_000));
+    let text = a.json().to_string().to_lowercase();
+    for word in ["scope", "allow", "authorize"] {
+        assert!(!text.contains(word), "{word} in {text}");
+    }
+
+    let plain = e.waiting_third_party("openid email").await;
+    let none = w
+        .send(
+            "POST",
+            "/v1/account/connect/preview",
+            Some(json!({ "return_to": plain })),
+        )
+        .await;
+    assert_eq!(none.code(), "no-such-app");
 }

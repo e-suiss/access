@@ -170,6 +170,52 @@ pub fn parse_details(
     Ok((kind, out))
 }
 
+/// How long a delegation to an app lasts unless the person changes it (OP-153 m.3 (x)): an
+/// app is not a human, so it always ends.
+pub const CONNECT_DEFAULT_MS: u64 = 30 * 86_400_000;
+
+/// The S1 draft a third-party app's typed bounds open when the person connects it (§8.17.4.3,
+/// §2.2.2 #2, X27, OP-153 m.3 (x)): to the app, what its details name and nothing else, no
+/// passing on, no capacity chosen for the person, ending after [`CONNECT_DEFAULT_MS`]. It is a
+/// draft only: what is committed is the `grant.issue` of the exact preview the person signs.
+/// There is no scope list and no "Allow".
+///
+/// # Errors
+/// [`AuthorityError::Details`] for an `intent` request, which asks to run one action, not to be
+/// given authority.
+pub fn connect_draft(
+    app: &str,
+    kind: Kind,
+    details: &BTreeSet<Detail>,
+    now_ms: u64,
+) -> Result<Json, AuthorityError> {
+    if kind != Kind::Bounds {
+        return Err(AuthorityError::Details);
+    }
+    let can_do: Vec<String> = details
+        .iter()
+        .map(|d| {
+            let mut parts = d.r#type.splitn(3, ':');
+            match (parts.next(), parts.next()) {
+                (Some(ns), Some(name)) => format!("{ns}.{name}"),
+                _ => d.r#type.clone(),
+            }
+        })
+        .collect();
+    Ok(serde_json::json!({
+        "source": "editor",
+        "to": { "name": app, "kind": "agent" },
+        "canDo": can_do,
+        "actingAs": null,
+        "capacity": null,
+        "canPassOn": false,
+        "limits": [],
+        "requires": [],
+        "valid": { "kind": "until", "atMs": now_ms.saturating_add(CONNECT_DEFAULT_MS) },
+        "interpretations": [],
+    }))
+}
+
 /// The holder's signed `projection.issue` Exercise.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TokenExercise {

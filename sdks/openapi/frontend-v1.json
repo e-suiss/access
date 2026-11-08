@@ -1448,6 +1448,36 @@
         }
       }
     },
+    "/v1/account/connect/preview": {
+      "post": {
+        "operationId": "previewConnect",
+        "summary": "The S1 draft a waiting third-party request's typed bounds open (§8.17.4.3, X27).",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/account/bindings": {
       "get": {
         "operationId": "listBindings",
