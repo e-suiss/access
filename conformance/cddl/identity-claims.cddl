@@ -1,0 +1,56 @@
+; Access identity-plane Claim classes outside the Kernel table, version 1 (RFC 8610;
+; OP-153 m.2 N0, m.3 (b), (c), (o), (q)). Deterministic CBOR (RFC 8949 §4.2.1).
+; The realm issuer signs these Claims. A class with a body carries in the Claim's `value` the
+; digest SHA-256("access/claim-body/v1" || 0x00 || dCBOR([class, body])) (L2-CLB-1); the Kernel
+; does not check these classes (L2-CLB-2), the identity plane and authority-core do.
+
+identity-claim-binding = ["recovery_result", recovery-result] /
+  ["domain_verification", domain-verification] /
+  ["membership", membership] /
+  ["guardianship", guardianship] /
+  ["age_range", age-range]
+
+; A finished recovery attempt names the successor key that may self-sign `instance_recover`
+; (OP-153 m.3 (c)). Issued while the attempt is REBIND_OPEN.
+recovery-result = {
+  party: id,                        ; the recovered Party
+  successor: bstr .size 32,         ; x5t#S256 of the successor key
+  attempt: id,                      ; the recovery attempt
+  path: recovery-path,              ; the recovery class that proved it (OP-153 m.3 (d))
+  achieved_aal: 1 / 2 / 3,          ; NIST SP 800-63B-4 AAL the path reached
+}
+
+recovery-path = "registered_code" / "sent_code" / "recovery_contact" /
+  "second_authenticator" / "identity_reproofing" / "reset_intent" / "temporary_access_pass"
+
+; A domain an organization proved control of (TN-90, OP-153 m.3 (o)); re-verified every 90 days.
+domain-verification = {
+  organization: id,                 ; the organization's Party
+  domain: domain-name,
+  method: "dns_txt" / "https" / "idp",
+  verified_at: uint,                ; Unix milliseconds
+}
+
+; A person's membership of an organization (TN-5, OP-153 m.3 (o), (p)); `root` marks an owner.
+membership = {
+  organization: id,
+  member: id,                       ; the member's Party
+  root: bool,
+  since: uint,                      ; Unix milliseconds
+}
+
+; A guardian's standing for a ward (E53, OP-153 m.3 (q)); effective only with an Acceptance.
+guardianship = {
+  guardian: id,
+  ward: id,
+  basis: "parent" / "legal_guardian",
+  ? until: uint,                    ; Unix milliseconds of majority, from the country table
+}
+
+; The age band; the date of birth stays in the PII vault (OP-153 m.3 (q)). Carried in `value`
+; without a body; listed here so the band set is one contract.
+age-range = "under_13" / "age_13_15" / "age_16_17" / "age_18_plus"
+
+domain-name = tstr .regexp "[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+"
+
+id = bstr .size 16

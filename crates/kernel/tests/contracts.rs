@@ -238,6 +238,12 @@ fn auth_context_examples_meet_the_cddl() {
     check_examples("auth-context.json");
 }
 
+// OP-153 m.3 (b), (c), (o), (q), L2-CLB-1
+#[test]
+fn identity_claim_examples_meet_the_cddl() {
+    check_examples("identity-claims.json");
+}
+
 // OP-149 m.5, OP-149 m.8, CR-24
 #[test]
 fn key_lookup_examples_meet_the_cddl() {
