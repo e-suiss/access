@@ -39,7 +39,7 @@ impl TenantTx {
     ///
     /// # Errors
     /// [`StoreError`].
-    pub async fn consent(
+    pub async fn claim_consent(
         &mut self,
         subject: [u8; 16],
         client: [u8; 16],

@@ -244,7 +244,7 @@ impl OAuthTx for PgOAuthTx {
         subject: [u8; 16],
         client: [u8; 16],
     ) -> Result<Option<Vec<String>>, Unavailable> {
-        self.0.consent(subject, client).await.map_err(down)
+        self.0.claim_consent(subject, client).await.map_err(down)
     }
 
     async fn pairwise(
