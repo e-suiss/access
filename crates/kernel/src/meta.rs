@@ -1971,6 +1971,15 @@ fn read<T: Canonical>(view: &dyn View, kind: &str, id: &Id) -> Result<T, MetaErr
     T::from_value(&v).map_err(|_| MetaError::Corrupt)
 }
 
+/// Whether `party` is registered as an organization (C6).
+fn organization(view: &dyn View, party: &Id) -> Result<bool, MetaError> {
+    view.get(&key(kind::PARTY, party)).map_or(Ok(false), |v| {
+        PartyState::from_value(&v)
+            .map(|p| p.actor_kind == ActorKind::Organization)
+            .map_err(|_| MetaError::Corrupt)
+    })
+}
+
 fn ids(view: &dyn View, kind: &str, of: &Id) -> Result<BTreeSet<Id>, MetaError> {
     view.get(&key(kind, of)).map_or_else(
         || Ok(BTreeSet::new()),
@@ -2665,6 +2674,10 @@ pub fn apply(ctx: &Context<'_>, payload: &Payload, view: &dyn View) -> Result<Ou
             }
             let p: PartyState = read(view, kind::PARTY, party)?;
             live(p.ended, ())?;
+            // C6, OP-153 m.3 (b)
+            if p.actor_kind == ActorKind::Organization {
+                return Err(MetaError::NotAuthorized);
+            }
             let i = new_id(ctx, kind::INSTANCE, 0);
             if i != actor.instance {
                 return Err(MetaError::NotAuthorized);
@@ -2715,6 +2728,10 @@ pub fn apply(ctx: &Context<'_>, payload: &Payload, view: &dyn View) -> Result<Ou
         }
         Payload::InstanceRecover { instance, key: k } => {
             let mut old = own_instance(view, instance, &actor)?;
+            // C6, OP-153 m.3 (b)
+            if organization(view, &old.party)? {
+                return Err(MetaError::NotAuthorized);
+            }
             let succ = new_id(ctx, kind::INSTANCE, 0);
             old.successor = Some(succ);
             old.ended = Some(end(ctx.pos, EndedHow::Recovered));

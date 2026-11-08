@@ -2325,6 +2325,60 @@ fn meta_vectors_match() {
         public,
         &create_p256,
     );
+    let org = Id([6; 16]);
+    r.step(
+        "register-organization",
+        &["L0-META-22"],
+        (org, org),
+        public,
+        &Payload::PartyRegister {
+            party: org,
+            root: Root::Sole(org),
+            actor_kind: ActorKind::Organization,
+        },
+    );
+    let org_instance = object_id(
+        &exercise_id(&DOMAIN, &r.run.pos.to_be_bytes().repeat(2)).unwrap(),
+        kind::INSTANCE,
+        0,
+    );
+    // C6, OP-153 m.3 (b)
+    r.step(
+        "organization-has-no-instance",
+        &["L0-META-23"],
+        (org, org_instance),
+        public,
+        &Payload::InstanceCreate {
+            party: org,
+            key: p256_key(7),
+            mandate: None,
+        },
+    );
+    let forged = Id([7; 16]);
+    r.run.state.apply(&[(
+        super::key(kind::INSTANCE, &forged),
+        Some(
+            InstanceState {
+                party: org,
+                key: p256_key(8),
+                since: 1,
+                successor: None,
+                ended: None,
+            }
+            .to_value(),
+        ),
+    )]);
+    // C6, OP-153 m.3 (b)
+    r.step(
+        "organization-has-no-recovery",
+        &["L0-META-23"],
+        (org, forged),
+        public,
+        &Payload::InstanceRecover {
+            instance: forged,
+            key: p256_key(9),
+        },
+    );
     let json = format!(
         "{{\n \"rule\": \"OP-141\",\n \"track\": \"core\",\n \"version\": 1,\n \"operation\": \"meta.apply\",\n {},\n \"cases\": [\n{}\n ]\n}}\n",
         field(&["L0-META-1", "L0-META-2"]),

@@ -617,7 +617,10 @@ class Apply:
             refuse("meta-basis")
         if body["party"] != self.party:
             refuse("meta-not-authorized")
-        self.live("party", self.party)
+        party = self.live("party", self.party)
+        # C6, OP-153 m.3 (b)
+        if party["actor_kind"] == "organization":
+            refuse("meta-not-authorized")
         instance_id = self.new_id("instance")
         if instance_id != self.instance:
             refuse("meta-not-authorized")
@@ -655,6 +658,10 @@ class Apply:
         # L0-META-23
         instance = self.live("instance", body["instance"])
         self.require_own_instance(instance)
+        # C6, OP-153 m.3 (b)
+        party = self.read("party", instance["party"])
+        if party is not None and party["actor_kind"] == "organization":
+            refuse("meta-not-authorized")
         successor = self.new_id("instance")
         ended = dict(instance, successor=successor)
         self.end("instance", body["instance"], ended, "recovered")
