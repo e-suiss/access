@@ -18,7 +18,7 @@ fn civil_dates_match_known_days() {
     assert_eq!(days_from_civil(1969, 12, 31), None);
 }
 
-// OP-147 m.2: a missing day moves forward, never back
+// OP-147 m.2
 #[test]
 fn a_missing_day_moves_to_the_next_month() {
     assert_eq!(
@@ -51,7 +51,7 @@ fn a_missing_day_moves_to_the_next_month() {
     );
 }
 
-// OP-147 m.2, Ek C C.2: "the end of the calendar year" starts the next 1 January
+// OP-147 m.2, Ek C.2
 #[test]
 fn year_end_is_the_next_first_of_january() {
     assert_eq!(at(2025, 1, 1).next_year_start(), Some(at(2026, 1, 1)));
@@ -75,7 +75,7 @@ proptest! {
         prop_assert_eq!(days_from_civil(y, m, d), Some(days));
     }
 
-    // OP-147 m.2: a period never ends before its shortest reading
+    // OP-147 m.2
     #[test]
     fn periods_never_end_early(
         ms in 0u64..10_000_000_000_000,

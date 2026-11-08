@@ -1,6 +1,6 @@
 use super::{Class, UnknownClass};
 
-// OP-147 m.2, OP-74 m.1: the class names are the Ek C C.0 names
+// OP-147 m.2, OP-74 m.1
 #[test]
 fn names_are_the_ek_c_names() {
     let names: [&str; 25] = Class::ALL.map(Class::name);
@@ -48,7 +48,7 @@ fn names_parse_back_and_nothing_else_parses() {
     assert_eq!("work".parse::<Class>(), Err(UnknownClass));
 }
 
-// OP-147 m.4: the wire name is the Ek C C.0 name
+// OP-147 m.4
 #[cfg(feature = "serde")]
 #[test]
 fn wire_names_are_the_ek_c_names() {

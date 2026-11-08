@@ -29,7 +29,7 @@ fn record(tenant: &str, class: Class, subject: Option<&str>) -> Record {
     }
 }
 
-// OP-74 m.3, OP-147 m.2: a hold covers a subject, a class set or the whole tenant
+// OP-74 m.3, OP-147 m.2
 #[test]
 fn scope_decides_what_a_hold_covers() {
     let subject = hold(HoldScope::Subject(SubjectId::new("s1")));
@@ -49,7 +49,7 @@ fn scope_decides_what_a_hold_covers() {
     assert!(!tenant.covers(&record("t2", Class::WorkDraft, None)));
 }
 
-// OP-74 m.3: a hold lasts until it is lifted; `until` is exclusive
+// OP-74 m.3
 #[test]
 fn a_hold_is_active_until_its_end() {
     let mut h = hold(HoldScope::Tenant);
@@ -60,7 +60,7 @@ fn a_hold_is_active_until_its_end() {
     assert!(!h.is_active(Timestamp::from_unix_millis(5_000)));
 }
 
-// OP-74 m.4, Ek C C.1.1 (6): a suspicious-activity hold does not print its scope
+// OP-74 m.4, Ek C.1.1
 #[test]
 fn suspicious_activity_scope_is_not_printed() {
     let mut h = hold(HoldScope::Subject(SubjectId::new("subject-42")));
@@ -71,7 +71,7 @@ fn suspicious_activity_scope_is_not_printed() {
     assert!(shown.contains("<confidential>"));
 }
 
-// OP-147 m.4: the hold wire form
+// OP-147 m.4
 #[cfg(feature = "serde")]
 #[test]
 fn hold_wire_form() {

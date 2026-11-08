@@ -58,7 +58,7 @@ fn ten_days() -> Schedule {
     schedule(Length::For(Period::Days(10)), Event::Recorded, None)
 }
 
-// OP-147 m.2, OP-74 m.2: destruction comes when the period has run, not a millisecond before
+// OP-147 m.2, OP-74 m.2
 #[test]
 fn destroys_only_once_the_period_has_run() {
     let s = ten_days();
@@ -72,7 +72,7 @@ fn destroys_only_once_the_period_has_run() {
     assert!(may_destroy(&s, &r, &[], FRESH, ts(u64::MAX)).is_destroy());
 }
 
-// OP-147 m.2: the snapshot must be younger than 24 h (PD)
+// OP-147 m.2
 #[test]
 fn a_stale_or_missing_snapshot_defers() {
     assert_eq!(SNAPSHOT_MAX_AGE, Duration::from_hours(24));
@@ -94,8 +94,7 @@ fn a_stale_or_missing_snapshot_defers() {
     );
 }
 
-// OP-74 m.3, OP-147 m.2, Ek C C.5 #5: an active covering hold stops destruction past the period
-// and the cap; a lifted or unrelated hold does not
+// OP-74 m.3, OP-147 m.2, Ek C.5
 #[test]
 fn an_active_covering_hold_retains() {
     let s = schedule(
@@ -137,7 +136,7 @@ fn an_active_covering_hold_retains() {
     assert_eq!(held(other_tenant), Decision::Destroy);
 }
 
-// OP-147 m.2: unknown state defers
+// OP-147 m.2
 #[test]
 fn unknown_state_defers() {
     let now = ts(1_000 * DAY);
@@ -191,7 +190,7 @@ fn unknown_state_defers() {
     );
 }
 
-// Ek C rule 4, OP-74 m.2: the period does not run before the start event
+// Ek rule 4, OP-74 m.2
 #[test]
 fn the_period_waits_for_the_start_event() {
     let r = record(Occurrence::NotYet, Occurrence::Unknown);
@@ -201,7 +200,7 @@ fn the_period_waits_for_the_start_event() {
     );
 }
 
-// OP-147 m.2, Ek C C.3.6: "for the contract / until event" goes when the event is recorded
+// OP-147 m.2, Ek C.3.6
 #[test]
 fn until_event_goes_when_the_event_is_recorded() {
     let s = schedule(Length::Until(Event::TenantClosed), Event::Recorded, None);
@@ -223,7 +222,7 @@ fn until_event_goes_when_the_event_is_recorded() {
     );
 }
 
-// OP-74 m.2, Ek C C.5 #26: a capped until-event schedule may go at the cap
+// OP-74 m.2, Ek C.5
 #[test]
 fn a_cap_ends_an_open_until_event_schedule() {
     let s = schedule(
@@ -247,7 +246,7 @@ fn a_cap_ends_an_open_until_event_schedule() {
     );
 }
 
-// Ek C C.2.1 (TTK m.82), OP-147 m.2: a year-end start counts from the next 1 January
+// Ek C.2.1 (TTK m.82), OP-147 m.2
 #[test]
 fn year_end_start_counts_from_the_next_year() {
     let s = schedule(Length::For(Period::Years(10)), Event::YearEnd, None);
@@ -328,8 +327,7 @@ fn shortest_days(p: Period) -> u64 {
 }
 
 proptest! {
-    // OP-147 m.2, OP-73 m.4: Destroy only with a fresh snapshot, no active covering hold and the
-    // period run; never before the shortest reading of the period
+    // OP-147 m.2, OP-73 m.4
     #[test]
     fn never_destroys_early(
         s in any_schedule(),
@@ -369,7 +367,7 @@ proptest! {
         }
     }
 
-    // OP-147 m.2: once destroyable, a record stays destroyable as time goes on
+    // OP-147 m.2
     #[test]
     fn destroy_is_stable_over_time(
         s in any_schedule(),
@@ -385,7 +383,7 @@ proptest! {
         }
     }
 
-    // OP-74 m.3: an open-ended covering hold always wins
+    // OP-74 m.3
     #[test]
     fn an_indefinite_covering_hold_always_retains(
         s in any_schedule(),

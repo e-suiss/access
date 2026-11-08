@@ -2,7 +2,7 @@ use super::{Event, Length, Period, PolicyVersion, Schedule};
 use crate::class::Class;
 use crate::ids::TenantId;
 
-// OP-147 m.5, Ek C C.3.6, C.5 #25: the Work class defaults
+// OP-147 m.5, Ek C.3.6, C.5
 #[test]
 fn work_defaults_follow_ek_c() {
     let t = TenantId::new("t1");
@@ -38,7 +38,7 @@ fn work_defaults_follow_ek_c() {
     }
 }
 
-// OP-147 m.4: the schedule wire form
+// OP-147 m.4
 #[cfg(feature = "serde")]
 #[test]
 fn schedule_wire_form() {
