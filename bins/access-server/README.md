@@ -33,7 +33,6 @@ the start. Unknown keys are refused.
 | `listen` | no | `127.0.0.1:8443` | Public listener. Loopback unless set. |
 | `management_listen` | yes | | Management API and console listener; never the public address. |
 | `internal_listen` | yes | | Health and metrics listener; never the public or management address. |
-| `internal_plain` | no | `false` | Serve the internal listener without TLS; only on a loopback or private address. |
 | `log` | no | `info` | `tracing` filter directives. |
 | `issuer` | yes | | The ADP issuer: an `https` URL without a trailing slash. |
 | `signer` | yes | | The authority signer's Unix socket. |

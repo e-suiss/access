@@ -1,7 +1,7 @@
 //! Process configuration (OP-63 rule 4).
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use std::net::{Ipv4Addr, SocketAddr};
 use std::path::PathBuf;
 
 use access_http::SecurityTxt;
@@ -25,9 +25,6 @@ pub(crate) struct Config {
     /// The internal listener: `/livez`, `/readyz`, `/healthz`, `/metrics` (OP-67 m.3, OP-151
     /// m.3 (b)). Required; never the public or management one.
     pub(crate) internal_listen: Option<SocketAddr>,
-    /// Serve the internal listener in plain HTTP. Only on a loopback or private address (RFC
-    /// 1918, IPv6 unique local); off by default, so it speaks TLS like the others.
-    pub(crate) internal_plain: bool,
     /// `tracing` filter directives.
     pub(crate) log: String,
     /// `security.txt` contact URIs (RFC 9116).
@@ -329,7 +326,6 @@ impl Default for Config {
             listen: SocketAddr::from((Ipv4Addr::LOCALHOST, 8443)),
             management_listen: None,
             internal_listen: None,
-            internal_plain: false,
             log: "info".to_owned(),
             security_contacts: vec![
                 "https://github.com/e-suiss/access/security/advisories/new".to_owned(),
@@ -408,10 +404,6 @@ pub(crate) enum ConfigError {
     SharedListener,
     #[error("management_listen binds a non-loopback address without TLS (§17.9.6, OP-148)")]
     AdminWithoutTls,
-    #[error(
-        "internal_plain is allowed only on a loopback or private internal_listen address (OP-151 m.3 (b))"
-    )]
-    InternalPlain,
 }
 
 /// Whether two listen addresses would take the same socket: one port, and one address or the
@@ -422,19 +414,9 @@ fn overlap(a: SocketAddr, b: SocketAddr) -> bool {
         && (a.ip() == b.ip() || a.ip().is_unspecified() || b.ip().is_unspecified())
 }
 
-/// A loopback or private address: RFC 1918 or IPv4 loopback, IPv6 loopback or unique local.
-fn private(addr: SocketAddr) -> bool {
-    match addr.ip() {
-        IpAddr::V4(v4) => v4.is_loopback() || v4.is_private(),
-        IpAddr::V6(v6) => {
-            v6.is_loopback() || v6.segments().first().is_some_and(|s| s & 0xfe00 == 0xfc00)
-        }
-    }
-}
-
 /// The admin address check at start-up (OP-148, §17.9.6, Ek B "admin adresi açılış denetimi"):
-/// three distinct listeners; the management one never non-loopback without TLS; a plain-text
-/// internal one only on a private address when asked for.
+/// three distinct listeners; the management one never non-loopback without TLS; all three speak
+/// TLS (TI-9, OP-152 m.5 (g)).
 pub(crate) fn check_listeners(config: &Config) -> Result<(), ConfigError> {
     let (Some(management), Some(internal)) = (config.management_listen, config.internal_listen)
     else {
@@ -448,9 +430,6 @@ pub(crate) fn check_listeners(config: &Config) -> Result<(), ConfigError> {
     }
     if config.tls.is_none() && !management.ip().is_loopback() {
         return Err(ConfigError::AdminWithoutTls);
-    }
-    if config.internal_plain && !private(internal) {
-        return Err(ConfigError::InternalPlain);
     }
     Ok(())
 }
@@ -722,36 +701,15 @@ mod tests {
         assert!(matches!(config.validate(), Err(ConfigError::NoTls)));
     }
 
-    // OP-151 m.3 (b), TI-9: plain-text internal listener only when asked and only on a
-    // loopback or private address
+    // TI-9, OP-152 m.5 (g): the internal listener always speaks TLS; there is no key to turn
+    // it into plain HTTP, and a configuration naming one does not load
     #[test]
-    fn a_plain_internal_listener_stays_private() {
-        for ok in [
-            "127.0.0.1:9090",
-            "10.1.2.3:9090",
-            "192.168.0.1:9090",
-            "[fd00::1]:9090",
-        ] {
-            let config = Config {
-                internal_plain: true,
-                ..listeners("127.0.0.1:9443", ok)
-            };
-            config.validate().unwrap();
-        }
-        for bad in [
-            "0.0.0.0:9090",
-            "8.8.8.8:9090",
-            "[::]:9090",
-            "[2001:db8::1]:9090",
-        ] {
-            let config = Config {
-                internal_plain: true,
-                ..listeners("127.0.0.1:9443", bad)
-            };
-            assert!(
-                matches!(config.validate(), Err(ConfigError::InternalPlain)),
-                "{bad}"
-            );
+    fn the_internal_listener_has_no_plain_text_switch() {
+        for key in ["internal_plain = true", "internal_plain = false"] {
+            let result: Result<Config, _> = Figment::from(Serialized::defaults(with_tls()))
+                .merge(Toml::string(key))
+                .extract();
+            assert!(result.is_err(), "{key}");
         }
     }
 

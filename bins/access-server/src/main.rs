@@ -1268,8 +1268,7 @@ fn nonblocking(listener: std::net::TcpListener) -> Result<tokio::net::TcpListene
 }
 
 /// Serves the public, management and internal routers on their listeners until a shutdown
-/// signal; the process is ready once all three accept. Each speaks TLS 1.3, except the internal
-/// one when `internal_plain` is set on a private address (checked at start-up).
+/// signal; the process is ready once all three accept. Each speaks TLS 1.3 (TI-9).
 async fn listen(
     config: &Config,
     listeners: Listeners,
@@ -1291,7 +1290,6 @@ async fn listen(
         listen = %config.listen,
         management_listen = ?config.management_listen,
         internal_listen = ?config.internal_listen,
-        internal_plain = config.internal_plain,
         "access-server listening (TLS 1.3)"
     );
     let public = access_http::tls::serve(public_l, tls.clone(), public, signal(stopped.clone()));
@@ -1301,15 +1299,7 @@ async fn listen(
         management,
         signal(stopped.clone()),
     );
-    let inside = async {
-        if config.internal_plain {
-            axum::serve(internal_l, inside)
-                .with_graceful_shutdown(signal(stopped.clone()))
-                .await
-        } else {
-            access_http::tls::serve(internal_l, tls.clone(), inside, signal(stopped.clone())).await
-        }
-    };
+    let inside = access_http::tls::serve(internal_l, tls.clone(), inside, signal(stopped.clone()));
     let shutdown = async {
         shutdown_signal().await;
         ready.unready();
