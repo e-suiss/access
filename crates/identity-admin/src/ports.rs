@@ -5,8 +5,9 @@ use std::future::Future;
 
 pub use access_identity_signer::issuer::Registration as IssuerAis;
 use access_internal_api::idp::{GenesisOpened, GenesisOrder, Submission, Unavailable, Verdict};
-use access_internal_api::instances::{Registration, RegistrationVerdict};
+use access_internal_api::instances::{Registration, RegistrationVerdict, SelfSigned};
 use access_kernel::digest::Digest;
+use access_kernel::meta::ActorKind;
 use access_kernel::model::Id;
 use access_kernel::verify::cose::PublicKey;
 use access_store::identity::RealmId;
@@ -106,4 +107,82 @@ pub trait Instances: Send + Sync {
 
     /// The trusted time the domain judges a registration's intent and AIS by (OP-129 m.1).
     fn now(&self) -> impl Future<Output = Result<u64, Unavailable>> + Send;
+
+    /// The actor kind of `party` in `domain` and whether it ended, from the domain's Party
+    /// lookup (OP-149 m.28 (c), OP-153 m.10 (e)); `None` for a Party the domain does not know.
+    fn party(
+        &self,
+        domain: Digest,
+        party: Id,
+    ) -> impl Future<Output = Result<Option<PartyKind>, Unavailable>> + Send {
+        let _ = (domain, party);
+        async { Err(Unavailable(String::from("party-lookup"))) }
+    }
+
+    /// Commits an organization's `party_register`, signed by the one-time key its founder's
+    /// client made and dropped (OP-153 m.3 (b), L0-META-7).
+    fn register_organization(
+        &self,
+        registration: OrgRegistration,
+    ) -> impl Future<Output = Result<OrgRegistered, Unavailable>> + Send {
+        let _ = registration;
+        async { Err(Unavailable(String::from("organization-registration"))) }
+    }
+}
+
+/// What an organization's registration came to.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum OrgRegistered {
+    /// Recorded, now or by an identical earlier registration.
+    Registered {
+        /// An identical earlier registration recorded it.
+        replayed: bool,
+    },
+    /// Not recorded, by stable reason code.
+    Refused {
+        /// Stable reason code.
+        code: String,
+    },
+}
+
+/// A Party as the domain's lookup answers it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct PartyKind {
+    /// Fixed at `party_register` (OP-149 m.8).
+    pub actor_kind: ActorKind,
+    /// It departed or was terminated.
+    pub ended: bool,
+}
+
+/// An organization Party to register (OP-153 m.3 (b)): `party_register` with
+/// `actor_kind = organization` and the founder's Party as its sole root, signed by a key no
+/// Instance will ever hold (C6).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct OrgRegistration {
+    /// The tenant.
+    pub tenant: [u8; 16],
+    /// The realm's governing domain.
+    pub domain: Digest,
+    /// The organization's Party.
+    pub party: Id,
+    /// Its root: the founder's Party.
+    pub founder: Id,
+    /// The one-time key that signed the registration.
+    pub key: PublicKey,
+    /// The self-signed `party_register`.
+    pub register: SelfSigned,
+    /// The identity plane as PEP.
+    pub pep: String,
+}
+
+impl OrgRegistration {
+    /// The `party_register` payload.
+    #[must_use]
+    pub const fn payload(&self) -> access_kernel::meta::Payload {
+        access_kernel::meta::Payload::PartyRegister {
+            party: self.party,
+            root: access_kernel::meta::Root::Sole(self.founder),
+            actor_kind: ActorKind::Organization,
+        }
+    }
 }

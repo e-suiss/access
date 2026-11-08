@@ -187,6 +187,29 @@ impl TenantTx {
         Ok(*id.as_bytes())
     }
 
+    /// Organizations `subject` founded in the last `since_s` seconds (OP-153 m.3 (o)).
+    ///
+    /// # Errors
+    /// [`StoreError`].
+    pub async fn orgs_founded_since(
+        &mut self,
+        subject: [u8; 16],
+        since_s: i64,
+    ) -> Result<i64, StoreError> {
+        let (tenant, realm) = self.org_scope()?;
+        Ok(sqlx::query_scalar!(
+            r#"SELECT count(*) AS "n!" FROM access.org_memberships
+                WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND source = 'founder'
+                  AND joined_at > clock_timestamp() - make_interval(secs => $4)"#,
+            tenant,
+            realm,
+            uuid(subject),
+            f64::from(i32::try_from(since_s).map_err(|_| StoreError::Range)?),
+        )
+        .fetch_one(&mut *self.tx)
+        .await?)
+    }
+
     /// The organization `id` (TN-3: routing is by id).
     ///
     /// # Errors

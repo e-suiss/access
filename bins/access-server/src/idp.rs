@@ -17,7 +17,9 @@ use access_crypto::dpop::{Role as NonceRole, label as nonce_label};
 use access_crypto::jose::JwsAlg;
 use access_crypto::webauthn::decoy_label;
 use access_identity_admin::domain::JoseAlg;
-use access_identity_admin::ports::{Decider, Governance, Instances, RealmKeys};
+use access_identity_admin::ports::{
+    Decider, Governance, Instances, OrgRegistered, OrgRegistration, PartyKind, RealmKeys,
+};
 use access_identity_oauth::adapters::SignerKeys;
 use access_identity_ui::ports::{Approvals, DeviceInstances};
 use access_internal_api::approvals::{
@@ -357,34 +359,34 @@ where
     S: Salts + Clone + Send + Sync + 'static,
     C: Clock + Clone + Send + Sync + 'static,
 {
-    /// Commits one self-signed `payload` of `r` under the bootstrap basis.
-    async fn self_signed(
+    /// Commits one self-signed `payload` of `party` in `domain` under the bootstrap basis.
+    async fn self_signed_in(
         &self,
-        r: &Registration,
+        (domain, party): (Digest, Id),
         e: &SelfSigned,
         payload: Payload,
+        (pep, context): (String, Option<RateContext>),
     ) -> Result<Verdict, Unavailable> {
-        let Some(intent) = self_signed_intent(&payload, r.party, e.validity) else {
+        let Some(intent) = self_signed_intent(&payload, party, e.validity) else {
             return Ok(Verdict::Refused {
                 code: String::from("protocol"),
                 errors: Vec::new(),
             });
         };
         let request = Request {
-            domain: r.domain,
+            domain,
             mode: Mode::Commit,
             nonce: e.nonce.clone(),
             intent,
             payload: Some(payload),
-            basis: bootstrap_basis(&r.domain),
+            basis: bootstrap_basis(&domain),
             capacity: Capacity::Own,
             proofs: Vec::new(),
             exercise: None,
             consistency: None,
         };
         // OP-152 m.5 (b)
-        self.commit(request, e.ais.clone(), (r.pep.clone(), r.context.clone()))
-            .await
+        self.commit(request, e.ais.clone(), (pep, context)).await
     }
 
     /// OP-149 m.16 (a), L0-META-7: binds the new key to the checked Party, commits
@@ -397,12 +399,28 @@ where
             });
         };
         if let Some(e) = &r.register {
-            match self.self_signed(&r, e, r.register_payload()).await? {
+            match self
+                .self_signed_in(
+                    (r.domain, r.party),
+                    e,
+                    r.register_payload(),
+                    (r.pep.clone(), r.context.clone()),
+                )
+                .await?
+            {
                 Verdict::Committed(_) => {}
                 other => return not_registered(other),
             }
         }
-        let created = match self.self_signed(&r, &r.create, r.create_payload()).await? {
+        let created = match self
+            .self_signed_in(
+                (r.domain, r.party),
+                &r.create,
+                r.create_payload(),
+                (r.pep.clone(), r.context.clone()),
+            )
+            .await?
+        {
             Verdict::Committed(c) => c,
             other => return not_registered(other),
         };
@@ -436,6 +454,48 @@ where
             .now()
             .await
             .map_err(|e| Unavailable(e.to_string()))
+    }
+
+    async fn party(&self, domain: Digest, party: Id) -> Result<Option<PartyKind>, Unavailable> {
+        // OP-153 m.10 (e), OP-149 m.28 (c)
+        let answer = self
+            .domains
+            .lookup_parties(
+                domain,
+                &[party],
+                access_authority_core::keys::AsOf::Head,
+                false,
+            )
+            .await
+            .map_err(|e| unavailable(&e))?;
+        Ok(answer.lookup.parties.first().map(|p| PartyKind {
+            actor_kind: p.actor_kind,
+            ended: p.ended.is_some(),
+        }))
+    }
+
+    async fn register_organization(
+        &self,
+        r: OrgRegistration,
+    ) -> Result<OrgRegistered, Unavailable> {
+        // OP-153 m.3 (b), L0-META-7, C6
+        let Some(_hold) = self.actors.hold(r.party, &r.key) else {
+            return Ok(OrgRegistered::Refused {
+                code: String::from(BINDING_BUSY),
+            });
+        };
+        let verdict = self
+            .self_signed_in((r.domain, r.party), &r.register, r.payload(), (r.pep, None))
+            .await?;
+        Ok(match verdict {
+            Verdict::Committed(c) => OrgRegistered::Registered {
+                replayed: c.replayed,
+            },
+            Verdict::Refused { code, .. } => OrgRegistered::Refused { code },
+            Verdict::NotAllowed { .. } => OrgRegistered::Refused {
+                code: String::from("denied"),
+            },
+        })
     }
 }
 

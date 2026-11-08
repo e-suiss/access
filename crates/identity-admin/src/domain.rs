@@ -353,6 +353,12 @@ pub enum Invalid {
     /// Nobody issues a recovery pass or intent for their own account (TN-62).
     #[error("self issue")]
     SelfIssue,
+    /// The Party is not a live organization Party of the domain (OP-153 m.3 (b), m.10 (e)).
+    #[error("not an organization")]
+    NotOrganization,
+    /// The founder created as many organizations today as allowed (OP-153 m.3 (o)).
+    #[error("organization limit")]
+    OrgLimit,
 }
 
 impl Invalid {
@@ -365,6 +371,8 @@ impl Invalid {
             Self::OrgExists => "organization-exists",
             Self::NoMember => "no-such-member",
             Self::LastOwner => "last-owner",
+            Self::NotOrganization => "not-an-organization",
+            Self::OrgLimit => "organization-limit",
             Self::DisplayName => "invalid-display-name",
             Self::RedirectUri | Self::RedirectUris => "invalid-redirect-uri",
             Self::JwksUri => "invalid-jwks-uri",

@@ -737,6 +737,8 @@ pub fn problem_of(e: &AdminError) -> &'static Code {
             Invalid::RecoveryPolicy => &r::INVALID_RECOVERY_POLICY,
             Invalid::RecoveryOption => &r::RECOVERY_OPTION_OFF,
             Invalid::SelfIssue => &r::SELF_ISSUE_REFUSED,
+            Invalid::NotOrganization => &r::NOT_AN_ORGANIZATION,
+            Invalid::OrgLimit => &codes::RATE_LIMITED,
             Invalid::NoClient
             | Invalid::NoKey
             | Invalid::NoGroup

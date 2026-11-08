@@ -55,6 +55,13 @@ pub static PUBLIC_SUB_OPT_IN: access_telemetry::metrics::Counter<0> =
         [],
     );
 
+/// Organizations one founder may create a day (OP-153 m.3 (o): five tenants a day per
+/// platform account, PD).
+pub const ORGS_PER_FOUNDER_PER_DAY: i64 = 5;
+
+/// One day in seconds.
+const DAY_S: i64 = 86_400;
+
 /// How long a rotated client secret stays valid next to its successor (CR-38, PD).
 pub const SECRET_OVERLAP_MS: u64 = 24 * 3_600_000;
 use crate::ports::{Decider, Governance, Instances, RealmKeys};
@@ -583,6 +590,10 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             return Err(Invalid::PlatformTenant.into());
         }
         let g = self.governing(p, state).await?;
+        if let Change::OrgCreate(o) = &p.change {
+            self.org_creatable(p, Digest(*g.domain.as_bytes()), o.party)
+                .await?;
+        }
         let intent = p
             .change
             .intent(&g.slug, p.validity)
@@ -593,6 +604,81 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             intent,
             digest,
         })
+    }
+
+    /// An organization is created only for a live organization Party of the realm's domain
+    /// (OP-153 m.3 (b), m.10 (e)), by a founder with a session, at most
+    /// [`ORGS_PER_FOUNDER_PER_DAY`] a day (OP-153 m.3 (o), HL-41).
+    async fn org_creatable(
+        &self,
+        p: &Proposal,
+        domain: Digest,
+        party: [u8; 16],
+    ) -> Result<(), AdminError> {
+        let founder = p
+            .subject
+            .ok_or_else(|| AdminError::Refused(String::from(ACTOR_BINDING)))?;
+        let kind = self
+            .governance
+            .party(domain, Id(party))
+            .await
+            .map_err(|e| AdminError::Unavailable(e.0))?;
+        if !kind.is_some_and(|k| {
+            k.actor_kind == access_kernel::meta::ActorKind::Organization && !k.ended
+        }) {
+            return Err(Invalid::NotOrganization.into());
+        }
+        let mut t = TenantTx::begin(self.app, p.tenant, p.realm).await?;
+        let today = t.orgs_founded_since(founder, DAY_S).await?;
+        t.commit().await?;
+        if today >= ORGS_PER_FOUNDER_PER_DAY {
+            return Err(Invalid::OrgLimit.into());
+        }
+        Ok(())
+    }
+
+    /// Records an organization's Party from the `party_register` its founder's client signed
+    /// with a one-time key (OP-153 m.3 (b), L0-META-7): the Party is an organization rooted
+    /// solely in the founder's Party, so it never has an Instance (C6). The founder's session
+    /// subject must be bound to a Party of the realm.
+    ///
+    /// # Errors
+    /// [`AdminError`]; a refusal by the domain is [`AdminError::Refused`].
+    pub async fn register_organization(
+        &self,
+        (tenant, realm): (TenantId, RealmId),
+        founder: [u8; 16],
+        party: Id,
+        key: access_kernel::verify::cose::PublicKey,
+        register: access_internal_api::instances::SelfSigned,
+    ) -> Result<bool, AdminError> {
+        let mut t = TenantTx::begin(self.app, tenant, realm).await?;
+        let g = idp::governance(&mut t).await?.ok_or(AdminError::NoRealm)?;
+        let root = idp::subject_party(&mut t, &founder).await?;
+        let today = t.orgs_founded_since(founder, DAY_S).await?;
+        t.commit().await?;
+        let root = root.ok_or_else(|| AdminError::Refused(String::from(ACTOR_BINDING)))?;
+        // OP-153 m.3 (o), HL-41
+        if today >= ORGS_PER_FOUNDER_PER_DAY {
+            return Err(Invalid::OrgLimit.into());
+        }
+        let verdict = self
+            .governance
+            .register_organization(crate::ports::OrgRegistration {
+                tenant: *tenant.as_bytes(),
+                domain: Digest(*g.domain.as_bytes()),
+                party,
+                founder: Id(root),
+                key,
+                register,
+                pep: String::from(self.pep),
+            })
+            .await
+            .map_err(|e| AdminError::Unavailable(e.0))?;
+        match verdict {
+            crate::ports::OrgRegistered::Registered { replayed } => Ok(replayed),
+            crate::ports::OrgRegistered::Refused { code } => Err(AdminError::Refused(code)),
+        }
     }
 
     /// Has the realm's governing domain commit one core meta-action write `w`, such as a Grant

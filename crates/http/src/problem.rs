@@ -447,6 +447,7 @@ pub const CODES: &[Code] = &[
     codes::realm::INVALID_RECOVERY_POLICY,
     codes::realm::RECOVERY_OPTION_OFF,
     codes::realm::SELF_ISSUE_REFUSED,
+    codes::realm::NOT_AN_ORGANIZATION,
     codes::realm::INVALID_AUDIT_FORMAT,
 ];
 

@@ -5,13 +5,54 @@
 use access_identity_account::app::SUBJECT_PREFIX;
 use access_identity_admin::app::rest::{Op, compile};
 use access_identity_admin::domain::Invalid;
+use access_internal_api::instances::{RegistrationVerdict, SelfSigned};
 use access_kernel::json::b64url_encode;
+use access_kernel::meta::{ActorKind, Payload, Root};
 use access_store::orgs::Source;
 use serde_json::json;
 
 use super::*;
 
 const ORG: [u8; 16] = [0x0a; 16];
+const ORG_KEY: u8 = 0x3a;
+
+/// The `party_register` of organization `party` its founder's client signs with the one-time
+/// key `seed` (OP-153 m.3 (b)).
+fn org_register(d: Digest, party: [u8; 16], founder: Id, seed: u8) -> SelfSigned {
+    let payload = Payload::PartyRegister {
+        party: Id(party),
+        root: Root::Sole(founder),
+        actor_kind: ActorKind::Organization,
+    };
+    let nonce = register_nonce(&challenge_of(seed));
+    SelfSigned {
+        ais: self_signed(d, &nonce, &payload, Id(party), seed),
+        nonce,
+        validity: Window {
+            from: 0,
+            until: HOUR,
+        },
+    }
+}
+
+async fn register_org(
+    w: &World,
+    at: (TenantId, RealmId),
+    d: Digest,
+    founder: [u8; 16],
+    party: [u8; 16],
+    seed: u8,
+) -> Result<bool, AdminError> {
+    w.admin()
+        .register_organization(
+            at,
+            founder,
+            Id(party),
+            public(seed),
+            org_register(d, party, ROOT, seed),
+        )
+        .await
+}
 
 async fn ready(slug: &str) -> (World, (TenantId, RealmId), Digest, [u8; 16]) {
     let w = World::new().await;
@@ -25,7 +66,72 @@ async fn ready(slug: &str) -> (World, (TenantId, RealmId), Digest, [u8; 16]) {
             .unwrap()
     );
     t.commit().await.unwrap();
+    assert!(
+        !register_org(&w, (tenant, realm), d, founder, ORG, ORG_KEY)
+            .await
+            .unwrap()
+    );
     (w, (tenant, realm), d, founder)
+}
+
+// OP-153 m.3 (b), m.10 (e), C6, Ek B 4082, 3599
+#[tokio::test]
+async fn an_organization_party_is_self_registered_and_never_gets_an_instance() {
+    let (w, at, d, founder) = ready("org-party").await;
+    assert_eq!(
+        Instances::party(&w.plane, d, Id(ORG)).await.unwrap(),
+        Some(access_identity_admin::ports::PartyKind {
+            actor_kind: ActorKind::Organization,
+            ended: false,
+        })
+    );
+    // C6: the organization's Party has no Instance, whatever key asks
+    let mut r = registration(d, device(), Id(ORG), ORG_KEY, false);
+    r.register = None;
+    assert_eq!(
+        Instances::register(&w.plane, r).await.unwrap(),
+        RegistrationVerdict::Refused {
+            code: String::from("denied")
+        }
+    );
+    // OP-153 m.10 (e): a Party that is not an organization does not become one
+    let create = |party: [u8; 16]| {
+        compile(
+            Op::CreateOrganization,
+            None,
+            &json!({ "party": b64url_encode(&party), "display_name": "Acme" }),
+            &w.ids,
+        )
+        .unwrap()
+    };
+    assert_eq!(
+        refused(&w, &as_founder(at, d, create(ROOT.0), 1, founder)).await,
+        Invalid::NotOrganization
+    );
+    assert_eq!(
+        refused(&w, &as_founder(at, d, create([0x0b; 16]), 2, founder)).await,
+        Invalid::NotOrganization
+    );
+    // OP-153 m.3 (o), HL-41: a founder creates at most five organizations a day
+    let mut t = TenantTx::begin(&w.db.app, at.0, at.1).await.unwrap();
+    for i in 0..5u8 {
+        let org = t
+            .insert_org([0x40 + i; 16], "Acme", &[i; 32])
+            .await
+            .unwrap();
+        t.insert_membership(org, founder, Source::Founder, true, None)
+            .await
+            .unwrap();
+    }
+    t.commit().await.unwrap();
+    assert_eq!(
+        refused(&w, &as_founder(at, d, create(ORG), 3, founder)).await,
+        Invalid::OrgLimit
+    );
+    assert!(matches!(
+        register_org(&w, at, d, founder, [0x0c; 16], ORG_KEY + 1).await,
+        Err(AdminError::Invalid(Invalid::OrgLimit))
+    ));
 }
 
 fn as_founder(
@@ -62,7 +168,7 @@ async fn an_organization_is_created_through_commit_and_keeps_its_last_owner() {
     let mut operator = proposal(at, create.clone(), 1, idp_anchor(d), 1);
     operator.subject = None;
     assert!(matches!(
-        exercise(&w, &operator, ROOT_KEY).await,
+        w.admin().prepare(&operator).await,
         Err(AdminError::Refused(_))
     ));
     written(

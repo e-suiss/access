@@ -368,3 +368,10 @@ pub const SELF_ISSUE_REFUSED: Code = code(
     "Forbidden",
     "Nobody issues a reset intent or a temporary access pass for their own account (TN-62).",
 );
+/// The Party is not a live organization Party of the realm's governing domain (OP-153 m.3 (b)).
+pub const NOT_AN_ORGANIZATION: Code = code(
+    "not-an-organization",
+    409,
+    "Conflict",
+    "The Party is not a live organization Party of the realm's governing domain (OP-153 m.3 (b)).",
+);
