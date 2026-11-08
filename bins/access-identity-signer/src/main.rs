@@ -321,7 +321,7 @@ mod tests {
         ))
     }
 
-    // CR-21, OP-69: provisioning makes the KEK once and keeps it
+    // CR-21, OP-69
     #[test]
     fn init_makes_the_kek_once() {
         let store = token();

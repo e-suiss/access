@@ -141,7 +141,7 @@ mod tests {
         }
     }
 
-    // OP-69: the local deployment's configuration is valid
+    // OP-69
     #[test]
     fn the_local_deployment_configuration_is_valid() {
         let path = concat!(
@@ -155,7 +155,7 @@ mod tests {
         config.validate().unwrap();
     }
 
-    // CMP-22b, CR-21, OP-150: callers, a token, a sane schedule and a cell name are required
+    // CMP-22b, CR-21, OP-150
     #[test]
     fn incomplete_configurations_are_refused() {
         valid().validate().unwrap();
@@ -183,8 +183,7 @@ mod tests {
         }
     }
 
-    // CR-32, T31, CMP-22b: the local deployment's identity signer has its own token, KEK and
-    // vault, apart from the authority signer's
+    // CR-32, T31, CMP-22b
     #[test]
     fn the_identity_plane_keeps_its_own_key_store() {
         let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/../../deploy/compose/access/");
