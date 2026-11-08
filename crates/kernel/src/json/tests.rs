@@ -90,6 +90,10 @@ fn decodes_every_short_escape() {
 #[test]
 fn joins_surrogate_pairs_only_when_complete() {
     assert_eq!(p(r#""😀""#), Ok(Json::Str("\u{1f600}".to_string())));
+    assert_eq!(
+        p(r#""\ud83d\ude00""#),
+        Ok(Json::Str("\u{1f600}".to_string()))
+    );
     assert_eq!(p(r#""\ud83d\nde00""#), Err(JsonError::Syntax));
     assert_eq!(p(r#""\ud83dxude00""#), Err(JsonError::Syntax));
     assert_eq!(p(r#""\ud83d\ud83d""#), Err(JsonError::Syntax));
