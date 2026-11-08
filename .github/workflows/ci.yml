@@ -435,6 +435,7 @@ jobs:
             sdks/typescript/package-lock.json
             web/console/package-lock.json
             web/login/package-lock.json
+            web/components/package-lock.json
       - name: Install (lockfile only, no install scripts)
         run: just web-install
       - name: Lint, type check, format (OP-83)

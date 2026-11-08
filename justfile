@@ -240,7 +240,7 @@ uniffi-test-swift:
     "$out/vectors" conformance/vectors/core/1
 
 # OP-97
-npm_packages :="sdks/typescript web/console web/login"
+npm_packages :="sdks/typescript web/console web/login web/components"
 
 # OP-83, §14.5
 web-install:
@@ -255,6 +255,7 @@ web-check: wasm
 
 web-test: wasm
     cd sdks/typescript && npm test
+    cd web/components && npm test
 
 # OP-151 m.3 (g), TN-112 item 8: the SDK types are generated from the contracts and committed
 sdk-types-check:
