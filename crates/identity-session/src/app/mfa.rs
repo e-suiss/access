@@ -312,6 +312,17 @@ where
         if !tx.use_otp_step(credential, i64_of(step)?).await? {
             return Err(SessionError::Corrupt);
         }
+        // §10.1.3, OP-150 m.12 (j)
+        access_identity_account::app::claims::emit(
+            &mut tx,
+            &access_identity_account::domain::claims::secret_binding(
+                subject,
+                access_kernel::claim::body::AuthenticatorKind::Totp,
+                &credential,
+                now,
+            ),
+        )
+        .await?;
         // TN-41
         let s = Signal::credential_change(
             fresh_id()?,

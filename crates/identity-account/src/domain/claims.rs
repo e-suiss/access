@@ -366,6 +366,40 @@ pub fn device_key_binding(
     }
 }
 
+/// The `authenticator_binding` Claim of a new password or TOTP credential (§10.1.3 "parola
+/// değişimi yeni authenticator-binding Claim'idir", OP-150 m.12 (j)): the credential named by
+/// digest, never its secret; it binds to the Party and changes no Instance (K04).
+#[must_use]
+pub fn secret_binding(
+    subject: [u8; 16],
+    kind: AuthenticatorKind,
+    credential: &[u8],
+    at: u64,
+) -> ClaimOrder {
+    ClaimOrder {
+        subject,
+        class: Class::AuthenticatorBinding.name(),
+        at,
+        ttl_ms: BINDING_TTL_MS,
+        content: Content::Body {
+            body: Body::AuthenticatorBinding(AuthenticatorBinding {
+                kind,
+                material: material(kind, credential, &[]),
+                alg: None,
+                attestation: None,
+                aaguid: None,
+                be: false,
+                transports: BTreeSet::new(),
+            }),
+            disclose: true,
+        },
+        assurance: BTreeMap::new(),
+        bind: Bind::None,
+        line: Some(authenticator_line(kind, credential)),
+        retract: false,
+    }
+}
+
 /// The order that ends an authenticator's line when it is removed: its last Claim is superseded
 /// by one that holds for no time. Instances are untouched (IDP-2, K04). `credential` names the
 /// line: a passkey's identity credential row, a device key's Instance.

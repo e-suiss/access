@@ -2,6 +2,7 @@
 //! audit row (OPI-6). Accounts are found by identifier only; nothing is linked, merged or
 //! authorized by an e-mail address (§12.3.3, E27).
 
+use access_kernel::claim::body::AuthenticatorKind;
 use access_store::accounts::{NewCredential, Revoke};
 use access_store::audit::AuditEvent;
 
@@ -20,6 +21,9 @@ use crate::ports::{AccountDb, AccountTx, BreachRanges, Entropy};
 
 /// The password credential kind.
 pub const PASSWORD: &str = "password";
+
+/// The credential kind of a TOTP seed.
+pub const TOTP: &str = "totp";
 
 /// The credential kind of a passkey's identity credential row.
 pub const PASSKEY: &str = "webauthn";
@@ -344,11 +348,29 @@ pub async fn set_password<D: AccountDb, B: BreachRanges, E: Entropy>(
     } else {
         ChangeType::Update
     };
+    let at = tx.server_time().await?;
     for c in old {
         if tx.revoke(subject, c.id).await? != Revoke::Done {
             return Err(AccountError::Corrupt);
         }
+        // §10.1.3, OP-150 m.12 (j)
+        crate::app::claims::emit(
+            &mut tx,
+            &crate::domain::claims::authenticator_removed(
+                subject,
+                AuthenticatorKind::Password,
+                &c.id,
+                at,
+            ),
+        )
+        .await?;
     }
+    // §10.1.3, OP-150 m.12 (j)
+    crate::app::claims::emit(
+        &mut tx,
+        &crate::domain::claims::secret_binding(subject, AuthenticatorKind::Password, &id, at),
+    )
+    .await?;
     credential_signal(&mut tx, subject, CredentialType::Password, change).await?;
     // OP-151 m.3 (i)
     events::credential(&mut tx, realm, subject, PASSWORD, replaced).await?;
@@ -396,17 +418,19 @@ pub async fn remove_credential<D: AccountDb>(
         Revoke::LastMethod => return Err(AccountError::LastMethod),
     }
     credential_signal(&mut tx, subject, signal_kind, ChangeType::Revoke).await?;
-    // IDP-2, OP-150 L2: the passkey's binding line ends; no Instance changes
-    if passkey {
+    // IDP-2, OP-150 L2, OP-150 m.12 (j): the authenticator's binding line ends; no Instance
+    // changes
+    let bound = match kind {
+        PASSKEY => Some(AuthenticatorKind::Passkey),
+        PASSWORD => Some(AuthenticatorKind::Password),
+        TOTP => Some(AuthenticatorKind::Totp),
+        _ => None,
+    };
+    if let Some(bound) = bound {
         let at = tx.server_time().await?;
         crate::app::claims::emit(
             &mut tx,
-            &crate::domain::claims::authenticator_removed(
-                subject,
-                access_kernel::claim::body::AuthenticatorKind::Passkey,
-                &credential,
-                at,
-            ),
+            &crate::domain::claims::authenticator_removed(subject, bound, &credential, at),
         )
         .await?;
     }
@@ -428,7 +452,7 @@ async fn credential_kind<T: AccountTx>(
     subject: [u8; 16],
     credential: [u8; 16],
 ) -> Result<&'static str, AccountError> {
-    for kind in [PASSWORD, "totp", "recovery_code"] {
+    for kind in [PASSWORD, TOTP, "recovery_code"] {
         if tx
             .credentials(subject, kind)
             .await?

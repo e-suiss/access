@@ -366,3 +366,105 @@ async fn session_authentications_bind_the_registered_instance() {
     assert_eq!(st.validity.from, NOW - 5);
     assert!(plane.got.lock().unwrap()[0].body.is_some());
 }
+
+struct NoBreaches;
+
+impl access_identity_account::ports::BreachRanges for NoBreaches {
+    fn range(
+        &self,
+        _: &str,
+    ) -> impl Future<Output = Result<String, access_identity_account::ports::RangeUnavailable>> + Send
+    {
+        std::future::ready(Ok(String::new()))
+    }
+}
+
+// §10.1.3, OP-150 m.12 (j), OP-152 m.5 (l), K04: a password is an authenticator bound by an
+// authenticator_binding Claim; a new password ends the old one's line and opens its own, naming
+// the credential by digest and never its hash
+#[tokio::test]
+async fn password_changes_become_authenticator_binding_claims() {
+    use access_identity_account::adapters::system::SystemEntropy;
+    use access_identity_account::app::accounts::{PasswordServices, create, set_password};
+    use access_identity_account::app::hasher::{Hasher, HasherConfig};
+    use access_identity_account::domain::identifier::{Identifier, IdentifierKind};
+    use access_identity_account::domain::password::Argon2Params;
+    let e = Env::new(0x36, true).await;
+    let pg = PgAccounts(e.db.app.clone());
+    let id = Identifier::new(IdentifierKind::Username, "pat").unwrap();
+    let s = create(&pg, &e.realm(), &[id], &ADMIN).await.unwrap();
+    let mut t = TenantTx::begin(&e.db.app, e.tenant, e.realm).await.unwrap();
+    assert!(bind_subject_party(&mut t, &s, &PARTY).await.unwrap());
+    t.commit().await.unwrap();
+    let hasher = Hasher::new(HasherConfig::sized(
+        Argon2Params {
+            m_kib: 64,
+            t: 1,
+            p: 1,
+        },
+        2,
+        None,
+    ));
+    let services = PasswordServices {
+        hasher: &hasher,
+        ranges: &NoBreaches,
+        entropy: &SystemEntropy,
+    };
+    let first = set_password(
+        &pg,
+        &e.realm(),
+        &services,
+        s,
+        "correct horse battery",
+        &ADMIN,
+    )
+    .await
+    .unwrap();
+    set_password(
+        &pg,
+        &e.realm(),
+        &services,
+        s,
+        "another horse battery",
+        &ADMIN,
+    )
+    .await
+    .unwrap();
+    let plane = Plane::default();
+    let c = e.courier(&plane);
+    assert_eq!(answered(&c, 3).await.answered, 3);
+    let got = statements(&plane);
+    assert_eq!(got.len(), 3);
+    assert!(got.iter().all(|st| st.class == "authenticator_binding"
+        && st.subject == Id(PARTY)
+        && st.bound_instance.is_none()));
+    let ids: Vec<_> = plane
+        .got
+        .lock()
+        .unwrap()
+        .iter()
+        .map(|s| access_kernel::claim::claim_id(&s.claim))
+        .collect();
+    assert_eq!(
+        got[1].supersedes,
+        Some(ids[0]),
+        "the old password's line ends"
+    );
+    assert_eq!(
+        got[2].supersedes, None,
+        "the new password opens its own line"
+    );
+    let bodies: Vec<Vec<u8>> = plane
+        .got
+        .lock()
+        .unwrap()
+        .iter()
+        .map(|s| s.body.clone().unwrap())
+        .collect();
+    assert!(
+        bodies
+            .iter()
+            .all(|b| !b.windows(7).any(|w| w == b"$argon2"))
+    );
+    assert!(!bodies[0].windows(16).any(|w| w == first));
+}

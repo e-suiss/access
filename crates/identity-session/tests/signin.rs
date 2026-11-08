@@ -1377,17 +1377,15 @@ async fn sign_in_queues_its_claims_and_signals_never_gate() {
     other.aaguid = [0x22; 16];
     other.credential_id = vec![0xc2; 32];
     register_passkey(&e, &cookie, &mut other).await;
-    let orders = claim_orders(&e, |o| {
-        o.iter()
-            .filter(|x| x.class == "authenticator_binding")
-            .count()
-            >= 2
-    })
-    .await;
-    let bindings: Vec<_> = orders
-        .iter()
-        .filter(|o| o.class == "authenticator_binding")
-        .collect();
+    let passkey = |o: &&access_identity_account::domain::claims::ClaimOrder| {
+        matches!(
+            &o.content,
+            Content::Body { body: Body::AuthenticatorBinding(b), .. }
+                if b.kind == access_kernel::claim::body::AuthenticatorKind::Passkey
+        )
+    };
+    let orders = claim_orders(&e, |o| o.iter().filter(passkey).count() >= 2).await;
+    let bindings: Vec<_> = orders.iter().filter(passkey).collect();
     assert_eq!(bindings.len(), 2);
     assert!(
         bindings
