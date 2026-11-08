@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.org_domains\n                  SET claim_issued_at = CASE WHEN $4 THEN clock_timestamp() ELSE claim_issued_at END,\n                      claim_retracted_at = CASE WHEN $4 THEN claim_retracted_at ELSE clock_timestamp() END\n                WHERE tenant_id = $1 AND realm_id = $2 AND claim_id = $3",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Bool"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "a72f60bac3b9bf11fe9296145c3b1733fd97284ed4bf6cc5ee5ff568ec7597fa"
+}

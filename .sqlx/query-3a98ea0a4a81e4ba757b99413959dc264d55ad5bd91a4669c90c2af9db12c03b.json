@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.org_memberships\n                  SET grant_state = CASE WHEN $4::bytea IS NULL THEN 'denied' ELSE 'issued' END,\n                      grant_id = $4, grant_exercise = $5\n                WHERE tenant_id = $1 AND realm_id = $2 AND membership_id = $3\n                  AND ended_at IS NULL AND grant_state = 'pending'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Bytea",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "3a98ea0a4a81e4ba757b99413959dc264d55ad5bd91a4669c90c2af9db12c03b"
+}

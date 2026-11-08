@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.guardianships SET ended_at = clock_timestamp(), ended_by = 'majority'\n                WHERE tenant_id = $1 AND realm_id = $2 AND ended_at IS NULL\n                  AND majority_at <= clock_timestamp()\n               RETURNING guardianship_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "guardianship_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.guardianships",
+            "name": "guardianship_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "0d067e89a0c790480f6805900e81fb1e94f1ba94a176084d0845a5d8f683052c"
+}

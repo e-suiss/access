@@ -1,0 +1,36 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.org_memberships\n                 (tenant_id, realm_id, org_id, subject_id, source, owner, role_name, role_version,\n                  inviter_party, grant_state, cooling_until)\n               VALUES ($1, $2, $3, $4, $5, false, $6, $7, $8,\n                       CASE WHEN $6::text IS NULL THEN NULL ELSE 'pending' END,\n                       CASE WHEN $9::float8 IS NULL THEN NULL\n                            ELSE clock_timestamp() + make_interval(secs => $9) END)\n               RETURNING membership_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "membership_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.org_memberships",
+            "name": "membership_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Text",
+        "Int8",
+        "Bytea",
+        "Float8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "2d631dad92b21efe7d296abce16cdfd1eee476df6ff519daf159cc66266fa356"
+}

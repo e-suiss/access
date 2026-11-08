@@ -1,0 +1,33 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT count(*) AS \"sent!\", count(accepted_at) AS \"accepted!\"\n                 FROM access.org_invitations\n                WHERE tenant_id = $1 AND realm_id = $2 AND org_id = $3\n                  AND created_at > clock_timestamp() - make_interval(secs => $4)",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "sent!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "accepted!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Float8"
+      ]
+    },
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "849c4267994e5bb9a7405d5cd20de5e0f15af4adf7bdfa38ef3fbc7e1213c1ff"
+}

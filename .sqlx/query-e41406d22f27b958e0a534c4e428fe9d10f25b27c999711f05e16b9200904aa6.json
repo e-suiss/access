@@ -1,0 +1,32 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.parent_consents\n                 (tenant_id, realm_id, guardianship_id, purpose_digest, expires_at)\n               VALUES ($1, $2, $3, $4, clock_timestamp() + make_interval(secs => $5))\n               RETURNING consent_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "consent_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.parent_consents",
+            "name": "consent_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Bytea",
+        "Float8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "e41406d22f27b958e0a534c4e428fe9d10f25b27c999711f05e16b9200904aa6"
+}

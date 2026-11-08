@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT transfer_id FROM access.org_transfers\n                WHERE tenant_id = $1 AND realm_id = $2 AND org_id = $3\n                ORDER BY transfer_id DESC LIMIT 100",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "transfer_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.org_transfers",
+            "name": "transfer_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "48db6e2f2e58eef3ceb570ee47195340c2dcfc7abf77d585e87dc16762379f4b"
+}

@@ -1,0 +1,80 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT consent_id, guardianship_id, purpose_digest, decision,\n                      (extract(epoch FROM expires_at) * 1000)::bigint AS \"expires_ms!\",\n                      (decided_at IS NULL AND expires_at <= clock_timestamp()) AS \"expired!\"\n                 FROM access.parent_consents\n                WHERE tenant_id = $1 AND realm_id = $2 AND consent_id = $3",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "consent_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.parent_consents",
+            "name": "consent_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "guardianship_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.parent_consents",
+            "name": "guardianship_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "purpose_digest",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.parent_consents",
+            "name": "purpose_digest"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "decision",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.parent_consents",
+            "name": "decision"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "expires_ms!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 5,
+        "name": "expired!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      null,
+      null
+    ]
+  },
+  "hash": "dd4441eeb61a7ce308e1ab7fe6a70ba00024cc3d7274650d1222b857680205d9"
+}

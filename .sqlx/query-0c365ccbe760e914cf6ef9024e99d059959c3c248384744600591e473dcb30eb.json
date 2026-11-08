@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "INSERT INTO access.org_memberships\n                 (tenant_id, realm_id, org_id, subject_id, source, owner, role_name, role_version)\n               VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING membership_id",
+  "query": "INSERT INTO access.org_memberships\n                 (tenant_id, realm_id, org_id, subject_id, source, owner, role_name, role_version,\n                  grant_state)\n               VALUES ($1, $2, $3, $4, $5, $6, $7, $8,\n                       CASE WHEN $7::text IS NULL THEN NULL ELSE 'pending' END)\n               RETURNING membership_id",
   "describe": {
     "columns": [
       {
@@ -31,5 +31,5 @@
       false
     ]
   },
-  "hash": "fdb9340b2715486e8f5684af7776934257857fe8934575b4b8554a7e22614e39"
+  "hash": "0c365ccbe760e914cf6ef9024e99d059959c3c248384744600591e473dcb30eb"
 }

@@ -1,0 +1,152 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT membership_id, org_id, subject_id, source, owner, role_name, role_version,\n                      inviter_party, grant_state, grant_id,\n                      (extract(epoch FROM cooling_until) * 1000)::bigint AS cooling_ms,\n                      (extract(epoch FROM joined_at) * 1000)::bigint AS \"joined_ms!\"\n                 FROM access.org_memberships\n                WHERE tenant_id = $1 AND realm_id = $2 AND org_id = $3 AND ended_at IS NULL\n                ORDER BY membership_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "membership_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.org_memberships",
+            "name": "membership_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "org_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.org_memberships",
+            "name": "org_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "subject_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.org_memberships",
+            "name": "subject_id"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "source",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.org_memberships",
+            "name": "source"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "owner",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "access.org_memberships",
+            "name": "owner"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "role_name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.org_memberships",
+            "name": "role_name"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "role_version",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.org_memberships",
+            "name": "role_version"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "inviter_party",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.org_memberships",
+            "name": "inviter_party"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "grant_state",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.org_memberships",
+            "name": "grant_state"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "grant_id",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.org_memberships",
+            "name": "grant_id"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "cooling_ms",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 11,
+        "name": "joined_ms!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      null,
+      null
+    ]
+  },
+  "hash": "094882c52a9c01c6bdbcbb2edc95c353222e30f1182df6ad6197f211992f654b"
+}

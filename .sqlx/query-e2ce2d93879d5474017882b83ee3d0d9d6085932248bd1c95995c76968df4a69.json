@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.org_domains SET checked_at = clock_timestamp()\n                WHERE tenant_id = $1 AND realm_id = $2 AND claim_id = $3",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e2ce2d93879d5474017882b83ee3d0d9d6085932248bd1c95995c76968df4a69"
+}

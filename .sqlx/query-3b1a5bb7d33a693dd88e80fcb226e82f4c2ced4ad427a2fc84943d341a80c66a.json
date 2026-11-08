@@ -1,0 +1,85 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT draft_id, protocol, issuer, client_id, drafted_by,\n                      withdrawn_at IS NOT NULL AS \"withdrawn!\"\n                 FROM access.org_sso_drafts\n                WHERE tenant_id = $1 AND realm_id = $2 AND org_id = $3\n                ORDER BY draft_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "draft_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.org_sso_drafts",
+            "name": "draft_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "protocol",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.org_sso_drafts",
+            "name": "protocol"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "issuer",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.org_sso_drafts",
+            "name": "issuer"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "client_id",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.org_sso_drafts",
+            "name": "client_id"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "drafted_by",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.org_sso_drafts",
+            "name": "drafted_by"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "withdrawn!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      null
+    ]
+  },
+  "hash": "3b1a5bb7d33a693dd88e80fcb226e82f4c2ced4ad427a2fc84943d341a80c66a"
+}

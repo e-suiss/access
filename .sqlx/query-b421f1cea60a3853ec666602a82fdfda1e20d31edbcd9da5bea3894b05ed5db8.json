@@ -1,0 +1,97 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT guardianship_id, guardian_subject, ward_subject, basis, country, ended_by,\n                      (extract(epoch FROM majority_at) * 1000)::bigint AS \"majority_ms!\"\n                 FROM access.guardianships\n                WHERE tenant_id = $1 AND realm_id = $2 AND guardianship_id = $3",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "guardianship_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.guardianships",
+            "name": "guardianship_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "guardian_subject",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.guardianships",
+            "name": "guardian_subject"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "ward_subject",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.guardianships",
+            "name": "ward_subject"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "basis",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.guardianships",
+            "name": "basis"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "country",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.guardianships",
+            "name": "country"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "ended_by",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.guardianships",
+            "name": "ended_by"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "majority_ms!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      null
+    ]
+  },
+  "hash": "b421f1cea60a3853ec666602a82fdfda1e20d31edbcd9da5bea3894b05ed5db8"
+}

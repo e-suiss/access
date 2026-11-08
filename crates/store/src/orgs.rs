@@ -65,6 +65,14 @@ impl Source {
         }
     }
 
+    /// The source of a stored word.
+    ///
+    /// # Errors
+    /// [`StoreError::Corrupt`].
+    pub fn parse(w: &str) -> Result<Self, StoreError> {
+        Self::of(w)
+    }
+
     fn of(w: &str) -> Result<Self, StoreError> {
         match w {
             "founder" => Ok(Self::Founder),
@@ -176,7 +184,7 @@ pub struct DomainRow {
 }
 
 impl TenantTx {
-    fn org_scope(&self) -> Result<(Uuid, Uuid), StoreError> {
+    pub(crate) fn org_scope(&self) -> Result<(Uuid, Uuid), StoreError> {
         let realm = self.realm().ok_or(StoreError::Range)?;
         Ok((uuid(*self.tenant.as_bytes()), uuid(*realm.as_bytes())))
     }
@@ -359,8 +367,11 @@ impl TenantTx {
             .transpose()?;
         let id = sqlx::query_scalar!(
             r#"INSERT INTO access.org_memberships
-                 (tenant_id, realm_id, org_id, subject_id, source, owner, role_name, role_version)
-               VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING membership_id"#,
+                 (tenant_id, realm_id, org_id, subject_id, source, owner, role_name, role_version,
+                  grant_state)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8,
+                       CASE WHEN $7::text IS NULL THEN NULL ELSE 'pending' END)
+               RETURNING membership_id"#,
             tenant,
             realm,
             uuid(org),

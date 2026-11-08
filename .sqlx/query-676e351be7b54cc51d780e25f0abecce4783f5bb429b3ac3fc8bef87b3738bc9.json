@@ -1,0 +1,168 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT d.claim_id, d.org_id, o.party, d.domain, d.method, d.challenge_hash,\n                      (extract(epoch FROM d.verified_at) * 1000)::bigint AS verified_ms,\n                      (extract(epoch FROM d.reverify_by) * 1000)::bigint AS reverify_ms,\n                      d.mx_digest, d.rdap_digest,\n                      (extract(epoch FROM d.changed_at) * 1000)::bigint AS changed_ms,\n                      d.autojoin,\n                      (extract(epoch FROM d.contested_at) * 1000)::bigint AS contested_ms,\n                      (d.claim_issued_at IS NOT NULL AND (d.claim_retracted_at IS NULL\n                        OR d.claim_retracted_at < d.claim_issued_at)) AS \"claimed!\",\n                      (extract(epoch FROM d.checked_at) * 1000)::bigint AS checked_ms\n                 FROM access.org_domains d\n                 JOIN access.organizations o\n                   ON o.tenant_id = d.tenant_id AND o.realm_id = d.realm_id AND o.org_id = d.org_id\n                WHERE d.tenant_id = $1 AND d.realm_id = $2 AND d.released_at IS NULL\n                  AND o.ended_at IS NULL AND ($3::uuid IS NULL OR d.org_id = $3)\n                ORDER BY d.claim_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "claim_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.org_domains",
+            "name": "claim_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "org_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.org_domains",
+            "name": "org_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "party",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.organizations",
+            "name": "party"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "domain",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.org_domains",
+            "name": "domain"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "method",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.org_domains",
+            "name": "method"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "challenge_hash",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.org_domains",
+            "name": "challenge_hash"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "verified_ms",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 7,
+        "name": "reverify_ms",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 8,
+        "name": "mx_digest",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.org_domains",
+            "name": "mx_digest"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "rdap_digest",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.org_domains",
+            "name": "rdap_digest"
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "changed_ms",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 11,
+        "name": "autojoin",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "access.org_domains",
+            "name": "autojoin"
+          }
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "contested_ms",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 13,
+        "name": "claimed!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 14,
+        "name": "checked_ms",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      null,
+      null,
+      true,
+      true,
+      null,
+      false,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "676e351be7b54cc51d780e25f0abecce4783f5bb429b3ac3fc8bef87b3738bc9"
+}

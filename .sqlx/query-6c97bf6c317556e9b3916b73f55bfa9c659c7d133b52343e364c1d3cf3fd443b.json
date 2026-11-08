@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.org_domains d\n                  SET contested_at = coalesce(d.contested_at, clock_timestamp()), autojoin = false\n                WHERE d.tenant_id = $1 AND d.realm_id = $2 AND d.domain = $3\n                  AND d.released_at IS NULL\n                  AND (SELECT count(DISTINCT x.org_id) FROM access.org_domains x\n                        WHERE x.tenant_id = d.tenant_id AND x.realm_id = d.realm_id\n                          AND x.domain = d.domain AND x.released_at IS NULL) > 1\n                  AND (d.contested_at IS NULL OR d.autojoin)\n               RETURNING claim_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "claim_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.org_domains",
+            "name": "claim_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "6c97bf6c317556e9b3916b73f55bfa9c659c7d133b52343e364c1d3cf3fd443b"
+}
