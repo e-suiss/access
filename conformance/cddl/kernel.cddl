@@ -752,7 +752,7 @@ genesis-fields = {
   ? grants: [+ genesis-grant],
   ? acceptances: [+ acceptance-content],
   ? reserved: [+ action-ref],
-  ? policy: { ? ct3_delay_s: uint },
+  ? policy: { ? ct3_delay_s: uint, ? causal_binding: true },
   versions: spec-versions,
 }
 

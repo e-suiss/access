@@ -928,6 +928,39 @@ fn genesis_sets_the_ct3_time_lock() {
     assert!(genesis_effects(&DOMAIN, &fields).is_err());
 }
 
+// OP-152 m.7 (d), §7.9.7.4, E17
+#[test]
+fn genesis_declares_causal_binding_only_as_true() {
+    let mut fields = BTreeMap::new();
+    fields.insert(
+        "meta_anchor".to_string(),
+        map([("root", Some(root_value(&Root::Sole(ROOT))))]),
+    );
+    let declared = genesis_effects(&DOMAIN, &fields).unwrap();
+    assert!(
+        declared
+            .iter()
+            .all(|(k, _)| *k != policy_default_key(CAUSAL_BINDING))
+    );
+    fields.insert(
+        "policy".to_string(),
+        map([(CAUSAL_BINDING, Some(Value::Bool(true)))]),
+    );
+    let effects = genesis_effects(&DOMAIN, &fields).unwrap();
+    assert!(effects.contains(&(policy_default_key(CAUSAL_BINDING), Some(Value::Bool(true)))));
+    for wrong in [
+        Value::Bool(false),
+        Value::Unsigned(1),
+        Value::text("enforced"),
+    ] {
+        fields.insert("policy".to_string(), map([(CAUSAL_BINDING, Some(wrong))]));
+        assert_eq!(
+            genesis_effects(&DOMAIN, &fields).unwrap_err(),
+            MetaError::Malformed(ModelError::Shape)
+        );
+    }
+}
+
 // L0-META-5, L0-META-27
 #[test]
 fn acceptances_are_indexed_by_issuer() {

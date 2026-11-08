@@ -2080,22 +2080,36 @@ pub fn genesis_effects(
     if let Some(list) = take("acceptances") {
         out.extend(genesis_acceptances(domain, list)?);
     }
-    // OP-141 m.34 (d)
     if let Some(policy) = take("policy") {
-        let mut f = Fields::of(policy)?;
-        if let Some(delay) = f.opt("ct3_delay_s") {
-            out.push((
-                policy_default_key(CT3_DELAY),
-                Some(Value::Unsigned(uint(delay)?)),
-            ));
-        }
-        f.done()?;
+        out.extend(genesis_policy(policy)?);
     }
     let _ = take("reserved");
     let _ = take("versions");
     if known != fields.len() {
         return Err(MetaError::Malformed(ModelError::Unknown));
     }
+    Ok(out)
+}
+
+/// The policy defaults a Genesis sets: the CT3 time-lock (OP-141 m.34 (d)) and the
+/// causal-bound allowance declaration (OP-152 m.7 (d) E11), which is only ever `true`.
+fn genesis_policy(policy: &Value) -> Result<Vec<Effect>, MetaError> {
+    let mut out = Vec::new();
+    let mut f = Fields::of(policy)?;
+    if let Some(delay) = f.opt(CT3_DELAY) {
+        out.push((
+            policy_default_key(CT3_DELAY),
+            Some(Value::Unsigned(uint(delay)?)),
+        ));
+    }
+    match f.opt(CAUSAL_BINDING) {
+        None => {}
+        Some(Value::Bool(true)) => {
+            out.push((policy_default_key(CAUSAL_BINDING), Some(Value::Bool(true))));
+        }
+        Some(_) => return Err(MetaError::Malformed(ModelError::Shape)),
+    }
+    f.done()?;
     Ok(out)
 }
 
@@ -3286,6 +3300,11 @@ fn pinned(
 pub const CT3_DELAY: &str = "ct3_delay_s";
 /// The CT3 time-lock when Genesis sets none: 24 hours (§13.7.3, SEC26).
 pub const CT3_DELAY_DEFAULT_S: u64 = 86_400;
+
+/// The policy default declaring causal-bound allowances (§7.9.7.4, E17, OP-152 m.7 (d) E11):
+/// `true` when Genesis declares that an upstream `ExerciseID` backs at most one downstream
+/// Exercise in the domain. Absent, an upstream causal ref is audit only.
+pub const CAUSAL_BINDING: &str = "causal_binding";
 
 /// `dCBOR(["policy_default", name])`: a policy default Genesis sets (OP-141 m.34 (d)).
 #[must_use]
