@@ -41,6 +41,7 @@ time = { workspace = true, features = ["std"] }
 tokio = { workspace = true, features = ["macros", "net", "rt-multi-thread", "signal", "time"] }
 tower = { workspace = true, features = ["util"] }
 tracing = { workspace = true, features = ["std"] }
+zeroize = { workspace = true, features = ["alloc", "std"] }
 
 [dev-dependencies]
 access-authority-signer = { path = "../../crates/authority-signer" }
@@ -55,7 +56,6 @@ rcgen = { workspace = true, features = ["aws_lc_rs", "pem"] }
 suiss-crypto = { workspace = true, features = ["testing"] }
 suiss-ledger = { workspace = true }
 tower = { workspace = true, features = ["util"] }
-zeroize = { workspace = true, features = ["alloc", "std"] }
 
 [lints]
 workspace = true
