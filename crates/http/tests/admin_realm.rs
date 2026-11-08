@@ -263,7 +263,7 @@ async fn a_draft_returns_the_intent_and_changes_nothing() {
         assert_eq!(r.status(), StatusCode::BAD_REQUEST);
     }
     assert_eq!(h.position(), 0);
-    assert_eq!(h.proposals(), 0);
+    assert_eq!(h.commits(), 0);
 }
 
 // TN-61, TNI-6, CR-38, OP-151 m.3 (s): no resource schema of the contract has a credential

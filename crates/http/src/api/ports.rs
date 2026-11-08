@@ -7,7 +7,6 @@ use std::pin::Pin;
 
 use access_kernel::digest::Digest;
 use access_kernel::verify::cose::PublicKey;
-use axum::body::Bytes;
 
 use super::domain::SurfaceScope;
 use super::domain::caller::WriteCaller;
@@ -95,52 +94,6 @@ pub trait Surfaces: Send + Sync {
         kid: [u8; 32],
         at_ms: u64,
     ) -> impl Future<Output = Result<Option<PublicKey>, Unavailable>> + Send;
-}
-
-/// A write the management API compiles into an Exercise (TN-110): the surface, the operation,
-/// the caller's verified AIS and the request body.
-#[derive(Clone, Debug)]
-pub struct Proposal {
-    /// The surface.
-    pub scope: SurfaceScope,
-    /// The surface's governing domain.
-    pub domain: Digest,
-    /// The manifest operation.
-    pub operation: &'static str,
-    /// The caller and its statement.
-    pub caller: WriteCaller,
-    /// The body.
-    pub body: Bytes,
-}
-
-/// What the write path answered.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Proposed {
-    /// Committed: the Exercise record (TN-110, X14).
-    Committed {
-        /// The `ExerciseID`.
-        exercise_id: Digest,
-        /// Its position in the domain's log.
-        position: u64,
-    },
-    /// Decided and not allowed; nothing changed.
-    NotAllowed {
-        /// Position of the decision record, when recorded.
-        position: Option<u64>,
-    },
-    /// Refused before a decision; nothing changed.
-    Refused,
-}
-
-/// Compiles management writes into `idp.*` domain action or meta-action Exercises and submits
-/// them through ADP `commit` (TN-110, PI-4, INV-2): the only way a management write changes
-/// authority state or realm configuration.
-pub trait Proposals: Send + Sync {
-    /// Submits `proposal`.
-    fn propose(
-        &self,
-        proposal: Proposal,
-    ) -> impl Future<Output = Result<Proposed, Unavailable>> + Send;
 }
 
 /// What a request under an `Idempotency-Key` does (TN-126).
@@ -593,8 +546,6 @@ pub trait Env: Send + Sync + 'static {
     type Tokens: ReadTokens + 'static;
     /// Surface domains and Instance keys.
     type Surfaces: Surfaces + 'static;
-    /// The write path.
-    type Proposals: Proposals + 'static;
     /// Idempotency answers.
     type Idempotency: IdempotencyStore + 'static;
 
@@ -610,8 +561,6 @@ pub trait Env: Send + Sync + 'static {
     fn tokens(&self) -> &Self::Tokens;
     /// Surfaces.
     fn surfaces(&self) -> &Self::Surfaces;
-    /// The write path.
-    fn proposals(&self) -> &Self::Proposals;
     /// Idempotency answers.
     fn idempotency(&self) -> &Self::Idempotency;
     /// The management origin, `https://<host>[:port]`, from configuration only (§17.9.6).

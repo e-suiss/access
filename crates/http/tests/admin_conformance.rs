@@ -18,9 +18,9 @@ use access_kernel::json::b64url_encode;
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
 
-use admin::{Harness, ais, ais_with, platform_domain, proof, realm_domain, send, test_router};
+use admin::{Harness, ais, ais_with, platform_domain, proof, realm_domain, send};
 
-const PATH: &str = "/admin/v1/realms/acme/probes";
+const PATH: &str = "/admin/v1/realms/acme/groups/staff/retire";
 
 fn write(key: &str, ais: Option<&str>, token: Option<&str>) -> Request<Body> {
     let mut b = Request::post(PATH)
@@ -42,7 +42,7 @@ fn write(key: &str, ais: Option<&str>, token: Option<&str>) -> Request<Body> {
 #[tokio::test]
 async fn a_write_without_actor_proof_changes_nothing() {
     let h = Harness::new();
-    let router = test_router(&h);
+    let router = h.router();
     let nonce = [5; 16];
     let key = b64url_encode(&nonce);
     let reader = h.token(
@@ -88,7 +88,7 @@ async fn a_write_without_actor_proof_changes_nothing() {
             r.status()
         );
         assert_eq!(h.position(), 0, "case {i}");
-        assert_eq!(h.proposals(), 0, "case {i}");
+        assert_eq!(h.commits(), 0, "case {i}");
     }
     let (r, body) = send(
         &router,

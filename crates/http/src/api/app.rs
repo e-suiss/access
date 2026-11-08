@@ -11,7 +11,6 @@ use std::sync::Arc;
 use access_kernel::digest::Digest;
 use access_kernel::json::b64url_encode;
 use axum::Router;
-use axum::body::Bytes;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use serde_json::json;
@@ -23,9 +22,9 @@ pub use request_id::{
 use super::domain::SurfaceScope;
 use super::domain::caller::{ReadCaller, WriteCaller};
 use super::manifest::{Builder, MANIFEST, ManifestError, Route};
-use super::ports::{Entropy, Env, Proposal, Proposals, Proposed, Unavailable};
+use super::ports::{Entropy, Env, Unavailable};
 use crate::Limits;
-use crate::problem::{Code, codes};
+use crate::problem::codes;
 
 /// The management API over its ports.
 pub struct Api<E> {
@@ -99,38 +98,6 @@ impl Committed {
             "exercise_id": b64url_encode(&self.exercise_id.0),
             "position": self.position.to_string(),
         })
-    }
-}
-
-/// Compiles the guarded write into an Exercise through the [`super::ports::Proposals`] port and
-/// submits it (TN-110): the only way a management write changes anything. A refusal or a
-/// decision that does not allow it is the problem to answer with.
-///
-/// # Errors
-/// `exercise-not-allowed` (403), `exercise-refused` (400), `ais-required` (401) for a read
-/// caller, or `unavailable` (503).
-pub async fn submit<E: Env>(ctx: &Ctx<E>, body: Bytes) -> Result<Committed, &'static Code> {
-    let Caller::Write(caller) = &ctx.caller else {
-        return Err(&codes::AIS_REQUIRED);
-    };
-    let proposal = Proposal {
-        scope: ctx.scope.clone(),
-        domain: ctx.domain,
-        operation: ctx.row.operation_id,
-        caller: caller.clone(),
-        body,
-    };
-    match ctx.api.env.proposals().propose(proposal).await {
-        Ok(Proposed::Committed {
-            exercise_id,
-            position,
-        }) => Ok(Committed {
-            exercise_id,
-            position,
-        }),
-        Ok(Proposed::NotAllowed { .. }) => Err(&codes::EXERCISE_NOT_ALLOWED),
-        Ok(Proposed::Refused) => Err(&codes::EXERCISE_REFUSED),
-        Err(Unavailable) => Err(&codes::UNAVAILABLE),
     }
 }
 

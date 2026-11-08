@@ -14,8 +14,8 @@ use suiss_crypto::secret::Secret;
 use super::domain::SurfaceScope;
 use super::domain::rate::{BucketKey, Quota, Take, gcra};
 use super::ports::{
-    Begun, CursorSeal, IdempotencyStore, Presented, Proposal, Proposals, Proposed, RateLimiter,
-    ReadToken, ReadTokens, Surfaces, Unavailable,
+    Begun, CursorSeal, IdempotencyStore, Presented, RateLimiter, ReadToken, ReadTokens, Surfaces,
+    Unavailable,
 };
 
 /// Most buckets kept; past it the oldest-idle are forgotten, which only ever admits.
@@ -173,19 +173,6 @@ impl ReadTokens for NoReadTokens {
         _presented: Presented<'_>,
     ) -> impl Future<Output = Result<Option<ReadToken>, Unavailable>> + Send {
         std::future::ready(Ok(None))
-    }
-}
-
-/// No write is proposed: every write is `503` until the write path is wired (fail closed).
-#[derive(Clone, Copy, Debug, Default)]
-pub struct NoProposals;
-
-impl Proposals for NoProposals {
-    fn propose(
-        &self,
-        _proposal: Proposal,
-    ) -> impl Future<Output = Result<Proposed, Unavailable>> + Send {
-        std::future::ready(Err(Unavailable))
     }
 }
 

@@ -23,7 +23,6 @@ use axum::http::{Request, StatusCode};
 
 use admin::{
     Harness, MISSING, REALM, ROWS, ais, platform_domain, proof, realm_domain, send, surface,
-    test_router,
 };
 
 fn concrete(row: &Route, slug: &str) -> String {
@@ -249,14 +248,6 @@ async fn deny_matrix(h: &Harness, router: &axum::Router, rows: &[Route]) {
 async fn every_manifest_row_refuses_a_caller_without_its_permission() {
     let h = Harness::new();
     deny_matrix(&h, &h.router(), MANIFEST).await;
-}
-
-// TN-113, TN-110: the write half of the guard on write rows
-#[tokio::test]
-async fn write_rows_refuse_a_caller_without_its_ais() {
-    let h = Harness::new();
-    deny_matrix(&h, &test_router(&h), ROWS).await;
-    assert_eq!(h.proposals(), 0);
 }
 
 // TN-113: the router serves the manifest's rows and nothing else

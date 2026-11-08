@@ -21,10 +21,10 @@ use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use suiss_crypto::signer::{Signer, SoftSigner};
 
-use admin::{Harness, ais, platform_domain, proof, read, realm_domain, send, test_router};
+use admin::{Harness, ais, platform_domain, proof, read, realm_domain, send};
 
-const REALM_WRITE: &str = "/admin/v1/realms/acme/probes";
-const PLATFORM_WRITE: &str = "/admin/v1/platform/probes";
+const REALM_WRITE: &str = "/admin/v1/realms/acme/groups/staff/retire";
+const PLATFORM_WRITE: &str = "/admin/v1/platform/tenants";
 
 fn post(path: &str, key: &str, ais: &str, body: &'static str) -> Request<Body> {
     Request::post(path)
@@ -120,14 +120,14 @@ async fn writes_are_limited_per_actor_instance() {
         (PLATFORM_WRITE, platform_domain(), 20),
     ] {
         let h = Harness::new();
-        let router = test_router(&h);
+        let router = h.router();
         let actor = h.instance(domain);
         for i in 0..=burst {
             let nonce = [i; 16];
             let a = ais(&actor, domain, nonce, h.now());
             let (r, body) = send(&router, post(path, &b64url_encode(&nonce), &a, "{}")).await;
             if i < burst {
-                assert_eq!(r.status(), StatusCode::OK, "{path} {i}: {body}");
+                assert!(r.status().is_success(), "{path} {i}: {body}");
             } else {
                 assert_eq!(r.status(), StatusCode::TOO_MANY_REQUESTS, "{path}");
                 assert_eq!(body["code"], "rate-limited");
@@ -137,9 +137,8 @@ async fn writes_are_limited_per_actor_instance() {
         let nonce = [200; 16];
         let a = ais(&other, domain, nonce, h.now());
         let (r, _) = send(&router, post(path, &b64url_encode(&nonce), &a, "{}")).await;
-        assert_eq!(
-            r.status(),
-            StatusCode::OK,
+        assert!(
+            r.status().is_success(),
             "another Instance has its own budget"
         );
     }
@@ -149,7 +148,7 @@ async fn writes_are_limited_per_actor_instance() {
 #[tokio::test]
 async fn a_write_needs_its_nonce_as_idempotency_key() {
     let h = Harness::new();
-    let router = test_router(&h);
+    let router = h.router();
     let actor = h.instance(realm_domain());
     let nonce = [1; 16];
     let a = ais(&actor, realm_domain(), nonce, h.now());
@@ -173,7 +172,7 @@ async fn a_write_needs_its_nonce_as_idempotency_key() {
             (StatusCode::BAD_REQUEST, code)
         );
     }
-    assert_eq!(h.proposals(), 0);
+    assert_eq!(h.commits(), 0);
 }
 
 // TN-126, TI-8: the same key and request replay the first answer without a second Exercise;
@@ -181,7 +180,7 @@ async fn a_write_needs_its_nonce_as_idempotency_key() {
 #[tokio::test]
 async fn a_repeated_write_replays_and_a_changed_one_is_refused() {
     let h = Harness::new();
-    let router = test_router(&h);
+    let router = h.router();
     let actor = h.instance(realm_domain());
     let nonce = [3; 16];
     let key = b64url_encode(&nonce);
@@ -191,11 +190,11 @@ async fn a_repeated_write_replays_and_a_changed_one_is_refused() {
     let (again, body2) = send(&router, post(REALM_WRITE, &key, &a, "{\"x\":1}")).await;
     assert_eq!(again.status(), StatusCode::OK);
     assert_eq!(body1, body2);
-    assert_eq!(h.proposals(), 1, "no second Exercise");
+    assert_eq!(h.commits(), 1, "no second Exercise");
     let (changed, body) = send(&router, post(REALM_WRITE, &key, &a, "{\"x\":2}")).await;
     assert_eq!(changed.status(), StatusCode::UNPROCESSABLE_ENTITY);
     assert_eq!(body["code"], "idempotency-key-reused");
-    assert_eq!(h.proposals(), 1);
+    assert_eq!(h.commits(), 1);
 }
 
 // TN-126, SI-20: a validation failure (400) and a server failure (5xx) are not kept; the same
@@ -203,21 +202,29 @@ async fn a_repeated_write_replays_and_a_changed_one_is_refused() {
 #[tokio::test]
 async fn failures_are_not_kept() {
     let h = Harness::new();
-    let router = test_router(&h);
+    let router = h.router();
     let actor = h.instance(realm_domain());
-    for (body, status, n) in [
-        ("refuse", StatusCode::BAD_REQUEST, 6_u8),
-        ("fail", StatusCode::SERVICE_UNAVAILABLE, 4),
+    for (path, status, n) in [
+        (
+            "/admin/v1/realms/acme/groups/refuse/retire",
+            StatusCode::BAD_REQUEST,
+            6_u8,
+        ),
+        (
+            "/admin/v1/realms/acme/groups/fail/retire",
+            StatusCode::SERVICE_UNAVAILABLE,
+            4,
+        ),
     ] {
         let nonce = [n; 16];
         let key = b64url_encode(&nonce);
         let a = ais(&actor, realm_domain(), nonce, h.now());
-        let before = h.proposals();
+        let before = h.commits();
         for _ in 0..2 {
-            let (r, _) = send(&router, post(REALM_WRITE, &key, &a, body)).await;
+            let (r, _) = send(&router, post(path, &key, &a, "{}")).await;
             assert_eq!(r.status(), status);
         }
-        assert_eq!(h.proposals(), before + 2, "{body}: ran again");
+        assert_eq!(h.commits(), before + 2, "{path}: ran again");
     }
 }
 
@@ -225,7 +232,7 @@ async fn failures_are_not_kept() {
 #[tokio::test]
 async fn a_running_key_is_in_use() {
     let h = Harness::new();
-    let router = test_router(&h);
+    let router = h.router();
     let actor = h.instance(realm_domain());
     let nonce = [9; 16];
     let key = b64url_encode(&nonce);
@@ -244,7 +251,7 @@ async fn a_running_key_is_in_use() {
     let (r, body) = send(&router, post(REALM_WRITE, &key, &a, "{}")).await;
     assert_eq!(r.status(), StatusCode::CONFLICT);
     assert_eq!(body["code"], "idempotency-key-in-use");
-    assert_eq!(h.proposals(), 0);
+    assert_eq!(h.commits(), 0);
 }
 
 // TN-126, OP-151 m.3 (c): keys are scoped to the caller; another Instance's identical key is
@@ -252,7 +259,7 @@ async fn a_running_key_is_in_use() {
 #[tokio::test]
 async fn keys_are_scoped_to_the_caller() {
     let h = Harness::new();
-    let router = test_router(&h);
+    let router = h.router();
     let nonce = [4; 16];
     let key = b64url_encode(&nonce);
     for _ in 0..2 {
@@ -261,14 +268,14 @@ async fn keys_are_scoped_to_the_caller() {
         let (r, _) = send(&router, post(REALM_WRITE, &key, &a, "{}")).await;
         assert_eq!(r.status(), StatusCode::OK);
     }
-    assert_eq!(h.proposals(), 2);
+    assert_eq!(h.commits(), 2);
 }
 
 // TN-130: the body may carry the AIS instead of the header, but not both
 #[tokio::test]
 async fn the_ais_may_travel_in_the_body() {
     let h = Harness::new();
-    let router = test_router(&h);
+    let router = h.router();
     let actor: SoftSigner = h.instance(realm_domain());
     let nonce = [6; 16];
     let a = ais(&actor, realm_domain(), nonce, h.now());

@@ -13,7 +13,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use access_crypto::Secret;
 use access_http::Limits;
 use access_http::api::Api;
-use access_http::api::adapters::{MemoryLimiter, NoProposals, SivCursors};
+use access_http::api::adapters::{MemoryLimiter, SivCursors};
 use access_http::api::domain::idempotency::{LEASE_MS, RETENTION_MS};
 use access_http::api::ports::{
     Begun, Clock, CursorSeal, Entropy, Env, IdempotencyStore, PlatformResources, RateLimiter,
@@ -258,7 +258,6 @@ pub(crate) fn router<P: RealmPlane>(
 impl<P: RealmPlane> Env for ServerApi<P> {
     type Tokens = tokens::ManagementTokens<P>;
     type Surfaces = realm::Realms<P>;
-    type Proposals = NoProposals;
     type Idempotency = PgIdempotency;
 
     fn clock(&self) -> &dyn Clock {
@@ -283,10 +282,6 @@ impl<P: RealmPlane> Env for ServerApi<P> {
 
     fn surfaces(&self) -> &realm::Realms<P> {
         &self.realms
-    }
-
-    fn proposals(&self) -> &NoProposals {
-        &NoProposals
     }
 
     fn idempotency(&self) -> &PgIdempotency {

@@ -18,18 +18,15 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use access_http::Limits;
 use access_http::api::Api;
 use access_http::api::adapters::{MemoryIdempotency, MemoryLimiter, SivCursors};
-use access_http::api::app::{Ctx, router_for, submit};
-use access_http::api::domain::Surface;
+use access_http::api::app::Ctx;
 use access_http::api::domain::SurfaceScope;
 use access_http::api::domain::caller::WriteCaller;
-use access_http::api::manifest::{
-    Access, Answer, PLATFORM_ROOT, REALM_ROOT, Route, Verb, Visibility,
-};
+use access_http::api::manifest::{PLATFORM_ROOT, REALM_ROOT, Route};
 use access_http::api::ports::{
     Clock, CursorSeal, Draft, Drafted, Entropy, Env, Item, JobItem, JobView, Jobs, Listing, NewJob,
-    Pending, PlatformKind, PlatformQuery, PlatformResources, PlatformWrite, Presented, Proposal,
-    Proposals, Proposed, RateLimiter, ReadToken, ReadTokens, RealmResources, ResourceKind,
-    ResourceQuery, ResourceWrite, Surfaces, Unavailable, Written,
+    Pending, PlatformKind, PlatformQuery, PlatformResources, PlatformWrite, Presented, RateLimiter,
+    ReadToken, ReadTokens, RealmResources, ResourceKind, ResourceQuery, ResourceWrite, Surfaces,
+    Unavailable, Written,
 };
 use access_kernel::ais::{CONTENT_TYPE, Statement};
 use access_kernel::codec::Canonical;
@@ -43,7 +40,6 @@ use access_kernel::verify::key_scope::thumbprint;
 use axum::Extension;
 use axum::Router;
 use axum::body::Body;
-use axum::body::Bytes;
 use axum::http::StatusCode;
 use axum::http::{Request, Response};
 use axum::response::IntoResponse;
@@ -153,27 +149,6 @@ impl Surfaces for Shared {
     }
 }
 
-impl Proposals for Shared {
-    fn propose(
-        &self,
-        proposal: Proposal,
-    ) -> impl Future<Output = Result<Proposed, Unavailable>> + Send {
-        let ledger = self.0.ledger.clone();
-        ledger.calls.fetch_add(1, Ordering::SeqCst);
-        if proposal.body.as_ref() == b"refuse" {
-            return std::future::ready(Ok(Proposed::Refused));
-        }
-        if proposal.body.as_ref() == b"fail" {
-            return std::future::ready(Err(Unavailable));
-        }
-        let position = ledger.position.fetch_add(1, Ordering::SeqCst) + 1;
-        std::future::ready(Ok(Proposed::Committed {
-            exercise_id: proposal.caller.statement.intent,
-            position,
-        }))
-    }
-}
-
 impl access_http::api::ports::IdempotencyStore for Shared {
     fn begin(
         &self,
@@ -196,6 +171,12 @@ impl access_http::api::ports::IdempotencyStore for Shared {
 
 /// The key a fake realm resource is hidden behind: it belongs to another realm (TN-113).
 pub const HIDDEN_KEY: &str = "elsewhere";
+
+/// The key a fake realm write is refused under, before a decision.
+pub const REFUSED_KEY: &str = "refuse";
+
+/// The key a fake realm write fails under: the write path is unavailable.
+pub const FAILING_KEY: &str = "fail";
 
 fn fake_item(kind: ResourceKind, key: &str, version: u64) -> Item {
     let body = match kind {
@@ -286,6 +267,14 @@ impl RealmResources for Shared {
             if w.key.as_deref() == Some(HIDDEN_KEY) {
                 return Ok(Written::Rejected(&access_http::problem::codes::NOT_FOUND));
             }
+            if w.key.as_deref() == Some(REFUSED_KEY) {
+                return Ok(Written::Rejected(
+                    &access_http::problem::codes::EXERCISE_REFUSED,
+                ));
+            }
+            if w.key.as_deref() == Some(FAILING_KEY) {
+                return Err(Unavailable);
+            }
             let position = ledger.position.fetch_add(1, Ordering::SeqCst) + 1;
             let kind = access_http::api::realm::spec(w.operation).unwrap().0;
             Ok(Written::Committed {
@@ -367,7 +356,6 @@ pub struct TestEnv(pub Shared);
 impl Env for TestEnv {
     type Tokens = Shared;
     type Surfaces = Shared;
-    type Proposals = Shared;
     type Idempotency = Shared;
 
     fn clock(&self) -> &dyn Clock {
@@ -386,9 +374,6 @@ impl Env for TestEnv {
         &self.0
     }
     fn surfaces(&self) -> &Shared {
-        &self.0
-    }
-    fn proposals(&self) -> &Shared {
         &self.0
     }
     fn idempotency(&self) -> &Shared {
@@ -584,7 +569,8 @@ impl Harness {
         self.fake.ledger.position.load(Ordering::SeqCst)
     }
 
-    pub fn proposals(&self) -> u64 {
+    /// The writes the realm and platform resources were asked to commit.
+    pub fn commits(&self) -> u64 {
         self.fake.ledger.calls.load(Ordering::SeqCst)
     }
 }
@@ -657,55 +643,9 @@ pub async fn send(router: &Router, request: Request<Body>) -> (Response<Body>, s
     (Response::from_parts(parts, Body::empty()), json)
 }
 
-/// A realm-admin write and a platform-admin write, for the guard's write half.
-pub const REALM_PROBE: Route = Route {
-    verb: Verb::Post,
-    path: "/admin/v1/realms/{slug}/probes",
-    surface: Surface::Realm,
-    access: Access::Write,
-    visibility: Visibility::Hidden,
-    operation_id: "createRealmProbe",
-    summary: "Test write.",
-    query: &[],
-    answer: Answer::Replay,
-    lifecycle: None,
-};
+pub static ROWS: &[Route] = &[PLATFORM_ROOT, REALM_ROOT];
 
-pub const PLATFORM_PROBE: Route = Route {
-    verb: Verb::Post,
-    path: "/admin/v1/platform/probes",
-    surface: Surface::Platform,
-    access: Access::Write,
-    visibility: Visibility::Forbidden,
-    operation_id: "createPlatformProbe",
-    summary: "Test write.",
-    query: &[],
-    answer: Answer::Replay,
-    lifecycle: None,
-};
-
-pub static ROWS: &[Route] = &[PLATFORM_ROOT, REALM_ROOT, REALM_PROBE, PLATFORM_PROBE];
-
-pub async fn probe(
-    Extension(ctx): Extension<Ctx<TestEnv>>,
-    body: Bytes,
-) -> axum::response::Response {
-    match submit(&ctx, body).await {
-        Ok(c) => axum::Json(c.json()).into_response(),
-        Err(code) => code.problem().into_response(),
-    }
-}
-
+#[allow(clippy::unused_async, reason = "an axum handler")]
 pub async fn surface(Extension(_ctx): Extension<Ctx<TestEnv>>) -> axum::response::Response {
     StatusCode::OK.into_response()
-}
-
-pub fn test_router(h: &Harness) -> axum::Router {
-    router_for(&h.api, ROWS, |b| {
-        b.handle("getPlatformSurface", surface)?
-            .handle("getRealmSurface", surface)?
-            .handle("createRealmProbe", probe)?
-            .handle("createPlatformProbe", probe)
-    })
-    .unwrap()
 }
