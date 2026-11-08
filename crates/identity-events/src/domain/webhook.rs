@@ -20,7 +20,7 @@ use access_kernel::model::Window;
 use suiss_crypto::dcbor::Value as Cbor;
 
 use crate::domain::Invalid;
-use crate::domain::catalog::IdentityKind;
+use crate::domain::catalog::{IdentityKind, subscribable};
 
 /// The first retry waits this long, ms (OP-151 m.3 (i)).
 pub const FIRST_RETRY_MS: u64 = 60_000;
@@ -75,7 +75,9 @@ pub fn event_names(names: &[String]) -> Result<Vec<String>, Invalid> {
     out.dedup();
     if out.is_empty()
         || out.len() > MAX_EVENTS
-        || out.iter().any(|n| IdentityKind::of_name(n).is_none())
+        || out
+            .iter()
+            .any(|n| IdentityKind::of_name(n).is_none() || !subscribable(n))
     {
         return Err(Invalid("events"));
     }
@@ -283,6 +285,15 @@ mod tests {
             .unwrap(),
             ok.events
         );
+    }
+
+    // TN-136, §12.4.2: an event nothing produces cannot be subscribed to
+    #[test]
+    fn unproduced_events_are_not_subscribable() {
+        for name in crate::domain::catalog::UNPRODUCED {
+            assert!(event_names(&[String::from(name)]).is_err(), "{name}");
+        }
+        assert!(event_names(&[String::from("account.suspended")]).is_ok());
     }
 
     // EI-25: each change names its action and binds its own digest

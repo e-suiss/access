@@ -58,6 +58,28 @@ pub fn urn(name: &str) -> String {
     format!("{URN_PREFIX}{name}")
 }
 
+/// Catalog events nothing produces yet: organizations and their memberships arrive with the
+/// organization model, preferences, documents and agent suspension with their own domains. A
+/// subscription cannot name them until a producer exists (TN-136, §12.4.2).
+pub const UNPRODUCED: [&str; 5] = [
+    "membership.added",
+    "membership.removed",
+    "preference.changed",
+    "document.accepted",
+    "agent.suspended",
+];
+
+/// Whether a webhook or stream may subscribe to `name`: a catalog event with a producer.
+#[must_use]
+pub fn subscribable(name: &str) -> bool {
+    NAMES.contains(&name) && !UNPRODUCED.contains(&name)
+}
+
+/// The event names a webhook or stream may subscribe to.
+pub fn subscribable_names() -> impl Iterator<Item = &'static str> {
+    NAMES.into_iter().filter(|n| subscribable(n))
+}
+
 /// The event name of a type URN in the catalog.
 #[must_use]
 pub fn name_of(urn: &str) -> Option<&'static str> {

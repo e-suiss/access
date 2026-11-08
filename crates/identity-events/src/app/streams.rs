@@ -228,9 +228,8 @@ impl<K: Sealer, R: Random> Streams<K, R> {
             channel: Channel::SsfPush,
             endpoint: Some(String::from(endpoint)),
             audience: String::from(client_id),
-            events: crate::domain::catalog::NAMES
-                .iter()
-                .map(|n| crate::domain::catalog::urn(n))
+            events: crate::domain::catalog::subscribable_names()
+                .map(crate::domain::catalog::urn)
                 .collect(),
             description: Some(String::from("platform pairing")),
             profile: crate::domain::mapping::Profile::Access,

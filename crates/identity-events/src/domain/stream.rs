@@ -4,7 +4,7 @@
 use serde_json::{Map, Value, json};
 
 use crate::domain::Invalid;
-use crate::domain::catalog::{NAMES, name_of, urn, uuid};
+use crate::domain::catalog::{name_of, subscribable, subscribable_names, urn, uuid};
 use crate::domain::mapping::{Profile, signal_of, signal_uris};
 
 /// RFC 8935 push delivery method.
@@ -133,7 +133,7 @@ pub fn requested(v: Option<&Value>) -> Result<Vec<String>, Invalid> {
     let mut out = Vec::with_capacity(list.len());
     for e in list {
         let u = e.as_str().ok_or(Invalid("events_requested"))?;
-        if name_of(u).is_none() && signal_of(u).is_none() {
+        if !name_of(u).is_some_and(subscribable) && signal_of(u).is_none() {
             return Err(Invalid("unsupported-event"));
         }
         out.push(String::from(u));
@@ -230,7 +230,7 @@ pub fn stream_json(
 /// Every event type the transmitter supports: the Access URNs, then the CAEP and RISC URIs.
 #[must_use]
 pub fn supported() -> Vec<String> {
-    let mut out: Vec<String> = NAMES.iter().map(|n| urn(n)).collect();
+    let mut out: Vec<String> = subscribable_names().map(urn).collect();
     out.extend(signal_uris());
     out
 }

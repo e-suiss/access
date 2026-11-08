@@ -236,7 +236,7 @@ async fn a_hook_and_a_webhook_registered_through_rest_then_fire() {
         Op::RegisterWebhook,
         None,
         &json!({"webhook_id": webhook_id, "url": "https://sync.shop.example/events",
-                "events": ["agent.suspended"]}),
+                "events": ["login.failed_surge"]}),
         &w.ids,
     )
     .unwrap();
@@ -247,7 +247,7 @@ async fn a_hook_and_a_webhook_registered_through_rest_then_fire() {
         .read(at.0, at.1, Kind::Webhooks, Some(&webhook_id), None, 1)
         .await
         .unwrap();
-    assert_eq!(webhooks.items[0].0["events"], json!(["agent.suspended"]));
+    assert_eq!(webhooks.items[0].0["events"], json!(["login.failed_surge"]));
 
     let mut t = TenantTx::begin(&w.db.app, at.0, at.1).await.unwrap();
     let now = access_store::authority::server_time(&w.db.app)
@@ -255,7 +255,7 @@ async fn a_hook_and_a_webhook_registered_through_rest_then_fire() {
         .unwrap();
     emit(
         &mut t,
-        &IdentityEvent::agent_suspended([0x31; 32], at.1.as_bytes(), &[0x41; 16], now),
+        &IdentityEvent::login_failed_surge([0x31; 32], at.1.as_bytes(), 50, 60_000, now),
     )
     .await
     .unwrap();
@@ -284,7 +284,10 @@ async fn a_hook_and_a_webhook_registered_through_rest_then_fire() {
     let body = receiver.0.lock().unwrap()[0].1.clone();
     let event: Json = serde_json::from_slice(&body).unwrap();
     assert!(
-        event["type"].as_str().unwrap().ends_with("agent.suspended"),
+        event["type"]
+            .as_str()
+            .unwrap()
+            .ends_with("login.failed_surge"),
         "{event}"
     );
 
