@@ -483,6 +483,62 @@ pub async fn age_recovery(db: &TestDb, attempt: [u8; 16]) -> Result<(), TestDbEr
     .await
 }
 
+/// Moves every record time of `domain` and its head `ms` into the past, as time would: a CT3
+/// time-lock counted from an opening and the 24 hours of a new Instance (SEC18) then run out.
+/// The leaves keep their hashes; only the times readers count from move.
+///
+/// # Errors
+/// [`TestDbError`].
+pub async fn age_authority(db: &TestDb, domain: [u8; 32], ms: u64) -> Result<(), TestDbError> {
+    let ms = i64::try_from(ms).unwrap_or(i64::MAX);
+    let mut t = db.owner.begin().await.at("begin owner")?;
+    let hex = domain.iter().fold(String::new(), |mut s, b| {
+        use std::fmt::Write as _;
+        let _ = write!(s, "{b:02x}");
+        s
+    });
+    sqlx::query("SELECT set_config('app.domain_id', $1, true)")
+        .bind(hex)
+        .execute(&mut *t)
+        .await
+        .at("domain scope")?;
+    for statement in [
+        "ALTER TABLE access.authority_log DISABLE TRIGGER append_only_row",
+        "ALTER TABLE access.authority_log_default DISABLE TRIGGER append_only_row",
+    ] {
+        sqlx::query(statement)
+            .execute(&mut *t)
+            .await
+            .at("lift trigger")?;
+    }
+    for statement in [
+        "UPDATE access.authority_log SET recorded_at = GREATEST(recorded_at - $2, 0) \
+         WHERE domain_id = $1",
+        "UPDATE access.domain_head SET recorded_at = GREATEST(recorded_at - $2, 0) \
+         WHERE domain_id = $1",
+    ] {
+        let done = sqlx::query(statement)
+            .bind(domain.as_slice())
+            .bind(ms)
+            .execute(&mut *t)
+            .await
+            .at("age authority")?;
+        if done.rows_affected() == 0 {
+            return Err(TestDbError::Db("age authority", sqlx::Error::RowNotFound));
+        }
+    }
+    for statement in [
+        "ALTER TABLE access.authority_log ENABLE TRIGGER append_only_row",
+        "ALTER TABLE access.authority_log_default ENABLE TRIGGER append_only_row",
+    ] {
+        sqlx::query(statement)
+            .execute(&mut *t)
+            .await
+            .at("restore trigger")?;
+    }
+    t.commit().await.at("commit")
+}
+
 /// Tries to rewrite every recovery step as the schema owner, triggers in force: the record only
 /// grows, so this fails (OP-73, TN-54).
 ///

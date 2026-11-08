@@ -27,13 +27,15 @@ use crate::ports::KeyFactory;
 pub const LABEL: &str = "claim-issuer";
 
 /// The classes the identity issuer signs (§10.1.2, §10.1.5): authentication results, authenticator
-/// and identity bindings, account status and device posture. Regime classes are never its own.
-pub const CLASSES: [&str; 5] = [
+/// and identity bindings, account status, device posture and the result of a recovery (OP-153
+/// m.3 (c)). Regime classes are never its own.
+pub const CLASSES: [&str; 6] = [
     "authentication",
     "authenticator_binding",
     "account_status",
     "posture_device",
     "identity_binding_person",
+    "recovery_result",
 ];
 
 /// The prefix of the identity plane's risk signal classes (§7.6 TN-O4, TN-63): signals, never

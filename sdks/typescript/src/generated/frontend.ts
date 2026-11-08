@@ -55,6 +55,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/me/instances/recover": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Forwards the successor key's own instance_recover after a recovery's rebind (OP-153 m.3 (c), INV-13): the session is in the grace period that followed it and the realm issuer's recovery_result, which names the key, is in the governing domain. The predecessor is the user's device Instance; its Mandates stay behind. */
+        post: operations["recoverInstance"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/me/instances/{instance}": {
         parameters: {
             query?: never;
@@ -257,6 +274,24 @@ export interface components {
              */
             valid_until: string;
             /** @description AIS (COSE_Sign1) by one of the user's own Instances over the access/instance_terminate intent, mode commit, capacity own, pep "access-identity". */
+            ais: string;
+        };
+        InstanceRecovery: {
+            /** @description The successor key as a COSE_Key: OKP Ed25519 or EC2 P-256, the one the recovery named. */
+            key: string;
+            /** @description Exercise nonce, 16 to 64 bytes. */
+            nonce: string;
+            /**
+             * Format: date-time
+             * @description Intent validity start, millisecond precision at most.
+             */
+            valid_from: string;
+            /**
+             * Format: date-time
+             * @description Intent validity end, millisecond precision at most.
+             */
+            valid_until: string;
+            /** @description AIS (COSE_Sign1) by the successor key over access/instance_recover on access.party:[hex(party)], basis the bootstrap Grant, mode commit, capacity own, pep "access-identity". */
             ais: string;
         };
         InstanceTerminated: {
@@ -553,6 +588,75 @@ export interface operations {
                 };
             };
             /** @description The session already binds an active device Instance (instance-exists; INV-13: one per session and realm). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Temporarily unavailable. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    recoverInstance: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InstanceRecovery"];
+            };
+        };
+        responses: {
+            /** @description The successor Instance, its kid and Party. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InstanceRegistered"];
+                };
+            };
+            /** @description Recorded behind the domain's time-lock; send it again after `after`. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description invalid-request. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No live session (session-required). */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description recovery-result-pending (retry), recovery-no-instance, recovery-key-not-named (the recovery named another key) or instance-not-recovered. */
             409: {
                 headers: {
                     [name: string]: unknown;

@@ -421,3 +421,125 @@ async fn an_idp_write_before_the_upgrade_answers_catalog_upgrade_required() {
         "{refused:?}"
     );
 }
+
+/// Opens Genesis as it stood before recovery joined it: the bootstrap Grant without
+/// `instance_recover` and the realm issuer's Acceptance without `recovery_result`; the CT3
+/// time-lock is zero.
+struct PreRecovery<'a> {
+    plane: &'a TestPlane,
+    domains: &'a TestDomains,
+}
+
+fn without_recovery(v: &mut Value) {
+    let Value::Map(entries) = v else {
+        return;
+    };
+    for (k, val) in entries.iter_mut() {
+        match (k, val) {
+            (Value::Text(t), val @ Value::Map(_)) if t == "authority" => {
+                let mut a = access_authority_core::genesis::bootstrap_authority();
+                a.authority
+                    .actions
+                    .exact
+                    .remove(&access_kernel::meta::core_action("instance_recover"));
+                *val = access_kernel::codec::Canonical::to_value(&a);
+            }
+            (Value::Text(t), Value::Array(classes)) if t == "classes" => {
+                classes.retain(|c| *c != Value::text("recovery_result"));
+            }
+            _ => {}
+        }
+    }
+}
+
+impl Governance for PreRecovery<'_> {
+    async fn open(&self, mut order: GenesisOrder) -> Result<GenesisOpened, Unavailable> {
+        order.ct3_delay_s = Some(0);
+        let mut fields = access_authority_core::genesis::realm(&order, &mut OsSalts)
+            .map_err(|e| Unavailable(e.to_string()))?;
+        for name in ["grants", "acceptances"] {
+            let Value::Array(items) = &mut fields.get_mut(name).unwrap().value else {
+                panic!("{name}");
+            };
+            items.iter_mut().for_each(without_recovery);
+            items.sort_by_key(|v| {
+                suiss_crypto::dcbor::encode(v, suiss_crypto::dcbor::Limits::CEILING).unwrap()
+            });
+        }
+        let now = Instances::now(self.plane).await?;
+        let domain = self
+            .domains
+            .create(order.tenant, fields, now)
+            .await
+            .unwrap();
+        Ok(GenesisOpened { domain })
+    }
+}
+
+impl Instances for PreRecovery<'_> {
+    async fn register(&self, r: Registration) -> Result<RegistrationVerdict, Unavailable> {
+        Instances::register(self.plane, r).await
+    }
+
+    async fn now(&self) -> Result<u64, Unavailable> {
+        Instances::now(self.plane).await
+    }
+}
+
+// OP-153 m.3 (c), m.13 (e), OP-152 m.8 (a)
+#[tokio::test]
+async fn a_domain_opened_before_recovery_takes_it_once_its_root_signs_it() {
+    let w = World::new("recovery-upgrade").await;
+    let governance = PreRecovery {
+        plane: &w.plane,
+        domains: &w.domains,
+    };
+    let domain = realm_with(&w, &governance, "elder").await.1.domain;
+    let summary = w.run(&old_plan("elder")).await;
+    let mut steps: Vec<_> = upgraded(&summary, "elder")
+        .iter()
+        .map(|c| (c.namespace.as_str(), c.state))
+        .collect();
+    steps.sort_unstable();
+    assert_eq!(
+        steps,
+        vec![
+            ("access.bootstrap", "accepted"),
+            ("access.recovery_result", "accepted")
+        ]
+    );
+    let grant = access_kernel::meta::object_id(
+        &domain,
+        access_kernel::meta::kind::GRANT,
+        access_authority_core::genesis::BOOTSTRAP_GRANT,
+    );
+    let rows = access_store::authority::state_of(
+        &w.db.app,
+        &DomainId::from_bytes(domain.0),
+        &[access_kernel::meta::key(
+            access_kernel::meta::kind::GRANT,
+            &grant,
+        )],
+    )
+    .await
+    .unwrap();
+    let state = <access_kernel::meta::GrantState as access_kernel::codec::Canonical>::from_value(
+        &suiss_crypto::dcbor::decode(
+            rows[0].value.as_deref().unwrap(),
+            suiss_crypto::dcbor::Limits::CEILING,
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert!(
+        state
+            .content
+            .authority
+            .authority
+            .actions
+            .exact
+            .contains(&access_kernel::meta::core_action("instance_recover"))
+    );
+    let again = w.run(&old_plan("elder")).await;
+    assert_eq!(upgraded(&again, "elder"), []);
+}

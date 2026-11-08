@@ -299,6 +299,54 @@ pub struct Termination {
     pub pep: String,
 }
 
+/// The subcode of the recorded DENY of a self-signed `instance_recover` no live
+/// `recovery_result` names (OP-153 m.3 (c)).
+pub const RECOVERY_UNBOUND: &str = "actor-binding";
+
+/// A self-signed `instance_recover` (OP-153 m.3 (c), INV-13): the successor key signs it under
+/// the Genesis bootstrap Grant, as `instance_create`; the authority plane takes the actor from
+/// the predecessor's Party and accepts it only while the realm issuer's `recovery_result`
+/// names the key.
+#[derive(Clone, Debug)]
+pub struct Recovery {
+    /// The governing domain.
+    pub domain: Digest,
+    /// The recovered Party.
+    pub party: Id,
+    /// The Instance it succeeds.
+    pub predecessor: Id,
+    /// The successor key.
+    pub key: PublicKey,
+    /// The Exercise nonce.
+    pub nonce: Vec<u8>,
+    /// The intent's validity.
+    pub validity: Window,
+    /// The AIS by the successor key over the intent [`self_signed_intent`] forms.
+    pub ais: Vec<u8>,
+    /// The identity plane as PEP.
+    pub pep: String,
+}
+
+impl Recovery {
+    /// The meta payload.
+    #[must_use]
+    pub fn payload(&self) -> Payload {
+        Payload::InstanceRecover {
+            instance: self.predecessor,
+            key: self.key.clone(),
+        }
+    }
+
+    /// The successor `instance_recover` opens: the first object of its Exercise.
+    ///
+    /// `None` when the nonce cannot be encoded.
+    #[must_use]
+    pub fn successor(&self) -> Option<Id> {
+        let exercise = meta::exercise_id(&self.domain, &self.nonce).ok()?;
+        Some(meta::object_id(&exercise, kind::INSTANCE, 0))
+    }
+}
+
 /// The meta payload of a termination.
 #[must_use]
 pub const fn terminate_payload(instance: Id) -> Payload {

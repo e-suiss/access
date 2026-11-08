@@ -1195,6 +1195,10 @@ where
     ///
     /// # Errors
     /// [`BootstrapError`]; what was done stays.
+    #[expect(
+        clippy::too_many_lines,
+        reason = "one realm loop, its steps in the order they run"
+    )]
     pub(crate) async fn run(&self, plan: &Plan) -> Result<Summary, BootstrapError> {
         let ids = cell_ids(self.app, self.hsm).await?;
         let root = root_key(self.hsm)?;
@@ -1241,7 +1245,12 @@ where
                 .await?;
             self.onboard(tenant, realm, domain, &root, party).await?;
             // OP-151 m.18 (g)
-            let upgraded = self.upgrade_catalog(domain, &root, party).await?;
+            let mut upgraded = self.upgrade_catalog(domain, &root, party).await?;
+            // OP-153 m.3 (c), m.13 (e)
+            upgraded.extend(
+                self.upgrade_recovery((tenant, realm), domain, &root, party)
+                    .await?,
+            );
             // OP-151 m.12 (b)
             if let Some(origin) = self.console {
                 self.console_client(&admin, (tenant, realm), domain, &root, origin)

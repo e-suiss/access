@@ -345,4 +345,23 @@ pub trait RecoveryTx: SessionTx {
         &mut self,
         subject: [u8; 16],
     ) -> impl Future<Output = Result<u64, SessionError>> + Send;
+    /// The Party the subject is bound to in the realm's governing domain, if any (OP-153 m.3
+    /// (c)).
+    fn subject_party(
+        &mut self,
+        subject: [u8; 16],
+    ) -> impl Future<Output = Result<Option<[u8; 16]>, SessionError>> + Send;
+    /// The Instance of the subject's first active device key, if any.
+    fn subject_instance(
+        &mut self,
+        subject: [u8; 16],
+    ) -> impl Future<Output = Result<Option<[u8; 16]>, SessionError>> + Send;
+    /// The newest Claim the realm issuer issued in `line` about the subject in `domain` and
+    /// that Claim Ingest did not reject.
+    fn issued_in_line(
+        &mut self,
+        subject: [u8; 16],
+        domain: [u8; 32],
+        line: [u8; 32],
+    ) -> impl Future<Output = Result<Option<[u8; 16]>, SessionError>> + Send;
 }

@@ -2377,3 +2377,4 @@ mod experience;
 mod management;
 mod privacy;
 mod recovery;
+mod recovery_authority;

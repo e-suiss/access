@@ -300,3 +300,36 @@ fn status_claims_hold_until_superseded() {
         Some(status_line())
     );
 }
+
+// OP-153 m.3 (c), INV-40, §7.7, L2-CLB-1
+#[test]
+fn a_recovery_result_names_the_successor_and_travels_with_its_body() {
+    let r = crate::domain::claim_classes::RecoveryResult {
+        party: Id([5; 16]),
+        successor: [9; 32],
+        attempt: Id([7; 16]),
+        path: crate::domain::claim_classes::RecoveryPath::SentCode,
+        achieved_aal: 1,
+    };
+    let order = recovery_result(SUBJECT, &r, 100);
+    assert_eq!(order.line, Some(recovery_result_line(&[7; 16])));
+    assert_eq!(order.ttl_ms, RECOVERY_RESULT_TTL_MS);
+    assert_eq!(order.assurance.get("aal"), Some(&1));
+    let bytes = order.to_bytes().unwrap();
+    assert_eq!(
+        ClaimOrder::from_bytes(&bytes).unwrap().to_bytes().unwrap(),
+        bytes
+    );
+    let p = order.prepare(&placement(100)).unwrap();
+    let digest = crate::domain::claim_classes::digest(
+        crate::domain::claim_classes::IdentityClass::RecoveryResult,
+        &r.to_value(),
+    )
+    .unwrap();
+    assert_eq!(p.statement.value, Some(EqValue::Bytes(digest.to_vec())));
+    assert_eq!(
+        p.body.unwrap(),
+        dcbor::encode(&r.to_value(), Limits::CEILING).unwrap()
+    );
+    assert_eq!(p.statement.validity.until, 100 + RECOVERY_RESULT_TTL_MS);
+}

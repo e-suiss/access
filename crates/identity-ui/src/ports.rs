@@ -18,7 +18,7 @@ use access_identity_webauthn::domain::policy::RealmPolicy;
 use access_identity_webauthn::domain::rp::RelyingParty;
 use access_internal_api::approvals::{Contribution, Opening};
 use access_internal_api::idp::{Unavailable as InstancesUnavailable, Verdict};
-use access_internal_api::instances::{Registration, RegistrationVerdict, Termination};
+use access_internal_api::instances::{Recovery, Registration, RegistrationVerdict, Termination};
 use access_kernel::digest::Digest;
 use access_store::identity::{RealmId, TenantId};
 use suiss_crypto::envelope::Kek;
@@ -128,6 +128,12 @@ pub trait DeviceInstances: Send + Sync {
     fn terminate(
         &self,
         termination: Termination,
+    ) -> impl Future<Output = Result<Verdict, InstancesUnavailable>> + Send;
+
+    /// Forwards a self-signed `instance_recover` of a successor key, as PEP (OP-153 m.3 (c)).
+    fn recover(
+        &self,
+        recovery: Recovery,
     ) -> impl Future<Output = Result<Verdict, InstancesUnavailable>> + Send;
 }
 

@@ -263,4 +263,25 @@ impl RecoveryTx for PgTx {
     async fn cut_federated_links(&mut self, subject: [u8; 16]) -> Result<u64, SessionError> {
         Ok(self.0.release_federated_links(subject).await?)
     }
+
+    async fn subject_party(&mut self, subject: [u8; 16]) -> Result<Option<[u8; 16]>, SessionError> {
+        Ok(access_store::idp::subject_party(&mut self.0, &subject).await?)
+    }
+
+    async fn subject_instance(
+        &mut self,
+        subject: [u8; 16],
+    ) -> Result<Option<[u8; 16]>, SessionError> {
+        Ok(access_store::issuer::subject_instance(&mut self.0, &subject).await?)
+    }
+
+    async fn issued_in_line(
+        &mut self,
+        subject: [u8; 16],
+        domain: [u8; 32],
+        line: [u8; 32],
+    ) -> Result<Option<[u8; 16]>, SessionError> {
+        let domain = access_store::scope::DomainId::from_bytes(domain);
+        Ok(access_store::issuer::last_in_line(&mut self.0, &subject, &domain, &line).await?)
+    }
 }

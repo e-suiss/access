@@ -599,7 +599,10 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             .resolve(req, actor.map(|a| a.party), at, record.saturating_sub(1))
             .await?;
         self.rebind(req, actor, &digest, &mut resolved, at).await?;
-        let compromised = self.compromised(actor, at).await?;
+        let compromised = match self.compromised(actor, at).await? {
+            Some(c) => Some(c),
+            None => self.recovery_binding(req, actor, at).await?,
+        };
         let frame = Frame {
             intent_digest: digest,
             exercise,
@@ -613,7 +616,15 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             compromised,
         };
         let (mut evaluation, _) = self.passes(req, &frame).await?;
+        let tier = access_kernel::tier::of(
+            &req.intent,
+            req.payload.as_ref(),
+            evaluation.expansion,
+            evaluation.action.as_deref(),
+        );
         self.tiered(req, &mut evaluation, opened, at).await?;
+        self.recovery_rules(req, actor, &mut evaluation, tier, at)
+            .await?;
         self.throttled(&mut evaluation, actor, opened, at).await?;
         Ok(evaluation)
     }
@@ -666,7 +677,33 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             .payload
             .as_ref()
             .is_some_and(|p| BOOTSTRAP.contains(&p.action()));
-        let (party, instance, key) = if bootstrap {
+        let recover = match &req.payload {
+            Some(Payload::InstanceRecover { instance, key }) => Some((*instance, key.clone())),
+            _ => None,
+        };
+        let (party, instance, key) = if let Some((predecessor, key)) = recover {
+            // OP-153 m.3 (c), L0-META-7
+            if access_kernel::verify::key_scope::thumbprint(&key) != kid {
+                return Err(CoreError::Ais(AisError::Mismatch("key")));
+            }
+            let mut snap = Snapshot::default();
+            let ikey = meta::key(kind::INSTANCE, &predecessor);
+            self.snapshot_get(&mut snap, std::slice::from_ref(&ikey))
+                .await?;
+            let Some(old) = snap
+                .values_of(&ikey)
+                .and_then(|v| InstanceState::from_value(&v).ok())
+            else {
+                return Ok(None);
+            };
+            let exercise = meta::exercise_id(&req.domain, &req.nonce)
+                .map_err(|_| CoreError::Protocol("nonce"))?;
+            (
+                old.party,
+                meta::object_id(&exercise, kind::INSTANCE, 0),
+                key,
+            )
+        } else if bootstrap {
             let Some((party, key)) = self.binding.bound(&kid) else {
                 return Ok(None);
             };
@@ -1459,7 +1496,10 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             let head = self.leader.head().pos;
             let mut resolved = self.resolve(req, actor.map(|a| a.party), now, head).await?;
             self.rebind(req, actor, &digest, &mut resolved, now).await?;
-            let compromised = self.compromised(actor, now).await?;
+            let compromised = match self.compromised(actor, now).await? {
+                Some(c) => Some(c),
+                None => self.recovery_binding(req, actor, now).await?,
+            };
             let records = u64::try_from(resolved.claims.len())
                 .map_err(|_| CoreError::Protocol("proofs"))?
                 .saturating_add(u64::from(!open))
@@ -1474,6 +1514,8 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             let (mut evaluation, snapshot) = self.passes(req, &frame).await?;
             let (tier, render, render_bytes) = rendered(req, &evaluation)?;
             self.tiered(req, &mut evaluation, open, now).await?;
+            self.recovery_rules(req, actor, &mut evaluation, tier, now)
+                .await?;
             self.approval(req, actor, &resolved, &mut evaluation, &exercise, now)
                 .await?;
             self.requester_rules(req, &mut evaluation, actor, open, now)
@@ -1998,6 +2040,7 @@ pub mod management;
 pub mod projection;
 mod proofs;
 pub mod publishing;
+pub mod recovery;
 mod regime;
 pub mod roles;
 pub mod sources;

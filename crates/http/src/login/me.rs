@@ -19,8 +19,8 @@ use access_identity_ui::domain::approval::{
 };
 use access_identity_ui::domain::frontend::{
     APPROVE_PATH, AUTH_CONTEXT_PATH, ApproveQuery, AuthContextRequest, BINDINGS_PATH,
-    CHALLENGES_PATH, INSTANCE_PATH, INSTANCES_PATH, InstanceBinding, InstanceRegistration,
-    InstanceTermination,
+    CHALLENGES_PATH, INSTANCE_PATH, INSTANCES_PATH, InstanceBinding, InstanceRecovery,
+    InstanceRegistration, InstanceTermination, RECOVER_PATH,
 };
 use access_identity_ui::ports::{
     ApprovalClaims, Approvals, ArtifactSigner, Clock, DeviceInstances, Kits, Messages,
@@ -89,6 +89,11 @@ where
             .route(
                 &format!("{prefix}{BINDINGS_PATH}"),
                 post(bind::<D, K, KI, C, M, A, I, P, Q>),
+            )
+            // OP-153 m.3 (c)
+            .route(
+                &format!("{prefix}{RECOVER_PATH}"),
+                post(recover::<D, K, KI, C, M, A, I, P, Q>),
             )
             .route(
                 &format!("{prefix}{INSTANCE_PATH}"),
@@ -200,6 +205,16 @@ handler! {
         json_only(&headers)?;
         let req: InstanceBinding = body(&bytes)?;
         Ok(s.login.hosted.bind_instance(&entry, &jar.browser(), &req).await)
+    }
+}
+
+handler! {
+    /// `POST /v1/me/instances/recover` (OP-153 m.3 (c)).
+    recover(s, entry, jar, p, bytes, headers, uri) true {
+        let _ = (&p, &uri);
+        json_only(&headers)?;
+        let req: InstanceRecovery = body(&bytes)?;
+        Ok(s.login.hosted.recover_instance(&s.devices, &entry, &jar.browser(), &req).await)
     }
 }
 

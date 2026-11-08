@@ -22,6 +22,8 @@ pub const INSTANCES_PATH: &str = "/v1/me/instances";
 pub const BINDINGS_PATH: &str = "/v1/me/instances/bindings";
 /// `DELETE`: ends a device Instance.
 pub const INSTANCE_PATH: &str = "/v1/me/instances/{instance}";
+/// `POST`: the successor key's `instance_recover` after a recovery (OP-153 m.3 (c)).
+pub const RECOVER_PATH: &str = "/v1/me/instances/recover";
 /// `POST`: the session's `auth_context`.
 pub const AUTH_CONTEXT_PATH: &str = "/v1/me/auth-context";
 /// `GET`: the approval call (OP-149 m.9).
@@ -100,6 +102,27 @@ pub struct InstanceBinding {
     /// RFC 7638 thumbprint, content type `application/access-instance-pop`, payload the 32
     /// challenge bytes.
     pub pop: String,
+}
+
+/// `POST /v1/me/instances/recover` (OP-153 m.3 (c), INV-13): the successor key's own
+/// `instance_recover`, signed after the rebind of a recovery whose `recovery_result` named the
+/// key. The intent is `access/instance_recover` on `access.party:[hex(party)]` with the payload
+/// `{instance: predecessor, key}` digest in `opaque["payload"]`; basis the Genesis bootstrap
+/// Grant, mode commit, capacity own, PEP `access-identity`. The recovery step that named the key
+/// answered with the Party, the predecessor, the domain and the basis.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct InstanceRecovery {
+    /// The successor key as a `COSE_Key`, base64url: Ed25519 or P-256.
+    pub key: String,
+    /// The Exercise nonce, base64url, 16 to 64 bytes.
+    pub nonce: String,
+    /// The intent's validity start, RFC 3339 with at most millisecond precision.
+    pub valid_from: String,
+    /// The intent's validity end, RFC 3339 with at most millisecond precision.
+    pub valid_until: String,
+    /// The AIS (`COSE_Sign1`) by the successor key, base64url.
+    pub ais: String,
 }
 
 /// A registered device Instance, or the one a session was bound to (OP-149 m.32).
@@ -347,6 +370,10 @@ fn problem_codes() -> Value {
     ])
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "one schema table, read top to bottom"
+)]
 fn components() -> Value {
     json!({
         "InstanceChallenge": object(
@@ -397,6 +424,16 @@ fn components() -> Value {
                 "ais": b64("AIS (COSE_Sign1) by one of the user's own Instances over the access/instance_terminate intent, mode commit, capacity own, pep \"access-identity\"."),
             }),
             &["nonce", "basis", "valid_from", "valid_until", "ais"],
+        ),
+        "InstanceRecovery": object(
+            &json!({
+                "key": b64("The successor key as a COSE_Key: OKP Ed25519 or EC2 P-256, the one the recovery named."),
+                "nonce": b64("Exercise nonce, 16 to 64 bytes."),
+                "valid_from": time_field("Intent validity start, millisecond precision at most."),
+                "valid_until": time_field("Intent validity end, millisecond precision at most."),
+                "ais": b64("AIS (COSE_Sign1) by the successor key over access/instance_recover on access.party:[hex(party)], basis the bootstrap Grant, mode commit, capacity own, pep \"access-identity\"."),
+            }),
+            &["key", "nonce", "valid_from", "valid_until", "ais"],
         ),
         "InstanceTerminated": object(
             &json!({ "exercise": b64("ExerciseID, 32 bytes (TN-110).") }),
@@ -534,6 +571,23 @@ pub fn openapi() -> Value {
     let step_up = "The session is below AAL2 or its last authentication or step-up is older than five minutes (OP-149 m.6); step up and retry.";
     let mut paths = Map::new();
     instance_paths(&mut paths, step_up);
+    paths.insert(
+        RECOVER_PATH.to_owned(),
+        json!({ "post": {
+            "operationId": "recoverInstance",
+            "summary": "Forwards the successor key's own instance_recover after a recovery's rebind (OP-153 m.3 (c), INV-13): the session is in the grace period that followed it and the realm issuer's recovery_result, which names the key, is in the governing domain. The predecessor is the user's device Instance; its Mandates stay behind.",
+            "parameters": [idempotency()],
+            "requestBody": body("InstanceRecovery", true),
+            "responses": {
+                "201": json_response("The successor Instance, its kid and Party.", "InstanceRegistered"),
+                "202": { "description": "Recorded behind the domain's time-lock; send it again after `after`." },
+                "400": problem("invalid-request."),
+                "401": problem("No live session (session-required)."),
+                "409": problem("recovery-result-pending (retry), recovery-no-instance, recovery-key-not-named (the recovery named another key) or instance-not-recovered."),
+                "503": problem("Temporarily unavailable."),
+            },
+        }}),
+    );
     paths.insert(
         INSTANCE_PATH.to_owned(),
         json!({

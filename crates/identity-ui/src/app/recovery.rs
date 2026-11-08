@@ -12,6 +12,7 @@ use access_identity_session::app::recovery::{
 };
 use access_identity_session::domain::recovery::{RecoveryPath, Restricted, State, aal_name, path};
 use access_identity_session::ports::Clock;
+use access_kernel::json::b64url_encode;
 use serde_json::{Value, json};
 
 use super::{Browser, Hosted, Reply, failed, signin};
@@ -49,6 +50,10 @@ pub struct StepBody {
     /// The new password in the rebind window.
     #[serde(default)]
     pub new_password: Option<String>,
+    /// The device key, a base64url `COSE_Key`, that becomes the successor Instance: named in
+    /// the rebind window (OP-153 m.3 (c)).
+    #[serde(default)]
+    pub successor_key: Option<String>,
 }
 
 /// The account's recovery addresses.
@@ -139,6 +144,11 @@ fn recovered(r: Recovered, status: u16) -> Reply {
         if let Some(code) = &r.replacement {
             // OP-153 m.3 (d)
             m.insert("replacement_code".into(), code.expose().clone().into());
+        }
+        if let Some((party, predecessor)) = r.successor {
+            // OP-153 m.3 (c)
+            m.insert("party".into(), b64url_encode(&party).into());
+            m.insert("predecessor".into(), b64url_encode(&predecessor).into());
         }
         if let Some(after) = r.sensitive_after_ms {
             // X38, TN-55, Ek B 3656
@@ -241,6 +251,52 @@ where
             Ok(k) => k,
             Err(r) => return r,
         };
+        if let Some(cose) = body.successor_key.as_deref() {
+            let key = access_kernel::json::b64url_decode(cose)
+                .ok()
+                .filter(|b| b.len() <= 256)
+                .and_then(|b| access_identity_session::domain::device::instance_key(&b).ok());
+            let empty = body.code.is_none()
+                && body.password.is_none()
+                && body.send.is_none()
+                && !body.resume
+                && body.new_password.is_none();
+            let (Some(key), true) = (key, empty) else {
+                return problem(access_identity_session::app::recovery::RECOVERY_INVALID);
+            };
+            let proof = Proof::Successor {
+                kid: access_kernel::verify::key_scope::thumbprint(&key),
+                rebind: c.rebind,
+            };
+            let domain = match super::me::governing(&self.db, &kit).await {
+                Ok(d) => d,
+                Err(r) => return r,
+            };
+            signin!(self, kit, auth, Some(b.ip));
+            let mut reply = match auth
+                .prove_recovery(c.attempt, attempt, proof, b.correlation)
+                .await
+            {
+                Ok(a) => answered(a, 200),
+                Err(e) => return failed(&e),
+            };
+            // OP-153 m.3 (c), L0-META-7
+            if let super::Body::Json(Value::Object(m)) = &mut reply.body
+                && m.contains_key("party")
+            {
+                let basis = access_internal_api::instances::bootstrap_basis(&domain);
+                let access_kernel::meta::ExerciseBasis::Public(grant) = basis else {
+                    return reply;
+                };
+                m.insert("domain".into(), b64url_encode(&domain.0).into());
+                m.insert("basis".into(), b64url_encode(&grant.0).into());
+                m.insert(
+                    "pep".into(),
+                    access_internal_api::instances::IDENTITY_PEP.into(),
+                );
+            }
+            return reply;
+        }
         let proof = match (
             body.code.as_deref(),
             body.password.as_deref(),

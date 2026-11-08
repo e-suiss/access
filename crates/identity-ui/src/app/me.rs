@@ -14,8 +14,8 @@ use access_identity_session::ports::Clock;
 use access_internal_api::context::RateContext;
 use access_internal_api::idp::Verdict;
 use access_internal_api::instances::{
-    Registrant, Registration, RegistrationVerdict, SelfSigned, Termination, bootstrap_basis,
-    register_nonce,
+    Recovery, Registrant, Registration, RegistrationVerdict, SelfSigned, Termination,
+    bootstrap_basis, register_nonce,
 };
 use access_kernel::digest::Digest;
 use access_kernel::json::{b64url_decode, b64url_encode};
@@ -27,8 +27,8 @@ use serde_json::json;
 
 use super::{Browser, Hosted, Reply, SESSION_REQUIRED, devices, failed, signin};
 use crate::domain::frontend::{
-    AuthContextRequest, InstanceBinding, InstanceRegistration, InstanceTermination, rfc3339,
-    unix_ms,
+    AuthContextRequest, InstanceBinding, InstanceRecovery, InstanceRegistration,
+    InstanceTermination, rfc3339, unix_ms,
 };
 use crate::ports::{ArtifactSigner, DeviceInstances, Kits, Messages, RealmKit};
 
@@ -325,6 +325,70 @@ async fn device_retired(
         let at = tx.0.server_time().await.map_err(|_| unavailable())?;
         let order = authenticator_removed(subject, AuthenticatorKind::DeviceKey, &instance, at);
         emit(&mut tx, &order).await.map_err(|_| unavailable())?;
+    }
+    tx.0.commit().await.map_err(|_| unavailable())
+}
+
+/// What a forwarded `instance_recover` leaves in the identity plane (OP-153 m.3 (c), INV-13):
+/// the Exercise kept with its attempt, so it can be forwarded again after a time-lock; once it
+/// commits, the successor's device key with its `authenticator_binding` Claim, and the
+/// predecessor's key retired with its binding line ended.
+async fn recovery_forwarded(
+    db: &access_store::Pool,
+    kit: &RealmKit,
+    s: &access_identity_session::app::recovery::Successor,
+    r: &Recovery,
+    successor: Option<[u8; 16]>,
+) -> Result<(), Reply> {
+    use access_identity_account::app::claims::emit;
+    use access_identity_account::domain::claims::authenticator_removed;
+    use access_kernel::claim::body::AuthenticatorKind;
+    use access_kernel::verify::cose::PublicKey;
+    let (raw, kty) = match &r.key {
+        PublicKey::Ed25519(k) => (k.to_vec(), "OKP"),
+        PublicKey::P256(k) => (k.clone(), "EC2"),
+        PublicKey::MlDsa(..) => return Err(invalid()),
+    };
+    let mut tx = access_identity_account::adapters::pg::PgTx::new(
+        TenantTx::begin(db, kit.tenant, kit.realm)
+            .await
+            .map_err(|_| unavailable())?,
+    );
+    let to_i64 = |v: u64| i64::try_from(v).map_err(|_| invalid());
+    tx.0.insert_recovery_rebind(
+        s.subject,
+        &access_store::recovery::RebindRow {
+            attempt: s.attempt,
+            predecessor: s.predecessor,
+            nonce: r.nonce.clone(),
+            public_key: raw,
+            key_type: String::from(kty),
+            valid: (to_i64(r.validity.from)?, to_i64(r.validity.until)?),
+            ais: r.ais.clone(),
+            claim: Some(s.claim),
+        },
+    )
+    .await
+    .map_err(|_| unavailable())?;
+    if let Some(instance) = successor {
+        let device = devices::DeviceKey {
+            subject: s.subject,
+            key: r.key.clone(),
+            instance,
+            session: None,
+        };
+        devices::record_device_key(&mut tx, &device)
+            .await
+            .map_err(|_| unavailable())?;
+        if access_store::issuer::retire_device_key(&mut tx.0, &s.subject, &s.predecessor)
+            .await
+            .map_err(|_| unavailable())?
+        {
+            let at = tx.0.server_time().await.map_err(|_| unavailable())?;
+            let order =
+                authenticator_removed(s.subject, AuthenticatorKind::DeviceKey, &s.predecessor, at);
+            emit(&mut tx, &order).await.map_err(|_| unavailable())?;
+        }
     }
     tx.0.commit().await.map_err(|_| unavailable())
 }
@@ -644,6 +708,110 @@ where
                 409,
                 "instance-not-terminated",
                 "The device could not be removed",
+            ),
+            Err(_) => unavailable(),
+        }
+    }
+
+    /// `POST /v1/me/instances/recover` (OP-153 m.3 (c), INV-13, §12.3.2): the successor key's
+    /// own `instance_recover` after a recovery's rebind. The session's subject must be in the
+    /// grace period that followed it and the realm issuer's `recovery_result` of the attempt
+    /// must have reached the governing domain; the predecessor is the subject's device Instance.
+    /// The authority plane checks that the Claim names the key; while the domain's time-lock runs
+    /// the answer is `202` with the time it can be sent again.
+    pub async fn recover_instance<A, I: DeviceInstances, P, Q>(
+        &self,
+        devices: &Devices<A, I, P, Q>,
+        entry: &RealmEntry,
+        b: &Browser<'_>,
+        body: &InstanceRecovery,
+    ) -> Reply {
+        let kit = match self.kit(entry).await {
+            Ok(k) => k,
+            Err(r) => return r,
+        };
+        signin!(self, kit, auth);
+        let Some(cookie) = b.session else {
+            return session_required();
+        };
+        let key = bytes(&body.key, 1, 256)
+            .and_then(|k| access_identity_session::domain::device::instance_key(&k).ok());
+        let (Some(key), Some(nonce), Some(ais), Some(from), Some(until)) = (
+            key,
+            bytes(&body.nonce, 16, 64),
+            bytes(&body.ais, 1, 8192),
+            unix_ms(&body.valid_from),
+            unix_ms(&body.valid_until),
+        ) else {
+            return invalid();
+        };
+        if from > until {
+            return invalid();
+        }
+        let domain = match governing(&self.db, &kit).await {
+            Ok(d) => d,
+            Err(r) => return r,
+        };
+        let s = match auth.recovered_successor(cookie, domain.0).await {
+            Ok(Ok(s)) => s,
+            Ok(Err(p)) => return Reply::problem(p),
+            Err(e) => return failed(&e),
+        };
+        let r = Recovery {
+            domain,
+            party: Id(s.party),
+            predecessor: Id(s.predecessor),
+            key,
+            nonce,
+            validity: Window { from, until },
+            ais,
+            pep: devices.pep.clone(),
+        };
+        let verdict = devices.instances.recover(r.clone()).await;
+        match verdict {
+            Ok(Verdict::Committed(c)) => {
+                let successor = r.successor().map(|i| i.0);
+                if let Err(reply) = recovery_forwarded(&self.db, &kit, &s, &r, successor).await {
+                    return reply;
+                }
+                Reply::json(
+                    201,
+                    json!({
+                        "instance": successor.map(|i| b64url_encode(&i)),
+                        "kid": b64url_encode(&access_kernel::verify::key_scope::thumbprint(&r.key)),
+                        "party": b64url_encode(&s.party),
+                        "exercise": b64url_encode(&c.exercise.0),
+                    }),
+                )
+            }
+            Ok(Verdict::NotAllowed { decision, .. })
+                if decision.outcome == access_kernel::combinator::Outcome::RequireAction =>
+            {
+                // SEC26, §13.7.3
+                if let Err(reply) = recovery_forwarded(&self.db, &kit, &s, &r, None).await {
+                    return reply;
+                }
+                let after = decision.blockers.iter().find_map(|b| match b.remediation {
+                    access_kernel::combinator::Remediation::WaitUntil(t) => Some(t),
+                    _ => None,
+                });
+                Reply::json(202, json!({ "after": after.map(rfc3339) }))
+            }
+            Ok(Verdict::NotAllowed { decision, .. })
+                if decision.blockers.iter().any(|b| {
+                    b.subcode.as_deref() == Some(access_internal_api::instances::RECOVERY_UNBOUND)
+                }) =>
+            {
+                problem(
+                    409,
+                    "recovery-key-not-named",
+                    "This device is not the one your recovery named",
+                )
+            }
+            Ok(Verdict::NotAllowed { .. } | Verdict::Refused { .. }) => problem(
+                409,
+                "instance-not-recovered",
+                "The device could not take over",
             ),
             Err(_) => unavailable(),
         }

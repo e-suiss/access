@@ -11,7 +11,13 @@ use access_authority_core::genesis;
 use access_internal_api::idp::{NAMESPACES, spp};
 use access_kernel::combinator::{Outcome, Remediation};
 use access_kernel::tier;
-use access_store::authority::nonces_with_prefix;
+use std::collections::BTreeSet;
+
+use access_kernel::codec::Canonical as _;
+use access_kernel::combinator::Capacity;
+use access_kernel::meta::{self, GrantState};
+use access_store::authority::{nonces_with_prefix, state_of};
+use suiss_crypto::dcbor::{self, Limits};
 
 use super::{
     Bootstrap, BootstrapError, Decider, Digest, DomainId, Governance, HsmSigner, Id, Instances,
@@ -22,6 +28,9 @@ use suiss_crypto::signer::Signer as _;
 
 /// What the root signs to derive the nonce prefix of one namespace's catalog upgrade.
 const CATALOG_LABEL: &[u8] = b"access-bootstrap/catalog:1";
+
+/// What the root signs to derive the nonce prefix of a recovery upgrade step.
+const RECOVERY_LABEL: &[u8] = b"access-bootstrap/recovery:1";
 
 /// Length of the nonce prefix: a SHA-256.
 const PREFIX_LEN: usize = 32;
@@ -94,8 +103,121 @@ where
         let mut label = CATALOG_LABEL.to_vec();
         label.extend_from_slice(&domain.0);
         label.extend_from_slice(&package.catalog_digest().0);
+        let payload =
+            Payload::AcceptanceEstablish(genesis::schemas(&package.namespace, package.publisher));
+        self.time_locked(
+            domain,
+            root,
+            party,
+            &label,
+            payload,
+            package.namespace.clone(),
+        )
+        .await
+    }
+
+    /// Makes a domain opened before `instance_recover` joined the bootstrap Grant and
+    /// `recovery_result` the realm issuer's Acceptance take both (OP-153 m.3 (c), m.13 (e)):
+    /// the founding root amends the bootstrap Grant and establishes the issuer's Acceptance of
+    /// the class, each a CT3 widening behind the time-lock. A domain whose bootstrap Grant
+    /// already covers `instance_recover` was born with both.
+    ///
+    /// # Errors
+    /// [`BootstrapError`]; a refusal stops the run.
+    pub(crate) async fn upgrade_recovery(
+        &self,
+        (tenant, realm): (
+            access_store::identity::TenantId,
+            access_store::identity::RealmId,
+        ),
+        domain: Digest,
+        root: &HsmSigner,
+        party: Id,
+    ) -> Result<Vec<CatalogOut>, BootstrapError> {
+        let issuer = {
+            let mut t = access_store::identity::TenantTx::begin(self.app, tenant, realm).await?;
+            let i = access_store::issuer::realm_issuer(&mut t).await?;
+            t.commit().await?;
+            i.map(Id)
+        };
+        let grant = meta::object_id(&domain, meta::kind::GRANT, genesis::BOOTSTRAP_GRANT);
+        let rows = state_of(
+            self.app,
+            &DomainId::from_bytes(domain.0),
+            &[meta::key(meta::kind::GRANT, &grant)],
+        )
+        .await?;
+        let covers = rows
+            .iter()
+            .filter_map(|r| r.value.as_deref())
+            .filter_map(|v| dcbor::decode(v, Limits::CEILING).ok())
+            .filter_map(|v| GrantState::from_value(&v).ok())
+            .any(|g| {
+                g.content
+                    .authority
+                    .authority
+                    .actions
+                    .exact
+                    .contains(&meta::core_action("instance_recover"))
+            });
+        if covers {
+            return Ok(Vec::new());
+        }
+        self.lead(domain).await?;
+        let mut out = Vec::new();
+        let mut label = RECOVERY_LABEL.to_vec();
+        label.extend_from_slice(&domain.0);
+        label.extend_from_slice(b"bootstrap-grant");
+        let amend = Payload::GrantAmend {
+            grant,
+            authority: genesis::bootstrap_authority(),
+            agency: BTreeSet::from([Capacity::Own]),
+            named: None,
+        };
+        out.push(
+            self.time_locked(
+                domain,
+                root,
+                party,
+                &label,
+                amend,
+                String::from("access.bootstrap"),
+            )
+            .await?,
+        );
+        if let Some(issuer) = issuer {
+            let mut label = RECOVERY_LABEL.to_vec();
+            label.extend_from_slice(&domain.0);
+            label.extend_from_slice(b"recovery-result");
+            let gate = genesis::recovery_acceptance(issuer);
+            out.push(
+                self.time_locked(
+                    domain,
+                    root,
+                    party,
+                    &label,
+                    Payload::AcceptanceEstablish(gate),
+                    String::from("access.recovery_result"),
+                )
+                .await?,
+            );
+        }
+        Ok(out)
+    }
+
+    /// One root-signed meta-Exercise behind the CT3 time-lock, idempotent across runs: the
+    /// nonce is the root's signature over `label` hashed, then the validity start.
+    async fn time_locked(
+        &self,
+        domain: Digest,
+        root: &HsmSigner,
+        party: Id,
+        label: &[u8],
+        payload: Payload,
+        namespace: String,
+    ) -> Result<CatalogOut, BootstrapError> {
         let signature = root
-            .sign(&label)
+            .sign(label)
             .map_err(|e| BootstrapError::Unavailable(String::from(e.code())))?;
         let prefix = suiss_crypto::digest::sha256(&signature);
         let now = server_time(self.app).await?;
@@ -118,9 +240,6 @@ where
                 until: from.saturating_add(ceiling),
             },
         };
-        let payload =
-            Payload::AcceptanceEstablish(genesis::schemas(&package.namespace, package.publisher));
-        let namespace = package.namespace.clone();
         match self
             .meta_verdict(domain, root, &nonce, payload, party, &w)
             .await?

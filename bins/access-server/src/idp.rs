@@ -27,8 +27,8 @@ use access_internal_api::approvals::{
 };
 use access_internal_api::context::RateContext;
 use access_internal_api::instances::{
-    Registered, Registration, RegistrationVerdict, SelfSigned, Termination, bootstrap_basis,
-    self_signed_intent, terminate_intent, terminate_payload,
+    Recovery, Registered, Registration, RegistrationVerdict, SelfSigned, Termination,
+    bootstrap_basis, self_signed_intent, terminate_intent, terminate_payload,
 };
 use access_kernel::combinator::Capacity;
 use access_kernel::meta::Payload;
@@ -565,6 +565,30 @@ where
             consistency: None,
         };
         self.commit(request, t.ais, (t.pep, None)).await
+    }
+
+    async fn recover(&self, r: Recovery) -> Result<Verdict, Unavailable> {
+        // OP-153 m.3 (c), L0-META-7
+        let payload = r.payload();
+        let Some(intent) = self_signed_intent(&payload, r.party, r.validity) else {
+            return Ok(Verdict::Refused {
+                code: String::from("protocol"),
+                errors: Vec::new(),
+            });
+        };
+        let request = Request {
+            domain: r.domain,
+            mode: Mode::Commit,
+            nonce: r.nonce,
+            intent,
+            payload: Some(payload),
+            basis: bootstrap_basis(&r.domain),
+            capacity: Capacity::Own,
+            proofs: Vec::new(),
+            exercise: None,
+            consistency: None,
+        };
+        self.commit(request, r.ais, (r.pep, None)).await
     }
 }
 

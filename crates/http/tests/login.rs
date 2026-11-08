@@ -231,6 +231,16 @@ impl DeviceInstances for Plane {
             errors: Vec::new(),
         })
     }
+
+    async fn recover(
+        &self,
+        _: access_internal_api::instances::Recovery,
+    ) -> Result<Verdict, PlaneUnavailable> {
+        Ok(Verdict::Refused {
+            code: String::from("protocol"),
+            errors: Vec::new(),
+        })
+    }
 }
 
 /// The authority plane behind the Approval Surface: one `REQUIRE_ACTION` on intent `[0x44; 32]`

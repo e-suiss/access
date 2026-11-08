@@ -78,16 +78,19 @@ fn structural(namespace: &str, prefix: Vec<String>) -> ResourceSelector {
     })
 }
 
-/// L0-META-7: anyone may register a Party and create its Instances; actor-binding decides who
-/// the key belongs to (§7.9.2.3).
-fn bootstrap() -> Value {
-    let authority = CanonicalAuthority {
+/// The core actions the Genesis bootstrap Grant covers: a new key registers its Party, creates
+/// its Instance, or recovers one as the successor a `recovery_result` names (L0-META-7, OP-153
+/// m.3 (c)).
+pub const BOOTSTRAP_ACTIONS: [&str; 3] = ["party_register", "instance_create", "instance_recover"];
+
+/// The bootstrap Grant's authority (L0-META-7): what a domain opened before `instance_recover`
+/// joined it is amended to (OP-153 m.13 (e)).
+#[must_use]
+pub fn bootstrap_authority() -> CanonicalAuthority {
+    CanonicalAuthority {
         authority: AuthoritySet {
             actions: ActionSet {
-                exact: BTreeSet::from([
-                    core_action("party_register"),
-                    core_action("instance_create"),
-                ]),
+                exact: BOOTSTRAP_ACTIONS.iter().map(|a| core_action(a)).collect(),
                 prefix: BTreeSet::new(),
             },
             resource: structural("access.party", Vec::new()),
@@ -108,7 +111,13 @@ fn bootstrap() -> Value {
             downstream_holder_class: None,
         },
         requirements: BTreeSet::new(),
-    };
+    }
+}
+
+/// L0-META-7: anyone may register a Party and create its Instances; actor-binding decides who
+/// the key belongs to (§7.9.2.3), and a `recovery_result` who may recover one (OP-153 m.3 (c)).
+fn bootstrap() -> Value {
+    let authority = bootstrap_authority();
     Value::Map(vec![
         (Value::text("anchor"), Value::Unsigned(0)),
         (Value::text("holder"), SubjectSelector::Public.to_value()),
@@ -157,18 +166,32 @@ fn published(package: &Spp, founder: Id) -> Value {
 }
 
 /// The classes the realm issuer's default Acceptance covers: who acts, by which authenticator
-/// and under which identity (§10.1.4 rule 3, §10.1.5), and whether that account still stands,
-/// which only narrows (§12.3.1, TN-49, Ek B K04 default DENY overlay).
-pub const REALM_ISSUER_CLASSES: [&str; 4] = [
+/// and under which identity (§10.1.4 rule 3, §10.1.5), whether that account still stands,
+/// which only narrows (§12.3.1, TN-49, Ek B K04 default DENY overlay), and which key a recovery
+/// named (OP-153 m.3 (c)). In deterministic CBOR order, as a Genesis set must be.
+pub const REALM_ISSUER_CLASSES: [&str; 5] = [
     "account_status",
     "authentication",
+    "recovery_result",
     "authenticator_binding",
     "identity_binding_person",
 ];
 
+/// The realm issuer's Acceptance of `recovery_result` for actor-binding alone: what a domain
+/// opened before the class joined [`REALM_ISSUER_CLASSES`] establishes (OP-153 m.3 (c),
+/// m.13 (e)).
+#[must_use]
+pub fn recovery_acceptance(issuer: Id) -> Value {
+    issuer_acceptance(issuer, &["recovery_result"])
+}
+
 /// The default Acceptance of the realm's identity issuer: `actor-binding` only; predicate
 /// input and subject selection are added explicitly (§10.1.4 rule 3, E18, OP-142).
 fn realm_issuer(issuer: Id) -> Value {
+    issuer_acceptance(issuer, &REALM_ISSUER_CLASSES)
+}
+
+fn issuer_acceptance(issuer: Id, classes: &[&str]) -> Value {
     Value::Map(vec![
         (Value::text("issuer"), issuer.to_value()),
         (
@@ -177,12 +200,7 @@ fn realm_issuer(issuer: Id) -> Value {
         ),
         (
             Value::text("classes"),
-            Value::Array(
-                REALM_ISSUER_CLASSES
-                    .iter()
-                    .map(|c| Value::text(c))
-                    .collect(),
-            ),
+            Value::Array(classes.iter().map(|c| Value::text(c)).collect()),
         ),
         (Value::text("subject"), SubjectSelector::Public.to_value()),
         (

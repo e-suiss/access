@@ -147,6 +147,16 @@ fn hasher() -> access_identity_account::app::hasher::Hasher {
 /// The realm's hosted surface as `main` mounts it, over the token's realm keys, with the
 /// recording Relay seam.
 pub(super) fn hosted(c: &Console, messages: Recording) -> axum::Router {
+    routes(c, messages, false)
+}
+
+/// [`hosted`] with the Frontend API's device Instance routes over the authority plane and the
+/// realm issuer's courier (OP-149 m.6, OP-153 m.3 (c)).
+pub(super) fn hosted_with_devices(c: &Console, messages: Recording) -> axum::Router {
+    routes(c, messages, true)
+}
+
+fn routes(c: &Console, messages: Recording, devices: bool) -> axum::Router {
     use access_identity_account::adapters::system::SystemClock;
     use access_identity_account::app::local::LocalLimiter;
     use access_identity_account::app::login::LoginGate;
@@ -176,14 +186,45 @@ pub(super) fn hosted(c: &Console, messages: Recording) -> axum::Router {
         risk,
         signup: access_identity_ui::app::signup::Signup::without_providers().unwrap(),
     });
-    access_http::login::router(
+    let discovery = || {
         RealmDiscovery::new(
             PgDirectory::new(w.db.router.clone()),
             SignerKeys::new(w.identity_signer.clone()),
-        ),
+        )
+    };
+    let login = access_http::login::router(discovery(), hosted.clone(), None);
+    if !devices {
+        return login;
+    }
+    login.merge(access_http::login::me_router(
+        discovery(),
         hosted,
-        None,
-    )
+        access_identity_ui::app::Devices {
+            signer: SignerKeys::new(w.identity_signer.clone()),
+            instances: w.plane.clone(),
+            approvals: w.plane.clone(),
+            claims: Arc::new(courier(c)),
+            pep: String::from(access_identity_ui::domain::frontend::IDENTITY_PEP),
+        },
+    ))
+}
+
+/// The realm issuer's courier of this process over the token's issuer keys (OP-150 L2).
+pub(super) fn courier(c: &Console) -> crate::claims::ClaimsCourier<TestDomains> {
+    let w = &c.w;
+    access_identity_account::app::claims::Courier {
+        app: w.db.app.clone(),
+        reader: w.db.reader.clone(),
+        signer: SignerKeys::new(w.identity_signer.clone()),
+        ingest: access_authority_ingest::app::Ingest::new(
+            w.domains.clone(),
+            crate::ingest::PgSubmissions(w.db.app.clone()),
+            crate::ingest::Trusted(tokio::sync::Mutex::new(
+                access_authority_sequencer::adapters::SourcesClock::new(w.db.app.clone()),
+            )),
+        ),
+        clock: access_identity_account::adapters::system::SystemClock,
+    }
 }
 
 /// A browser on the realm's host: its cookie jar.

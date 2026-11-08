@@ -15,7 +15,8 @@ use access_identity_account::app::claims::emit;
 use access_identity_account::app::events;
 use access_identity_account::app::sealing::{open, seal, subject_key};
 use access_identity_account::app::signal::{emit as signal, fresh_id};
-use access_identity_account::domain::claims::authentication_ended;
+use access_identity_account::domain::claim_classes::RecoveryResult;
+use access_identity_account::domain::claims::{authentication_ended, recovery_result};
 use access_identity_account::domain::gcra::Gcra;
 use access_identity_account::domain::login::{Problem, counter_key};
 use access_identity_account::domain::password::{ALGORITHM, Password};
@@ -152,6 +153,15 @@ pub const RECOVERY_INVALID: Problem = Problem {
     retry_after_s: None,
 };
 
+/// OP-153 m.3 (c): the account has no Party, so no Instance to recover; the rebind alone
+/// restores sign-in.
+pub const NO_PARTY: Problem = Problem {
+    status: 409,
+    code: "recovery-no-instance",
+    title: "This account has no device to recover; set a new password",
+    retry_after_s: None,
+};
+
 /// A new password the policy or the breach corpus refuses.
 pub const PASSWORD_REFUSED: Problem = Problem {
     status: 400,
@@ -192,7 +202,34 @@ pub struct Recovered {
     pub links_cut: u64,
     /// After a rebind: when high-impact actions open (X38, TN-55).
     pub sensitive_after_ms: Option<u64>,
+    /// After a successor is named: the Party and the predecessor Instance its self-signed
+    /// `instance_recover` names (OP-153 m.3 (c)).
+    pub successor: Option<([u8; 16], [u8; 16])>,
 }
+
+/// A successor a `recovery_result` names, ready for its `instance_recover` (OP-153 m.3 (c)).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Successor {
+    /// The session's subject.
+    pub subject: [u8; 16],
+    /// The attempt in its grace period.
+    pub attempt: [u8; 16],
+    /// The subject's Party.
+    pub party: [u8; 16],
+    /// The Instance it recovers.
+    pub predecessor: [u8; 16],
+    /// The `recovery_result` Claim.
+    pub claim: [u8; 16],
+}
+
+/// OP-153 m.3 (c): the `recovery_result` Claim is not yet in the governing domain; the
+/// `instance_recover` would be denied, so it is not forwarded.
+pub const RESULT_PENDING: Problem = Problem {
+    status: 409,
+    code: "recovery-result-pending",
+    title: "Your recovery is still being recorded; try again in a moment",
+    retry_after_s: Some(2),
+};
 
 /// A recovery decision: done, refused with a problem, or throttled.
 pub enum Answer {
@@ -222,6 +259,14 @@ pub enum Proof<'a> {
     Bind {
         /// The new password.
         password: &'a str,
+        /// The rebind cookie.
+        rebind: Option<&'a str>,
+    },
+    /// Names the device key that becomes the successor Instance in the rebind window: the
+    /// realm issuer's `recovery_result` Claim names it (OP-153 m.3 (c), INV-40).
+    Successor {
+        /// The key's RFC 7638 thumbprint, `x5t#S256`.
+        kid: [u8; 32],
         /// The rebind cookie.
         rebind: Option<&'a str>,
     },
@@ -930,6 +975,14 @@ where
                     ..RECOVERY_STEP
                 }));
             }
+            (Proof::Successor { kid, rebind }, State::RebindOpen) => {
+                if let Err(p) = self
+                    .successor(&mut tx, &a, &t, kid, rebind, now, &mut out, correlation)
+                    .await?
+                {
+                    return Ok(Answer::Refused(p));
+                }
+            }
             (Proof::Bind { password, rebind }, State::RebindOpen) => {
                 match self
                     .bind(
@@ -1261,6 +1314,113 @@ where
             Some(REBIND_TTL_MS / 1000),
         ));
         Ok(())
+    }
+
+    /// `REBIND_OPEN`: queues the realm issuer's `recovery_result` Claim naming `kid` as the
+    /// successor that may self-sign `instance_recover` (OP-153 m.3 (c), INV-40, §7.7). The
+    /// rebind token proves the browser and is not spent; naming another key supersedes the
+    /// first (one line per attempt). An account without a Party has no Instance to recover.
+    #[expect(clippy::too_many_arguments, reason = "one step and its context")]
+    async fn successor(
+        &self,
+        tx: &mut D::Tx,
+        a: &AttemptRow,
+        t: &TransitionRow,
+        kid: [u8; 32],
+        rebind: Option<&str>,
+        now: u64,
+        out: &mut Recovered,
+        correlation: &str,
+    ) -> Result<Result<(), Problem>, SessionError> {
+        let subject = a.subject.ok_or(SessionError::Corrupt)?;
+        let Some(token) = rebind else {
+            return Ok(Err(RECOVERY_STEP));
+        };
+        if tx
+            .token(&tokens::digest(token), &kinds(&[REBIND]), i64_of(now)?)
+            .await?
+            .is_none_or(|r| r.attempt != Some(a.id) || r.subject != subject)
+        {
+            return Ok(Err(RECOVERY_STEP));
+        }
+        let (Some(party), Some(predecessor)) = (
+            tx.subject_party(subject).await?,
+            tx.subject_instance(subject).await?,
+        ) else {
+            return Ok(Err(NO_PARTY));
+        };
+        let achieved = t
+            .achieved_aal
+            .as_deref()
+            .and_then(aal_of)
+            .unwrap_or(Aal::Aal1);
+        let result = RecoveryResult {
+            party: access_kernel::model::Id(party),
+            successor: kid,
+            attempt: access_kernel::model::Id(a.id),
+            path: path(&a.path).ok_or(SessionError::Corrupt)?,
+            achieved_aal: crate::domain::recovery::aal_level(achieved),
+        };
+        emit(tx, &recovery_result(subject, &result, now)).await?;
+        let target = self.external(subject)?;
+        audit(
+            tx,
+            "recovery.successor_named",
+            &target,
+            &target,
+            correlation,
+        )
+        .await?;
+        out.successor = Some((party, predecessor));
+        Ok(Ok(()))
+    }
+
+    /// The successor the signed-in subject of `cookie` may now recover in `domain` (OP-153
+    /// m.3 (c)): its attempt is in the grace period that followed the rebind and the realm
+    /// issuer's `recovery_result` of that attempt reached Claim Ingest. The authority plane
+    /// checks that the Claim names the key.
+    ///
+    /// # Errors
+    /// [`SessionError`].
+    pub async fn recovered_successor(
+        &self,
+        cookie: &str,
+        domain: [u8; 32],
+    ) -> Result<Result<Successor, Problem>, SessionError> {
+        let now = self.now();
+        let mut tx = self.begin().await?;
+        let Some(subject) = self.signed_in(&mut tx, cookie, now).await? else {
+            tx.commit().await?;
+            return Ok(Err(SESSION_REQUIRED));
+        };
+        let since = i64_of(now.saturating_sub(LIVE_WINDOW_MS))?;
+        let mut found = None;
+        for a in tx.attempts_since(subject, since).await? {
+            let ts = tx.transitions(a.id).await?;
+            if matches!(last(&ts), Ok((_, State::GracePeriod))) {
+                found = Some(a.id);
+            }
+        }
+        let (Some(attempt), Some(party), Some(predecessor)) = (
+            found,
+            tx.subject_party(subject).await?,
+            tx.subject_instance(subject).await?,
+        ) else {
+            tx.commit().await?;
+            return Ok(Err(NO_PARTY));
+        };
+        let line = access_identity_account::domain::claims::recovery_result_line(&attempt);
+        let claim = tx.issued_in_line(subject, domain, line).await?;
+        tx.commit().await?;
+        Ok(claim.map_or(Err(RESULT_PENDING), |claim| {
+            Ok(Successor {
+                subject,
+                attempt,
+                party,
+                predecessor,
+                claim,
+            })
+        }))
     }
 
     /// Binds a new password in the rebind window, the one atomic unit of TN-54: the state is

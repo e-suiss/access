@@ -17,6 +17,8 @@ use access_kernel::model::{EqValue, Id, Window};
 use suiss_crypto::dcbor::{self, Limits, Value};
 use suiss_crypto::digest::context_digest;
 
+use crate::domain::claim_classes::{IdentityClass, RecoveryResult, digest as class_digest};
+
 /// The identity outbox kind prefix of Claim orders.
 pub const OUTBOX_PREFIX: &str = "claim.";
 
@@ -114,6 +116,9 @@ pub enum Content {
         /// Whether the body travels with the Claim.
         disclose: bool,
     },
+    /// A body of a registry class outside the Kernel table (OP-153 m.2 N0): its digest is the
+    /// value, and it always travels with the Claim.
+    Registry(Value),
 }
 
 /// A Claim the realm issuer is asked to issue, queued with the event that caused it.
@@ -574,6 +579,36 @@ pub struct Prepared {
     pub body: Option<Vec<u8>>,
 }
 
+/// How long a `recovery_result` Claim holds: the CT3 intent validity ceiling, so a self-signed
+/// `instance_recover` forwarded again after the domain's time-lock still finds it (OP-153 m.3
+/// (c), §13.7.3).
+pub const RECOVERY_RESULT_TTL_MS: u64 = 72 * 3_600_000;
+
+/// The line of an attempt's `recovery_result` Claims: a successor named again supersedes the
+/// first (OP-153 m.3 (c)).
+#[must_use]
+pub fn recovery_result_line(attempt: &[u8; 16]) -> [u8; 32] {
+    line(&[b"recovery_result", attempt])
+}
+
+/// The `recovery_result` Claim of an attempt at `REBIND_OPEN` (OP-153 m.3 (c), INV-40, §7.7):
+/// the successor key that may self-sign `instance_recover`, the path and the AAL it reached.
+/// The body travels with the Claim; its `aal` is also the Claim's assurance (§10.1.6).
+#[must_use]
+pub fn recovery_result(subject: [u8; 16], r: &RecoveryResult, at: u64) -> ClaimOrder {
+    ClaimOrder {
+        subject,
+        class: String::from(IdentityClass::RecoveryResult.name()),
+        at,
+        ttl_ms: RECOVERY_RESULT_TTL_MS,
+        content: Content::Registry(r.to_value()),
+        assurance: BTreeMap::from([(String::from("aal"), u64::from(r.achieved_aal))]),
+        bind: Bind::None,
+        line: Some(recovery_result_line(&r.attempt.0)),
+        retract: false,
+    }
+}
+
 impl ClaimOrder {
     /// The outbox kind.
     #[must_use]
@@ -597,6 +632,12 @@ impl ClaimOrder {
                     Some(EqValue::Bytes(digest.to_vec())),
                     disclose.then_some(bytes),
                 )
+            }
+            Content::Registry(v) => {
+                let class = IdentityClass::parse(&self.class).ok_or(BadOrder)?;
+                let digest = class_digest(class, v).map_err(|_| BadOrder)?;
+                let bytes = dcbor::encode(v, Limits::CEILING).map_err(|_| BadOrder)?;
+                (Some(EqValue::Bytes(digest.to_vec())), Some(bytes))
             }
         };
         let until = if self.retract {
@@ -649,6 +690,7 @@ impl ClaimOrder {
                 Value::Array(vec![Value::text("body"), body.to_value()]),
                 Some(Value::Bool(*disclose)),
             ),
+            Content::Registry(v) => (Value::Array(vec![Value::text("registry"), v.clone()]), None),
         };
         let bind = match self.bind {
             Bind::None => None,
@@ -747,6 +789,10 @@ fn content_of(value: Option<&Value>, class: &str, disclose: bool) -> Result<Cont
                 body: Body::from_value(parsed, inner).map_err(|_| BadOrder)?,
                 disclose,
             })
+        }
+        [Value::Text(tag), inner] if tag == "registry" => {
+            IdentityClass::parse(class).ok_or(BadOrder)?;
+            Ok(Content::Registry(inner.clone()))
         }
         _ => Err(BadOrder),
     }

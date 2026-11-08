@@ -178,6 +178,13 @@ impl DeviceInstances for Offline {
     async fn terminate(&self, _: Termination) -> Result<Verdict, PlaneUnavailable> {
         Err(offline())
     }
+
+    async fn recover(
+        &self,
+        _: access_internal_api::instances::Recovery,
+    ) -> Result<Verdict, PlaneUnavailable> {
+        Err(offline())
+    }
 }
 
 impl Approvals for Offline {
