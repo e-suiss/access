@@ -38,6 +38,31 @@ pub trait BreachRanges: Send + Sync {
     fn range(&self, prefix: &str) -> impl Future<Output = Result<String, RangeUnavailable>> + Send;
 }
 
+/// A non-interactive bot signal for a registration or recovery request (OP-153 m.1 (b)).
+pub trait BotSignals: Send + Sync {
+    /// The signal for the client's `token` from the hosted page, if any, and the request's
+    /// address prefix pseudonym; a provider that cannot answer is `Unavailable`, never an error.
+    fn assess(
+        &self,
+        token: Option<&str>,
+        context: &[u8],
+    ) -> impl Future<Output = crate::domain::bot::BotSignal> + Send;
+}
+
+/// The bot signal of a deployment with no provider configured.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct NoBotProvider;
+
+impl BotSignals for NoBotProvider {
+    fn assess(
+        &self,
+        _token: Option<&str>,
+        _context: &[u8],
+    ) -> impl Future<Output = crate::domain::bot::BotSignal> + Send {
+        std::future::ready(crate::domain::bot::BotSignal::Unavailable)
+    }
+}
+
 /// Opens account transactions in one realm.
 pub trait AccountDb: Send + Sync {
     /// The transaction.
