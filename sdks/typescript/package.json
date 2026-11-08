@@ -30,7 +30,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "build": "tsc -p tsconfig.build.json",
-    "gen": "openapi-typescript ../openapi/access-v1.json -o src/generated/access-v1.ts && openapi-typescript ../openapi/admin-v1.json -o src/generated/admin-v1.ts && openapi-typescript ../openapi/frontend.json -o src/generated/frontend.ts && openapi-typescript ../openapi/login.json -o src/generated/login.ts"
+    "gen": "openapi-typescript ../openapi/access-v1.json -o src/generated/access-v1.ts && openapi-typescript ../openapi/admin-v1.json -o src/generated/admin-v1.ts && openapi-typescript ../openapi/frontend.json -o src/generated/frontend.ts && openapi-typescript ../openapi/login.json -o src/generated/login.ts && openapi-typescript ../openapi/experience-v1.json -o src/generated/experience-v1.ts"
   },
   "engines": {
     "node": ">=24",

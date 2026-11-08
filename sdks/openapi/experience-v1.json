@@ -1,0 +1,835 @@
+{
+  "components": {
+    "schemas": {
+      "ActivityRow": {
+        "additionalProperties": false,
+        "properties": {
+          "at": {
+            "description": "Unix ms.",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "capacity": {
+            "$ref": "#/components/schemas/CapacityLabel"
+          },
+          "domain": {
+            "description": "DomainID.",
+            "type": "string"
+          },
+          "grant": {
+            "description": "The Grant it rested on.",
+            "type": "string"
+          },
+          "instance": {
+            "description": "The acting Instance, at expert depth.",
+            "type": "string"
+          },
+          "label": {
+            "description": "The reader's label of the domain; present only with more than one domain (IA-6).",
+            "type": "string"
+          },
+          "owner": {
+            "description": "Whose record the row is (XI-1).",
+            "enum": [
+              "access",
+              "executor",
+              "verifier",
+              "relay",
+              "pay"
+            ],
+            "type": "string"
+          },
+          "pos": {
+            "description": "The record.",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "text": {
+            "enum": [
+              "activity.by_you",
+              "activity.for_you"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "domain",
+          "owner",
+          "pos",
+          "text",
+          "capacity"
+        ],
+        "type": "object"
+      },
+      "CapacityLabel": {
+        "additionalProperties": false,
+        "properties": {
+          "party": {
+            "description": "The Party acted for.",
+            "type": "string"
+          },
+          "text": {
+            "enum": [
+              "capacity.own_use",
+              "capacity.on_behalf_of",
+              "capacity.as_yourself"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "type": "object"
+      },
+      "ChangeRow": {
+        "additionalProperties": false,
+        "properties": {
+          "about": {
+            "description": "The Grant, Instance, Acceptance or Claim.",
+            "type": "string"
+          },
+          "at": {
+            "description": "Unix ms.",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "derived": {
+            "const": true
+          },
+          "domain": {
+            "description": "DomainID.",
+            "type": "string"
+          },
+          "key_event": {
+            "description": "`{class, issuer}` (U26, SI-13).",
+            "type": "object"
+          },
+          "kind": {
+            "enum": [
+              "grant_to_you",
+              "grant_for_you",
+              "instance_added",
+              "acceptance",
+              "key_event"
+            ],
+            "type": "string"
+          },
+          "label": {
+            "description": "The reader's label of the domain; present only with more than one domain (IA-6).",
+            "type": "string"
+          },
+          "owner": {
+            "description": "Whose record the row is (XI-1).",
+            "enum": [
+              "access",
+              "executor",
+              "verifier",
+              "relay",
+              "pay"
+            ],
+            "type": "string"
+          },
+          "pos": {
+            "description": "The record.",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "text": {
+            "description": "The text key; none asks for an action (IA-2).",
+            "type": "string"
+          }
+        },
+        "required": [
+          "domain",
+          "owner",
+          "pos",
+          "kind",
+          "text",
+          "about",
+          "derived"
+        ],
+        "type": "object"
+      },
+      "DomainRef": {
+        "additionalProperties": false,
+        "properties": {
+          "domain": {
+            "description": "DomainID, base64url.",
+            "type": "string"
+          },
+          "label": {
+            "description": "The reader's label of the domain; present only with more than one domain (IA-6).",
+            "type": "string"
+          }
+        },
+        "required": [
+          "domain"
+        ],
+        "type": "object"
+      },
+      "DomainStatus": {
+        "additionalProperties": false,
+        "properties": {
+          "as_of": {
+            "description": "When it was read; absent when unknown (XI-16).",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "domain": {
+            "description": "DomainID.",
+            "type": "string"
+          },
+          "freshness": {
+            "$ref": "#/components/schemas/Freshness"
+          },
+          "label": {
+            "description": "The reader's label of the domain; present only with more than one domain (IA-6).",
+            "type": "string"
+          },
+          "owner": {
+            "description": "Whose record the row is (XI-1).",
+            "enum": [
+              "access",
+              "executor",
+              "verifier",
+              "relay",
+              "pay"
+            ],
+            "type": "string"
+          },
+          "text": {
+            "description": "`domain.current` or `domain.unreachable`.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "domain",
+          "owner",
+          "freshness",
+          "text"
+        ],
+        "type": "object"
+      },
+      "Freshness": {
+        "enum": [
+          "current",
+          "unknown",
+          "needs_refresh"
+        ],
+        "type": "string"
+      },
+      "Hub": {
+        "additionalProperties": false,
+        "properties": {
+          "acting_for_you": {
+            "description": "Holdings whose agency names the reader.",
+            "items": {
+              "$ref": "#/components/schemas/Row"
+            },
+            "type": "array"
+          },
+          "activity": {
+            "description": "Uses (S6).",
+            "items": {
+              "$ref": "#/components/schemas/ActivityRow"
+            },
+            "type": "array"
+          },
+          "as_of": {
+            "description": "When it was assembled.",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "changes": {
+            "description": "Changes (IA-2).",
+            "items": {
+              "$ref": "#/components/schemas/ChangeRow"
+            },
+            "type": "array"
+          },
+          "depth": {
+            "enum": [
+              "default",
+              "expert",
+              "audit"
+            ],
+            "type": "string"
+          },
+          "domains": {
+            "description": "The domains as seen.",
+            "items": {
+              "$ref": "#/components/schemas/DomainStatus"
+            },
+            "type": "array"
+          },
+          "notices": {
+            "description": "Always includes `hub.not_shown_unconnected`.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "roots": {
+            "description": "Anchors the reader roots.",
+            "items": {
+              "$ref": "#/components/schemas/RootRow"
+            },
+            "type": "array"
+          },
+          "shared_from_you": {
+            "description": "Holdings from the reader's holding or root, not for the reader.",
+            "items": {
+              "$ref": "#/components/schemas/Row"
+            },
+            "type": "array"
+          },
+          "show_domains": {
+            "description": "IA-6.",
+            "type": "boolean"
+          },
+          "your_authority": {
+            "description": "The reader's holdings.",
+            "items": {
+              "$ref": "#/components/schemas/Row"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "as_of",
+          "depth",
+          "domains",
+          "show_domains",
+          "acting_for_you",
+          "shared_from_you",
+          "your_authority",
+          "roots",
+          "activity",
+          "changes",
+          "notices"
+        ],
+        "type": "object"
+      },
+      "HubRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "depth": {
+            "default": "default",
+            "description": "§8.12: each depth explains the one before; capacity and status show at every depth.",
+            "enum": [
+              "default",
+              "expert",
+              "audit"
+            ],
+            "type": "string"
+          },
+          "reads": {
+            "description": "The signed reads.",
+            "items": {
+              "$ref": "#/components/schemas/SignedRead"
+            },
+            "type": "array"
+          },
+          "viewer": {
+            "description": "The reader's Party.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "viewer",
+          "reads"
+        ],
+        "type": "object"
+      },
+      "Kind": {
+        "enum": [
+          "inventory",
+          "activity",
+          "changes"
+        ],
+        "type": "string"
+      },
+      "Plan": {
+        "additionalProperties": false,
+        "properties": {
+          "pep": {
+            "description": "The PEP the AIS names: this service, as Access authenticates it (XI-18).",
+            "type": "string"
+          },
+          "reads": {
+            "description": "The reads to sign.",
+            "items": {
+              "$ref": "#/components/schemas/PlannedRead"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "pep",
+          "reads"
+        ],
+        "type": "object"
+      },
+      "PlanRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "domains": {
+            "description": "The domains the reader knows.",
+            "items": {
+              "$ref": "#/components/schemas/DomainRef"
+            },
+            "type": "array"
+          },
+          "kinds": {
+            "description": "All kinds when absent.",
+            "items": {
+              "$ref": "#/components/schemas/Kind"
+            },
+            "type": "array"
+          },
+          "viewer": {
+            "description": "The reader's Party, base64url.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "viewer",
+          "domains"
+        ],
+        "type": "object"
+      },
+      "PlannedRead": {
+        "additionalProperties": false,
+        "properties": {
+          "basis": {
+            "description": "`{anchor}`: the basis the AIS names.",
+            "type": "object"
+          },
+          "body": {
+            "description": "The ADP search body without `context.ais`.",
+            "type": "object"
+          },
+          "domain": {
+            "description": "DomainID.",
+            "type": "string"
+          },
+          "intent_digest": {
+            "description": "The digest the AIS signs, base64url.",
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/Kind"
+          },
+          "nonce": {
+            "description": "Nonce, base64url.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "domain",
+          "kind",
+          "nonce",
+          "intent_digest",
+          "basis",
+          "body"
+        ],
+        "type": "object"
+      },
+      "RootRow": {
+        "additionalProperties": false,
+        "properties": {
+          "anchor": {
+            "description": "The Anchor.",
+            "type": "string"
+          },
+          "confirm": {
+            "description": "`root.sole_confirm` or `root.joint_confirm` (§13.8).",
+            "type": "string"
+          },
+          "domain": {
+            "description": "DomainID.",
+            "type": "string"
+          },
+          "label": {
+            "description": "The reader's label of the domain; present only with more than one domain (IA-6).",
+            "type": "string"
+          },
+          "owner": {
+            "description": "Whose record the row is (XI-1).",
+            "enum": [
+              "access",
+              "executor",
+              "verifier",
+              "relay",
+              "pay"
+            ],
+            "type": "string"
+          },
+          "sole": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "domain",
+          "anchor",
+          "owner",
+          "sole",
+          "confirm"
+        ],
+        "type": "object"
+      },
+      "Row": {
+        "additionalProperties": false,
+        "properties": {
+          "as_of": {
+            "description": "When it was read (XI-16).",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "capacity": {
+            "description": "In whose name, apart from where it came from (XI-10); never empty.",
+            "items": {
+              "$ref": "#/components/schemas/CapacityLabel"
+            },
+            "type": "array"
+          },
+          "domain": {
+            "description": "DomainID.",
+            "type": "string"
+          },
+          "expert": {
+            "additionalProperties": false,
+            "properties": {
+              "revision": {
+                "description": "Revision.",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "role": {
+                "type": "object"
+              },
+              "since": {
+                "description": "Issuing position.",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "source": {
+                "type": "object"
+              }
+            },
+            "required": [
+              "source",
+              "since",
+              "revision"
+            ],
+            "type": "object"
+          },
+          "freshness": {
+            "$ref": "#/components/schemas/Freshness"
+          },
+          "grant": {
+            "description": "The Grant.",
+            "type": "string"
+          },
+          "label": {
+            "description": "The reader's label of the domain; present only with more than one domain (IA-6).",
+            "type": "string"
+          },
+          "limits": {
+            "description": "One row per limit and owner (XI-14).",
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "kind": {
+                  "enum": [
+                    "authority",
+                    "financial"
+                  ],
+                  "type": "string"
+                },
+                "owner": {
+                  "description": "Whose record the row is (XI-1).",
+                  "enum": [
+                    "access",
+                    "executor",
+                    "verifier",
+                    "relay",
+                    "pay"
+                  ],
+                  "type": "string"
+                },
+                "term": {
+                  "type": "object"
+                }
+              },
+              "required": [
+                "kind",
+                "owner",
+                "term"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "offers": {
+            "description": "Actions; one the reader cannot take is shown with who can.",
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "action": {
+                  "enum": [
+                    "revoke",
+                    "narrow",
+                    "suspend"
+                  ],
+                  "type": "string"
+                },
+                "available": {
+                  "type": "boolean"
+                },
+                "steps": {
+                  "description": "XI-5.",
+                  "maximum": 2,
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                "who_can": {
+                  "description": "A text key naming who can, when the reader cannot (XI-11).",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "action",
+                "available",
+                "steps"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "owner": {
+            "description": "Whose record the row is (XI-1).",
+            "enum": [
+              "access",
+              "executor",
+              "verifier",
+              "relay",
+              "pay"
+            ],
+            "type": "string"
+          },
+          "status": {
+            "description": "`status.current` or `status.needs_refresh` (XI-15: never \"removed\").",
+            "type": "string"
+          },
+          "validity": {
+            "additionalProperties": false,
+            "properties": {
+              "text": {
+                "const": "validity.valid_until"
+              },
+              "valid_until": {
+                "description": "Unix ms.",
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "required": [
+              "valid_until",
+              "text"
+            ],
+            "type": "object"
+          },
+          "what": {
+            "description": "`namespace:name` of each action.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "who": {
+            "additionalProperties": false,
+            "properties": {
+              "classes": {
+                "description": "Claim classes of a rule-shaped holder.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "kind": {
+                "enum": [
+                  "party",
+                  "everyone",
+                  "group",
+                  "foreign"
+                ],
+                "type": "string"
+              },
+              "party": {
+                "description": "Party.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "domain",
+          "grant",
+          "owner",
+          "as_of",
+          "freshness",
+          "status",
+          "who",
+          "capacity",
+          "what",
+          "validity",
+          "limits",
+          "offers"
+        ],
+        "type": "object"
+      },
+      "Signal": {
+        "additionalProperties": false,
+        "properties": {
+          "at_least": {
+            "description": "Read again; the answer reflects at least this position.",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "kind": {
+            "const": "authority"
+          }
+        },
+        "required": [
+          "kind",
+          "at_least"
+        ],
+        "type": "object"
+      },
+      "SignedRead": {
+        "additionalProperties": false,
+        "properties": {
+          "body": {
+            "description": "The ADP search body with `context.ais`.",
+            "type": "object"
+          },
+          "domain": {
+            "description": "DomainID.",
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/Kind"
+          },
+          "label": {
+            "description": "The reader's label of the domain; present only with more than one domain (IA-6).",
+            "type": "string"
+          }
+        },
+        "required": [
+          "domain",
+          "kind",
+          "body"
+        ],
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "description": "The Authority hub's render data (CMP-16). Read with the reader's own AIS from Access's public endpoints, as any third-party experience could (XI-18, IA-7). It holds and writes no authority.",
+    "license": {
+      "identifier": "Apache-2.0",
+      "name": "Apache-2.0"
+    },
+    "title": "Suiss Access Experience",
+    "version": "1.0.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/experience/v1/hub": {
+      "post": {
+        "operationId": "readHub",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HubRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Hub"
+                }
+              }
+            },
+            "description": "The hub."
+          },
+          "400": {
+            "description": "Malformed."
+          }
+        },
+        "summary": "The hub's render data, read with the reader's own signed reads (S2, S6, IA-2). A domain that does not answer is `unknown`, never empty and never pending (XI-16). No write path exists here."
+      }
+    },
+    "/experience/v1/hub/plan": {
+      "post": {
+        "operationId": "planHub",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PlanRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Plan"
+                }
+              }
+            },
+            "description": "The plan."
+          },
+          "400": {
+            "description": "Malformed."
+          }
+        },
+        "summary": "The reads to sign for the Authority hub. Nothing is read or written."
+      }
+    },
+    "/experience/v1/stream": {
+      "get": {
+        "operationId": "streamSignals",
+        "responses": {
+          "200": {
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/Signal"
+                }
+              }
+            },
+            "description": "`text/event-stream` of `Signal` events."
+          }
+        },
+        "summary": "Server-sent events: `{kind, at_least}` hints to read again; never the data (§17.3.1)."
+      }
+    }
+  }
+}

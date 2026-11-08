@@ -118,3 +118,4 @@ export type * as AccessApi from "./generated/access-v1.js";
 export type * as AdminApi from "./generated/admin-v1.js";
 export type * as FrontendApi from "./generated/frontend.js";
 export type * as LoginApi from "./generated/login.js";
+export type * as ExperienceApi from "./generated/experience-v1.js";

@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/*", "bins/*", "sdks/bindings/wasm", "sdks/bindings/uniffi", "sdks/rust/*", "xtask"]
+members = ["crates/*", "bins/*", "services/*", "sdks/bindings/wasm", "sdks/bindings/uniffi", "sdks/rust/*", "xtask"]
 
 [workspace.package]
 version = "0.3.1"
@@ -35,6 +35,7 @@ access-identity-hooks = { path = "crates/identity-hooks", default-features = fal
 access-identity-risk = { path = "crates/identity-risk", default-features = false }
 access-authority-ingest = { path = "crates/authority-ingest", default-features = false }
 access-sdk = { package = "esuiss-access-sdk", path = "sdks/rust/access", version = "=0.3.1", default-features = false }
+access-experience = { path = "services/experience", default-features = false }
 access-verifier = { package = "esuiss-access-verifier", path = "sdks/rust/verifier", version = "=0.3.1", default-features = false }
 
 # F-2
@@ -87,6 +88,8 @@ httparse = { version = "1.10.1", default-features = false }
 rustls-webpki = { version = "0.103.16", default-features = false }
 rcgen = { version = "0.14.7", default-features = false }
 tower = { version = "0.5.3", default-features = false }
+# OP-153 m.3 (v): the experience SSE stream
+futures-util = { version = "0.3.34", default-features = false }
 tower-http = { version = "0.7.1", default-features = false }
 figment = { version = "0.10.19", default-features = false }
 clap = { version = "4.6.7", default-features = false }

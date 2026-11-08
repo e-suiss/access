@@ -1,0 +1,27 @@
+[package]
+name = "access-experience"
+description = "Experience backend (CMP-16): the Authority hub's render data, read from Access's public endpoints with the caller's own AIS; it holds and writes no authority."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+# OP-153 m.3 (v), OP-62
+access-kernel = { workspace = true }
+access-sdk = { workspace = true }
+axum = { workspace = true, features = ["http1", "tokio", "json"] }
+futures-util = { workspace = true }
+serde = { workspace = true, features = ["derive", "std"] }
+serde_json = { workspace = true, features = ["std"] }
+thiserror = { workspace = true, features = ["std"] }
+tokio = { workspace = true, features = ["sync", "time", "rt", "macros"] }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["sync", "time", "rt", "macros", "rt-multi-thread"] }
+tower = { workspace = true, features = ["util"] }
+
+[lints]
+workspace = true

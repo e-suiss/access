@@ -109,6 +109,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "access-experience"
+version = "0.3.1"
+dependencies = [
+ "axum",
+ "esuiss-access-kernel",
+ "esuiss-access-sdk",
+ "futures-util",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+ "tower",
+]
+
+[[package]]
 name = "access-http"
 version = "0.3.1"
 dependencies = [

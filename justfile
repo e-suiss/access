@@ -284,6 +284,10 @@ login-contract:
 access-contract:
     ACCESS_UPDATE_CONTRACTS=1 cargo test --locked -p access-http --test product
 
+# OP-65, OP-153 m.3 (v): rewrite sdks/openapi/experience-v1.json from services/experience
+experience-contract:
+    ACCESS_UPDATE_CONTRACTS=1 cargo test --locked -p access-experience --test contract
+
 # OP-65, OP-151 m.4: rewrite sdks/openapi/admin-v1.json and problems.json from crates/http
 admin-contract:
     ACCESS_UPDATE_CONTRACTS=1 cargo test --locked -p access-http --test admin_contract
