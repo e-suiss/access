@@ -27,15 +27,21 @@ pub(crate) enum Durability {
 
 /// One login role.
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct Role {
     /// Login role.
     pub(crate) user: String,
     /// Credential file (OP-129 m.3); never the password itself.
     pub(crate) password_file: PathBuf,
+    /// The server's pool size; the command line opens one connection.
+    #[serde(default, rename = "pool")]
+    _pool: Option<u32>,
 }
 
-/// The database section, as far as the command line needs it.
+/// The database section, as far as the command line needs it. The server's other logins are
+/// read and checked but not used, so a misspelt key is refused here as in the server (OP-63).
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct Database {
     /// Server host name, checked against its certificate.
     pub(crate) host: String,
@@ -50,6 +56,24 @@ pub(crate) struct Database {
     /// `access_migrator` login: only the migration job uses it (OP-55).
     #[serde(default)]
     pub(crate) migrator: Option<Role>,
+    /// The server's logins, unused here.
+    #[serde(default, rename = "sequencer")]
+    _sequencer: Option<Role>,
+    #[serde(default, rename = "app")]
+    _app: Option<Role>,
+    #[serde(default, rename = "deriver")]
+    _deriver: Option<Role>,
+    #[serde(default, rename = "router")]
+    _router: Option<Role>,
+    #[serde(default, rename = "archive")]
+    _archive: Option<Role>,
+    #[serde(default, rename = "outbox_reader")]
+    _outbox_reader: Option<Role>,
+    #[serde(default, rename = "checkpointer")]
+    _checkpointer: Option<Role>,
+    /// The server's read replica, unused here.
+    #[serde(default, rename = "replica_host")]
+    _replica_host: Option<String>,
 }
 
 /// Why the configuration cannot be used.
@@ -88,5 +112,47 @@ impl File {
             .as_ref()
             .ok_or(ConfigError::Missing("database.migrator"))?;
         Ok((db, role))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used, reason = "test code")]
+
+    use super::*;
+
+    fn parse(text: &str) -> Result<File, Box<figment::Error>> {
+        Figment::from(Toml::string(text))
+            .extract()
+            .map_err(Box::new)
+    }
+
+    // A-9, OP-63, TI-9: the server's own database section reads, and a misspelt key in it or in
+    // a login is refused rather than ignored
+    #[test]
+    fn unknown_database_keys_are_refused() {
+        let server = include_str!("../../../deploy/compose/access/access.toml");
+        let file = parse(server).unwrap();
+        assert!(file.migration().is_ok());
+        let base = "[database]\nhost = \"h\"\nport = 5432\nname = \"access\"\n\
+                    root_cert_file = \"/r.pem\"\ndurability = \"replicated\"\n";
+        assert!(
+            parse(&format!(
+                "{base}migrater = {{ user = \"m\", password_file = \"/p\" }}\n"
+            ))
+            .is_err()
+        );
+        assert!(
+            parse(&format!(
+                "{base}migrator = {{ user = \"m\", password_file = \"/p\", insecure = true }}\n"
+            ))
+            .is_err()
+        );
+        assert!(
+            parse(&format!(
+                "{base}migrator = {{ user = \"m\", password_file = \"/p\", pool = 1 }}\n"
+            ))
+            .is_ok()
+        );
     }
 }
