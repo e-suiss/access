@@ -119,6 +119,12 @@ fn account_router(c: &super::management::Console) -> axum::Router {
 /// A hosted login session of `subject`, authenticated just now with a password and a TOTP code
 /// (AAL2), as the hosted login opens one.
 async fn signed_in(c: &super::management::Console) -> String {
+    let at = now();
+    signed_in_with(c, vec![Factor::password(at), Factor::totp([4; 16], at)]).await
+}
+
+/// A hosted login session of `subject` authenticated just now with `factors`.
+async fn signed_in_with(c: &super::management::Console, factors: Vec<Factor>) -> String {
     let value: [u8; 32] = access_crypto::random::bytes().unwrap();
     let at = now();
     let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.realm)
@@ -133,8 +139,7 @@ async fn signed_in(c: &super::management::Console) -> String {
         auth_time_ms: i64::try_from(at).unwrap(),
         idle_ms: 3_600_000,
         expires_ms: i64::try_from(at + 3_600_000).unwrap(),
-        assurance: &serde_json::to_vec(&vector(&[Factor::password(at), Factor::totp([4; 16], at)]))
-            .unwrap(),
+        assurance: &serde_json::to_vec(&vector(&factors)).unwrap(),
     })
     .await
     .unwrap();
@@ -287,6 +292,40 @@ async fn the_account_pages_read_and_revoke_only_with_the_browsers_key() {
     assert!(s["instance"].is_null());
     assert_eq!(s["api"], BASE);
     let csrf = csrf_of(&r);
+
+    // OP-149 m.6
+    let weak = Page {
+        session: signed_in_with(&c, vec![Factor::password(now())]).await,
+        csrf: None,
+    };
+    let (r, body) = send(
+        &app,
+        weak.request(&Method::GET, &format!("{BASE}/session"))
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(
+        json_of(&body)["step_up_needed"],
+        true,
+        "{}",
+        String::from_utf8_lossy(&body)
+    );
+    let weak = Page {
+        csrf: Some(csrf_of(&r)),
+        ..weak
+    };
+    let (r, body) = send(
+        &app,
+        weak.post(
+            &format!("{BASE}/instances/challenge"),
+            &json!({ "key": "AA" }),
+        ),
+    )
+    .await;
+    assert_eq!(r.status(), StatusCode::FORBIDDEN);
+    assert_eq!(json_of(&body)["code"], "step-up-required");
+    assert_eq!(s["step_up_needed"], false);
 
     // TN-131
     let key = SoftSigner::generate_p256().unwrap().0;

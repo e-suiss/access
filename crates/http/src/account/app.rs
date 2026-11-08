@@ -189,6 +189,10 @@ mod problems {
         Problem::new(StatusCode::FORBIDDEN, "read-not-own", "Forbidden")
     }
 
+    pub(super) fn step_up() -> Problem {
+        Problem::new(StatusCode::FORBIDDEN, "step-up-required", "Forbidden")
+    }
+
     pub(super) fn instance_exists() -> Problem {
         Problem::new(StatusCode::CONFLICT, "instance-exists", "Conflict")
     }
@@ -372,6 +376,7 @@ async fn session(
             "party": sh.party.map(|p| b64url_encode(&p)),
             "instance": sh.instance.as_ref().map(|i| b64url_encode(&i.kid)),
             "instance_id": sh.instance.as_ref().map(|i| b64url_encode(&i.instance)),
+            "step_up_needed": !sh.fresh,
             "pep": ACCOUNT_PEP,
             "api": api_base(slug),
             "frontend": slug.map_or_else(String::new, |s| format!("/realms/{s}")),
@@ -400,6 +405,10 @@ async fn challenge(
     };
     if l.shell.instance.is_some() {
         return problems::instance_exists().into_response();
+    }
+    // OP-149 m.6
+    if !l.shell.fresh {
+        return problems::step_up().into_response();
     }
     let Some(key) = serde_json::from_slice::<serde_json::Value>(&body)
         .ok()

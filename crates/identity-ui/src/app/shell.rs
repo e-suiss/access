@@ -5,7 +5,7 @@
 
 use access_identity_oauth::ports::RealmEntry;
 use access_identity_session::app::sessions::SessionStatus;
-use access_identity_session::domain::device::instance_key;
+use access_identity_session::domain::device::{Assurance, assurance, instance_key};
 use access_identity_session::domain::session::{SESSION_COOKIE, clear_cookie};
 use access_identity_session::ports::Clock;
 use access_internal_api::instances::{Registrant, Registration, SelfSigned, self_signed_intent};
@@ -57,6 +57,9 @@ pub struct Shell {
     pub party: Option<[u8; 16]>,
     /// The session's device Instance, once registered or bound (INV-13).
     pub instance: Option<ShellInstance>,
+    /// Whether the session may set up a device now: AAL2, authenticated or stepped up within
+    /// the window (OP-149 m.6).
+    pub fresh: bool,
 }
 
 fn ended(status: &SessionStatus) -> Reply {
@@ -102,6 +105,10 @@ where
             Ok(other) => return Err(ended(&other)),
             Err(e) => return Err(failed(&e)),
         };
+        let fresh = matches!(
+            assurance(v.assurance.aal, v.auth_time_ms, self.clock.now_ms()),
+            Assurance::Fresh
+        );
         let domain = governing(&self.db, &kit).await?;
         let mut t = TenantTx::begin(&self.db, kit.tenant, kit.realm)
             .await
@@ -142,6 +149,7 @@ where
             expires_ms: v.expires_ms,
             party,
             instance,
+            fresh,
         })
     }
 
