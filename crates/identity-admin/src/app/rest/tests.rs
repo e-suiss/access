@@ -388,6 +388,9 @@ fn an_administrator_never_sets_a_users_credential() {
             IdpAction::AccountRecoveryPolicyLoosen,
             IdpAction::AccountExport,
             IdpAction::AccountMigrationExport,
+            IdpAction::AccountRead,
+            IdpAction::AccountProfileUpdate,
+            IdpAction::AccountEmailChange,
         ]
     );
     for a in IdpAction::ALL {

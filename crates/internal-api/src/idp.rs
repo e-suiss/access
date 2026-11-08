@@ -190,11 +190,23 @@ pub enum IdpAction {
     /// Moves the realm's hosted surfaces, issuer and RP ID to a verified customer domain
     /// (OP-153 m.3 (u)): reserved, irreversible, CT3.
     RealmCustomDomain,
+    /// Reads the account's own resources under its self-anchor (E34): CT1.
+    AccountRead,
+    /// Changes the account's own profile fields under its self-anchor (E34): CT1.
+    AccountProfileUpdate,
+    /// Changes the account's primary e-mail address after step-up and an out-of-band code
+    /// (E34, OP-153 m.3 (i)): CT2.
+    AccountEmailChange,
+    /// Places a legal hold that stops destruction of the held records (T39, OP-153 m.3 (ff)):
+    /// CT1.
+    RealmRetentionHoldPlace,
+    /// Lifts a legal hold, letting destruction run on its schedule again (T39): CT2.
+    RealmRetentionHoldLift,
 }
 
 impl IdpAction {
     /// Every action, in catalog order.
-    pub const ALL: [Self; 63] = [
+    pub const ALL: [Self; 68] = [
         Self::ClientRegister,
         Self::ClientUpdate,
         Self::ClientRetire,
@@ -258,6 +270,11 @@ impl IdpAction {
         Self::RealmInactivityPolicy,
         Self::RealmRetentionExtend,
         Self::RealmCustomDomain,
+        Self::AccountRead,
+        Self::AccountProfileUpdate,
+        Self::AccountEmailChange,
+        Self::RealmRetentionHoldPlace,
+        Self::RealmRetentionHoldLift,
     ];
 
     /// The catalog version that first declared it (OP-153 m.3 (a)).
@@ -288,7 +305,12 @@ impl IdpAction {
             | Self::RealmPreferenceTopics
             | Self::RealmInactivityPolicy
             | Self::RealmRetentionExtend
-            | Self::RealmCustomDomain => 2,
+            | Self::RealmCustomDomain
+            | Self::AccountRead
+            | Self::AccountProfileUpdate
+            | Self::AccountEmailChange
+            | Self::RealmRetentionHoldPlace
+            | Self::RealmRetentionHoldLift => 2,
             _ => 1,
         }
     }
@@ -327,7 +349,9 @@ impl IdpAction {
             | Self::RealmPreferenceTopics
             | Self::RealmInactivityPolicy
             | Self::RealmRetentionExtend
-            | Self::RealmCustomDomain => "idp.realm",
+            | Self::RealmCustomDomain
+            | Self::RealmRetentionHoldPlace
+            | Self::RealmRetentionHoldLift => "idp.realm",
             Self::OrgCreate
             | Self::OrgUpdate
             | Self::OrgDomainClaim
@@ -354,7 +378,10 @@ impl IdpAction {
             | Self::AccountRecoveryPolicy
             | Self::AccountRecoveryPolicyLoosen
             | Self::AccountExport
-            | Self::AccountMigrationExport => "idp.account",
+            | Self::AccountMigrationExport
+            | Self::AccountRead
+            | Self::AccountProfileUpdate
+            | Self::AccountEmailChange => "idp.account",
         }
     }
 
@@ -424,6 +451,11 @@ impl IdpAction {
             Self::RealmInactivityPolicy => "inactivity_policy",
             Self::RealmRetentionExtend => "retention_extend",
             Self::RealmCustomDomain => "custom_domain",
+            Self::AccountRead => "read",
+            Self::AccountProfileUpdate => "profile_update",
+            Self::AccountEmailChange => "email_change",
+            Self::RealmRetentionHoldPlace => "retention_hold_place",
+            Self::RealmRetentionHoldLift => "retention_hold_lift",
         }
     }
 
@@ -459,7 +491,10 @@ impl IdpAction {
             | Self::OrgInviteRevoke
             | Self::OrgMemberRemove
             | Self::OrgSsoDraft
-            | Self::SocialDisable => EffectClass::Reversible,
+            | Self::SocialDisable
+            | Self::AccountRead
+            | Self::AccountProfileUpdate
+            | Self::RealmRetentionHoldPlace => EffectClass::Reversible,
             _ => EffectClass::Irreversible,
         }
     }
