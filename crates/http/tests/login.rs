@@ -4544,3 +4544,266 @@ async fn n5_the_last_sign_in_method_stays() {
     );
     assert_eq!(last.json()["code"], "last-sign-in-method");
 }
+
+impl Env {
+    /// N5: an ALLOW recorded in the realm's governing domain; its log position.
+    async fn decided(&self, seed: u8) -> u64 {
+        use access_store::authority::{
+            CommitBatch, HeadRow, NonceRow, acquire_lease, commit_batch,
+        };
+        let (lease, head) = acquire_lease(
+            &self.db.sequencer,
+            &self.domain,
+            "t",
+            std::time::Duration::from_secs(10),
+        )
+        .await
+        .unwrap();
+        let pos = head.pos + 1;
+        let leaf = [seed; 32];
+        let batch = CommitBatch {
+            epoch: lease.epoch,
+            after: head.pos,
+            records: vec![LogRecord {
+                pos,
+                kind: "decision",
+                recorded_at: 2,
+                leaf_hash: leaf,
+                envelope: vec![0xa1, 1],
+            }],
+            head: HeadRow {
+                pos,
+                epoch: lease.epoch,
+                leaf_hash: leaf,
+                recorded_at: 2,
+                frontier: vec![leaf],
+            },
+            nonces: vec![NonceRow {
+                nonce: vec![seed; 16],
+                actor: vec![1],
+                intent_digest: [seed; 32],
+                decision_pos: pos,
+                outcome: String::from("allow"),
+                render_digest: None,
+                tier: None,
+            }],
+            outbox: vec![],
+            proofs: vec![],
+            reads: vec![],
+            writes: vec![],
+            draws: vec![],
+            single_use: vec![],
+            effects: vec![],
+        };
+        commit_batch(
+            &self.db.sequencer,
+            &self.domain,
+            *self.tenant.as_bytes(),
+            &batch,
+        )
+        .await
+        .unwrap();
+        pos
+    }
+
+    /// N5: the realm's branding, decided through `idp.realm.branding` (TN-106).
+    async fn brand(&self, entries: Vec<(&str, suiss_crypto::dcbor::Value)>, seed: u8) {
+        use access_store::idp::{Decision, bind};
+        use suiss_crypto::dcbor::{Limits, Value, encode};
+        let pos = self.decided(seed).await;
+        let value = Value::Map(
+            entries
+                .into_iter()
+                .map(|(k, v)| (Value::Text(k.into()), v))
+                .collect(),
+        );
+        let mut tx = TenantTx::begin(&self.db.app, self.tenant, self.realm)
+            .await
+            .unwrap();
+        let bound = bind(
+            &mut tx,
+            &Decision {
+                domain: &self.domain,
+                position: pos,
+                nonce: &[seed; 16],
+                intent: [seed; 32],
+                change: [seed; 32],
+                action: "idp.realm.branding",
+            },
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        access_store::idp::set_branding(&mut tx, &bound, &encode(&value, Limits::CEILING).unwrap())
+            .await
+            .unwrap();
+        tx.commit().await.unwrap();
+    }
+}
+
+// TN-106, IDP-36, OP-153 m.3 (t), F23
+#[tokio::test]
+async fn n5_the_theme_record_is_applied_to_the_hosted_page() {
+    use suiss_crypto::dcbor::Value;
+    let e = env(56, "n5-f", AuthPolicy::DEFAULT).await;
+    let mut b = e.browser("b");
+    let none = b.get("/v1/login/branding").await;
+    assert_eq!(none.status, StatusCode::OK);
+    assert_eq!(
+        none.json(),
+        json!({ "display_name": null, "logo_uri": null })
+    );
+    assert_eq!(b.get("/login/theme.css").await.body, b":root{}\n");
+    e.brand(
+        vec![
+            ("display_name", Value::Text("Acme Shop".into())),
+            (
+                "logo_uri",
+                Value::Text("https://cdn.acme.example/logo.svg".into()),
+            ),
+            ("primary_color", Value::Text("#0a2540".into())),
+            ("background_color", Value::Text("#ffffff".into())),
+            (
+                "csp_origins",
+                Value::Array(vec![Value::Text("https://cdn.acme.example".into())]),
+            ),
+        ],
+        0x61,
+    )
+    .await;
+    let brand = b.get("/v1/login/branding").await.json();
+    assert_eq!(brand["display_name"], "Acme Shop");
+    assert_eq!(brand["logo_uri"], "https://cdn.acme.example/logo.svg");
+    let css = b.get("/login/theme.css").await;
+    assert_eq!(css.headers[header::CONTENT_TYPE], "text/css; charset=utf-8");
+    assert_eq!(
+        css.body,
+        b":root{--brand-primary:#0a2540;--brand-background:#ffffff;}\n"
+    );
+    let page = b.get("/login").await;
+    let csp = page.headers["content-security-policy"].to_str().unwrap();
+    assert!(
+        csp.contains("img-src 'self' https://cdn.acme.example;"),
+        "{csp}"
+    );
+    assert!(csp.contains("script-src 'self';"));
+    assert!(csp.contains("frame-ancestors 'none'"));
+    assert!(!csp.contains("unsafe"));
+    assert!(
+        !page
+            .headers
+            .contains_key("content-security-policy-report-only")
+    );
+
+    e.brand(
+        vec![
+            (
+                "logo_uri",
+                Value::Text("https://cdn.acme.example/logo.svg".into()),
+            ),
+            (
+                "csp_origins",
+                Value::Array(vec![Value::Text("https://cdn.acme.example".into())]),
+            ),
+            ("csp_mode", Value::Text("report_only".into())),
+        ],
+        0x62,
+    )
+    .await;
+    let page = b.get("/login").await;
+    let csp = page.headers["content-security-policy"].to_str().unwrap();
+    assert!(csp.contains("img-src 'self';"), "{csp}");
+    let report = page.headers["content-security-policy-report-only"]
+        .to_str()
+        .unwrap();
+    assert!(report.contains("img-src 'self' https://cdn.acme.example;"));
+}
+
+// OP-153 m.3 (t), IDP-36
+#[tokio::test]
+async fn n5_a_csp_violation_report_is_accepted_and_rate_limited() {
+    let e = env(57, "n5-g", AuthPolicy::DEFAULT).await;
+    let mut b = e.browser("b");
+    let report = json!({ "csp-report": {
+        "document-uri": "https://acme.example/login?flow=secret",
+        "effective-directive": "script-src-elem",
+        "blocked-uri": "https://tracker.example/t.js?u=1",
+        "disposition": "enforce",
+    }});
+    let send = async |b: &mut Web, kind: &str, body: Value| {
+        b.send_with(
+            "POST",
+            "/csp-reports",
+            Some(body),
+            None,
+            &[("content-type", kind)],
+        )
+        .await
+    };
+    let first = send(&mut b, "application/csp-report", report.clone()).await;
+    assert_eq!(
+        first.status,
+        StatusCode::NO_CONTENT,
+        "{}",
+        String::from_utf8_lossy(&first.body)
+    );
+    let mut t = TenantTx::begin(&e.db.app, e.tenant, e.realm).await.unwrap();
+    assert_eq!(t.csp_reports_since(0).await.unwrap(), 1);
+    t.commit().await.unwrap();
+    let api = json!([{ "type": "csp-violation", "body": {
+        "documentURL": "https://acme.example/login", "effectiveDirective": "img-src",
+        "blockedURL": "https://pixel.example/p.gif", "disposition": "report" } }]);
+    for _ in 1..access_identity_ui::app::pages::CSP_REPORTS_PER_MINUTE {
+        let r = send(&mut b, "application/reports+json", api.clone()).await;
+        assert_eq!(r.status, StatusCode::NO_CONTENT);
+    }
+    let over = send(&mut b, "application/reports+json", api.clone()).await;
+    assert_eq!(over.status, StatusCode::TOO_MANY_REQUESTS);
+    assert_eq!(over.json()["code"], "csp-reports-throttled");
+    e.advance(60_001);
+    assert_eq!(
+        send(&mut b, "application/reports+json", api).await.status,
+        StatusCode::NO_CONTENT
+    );
+    let bad = send(&mut b, "text/plain", json!({})).await;
+    assert_eq!(bad.status, StatusCode::UNSUPPORTED_MEDIA_TYPE);
+    let junk = send(&mut b, "application/csp-report", json!("x")).await;
+    assert_eq!(junk.status, StatusCode::BAD_REQUEST);
+}
+
+// TN-133, X-L5, OP-153 m.3 (t)
+#[tokio::test]
+async fn n5_consent_and_approval_pages_cannot_be_framed() {
+    let e = env(58, "n5-h", AuthPolicy::DEFAULT).await;
+    let mut b = e.browser("b");
+    for path in [
+        "/login?reason=share&return_to=%2Fauthorize",
+        "/login/invitation/X",
+        "/v1/approve/app.js",
+    ] {
+        let page = b
+            .send_with("GET", path, None, None, &[("sec-fetch-dest", "iframe")])
+            .await;
+        let csp = page.headers["content-security-policy"].to_str().unwrap();
+        assert!(csp.contains("frame-ancestors 'none'"), "{path}: {csp}");
+        assert_eq!(
+            page.headers["cross-origin-opener-policy"], "same-origin",
+            "{path}"
+        );
+        assert!(
+            !page.headers.contains_key("access-control-allow-origin"),
+            "{path}"
+        );
+    }
+    let cross = b
+        .send_with(
+            "POST",
+            "/v1/login/flows",
+            None,
+            Some("k-cross"),
+            &[("origin", "https://shop.example")],
+        )
+        .await;
+    assert!(!cross.headers.contains_key("access-control-allow-origin"));
+    assert_eq!(cross.status, StatusCode::FORBIDDEN);
+}

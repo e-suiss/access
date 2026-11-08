@@ -421,7 +421,8 @@ pub enum Node {
         provider: String,
         /// Caption.
         label: Text,
-        /// `GET` target that starts the provider sign-in.
+        /// `GET` target that starts the provider sign-in, below the realm issuer like every
+        /// action of the contract.
         href: String,
     },
 }

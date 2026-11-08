@@ -240,3 +240,39 @@ async fn routes_forms_and_outages() {
             .starts_with("DPoP ")
     );
 }
+
+// X-L8, X41, OP-153 m.3 (jj)
+#[tokio::test]
+async fn a_browser_sees_the_error_page_with_owner_and_reference() {
+    let page = send(
+        Request::get("/authorize?client_id=cli_x")
+            .header(header::HOST, "acme.id.test")
+            .header(header::ACCEPT, "text/html,application/xhtml+xml")
+            .header(
+                "traceparent",
+                "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+            )
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(page.status(), StatusCode::SEE_OTHER);
+    let to = page.headers()[header::LOCATION].to_str().unwrap();
+    let reference =
+        access_identity_ui::domain::error_page::reference("4bf92f3577b34da6a3ce929d0e0e4736");
+    assert_eq!(
+        to,
+        format!(
+            "https://acme.id.test/login/error?error=temporarily_unavailable&owner=access&ref={reference}"
+        )
+    );
+    let api = send(
+        Request::get("/authorize?client_id=cli_x")
+            .header(header::HOST, "acme.id.test")
+            .header(header::ACCEPT, "application/json")
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(api.status(), StatusCode::SERVICE_UNAVAILABLE);
+}

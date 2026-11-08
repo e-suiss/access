@@ -534,7 +534,6 @@ where
         let Ok(rows) = rows.await else {
             return reply;
         };
-        let base = issuer_path(&kit.issuer);
         for row in rows.into_iter().filter(|r| r.active) {
             let name = shipped_presets()
                 .and_then(|p| p.get(&row.preset))
@@ -544,7 +543,7 @@ where
                     id: TextId::ContinueWith,
                     text: format!("Continue with {name}"),
                 },
-                href: format!("{base}/v1/login/social/{}", row.preset),
+                href: format!("/v1/login/social/{}", row.preset),
                 provider: row.preset,
             });
         }

@@ -1745,3 +1745,63 @@ async fn a_vouched_sign_in_records_the_hosted_domain_its_upstream_asserted() {
     };
     assert_eq!(org_owner, (true, false));
 }
+// X-L8, OP-153 m.3 (z)
+#[tokio::test]
+async fn a_person_who_does_not_share_sends_the_app_access_denied() {
+    let e = env(0x5a, "soc-n5").await;
+    e.account("ada@example.org").await;
+    let return_to = e.waiting_third_party("openid email").await;
+    let mut anon = e.browser(9);
+    let refused = anon
+        .send(
+            "POST",
+            "/v1/account/connected-apps/decline",
+            Some(json!({ "return_to": return_to })),
+        )
+        .await;
+    assert_eq!(refused.status, StatusCode::UNAUTHORIZED);
+    let mut w = e.browser(1);
+    w.sign_in("ada@example.org").await;
+    let declined = w
+        .send(
+            "POST",
+            "/v1/account/connected-apps/decline",
+            Some(json!({ "return_to": return_to })),
+        )
+        .await;
+    assert_eq!(declined.status, StatusCode::OK, "{}", declined.code());
+    let to = declined.json()["redirect_to"].as_str().unwrap().to_owned();
+    assert!(to.contains("error=access_denied"), "{to}");
+    assert!(to.contains(&format!("iss=https%3A%2F%2F{HOST}")), "{to}");
+    let list = w.send("GET", "/v1/account/connected-apps", None).await;
+    assert_eq!(list.json()["apps"], json!([]));
+}
+
+// OP-153 m.3 (l), TN-106
+#[tokio::test]
+async fn the_first_step_offers_the_realms_active_providers() {
+    let e = env(0x5b, "soc-n5b").await;
+    let mut w = e.browser(1);
+    let before = w.send("POST", "/v1/login/flows", None).await;
+    assert!(
+        !before.json()["nodes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|n| n["type"] == "provider")
+    );
+    e.enable(Some("own-client")).await;
+    let mut w = e.browser(2);
+    let after = w.send("POST", "/v1/login/flows", None).await;
+    let provider = after.json()["nodes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|n| n["type"] == "provider")
+        .cloned()
+        .unwrap();
+    assert_eq!(provider["provider"], "google");
+    assert_eq!(provider["href"], "/v1/login/social/google");
+    assert_eq!(provider["label"]["id"], "action.continue_with");
+    assert_eq!(provider["label"]["text"], "Continue with Google");
+}
