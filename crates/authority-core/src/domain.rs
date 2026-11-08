@@ -297,6 +297,24 @@ fn meta_denial(e: MetaError) -> Decision {
     deny(class, e.code(), Resolver::Root)
 }
 
+/// The answer to a commit whose basis does not resolve: not the actor's root or holding, a
+/// `since` that does not match, or no such Grant. One answer for all, so existence does not
+/// leak (OP-152 m.5 (a)).
+fn unresolved_basis() -> Decision {
+    Decision {
+        outcome: KernelOutcome::Deny,
+        blockers: vec![Blocker {
+            class: BlockerClass::NoCoveringAuthority,
+            subcode: None,
+            position: Position::Hop(0),
+            resolver: Resolver::Actor,
+            remediation: Remediation::RouteToCoordinator,
+        }],
+        unmet: Vec::new(),
+        relied_on: Vec::new(),
+    }
+}
+
 fn everything() -> Window {
     Window {
         from: 0,
@@ -1678,6 +1696,19 @@ pub fn pass(req: &Request, frame: &Frame<'_>, snapshot: &Snapshot) -> Pass {
     let missing = snapshot.missing();
     if !missing.is_empty() {
         return Pass::Need(missing);
+    }
+    // OP-152 m.5 (a)
+    if bases.is_empty() && req.mode != Mode::Check {
+        return Pass::Done(Evaluation {
+            decision: unresolved_basis(),
+            effects: Vec::new(),
+            draws: Vec::new(),
+            releases: Vec::new(),
+            expansion: false,
+            action: schema,
+            foreign: None,
+            agency: Vec::new(),
+        });
     }
     let input = EvaluationInput {
         mode: req.mode,

@@ -24,7 +24,7 @@ use access_crypto::secret::Secret;
 use access_kernel::aas::{Act, ApprovalAct};
 use access_kernel::ais::{CONTENT_TYPE, Statement};
 use access_kernel::codec::Canonical;
-use access_kernel::combinator::{Capacity, Mode, Outcome};
+use access_kernel::combinator::{BlockerClass, Capacity, Mode, Outcome, Resolver};
 use access_kernel::digest::Digest;
 use access_kernel::intent::{ContextRefs, IntentEnvelope};
 use access_kernel::meta::{
@@ -431,6 +431,59 @@ async fn send_at(
 
 fn allowed(r: &Response) {
     assert_eq!(r.decision.outcome, Outcome::Allow, "{r:?}");
+}
+
+/// A recorded `no_covering_authority` the actor resolves (OP-152 m.5 (a)).
+fn unresolved(r: &Response) {
+    assert_eq!(r.decision.outcome, Outcome::Deny, "{r:?}");
+    assert!(r.record.is_some(), "{r:?}");
+    assert!(r.exercise.is_none());
+    let [b] = r.decision.blockers.as_slice() else {
+        panic!("one blocker: {r:?}");
+    };
+    assert_eq!(b.class, BlockerClass::NoCoveringAuthority);
+    assert_eq!(b.resolver, Resolver::Actor);
+    assert_eq!(b.subcode, None);
+}
+
+// OP-152 m.5 (a): an unresolvable basis is a recorded DENY, the same for a missing Grant
+#[tokio::test]
+async fn an_unresolvable_basis_is_a_recorded_denial() {
+    let db = fresh().await.unwrap();
+    let (mut core, d) = setup(&db).await;
+    onboard(&mut core, d, ROOT, ROOT_KEY, (1, 2)).await;
+    onboard(&mut core, d, ALICE, ALICE_KEY, (3, 4)).await;
+    let shop = meta::object_id(&d, kind::ANCHOR, 1);
+
+    let not_root = send(
+        &mut core,
+        shop_request(d, 5, Mode::Commit, ExerciseBasis::Anchor(shop)),
+        ALICE_KEY,
+    )
+    .await
+    .unwrap();
+    unresolved(&not_root);
+
+    let missing = send(
+        &mut core,
+        shop_request(
+            d,
+            6,
+            Mode::Commit,
+            ExerciseBasis::Holding(HoldingRef {
+                grant: Id([0xEE; 16]),
+                holder: ALICE,
+                since: 1,
+            }),
+        ),
+        ALICE_KEY,
+    )
+    .await
+    .unwrap();
+    unresolved(&missing);
+    assert_eq!(not_root.decision, missing.decision);
+
+    fold_check(&db.sequencer, d).await.unwrap();
 }
 
 /// Registers `party` with the key `seed` under the Public bootstrap Grant.
@@ -2437,16 +2490,16 @@ async fn a_member_holds_the_groups_grant_from_its_episode() {
         })
     };
 
-    // L0-EVAL-60: a holding the actor does not hold is no basis at all
-    assert!(matches!(
-        send(
+    // OP-152 m.5 (a): a holding the actor does not hold is a recorded no_covering_authority
+    unresolved(
+        &send(
             &mut core,
             shop_request(d, 8, Mode::Commit, holding(0)),
-            ROOT_KEY
+            ROOT_KEY,
         )
-        .await,
-        Err(CoreError::Rejected(_))
-    ));
+        .await
+        .unwrap(),
+    );
     let shop = ExerciseBasis::Anchor(meta::object_id(&d, kind::ANCHOR, 1));
     let membership = claim(d, ALICE, ALICE_KEY, "staff");
     let ingested = send(
@@ -2471,15 +2524,15 @@ async fn a_member_holds_the_groups_grant_from_its_episode() {
     .unwrap();
     allowed(&member);
 
-    assert!(matches!(
-        send(
+    unresolved(
+        &send(
             &mut core,
             shop_request(d, 11, Mode::Commit, holding(episode - 1)),
-            ROOT_KEY
+            ROOT_KEY,
         )
-        .await,
-        Err(CoreError::Rejected(_))
-    ));
+        .await
+        .unwrap(),
+    );
 
     // OP-141 m.42: a cutoff closes the episode; lifting it widens the Acceptance and the closed
     // episode does not come back, a new one starts at the widening
