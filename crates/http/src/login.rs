@@ -17,7 +17,7 @@ use access_identity_oauth::ports::{Directory, Keys};
 use access_identity_ui::app::Hosted;
 use access_identity_ui::ports::{Clock, Kits, Messages};
 use axum::Router;
-use axum::routing::{get, post};
+use axum::routing::{delete, get, post, put};
 
 pub use assets::{Assets, AssetsError};
 pub use idempotency::{CAPACITY as IDEMPOTENCY_CAPACITY, RETENTION as IDEMPOTENCY_RETENTION};
@@ -34,6 +34,7 @@ pub(crate) struct Shared<D, K, KI, C, M> {
 }
 
 /// The login routes. `assets` is the built login app; without it only the API is served.
+#[expect(clippy::too_many_lines, reason = "one route table, read top to bottom")]
 pub fn router<D, K, KI, C, M>(
     discovery: Discovery<D, K>,
     hosted: impl Into<Arc<Hosted<KI, C, M>>>,
@@ -102,6 +103,18 @@ where
             .route(
                 &format!("{prefix}/v1/account/passkeys/{{registration}}"),
                 post(web::finish_passkey::<D, K, KI, C, M>),
+            )
+            .route(
+                &format!("{prefix}/v1/account/preferences"),
+                put(web::set_preferences::<D, K, KI, C, M>),
+            )
+            .route(
+                &format!("{prefix}/v1/account/documents"),
+                post(web::accept_document::<D, K, KI, C, M>),
+            )
+            .route(
+                &format!("{prefix}/v1/account/deletion"),
+                delete(web::cancel_deletion::<D, K, KI, C, M>),
             );
         reads = reads
             .route(
@@ -115,6 +128,26 @@ where
             .route(
                 &format!("{prefix}/v1/sessions"),
                 get(web::sessions::<D, K, KI, C, M>),
+            )
+            .route(
+                &format!("{prefix}/v1/account/preferences"),
+                get(web::preferences::<D, K, KI, C, M>),
+            )
+            .route(
+                &format!("{prefix}/v1/account/documents"),
+                get(web::documents::<D, K, KI, C, M>),
+            )
+            .route(
+                &format!("{prefix}/v1/account/security-history"),
+                get(web::security_history::<D, K, KI, C, M>),
+            )
+            .route(
+                &format!("{prefix}/v1/account/deletion"),
+                get(web::deletion::<D, K, KI, C, M>),
+            )
+            .route(
+                &format!("{prefix}/v1/account/data-requests"),
+                get(web::data_requests::<D, K, KI, C, M>),
             );
     }
     let reads = reads

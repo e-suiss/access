@@ -590,3 +590,69 @@ where
         .and_then(|a| a.asset(param(&p, "path")))
         .unwrap_or_else(not_found)
 }
+
+handler! {
+    /// `GET /v1/account/preferences` (IDP-37).
+    preferences(s, entry, b, p, bytes, headers) false {
+        let _ = (&p, &bytes);
+        Ok(s.hosted.preferences(&entry, &b).await)
+    }
+}
+
+handler! {
+    /// `PUT /v1/account/preferences` (IDP-37, OP-153 m.3 (ee)).
+    set_preferences(s, entry, b, p, bytes, headers) true {
+        let _ = &p;
+        let req: access_identity_ui::app::privacy::PreferencesBody = body(&bytes)?;
+        Ok(s.hosted.set_preferences(&entry, &b, &req).await)
+    }
+}
+
+handler! {
+    /// `GET /v1/account/documents` (E60).
+    documents(s, entry, b, p, bytes, headers) false {
+        let _ = (&p, &bytes);
+        Ok(s.hosted.documents(&entry, &b).await)
+    }
+}
+
+handler! {
+    /// `POST /v1/account/documents` (IDP-37, TN-132).
+    accept_document(s, entry, b, p, bytes, headers) true {
+        let _ = &p;
+        let req: access_identity_ui::app::privacy::DocumentBody = body(&bytes)?;
+        Ok(s.hosted.accept_document(&entry, &b, &req).await)
+    }
+}
+
+handler! {
+    /// `GET /v1/account/security-history` (OP-43).
+    security_history(s, entry, b, p, bytes, headers) false {
+        let _ = (&p, &bytes);
+        Ok(s.hosted.security_history(&entry, &b).await)
+    }
+}
+
+handler! {
+    /// `GET /v1/account/deletion` (OP-153 m.3 (bb), X38).
+    deletion(s, entry, b, p, bytes, headers) false {
+        let _ = (&p, &bytes);
+        Ok(s.hosted.deletion(&entry, &b).await)
+    }
+}
+
+handler! {
+    /// `DELETE /v1/account/deletion`: cancels inside the window (OP-153 m.3 (bb)).
+    cancel_deletion(s, entry, b, p, bytes, headers) true {
+        let _ = (&p, &bytes);
+        Ok(s.hosted.cancel_deletion(&entry, &b).await)
+    }
+}
+
+handler! {
+    /// `GET /v1/account/data-requests` (TN-78).
+    data_requests(s, entry, b, p, bytes, headers) false {
+        let _ = (&p, &bytes);
+        Ok(s.hosted.data_requests(&entry, &b).await)
+    }
+}

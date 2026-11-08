@@ -15,6 +15,7 @@ mod approve;
 mod credential;
 pub mod devices;
 mod me;
+pub mod privacy;
 
 pub use me::Devices;
 
