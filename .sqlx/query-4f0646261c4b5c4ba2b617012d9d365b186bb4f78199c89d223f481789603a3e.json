@@ -1,0 +1,80 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT claim_id, org_id, domain, autojoin,\n                      (verified_at IS NOT NULL AND reverify_by > clock_timestamp()) AS \"verified!\",\n                      (extract(epoch FROM changed_at) * 1000)::bigint AS changed_ms\n                 FROM access.org_domains\n                WHERE tenant_id = $1 AND realm_id = $2 AND domain = $3 AND released_at IS NULL\n                ORDER BY claim_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "claim_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.org_domains",
+            "name": "claim_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "org_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.org_domains",
+            "name": "org_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "domain",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.org_domains",
+            "name": "domain"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "autojoin",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "access.org_domains",
+            "name": "autojoin"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "verified!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 5,
+        "name": "changed_ms",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      null,
+      null
+    ]
+  },
+  "hash": "4f0646261c4b5c4ba2b617012d9d365b186bb4f78199c89d223f481789603a3e"
+}

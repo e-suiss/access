@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.org_invitations SET scanner_clicks = scanner_clicks + 1\n                WHERE tenant_id = $1 AND realm_id = $2 AND invitation_id = $3\n                  AND accepted_at IS NULL AND revoked_at IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "16a566ce47196796b57a1e7ff624eecb65b9d8edf9c7c976eeeadd6f28366457"
+}

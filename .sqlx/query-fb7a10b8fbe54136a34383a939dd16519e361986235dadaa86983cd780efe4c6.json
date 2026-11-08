@@ -1,0 +1,39 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.org_invitations\n                 (tenant_id, realm_id, org_id, token_hash, code_hash, invitee_index, invitee_domain,\n                  inviter_party, role_name, role_version, created_exercise, expires_at)\n               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11,\n                       clock_timestamp() + make_interval(secs => $12))\n               RETURNING invitation_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "invitation_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.org_invitations",
+            "name": "invitation_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Bytea",
+        "Bytea",
+        "Bytea",
+        "Text",
+        "Bytea",
+        "Text",
+        "Int8",
+        "Bytea",
+        "Float8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "fb7a10b8fbe54136a34383a939dd16519e361986235dadaa86983cd780efe4c6"
+}

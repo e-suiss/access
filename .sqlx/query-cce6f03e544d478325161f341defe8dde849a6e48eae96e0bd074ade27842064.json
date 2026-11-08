@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.org_invitations SET accepted_at = clock_timestamp(), accepted_subject = $4\n                WHERE tenant_id = $1 AND realm_id = $2 AND invitation_id = $3\n                  AND accepted_at IS NULL AND revoked_at IS NULL AND expires_at > clock_timestamp()",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "cce6f03e544d478325161f341defe8dde849a6e48eae96e0bd074ade27842064"
+}

@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.org_domains\n                  SET verified_at = clock_timestamp(),\n                      reverify_by = clock_timestamp() + make_interval(secs => $4),\n                      mx_digest = $5, rdap_digest = $6, changed_at = NULL\n                WHERE tenant_id = $1 AND realm_id = $2 AND claim_id = $3 AND released_at IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Float8",
+        "Bytea",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "caa7892af67eb335fea21494268122e2da7b96760ab901524c0f261a4998f667"
+}

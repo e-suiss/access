@@ -1,0 +1,133 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT invitation_id, org_id, code_hash, invitee_index, invitee_domain, inviter_party,\n                      role_name, role_version, scanner_clicks,\n                      (accepted_at IS NULL AND revoked_at IS NULL\n                       AND expires_at > clock_timestamp()) AS \"open!\"\n                 FROM access.org_invitations\n                WHERE tenant_id = $1 AND realm_id = $2 AND token_hash = $3",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "invitation_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.org_invitations",
+            "name": "invitation_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "org_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.org_invitations",
+            "name": "org_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "code_hash",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.org_invitations",
+            "name": "code_hash"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "invitee_index",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.org_invitations",
+            "name": "invitee_index"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "invitee_domain",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.org_invitations",
+            "name": "invitee_domain"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "inviter_party",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.org_invitations",
+            "name": "inviter_party"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "role_name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.org_invitations",
+            "name": "role_name"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "role_version",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.org_invitations",
+            "name": "role_version"
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "scanner_clicks",
+        "type_info": "Int4",
+        "origin": {
+          "Table": {
+            "table": "access.org_invitations",
+            "name": "scanner_clicks"
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "open!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      null
+    ]
+  },
+  "hash": "d16c7cb36dc4d60d268e7d31dd2c1a731fa94f67aef907486461a1f44c96bf7b"
+}

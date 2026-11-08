@@ -33,6 +33,7 @@ pub mod locks;
 pub mod oauth;
 pub mod offline;
 pub mod operational;
+pub mod orgs;
 pub mod passkeys;
 pub mod platform;
 pub mod privacy;

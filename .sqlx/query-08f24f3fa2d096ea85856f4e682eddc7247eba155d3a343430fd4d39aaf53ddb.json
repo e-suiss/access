@@ -1,0 +1,73 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT org_id, party, display_name, hrd, ended_at IS NOT NULL AS \"ended!\"\n                 FROM access.organizations\n                WHERE tenant_id = $1 AND realm_id = $2 AND org_id = $3",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "org_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.organizations",
+            "name": "org_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "party",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.organizations",
+            "name": "party"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "display_name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.organizations",
+            "name": "display_name"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "hrd",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "access.organizations",
+            "name": "hrd"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "ended!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      null
+    ]
+  },
+  "hash": "08f24f3fa2d096ea85856f4e682eddc7247eba155d3a343430fd4d39aaf53ddb"
+}

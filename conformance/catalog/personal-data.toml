@@ -120,3 +120,12 @@ retention = "dsr_log"
 basis = "legal_obligation"
 portable = "observed"
 export = true
+
+[[field]]
+column = "access.org_invitations.invitee_index"
+vault = "none"
+retention = "suppression"
+basis = "legitimate_interest"
+portable = "derived"
+export = false
+note = "Keyed blind index of the invitee's folded identifier (TN-89); the address itself is never stored."

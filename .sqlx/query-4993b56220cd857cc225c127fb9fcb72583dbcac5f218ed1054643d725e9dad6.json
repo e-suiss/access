@@ -1,0 +1,102 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT membership_id, subject_id, source, owner, role_name, role_version, grant_id\n                 FROM access.org_memberships\n                WHERE tenant_id = $1 AND realm_id = $2 AND org_id = $3 AND ended_at IS NULL\n                ORDER BY membership_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "membership_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.org_memberships",
+            "name": "membership_id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "subject_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.org_memberships",
+            "name": "subject_id"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "source",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.org_memberships",
+            "name": "source"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "owner",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "access.org_memberships",
+            "name": "owner"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "role_name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.org_memberships",
+            "name": "role_name"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "role_version",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "access.org_memberships",
+            "name": "role_version"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "grant_id",
+        "type_info": "Bytea",
+        "origin": {
+          "Table": {
+            "table": "access.org_memberships",
+            "name": "grant_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "4993b56220cd857cc225c127fb9fcb72583dbcac5f218ed1054643d725e9dad6"
+}

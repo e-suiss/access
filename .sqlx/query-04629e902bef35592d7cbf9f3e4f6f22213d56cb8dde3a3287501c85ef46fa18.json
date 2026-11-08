@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.org_domains\n                  SET verified_at = NULL, reverify_by = NULL, autojoin = false\n                WHERE tenant_id = $1 AND realm_id = $2 AND released_at IS NULL\n                  AND verified_at IS NOT NULL\n                  AND (reverify_by <= clock_timestamp()\n                       OR changed_at <= clock_timestamp() - make_interval(secs => $3))\n               RETURNING claim_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "claim_id",
+        "type_info": "Uuid",
+        "origin": {
+          "Table": {
+            "table": "access.org_domains",
+            "name": "claim_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Float8"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "04629e902bef35592d7cbf9f3e4f6f22213d56cb8dde3a3287501c85ef46fa18"
+}

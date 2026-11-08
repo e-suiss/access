@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.org_domains SET autojoin = $4\n                WHERE tenant_id = $1 AND realm_id = $2 AND claim_id = $3 AND released_at IS NULL\n                  AND (NOT $4 OR (verified_at IS NOT NULL AND reverify_by > clock_timestamp()))",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Bool"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "6d0aebb451fdadf536d0278217a1662dd0dea3d3a56a5e4e9025138bcc9d0a29"
+}
