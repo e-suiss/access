@@ -107,6 +107,7 @@ fn op_90_server_refuses_to_start_without_lockdown() {
         &config,
         format!(
             "issuer = \"https://access.example\"\n\
+             signer = \"/run/access/signer.sock\"\n\
              [tls]\ncert_file = {crt:?}\nkey_file = {key:?}\n\
              [database]\nhost = \"localhost\"\nport = 5432\nname = \"access\"\n\
              root_cert_file = {crt:?}\ndurability = \"single-node\"\n\
@@ -116,6 +117,7 @@ fn op_90_server_refuses_to_start_without_lockdown() {
              router = {{ user = \"r\", password_file = {pw:?}, pool = 1 }}\n\
              archive = {{ user = \"x\", password_file = {pw:?}, pool = 1 }}\n\
              outbox_reader = {{ user = \"o\", password_file = {pw:?}, pool = 1 }}\n\
+             checkpointer = {{ user = \"c\", password_file = {pw:?}, pool = 1 }}\n\
              [identity]\nrealm_base = \"https://id.access.example\"\n\
              signer = \"/run/access/identity-signer.sock\"\n\
              [hsm]\nmodule = {module:?}\ntoken = {token:?}\npin_file = {pin:?}\n\

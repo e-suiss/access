@@ -96,6 +96,9 @@ spec:
             - name: secrets
               mountPath: /run/secrets
               readOnly: true
+            # CMP-22: the signers' Unix sockets
+            - name: sockets
+              mountPath: /run/access
           lifecycle:
             preStop:
               sleep:
@@ -117,7 +120,93 @@ spec:
               drop: [ALL]
             seccompProfile:
               type: RuntimeDefault
+        # CMP-22a: the authority signer beside the server, reached only over the shared socket
+        # directory; no network port
+        - name: authority-signer
+          image: ghcr.io/e-suiss/access@sha256:0000000000000000000000000000000000000000000000000000000000000000
+          imagePullPolicy: IfNotPresent
+          command: ["/usr/local/bin/access-signer"]
+          env:
+            - name: ACCESS_SIGNER_CONFIG
+              value: /etc/access/signer.toml
+          volumeMounts:
+            - name: config
+              mountPath: /etc/access
+              readOnly: true
+            - name: secrets
+              mountPath: /run/secrets
+              readOnly: true
+            - name: sockets
+              mountPath: /run/access
+            - name: signer-vault
+              mountPath: /var/lib/access/signer
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            privileged: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 65532
+            runAsGroup: 65532
+            capabilities:
+              drop: [ALL]
+            seccompProfile:
+              type: RuntimeDefault
+        # CMP-22b: the identity signer beside the server, reached only over the shared socket
+        # directory; no network port
+        - name: identity-signer
+          image: ghcr.io/e-suiss/access@sha256:0000000000000000000000000000000000000000000000000000000000000000
+          imagePullPolicy: IfNotPresent
+          command: ["/usr/local/bin/access-identity-signer"]
+          env:
+            - name: ACCESS_IDENTITY_SIGNER_CONFIG
+              value: /etc/access/identity-signer.toml
+          volumeMounts:
+            - name: config
+              mountPath: /etc/access
+              readOnly: true
+            - name: secrets
+              mountPath: /run/secrets
+              readOnly: true
+            - name: sockets
+              mountPath: /run/access
+            - name: identity-signer-vault
+              mountPath: /var/lib/access/identity-signer
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              memory: 256Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            privileged: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 65532
+            runAsGroup: 65532
+            capabilities:
+              drop: [ALL]
+            seccompProfile:
+              type: RuntimeDefault
       volumes:
+        # CMP-22: the signers' sockets, shared by the three containers of the pod only
+        - name: sockets
+          emptyDir:
+            medium: Memory
+            sizeLimit: 1Mi
+        # CR-21, CMP-22: each signer's sealed keys (sealed by its HSM KEK)
+        - name: signer-vault
+          emptyDir:
+            sizeLimit: 64Mi
+        - name: identity-signer-vault
+          emptyDir:
+            sizeLimit: 64Mi
         - name: config
           configMap:
             name: access-server

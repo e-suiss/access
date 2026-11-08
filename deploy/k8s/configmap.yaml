@@ -12,6 +12,8 @@ data:
     management_listen = "0.0.0.0:9443"
     internal_listen = "0.0.0.0:9090"
     issuer = "https://access-server.access.svc"
+    # OP-143 m.5, CMP-22a: the authority signer sidecar's socket
+    signer = "/run/access/signer.sock"
 
     [tls]
     cert_file = "/run/tls/tls.crt"
@@ -32,11 +34,20 @@ data:
     # OP-146 m.5 (f), OP-131
     archive = { user = "access_archive_login", password_file = "/run/secrets/db-archive", pool = 1 }
     outbox_reader = { user = "access_outbox_reader_login", password_file = "/run/secrets/db-outbox-reader", pool = 2 }
+    # OP-38, OP-44
+    checkpointer = { user = "access_checkpointer_login", password_file = "/run/secrets/db-checkpointer", pool = 1 }
 
     # TN-10, CMP-22b, OP-138
     [identity]
     realm_base = "https://id.access.example"
     signer = "/run/access/identity-signer.sock"
+
+    # OP-146 m.12 (f), TN-128: the built hosted login and console in the image
+    [login]
+    dist_dir = "/usr/share/access/login"
+
+    [console]
+    dist_dir = "/usr/share/access/console"
 
     # OP-149 m.3, m.4
     [suiss]
@@ -52,6 +63,29 @@ data:
     module = "/opt/pkcs11/module.so"
     token = "access"
     pin_file = "/run/secrets/hsm-pin"
+  # CMP-22a: the authority signer sidecar; its token and KEK are its own (T31)
+  signer.toml: |
+    socket = "/run/access/signer.sock"
+    vault = "/var/lib/access/signer"
+    callers = [65532]
+
+    [hsm]
+    module = "/opt/pkcs11/module.so"
+    token = "access-signer"
+    pin_file = "/run/secrets/hsm-signer-pin"
+    kek = "access/signer/kek"
+  # CMP-22b: the identity signer sidecar; the cell names the audit chains' origins (OP-150 m.3 (h))
+  identity-signer.toml: |
+    socket = "/run/access/identity-signer.sock"
+    vault = "/var/lib/access/identity-signer"
+    callers = [65532]
+    cell = "access"
+
+    [hsm]
+    module = "/opt/pkcs11/module.so"
+    token = "access-identity-signer"
+    pin_file = "/run/secrets/hsm-identity-signer-pin"
+    kek = "access/identity-signer/kek"
   # OP-55, OP-138: the migration job's configuration, the database and its migration login only
   migrate.toml: |
     [database]

@@ -12,6 +12,7 @@
 
 mod admin;
 mod bootstrap;
+mod checkpoints;
 mod claims;
 mod config;
 mod console;
@@ -45,7 +46,7 @@ use access_http::adp::adapters::{Discovery, router as adp_router};
 use access_http::adp::app::Service;
 use access_http::api::app::{RequestIds, request_id};
 use access_http::declarations::{Declarations, router as declared};
-use access_http::internal::{Readiness, router as internal_router};
+use access_http::internal::{Readiness, ReadyFlag, router as internal_router};
 use access_http::login::{Assets, me_router, router as login_router};
 use access_http::oauth::router as oauth_router;
 use access_http::realm::router as realm_router;
@@ -106,6 +107,7 @@ struct Prepared {
     router_password: SecretFile,
     archive_password: SecretFile,
     outbox_password: SecretFile,
+    checkpointer_password: SecretFile,
     keys: KeyStore,
     login_keys: Arc<KeyStore>,
     identity_keys: Arc<KeyStore>,
@@ -127,6 +129,7 @@ struct Pools {
     router: Pool,
     archive: Pool,
     outbox_reader: Pool,
+    checkpointer: Pool,
 }
 
 /// What the process was asked to do.
@@ -539,6 +542,7 @@ fn prepare(config: &Config, tls: Arc<access_http::tls::ServerConfig>) -> Result<
         router_password: password(&db.router)?,
         archive_password: password(&db.archive)?,
         outbox_password: password(&db.outbox_reader)?,
+        checkpointer_password: password(&db.checkpointer)?,
         keys,
         login_keys,
         identity_keys,
@@ -697,6 +701,7 @@ async fn pools(config: &Config, prepared: &Prepared) -> Result<Pools, String> {
     let router = open(&db.router, &prepared.router_password).await?;
     let archive = open(&db.archive, &prepared.archive_password).await?;
     let outbox_reader = open(&db.outbox_reader, &prepared.outbox_password).await?;
+    let checkpointer = open(&db.checkpointer, &prepared.checkpointer_password).await?;
     let durability = durability(db);
     let total = db
         .sequencer
@@ -705,7 +710,8 @@ async fn pools(config: &Config, prepared: &Prepared) -> Result<Pools, String> {
         .saturating_add(db.deriver.pool)
         .saturating_add(db.router.pool)
         .saturating_add(db.archive.pool)
-        .saturating_add(db.outbox_reader.pool);
+        .saturating_add(db.outbox_reader.pool)
+        .saturating_add(db.checkpointer.pool);
     // OP-52
     for p in [
         &sequencer,
@@ -714,6 +720,7 @@ async fn pools(config: &Config, prepared: &Prepared) -> Result<Pools, String> {
         &router,
         &archive,
         &outbox_reader,
+        &checkpointer,
     ] {
         check_server(p, total, true, durability)
             .await
@@ -727,6 +734,7 @@ async fn pools(config: &Config, prepared: &Prepared) -> Result<Pools, String> {
         router,
         archive,
         outbox_reader,
+        checkpointer,
     })
 }
 
@@ -919,7 +927,7 @@ fn courier(config: &Config, pools: &Pools, outbound: Outbound) -> Result<LogoutC
 }
 
 /// The identity plane's background work: the back-channel courier, event delivery and the
-/// day-partition opener.
+/// day-partition opener, and the start-up flags readiness waits for (OP-67 m.3).
 struct Background {
     stop: tokio::sync::watch::Sender<bool>,
     delivering: tokio::task::JoinHandle<()>,
@@ -927,6 +935,8 @@ struct Background {
     opening: tokio::task::JoinHandle<()>,
     sampling: tokio::task::JoinHandle<()>,
     ready: Readiness,
+    /// Every realm's JWKS loaded at start-up (OP-138, §17.9.7).
+    jwks: ReadyFlag,
 }
 
 impl Background {
@@ -939,15 +949,23 @@ impl Background {
     ) -> Result<Self, String> {
         let identity = config.identity.as_ref().ok_or("no identity section")?;
         let logout = courier(config, pools, outbound.clone())?;
+        let ready = readiness(config, pools);
+        // OP-67 m.3: unset again as soon as any courier or consumer task ends
+        let consumers = ready.flag("outbox.consumers");
         // OP-149 m.4, m.7, m.17
         let events = events::Delivery::outbound(
             &event_pools(pools, ids, &outbound),
             outbound,
             SignerKeys::new(identity.signer.clone()),
             keks,
+            &consumers,
         );
         let (stop, stopped) = tokio::sync::watch::channel(false);
-        let delivering = tokio::spawn(async move { logout.run(&stopped).await });
+        let ended = consumers.clone();
+        let delivering = tokio::spawn(async move {
+            logout.run(&stopped).await;
+            ended.set(false);
+        });
         // OP-146 m.5 (f)
         let opening = tokio::spawn(jobs::run(
             pools.app.clone(),
@@ -955,6 +973,7 @@ impl Background {
             pools.router.clone(),
             holder()?,
         ));
+        consumers.set(true);
         Ok(Self {
             stop,
             delivering,
@@ -962,7 +981,8 @@ impl Background {
             opening,
             // §17.8.2, OP-53
             sampling: tokio::spawn(sample_pools(PoolGauges::of(pools))),
-            ready: readiness(config, pools),
+            jwks: ready.flag("jwks.realms"),
+            ready,
         })
     }
 
@@ -1064,6 +1084,7 @@ async fn serve(
         deriver,
         router: router_pool,
         outbox_reader,
+        checkpointer: checkpointer_pool,
         ..
     } = all;
     let (sign_in, hosted) = login(
@@ -1078,6 +1099,8 @@ async fn serve(
     let tenants_pool = router_pool.clone();
     let sandbox_pool = router_pool.clone();
     let realms = identity(config, router_pool, app.clone(), prepared.tls_names.clone()).await?;
+    // OP-67 m.3, OP-138: the start-up checks loaded every realm's JWKS
+    background.jwks.set(true);
     let (idp_sequencer, idp_app, product_app) = (sequencer.clone(), app.clone(), app.clone());
     let (issuer, limits) = (config.issuer.clone().ok_or("no issuer")?, Limits::default());
     // OP-141 m.18 (a), (e), (f), OP-149 m.16 (a)
@@ -1100,6 +1123,18 @@ async fn serve(
     // OP-150 L2, CMP-8
     let (renewing, courier) = claims::start(signer(), &platform_pools, domains.clone(), renew);
     let _publishing = status::spawn(&domains, &product_app, &sequencer, config.signer.as_ref());
+    // OP-38, OP-44, CMP-6, T16
+    let led = domains.clone();
+    let checkpointing = checkpoints::Checkpointers::start(
+        checkpoints::Inputs {
+            checkpointer: checkpointer_pool,
+            app: product_app.clone(),
+            sequencer: sequencer.clone(),
+            identity_signer: identity_section.signer.clone(),
+            authority_signer: config.signer.clone().ok_or("no signer")?,
+        },
+        move || led.led(),
+    );
     // OP-62, MD-14, TN-111: the identity plane's idp.* write path and realm Genesis
     let idp_plane = idp::Plane::new(
         domains.clone(),
@@ -1195,6 +1230,7 @@ async fn serve(
     .await;
     // OP-31
     background.stop().await;
+    checkpointing.stop();
     renewing.stop().await;
     domains.release().await;
     served
@@ -1315,6 +1351,7 @@ fn readiness(config: &Config, pools: &Pools) -> Readiness {
             "deriver" => "db.deriver",
             "router" => "db.router",
             "archive" => "db.archive",
+            "checkpointer" => "db.checkpointer",
             _ => "db.outbox_reader",
         };
         ready.add_fn(check, move || -> Probe {
@@ -1349,6 +1386,7 @@ impl PoolGauges {
             ("router", pools.router.clone()),
             ("archive", pools.archive.clone()),
             ("outbox_reader", pools.outbox_reader.clone()),
+            ("checkpointer", pools.checkpointer.clone()),
         ])
     }
 }

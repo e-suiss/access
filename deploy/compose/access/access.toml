@@ -27,12 +27,21 @@ deriver = { user = "access_deriver_login", password_file = "/var/lib/access/secr
 router = { user = "access_router_login", password_file = "/var/lib/access/secrets/db-router", pool = 2 }
 archive = { user = "access_archive_login", password_file = "/var/lib/access/secrets/db-archive", pool = 1 }
 outbox_reader = { user = "access_outbox_reader_login", password_file = "/var/lib/access/secrets/db-outbox-reader", pool = 1 }
+checkpointer = { user = "access_checkpointer_login", password_file = "/var/lib/access/secrets/db-checkpointer", pool = 1 }
 migrator = { user = "access_migrator_login", password_file = "/var/lib/access/secrets/db-migrator", pool = 1 }
 
 # TN-10, CMP-22b, OP-138
 [identity]
 realm_base = "https://access-server:8443"
 signer = "/run/access/identity-signer.sock"
+
+# OP-146 m.12 (f): the hosted login's built app, from the image
+[login]
+dist_dir = "/usr/share/access/login"
+
+# TN-128: the console's built app, from the image
+[console]
+dist_dir = "/usr/share/access/console"
 
 # OP-149 m.3, m.15 (g)
 [suiss]

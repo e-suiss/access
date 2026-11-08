@@ -44,7 +44,8 @@ pub(crate) struct Config {
     pub(crate) database: Option<Database>,
     /// The PKCS#11 token (OP-94, OP-141 m.18 (h)).
     pub(crate) hsm: Option<Hsm>,
-    /// The authority signer's Unix socket; without it receipts are not signed (OP-143 m.5).
+    /// The authority signer's Unix socket (OP-143 m.5, CMP-22a). Required: receipts, lists and
+    /// checkpoints are signed there.
     pub(crate) signer: Option<PathBuf>,
     /// The identity plane (TN-10, CMP-22b, OP-138).
     pub(crate) identity: Option<Identity>,
@@ -294,6 +295,8 @@ pub(crate) struct Database {
     pub(crate) archive: Role,
     /// `access_outbox_reader` login: the back-channel logout courier (OP-131).
     pub(crate) outbox_reader: Role,
+    /// `access_checkpointer` login: integrates and signs the audit chains (OP-38, OP-44).
+    pub(crate) checkpointer: Role,
     /// `access_migrator` login: only `access-server migrate` uses it, never the server
     /// (OP-55).
     #[serde(default)]
@@ -369,6 +372,8 @@ pub(crate) enum ConfigError {
     NoHsm,
     #[error("database pools must have at least one connection each")]
     PoolSize,
+    #[error("signer is required: the authority signer's Unix socket (OP-143 m.5, CMP-22a)")]
+    NoSigner,
     #[error("the identity section is required (TN-10, CMP-22b)")]
     NoIdentity,
     #[error("login session lifetimes are outside the TN-36 ranges")]
@@ -483,11 +488,25 @@ impl Config {
             _ => return Err(ConfigError::Issuer),
         }
         let db = self.database.as_ref().ok_or(ConfigError::NoDatabase)?;
-        if [&db.sequencer, &db.app, &db.deriver, &db.router]
-            .iter()
-            .any(|r| r.pool == 0)
+        // OP-53
+        if [
+            &db.sequencer,
+            &db.app,
+            &db.deriver,
+            &db.router,
+            &db.archive,
+            &db.outbox_reader,
+            &db.checkpointer,
+        ]
+        .into_iter()
+        .chain(db.migrator.as_ref())
+        .any(|r| r.pool == 0)
         {
             return Err(ConfigError::PoolSize);
+        }
+        // OP-143 m.5, CMP-22a
+        if self.signer.is_none() {
+            return Err(ConfigError::NoSigner);
         }
         if self.hsm.is_none() {
             return Err(ConfigError::NoHsm);
@@ -574,9 +593,11 @@ mod tests {
                 router: role("access_router_login"),
                 archive: role("access_archive_login"),
                 outbox_reader: role("access_outbox_reader_login"),
+                checkpointer: role("access_checkpointer_login"),
                 migrator: None,
                 replica_host: None,
             }),
+            signer: Some("/run/access/signer.sock".into()),
             hsm: Some(Hsm {
                 module: "/usr/lib/softhsm/libsofthsm2.so".into(),
                 token: "access".to_owned(),
@@ -894,6 +915,44 @@ mod tests {
             ))
             .extract();
         assert!(result.is_err());
+    }
+
+    // A-9, OP-53: every role's pool has a connection, the archive, outbox reader and
+    // checkpointer pools too
+    #[test]
+    fn every_pool_has_a_connection() {
+        let empty = |f: fn(&mut Database)| {
+            let mut c = with_tls();
+            if let Some(db) = c.database.as_mut() {
+                f(db);
+            }
+            matches!(c.validate(), Err(ConfigError::PoolSize))
+        };
+        assert!(empty(|d| d.sequencer.pool = 0));
+        assert!(empty(|d| d.app.pool = 0));
+        assert!(empty(|d| d.deriver.pool = 0));
+        assert!(empty(|d| d.router.pool = 0));
+        assert!(empty(|d| d.archive.pool = 0));
+        assert!(empty(|d| d.outbox_reader.pool = 0));
+        assert!(empty(|d| d.checkpointer.pool = 0));
+        assert!(empty(|d| {
+            d.migrator = Some(Role {
+                user: "access_migrator_login".to_owned(),
+                password_file: "/run/secrets/db".into(),
+                pool: 0,
+            });
+        }));
+    }
+
+    // A-3, OP-143 m.5, CMP-22a, MD-8: without the authority signer the server does not start,
+    // so it is never ready with receipts, lists and checkpoints unsigned
+    #[test]
+    fn the_authority_signer_is_required() {
+        let config = Config {
+            signer: None,
+            ..with_tls()
+        };
+        assert!(matches!(config.validate(), Err(ConfigError::NoSigner)));
     }
 
     // OP-63, TI-9

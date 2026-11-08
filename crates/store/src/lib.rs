@@ -8,6 +8,7 @@ pub mod api_idempotency;
 pub mod approvals;
 pub mod audit;
 pub mod authority;
+pub mod authority_checkpoint;
 pub mod backchannel;
 pub mod bodies;
 pub mod claims;

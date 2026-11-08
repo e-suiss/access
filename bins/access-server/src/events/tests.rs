@@ -192,6 +192,10 @@ async fn authority_event(db: &TestDb, tenant: TenantId, domain: &DomainId, event
 // and an event of a live realm's governing domain to a webhook subscriber, signed per Standard
 // Webhooks with the secret sealed under the realm KEK from the HSM
 #[tokio::test]
+#[expect(
+    clippy::too_many_lines,
+    reason = "one end-to-end delivery with its readiness flag (A-7)"
+)]
 async fn the_server_delivers_events_to_a_webhook() {
     // OP-149 m.17 (b), OP-42, OP-135
     let db = fresh().await.unwrap();
@@ -268,11 +272,16 @@ async fn the_server_delivers_events_to_a_webhook() {
     .await;
 
     let (port, got) = receiver().await;
+    // A-7, OP-67 m.3: the consumers' start-up flag holds while they run
+    let ready = access_http::internal::Readiness::default();
+    let consumers = ready.flag("outbox.consumers");
+    consumers.set(true);
     let delivery = Delivery::start(
         &pools,
         Local(port),
         SignerKeys::new("/nonexistent.sock".into()),
         keks,
+        &consumers,
     );
     let deadline = std::time::Instant::now() + Duration::from_secs(30);
     while got.lock().unwrap().len() < 2 {
@@ -282,7 +291,10 @@ async fn the_server_delivers_events_to_a_webhook() {
         );
         tokio::time::sleep(Duration::from_millis(50)).await;
     }
+    assert!(!ready.failing().await.contains(&"outbox.consumers"));
     delivery.stop().await;
+    // MD-8: once a consumer ended, the process is not ready
+    assert!(ready.failing().await.contains(&"outbox.consumers"));
 
     let mut types = Vec::new();
     for (headers, body) in got.lock().unwrap().iter() {

@@ -5,6 +5,7 @@
 
 use std::sync::Arc;
 
+use access_http::internal::ReadyFlag;
 use access_identity_account::notify::delivery::Backoff;
 use access_identity_events::adapters::{KekSealer, OutboundTransport};
 use access_identity_events::app::Db;
@@ -65,18 +66,23 @@ pub(crate) struct Delivery {
 }
 
 impl Delivery {
-    /// Starts the four delivery tasks over `transport`.
+    /// Starts the four delivery tasks over `transport`; `alive` is unset when one of them ends.
     pub(crate) fn start<T: Transport + Clone + 'static>(
         pools: &EventPools,
         transport: T,
         signer: SignerKeys,
         keks: RealmKeks,
+        alive: &ReadyFlag,
     ) -> Self {
         let (stop, stopped) = tokio::sync::watch::channel(false);
         let fanout = Fanout::new(pools.db(), SystemClock);
         let router = pools.router.clone();
         let until = stopped.clone();
-        let fanning = tokio::spawn(async move { fanout.run(&router, &until).await });
+        let ended = alive.clone();
+        let fanning = tokio::spawn(async move {
+            fanout.run(&router, &until).await;
+            ended.set(false);
+        });
         let courier = Courier::new(
             pools.db(),
             transport.clone(),
@@ -86,14 +92,26 @@ impl Delivery {
             Backoff::default(),
         );
         let until = stopped.clone();
-        let sending = tokio::spawn(async move { courier.run(&until).await });
+        let ended = alive.clone();
+        let sending = tokio::spawn(async move {
+            courier.run(&until).await;
+            ended.set(false);
+        });
         // TN-136, OP-151 m.3 (i)
         let webhook_fanout = WebhookFanout::new(pools.db(), SystemClock);
         let until = stopped.clone();
-        let webhook_fanning = tokio::spawn(async move { webhook_fanout.run(&until).await });
+        let ended = alive.clone();
+        let webhook_fanning = tokio::spawn(async move {
+            webhook_fanout.run(&until).await;
+            ended.set(false);
+        });
         let webhook_courier =
             WebhookCourier::new(pools.db(), transport, KekSealer(keks), SystemClock);
-        let webhook_sending = tokio::spawn(async move { webhook_courier.run(&stopped).await });
+        let ended = alive.clone();
+        let webhook_sending = tokio::spawn(async move {
+            webhook_courier.run(&stopped).await;
+            ended.set(false);
+        });
         Self {
             stop,
             fanning,
@@ -110,20 +128,24 @@ impl Delivery {
         outbound: Outbound,
         signer: SignerKeys,
         keks: RealmKeks,
+        alive: &ReadyFlag,
     ) -> Self {
         let mut delivery = Self::start(
             pools,
             OutboundTransport(outbound.clone()),
             signer,
             keks.clone(),
+            alive,
         );
         // OP-151 m.3 (l)
         let receiver = receiver(pools, outbound.clone(), keks);
         let client = OutboundTransport(outbound);
         let router = pools.router.clone();
         let stopped = delivery.stop.subscribe();
+        let ended = alive.clone();
         delivery.polling = Some(tokio::spawn(async move {
             receiver.run(&client, &router, &stopped).await;
+            ended.set(false);
         }));
         delivery
     }

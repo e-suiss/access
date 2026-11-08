@@ -62,7 +62,7 @@ leaf() {
     rm -f "$ext"
 }
 
-for role in migrator sequencer app deriver router archive outbox-reader; do
+for role in migrator sequencer app deriver router archive outbox-reader checkpointer; do
     secret "db-$role"
 done
 for token in access-server access-signer access-identity-signer; do
@@ -157,7 +157,7 @@ mkdir -p "$initdb/sql"
 cp /usr/share/access/postgres/roles.sql /usr/share/access/postgres/database.sql "$initdb/sql/"
 cp /usr/share/access/postgres/postgres-init.sh "$initdb/10-access.sh"
 {
-    for role in migrator sequencer app deriver router archive outbox-reader; do
+    for role in migrator sequencer app deriver router archive outbox-reader checkpointer; do
         r="$(echo "$role" | tr - _)"
         echo "access_${r}_login access_${r} $(cat "$secrets/db-$role")"
     done
