@@ -37,6 +37,7 @@ impl StatusLists for PgStatusLists {
             token: p.token,
             excerpt: p.excerpt,
             as_of: p.applied_pos,
+            seq: p.seq,
         }))
     }
 }

@@ -82,6 +82,13 @@ async fn domain(db: &TestDb, seed: u8) -> Digest {
     Digest([seed; 32])
 }
 
+/// The in-process signer's clock: `NOW` until a test moves it.
+static SIGNER_NOW: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(NOW);
+
+fn signer_now() -> u64 {
+    SIGNER_NOW.load(std::sync::atomic::Ordering::Relaxed)
+}
+
 struct SoftBinding;
 
 impl access_authority_signer::ports::Bindings for SoftBinding {
@@ -130,7 +137,7 @@ async fn start_signer(name: &str, d: Digest) -> std::path::PathBuf {
         tokio::net::UnixListener::bind(&socket).unwrap(),
         std::sync::Arc::clone(&service),
         vec![uid],
-        || NOW,
+        signer_now,
     ));
     let open = Request::Open(Box::new(access_authority_signer::domain::default_template(
         d,
@@ -193,7 +200,7 @@ async fn the_served_list_shows_a_revocation() {
     let r = get(&db.app, d, None).await;
     assert_eq!(r.status(), StatusCode::OK);
     assert_eq!(r.headers()[header::CONTENT_TYPE], CWT_CONTENT_TYPE);
-    assert_eq!(r.headers()[header::ETAG], "\"1\"");
+    assert_eq!(r.headers()[header::ETAG], "\"1.0\"");
     let body = to_bytes(r.into_body(), 1 << 20).await.unwrap();
     assert_eq!(set_entries(&body), Some(0));
 
@@ -206,11 +213,11 @@ async fn the_served_list_shows_a_revocation() {
     append(&db, &scope, 2).await;
     assert_eq!(publisher.publish(d, NOW).await.unwrap().len(), 1);
     assert_eq!(
-        get(&db.app, d, Some("\"1\"")).await.status(),
+        get(&db.app, d, Some("\"1.0\"")).await.status(),
         StatusCode::OK
     );
     let r = get(&db.app, d, None).await;
-    assert_eq!(r.headers()[header::ETAG], "\"2\"");
+    assert_eq!(r.headers()[header::ETAG], "\"2.1\"");
     let body = to_bytes(r.into_body(), 1 << 20).await.unwrap();
     assert_eq!(set_entries(&body), Some(1));
     let payload = access_kernel::verify::cose::parse_sign1(&body)
@@ -220,7 +227,66 @@ async fn the_served_list_shows_a_revocation() {
     let t = access_kernel::status::ListToken::from_bytes(&payload).unwrap();
     assert_eq!((t.as_of, t.iat), (2, (NOW + 2_000) / 1_000));
     assert_eq!(
-        get(&db.app, d, Some("\"2\"")).await.status(),
+        get(&db.app, d, Some("\"2.1\"")).await.status(),
         StatusCode::NOT_MODIFIED
+    );
+}
+
+// E13, T16, §9.16 heartbeat, T24, OP-150 m.10 (d): a quiet domain's list is signed again on its
+// heartbeat though the head did not move: the same position and bits, a fresh iat and a new
+// ETag, so a verifier that holds a list for its ttl never finds an idle domain's list stale
+#[tokio::test]
+async fn an_idle_domains_list_stays_fresh() {
+    use access_authority_core::status::{HEARTBEAT_MS, TTL_S};
+    let db = fresh().await.unwrap();
+    let d = domain(&db, 43).await;
+    let socket = start_signer("idle-status", d).await;
+    let family = Family {
+        family: [8; 16],
+        client_id: String::from("cli_y"),
+        holder: [5; 16],
+        root_exercise: [8; 32],
+        status: None,
+        revoked_pos: None,
+    };
+    open_family(&db.sequencer, API, d, &family)
+        .await
+        .unwrap()
+        .unwrap();
+    let publisher = Publisher::new(
+        PgLists {
+            app: db.app.clone(),
+            sequencer: db.sequencer.clone(),
+        },
+        SignerSocket(socket),
+    );
+    let token = |body: &[u8]| {
+        let payload = access_kernel::verify::cose::parse_sign1(body)
+            .unwrap()
+            .payload
+            .unwrap();
+        access_kernel::status::ListToken::from_bytes(&payload).unwrap()
+    };
+    assert_eq!(publisher.publish(d, NOW).await.unwrap().len(), 1);
+    let first = to_bytes(get(&db.app, d, None).await.into_body(), 1 << 20)
+        .await
+        .unwrap();
+    let first = token(&first);
+    assert_eq!((first.as_of, first.iat), (1, (NOW + 1_000) / 1_000));
+    // nothing moves: before the heartbeat nothing is signed
+    let quiet = NOW + 1_000 + HEARTBEAT_MS;
+    assert_eq!(publisher.publish(d, quiet - 1).await.unwrap().len(), 0);
+    SIGNER_NOW.store(quiet, std::sync::atomic::Ordering::Relaxed);
+    assert_eq!(publisher.publish(d, quiet).await.unwrap().len(), 1);
+    let r = get(&db.app, d, None).await;
+    assert_eq!(r.headers()[header::ETAG], "\"1.1\"");
+    let body = to_bytes(r.into_body(), 1 << 20).await.unwrap();
+    let again = token(&body);
+    assert_eq!((again.as_of, again.iat), (1, quiet / 1_000));
+    assert_eq!(again.lst, first.lst);
+    assert!(quiet / 1_000 + 60 < first.iat + TTL_S + HEARTBEAT_MS / 1_000);
+    assert_eq!(
+        get(&db.app, d, Some("\"1.0\"")).await.status(),
+        StatusCode::OK
     );
 }

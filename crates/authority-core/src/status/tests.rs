@@ -84,13 +84,17 @@ fn a_token_reflects_its_position_and_bits() {
     assert!(!lookup(&t, &raw, &r(4)).unwrap());
 }
 
-// G43, T24: a list never goes back to an earlier or the same position, so old content is never
-// signed again with a fresh iat
+// G43, T24: a list never goes back to an earlier position, and changed entries are never
+// published at a position already published
 #[test]
 fn a_publication_never_goes_back() {
     let l = last(4, 20, 1_000);
     assert_eq!(
         plan(Some((&l, Some(0))), &snapshot(20, 900_000, &[1]), 900_000),
+        Plan::Skip(Skip::NotNewer)
+    );
+    assert_eq!(
+        plan(Some((&l, Some(1))), &snapshot(20, 900, &[1]), 900),
         Plan::Skip(Skip::NotNewer)
     );
     assert_eq!(
@@ -136,6 +140,26 @@ fn a_revocation_is_published_first_and_a_quiet_list_on_heartbeat() {
         plan(Some((&l, None)), &snapshot(21, 1_000_100, &[]), 1_000_200),
         Plan::Publish { seq: 5 }
     );
+}
+
+// E13, T16, §9.16 heartbeat, T24: a quiet domain's unchanged list is signed again once its last
+// publication is a heartbeat old, issued at the trusted time read before the unmoved head, so
+// a verifier holding it for its ttl never finds it stale while nothing changed
+#[test]
+fn a_quiet_list_is_signed_again_on_its_heartbeat() {
+    let l = last(4, 20, 1_000_000);
+    let quiet = snapshot(20, 1_000_000, &[1, 2]);
+    assert_eq!(
+        plan(Some((&l, Some(2))), &quiet, 1_000_000 + HEARTBEAT_MS - 1),
+        Plan::Skip(Skip::NotNewer)
+    );
+    assert_eq!(
+        plan(Some((&l, Some(2))), &quiet, 1_000_000 + HEARTBEAT_MS),
+        Plan::Heartbeat { seq: 5 }
+    );
+    const { assert!(HEARTBEAT_MS < TTL_S * 1_000) };
+    let t = token_at(&list(), &quiet, 1_000_000 + HEARTBEAT_MS).unwrap();
+    assert_eq!((t.as_of, t.iat), (20, (1_000_000 + HEARTBEAT_MS) / 1_000));
 }
 
 struct Store {

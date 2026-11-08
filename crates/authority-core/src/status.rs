@@ -3,9 +3,11 @@
 //!
 //! A family takes the next entry of the domain's newest list when it opens; its entry is set
 //! when the family is revoked, so a list at a position is read from the families revoked at or
-//! before it. A publication's `iat` is that position's `recorded_at`, never the time of
-//! signing: a publisher never signs old content with a fresh `iat` (G43). A list is an
-//! information channel, never the safety mechanism (§9.12.4, PI-9).
+//! before it. A publication's `iat` is that position's `recorded_at`: a publisher never signs
+//! old content with a fresh `iat` (G43). A quiet domain's unchanged list is signed again on its
+//! heartbeat with the trusted time read before its head was, at which that head was still the
+//! head (T16, §9.16 heartbeat). A list is an information channel, never the safety mechanism
+//! (§9.12.4, PI-9).
 
 pub mod adapters;
 
@@ -24,9 +26,10 @@ pub const CAPACITY: u64 = 1 << 20;
 /// How long a verifier may use a list before fetching it again, seconds (the CWT `ttl`, PD).
 pub const TTL_S: u64 = 300;
 
-/// The longest a list goes without a new publication while its domain's head moves, so its
-/// `iat` follows the heartbeat checkpoints (T16, PD).
-pub const HEARTBEAT_MS: u64 = 300_000;
+/// The longest a list goes without a new publication, so its `iat` stays within the `ttl` a
+/// verifier holds it for, a quiet domain's too, with the publisher tick and the 60 s cache on top
+/// (T16, PD).
+pub const HEARTBEAT_MS: u64 = 180_000;
 
 /// The path of a list under the API base, without the list number.
 pub const PATH: &str = "/access/v1/status-lists/";
@@ -85,10 +88,19 @@ pub fn bits(capacity: u64, revoked: &[u64]) -> Result<Vec<u8>, BuildError> {
 /// # Errors
 /// [`BuildError`].
 pub fn token(list: &List, snapshot: &Snapshot) -> Result<ListToken, BuildError> {
+    token_at(list, snapshot, snapshot.recorded_at)
+}
+
+/// [`token`] issued at `iat_ms`: the snapshot position's `recorded_at`, or on a heartbeat the
+/// trusted time at which that position was still the head.
+///
+/// # Errors
+/// [`BuildError`].
+pub fn token_at(list: &List, snapshot: &Snapshot, iat_ms: u64) -> Result<ListToken, BuildError> {
     let raw = bits(list.capacity, &snapshot.revoked)?;
     Ok(ListToken {
         uri: list.uri.clone(),
-        iat: snapshot.recorded_at / 1_000,
+        iat: iat_ms / 1_000,
         exp: None,
         ttl: Some(TTL_S),
         lst: miniz_oxide::deflate::compress_to_vec_zlib(&raw, 6),
@@ -115,6 +127,12 @@ pub enum Plan {
         /// The publication number.
         seq: u64,
     },
+    /// Sign the unchanged list of an unmoved head again as publication `seq`, issued at the
+    /// trusted time read before the head was (T16 heartbeat).
+    Heartbeat {
+        /// The publication number.
+        seq: u64,
+    },
     /// Nothing to publish.
     Skip(Skip),
 }
@@ -129,22 +147,27 @@ pub enum Skip {
     Unchanged,
 }
 
-/// Whether to publish `snapshot` after `last`, at `now` (T24, G43): a list whose entries
-/// changed is published at once (a revocation first); one that did not is published again only
-/// when its domain's head moved and the last publication is [`HEARTBEAT_MS`] old.
+/// Whether to publish `snapshot` after `last`, at trusted time `now` read before the snapshot
+/// (T24, G43, T16): a list whose entries changed is published at once (a revocation first); one
+/// that did not is published again when the last publication is [`HEARTBEAT_MS`] old, at its
+/// new position when the head moved, else as a heartbeat issued at `now`. A list never goes
+/// back, and changed entries are never published at a position already published.
 #[must_use]
 pub fn plan(last: Option<(&Publication, Option<u64>)>, snapshot: &Snapshot, now: u64) -> Plan {
     let Some((last, set)) = last else {
         return Plan::Publish { seq: 0 };
     };
-    if snapshot.pos <= last.applied_pos {
-        return Plan::Skip(Skip::NotNewer);
-    }
     let Some(seq) = last.seq.checked_add(1) else {
         return Plan::Skip(Skip::NotNewer);
     };
     let changed = set != u64::try_from(snapshot.revoked.len()).ok();
     let aged = now.saturating_sub(last.iat_ms) >= HEARTBEAT_MS;
+    if snapshot.pos == last.applied_pos && !changed && aged && now > last.iat_ms {
+        return Plan::Heartbeat { seq };
+    }
+    if snapshot.pos <= last.applied_pos {
+        return Plan::Skip(Skip::NotNewer);
+    }
     if changed || aged {
         Plan::Publish { seq }
     } else {
@@ -256,11 +279,12 @@ impl<L: Lists, S: ListSigner> Publisher<L, S> {
         };
         let previous = self.lists.latest(domain, &list.uri).await?;
         let set = previous.as_ref().and_then(|p| set_entries(&p.token));
-        let Plan::Publish { seq } = plan(previous.as_ref().map(|p| (p, set)), &snapshot, now)
-        else {
-            return Ok((None, previous.map(|p| p.iat_ms)));
+        let (seq, iat_ms) = match plan(previous.as_ref().map(|p| (p, set)), &snapshot, now) {
+            Plan::Publish { seq } => (seq, snapshot.recorded_at),
+            Plan::Heartbeat { seq } => (seq, now),
+            Plan::Skip(_) => return Ok((None, previous.map(|p| p.iat_ms))),
         };
-        let payload = token(list, &snapshot)
+        let payload = token_at(list, &snapshot, iat_ms)
             .map_err(|_| CoreError::Unavailable("status-build"))?
             .to_bytes()
             .map_err(|_| CoreError::Unavailable("status-build"))?;
@@ -273,7 +297,7 @@ impl<L: Lists, S: ListSigner> Publisher<L, S> {
             uri: list.uri.clone(),
             seq,
             applied_pos: snapshot.pos,
-            iat_ms: snapshot.recorded_at,
+            iat_ms,
             entries: list.capacity,
             token: signed,
             excerpt: Some(excerpt),

@@ -20,6 +20,7 @@ impl StatusLists for One {
                 token: vec![0xd2, 0x84],
                 excerpt: Some(vec![1, 2, 3]),
                 as_of: 42,
+                seq: 3,
             })),
             (2, _) => Err(Unavailable),
             _ => Ok(None),
@@ -46,7 +47,8 @@ async fn get(path: &str, if_none_match: Option<&str>) -> Response {
 }
 
 // OP-150 m.3 (a), (s), CR-58 m.1: the list is served as application/statuslist+cwt with its key
-// excerpt, a short cache lifetime and the reflected position as its ETag
+// excerpt, a short cache lifetime and the reflected position and publication as its ETag (E13:
+// a heartbeat at the same position is a new representation)
 #[tokio::test]
 async fn the_latest_list_is_served_with_its_excerpt() {
     let r = get(&uri(1, "0"), None).await;
@@ -54,11 +56,15 @@ async fn the_latest_list_is_served_with_its_excerpt() {
     let h = r.headers();
     assert_eq!(h[header::CONTENT_TYPE], CWT_CONTENT_TYPE);
     assert_eq!(h[header::CACHE_CONTROL], CACHE);
-    assert_eq!(h[header::ETAG], "\"42\"");
+    assert_eq!(h[header::ETAG], "\"42.3\"");
     assert_eq!(h[EXCERPT_HEADER], b64url_encode(&[1, 2, 3]));
     let body = to_bytes(r.into_body(), 1 << 16).await.unwrap();
     assert_eq!(body.as_ref(), [0xd2, 0x84]);
+    let again = get(&uri(1, "0"), Some("\"42.3\"")).await;
+    assert_eq!(again.status(), StatusCode::NOT_MODIFIED);
     let again = get(&uri(1, "0"), Some("\"42\"")).await;
+    assert_eq!(again.status(), StatusCode::OK);
+    let again = get(&uri(1, "0"), Some("\"42.3\"")).await;
     assert_eq!(again.status(), StatusCode::NOT_MODIFIED);
 }
 

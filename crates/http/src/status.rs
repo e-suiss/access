@@ -37,6 +37,8 @@ pub struct Served {
     pub excerpt: Option<Vec<u8>>,
     /// The position it reflects.
     pub as_of: u64,
+    /// Its publication number within the list: a heartbeat republishes the same position.
+    pub seq: u64,
 }
 
 /// The store could not be read.
@@ -65,8 +67,8 @@ fn unknown() -> Response {
     Problem::new(StatusCode::NOT_FOUND, "status-list-unknown", "Not Found").into_response()
 }
 
-fn etag(as_of: u64) -> String {
-    format!("\"{as_of}\"")
+fn etag(as_of: u64, seq: u64) -> String {
+    format!("\"{as_of}.{seq}\"")
 }
 
 async fn list<L: StatusLists>(
@@ -98,7 +100,7 @@ async fn list<L: StatusLists>(
             .into_response();
         }
     };
-    let tag = etag(served.as_of);
+    let tag = etag(served.as_of, served.seq);
     let Ok(tag_value) = HeaderValue::from_str(&tag) else {
         return unknown();
     };
