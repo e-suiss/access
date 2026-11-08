@@ -312,26 +312,7 @@ where
         if !tx.use_otp_step(credential, i64_of(step)?).await? {
             return Err(SessionError::Corrupt);
         }
-        // §10.1.3, OP-150 m.12 (j)
-        access_identity_account::app::claims::emit(
-            &mut tx,
-            &access_identity_account::domain::claims::secret_binding(
-                subject,
-                access_kernel::claim::body::AuthenticatorKind::Totp,
-                &credential,
-                now,
-            ),
-        )
-        .await?;
-        // TN-41
-        let s = Signal::credential_change(
-            fresh_id()?,
-            subject,
-            CredentialType::App,
-            ChangeType::Create,
-            now,
-        );
-        signal(&mut tx, &s).await?;
+        totp_enrolled(&mut tx, subject, credential, now).await?;
         // OP-151 m.3 (i)
         events::credential(&mut tx, &self.realm, subject, TOTP, CredentialChange::Added).await?;
         let recovery_codes = if tx.credentials(subject, RECOVERY_CODE).await?.is_empty() {
@@ -636,4 +617,33 @@ where
         }
         Ok(outcome)
     }
+}
+
+/// The Claim and signal of a confirmed TOTP: its `authenticator_binding` line opens (§10.1.3,
+/// OP-150 m.12 (j)) and a CAEP credential change is queued (TN-41).
+async fn totp_enrolled<T: SessionTx>(
+    tx: &mut T,
+    subject: [u8; 16],
+    credential: [u8; 16],
+    now: u64,
+) -> Result<(), SessionError> {
+    access_identity_account::app::claims::emit(
+        tx,
+        &access_identity_account::domain::claims::secret_binding(
+            subject,
+            access_kernel::claim::body::AuthenticatorKind::Totp,
+            &credential,
+            now,
+        ),
+    )
+    .await?;
+    let s = Signal::credential_change(
+        fresh_id()?,
+        subject,
+        CredentialType::App,
+        ChangeType::Create,
+        now,
+    );
+    signal(tx, &s).await?;
+    Ok(())
 }
