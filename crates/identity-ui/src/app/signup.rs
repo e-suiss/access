@@ -416,6 +416,17 @@ where
             Ok(k) => k,
             Err(r) => return r,
         };
+        // TN-56, OP-153 m.3 (e)
+        if let Some(r) = self
+            .grace_refusal(
+                &kit,
+                b,
+                access_identity_session::domain::recovery::Restricted::ContactChange,
+            )
+            .await
+        {
+            return r;
+        }
         let subject = match self.fresh_subject(&kit, b).await {
             Ok(s) => s,
             Err(r) => return r,
@@ -490,6 +501,17 @@ where
             Ok(k) => k,
             Err(r) => return r,
         };
+        // TN-56, OP-153 m.3 (e)
+        if let Some(r) = self
+            .grace_refusal(
+                &kit,
+                b,
+                access_identity_session::domain::recovery::Restricted::ContactChange,
+            )
+            .await
+        {
+            return r;
+        }
         let subject = match self.fresh_subject(&kit, b).await {
             Ok(s) => s,
             Err(r) => return r,

@@ -798,6 +798,7 @@ pub fn problem_of(e: &AdminError) -> &'static Code {
             Invalid::HrdUnverified => &r::HRD_NEEDS_VERIFIED_DOMAIN,
             Invalid::Social => &r::INVALID_SOCIAL_PROVIDER,
             Invalid::SharedSocialKey => &r::SHARED_SOCIAL_KEY_IN_PRODUCTION,
+            Invalid::RecoveryGrace => &r::RECOVERY_GRACE,
             Invalid::NoClient
             | Invalid::NoKey
             | Invalid::NoGroup

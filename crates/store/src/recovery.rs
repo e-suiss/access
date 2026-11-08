@@ -707,6 +707,39 @@ impl TenantTx {
             .collect())
     }
 
+    /// The end of the subject's grace period still running at `now_ms` (TN-56): the latest
+    /// `until` among its attempts whose last step is `grace_period`; `None` when none runs. A
+    /// read for the surfaces outside the session crate; the session crate closes elapsed ones.
+    ///
+    /// # Errors
+    /// [`StoreError`].
+    pub async fn recovery_grace_until(
+        &mut self,
+        subject: [u8; 16],
+        now_ms: i64,
+    ) -> Result<Option<i64>, StoreError> {
+        let (tenant, realm) = self.recovery_scope()?;
+        let until = sqlx::query_scalar!(
+            r#"SELECT max((extract(epoch FROM t.until) * 1000)::bigint) AS until_ms
+                 FROM access.recovery_attempts a
+                 JOIN LATERAL (
+                   SELECT state, until FROM access.recovery_transitions r
+                    WHERE r.tenant_id = a.tenant_id AND r.realm_id = a.realm_id
+                      AND r.attempt_id = a.attempt_id
+                    ORDER BY seq DESC LIMIT 1
+                 ) t ON true
+                WHERE a.tenant_id = $1 AND a.realm_id = $2 AND a.subject_id = $3
+                  AND t.state = 'grace_period' AND t.until > to_timestamp($4::float8)"#,
+            tenant,
+            realm,
+            uuid(subject),
+            seconds(now_ms),
+        )
+        .fetch_one(&mut *self.tx)
+        .await?;
+        Ok(until)
+    }
+
     /// The attempt's transitions, in order.
     ///
     /// # Errors

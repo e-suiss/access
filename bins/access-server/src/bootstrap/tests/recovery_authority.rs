@@ -576,3 +576,90 @@ async fn a_recovered_successor_is_bound_by_its_recovery_result() {
 }
 
 const DAY_MS: u64 = 86_400_000;
+
+/// Puts `subject` in the grace period after a recovery, as a rebind leaves it (TN-54).
+async fn graced(c: &super::management::Console, subject: [u8; 16]) {
+    use access_store::recovery::{NewAttempt, NewTransition};
+    let at = i64::try_from(now()).unwrap();
+    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.realm)
+        .await
+        .unwrap();
+    let id = t
+        .insert_recovery_attempt(&NewAttempt {
+            subject: Some(subject),
+            handle_hash: &access_crypto::random::bytes::<32>().unwrap(),
+            path: "registered_code",
+            required_aal: "aal1",
+            cooling: b"{}",
+            high_value: false,
+            at_ms: at,
+        })
+        .await
+        .unwrap();
+    let evidence = vec![String::from("registered_code")];
+    for (seq, state, until) in [
+        (0, "requested", None),
+        (1, "evidence_met", None),
+        (2, "rebind_open", None),
+        (3, "grace_period", Some(at + 86_400_000)),
+    ] {
+        t.insert_recovery_transition(
+            id,
+            &NewTransition {
+                seq,
+                state,
+                required_aal: Some("aal1"),
+                achieved_aal: (seq > 0).then_some("aal1"),
+                evidence: if seq > 0 { &evidence } else { &[] },
+                reason: "test",
+                until_ms: until,
+                at_ms: at,
+            },
+        )
+        .await
+        .unwrap();
+    }
+    t.commit().await.unwrap();
+}
+
+// TN-56, OP-153 m.3 (e), (gg), Ek B 3465
+#[tokio::test]
+async fn the_grace_period_holds_the_remaining_surfaces() {
+    let c = console("recovery-grace-surfaces", false).await;
+    let app = super::recovery::hosted(&c, Recording::default());
+    let ids = crate::ids::CellIds::new(c.w.keys.clone()).key().unwrap();
+    let founder = ids
+        .encode(access_identity_account::app::SUBJECT_PREFIX, c.subject)
+        .unwrap();
+    graced(&c, c.subject).await;
+
+    // TN-56
+    let mut me = Page::default();
+    me.jar.insert(
+        String::from("__Host-access-session"),
+        session(&c, c.subject).await,
+    );
+    let change = me
+        .call(
+            &app,
+            &Method::POST,
+            "/v1/account/email",
+            Some(serde_json::json!({"email": "founder.new@example.com"})),
+        )
+        .await;
+    assert_eq!(change.status, StatusCode::FORBIDDEN, "{}", change.json);
+    assert_eq!(change.json["code"], "recovery-grace");
+    assert!(change.retry_after.unwrap() > 86_000);
+
+    // TN-56
+    let (status, body) = super::recovery::admin_write(
+        &c,
+        "deleteAccount",
+        Some(&founder),
+        &format!("/admin/realms/acme/accounts/{founder}/delete"),
+        serde_json::json!({}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN, "{body}");
+    assert_eq!(body["code"], "recovery-grace");
+}

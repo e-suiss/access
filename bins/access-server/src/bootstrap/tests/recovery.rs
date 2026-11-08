@@ -796,7 +796,7 @@ async fn an_aal2_account_cannot_rest_its_recovery_on_one_email() {
 
 /// Drafts `operation` on `key` through the console BFF and commits it at `path` with the
 /// browser's AIS: the management API's single write path (TN-110).
-async fn admin_write(
+pub(super) async fn admin_write(
     c: &Console,
     operation: &str,
     key: Option<&str>,

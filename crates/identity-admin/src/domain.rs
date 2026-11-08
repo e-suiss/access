@@ -330,6 +330,10 @@ pub enum Invalid {
     /// (OP-153 m.3 (a)).
     #[error("catalog upgrade required")]
     CatalogUpgradeRequired,
+    /// The actor's account is in the grace period after a recovery, which refuses this change
+    /// (TN-56, OP-153 m.3 (e)).
+    #[error("recovery grace")]
+    RecoveryGrace,
     /// The organization does not exist or ended.
     #[error("no such organization")]
     NoOrg,
@@ -460,6 +464,7 @@ impl Invalid {
             Self::RecoveryPolicy => "invalid-recovery-policy",
             Self::RecoveryOption => "recovery-option-off",
             Self::SelfIssue => "self-issue-refused",
+            Self::RecoveryGrace => "recovery-grace",
         }
     }
 }

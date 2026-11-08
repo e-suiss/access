@@ -183,6 +183,17 @@ impl OAuthTx for PgOAuthTx {
         self.0.end_sessions(subject).await.map(drop).map_err(down)
     }
 
+    async fn recovery_grace_until(
+        &mut self,
+        subject: [u8; 16],
+        now_ms: i64,
+    ) -> Result<Option<i64>, Unavailable> {
+        self.0
+            .recovery_grace_until(subject, now_ms)
+            .await
+            .map_err(down)
+    }
+
     async fn insert_grant(&mut self, g: &NewGrant<'_>) -> Result<[u8; 16], Unavailable> {
         self.0.insert_grant(g).await.map_err(down)
     }

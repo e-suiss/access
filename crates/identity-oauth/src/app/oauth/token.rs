@@ -81,6 +81,28 @@ fn audit_text(v: Option<&str>, max: usize) -> &str {
     .unwrap_or("-")
 }
 
+/// TN-56, OP-153 m.3 (e): while the subject is in the grace period after a recovery, a new
+/// grant gets no long-lived token: `offline_access` is withheld from its scope.
+async fn withhold_offline<T: OAuthTx>(
+    tx: &mut T,
+    granted: &mut String,
+    subject: [u8; 16],
+    now: u64,
+) -> Result<(), Unavailable> {
+    if !granted.split(' ').any(|s| s == scope::OFFLINE_ACCESS) {
+        return Ok(());
+    }
+    let now = i64::try_from(now).map_err(|_| Unavailable)?;
+    if tx.recovery_grace_until(subject, now).await?.is_some() {
+        *granted = granted
+            .split(' ')
+            .filter(|s| *s != scope::OFFLINE_ACCESS)
+            .collect::<Vec<_>>()
+            .join(" ");
+    }
+    Ok(())
+}
+
 fn verifier_ok(v: &str) -> bool {
     (43..=128).contains(&v.len())
         && v.bytes()
@@ -224,6 +246,10 @@ impl<E: Env> OAuth<E> {
 
     /// RFC 6749 §4.1.3, §11.4.5 #20: the code is redeemed once by compare-and-set; a second
     /// redemption revokes what the first one issued.
+    #[expect(
+        clippy::too_many_lines,
+        reason = "one code redemption, its checks in order"
+    )]
     async fn exchange(
         &self,
         tx: &mut <E::Db as crate::ports::oauth::OAuthDb>::Tx,
@@ -250,7 +276,8 @@ impl<E: Env> OAuth<E> {
         if unsigned(row.expires_ms) <= now {
             return Ok(invalid_grant());
         }
-        let details: CodeDetails = serde_json::from_slice(&row.details).map_err(|_| Unavailable)?;
+        let mut details: CodeDetails =
+            serde_json::from_slice(&row.details).map_err(|_| Unavailable)?;
         // IDP-7
         if params.get("redirect_uri") != Some(details.redirect_uri.as_str()) {
             return Ok(invalid_grant());
@@ -280,6 +307,8 @@ impl<E: Env> OAuth<E> {
         let Ok(bound) = refresh_binding(client.client_type(), Some(jkt)) else {
             return Ok(binding(BindingError::ProofRequired));
         };
+        // TN-56, OP-153 m.3 (e)
+        withhold_offline(tx, &mut details.grant.scope, session.subject, now).await?;
         let mut grant_details = details.grant.clone();
         let projected = match self
             .code_projection(realm, client, params, &mut grant_details, jkt)

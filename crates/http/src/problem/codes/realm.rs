@@ -375,6 +375,14 @@ pub const RECOVERY_OPTION_OFF: Code = code(
     "Conflict",
     "The realm does not allow temporary access passes, or the account turned assisted recovery off (TN-60, TN-62).",
 );
+/// The actor's account is in the 24 hours after a recovery: deleting it, a new API key or client
+/// secret, an identity provider link and the other restricted changes wait (TN-56).
+pub const RECOVERY_GRACE: Code = code(
+    "recovery-grace",
+    403,
+    "Forbidden",
+    "The account is in the grace period after a recovery; deleting it, a new client secret, an identity provider link and the other restricted changes wait until it ends (TN-56, OP-153 m.3 (e)).",
+);
 /// Nobody issues a reset intent or a temporary access pass for their own account (TN-62).
 pub const SELF_ISSUE_REFUSED: Code = code(
     "self-issue-refused",

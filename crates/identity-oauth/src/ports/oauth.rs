@@ -106,6 +106,13 @@ pub trait OAuthTx: Send {
         &mut self,
         subject: [u8; 16],
     ) -> impl Future<Output = Result<(), Unavailable>> + Send;
+    /// The end of the subject's grace period after a recovery still running at `now_ms`
+    /// (TN-56).
+    fn recovery_grace_until(
+        &mut self,
+        subject: [u8; 16],
+        now_ms: i64,
+    ) -> impl Future<Output = Result<Option<i64>, Unavailable>> + Send;
     /// Stores a grant.
     fn insert_grant(
         &mut self,

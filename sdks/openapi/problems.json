@@ -662,6 +662,13 @@
       "description": "Only a sandbox realm may use the shared development client; give the realm its own client id and secret reference (IDP-31)."
     },
     {
+      "code": "recovery-grace",
+      "type": "urn:suiss:access:problem:recovery-grace",
+      "status": 403,
+      "title": "Forbidden",
+      "description": "The account is in the grace period after a recovery; deleting it, a new client secret, an identity provider link and the other restricted changes wait until it ends (TN-56, OP-153 m.3 (e))."
+    },
+    {
       "code": "invalid-audit-format",
       "type": "urn:suiss:access:problem:invalid-audit-format",
       "status": 400,

@@ -773,6 +773,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
         let actor = self.actor(p).await?;
         self.standing((p.tenant, p.realm), prepared.domain, &ais, actor)
             .await?;
+        self.recovery_grace(p, prepared.domain, &ais, actor).await?;
         let issuer = self
             .recovery_issuer(p, prepared.domain, &ais, actor)
             .await?;
@@ -996,6 +997,58 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
         )
         .await
         .map(drop)
+    }
+
+    /// TN-56, OP-153 m.3 (e): while the actor's own account is in the grace period after a
+    /// recovery, deleting it, a new API key (a client or a client secret) and linking it to an
+    /// identity provider are refused before anything is decided.
+    async fn recovery_grace(
+        &self,
+        p: &Proposal,
+        domain: Digest,
+        ais: &[u8],
+        actor: Option<Id>,
+    ) -> Result<(), AdminError> {
+        if !matches!(
+            &p.change,
+            Change::AccountDelete(_)
+                | Change::ClientRegister(_)
+                | Change::ClientSecretRotate(_)
+                | Change::UpstreamLink(_)
+        ) {
+            return Ok(());
+        }
+        let party = match actor {
+            Some(party) => Some(party),
+            None => self
+                .decider
+                .signer(domain, ais)
+                .await
+                .map_err(|e| AdminError::Unavailable(e.0))?,
+        };
+        let mut t = TenantTx::begin(self.app, p.tenant, p.realm).await?;
+        let subject = match (p.subject, party) {
+            (Some(s), _) => Some(s),
+            (None, Some(party)) => idp::party_subject(&mut t, &party.0).await?,
+            (None, None) => None,
+        };
+        let restricted = subject.filter(|subject| match &p.change {
+            Change::AccountDelete(s) => s == subject,
+            Change::UpstreamLink(l) => l.account == *subject,
+            _ => true,
+        });
+        let Some(subject) = restricted else {
+            t.commit().await?;
+            return Ok(());
+        };
+        let now = access_store::authority::server_time(self.app).await?;
+        let now = i64::try_from(now).map_err(|_| AdminError::Encode)?;
+        let until = t.recovery_grace_until(subject, now).await?;
+        t.commit().await?;
+        if until.is_some() {
+            return Err(Invalid::RecoveryGrace.into());
+        }
+        Ok(())
     }
 
     /// The Party the session subject of `p` is bound to (§13.4 G54, OP-149 m.16 (a)); a subject

@@ -14,6 +14,9 @@ pub const PROTOCOL_SCOPES: [&str; 6] = [
     "offline_access",
 ];
 
+/// The long-lived token scope; the grace period after a recovery withholds it (TN-56).
+pub const OFFLINE_ACCESS: &str = "offline_access";
+
 /// What a requested scope is.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ScopeClass {

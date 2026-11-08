@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT max((extract(epoch FROM t.until) * 1000)::bigint) AS until_ms\n                 FROM access.recovery_attempts a\n                 JOIN LATERAL (\n                   SELECT state, until FROM access.recovery_transitions r\n                    WHERE r.tenant_id = a.tenant_id AND r.realm_id = a.realm_id\n                      AND r.attempt_id = a.attempt_id\n                    ORDER BY seq DESC LIMIT 1\n                 ) t ON true\n                WHERE a.tenant_id = $1 AND a.realm_id = $2 AND a.subject_id = $3\n                  AND t.state = 'grace_period' AND t.until > to_timestamp($4::float8)",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "until_ms",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Float8"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "3636beb931556e3610c7aafe27a8f04e67fc92c248e8ffe27c37c2536e65c9ad"
+}
