@@ -1,4 +1,4 @@
-//! Known-answer vectors from independent implementations: OpenBSD and crypt_blowfish bcrypt,
+//! Known-answer vectors from independent implementations: OpenBSD and `crypt_blowfish` bcrypt,
 //! Apache htpasswd, OpenSSL passwd, Python hashlib, RFC 1321, RFC 7914 and the firebase/scrypt
 //! README.
 
