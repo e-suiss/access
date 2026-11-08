@@ -456,3 +456,34 @@ fn codes_are_distinct() {
     let codes: BTreeSet<&str> = all.iter().map(|e| e.code()).collect();
     assert_eq!(codes.len(), all.len());
 }
+
+// IDP-11 step 1: a proof of exactly the size limit is verified; the limit is checked first
+#[test]
+fn proof_size_limit_is_inclusive() {
+    let sig_len = b64url_encode(&[0; 64]).len();
+    let b64_len = |n: usize| (n * 4).div_ceil(3);
+    let (header, body_bytes) = (0..MAX_HEADER)
+        .find_map(|pad| {
+            let header = format!("{}{}", ed_header(), " ".repeat(pad));
+            let rest = MAX_PROOF - b64_len(header.len()) - sig_len - 2;
+            let bytes = rest * 3 / 4;
+            (b64_len(bytes) == rest && bytes <= MAX_PAYLOAD).then_some((header, bytes))
+        })
+        .unwrap();
+    let base = payload("");
+    let body = format!("{}{}", " ".repeat(body_bytes - base.len()), base);
+    let p = compact(&header, &body, &sign_ed);
+    assert_eq!(p.len(), MAX_PROOF);
+    assert_eq!(check(&p, &same).map(|v| v.iat), Ok(NOW));
+}
+
+// TN-28: an htu is ASCII, at most MAX_URI long, and its port has at most five digits
+#[test]
+fn htu_bounds() {
+    let at = format!("https://example.com/{}", "a".repeat(MAX_URI - 20));
+    assert_eq!(at.len(), MAX_URI);
+    assert_eq!(normalize_htu(&at).as_deref(), Some(at.as_str()));
+    assert_eq!(normalize_htu(&format!("{at}a")), None);
+    assert_eq!(normalize_htu("https://example.com/a?q=\u{e4}"), None);
+    assert_eq!(normalize_htu("https://example.com:000443/"), None);
+}

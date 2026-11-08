@@ -735,3 +735,73 @@ fn thumbprint_vectors_match() {
         &json,
     );
 }
+
+// CR-58 m.3: metadata is refused when its own algorithm list leaves out the signing binding's
+#[test]
+fn metadata_signed_with_an_algorithm_it_does_not_list_is_refused() {
+    let case = Case::new();
+    let kid = case.signer_kid;
+    let mut trusted = KeySet::default();
+    trusted.insert(kid, ed_pub(1)).unwrap();
+    trusted.allowed.insert(Algorithm::Ed25519);
+    let mut unlisted = case.metadata.clone();
+    unlisted.algorithms.remove(&Algorithm::Ed25519);
+    let signed = sign1(
+        &Signer::Ed(1),
+        kid,
+        METADATA_CONTENT_TYPE,
+        &unlisted.to_bytes().unwrap(),
+    );
+    assert_eq!(
+        verify_metadata(&PureBackend, &signed, &trusted),
+        Err(KeyScopeError::Algorithm)
+    );
+}
+
+// CR-24: an AKP thumbprint names the ML-DSA parameter set, so one public value gives three kids
+#[test]
+fn ml_dsa_thumbprints_name_the_parameter_set() {
+    let public = vec![0x11; 32];
+    let kids: Vec<[u8; 32]> = [Algorithm::MlDsa44, Algorithm::MlDsa65, Algorithm::MlDsa87]
+        .into_iter()
+        .map(|a| thumbprint(&PublicKey::MlDsa(a, public.clone())))
+        .collect();
+    let expected: [[u8; 32]; 3] = ["ML-DSA-44", "ML-DSA-65", "ML-DSA-87"].map(|name| {
+        Sha256::digest(
+            alloc::format!(
+                r#"{{"alg":"{name}","kty":"AKP","pub":"{}"}}"#,
+                b64url_encode(&public)
+            )
+            .as_bytes(),
+        )
+        .into()
+    });
+    assert_eq!(kids, expected);
+}
+
+// OP-108 m.4: a known variant of the wrong shape is malformed, an unknown one is not understood
+#[test]
+fn key_and_scope_variants_are_strict() {
+    assert_eq!(
+        PublicKey::from_value(&Value::Map(vec![(
+            Value::text("ml_dsa"),
+            Value::Bytes(vec![0; 32])
+        )])),
+        Err(ModelError::Shape)
+    );
+    assert_eq!(
+        PublicKey::from_value(&Value::Map(vec![(
+            Value::text("rsa"),
+            Value::Bytes(vec![0; 32])
+        )])),
+        Err(ModelError::Unknown)
+    );
+    assert_eq!(
+        BindingScope::from_value(&Value::text("domain")),
+        Ok(BindingScope::Domain)
+    );
+    assert_eq!(
+        BindingScope::from_value(&Value::text("provider")),
+        Err(ModelError::Unknown)
+    );
+}

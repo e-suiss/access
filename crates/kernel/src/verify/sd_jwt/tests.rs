@@ -535,3 +535,115 @@ fn sd_jwt_vectors_match() {
         json
     );
 }
+
+fn p_holder() -> p256::ecdsa::SigningKey {
+    p256::ecdsa::SigningKey::from_slice(&[9; 32]).unwrap()
+}
+
+fn p_cnf() -> String {
+    let point = p_holder().verifying_key().to_sec1_point(false);
+    let xy = &point.as_bytes()[1..];
+    format!(
+        r#""cnf":{{"jwk":{{"kty":"EC","crv":"P-256","x":"{}","y":"{}"}}}}"#,
+        b64url_encode(&xy[..32]),
+        b64url_encode(&xy[32..])
+    )
+}
+
+fn p_kb_jwt(prefix: &str) -> String {
+    use p256::ecdsa::signature::Signer as _;
+    let sd_hash = b64url_encode(&Sha256::digest(prefix.as_bytes()));
+    let input = format!(
+        "{}.{}",
+        b64url_encode(br#"{"alg":"ES256","typ":"kb+jwt"}"#),
+        b64url_encode(
+            format!(r#"{{"iat":1000,"aud":"pep:shop","nonce":"n-1","sd_hash":"{sd_hash}"}}"#)
+                .as_bytes()
+        )
+    );
+    let s: p256::ecdsa::Signature = p_holder().sign(input.as_bytes());
+    format!("{input}.{}", b64url_encode(&s.normalize_s().to_bytes()))
+}
+
+// CR-55 m.7, RFC 9901 §4.1.2: a P-256 confirmation key binds the holder like an Ed25519 one
+#[test]
+fn p256_confirmation_key_binds_the_holder() {
+    let mut ks = keys();
+    ks.allowed.insert(Algorithm::Es256);
+    let jwt = issuer_jwt(&format!(
+        r#"{{"iss":"https://access.example","exp":2000,{}}}"#,
+        p_cnf()
+    ));
+    let prefix = format!("{jwt}~");
+    let ok = format!("{prefix}{}", p_kb_jwt(&prefix));
+    let v = verify(&PureBackend, &ok, &ks, &rules(), Origin::Native).unwrap();
+    assert!(v.holder_bound);
+    assert_eq!(
+        verify(&PureBackend, &prefix, &ks, &rules(), Origin::Native).map(|_| ()),
+        Err(SdJwtError::KeyBinding)
+    );
+    let short = issuer_jwt(&format!(
+        r#"{{"iss":"https://access.example","exp":2000,"cnf":{{"jwk":{{"kty":"EC","crv":"P-256","x":"{}","y":"{}"}}}}}}"#,
+        b64url_encode(&[1; 31]),
+        b64url_encode(&[1; 32])
+    ));
+    let short = format!("{short}~");
+    assert_eq!(
+        verify(
+            &PureBackend,
+            &format!("{short}{}", p_kb_jwt(&short)),
+            &ks,
+            &rules(),
+            Origin::Native
+        )
+        .map(|_| ()),
+        Err(SdJwtError::ConfirmationKey)
+    );
+}
+
+fn padded(i: usize, len: usize) -> String {
+    disclosure(&format!(r#"["s","c{i:03}","{}"]"#, "v".repeat(len)))
+}
+
+// OP-117 m.6: a presentation of exactly the size and disclosure limits is verified
+#[test]
+fn presentation_limits_are_inclusive() {
+    let jwt_for = |ds: &[String]| {
+        let digests: Vec<String> = ds.iter().map(|d| format!("\"{}\"", digest_of(d))).collect();
+        issuer_jwt(&format!(
+            r#"{{"iss":"https://access.example","exp":2000,"_sd":[{}]}}"#,
+            digests.join(",")
+        ))
+    };
+    let assemble = |ds: &[String]| {
+        let mut s = jwt_for(ds);
+        for d in ds {
+            s.push('~');
+            s.push_str(d);
+        }
+        s.push('~');
+        s
+    };
+    let mut ds: Vec<String> = (0..MAX_DISCLOSURES).map(|i| padded(i, 700)).collect();
+    let last = MAX_DISCLOSURES - 1;
+    let fixed = assemble(&ds).len() - ds[last - 1].len() - ds[last].len();
+    let (a, b) = (0..4)
+        .find_map(|a| {
+            let room = MAX_PRESENTATION - fixed - padded(last - 1, 700 + a).len();
+            (0..4096)
+                .find(|b| padded(last, 700 + b).len() == room)
+                .map(|b| (a, b))
+        })
+        .unwrap();
+    ds[last - 1] = padded(last - 1, 700 + a);
+    ds[last] = padded(last, 700 + b);
+    let p = assemble(&ds);
+    assert_eq!(p.len(), MAX_PRESENTATION);
+    let v = run(&p).unwrap();
+    assert_eq!(
+        v.claims.get("c000").and_then(Json::as_str).map(str::len),
+        Some(700)
+    );
+    let many: Vec<String> = (0..=MAX_DISCLOSURES).map(|i| padded(i, 1)).collect();
+    assert_eq!(run(&assemble(&many)).map(|_| ()), Err(SdJwtError::Format));
+}

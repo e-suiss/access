@@ -862,3 +862,101 @@ fn jwt_claim_vectors_match() {
         json
     );
 }
+
+// CR-56 rows 2-3, OP-117 m.14: the fully-specified ML-DSA names are recognised, then refused
+// while not enabled
+#[test]
+fn ml_dsa_names_are_known_but_not_enabled() {
+    for (name, alg) in [
+        ("ML-DSA-44", Algorithm::MlDsa44),
+        ("ML-DSA-65", Algorithm::MlDsa65),
+        ("ML-DSA-87", Algorithm::MlDsa87),
+    ] {
+        assert_eq!(algorithm(name), Some(alg), "{name}");
+        let mut ks = keys();
+        ks.allowed.insert(alg);
+        let token = token_with(
+            &h(&format!(r#"{{"alg":"{name}","kid":"KID1","typ":"TYP"}}"#)),
+            PAYLOAD,
+            &ed_sign,
+        );
+        assert_eq!(
+            verify_compact(&PureBackend, &token, &ks, TYP, Origin::External).map(|_| ()),
+            Err(JwsError::Algorithm),
+            "{name}"
+        );
+    }
+    assert_eq!(algorithm("ML-DSA"), None);
+}
+
+// CR-56 row 3, RFC 9901 §4.3: the key binding JWT's algorithm must be in the allowlist
+#[test]
+fn key_binding_jws_needs_an_allowed_algorithm() {
+    let token = token_with(r#"{"alg":"Ed25519","typ":"kb+jwt"}"#, PAYLOAD, &ed_sign);
+    let key = PublicKey::Ed25519(ed_key().verifying_key().to_bytes());
+    let ed: alloc::collections::BTreeSet<Algorithm> = [Algorithm::Ed25519].into();
+    let es: alloc::collections::BTreeSet<Algorithm> = [Algorithm::Es256].into();
+    assert_eq!(
+        verify_with_key(&PureBackend, &token, &key, &ed, "kb+jwt"),
+        Ok(PAYLOAD.as_bytes().to_vec())
+    );
+    assert_eq!(
+        verify_with_key(&PureBackend, &token, &key, &es, "kb+jwt"),
+        Err(JwsError::Algorithm)
+    );
+}
+
+// §14.6: a token of exactly the size limit is decoded; one byte more is refused unread
+#[test]
+fn token_size_limit_is_inclusive() {
+    let head = b64url_encode(ed_header().as_bytes());
+    let sized = |len: usize| {
+        let mut sig = b64url_encode(&[0; 64]);
+        let mut body = len - head.len() - sig.len() - 2;
+        if body % 4 == 1 {
+            sig = b64url_encode(&[0; 63]);
+            body += 2;
+        }
+        format!("{head}.{}.{sig}", "A".repeat(body))
+    };
+    let at = sized(MAX_TOKEN);
+    assert_eq!(at.len(), MAX_TOKEN);
+    assert!(matches!(
+        verify_compact(&PureBackend, &at, &keys(), TYP, Origin::External),
+        Err(JwsError::Signature(_))
+    ));
+    let over = sized(MAX_TOKEN + 1);
+    assert_eq!(over.len(), MAX_TOKEN + 1);
+    assert_eq!(
+        verify_compact(&PureBackend, &over, &keys(), TYP, Origin::External),
+        Err(JwsError::Format)
+    );
+}
+
+// OP-122 m.3a: a NumericDate of zero is the epoch, only negative ones are refused
+#[test]
+fn numeric_date_zero_is_valid() {
+    assert_eq!(millis(0), Ok(0));
+    assert_eq!(millis(1), Ok(1000));
+    assert_eq!(millis(-1), Err(ClaimError::Time));
+}
+
+// CR-56 row 17: an audience array must name this verifier
+#[test]
+fn audience_array_must_name_the_verifier() {
+    let rules = ClaimRules {
+        issuer: "https://access.example",
+        audience: "pep:shop",
+        now: 1_500_000,
+        skew_ms: 60_000,
+    };
+    let p = |s: &str| check_claims(s.as_bytes(), &rules).map(|_| ());
+    assert_eq!(
+        p(r#"{"iss":"https://access.example","aud":["pep:shop"],"exp":2000}"#),
+        Ok(())
+    );
+    assert_eq!(
+        p(r#"{"iss":"https://access.example","aud":["pep:bank"],"exp":2000}"#),
+        Err(ClaimError::Audience)
+    );
+}

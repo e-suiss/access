@@ -399,3 +399,65 @@ fn a_foreign_gate_opens_for_its_domain_and_classes() {
         "sha-256:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
     );
 }
+
+// OP-143 m.13 (d): the freshness and issuance cutoffs are inclusive
+#[test]
+fn freshness_and_cutoff_bounds_are_inclusive() {
+    let edge = [
+        Case {
+            metadata: metadata_bytes(NOW - FRESHNESS_MS, 1),
+            ..Case::new()
+        },
+        Case {
+            gate: ForeignGate {
+                issued_until: Some(IAT),
+                ..gate(&[1])
+            },
+            ..Case::new()
+        },
+    ];
+    for case in edge {
+        assert_eq!(case.run().map(|p| p.iat), Ok(IAT));
+    }
+}
+
+// OP-143 m.13 (d): a binding key counts only with the key and algorithm that are pinned
+#[test]
+fn a_binding_pinned_under_another_algorithm_is_dropped() {
+    let both = Case {
+        gate: gate(&[1, 4]),
+        ..Case::new()
+    };
+    assert_eq!(both.run().map(|p| p.iat), Ok(IAT));
+    let mut g = gate(&[1, 4]);
+    let kid = binding(1).kid;
+    if let Some(b) = g.issuer.binding.get_mut(&kid) {
+        b.alg = Algorithm::Es256;
+    }
+    let case = Case {
+        gate: g,
+        ..Case::new()
+    };
+    assert_eq!(case.run().map(|_| ()), Err("pap-key"));
+}
+
+// OP-143 m.13 (a), (d): both the PAP bounds and its validity bounds stay inside the class
+#[test]
+fn validity_bounds_outside_the_class_are_refused() {
+    let mut p = pap("pay");
+    p.validity.bounds.actions.exact.insert(action("shop"));
+    let case = Case {
+        pap: sign1(2, CONTENT_TYPE, &p.to_bytes().unwrap()),
+        ..Case::new()
+    };
+    assert_eq!(case.run().map(|_| ()), Err("foreign-class"));
+}
+
+// OP-143 m.13 (d): the gate is picked by the domain the PAP payload claims
+#[test]
+fn the_claimed_domain_is_read_from_the_payload() {
+    let signed = sign1(2, CONTENT_TYPE, &pap("pay").to_bytes().unwrap());
+    assert_eq!(claimed_domain(&signed), Some(d(1)));
+    assert_eq!(claimed_domain(&excerpt()), None);
+    assert_eq!(claimed_domain(b"not cose"), None);
+}
