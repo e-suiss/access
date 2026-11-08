@@ -17,16 +17,25 @@ const catalogs = new Catalogs(
 
 const LANGUAGES = ["en", "tr"];
 
+/** The right-to-left pseudo-locale (OP-153 m.3 (s), TN-108). */
+export const PSEUDO_RTL = "ar-XB";
+
 function choose(): string {
-  for (const l of navigator.languages) {
+  const asked = new URLSearchParams(location.search).get("ui_locales");
+  for (const l of [...(asked === null ? [] : asked.split(" ")), ...navigator.languages]) {
+    if (l === PSEUDO_RTL) return l;
     const language = l.toLowerCase().split("-")[0] ?? "";
-    if (LANGUAGES.includes(language)) return l;
+    if (/^[A-Za-z0-9-]{2,35}$/.test(l) && LANGUAGES.includes(language)) return l;
   }
   return "en";
 }
 
 /** The viewer's locale. */
 export const locale = choose();
+
+// TN-108
+document.documentElement.lang = locale;
+document.documentElement.dir = locale === PSEUDO_RTL ? "rtl" : "ltr";
 
 /** The text of wire id `id` (`hub.title`), with `args` placed as plain text. */
 export function t(id: string, args?: Readonly<Record<string, string>>): string {

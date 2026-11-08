@@ -11,7 +11,7 @@ import { call, FRONTEND, json, PAGE, Problem, type SessionInfo } from "./lib/api
 import { t } from "./lib/i18n.js";
 import { find, type Instance } from "./lib/instance.js";
 import { Privacy } from "./privacy/Privacy.js";
-import { SignIns } from "./signins/index.js";
+import { SignedOutReason, SignIns } from "./signins/index.js";
 
 type Screen = "account" | Section;
 
@@ -67,6 +67,7 @@ export function App(): ReactElement {
     return (
       <main className="shell">
         <p data-testid="signed-out">{t("shell.signed_out")}</p>
+        <SignedOutReason />
         <a href={`${FRONTEND}/login`}>{t("action.sign_in")}</a>
       </main>
     );

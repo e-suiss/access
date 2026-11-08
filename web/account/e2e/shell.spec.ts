@@ -47,3 +47,21 @@ test("the page carries the account's security headers", async ({ page }) => {
   expect(csp).toContain("script-src 'self' 'wasm-unsafe-eval'");
   expect(r?.headers()["x-frame-options"]).toBe("DENY");
 });
+
+// OP-153 m.3 (y), X36
+test("the signed-out screen says why, from the closed list", async ({ page, bff }) => {
+  bff.signedOutReason = "device_mismatch";
+  await page.goto("/account/");
+  await expect(page.getByTestId("signed-out")).toBeVisible();
+  await expect(page.getByTestId("signed-out-reason")).toHaveText(
+    "Signed out because this device didn't match the sign-in.",
+  );
+});
+
+// TN-108, OP-153 m.3 (s)
+test("the ar-XB pseudo-locale draws the shell right to left", async ({ page }) => {
+  await page.goto("/account/?ui_locales=ar-XB");
+  await expect(page.getByTestId("signed-out")).toBeVisible();
+  await expect(page.locator("html")).toHaveAttribute("dir", "rtl");
+  await expect(page.locator("html")).toHaveAttribute("lang", "ar-XB");
+});
