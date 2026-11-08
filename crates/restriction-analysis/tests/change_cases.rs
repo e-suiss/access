@@ -262,7 +262,7 @@ fn e_optional_entity_attribute_is_narrowing() {
     assert_eq!(check(&new), Ok(Verdict::Narrowing));
 }
 
-// §5.8, OP-105: "did authority change?" in both directions, timed for the README
+// §5.8, OP-105
 #[test]
 #[cfg(target_os = "linux")]
 #[ignore = "needs the pinned cvc5 in ACCESS_CVC5; run `just smt-test`"]

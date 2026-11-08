@@ -159,7 +159,7 @@ fn sets_outside_the_restriction_rules_are_rejected() {
     );
 }
 
-// §5.8, OP-105: a preview that runs out of time says "unknown", never "equivalent"
+// §5.8, OP-105
 #[test]
 fn compare_on_timeout_is_unknown_never_equivalent() {
     let (path, hash) = script("compare-hang", "exec /bin/sleep 30");
