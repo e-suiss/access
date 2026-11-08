@@ -634,8 +634,7 @@ mod tests {
         })
     }
 
-    // OP-149 m.9, §9.14.1 A step 1: the surface reads the target from the request's
-    // require_action; a request without one, or without a reason, is no approval request
+    // OP-149 m.9, §9.14.1 step 1
     #[test]
     fn a_push_names_its_target() {
         let p = pushed(&request()).unwrap();
@@ -653,8 +652,7 @@ mod tests {
         assert_eq!(pushed(&short), Err(PushRejection::Request));
     }
 
-    // §9.14.1 A step 4, L0-META-30: the contribution envelope names the nonce, the basis and
-    // the AIS; capacity is own in Stage 6
+    // §9.14.1 step 4, L0-META-30
     #[test]
     fn an_envelope_decodes_to_the_exercise_shape() {
         let e = ContributionEnvelope {
@@ -690,8 +688,7 @@ mod tests {
         );
     }
 
-    // §13.7.3: a push is kept until its expires_at, at most 72 h (the CT3 intent validity
-    // ceiling); a past expires_at is refused
+    // §13.7.3
     #[test]
     fn a_push_is_kept_no_longer_than_its_request() {
         let now = 1_000_000;
@@ -704,7 +701,7 @@ mod tests {
         assert_eq!(MAX_PUSH_TTL_MS, 72 * 3_600 * 1_000);
     }
 
-    // SEC18, §8.13, X38: the cooling refusal names when the method becomes usable
+    // SEC18, §8.13, X38
     #[test]
     fn the_cooling_text_names_the_time() {
         let text = cooling_text(1_767_225_600_000);
@@ -712,8 +709,7 @@ mod tests {
         assert!(text.contains("2026-01-01T00:00:00Z"));
     }
 
-    // OP-146 m.12 (f): the page loads its script from the realm host only, so the hosted CSP
-    // (script-src 'self', no inline scripts) holds, and the script uses no HTML sinks
+    // OP-146 m.12 (f)
     #[test]
     fn the_page_fits_the_hosted_csp() {
         assert!(PAGE_HTML.contains("<script src=\"/v1/approve/app.js\"></script>"));

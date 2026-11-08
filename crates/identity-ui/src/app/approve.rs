@@ -312,7 +312,7 @@ where
             Ok(o) => o,
             Err(r) => return r,
         };
-        // §9.14.1: the approver Instance is the one whose key signed the contribution
+        // §9.14.1
         let approver = match self.approver(&kit, &session.subject, &env.ais).await {
             Ok(Some(a)) => a,
             Ok(None) => {
@@ -324,7 +324,7 @@ where
             }
             Err(r) => return r,
         };
-        // §9.14.5 WYSIWYS: the render the decision point kept, never the surface's own
+        // §9.14.5
         let opening = match devices.approvals.opening(p.domain, p.intent).await {
             Ok(Some(o)) => o,
             Ok(None) => return Reply::problem(CHANGED),
@@ -542,7 +542,6 @@ where
             Ok(s) => s,
             Err(r) => return r,
         };
-        // the redirect is checked again: exactly a registered redirect URI, a printable state
         let query = ApproveQuery {
             request: row.request_uri.clone(),
             redirect_uri: body.redirect_uri.clone(),
@@ -565,7 +564,7 @@ where
             Ok(t) => t,
             Err(r) => return r,
         };
-        // §9.14.1 step 3: one passkey assertion whose challenge is H(AAS)
+        // §9.14.1 step 3
         let verified = match self
             .assert(&kit, &session.subject, &statement, tier, &assertion, now)
             .await
@@ -573,7 +572,7 @@ where
             Ok(v) => v,
             Err(r) => return r,
         };
-        // SEC18, §8.13: a binding younger than 24 h meets no CT2+ approval
+        // SEC18, §8.13
         if let Err(r) = cooled(tier, verified.created_ms, now) {
             return r;
         }
@@ -591,7 +590,7 @@ where
             Ok(c) => c,
             Err(r) => return r,
         };
-        // §9.14.1 step 4: the contribution, with the statement and the Claim as proofs
+        // §9.14.1 step 4
         let verdict = devices
             .approvals
             .contribute(Contribution {
@@ -944,8 +943,7 @@ fn committed(
         }
         Ok(Verdict::Refused { code, errors }) => {
             tracing::info!(%code, ?errors, "approval refused");
-            // OP-149 m.24 (b), m.30 (b): the reason and, when the plane can tell, what it
-            // expected; never a value of the request or of a Claim
+            // OP-149 m.24 (b), m.30 (b)
             let mut problem = json!({
                 "type": "urn:suiss:access:problem:approval-refused",
                 "status": 409,

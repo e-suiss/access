@@ -8,7 +8,7 @@ fn query(request: &str, state: &str) -> ApproveQuery {
     }
 }
 
-// OP-149 m.9: request is a 32-byte digest or a pushed request_uri; state is printable ASCII
+// OP-149 m.9
 #[test]
 fn approval_parameters_are_checked() {
     let digest = b64url_encode(&[7; 32]);
@@ -42,8 +42,7 @@ fn approval_parameters_are_checked() {
     }
 }
 
-// OP-149 m.9, m.33 (c): the browser goes back with exercise, render_digest, the approver's
-// Claim and the state unchanged
+// OP-149 m.9, m.33 (c)
 #[test]
 fn the_redirect_carries_exercise_render_digest_and_state() {
     let to = approval_redirect(
@@ -72,7 +71,7 @@ fn the_redirect_carries_exercise_render_digest_and_state() {
     assert!(kept.starts_with("https://work.suiss.example/cb?x=1&exercise="));
 }
 
-// OP-65: times are RFC 3339 UTC; an intent validity keeps millisecond precision exactly
+// OP-65
 #[test]
 fn times_round_trip_at_millisecond_precision() {
     let ms = 1_767_225_000_123;

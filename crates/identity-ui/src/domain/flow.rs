@@ -589,8 +589,7 @@ mod tests {
         );
     }
 
-    // IDP-8, §10.2 AAL2 table: an account whose only second factor is a passkey is offered it
-    // after the password; without one the step offers only what is enrolled
+    // IDP-8, §10.2 AAL2
     #[test]
     fn a_passkey_is_offered_as_the_second_factor() {
         let offered = SecondFactors {

@@ -63,7 +63,7 @@ fn committed_openapi_matches_the_code() {
     check_file(&root().join("frontend.json"), &pretty(&openapi()));
 }
 
-// OP-149 m.6, m.8, m.9: the contract names every endpoint the products call
+// OP-149 m.6, m.8, m.9
 #[test]
 fn the_document_has_every_endpoint() {
     let doc = openapi();
@@ -92,7 +92,7 @@ fn the_document_has_every_endpoint() {
     assert_eq!(names, ["request", "redirect_uri", "state"]);
 }
 
-// OP-65, OP-149 m.6, m.8, m.16 (a), (f): the examples meet the schemas and read back unchanged
+// OP-65, OP-149 m.6, m.8, m.16 (a), (f)
 #[test]
 fn committed_examples_match_the_code_and_the_schema() {
     let doc = openapi();
@@ -184,15 +184,14 @@ fn committed_examples_match_the_code_and_the_schema() {
     );
 }
 
-// OP-149 m.6: a registration names nothing but the key and its proof
+// OP-149 m.6
 #[test]
 fn unknown_fields_are_refused() {
     let extra = json!({ "key": "a", "pop": "b", "party": "c" });
     assert!(serde_json::from_value::<InstanceRegistration>(extra).is_err());
 }
 
-// OP-150 m.3 (r), OP-149 m.9, §9.14.1 A: the Approval Surface's examples meet the schemas and
-// read back unchanged
+// OP-150 m.3 (r), OP-149 m.9, §9.14.1
 #[test]
 fn approval_examples_match_the_code_and_the_schema() {
     let doc = openapi();

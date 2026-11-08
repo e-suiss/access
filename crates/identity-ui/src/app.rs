@@ -648,7 +648,7 @@ where
         let blank = || options(json!({}));
         let ui = match current {
             Current::Done(r) => return Ok(r),
-            // TN-132: no passkey challenge where the realm did not enable passkey sign-in
+            // TN-132
             Current::Identifier if !kit.auth.passkey => {
                 Ui::identifier(flow.clone(), blank()?, &reqs)
                     .with_first_steps(kit.auth.password, false)

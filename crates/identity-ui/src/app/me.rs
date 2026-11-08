@@ -447,8 +447,7 @@ where
         if !fits {
             return problem(400, "invalid-party", "The Party is not this user's");
         }
-        // INV-13, §7.1, §12.12/7: one human Instance per session and realm; renewing the
-        // session is not a new Instance
+        // INV-13, §7.1, §12.12/7
         match session_instance(&self.db, &kit, &proven.session.id).await {
             Ok(None) => {}
             Ok(Some(_)) => {
@@ -496,7 +495,7 @@ where
         {
             return r;
         }
-        // §10.1.3 device key, OP-150 L2
+        // §10.1.3, OP-150
         if let Ok(RegistrationVerdict::Registered(r)) = &verdict
             && let Err(reply) = device_registered(&self.db, &kit, &proven, r.instance.0).await
         {
@@ -685,7 +684,7 @@ where
             Ok(Err(status)) => return ended(&status),
             Err(e) => return failed(&e),
         };
-        // OP-149 m.30 (c): the device Instance the session is bound to, when it registered one
+        // OP-149 m.30 (c)
         artifact.instance = match session_instance(&self.db, &kit, &session).await {
             Ok(i) => i,
             Err(r) => return r,
