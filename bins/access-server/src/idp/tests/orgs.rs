@@ -146,6 +146,29 @@ fn as_founder(
     p
 }
 
+/// Waits until the realm's identity outbox holds `n` events of `kind` (OP-153 m.4).
+async fn realm_events(w: &World, realm: RealmId, kind: &str, n: usize) {
+    let deadline = std::time::Instant::now() + Duration::from_secs(20);
+    loop {
+        let seen = access_store::identity::poll(
+            &w.db.reader,
+            access_store::identity::Cursor::default(),
+            1000,
+        )
+        .await
+        .unwrap()
+        .into_iter()
+        .filter(|e| e.realm == realm && e.kind == kind)
+        .count();
+        if seen >= n {
+            assert_eq!(seen, n, "{kind}");
+            return;
+        }
+        assert!(std::time::Instant::now() < deadline, "{seen} of {n} {kind}");
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+}
+
 async fn refused(w: &World, p: &Proposal) -> Invalid {
     match w.admin().prepare(p).await {
         Err(AdminError::Invalid(i)) => i,
@@ -154,7 +177,7 @@ async fn refused(w: &World, p: &Proposal) -> Invalid {
     }
 }
 
-// TN-5, TN-3, OP-153 m.3 (b), TN-91, OP-153 m.3 (p), Ek B 3598, 3618, 4077
+// TN-5, TN-3, OP-153 m.3 (b), TN-91, OP-153 m.3 (p), OP-153 m.4, Ek B 3598, 3618, 4077
 #[tokio::test]
 async fn an_organization_is_created_through_commit_and_keeps_its_last_owner() {
     let (w, at, d, founder) = ready("orgs").await;
@@ -183,6 +206,9 @@ async fn an_organization_is_created_through_commit_and_keeps_its_last_owner() {
     let members = t.memberships(org.id).await.unwrap();
     assert_eq!(members.len(), 1);
     assert!(members[0].owner && members[0].source == Source::Founder);
+    // OP-153 m.4, OP-149 m.4
+    realm_events(&w, at.1, "event.organization.created", 1).await;
+    realm_events(&w, at.1, "event.membership.added", 1).await;
     let bob = t.insert_subject("active", "kek-1", &[2; 40]).await.unwrap();
     t.insert_membership(org.id, bob, Source::Invite, false, Some(("member", 1)))
         .await
@@ -216,6 +242,7 @@ async fn an_organization_is_created_through_commit_and_keeps_its_last_owner() {
     let mut t = TenantTx::begin(&w.db.app, at.0, at.1).await.unwrap();
     assert_eq!(t.memberships(org.id).await.unwrap().len(), 1);
     t.commit().await.unwrap();
+    realm_events(&w, at.1, "event.membership.removed", 1).await;
     assert_eq!(
         refused(&w, &as_founder(at, d, remove(bob), 6, founder)).await,
         Invalid::NoMember

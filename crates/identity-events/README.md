@@ -152,6 +152,7 @@ profile is used by Relay, so one verifier accepts both products. Test vectors:
 The tenant, organization and API client events of the catalogue (`tenant.created`,
 `organization.*`, `api_client.*`) and the authority events reach subscribers through streams.
 
-`membership.*`, `preference.changed`, `document.accepted` and `agent.suspended` have schemas but
-no producer yet; a webhook or stream that names them is refused (`invalid-webhook-events`,
-`unsupported-event`) until the domain that raises them exists.
+`organization.created` and `membership.*` are raised by organization creation, membership
+removal and invitation acceptance. `agent.suspended` has a schema but no producer yet; a webhook
+or stream that names it is refused (`invalid-webhook-events`, `unsupported-event`) until the
+domain that raises it exists.

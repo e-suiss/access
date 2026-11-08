@@ -2,6 +2,7 @@
 //! write path (MD-14, EI-25), and the platform product API (OP-149 m.4).
 
 pub mod issuer;
+mod orgs;
 pub mod platform;
 pub mod provision;
 pub mod rest;
@@ -891,6 +892,24 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                 None,
             )
             .await?;
+            // OP-149 m.4, OP-153 m.4
+            let at = access_store::authority::server_time(self.app).await?;
+            orgs::organization_event(
+                &mut t.0,
+                self.ids,
+                IdentityKind::OrganizationCreated,
+                org,
+                at,
+            )
+            .await?;
+            orgs::membership_event(
+                &mut t.0,
+                self.ids,
+                IdentityKind::MembershipAdded,
+                (founder, org),
+                at,
+            )
+            .await?;
         }
         let mut secret = secret;
         if let Change::AccountResetIntent { .. } | Change::AccountTapIssue(_) = &p.change {
@@ -1223,7 +1242,8 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                     .filter(|o| !o.ended)
                     .ok_or(Invalid::NoOrg)?;
                 // TN-91
-                t.end_membership(org.id, m.subject, "remove")
+                let ended = t
+                    .end_membership(org.id, m.subject, "remove")
                     .await
                     .map_err(|e| {
                         if access_store::orgs::last_owner(&e) {
@@ -1231,7 +1251,20 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                         } else {
                             e.into()
                         }
-                    })?
+                    })?;
+                if ended {
+                    // OP-153 m.4
+                    let at = access_store::authority::server_time(self.app).await?;
+                    orgs::membership_event(
+                        t,
+                        self.ids,
+                        IdentityKind::MembershipRemoved,
+                        (m.subject, org.id),
+                        at,
+                    )
+                    .await?;
+                }
+                ended
             }
             Change::RecoveryPolicy { policy, .. } => {
                 let bytes = policy.to_bytes().map_err(|_| AdminError::Encode)?;
