@@ -1,0 +1,2 @@
+# F-13: a Debug-redaction test value (base64 of "cli:secret"), replaced in the next commit
+13c3e5e025dfa17b81dad3b36ea647f5eb093904:crates/identity-oauth/src/app/dpop/tests.rs:generic-api-key:313

@@ -302,15 +302,15 @@ fn requests_do_not_print_their_credentials() {
         proofs: &proofs,
         method: "POST",
         uri: URI,
-        access_token: Some("at-secret-value"),
+        access_token: Some("at-test-value"),
         bound: None,
     };
     let http = crate::app::oauth::TokenHttp {
-        authorization: Some("Basic Y2xpOnNlY3JldA=="),
+        authorization: Some("Basic dGVzdC1jbGllbnQ6dGVzdC12YWx1ZQ=="),
         dpop: &proofs,
     };
     let printed = format!("{request:?} {http:?}");
-    for secret in ["eyJ0eXAi", "at-secret-value", "Y2xpOnNlY3JldA"] {
+    for secret in ["eyJ0eXAi", "at-test-value", "dGVzdC1jbGllbnQ6dGVzdC12YWx1ZQ"] {
         assert!(!printed.contains(secret), "{printed}");
     }
     assert!(printed.contains(URI));
