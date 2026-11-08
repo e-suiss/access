@@ -360,7 +360,20 @@ impl<P: Decider + Governance + Instances + Clone + Send + Sync + 'static> Realms
             pep: IDENTITY_PEP.to_owned(),
             actor: None,
         };
-        match self.admin(&ids).meta(place, submission).await {
+        let applied = match &w.role {
+            // TN-89 (3)
+            Some((org, account)) => {
+                let Ok(subject) = ids.decode(access_identity_account::app::SUBJECT_PREFIX, account)
+                else {
+                    return Ok(Written::Rejected(&codes::NOT_FOUND));
+                };
+                self.admin(&ids)
+                    .issue_role_grant(place, (*org, subject), submission)
+                    .await
+            }
+            None => self.admin(&ids).meta(place, submission).await,
+        };
+        match applied {
             Ok(
                 Applied::Written {
                     exercise, position, ..

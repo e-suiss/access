@@ -675,3 +675,217 @@ async fn a_domain_is_verified_by_its_challenge_watched_contested_and_lapsed() {
     let issued = orders(&identity_events(&w.db, "claim.domain_verification", 2).await);
     assert!(issued.iter().any(|o| o.retract && o.party() == Some(ORG)));
 }
+
+/// A core meta-action write `payload` on `basis`, signed by the key `seed`.
+fn meta_write(
+    d: Digest,
+    nonce: u8,
+    payload: Payload,
+    basis: ExerciseBasis,
+    seed: u8,
+) -> access_internal_api::idp::Submission {
+    let intent = access_kernel::intent::IntentEnvelope {
+        action: meta::core_action(payload.action()),
+        resources: vec![access_kernel::model::ResourceRef {
+            namespace: String::from("access.party"),
+            path: vec![String::from("p")],
+            incarnation: 0,
+        }],
+        params: std::collections::BTreeMap::new(),
+        opaque: std::collections::BTreeMap::from([(
+            String::from(meta::PAYLOAD_PARAM),
+            payload.digest().unwrap(),
+        )]),
+        recipient: None,
+        purpose: None,
+        context: access_kernel::intent::ContextRefs::default(),
+        validity: Window {
+            from: NOW,
+            until: NOW + HOUR,
+        },
+    };
+    let digest = intent_digest(&intent).unwrap();
+    access_internal_api::idp::Submission {
+        domain: d,
+        nonce: vec![nonce; 16],
+        ais: sign(&statement(d, &[nonce; 16], digest, basis), seed),
+        intent,
+        payload: Some(Box::new(payload)),
+        basis,
+        capacity: Capacity::Own,
+        pep: String::from(PEP),
+        actor: None,
+    }
+}
+
+/// The `member` role: reading accounts in the realm `slug`.
+fn member_set(slug: &str) -> access_kernel::model::AuthoritySet {
+    use access_kernel::model::{ActionSet, AuthoritySet, ResourceSelector, Structural};
+    AuthoritySet {
+        actions: ActionSet {
+            exact: std::collections::BTreeSet::from([
+                access_internal_api::idp::IdpAction::AccountRead.action_ref(),
+            ]),
+            prefix: std::collections::BTreeSet::new(),
+        },
+        resource: ResourceSelector::Structural(Structural {
+            namespace: String::from(access_internal_api::idp::RESOURCE_NAMESPACE),
+            prefix: vec![String::from(slug)],
+            kind: None,
+            attrs: std::collections::BTreeMap::new(),
+        }),
+        params: std::collections::BTreeMap::new(),
+        recipient: None,
+        purpose: None,
+    }
+}
+
+fn role_issue(d: Digest, holder: Id, (name, version): (&str, u64)) -> Payload {
+    use access_kernel::model::{CanonicalAuthority, ConstraintSet, SubjectSelector};
+    let set = member_set("org-role");
+    Payload::GrantIssue(access_kernel::meta::GrantContent {
+        basis: access_kernel::meta::GrantBasis::Anchor(meta::object_id(
+            &d,
+            kind::ANCHOR,
+            IDP_ANCHOR,
+        )),
+        holder: SubjectSelector::Party(holder),
+        authority: CanonicalAuthority {
+            authority: set.clone(),
+            constraints: ConstraintSet {
+                validity: Window {
+                    from: 0,
+                    until: u64::MAX / 2,
+                },
+                conditions: std::collections::BTreeSet::new(),
+                budget: std::collections::BTreeSet::new(),
+            },
+            delegation: access_kernel::model::DelegationTerms::default(),
+            requirements: std::collections::BTreeSet::new(),
+        },
+        agency: std::collections::BTreeSet::from([Capacity::Own]),
+        named: Some((name.to_owned(), version, meta::authority_set_digest(&set))),
+    })
+}
+
+async fn role(
+    w: &World,
+    at: (TenantId, RealmId),
+    member: ([u8; 16], [u8; 16]),
+    sub: access_internal_api::idp::Submission,
+) -> Result<Applied, AdminError> {
+    Box::pin(w.admin().issue_role_grant(at, member, sub)).await
+}
+
+// TN-89, TN-5, §12.3.8, OP-153 m.3 (o), (gg), Ek B 3604, 3606
+#[tokio::test]
+async fn an_accepted_invitations_role_is_issued_by_the_inviters_current_authority() {
+    let (w, at, d, founder) = ready("org-role").await;
+    let org = create_org(&w, at, d, founder).await;
+    onboard(&w.plane, d, ALICE, ALICE_KEY).await;
+    let define = Payload::AuthoritySetDefine {
+        name: String::from("member"),
+        authority: member_set("org-role"),
+    };
+    let anchor = ExerciseBasis::Anchor(meta::meta_anchor(&d));
+    assert!(matches!(
+        w.admin()
+            .meta(at, meta_write(d, 0x50, define, anchor, ROOT_KEY))
+            .await
+            .unwrap(),
+        Applied::Written { .. }
+    ));
+    let bob = account(&w, at, "bob@acme.example").await;
+    let carol = account(&w, at, "carol@acme.example").await;
+    let mut t = TenantTx::begin(&w.db.app, at.0, at.1).await.unwrap();
+    assert!(
+        access_store::idp::bind_subject_party(&mut t, &bob, &ALICE.0)
+            .await
+            .unwrap()
+    );
+    assert!(
+        access_store::idp::bind_subject_party(&mut t, &carol, &[0x0e; 16])
+            .await
+            .unwrap()
+    );
+    t.open_member(
+        (org, bob),
+        Source::Invite,
+        Some(("member", 1)),
+        Some(ROOT.0),
+        None,
+    )
+    .await
+    .unwrap();
+    t.open_member(
+        (org, carol),
+        Source::Invite,
+        Some(("member", 1)),
+        Some(ALICE.0),
+        None,
+    )
+    .await
+    .unwrap();
+    t.commit().await.unwrap();
+    let idp = ExerciseBasis::Anchor(meta::object_id(&d, kind::ANCHOR, IDP_ANCHOR));
+    let issue = |holder: Id, role: (&str, u64), nonce: u8, seed: u8| {
+        meta_write(d, nonce, role_issue(d, holder, role), idp, seed)
+    };
+
+    // TN-89 (3)
+    assert!(matches!(
+        role(&w, at, (ORG, bob), issue(ALICE, ("member", 1), 0x51, ALICE_KEY)).await,
+        Err(AdminError::Refused(c)) if c == "inviter-only"
+    ));
+    // TN-89 (2)
+    assert!(matches!(
+        role(&w, at, (ORG, bob), issue(ALICE, ("admin", 1), 0x52, ROOT_KEY)).await,
+        Err(AdminError::Refused(c)) if c == "not-the-membership-role"
+    ));
+    assert!(matches!(
+        role(&w, at, (ORG, bob), issue(ROOT, ("member", 1), 0x53, ROOT_KEY)).await,
+        Err(AdminError::Refused(c)) if c == "not-the-membership-role"
+    ));
+    let applied = role(
+        &w,
+        at,
+        (ORG, bob),
+        issue(ALICE, ("member", 1), 0x54, ROOT_KEY),
+    )
+    .await
+    .unwrap();
+    let Applied::Written { exercise, .. } = applied else {
+        panic!("{applied:?}");
+    };
+    let mut t = TenantTx::begin(&w.db.app, at.0, at.1).await.unwrap();
+    let m = t.member(org, bob).await.unwrap().unwrap();
+    assert_eq!(m.grant_state.as_deref(), Some("issued"));
+    assert_eq!(m.grant, Some(meta::object_id(&exercise, kind::GRANT, 0).0));
+    t.commit().await.unwrap();
+
+    // TN-89 (3)
+    let applied = role(
+        &w,
+        at,
+        (ORG, carol),
+        issue(Id([0x0e; 16]), ("member", 1), 0x55, ALICE_KEY),
+    )
+    .await
+    .unwrap();
+    assert!(matches!(applied, Applied::NotAllowed { .. }), "{applied:?}");
+    let mut t = TenantTx::begin(&w.db.app, at.0, at.1).await.unwrap();
+    let m = t.member(org, carol).await.unwrap().unwrap();
+    assert_eq!(m.grant_state.as_deref(), Some("denied"));
+    assert_eq!(m.grant, None);
+    t.commit().await.unwrap();
+    assert!(matches!(
+        role(
+            &w,
+            at,
+            (ORG, carol),
+            issue(Id([0x0e; 16]), ("member", 1), 0x56, ALICE_KEY)
+        )
+        .await,
+        Err(AdminError::Invalid(Invalid::NoMember))
+    ));
+}

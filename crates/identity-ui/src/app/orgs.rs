@@ -162,9 +162,11 @@ where
     }
 
     /// `POST /v1/invitations/{code}` (TN-89, OP-153 m.3 (o)): accepts with the signed-in
-    /// person's verified identifier; never as owner; the inviter must still stand in the
-    /// organization; an invitee domain the organization has not verified needs the person's
-    /// confirmation first. Opens the membership with the invitation's role and queues
+    /// person's verified identifier (the realm's blind index of its NFKC fold); never as
+    /// owner; the inviter must still stand in the organization; an invitee domain the
+    /// organization has not verified needs the person's confirmation first. Opens the
+    /// membership with the invitation's role pending: its Grant is the `grant_issue` the
+    /// inviter's own client signs, decided against the inviter's authority then. Queues
     /// `membership.added`.
     #[expect(
         clippy::too_many_lines,
@@ -254,14 +256,14 @@ where
             Ok(false) => return Reply::problem(INVITATION_GONE),
             Err(e) => return store_failed(&e),
         }
-        // TN-89 (10), OP-153 m.3 (o)
+        // TN-89 (3), (10), OP-153 m.3 (o)
         if let Err(e) = t
-            .insert_membership(
-                org.id,
-                me,
+            .open_member(
+                (org.id, me),
                 Source::Invite,
-                false,
                 Some((row.role.0.as_str(), row.role.1)),
+                Some(row.inviter),
+                None,
             )
             .await
         {
@@ -282,6 +284,7 @@ where
                 },
                 "owner": false,
                 "role": { "name": row.role.0, "version": row.role.1 },
+                "role_grant": "pending",
             }),
         )
     }

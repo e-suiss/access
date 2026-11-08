@@ -300,6 +300,9 @@ pub enum Written {
 pub struct MetaWrite {
     /// The realm's slug.
     pub slug: String,
+    /// For an accepted invitation's role Grant, the organization's id and the member's
+    /// `account_id` (TN-89 (3)).
+    pub role: Option<([u8; 16], String)>,
     /// The request: domain, nonce, intent, payload, basis and capacity.
     pub request: access_authority_core::domain::Request,
 }

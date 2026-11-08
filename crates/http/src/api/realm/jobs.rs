@@ -46,10 +46,22 @@ pub const JOB_CONTEXT: &str = "access/admin-job/v1";
 const IF_MATCH: &str = "if_match";
 
 /// The job operations that are core meta-action writes (E17), with their meta-action.
-pub const META_OPERATIONS: [(&str, &str); 2] = [
+pub const META_OPERATIONS: [(&str, &str); 3] = [
     ("revokeGrant", "grant_revoke"),
     ("amendGrant", "grant_amend"),
+    ("issueRoleGrant", "grant_issue"),
 ];
+
+/// The key of an `issueRoleGrant` item: the organization's id and the member's `account_id`
+/// (TN-89 (3)).
+#[must_use]
+pub fn role_key(key: &str) -> Option<([u8; 16], &str)> {
+    let (org, account) = key.split_once(':')?;
+    let org = b64url_decode(org)
+        .ok()
+        .and_then(|b| <[u8; 16]>::try_from(b.as_slice()).ok())?;
+    (!account.is_empty()).then_some((org, account))
+}
 
 /// One item as submitted.
 #[derive(Clone, Debug)]
@@ -196,17 +208,33 @@ fn meta_item(op: &mut Map<String, Value>) -> Result<Option<Item>, &'static Code>
     let decoded = crate::adp::domain::decode_context(&raw, 1 << 20)
         .map_err(|_| &codes::realm::INVALID_JOB)?;
     let request = decoded.request;
-    let grant = b64url_decode(&key)
-        .ok()
-        .and_then(|b| <[u8; 16]>::try_from(b.as_slice()).ok())
-        .map(access_kernel::model::Id)
-        .ok_or(&codes::realm::INVALID_JOB)?;
-    let named = match &request.payload {
-        Some(
-            access_kernel::meta::Payload::GrantRevoke { grant: g }
-            | access_kernel::meta::Payload::GrantAmend { grant: g, .. },
-        ) => *g,
-        _ => return Err(&codes::realm::JOB_OPERATION_NOT_ALLOWED),
+    let (grant, named) = if *action == "grant_issue" {
+        // TN-89 (3)
+        role_key(&key).ok_or(&codes::realm::INVALID_JOB)?;
+        if !matches!(
+            &request.payload,
+            Some(access_kernel::meta::Payload::GrantIssue(_))
+        ) {
+            return Err(&codes::realm::JOB_OPERATION_NOT_ALLOWED);
+        }
+        (
+            access_kernel::model::Id([0; 16]),
+            access_kernel::model::Id([0; 16]),
+        )
+    } else {
+        let grant = b64url_decode(&key)
+            .ok()
+            .and_then(|b| <[u8; 16]>::try_from(b.as_slice()).ok())
+            .map(access_kernel::model::Id)
+            .ok_or(&codes::realm::INVALID_JOB)?;
+        let named = match &request.payload {
+            Some(
+                access_kernel::meta::Payload::GrantRevoke { grant: g }
+                | access_kernel::meta::Payload::GrantAmend { grant: g, .. },
+            ) => *g,
+            _ => return Err(&codes::realm::JOB_OPERATION_NOT_ALLOWED),
+        };
+        (grant, named)
     };
     let digest = request
         .payload
@@ -380,6 +408,12 @@ async fn meta_one<E: Env>(
     request.domain = ctx.domain;
     let write = crate::api::ports::MetaWrite {
         slug: slug(ctx),
+        role: item
+            .key
+            .as_deref()
+            .filter(|_| item.operation == "issueRoleGrant")
+            .and_then(role_key)
+            .map(|(o, a)| (o, a.to_owned())),
         request,
     };
     match ctx.api.env().realm().exercise(write, caller).await {

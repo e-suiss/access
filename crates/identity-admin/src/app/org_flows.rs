@@ -105,3 +105,112 @@ pub(crate) async fn committed(
         _ => Ok(None),
     }
 }
+
+/// Why a role Grant submission is not the membership's.
+const NOT_THE_ROLE: &str = "not-the-membership-role";
+
+/// Only the inviter's own client issues the role it invited to (TN-89 (3)).
+const INVITER_ONLY: &str = "inviter-only";
+
+/// The reserved `idp.*` actions, as `(namespace, name)`.
+fn reserved_actions() -> Vec<(String, String)> {
+    access_internal_api::idp::IdpAction::ALL
+        .into_iter()
+        .filter(|a| a.reserved())
+        .map(|a| (String::from(a.namespace()), String::from(a.name())))
+        .collect()
+}
+
+impl<D, G, K> super::Admin<'_, D, G, K>
+where
+    D: crate::ports::Decider,
+    G: crate::ports::Governance + crate::ports::Instances,
+    K: crate::ports::RealmKeys,
+{
+    /// Issues the role Grant of an accepted invitation (TN-89 (3), OP-153 m.3 (o)): `w` is the
+    /// `grant_issue` the inviter's own client signed, holding the member's Party to the
+    /// membership's named role version; the domain decides it against the inviter's authority
+    /// now, so an inviter whose authority fell gets a DENY and the role is denied. A first
+    /// acceptance never grants an `anchor_*` meta-action or a reserved action.
+    ///
+    /// # Errors
+    /// [`AdminError`]; a pending decision leaves the role pending.
+    pub async fn issue_role_grant(
+        &self,
+        (tenant, realm): (
+            access_store::identity::TenantId,
+            access_store::identity::RealmId,
+        ),
+        (org, subject): ([u8; 16], [u8; 16]),
+        w: access_internal_api::idp::Submission,
+    ) -> Result<super::Applied, AdminError> {
+        use access_kernel::meta::Payload;
+        use access_kernel::model::{Id, SubjectSelector};
+
+        let mut t = TenantTx::begin(self.app, tenant, realm).await?;
+        let org = live_org(&mut t, org).await?;
+        let member = t
+            .member(org.id, subject)
+            .await?
+            .filter(|m| m.grant_state.as_deref() == Some("pending"))
+            .ok_or(Invalid::NoMember)?;
+        let party = access_store::idp::subject_party(&mut t, &subject)
+            .await?
+            .ok_or(Invalid::NoMember)?;
+        t.commit().await?;
+        let (role, version) = member.role.clone().ok_or(Invalid::NoMember)?;
+        let Some(Payload::GrantIssue(content)) = w.payload.as_deref() else {
+            return Err(AdminError::Refused(String::from(NOT_THE_ROLE)));
+        };
+        let names_role = content
+            .named
+            .as_ref()
+            .is_some_and(|(n, v, _)| *n == role && *v == version);
+        if content.holder != SubjectSelector::Party(Id(party)) || !names_role {
+            return Err(AdminError::Refused(String::from(NOT_THE_ROLE)));
+        }
+        // TN-89 (10)
+        let set = &content.authority.authority.actions;
+        let reserved = reserved_actions();
+        let actions: Vec<(String, String)> = set
+            .exact
+            .iter()
+            .map(|a| (a.namespace.clone(), a.name.clone()))
+            .collect();
+        let whole = set.prefix.iter().any(|(ns, _)| {
+            ns == access_kernel::meta::NAMESPACE || reserved.iter().any(|(r, _)| r == ns)
+        });
+        if whole || !crate::domain::org::first_accept_allowed(&actions, &reserved) {
+            return Err(AdminError::Refused(String::from(NOT_THE_ROLE)));
+        }
+        // TN-89 (3)
+        let signer = self
+            .decider
+            .signer(w.domain, &w.ais)
+            .await
+            .map_err(|e| AdminError::Unavailable(e.0))?;
+        if signer.is_none() || signer.map(|s| s.0) != member.inviter {
+            return Err(AdminError::Refused(String::from(INVITER_ONLY)));
+        }
+        let applied = self.meta((tenant, realm), w).await?;
+        let settled = match &applied {
+            super::Applied::Written { exercise, .. }
+            | super::Applied::AlreadyWritten { exercise, .. } => Some(Some((
+                access_kernel::meta::object_id(exercise, access_kernel::meta::kind::GRANT, 0).0,
+                exercise.0,
+            ))),
+            super::Applied::NotAllowed { decision, .. }
+                if decision.outcome == access_kernel::combinator::Outcome::Deny =>
+            {
+                Some(None)
+            }
+            super::Applied::NotAllowed { .. } => None,
+        };
+        if let Some(issued) = settled {
+            let mut t = TenantTx::begin(self.app, tenant, realm).await?;
+            t.settle_role_grant(member.id, issued).await?;
+            t.commit().await?;
+        }
+        Ok(applied)
+    }
+}
