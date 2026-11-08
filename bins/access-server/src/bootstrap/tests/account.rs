@@ -90,6 +90,7 @@ fn account_router(c: &super::management::Console) -> axum::Router {
         redirect_to: String::from("/"),
         hooks: Arc::new(access_identity_hooks::ports::NoHooks),
         risk: access_identity_session::app::RiskServices::without_sources(),
+        signup: access_identity_ui::app::signup::Signup::without_providers().unwrap(),
     });
     let adp = adp_router(
         Service::new(w.domains.clone(), 64 * 1024),
