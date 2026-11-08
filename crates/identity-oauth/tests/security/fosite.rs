@@ -270,6 +270,7 @@ async fn state_and_iss_resist_mix_up() {
 // short, long or ill-formed verifier is refused even when its hash matches
 #[tokio::test]
 async fn code_exchange_downgrades_are_refused() {
+    // GHSA-hh34-7jqq-3f73
     let c = Cluster::new(&["fos-e"]).await;
     let a = c.at(0);
     let cookie = Some(a.f.cookie.as_str());
@@ -394,6 +395,7 @@ async fn assert_dead(a: &At<'_>, tokens: &serde_json::Value) {
 // redemptions race; a second redemption revokes what the first one issued
 #[tokio::test]
 async fn code_reuse_and_races() {
+    // GHSA-hh34-7jqq-3f73
     let c = Cluster::new(&["fos-f"]).await;
     let a = c.at(0);
     let code = a.code(&a.f.public).await;

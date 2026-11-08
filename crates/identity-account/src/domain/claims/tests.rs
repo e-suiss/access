@@ -168,6 +168,7 @@ fn contains(hay: &[u8], needle: &[u8]) -> bool {
 // of its public material; the credential id and the public key never leave the identity plane
 #[test]
 fn claims_carry_digests_not_material() {
+    // EI-15
     for o in [
         passkey(),
         device_key_binding(SUBJECT, &PUBLIC_KEY, -8, [6; 16], 100),

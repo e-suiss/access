@@ -201,6 +201,7 @@ fn inbound_sets_name_their_transmitter_and_types() {
 // only ends sessions; a lower risk or a compliant device does nothing
 #[test]
 fn inbound_events_only_narrow_and_never_revoke_a_grant() {
+    // EI-19
     let body = |s: &str| json::parse(s.as_bytes(), 1024).unwrap();
     for kind in SignalKind::ALL {
         let e = effect(kind, &body("{}"));

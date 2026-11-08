@@ -1074,6 +1074,7 @@ async fn unknown_hosts_and_forms_are_refused() {
 // web/login/security-headers.ts; the Related Origins document is the builder's
 #[tokio::test]
 async fn the_login_app_carries_its_security_headers() {
+    // GHSA-gpxg-fx2g-qxj2
     let e = env(5, "lg-e", AuthPolicy::DEFAULT).await;
     let mut b = e.browser("b");
     let page = b.get("/login").await;
@@ -1916,6 +1917,7 @@ fn masked(a: &Answer) -> (u16, Vec<(String, String)>, String) {
 // bytes and no redirect
 #[tokio::test]
 async fn enumeration_parity_on_login() {
+    // CVE-2026-4633
     let e = env(9, "lg-i", AuthPolicy::DEFAULT).await;
     e.account("ann1@example.com").await;
     let locked = e.account("ann3@example.com").await;

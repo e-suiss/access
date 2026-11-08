@@ -1475,6 +1475,7 @@ mod secret_compare_tests {
     // CR-39 m.2
     #[test]
     fn comparing_an_exposed_secret_is_rejected() {
+        // GHSA-53hj-r94p-8c8f
         let bad = "fn f(s: &Secret<[u8; 32]>, t: &[u8]) -> bool { s.expose() == t }\n";
         assert_eq!(
             secret_compare_violations("crates/x/src/lib.rs", bad).len(),

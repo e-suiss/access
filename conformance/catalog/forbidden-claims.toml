@@ -169,7 +169,7 @@ scope = "all"
 phrases = ["exactly-once execution", "exactly once execution", "guarantees the action happened", "guarantees the effect", "exactly-once effects"]
 negation = true
 sources = ["§8.10", "§13.8", "must-never #10", "INV-18"]
-rows = ["N-5", "INV-18", "MUST-NEVER-10"]
+rows = ["N-5", "INV-18", "MUST-NEVER-10", "CI-7"]
 honest = "Allowed · Owner: reported done / unknown."
 
 [[claim]]
@@ -190,7 +190,7 @@ scope = "all"
 phrases = ["nothing was lost", "nothing is ever lost", "lossless recovery", "zero data loss guaranteed"]
 negation = true
 sources = ["§8.10", "§13.8", "B15"]
-rows = ["N-14"]
+rows = ["N-14", "HL-4"]
 honest = "Changes after <time of N> may be lost; repeat revocations made after then."
 
 [[claim]]
@@ -199,6 +199,7 @@ scope = "all"
 phrases = ["guaranteed throughput", "throughput guarantee", "guaranteed logins per second", "guaranteed requests per second"]
 negation = true
 sources = ["B15", "§3.3a", "HL-1"]
+rows = ["HL-1"]
 honest = "Same hardware budget and Argon2 cost, target: X (pending reproduction)."
 
 [[claim]]
@@ -221,7 +222,7 @@ phrases = [
   "passkeys prevent token theft", "passkeys stop token theft", "prevents session theft",
 ]
 sources = ["§3.3a", "§8.10", "§13.8", "B15", "SA-12"]
-rows = ["N-41"]
+rows = ["N-41", "HL-23"]
 honest = "Passkeys are origin-bound and phishing-resistant; device binding separately protects against session theft."
 
 [[claim]]
@@ -260,7 +261,7 @@ phrases = [
 ]
 negation = true
 sources = ["§13.8"]
-rows = ["N-31"]
+rows = ["N-31", "HL-18"]
 honest = "Each app sees a different user number; timing, network and device data may still allow correlation."
 
 [[claim]]
@@ -502,7 +503,7 @@ scope = "all"
 phrases = ["instantly at offline verifiers", "immediately at offline verifiers", "offline verifiers see revocations immediately", "offline revocation is instant"]
 negation = true
 sources = ["§13.4", "§13.8", "SAI-1"]
-rows = ["N-4"]
+rows = ["N-4", "HL-3"]
 honest = "Offline verifiers honor revocation within their declared freshness window."
 
 [[claim]]
@@ -565,7 +566,7 @@ scope = "all"
 phrases = ["equivocation is impossible", "prevents equivocation", "provider cannot equivocate", "provider decisions are always correct"]
 negation = true
 sources = ["§13.4", "§13.8", "SAI-1"]
-rows = ["N-13"]
+rows = ["N-13", "HL-2"]
 honest = "Equivocation is detectable with independent witnesses, not preventable."
 
 [[claim]]
@@ -574,7 +575,7 @@ scope = "all"
 phrases = ["verifier reports are always accurate", "offline reports are always true"]
 negation = true
 sources = ["§13.4", "§13.8", "SAI-1"]
-rows = ["N-15"]
+rows = ["N-15", "HL-14"]
 honest = "Offline reports are the reporting verifier's claim."
 
 [[claim]]
@@ -646,7 +647,7 @@ scope = "all"
 phrases = ["time can never be manipulated", "tamper-proof time"]
 negation = true
 sources = ["§13.4", "§13.8", "SAI-1"]
-rows = ["N-28"]
+rows = ["N-28", "HL-6"]
 honest = "Time terms rely on independent time sources and witnesses."
 
 [[claim]]
@@ -655,7 +656,7 @@ scope = "all"
 phrases = ["immune to storage corruption", "corruption can never cause a wrong decision"]
 negation = true
 sources = ["§13.4", "§13.8", "SAI-1"]
-rows = ["N-29"]
+rows = ["N-29", "HL-2"]
 honest = "Silent corruption is detected against commitments; decisions before detection are not covered."
 
 [[claim]]
@@ -673,7 +674,7 @@ scope = "all"
 phrases = ["keys cannot be stolen from memory", "keys are safe even if the host is compromised"]
 negation = true
 sources = ["§13.4", "§13.8", "SAI-1"]
-rows = ["N-33"]
+rows = ["N-33", "HL-21"]
 honest = "A host compromise exposes keys in process memory for the declared window."
 
 [[claim]]
@@ -682,7 +683,7 @@ scope = "all"
 phrases = ["erases every copy of the secret", "secrets leave no trace in memory", "guaranteed memory wiping"]
 negation = true
 sources = ["§13.4", "§13.8", "SAI-1"]
-rows = ["N-34"]
+rows = ["N-34", "HL-21"]
 honest = "Secrets are zeroized on drop; copies in registers, swap or dumps are not covered."
 
 [[claim]]
@@ -727,7 +728,7 @@ scope = "all"
 phrases = ["unlimited signing throughput", "hsm throughput is unlimited"]
 negation = true
 sources = ["§13.4", "§13.8", "SAI-1"]
-rows = ["N-43"]
+rows = ["N-43", "HL-20"]
 honest = "Signing throughput is bounded by the declared HSM/KMS ceiling."
 
 [[claim]]
@@ -736,7 +737,7 @@ scope = "all"
 phrases = ["publisher identity is cryptographically verified", "verified crates.io publishers", "verified npm publishers"]
 negation = true
 sources = ["§13.4", "§13.8", "SAI-1"]
-rows = ["N-44"]
+rows = ["N-44", "HL-24"]
 honest = "Registry publisher identity is trust-on-first-use; dependencies are reviewed and vendored."
 
 [[claim]]
@@ -808,7 +809,7 @@ scope = "all"
 phrases = ["any pep enforces correctly", "all peps are safe"]
 negation = true
 sources = ["§13.4", "§13.8", "SAI-1"]
-rows = ["N-53"]
+rows = ["N-53", "HL-37"]
 honest = "Guarantees hold for conformant PEPs (SDK or declared conformance)."
 
 [[claim]]

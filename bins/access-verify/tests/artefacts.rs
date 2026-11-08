@@ -126,6 +126,7 @@ fn expect(r: &Run, c: &J, output: &str) {
 // L2-PAP-3, §9.10, CMP-17
 #[test]
 fn pap_vectors() {
+    // G58
     let v = vectors("core", "pap");
     let dir = Dir::new("pap");
     let metadata = dir.file("metadata.cbor", &unhex(s(&v, "metadata")));

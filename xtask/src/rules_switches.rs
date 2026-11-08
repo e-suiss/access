@@ -569,6 +569,7 @@ mod tests {
     // INV-26, TI-9
     #[test]
     fn fail_open_switches_are_rejected() {
+        // CI-12
         for atom in [
             "fail_open",
             "FAIL_OPEN_ON_TIMEOUT",

@@ -50,6 +50,7 @@ fn base() -> Pap {
 // L2-PAP-3, U2, PI-20, PI-11
 #[test]
 fn a_use_within_the_projection_is_allowed_and_drawn() {
+    // G25
     let p = base();
     let mut v = device(&p);
     let Verdict::Allow(a) = run(&mut v, &p, 40) else {

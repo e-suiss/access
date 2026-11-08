@@ -65,7 +65,7 @@ async fn security_txt_has_required_fields() {
     assert!(body.contains("Expires: 2027-04-01T00:00:00Z\n"));
 }
 
-// SA-21, R-3
+// SA-21, R-3, RAUTHY-006
 #[tokio::test]
 async fn panic_in_handler_becomes_500_problem_and_service_survives() {
     let app = harden(

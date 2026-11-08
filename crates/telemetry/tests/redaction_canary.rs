@@ -56,6 +56,7 @@ impl std::fmt::Debug for LoginRequest {
 
 #[test]
 fn password_never_appears_in_logs() {
+    // GHSA-j4gj-f54h-56j5
     let capture = Capture::default();
     access_telemetry::init_with_writer("trace", capture.clone()).unwrap();
 

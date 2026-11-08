@@ -468,6 +468,17 @@ mod tests {
         assert!(banned_providers(&md).is_empty());
     }
 
+    // CR-14, RAUTHY-001
+    #[test]
+    fn the_rsa_crate_is_a_banned_provider() {
+        let packages = [fixture::external("rsa", "0.9.8", true)];
+        let mut md = parse(&fixture::metadata(&packages, &[])).unwrap();
+        retain_built(&mut md, "rsa v0.9.8\n");
+        let v = banned_providers(&md);
+        assert_eq!(v.len(), 1);
+        assert!(v.first().is_some_and(|x| x.message.contains("`rsa`")));
+    }
+
     // CR-11
     #[test]
     fn batch_verification_is_rejected_in_any_code() {

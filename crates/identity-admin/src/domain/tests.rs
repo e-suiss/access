@@ -346,6 +346,7 @@ fn key_changes_and_deletion_are_declared() {
 // part of the authorized change, not a switch the code reads
 #[test]
 fn a_third_party_platform_product_is_checked_like_a_first_party_one() {
+    // EI-13
     // OP-149 m.4, CT2
     let platform = |name: &str, auth: AuthMethod| Client {
         auth,

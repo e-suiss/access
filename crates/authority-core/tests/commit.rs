@@ -584,7 +584,7 @@ async fn onboard_as(
 
 #[tokio::test]
 async fn a_grant_allows_until_it_is_revoked() {
-    // INV-1, G1, G4, MUST-NEVER-1
+    // INV-1, G1, G4, MUST-NEVER-1, CI-1, EI-2
     let db = fresh().await.unwrap();
     let (mut core, d) = setup(&db).await;
     onboard(&mut core, d, ROOT, ROOT_KEY, (1, 2)).await;
@@ -657,7 +657,7 @@ async fn a_grant_allows_until_it_is_revoked() {
 
 #[tokio::test]
 async fn a_nonce_returns_its_decision_and_binds_its_intent() {
-    // INV-19, MUST-NEVER-12, U31
+    // INV-19, MUST-NEVER-12, U31, CI-8
     let db = fresh().await.unwrap();
     let (mut core, d) = setup(&db).await;
     onboard(&mut core, d, ROOT, ROOT_KEY, (1, 2)).await;
@@ -737,7 +737,7 @@ async fn an_unknown_key_is_not_an_actor() {
 
 #[tokio::test]
 async fn an_anonymous_meta_action_is_denied() {
-    // G15, INV-11
+    // G15, INV-11, CI-5
     let db = fresh().await.unwrap();
     let (mut core, d) = setup(&db).await;
     let public_basis = ExerciseBasis::Public(meta::object_id(&d, kind::GRANT, 0));
@@ -1120,7 +1120,7 @@ async fn an_agent_party_cannot_satisfy_human_presence_itself() {
 // same nonce; a Claim no Acceptance covers is recorded in quarantine and meets nothing
 #[tokio::test]
 async fn an_accepted_claim_meets_a_requirement() {
-    // INV-14, G7, G8, SI-3, PI-3, EI-21, MUST-NEVER-3, MUST-NEVER-9
+    // INV-14, G7, G8, SI-3, PI-3, EI-21, MUST-NEVER-3, MUST-NEVER-9, EI-3, EI-22
     let db = fresh().await.unwrap();
     let kyc = term(ProofKind::Claim, "kyc", ProofBinding::None);
     let (mut core, d) = setup_with(&db, gated(&[kyc])).await;
@@ -1933,7 +1933,7 @@ fn approved_at(
 // requirement once and is consumed
 #[tokio::test]
 async fn a_contribution_approves_once() {
-    // G12, G13, SI-5, SI-17, EI-18, XI-19, INV-20
+    // G12, G13, SI-5, SI-17, EI-18, XI-19, INV-20, CI-14
     let db = fresh().await.unwrap();
     let approve = term(
         ProofKind::Contribution,
@@ -2481,7 +2481,7 @@ async fn a_continuation_names_its_exercise() {
 // a new decision against the current state and is denied
 #[tokio::test]
 async fn a_continuation_after_revocation_is_denied() {
-    // G4
+    // G4, CI-9
     use access_kernel::combinator::BlockerClass;
     let db = fresh().await.unwrap();
     let (mut core, d) = setup(&db).await;
@@ -3701,6 +3701,7 @@ async fn onboard_signed(
     reason = "one projection from commit to an offline verifier's two decisions"
 )]
 async fn a_projection_carries_a_signed_pap() {
+    // CI-3
     use access_kernel::validity::{ProfileClass, ProfileVariant};
     let db = fresh().await.unwrap();
     let d = create_genesis(&db.sequencer, TENANT, genesis(), 1_000)
@@ -3923,7 +3924,7 @@ async fn an_allow_carries_a_signed_receipt() {
 )]
 async fn a_receipt_names_the_agency_chain_of_a_mandated_agent() {
     // OP-149 m.11
-    // L2-RCP-1
+    // L2-RCP-1, CI-6
     let db = fresh().await.unwrap();
     let (mut core, d) = setup(&db).await;
     onboard(&mut core, d, ROOT, ROOT_KEY, (1, 2)).await;
@@ -4469,7 +4470,7 @@ fn blocked(r: &Response) -> (access_kernel::combinator::BlockerClass, String) {
     reason = "one home domain, one target domain and each way a foreign PAP is refused"
 )]
 async fn a_foreign_pap_holds_a_bridging_grant() {
-    // INV-17, G10, PI-3, PI-24
+    // INV-17, G10, PI-3, PI-24, CI-10, EI-12
     use access_authority_signer::ports::Bindings as _;
     use access_kernel::combinator::BlockerClass;
     let db = fresh().await.unwrap();
@@ -7823,6 +7824,7 @@ async fn e6_a_self_anchor_covers_only_its_party() {
 // the domain's actions
 #[tokio::test]
 async fn e6_resource_anchor_stays_scoped_domain_anchor_covers_the_domain() {
+    // EI-14
     let db = fresh().await.unwrap();
     let (a, d, _, _) = audited_domain(&db).await;
     let shop = ExerciseBasis::Anchor(meta::object_id(&d, kind::ANCHOR, 1));

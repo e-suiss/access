@@ -989,6 +989,7 @@ async fn account_status_overlays_the_party_until_superseded() {
 // fails closed; an identity break denies the Instances established before it
 #[tokio::test]
 async fn termination_and_identity_break_restrict_instances() {
+    // EI-7
     let db = fresh().await.unwrap();
     let (mut core, d) = setup(&db, vec![regime_acceptance()]).await;
     let terminated = statement(d, REGIME, BOB, "party_terminated", EqValue::Int(5_000));

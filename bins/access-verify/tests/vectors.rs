@@ -184,6 +184,7 @@ fn domain_hex(c: &J) -> String {
 // L0-SIG-10…L0-SIG-21, CR-55
 #[test]
 fn cose_vectors() {
+    // GHSA-75rw-34q6-72cr
     let v = vectors("cose");
     let dir = Dir::new("cose");
     let keys = v["keys"].as_object().unwrap().iter().map(|(kid, key)| {
@@ -329,6 +330,7 @@ fn artefact_chain_from_trusted_binding_keys() {
 // L0-SIG-30…L0-SIG-42, CR-56; L0-SIG-41…L0-SIG-41b, OP-122 m.7
 #[test]
 fn jws_vectors() {
+    // GHSA-h395-gr6q-cpjc
     let dir = Dir::new("jws");
     let attack = vectors("jose-attack-classes");
     let claims = vectors("jwt-claims");

@@ -98,7 +98,7 @@ fn constructs_outside_the_subset_are_refused() {
     }
 }
 
-// CR-10, OP-8: size, depth and term limits hold before recursion
+// CR-10, OP-8, GHSA-r5fr-9gmv-jggh: size, depth and term limits hold before recursion
 #[test]
 fn limits_are_enforced() {
     let deep = format!("{}active pr{}", "(".repeat(64), ")".repeat(64));

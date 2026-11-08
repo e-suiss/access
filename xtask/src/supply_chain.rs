@@ -50,7 +50,38 @@ pub(crate) fn checks() -> Vec<Check> {
             name: "cooldown",
             run: cooldown::check,
         },
+        Check {
+            name: "committed-private-keys",
+            run: check_committed_private_keys,
+        },
     ]
+}
+
+/// F-13, RAUTHY-009: private key material in a repository file; keys are generated at setup.
+const KEY_MARKERS: &[&str] = &["PRIVATE KEY-----", "PRIVATE KEY BLOCK-----"];
+
+fn private_key_lines(rel_path: &str, bytes: &[u8]) -> Vec<Violation> {
+    let text = String::from_utf8_lossy(bytes);
+    text.lines()
+        .enumerate()
+        .filter(|(_, l)| l.contains("-----BEGIN ") && KEY_MARKERS.iter().any(|m| l.contains(m)))
+        .map(|(i, _)| {
+            v(
+                "committed-private-keys",
+                &format!("{rel_path}:{}", i.saturating_add(1)),
+                "private key material in the repository; generate keys at setup (F-13)".to_owned(),
+            )
+        })
+        .collect()
+}
+
+fn check_committed_private_keys(root: &Path) -> Result<Vec<Violation>, String> {
+    let mut out = Vec::new();
+    for path in walk(root)? {
+        let bytes = std::fs::read(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+        out.extend(private_key_lines(&rel(root, &path), &bytes));
+    }
+    Ok(out)
 }
 
 fn v(rule: &'static str, path: &str, message: String) -> Violation {
@@ -342,6 +373,26 @@ mod tests {
     use super::*;
     use metadata::fixture::{external, member, metadata as md_json};
     use metadata::parse;
+
+    // RAUTHY-009
+    #[test]
+    fn committed_private_keys_are_rejected() {
+        let begin = "-----BEGIN ";
+        for kind in [
+            "PRIVATE KEY",
+            "EC PRIVATE KEY",
+            "OPENSSH PRIVATE KEY",
+            "PGP PRIVATE KEY BLOCK",
+        ] {
+            let pem = format!("x\n{begin}{kind}-----\nAAAA\n");
+            let found = private_key_lines("k.pem", pem.as_bytes());
+            assert_eq!(found.len(), 1, "{kind}");
+            assert!(found.iter().all(|f| f.path == Path::new("k.pem:2")));
+        }
+        let public = format!("{begin}PUBLIC KEY-----\nAAAA\n");
+        assert!(private_key_lines("k.pem", public.as_bytes()).is_empty());
+        assert!(private_key_lines("a.rs", b"// PRIVATE KEY-----").is_empty());
+    }
 
     #[test]
     fn backtracking_regex_engine_in_lockfile_is_rejected() {

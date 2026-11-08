@@ -154,7 +154,7 @@ fn if_match_compares_strong_tags() {
     assert_eq!(if_match(["*"], None), Err(Precondition::Failed));
 }
 
-// OP-65, TN-112, §13.7.4: only named parameters, page size 1 to 100, no offsets
+// OP-65, TN-112, §13.7.4, RAUTHY-004: only named parameters, page size 1 to 100, no offsets
 #[test]
 fn list_queries_are_closed() {
     let allowed = &["page[size]", "cursor", "filter"];
