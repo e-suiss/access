@@ -85,7 +85,7 @@ fn allowed_targets(from: Class) -> Option<&'static [Class]> {
         // OP-93
         Proto | Telemetry => &[Kernel],
         Parse | Crypto | Store | Bindings | InternalApi => &[Kernel, Proto],
-        // INV-12, SEC19; OP-130 m.1: the shared Suiss crates
+        // INV-12, SEC19; OP-130 m.1
         Authority => &[
             Kernel,
             Proto,
@@ -113,7 +113,7 @@ fn allowed_targets(from: Class) -> Option<&'static [Class]> {
         // B21, B22, E24
         Service => &[Kernel, Proto, Sdk, Bindings],
         Sdk => &[Kernel, Proto, Bindings, Sdk],
-        // OP-93, OP-62; OP-151 m.3: Parse for the management API's SCIM filter subset
+        // OP-93, OP-62; OP-151 m.3
         Http => &[
             Kernel,
             Proto,

@@ -315,7 +315,7 @@ mod tests {
         assert!(!too_new(93 * 86_400 + 80_000, now));
     }
 
-    // F-2: a locked version whose publication date is not recorded fails the offline check
+    // F-2
     #[test]
     fn unjudged_versions_fail_the_cooldown() {
         let pkg = |name: &str, version: &str| Locked {

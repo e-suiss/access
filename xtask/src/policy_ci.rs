@@ -244,7 +244,7 @@ mod tests {
 
     const CHECK: &str = "        run: |\n          gh api \"repos/$R/compare/main...$SHA\"\n          gh api \"repos/$R/actions/workflows/ci.yml/runs?head_sha=$SHA&status=success\"\n";
 
-    // T-6, T-4: a tag publishes only from main after CI passed and the repository rules held
+    // T-6, T-4
     #[test]
     fn a_release_waits_for_main_ci_and_the_rules() {
         let gated = format!(
@@ -263,7 +263,7 @@ mod tests {
         assert_eq!(semantics_release_findings(labels).len(), 2);
     }
 
-    // T-18, D-5, T-16: the main image follows CI; CI checks the sqlx metadata and its scripts
+    // T-18, D-5, T-16
     #[test]
     fn the_main_image_waits_for_ci() {
         let ci = "jobs:\n  fast:\n    steps:\n      - run: just ci-scripts-test\n  sqlx:\n    steps:\n      - run: just sqlx-check\n  image:\n    needs:\n      - fast\n      - test\n      - sqlx\n      - web-e2e\n    uses: ./.github/workflows/image.yml\n";
@@ -289,7 +289,7 @@ mod tests {
         assert_eq!(op_3_findings("jobs:\n", "jobs:\n").len(), 3);
     }
 
-    // T-10, T-17, OP-3-G3: the image binaries are auditable and hardened; hidden entries stay out
+    // T-10, T-17, OP-3-G3
     #[test]
     fn the_image_is_auditable_hardened_and_its_context_hides_dot_entries() {
         let good = "FROM x AS builder\nRUN cargo auditable build --release --locked \\\n      --package a \\\n && scripts/checksec.sh target/release/a\n";

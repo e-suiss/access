@@ -77,7 +77,7 @@ pub(crate) fn check(root: &Path) -> Result<Vec<Violation>, String> {
 mod tests {
     use super::*;
 
-    // §5.12, TI-15, T31, E3: an authority crate naming an identity store module is refused
+    // §5.12, TI-15, T31, E3
     #[test]
     fn identity_store_modules_are_refused_on_the_authority_side() {
         let src = "use access_store::accounts::Account;\nfn f() { access_store::idp::write(); }\n";
@@ -91,7 +91,7 @@ mod tests {
         }
     }
 
-    // §5.12: the authority plane's own store modules, comments and test code are accepted
+    // §5.12
     #[test]
     fn authority_store_modules_are_accepted() {
         let src = "use access_store::authority::Draw;\nuse access_store::claims;\n// access_store::idp\n#[cfg(test)]\nmod tests { use access_store::identity::RealmId; }\n";

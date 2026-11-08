@@ -462,7 +462,6 @@ mod tests {
         let mut md = parse(&fixture::metadata(&packages, &[])).unwrap();
         retain_built(&mut md, "ring v0.17.8\naws-lc-rs v1.15.0\n");
         assert_eq!(banned_providers(&md).len(), 1);
-        // only named by a weak feature: listed, never built
         let mut md = parse(&fixture::metadata(&packages, &[])).unwrap();
         retain_built(&mut md, "aws-lc-rs v1.15.0\n");
         assert!(banned_providers(&md).is_empty());

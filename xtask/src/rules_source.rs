@@ -360,7 +360,6 @@ pub(crate) fn delete_findings(
                     ));
                 }
             }
-            // a trigger event (`BEFORE TRUNCATE`, `UPDATE OR TRUNCATE`) is not a statement
             ("TRUNCATE", _)
                 if k.checked_sub(1)
                     .and_then(|p| words.get(p))
@@ -1193,7 +1192,7 @@ mod tests {
         assert_eq!(f.len(), 3);
     }
 
-    // OP-73: column, schema and MERGE deletes destroy data as surely as DELETE and DROP TABLE
+    // OP-73
     #[test]
     fn column_schema_and_merge_deletes_are_rejected() {
         for bad in [
@@ -1235,7 +1234,7 @@ mod tests {
         );
     }
 
-    // OP-11, OP-16, OP-19, §12.1.3 rules 9, 14
+    // OP-11, OP-16, OP-19, §12.1.3
     #[test]
     fn migrations_keep_their_hygiene() {
         let ok = "SET LOCAL ROLE access_migrator;\nCREATE TABLE a (id uuid DEFAULT uuidv7());\nRESET ROLE;";
@@ -1252,7 +1251,7 @@ mod tests {
         }
     }
 
-    // OP-138, OP-55: an index built CONCURRENTLY lives in a migration without a transaction
+    // OP-138, OP-55
     #[test]
     fn concurrent_indexes_run_outside_a_transaction() {
         let detached = "-- no-transaction\nCREATE INDEX CONCURRENTLY a_x ON access.a (x);\n";
@@ -1268,7 +1267,7 @@ mod tests {
         assert!(concurrently_finding(late).is_some());
     }
 
-    // OP-55: from 2026-11-08 on, indexes and constraints on existing tables are built online
+    // OP-55
     #[test]
     fn locking_ddl_on_existing_tables_is_rejected() {
         for bad in [

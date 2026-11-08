@@ -405,7 +405,7 @@ pub(crate) fn check_events(root: &Path) -> Result<Vec<Violation>, String> {
 mod tests {
     use super::*;
 
-    // OP-47: the allowlist is read from `Label::name`; a forbidden name in it is caught
+    // OP-47
     #[test]
     fn the_allowlist_is_read_from_the_facade() {
         let src = "impl Label {\n    pub const fn name(self) -> &'static str {\n        match self {\n            Self::A => \"outcome\",\n            Self::B => \"tenant_id\",\n        }\n    }\n}\n";
@@ -414,7 +414,7 @@ mod tests {
         assert!(names.iter().any(|n| FORBIDDEN.contains(&n.as_str())));
     }
 
-    // OP-47: attribute names inside the facade are found
+    // OP-47
     #[test]
     fn attribute_names_are_found() {
         let src = "let a = KeyValue::new(\"realm_id\", v);\nKeyValue::new( \"outcome\", x)";
@@ -424,7 +424,7 @@ mod tests {
         );
     }
 
-    // OP-47: alert and dashboard expressions may not group by a forbidden label
+    // OP-47
     #[test]
     fn alert_expressions_are_checked() {
         assert_eq!(
@@ -436,7 +436,7 @@ mod tests {
         assert_eq!(forbidden_in_line("url: http://ip.example/x"), None);
     }
 
-    // OP-67 m.2: event names in code are literals from the catalogue; bindings are not events
+    // OP-67 m.2
     #[test]
     fn event_fields_are_found() {
         let src = "fn f() {\n    tracing::info!(event = \"login.failed\", outcome = \"deny\");\n    let event = 3;\n    tracing::warn!(event = %name);\n    if event == 3 {}\n}\n#[cfg(test)]\nmod tests {\n    fn g() { tracing::info!(event = \"x.y\"); }\n}\n";
@@ -446,14 +446,14 @@ mod tests {
         );
     }
 
-    // OP-67 m.5: an alert without a runbook or a severity is caught
+    // OP-67 m.5
     #[test]
     fn alerts_need_runbooks() {
         let text = "groups:\n  - name: g\n    rules:\n      - alert: A\n        expr: x > 0\n        labels:\n          severity: page\n          runbook: a\n      - alert: B\n        expr: y > 0\n        labels:\n          severity: page\n";
         assert_eq!(unlabelled_alerts(text), vec!["B".to_owned()]);
     }
 
-    // OP-67 m.2: the catalogue format is checked
+    // OP-67 m.2
     #[test]
     fn the_catalogue_is_checked() {
         let good = "[[event]]\nname = \"login.failed\"\nplane = \"identity\"\nseverity = \"info\"\nsince = \"0.3.1\"\nfields = []\nocsf = \"authentication\"\n";

@@ -336,7 +336,7 @@ mod tests {
         .unwrap_or_default()
     }
 
-    // X24, XI-13, OP-151 m.3 (r): every forbidden word, phrase and prefix is found
+    // X24, XI-13, OP-151 m.3 (r)
     #[test]
     fn forbidden_terms_are_found() {
         let a = allow();
@@ -369,7 +369,7 @@ mod tests {
         }
     }
 
-    // OP-151 m.3 (r): only declared protocol phrases are allowed
+    // OP-151 m.3 (r)
     #[test]
     fn allowlist_holds_protocol_phrases_only() {
         assert!(
@@ -388,7 +388,7 @@ mod tests {
         assert_eq!(forbidden("Transfer", &a).as_deref(), Some("transfer"));
     }
 
-    // X24, TN-131: literals and JSX text are scanned; comments are not
+    // X24, TN-131
     #[test]
     fn literals_and_jsx_text_are_scanned() {
         let src = "// pause here is a comment\nconst a = \"Pause\";\nconst b = <p>Undo it</p>;\nconst c = `trusted ${x}`;\n";
@@ -404,7 +404,7 @@ mod tests {
         );
     }
 
-    // TN-131: no string becomes HTML
+    // TN-131
     #[test]
     fn html_sinks_are_refused() {
         let v = scan(

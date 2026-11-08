@@ -63,7 +63,7 @@ pub(crate) fn check(root: &Path) -> Result<Vec<Violation>, String> {
 mod tests {
     use super::*;
 
-    // TN-113: a route added outside the manifest builder is refused
+    // TN-113
     #[test]
     fn tn_113_route_outside_the_manifest_is_rejected() {
         let src = "fn r() -> Router { Router::new().route(\"/x\", get(h)).nest(\"/y\", other) }\n";
@@ -75,7 +75,7 @@ mod tests {
         );
     }
 
-    // TN-113: the builder itself, comments, strings, tests and other directories are accepted
+    // TN-113
     #[test]
     fn tn_113_builder_comments_and_tests_are_accepted() {
         let src = "fn r() { router.route(path, m); }\n";

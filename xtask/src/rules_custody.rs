@@ -115,7 +115,7 @@ pub(crate) fn check(root: &Path) -> Result<Vec<Violation>, String> {
 mod tests {
     use super::*;
 
-    // OP-150, SEC17, SEC19, SI-13, CR-31: a custody key label, seal context or switch is refused
+    // OP-150, SEC17, SEC19, SI-13, CR-31
     // U14, U15
     #[test]
     fn custody_keys_are_refused() {
@@ -138,7 +138,7 @@ mod tests {
         );
     }
 
-    // OP-150, SEC17: the non-custodial assurance flag, comments and test code are accepted
+    // OP-150, SEC17
     #[test]
     fn the_non_custodial_flag_is_accepted() {
         for atom in ["non_custodial", "nonCustodial", "custom", "kek"] {
