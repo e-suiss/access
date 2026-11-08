@@ -347,4 +347,41 @@ pub trait ConsoleEnv: Send + Sync + 'static {
     fn upstream(&self) -> &Self::Upstream;
     /// The management origin, `https://<host>[:port]`, from configuration only (TN-131).
     fn origin(&self) -> &str;
+    /// The domain's accepted tenant actions; none by default, so no tenant action is drafted.
+    fn accepted(&self) -> &dyn AcceptedActions {
+        &NoAcceptedActions
+    }
+}
+
+/// A future of the accepted actions port.
+pub type Accepted<'a> = std::pin::Pin<
+    Box<
+        dyn Future<Output = Result<Option<access_kernel::model::ActionRef>, Unavailable>>
+            + Send
+            + 'a,
+    >,
+>;
+
+/// The actions a domain accepted through its live Schema Publication Packages, with their
+/// pinned schema digests (OP-141 m.35 (e), OP-151 m.20 (a)): what the decision lab drafts a
+/// tenant action with.
+pub trait AcceptedActions: Send + Sync {
+    /// The accepted action `namespace`/`name` of `major` in `domain` now; `None` when the
+    /// domain accepts no such action.
+    fn action<'a>(
+        &'a self,
+        domain: Digest,
+        namespace: &'a str,
+        name: &'a str,
+        major: u64,
+    ) -> Accepted<'a>;
+}
+
+/// No accepted actions: tenant actions are never drafted (fail closed).
+pub struct NoAcceptedActions;
+
+impl AcceptedActions for NoAcceptedActions {
+    fn action<'a>(&'a self, _: Digest, _: &'a str, _: &'a str, _: u64) -> Accepted<'a> {
+        Box::pin(async { Ok(None) })
+    }
 }

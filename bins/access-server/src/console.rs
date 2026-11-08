@@ -165,6 +165,7 @@ pub(crate) struct ServerConsole<P> {
     sign_in: sign_in::RealmSignIn,
     devices: devices::ConsoleDevices<P>,
     grants: crate::admin::tokens::ConsoleGrants<P>,
+    accepted: P,
     origin: String,
 }
 
@@ -184,6 +185,8 @@ pub(crate) struct Parts<P> {
     pub(crate) devices: devices::ConsoleDevices<P>,
     /// Read tokens.
     pub(crate) grants: crate::admin::tokens::ConsoleGrants<P>,
+    /// The domains' accepted tenant actions (OP-151 m.20 (a)).
+    pub(crate) accepted: P,
 }
 
 impl<P> ServerConsole<P> {
@@ -201,6 +204,7 @@ impl<P> ServerConsole<P> {
             sign_in: parts.sign_in,
             devices: parts.devices,
             grants: parts.grants,
+            accepted: parts.accepted,
             origin,
         }
     }
@@ -210,6 +214,7 @@ impl<P> ConsoleEnv for ServerConsole<P>
 where
     P: crate::admin::realm::LiveKeys
         + access_identity_ui::ports::DeviceInstances
+        + access_http::console::ports::AcceptedActions
         + Send
         + Sync
         + 'static,
@@ -265,6 +270,10 @@ where
 
     fn origin(&self) -> &str {
         &self.origin
+    }
+
+    fn accepted(&self) -> &dyn access_http::console::ports::AcceptedActions {
+        &self.accepted
     }
 }
 

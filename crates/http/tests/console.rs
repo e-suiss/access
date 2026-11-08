@@ -354,6 +354,29 @@ struct Env {
     up: Up,
 }
 
+/// The domain accepted `commerce`/`refund` v1 with schema digest `[4; 32]` (OP-151 m.20 (a)).
+struct Accepted;
+
+impl access_http::console::ports::AcceptedActions for Accepted {
+    fn action<'a>(
+        &'a self,
+        _: Digest,
+        namespace: &'a str,
+        name: &'a str,
+        major: u64,
+    ) -> access_http::console::ports::Accepted<'a> {
+        let found = (namespace == "commerce" && name == "refund" && major == 1).then(|| {
+            access_kernel::model::ActionRef {
+                namespace: String::from("commerce"),
+                name: String::from("refund"),
+                major: 1,
+                schema: Digest([4; 32]),
+            }
+        });
+        Box::pin(async move { Ok(found) })
+    }
+}
+
 impl ConsoleEnv for Env {
     type Sessions = Sessions;
     type SignIn = Hosted;
@@ -396,6 +419,9 @@ impl ConsoleEnv for Env {
     }
     fn origin(&self) -> &str {
         ORIGIN
+    }
+    fn accepted(&self) -> &dyn access_http::console::ports::AcceptedActions {
+        &Accepted
     }
 }
 
@@ -1347,6 +1373,62 @@ async fn intents_are_drafted_for_a_read_proof() {
         .insert("x-access-ais", right().parse().unwrap());
     let (r, _) = h.send(no_csrf, CLIENT).await;
     assert_eq!(r.status(), StatusCode::FORBIDDEN);
+    assert!(h.env().up.take().is_empty());
+}
+
+// OP-151 m.20 (a), Ek B 3115, 3116: the decision lab drafts the domain's accepted tenant
+// action through the BFF, with the schema digest the domain pinned and the eligibility set it
+// belongs to; an action the domain did not accept, or a commit of one, is not drafted
+#[tokio::test]
+#[allow(
+    clippy::many_single_char_names,
+    reason = "the harness, session, answer and body"
+)]
+async fn the_domains_accepted_tenant_actions_are_drafted_for_the_lab() {
+    let h = Harness::new();
+    let s = h.with_instance().await;
+    let right = || {
+        h.ais(
+            Mode::Check,
+            read_intent(&Method::POST, "/console/api/intents"),
+            h.now(),
+        )
+    };
+    let ask = |name: &str, mode: &str| {
+        let body = serde_json::json!({
+            "action": { "namespace": "commerce", "name": name, "major": 1 },
+            "resources": [{ "namespace": "commerce.order", "path": ["8812"] }],
+            "mode": mode,
+        })
+        .to_string();
+        let leaked: &'static str = Box::leak(body.into_boxed_str());
+        leaked
+    };
+    let mut good = s.post("/console/api/intents", ask("refund", "check"));
+    good.headers_mut()
+        .insert("x-access-ais", right().parse().unwrap());
+    let (r, b) = h.send(good, CLIENT).await;
+    assert_eq!(
+        r.status(),
+        StatusCode::OK,
+        "{}",
+        String::from_utf8_lossy(&b)
+    );
+    let v = json(&b);
+    assert_eq!(v["intent"]["action"]["schema"], b64url_encode(&[4; 32]));
+    assert!(v["probe"]["basis"]["anchor"].is_string());
+    for (name, mode, code) in [
+        ("void", "check", "intent-action-not-catalogued"),
+        ("refund", "commit", "intent-mode-not-allowed"),
+    ] {
+        let mut refused = s.post("/console/api/intents", ask(name, mode));
+        refused
+            .headers_mut()
+            .insert("x-access-ais", right().parse().unwrap());
+        let (r, b) = h.send(refused, CLIENT).await;
+        assert_eq!(r.status(), StatusCode::BAD_REQUEST, "{name} {mode}");
+        assert_eq!(json(&b)["code"], code);
+    }
     assert!(h.env().up.take().is_empty());
 }
 

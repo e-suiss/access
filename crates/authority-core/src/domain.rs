@@ -503,6 +503,30 @@ fn schema_catalog(
     }
 }
 
+/// The accepted action `namespace`/`name` of `major` now, with its pinned schema digest: a live
+/// `schema-definition` Acceptance of the namespace declares it and has not retired it (OP-141
+/// m.35 (e), OP-151 m.20 (a)).
+pub(crate) fn accepted_action(
+    view: &Snapshot,
+    namespace: &str,
+    name: &str,
+    major: u64,
+    now: u64,
+) -> Option<ActionRef> {
+    let mut found = None;
+    for spp in live_spps(view, namespace, now) {
+        for (r, _) in spp.refs() {
+            if r.namespace == namespace && r.name == name && r.major == major {
+                if spp.retirements.contains(&r) {
+                    return None;
+                }
+                found = Some(r);
+            }
+        }
+    }
+    found
+}
+
 /// The accepted Action Schema of `action` now, if a live `schema-definition` Acceptance of its
 /// namespace declares it and has not retired it (OP-141 m.35 (e)).
 pub(crate) fn accepted_schema(

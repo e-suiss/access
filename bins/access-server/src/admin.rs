@@ -156,6 +156,7 @@ pub(crate) trait RealmPlane:
     + Instances
     + realm::LiveKeys
     + access_identity_ui::ports::DeviceInstances
+    + access_http::console::ports::AcceptedActions
     + Clone
     + Send
     + Sync
@@ -169,6 +170,7 @@ impl<P> RealmPlane for P where
         + Instances
         + realm::LiveKeys
         + access_identity_ui::ports::DeviceInstances
+        + access_http::console::ports::AcceptedActions
         + Clone
         + Send
         + Sync
@@ -241,6 +243,7 @@ pub(crate) fn router<P: RealmPlane>(
             signer: signer(),
             origin: origin.clone(),
         },
+        accepted: plane.clone(),
         devices: crate::console::devices::ConsoleDevices {
             app,
             instances: plane,

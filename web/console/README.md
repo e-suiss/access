@@ -59,11 +59,13 @@ on the signature screen as the Kernel decoded them, and sent as one Exercise.
 
 The BFF drafts every intent the console signs (`POST /console/api/intents`, a read that needs a
 read proof): only an action of the server's catalogue, with its pinned schema digest, on your
-realm's resources. A `check` draft also names the eligibility check it belongs to (the domain,
-the root that covers the action's family as basis, and capacity), and a screen appears when the
-eligibility check, run by the decision point for your own Party, answers yes; a meta-action is
-asked without its payload and answered by coverage alone. Changes that are ADP Exercises (the audit export) go to ADP as a `commit`
-signed in this browser; the BFF forwards `evaluation` and `audit/export` only when your device
+realm's resources, or, for the decision lab's Check, an action your domain accepted, with the
+schema digest the domain pinned, on a resource of its own namespace. A `check` draft also names
+the eligibility check it belongs to (the domain, the root that covers the action's family as
+basis, and capacity), and a screen appears when the eligibility check, run by the decision point
+for your own Party, answers yes; a meta-action is asked without its payload and answered by
+coverage alone. Changes that are ADP Exercises (the audit export) go to ADP as a `commit` signed
+in this browser; the BFF forwards `evaluation` and `audit/export` only when your device
 key signed that commit, and never signs anything itself.
 
 | Section   | Screen                          | Reads and changes                                                         | Spec                       |

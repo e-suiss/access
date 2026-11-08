@@ -149,6 +149,7 @@ enum Family {
     Read,
     Export,
     Meta,
+    Tenant,
 }
 
 fn catalogued(namespace: &str, name: &str, major: u64) -> Option<(ActionRef, Family)> {
@@ -225,6 +226,8 @@ fn allowed(family: Family, r: &[ResourceRef], realm: &str) -> bool {
                     && first.is_some_and(|k| SEARCH_KINDS.contains(&k)))
         }
         Family::Meta => one.namespace.starts_with("access.") && one.namespace.len() <= MAX_SEGMENT,
+        // OP-151 m.20 (a): a tenant action names a resource of its own namespace
+        Family::Tenant => tenant_resource(&one.namespace, realm),
     }
 }
 
@@ -274,6 +277,43 @@ fn mode(v: Option<&Value>) -> Result<Mode, DraftError> {
 /// # Errors
 /// [`DraftError`].
 pub fn draft(body: &[u8], realm: &str, now_ms: u64) -> Result<Drafted, DraftError> {
+    draft_with(body, realm, now_ms, None)
+}
+
+/// The action `body` asks for, `(namespace, name, major)`; `None` when the body names none.
+#[must_use]
+pub fn asked_action(body: &[u8]) -> Option<(String, String, u64)> {
+    let root: Value = serde_json::from_slice(body).ok()?;
+    let a = root.get("action")?;
+    Some((
+        String::from(a.get("namespace")?.as_str()?),
+        String::from(a.get("name")?.as_str()?),
+        a.get("major")?.as_u64()?,
+    ))
+}
+
+/// Whether `namespace` is a tenant action's own resource namespace: the action's namespace or
+/// one below it, never the core's or the identity plane's.
+fn tenant_resource(namespace: &str, _realm: &str) -> bool {
+    namespace.len() <= MAX_SEGMENT
+        && namespace != meta::NAMESPACE
+        && !namespace.starts_with("access.")
+        && namespace != RESOURCE_NAMESPACE
+        && !namespace.starts_with("idp.")
+}
+
+/// [`draft`], and when the action is not this build's, the domain's accepted tenant action
+/// `tenant` with its pinned schema digest, for a `check` on a resource of its namespace only
+/// (OP-151 m.20 (a): the decision lab drafts the domain's accepted tenant actions).
+///
+/// # Errors
+/// [`DraftError`].
+pub fn draft_with(
+    body: &[u8],
+    realm: &str,
+    now_ms: u64,
+    tenant: Option<&ActionRef>,
+) -> Result<Drafted, DraftError> {
     let root: Value = serde_json::from_slice(body).map_err(|_| DraftError::Malformed)?;
     let o = root.as_object().ok_or(DraftError::Malformed)?;
     if o.keys()
@@ -298,9 +338,22 @@ pub fn draft(body: &[u8], realm: &str, now_ms: u64) -> Result<Drafted, DraftErro
         return Err(DraftError::Malformed);
     };
     let mode = mode(o.get("mode"))?;
-    let (action, family) = catalogued(namespace, name, major).ok_or(DraftError::Action)?;
+    let (action, family) = catalogued(namespace, name, major)
+        .or_else(|| {
+            tenant
+                .filter(|t| t.namespace == namespace && t.name == name && t.major == major)
+                .filter(|t| tenant_resource(&t.namespace, realm))
+                .map(|t| (t.clone(), Family::Tenant))
+        })
+        .ok_or(DraftError::Action)?;
     let resources = resources(o.get("resources").ok_or(DraftError::Malformed)?)?;
-    if !allowed(family, &resources, realm) {
+    if !allowed(family, &resources, realm)
+        || (family == Family::Tenant
+            && !resources.iter().all(|r| {
+                r.namespace == action.namespace
+                    || r.namespace.starts_with(&format!("{}.", action.namespace))
+            }))
+    {
         return Err(DraftError::Resource);
     }
     let params = params(family, o.get("params"))?;

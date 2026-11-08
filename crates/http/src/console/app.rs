@@ -1001,7 +1001,20 @@ async fn intents<E: ConsoleEnv>(
         Err(ProofError::NoInstance) => return problems::instance_required().into_response(),
         Err(ProofError::Rejected) => return problems::proof_rejected().into_response(),
     }
-    match super::drafts::draft(&body, &live.session.who.realm, now) {
+    // OP-151 m.20 (a): an action outside this build's catalogue may be one the domain accepted
+    let tenant = match super::drafts::asked_action(&body) {
+        Some((namespace, name, major)) => match c
+            .env
+            .accepted()
+            .action(live.session.who.domain, &namespace, &name, major)
+            .await
+        {
+            Ok(t) => t,
+            Err(Unavailable) => return unavailable(),
+        },
+        None => None,
+    };
+    match super::drafts::draft_with(&body, &live.session.who.realm, now, tenant.as_ref()) {
         Ok(d) => json_reply(StatusCode::OK, &d.answer(&live.session.who.domain)),
         Err(e) => problems::draft(e).into_response(),
     }

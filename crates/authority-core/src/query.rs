@@ -189,6 +189,22 @@ fn holder_hit(sel: &SubjectSelector) -> Option<Hit> {
 }
 
 impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
+    /// The domain's accepted action `namespace`/`name` of `major` at `now`, with its pinned
+    /// schema digest, as an intent names it (OP-141 m.35 (e), OP-151 m.20 (a)).
+    ///
+    /// # Errors
+    /// The reader's errors.
+    pub async fn accepted_action(
+        &self,
+        namespace: &str,
+        name: &str,
+        major: u64,
+        now: u64,
+    ) -> Result<Option<access_kernel::model::ActionRef>, CoreError> {
+        self.settled(|snap| crate::domain::accepted_action(snap, namespace, name, major, now))
+            .await
+    }
+
     /// Runs `f` over a snapshot, fetching what it asks for until it asks for nothing more.
     pub(crate) async fn settled<T>(&self, f: impl Fn(&Snapshot) -> T) -> Result<T, CoreError> {
         let mut snap = Snapshot::default();

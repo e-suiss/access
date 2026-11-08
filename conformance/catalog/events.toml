@@ -385,3 +385,11 @@ severity = "warn"
 since = "unreleased"
 fields = []
 ocsf = "entity_management"
+
+[[event]]
+name = "console.accepted.unavailable"
+plane = "ops"
+severity = "warn"
+since = "unreleased"
+fields = ["error"]
+ocsf = "application_error"

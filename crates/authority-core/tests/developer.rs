@@ -1045,3 +1045,29 @@ async fn op_105_the_change_impact_report_asks_the_wired_analysis() {
         )
     ));
 }
+
+// OP-151 m.20 (a), OP-141 m.35 (e), Ek B 3115, 3116: the decision lab drafts the domain's
+// accepted tenant actions with the schema digest the domain pinned; an action no live
+// `schema-definition` Acceptance declares, another major or another namespace is not accepted
+#[tokio::test]
+async fn the_domains_accepted_tenant_actions_are_read_with_their_schema() {
+    let db = fresh().await.unwrap();
+    let (core, _) = ready(&db).await;
+    assert_eq!(
+        core.accepted_action("shop", "read", 1, NOW).await.unwrap(),
+        Some(action("shop", "read"))
+    );
+    for (namespace, name, major) in [
+        ("shop", "refund", 1),
+        ("shop", "read", 2),
+        ("bank", "read", 1),
+    ] {
+        assert_eq!(
+            core.accepted_action(namespace, name, major, NOW)
+                .await
+                .unwrap(),
+            None,
+            "{namespace}/{name}/{major}"
+        );
+    }
+}

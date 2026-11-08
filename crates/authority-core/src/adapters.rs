@@ -548,6 +548,24 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
         led.core.lab_check(inc, now).await
     }
 
+    /// The accepted action `namespace`/`name` of `major` in `domain` now, with its pinned
+    /// schema digest (OP-151 m.20 (a)): what the console's decision lab drafts a tenant action
+    /// with.
+    ///
+    /// # Errors
+    /// As [`Authority::accepted_action`].
+    pub async fn accepted_action(
+        &self,
+        domain: Digest,
+        namespace: &str,
+        name: &str,
+        major: u64,
+    ) -> Result<Option<access_kernel::model::ActionRef>, CoreError> {
+        let (guard, now) = self.led_now(domain).await?;
+        let led = guard.as_ref().ok_or(CoreError::Unavailable("leader"))?;
+        led.core.accepted_action(namespace, name, major, now).await
+    }
+
     /// Decision lab Explain on the request's domain (§8.17.10.4).
     ///
     /// # Errors

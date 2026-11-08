@@ -224,3 +224,55 @@ fn anything_else_is_refused() {
     );
     assert_eq!(draft(b"[]", "acme", NOW), Err(DraftError::Malformed));
 }
+
+// OP-151 m.20 (a), Ek B 3115, 3116: an action outside the build's catalogue is drafted only as
+// the domain's accepted tenant action, with the schema digest the domain pinned, for a check on
+// a resource of its own namespace; a commit, another action, a foreign resource, or a tenant
+// action claiming the core's or the identity plane's namespace is refused
+#[test]
+fn an_accepted_tenant_action_is_drafted_for_a_check_only() {
+    let accepted = ActionRef {
+        namespace: String::from("commerce"),
+        name: String::from("refund"),
+        major: 1,
+        schema: Digest([4; 32]),
+    };
+    let w = wanted("commerce", "refund", "commerce.order", &["8812"], "check");
+    let ask_with =
+        |v: &Value, t: Option<&ActionRef>| draft_with(v.to_string().as_bytes(), "acme", NOW, t);
+    assert_eq!(ask(&w), Err(DraftError::Action));
+    let d = ask_with(&w, Some(&accepted)).unwrap();
+    assert_eq!(d.envelope.action, accepted);
+    assert_eq!(d.probe, Some(ProbeRoot::Meta));
+    assert_eq!(
+        d.answer(&Digest([3; 32]))["intent"]["action"]["schema"],
+        b64url_encode(&[4; 32])
+    );
+    let commit = wanted("commerce", "refund", "commerce.order", &["8812"], "commit");
+    assert_eq!(ask_with(&commit, Some(&accepted)), Err(DraftError::Mode));
+    let other = wanted("commerce", "void", "commerce.order", &["8812"], "check");
+    assert_eq!(ask_with(&other, Some(&accepted)), Err(DraftError::Action));
+    let foreign = wanted("commerce", "refund", "bank.account", &["1"], "check");
+    assert_eq!(
+        ask_with(&foreign, Some(&accepted)),
+        Err(DraftError::Resource)
+    );
+    let mut with_params = w.clone();
+    with_params["params"] = json!({ "amount": 5 });
+    assert_eq!(
+        ask_with(&with_params, Some(&accepted)),
+        Err(DraftError::Params)
+    );
+    for namespace in ["idp.account", "access.schema"] {
+        let claimed = ActionRef {
+            namespace: String::from(namespace),
+            ..accepted.clone()
+        };
+        let w = wanted(namespace, "refund", namespace, &["acme"], "check");
+        assert_eq!(
+            ask_with(&w, Some(&claimed)),
+            Err(DraftError::Action),
+            "{namespace}"
+        );
+    }
+}

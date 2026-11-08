@@ -176,6 +176,33 @@ fn verdict(e: &CoreError) -> Result<Verdict, Unavailable> {
 }
 
 // OP-151 m.6 (e): a management write's AIS verifies with a live Instance key of the domain
+// OP-151 m.20 (a)
+impl<K, B, S, C> access_http::console::ports::AcceptedActions for Plane<K, B, S, C>
+where
+    K: Keys + Send + Sync + 'static,
+    B: Binding + Clone + Send + Sync + 'static,
+    S: Salts + Clone + Send + Sync + 'static,
+    C: Clock + Clone + Send + Sync + 'static,
+{
+    fn action<'a>(
+        &'a self,
+        domain: Digest,
+        namespace: &'a str,
+        name: &'a str,
+        major: u64,
+    ) -> access_http::console::ports::Accepted<'a> {
+        Box::pin(async move {
+            self.domains
+                .accepted_action(domain, namespace, name, major)
+                .await
+                .map_err(|e| {
+                    tracing::warn!(event = "console.accepted.unavailable", outcome = "error", error = %e, "accepted actions unavailable");
+                    access_http::api::ports::Unavailable
+                })
+        })
+    }
+}
+
 impl<K, B, S, C> crate::admin::realm::LiveKeys for Plane<K, B, S, C>
 where
     K: Keys + Send + Sync + 'static,
