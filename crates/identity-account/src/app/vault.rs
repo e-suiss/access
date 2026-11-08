@@ -255,6 +255,45 @@ pub async fn reveal(
     }
 }
 
+/// The readable value of a stored identifier with the realm KEK alone, as [`reveal`] does: a
+/// management write reads the account's own address with it (TN-61). `None` once its class key
+/// is shredded (U58).
+///
+/// # Errors
+/// [`AccountError::Corrupt`] when another KEK wrapped the key; [`AccountError`].
+pub async fn reveal_with_kek(
+    t: &mut TenantTx,
+    kek: &(dyn Kek + Send + Sync),
+    subject: [u8; 16],
+    stored: &StoredValue,
+) -> Result<Option<String>, AccountError> {
+    match stored {
+        StoredValue::Plain(v) => Ok(Some(v.clone())),
+        StoredValue::Sealed {
+            class,
+            nonce,
+            ciphertext,
+        } => {
+            let class = PiiClass::parse(class).ok_or(AccountError::Corrupt)?;
+            let Some(row) = t.subject_key(subject, class.name()).await? else {
+                return Ok(None);
+            };
+            let Some(wrapped) = row.wrapped_dek else {
+                return Ok(None);
+            };
+            if row.kek_id != kek.id() {
+                return Err(AccountError::Corrupt);
+            }
+            let dek = kek.unwrap(&wrapped)?;
+            let sealed = Sealed {
+                nonce: *nonce,
+                ciphertext: ciphertext.clone(),
+            };
+            open(t, &dek, subject, class, IDENTIFIER, &sealed).map(Some)
+        }
+    }
+}
+
 /// Seals up to `limit` identifiers of the realm still written in plaintext, each under its
 /// subject's class key (OP-153 m.3 (aa)); returns how many were sealed.
 ///

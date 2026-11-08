@@ -346,3 +346,25 @@ pub const INVALID_AUDIT_FORMAT: Code = code(
     "Bad Request",
     "An audit stream rendering other than ocsf, cef or set (OP-41).",
 );
+/// A recovery policy outside its ranges, or below the cooling table's floor (TN-55).
+pub const INVALID_RECOVERY_POLICY: Code = code(
+    "invalid-recovery-policy",
+    400,
+    "Bad Request",
+    "A recovery policy outside its ranges, or a cooling entry below the floor of the realm default (TN-55, OP-153 m.3 (e)).",
+);
+/// The realm does not allow temporary access passes, or the account turned assisted recovery
+/// off (TN-60, TN-62).
+pub const RECOVERY_OPTION_OFF: Code = code(
+    "recovery-option-off",
+    409,
+    "Conflict",
+    "The realm does not allow temporary access passes, or the account turned assisted recovery off (TN-60, TN-62).",
+);
+/// Nobody issues a reset intent or a temporary access pass for their own account (TN-62).
+pub const SELF_ISSUE_REFUSED: Code = code(
+    "self-issue-refused",
+    403,
+    "Forbidden",
+    "Nobody issues a reset intent or a temporary access pass for their own account (TN-62).",
+);

@@ -11,6 +11,7 @@ use access_crypto::opaque_id::IdKey;
 use access_identity_account::adapters::pg::PgTx;
 use access_identity_account::app::accounts::status_moved;
 use access_identity_account::domain::password::Argon2Params;
+use access_identity_account::domain::recovery_policy::{self, RecoveryPolicy};
 use access_identity_account::domain::status::AccountStatus;
 use access_identity_oauth::adapters::outbound::DeclaredTargets;
 use access_identity_oauth::domain::issuer::{Issuer, IssuerStyle, RealmBase};
@@ -473,6 +474,32 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                     return Err(Invalid::UpstreamSubjectLinked.into());
                 }
             }
+            Change::AccountResetIntent { subject, .. }
+            | Change::AccountTapIssue(crate::domain::TapIssue { subject, .. }) => {
+                if resources::account(t, *subject).await?.is_none() {
+                    return Err(Invalid::NoAccount.into());
+                }
+                // TN-60
+                if t.account_recovery_policy(*subject)
+                    .await?
+                    .is_some_and(|p| !p.assisted_recovery)
+                {
+                    return Err(Invalid::RecoveryOption.into());
+                }
+                // TN-62
+                if matches!(change, Change::AccountTapIssue(_)) && !recovery_policy(t).await?.tap {
+                    return Err(Invalid::RecoveryOption.into());
+                }
+            }
+            Change::RecoveryPolicy { policy, loosens } => {
+                // TN-55, OP-153 m.3 (e)
+                let current = recovery_policy(t).await?;
+                match policy.change(&current) {
+                    Ok(l) if l == *loosens => {}
+                    Ok(_) => return Err(AdminError::Conflict),
+                    Err(_) => return Err(Invalid::RecoveryPolicy.into()),
+                }
+            }
             Change::ProtectionMode { mode, loosens } => {
                 // OP-151 m.14 (f)
                 let tier = access_identity_risk::app::settings::change_tier(t, mode)
@@ -538,6 +565,16 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
     }
 
     async fn prepared(&self, p: &Proposal, state: bool) -> Result<Prepared, AdminError> {
+        // TN-62, TN-61
+        if let (
+            Some(me),
+            Change::AccountResetIntent { subject, .. }
+            | Change::AccountTapIssue(crate::domain::TapIssue { subject, .. }),
+        ) = (&p.subject, &p.change)
+            && me == subject
+        {
+            return Err(Invalid::SelfIssue.into());
+        }
         // OP-149 m.4
         if let Change::ClientRegister(c) | Change::ClientUpdate(c) = &p.change
             && c.platform.is_some()
@@ -619,6 +656,9 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
         let actor = self.actor(p).await?;
         self.standing((p.tenant, p.realm), prepared.domain, &ais, actor)
             .await?;
+        let issuer = self
+            .recovery_issuer(p, prepared.domain, &ais, actor)
+            .await?;
         let verdict = self
             .decider
             .decide(Submission {
@@ -682,7 +722,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             });
         };
         let secret = self
-            .first_application(t, p, &bound, &committed.exercise)
+            .first_application(t, p, &bound, &committed.exercise, issuer)
             .await?;
         self.after(p).await?;
         Ok(Applied::Written {
@@ -701,6 +741,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
         p: &Proposal,
         bound: &idp::Bound,
         exercise: &Digest,
+        issuer: Option<[u8; 16]>,
     ) -> Result<Option<ClientSecret>, AdminError> {
         let mut t = PgTx::new(t);
         let g = idp::governance(&mut t.0)
@@ -764,6 +805,13 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                 None,
             )
             .await?;
+        }
+        let mut secret = secret;
+        if let Change::AccountResetIntent { .. } | Change::AccountTapIssue(_) = &p.change {
+            secret = self
+                .recovery_token(&mut t, p, &g, exercise, issuer)
+                .await?
+                .or(secret);
         }
         declare_transmitter(&mut t.0, bound, &p.change, exercise).await?;
         self.announce(&mut t.0, p, exercise).await?;
@@ -1078,7 +1126,10 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                     .await?
                     .ok_or(Invalid::UpstreamSubjectLinked)?
             }
-            Change::AccountDelete(_) | Change::OrgCreate(_) => true,
+            Change::AccountDelete(_)
+            | Change::OrgCreate(_)
+            | Change::AccountResetIntent { .. }
+            | Change::AccountTapIssue(_) => true,
             Change::OrgMemberRemove(m) => {
                 let org = t
                     .org_by_party(m.org)
@@ -1095,6 +1146,11 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                             e.into()
                         }
                     })?
+            }
+            Change::RecoveryPolicy { policy, .. } => {
+                let bytes = policy.to_bytes().map_err(|_| AdminError::Encode)?;
+                t.insert_recovery_realm_policy(&bytes, bound).await?;
+                true
             }
         };
         if done {
@@ -1124,6 +1180,229 @@ async fn org_member_current(
         return Err(Invalid::LastOwner.into());
     }
     Ok(())
+}
+
+impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
+    /// The account that issues a reset intent or a pass: the subject of the Party whose
+    /// Instance signed the write. Nobody issues one for their own account (TN-62); `None` for
+    /// every other change, or a signer without an account.
+    async fn recovery_issuer(
+        &self,
+        p: &Proposal,
+        domain: Digest,
+        ais: &[u8],
+        actor: Option<Id>,
+    ) -> Result<Option<[u8; 16]>, AdminError> {
+        let target = match &p.change {
+            Change::AccountResetIntent { subject, .. }
+            | Change::AccountTapIssue(crate::domain::TapIssue { subject, .. }) => *subject,
+            _ => return Ok(None),
+        };
+        let party = match actor {
+            Some(a) => Some(a),
+            None => self
+                .decider
+                .signer(domain, ais)
+                .await
+                .map_err(|e| AdminError::Unavailable(e.0))?,
+        };
+        let Some(party) = party else {
+            return Ok(p.subject);
+        };
+        let mut t = TenantTx::begin(self.app, p.tenant, p.realm).await?;
+        let subject = idp::party_subject(&mut t, &party.0).await?;
+        t.commit().await?;
+        // TN-62
+        if subject == Some(target) || p.subject == Some(target) {
+            return Err(Invalid::SelfIssue.into());
+        }
+        Ok(subject.or(p.subject))
+    }
+}
+
+/// The realm's recovery policy, or the default one (OP-153 m.3 (e)).
+async fn recovery_policy(t: &mut TenantTx) -> Result<RecoveryPolicy, AdminError> {
+    match t.recovery_realm_policy().await? {
+        Some(b) => RecoveryPolicy::from_bytes(&b).map_err(|_| AdminError::Encode),
+        None => Ok(RecoveryPolicy::DEFAULT),
+    }
+}
+
+impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
+    /// The token a committed `idp.account.reset_intent` or `idp.account.tap_issue` issues, in
+    /// the transaction that applies it (TN-61, TN-62): stored by digest only and bound to its
+    /// Exercise. A reset intent goes to the account's own registered address, never to a
+    /// recovery channel, and opens a credential-only window; a pass is handed to the issuer
+    /// once, to read out. Issue and use are separate audit events, the issue naming the issuer.
+    #[expect(
+        clippy::too_many_lines,
+        reason = "one token, its delivery and its audit row"
+    )]
+    async fn recovery_token(
+        &self,
+        t: &mut PgTx,
+        p: &Proposal,
+        g: &Governing,
+        exercise: &Digest,
+        issuer: Option<[u8; 16]>,
+    ) -> Result<Option<ClientSecret>, AdminError> {
+        use access_identity_account::adapters::system::{SystemClock, SystemEntropy};
+        use access_identity_account::domain::recovery_token as tokens;
+        use access_identity_account::notify::message::{
+            Address, Body, LinkPurpose, Message, Notice,
+        };
+        use access_identity_account::notify::notifier::OutboxNotifier;
+        use access_identity_account::notify::ports::Notifier as _;
+        use access_store::recovery::NewToken;
+        let kek = self
+            .vault
+            .and_then(|v| v.realm_kek(p.tenant, p.realm))
+            .ok_or_else(|| AdminError::Unavailable(String::from("kek")))?;
+        let realm = access_identity_account::app::Realm {
+            tenant: p.tenant,
+            realm: p.realm,
+            kek: &*kek,
+            ids: self.ids,
+        };
+        let notifier = OutboxNotifier::new(&realm, &SystemEntropy, &SystemClock);
+        let now = access_store::authority::server_time(self.app).await?;
+        let correlation = access_kernel::json::b64url_encode(&exercise.0);
+        let issuer = match issuer.or(p.subject) {
+            Some(s) => realm.external(s).map_err(account)?,
+            None => String::from(DECIDED_BY),
+        };
+        let (subject, out) = match &p.change {
+            Change::AccountResetIntent { subject, ttl_ms } => {
+                let (kind, stored) =
+                    t.0.contact(*subject)
+                        .await?
+                        .ok_or(Invalid::RecoveryOption)?;
+                let value = access_identity_account::app::vault::reveal_with_kek(
+                    &mut t.0, &*kek, *subject, &stored,
+                )
+                .await
+                .map_err(account)?
+                .ok_or(Invalid::RecoveryOption)?;
+                let to = if kind == "phone" {
+                    Address::Phone(value)
+                } else {
+                    Address::Email(value)
+                };
+                let token = access_kernel::json::b64url_encode(
+                    &access_crypto::random::bytes::<32>()
+                        .map_err(|_| AdminError::Unavailable(String::from("random")))?,
+                );
+                let expires = now.saturating_add(*ttl_ms);
+                t.0.insert_recovery_token(&NewToken {
+                    subject: *subject,
+                    kind: tokens::RESET_INTENT,
+                    token_hash: &tokens::digest(&token),
+                    attempt: None,
+                    exercise: Some(&exercise.0),
+                    address: None,
+                    entropy_bits: 256,
+                    one_time: true,
+                    at_ms: i64::try_from(now).map_err(|_| AdminError::Encode)?,
+                    expires_ms: i64::try_from(expires).map_err(|_| AdminError::Encode)?,
+                })
+                .await
+                .map_err(|_| AdminError::Conflict)?;
+                let base = g.issuer.as_deref().ok_or(AdminError::NoRealm)?;
+                let link = format!(
+                    "{}/login/recovery#intent={token}",
+                    base.trim_end_matches('/')
+                );
+                notifier
+                    .notify(
+                        &mut t.0,
+                        &Message {
+                            subject: *subject,
+                            to,
+                            locale: None,
+                            valid_since_ms: None,
+                            body: Body::Link {
+                                purpose: LinkPurpose::ResetIntent,
+                                link: access_crypto::Secret::new(link),
+                                expires_at_ms: expires,
+                            },
+                        },
+                    )
+                    .await
+                    .map_err(|_| AdminError::Unavailable(String::from("relay")))?;
+                let target = realm.external(*subject).map_err(account)?;
+                t.0.audit(&access_store::audit::AuditEvent {
+                    event_type: "recovery.reset_intent.issued",
+                    actor: &issuer,
+                    target: &target,
+                    correlation: &correlation,
+                })
+                .await?;
+                (*subject, None)
+            }
+            Change::AccountTapIssue(tap) => {
+                let raw = access_crypto::random::bytes::<{ recovery_policy::TAP_LENGTH_MAX }>()
+                    .map_err(|_| AdminError::Unavailable(String::from("random")))?;
+                let code = recovery_policy::tap_code(&raw, usize::from(tap.length));
+                let expires = now.saturating_add(tap.ttl_ms);
+                t.0.insert_recovery_token(&NewToken {
+                    subject: tap.subject,
+                    kind: tokens::TEMPORARY_ACCESS_PASS,
+                    token_hash: &tokens::typed_digest(&code),
+                    attempt: None,
+                    exercise: Some(&exercise.0),
+                    address: None,
+                    entropy_bits: i16::from(tap.length).saturating_mul(5),
+                    one_time: tap.one_time,
+                    at_ms: i64::try_from(now).map_err(|_| AdminError::Encode)?,
+                    expires_ms: i64::try_from(expires).map_err(|_| AdminError::Encode)?,
+                })
+                .await
+                .map_err(|_| AdminError::Conflict)?;
+                let target = realm.external(tap.subject).map_err(account)?;
+                t.0.audit(&access_store::audit::AuditEvent {
+                    event_type: "recovery.tap.issued",
+                    actor: &issuer,
+                    target: &target,
+                    correlation: &correlation,
+                })
+                .await?;
+                (tap.subject, Some(ClientSecret(code)))
+            }
+            _ => return Ok(None),
+        };
+        // TN-61 rule 2
+        if let Some((kind, stored)) = t.0.contact(subject).await?
+            && let Some(value) = access_identity_account::app::vault::reveal_with_kek(
+                &mut t.0, &*kek, subject, &stored,
+            )
+            .await
+            .map_err(account)?
+        {
+            let to = if kind == "phone" {
+                Address::Phone(value)
+            } else {
+                Address::Email(value)
+            };
+            notifier
+                .notify(
+                    &mut t.0,
+                    &Message {
+                        subject,
+                        to,
+                        locale: None,
+                        valid_since_ms: None,
+                        body: Body::Notice {
+                            notice: Notice::RecoveryRequested,
+                            at_ms: now,
+                            until_ms: None,
+                        },
+                    },
+                )
+                .await
+                .map_err(|_| AdminError::Unavailable(String::from("relay")))?;
+        }
+        Ok(out)
+    }
 }
 
 /// Who a decided account status move is in the account audit log (OP-10); the correlation is

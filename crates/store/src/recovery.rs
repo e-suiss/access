@@ -7,7 +7,6 @@ use sqlx::types::Uuid;
 
 use crate::StoreError;
 use crate::identity::TenantTx;
-use crate::scope::DomainId;
 
 fn uuid(b: [u8; 16]) -> Uuid {
     Uuid::from_bytes(b)
@@ -532,15 +531,14 @@ impl TenantTx {
         }))
     }
 
-    /// Records the realm's recovery policy under the committed decision at `position`.
+    /// Records the realm's recovery policy under the committed decision `bound` (EI-25).
     ///
     /// # Errors
     /// [`StoreError`].
     pub async fn insert_recovery_realm_policy(
         &mut self,
         policy: &[u8],
-        domain: &DomainId,
-        position: i64,
+        bound: &crate::idp::Bound,
     ) -> Result<(), StoreError> {
         let (tenant, realm) = self.recovery_scope()?;
         sqlx::query!(
@@ -550,8 +548,8 @@ impl TenantTx {
             tenant,
             realm,
             policy,
-            domain.as_bytes().as_slice(),
-            position,
+            bound.domain().as_bytes().as_slice(),
+            bound.raw_position(),
         )
         .execute(&mut *self.tx)
         .await?;

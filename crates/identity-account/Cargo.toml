@@ -26,6 +26,7 @@ unicode-normalization = { workspace = true, features = ["std"] }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["rt", "sync", "time", "fs", "net", "io-util"] }
 tracing = { workspace = true, features = ["std"] }
+serde = { workspace = true, features = ["derive", "std"] }
 serde_json = { workspace = true, features = ["std"] }
 time = { workspace = true, features = ["std", "formatting", "macros"] }
 zeroize = { workspace = true, features = ["alloc"] }

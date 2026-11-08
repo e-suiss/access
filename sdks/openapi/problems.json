@@ -606,6 +606,27 @@
       "description": "The organization keeps at least one active owner on every path; add another owner first (TN-91)."
     },
     {
+      "code": "invalid-recovery-policy",
+      "type": "urn:suiss:access:problem:invalid-recovery-policy",
+      "status": 400,
+      "title": "Bad Request",
+      "description": "A recovery policy outside its ranges, or a cooling entry below the floor of the realm default (TN-55, OP-153 m.3 (e))."
+    },
+    {
+      "code": "recovery-option-off",
+      "type": "urn:suiss:access:problem:recovery-option-off",
+      "status": 409,
+      "title": "Conflict",
+      "description": "The realm does not allow temporary access passes, or the account turned assisted recovery off (TN-60, TN-62)."
+    },
+    {
+      "code": "self-issue-refused",
+      "type": "urn:suiss:access:problem:self-issue-refused",
+      "status": 403,
+      "title": "Forbidden",
+      "description": "Nobody issues a reset intent or a temporary access pass for their own account (TN-62)."
+    },
+    {
       "code": "invalid-audit-format",
       "type": "urn:suiss:access:problem:invalid-audit-format",
       "status": 400,

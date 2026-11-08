@@ -187,6 +187,7 @@ dependencies = [
  "httparse",
  "rcgen",
  "rustls",
+ "serde",
  "serde_json",
  "thiserror",
  "time",

@@ -4,6 +4,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use access_identity_account::domain::password::Argon2Params;
+use access_identity_account::domain::recovery_policy::{self, RecoveryPolicy};
 pub use access_identity_events::domain::webhook::{WebhookChange, WebhookSpec};
 use access_identity_hooks::domain::uuid;
 pub use access_identity_hooks::domain::{
@@ -341,6 +342,17 @@ pub enum Invalid {
     /// The change would leave the organization without an active owner (TN-91).
     #[error("last owner")]
     LastOwner,
+    /// A recovery policy outside its ranges or below the floor of OP-153 m.3 (e) (TN-55).
+    #[error("bad recovery policy")]
+    RecoveryPolicy,
+    /// The realm or the account has turned this recovery option off: temporary access passes
+    /// exist only when the realm opts in (TN-62); an account without assisted recovery takes no
+    /// reset intent or pass (TN-60).
+    #[error("recovery option off")]
+    RecoveryOption,
+    /// Nobody issues a recovery pass or intent for their own account (TN-62).
+    #[error("self issue")]
+    SelfIssue,
 }
 
 impl Invalid {
@@ -404,6 +416,9 @@ impl Invalid {
             Self::UpstreamSubject => "invalid-upstream-subject",
             Self::UpstreamSubjectLinked => "upstream-subject-linked",
             Self::CatalogUpgradeRequired => access_internal_api::idp::CATALOG_UPGRADE_REQUIRED,
+            Self::RecoveryPolicy => "invalid-recovery-policy",
+            Self::RecoveryOption => "recovery-option-off",
+            Self::SelfIssue => "self-issue-refused",
         }
     }
 }
@@ -1237,6 +1252,25 @@ pub enum Change {
     AccountCanary([u8; 16]),
     /// `idp.account.delete`: the subject's internal id; reserved, CT3 (OP-153 m.3 (bb)).
     AccountDelete([u8; 16]),
+    /// `idp.account.reset_intent`: a one-time credential setup token sent to the account's own
+    /// registered address, never a credential (TN-61, MD-14); CT2.
+    AccountResetIntent {
+        /// The subject's internal id.
+        subject: [u8; 16],
+        /// Its lifetime: one hour by default, at most 24.
+        ttl_ms: u64,
+    },
+    /// `idp.account.tap_issue`: a temporary access pass (TN-62); CT2, only in a realm that opts in.
+    AccountTapIssue(TapIssue),
+    /// `idp.account.recovery_policy` when it only tightens, `idp.account.recovery_policy_loosen`
+    /// when anything loosens (TN-55, OP-153 m.3 (a)); `loosens` is resolved against the realm's
+    /// current policy before the intent is drawn.
+    RecoveryPolicy {
+        /// The new policy.
+        policy: RecoveryPolicy,
+        /// Whether it loosens anything the current policy enforces.
+        loosens: bool,
+    },
     /// `idp.realm.extension_policy`.
     ExtensionPolicy(ExtensionPolicy),
     /// `idp.hook.register` or `idp.hook.retire` (TN-135).
@@ -1295,6 +1329,50 @@ impl OrgMember {
     }
 }
 
+/// A temporary access pass to issue (TN-62): one live pass per user, nobody issues one for
+/// themselves, and its session binds an authenticator only.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TapIssue {
+    /// The subject's internal id.
+    pub subject: [u8; 16],
+    /// Its lifetime: one hour by default, between 10 minutes and 30 days.
+    pub ttl_ms: u64,
+    /// Its length: 16 by default, between 8 and 48 characters.
+    pub length: u8,
+    /// Used once (the default), or until it expires.
+    pub one_time: bool,
+}
+
+impl TapIssue {
+    /// TN-62's ranges.
+    ///
+    /// # Errors
+    /// [`Invalid::Body`].
+    pub fn check(&self) -> Result<(), Invalid> {
+        let len = usize::from(self.length);
+        if (recovery_policy::TAP_TTL_MIN_MS..=recovery_policy::TAP_TTL_MAX_MS)
+            .contains(&self.ttl_ms)
+            && (recovery_policy::TAP_LENGTH_MIN..=recovery_policy::TAP_LENGTH_MAX).contains(&len)
+        {
+            Ok(())
+        } else {
+            Err(Invalid::Body)
+        }
+    }
+
+    fn to_value(self) -> Value {
+        Value::Map(vec![
+            (Value::text("subject"), Value::Bytes(self.subject.to_vec())),
+            (Value::text("ttl_ms"), Value::Unsigned(self.ttl_ms)),
+            (
+                Value::text("length"),
+                Value::Unsigned(u64::from(self.length)),
+            ),
+            (Value::text("one_time"), Value::Bool(self.one_time)),
+        ])
+    }
+}
+
 fn uint(v: u32) -> Value {
     Value::Unsigned(u64::from(v))
 }
@@ -1333,6 +1411,10 @@ impl Change {
             Self::ProtectionMode { loosens: true, .. } => IdpAction::RealmProtectionModeLoosen,
             Self::AccountCanary(_) => IdpAction::AccountCanary,
             Self::AccountDelete(_) => IdpAction::AccountDelete,
+            Self::AccountResetIntent { .. } => IdpAction::AccountResetIntent,
+            Self::AccountTapIssue(_) => IdpAction::AccountTapIssue,
+            Self::RecoveryPolicy { loosens: false, .. } => IdpAction::AccountRecoveryPolicy,
+            Self::RecoveryPolicy { loosens: true, .. } => IdpAction::AccountRecoveryPolicyLoosen,
             Self::ExtensionPolicy(_) => IdpAction::RealmExtensionPolicy,
             Self::Hook(h) => h.action().idp(),
             Self::Webhook(w) => w.action().idp(),
@@ -1365,6 +1447,20 @@ impl Change {
             Self::SessionPolicy(p) => p.check(),
             Self::ExtensionPolicy(p) => p.check().map_err(|_| Invalid::ExtensionPolicy),
             Self::UpstreamLink(l) => l.check(),
+            // TN-61
+            Self::AccountResetIntent { ttl_ms, .. } => {
+                if (1..=recovery_policy::INTENT_TTL_MAX_MS).contains(ttl_ms) {
+                    Ok(())
+                } else {
+                    Err(Invalid::Body)
+                }
+            }
+            // TN-62
+            Self::AccountTapIssue(t) => t.check(),
+            // TN-55
+            Self::RecoveryPolicy { policy, .. } => {
+                policy.validate().map_err(|_| Invalid::RecoveryPolicy)
+            }
             Self::OrgCreate(o) => o.check(),
             Self::OrgMemberRemove(_)
             | Self::Hook(_)
@@ -1452,6 +1548,15 @@ impl Change {
             Self::UpstreamLink(l) => l.to_value(),
             Self::OrgCreate(o) => o.to_value(),
             Self::OrgMemberRemove(m) => m.to_value(),
+            Self::AccountResetIntent { subject, ttl_ms } => Value::Map(vec![
+                (Value::text("subject"), Value::Bytes(subject.to_vec())),
+                (Value::text("ttl_ms"), Value::Unsigned(*ttl_ms)),
+            ]),
+            Self::AccountTapIssue(t) => t.to_value(),
+            Self::RecoveryPolicy { policy, .. } => Value::Map(vec![(
+                Value::text("policy"),
+                Value::Bytes(policy.to_bytes().unwrap_or_default()),
+            )]),
         }
     }
 
@@ -1489,7 +1594,9 @@ impl Change {
             Self::AccountSuspend(s)
             | Self::AccountReactivate(s)
             | Self::AccountCanary(s)
-            | Self::AccountDelete(s) => {
+            | Self::AccountDelete(s)
+            | Self::AccountResetIntent { subject: s, .. }
+            | Self::AccountTapIssue(TapIssue { subject: s, .. }) => {
                 path.extend([String::from("account"), b64url_encode(s)]);
             }
             Self::UpstreamRegister(Upstream { name, .. })
@@ -1509,6 +1616,7 @@ impl Change {
             | Self::SigninPolicy(_)
             | Self::SessionPolicy(_)
             | Self::ProtectionMode { .. }
+            | Self::RecoveryPolicy { .. }
             | Self::ExtensionPolicy(_) => {
                 path.push(String::from("realm"));
             }

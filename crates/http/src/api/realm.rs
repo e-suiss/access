@@ -343,7 +343,19 @@ pub const ROWS: &[Route] = &[
         Verb::Post,
         "/admin/v1/realms/{slug}/accounts/{account_id}/reset-intents",
         "createResetIntent",
-        "Asks for a one-time reset intent sent to the account's own registered address: declared, never applied here.",
+        "Issues a one-time reset intent sent to the account's own registered address; the person chooses their new sign-in method themselves (TN-61).",
+    ),
+    write(
+        Verb::Post,
+        "/admin/v1/realms/{slug}/accounts/{account_id}/temporary-access-passes",
+        "createTemporaryAccessPass",
+        "Issues a temporary access pass, shown once to read out, in a realm that allows them; its session binds an authenticator only (TN-62).",
+    ),
+    write(
+        Verb::Put,
+        "/admin/v1/realms/{slug}/settings/recovery-policy",
+        "putRecoveryPolicy",
+        "Sets the recovery policy; anything that loosens it is a higher tier and only applies to recoveries started later (TN-55).",
     ),
     write(
         Verb::Post,
@@ -610,7 +622,8 @@ pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
         | "deleteAccount"
         | "createResetIntent"
         | "createOrganization"
-        | "removeOrganizationMember" => (Accounts, w(false)),
+        | "removeOrganizationMember"
+        | "createTemporaryAccessPass" => (Accounts, w(false)),
         "listUpstreamIdps" => (UpstreamIdps, Shape::List(&["name", "issuer", "status"])),
         "getUpstreamIdp" => (UpstreamIdps, Shape::Get),
         "putUpstreamIdp" => (UpstreamIdps, w(true)),
@@ -630,7 +643,7 @@ pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
         "patchCimdPolicy" => (Settings, patch(CIMD_PATCH, Some("cimd"))),
         "putProtectionMode" => (Settings, put("protection_mode")),
         "patchProtectionMode" => (Settings, patch(PROTECTION_PATCH, Some("protection_mode"))),
-        "rehomeRealm" => (Settings, w(false)),
+        "rehomeRealm" | "putRecoveryPolicy" => (Settings, w(false)),
         "createJob" => (Settings, Shape::JobCreate),
         "getJob" => (Settings, Shape::JobGet),
         "listJobItems" => (Settings, Shape::JobItems),
@@ -721,6 +734,9 @@ pub fn problem_of(e: &AdminError) -> &'static Code {
             Invalid::CatalogUpgradeRequired => &r::CATALOG_UPGRADE_REQUIRED,
             Invalid::OrgExists => &r::RESOURCE_EXISTS,
             Invalid::LastOwner => &r::LAST_OWNER,
+            Invalid::RecoveryPolicy => &r::INVALID_RECOVERY_POLICY,
+            Invalid::RecoveryOption => &r::RECOVERY_OPTION_OFF,
+            Invalid::SelfIssue => &r::SELF_ISSUE_REFUSED,
             Invalid::NoClient
             | Invalid::NoKey
             | Invalid::NoGroup

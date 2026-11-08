@@ -145,4 +145,8 @@ impl<K: RealmKek> access_identity_hooks::ports::KeyVault for KekSealer<K> {
         Sealer::open(self, tenant, realm, id, sealed)
             .map_err(|Unavailable| access_identity_hooks::ports::Unavailable)
     }
+
+    fn realm_kek(&self, tenant: TenantId, realm: RealmId) -> Option<Arc<dyn Kek + Send + Sync>> {
+        self.0.kek(tenant, realm)
+    }
 }

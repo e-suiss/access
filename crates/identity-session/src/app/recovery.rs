@@ -45,8 +45,8 @@ use crate::domain::recovery::{
     ATTEMPT_FAILURES, CONTACT_CODE_TTL_MS, CoolingTable, GRACE_MS, INTENT_TTL_MAX_MS,
     LINK_CODE_TTL_MS, MAX_CONTACTS, REBIND_TTL_MS, RecoveryPath, RecoveryPolicy, Restricted,
     SENT_CODE_TTL_MS, State, TAP_LENGTH_MAX, TAP_LENGTH_MIN, TAP_TTL_MAX_MS, TAP_TTL_MIN_MS,
-    aal_name, aal_of, achieved, backoff_ms, code_digest, label, link_code, link_code_bits, path,
-    too_weak,
+    aal_from_level, aal_name, aal_of, achieved, backoff_ms, code_digest, label, link_code,
+    link_code_bits, path, too_weak,
 };
 use crate::domain::session::{SESSION_COOKIE, clear_cookie, cookie_digest, set_cookie};
 use crate::ports::{
@@ -483,7 +483,10 @@ where
         {
             need = need.max(Aal::Aal2);
         }
-        Ok(policy.rebind_aal.map_or(need, |r| need.max(r)))
+        Ok(policy
+            .rebind_aal
+            .and_then(aal_from_level)
+            .map_or(need, |r| need.max(r)))
     }
 
     async fn high_value(&self, tx: &mut D::Tx, subject: [u8; 16]) -> Result<bool, SessionError> {

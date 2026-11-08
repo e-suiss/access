@@ -128,4 +128,15 @@ pub trait KeyVault: Send + Sync {
         id: &[u8; 16],
         sealed: &SealedKey,
     ) -> Result<Zeroizing<Vec<u8>>, Unavailable>;
+
+    /// The realm's current KEK, for a management write that must read or write the account's
+    /// sealed data in the same transaction (a reset intent's address, TN-61); `None` when this
+    /// vault does not hand it out, and the write fails closed.
+    fn realm_kek(
+        &self,
+        _tenant: TenantId,
+        _realm: RealmId,
+    ) -> Option<std::sync::Arc<dyn suiss_crypto::envelope::Kek + Send + Sync>> {
+        None
+    }
 }

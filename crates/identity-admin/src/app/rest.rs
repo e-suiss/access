@@ -7,6 +7,7 @@ use std::collections::BTreeSet;
 
 use access_crypto::opaque_id::IdKey;
 use access_identity_account::app::SUBJECT_PREFIX;
+use access_identity_account::domain::recovery_policy;
 
 use access_kernel::json::{b64url_decode, b64url_encode};
 use access_kernel::model::Window;
@@ -90,8 +91,12 @@ pub enum Op {
     DeleteAccount,
     /// `rehomeRealm`: `idp.realm.rehome`, reserved and declaration only (OP-150 m.11 (b)).
     RehomeRealm,
-    /// `createResetIntent`: declared for the recovery stage, never applied here (TN-61).
+    /// `createResetIntent`: `idp.account.reset_intent` (TN-61).
     ResetIntent,
+    /// `createTemporaryAccessPass`: `idp.account.tap_issue` (TN-62).
+    IssueTap,
+    /// `putRecoveryPolicy`: `idp.account.recovery_policy`, or its loosening (TN-55).
+    PutRecoveryPolicy,
     /// `registerHook` (TN-135).
     RegisterHook,
     /// `retireHook`.
@@ -142,6 +147,8 @@ impl Op {
             "deleteAccount" => Self::DeleteAccount,
             "rehomeRealm" => Self::RehomeRealm,
             "createResetIntent" => Self::ResetIntent,
+            "createTemporaryAccessPass" => Self::IssueTap,
+            "putRecoveryPolicy" => Self::PutRecoveryPolicy,
             "registerHook" => Self::RegisterHook,
             "retireHook" => Self::RetireHook,
             "registerWebhook" => Self::RegisterWebhook,
@@ -332,6 +339,17 @@ fn party_of(s: &str, missing: Invalid) -> Result<[u8; 16], Invalid> {
         .ok()
         .and_then(|b| <[u8; 16]>::try_from(b.as_slice()).ok())
         .ok_or(missing)
+}
+
+/// A lifetime given in whole seconds, or `default_ms` when absent.
+fn seconds(m: &Map<String, Json>, k: &str, default_ms: u64) -> Result<u64, Invalid> {
+    match m.get(k) {
+        None | Some(Json::Null) => Ok(default_ms),
+        Some(v) => v
+            .as_u64()
+            .and_then(|s| s.checked_mul(1000))
+            .ok_or(Invalid::Body),
+    }
 }
 
 fn key_of(key: Option<&str>) -> Result<&str, Invalid> {
@@ -575,7 +593,48 @@ pub fn compile(op: Op, key: Option<&str>, body: &Json, ids: &IdKey) -> Result<Ch
             only(m, &[])?;
             Change::AccountDelete(subject(ids, key_of(key)?)?)
         }
-        Op::RehomeRealm | Op::ResetIntent => return Err(Invalid::Reserved),
+        Op::RehomeRealm => return Err(Invalid::Reserved),
+        // TN-61
+        Op::ResetIntent => {
+            only(m, &["ttl_s"])?;
+            Change::AccountResetIntent {
+                subject: subject(ids, key_of(key)?)?,
+                ttl_ms: seconds(m, "ttl_s", recovery_policy::INTENT_TTL_MS)?,
+            }
+        }
+        // TN-62
+        Op::IssueTap => {
+            only(m, &["ttl_s", "length", "one_time"])?;
+            let length = match m.get("length") {
+                None | Some(Json::Null) => recovery_policy::TAP_LENGTH,
+                Some(v) => v
+                    .as_u64()
+                    .and_then(|n| usize::try_from(n).ok())
+                    .ok_or(Invalid::Body)?,
+            };
+            Change::AccountTapIssue(crate::domain::TapIssue {
+                subject: subject(ids, key_of(key)?)?,
+                ttl_ms: seconds(m, "ttl_s", recovery_policy::TAP_TTL_MS)?,
+                length: u8::try_from(length).map_err(|_| Invalid::Body)?,
+                one_time: match m.get("one_time") {
+                    None | Some(Json::Null) => true,
+                    Some(Json::Bool(b)) => *b,
+                    Some(_) => return Err(Invalid::Body),
+                },
+            })
+        }
+        // TN-55, OP-153 m.3 (e)
+        Op::PutRecoveryPolicy => {
+            let mut body = m.clone();
+            body.remove(VALIDITY);
+            body.remove("ais");
+            let policy: recovery_policy::RecoveryPolicy =
+                serde_json::from_value(Json::Object(body)).map_err(|_| Invalid::RecoveryPolicy)?;
+            Change::RecoveryPolicy {
+                policy,
+                loosens: false,
+            }
+        }
         Op::PutJoseAlg => {
             only(m, &["alg"])?;
             Change::JoseAlg(JoseAlg::from_name(text(m, "alg")?).ok_or(Invalid::JoseAlg)?)
@@ -1010,6 +1069,18 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                     .is_some() =>
             {
                 Change::UpstreamUpdate(u)
+            }
+            // TN-55
+            Change::RecoveryPolicy { policy, .. } => {
+                let current = match t.recovery_realm_policy().await? {
+                    Some(b) => recovery_policy::RecoveryPolicy::from_bytes(&b)
+                        .map_err(|_| AdminError::Encode)?,
+                    None => recovery_policy::RecoveryPolicy::DEFAULT,
+                };
+                Change::RecoveryPolicy {
+                    loosens: policy.loosens(&current),
+                    policy,
+                }
             }
             // OP-151 m.14 (f)
             Change::ProtectionMode { mode, .. } => {

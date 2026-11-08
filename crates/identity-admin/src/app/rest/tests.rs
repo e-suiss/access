@@ -416,13 +416,35 @@ fn an_administrator_never_sets_a_users_credential() {
             );
         }
     }
-    for body in chosen.iter().chain([&json!({})]) {
-        assert_eq!(
-            compile(Op::ResetIntent, Some(&subject), body, &ids),
-            Err(Invalid::Reserved),
-            "{body}"
-        );
+    // TN-61, TN-62, HL-38
+    for body in &chosen {
+        for op in [Op::ResetIntent, Op::IssueTap] {
+            assert_eq!(
+                compile(op, Some(&subject), body, &ids),
+                Err(Invalid::Body),
+                "{op:?} {body}"
+            );
+        }
     }
+    assert_eq!(
+        compile(Op::ResetIntent, Some(&subject), &json!({}), &ids),
+        Ok(Change::AccountResetIntent {
+            subject: [1; 16],
+            ttl_ms: 3_600_000,
+        })
+    );
+    assert_eq!(
+        compile(
+            Op::ResetIntent,
+            Some(&subject),
+            &json!({"ttl_s": 90_000}),
+            &ids
+        )
+        .unwrap()
+        .check(&access_identity_oauth::adapters::outbound::DeclaredTargets::default()),
+        Err(Invalid::Body),
+        "an intent lives at most 24 hours"
+    );
     for name in [
         "setCredential",
         "setPassword",

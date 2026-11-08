@@ -752,3 +752,324 @@ async fn an_aal2_account_cannot_rest_its_recovery_on_one_email() {
     assert_eq!(enough.status, StatusCode::OK, "{}", enough.json);
     assert_eq!(enough.json["contacts"][0], "friend@example.org");
 }
+
+/// Drafts `operation` on `key` through the console BFF and commits it at `path` with the
+/// browser's AIS: the management API's single write path (TN-110).
+async fn admin_write(
+    c: &Console,
+    operation: &str,
+    key: Option<&str>,
+    path: &str,
+    body: serde_json::Value,
+) -> (StatusCode, serde_json::Value) {
+    use access_authority_core::genesis::IDP_ANCHOR;
+    use access_http::console::domain::read_intent;
+    use access_kernel::combinator::Mode;
+    use access_kernel::meta::{ExerciseBasis, kind};
+    let domain = c.domain;
+    let basis = ExerciseBasis::Anchor(access_kernel::meta::object_id(
+        &domain,
+        kind::ANCHOR,
+        IDP_ANCHOR,
+    ));
+    let mut ask = serde_json::json!({"operation": operation, "body": body});
+    if let Some(k) = key {
+        ask["key"] = k.into();
+    }
+    let proof = c.browser.ais(
+        domain,
+        &access_crypto::random::bytes::<16>().unwrap(),
+        read_intent(&Method::POST, "/admin/v1/realms/acme/intents"),
+        Mode::Check,
+        basis,
+    );
+    let (r, bytes) = send(
+        &c.management,
+        c.browser
+            .request(
+                &Method::POST,
+                "/console/api/proxy/admin/realms/acme/intents",
+                "x",
+            )
+            .header("x-access-ais", proof)
+            .body(Body::from(ask.to_string()))
+            .unwrap(),
+    )
+    .await;
+    let draft: serde_json::Value =
+        serde_json::from_slice(&bytes).unwrap_or(serde_json::Value::Null);
+    if r.status() != StatusCode::OK {
+        return (r.status(), draft);
+    }
+    let digest = Digest(
+        <[u8; 32]>::try_from(
+            access_kernel::json::b64url_decode(draft["intent_digest"].as_str().unwrap()).unwrap(),
+        )
+        .unwrap(),
+    );
+    let nonce = access_crypto::random::bytes::<16>().unwrap();
+    let ais = c.browser.ais(domain, &nonce, digest, Mode::Commit, basis);
+    let method = if path.ends_with("recovery-policy") {
+        Method::PUT
+    } else {
+        Method::POST
+    };
+    let (r, bytes) = send(
+        &c.management,
+        c.browser
+            .request(&method, &format!("/console/api/proxy{path}"), "x")
+            .header("x-access-ais", ais)
+            .header("idempotency-key", b64url_encode(&nonce))
+            .body(Body::from(draft["body"].to_string()))
+            .unwrap(),
+    )
+    .await;
+    (
+        r.status(),
+        serde_json::from_slice(&bytes).unwrap_or(serde_json::Value::Null),
+    )
+}
+
+/// The newest Relay message of `kind` for `subject` in the identity outbox, opened with the
+/// subject's key as the courier opens it.
+async fn relayed(c: &Console, subject: [u8; 16], kind: &str) -> Message {
+    let ids = crate::ids::CellIds::new(c.w.keys.clone()).key().unwrap();
+    let v = vault_of(c);
+    let realm = Realm {
+        tenant: c.route.tenant,
+        realm: c.route.realm,
+        kek: &*v.kek,
+        ids: &ids,
+    };
+    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.realm)
+        .await
+        .unwrap();
+    let row = t.subject(subject, false).await.unwrap().unwrap();
+    t.commit().await.unwrap();
+    let dek = access_identity_account::app::sealing::subject_key(&realm, &row).unwrap();
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
+    loop {
+        let mut cursor = access_store::identity::Cursor::default();
+        let mut found = None;
+        loop {
+            let batch = access_store::identity::poll(&c.w.db.reader, cursor, 500)
+                .await
+                .unwrap();
+            let Some(last) = batch.last() else { break };
+            cursor = access_store::identity::Cursor {
+                xid: last.xid,
+                id: last.id,
+            };
+            for e in batch.iter().filter(|e| e.kind == kind) {
+                if let Ok(env) = access_identity_account::notify::envelope::parse(&e.payload)
+                    && let Ok(m) = env.open(&e.kind, &dek)
+                    && m.subject == subject
+                {
+                    found = Some(m);
+                }
+            }
+        }
+        if let Some(m) = found {
+            return m;
+        }
+        assert!(std::time::Instant::now() < deadline, "no {kind} after 20 s");
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+}
+
+async fn audited(c: &Console, event: &str) -> Vec<access_store::audit::AuditRow> {
+    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.realm)
+        .await
+        .unwrap();
+    let rows: Vec<_> = t
+        .list_audit(1000)
+        .await
+        .unwrap()
+        .into_iter()
+        .filter(|r| r.event_type == event)
+        .collect();
+    t.commit().await.unwrap();
+    rows
+}
+
+// TN-61, TN-62, TN-60, MD-14, HL-38, TNI-6, TN-55, OP-153 m.3 (a), (f), (gg)
+// TN-61, Ek B 3555, 3557, 3845, 3550, 3531, 4041
+#[tokio::test]
+async fn a_reset_intent_is_an_exercise_and_opens_a_rebind_window_once() {
+    let c = console("recovery-intent", false).await;
+    let sent = Recording::default();
+    let app = hosted(&c, sent.clone());
+    let ids = crate::ids::CellIds::new(c.w.keys.clone()).key().unwrap();
+    let ivy = account(&c, "ivy@example.com", true).await;
+    let key = ids
+        .encode(access_identity_account::app::SUBJECT_PREFIX, ivy)
+        .unwrap();
+    let before = c.w.domains.head(c.domain).await.unwrap().0;
+
+    // TN-61, MD-14
+    let (status, body) = admin_write(
+        &c,
+        "createResetIntent",
+        Some(&key),
+        &format!("/admin/realms/acme/accounts/{key}/reset-intents"),
+        serde_json::json!({"password": "chosen-by-the-admin"}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+    let (status, body) = admin_write(
+        &c,
+        "createResetIntent",
+        Some(&key),
+        &format!("/admin/realms/acme/accounts/{key}/reset-intents"),
+        serde_json::json!({}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let position: u64 = body["position"].as_str().unwrap().parse().unwrap();
+    assert!(position > before, "the intent is a recorded Exercise");
+    let issued = audited(&c, "recovery.reset_intent.issued").await;
+    assert_eq!(issued.len(), 1);
+    let founder = ids
+        .encode(access_identity_account::app::SUBJECT_PREFIX, c.subject)
+        .unwrap();
+    assert_eq!(issued[0].actor, founder, "the issue names the issuer");
+    assert_eq!(issued[0].target, key);
+
+    // TN-61
+    let m = relayed(&c, ivy, "relay.message.reset_intent.v1").await;
+    let Address::Email(to) = &m.to else {
+        panic!("not an e-mail")
+    };
+    assert_eq!(to, "ivy@example.com");
+    let MessageBody::Link {
+        link,
+        expires_at_ms,
+        ..
+    } = &m.body
+    else {
+        panic!("not a link")
+    };
+    assert!(
+        *expires_at_ms <= now() + 3_600_000 + 60_000,
+        "one hour by default"
+    );
+    let token = link.expose().split_once("#intent=").unwrap().1.to_owned();
+
+    // TN-61, HL-38
+    let mut page = Page::default();
+    let opened = page
+        .call(
+            &app,
+            &Method::POST,
+            &format!("/v1/recovery/intents/{token}"),
+            None,
+        )
+        .await;
+    assert_eq!(opened.status, StatusCode::OK, "{}", opened.json);
+    assert_eq!(opened.json["state"], "rebind_open");
+    assert_eq!(opened.json["method"], "reset_intent");
+    let mut again = Page::default();
+    let reused = again
+        .call(
+            &app,
+            &Method::POST,
+            &format!("/v1/recovery/intents/{token}"),
+            None,
+        )
+        .await;
+    assert_eq!(reused.status, StatusCode::GONE);
+    assert_eq!(audited(&c, "recovery.reset_intent.used").await.len(), 1);
+    let attempt = opened.json["attempt"].as_str().unwrap().to_owned();
+    let bound = page
+        .call(
+            &app,
+            &Method::POST,
+            &format!("/v1/recovery/{attempt}"),
+            Some(serde_json::json!({"new_password": "ivy picks this one herself"})),
+        )
+        .await;
+    assert_eq!(bound.status, StatusCode::OK, "{}", bound.json);
+    assert_eq!(bound.json["state"], "grace_period");
+
+    // TN-62
+    let (status, body) = admin_write(
+        &c,
+        "createResetIntent",
+        Some(&founder),
+        &format!("/admin/realms/acme/accounts/{founder}/reset-intents"),
+        serde_json::json!({}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN, "{body}");
+    assert_eq!(body["code"], "self-issue-refused");
+    let (status, body) = admin_write(
+        &c,
+        "createTemporaryAccessPass",
+        Some(&key),
+        &format!("/admin/realms/acme/accounts/{key}/temporary-access-passes"),
+        serde_json::json!({}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT, "{body}");
+    assert_eq!(body["code"], "recovery-option-off");
+
+    // TN-55, §10.1.3
+    let mut policy = serde_json::to_value(
+        access_identity_account::domain::recovery_policy::RecoveryPolicy::DEFAULT,
+    )
+    .unwrap();
+    policy["cooling"]["sent_code_ms"] = (2 * 86_400_000_u64).into();
+    let (status, body) = admin_write(
+        &c,
+        "putRecoveryPolicy",
+        None,
+        "/admin/realms/acme/settings/recovery-policy",
+        policy.clone(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    // TN-55, OP-153 m.3 (e)
+    let mut below = policy.clone();
+    below["cooling"]["sent_code_ms"] = 3_600_000_u64.into();
+    let (status, body) = admin_write(
+        &c,
+        "putRecoveryPolicy",
+        None,
+        "/admin/realms/acme/settings/recovery-policy",
+        below,
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+    assert_eq!(body["code"], "invalid-recovery-policy");
+    let mut loosen = policy;
+    loosen["tap"] = true.into();
+    let (status, body) = admin_write(
+        &c,
+        "putRecoveryPolicy",
+        None,
+        "/admin/realms/acme/settings/recovery-policy",
+        loosen,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let mut t = TenantTx::begin(&c.w.db.app, c.route.tenant, c.route.realm)
+        .await
+        .unwrap();
+    let stored = t.recovery_realm_policy().await.unwrap().unwrap();
+    t.commit().await.unwrap();
+    let stored =
+        access_identity_account::domain::recovery_policy::RecoveryPolicy::from_bytes(&stored)
+            .unwrap();
+    assert!(stored.tap);
+    assert_eq!(stored.cooling.sent_code_ms, 2 * 86_400_000);
+    let (status, body) = admin_write(
+        &c,
+        "createTemporaryAccessPass",
+        Some(&key),
+        &format!("/admin/realms/acme/accounts/{key}/temporary-access-passes"),
+        serde_json::json!({}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(audited(&c, "recovery.tap.issued").await.len(), 1);
+}

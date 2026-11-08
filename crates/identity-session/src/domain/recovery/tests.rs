@@ -104,7 +104,7 @@ fn a_policy_only_tightens_unless_loosened_as_ct3_and_never_below_the_floor() {
     assert_eq!(base.validate(), Ok(()));
     let mut longer = base;
     longer.cooling.sent_code_ms = 2 * DAY_MS;
-    longer.rebind_aal = Some(Aal::Aal2);
+    longer.rebind_aal = Some(2);
     assert_eq!(longer.change(&base), Ok(false));
     assert_eq!(base.change(&longer), Ok(true));
     let mut below = base;
@@ -145,8 +145,11 @@ fn codes_carry_their_entropy() {
     let long = link_code(&[0xff; 14], false);
     assert_eq!(short.replace('-', "").len() * 5, 40);
     assert!(long.replace('-', "").len() * 5 >= 112);
-    assert_eq!(tap_code(&[0; 30], TAP_LENGTH).len(), TAP_LENGTH);
-    assert_eq!(tap_code(&[0; 30], TAP_LENGTH_MAX).len(), TAP_LENGTH_MAX);
+    assert_eq!(tap_code(&[0; TAP_LENGTH_MAX], TAP_LENGTH).len(), TAP_LENGTH);
+    assert_eq!(
+        tap_code(&[0; TAP_LENGTH_MAX], TAP_LENGTH_MAX).len(),
+        TAP_LENGTH_MAX
+    );
     assert_eq!(canonical("ab-cd"), "ABCD");
     assert_eq!(backoff_ms(1), 30_000);
     assert_eq!(backoff_ms(2), 60_000);
