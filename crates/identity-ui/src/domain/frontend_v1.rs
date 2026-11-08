@@ -561,9 +561,9 @@ pub const ROUTES: &[Route] = &[
     planned(
         Owner::N5,
         Verb::Post,
-        "/v1/sessions/{instance}/end",
+        "/v1/sessions/{session}/end",
         "endSignIn",
-        "Ends another device's sign-in: instance.terminate (OP-153 m.3 (y)).",
+        "Ends another device's sign-in; names the device Instance whose instance.terminate the page then signs (OP-153 m.3 (y)).",
     ),
     planned(
         Owner::N5,
@@ -585,6 +585,41 @@ pub const ROUTES: &[Route] = &[
         "/csp-reports",
         "reportCsp",
         "Receives CSP reports, 100 a minute per realm (OP-153 m.3 (t)).",
+    ),
+    planned(
+        Owner::N5,
+        Verb::Get,
+        "/v1/login/branding",
+        "getBranding",
+        "The realm's branding record as the hosted pages draw it: name and logo URL (TN-106, OP-153 m.3 (t)).",
+    ),
+    planned(
+        Owner::N5,
+        Verb::Post,
+        "/v1/account/connected-apps/decline",
+        "declineSharing",
+        "The person chose not to share: the waiting request goes back to the app with access_denied (X-L8).",
+    ),
+    planned(
+        Owner::N5,
+        Verb::Get,
+        "/v1/account/methods",
+        "listSignInMethods",
+        "The account's sign-in methods for S11: password, passkeys, authenticator apps, recovery codes (TN-99, OP-148).",
+    ),
+    planned(
+        Owner::N5,
+        Verb::Delete,
+        "/v1/account/methods/{credential}",
+        "removeSignInMethod",
+        "Removes a sign-in method after a recent re-authentication; never the last one (TN-68).",
+    ),
+    planned(
+        Owner::N5,
+        Verb::Put,
+        "/v1/account/password",
+        "setPassword",
+        "Sets or changes the password after a recent re-authentication; other sign-ins end (TN-50).",
     ),
     planned(
         Owner::N7,

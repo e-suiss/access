@@ -255,11 +255,20 @@ pub enum TextId {
     /// Text `claim.issuer_says` (§13.8, INV-14).
     #[serde(rename = "claim.issuer_says")]
     IssuerSays,
+    /// N5: the "Keep me signed in on this device" option (TN-36, X33).
+    #[serde(rename = "label.keep_signed_in")]
+    KeepSignedInLabel,
+    /// N5: the 30-day second-step option (X33, X-L2).
+    #[serde(rename = "label.remember_device")]
+    RememberDeviceLabel,
+    /// N5: a sign-in provider's button (OP-153 m.3 (l)); `{ $provider }` is its name.
+    #[serde(rename = "action.continue_with")]
+    ContinueWith,
 }
 
 impl TextId {
     /// All ids, in declaration order.
-    pub const ALL: [Self; 83] = [
+    pub const ALL: [Self; 86] = [
         Self::LoginFailed,
         Self::TooManyAttempts,
         Self::Unavailable,
@@ -343,6 +352,9 @@ impl TextId {
         Self::ErrorAccessOwner,
         Self::StepUpRequired,
         Self::IssuerSays,
+        Self::KeepSignedInLabel,
+        Self::RememberDeviceLabel,
+        Self::ContinueWith,
     ];
 
     /// The stable id on the wire.
@@ -432,6 +444,9 @@ impl TextId {
             Self::ErrorAccessOwner => "error.access_owner",
             Self::StepUpRequired => "step_up.required",
             Self::IssuerSays => "claim.issuer_says",
+            Self::KeepSignedInLabel => "label.keep_signed_in",
+            Self::RememberDeviceLabel => "label.remember_device",
+            Self::ContinueWith => "action.continue_with",
         }
     }
 
@@ -550,6 +565,9 @@ impl TextId {
             Self::ErrorAccessOwner => "Access couldn't complete this request. Try again shortly.",
             Self::StepUpRequired => "Confirm it's you to continue with this action.",
             Self::IssuerSays => "Issuer says (signed)",
+            Self::KeepSignedInLabel => "Keep me signed in on this device",
+            Self::RememberDeviceLabel => "Don't ask for a second step on this device for 30 days",
+            Self::ContinueWith => "Continue with { $provider }",
         }
     }
 

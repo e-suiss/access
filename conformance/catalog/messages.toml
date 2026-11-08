@@ -85,6 +85,30 @@ owner = "identity_plane"
 protected = false
 
 [[message]]
+key = "label-keep_signed_in"
+text_id = "label.keep_signed_in"
+surface = "login"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "label-remember_device"
+text_id = "label.remember_device"
+surface = "login"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "action-continue_with"
+text_id = "action.continue_with"
+surface = "login"
+class = "action"
+owner = "identity_plane"
+protected = false
+
+[[message]]
 key = "action-continue"
 text_id = "action.continue"
 surface = "login"

@@ -1894,10 +1894,10 @@
         }
       }
     },
-    "/v1/sessions/{instance}/end": {
+    "/v1/sessions/{session}/end": {
       "post": {
         "operationId": "endSignIn",
-        "summary": "Ends another device's sign-in: instance.terminate (OP-153 m.3 (y)).",
+        "summary": "Ends another device's sign-in; names the device Instance whose instance.terminate the page then signs (OP-153 m.3 (y)).",
         "responses": {
           "501": {
             "$ref": "#/components/responses/NotYetServed"
@@ -1908,7 +1908,7 @@
         },
         "parameters": [
           {
-            "name": "instance",
+            "name": "session",
             "in": "path",
             "required": true,
             "schema": {
@@ -1980,6 +1980,109 @@
       "post": {
         "operationId": "reportCsp",
         "summary": "Receives CSP reports, 100 a minute per realm (OP-153 m.3 (t)).",
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "x-suiss-status": "planned"
+      }
+    },
+    "/v1/login/branding": {
+      "get": {
+        "operationId": "getBranding",
+        "summary": "The realm's branding record as the hosted pages draw it: name and logo URL (TN-106, OP-153 m.3 (t)).",
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "x-suiss-status": "planned"
+      }
+    },
+    "/v1/account/connected-apps/decline": {
+      "post": {
+        "operationId": "declineSharing",
+        "summary": "The person chose not to share: the waiting request goes back to the app with access_denied (X-L8).",
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "x-suiss-status": "planned"
+      }
+    },
+    "/v1/account/methods": {
+      "get": {
+        "operationId": "listSignInMethods",
+        "summary": "The account's sign-in methods for S11: password, passkeys, authenticator apps, recovery codes (TN-99, OP-148).",
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "x-suiss-status": "planned"
+      }
+    },
+    "/v1/account/methods/{credential}": {
+      "delete": {
+        "operationId": "removeSignInMethod",
+        "summary": "Removes a sign-in method after a recent re-authentication; never the last one (TN-68).",
+        "responses": {
+          "501": {
+            "$ref": "#/components/responses/NotYetServed"
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "parameters": [
+          {
+            "name": "credential",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "x-suiss-status": "planned"
+      }
+    },
+    "/v1/account/password": {
+      "put": {
+        "operationId": "setPassword",
+        "summary": "Sets or changes the password after a recent re-authentication; other sign-ins end (TN-50).",
         "responses": {
           "501": {
             "$ref": "#/components/responses/NotYetServed"

@@ -38,11 +38,16 @@ pub enum FieldName {
     LinkCode,
     /// N1: the hosted page's non-interactive bot token, if any (OP-153 m.1 (b), m.3 (h)).
     BotToken,
+    /// N5: "Keep me signed in on this device" (TN-36, X33), an [`Node::Option`].
+    KeepSignedIn,
+    /// N5: "Don't ask for a second step on this device for 30 days" (X33, X-L2), an
+    /// [`Node::Option`].
+    RememberDevice,
 }
 
 impl FieldName {
     /// All names.
-    pub const ALL: [Self; 13] = [
+    pub const ALL: [Self; 15] = [
         Self::Identifier,
         Self::Password,
         Self::TotpCode,
@@ -56,6 +61,8 @@ impl FieldName {
         Self::InvitationCode,
         Self::LinkCode,
         Self::BotToken,
+        Self::KeepSignedIn,
+        Self::RememberDevice,
     ];
 
     /// The wire name.
@@ -75,6 +82,8 @@ impl FieldName {
             Self::InvitationCode => "invitation_code",
             Self::LinkCode => "link_code",
             Self::BotToken => "bot_token",
+            Self::KeepSignedIn => "keep_signed_in",
+            Self::RememberDevice => "remember_device",
         }
     }
 
@@ -102,6 +111,7 @@ impl FieldName {
             // OP-153 m.3 (d)
             Self::LinkCode => 32,
             Self::BotToken => 4096,
+            Self::KeepSignedIn | Self::RememberDevice => 8,
         }
     }
 
@@ -395,6 +405,26 @@ pub enum Node {
         /// The call.
         signal: PasskeySignal,
     },
+    /// N5: a checkbox that belongs to the whole step: when checked, the client sends
+    /// `fields[name] = "true"` with every submission of the step (TN-36, X33).
+    Option {
+        /// [`FieldName::KeepSignedIn`] or [`FieldName::RememberDevice`].
+        name: FieldName,
+        /// Caption.
+        label: Text,
+        /// Whether it starts checked; never for the second-step marker (X-L2).
+        checked: bool,
+    },
+    /// N5: a sign-in provider of the realm (OP-153 m.3 (l)): a button that navigates the whole
+    /// page to `href`, a path under the realm issuer.
+    Provider {
+        /// The preset name.
+        provider: String,
+        /// Caption.
+        label: Text,
+        /// `GET` target that starts the provider sign-in.
+        href: String,
+    },
 }
 
 impl Node {
@@ -405,7 +435,7 @@ impl Node {
             Self::Input { method, .. } | Self::Submit { method, .. } => Some(*method),
             Self::PasskeyGet { .. } | Self::PasskeyAutofill { .. } => Some(Method::Passkey),
             Self::PasskeyCreate { .. } => Some(Method::PasskeyRegister),
-            Self::PasskeySignal { .. } => None,
+            Self::PasskeySignal { .. } | Self::Option { .. } | Self::Provider { .. } => None,
         }
     }
 

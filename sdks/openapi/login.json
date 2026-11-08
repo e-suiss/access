@@ -311,7 +311,8 @@
                 "enum": [
                   "text",
                   "password",
-                  "code"
+                  "code",
+                  "hidden"
                 ]
               },
               "autocomplete": {
@@ -448,6 +449,55 @@
                 "$ref": "#/components/schemas/PasskeySignal"
               }
             }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "type",
+              "name",
+              "label",
+              "checked"
+            ],
+            "properties": {
+              "type": {
+                "const": "option"
+              },
+              "name": {
+                "$ref": "#/components/schemas/FieldName"
+              },
+              "label": {
+                "$ref": "#/components/schemas/Text"
+              },
+              "checked": {
+                "type": "boolean"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "type",
+              "provider",
+              "label",
+              "href"
+            ],
+            "properties": {
+              "type": {
+                "const": "provider"
+              },
+              "provider": {
+                "type": "string"
+              },
+              "label": {
+                "$ref": "#/components/schemas/Text"
+              },
+              "href": {
+                "type": "string",
+                "pattern": "^/"
+              }
+            }
           }
         ]
       },
@@ -466,7 +516,9 @@
           "acknowledged",
           "invitation_code",
           "link_code",
-          "bot_token"
+          "bot_token",
+          "keep_signed_in",
+          "remember_device"
         ]
       },
       "Method": {
@@ -577,7 +629,10 @@
           "error.upstream_owner",
           "error.access_owner",
           "step_up.required",
-          "claim.issuer_says"
+          "claim.issuer_says",
+          "label.keep_signed_in",
+          "label.remember_device",
+          "action.continue_with"
         ]
       },
       "Text": {

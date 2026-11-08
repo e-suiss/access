@@ -380,7 +380,77 @@ fn first_step(kit: &RealmKit, ui: Ui) -> Ui {
     }
 }
 
+/// N5: the step-wide options of a login step (TN-36, X33, X-L2): "Keep me signed in" before
+/// the first factor, the 30-day second-step marker on the second step when the realm allows
+/// it. Neither starts checked.
+fn with_options(kit: &RealmKit, mut ui: Ui) -> Ui {
+    use crate::domain::flow::Step;
+    use crate::domain::node::Node;
+    if !ui.kind.is_login() {
+        return ui;
+    }
+    let option = |name, id: TextId| Node::Option {
+        name,
+        label: id.into(),
+        checked: false,
+    };
+    match ui.step {
+        Step::Identifier | Step::Authenticate => ui
+            .nodes
+            .push(option(FieldName::KeepSignedIn, TextId::KeepSignedInLabel)),
+        Step::SecondFactor if kit.auth.remember_device_days.is_some() => ui
+            .nodes
+            .push(option(FieldName::RememberDevice, TextId::RememberDeviceLabel)),
+        _ => {}
+    }
+    ui
+}
+
+/// Which options `ui` offered, as [`Signin::options`] takes them.
+fn offered_options(ui: &Ui, checked: &Checked) -> (Option<bool>, Option<bool>) {
+    use crate::domain::node::Node;
+    let mut out = (None, None);
+    for n in &ui.nodes {
+        if let Node::Option { name, .. } = n {
+            let on = checked.get(*name) == Some("true");
+            match name {
+                FieldName::KeepSignedIn => out.0 = Some(on),
+                FieldName::RememberDevice => out.1 = Some(on),
+                _ => {}
+            }
+        }
+    }
+    out
+}
+
+/// The path of an issuer URL below its host: empty for a host issuer, `/realms/{slug}` for a
+/// path one (§17.9.6).
+fn issuer_path(issuer: &str) -> &str {
+    let rest = issuer
+        .strip_prefix("https://")
+        .or_else(|| issuer.strip_prefix("http://"))
+        .unwrap_or(issuer);
+    rest.find('/')
+        .and_then(|i| rest.get(i..))
+        .unwrap_or_default()
+        .trim_end_matches('/')
+}
+
+/// The shipped sign-in provider presets, for their names (OP-153 m.3 (l)).
+fn shipped_presets() -> Option<&'static access_identity_federation::domain::preset::Presets> {
+    static PRESETS: std::sync::OnceLock<
+        Option<access_identity_federation::domain::preset::Presets>,
+    > = std::sync::OnceLock::new();
+    PRESETS
+        .get_or_init(|| access_identity_federation::app::presets().ok())
+        .as_ref()
+}
+
 fn shape(kit: &RealmKit, flow: &FlowId, current: &Current) -> Option<Ui> {
+    shape_bare(kit, flow, current).map(|ui| with_options(kit, ui))
+}
+
+fn shape_bare(kit: &RealmKit, flow: &FlowId, current: &Current) -> Option<Ui> {
     let blank = PasskeyOptions::new(json!({}))?;
     let reqs = policy(kit);
     Some(match current {
@@ -425,6 +495,49 @@ where
             .map_err(|_| Reply::problem(SessionError::Corrupt.problem()))
     }
 
+    /// N5: a login step as drawn: its step-wide options and, on the first step, a button for
+    /// each active sign-in provider of the realm (TN-36, X33, OP-153 m.3 (l)). A provider list
+    /// that cannot be read now leaves the buttons out; the step itself is unchanged.
+    async fn drawn(&self, kit: &RealmKit, mut reply: Reply) -> Reply {
+        use crate::domain::flow::Step;
+        use crate::domain::node::Node;
+        let Body::Ui(ui) = &mut reply.body else {
+            return reply;
+        };
+        if !ui.kind.is_login() {
+            return reply;
+        }
+        **ui = with_options(kit, (**ui).clone());
+        if ui.step != Step::Identifier {
+            return reply;
+        }
+        let rows = async {
+            let mut t = access_store::identity::TenantTx::begin(&self.db, kit.tenant, kit.realm)
+                .await?;
+            let rows = t.social_providers().await?;
+            t.commit().await?;
+            Ok::<_, access_store::StoreError>(rows)
+        };
+        let Ok(rows) = rows.await else {
+            return reply;
+        };
+        let base = issuer_path(&kit.issuer);
+        for row in rows.into_iter().filter(|r| r.active) {
+            let name = shipped_presets()
+                .and_then(|p| p.get(&row.preset))
+                .map_or_else(|| row.preset.clone(), |p| p.display_name.clone());
+            ui.nodes.push(Node::Provider {
+                label: crate::domain::message::Text {
+                    id: TextId::ContinueWith,
+                    text: format!("Continue with {name}"),
+                },
+                href: format!("{base}/v1/login/social/{}", row.preset),
+                provider: row.preset,
+            });
+        }
+        reply
+    }
+
     /// `POST /v1/login/flows`: a new flow at the identifier step, with discoverable passkey
     /// options (TN-96, TN-99).
     pub async fn create(&self, entry: &RealmEntry, b: &Browser<'_>) -> Reply {
@@ -433,9 +546,11 @@ where
             Err(r) => return r,
         };
         signin!(self, kit, auth, Some(b.ip));
-        self.start(&auth, &kit, b, None, 201)
+        let reply = self
+            .start(&auth, &kit, b, None, 201, false)
             .await
-            .unwrap_or_else(|r| r)
+            .unwrap_or_else(|r| r);
+        self.drawn(&kit, reply).await
     }
 
     /// `POST /v1/login/step-up`: re-authenticates the live session in place when the
@@ -497,13 +612,14 @@ where
         b: &Browser<'_>,
         identifier: Option<&str>,
         status: u16,
+        keep_signed_in: bool,
     ) -> Result<Reply, Reply> {
         let started = auth
             .identify(&Identify {
                 identifier,
                 device: b.flow,
                 marker: b.marker,
-                keep_signed_in: false,
+                keep_signed_in,
                 remember_device: false,
             })
             .await
@@ -552,9 +668,11 @@ where
             Ok(c) => c,
             Err(r) => return r,
         };
-        self.render(&auth, &kit, &flow, &fref, current, 200)
+        let reply = self
+            .render(&auth, &kit, &flow, &fref, current, 200)
             .await
-            .unwrap_or_else(|r| r)
+            .unwrap_or_else(|r| r);
+        self.drawn(&kit, reply).await
     }
 
     /// `POST /v1/login/flows/{flow}`: one method of the current step. Fields and methods the
@@ -572,9 +690,11 @@ where
             Err(r) => return r,
         };
         signin!(self, kit, auth, Some(b.ip));
-        self.submitted(&auth, &kit, b, handle, submission)
+        let reply = self
+            .submitted(&auth, &kit, b, handle, submission)
             .await
-            .unwrap_or_else(|r| r)
+            .unwrap_or_else(|r| r);
+        self.drawn(&kit, reply).await
     }
 
     async fn submitted<N: Notifier + Sync>(
@@ -594,20 +714,37 @@ where
         if let Current::Done(reply) = current {
             return Ok(reply);
         }
-        let checked: Checked = shape(kit, &flow, &current)
-            .ok_or_else(|| Reply::problem(FLOW_GONE))?
+        let step = shape(kit, &flow, &current).ok_or_else(|| Reply::problem(FLOW_GONE))?;
+        let checked: Checked = step
             .check(submission)
             .map_err(|_| Reply::problem(INVALID_SUBMISSION))?;
+        let (keep, remember) = offered_options(&step, &checked);
+        // TN-36, X33
+        if !matches!(checked.method, Method::Identifier | Method::Restart)
+            && !(checked.method == Method::Password && kit.signin.strict)
+            && (keep.is_some() || remember.is_some())
+        {
+            auth.options(&fref, keep, remember)
+                .await
+                .map_err(|e| failed(&e))?;
+        }
         let field = |name| checked.get(name).unwrap_or_default();
         let corr = b.correlation;
         steps(checked.method);
         let outcome = match (checked.method, &current) {
             (Method::Identifier, _) => {
                 return self
-                    .start(auth, kit, b, Some(field(FieldName::Identifier)), 200)
+                    .start(
+                        auth,
+                        kit,
+                        b,
+                        Some(field(FieldName::Identifier)),
+                        200,
+                        keep == Some(true),
+                    )
                     .await;
             }
-            (Method::Restart, _) => return self.start(auth, kit, b, None, 200).await,
+            (Method::Restart, _) => return self.start(auth, kit, b, None, 200, false).await,
             // OP-153 m.3 (j), TN-96
             (Method::Password, Current::Identifier) if kit.signin.strict => {
                 return self
@@ -617,6 +754,7 @@ where
                         b,
                         field(FieldName::Identifier),
                         field(FieldName::Password),
+                        keep == Some(true),
                     )
                     .await;
             }
@@ -675,13 +813,14 @@ where
         b: &Browser<'_>,
         identifier: &str,
         password: &str,
+        keep_signed_in: bool,
     ) -> Result<Reply, Reply> {
         let started = auth
             .identify(&Identify {
                 identifier: Some(identifier),
                 device: b.flow,
                 marker: b.marker,
-                keep_signed_in: false,
+                keep_signed_in,
                 remember_device: false,
             })
             .await
@@ -706,7 +845,7 @@ where
         if let Outcome::Rejected(Refusal { problem, pad_ms }) = outcome
             && problem.status == 401
         {
-            let mut reply = self.start(auth, kit, b, None, 401).await?;
+            let mut reply = self.start(auth, kit, b, None, 401, false).await?;
             if let Body::Ui(ui) = &mut reply.body {
                 ui.messages.push(Message::error(TextId::LoginFailed));
             }
@@ -714,7 +853,7 @@ where
             return Ok(reply.cookie(started.set_cookie));
         }
         if let Outcome::Throttled { retry_after_s } = outcome {
-            let mut reply = self.start(auth, kit, b, None, 429).await?;
+            let mut reply = self.start(auth, kit, b, None, 429, false).await?;
             if let Body::Ui(ui) = &mut reply.body {
                 let seconds = u32::try_from(retry_after_s).unwrap_or(u32::MAX);
                 ui.messages

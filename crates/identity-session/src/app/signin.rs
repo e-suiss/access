@@ -485,6 +485,38 @@ where
         Ok(Ok(options))
     }
 
+    /// The step-wide options of a submission (TN-36, X33): `Some` for each option the step
+    /// offered, checked or not. Only a login flow keeps them; a gone flow changes nothing and
+    /// the step itself answers for it.
+    ///
+    /// # Errors
+    /// [`SessionError`].
+    pub async fn options(
+        &self,
+        flow: &FlowRef<'_>,
+        keep_signed_in: Option<bool>,
+        remember_device: Option<bool>,
+    ) -> Result<(), SessionError> {
+        let now = self.now();
+        let mut tx = self.begin().await?;
+        let Ok(mut l) = load(&mut tx, flow, now).await? else {
+            return Ok(());
+        };
+        if !matches!(l.state.purpose, Purpose::Login) {
+            return Ok(());
+        }
+        let keep = keep_signed_in.unwrap_or(l.state.keep_signed_in);
+        let remember = remember_device.unwrap_or(l.state.remember_device);
+        if (keep, remember) == (l.state.keep_signed_in, l.state.remember_device) {
+            return Ok(());
+        }
+        l.state.keep_signed_in = keep;
+        l.state.remember_device = remember;
+        save(&mut tx, &l, "open", Resume::Keep).await?;
+        tx.commit().await?;
+        Ok(())
+    }
+
     /// The passkey step (§10.2.4): the ceremony is taken out of the flow before it is
     /// verified, so it is used once.
     ///

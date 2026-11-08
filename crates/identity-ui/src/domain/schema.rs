@@ -46,7 +46,7 @@ fn node() -> Value {
         &json!({
             "name": r("FieldName"),
             "method": r("Method"),
-            "kind": string_enum(&["text", "password", "code"]),
+            "kind": string_enum(&["text", "password", "code", "hidden"]),
             "autocomplete": string_enum(&["username webauthn", "username", "current-password", "one-time-code", "off", "new-password", "email", "name"]),
             "required": { "type": "boolean" },
             "max_length": { "type": "integer", "minimum": 1 },
@@ -98,7 +98,32 @@ fn node() -> Value {
         &json!({ "signal": r("PasskeySignal") }),
         &["signal"],
     );
-    json!({ "oneOf": [input, submit, passkey_get, passkey_autofill, passkey_create, passkey_signal] })
+    let option = variant(
+        "type",
+        "option",
+        &json!({ "name": r("FieldName"), "label": r("Text"), "checked": { "type": "boolean" } }),
+        &["name", "label", "checked"],
+    );
+    let provider = variant(
+        "type",
+        "provider",
+        &json!({
+            "provider": { "type": "string" },
+            "label": r("Text"),
+            "href": { "type": "string", "pattern": "^/" },
+        }),
+        &["provider", "label", "href"],
+    );
+    json!({ "oneOf": [
+        input,
+        submit,
+        passkey_get,
+        passkey_autofill,
+        passkey_create,
+        passkey_signal,
+        option,
+        provider,
+    ] })
 }
 
 fn signal() -> Value {

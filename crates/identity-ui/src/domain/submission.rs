@@ -143,6 +143,8 @@ impl Ui {
                     read_only: false,
                     ..
                 } if *m == method => Some((*name, *required, *max_length)),
+                // N5: a step-wide option goes with every method of the step (TN-36, X33)
+                Node::Option { name, .. } => Some((*name, false, name.max_length())),
                 _ => None,
             })
             .collect();
@@ -277,6 +279,30 @@ mod tests {
             SubmissionError::Method
         );
         assert_eq!(SubmissionError::Field.problem().status, 400);
+    }
+
+    // TN-36, X33
+    #[test]
+    fn options_go_with_every_method_of_their_step() {
+        let mut ui = Ui::authenticate(flow(), "ada", options(), &[]);
+        ui.nodes.push(Node::Option {
+            name: FieldName::KeepSignedIn,
+            label: crate::domain::message::TextId::KeepSignedInLabel.into(),
+            checked: false,
+        });
+        let ok = ui
+            .check(submit(json!({"method": "password",
+                "fields": {"password": "hunter2hunter2", "keep_signed_in": "true"}})))
+            .unwrap();
+        assert_eq!(ok.get(FieldName::KeepSignedIn), Some("true"));
+        assert!(ui.check(submit(json!({"method": "restart",
+            "fields": {"keep_signed_in": "true"}}))).is_ok());
+        assert_eq!(
+            ui.check(submit(json!({"method": "password",
+                "fields": {"password": "x", "remember_device": "true"}})))
+                .unwrap_err(),
+            SubmissionError::Field
+        );
     }
 
     // OP-64

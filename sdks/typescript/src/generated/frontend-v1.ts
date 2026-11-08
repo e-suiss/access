@@ -900,7 +900,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/sessions/{instance}/end": {
+    "/v1/sessions/{session}/end": {
         parameters: {
             query?: never;
             header?: never;
@@ -909,7 +909,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Ends another device's sign-in: instance.terminate (OP-153 m.3 (y)). */
+        /** Ends another device's sign-in; names the device Instance whose instance.terminate the page then signs (OP-153 m.3 (y)). */
         post: operations["endSignIn"];
         delete?: never;
         options?: never;
@@ -962,6 +962,91 @@ export interface paths {
         put?: never;
         /** Receives CSP reports, 100 a minute per realm (OP-153 m.3 (t)). */
         post: operations["reportCsp"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/login/branding": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The realm's branding record as the hosted pages draw it: name and logo URL (TN-106, OP-153 m.3 (t)). */
+        get: operations["getBranding"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/account/connected-apps/decline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** The person chose not to share: the waiting request goes back to the app with access_denied (X-L8). */
+        post: operations["declineSharing"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/account/methods": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The account's sign-in methods for S11: password, passkeys, authenticator apps, recovery codes (TN-99, OP-148). */
+        get: operations["listSignInMethods"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/account/methods/{credential}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Removes a sign-in method after a recent re-authentication; never the last one (TN-68). */
+        delete: operations["removeSignInMethod"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/account/password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Sets or changes the password after a recent re-authentication; other sign-ins end (TN-50). */
+        put: operations["setPassword"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -2536,7 +2621,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                instance: string;
+                session: string;
             };
             cookie?: never;
         };
@@ -2585,6 +2670,81 @@ export interface operations {
         };
     };
     reportCsp: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            501: components["responses"]["NotYetServed"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    getBranding: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            501: components["responses"]["NotYetServed"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    declineSharing: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            501: components["responses"]["NotYetServed"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    listSignInMethods: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            501: components["responses"]["NotYetServed"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    removeSignInMethod: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                credential: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            501: components["responses"]["NotYetServed"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    setPassword: {
         parameters: {
             query?: never;
             header?: never;
