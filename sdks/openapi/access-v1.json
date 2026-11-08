@@ -3848,7 +3848,7 @@
             "items": {
               "type": "object"
             },
-            "description": "`{exercise, holder, class, horizon_ms, window_ms}`: projections whose contract outlives it."
+            "description": "`{exercise, holder, class, horizon_ms, window_ms, pep, applied_at}`: projections whose contract outlives it; `applied_at` is when its PEP acknowledged applying the revocation, `null` when unknown (E30)."
           },
           "max_exposure_ms": {
             "type": "integer",
@@ -3865,9 +3865,16 @@
             "minimum": 0,
             "description": "Index rows live for an ended Grant (§5.4)."
           },
+          "acknowledged": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            },
+            "description": "`{pep, applied_at, basis}`: PEPs whose authority-state acknowledgement applies the recorded revocation (§9.12.3, E30); a missing PEP is unknown, not unapplied."
+          },
           "aftermath": {
             "type": "object",
-            "description": "`{grants_ending, projections_open, honoured_until_ms, running_copies}` (XI-3)."
+            "description": "`{grants_ending, projections_open, honoured_until_ms, running_copies, confirmed_applied}` (XI-3, E30)."
           },
           "advisory": {
             "const": true

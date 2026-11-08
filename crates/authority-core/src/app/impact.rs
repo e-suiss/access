@@ -161,6 +161,23 @@ pub struct Exposure {
     pub horizon_ms: u64,
     /// How long after the revocation it may be honoured.
     pub window_ms: u64,
+    /// The PEP that asked for it.
+    pub pep: String,
+    /// When that PEP says it applied the revocation, from its authority-state acknowledgement;
+    /// `None` is unknown, not "not applied" (§9.12.3, E30).
+    pub applied_at: Option<u64>,
+}
+
+/// A PEP's acknowledgement that it applied a revocation (§9.12.3, E30): an accepted
+/// `authority_state_ack` Claim whose applied basis position is at or after the revocation.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Acknowledged {
+    /// The PEP.
+    pub pep: String,
+    /// PEP-local time it applied the state.
+    pub applied_at: u64,
+    /// The basis position it applied.
+    pub basis: u64,
 }
 
 /// The aftermath summary of revoke, narrow, suspend and instance terminate (XI-3, §5.1).
@@ -174,6 +191,8 @@ pub struct Aftermath {
     pub honoured_until_ms: Option<u64>,
     /// For an Instance: its running copies, the open projections it holds.
     pub running_copies: u64,
+    /// Open projections whose PEP acknowledged applying the revocation (§9.12.3, E30).
+    pub confirmed_applied: u64,
 }
 
 /// Revocation impact and staleness exposure (§5.4, §16.5.1).
@@ -193,6 +212,8 @@ pub struct RevocationImpact {
     pub index_lag: u64,
     /// Index rows that still say live for an ended Grant (§5.4 orphan tuple counter).
     pub orphan_tuples: u64,
+    /// The PEPs that acknowledged applying it, one entry each, the latest application (E30).
+    pub acknowledged: Vec<Acknowledged>,
     /// The aftermath summary.
     pub aftermath: Aftermath,
 }
@@ -594,6 +615,13 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         let contracts = self.reader.open_contracts(at).await?;
         let (live, _, cursor) = self.live_grant_ids().await?;
         let head = self.head();
+        let acknowledged = self.acknowledged(revoked).await?;
+        let applied = |pep: &str| {
+            acknowledged
+                .iter()
+                .find(|a| a.pep == pep)
+                .map(|a| a.applied_at)
+        };
         let (subtree, exposed, orphan_tuples) = settle(&self.reader, |snap| {
             let subtree = match revoked {
                 Revoked::Grant(g) => subtree(snap, &g),
@@ -613,6 +641,8 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                     class: c.class.clone(),
                     horizon_ms: c.horizon_ms,
                     window_ms: c.horizon_ms.saturating_sub(at),
+                    pep: c.pep.clone(),
+                    applied_at: applied(&c.pep),
                 })
                 .collect();
             let orphans = live.iter().filter(|g| !live_grant(snap, g)).count();
@@ -628,6 +658,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                 Revoked::Instance(_) => n(exposed.len()),
                 Revoked::Grant(_) => 0,
             },
+            confirmed_applied: n(exposed.iter().filter(|e| e.applied_at.is_some()).count()),
         };
         Ok(RevocationImpact {
             revoked,
@@ -637,8 +668,79 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             exposed,
             index_lag: head.saturating_sub(cursor),
             orphan_tuples,
+            acknowledged,
             aftermath,
         })
+    }
+
+    /// The authority-state acknowledgements of `revoked` once it is recorded (§9.12.3, E30):
+    /// accepted, current `authority_state_ack` Claims whose applied basis position is at or after
+    /// the ending record, the latest per PEP. Empty before the revocation is recorded. An ack
+    /// changes no decision (INV-21); it only feeds this view.
+    async fn acknowledged(&self, revoked: Revoked) -> Result<Vec<Acknowledged>, CoreError> {
+        use access_kernel::claim::body::{self as claim_body, Body, Class};
+        use access_kernel::model::EqValue;
+        let class = Class::AuthorityStateAck.name();
+        let mut prefix = claim::member_prefix(&class, &Id([0; 16]));
+        prefix.truncate(prefix.len().saturating_sub(17));
+        let (ended, acks) = settle(&self.reader, |snap| {
+            let ended = match revoked {
+                Revoked::Grant(g) => read::<GrantState>(snap, kind::GRANT, &g)
+                    .and_then(|s| s.ended)
+                    .map(|e| e.at),
+                Revoked::Instance(i) => read::<meta::InstanceState>(snap, kind::INSTANCE, &i)
+                    .and_then(|s| s.ended)
+                    .map(|e| e.at),
+            };
+            let acks: Vec<access_kernel::claim::Statement> = snap
+                .scan(&prefix)
+                .into_iter()
+                .filter_map(|(_, v)| Id::from_value(&v).ok())
+                .filter_map(|id| {
+                    snap.get(&meta::key(kind::CLAIM, &id))
+                        .and_then(|v| ClaimState::from_value(&v).ok())
+                })
+                .filter(|s| s.ended.is_none())
+                .map(|s| s.statement)
+                .collect();
+            (ended, acks)
+        })
+        .await?;
+        let Some(ended) = ended else {
+            return Ok(Vec::new());
+        };
+        let mut out: Vec<Acknowledged> = Vec::new();
+        for s in acks {
+            let Some(EqValue::Bytes(d)) = &s.value else {
+                continue;
+            };
+            let Ok(d) = <[u8; 32]>::try_from(d.as_slice()) else {
+                continue;
+            };
+            let Some(bytes) = self.reader.proof(&d).await? else {
+                continue;
+            };
+            let Ok(Some(Body::AuthorityStateAck(a))) = claim_body::check(&s, Some(&bytes)) else {
+                continue;
+            };
+            if a.basis < ended {
+                continue;
+            }
+            match out.iter_mut().find(|o| o.pep == a.pep) {
+                Some(o) if o.applied_at >= a.applied_at => {}
+                Some(o) => {
+                    o.applied_at = a.applied_at;
+                    o.basis = a.basis;
+                }
+                None => out.push(Acknowledged {
+                    pep: a.pep,
+                    applied_at: a.applied_at,
+                    basis: a.basis,
+                }),
+            }
+        }
+        out.sort();
+        Ok(out)
     }
 
     /// What `compromised` may have touched inside `window` (SEC15, RR-13, §16.5.1): the

@@ -238,6 +238,7 @@ impl Reader for PgReader {
                 holder: Id(c.holder),
                 class: c.class,
                 horizon_ms: c.horizon_ms,
+                pep: c.pep,
             })
             .collect())
     }

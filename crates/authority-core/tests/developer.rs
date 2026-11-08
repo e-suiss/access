@@ -1072,3 +1072,181 @@ async fn the_domains_accepted_tenant_actions_are_read_with_their_schema() {
         );
     }
 }
+
+/// BOB's authority-state acknowledgement as `pep` of the state at `basis`, applied at
+/// `applied_at` (§9.12.3).
+fn ack(
+    d: Digest,
+    pep: &str,
+    basis: u64,
+    applied_at: u64,
+) -> access_internal_api::claims::ClaimSubmission {
+    use access_kernel::claim::body::{AckEvent, AckScope, AuthorityStateAck, Body, Class};
+    let body = Body::AuthorityStateAck(AuthorityStateAck {
+        pep: pep.to_owned(),
+        event: AckEvent::Exercise(Digest([9; 32])),
+        applied_at,
+        clock_evidence: None,
+        basis,
+        scope: BTreeSet::from([AckScope::Cache]),
+    });
+    let v = body.to_value();
+    let digest = access_kernel::claim::body::body_digest(Class::AuthorityStateAck, &v).unwrap();
+    let statement = access_kernel::claim::Statement {
+        domain: d,
+        issuer: BOB,
+        subject: BOB,
+        class: "authority_state_ack".to_owned(),
+        value: Some(access_kernel::model::EqValue::Bytes(digest.to_vec())),
+        issued_at: NOW,
+        validity: Window {
+            from: 0,
+            until: 1_000_000,
+        },
+        assurance: BTreeMap::new(),
+        bound_intent: None,
+        bound_instance: None,
+        bound_resource: None,
+        supersedes: None,
+    };
+    let payload = statement.to_bytes().unwrap();
+    let prot = dcbor::encode(
+        &Value::Map(vec![
+            (Value::Unsigned(ALG), Value::int(-19)),
+            (
+                Value::Unsigned(CT),
+                Value::text(access_kernel::claim::CONTENT_TYPE),
+            ),
+            (
+                Value::Unsigned(KID),
+                Value::Bytes(thumbprint(&public(BOB_KEY)).to_vec()),
+            ),
+        ]),
+        Limits::CEILING,
+    )
+    .unwrap();
+    let sig = signing(BOB_KEY)
+        .sign(&to_be_signed(&prot, &payload).unwrap())
+        .to_bytes();
+    let cose = dcbor::encode(
+        &Value::Array(vec![
+            Value::Bytes(prot),
+            Value::Map(Vec::new()),
+            Value::Bytes(payload),
+            Value::Bytes(sig.to_vec()),
+        ]),
+        Limits::CEILING,
+    )
+    .unwrap();
+    access_internal_api::claims::ClaimSubmission {
+        domain: d,
+        carrier: access_internal_api::claims::Carrier::Cose,
+        claim: [vec![0xd2], cose].concat(),
+        body: Some(dcbor::encode(&v, Limits::CEILING).unwrap()),
+        evidence: None,
+    }
+}
+
+/// The domain of [`genesis`] that also accepts BOB's `authority_state_ack` Claims.
+async fn with_ack_issuer(db: &TestDb) -> (Core, Digest) {
+    let sorted = |mut m: Vec<(Value, Value)>| {
+        m.sort_by_key(|(k, _)| dcbor::encode(k, Limits::CEILING).unwrap());
+        Value::Map(m)
+    };
+    let accepts = sorted(vec![
+        (Value::text("use"), Value::text("predicate-input")),
+        (Value::text("issuer"), BOB.to_value()),
+        (
+            Value::text("classes"),
+            Value::Array(vec![Value::text("authority_state_ack")]),
+        ),
+        (Value::text("subject"), SubjectSelector::Public.to_value()),
+        (
+            Value::text("validity"),
+            Value::Array(vec![Value::Unsigned(0), Value::Unsigned(1_000_000)]),
+        ),
+    ]);
+    let mut list = vec![shop_schemas(), accepts];
+    list.sort_by_key(|v| dcbor::encode(v, Limits::CEILING).unwrap());
+    let mut g = genesis();
+    g.insert(
+        "acceptances".to_owned(),
+        Opened {
+            value: Value::Array(list),
+            salt: [3; 32],
+        },
+    );
+    let d = create_genesis(&db.sequencer, TENANT, g, 1_000)
+        .await
+        .unwrap();
+    let log = PgLog::new(db.sequencer.clone(), d, TENANT, "t".to_owned(), TTL);
+    let leader = Leader::acquire(log, d, EventKey::new(Secret::new([5; 32])))
+        .await
+        .unwrap();
+    let reader = PgReader::new(db.app.clone(), DomainId::from_bytes(d.0));
+    (Authority::new(leader, reader, binding(), Counter(0), d), d)
+}
+
+// E15, §9.12.3, §7.9.8.3, E30, INV-21: a PEP's authority-state acknowledgement of a state at or
+// after a recorded revocation feeds its staleness exposure view; an older one, or any before the
+// revocation is recorded, does not
+#[tokio::test]
+async fn authority_state_acks_feed_the_revocation_view() {
+    let db = fresh().await.unwrap();
+    let (mut core, d) = with_ack_issuer(&db).await;
+    onboard(&mut core, d, ROOT, ROOT_KEY, (1, 2)).await;
+    onboard(&mut core, d, ALICE, ALICE_KEY, (3, 4)).await;
+    onboard(&mut core, d, BOB, BOB_KEY, (5, 6)).await;
+    define(&mut core, d, 9, &role_set(&["read"], &[])).await;
+    let (grant, _) = clerk_grant(&mut core, d, 10).await;
+
+    let admitted = |v: &access_internal_api::claims::ClaimVerdict| {
+        matches!(
+            v,
+            access_internal_api::claims::ClaimVerdict::Admitted { .. }
+        )
+    };
+    let early = core
+        .ingest(&ack(d, "pep.early", 2, NOW), NOW)
+        .await
+        .unwrap();
+    assert!(admitted(&early.verdict), "{early:?}");
+    let before = core
+        .revocation_impact(Revoked::Grant(grant), NOW)
+        .await
+        .unwrap();
+    assert!(before.acknowledged.is_empty());
+    assert_eq!(before.aftermath.confirmed_applied, 0);
+
+    let shop = ExerciseBasis::Anchor(meta::object_id(&d, kind::ANCHOR, 1));
+    let revoked = send(
+        &mut core,
+        meta_request(d, 12, shop, Payload::GrantRevoke { grant }),
+        ROOT_KEY,
+    )
+    .await
+    .unwrap();
+    allowed(&revoked);
+    let at = revoked.record.unwrap();
+    for (pep, basis, applied) in [
+        ("pep.stale", at - 1, NOW + 1),
+        ("pep.applied", at, NOW + 2),
+        ("pep.applied", at + 1, NOW + 5),
+    ] {
+        let v = core
+            .ingest(&ack(d, pep, basis, applied), NOW)
+            .await
+            .unwrap();
+        assert!(admitted(&v.verdict), "{v:?}");
+    }
+    let after = core
+        .revocation_impact(Revoked::Grant(grant), NOW)
+        .await
+        .unwrap();
+    let peps: Vec<(&str, u64)> = after
+        .acknowledged
+        .iter()
+        .map(|a| (a.pep.as_str(), a.applied_at))
+        .collect();
+    assert_eq!(peps, [("pep.applied", NOW + 5)]);
+}

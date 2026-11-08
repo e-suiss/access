@@ -180,6 +180,8 @@ pub struct OpenContract {
     pub class: String,
     /// The contract's horizon, milliseconds.
     pub horizon_ms: u64,
+    /// The PEP that asked for the projection.
+    pub pep: String,
 }
 
 /// Whether a restriction policy change moved authority (§5.8, OP-105), as the control-plane

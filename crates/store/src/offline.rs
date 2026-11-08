@@ -408,6 +408,8 @@ pub struct OpenContract {
     pub class: String,
     /// The contract's horizon, milliseconds.
     pub horizon_ms: u64,
+    /// The PEP that asked for the projection.
+    pub pep: String,
 }
 
 /// The projections whose horizon is after `at` and whose family is not revoked, in
@@ -422,7 +424,7 @@ pub async fn open_at(
 ) -> Result<Vec<OpenContract>, StoreError> {
     let mut t = DomainTx::begin(pool, domain).await?;
     let rows = sqlx::query!(
-        "SELECT c.exercise_id, c.holder_id, c.class, c.horizon_ms
+        "SELECT c.exercise_id, c.holder_id, c.class, c.horizon_ms, c.pep
            FROM access.projection_contract c
           WHERE c.domain_id = $1 AND c.horizon_ms > $2
             AND NOT EXISTS (SELECT 1 FROM access.projection_family f
@@ -444,6 +446,7 @@ pub async fn open_at(
                 holder: bytes(&r.holder_id)?,
                 class: r.class,
                 horizon_ms: unsigned(r.horizon_ms)?,
+                pep: r.pep,
             })
         })
         .collect()

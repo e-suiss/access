@@ -150,8 +150,15 @@ fn revocation(r: &RevocationImpact) -> Out {
                 "class": e.class,
                 "horizon_ms": e.horizon_ms,
                 "window_ms": e.window_ms,
+                "pep": e.pep,
+                "applied_at": e.applied_at,
             })
         })
+        .collect();
+    let acknowledged: Vec<Out> = r
+        .acknowledged
+        .iter()
+        .map(|a| json!({ "pep": a.pep, "applied_at": a.applied_at, "basis": a.basis }))
         .collect();
     json!({
         "type": "revocation_impact",
@@ -162,11 +169,13 @@ fn revocation(r: &RevocationImpact) -> Out {
         "max_exposure_ms": r.max_exposure_ms,
         "index_lag": r.index_lag,
         "orphan_tuples": r.orphan_tuples,
+        "acknowledged": acknowledged,
         "aftermath": {
             "grants_ending": r.aftermath.grants_ending,
             "projections_open": r.aftermath.projections_open,
             "honoured_until_ms": r.aftermath.honoured_until_ms,
             "running_copies": r.aftermath.running_copies,
+            "confirmed_applied": r.aftermath.confirmed_applied,
         },
         "advisory": true,
     })

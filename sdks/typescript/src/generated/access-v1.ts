@@ -975,7 +975,7 @@ export interface components {
             at: number;
             /** @description Grants that end with it. */
             subtree: string[];
-            /** @description `{exercise, holder, class, horizon_ms, window_ms}`: projections whose contract outlives it. */
+            /** @description `{exercise, holder, class, horizon_ms, window_ms, pep, applied_at}`: projections whose contract outlives it; `applied_at` is when its PEP acknowledged applying the revocation, `null` when unknown (E30). */
             exposed: Record<string, never>[];
             /** @description The longest window. */
             max_exposure_ms?: number;
@@ -983,7 +983,9 @@ export interface components {
             index_lag?: number;
             /** @description Index rows live for an ended Grant (§5.4). */
             orphan_tuples: number;
-            /** @description `{grants_ending, projections_open, honoured_until_ms, running_copies}` (XI-3). */
+            /** @description `{pep, applied_at, basis}`: PEPs whose authority-state acknowledgement applies the recorded revocation (§9.12.3, E30); a missing PEP is unknown, not unapplied. */
+            acknowledged?: Record<string, never>[];
+            /** @description `{grants_ending, projections_open, honoured_until_ms, running_copies, confirmed_applied}` (XI-3, E30). */
             aftermath: Record<string, never>;
             /** @constant */
             advisory: true;

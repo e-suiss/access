@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT c.exercise_id, c.holder_id, c.class, c.horizon_ms\n           FROM access.projection_contract c\n          WHERE c.domain_id = $1 AND c.horizon_ms > $2\n            AND NOT EXISTS (SELECT 1 FROM access.projection_family f\n                             WHERE f.domain_id = c.domain_id\n                               AND f.family_id = substring(c.exercise_id from 1 for 16)\n                               AND f.revoked_at IS NOT NULL)\n          ORDER BY c.exercise_id LIMIT $3",
+  "query": "SELECT c.exercise_id, c.holder_id, c.class, c.horizon_ms, c.pep\n           FROM access.projection_contract c\n          WHERE c.domain_id = $1 AND c.horizon_ms > $2\n            AND NOT EXISTS (SELECT 1 FROM access.projection_family f\n                             WHERE f.domain_id = c.domain_id\n                               AND f.family_id = substring(c.exercise_id from 1 for 16)\n                               AND f.revoked_at IS NOT NULL)\n          ORDER BY c.exercise_id LIMIT $3",
   "describe": {
     "columns": [
       {
@@ -46,6 +46,17 @@
             "name": "horizon_ms"
           }
         }
+      },
+      {
+        "ordinal": 4,
+        "name": "pep",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "access.projection_contract",
+            "name": "pep"
+          }
+        }
       }
     ],
     "parameters": {
@@ -59,8 +70,9 @@
       false,
       false,
       false,
+      false,
       false
     ]
   },
-  "hash": "49a87406c6c93addc6338b0e08f0e043e71c52ee836ba0d38569b48aca0df617"
+  "hash": "fa53ff46f4b4d938ce7eb715a8fbb94d261b40537f65ff1aa8a74a34296d35c8"
 }

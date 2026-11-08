@@ -8,7 +8,9 @@
     reason = "test code; the request-path lints (OP-3) do not apply"
 )]
 
-use access_authority_core::app::impact::{Aftermath, Compromised, RevocationImpact, Revoked};
+use access_authority_core::app::impact::{
+    Acknowledged, Aftermath, Compromised, Exposure, RevocationImpact, Revoked,
+};
 use access_authority_core::app::publishing::{Diff, Notes, Offer, Standing};
 use access_authority_core::query::{Change, Hit, Query, Report};
 use access_http::adp::domain::{decode_search, encode_search};
@@ -170,12 +172,26 @@ fn a_revocation_report_carries_exposure_and_aftermath() {
         revoked: Revoked::Instance(Id([4; 16])),
         at: 100,
         subtree: Vec::new(),
-        exposed: Vec::new(),
-        max_exposure_ms: 0,
+        exposed: vec![Exposure {
+            exercise: Digest([5; 32]),
+            holder: Id([6; 16]),
+            class: "offline".to_owned(),
+            horizon_ms: 900,
+            window_ms: 800,
+            pep: "pos-7".to_owned(),
+            applied_at: Some(150),
+        }],
+        max_exposure_ms: 800,
         index_lag: 2,
         orphan_tuples: 1,
+        acknowledged: vec![Acknowledged {
+            pep: "pos-7".to_owned(),
+            applied_at: 150,
+            basis: 12,
+        }],
         aftermath: Aftermath {
             running_copies: 3,
+            confirmed_applied: 1,
             ..Aftermath::default()
         },
     };
@@ -188,5 +204,10 @@ fn a_revocation_report_carries_exposure_and_aftermath() {
     assert_eq!(r["orphan_tuples"], 1);
     assert_eq!(r["index_lag"], 2);
     assert_eq!(r["aftermath"]["running_copies"], 3);
+    // E15, E30: the PEPs that acknowledged applying it, per exposure and in the aftermath
+    assert_eq!(r["exposed"][0]["pep"], "pos-7");
+    assert_eq!(r["exposed"][0]["applied_at"], 150);
+    assert_eq!(r["acknowledged"][0]["basis"], 12);
+    assert_eq!(r["aftermath"]["confirmed_applied"], 1);
     assert_eq!(r["revoked"]["instance"], b64url_encode(&[4; 16]));
 }
