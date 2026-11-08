@@ -242,7 +242,6 @@ mod tests {
         let mx = answer(7, 0, &[(MX, &[0, 10, 4, b'm', b'a', b'i', b'l', 0xC0, 12])]);
         assert_eq!(read(&mx, 7, MX), Answer::Records { usable: true });
         assert_eq!(decide(read(&mx, 7, MX), &[]), Deliverability::Deliverable);
-        // RFC 7505
         let null = answer(7, 0, &[(MX, &[0, 0, 0])]);
         assert_eq!(
             decide(read(&null, 7, MX), &[]),
@@ -254,7 +253,6 @@ mod tests {
         assert_eq!(decide(read(&servfail, 7, MX), &[]), Deliverability::Unknown);
         let empty = answer(7, 0, &[]);
         assert_eq!(read(&empty, 7, MX), Answer::NoData);
-        // RFC 5321 §5.1
         let a = answer(7, 0, &[(A, &[192, 0, 2, 1])]);
         assert_eq!(
             decide(Answer::NoData, &[read(&a, 7, A), Answer::NoData]),

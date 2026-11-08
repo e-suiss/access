@@ -2002,6 +2002,59 @@ async fn enumeration_parity_on_login() {
     assert_eq!(right[0], wrong[0]);
 }
 
+// 3662, 4091, 4107, X-L11, X34, CR-40, TN-76, OP-153 m.11 (b)
+#[tokio::test]
+async fn a_deleted_account_cannot_be_told_from_one_that_never_existed() {
+    use access_identity_account::app::privacy::{DeletionSource, request_deletion, tombstone_due};
+    use access_identity_account::ports::{AccountDb as _, AccountTx as _};
+    let e = env(37, "del-a", AuthPolicy::DEFAULT).await;
+    let gone = e.account("gone@example.com").await;
+    let pg = PgAccounts::sealed(e.db.app.clone(), e.kit.vault());
+    let mut tx = pg.begin(e.tenant, e.realm).await.unwrap();
+    request_deletion(
+        &mut tx,
+        &e.realm(),
+        gone,
+        DeletionSource::SelfService,
+        None,
+        0,
+        &ADMIN,
+    )
+    .await
+    .unwrap();
+    tx.commit().await.unwrap();
+    assert_eq!(tombstone_due(&pg, &e.realm(), &ADMIN).await.unwrap(), 1);
+    let who = ["gone@example.com", "never@example.com"];
+    let (mut identified, mut wrong, mut right) = (Vec::new(), Vec::new(), Vec::new());
+    for (i, w) in who.iter().enumerate() {
+        let mut b = e.browser(&format!("del{i}"));
+        let at = b.identify(w).await;
+        identified.push(masked(&at));
+        let bad = b
+            .submit(&at, "password", json!({ "password": "not the one" }))
+            .await;
+        wrong.push(masked(&bad));
+        e.advance(2_000);
+        let good = b.submit(&bad, "password", json!({ "password": PW })).await;
+        right.push(masked(&good));
+    }
+    for set in [&identified, &wrong, &right] {
+        assert_eq!(set[0], set[1]);
+    }
+    assert_eq!(right[0].0, 401);
+    let mut signed_up = Vec::new();
+    for (i, w) in who.iter().enumerate() {
+        let mut b = e.browser(&format!("del-su{i}"));
+        signed_up.push(masked(&b.register(w).await));
+    }
+    assert_eq!(signed_up[0], signed_up[1]);
+    assert_eq!(signed_up[0].0, 200);
+    // OP-153 m.11 (b)
+    let sent = e.sent();
+    assert_eq!(sent.len(), 1, "a retired address hears nothing: {sent:?}");
+    assert_eq!(sent[0].0, "relay.message.otp.v1");
+}
+
 fn percentile(sorted: &[u128], p: usize) -> u128 {
     sorted[(sorted.len() - 1) * p / 100]
 }

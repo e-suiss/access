@@ -993,6 +993,47 @@ async fn a_matching_verified_address_never_links_and_the_answer_does_not_tell() 
     );
 }
 
+/// The answer with cookie values, `Date` and the request id masked.
+fn masked(a: &Answer) -> (u16, Vec<(String, String)>, Vec<u8>) {
+    let mut headers: Vec<(String, String)> = a
+        .headers
+        .iter()
+        .filter(|(n, _)| *n != header::DATE && n.as_str() != "x-request-id")
+        .map(|(n, v)| {
+            let v = v.to_str().unwrap();
+            let v = if *n == header::SET_COOKIE {
+                let (name, rest) = v.split_once('=').unwrap();
+                let attrs = rest.split_once(';').map_or("", |(_, a)| a);
+                format!("{name}=*;{attrs}")
+            } else {
+                v.to_owned()
+            };
+            (n.as_str().to_owned(), v)
+        })
+        .collect();
+    headers.sort();
+    (a.status.as_u16(), headers, a.body.clone())
+}
+
+// 4107, 4111, CR-40, TN-96, X34, OP-153 m.15 (a)
+#[tokio::test]
+async fn a_social_sign_in_answers_byte_for_byte_alike_whether_or_not_its_address_is_held() {
+    let e = env(0x47, "soc-p").await;
+    e.enable(Some("own-client")).await;
+    e.account("held@gmail.com").await;
+    let mut answers = Vec::new();
+    for (i, (sub, mail)) in [("g-p1", "held@gmail.com"), ("g-p2", "free@gmail.com")]
+        .into_iter()
+        .enumerate()
+    {
+        e.says(sub, Some((mail, true)));
+        let mut w = e.browser(10 + u8::try_from(i).unwrap());
+        answers.push(masked(&w.social(&e).await));
+    }
+    assert_eq!(answers[0], answers[1]);
+    assert_eq!(answers[0].0, 303);
+}
+
 // §10.2.6, MD-8
 #[tokio::test]
 async fn a_wrong_audience_or_nonce_is_refused_and_nothing_is_created() {

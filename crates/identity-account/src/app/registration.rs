@@ -329,13 +329,14 @@ impl<B: BotSignals, N: Notifier + Sync> Registrar<'_, B, N> {
         let index = self.vault.index_of(&tenant, &realm, email.raw())?;
         let holder = tx.subject_by_identifier(email.raw()).await?;
         let retired = tx.0.identifier_retired(&index, i64_of(req.now_ms)?).await?;
-        let staged = match holder {
+        let status = match holder {
             Some(s) => tx
                 .subject(s, false)
                 .await?
-                .is_some_and(|r| r.status == AccountStatus::Staged.name()),
-            None => false,
+                .and_then(|r| AccountStatus::parse(&r.status)),
+            None => None,
         };
+        let staged = status == Some(AccountStatus::Staged);
         let takes_code = (holder.is_none() && !retired) || staged;
         let code = new_code()?;
         let digest = takes_code.then(|| code_digest(&req.flow_hash, code.expose()));
@@ -370,6 +371,7 @@ impl<B: BotSignals, N: Notifier + Sync> Registrar<'_, B, N> {
             )
             .await?;
         } else if let Some(owner) = holder
+            && status == Some(AccountStatus::Active)
             && account_mail_allowed(&mut tx, &tenant, &realm, owner, req.now_ms).await?
         {
             let since = tx.0.mailbox_since(owner).await?.unwrap_or(1);

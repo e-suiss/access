@@ -1057,3 +1057,97 @@ async fn turning_assisted_recovery_off_leaves_only_the_owners_own_codes() {
         assert_eq!(g.status, StatusCode::UNAUTHORIZED, "{route}: {}", g.json);
     }
 }
+
+/// Deletes `subject` with no window and writes its tombstone, as the retention job does.
+async fn delete_now(c: &super::management::Console, subject: [u8; 16]) {
+    use access_identity_account::app::privacy::{DeletionSource, request_deletion, tombstone_due};
+    use access_identity_account::ports::{AccountDb as _, AccountTx as _};
+    let ids = crate::ids::CellIds::new(c.w.keys.clone()).key().unwrap();
+    let v = super::recovery::vault_of(c);
+    let realm = access_identity_account::app::Realm {
+        tenant: c.route.tenant,
+        realm: c.route.realm,
+        kek: &*v.kek,
+        ids: &ids,
+    };
+    let who = access_identity_account::app::Actor {
+        actor: "test",
+        correlation: "test",
+    };
+    let db =
+        access_identity_account::adapters::pg::PgAccounts::sealed(c.w.db.app.clone(), v.clone());
+    let mut tx = db.begin(realm.tenant, realm.realm).await.unwrap();
+    request_deletion(
+        &mut tx,
+        &realm,
+        subject,
+        DeletionSource::SelfService,
+        None,
+        0,
+        &who,
+    )
+    .await
+    .unwrap();
+    tx.commit().await.unwrap();
+    assert_eq!(tombstone_due(&db, &realm, &who).await.unwrap(), 1);
+}
+
+type Start = (StatusCode, Option<u64>, String, Vec<String>);
+
+async fn neutral_start(app: &axum::Router, who: &str) -> Start {
+    let mut p = Page::default();
+    let mut r = p
+        .call(
+            app,
+            &Method::POST,
+            "/v1/recovery",
+            Some(start_body(who, "registered_code")),
+        )
+        .await;
+    assert!(r.json["attempt"].is_string(), "{}", r.json);
+    r.json["attempt"] = serde_json::Value::from("*");
+    (
+        r.status,
+        r.retry_after,
+        r.json.to_string(),
+        p.jar.keys().cloned().collect(),
+    )
+}
+
+// 4091, 4107, 4110, 4111, 3662, CR-40, TN-54, TN-83, X-L11, OP-153 m.3 (d), (gg)
+#[tokio::test]
+async fn recovery_starts_answer_alike_for_live_unknown_and_deleted_accounts() {
+    let c = console("recovery-parity", false).await;
+    let sent = Recording::default();
+    let app = super::recovery::hosted(&c, sent.clone());
+    account(&c, "live@example.com", true).await;
+    let gone = account(&c, "gone@example.com", true).await;
+    delete_now(&c, gone).await;
+    let mut answers = Vec::new();
+    for who in ["live@example.com", "never@example.com", "gone@example.com"] {
+        answers.push(neutral_start(&app, who).await);
+    }
+    assert_eq!(answers[0], answers[1]);
+    assert_eq!(answers[0], answers[2]);
+    assert_eq!(answers[0].0, StatusCode::CREATED);
+    // TN-83, Ek B 4110
+    let mut limited = Vec::new();
+    for _ in 0..4 {
+        limited.push(neutral_start(&app, "live@example.com").await);
+    }
+    assert!(limited.iter().all(|a| *a == answers[1]), "{limited:?}");
+    assert_eq!(
+        super::recovery::audited(&c, "recovery.start_limited")
+            .await
+            .len(),
+        2,
+        "three starts a day per account, then silence"
+    );
+    let to_live = sent
+        .sent()
+        .iter()
+        .filter(|s| s.to == "live@example.com")
+        .count();
+    assert_eq!(to_live, 3);
+    assert!(sent.sent().iter().all(|s| s.to != "gone@example.com"));
+}
