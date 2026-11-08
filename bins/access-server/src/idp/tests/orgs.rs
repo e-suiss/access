@@ -120,7 +120,7 @@ async fn an_organization_party_is_self_registered_and_never_gets_an_instance() {
             ended: false,
         })
     );
-    // C6: the organization's Party has no Instance, whatever key asks
+    // C6
     let mut r = registration(d, device(), Id(ORG), ORG_KEY, false);
     r.register = None;
     assert_eq!(
@@ -129,7 +129,7 @@ async fn an_organization_party_is_self_registered_and_never_gets_an_instance() {
             code: String::from("denied")
         }
     );
-    // OP-153 m.10 (e): a Party that is not an organization does not become one
+    // OP-153 m.10 (e)
     let create = |party: [u8; 16]| {
         compile(
             Op::CreateOrganization,
@@ -147,7 +147,7 @@ async fn an_organization_party_is_self_registered_and_never_gets_an_instance() {
         refused(&w, &as_founder(at, d, create([0x0b; 16]), 2, founder)).await,
         Invalid::NotOrganization
     );
-    // OP-153 m.3 (o), HL-41: a founder creates at most five organizations a day
+    // OP-153 m.3 (o), HL-41
     let mut t = TenantTx::begin(&w.db.app, at.0, at.1).await.unwrap();
     for i in 0..5u8 {
         let org = t
@@ -324,7 +324,7 @@ async fn an_invitation_is_committed_mailed_limited_and_revoked() {
         "role": "member",
         "role_version": 1,
     });
-    // TN-89: the change names the invitee by digest only; the address never enters the intent
+    // TN-89
     let change = invite(&w, &body);
     assert!(!format!("{change:?}").contains("acme.example"));
     written(
@@ -339,10 +339,10 @@ async fn an_invitation_is_committed_mailed_limited_and_revoked() {
     assert_eq!(listed[0].invitee_domain, "acme.example");
     assert_eq!(listed[0].role, (String::from("member"), 1));
     t.commit().await.unwrap();
-    // OP-153 m.3 (o): the mail goes through Relay in the same transaction
+    // OP-153 m.3 (o)
     realm_events(&w, at.1, "relay.message.invitation.v1", 1).await;
 
-    // TN-89: lifetime at most 30 days, a role version
+    // TN-89
     for bad in [
         json!({ "email": "x@acme.example", "inviter_name": "A", "role": "member", "role_version": 1, "days": 31 }),
         json!({ "email": "x@acme.example", "inviter_name": "A", "role": "member", "role_version": 0 }),
@@ -371,7 +371,7 @@ async fn an_invitation_is_committed_mailed_limited_and_revoked() {
         Invalid::NoInvitation
     );
 
-    // HL-39, OP-153 m.3 (o): at most 50 invitations an hour per organization
+    // HL-39, OP-153 m.3 (o)
     let mut t = TenantTx::begin(&w.db.app, at.0, at.1).await.unwrap();
     for i in 0..49u8 {
         t.insert_invitation(&access_store::orgs::NewInvitation {
@@ -451,7 +451,7 @@ async fn home_realm_discovery_needs_a_verified_uncontested_domain() {
         t.hrd_domains(org).await.unwrap(),
         vec![String::from("acme.example")]
     );
-    // TN-90: a second organization's claim of the domain locks it
+    // TN-90
     let other = t
         .insert_org([0x0d; 16], "Not Acme", &[4; 32])
         .await

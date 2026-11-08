@@ -254,7 +254,7 @@ where
             Ok(false) => return Reply::problem(INVITATION_GONE),
             Err(e) => return store_failed(&e),
         }
-        // TN-89 (10), OP-153 m.3 (o): never owner at first acceptance
+        // TN-89 (10), OP-153 m.3 (o)
         if let Err(e) = t
             .insert_membership(
                 org.id,

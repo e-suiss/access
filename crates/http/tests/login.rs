@@ -3249,8 +3249,7 @@ async fn an_invitation_is_read_without_consuming_it_and_accepted_by_its_invitee(
     .await;
     let path = format!("/v1/invitations/{token}");
 
-    // TN-89 (8), (9): no session needed, never sent on as a referrer, and a scanner's fetch is
-    // counted and consumes nothing
+    // TN-89 (8), (9)
     let mut scanner = e.browser("s");
     for _ in 0..2 {
         let a = scanner.get(&path).await;
@@ -3269,14 +3268,14 @@ async fn an_invitation_is_read_without_consuming_it_and_accepted_by_its_invitee(
         StatusCode::UNAUTHORIZED
     );
 
-    // TN-89 (5): only the invitee's verified identifier accepts it
+    // TN-89 (5)
     let mut m = e.browser("m");
     assert_eq!(m.sign_in("mallory@evil.example").await.step(), "complete");
     let a = m.post(&path, Some(json!({ "confirm": true }))).await;
     assert_eq!(a.status, StatusCode::FORBIDDEN);
     assert_eq!(a.json()["code"], "invitation-mismatch");
 
-    // TN-89 (10): an invitee domain the organization has not verified needs a confirmation
+    // TN-89 (10)
     let mut b = e.browser("a");
     assert_eq!(b.sign_in("alice@acme.example").await.step(), "complete");
     let a = b.post(&path, Some(json!({}))).await;
@@ -3284,7 +3283,7 @@ async fn an_invitation_is_read_without_consuming_it_and_accepted_by_its_invitee(
     assert_eq!(a.json()["organization"]["display_name"], "Acme");
     let a = b.post(&path, Some(json!({ "confirm": true }))).await;
     assert_eq!(a.status, StatusCode::OK, "{:?}", a.json());
-    // TN-89 (10), OP-153 m.3 (o): never owner at first acceptance
+    // TN-89 (10), OP-153 m.3 (o)
     assert_eq!(a.json()["owner"], false);
     let mine = b.get("/v1/account/organizations").await;
     assert_eq!(mine.status, StatusCode::OK);
@@ -3293,14 +3292,13 @@ async fn an_invitation_is_read_without_consuming_it_and_accepted_by_its_invitee(
     assert_eq!(items[0]["source"], "invite");
     assert_eq!(items[0]["owner"], false);
     assert_eq!(items[0]["role"]["version"], 1);
-    // accepted once
     assert_eq!(
         b.post(&path, Some(json!({ "confirm": true }))).await.status,
         StatusCode::NOT_FOUND
     );
     assert_eq!(scanner.get(&path).await.status, StatusCode::NOT_FOUND);
 
-    // TN-90: an access request is asked once
+    // TN-90
     let ask = format!(
         "/v1/organizations/{}/access-requests",
         b64url_encode(&[0x0a; 16])
@@ -3319,7 +3317,7 @@ async fn an_invitation_is_read_without_consuming_it_and_accepted_by_its_invitee(
     );
 }
 
-// TN-89 (3), OP-153 m.3 (o): acceptance re-checks the inviter
+// TN-89 (3), OP-153 m.3 (o)
 #[tokio::test]
 async fn an_invitation_from_an_inviter_who_left_grants_nothing() {
     let e = env(0x32, "lg-invite-gone", AuthPolicy::DEFAULT).await;
@@ -3343,7 +3341,7 @@ async fn an_invitation_from_an_inviter_who_left_grants_nothing() {
     t.commit().await.unwrap();
     let mut b = e.browser("a");
     assert_eq!(b.sign_in("alice@acme.example").await.step(), "complete");
-    // TN-89: the magic code is the link's fallback, for its invitee only
+    // TN-89
     let a = b
         .post("/v1/invitations/wxyz2345", Some(json!({ "confirm": true })))
         .await;
@@ -3366,12 +3364,12 @@ async fn home_realm_discovery_routes_by_organization_id_only_when_turned_on() {
     .await;
     let path = format!("/v1/organizations/{}/sign-in", b64url_encode(&[0x0a; 16]));
     let mut b = e.browser("b");
-    // TN-98: off by default
+    // TN-98
     assert_eq!(b.get(&path).await.status, StatusCode::NOT_FOUND);
     let mut t = TenantTx::begin(&e.db.app, e.tenant, e.realm).await.unwrap();
     assert!(t.set_org_hrd(org, true).await.unwrap());
     t.commit().await.unwrap();
-    // §10.2.6: no route for a domain that is not verified
+    // §10.2.6
     assert_eq!(b.get(&path).await.status, StatusCode::NOT_FOUND);
     let mut t = TenantTx::begin(&e.db.app, e.tenant, e.realm).await.unwrap();
     let claim = t
@@ -3389,7 +3387,7 @@ async fn home_realm_discovery_routes_by_organization_id_only_when_turned_on() {
     assert_eq!(a.json()["organization"]["display_name"], "Acme");
     assert_eq!(a.json()["domains"][0], "acme.example");
     assert_eq!(a.json()["confirm"], true);
-    // TN-3: an e-mail domain is never a route
+    // TN-3
     assert_eq!(
         b.get("/v1/organizations/acme.example/sign-in").await.status,
         StatusCode::NOT_FOUND

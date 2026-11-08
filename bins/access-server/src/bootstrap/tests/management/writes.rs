@@ -801,7 +801,7 @@ async fn a_delegated_admin_signs_a_meta_write_on_its_own_holding() {
         .unwrap();
     let target = c.issue_to_founder().await;
     let revoke = serde_json::json!({ "grant_revoke": { "grant": b64url_encode(&target.0) } });
-    // OP-153 m.10 (e), OP-152 m.5 (a): an episode that is not the holder's does not resolve
+    // OP-153 m.10 (e), OP-152 m.5 (a)
     let stale = ExerciseBasis::Holding(kmeta::HoldingRef {
         grant: held,
         holder: c.root,

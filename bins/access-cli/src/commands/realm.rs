@@ -230,7 +230,7 @@ mod tests {
                     .unwrap_or_else(|e| panic!("{name}: {}: {e}", step.resource));
             }
         }
-        // OP-153 m.3 (r): the payment template carries the GKD rules it cannot express yet
+        // OP-153 m.3 (r)
         let tr = parse(TEMPLATES[9].1).unwrap();
         assert!(tr.notes.iter().any(|n| n.contains("biometrics alone")));
         assert!(tr.notes.iter().any(|n| n.contains("SMS")));
