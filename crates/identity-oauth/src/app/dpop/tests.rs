@@ -310,7 +310,11 @@ fn requests_do_not_print_their_credentials() {
         dpop: &proofs,
     };
     let printed = format!("{request:?} {http:?}");
-    for secret in ["eyJ0eXAi", "at-test-value", "dGVzdC1jbGllbnQ6dGVzdC12YWx1ZQ"] {
+    for secret in [
+        "eyJ0eXAi",
+        "at-test-value",
+        "dGVzdC1jbGllbnQ6dGVzdC12YWx1ZQ",
+    ] {
         assert!(!printed.contains(secret), "{printed}");
     }
     assert!(printed.contains(URI));
