@@ -52,6 +52,73 @@ export function seed(bff: ConsoleMock): void {
       },
     ],
   });
+  bff.admin.set("realms/acme/organizations", {
+    items: [{ organization: id(10), display_name: "Acme <b>Corp</b>", hrd: false }],
+  });
+  bff.admin.set(`realms/acme/organizations/${id(10)}`, {
+    organization: id(10),
+    display_name: "Acme <b>Corp</b>",
+    hrd: true,
+    roots: 1,
+    members: [
+      {
+        account_id: "usr_owner",
+        owner: true,
+        membership_source: "founder",
+        role: null,
+        role_grant: null,
+        cooling_until: null,
+      },
+      {
+        account_id: "usr_dave",
+        owner: false,
+        membership_source: "domain_autojoin",
+        role: { name: "member", version: 2 },
+        role_grant: "pending",
+        cooling_until: "2026-11-08T12:00:00Z",
+      },
+    ],
+    domains: [
+      {
+        domain: "acme.example",
+        method: "dns_txt",
+        verified_at: "2026-11-01T00:00:00Z",
+        reverify_by: "2027-01-30T00:00:00Z",
+        changed_at: null,
+        contested_at: null,
+        autojoin: true,
+        claimed: true,
+      },
+      {
+        domain: "acme.test",
+        method: "https",
+        verified_at: null,
+        reverify_by: null,
+        changed_at: null,
+        contested_at: "2026-11-02T00:00:00Z",
+        autojoin: false,
+        claimed: false,
+      },
+    ],
+    handovers: [
+      {
+        handover: id(11),
+        from: "usr_owner",
+        to: "usr_dave",
+        state: "contributed",
+        effective_at: "2026-11-09T10:00:00Z",
+        dns_recovery: false,
+      },
+    ],
+    connection_drafts: [
+      {
+        protocol: "oidc",
+        issuer: "https://login.acme.example",
+        client_id: "access",
+        drafted_by: id(2),
+      },
+    ],
+  });
   bff.admin.set("realms/acme/upstream-idps", { items: [{ name: "corp", status: "active" }] });
   bff.admin.set("realms/acme/social-providers", {
     items: [
@@ -192,16 +259,20 @@ export function seed(bff: ConsoleMock): void {
         class: "reusable",
         horizon_ms: Date.UTC(2026, 10, 7, 14, 30),
         window_ms: 1_200_000,
+        pep: "shop-gateway",
+        applied_at: null,
       },
     ],
     max_exposure_ms: 1_200_000,
     index_lag: 0,
     orphan_tuples: 0,
+    acknowledged: [{ pep: "ledger-pep", applied_at: Date.UTC(2026, 10, 7, 12, 1), basis: 88 }],
     aftermath: {
       grants_ending: 1,
       projections_open: 1,
       honoured_until_ms: Date.UTC(2026, 10, 7, 18, 0),
       running_copies: 2,
+      confirmed_applied: 0,
     },
     advisory: true,
   };

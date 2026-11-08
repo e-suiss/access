@@ -529,6 +529,22 @@ test("revocation impact shows exposure and never offers undo", async ({ page, bf
   expect(bff.queries.find((q) => q.kind === "revocation-impact")?.query).toEqual({ grant: "g1" });
 });
 
+// §9.12.3, E30, Ek B 3883: where a revocation took effect is each PEP's own report
+test("revocation impact lists where it took effect and calls the rest unknown", async ({
+  page,
+  bff,
+}) => {
+  await open(page, bff, "/console/audit/revocation");
+  await page.getByLabel("Delegation ID").fill("g1");
+  await page.getByRole("button", { name: "Show" }).click();
+  const acks = page.getByTestId("acknowledged");
+  await expect(acks.getByRole("row")).toHaveCount(2);
+  await expect(acks).toContainText("ledger-pep");
+  await expect(acks).toContainText("2026-11-07T12:01:00.000Z");
+  await expect(acks).toContainText("its status is unknown, not");
+  await expect(page.getByTestId("revocation-impact")).toContainText("Not reported — unknown");
+});
+
 // EI-22, RR-13, Ek B 3227, 3362: a missing report is "Result unknown"
 test("unknown outcomes say so", async ({ page, bff }) => {
   await open(page, bff, "/console/audit/unknown");
@@ -564,4 +580,68 @@ test("an export is never sent without a decoded, signed intent", async ({ page, 
     .map((s) => s.path)
     .filter((p) => p === "/proxy/adp/evaluation" || p === "/proxy/adp/audit/export");
   expect(order).toEqual(["/proxy/adp/evaluation", "/proxy/adp/audit/export"]);
+});
+
+// §8.5 S7, §8.17.9.3, TN-91, TN-92, TN-120, Ek B 3735, 3808, 3819, 3821
+test("organizations show roots, membership sources apart from sign-in, domains and handovers", async ({
+  page,
+  bff,
+}) => {
+  await open(page, bff, "/console/admin/organizations");
+  await page.getByRole("button", { name: "Acme <b>Corp</b>" }).click();
+  const o = page.getByTestId("organization");
+  await expect(o.getByRole("heading", { level: 4 })).toHaveText("Acme <b>Corp</b>");
+  await expect(page.getByTestId("org-roots")).toHaveText("1 owners");
+  const members = page.getByTestId("org-members");
+  await expect(members).toContainText("Founded it");
+  await expect(members).toContainText("Domain rule");
+  await expect(members).toContainText("member v2 · waiting for the inviter's signed change");
+  await expect(members).toContainText("protected scope starts 2026-11-08T12:00:00.000Z");
+  await expect(o).toContainText("It is not the sign-in source");
+  await expect(page.getByTestId("org-domains")).toContainText(
+    "another organization claims it too — locked",
+  );
+  await expect(page.getByTestId("org-handovers")).toContainText("Accepted by the recipient");
+  await expect(page.getByTestId("org-dns-recovery")).toContainText(
+    "only when the domain's founding terms declared it",
+  );
+  await expect(page.getByTestId("org-drafts")).toContainText("draft only");
+  await expect(o).toContainText("Who pays is not decided here.");
+  await expect(page.getByText(/transfer/i)).toHaveCount(0);
+});
+
+// §8.5 S7, §8.17.9.1, Ek B 3874: every change grouped by the record that made it
+test("history lists each recorded change under its record and asks nothing", async ({
+  page,
+  bff,
+}) => {
+  await open(page, bff, "/console/admin/history");
+  const h = page.getByTestId("history");
+  await expect(h.locator(":scope > li")).toHaveCount(2);
+  await expect(h).toContainText("Record 42 · 2026-11-07T11:02:00.000Z · by you");
+  await expect(h).toContainText("helpdesk v2");
+  await expect(
+    page.getByRole("main").getByRole("button", { name: /sign|approve|revoke/i }),
+  ).toHaveCount(0);
+});
+
+// §8.6, §8.13, §8.17.9.7, Ek B 3921: containment is one signed change per step
+test("containment proposes each step as its own signed change", async ({ page, bff }) => {
+  await open(page, bff, "/console/audit/containment");
+  await page.getByLabel("Running copy ID").fill("inst");
+  await page.getByLabel("From (Unix ms)").fill("1");
+  await page.getByLabel("Until (Unix ms)").fill("2");
+  await page.getByRole("button", { name: "Show" }).click();
+  const steps = page.getByTestId("containment");
+  await expect(steps.getByRole("listitem")).toHaveCount(1);
+  await expect(steps).toContainText("End running copy");
+  await expect(page.getByRole("button", { name: /stop all|stop everything/i })).toHaveCount(0);
+  expect(bff.metaCommits).toEqual([]);
+  await steps.getByRole("button", { name: "Review and sign" }).click();
+  const dialog = page.getByRole("dialog", { name: "Review and sign" });
+  await expect(dialog).toContainText("access.instance_terminate");
+  await dialog.getByRole("button", { name: "Sign" }).click();
+  await expect(steps).toContainText("Recorded as change");
+  expect(bff.metaCommits).toHaveLength(1);
+  expect(bff.metaCommits[0]?.action).toBe("instance_terminate");
 });

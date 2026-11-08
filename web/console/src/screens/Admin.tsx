@@ -940,3 +940,79 @@ export function Changes({ ctx }: { readonly ctx: Ctx }): ReactElement {
     </>
   );
 }
+
+/**
+ * §8.5 S7, §8.17.9.1, Ek B 3874: the meta-Exercise history. Every allowed meta-Exercise, newest
+ * first, with each object it changed under its record position; an auditor reads every one. It
+ * is information only, like Changes, and no row offers an action.
+ */
+export function History({ ctx }: { readonly ctx: Ctx }): ReactElement {
+  const [rows, setRows] = useState<readonly ChangeRow[]>([]);
+  const [token, setToken] = useState<string | undefined>(undefined);
+  const [l, run] = useRun<SearchAnswer<ChangeRow>>();
+  const more = (after?: string) => {
+    run(() =>
+      search<ChangeRow>(ctx.instance, "changes", {}, after).then((a) => {
+        setRows((r) => (after === undefined ? a.results : [...r, ...a.results]));
+        setToken(a.page.next_token === "" ? undefined : a.page.next_token);
+        return a;
+      }),
+    );
+  };
+  useEffect(() => {
+    more();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const byRecord = new Map<string, ChangeRow[]>();
+  for (const r of rows) {
+    const list = byRecord.get(r.position) ?? [];
+    list.push(r);
+    byRecord.set(r.position, list);
+  }
+  return (
+    <>
+      <p>{t("historyIntro")}</p>
+      <Show l={l}>
+        {() =>
+          byRecord.size === 0 ? (
+            <p>{t("changesNone")}</p>
+          ) : (
+            <ol data-testid="history">
+              {[...byRecord.entries()].map(([position, list]) => (
+                <li key={position}>
+                  <p>
+                    {t("historyRecord", { position, at: at(list[0]?.at) })}
+                    {list.some((r) => r.own) && ` · ${t("changeByYou")}`}
+                  </p>
+                  <ul>
+                    {list.map((r) => (
+                      <li key={`${r.kind}/${r.id}`}>
+                        {t(CHANGE_KINDS[r.kind] ?? "changeKindOther")}{" "}
+                        <span className="mono">
+                          {r.version === undefined || r.version === null
+                            ? r.id
+                            : `${r.id} v${String(r.version)}`}
+                        </span>
+                        {r.ended && ` · ${t("changeEnded")}`}
+                      </li>
+                    ))}
+                  </ul>
+                </li>
+              ))}
+            </ol>
+          )
+        }
+      </Show>
+      {token !== undefined && (
+        <button
+          type="button"
+          onClick={() => {
+            more(token);
+          }}
+        >
+          {t("changesOlder")}
+        </button>
+      )}
+    </>
+  );
+}

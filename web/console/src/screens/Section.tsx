@@ -8,6 +8,7 @@ import { type Screen, SCREENS, type Section } from "../lib/sections.js";
 import * as A from "./Admin.js";
 import * as Au from "./Audit.js";
 import * as D from "./Developer.js";
+import * as O from "./Organizations.js";
 import type { Ctx } from "./parts.js";
 import { SignInSettings } from "./SignInSettings.js";
 
@@ -20,6 +21,8 @@ export const SCREEN_TITLE: Readonly<Record<Screen, Key>> = {
   offboarding: "screenOffboarding",
   domain: "screenDomain",
   changes: "screenChanges",
+  history: "screenHistory",
+  organizations: "screenOrganizations",
   "sign-in": "screenSignIn",
   schemas: "screenSchemas",
   integrations: "screenIntegrations",
@@ -29,6 +32,7 @@ export const SCREEN_TITLE: Readonly<Record<Screen, Key>> = {
   replay: "screenReplay",
   revocation: "screenRevocation",
   unknown: "screenUnknown",
+  containment: "screenContainment",
   export: "screenExport",
 };
 
@@ -62,6 +66,10 @@ function body(screen: Screen, ctx: Ctx): ReactElement {
       return <A.Domain ctx={ctx} />;
     case "changes":
       return <A.Changes ctx={ctx} />;
+    case "history":
+      return <A.History ctx={ctx} />;
+    case "organizations":
+      return <O.Organizations ctx={ctx} />;
     case "sign-in":
       return <SignInSettings ctx={ctx} />;
     case "schemas":
@@ -80,6 +88,9 @@ function body(screen: Screen, ctx: Ctx): ReactElement {
       return <Au.Revocation ctx={ctx} />;
     case "unknown":
       return <Au.Unknown ctx={ctx} />;
+    case "containment":
+      return <Au.Containment ctx={ctx} />;
+
     case "export":
       return <Au.Export ctx={ctx} />;
   }

@@ -184,16 +184,60 @@ export interface RevocationImpact {
     readonly class: string;
     readonly horizon_ms: number;
     readonly window_ms: number;
+    readonly pep?: string;
+    readonly applied_at?: number | null;
   }[];
   readonly max_exposure_ms?: number;
   readonly index_lag?: number;
   readonly orphan_tuples: number;
+  readonly acknowledged?: readonly {
+    readonly pep: string;
+    readonly applied_at: number;
+    readonly basis: number;
+  }[];
   readonly aftermath: {
     readonly grants_ending: number;
     readonly projections_open: number;
     readonly honoured_until_ms: number | null;
     readonly running_copies: number;
+    readonly confirmed_applied?: number;
   };
+}
+
+/**
+ * §9.12.3, E30, Ek B 3883: where a revocation took effect is each decision point's own report;
+ * one that has not reported is unknown, never "not applied", and delivery is not authority.
+ */
+export function Acknowledgements({ r }: { readonly r: RevocationImpact }): ReactElement {
+  const acks = r.acknowledged ?? [];
+  return (
+    <section aria-label={t("revocationAcks")} data-testid="acknowledged">
+      <h5>{t("revocationAcks")}</h5>
+      <p className="hint">{t("revocationAcksIntro")}</p>
+      {acks.length === 0 ? (
+        <p>{t("revocationAcksNone")}</p>
+      ) : (
+        <table>
+          <thead>
+            <tr>
+              <th scope="col">{t("colPep")}</th>
+              <th scope="col">{t("colAppliedAt")}</th>
+              <th scope="col">{t("colBasis")}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {acks.map((a) => (
+              <tr key={a.pep}>
+                <td className="mono">{a.pep}</td>
+                <td>{at(a.applied_at)}</td>
+                <td className="mono">{a.basis}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </section>
+  );
 }
 
 /** §8.17.7.3, §8.17.7.4, §8.10: the impact preview and aftermath lines, each from its owner. */
@@ -214,6 +258,9 @@ export function Aftermath({ r }: { readonly r: RevocationImpact }): ReactElement
         </li>
       )}
       {a.running_copies > 0 && <li>{t("aftermathCopies", { n: String(a.running_copies) })}</li>}
+      {(a.confirmed_applied ?? 0) > 0 && (
+        <li>{t("aftermathConfirmed", { n: String(a.confirmed_applied ?? 0) })}</li>
+      )}
       <li>{t("aftermathRuntime")}</li>
       <li>{t("aftermathHistory")}</li>
     </ul>
@@ -235,6 +282,7 @@ export function RevocationView({ r }: { readonly r: RevocationImpact }): ReactEl
               <th scope="col">{t("unknownPosition")}</th>
               <th scope="col">{t("colHolder")}</th>
               <th scope="col">{t("unknownUntil")}</th>
+              <th scope="col">{t("colPep")}</th>
             </tr>
           </thead>
           <tbody>
@@ -243,6 +291,11 @@ export function RevocationView({ r }: { readonly r: RevocationImpact }): ReactEl
                 <td className="mono">{e.exercise}</td>
                 <td className="mono">{e.holder}</td>
                 <td>{at(e.horizon_ms)}</td>
+                <td>
+                  {e.applied_at === undefined || e.applied_at === null
+                    ? t("exposedUnknown")
+                    : t("exposedApplied", { at: at(e.applied_at) })}
+                </td>
               </tr>
             ))}
           </tbody>
@@ -253,12 +306,14 @@ export function RevocationView({ r }: { readonly r: RevocationImpact }): ReactEl
       )}
       {(r.index_lag ?? 0) > 0 && <p>{t("revocationLag", { n: String(r.index_lag ?? 0) })}</p>}
       {r.orphan_tuples > 0 && <p>{t("revocationOrphans", { n: String(r.orphan_tuples) })}</p>}
+      <Acknowledgements r={r} />
     </article>
   );
 }
 
 export interface CompromiseImpact {
   readonly type: "compromise_impact";
+  readonly instance?: string | null;
   readonly exercises: readonly {
     readonly pos: number;
     readonly intent: string;

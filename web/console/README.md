@@ -88,6 +88,8 @@ control anywhere — each domain accepts only by its own protected change.
 | Admin     | Offboarding                     | keep or revoke for each delegation, no default; end running copies        | §8.17.9.6, E6              |
 | Admin     | Domain                          | constitution, provider, partner authority ceilings                        | §8.17.9.7, §5.13           |
 | Admin     | Changes                         | what changed, at your depth; information only                             | IA-2                       |
+| Admin     | History                         | every recorded change, grouped by the record that made it                 | §8.17.9.1                  |
+| Admin     | Organizations                   | roots, members by membership source, domains, owner handovers, drafts     | §8.5 S7, §12.3.8           |
 | Admin     | Sign-in settings                | settings, branding, RP ID, apps, upstreams, keys, signals, analytics      | E34, TN-17, TN-111, §8.13  |
 | Developer | Namespaces & schemas            | publish a version; "Pending acceptance in: …"; no accept control          | §8.17.10.2, E10–E12, X21   |
 | Developer | Integrations                    | apps, hooks, webhooks                                                     | §8.11                      |
@@ -95,8 +97,9 @@ control anywhere — each domain accepts only by its own protected change.
 | Developer | Logs                            | a recorded event at viewer depth; audit-only chain link warning           | §8.17.10.3, §9.9.2         |
 | Audit     | Records                         | a record at audit depth (`reason_admin`, StateBasis, `basis_ref`); search | OP-151 m.8 (d), (e), (g)   |
 | Audit     | Replay                          | a recorded decision evaluated again; match or mismatch                    | INV-27                     |
-| Audit     | Revocation impact               | `revocation-impact`: subtree, exposure, aftermath                         | §5.4, §8.17.7.3            |
+| Audit     | Revocation impact               | `revocation-impact`: subtree, exposure, aftermath, where it took effect   | §5.4, §8.17.7.3, §9.12.3   |
 | Audit     | Unknown outcomes                | `compromise-impact`: uses in a window, "Result unknown"                   | RR-13, EI-22               |
+| Audit     | Containment                     | each step (end a running copy, revoke) its own signed change              | §8.6, §8.13                |
 | Audit     | Export                          | an `access.audit_export` Exercise, signed here                            | OP-151 m.8 (b)             |
 
 Explanations show a reason by its class and what is needed (§8.17.8); policy content, thresholds
@@ -119,6 +122,7 @@ just wasm                    # the Kernel's WebAssembly build for @esuiss/access
 npm ci
 npm run lint && npm run typecheck
 npm run e2e                  # Playwright: shell, signing, stolen cookie, security, WCAG 2.2 AA
+npm run e2e:live             # @live: against the local deployment's management listener
 ```
 
 The end-to-end tests run against a mock of the BFF that applies the BFF's rules; the BFF itself

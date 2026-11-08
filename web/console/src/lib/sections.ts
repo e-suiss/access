@@ -20,10 +20,12 @@ export const SCREENS = {
     "offboarding",
     "domain",
     "changes",
+    "history",
+    "organizations",
     "sign-in",
   ],
   developer: ["schemas", "integrations", "lab", "logs"],
-  audit: ["records", "replay", "revocation", "unknown", "export"],
+  audit: ["records", "replay", "revocation", "unknown", "containment", "export"],
 } as const satisfies Readonly<Record<Section, readonly string[]>>;
 
 export type Screen = (typeof SCREENS)[Section][number];
@@ -56,6 +58,10 @@ export const PROBES: Readonly<Record<Screen, readonly Probe[]>> = {
   offboarding: [meta("party_depart")],
   domain: [meta("anchor_amend")],
   changes: [meta("grant_issue"), meta("policy_set"), meta("acceptance_amend")],
+  // §8.5 S7, §8.17.9.1, Ek B 3874: every meta-Exercise, which auditors read
+  history: [AUDIT],
+  // §8.5 S7, §12.3.8, Ek B 3735, 3808
+  organizations: [idp("org", "create"), idp("org", "update"), idp("org", "invite")],
   "sign-in": [
     idp("realm", "signin_policy"),
     idp("realm", "branding"),
@@ -71,6 +77,8 @@ export const PROBES: Readonly<Record<Screen, readonly Probe[]>> = {
   replay: [AUDIT],
   revocation: [AUDIT],
   unknown: [AUDIT],
+  // §8.6, Ek B 3921
+  containment: [meta("instance_terminate"), meta("grant_revoke")],
   export: [AUDIT],
 };
 

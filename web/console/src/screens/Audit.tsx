@@ -13,6 +13,7 @@ import {
   search,
   type SearchAnswer,
 } from "../lib/adp.js";
+import { type MetaPayload, type MetaResult, metaWrite } from "../lib/meta.js";
 import { Explanation } from "./Explanation.js";
 import { type Ctx, Field, PageCount, Panel, Show, useRun } from "./parts.js";
 import {
@@ -313,6 +314,145 @@ export function Export({ ctx }: { readonly ctx: Ctx }): ReactElement {
           </>
         )}
       </Show>
+    </>
+  );
+}
+
+interface Proposal {
+  readonly key: string;
+  readonly label: string;
+  readonly payload: MetaPayload;
+}
+
+function proposals(c: CompromiseImpact): readonly Proposal[] {
+  const out: Proposal[] = [];
+  if (c.instance !== undefined && c.instance !== null) {
+    out.push({
+      key: `i:${c.instance}`,
+      label: t("containEndCopy", { id: c.instance }),
+      payload: { instance_terminate: { instance: c.instance } },
+    });
+  }
+  for (const g of c.grants) {
+    out.push({
+      key: `g:${g}`,
+      label: t("containRevoke", { id: g }),
+      payload: { grant_revoke: { grant: g } },
+    });
+  }
+  return out;
+}
+
+function ContainResult({ r }: { readonly r: MetaResult }): ReactElement {
+  if (r.decision) {
+    return <p role="status">{t("containRecorded", { exercise: r.exercise ?? "" })}</p>;
+  }
+  return (
+    <p role="status">{r.outcome === "require_action" ? t("changeHeld") : t("changeRefused")}</p>
+  );
+}
+
+/**
+ * §8.6, §8.13, §8.17.9.7, Ek B 3921: containment from S9. A compromise report lists the uses in
+ * the window; each containment step is its own signed change (an Instance end or a revocation),
+ * proposed one by one and never all at once. An executor that ignores a recorded step gets no
+ * stop-all button either: the remaining steps stay listed as proposals.
+ */
+export function Containment({ ctx }: { readonly ctx: Ctx }): ReactElement {
+  const [instance, setInstance] = useState("");
+  const [from, setFrom] = useState("");
+  const [until, setUntil] = useState("");
+  const [l, run] = useRun<SearchAnswer<CompromiseImpact>>();
+  const [done, setDone] = useState<Readonly<Record<string, MetaResult>>>({});
+  const [w, write] = useRun<MetaResult>();
+  const sign = (p: Proposal) => {
+    write(() =>
+      metaWrite(ctx.instance, ctx.confirm, ctx.instance.party ?? "", p.payload).then((r) => {
+        setDone((d) => ({ ...d, [p.key]: r }));
+        return r;
+      }),
+    );
+  };
+  return (
+    <>
+      <p>{t("containIntro")}</p>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          setDone({});
+          run(() =>
+            search<CompromiseImpact>(ctx.instance, "compromise-impact", {
+              instance,
+              window: { from: Number(from), until: Number(until) },
+            }),
+          );
+        }}
+      >
+        <Field
+          id="con-instance"
+          label={t("unknownKindInstance")}
+          value={instance}
+          onChange={setInstance}
+        />
+        <Field
+          id="con-from"
+          label={t("unknownFrom")}
+          value={from}
+          onChange={setFrom}
+          type="number"
+        />
+        <Field
+          id="con-until"
+          label={t("unknownUntil")}
+          value={until}
+          onChange={setUntil}
+          type="number"
+        />
+        <button type="submit">{t("run")}</button>
+      </form>
+      <Show l={l}>
+        {(a) => (
+          <>
+            {a.results.map((c, i) => {
+              const steps = proposals(c);
+              return (
+                <Panel key={String(i)} id={`contain-${String(i)}`} title={t("containSteps")}>
+                  <CompromiseView c={c} />
+                  {steps.length === 0 ? (
+                    <p>{t("containNothing")}</p>
+                  ) : (
+                    <ul data-testid="containment">
+                      {steps.map((p) => {
+                        const r = done[p.key];
+                        return (
+                          <li key={p.key}>
+                            <span>{p.label}</span>{" "}
+                            {r === undefined ? (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  sign(p);
+                                }}
+                              >
+                                {t("containPropose")}
+                              </button>
+                            ) : (
+                              <ContainResult r={r} />
+                            )}
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                  <p className="hint">{t("containRestriction")}</p>
+                  <p className="hint">{t("containIgnored")}</p>
+                </Panel>
+              );
+            })}
+          </>
+        )}
+      </Show>
+      {w.status === "failed" && <p role="alert">{t(w.key)}</p>}
     </>
   );
 }
