@@ -50,6 +50,8 @@ export interface components {
             version: 1;
             flow: components["schemas"]["FlowId"];
             /** @enum {string} */
+            kind?: "login" | "registration" | "recovery" | "settings" | "consent" | "invitation" | "link";
+            /** @enum {string} */
             step: "identifier" | "authenticate" | "second_factor" | "complete";
             action: string;
             requirements: components["schemas"]["RequirementStatus"][];
@@ -72,7 +74,7 @@ export interface components {
             /** @enum {string} */
             kind: "text" | "password" | "code";
             /** @enum {string} */
-            autocomplete: "username webauthn" | "username" | "current-password" | "one-time-code" | "off";
+            autocomplete: "username webauthn" | "username" | "current-password" | "one-time-code" | "off" | "new-password" | "email" | "name";
             required: boolean;
             max_length: number;
             label: components["schemas"]["Text"];
@@ -106,11 +108,11 @@ export interface components {
             signal: components["schemas"]["PasskeySignal"];
         };
         /** @enum {string} */
-        FieldName: "identifier" | "password" | "totp_code" | "recovery_code" | "passkey_credential" | "email_code";
+        FieldName: "identifier" | "password" | "totp_code" | "recovery_code" | "passkey_credential" | "email_code" | "email" | "new_password" | "display_name" | "acknowledged" | "invitation_code" | "link_code";
         /** @enum {string} */
-        Method: "identifier" | "password" | "passkey" | "totp" | "recovery_code" | "passkey_register" | "skip" | "restart" | "email_code" | "magic_link";
+        Method: "identifier" | "password" | "passkey" | "totp" | "recovery_code" | "passkey_register" | "skip" | "restart" | "email_code" | "magic_link" | "register" | "recover" | "new_password" | "share" | "dont_share" | "accept_invitation" | "link" | "acknowledge";
         /** @enum {string} */
-        TextId: "login.failed" | "login.throttled" | "login.unavailable" | "flow.expired" | "second_factor.failed" | "passkey.not_registered" | "label.identifier" | "label.password" | "label.totp_code" | "label.recovery_code" | "action.continue" | "action.sign_in" | "action.passkey" | "action.passkey_create" | "action.verify" | "action.recovery_code" | "action.skip" | "action.restart" | "label.email_code" | "action.email_code" | "action.magic_link" | "email.sent";
+        TextId: "login.failed" | "login.throttled" | "login.unavailable" | "flow.expired" | "second_factor.failed" | "passkey.not_registered" | "label.identifier" | "label.password" | "label.totp_code" | "label.recovery_code" | "action.continue" | "action.sign_in" | "action.passkey" | "action.passkey_create" | "action.verify" | "action.recovery_code" | "action.skip" | "action.restart" | "label.email_code" | "action.email_code" | "action.magic_link" | "email.sent" | "registration.title" | "label.email" | "label.new_password" | "label.display_name" | "action.create_account" | "registration.code_sent" | "registration.failed" | "action.have_account" | "registration.complete" | "recovery.title" | "action.recovery_start" | "recovery.requested" | "recovery.cooling" | "recovery.denied" | "recovery.complete" | "recovery.locked" | "recovery_codes.title" | "recovery_codes.save" | "action.codes_saved" | "label.link_code" | "settings.title" | "settings.sign_in_methods" | "settings.sign_ins" | "settings.tied_to_device" | "action.end_sign_in" | "action.sign_out" | "settings.connected_apps" | "action.stop_sharing" | "settings.linked_sign_ins" | "notice.email_changed" | "notice.new_method" | "action.secure_account" | "signed_out.password_changed" | "signed_out.device_mismatch" | "signed_out.admin_ended" | "signed_out.recovery" | "signed_out.expired" | "signed_out.delegations_remain" | "account.sign_in_turned_off" | "account.deletion_scheduled" | "account.deleted" | "account.export_ready" | "account.email_confirmed" | "consent.title" | "consent.claims" | "action.share" | "action.dont_share" | "delegation.check_note" | "delegation.created" | "invitation.title" | "action.accept_invitation" | "invitation.expired" | "label.invitation_code" | "link.title" | "link.combine_warning" | "error.reference" | "error.app_owner" | "error.upstream_owner" | "error.access_owner" | "step_up.required" | "claim.issuer_says";
         Text: {
             id: components["schemas"]["TextId"];
             text: string;
