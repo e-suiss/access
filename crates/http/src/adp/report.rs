@@ -120,10 +120,10 @@ fn holding(h: &Holding) -> Out {
 
 fn change(c: &Change) -> Out {
     let (object, version) = match &c.changed {
-        Changed::Object(i) => (id(i), None),
+        Changed::Object(i) | Changed::KeyEvent { claim: i, .. } => (id(i), None),
         Changed::Role { name, version } => (Out::from(name.as_str()), Some(*version)),
     };
-    json!({
+    let mut out = json!({
         "type": "change",
         "position": c.position.to_string(),
         "at": c.at,
@@ -133,7 +133,13 @@ fn change(c: &Change) -> Out {
         "ended": c.ended,
         "own": c.own,
         "advisory": true,
-    })
+    });
+    // U26, SI-13
+    if let (Changed::KeyEvent { class, issuer, .. }, Some(m)) = (&c.changed, out.as_object_mut()) {
+        m.insert("class".into(), Out::from(class.as_str()));
+        m.insert("issuer".into(), id(issuer));
+    }
+    out
 }
 
 fn bulk(b: &BulkImpact) -> Out {

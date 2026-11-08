@@ -1,7 +1,8 @@
 //! The ADP search route and its developer-surface kinds (L1-ADP-16, §8.17.10, §5.4, §16.5.1):
 //! `schema-publications`, `change-impact`, `revocation-impact`, `compromise-impact` and
 //! `bulk-impact`, and the management kinds `roles`, `role`, `admin-grant`, `holdings` and
-//! `changes` (§8.17.9, IA-2, IA-5). Each answers one advisory page; none of them writes, and none
+//! `changes` (§8.17.9, IA-2, IA-5), and the hub kinds `inventory` and
+//! `activity` (§8.17.7.1, S6), which answer only the reading Party about itself (XI-9, XI-22). Each answers one advisory page; none of them writes, and none
 //! carries an accept or any other action (X21). Schema publication (§8.17.10.2, X21) and the
 //! JSON form of meta-action payloads (L1-ADP-17) are here too.
 
@@ -24,7 +25,7 @@ fn list(items: &Value, description: &str) -> Value {
 /// The search request and the developer report schemas.
 pub(super) fn components() -> Value {
     let mut all = queries();
-    for more in [reports(), management(), publications()] {
+    for more in [reports(), management(), publications(), hub()] {
         if let (Value::Object(m), Value::Object(more)) = (&mut all, more) {
             m.extend(more);
         }
@@ -128,8 +129,10 @@ fn management() -> Value {
                 "type": { "const": "change" },
                 "position": r("Position"),
                 "at": uint("Its trusted time, Unix ms."),
-                "kind": { "type": "string", "enum": ["grant", "anchor", "party", "instance", "mandate", "acceptance", "policy", "authority_set"] },
-                "id": text("The object: an id in base64url, or a role's name."),
+                "kind": { "type": "string", "enum": ["grant", "anchor", "party", "instance", "mandate", "acceptance", "policy", "authority_set", "key_event"] },
+                "id": text("The object: an id in base64url, or a role's name; for a key event, the Claim."),
+                "class": text("For a key event: the Claim class (U26, SI-13)."),
+                "issuer": b64("For a key event: who signed it."),
                 "version": { "type": ["integer", "null"], "description": "For a role: the version defined." },
                 "ended": { "type": "boolean", "description": "The change ended the object." },
                 "own": { "type": "boolean", "description": "The viewer's own Instance made it." },
@@ -286,6 +289,10 @@ fn queries() -> Value {
             }),
             &[],
         ),
+        "HubQuery": object(
+            &json!({ "party": b64("The reading Party; any other Party gets an empty page (XI-9, XI-22).") }),
+            &["party"],
+        ),
         "CompromiseImpactQuery": object(
             &json!({
                 "instance": b64("A compromised Instance."),
@@ -294,6 +301,54 @@ fn queries() -> Value {
                 "window": object(&json!({ "from": uint("Unix ms."), "until": uint("Unix ms.") }), &["from", "until"]),
             }),
             &["window"],
+        ),
+    })
+}
+
+fn hub() -> Value {
+    json!({
+        "HubHolding": object(
+            &json!({
+                "type": { "const": "holding" },
+                "grant": b64("The Grant."),
+                "groups": list(&json!({ "type": "string", "enum": ["acting_for_you", "shared_from_you", "your_authority"] }), "The groups it shows in (§8.17.7.1); never empty: every Grant the reader gave shows in at least one (XI-10)."),
+                "holder": { "type": "object", "description": "`{party}`, `{public: true}`, `{group: [claim classes]}` (rule-shaped) or `{foreign: true}`." },
+                "source": { "type": "object", "description": "`{anchor}` or `{grant, holder}`: where it derives from." },
+                "capacities": list(&json!({}), "Its agency: `own` or `{for: Party}` (XI-10)."),
+                "actions": list(&json!({ "type": "object" }), "The actions it names exactly."),
+                "resource": { "type": "object", "description": "The resources it covers." },
+                "validity": object(&json!({ "from": uint("Unix ms."), "until": uint("Unix ms.") }), &["from", "until"]),
+                "budget": list(&json!({ "type": "object" }), "Its authority limits (XI-14); a financial limit is another owner's row."),
+                "conditions": uint("How many while-conditions it carries."),
+                "named": object(&json!({ "name": text("Role."), "version": uint("Version.") }), &["name", "version"]),
+                "since": uint("Issuing position."),
+                "revision": uint("Revision, 0 at issue."),
+                "member": { "type": "boolean", "description": "For a rule-shaped holder: whether the reader is a member now; `false` reads \"needs refresh\", never \"removed\" (XI-15)." },
+            }),
+            &["type", "grant", "groups", "holder", "source", "capacities", "actions", "resource", "validity", "budget", "conditions", "since", "revision"],
+        ),
+        "HubRoot": object(
+            &json!({
+                "type": { "const": "root" },
+                "anchor": b64("An Anchor the reader roots."),
+                "sole": { "type": "boolean", "description": "Whether the reader is its sole root (§13.8)." },
+                "quorum": uint("How many roots act together."),
+                "since": uint("Creating position."),
+            }),
+            &["type", "anchor", "sole", "quorum", "since"],
+        ),
+        "HubUse": object(
+            &json!({
+                "type": { "const": "use" },
+                "pos": uint("The decision record."),
+                "at": uint("Its trusted time, Unix ms."),
+                "intent": b64("The intent digest."),
+                "basis": { "type": "object", "description": "`{anchor}` or `{grant}`." },
+                "capacity": { "description": "`own` or `{for: Party}`." },
+                "instance": b64("The acting Instance."),
+                "by_viewer": { "type": "boolean", "description": "The reader acted; otherwise someone acted for the reader." },
+            }),
+            &["type", "pos", "intent", "basis", "capacity", "instance", "by_viewer"],
         ),
     })
 }
@@ -389,11 +444,12 @@ pub(super) fn paths(paths: &mut Map<String, Value>) {
         "/access/v1/search/{kind}".into(),
         json!({ "post": {
             "operationId": "search",
-            "summary": "One advisory search page (L1-ADP-16). Graph kinds `subject`, `resource`, `action`; management kinds `roles` and `role` (a role version with its computed \"Not included\" block, §8.17.9.2, E11), `admin-grant` (an admin Grant's meta-actions one by one, reserved ones apart), `holdings` (the viewer's own holdings, each a usable ADP `holding` basis, IA-5) and `changes` (information only, IA-2: an auditor sees every change, anyone else only those about them); `bulk-impact` (each Grant revoke of a bulk job and their sum, E17); developer kinds `schema-publications` (a namespace's published versions and where each stands here: there is no accept, a domain accepts only by its own `acceptance.amend` with the exact fingerprint, X21), `change-impact` (a role move or a `policy.set` candidate: abilities gained and lost per holder count, expansion requirements, orphan rows; X20, TN-121, §5.8; the SMT relation is `unknown` until proved), `revocation-impact` (subtree, staleness exposure, index lag, orphan tuples; §5.4) and `compromise-impact` (Exercises, Grants, contributions, projections and Claims in a window; SEC15). Developer kinds answer only the domain's auditors; anyone else gets an empty page. Nothing is recorded.",
+            "summary": "One advisory search page (L1-ADP-16). Graph kinds `subject`, `resource`, `action`; management kinds `roles` and `role` (a role version with its computed \"Not included\" block, §8.17.9.2, E11), `admin-grant` (an admin Grant's meta-actions one by one, reserved ones apart), `holdings` (the viewer's own holdings, each a usable ADP `holding` basis, IA-5) and `changes` (information only, IA-2: an auditor sees every change, anyone else only those about them); `bulk-impact` (each Grant revoke of a bulk job and their sum, E17); developer kinds `schema-publications` (a namespace's published versions and where each stands here: there is no accept, a domain accepts only by its own `acceptance.amend` with the exact fingerprint, X21), `change-impact` (a role move or a `policy.set` candidate: abilities gained and lost per holder count, expansion requirements, orphan rows; X20, TN-121, §5.8; the SMT relation is `unknown` until proved), `revocation-impact` (subtree, staleness exposure, index lag, orphan tuples; §5.4) and `compromise-impact` (Exercises, Grants, contributions, projections and Claims in a window; SEC15). Developer kinds answer only the domain's auditors, and `revocation-impact` of a Grant also whoever stands above it in its lineage: the root of its Anchor or a holder of a Grant it derives from (XI-5); anyone else gets an empty page. `changes` also lists Grants whose agency names the reader and ingested regime key-events about the reader (`kind: key_event` with `class` and `issuer`; SI-21, SI-13, U26). Hub kinds `inventory` (holdings in the groups acting for you, shared from you and your authority, with the Anchors the reader roots) and `activity` (allowed uses by or for the reader; a DENY is not a use) answer only the reading Party about itself (XI-9, XI-22). Nothing is recorded.",
             "parameters": [path("kind", &json!({ "type": "string", "enum": [
                 "subject", "resource", "action",
                 "roles", "role", "admin-grant", "holdings", "changes", "bulk-impact",
                 "schema-publications", "change-impact", "revocation-impact", "compromise-impact",
+                "inventory", "activity",
             ] }))],
             "requestBody": { "required": true, "content": { "application/json": { "schema": r("SearchRequest") } } },
             "responses": {
@@ -413,6 +469,9 @@ pub(super) fn paths(paths: &mut Map<String, Value>) {
                                 r("Holding"),
                                 r("Change"),
                                 r("BulkImpact"),
+                                r("HubHolding"),
+                                r("HubRoot"),
+                                r("HubUse"),
                             ] }), "One page."),
                             "page": { "type": "object" },
                             "context": { "type": "object" },

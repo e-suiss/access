@@ -1990,6 +1990,7 @@ pub mod audit;
 mod binding;
 mod events;
 pub mod export;
+pub mod hub;
 pub mod impact;
 mod ingest;
 pub mod lab;

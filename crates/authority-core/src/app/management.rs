@@ -7,7 +7,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use access_authority_sequencer::ports::DomainLog;
 use access_kernel::algebra::Catalog;
 use access_kernel::codec::Canonical as _;
-use access_kernel::combinator::HopStatus;
+use access_kernel::combinator::{Capacity, HopStatus};
 use access_kernel::meta::{self, Actor, GrantState, kind};
 use access_kernel::model::{ActionRef, Id, ResourceSelector, SubjectSelector};
 use access_kernel::record::{RecordEnvelope, RecordKind};
@@ -70,6 +70,8 @@ pub enum ChangeKind {
     Policy,
     /// A role version.
     AuthoritySet,
+    /// An ingested regime key-event Claim (U26, SI-13).
+    KeyEvent,
 }
 
 impl ChangeKind {
@@ -87,6 +89,9 @@ impl ChangeKind {
     /// Its word.
     #[must_use]
     pub fn word(self) -> &'static str {
+        if self == Self::KeyEvent {
+            return "key_event";
+        }
         Self::ALL
             .iter()
             .find(|(_, k)| *k == self)
@@ -109,6 +114,17 @@ pub enum Changed {
         name: String,
         /// Version.
         version: u64,
+    },
+    /// A regime key-event Claim about `subject` (U26, SI-13).
+    KeyEvent {
+        /// The Claim.
+        claim: Id,
+        /// Its class.
+        class: String,
+        /// Who signed it.
+        issuer: Id,
+        /// The Party it is about.
+        subject: Id,
     },
 }
 
@@ -203,6 +219,31 @@ fn changes_of(r: &RecordEnvelope, actors: &BTreeMap<Vec<u8>, Value>, own: &Value
             })
         })
         .collect()
+}
+
+/// The key-event row of an admitted regime key-event Claim record (U26, SI-13).
+fn key_event_of(r: &RecordEnvelope) -> Option<Change> {
+    let (Some(Value::Text(class)), Some(subject), Some(issuer), Some(claim)) = (
+        field(r, "class"),
+        field(r, "subject").and_then(|v| Id::from_value(v).ok()),
+        field(r, "issuer").and_then(|v| Id::from_value(v).ok()),
+        field(r, "id").and_then(|v| Id::from_value(v).ok()),
+    ) else {
+        return None;
+    };
+    (field(r, "effects").is_some() && crate::app::hub::key_event(class)).then(|| Change {
+        position: r.header.pos,
+        at: r.header.recorded_at,
+        kind: ChangeKind::KeyEvent,
+        changed: Changed::KeyEvent {
+            claim,
+            class: class.clone(),
+            issuer,
+            subject,
+        },
+        ended: false,
+        own: false,
+    })
 }
 
 /// Whether every hop of `grant`'s lineage is live.
@@ -345,7 +386,8 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                         }
                     }
                     RecordKind::Decision => rows.extend(changes_of(&r, &actors, &own)),
-                    RecordKind::Claim | RecordKind::Genesis => {}
+                    RecordKind::Claim => rows.extend(key_event_of(&r)),
+                    RecordKind::Genesis => {}
                 }
             }
             from = to.saturating_add(1);
@@ -358,11 +400,17 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
                             || match (&c.kind, &c.changed) {
                                 (ChangeKind::Party, Changed::Object(p)) => *p == actor.party,
                                 (ChangeKind::Instance, Changed::Object(i)) => *i == actor.instance,
+                                // SI-21
                                 (ChangeKind::Grant, Changed::Object(g)) => {
                                     read::<GrantState>(snap, kind::GRANT, g).is_some_and(|s| {
                                         s.content.holder == SubjectSelector::Party(actor.party)
+                                            || s.content
+                                                .agency
+                                                .contains(&Capacity::For(actor.party))
                                     })
                                 }
+                                // U26, SI-13
+                                (_, Changed::KeyEvent { subject, .. }) => *subject == actor.party,
                                 _ => false,
                             }
                     })

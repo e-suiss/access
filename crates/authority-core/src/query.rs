@@ -101,6 +101,16 @@ pub enum Query {
         /// The Grants the job revokes.
         revoke: Vec<Id>,
     },
+    /// The viewer's inventory (§8.17.7.1, X6): only ever `party`'s own.
+    Inventory {
+        /// The viewer.
+        party: Id,
+    },
+    /// The viewer's uses of authority (S6).
+    Activity {
+        /// The viewer.
+        party: Id,
+    },
 }
 
 /// The change a `change-impact` search previews.
@@ -169,6 +179,8 @@ impl Query {
             Self::Holdings => "holdings",
             Self::Changes { .. } => "changes",
             Self::BulkImpact { .. } => "bulk-impact",
+            Self::Inventory { .. } => "inventory",
+            Self::Activity { .. } => "activity",
         }
     }
 
@@ -206,6 +218,8 @@ pub enum Hit {
     Action(ActionRef),
     /// A developer-surface report.
     Report(Box<Report>),
+    /// An Authority hub entry of the viewer (§8.5 S2, S6).
+    Entry(Box<crate::app::hub::Entry>),
 }
 
 /// One page of results.
@@ -331,6 +345,15 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
             }
             return self.report(&actor, query, now).await;
         }
+        // XI-9, XI-22
+        match query {
+            Query::Inventory { party } | Query::Activity { party } if *party != actor.party => {
+                return Ok(Found::default());
+            }
+            Query::Inventory { .. } => return self.inventory(&actor, after, now).await,
+            Query::Activity { .. } => return self.activity(&actor, after, now).await,
+            _ => {}
+        }
         let candidates = match query {
             Query::Subject { resource, .. } => {
                 self.reader
@@ -376,7 +399,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
     }
 
     /// Whether `actor`'s Party holds Grant `g` now: by name, as `Public`, or as a group member.
-    async fn holds(&self, g: &Id, actor: &Actor, now: u64) -> Result<bool, CoreError> {
+    pub(crate) async fn holds(&self, g: &Id, actor: &Actor, now: u64) -> Result<bool, CoreError> {
         let holder = self
             .settled(|snap| read::<GrantState>(snap, kind::GRANT, g).map(|s| s.content.holder))
             .await?;
@@ -491,7 +514,28 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         if let Some(found) = self.viewer_report(actor, query, auditor, now).await? {
             return Ok(found);
         }
-        if !auditor {
+        // XI-5, XI-9, §8.17.7.3
+        let previews_own = match query {
+            Query::RevocationImpact {
+                revoked: Revoked::Grant(g),
+                ..
+            } => {
+                self.settled(|snap| {
+                    read::<GrantState>(snap, kind::GRANT, g).is_some_and(|s| {
+                        let above = match s.content.basis {
+                            access_kernel::meta::GrantBasis::Anchor(a) => ExerciseBasis::Anchor(a),
+                            access_kernel::meta::GrantBasis::Holding(h) => {
+                                ExerciseBasis::Holding(h)
+                            }
+                        };
+                        crate::domain::views(snap, &above, &actor.party)
+                    })
+                })
+                .await?
+            }
+            _ => false,
+        };
+        if !auditor && !previews_own {
             return Ok(Found::default());
         }
         let reports: Vec<Report> = match query {

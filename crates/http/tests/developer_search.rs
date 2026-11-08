@@ -210,3 +210,87 @@ fn a_revocation_report_carries_exposure_and_aftermath() {
     assert_eq!(r["aftermath"]["confirmed_applied"], 1);
     assert_eq!(r["revoked"]["instance"], b64url_encode(&[4; 16]));
 }
+
+// §8.17.7.1, S6, IA-2, XI-9
+#[test]
+fn hub_kinds_name_the_viewer_and_nothing_else() {
+    let id = b64url_encode(&[7; 16]);
+    for (kind, expected) in [
+        ("inventory", Query::Inventory { party: Id([7; 16]) }),
+        ("activity", Query::Activity { party: Id([7; 16]) }),
+    ] {
+        assert_eq!(
+            decode(kind, &format!(r#"{{"party": "{id}"}}"#)),
+            Ok(expected)
+        );
+        assert_eq!(
+            decode(kind, &format!(r#"{{"party": "{id}", "all": true}}"#)),
+            Err("unknown-member")
+        );
+    }
+}
+
+// §8.17.7.1, XI-10, IA-2
+#[test]
+fn hub_entries_carry_capacity_and_no_action() {
+    use access_authority_core::app::hub::{Entry, Group, Holder, Holding, Source};
+    use access_kernel::combinator::Capacity;
+    use access_kernel::model::{ResourceSelector, Structural};
+    let holding = Holding {
+        grant: Id([1; 16]),
+        groups: vec![Group::SharedFromYou],
+        holder: Holder::Party(Id([2; 16])),
+        source: Source::Anchor(Id([3; 16])),
+        capacities: vec![Capacity::For(Id([4; 16]))],
+        actions: Vec::new(),
+        resource: ResourceSelector::Structural(Structural {
+            namespace: "shop".to_owned(),
+            prefix: Vec::new(),
+            kind: None,
+            attrs: std::collections::BTreeMap::new(),
+        }),
+        validity: Window { from: 0, until: 9 },
+        budget: Vec::new(),
+        conditions: 0,
+        named: None,
+        since: 5,
+        revision: 0,
+        member: None,
+    };
+    let change = access_authority_core::app::management::Change {
+        position: 7,
+        at: 70,
+        kind: access_authority_core::app::management::ChangeKind::KeyEvent,
+        changed: access_authority_core::app::management::Changed::KeyEvent {
+            claim: Id([6; 16]),
+            class: "party_key_state".to_owned(),
+            issuer: Id([5; 16]),
+            subject: Id([7; 16]),
+        },
+        ended: false,
+        own: false,
+    };
+    let out = encode_search(
+        &[
+            Hit::Entry(Box::new(Entry::Holding(Box::new(holding)))),
+            Hit::Report(Box::new(Report::Change(change))),
+        ],
+        None,
+        true,
+    );
+    let r = &out["results"][0];
+    assert_eq!(r["type"], "holding");
+    assert_eq!(r["groups"][0], "shared_from_you");
+    assert_eq!(r["capacities"][0]["for"], b64url_encode(&[4; 16]));
+    let c = &out["results"][1];
+    assert_eq!(c["kind"], "key_event");
+    assert_eq!(c["class"], "party_key_state");
+    assert_eq!(c["id"], b64url_encode(&[6; 16]));
+    for row in out["results"].as_array().unwrap() {
+        let keys: Vec<&String> = row.as_object().unwrap().keys().collect();
+        assert!(
+            keys.iter()
+                .all(|k| !k.contains("action_required") && *k != "revoke")
+        );
+    }
+}

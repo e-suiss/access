@@ -373,7 +373,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** One advisory search page (L1-ADP-16). Graph kinds `subject`, `resource`, `action`; management kinds `roles` and `role` (a role version with its computed "Not included" block, §8.17.9.2, E11), `admin-grant` (an admin Grant's meta-actions one by one, reserved ones apart), `holdings` (the viewer's own holdings, each a usable ADP `holding` basis, IA-5) and `changes` (information only, IA-2: an auditor sees every change, anyone else only those about them); `bulk-impact` (each Grant revoke of a bulk job and their sum, E17); developer kinds `schema-publications` (a namespace's published versions and where each stands here: there is no accept, a domain accepts only by its own `acceptance.amend` with the exact fingerprint, X21), `change-impact` (a role move or a `policy.set` candidate: abilities gained and lost per holder count, expansion requirements, orphan rows; X20, TN-121, §5.8; the SMT relation is `unknown` until proved), `revocation-impact` (subtree, staleness exposure, index lag, orphan tuples; §5.4) and `compromise-impact` (Exercises, Grants, contributions, projections and Claims in a window; SEC15). Developer kinds answer only the domain's auditors; anyone else gets an empty page. Nothing is recorded. */
+        /** One advisory search page (L1-ADP-16). Graph kinds `subject`, `resource`, `action`; management kinds `roles` and `role` (a role version with its computed "Not included" block, §8.17.9.2, E11), `admin-grant` (an admin Grant's meta-actions one by one, reserved ones apart), `holdings` (the viewer's own holdings, each a usable ADP `holding` basis, IA-5) and `changes` (information only, IA-2: an auditor sees every change, anyone else only those about them); `bulk-impact` (each Grant revoke of a bulk job and their sum, E17); developer kinds `schema-publications` (a namespace's published versions and where each stands here: there is no accept, a domain accepts only by its own `acceptance.amend` with the exact fingerprint, X21), `change-impact` (a role move or a `policy.set` candidate: abilities gained and lost per holder count, expansion requirements, orphan rows; X20, TN-121, §5.8; the SMT relation is `unknown` until proved), `revocation-impact` (subtree, staleness exposure, index lag, orphan tuples; §5.4) and `compromise-impact` (Exercises, Grants, contributions, projections and Claims in a window; SEC15). Developer kinds answer only the domain's auditors, and `revocation-impact` of a Grant also whoever stands above it in its lineage: the root of its Anchor or a holder of a Grant it derives from (XI-5); anyone else gets an empty page. `changes` also lists Grants whose agency names the reader and ingested regime key-events about the reader (`kind: key_event` with `class` and `issuer`; SI-21, SI-13, U26). Hub kinds `inventory` (holdings in the groups acting for you, shared from you and your authority, with the Anchors the reader roots) and `activity` (allowed uses by or for the reader; a DENY is not a use) answer only the reading Party about itself (XI-9, XI-22). Nothing is recorded. */
         post: operations["search"];
         delete?: never;
         options?: never;
@@ -918,6 +918,10 @@ export interface components {
             /** @description When, Unix ms; now when absent. */
             at?: number;
         };
+        HubQuery: {
+            /** @description The reading Party; any other Party gets an empty page (XI-9, XI-22). */
+            party: string;
+        };
         CompromiseImpactQuery: {
             /** @description A compromised Instance. */
             instance?: string;
@@ -1155,9 +1159,13 @@ export interface components {
             /** @description Its trusted time, Unix ms. */
             at: number;
             /** @enum {string} */
-            kind: "grant" | "anchor" | "party" | "instance" | "mandate" | "acceptance" | "policy" | "authority_set";
-            /** @description The object: an id in base64url, or a role's name. */
+            kind: "grant" | "anchor" | "party" | "instance" | "mandate" | "acceptance" | "policy" | "authority_set" | "key_event";
+            /** @description The object: an id in base64url, or a role's name; for a key event, the Claim. */
             id: string;
+            /** @description For a key event: the Claim class (U26, SI-13). */
+            class?: string;
+            /** @description For a key event: who signed it. */
+            issuer?: string;
             /** @description For a role: the version defined. */
             version?: number | null;
             /** @description The change ended the object. */
@@ -1271,6 +1279,76 @@ export interface components {
             new_actions: string[];
             /** @description Text keys, in order. */
             text: string[];
+        };
+        HubHolding: {
+            /** @constant */
+            type: "holding";
+            /** @description The Grant. */
+            grant: string;
+            /** @description The groups it shows in (§8.17.7.1); never empty: every Grant the reader gave shows in at least one (XI-10). */
+            groups: ("acting_for_you" | "shared_from_you" | "your_authority")[];
+            /** @description `{party}`, `{public: true}`, `{group: [claim classes]}` (rule-shaped) or `{foreign: true}`. */
+            holder: Record<string, never>;
+            /** @description `{anchor}` or `{grant, holder}`: where it derives from. */
+            source: Record<string, never>;
+            /** @description Its agency: `own` or `{for: Party}` (XI-10). */
+            capacities: unknown[];
+            /** @description The actions it names exactly. */
+            actions: Record<string, never>[];
+            /** @description The resources it covers. */
+            resource: Record<string, never>;
+            validity: {
+                /** @description Unix ms. */
+                from: number;
+                /** @description Unix ms. */
+                until: number;
+            };
+            /** @description Its authority limits (XI-14); a financial limit is another owner's row. */
+            budget: Record<string, never>[];
+            /** @description How many while-conditions it carries. */
+            conditions: number;
+            named?: {
+                /** @description Role. */
+                name: string;
+                /** @description Version. */
+                version: number;
+            };
+            /** @description Issuing position. */
+            since: number;
+            /** @description Revision, 0 at issue. */
+            revision: number;
+            /** @description For a rule-shaped holder: whether the reader is a member now; `false` reads "needs refresh", never "removed" (XI-15). */
+            member?: boolean;
+        };
+        HubRoot: {
+            /** @constant */
+            type: "root";
+            /** @description An Anchor the reader roots. */
+            anchor: string;
+            /** @description Whether the reader is its sole root (§13.8). */
+            sole: boolean;
+            /** @description How many roots act together. */
+            quorum: number;
+            /** @description Creating position. */
+            since: number;
+        };
+        HubUse: {
+            /** @constant */
+            type: "use";
+            /** @description The decision record. */
+            pos: number;
+            /** @description Its trusted time, Unix ms. */
+            at?: number;
+            /** @description The intent digest. */
+            intent: string;
+            /** @description `{anchor}` or `{grant}`. */
+            basis: Record<string, never>;
+            /** @description `own` or `{for: Party}`. */
+            capacity: unknown;
+            /** @description The acting Instance. */
+            instance: string;
+            /** @description The reader acted; otherwise someone acted for the reader. */
+            by_viewer: boolean;
         };
         MetaPayload: {
             anchor_create: {
@@ -3261,7 +3339,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                kind: "subject" | "resource" | "action" | "roles" | "role" | "admin-grant" | "holdings" | "changes" | "bulk-impact" | "schema-publications" | "change-impact" | "revocation-impact" | "compromise-impact";
+                kind: "subject" | "resource" | "action" | "roles" | "role" | "admin-grant" | "holdings" | "changes" | "bulk-impact" | "schema-publications" | "change-impact" | "revocation-impact" | "compromise-impact" | "inventory" | "activity";
             };
             cookie?: never;
         };
@@ -3279,7 +3357,7 @@ export interface operations {
                 content: {
                     "application/json": {
                         /** @description One page. */
-                        results: (Record<string, never> | components["schemas"]["SchemaPublication"] | components["schemas"]["ChangeImpact"] | components["schemas"]["RevocationImpact"] | components["schemas"]["CompromiseImpact"] | components["schemas"]["Roles"] | components["schemas"]["RoleVersion"] | components["schemas"]["AdminGrant"] | components["schemas"]["Holding"] | components["schemas"]["Change"] | components["schemas"]["BulkImpact"])[];
+                        results: (Record<string, never> | components["schemas"]["SchemaPublication"] | components["schemas"]["ChangeImpact"] | components["schemas"]["RevocationImpact"] | components["schemas"]["CompromiseImpact"] | components["schemas"]["Roles"] | components["schemas"]["RoleVersion"] | components["schemas"]["AdminGrant"] | components["schemas"]["Holding"] | components["schemas"]["Change"] | components["schemas"]["BulkImpact"] | components["schemas"]["HubHolding"] | components["schemas"]["HubRoot"] | components["schemas"]["HubUse"])[];
                         page: Record<string, never>;
                         context: Record<string, never>;
                     };

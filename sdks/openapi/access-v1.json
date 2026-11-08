@@ -1892,7 +1892,7 @@
     "/access/v1/search/{kind}": {
       "post": {
         "operationId": "search",
-        "summary": "One advisory search page (L1-ADP-16). Graph kinds `subject`, `resource`, `action`; management kinds `roles` and `role` (a role version with its computed \"Not included\" block, §8.17.9.2, E11), `admin-grant` (an admin Grant's meta-actions one by one, reserved ones apart), `holdings` (the viewer's own holdings, each a usable ADP `holding` basis, IA-5) and `changes` (information only, IA-2: an auditor sees every change, anyone else only those about them); `bulk-impact` (each Grant revoke of a bulk job and their sum, E17); developer kinds `schema-publications` (a namespace's published versions and where each stands here: there is no accept, a domain accepts only by its own `acceptance.amend` with the exact fingerprint, X21), `change-impact` (a role move or a `policy.set` candidate: abilities gained and lost per holder count, expansion requirements, orphan rows; X20, TN-121, §5.8; the SMT relation is `unknown` until proved), `revocation-impact` (subtree, staleness exposure, index lag, orphan tuples; §5.4) and `compromise-impact` (Exercises, Grants, contributions, projections and Claims in a window; SEC15). Developer kinds answer only the domain's auditors; anyone else gets an empty page. Nothing is recorded.",
+        "summary": "One advisory search page (L1-ADP-16). Graph kinds `subject`, `resource`, `action`; management kinds `roles` and `role` (a role version with its computed \"Not included\" block, §8.17.9.2, E11), `admin-grant` (an admin Grant's meta-actions one by one, reserved ones apart), `holdings` (the viewer's own holdings, each a usable ADP `holding` basis, IA-5) and `changes` (information only, IA-2: an auditor sees every change, anyone else only those about them); `bulk-impact` (each Grant revoke of a bulk job and their sum, E17); developer kinds `schema-publications` (a namespace's published versions and where each stands here: there is no accept, a domain accepts only by its own `acceptance.amend` with the exact fingerprint, X21), `change-impact` (a role move or a `policy.set` candidate: abilities gained and lost per holder count, expansion requirements, orphan rows; X20, TN-121, §5.8; the SMT relation is `unknown` until proved), `revocation-impact` (subtree, staleness exposure, index lag, orphan tuples; §5.4) and `compromise-impact` (Exercises, Grants, contributions, projections and Claims in a window; SEC15). Developer kinds answer only the domain's auditors, and `revocation-impact` of a Grant also whoever stands above it in its lineage: the root of its Anchor or a holder of a Grant it derives from (XI-5); anyone else gets an empty page. `changes` also lists Grants whose agency names the reader and ingested regime key-events about the reader (`kind: key_event` with `class` and `issuer`; SI-21, SI-13, U26). Hub kinds `inventory` (holdings in the groups acting for you, shared from you and your authority, with the Anchors the reader roots) and `activity` (allowed uses by or for the reader; a DENY is not a use) answer only the reading Party about itself (XI-9, XI-22). Nothing is recorded.",
         "parameters": [
           {
             "name": "kind",
@@ -1913,7 +1913,9 @@
                 "schema-publications",
                 "change-impact",
                 "revocation-impact",
-                "compromise-impact"
+                "compromise-impact",
+                "inventory",
+                "activity"
               ]
             }
           }
@@ -1978,6 +1980,15 @@
                           },
                           {
                             "$ref": "#/components/schemas/BulkImpact"
+                          },
+                          {
+                            "$ref": "#/components/schemas/HubHolding"
+                          },
+                          {
+                            "$ref": "#/components/schemas/HubRoot"
+                          },
+                          {
+                            "$ref": "#/components/schemas/HubUse"
                           }
                         ]
                       },
@@ -3652,6 +3663,20 @@
           }
         }
       },
+      "HubQuery": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "party"
+        ],
+        "properties": {
+          "party": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "The reading Party; any other Party gets an empty page (XI-9, XI-22)."
+          }
+        }
+      },
       "CompromiseImpactQuery": {
         "type": "object",
         "additionalProperties": false,
@@ -4463,12 +4488,22 @@
               "mandate",
               "acceptance",
               "policy",
-              "authority_set"
+              "authority_set",
+              "key_event"
             ]
           },
           "id": {
             "type": "string",
-            "description": "The object: an id in base64url, or a role's name."
+            "description": "The object: an id in base64url, or a role's name; for a key event, the Claim."
+          },
+          "class": {
+            "type": "string",
+            "description": "For a key event: the Claim class (U26, SI-13)."
+          },
+          "issuer": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "For a key event: who signed it."
           },
           "version": {
             "type": [
@@ -4859,6 +4894,220 @@
               "type": "string"
             },
             "description": "Text keys, in order."
+          }
+        }
+      },
+      "HubHolding": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "type",
+          "grant",
+          "groups",
+          "holder",
+          "source",
+          "capacities",
+          "actions",
+          "resource",
+          "validity",
+          "budget",
+          "conditions",
+          "since",
+          "revision"
+        ],
+        "properties": {
+          "type": {
+            "const": "holding"
+          },
+          "grant": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "The Grant."
+          },
+          "groups": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "acting_for_you",
+                "shared_from_you",
+                "your_authority"
+              ]
+            },
+            "description": "The groups it shows in (§8.17.7.1); never empty: every Grant the reader gave shows in at least one (XI-10)."
+          },
+          "holder": {
+            "type": "object",
+            "description": "`{party}`, `{public: true}`, `{group: [claim classes]}` (rule-shaped) or `{foreign: true}`."
+          },
+          "source": {
+            "type": "object",
+            "description": "`{anchor}` or `{grant, holder}`: where it derives from."
+          },
+          "capacities": {
+            "type": "array",
+            "items": {},
+            "description": "Its agency: `own` or `{for: Party}` (XI-10)."
+          },
+          "actions": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            },
+            "description": "The actions it names exactly."
+          },
+          "resource": {
+            "type": "object",
+            "description": "The resources it covers."
+          },
+          "validity": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "from",
+              "until"
+            ],
+            "properties": {
+              "from": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Unix ms."
+              },
+              "until": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Unix ms."
+              }
+            }
+          },
+          "budget": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            },
+            "description": "Its authority limits (XI-14); a financial limit is another owner's row."
+          },
+          "conditions": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "How many while-conditions it carries."
+          },
+          "named": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "name",
+              "version"
+            ],
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "Role."
+              },
+              "version": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Version."
+              }
+            }
+          },
+          "since": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Issuing position."
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Revision, 0 at issue."
+          },
+          "member": {
+            "type": "boolean",
+            "description": "For a rule-shaped holder: whether the reader is a member now; `false` reads \"needs refresh\", never \"removed\" (XI-15)."
+          }
+        }
+      },
+      "HubRoot": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "type",
+          "anchor",
+          "sole",
+          "quorum",
+          "since"
+        ],
+        "properties": {
+          "type": {
+            "const": "root"
+          },
+          "anchor": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "An Anchor the reader roots."
+          },
+          "sole": {
+            "type": "boolean",
+            "description": "Whether the reader is its sole root (§13.8)."
+          },
+          "quorum": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "How many roots act together."
+          },
+          "since": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Creating position."
+          }
+        }
+      },
+      "HubUse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "type",
+          "pos",
+          "intent",
+          "basis",
+          "capacity",
+          "instance",
+          "by_viewer"
+        ],
+        "properties": {
+          "type": {
+            "const": "use"
+          },
+          "pos": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "The decision record."
+          },
+          "at": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Its trusted time, Unix ms."
+          },
+          "intent": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "The intent digest."
+          },
+          "basis": {
+            "type": "object",
+            "description": "`{anchor}` or `{grant}`."
+          },
+          "capacity": {
+            "description": "`own` or `{for: Party}`."
+          },
+          "instance": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "The acting Instance."
+          },
+          "by_viewer": {
+            "type": "boolean",
+            "description": "The reader acted; otherwise someone acted for the reader."
           }
         }
       },

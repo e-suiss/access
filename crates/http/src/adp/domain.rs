@@ -659,6 +659,12 @@ pub fn decode_search(
                 window: window(q.req("window", "query")?).map_err(within("query"))?,
             }
         }
+        "inventory" => Query::Inventory {
+            party: id(q.req("party", "query")?)?,
+        },
+        "activity" => Query::Activity {
+            party: id(q.req("party", "query")?)?,
+        },
         _ => return Err(AdpError("search")),
     };
     q.done()?;
@@ -718,6 +724,7 @@ pub fn encode_search(hits: &[Hit], next: Option<&str>, first: bool) -> Out {
             Hit::Resource(sel) => json_of(&sel.to_value()),
             Hit::Action(a) => json_of(&a.to_value()),
             Hit::Report(r) => crate::adp::report::encode(r),
+            Hit::Entry(e) => crate::adp::hub::encode(e),
         })
         .collect();
     serde_json::json!({

@@ -7,6 +7,7 @@
     clippy::panic,
     clippy::indexing_slicing,
     clippy::assert_is_empty,
+    clippy::too_many_lines,
     reason = "test code; the request-path lints (OP-3) do not apply"
 )]
 
@@ -15,6 +16,7 @@ use std::time::Duration;
 
 use access_authority_core::CoreError;
 use access_authority_core::adapters::PgReader;
+use access_authority_core::app::hub::{Basis, Entry, Holding as HubHolding};
 use access_authority_core::app::impact::{Compromised, Revoked};
 use access_authority_core::app::lab::{ADVISORY, Sample};
 use access_authority_core::app::management::Changed;
@@ -1231,7 +1233,8 @@ fn ack(
     }
 }
 
-/// The domain of [`genesis`] that also accepts BOB's `authority_state_ack` Claims.
+/// The domain of [`genesis`] that also accepts BOB's `authority_state_ack` and
+/// `party_key_state` Claims.
 async fn with_ack_issuer(db: &TestDb) -> (Core, Digest) {
     let sorted = |mut m: Vec<(Value, Value)>| {
         m.sort_by_key(|(k, _)| dcbor::encode(k, Limits::CEILING).unwrap());
@@ -1242,7 +1245,10 @@ async fn with_ack_issuer(db: &TestDb) -> (Core, Digest) {
         (Value::text("issuer"), BOB.to_value()),
         (
             Value::text("classes"),
-            Value::Array(vec![Value::text("authority_state_ack")]),
+            Value::Array(vec![
+                Value::text("party_key_state"),
+                Value::text("authority_state_ack"),
+            ]),
         ),
         (Value::text("subject"), SubjectSelector::Public.to_value()),
         (
@@ -1331,4 +1337,306 @@ async fn authority_state_acks_feed_the_revocation_view() {
         .map(|a| (a.pep.as_str(), a.applied_at))
         .collect();
     assert_eq!(peps, [("pep.applied", NOW + 5)]);
+}
+
+/// BOB's `party_key_state` Claim about `subject`: a regime key-event as a custodian signs it
+/// (U26, SI-13).
+fn key_state(d: Digest, subject: Id) -> access_internal_api::claims::ClaimSubmission {
+    use access_kernel::claim::body::{Body, Class, PartyKeyState};
+    let body = Body::PartyKeyState(PartyKeyState {
+        sequence: 1,
+        keys: BTreeSet::from([Digest([4; 32])]),
+        designated: BTreeMap::new(),
+    });
+    let v = body.to_value();
+    let digest = access_kernel::claim::body::body_digest(Class::PartyKeyState, &v).unwrap();
+    let statement = access_kernel::claim::Statement {
+        domain: d,
+        issuer: BOB,
+        subject,
+        class: "party_key_state".to_owned(),
+        value: Some(access_kernel::model::EqValue::Bytes(digest.to_vec())),
+        issued_at: NOW,
+        validity: Window {
+            from: 0,
+            until: 1_000_000,
+        },
+        assurance: BTreeMap::new(),
+        bound_intent: None,
+        bound_instance: None,
+        bound_resource: None,
+        supersedes: None,
+    };
+    let payload = statement.to_bytes().unwrap();
+    let prot = dcbor::encode(
+        &Value::Map(vec![
+            (Value::Unsigned(ALG), Value::int(-19)),
+            (
+                Value::Unsigned(CT),
+                Value::text(access_kernel::claim::CONTENT_TYPE),
+            ),
+            (
+                Value::Unsigned(KID),
+                Value::Bytes(thumbprint(&public(BOB_KEY)).to_vec()),
+            ),
+        ]),
+        Limits::CEILING,
+    )
+    .unwrap();
+    let sig = signing(BOB_KEY)
+        .sign(&to_be_signed(&prot, &payload).unwrap())
+        .to_bytes();
+    let cose = dcbor::encode(
+        &Value::Array(vec![
+            Value::Bytes(prot),
+            Value::Map(Vec::new()),
+            Value::Bytes(payload),
+            Value::Bytes(sig.to_vec()),
+        ]),
+        Limits::CEILING,
+    )
+    .unwrap();
+    access_internal_api::claims::ClaimSubmission {
+        domain: d,
+        carrier: access_internal_api::claims::Carrier::Cose,
+        claim: [vec![0xd2], cose].concat(),
+        body: Some(dcbor::encode(&v, Limits::CEILING).unwrap()),
+        evidence: None,
+    }
+}
+
+fn entries(found: &access_authority_core::query::Found) -> Vec<Entry> {
+    found
+        .hits
+        .iter()
+        .map(|h| match h {
+            Hit::Entry(e) => (**e).clone(),
+            other => panic!("{other:?}"),
+        })
+        .collect()
+}
+
+fn holdings(found: &access_authority_core::query::Found) -> Vec<HubHolding> {
+    entries(found)
+        .into_iter()
+        .filter_map(|e| match e {
+            Entry::Holding(h) => Some(*h),
+            _ => None,
+        })
+        .collect()
+}
+
+fn uses_of(
+    found: &access_authority_core::query::Found,
+) -> Vec<access_authority_core::app::hub::Use> {
+    entries(found)
+        .into_iter()
+        .filter_map(|e| match e {
+            Entry::Use(u) => Some(u),
+            _ => None,
+        })
+        .collect()
+}
+
+fn changes_of(
+    found: &access_authority_core::query::Found,
+) -> Vec<access_authority_core::app::management::Change> {
+    found
+        .hits
+        .iter()
+        .filter_map(|h| match h {
+            Hit::Report(r) => match &**r {
+                Report::Change(c) => Some(c.clone()),
+                _ => None,
+            },
+            _ => None,
+        })
+        .collect()
+}
+
+/// BOB holds `shop:read` from the `shop` Anchor, to be exercised for ROOT.
+async fn for_root_grant(core: &mut Core, d: Digest, nonce: u8) -> (Id, ExerciseBasis) {
+    let shop = meta::object_id(&d, kind::ANCHOR, 1);
+    let issue = Payload::GrantIssue(GrantContent {
+        basis: GrantBasis::Anchor(shop),
+        holder: SubjectSelector::Party(BOB),
+        authority: authority(vec![action("shop", "read")], selector("shop")),
+        agency: BTreeSet::from([Capacity::For(ROOT)]),
+        named: None,
+    });
+    let issued = send(
+        core,
+        meta_request(d, nonce, ExerciseBasis::Anchor(shop), issue),
+        ROOT_KEY,
+    )
+    .await
+    .unwrap();
+    allowed(&issued);
+    let grant = meta::object_id(&issued.exercise.unwrap(), kind::GRANT, 0);
+    (
+        grant,
+        ExerciseBasis::Holding(HoldingRef {
+            grant,
+            holder: BOB,
+            since: issued.record.unwrap(),
+        }),
+    )
+}
+
+// §8.17.7.1, X6, XI-10, XI-9, XI-22, S6, IA-2, SI-21, U26, SI-13, XI-5
+#[tokio::test]
+async fn the_hub_reads_only_the_viewers_own_slice() {
+    use access_authority_core::app::hub::{Group, Holder};
+    use access_authority_core::app::management::{ChangeKind, Changed};
+    let db = fresh().await.unwrap();
+    let (mut core, d) = with_ack_issuer(&db).await;
+    onboard(&mut core, d, ROOT, ROOT_KEY, (1, 2)).await;
+    onboard(&mut core, d, ALICE, ALICE_KEY, (3, 4)).await;
+    onboard(&mut core, d, BOB, BOB_KEY, (5, 6)).await;
+    define(&mut core, d, 9, &role_set(&["read"], &[])).await;
+    let (clerk, alice_holding) = clerk_grant(&mut core, d, 10).await;
+    let (for_root, bob_holding) = for_root_grant(&mut core, d, 11).await;
+    allowed(
+        &send(
+            &mut core,
+            shop_request(d, 12, Mode::Commit, alice_holding),
+            ALICE_KEY,
+        )
+        .await
+        .unwrap(),
+    );
+    let mut on_behalf = shop_request(d, 13, Mode::Commit, bob_holding);
+    on_behalf.capacity = Capacity::For(ROOT);
+    allowed(&send(&mut core, on_behalf, BOB_KEY).await.unwrap());
+    let denied = send(
+        &mut core,
+        shop_request(d, 14, Mode::Commit, bob_holding),
+        ALICE_KEY,
+    )
+    .await
+    .unwrap();
+    assert_ne!(denied.decision.outcome, Outcome::Allow);
+    let admitted = core.ingest(&key_state(d, ALICE), NOW).await.unwrap();
+    assert!(
+        matches!(
+            admitted.verdict,
+            access_internal_api::claims::ClaimVerdict::Admitted { .. }
+        ),
+        "{admitted:?}"
+    );
+    let head = core.head();
+
+    let mut nonce = 40u8;
+    let mut read = |seed: u8, query: Query| {
+        nonce = nonce.wrapping_add(1);
+        let kind = query.kind();
+        (incoming(search_request(d, nonce, kind), seed), query)
+    };
+
+    // §8.17.7.1, XI-10
+    let (inc, q) = read(ROOT_KEY, Query::Inventory { party: ROOT });
+    let root = core.search(&inc, &q, None, NOW).await.unwrap();
+    let rows = holdings(&root);
+    let shared = rows.iter().find(|r| r.grant == clerk).unwrap();
+    assert_eq!(shared.groups, [Group::SharedFromYou]);
+    assert_eq!(shared.holder, Holder::Party(ALICE));
+    assert_eq!(shared.capacities, [Capacity::Own]);
+    let acting = rows.iter().find(|r| r.grant == for_root).unwrap();
+    assert_eq!(acting.groups, [Group::ActingForYou]);
+    assert_eq!(acting.capacities, [Capacity::For(ROOT)]);
+    assert!(
+        entries(&root)
+            .iter()
+            .any(|e| matches!(e, Entry::Rooted(r) if r.sole)),
+        "ROOT roots the Anchors alone"
+    );
+    let (inc, q) = read(ALICE_KEY, Query::Inventory { party: ALICE });
+    let alice = holdings(&core.search(&inc, &q, None, NOW).await.unwrap());
+    assert_eq!(alice.len(), 1, "{alice:?}");
+    assert_eq!(alice[0].grant, clerk);
+    assert_eq!(alice[0].groups, [Group::YourAuthority]);
+    assert_eq!(alice[0].named, Some(("clerk".to_owned(), 1)));
+    // XI-9, XI-22
+    let (inc, q) = read(BOB_KEY, Query::Inventory { party: ALICE });
+    assert!(
+        core.search(&inc, &q, None, NOW)
+            .await
+            .unwrap()
+            .hits
+            .is_empty()
+    );
+
+    // S6, §8.17.12
+    let (inc, q) = read(ALICE_KEY, Query::Activity { party: ALICE });
+    let uses = uses_of(&core.search(&inc, &q, None, NOW).await.unwrap());
+    assert!(
+        uses.iter()
+            .any(|u| u.by_viewer && u.basis == Basis::Grant(clerk)),
+        "{uses:?}"
+    );
+    assert!(
+        uses.iter().all(|u| u.basis != Basis::Grant(for_root)),
+        "a DENY is not a use"
+    );
+    let (inc, q) = read(ROOT_KEY, Query::Activity { party: ROOT });
+    let uses = uses_of(&core.search(&inc, &q, None, NOW).await.unwrap());
+    assert!(
+        uses.iter().any(|u| !u.by_viewer
+            && u.capacity == Capacity::For(ROOT)
+            && u.basis == Basis::Grant(for_root)),
+        "{uses:?}"
+    );
+
+    // IA-2, SI-21, U26, SI-13
+    let (inc, q) = read(ALICE_KEY, Query::Changes { before: None });
+    let changes = changes_of(&core.search(&inc, &q, None, NOW).await.unwrap());
+    let about: Vec<&Changed> = changes.iter().map(|c| &c.changed).collect();
+    assert!(about.contains(&&Changed::Object(clerk)), "{changes:?}");
+    assert!(
+        !about.contains(&&Changed::Object(for_root)),
+        "a Grant neither to nor for ALICE is not her change"
+    );
+    assert!(
+        changes.iter().any(|c| c.kind == ChangeKind::KeyEvent
+            && matches!(
+                &c.changed,
+                Changed::KeyEvent { class, issuer, subject, .. }
+                    if class == "party_key_state" && *issuer == BOB && *subject == ALICE
+            )),
+        "{changes:?}"
+    );
+    let (inc, q) = read(BOB_KEY, Query::Changes { before: None });
+    let changes = changes_of(&core.search(&inc, &q, None, NOW).await.unwrap());
+    assert!(
+        changes
+            .iter()
+            .any(|c| c.changed == Changed::Object(for_root))
+    );
+    assert!(
+        !changes.iter().any(|c| c.kind == ChangeKind::KeyEvent),
+        "another Party's key events stay out"
+    );
+
+    // XI-5, §8.17.7.3
+    let preview = Query::RevocationImpact {
+        revoked: Revoked::Grant(clerk),
+        at: None,
+    };
+    let (inc, q) = read(ROOT_KEY, preview.clone());
+    assert_eq!(
+        core.search(&inc, &q, None, NOW).await.unwrap().hits.len(),
+        1
+    );
+    for seed in [ALICE_KEY, BOB_KEY] {
+        let (inc, q) = read(seed, preview.clone());
+        assert!(
+            core.search(&inc, &q, None, NOW)
+                .await
+                .unwrap()
+                .hits
+                .is_empty(),
+            "only those above the Grant in its lineage preview revoking it"
+        );
+    }
+    assert_eq!(core.head(), head, "the hub reads write nothing");
 }

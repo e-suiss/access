@@ -3,6 +3,7 @@
 pub mod adapters;
 pub mod app;
 pub mod domain;
+pub mod hub;
 pub mod payload;
 pub mod ports;
 pub mod publication;
