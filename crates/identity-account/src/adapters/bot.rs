@@ -87,15 +87,22 @@ pub fn connector(config: Arc<rustls::ClientConfig>) -> TlsConnector {
 }
 
 fn form_escape(v: &str) -> String {
-    v.bytes()
-        .map(|b| {
-            if b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.' | b'~') {
-                char::from(b).to_string()
-            } else {
-                format!("%{b:02X}")
-            }
-        })
-        .collect()
+    let hex = |n: u8| {
+        char::from_digit(u32::from(n), 16)
+            .unwrap_or('0')
+            .to_ascii_uppercase()
+    };
+    let mut out = String::with_capacity(v.len());
+    for b in v.bytes() {
+        if b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.' | b'~') {
+            out.push(char::from(b));
+        } else {
+            out.push('%');
+            out.push(hex(b >> 4));
+            out.push(hex(b & 0x0f));
+        }
+    }
+    out
 }
 
 /// The request a score provider's verify endpoint takes.
