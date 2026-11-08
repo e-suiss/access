@@ -97,7 +97,7 @@ mod tests {
         s.iter().copied().collect()
     }
 
-    // TN-46, OP-151 m.3 (o): the documented table, deterministic
+    // TN-46, OP-151 m.3 (o)
     #[test]
     fn the_table() {
         use RiskSignal::*;
@@ -112,8 +112,7 @@ mod tests {
         assert_eq!(score(&set(&RiskSignal::ALL)), 290);
     }
 
-    // MD-8: a missing source with nothing fired is unavailable, never low; what fired still
-    // counts
+    // MD-8
     #[test]
     fn missing_sources_are_not_low() {
         assert_eq!(level(&set(&[]), false), Level::Unavailable);

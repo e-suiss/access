@@ -226,7 +226,7 @@ mod tests {
         }
     }
 
-    // TN-46: shadow by default asks nothing of the user but is reviewed; risk only narrows
+    // TN-46
     #[test]
     fn shadow_asks_nothing() {
         let i = Inputs {
@@ -244,7 +244,7 @@ mod tests {
         assert!(c.step_up && c.caep);
     }
 
-    // TN-46: a calm sign-in is low and asks nothing
+    // TN-46
     #[test]
     fn calm_is_low() {
         let a = assess(&calm(), &ProtectionMode::default(), Sl2Mode::StepUpCaep);
@@ -253,8 +253,7 @@ mod tests {
         assert!(!a.step_up && !a.review);
     }
 
-    // MD-8: a missing source makes the level unavailable, not low, and asks no step-up of its
-    // own; what the other sources fired still counts
+    // MD-8
     #[test]
     fn missing_sources_fail_closed_without_blocking() {
         let i = Inputs {
@@ -283,8 +282,7 @@ mod tests {
         );
     }
 
-    // TN-108, OP-151 m.3 (o): a protection in monitor mode only logs; in enforce mode it asks
-    // for a step-up even while SL2 is in shadow; never a lock
+    // TN-108, OP-151 m.3 (o)
     #[test]
     fn monitor_logs_enforce_steps_up() {
         let listed = Inputs {
@@ -304,7 +302,7 @@ mod tests {
         assert!(c.signals.contains(&RiskSignal::SuspiciousIp) && c.step_up);
     }
 
-    // §4.4: a canary match is high whatever else
+    // §4.4
     #[test]
     fn canary_is_high() {
         let i = Inputs {

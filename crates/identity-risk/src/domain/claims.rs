@@ -55,7 +55,7 @@ pub fn signal(subject: [u8; 16], signal: RiskSignal, at: u64) -> ClaimOrder {
 mod tests {
     use super::*;
 
-    // CI-2, TN-46: a risk order carries no assurance and binds nothing it could qualify
+    // CI-2, TN-46
     #[test]
     fn risk_orders_only_narrow() {
         for o in [
@@ -70,7 +70,7 @@ mod tests {
             level([1; 16], Level::Low, 1).line,
             level([1; 16], Level::High, 2).line
         );
-        // CMP-22b: the realm's identity signer signs both classes
+        // CMP-22b
         assert!(access_identity_signer::issuer::issues(LEVEL_CLASS));
         assert!(access_identity_signer::issuer::issues(RISK_SIGNAL));
         assert_ne!(

@@ -114,8 +114,7 @@ pub fn impossible_travel(from: Point, from_ms: u64, to: Point, to_ms: u64) -> bo
 mod tests {
     use super::*;
 
-    // OP-151 m.1 (b), IDP-39: Istanbul to New York in an hour is impossible, in a day it is not;
-    // neighbouring cities never are
+    // OP-151 m.1 (b), IDP-39
     #[test]
     fn impossible_travel_by_distance_and_time() {
         let ist = Point::from_degrees(41.01, 28.98).unwrap();

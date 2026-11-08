@@ -35,7 +35,7 @@ pub fn prefix(ip: IpAddr) -> String {
 mod tests {
     use super::*;
 
-    // OP-151 m.1 (b): only the /24 or /48 prefix is kept in clear
+    // OP-151 m.1 (b)
     #[test]
     fn prefixes() {
         assert_eq!(prefix("203.0.113.77".parse().unwrap()), "203.0.113.0/24");

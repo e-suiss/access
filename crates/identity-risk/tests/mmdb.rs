@@ -121,8 +121,7 @@ fn ip(s: &str) -> IpAddr {
     s.parse().unwrap()
 }
 
-// OP-151 m.1 (b), IDP-39: country, ASN and a coarse position from any MMDB file; an address the
-// file does not know is unavailable
+// OP-151 m.1 (b), IDP-39
 #[test]
 fn lookups() {
     let path = dir("lookups").join("geo.mmdb");
@@ -141,7 +140,7 @@ fn lookups() {
     );
 }
 
-// OP-151 m.1 (b): the file is read again when it changes, so an operator replaces it in place
+// OP-151 m.1 (b)
 #[test]
 fn reload_on_change() {
     let path = dir("reload").join("geo.mmdb");
@@ -156,8 +155,7 @@ fn reload_on_change() {
     assert_eq!((p.country, p.asn), (Some(*b"US"), Some(70_000)));
 }
 
-// MD-8, OP-151 m.1 (b): no file or a broken file makes every answer unavailable, never "fine",
-// and the management surface can say so
+// MD-8, OP-151 m.1 (b)
 #[test]
 fn missing_or_broken_is_unavailable() {
     let d = dir("broken");

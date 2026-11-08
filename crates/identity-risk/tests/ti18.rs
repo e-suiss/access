@@ -41,7 +41,7 @@ fn sources(dir: &Path, out: &mut Vec<PathBuf>) {
     }
 }
 
-// TI-18, IDP-36: no decision path reads analytics
+// TI-18, IDP-36
 #[test]
 fn no_decision_path_reads_analytics() {
     let crates = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();

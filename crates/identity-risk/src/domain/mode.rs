@@ -238,7 +238,7 @@ pub fn tier(from: &ProtectionMode, to: &ProtectionMode) -> Tier {
 mod tests {
     use super::*;
 
-    // OP-151 m.3 (o), TN-46, TN-108: monitor and shadow by default; brute force stays enforced
+    // OP-151 m.3 (o), TN-46, TN-108
     #[test]
     fn defaults_and_brute_force() {
         let m = ProtectionMode::default();
@@ -269,7 +269,7 @@ mod tests {
         );
     }
 
-    // OP-151 m.3 (o): 14 days of learning force shadow
+    // OP-151 m.3 (o)
     #[test]
     fn learning_window_forces_shadow() {
         let m = ProtectionMode::parse(&[], "stepup_caep", &[]).unwrap();
@@ -279,7 +279,7 @@ mod tests {
         assert_eq!(m.effective_sl2(None, 400 * day), Sl2Mode::Shadow);
     }
 
-    // OP-151 m.3 (o): tightening is CT1, loosening CT2
+    // OP-151 m.3 (o)
     #[test]
     fn tiers() {
         let base = ProtectionMode::default();

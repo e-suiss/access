@@ -116,7 +116,7 @@ pub async fn mark_canary(
 mod tests {
     use super::*;
 
-    // OP-151 m.3 (o): the stored form reads back to the same mode
+    // OP-151 m.3 (o)
     #[test]
     fn rows_round_trip() {
         let m = ProtectionMode::parse(&[("suspicious_ip", "enforce")], "stepup", &[7, 3]).unwrap();

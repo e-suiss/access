@@ -144,8 +144,7 @@ pub const FORBIDDEN_INPUTS: [&str; 12] = [
 mod tests {
     use super::*;
 
-    // TN-47: no signal, source or input is a behavioural biometric or an emotion inference;
-    // the set is closed, so a new input has to pass this list
+    // TN-47
     #[test]
     fn no_behavioural_biometrics_or_emotion_input() {
         let names: Vec<&str> = RiskSignal::ALL

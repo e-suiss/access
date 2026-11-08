@@ -78,9 +78,7 @@ async fn flow(tx: &mut TenantTx, day: u32, n: u8, state: &str, done: bool) {
     }
 }
 
-// IDP-36, OP-151 m.3 (n): funnel, method distribution, MFA setup, failed logins and SL2 step-ups
-// are counted per realm and day; a failed-login surge leaves one alert; another realm's viewer
-// sees none of it, and a read without a realm scope is refused
+// IDP-36, OP-151 m.3 (n)
 #[tokio::test]
 async fn daily_counters_surge_and_viewer_scope() {
     let db = fresh().await.unwrap();

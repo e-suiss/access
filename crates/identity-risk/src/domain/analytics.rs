@@ -27,7 +27,7 @@ pub const FP_BUDGET_PPM: u64 = 5_000;
 mod tests {
     use super::*;
 
-    // IDP-36: the surge alert needs a real jump and a floor
+    // IDP-36
     #[test]
     fn surge_rule() {
         assert!(surge(10, 100));

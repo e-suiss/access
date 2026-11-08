@@ -96,7 +96,7 @@ impl RangeFetch for ToMock {
     }
 }
 
-// IDP-3, OP-151 m.3 (o), G50, MD-8: the range API through a local mock
+// IDP-3, OP-151 m.3 (o), G50, MD-8
 #[tokio::test]
 async fn range_api_fails_closed() {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -121,7 +121,7 @@ async fn range_api_fails_closed() {
     assert!(seen.contains(&String::from("/v3/range/21BD1")));
 }
 
-// OP-151 m.3 (o): the base must be https
+// OP-151 m.3 (o)
 #[test]
 fn the_base_is_https() {
     assert!(RangeApi::new("http://ranges.test", ()).is_err());
