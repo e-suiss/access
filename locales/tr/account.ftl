@@ -1,0 +1,33 @@
+# Access account texts, tr (OP-153 m.3 (s)). Keys: conformance/catalog/messages.toml.
+
+recovery_codes-title = Kurtarma kodları
+recovery_codes-save = Bu kodları güvenli bir yerde saklayın. Her kod bir kez çalışır.
+action-codes_saved = Sakladım
+settings-title = Hesap
+settings-sign_in_methods = Giriş yöntemleri
+settings-sign_ins = Giriş yaptığınız yerler
+settings-tied_to_device = Bu giriş bu cihaza bağlı
+action-end_sign_in = Bu girişi sonlandır
+action-sign_out = Çıkış yap
+settings-connected_apps = Bağlı uygulamalar
+action-stop_sharing = Paylaşmayı durdur
+settings-linked_sign_ins = Bağlı girişler
+notice-email_changed = E-posta adresiniz değiştirildi. Bu siz değilseniz: Hesabınızı güvenceye alın.
+notice-new_method = Yeni bir giriş yöntemi eklendi. Bu siz değilseniz: Hesabınızı güvenceye alın.
+action-secure_account = Hesabınızı güvenceye alın
+signed_out-password_changed = Parolanız değiştiği için çıkış yapıldı.
+signed_out-device_mismatch = Bu cihaz girişle eşleşmediği için çıkış yapıldı.
+signed_out-admin_ended = Bir yönetici bu girişi sonlandırdığı için çıkış yapıldı.
+signed_out-recovery = Hesap kurtarıldığı için çıkış yapıldı.
+signed_out-expired = Girişin süresi dolduğu için çıkış yapıldı.
+signed_out-delegations_remain = Bağladığınız uygulamalar ve ajanlar, siz kaldırana kadar erişimlerini korur.
+account-sign_in_turned_off = Hesabınızın girişi bu kurum tarafından kapatıldı.
+account-deletion_scheduled = Hesabınız gösterilen tarihte silinecek. O zamana kadar iptal edebilirsiniz.
+account-deleted = Hesabınız silindi. Bazı kayıtlar yasal nedenlerle gösterilen tarihe kadar saklanır; geçmiş kayıtları kaldırılmaz, karartılır.
+account-export_ready = Veri dışa aktarımınız hazır. İndirme bağlantısı 24 saat çalışır.
+account-email_confirmed = Bu adreste e-posta alabildiğiniz doğrulandı.
+delegation-check_note = Access isteği yine de kontrol edecek.
+delegation-created = Yetki verildi
+link-title = Başka bir girişi bağla
+link-combine_warning = Hesapları birleştirmek geri alınamaz. Yetkilerin sonrasında yeniden verilmesi gerekir.
+claim-issuer_says = Veren beyan ediyor (imzalı)

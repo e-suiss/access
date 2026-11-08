@@ -1,0 +1,33 @@
+# Access account texts, en (OP-153 m.3 (s)). Keys: conformance/catalog/messages.toml.
+
+recovery_codes-title = Recovery codes
+recovery_codes-save = Save these codes somewhere safe. Each code works once.
+action-codes_saved = I saved them
+settings-title = Account
+settings-sign_in_methods = Sign-in methods
+settings-sign_ins = Where you're signed in
+settings-tied_to_device = This sign-in is tied to this device
+action-end_sign_in = End this sign-in
+action-sign_out = Sign out
+settings-connected_apps = Connected apps
+action-stop_sharing = Stop sharing
+settings-linked_sign_ins = Linked sign-ins
+notice-email_changed = Your email address was changed. If this wasn't you: Secure your account.
+notice-new_method = A new sign-in method was added. If this wasn't you: Secure your account.
+action-secure_account = Secure your account
+signed_out-password_changed = Signed out because your password changed.
+signed_out-device_mismatch = Signed out because this device didn't match the sign-in.
+signed_out-admin_ended = Signed out because an administrator ended this sign-in.
+signed_out-recovery = Signed out because the account was recovered.
+signed_out-expired = Signed out because the sign-in expired.
+signed_out-delegations_remain = Apps and agents you connected keep their access until you revoke it.
+account-sign_in_turned_off = Your account's sign-in is turned off by this organization.
+account-deletion_scheduled = Your account will be deleted on the date shown. You can cancel until then.
+account-deleted = Your account is deleted. Some records are kept until the date shown for legal reasons; history entries are redacted, not removed.
+account-export_ready = Your data export is ready. The download link works for 24 hours.
+account-email_confirmed = Confirmed you can receive email at this address.
+delegation-check_note = Access will still check the request.
+delegation-created = Delegation created
+link-title = Link another sign-in
+link-combine_warning = Combining accounts can't be reversed. Delegations must be given again afterwards.
+claim-issuer_says = Issuer says (signed)

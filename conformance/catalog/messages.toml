@@ -1,0 +1,918 @@
+# The message catalog (OP-153 m.3 (s), X35, X41, §8.15.2): every text Access shows, by its
+# Fluent key. `class` and `owner` follow §8.15.2; `protected` keys (enumeration-sensitive,
+# guarantee-bearing or owner-attributing) are never overridden by a realm (X35, XI-25); a
+# guarantee-bearing text names exactly one §3.3 class (SEC2). `text_id` is the login node
+# contract's wire id when the text is a TextId. Checked by `cargo xtask check` (fluent-catalog).
+
+[[message]]
+key = "login-failed"
+text_id = "login.failed"
+surface = "login"
+class = "auth_failed"
+owner = "identity_plane"
+protected = true
+
+[[message]]
+key = "login-throttled"
+text_id = "login.throttled"
+surface = "login"
+class = "auth_failed"
+owner = "identity_plane"
+protected = true
+
+[[message]]
+key = "login-unavailable"
+text_id = "login.unavailable"
+surface = "login"
+class = "info"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "flow-expired"
+text_id = "flow.expired"
+surface = "login"
+class = "info"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "second_factor-failed"
+text_id = "second_factor.failed"
+surface = "login"
+class = "auth_failed"
+owner = "identity_plane"
+protected = true
+
+[[message]]
+key = "passkey-not_registered"
+text_id = "passkey.not_registered"
+surface = "login"
+class = "auth_failed"
+owner = "identity_plane"
+protected = true
+
+[[message]]
+key = "label-identifier"
+text_id = "label.identifier"
+surface = "login"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "label-password"
+text_id = "label.password"
+surface = "login"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "label-totp_code"
+text_id = "label.totp_code"
+surface = "login"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "label-recovery_code"
+text_id = "label.recovery_code"
+surface = "login"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "action-continue"
+text_id = "action.continue"
+surface = "login"
+class = "action"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "action-sign_in"
+text_id = "action.sign_in"
+surface = "login"
+class = "action"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "action-passkey"
+text_id = "action.passkey"
+surface = "login"
+class = "action"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "action-passkey_create"
+text_id = "action.passkey_create"
+surface = "login"
+class = "action"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "action-verify"
+text_id = "action.verify"
+surface = "login"
+class = "action"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "action-recovery_code"
+text_id = "action.recovery_code"
+surface = "login"
+class = "action"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "action-skip"
+text_id = "action.skip"
+surface = "login"
+class = "action"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "action-restart"
+text_id = "action.restart"
+surface = "login"
+class = "action"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "label-email_code"
+text_id = "label.email_code"
+surface = "login"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "action-email_code"
+text_id = "action.email_code"
+surface = "login"
+class = "action"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "action-magic_link"
+text_id = "action.magic_link"
+surface = "login"
+class = "action"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "email-sent"
+text_id = "email.sent"
+surface = "login"
+class = "auth_failed"
+owner = "identity_plane"
+protected = true
+
+[[message]]
+key = "registration-title"
+text_id = "registration.title"
+surface = "login"
+class = "registration"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "label-email"
+text_id = "label.email"
+surface = "login"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "label-new_password"
+text_id = "label.new_password"
+surface = "login"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "label-display_name"
+text_id = "label.display_name"
+surface = "login"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "action-create_account"
+text_id = "action.create_account"
+surface = "login"
+class = "action"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "registration-code_sent"
+text_id = "registration.code_sent"
+surface = "login"
+class = "registration"
+owner = "identity_plane"
+protected = true
+
+[[message]]
+key = "registration-failed"
+text_id = "registration.failed"
+surface = "login"
+class = "registration"
+owner = "identity_plane"
+protected = true
+
+[[message]]
+key = "action-have_account"
+text_id = "action.have_account"
+surface = "login"
+class = "action"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "registration-complete"
+text_id = "registration.complete"
+surface = "login"
+class = "registration"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "recovery-title"
+text_id = "recovery.title"
+surface = "login"
+class = "recovery"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "action-recovery_start"
+text_id = "action.recovery_start"
+surface = "login"
+class = "action"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "recovery-requested"
+text_id = "recovery.requested"
+surface = "login"
+class = "recovery"
+owner = "identity_plane"
+protected = true
+
+[[message]]
+key = "recovery-cooling"
+text_id = "recovery.cooling"
+surface = "login"
+class = "recovery"
+owner = "identity_plane"
+protected = true
+guarantee = "UDC"
+
+[[message]]
+key = "recovery-denied"
+text_id = "recovery.denied"
+surface = "login"
+class = "recovery"
+owner = "identity_plane"
+protected = true
+
+[[message]]
+key = "recovery-complete"
+text_id = "recovery.complete"
+surface = "login"
+class = "recovery"
+owner = "identity_plane"
+protected = true
+guarantee = "UDC"
+
+[[message]]
+key = "recovery-locked"
+text_id = "recovery.locked"
+surface = "login"
+class = "recovery"
+owner = "identity_plane"
+protected = true
+
+[[message]]
+key = "recovery_codes-title"
+text_id = "recovery_codes.title"
+surface = "account"
+class = "settings"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "recovery_codes-save"
+text_id = "recovery_codes.save"
+surface = "account"
+class = "settings"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "action-codes_saved"
+text_id = "action.codes_saved"
+surface = "account"
+class = "action"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "label-link_code"
+text_id = "label.link_code"
+surface = "login"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "settings-title"
+text_id = "settings.title"
+surface = "account"
+class = "settings"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "settings-sign_in_methods"
+text_id = "settings.sign_in_methods"
+surface = "account"
+class = "settings"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "settings-sign_ins"
+text_id = "settings.sign_ins"
+surface = "account"
+class = "settings"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "settings-tied_to_device"
+text_id = "settings.tied_to_device"
+surface = "account"
+class = "settings"
+owner = "identity_plane"
+protected = true
+guarantee = "UDC"
+
+[[message]]
+key = "action-end_sign_in"
+text_id = "action.end_sign_in"
+surface = "account"
+class = "action"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "action-sign_out"
+text_id = "action.sign_out"
+surface = "account"
+class = "action"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "settings-connected_apps"
+text_id = "settings.connected_apps"
+surface = "account"
+class = "settings"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "action-stop_sharing"
+text_id = "action.stop_sharing"
+surface = "account"
+class = "action"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "settings-linked_sign_ins"
+text_id = "settings.linked_sign_ins"
+surface = "account"
+class = "settings"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "notice-email_changed"
+text_id = "notice.email_changed"
+surface = "account"
+class = "new_method_notice"
+owner = "identity_plane"
+protected = true
+
+[[message]]
+key = "notice-new_method"
+text_id = "notice.new_method"
+surface = "account"
+class = "new_method_notice"
+owner = "identity_plane"
+protected = true
+
+[[message]]
+key = "action-secure_account"
+text_id = "action.secure_account"
+surface = "account"
+class = "action"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "signed_out-password_changed"
+text_id = "signed_out.password_changed"
+surface = "account"
+class = "sign_out"
+owner = "identity_plane"
+protected = true
+
+[[message]]
+key = "signed_out-device_mismatch"
+text_id = "signed_out.device_mismatch"
+surface = "account"
+class = "sign_out"
+owner = "identity_plane"
+protected = true
+
+[[message]]
+key = "signed_out-admin_ended"
+text_id = "signed_out.admin_ended"
+surface = "account"
+class = "sign_out"
+owner = "realm_admin"
+protected = true
+
+[[message]]
+key = "signed_out-recovery"
+text_id = "signed_out.recovery"
+surface = "account"
+class = "sign_out"
+owner = "identity_plane"
+protected = true
+
+[[message]]
+key = "signed_out-expired"
+text_id = "signed_out.expired"
+surface = "account"
+class = "sign_out"
+owner = "identity_plane"
+protected = true
+
+[[message]]
+key = "signed_out-delegations_remain"
+text_id = "signed_out.delegations_remain"
+surface = "account"
+class = "sign_out"
+owner = "identity_plane"
+protected = true
+guarantee = "BS"
+
+[[message]]
+key = "account-sign_in_turned_off"
+text_id = "account.sign_in_turned_off"
+surface = "account"
+class = "account_state"
+owner = "realm_admin"
+protected = true
+
+[[message]]
+key = "account-deletion_scheduled"
+text_id = "account.deletion_scheduled"
+surface = "account"
+class = "account_state"
+owner = "identity_plane"
+protected = true
+guarantee = "UDC"
+
+[[message]]
+key = "account-deleted"
+text_id = "account.deleted"
+surface = "account"
+class = "account_state"
+owner = "identity_plane"
+protected = true
+guarantee = "BS"
+
+[[message]]
+key = "account-export_ready"
+text_id = "account.export_ready"
+surface = "account"
+class = "info"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "account-email_confirmed"
+text_id = "account.email_confirmed"
+surface = "account"
+class = "claim"
+owner = "identity_plane"
+protected = true
+guarantee = "BS"
+
+[[message]]
+key = "consent-title"
+text_id = "consent.title"
+surface = "login"
+class = "consent"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "consent-claims"
+text_id = "consent.claims"
+surface = "login"
+class = "consent"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "action-share"
+text_id = "action.share"
+surface = "login"
+class = "action"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "action-dont_share"
+text_id = "action.dont_share"
+surface = "login"
+class = "action"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "delegation-check_note"
+text_id = "delegation.check_note"
+surface = "account"
+class = "consent"
+owner = "access"
+protected = true
+guarantee = "BS"
+
+[[message]]
+key = "delegation-created"
+text_id = "delegation.created"
+surface = "account"
+class = "consent"
+owner = "access"
+protected = true
+guarantee = "BS"
+
+[[message]]
+key = "invitation-title"
+text_id = "invitation.title"
+surface = "login"
+class = "invitation"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "action-accept_invitation"
+text_id = "action.accept_invitation"
+surface = "login"
+class = "action"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "invitation-expired"
+text_id = "invitation.expired"
+surface = "login"
+class = "invitation"
+owner = "identity_plane"
+protected = true
+
+[[message]]
+key = "label-invitation_code"
+text_id = "label.invitation_code"
+surface = "login"
+class = "label"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "link-title"
+text_id = "link.title"
+surface = "account"
+class = "link"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "link-combine_warning"
+text_id = "link.combine_warning"
+surface = "account"
+class = "link"
+owner = "identity_plane"
+protected = true
+guarantee = "BS"
+
+[[message]]
+key = "error-reference"
+text_id = "error.reference"
+surface = "login"
+class = "oauth_error"
+owner = "identity_plane"
+protected = true
+
+[[message]]
+key = "error-app_owner"
+text_id = "error.app_owner"
+surface = "login"
+class = "oauth_error"
+owner = "client_developer"
+protected = true
+
+[[message]]
+key = "error-upstream_owner"
+text_id = "error.upstream_owner"
+surface = "login"
+class = "oauth_error"
+owner = "upstream_idp"
+protected = true
+
+[[message]]
+key = "error-access_owner"
+text_id = "error.access_owner"
+surface = "login"
+class = "oauth_error"
+owner = "identity_plane"
+protected = true
+
+[[message]]
+key = "step_up-required"
+text_id = "step_up.required"
+surface = "login"
+class = "step_up"
+owner = "access"
+protected = true
+
+[[message]]
+key = "claim-issuer_says"
+text_id = "claim.issuer_says"
+surface = "account"
+class = "claim"
+owner = "access"
+protected = true
+guarantee = "BS"
+
+[[message]]
+key = "remediation-route_to_coordinator"
+surface = "hub"
+class = "remediation"
+owner = "access"
+protected = false
+
+[[message]]
+key = "remediation-refresh_claim"
+surface = "hub"
+class = "remediation"
+owner = "access"
+protected = false
+
+[[message]]
+key = "remediation-self_authenticate"
+surface = "hub"
+class = "remediation"
+owner = "access"
+protected = false
+
+[[message]]
+key = "remediation-wait_until"
+surface = "hub"
+class = "remediation"
+owner = "access"
+protected = false
+
+[[message]]
+key = "remediation-not_satisfiable_by_actor"
+surface = "hub"
+class = "remediation"
+owner = "access"
+protected = false
+
+[[message]]
+key = "remediation-new_request_required"
+surface = "hub"
+class = "remediation"
+owner = "access"
+protected = false
+
+[[message]]
+key = "blocker-no_covering_authority"
+surface = "hub"
+class = "remediation"
+owner = "access"
+protected = false
+
+[[message]]
+key = "blocker-outside_instance_limits"
+surface = "hub"
+class = "remediation"
+owner = "access"
+protected = false
+
+[[message]]
+key = "blocker-restricted"
+surface = "hub"
+class = "remediation"
+owner = "access"
+protected = false
+
+[[message]]
+key = "blocker-budget_exhausted"
+surface = "hub"
+class = "remediation"
+owner = "access"
+protected = false
+
+[[message]]
+key = "blocker-ended"
+surface = "hub"
+class = "remediation"
+owner = "access"
+protected = false
+
+[[message]]
+key = "blocker-capacity_mismatch"
+surface = "hub"
+class = "remediation"
+owner = "access"
+protected = false
+
+[[message]]
+key = "blocker-source_not_accepted"
+surface = "hub"
+class = "remediation"
+owner = "access"
+protected = false
+
+[[message]]
+key = "blocker-schema_not_accepted"
+surface = "hub"
+class = "remediation"
+owner = "access"
+protected = false
+
+[[message]]
+key = "blocker-nonce_closed"
+surface = "hub"
+class = "remediation"
+owner = "access"
+protected = false
+
+[[message]]
+key = "blocker-foreign_status_unavailable"
+surface = "hub"
+class = "remediation"
+owner = "access"
+protected = false
+
+[[message]]
+key = "mail-otp-subject"
+surface = "mail"
+class = "notice"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "mail-magic_link-subject"
+surface = "mail"
+class = "notice"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "mail-password_changed-subject"
+surface = "mail"
+class = "notice"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "mail-new_sign_in-subject"
+surface = "mail"
+class = "notice"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "mail-account_status-subject"
+surface = "mail"
+class = "notice"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "mail-recovery_requested-subject"
+surface = "mail"
+class = "notice"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "mail-recovery_cooling-subject"
+surface = "mail"
+class = "notice"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "mail-recovery_completed-subject"
+surface = "mail"
+class = "notice"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "mail-recovery_codes_regenerated-subject"
+surface = "mail"
+class = "notice"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "mail-second_factor_enabled-subject"
+surface = "mail"
+class = "notice"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "mail-new_method-subject"
+surface = "mail"
+class = "notice"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "mail-email_changed-subject"
+surface = "mail"
+class = "notice"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "mail-invitation-subject"
+surface = "mail"
+class = "notice"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "mail-reset_intent-subject"
+surface = "mail"
+class = "notice"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "mail-deletion_scheduled-subject"
+surface = "mail"
+class = "notice"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "mail-export_ready-subject"
+surface = "mail"
+class = "notice"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "mail-inactivity_notice-subject"
+surface = "mail"
+class = "notice"
+owner = "identity_plane"
+protected = false
+
+[[message]]
+key = "mail-signup_code-subject"
+surface = "mail"
+class = "notice"
+owner = "identity_plane"
+protected = false

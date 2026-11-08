@@ -11,6 +11,8 @@ mod custody;
 pub(crate) mod deps;
 #[path = "rules_files.rs"]
 pub(crate) mod files;
+#[path = "rules_fluent.rs"]
+mod fluent;
 #[path = "rules_lex.rs"]
 pub(crate) mod lex;
 #[path = "rules_limits.rs"]
@@ -32,7 +34,7 @@ pub(crate) mod switches;
 #[path = "rules_telemetry.rs"]
 mod telemetry;
 #[path = "rules_ui_terms.rs"]
-mod ui_terms;
+pub(crate) mod ui_terms;
 #[path = "rules_vectors.rs"]
 mod vectors;
 
@@ -164,6 +166,10 @@ pub(crate) fn checks() -> Vec<Check> {
         Check {
             name: "ui-text-nodes",
             run: ui_terms::check_text_nodes,
+        },
+        Check {
+            name: "fluent-catalog",
+            run: fluent::check,
         },
     ]);
     all

@@ -1,0 +1,183 @@
+# The binding UI glossary (§8.8, §8.9, §8.11, X24, XI-13, TN-108, OP-153 m.3 (s)): one canonical
+# concept, one term per language, and one concept per term. A new language is a new column.
+# `banned` lists words no end-user text says (login, account, hub and mail surfaces); the console
+# is developer and admin UI and may name realms. `classes` narrows a ban to messages of those
+# classes. Checked over every `locales/*/*.ftl` by `cargo xtask check` (fluent-catalog).
+
+[[term]]
+canonical = "Grant (given)"
+en = "Delegation"
+tr = "Yetki verme"
+
+[[term]]
+canonical = "Grant (held)"
+en = "Your authority"
+tr = "Yetkim"
+
+[[term]]
+canonical = "Rule-shaped Grant"
+en = "Role delegation"
+tr = "Rol yetkisi"
+
+[[term]]
+canonical = "Named AuthoritySet"
+en = "Role"
+tr = "Rol"
+
+[[term]]
+canonical = "Capacity FOR(P)"
+en = "On your behalf"
+tr = "Sizin adınıza"
+
+[[term]]
+canonical = "DelegationTerms"
+en = "Can pass on"
+tr = "Başkasına verebilir"
+
+[[term]]
+canonical = "Reserved action"
+en = "Protected action"
+tr = "Korunan eylem"
+
+[[term]]
+canonical = "BudgetTerm"
+en = "Limit"
+tr = "Limit"
+
+[[term]]
+canonical = "Budget remaining"
+en = "left"
+tr = "kalan"
+
+[[term]]
+canonical = "Contribution (approve)"
+en = "Approve"
+tr = "Onayla"
+
+[[term]]
+canonical = "grant.revoke"
+en = "Revoke"
+tr = "Yetkiyi kaldır"
+
+[[term]]
+canonical = "grant.amend (narrow)"
+en = "Narrow"
+tr = "Daralt"
+
+[[term]]
+canonical = "grant.renounce"
+en = "Give back"
+tr = "İade et"
+
+[[term]]
+canonical = "Restriction overlay"
+en = "Suspend"
+tr = "Askıya al"
+
+[[term]]
+canonical = "ALLOW"
+en = "Allowed"
+tr = "İzin verildi"
+
+[[term]]
+canonical = "Mandate"
+en = "Instance limits"
+tr = "Çalışan kopya sınırları"
+
+[[term]]
+canonical = "Instance (human)"
+en = "Sign-in on {device}"
+tr = "{device} üzerinde giriş"
+
+[[term]]
+canonical = "Instance (agent)"
+en = "Running copy"
+tr = "Çalışan kopya"
+
+[[term]]
+canonical = "AuthorityAnchor root"
+en = "Authority root"
+tr = "Yetki kökü"
+
+[[term]]
+canonical = "Projection (offline)"
+en = "Offline pass"
+tr = "Çevrimdışı izin"
+
+[[term]]
+canonical = "grant.issue (on request)"
+en = "Give access"
+tr = "Erişim ver"
+
+[[term]]
+canonical = "grant.issue committed"
+en = "Delegation created"
+tr = "Yetki verildi"
+
+[[term]]
+canonical = "Claim"
+en = "Statement"
+tr = "Beyan"
+
+[[term]]
+canonical = "Acceptance"
+en = "Accepted source"
+tr = "Kabul edilen kaynak"
+
+[[term]]
+canonical = "Credential / authenticator"
+en = "Sign-in method"
+tr = "Giriş yöntemi"
+
+[[term]]
+canonical = "User record"
+en = "Account"
+tr = "Hesap"
+
+[[term]]
+canonical = "B2B Party"
+en = "Organization"
+tr = "Organizasyon"
+
+[[term]]
+canonical = "Client / RP"
+en = "App"
+tr = "Uygulama"
+
+[[term]]
+canonical = "IdentityBinding"
+en = "Linked sign-in"
+tr = "Bağlı giriş"
+
+[[term]]
+canonical = "Identity plane sign-out"
+en = "Sign out"
+tr = "Çıkış yap"
+
+[[term]]
+canonical = "instance.terminate"
+en = "End this sign-in"
+tr = "Bu girişi sonlandır"
+
+[[term]]
+canonical = "Support access Grant"
+en = "Support access"
+tr = "Destek erişimi"
+
+[[term]]
+canonical = "Tenant"
+en = "Subscription"
+tr = "Abonelik"
+
+# §8.9, §8.11, X24, X33, OP-153 m.2 N0 (Ek B 3591–3593, 3715–3717)
+
+[[banned]]
+en = ["tenant", "tenants", "realm", "realms", "cell", "cells", "session", "sessions", "mandate", "mandates", "merged", "trusted", "verified", "forever", "undo", "nonce", "holdingref", "validitycontract", "tenant_id", "realm_id", "acr", "amr", "sub", "dpop", "dbsc", "jti", "token", "tokens", "impersonate", "impersonation"]
+tr = ["kiracı", "kiracılar", "realm", "hücre", "oturum", "oturumlar", "birleştirildi", "güvenilir", "doğrulanmış", "sonsuza", "nonce", "token"]
+reason = "Never shown to an end user (§8.9, §8.11): tenancy and protocol names, and the words §8.10 forbids."
+
+[[banned]]
+en = ["allow", "authorize", "authorise"]
+tr = ["izin ver", "yetkilendir"]
+classes = ["consent"]
+reason = "A claim release or a delegation preview never says Allow or Authorize (§8.8, §8.11, X27)."
