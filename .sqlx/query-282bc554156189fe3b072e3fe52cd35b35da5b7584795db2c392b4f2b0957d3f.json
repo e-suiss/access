@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO access.recovery_code_sets (tenant_id, realm_id, subject_id)\n             VALUES ($1, $2, $3)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "282bc554156189fe3b072e3fe52cd35b35da5b7584795db2c392b4f2b0957d3f"
+}

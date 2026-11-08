@@ -3298,7 +3298,7 @@ async fn an_address_whose_domain_takes_no_mail_is_refused_before_any_code() {
     }
     // CR-40
     assert_eq!(answers[0], answers[1]);
-    assert!(e.sent().is_empty());
+    assert_eq!(e.sent().len(), 0);
     let _ = owner;
     let mut b = e.browser("su-mx-unknown");
     assert_eq!(
@@ -3484,6 +3484,26 @@ async fn a_second_step_and_new_recovery_codes_are_told_to_the_account() {
     let regenerated = *e.sent().last().unwrap();
     assert_eq!(regenerated.0, "relay.message.recovery_codes_regenerated.v1");
     assert_eq!(regenerated.2, subject);
+    // TN-59, OP-153 m.3 (d), Ek B 3539, 3969
+    assert_eq!(fresh.json()["acknowledgement_required"], true);
+    let saved = b
+        .post("/v1/account/recovery-codes/acknowledgement", None)
+        .await;
+    assert_eq!(saved.status, StatusCode::OK);
+    assert_eq!(saved.json()["acknowledged"], true);
+    let again = b
+        .post("/v1/account/recovery-codes/acknowledgement", None)
+        .await;
+    assert_eq!(again.status, StatusCode::CONFLICT);
+    assert_eq!(again.json()["code"], "nothing-to-acknowledge");
+    let mut t = TenantTx::begin(&e.db.app, e.tenant, e.realm).await.unwrap();
+    assert!(!t.code_set_pending(subject).await.unwrap());
+    t.commit().await.unwrap();
+    let anonymous = e
+        .browser("su-i-anon")
+        .post("/v1/account/recovery-codes/acknowledgement", None)
+        .await;
+    assert_eq!(anonymous.status, StatusCode::UNAUTHORIZED);
 }
 
 // OP-153 m.3 (j), TN-96, TN-82, CR-40

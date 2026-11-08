@@ -101,6 +101,10 @@ where
                 post(web::recovery_codes::<D, K, KI, C, M>),
             )
             .route(
+                &format!("{prefix}/v1/account/recovery-codes/acknowledgement"),
+                post(web::acknowledge_recovery_codes::<D, K, KI, C, M>),
+            )
+            .route(
                 &format!("{prefix}/v1/account/passkeys"),
                 post(web::begin_passkey::<D, K, KI, C, M>),
             )

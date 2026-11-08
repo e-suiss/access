@@ -218,6 +218,13 @@ pub const ROUTES: &[Route] = &[
         "regenerateRecoveryCodes",
         "Makes new recovery codes, shown once.",
     ),
+    live(
+        Owner::N1,
+        Verb::Post,
+        "/v1/account/recovery-codes/acknowledgement",
+        "acknowledgeRecoveryCodes",
+        "Records the owner's \"I saved them\" for the newest recovery codes (TN-59).",
+    ),
     served(
         Verb::Post,
         "/v1/account/passkeys",

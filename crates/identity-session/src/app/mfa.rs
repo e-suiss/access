@@ -145,7 +145,44 @@ where
             .await?;
             out.push(Secret::new(code));
         }
+        // TN-59, OP-153 m.3 (d)
+        tx.insert_code_set(subject).await?;
         Ok(out)
+    }
+
+    /// The owner's "I saved them" for the newest recovery codes (TN-59, OP-153 m.3 (d)); false
+    /// when no set waits for it.
+    ///
+    /// # Errors
+    /// [`SessionError`].
+    pub async fn acknowledge_recovery_codes(
+        &self,
+        cookie: &str,
+        correlation: &str,
+    ) -> Result<Result<bool, SessionStatus>, SessionError> {
+        let now = self.now();
+        let mut tx = self.begin().await?;
+        let session = match self.live_session(&mut tx, cookie, now).await? {
+            Ok(s) => s,
+            Err(status) => {
+                tx.commit().await?;
+                return Ok(Err(status));
+            }
+        };
+        let done = tx.acknowledge_code_set(session.subject).await?;
+        if done {
+            let target = self.external(session.subject)?;
+            audit(
+                &mut tx,
+                "credential.recovery_codes.acknowledged",
+                &target,
+                &target,
+                correlation,
+            )
+            .await?;
+        }
+        tx.commit().await?;
+        Ok(Ok(done))
     }
 
     /// TN-64: carries `session` to the next epoch, then moves the subject's epoch, which ends

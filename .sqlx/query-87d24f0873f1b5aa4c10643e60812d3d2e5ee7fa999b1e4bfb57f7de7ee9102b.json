@@ -1,0 +1,25 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT acknowledged_at IS NULL AS \"pending!\" FROM access.recovery_code_sets\n                WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3\n                ORDER BY issued_at DESC, set_id DESC LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "pending!",
+        "type_info": "Bool",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "87d24f0873f1b5aa4c10643e60812d3d2e5ee7fa999b1e4bfb57f7de7ee9102b"
+}

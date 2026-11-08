@@ -553,6 +553,14 @@ handler! {
 }
 
 handler! {
+    /// `POST /v1/account/recovery-codes/acknowledgement`.
+    acknowledge_recovery_codes(s, entry, b, p, bytes, headers) true {
+        let _ = (&p, &bytes);
+        Ok(s.hosted.acknowledge_recovery_codes(&entry, &b).await)
+    }
+}
+
+handler! {
     /// `POST /v1/account/passkeys`.
     begin_passkey(s, entry, b, p, bytes, headers) true {
         let _ = &p;

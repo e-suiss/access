@@ -116,6 +116,21 @@ pub trait SessionTx: AccountTx + RiskTx {
         credential: [u8; 16],
         step: i64,
     ) -> impl Future<Output = Result<bool, SessionError>> + Send;
+    /// Records a new set of recovery codes waiting for its "I saved them" (TN-59).
+    fn insert_code_set(
+        &mut self,
+        subject: [u8; 16],
+    ) -> impl Future<Output = Result<(), SessionError>> + Send;
+    /// Acknowledges the newest set; false when none waits.
+    fn acknowledge_code_set(
+        &mut self,
+        subject: [u8; 16],
+    ) -> impl Future<Output = Result<bool, SessionError>> + Send;
+    /// Whether the newest set still waits for its acknowledgement.
+    fn code_set_pending(
+        &mut self,
+        subject: [u8; 16],
+    ) -> impl Future<Output = Result<bool, SessionError>> + Send;
     /// The subject's WebAuthn `user.id`.
     fn user_handle(
         &mut self,

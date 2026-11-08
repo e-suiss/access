@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.recovery_code_sets SET acknowledged_at = clock_timestamp()\n              WHERE tenant_id = $1 AND realm_id = $2 AND acknowledged_at IS NULL\n                AND set_id = (SELECT s.set_id FROM access.recovery_code_sets s\n                               WHERE s.tenant_id = $1 AND s.realm_id = $2 AND s.subject_id = $3\n                               ORDER BY s.issued_at DESC, s.set_id DESC LIMIT 1)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "a905eeebe5affdd16f8e3275435e811a9d1045742360f14adbd53833c71873f2"
+}

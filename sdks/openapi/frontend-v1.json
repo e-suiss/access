@@ -397,6 +397,36 @@
         }
       }
     },
+    "/v1/account/recovery-codes/acknowledgement": {
+      "post": {
+        "operationId": "acknowledgeRecoveryCodes",
+        "summary": "Records the owner's \"I saved them\" for the newest recovery codes (TN-59).",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "default": {
+            "$ref": "#/components/responses/Problem"
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/account/passkeys": {
       "post": {
         "operationId": "beginPasskey",

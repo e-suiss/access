@@ -105,6 +105,18 @@ impl SessionTx for PgTx {
         Ok(self.0.use_otp_step(credential, step).await?)
     }
 
+    async fn insert_code_set(&mut self, subject: [u8; 16]) -> Result<(), SessionError> {
+        Ok(self.0.insert_code_set(subject).await?)
+    }
+
+    async fn acknowledge_code_set(&mut self, subject: [u8; 16]) -> Result<bool, SessionError> {
+        Ok(self.0.acknowledge_code_set(subject).await?)
+    }
+
+    async fn code_set_pending(&mut self, subject: [u8; 16]) -> Result<bool, SessionError> {
+        Ok(self.0.code_set_pending(subject).await?)
+    }
+
     async fn user_handle(&mut self, subject: [u8; 16]) -> Result<Option<[u8; 64]>, SessionError> {
         Ok(self.0.user_handle(subject).await?)
     }

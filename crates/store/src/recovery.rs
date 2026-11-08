@@ -273,6 +273,65 @@ fn seconds(ms: i64) -> f64 {
 }
 
 impl TenantTx {
+    /// Records a new set of registered recovery codes, waiting for its acknowledgement (TN-59).
+    ///
+    /// # Errors
+    /// [`StoreError`].
+    pub async fn insert_code_set(&mut self, subject: [u8; 16]) -> Result<(), StoreError> {
+        let (tenant, realm) = self.recovery_scope()?;
+        sqlx::query!(
+            "INSERT INTO access.recovery_code_sets (tenant_id, realm_id, subject_id)
+             VALUES ($1, $2, $3)",
+            tenant,
+            realm,
+            uuid(subject),
+        )
+        .execute(&mut *self.tx)
+        .await?;
+        Ok(())
+    }
+
+    /// Acknowledges the subject's newest set of recovery codes; false when it has none waiting.
+    ///
+    /// # Errors
+    /// [`StoreError`].
+    pub async fn acknowledge_code_set(&mut self, subject: [u8; 16]) -> Result<bool, StoreError> {
+        let (tenant, realm) = self.recovery_scope()?;
+        let n = sqlx::query!(
+            "UPDATE access.recovery_code_sets SET acknowledged_at = clock_timestamp()
+              WHERE tenant_id = $1 AND realm_id = $2 AND acknowledged_at IS NULL
+                AND set_id = (SELECT s.set_id FROM access.recovery_code_sets s
+                               WHERE s.tenant_id = $1 AND s.realm_id = $2 AND s.subject_id = $3
+                               ORDER BY s.issued_at DESC, s.set_id DESC LIMIT 1)",
+            tenant,
+            realm,
+            uuid(subject),
+        )
+        .execute(&mut *self.tx)
+        .await?
+        .rows_affected();
+        Ok(n == 1)
+    }
+
+    /// Whether the subject's newest set of recovery codes still waits for its acknowledgement.
+    ///
+    /// # Errors
+    /// [`StoreError`].
+    pub async fn code_set_pending(&mut self, subject: [u8; 16]) -> Result<bool, StoreError> {
+        let (tenant, realm) = self.recovery_scope()?;
+        let pending = sqlx::query_scalar!(
+            r#"SELECT acknowledged_at IS NULL AS "pending!" FROM access.recovery_code_sets
+                WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3
+                ORDER BY issued_at DESC, set_id DESC LIMIT 1"#,
+            tenant,
+            realm,
+            uuid(subject),
+        )
+        .fetch_optional(&mut *self.tx)
+        .await?;
+        Ok(pending.unwrap_or(false))
+    }
+
     fn recovery_scope(&self) -> Result<(Uuid, Uuid), StoreError> {
         let realm = self.realm().ok_or(StoreError::Range)?;
         Ok((uuid(*self.tenant.as_bytes()), uuid(*realm.as_bytes())))

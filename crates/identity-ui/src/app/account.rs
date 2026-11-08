@@ -246,6 +246,7 @@ where
                 let mut body = json!({});
                 if let (Some(codes), Some(map)) = (&done.recovery_codes, body.as_object_mut()) {
                     map.insert("recovery_codes".to_owned(), secrets(codes));
+                    map.insert("acknowledgement_required".to_owned(), json!(true));
                 }
                 Reply::json(200, body)
             }
@@ -270,7 +271,34 @@ where
             .regenerate_recovery_codes(b.session.unwrap_or_default(), b.correlation)
             .await
         {
-            Ok(Ok(codes)) => Reply::json(200, json!({ "recovery_codes": secrets(&codes) })),
+            Ok(Ok(codes)) => Reply::json(
+                200,
+                json!({ "recovery_codes": secrets(&codes), "acknowledgement_required": true }),
+            ),
+            Ok(Err(status)) => ended(&status),
+            Err(e) => failed(&e),
+        }
+    }
+
+    /// `POST /v1/account/recovery-codes/acknowledgement`: the owner's "I saved them" for the
+    /// newest set (TN-59, OP-153 m.3 (d)); `409` when no set waits for it.
+    pub async fn acknowledge_recovery_codes(&self, entry: &RealmEntry, b: &Browser<'_>) -> Reply {
+        let kit = match self.kit(entry).await {
+            Ok(k) => k,
+            Err(r) => return r,
+        };
+        signin!(self, kit, auth);
+        match auth
+            .acknowledge_recovery_codes(b.session.unwrap_or_default(), b.correlation)
+            .await
+        {
+            Ok(Ok(true)) => Reply::json(200, json!({ "acknowledged": true })),
+            Ok(Ok(false)) => Reply::problem(Problem {
+                status: 409,
+                code: "nothing-to-acknowledge",
+                title: "There are no new recovery codes to confirm",
+                retry_after_s: None,
+            }),
             Ok(Err(status)) => ended(&status),
             Err(e) => failed(&e),
         }
