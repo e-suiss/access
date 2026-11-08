@@ -212,16 +212,32 @@ impl<C: Clock + Send + Sync> WebhookFanout<C> {
     async fn queue(&self, tenant: TenantId, ready: &Ready) -> Result<u32, Unavailable> {
         let now = self.clock.now().map_err(down)?;
         let event_realm = ready.payload.get("realm").and_then(Value::as_str);
-        let mut t = TenantTx::begin_tenant(&self.db.app, tenant)
+        // OP-132 m.5: the webhooks of every realm are read tenant-wide, each delivery is queued
+        // in its own realm
+        let mut wide = TenantTx::begin_tenant_wide(&self.db.app, tenant)
             .await
             .map_err(down)?;
-        let hooks = store::live_webhooks(&mut t).await.map_err(down)?;
+        let hooks = store::live_webhooks(&mut wide).await.map_err(down)?;
+        wide.commit().await.map_err(down)?;
         let mut queued = 0_u32;
         let payload = serde_json::to_vec(&ready.payload).map_err(down)?;
+        let mut open: Option<([u8; 16], TenantTx)> = None;
         for w in hooks.iter().filter(|w| {
             w.events.iter().any(|n| n == ready.name)
                 && event_realm.is_none_or(|r| r == uuid(&w.realm))
         }) {
+            if open.as_ref().is_none_or(|(r, _)| *r != w.realm) {
+                if let Some((_, t)) = open.take() {
+                    t.commit().await.map_err(down)?;
+                }
+                let t = TenantTx::begin(&self.db.app, tenant, RealmId::from_bytes(w.realm))
+                    .await
+                    .map_err(down)?;
+                open = Some((w.realm, t));
+            }
+            let Some((_, t)) = open.as_mut() else {
+                return Err(Unavailable);
+            };
             let d = WebhookDelivery {
                 realm: w.realm,
                 webhook: w.id,
@@ -237,7 +253,9 @@ impl<C: Clock + Send + Sync> WebhookFanout<C> {
                 queued = queued.saturating_add(1);
             }
         }
-        t.commit().await.map_err(down)?;
+        if let Some((_, t)) = open {
+            t.commit().await.map_err(down)?;
+        }
         Ok(queued)
     }
 }

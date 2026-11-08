@@ -96,6 +96,27 @@ impl TenantTx {
         })
     }
 
+    /// A transaction scoped to a tenant that reads the live stream subscriptions and webhooks of
+    /// all its realms, as the fan-outs do (OP-132 m.5): every other realm-level row stays
+    /// invisible, and no realm-level row can be written in it.
+    ///
+    /// # Errors
+    /// [`StoreError::Db`].
+    pub async fn begin_tenant_wide(pool: &PgPool, tenant: TenantId) -> Result<Self, StoreError> {
+        let mut tx = pool.begin().await?;
+        sqlx::query!(
+            "SELECT set_config('app.tenant_id', $1, true) AS tenant, set_config('app.realm_wide', 'on', true) AS wide",
+            tenant.0.to_string()
+        )
+        .fetch_one(&mut *tx)
+        .await?;
+        Ok(Self {
+            tx,
+            tenant,
+            realm: None,
+        })
+    }
+
     /// Narrows a tenant-only transaction to `realm`, for the rows a realm's creation writes
     /// after its own (TN-111).
     ///

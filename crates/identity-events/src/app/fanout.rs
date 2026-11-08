@@ -297,7 +297,8 @@ impl<C: Clock + Send + Sync> Fanout<C> {
         let wants = |events: &[String]| {
             events.contains(&own) || standard.as_ref().is_some_and(|s| events.contains(s))
         };
-        let mut t = TenantTx::begin_tenant(&self.db.app, tenant)
+        // OP-132 m.5
+        let mut t = TenantTx::begin_tenant_wide(&self.db.app, tenant)
             .await
             .map_err(down)?;
         let subs = t.live_subscriptions().await.map_err(down)?;

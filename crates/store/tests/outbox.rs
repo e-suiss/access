@@ -110,7 +110,8 @@ async fn savepoints_keep_the_top_level_transaction_id() {
     let db = fresh().await.unwrap();
     let mut c = db.app.acquire().await.unwrap();
     c.execute("BEGIN").await.unwrap();
-    c.execute("SELECT set_config('app.tenant_id', '01010101-0101-0101-0101-010101010101', true)")
+    // OP-132 m.5: the outbox is realm-level
+    c.execute("SELECT set_config('app.tenant_id', '01010101-0101-0101-0101-010101010101', true), set_config('app.realm_id', '02020202-0202-0202-0202-020202020202', true)")
         .await
         .unwrap();
     let ins = "INSERT INTO access.identity_outbox (tenant_id, realm_id, kind, payload) VALUES \
