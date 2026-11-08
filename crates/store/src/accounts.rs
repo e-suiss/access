@@ -776,7 +776,8 @@ impl TenantTx {
         Ok(n == 1)
     }
 
-    /// Revokes a credential unless it is the subject's last method (TN-68). The subject row is
+    /// Revokes a credential unless it is the subject's last method (TN-68); a live linked
+    /// sign-in counts as a method (OP-153 m.15 (g)). The subject row is
     /// locked first, so two removals cannot both pass the check; the database trigger is the
     /// backstop.
     ///
@@ -792,9 +793,12 @@ impl TenantTx {
             return Ok(Revoke::Missing);
         };
         let others = sqlx::query_scalar!(
-            r#"SELECT count(*) AS "n!" FROM access.identity_credentials
-                WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3 AND status = 'active'
-                  AND credential_id <> $4"#,
+            r#"SELECT (SELECT count(*) FROM access.identity_credentials
+                        WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3
+                          AND status = 'active' AND credential_id <> $4)
+                    + (SELECT count(*) FROM access.identity_federated
+                        WHERE tenant_id = $1 AND realm_id = $2 AND subject_id = $3
+                          AND ended_ms IS NULL) AS "n!""#,
             tenant,
             realm,
             uuid(subject),

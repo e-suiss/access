@@ -337,6 +337,28 @@ async fn the_last_method_cannot_be_removed() {
     tx.commit().await.unwrap();
 }
 
+// TN-68, OP-153 m.15 (g)
+#[tokio::test]
+async fn a_live_linked_sign_in_is_a_method() {
+    let db = fresh().await.unwrap();
+    let (t, r) = realm(&db, 7, "acct-l").await;
+    let mut tx = TenantTx::begin(&db.app, t, r).await.unwrap();
+    let s = subject(&mut tx).await;
+    let wa = credential(&mut tx, s, "webauthn").await;
+    assert!(
+        tx.link_federated(s, "google", &[9; 32], None, 10)
+            .await
+            .unwrap()
+    );
+    tx.commit().await.unwrap();
+
+    let mut tx = TenantTx::begin(&db.app, t, r).await.unwrap();
+    assert_eq!(tx.revoke_credential(s, wa).await.unwrap(), Revoke::Done);
+    let link = tx.federated_of(s).await.unwrap()[0].link;
+    assert!(!tx.keeps_a_method(s, link).await.unwrap());
+    tx.commit().await.unwrap();
+}
+
 // OP-12, §12.1.3 test 2
 #[tokio::test]
 async fn accounts_are_invisible_outside_their_realm() {

@@ -51,6 +51,11 @@ async fn an_external_identity_links_to_one_account_and_a_link_ends_once() {
             .unwrap()
     );
     assert!(
+        tx.link_federated(a, "github", &[8; 32], None, 10)
+            .await
+            .unwrap()
+    );
+    assert!(
         !tx.link_federated(b, "google", &[7; 32], None, 11)
             .await
             .unwrap(),
@@ -60,7 +65,14 @@ async fn an_external_identity_links_to_one_account_and_a_link_ends_once() {
     assert_eq!((row.subject, row.verified_ms), (a, 10));
     tx.federated_verified(row.link, 20).await.unwrap();
     tx.federated_verified(row.link, 15).await.unwrap();
-    assert_eq!(tx.federated_of(a).await.unwrap()[0].verified_ms, 20);
+    assert_eq!(
+        tx.federated_by_key(&[7; 32])
+            .await
+            .unwrap()
+            .unwrap()
+            .verified_ms,
+        20
+    );
     assert!(!tx.end_federated(b, row.link, "unlinked", 30).await.unwrap());
     assert!(tx.end_federated(a, row.link, "unlinked", 30).await.unwrap());
     assert!(!tx.end_federated(a, row.link, "unlinked", 31).await.unwrap());
@@ -83,6 +95,44 @@ async fn an_external_identity_links_to_one_account_and_a_link_ends_once() {
         .execute(&db.owner)
         .await;
     assert!(deleted.is_err());
+}
+
+// TN-68, OP-153 m.15 (g)
+#[tokio::test]
+async fn the_last_live_link_stays_unless_a_combination_moves_it() {
+    let db = fresh().await.unwrap();
+    let (t, r) = realm(&db).await;
+    let mut tx = TenantTx::begin(&db.app, t, r).await.unwrap();
+    let a = tx.insert_subject("active", "k:1", &[1; 40]).await.unwrap();
+    let b = tx.insert_subject("active", "k:1", &[1; 40]).await.unwrap();
+    assert!(
+        tx.link_federated(a, "google", &[5; 32], None, 10)
+            .await
+            .unwrap()
+    );
+    assert!(
+        tx.link_federated(b, "google", &[6; 32], None, 10)
+            .await
+            .unwrap()
+    );
+    let la = tx.federated_by_key(&[5; 32]).await.unwrap().unwrap().link;
+    let lb = tx.federated_by_key(&[6; 32]).await.unwrap().unwrap().link;
+    assert!(!tx.keeps_a_method(a, la).await.unwrap());
+    assert!(tx.end_federated(b, lb, "combined", 20).await.unwrap());
+    tx.commit().await.unwrap();
+
+    let unlinked = sqlx::query(
+        "UPDATE access.identity_federated SET ended_ms = 30, end_reason = 'unlinked'
+          WHERE ended_ms IS NULL",
+    )
+    .execute(&db.owner)
+    .await;
+    let err = unlinked.unwrap_err();
+    let constraint = err
+        .as_database_error()
+        .and_then(sqlx::error::DatabaseError::constraint)
+        .map(String::from);
+    assert_eq!(constraint.as_deref(), Some("keep_last_method"));
 }
 
 // OP-153 m.3 (l), (m)
