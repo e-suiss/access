@@ -117,7 +117,7 @@ impl ReadTokens for Shared {
         &self,
         presented: Presented<'_>,
     ) -> impl Future<Output = Result<Option<ReadToken>, Unavailable>> + Send {
-        // TN-27: the fake binds a token to a proof naming this method and URI
+        // TN-27
         let expected = format!("{} {}", presented.method, presented.uri);
         let ok = presented.proofs == [expected.as_str()];
         let t = self.0.tokens.lock().unwrap().get(presented.token).cloned();
@@ -208,7 +208,7 @@ fn fake_item(kind: ResourceKind, key: &str, version: u64) -> Item {
     Item { body, version }
 }
 
-// TN-113: the fake store scopes reads to the realm; a key of another realm is simply absent
+// TN-113
 impl RealmResources for Shared {
     fn read(&self, q: ResourceQuery) -> Pending<'_, Option<Listing>> {
         let version = self.0.ledger.position.load(Ordering::SeqCst);
@@ -259,7 +259,7 @@ impl RealmResources for Shared {
     fn commit(&self, w: ResourceWrite, caller: WriteCaller) -> Pending<'_, Written> {
         let ledger = self.0.ledger.clone();
         ledger.calls.fetch_add(1, Ordering::SeqCst);
-        // TI-8: like ADP, a nonce is spent once; another request under it is refused
+        // TI-8
         let request = format!("{} {:?} {}", w.operation, w.key, w.body);
         let spent = self
             .0
@@ -321,7 +321,7 @@ fn fake_platform(kind: PlatformKind, key: &str) -> Item {
     Item { body, version: 1 }
 }
 
-// INV-29, X31: the fake platform answers any key; the handler keeps what the kind may show
+// INV-29, X31
 impl PlatformResources for Shared {
     fn read(&self, q: PlatformQuery) -> Pending<'_, Option<Listing>> {
         let keys = q.key.map_or_else(|| vec!["a".to_owned()], |k| vec![k]);
@@ -404,7 +404,7 @@ impl Env for TestEnv {
     }
 }
 
-// TN-125: the fake job store keeps everything in memory, in the one realm
+// TN-125
 impl Jobs for Shared {
     fn create(&self, slug: String, job: NewJob) -> Pending<'_, Option<String>> {
         let mut jobs = self.0.jobs.lock().unwrap();
@@ -473,7 +473,6 @@ impl Jobs for Shared {
             .get(&job)
             .map(|(v, _)| v.clone())
             .or_else(|| {
-                // like the resources, any other key of the realm reads as a finished job
                 (job != HIDDEN_KEY).then(|| JobView {
                     id: job.clone(),
                     mode: "parallel".to_owned(),

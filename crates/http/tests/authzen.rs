@@ -235,7 +235,6 @@ async fn post_to(
     )
 }
 
-// #1
 #[tokio::test]
 async fn evaluation_answers_allow_with_true() {
     let (status, _, body) = post(
@@ -250,7 +249,6 @@ async fn evaluation_answers_allow_with_true() {
     assert_eq!(body["context"]["exercise"], b64url_encode(&[8; 32]));
 }
 
-// #7, R2
 #[tokio::test]
 async fn deny_and_require_action_are_200_false() {
     for (o, word) in [
@@ -265,7 +263,6 @@ async fn deny_and_require_action_are_200_false() {
     }
 }
 
-// #7: a protocol error is 400, never a decision
 #[tokio::test]
 async fn a_protocol_error_is_400_problem() {
     let broken =
@@ -276,7 +273,6 @@ async fn a_protocol_error_is_400_problem() {
     assert!(body.get("decision").is_none());
 }
 
-// #7: core refusals keep their classes
 #[tokio::test]
 async fn core_refusals_map_to_their_status() {
     // PI-5, G16
@@ -293,7 +289,6 @@ async fn core_refusals_map_to_their_status() {
     }
 }
 
-// #6
 #[tokio::test]
 async fn discovery_names_the_pdp_and_the_profile() {
     let resp = app(Ok(Outcome::Allow), None)
@@ -321,9 +316,7 @@ async fn discovery_names_the_pdp_and_the_profile() {
     assert!(body.get("signed_metadata").is_none());
 }
 
-// §9.15.1, OP-143 m.4, T29, TI-RT5, OP-150 m.3 (q): the signer's Domain Metadata is served as
-// signed, with its media type and a cache lifetime that, stale copies included, never passes
-// one hour
+// §9.15.1, OP-143 m.4, T29, TI-RT5, OP-150 m.3 (q)
 #[tokio::test]
 async fn domain_metadata_is_served_as_signed() {
     let (status, headers, body) = get(&format!(
@@ -354,8 +347,7 @@ async fn domain_metadata_is_served_as_signed() {
     assert_eq!(body, METADATA);
 }
 
-// §9.15.1, OP-143 m.4: no signed document, or no DomainID in its text form, is a 404, never an
-// unsigned document
+// §9.15.1, OP-143 m.4
 #[tokio::test]
 async fn domain_metadata_without_a_signature_is_not_found() {
     let b = b64url_encode(&SIGNED.0);
@@ -384,8 +376,7 @@ async fn domain_metadata_without_a_signature_is_not_found() {
     }
 }
 
-// §9.5.1 #6, MD-3: a domain's discovery document names the domain's PDP identifier and carries
-// its signed Domain Metadata
+// §9.5.1, MD-3
 #[tokio::test]
 async fn domain_discovery_carries_signed_metadata() {
     let domain = domain_text(SIGNED);
@@ -406,7 +397,6 @@ async fn domain_discovery_carries_signed_metadata() {
     );
 }
 
-// #8
 #[tokio::test]
 async fn the_request_id_is_echoed() {
     let (_, echoed, _) = post(
@@ -418,7 +408,6 @@ async fn the_request_id_is_echoed() {
     assert_eq!(echoed.as_deref(), Some("req-42"));
 }
 
-// #9: carrier fields are forward compatible, Access members are must-understand
 #[tokio::test]
 async fn unknown_members_split_by_carrier() {
     let (status, _, _) = post(
@@ -442,7 +431,6 @@ async fn unknown_members_split_by_carrier() {
     assert_eq!(body["code"], "unknown-member");
 }
 
-// #10, L1-ADP-2
 #[tokio::test]
 async fn an_unauthenticated_pep_is_401_and_not_evaluated() {
     let (status, _, body) = post(
@@ -455,7 +443,6 @@ async fn an_unauthenticated_pep_is_401_and_not_evaluated() {
     assert_eq!(body["code"], "pep-unauthenticated");
 }
 
-// #11
 #[tokio::test]
 async fn floats_and_duplicates_are_refused() {
     let float = evaluation("commit", "").replace(r#""until": 100000"#, r#""until": 1e5"#);
@@ -469,7 +456,6 @@ async fn floats_and_duplicates_are_refused() {
     assert_eq!(status, StatusCode::BAD_REQUEST);
 }
 
-// #12
 #[tokio::test]
 async fn an_oversized_body_is_refused() {
     let big = evaluation(
@@ -480,7 +466,7 @@ async fn an_oversized_body_is_refused() {
     assert_eq!(status, StatusCode::PAYLOAD_TOO_LARGE);
 }
 
-// §9.5 Decision Response: `check` is advisory
+// §9.5
 #[tokio::test]
 async fn check_is_marked_advisory() {
     let (_, _, body) = post(
@@ -510,7 +496,7 @@ fn batch(modes: &[&str], semantic: &str) -> String {
     )
 }
 
-// #3 (batch), OP-141 m.22 (a): each item is answered like a single evaluation
+// OP-141 m.22 (a)
 #[tokio::test]
 async fn a_batch_answers_each_item() {
     // PI-23, G26
@@ -528,7 +514,7 @@ async fn a_batch_answers_each_item() {
     assert_eq!(items[1]["context"]["advisory"], true);
 }
 
-// OP-141 m.22 (a): a short-circuit is check-only; skipped items are not denials
+// OP-141 m.22 (a)
 #[tokio::test]
 async fn a_short_circuit_is_for_check_only() {
     // PI-23
@@ -553,7 +539,7 @@ async fn a_short_circuit_is_for_check_only() {
     assert_eq!(body["code"], "evaluations_semantic");
 }
 
-// OP-141 m.22 (a): an item's protocol error stays with the item
+// OP-141 m.22 (a)
 #[tokio::test]
 async fn an_item_error_stays_with_its_item() {
     let mut body: Value =
@@ -571,8 +557,7 @@ async fn an_item_error_stays_with_its_item() {
     assert_eq!(out["evaluations"][1]["error"], "unknown-member");
 }
 
-// OP-141 m.22 (h), m.36: a hypothetical explanation is a check labelled hypothetical; with
-// `record` it is the recorded decision, labelled recorded; `record` elsewhere is unknown
+// OP-141 m.22 (h), m.36
 #[tokio::test]
 async fn explain_is_hypothetical_check() {
     let (status, _, body) = post_to(
@@ -643,7 +628,7 @@ fn search_body(query: &str, page: &str) -> String {
     )
 }
 
-// #3–5 (search), L1-ADP-16, OP-141 m.22 (b): results with an opaque next page, advisory
+// L1-ADP-16, OP-141 m.22 (b)
 #[tokio::test]
 async fn search_pages_through_results() {
     let q = format!(
@@ -681,7 +666,7 @@ async fn search_pages_through_results() {
     assert_eq!(body["code"], "search");
 }
 
-// §13.7.4, OP-35, OP-141 m.23: over a rate limit is 429 with no decision
+// §13.7.4, OP-35, OP-141 m.23
 #[tokio::test]
 async fn a_rate_limit_is_429() {
     let (status, _, body) = post(
@@ -694,7 +679,7 @@ async fn a_rate_limit_is_429() {
     assert_eq!(body["code"], "rate-limited");
 }
 
-// OP-141 m.25: a limit is the batch's answer, never an error inside a 200
+// OP-141 m.25
 #[tokio::test]
 async fn a_rate_limited_batch_is_429() {
     let (status, _, body) = post_to(
@@ -708,9 +693,7 @@ async fn a_rate_limited_batch_is_429() {
     assert_eq!(body["code"], "rate-limited");
 }
 
-// §9.15.1 k.2, P60, MD-5: Domain Metadata, the realm's AS metadata and the authzen
-// configuration are three documents; none stands in for another, and the identity document's
-// issuer is no authority claim
+// §9.15.1 k.2, P60, MD-5
 #[tokio::test]
 async fn the_three_discovery_documents_stay_separate() {
     use access_identity_oauth::domain::issuer::Issuer;
@@ -746,9 +729,7 @@ async fn the_three_discovery_documents_stay_separate() {
     assert_eq!(az["signed_metadata"], b64url_encode(&md));
 }
 
-// OP-151 m.19 (e), E-5, INV-27: a recorded explanation at audit scope carries the selection
-// part of a two-part reason and whether the decision evaluated again matches; below audit scope
-// neither member exists
+// OP-151 m.19 (e), E-5, INV-27
 #[tokio::test]
 async fn audit_depth_adds_selection_and_replay() {
     let (status, _, body) = post_to(
@@ -780,8 +761,7 @@ async fn audit_depth_adds_selection_and_replay() {
     }
 }
 
-// §9.9.2, E17: a request naming an upstream Exercise is told the link is audit-only, never
-// enforced while no causal-bound allowance is evaluated; without one the member does not exist
+// §9.9.2, E17
 #[tokio::test]
 async fn an_upstream_causal_ref_is_marked_audit_only() {
     let upstream = format!(

@@ -100,7 +100,7 @@ fn parse(raw: &[u8]) -> Result<Submitted, &'static Code> {
             let Value::Object(mut op) = op else {
                 return Err(&codes::realm::INVALID_JOB);
             };
-            // TN-125: only writes whose answer may be kept; a shown-once secret never is
+            // TN-125
             let row = op
                 .remove("operation")
                 .and_then(|o| {
@@ -207,7 +207,7 @@ pub(super) async fn create<E: Env>(ctx: &Ctx<E>, raw: &[u8]) -> Result<Response,
         return Err(&codes::AIS_REQUIRED);
     };
     let job = parse(raw)?;
-    // TN-110: the envelope's AIS signs exactly this set of items
+    // TN-110
     if caller.statement.intent.0 != digest(&job)? {
         return Err(&codes::realm::JOB_INTENT_MISMATCH);
     }
@@ -281,7 +281,7 @@ async fn one<E: Env>(ctx: &Ctx<E>, index: u32, item: &Item, actor: [u8; 32]) -> 
     let Ok(now_ms) = env.clock().now_ms() else {
         return refused(index, item, &codes::UNAVAILABLE);
     };
-    // TN-127: each item takes from the caller's write budget
+    // TN-127
     let Some(row) = ROWS.iter().find(|r| r.operation_id == item.operation) else {
         return refused(index, item, &codes::realm::JOB_OPERATION_NOT_ALLOWED);
     };
@@ -299,7 +299,7 @@ async fn one<E: Env>(ctx: &Ctx<E>, index: u32, item: &Item, actor: [u8; 32]) -> 
     {
         return refused(index, item, &codes::RATE_LIMITED);
     }
-    // TN-110, PI-7: the item's AIS is the envelope's Instance's, for this domain
+    // TN-110, PI-7
     let Ok(kid) = ais_kid(&item.ais) else {
         return refused(index, item, &codes::AIS_INVALID);
     };
@@ -371,7 +371,7 @@ async fn run<E: Env>(ctx: Ctx<E>, id: String, job: Submitted) {
         let index = u32::try_from(i).unwrap_or(u32::MAX);
         total = total.saturating_add(1);
         let result = if blocked {
-            // TN-125: in a sequential job a failed item fails every one after it
+            // TN-125
             outcome(
                 index,
                 item,
@@ -476,8 +476,7 @@ mod tests {
         serde_json::to_vec(&json!({"mode": "sequential", "operations": ops})).unwrap_or_default()
     }
 
-    // TN-125: items are writes whose answer may be kept, each with its own AIS; the envelope
-    // is bounded
+    // TN-125
     #[test]
     fn a_job_names_bounded_replayable_writes_each_with_its_ais() {
         let ais = b64url_encode(b"x");
@@ -508,8 +507,7 @@ mod tests {
         );
     }
 
-    // TN-110, TN-125: the envelope's AIS binds the mode and every item's operation, key and
-    // AIS; changing any of them changes the digest
+    // TN-110, TN-125
     #[test]
     fn the_job_digest_binds_every_item() {
         let a = b64url_encode(b"a");

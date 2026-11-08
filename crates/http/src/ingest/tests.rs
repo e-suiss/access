@@ -76,8 +76,7 @@ async fn post_as(
     )
 }
 
-// CMP-8, §9.13 rule 3, OP-65: the endpoint answers admit or quarantine as a ClaimVerdict, a
-// refusal as a problem with its reason, and 503 when ingest is unavailable
+// CMP-8, §9.13 rule 3, OP-65
 #[tokio::test]
 async fn the_endpoint_answers_the_disposition() {
     let app = || router(Seen::default());
@@ -95,8 +94,7 @@ async fn the_endpoint_answers_the_disposition() {
     assert_eq!(s, StatusCode::SERVICE_UNAVAILABLE);
 }
 
-// L1-ADP-2, L2-CLM-5, OP-65: the caller is its client certificate; an unsigned Claim's channel
-// is that certificate; without an Idempotency-Key or a known carrier the request is refused
+// L1-ADP-2, L2-CLM-5, OP-65
 #[tokio::test]
 async fn the_caller_and_channel_come_from_the_transport() {
     let pep = b64url_encode(&PEP_THUMB);

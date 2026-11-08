@@ -246,8 +246,7 @@ fn check_is_advisory() {
     );
 }
 
-// TI-20, OP-141 m.22 (h): the requester sees a blocker's class, resolver and remediation, a hop
-// position, and never a subcode
+// TI-20, OP-141 m.22 (h)
 #[test]
 fn the_requester_sees_no_subcode_and_hop_positions_only() {
     use access_kernel::combinator::{Blocker, BlockerClass, Position, Remediation, Resolver};
@@ -277,8 +276,7 @@ fn the_requester_sees_no_subcode_and_hop_positions_only() {
     assert!(!out.to_string().contains("secret-policy"));
 }
 
-// OP-141 m.38 (c), (d): the viewer sees positions and subcodes but a restriction's subcode;
-// the auditor sees everything
+// OP-141 m.38 (c), (d)
 #[test]
 fn viewer_and_audit_filters_disclose_more() {
     use access_authority_core::app::Scope;
@@ -343,9 +341,7 @@ fn explained(response: &Response, scope: access_authority_core::app::Scope) -> O
     Out::Object(out)
 }
 
-// E43, L1-ADP-10, L1-ADP-15, TI-20, OP-141 m.38: the ADP context explains a decision in the
-// published explanation format; each reader's disclosure filter gives the committed example of
-// its view (`conformance/cddl/examples/explanation.json`)
+// E43, L1-ADP-10, L1-ADP-15, TI-20, OP-141 m.38
 #[test]
 fn the_adp_explains_in_the_published_format() {
     use access_authority_core::app::Scope;
@@ -368,9 +364,7 @@ fn the_adp_explains_in_the_published_format() {
     }
 }
 
-// §9.7.1: `page.total` is given only when the first page is the whole visible result, so it
-// never counts records outside the reader's disclosure scope; otherwise `has_more` says more
-// follows, and an empty visible result looks the same whatever exists
+// §9.7.1
 #[test]
 fn page_total_counts_only_a_complete_visible_result() {
     assert_eq!(
@@ -421,8 +415,7 @@ fn sample_explained() -> access_authority_core::app::audit::Explained {
     }
 }
 
-// §9.6.1, P41, E26, §17.1.1: `reason_admin` (with `basis_ref` expanded) exists only at audit
-// scope; the viewer gets the lineage with its pseudonyms; the requester gets neither
+// §9.6.1, P41, E26, §17.1.1
 #[test]
 fn reason_admin_exists_only_at_audit_scope() {
     let mut r = response(Outcome::Allow);

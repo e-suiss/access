@@ -5,7 +5,7 @@
 
 use super::*;
 
-// OP-149 m.5, CR-24: a kid is the canonical base64url of 32 bytes
+// OP-149 m.5, CR-24
 #[test]
 fn kids_are_canonical_thumbprints() {
     let text = b64url_encode(&[7; 32]);
@@ -14,7 +14,7 @@ fn kids_are_canonical_thumbprints() {
     assert_eq!(kid(&b64url_encode(&[7; 31])), None);
 }
 
-// OP-149 m.5: as_of is a ledger position or an RFC 3339 time
+// OP-149 m.5
 #[test]
 fn as_of_is_a_position_or_a_time() {
     assert_eq!(as_of(None), Ok(AsOf::Head));
@@ -29,7 +29,7 @@ fn as_of_is_a_position_or_a_time() {
     }
 }
 
-// OP-149 m.5: a batch names 1 to 100 distinct kids of one domain
+// OP-149 m.5
 #[test]
 fn a_batch_names_at_most_a_hundred_kids() {
     let domain = domain_text(&Digest([1; 32]));
@@ -45,7 +45,7 @@ fn a_batch_names_at_most_a_hundred_kids() {
     assert_eq!(batch(extra.as_bytes()), Err(BadRequest("unknown-member")));
 }
 
-// OP-149 m.4: the snapshot version follows its content
+// OP-149 m.4
 #[test]
 fn the_snapshot_version_follows_its_content() {
     let t = Tenant {
@@ -63,7 +63,7 @@ fn the_snapshot_version_follows_its_content() {
     let b = snapshot("tnt_a", &suspended, "eu-central");
     assert_ne!(a["version"], b["version"]);
     assert_eq!(a["retention"], json!({}));
-    // OP-149 m.4: a new realm is a new snapshot
+    // OP-149 m.4
     let grown = Tenant {
         realms: vec![super::super::ports::Realm {
             id: [2; 16],

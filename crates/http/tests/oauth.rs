@@ -164,10 +164,7 @@ async fn send(req: Request<Body>) -> axum::response::Response {
     app().oneshot(req).await.unwrap()
 }
 
-// §11.4.5 #19, G50, EP-2, TN-10: the endpoints answer at the host root and under the path
-// issuer; a body that is not a form is refused before anything is read; when the realm's rows
-// cannot be read the answer is 503 with Retry-After and no-store, never invalid_grant; an
-// unknown host gets 404
+// §11.4.5, G50, EP-2, TN-10
 // OP-54-RL11
 #[tokio::test]
 async fn routes_forms_and_outages() {
@@ -209,7 +206,7 @@ async fn routes_forms_and_outages() {
     )
     .await;
     assert_eq!(authorize.status(), StatusCode::SERVICE_UNAVAILABLE);
-    // MD-8: introspection never answers 503
+    // MD-8
     let introspect = send(
         Request::post("/introspect")
             .header(header::HOST, "acme.id.test")

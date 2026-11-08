@@ -136,9 +136,7 @@ async fn healthz_reports_landlock_abi() {
     assert!(body.contains(r#""seccomp_phase":2"#), "{body}");
 }
 
-// U42, §14.5, OP-151 m.3 (b): /healthz on the internal listener names the lockdown in force:
-// the profile, the seccomp phase, the Landlock ABI required (a hard minimum) and the one the
-// kernel reports; the public listener does not serve it
+// U42, §14.5, OP-151 m.3 (b)
 #[tokio::test]
 async fn healthz_names_the_required_and_the_kernel_landlock_abi() {
     let app = internal(health(), Readiness::default(), Limits::default(), || 0);
@@ -175,8 +173,7 @@ async fn unknown_path_is_404_problem() {
     );
 }
 
-// TN-113: a path reaches routing and path-based permissions only in its one canonical spelling;
-// dot segments, empty segments and needless percent-encoding are refused before any route
+// TN-113
 #[tokio::test]
 async fn non_canonical_paths_never_reach_a_route() {
     let app = router(security_txt(), Limits::default(), Router::new());
@@ -207,8 +204,7 @@ async fn non_canonical_paths_never_reach_a_route() {
     }
 }
 
-// OP-67 m.3, OP-151 m.3 (b): health, liveness, readiness and metrics are on the internal
-// listener only; the public router does not serve them
+// OP-67 m.3, OP-151 m.3 (b)
 #[tokio::test]
 async fn health_endpoints_are_internal_only() {
     let public = router(security_txt(), Limits::default(), Router::new());
@@ -229,7 +225,7 @@ async fn health_endpoints_are_internal_only() {
     };
     assert_eq!(get("/livez").await.unwrap().status(), StatusCode::OK);
     assert_eq!(get("/metrics").await.unwrap().status(), StatusCode::OK);
-    // MD-8: a process that is not ready takes no traffic
+    // MD-8
     assert_eq!(
         get("/readyz").await.unwrap().status(),
         StatusCode::SERVICE_UNAVAILABLE
@@ -239,8 +235,7 @@ async fn health_endpoints_are_internal_only() {
     assert_eq!(get("/nope").await.unwrap().status(), StatusCode::NOT_FOUND);
 }
 
-// SI-13, OP-150, CR-22: the provider declarations are served without authentication and state
-// that no custodial key exists
+// SI-13, OP-150, CR-22
 #[tokio::test]
 async fn the_provider_declarations_are_public() {
     use access_http::declarations::{Declarations, PATH, Stated};

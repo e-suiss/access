@@ -34,8 +34,7 @@ fn post(path: &str, key: &str, ais: &str, body: &'static str) -> Request<Body> {
         .unwrap()
 }
 
-// OP-65, OP-67 m.1: Request-Id is the trace id of a well-formed traceparent, else a new one, on
-// every response, refusals included
+// OP-65, OP-67 m.1
 #[tokio::test]
 async fn every_response_carries_the_trace_id_as_request_id() {
     let h = Harness::new();
@@ -82,8 +81,7 @@ async fn every_response_carries_the_trace_id_as_request_id() {
     assert!(r.headers().contains_key("request-id"));
 }
 
-// TN-127, OP-151 m.3 (d): a read token gets 60 per minute; the 61st is a 429 problem with
-// RateLimit and Retry-After; another token is unaffected
+// TN-127, OP-151 m.3 (d)
 #[tokio::test]
 async fn reads_are_limited_per_token() {
     let h = Harness::new();
@@ -111,8 +109,7 @@ async fn reads_are_limited_per_token() {
     assert_eq!(r.status(), StatusCode::OK);
 }
 
-// TN-127, OP-151 m.3 (d): realm-admin writes burst 50 per actor Instance, platform-admin 20 per
-// client Instance
+// TN-127, OP-151 m.3 (d)
 #[tokio::test]
 async fn writes_are_limited_per_actor_instance() {
     for (path, domain, burst) in [
@@ -144,7 +141,7 @@ async fn writes_are_limited_per_actor_instance() {
     }
 }
 
-// TN-126: the key is required, bounded, and is the AIS nonce
+// TN-126
 #[tokio::test]
 async fn a_write_needs_its_nonce_as_idempotency_key() {
     let h = Harness::new();
@@ -175,8 +172,7 @@ async fn a_write_needs_its_nonce_as_idempotency_key() {
     assert_eq!(h.commits(), 0);
 }
 
-// TN-126, TI-8: the same key and request replay the first answer without a second Exercise;
-// another request under the key is 422, never answered with the old answer
+// TN-126, TI-8
 #[tokio::test]
 async fn a_repeated_write_replays_and_a_changed_one_is_refused() {
     let h = Harness::new();
@@ -197,8 +193,7 @@ async fn a_repeated_write_replays_and_a_changed_one_is_refused() {
     assert_eq!(h.commits(), 1);
 }
 
-// TN-126, SI-20: a validation failure (400) and a server failure (5xx) are not kept; the same
-// key runs again
+// TN-126, SI-20
 #[tokio::test]
 async fn failures_are_not_kept() {
     let h = Harness::new();
@@ -228,7 +223,7 @@ async fn failures_are_not_kept() {
     }
 }
 
-// TN-126: while the first request runs, the same key is 409
+// TN-126
 #[tokio::test]
 async fn a_running_key_is_in_use() {
     let h = Harness::new();
@@ -254,8 +249,7 @@ async fn a_running_key_is_in_use() {
     assert_eq!(h.commits(), 0);
 }
 
-// TN-126, OP-151 m.3 (c): keys are scoped to the caller; another Instance's identical key is
-// its own
+// TN-126, OP-151 m.3 (c)
 #[tokio::test]
 async fn keys_are_scoped_to_the_caller() {
     let h = Harness::new();
@@ -271,7 +265,7 @@ async fn keys_are_scoped_to_the_caller() {
     assert_eq!(h.commits(), 2);
 }
 
-// TN-130: the body may carry the AIS instead of the header, but not both
+// TN-130
 #[tokio::test]
 async fn the_ais_may_travel_in_the_body() {
     let h = Harness::new();
@@ -298,8 +292,7 @@ async fn the_ais_may_travel_in_the_body() {
     );
 }
 
-// OP-65, TN-119: the surface roots answer with the surface's audience and scope namespace, in
-// snake_case, with the caller's RateLimit policies
+// OP-65, TN-119
 #[tokio::test]
 async fn the_surface_roots_describe_their_surface() {
     let h = Harness::new();

@@ -169,7 +169,7 @@ async fn handle<I: ClaimIngest>(
         )
         .into_response();
     };
-    // OP-65: every change carries an Idempotency-Key; the Claim itself is idempotent by content
+    // OP-65
     if headers
         .get("idempotency-key")
         .and_then(|v| v.to_str().ok())

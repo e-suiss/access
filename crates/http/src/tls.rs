@@ -66,7 +66,7 @@ pub fn server_config(
         return Err(TlsError::Certificates("no certificate".to_owned()));
     }
     let key = PrivateKeyDer::from_pem_slice(key_pem).map_err(|e| TlsError::Key(e.to_string()))?;
-    // CR-12: aws-lc-rs with X25519MLKEM768 preferred (rustls `prefer-post-quantum`)
+    // CR-12
     let provider = Arc::new(aws_lc_rs::default_provider());
     let builder = ServerConfig::builder_with_provider(provider.clone())
         .with_protocol_versions(&[&rustls::version::TLS13])?;
@@ -92,7 +92,7 @@ pub fn server_config(
     };
     let mut config = builder.with_single_cert(chain, key)?;
     config.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
-    // OP-36: no 0-RTT
+    // OP-36
     config.max_early_data_size = 0;
     Ok(Arc::new(config))
 }

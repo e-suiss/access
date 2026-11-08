@@ -67,7 +67,7 @@ fn client(
     TlsConnector::from(Arc::new(config))
 }
 
-// CR-12: TLS 1.3 with X25519MLKEM768, and the application answers over it
+// CR-12
 #[tokio::test]
 async fn tls_13_with_the_hybrid_group() {
     let s = start().await;
@@ -96,7 +96,7 @@ async fn tls_13_with_the_hybrid_group() {
     let _ = s.stop.send(());
 }
 
-// CR-12: a client that offers only TLS 1.2 gets no connection
+// CR-12
 #[tokio::test]
 async fn tls_12_is_refused() {
     let s = start().await;
@@ -108,7 +108,7 @@ async fn tls_12_is_refused() {
     let _ = s.stop.send(());
 }
 
-// OP-52: an unusable chain or key stops the server from starting
+// OP-52
 #[test]
 fn bad_pem_is_refused() {
     let cert = rcgen::generate_simple_self_signed(vec!["localhost".to_owned()]).unwrap();
@@ -193,8 +193,7 @@ async fn get_pep(
     Some(text.rsplit("\r\n").next().unwrap().to_owned())
 }
 
-// OP-141 m.18 (b), L1-ADP-2: a verified client certificate names the PEP by its thumbprint;
-// no certificate is still a connection, without a PEP; a foreign one is refused
+// OP-141 m.18 (b), L1-ADP-2
 #[tokio::test]
 async fn a_client_certificate_names_the_pep() {
     let trusted = ca();
@@ -208,7 +207,7 @@ async fn a_client_certificate_names_the_pep() {
     let _ = s.stop.send(());
 }
 
-// OP-52: an unusable client CA bundle stops the server from starting
+// OP-52
 #[test]
 fn bad_client_ca_is_refused() {
     let cert = rcgen::generate_simple_self_signed(vec!["localhost".to_owned()]).unwrap();

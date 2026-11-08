@@ -912,8 +912,7 @@ fn passkey_node(a: &Answer) -> Value {
         .clone()
 }
 
-// TN-96, TN-132, OP-146 m.12 (b): identifier → password → complete; the session cookie is
-// `__Host-` and the flow answers 410 once used
+// TN-96, TN-132, OP-146 m.12 (b)
 #[tokio::test]
 async fn identifier_then_password_signs_in_with_a_host_cookie() {
     let e = env(1, "lg-a", AuthPolicy::DEFAULT).await;
@@ -973,7 +972,7 @@ async fn identifier_then_password_signs_in_with_a_host_cookie() {
     assert_eq!(again.status, StatusCode::GONE);
 }
 
-// TN-106, X40: a field or method the step did not offer is 400; the flow is unchanged
+// TN-106, X40
 #[tokio::test]
 async fn fabricated_submissions_are_refused() {
     let e = env(2, "lg-b", AuthPolicy::DEFAULT).await;
@@ -994,8 +993,7 @@ async fn fabricated_submissions_are_refused() {
     assert_eq!(still.step(), "identifier");
 }
 
-// TN-126, OP-65: Idempotency-Key is required; the same key answers once; another request under
-// it is 422; another browser's key never replays this one's answer
+// TN-126, OP-65
 #[tokio::test]
 async fn idempotency_keys_replay_and_refuse() {
     let e = env(3, "lg-c", AuthPolicy::DEFAULT).await;
@@ -1042,7 +1040,7 @@ async fn idempotency_keys_replay_and_refuse() {
     assert_ne!(again.body, fresh.body);
 }
 
-// §17.9.6: an unknown host gets the plain 404; JSON is required on writes
+// §17.9.6
 #[tokio::test]
 async fn unknown_hosts_and_forms_are_refused() {
     let e = env(4, "lg-d", AuthPolicy::DEFAULT).await;
@@ -1070,8 +1068,7 @@ async fn unknown_hosts_and_forms_are_refused() {
     b.jar.clear();
 }
 
-// OP-146 m.12 (f), TN-18: the login app is served with the security headers of
-// web/login/security-headers.ts; the Related Origins document is the builder's
+// OP-146 m.12 (f), TN-18
 #[tokio::test]
 async fn the_login_app_carries_its_security_headers() {
     // GHSA-gpxg-fx2g-qxj2
@@ -1128,9 +1125,7 @@ async fn the_login_app_carries_its_security_headers() {
     assert_eq!(wk.json(), json!({ "origins": [ORIGIN] }));
 }
 
-// §10.2.2, TN-64, TN-59, TN-36, TN-50, S10: TOTP enrolment from a session ends other sessions;
-// the next sign-in asks for the second step; a recovery code works once; sign-out and sign-out
-// everywhere end sessions
+// §10.2.2, TN-64, TN-59, TN-36, TN-50, S10
 #[tokio::test]
 async fn totp_recovery_codes_and_sign_out() {
     let e = env(6, "lg-f", AuthPolicy::DEFAULT).await;
@@ -1229,8 +1224,7 @@ async fn totp_recovery_codes_and_sign_out() {
     );
 }
 
-// §10.2.4, TN-96, TN-97, OP-146 m.9, OP-149 m.16 (a): a passkey registered from a session signs
-// in from the identifier step's discoverable button; that stepped-up session registers devices
+// §10.2.4, TN-96, TN-97, OP-146 m.9, OP-149 m.16 (a)
 #[tokio::test]
 async fn a_passkey_registered_from_a_session_signs_in() {
     let e = env(7, "lg-g", AuthPolicy::DEFAULT).await;
@@ -1351,17 +1345,14 @@ async fn devices_bind_the_session_party(e: &Env, c: &mut Web) {
     assert_eq!(again.json()["code"], "invalid-party");
     let (_, other) = register(&b64url_encode(&[6; 16]), false).await;
     assert_eq!(other.json()["code"], "invalid-party");
-    // INV-13, §7.1, §12.12/7: the session already binds an active Instance; a new key is not a
-    // renewal of it
+    // INV-13, §7.1, §12.12/7
     let (_, next) = register(&party, false).await;
     assert_eq!(next.status, StatusCode::CONFLICT);
     assert_eq!(next.json()["code"], "instance-exists");
     device_key_claims(e, c).await;
 }
 
-// OP-150 m.3 (r), §14.5, CSRF: the Frontend API is same-origin only. A state-changing request
-// from another origin or site is refused before anything runs; no CORS is granted, so a
-// preflight gets nothing; the cookies are __Host-, Secure, HttpOnly and SameSite
+// OP-150 m.3 (r), §14.5, CSRF
 #[tokio::test]
 async fn the_frontend_api_is_same_origin_only() {
     let e = env(43, "lg-so", AuthPolicy::DEFAULT).await;
@@ -1406,9 +1397,7 @@ async fn the_frontend_api_is_same_origin_only() {
             assert!(r.headers.get("access-control-allow-origin").is_none());
         }
     }
-    // the session survived every refusal
     assert_eq!(b.get("/v1/sessions/current").await.status, StatusCode::OK);
-    // a same-origin request names the realm host over https, or a direct navigation
     for extra in [
         [("origin", "https://acme.example")],
         [("sec-fetch-site", "same-origin")],
@@ -1420,7 +1409,6 @@ async fn the_frontend_api_is_same_origin_only() {
             .await;
         assert_eq!(r.status, StatusCode::OK, "{extra:?}");
     }
-    // no CORS: a preflight is answered by nobody and no response names another origin
     let key = b.key();
     let preflight = b
         .send_with(
@@ -1632,13 +1620,7 @@ async fn auth_context_instance(e: &Env, w: &mut Web) -> Option<Vec<u8>> {
         })
 }
 
-// OP-149 m.32, m.6, m.16 (a), INV-13, §5.1 eki, OP-150 m.14 (f), m.12 (e), (f): a known device
-// key proven in a later session binds that session to the key's existing Instance; no Instance
-// is opened and the key row is untouched; the session's auth_context names it and its
-// authentication Claim is bound to it. A session binds one Instance (a second binding or
-// registration is instance-exists); a key no active device of this user holds, another
-// subject's key and a proof by another key are refused. A device the bootstrap recorded without
-// a session binds the same way. The Instance's termination releases every session bound to it.
+// OP-149 m.32, m.6, m.16 (a), INV-13, §5.1, OP-150 m.14 (f), m.12 (e), (f)
 #[tokio::test]
 async fn a_known_device_binds_a_later_session() {
     use access_identity_account::adapters::pg::PgTx;
@@ -1657,7 +1639,6 @@ async fn a_known_device_binds_a_later_session() {
     assert_eq!(registered.status, StatusCode::CREATED);
     assert_eq!(registered.json()["instance"], b64url_encode(&[9; 16]));
 
-    // a later session proves the same key: the same Instance, nothing registered
     let mut d = passkey_session(&e, "d", &mut key, &id, &user).await;
     assert_eq!(auth_context_instance(&e, &mut d).await, None);
     let bound = bind_device(&mut d, &device, &device).await;
@@ -1675,7 +1656,7 @@ async fn a_known_device_binds_a_later_session() {
     );
     assert_eq!(auth_context_instance(&e, &mut d).await, Some(vec![9; 16]));
     assert_eq!(auth_context_instance(&e, &mut c).await, Some(vec![9; 16]));
-    // INV-13: one Instance per session; neither a second binding nor a registration
+    // INV-13
     assert_eq!(
         bind_device(&mut d, &device, &device).await.json()["code"],
         "instance-exists"
@@ -1684,7 +1665,6 @@ async fn a_known_device_binds_a_later_session() {
     let second = register_device(&mut d, &other, false).await;
     assert_eq!(second.status, StatusCode::CONFLICT);
     assert_eq!(second.json()["code"], "instance-exists");
-    // a key no device of this user holds, and a proof by another key
     let mut f = passkey_session(&e, "f", &mut key, &id, &user).await;
     let unknown = bind_device(&mut f, &other, &other).await;
     assert_eq!(unknown.status, StatusCode::BAD_REQUEST);
@@ -1694,8 +1674,7 @@ async fn a_known_device_binds_a_later_session() {
     assert_eq!(forged.json()["code"], "invalid-proof-of-possession");
     assert_eq!(auth_context_instance(&e, &mut f).await, None);
 
-    // another subject's session with ann's key; bob's own device, recorded by the bootstrap
-    // without a session (OP-149 m.28 (b)), binds his session
+    // OP-149
     let bob = e.account("bob@example.com").await;
     let mut g = e.browser("g");
     assert_eq!(g.sign_in("bob@example.com").await.step(), "complete");
@@ -1731,7 +1710,7 @@ async fn a_known_device_binds_a_later_session() {
     assert_eq!(own.json()["party"], b64url_encode(&[6; 16]));
     assert_eq!(auth_context_instance(&e, &mut h).await, Some(vec![7; 16]));
 
-    // OP-150 m.12 (f): each bound session's authentication Claim is bound to its Instance
+    // OP-150 m.12 (f)
     let login_on = |instance: [u8; 16]| {
         move |o: &&ClaimOrder| {
             o.bind == Bind::Instance(instance)
@@ -1760,8 +1739,7 @@ async fn a_known_device_binds_a_later_session() {
         "the key was recorded once"
     );
 
-    // OP-150 m.12 (e), m.14 (f): the termination retires the key and releases the sessions
-    // bound to its Instance
+    // OP-150 m.12 (e), m.14 (f)
     let ended = c
         .send(
             "DELETE",
@@ -1780,14 +1758,11 @@ async fn a_known_device_binds_a_later_session() {
     assert_eq!(auth_context_instance(&e, &mut d).await, None);
     assert_eq!(auth_context_instance(&e, &mut c).await, None);
     assert_eq!(auth_context_instance(&e, &mut h).await, Some(vec![7; 16]));
-    // the retired key is no longer a known device
     let retired = bind_device(&mut f, &device, &device).await;
     assert_eq!(retired.json()["code"], "invalid-party");
 }
 
-// §10.2.2, TN-102, OP-146 m.14 (h): a magic link is previewed without being consumed and
-// confirmed by POST; another browser must confirm explicitly; only the starting browser gets
-// the session. An e-mail code signs in once.
+// §10.2.2, TN-102, OP-146 m.14 (h)
 #[tokio::test]
 async fn email_links_and_codes() {
     let e = env(8, "lg-h", AuthPolicy::DEFAULT).await;
@@ -1912,9 +1887,7 @@ fn masked(a: &Answer) -> (u16, Vec<(String, String)>, String) {
     (a.status.as_u16(), headers, body.to_string())
 }
 
-// OP-146 m.4 (h), CR-40, X34, TN-82, TN-96, TN-97, OP-146 m.10 (e): an active, an unknown, a
-// locked and a deactivated account read the same at every step: status, header set, body
-// bytes and no redirect
+// OP-146 m.4 (h), CR-40, X34, TN-82, TN-96, TN-97, OP-146 m.10 (e)
 #[tokio::test]
 async fn enumeration_parity_on_login() {
     // CVE-2026-4633
@@ -1965,9 +1938,7 @@ fn percentile(sorted: &[u128], p: usize) -> u128 {
     sorted[(sorted.len() - 1) * p / 100]
 }
 
-// OP-146 m.4 (h), SA-59, TN-82: the timing half of the enumeration measurement, N = 200 per
-// class, after successful sign-ins have set the padding mean. Nightly only (`just test-full`
-// runs ignored tests); the PR suite asserts no timing.
+// OP-146 m.4 (h), SA-59, TN-82
 #[tokio::test]
 #[ignore = "nightly: login timing parity (OP-146 m.4 (h))"]
 async fn enumeration_timing_parity_nightly() {
@@ -2030,8 +2001,7 @@ async fn enumeration_timing_parity_nightly() {
     }
 }
 
-// OP-149 m.6, m.8, m.9, m.16 (a), G57: the product endpoints need a live session; a challenge
-// names what the device's own Exercises sign; registering a device needs AAL2 and a fresh
+// OP-149 m.6, m.8, m.9, m.16 (a), G57
 /// The payload of a signed `auth_context` the realm key issued (OP-149 m.8): verified, its
 /// digest checked, decoded to its map entries.
 fn auth_context_fields(
@@ -2062,8 +2032,6 @@ fn auth_context_fields(
     fields
 }
 
-// step-up; auth_context is the session's artifact signed by the realm key; an approval call never
-// redirects to an unregistered URI
 #[tokio::test]
 async fn product_endpoints_follow_the_frontend_contract() {
     use suiss_crypto::dcbor::Value as Cbor;
@@ -2157,7 +2125,7 @@ async fn product_endpoints_follow_the_frontend_contract() {
         .find(|(k, _)| *k == Cbor::text("aal"))
         .map(|(_, v)| v.clone());
     assert_eq!(aal, Some(Cbor::text("aal1")));
-    // OP-149 m.30 (c): a session without a device Instance names none
+    // OP-149 m.30 (c)
     assert!(fields.iter().all(|(k, _)| *k != Cbor::text("instance")));
     let bound = b
         .post(
@@ -2188,11 +2156,7 @@ async fn product_endpoints_follow_the_frontend_contract() {
     assert_eq!(no_state.status, StatusCode::BAD_REQUEST);
 }
 
-// OP-149 m.33 (d), m.35, RFC 6749 §3.1.2, RFC 8252: a product is registered in the platform
-// realm only, with a list of return addresses; the Approval Surface of a tenant realm accepts
-// each of them exactly, the loopback one included, with no registration in the tenant realm,
-// and refuses an address no client registered, a different path on the product's origin and a
-// plain-http address included
+// OP-149 m.33 (d), m.35, RFC 6749 §3.1.2, RFC 8252
 #[tokio::test]
 async fn a_products_platform_registration_is_its_approval_return_address() {
     use access_kernel::verify::key_scope::thumbprint;
@@ -2279,9 +2243,7 @@ async fn a_products_platform_registration_is_its_approval_return_address() {
 
 /// Registers a passkey from `b`'s signed-in session; returns the authenticator, its id and the
 /// user handle.
-// IDP-8, §10.2 AAL2 table, TN-96: an account with a password and a passkey signs in with the
-// password and then the passkey as its second factor; the second step offers the assertion
-// request, and a stranger's key is refused with the honest message
+// IDP-8, §10.2 AAL2, TN-96
 #[tokio::test]
 async fn a_passkey_is_the_second_factor_after_the_password() {
     let e = env(0x51, "lg-2f", AuthPolicy::DEFAULT).await;
@@ -2387,12 +2349,7 @@ fn assertion_json(key: &mut Authenticator, id: &str, user: &str, challenge: &[u8
     })
 }
 
-// OP-150 m.3 (r), OP-149 m.9, §9.14.1 A, §9.14.5 WYSIWYS, SI-5, §13.7.3, SEC18: the hosted
-// Approval Surface end to end. A coordinator pushes the request with the approver's pre-signed
-// contribution; the page shows the render the decision point kept; one passkey assertion over
-// H(AAS) issues the bound authentication Claim at once and commits the contribution; the
-// browser goes back with exercise and render_digest. A statement over another render approves
-// nothing; from CT2 a passkey younger than 24 h cools.
+// OP-150 m.3 (r), OP-149 m.9, §9.14.1, §9.14.5, SI-5, §13.7.3, SEC18
 #[tokio::test]
 async fn an_approval_runs_on_the_hosted_surface() {
     use access_identity_account::domain::claims::Bind;
@@ -2404,7 +2361,6 @@ async fn an_approval_runs_on_the_hosted_surface() {
     let mut b = e.browser("b");
     assert_eq!(b.sign_in("ann@example.com").await.step(), "complete");
     let (mut key, id, user) = register_passkey(&mut b, "ann@example.com").await;
-    // the approver signs in with the passkey (AAL2) and registers a device Instance
     let mut c = e.browser("c");
     let first = c.start().await;
     let options = passkey_node(&first);
@@ -2435,7 +2391,7 @@ async fn an_approval_runs_on_the_hosted_surface() {
         )
         .await;
     assert_eq!(registered.status, StatusCode::CREATED);
-    // OP-149 m.30 (c): the session's auth_context now names the Instance it is bound to
+    // OP-149 m.30 (c)
     let issued = c.post("/v1/me/auth-context", None).await;
     assert_eq!(issued.status, StatusCode::OK);
     let instance = auth_context_fields(&e, &issued.json())
@@ -2447,7 +2403,7 @@ async fn an_approval_runs_on_the_hosted_surface() {
         Some(suiss_crypto::dcbor::Value::Bytes(vec![9; 16]))
     );
 
-    // §9.14.1 A step 4 prepared: the device signs the contribution's AIS; the coordinator pushes
+    // §9.14.1 step 4
     let kid = thumbprint(&device.public_key());
     let ais = sign_sign1(&device, kid, "application/access-ais+cbor", b"contribute").unwrap();
     let push = |nonce: u8| {
@@ -2494,7 +2450,6 @@ async fn an_approval_runs_on_the_hosted_surface() {
         )
     };
 
-    // the page: for the pushed request only, with the hosted security headers
     let page = c.get(&call(&uri)).await;
     assert_eq!(page.status, StatusCode::OK);
     assert!(
@@ -2518,7 +2473,6 @@ async fn an_approval_runs_on_the_hosted_surface() {
             .starts_with("text/javascript")
     );
 
-    // step 2: the flow opens with the decision point's render and options over H(AAS)
     let start = json!({ "request": uri, "redirect_uri": redirect, "state": "st-1" });
     let mut anon = e.browser("anon");
     assert_eq!(
@@ -2554,8 +2508,6 @@ async fn an_approval_runs_on_the_hosted_surface() {
     assert_eq!(again.status, StatusCode::CONFLICT);
     assert_eq!(again.json()["code"], "approval-started");
 
-    // steps 3 and 4: one assertion over H(AAS); the bound Claim is issued, the contribution
-    // committed, the browser sent back
     let finish = |credential: Value| json!({ "credential": credential, "redirect_uri": redirect, "state": "st-1" });
     let done = c
         .post(
@@ -2573,8 +2525,7 @@ async fn an_approval_runs_on_the_hosted_surface() {
     assert!(location.starts_with("https://shop.example/approved?exercise="));
     assert!(location.contains(&format!("exercise={}", b64url_encode(&[0xe3; 32]))));
     assert!(location.contains("&render_digest="));
-    // OP-149 m.33 (c): the approver's Claim goes back too, for a step-up term the same actor
-    // meets with this approval
+    // OP-149 m.33 (c)
     assert!(location.contains(&format!("&claim={}", b64url_encode(&[0xc1; 16]))));
     assert!(location.ends_with("&state=st-1"));
     assert_eq!(done.json()["claim"], b64url_encode(&[0xc1; 16]));
@@ -2599,7 +2550,6 @@ async fn an_approval_runs_on_the_hosted_surface() {
     assert_eq!(contributions[0].pep, "access-identity");
     let (render_digest, _) = refund_render(false);
     assert!(location.contains(&b64url_encode(&render_digest.0)));
-    // once: the statement was used
     let twice = c
         .post(
             &format!("/v1/approve/flows/{flow}"),
@@ -2609,7 +2559,7 @@ async fn an_approval_runs_on_the_hosted_surface() {
     assert_eq!(twice.status, StatusCode::CONFLICT);
     assert_eq!(twice.json()["code"], "approval-finished");
 
-    // §9.14.2, XI-7: the request changed between the statement and the commit
+    // §9.14.2, XI-7
     let pushed = coordinator
         .post("/v1/approve/requests", Some(push(21)))
         .await;
@@ -2629,7 +2579,7 @@ async fn an_approval_runs_on_the_hosted_surface() {
     assert_eq!(e.surface.contributions.lock().unwrap().len(), 1);
     e.surface.shifted.store(false, Ordering::SeqCst);
 
-    // §13.7.3, SEC18: a CT2 approval demands UV and a method older than 24 h
+    // §13.7.3, SEC18
     e.surface.tier.store(2, Ordering::SeqCst);
     let pushed = coordinator
         .post("/v1/approve/requests", Some(push(22)))
@@ -2662,9 +2612,7 @@ async fn an_approval_runs_on_the_hosted_surface() {
     assert!(cooling.json()["available_at"].is_string());
     assert_eq!(e.claims.0.lock().unwrap().len(), 1);
 
-    // SI-5, OP-149 m.30 (b): a contribution whose Claim the plane finds bound to another
-    // statement is refused with aas-binding; the problem names the part of the binding that
-    // was expected and not found, never a value of the request or of a Claim
+    // SI-5, OP-149 m.30 (b)
     e.surface.tier.store(1, Ordering::SeqCst);
     e.surface.unbound.store(true, Ordering::SeqCst);
     let pushed = coordinator
@@ -2699,7 +2647,6 @@ async fn an_approval_runs_on_the_hosted_surface() {
     assert_eq!(e.surface.contributions.lock().unwrap().len(), 1);
     e.surface.unbound.store(false, Ordering::SeqCst);
 
-    // nothing waits for an approval any more: the request changed
     e.surface.gone.store(true, Ordering::SeqCst);
     let pushed = coordinator
         .post("/v1/approve/requests", Some(push(23)))
@@ -2715,9 +2662,7 @@ async fn an_approval_runs_on_the_hosted_surface() {
     assert_eq!(gone.json()["code"], "approval-request-changed");
 }
 
-// TN-44, RFC 9470, §8.17.5.4, X-L3, Ek B 2290/2293/2295: `/login?reason=step_up&acr=…` drives a
-// step-up of the live session: fresh passkey steps restamp the same session at the asked AAL;
-// without a session there is nothing to step up
+// TN-44, RFC 9470, §8.17.5.4, X-L3
 #[tokio::test]
 async fn a_live_session_steps_up_in_place() {
     let e = env(47, "lg-su", AuthPolicy::DEFAULT).await;

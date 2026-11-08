@@ -195,9 +195,7 @@ mod tests {
 
     use super::*;
 
-    // SI-13, OP-150, CR-22, CR-30, T31: custody is declared "none" and the identity plane's KMS
-    // "separate" whatever the operator states; undeclared infrastructure facts stay null; the
-    // document matches the committed example
+    // SI-13, OP-150, CR-22, CR-30, T31
     #[test]
     fn the_declarations_match_the_example() {
         let unstated = serde_json::to_value(Declarations::of(Stated::default())).unwrap();

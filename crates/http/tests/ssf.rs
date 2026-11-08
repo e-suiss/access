@@ -124,8 +124,7 @@ async fn call(
     (status, json, cache)
 }
 
-// OP-149 m.7, SSF 1.0 §7.1, §8.1.1, RFC 8936 §2.4, RFC 6750: the metadata names the realm's
-// endpoints; a poll stream's credential reads, polls, updates and disables only its stream
+// OP-149 m.7, SSF §7.1, §8.1.1, RFC 8936 §2.4, RFC 6750
 #[tokio::test]
 #[allow(clippy::too_many_lines, reason = "one stream through its whole life")]
 async fn the_transmitter_serves_metadata_streams_and_poll() {
@@ -254,7 +253,7 @@ async fn the_transmitter_serves_metadata_streams_and_poll() {
         "urn:suiss:access:event:party.disabled"
     );
 
-    // SSF 1.0 §8.1.2, §8.1.4: the stream's own status and verification endpoints
+    // SSF §8.1.2, §8.1.4
     assert_eq!(same["status_endpoint"], format!("{ISSUER}/ssf/status"));
     assert_eq!(
         meta["verification_endpoint"],

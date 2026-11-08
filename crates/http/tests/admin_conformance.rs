@@ -37,8 +37,7 @@ fn write(key: &str, ais: Option<&str>, token: Option<&str>) -> Request<Body> {
     b.body(Body::from(r#"{"name":"x"}"#)).unwrap()
 }
 
-// §9.7, TN-110, OP-151 m.3 (s), TNI-12: without AIS, with a wrong Instance, or with a read
-// token only, the position of the domain's log does not move; with the caller's own AIS it does
+// §9.7, TN-110, OP-151 m.3 (s), TNI-12
 #[tokio::test]
 async fn a_write_without_actor_proof_changes_nothing() {
     let h = Harness::new();
@@ -100,8 +99,7 @@ async fn a_write_without_actor_proof_changes_nothing() {
     assert_eq!(h.position(), 1);
 }
 
-// TN-61, TN-130, MD-14, X24: no route sets a credential or acts as another user; reads never
-// write and writes always carry an AIS
+// TN-61, TN-130, MD-14, X24
 #[test]
 fn no_credential_setting_or_acting_as_route_exists() {
     for row in MANIFEST {
@@ -130,9 +128,7 @@ fn no_credential_setting_or_acting_as_route_exists() {
     }
 }
 
-// IDI-1, MD-14, TN-110: every realm write route compiles into one idp.* change committed in the
-// realm's governing domain, or is declared reserved and applies nothing; a bulk job runs each
-// item as such a write; no route writes identity plane configuration another way
+// IDI-1, MD-14, TN-110
 #[test]
 fn every_realm_write_is_an_idp_exercise() {
     use access_http::api::domain::Surface;
@@ -156,8 +152,7 @@ fn every_realm_write_is_an_idp_exercise() {
     assert!(writes > 30, "{writes}");
 }
 
-// XI-3, C2, E27: no surface holds or queues authority state; every management write answers
-// only once its Exercise committed, naming the Exercise and its log position, never 202 Accepted
+// XI-3, C2, E27
 #[test]
 fn every_management_write_answers_with_its_committed_exercise() {
     let doc = access_http::api::schema::openapi();
@@ -169,7 +164,7 @@ fn every_management_write_answers_with_its_committed_exercise() {
                 continue;
             }
             let id = op["operationId"].as_str().unwrap();
-            // PI-7: a draft changes nothing; it returns the intent the caller's AIS signs
+            // PI-7
             if matches!(id, "draftIntent" | "draftPlatformIntent") {
                 continue;
             }
@@ -201,9 +196,7 @@ fn committed_contract(name: &str) -> serde_json::Value {
     serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap()
 }
 
-// XI-7, E30, E44: Access has no inbox: no contract offers a person a list of requests, tasks or
-// notifications to act on, and the Approval Surface opens only for a request the coordinator
-// holds and hands over (its digest or pushed request_uri), never by browsing
+// XI-7, E30, E44
 #[test]
 fn no_contract_offers_an_inbox() {
     let banned = [

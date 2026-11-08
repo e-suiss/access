@@ -102,8 +102,7 @@ impl<P: Pdp> Service<P> {
                 }
                 Err(e) => bad(e, Body::Context),
             };
-            // OP-141 m.25: a limit is the batch's answer, never an item inside a 200; items
-            // already committed are answered again on retry with the same nonce (L2-REC-5)
+            // OP-141 m.25
             if reply == Reply::Limited {
                 return Reply::Limited;
             }
@@ -295,8 +294,7 @@ impl<P: Pdp> Service<P> {
         if scope != Scope::Audit {
             return out;
         }
-        // E-5: the selection is read by an anonymous check of the same intent and basis, under a
-        // nonce of its own, so the recorded statement is neither reused nor needed
+        // E-5
         let mut probe = inc.clone();
         probe.request.mode = Mode::Check;
         probe.ais = None;
@@ -374,7 +372,7 @@ pub(crate) fn failed(e: CoreError, body: Body) -> Reply {
         CoreError::Sequencer(_) | CoreError::Store(_) | CoreError::Unavailable(_) => {
             Reply::Unavailable(unavailable_reason(&e))
         }
-        // OP-149 m.12, m.30 (b): the reason first, then what the rejection expected
+        // OP-149 m.12, m.30 (b)
         CoreError::Protocol(_) | CoreError::AasBinding(_) => {
             let reason = e.reason().unwrap_or_default();
             let errors = std::iter::once(reason)

@@ -31,7 +31,7 @@ use access_http::api::ports::{CursorSeal, RateLimiter, ReadToken};
 use serde_json::json;
 use suiss_crypto::secret::Secret;
 
-// OP-67 m.1: W3C traceparent parsing
+// OP-67 m.1
 #[test]
 fn traceparent_is_read_strictly() {
     let t = TraceContext::parse("00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01").unwrap();
@@ -54,7 +54,7 @@ fn traceparent_is_read_strictly() {
     }
 }
 
-// TN-127: GCRA admits the burst, then the sustained rate
+// TN-127
 #[test]
 fn buckets_admit_the_burst_then_the_rate() {
     let q = Quota {
@@ -80,7 +80,7 @@ fn buckets_admit_the_burst_then_the_rate() {
     assert_eq!(q.policy_item(), "\"q\";q=10;w=1");
 }
 
-// TN-127: three layers behind one port; concurrency slots are returned
+// TN-127
 #[test]
 fn the_limiter_counts_concurrency_slots() {
     let l = MemoryLimiter::default();
@@ -92,7 +92,7 @@ fn the_limiter_counts_concurrency_slots() {
     assert!(l.enter("a", 2));
 }
 
-// TN-127: longest-prefix route groups
+// TN-127
 #[test]
 fn route_groups_are_longest_prefix() {
     assert_eq!(group_of("/admin/v1/platform", GROUPS), "/admin/v1/platform");
@@ -110,7 +110,7 @@ fn route_groups_are_longest_prefix() {
     );
 }
 
-// TN-126: keys and kept answers
+// TN-126
 #[test]
 fn keys_and_answers_round_trip() {
     assert!(valid_key(b"AAAAAAAAAAAAAAAAAAAAAA"));
@@ -129,7 +129,7 @@ fn keys_and_answers_round_trip() {
     assert!(Answer::decode(&[0, 1, 0xff, 0xff, 0xff, 0xff]).is_none());
 }
 
-// OP-65: strong ETags and If-Match (428 without, 412 on a mismatch, weak never matches)
+// OP-65
 #[test]
 fn if_match_compares_strong_tags() {
     let v1 = etag("client", "cli_1", b"1");
@@ -154,7 +154,7 @@ fn if_match_compares_strong_tags() {
     assert_eq!(if_match(["*"], None), Err(Precondition::Failed));
 }
 
-// OP-65, TN-112, §13.7.4, RAUTHY-004: only named parameters, page size 1 to 100, no offsets
+// OP-65, TN-112, §13.7.4, RAUTHY-004
 #[test]
 fn list_queries_are_closed() {
     let allowed = &["page[size]", "cursor", "filter"];
@@ -179,7 +179,7 @@ fn list_queries_are_closed() {
     }
 }
 
-// OP-65, RFC 8288: opaque cursors bound to their list, and the next link
+// OP-65, RFC 8288
 #[test]
 fn cursors_are_sealed_to_their_list() {
     let c = SivCursors::new(Secret::new([1; 32]));
@@ -198,7 +198,7 @@ fn cursors_are_sealed_to_their_list() {
     assert!(link.ends_with(">; rel=\"next\""));
 }
 
-// OP-65 m.2: RFC 9745 Deprecation and RFC 8594 Sunset
+// OP-65 m.2
 #[test]
 fn lifecycle_headers_are_well_formed() {
     assert_eq!(deprecation(1_688_169_599), "@1688169599");
@@ -217,7 +217,7 @@ fn lifecycle_headers_are_well_formed() {
     assert!(h[2].1.contains("rel=\"successor-version\""));
 }
 
-// TN-112 k.2, RFC 7396: merge patch with explicit null, and only the resource's members
+// TN-112 k.2, RFC 7396
 #[test]
 fn merge_patch_follows_rfc_7396() {
     let mut target = json!({ "a": "b", "c": { "d": "e", "f": "g" } });
@@ -253,7 +253,7 @@ fn token(audience: &str, scopes: &[&str], iat: u64, exp: u64) -> ReadToken {
     }
 }
 
-// OP-151 m.3 (a), (c), TN-119, TN-130: audience per surface, scope, ≤ 60 min, not expired
+// OP-151 m.3 (a), (c), TN-119, TN-130
 #[test]
 fn read_tokens_are_held_to_their_surface() {
     let realm = SurfaceScope::Realm("acme".into());

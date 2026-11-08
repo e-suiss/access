@@ -314,7 +314,7 @@ impl Subjects for People {
     ) -> Result<Option<Resolved>, Unavailable> {
         let known_sector = match sector {
             Sector::RealmClient(client_id) => client_id == "cli_relay",
-            // OP-149 m.37: the platform client as its assertion authenticated it
+            // OP-149 m.37
             Sector::Platform(c) => *c == relay(),
         };
         if tenant != [1; 16] || realm != REALM || !known_sector {
@@ -528,8 +528,7 @@ fn parties_request() -> Value {
     })
 }
 
-// OP-149 A11: Parties resolve to the pairwise sub one client sees and back, one direction per
-// call, at most 100 entries; what does not resolve is listed, with the consistency token
+// OP-149 A11
 #[tokio::test]
 async fn subjects_resolve_both_ways() {
     // MD-10, OP-141 m.22 (f)
@@ -542,7 +541,7 @@ async fn subjects_resolve_both_ways() {
     );
     assert_eq!(v["unknown"], json!([b64url_encode(&[3; 16])]));
     assert_eq!(v["consistency_token"], "ct-7");
-    // OP-149 m.34 (b): a sub that is a Party-less client's pseudonym names the client
+    // OP-149 m.34 (b)
     let back = json!({
         "realm": "a1a1a1a1-a1a1-a1a1-a1a1-a1a1a1a1a1a1",
         "client_id": "cli_relay",
@@ -596,8 +595,7 @@ async fn subjects_resolve_both_ways() {
     );
 }
 
-// OP-149 m.9: an allowed Exercise with the receipt the decision point issued; one known only
-// from state; and a 404 problem for one never allowed
+// OP-149 m.9
 #[tokio::test]
 async fn an_exercise_is_read_by_its_id() {
     // §9.8, L2-RCP-2
@@ -628,8 +626,7 @@ async fn an_exercise_is_read_by_its_id() {
     assert_eq!(status, StatusCode::BAD_REQUEST);
 }
 
-// OP-149 m.11, L2-RCP-1: the agency chain is read from the kept receipt, which comes with it;
-// an Exercise without a kept receipt has no chain and one never allowed is unknown
+// OP-149 m.11, L2-RCP-1
 #[tokio::test]
 async fn an_exercise_agency_chain_is_read_from_its_receipt() {
     // OP-149 m.11
@@ -659,12 +656,11 @@ async fn an_exercise_agency_chain_is_read_from_its_receipt() {
         problem_type(&body),
         "urn:suiss:access:problem:exercise-unknown"
     );
-    // a kept receipt that does not decode is not answered as an empty chain
     let (status, _, _) = call(app(true), get_agency(SIGNED)).await;
     assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
 }
 
-// OP-149 m.5, OP-141 m.18 (b): without a client certificate nothing is answered
+// OP-149 m.5, OP-141 m.18 (b)
 #[tokio::test]
 async fn a_client_certificate_is_required() {
     for req in [
@@ -722,10 +718,7 @@ fn dual_requests() -> Vec<(&'static str, Request<Body>)> {
     ]
 }
 
-// OP-149 m.37, m.19 (e), m.5, m.28 (c), m.19 (g): a platform product's fresh assertion names the
-// caller on the snapshot, tenant list, key and Party lookups, subjects:resolve and the Exercise
-// read, with the same answers a PEP certificate gets; for subjects:resolve the asking client is
-// the sector; the assertion may name the endpoint called as its audience
+// OP-149 m.37, m.19 (e), m.5, m.28 (c), m.19 (g)
 #[tokio::test]
 async fn a_platform_client_assertion_names_the_caller_like_a_certificate() {
     for (i, ((name, as_pep), (_, as_client))) in
@@ -755,8 +748,7 @@ async fn a_platform_client_assertion_names_the_caller_like_a_certificate() {
     assert_eq!(v["tenant"], "tnt_01");
 }
 
-// OP-149 m.37: the receipt is addressed to PEPs, so a platform client reads an allowed Exercise
-// without it, and the agency route, which is the receipt, stays a PEP's
+// OP-149 m.37
 #[tokio::test]
 async fn a_platform_client_reads_an_exercise_without_its_receipt() {
     let (status, _, body) = call(app(true), get_exercise(SIGNED)).await;
@@ -777,11 +769,7 @@ async fn a_platform_client_reads_an_exercise_without_its_receipt() {
     );
 }
 
-// OP-149 m.37, m.19 (e), m.20 (b), m.12: a replayed jti, an audience that is neither the platform
-// realm's issuer nor the endpoint, a client that is no platform product, or a malformed
-// Authorization header is 401 client-unauthenticated with WWW-Authenticate; a certificate and an
-// assertion together are 400 ambiguous-caller; the PEP-only routes answer an assertion as no
-// credential at all
+// OP-149 m.37, m.19 (e), m.20 (b), m.12
 #[tokio::test]
 async fn an_assertion_is_refused_plainly() {
     let snapshot = || {
@@ -834,7 +822,7 @@ async fn an_assertion_is_refused_plainly() {
         problem_type(&body),
         "urn:suiss:access:problem:ambiguous-caller"
     );
-    // OP-149 m.37: with an assertion the sector is the asking client, so the request names it
+    // OP-149 m.37
     let mut other = parties_request();
     other["client_id"] = json!("cli_other");
     let (status, _, body) = call(
@@ -847,7 +835,7 @@ async fn an_assertion_is_refused_plainly() {
         problem_type(&body),
         "urn:suiss:access:problem:client-mismatch"
     );
-    // OP-149 m.37: Claim Ingest, the ADP and the agency route stay mTLS
+    // OP-149 m.37
     let limits = Limits::default();
     let adp = harden(
         adp_router(
@@ -870,8 +858,7 @@ async fn an_assertion_is_refused_plainly() {
     );
 }
 
-// OP-149 m.5, CR-58: the canonical answer is the signed COSE_Sign1 with its excerpt; the
-// ETag is the ledger position and a live key is cached briefly
+// OP-149 m.5, CR-58
 #[tokio::test]
 async fn the_canonical_answer_is_signed() {
     for accept in [None, Some("application/cose"), Some("*/*")] {
@@ -889,8 +876,7 @@ async fn the_canonical_answer_is_signed() {
     }
 }
 
-// OP-149 m.5, OP-149 m.8: JSON carries the same content unsigned with the consistency token
-// and the Party's actor kind; an ended key is immutable
+// OP-149 m.5, OP-149 m.8
 #[tokio::test]
 async fn json_is_the_same_content_unsigned() {
     let (status, headers, body) =
@@ -911,7 +897,7 @@ async fn json_is_the_same_content_unsigned() {
     assert_eq!(v["keys"][0]["successor"], b64url_encode(&[5; 16]));
 }
 
-// OP-149 m.5, SEC12: a compromised key names the compromise and is not immutable
+// OP-149 m.5, SEC12
 #[tokio::test]
 async fn a_compromised_key_names_its_compromise() {
     let (status, headers, body) = call(
@@ -929,8 +915,7 @@ async fn a_compromised_key_names_its_compromise() {
     assert_eq!(k["compromise"]["source"], b64url_encode(&[7; 16]));
 }
 
-// OP-149 m.5: an unknown kid is a 404, a bad kid, domain or as_of a 400, a position past the
-// head a 503
+// OP-149 m.5
 #[tokio::test]
 async fn lookups_are_refused_plainly() {
     let (status, _, body) = call(app(true), get_key([0xff; 32], None, "")).await;
@@ -953,7 +938,7 @@ async fn lookups_are_refused_plainly() {
     assert_eq!(status, StatusCode::OK);
     let (status, _, body) = call(app(true), get_key(ACTIVE, None, "&as_of=99")).await;
     assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
-    // OP-149 m.12: a bare status keeps about:blank
+    // OP-149 m.12
     assert_eq!(problem_type(&body), "about:blank");
     let v: Value = serde_json::from_slice(&body).unwrap();
     assert_eq!(v["reason"], "consistency");
@@ -963,7 +948,7 @@ async fn lookups_are_refused_plainly() {
     assert_eq!(call(app(true), no_domain).await.0, StatusCode::BAD_REQUEST);
 }
 
-// OP-149 m.5: a batch answers up to 100 kids at one position and lists the unknown ones
+// OP-149 m.5
 #[tokio::test]
 async fn a_batch_answers_up_to_a_hundred_kids() {
     let (status, headers, body) = call(
@@ -988,10 +973,7 @@ async fn a_batch_answers_up_to_a_hundred_kids() {
     assert_eq!(problem_type(&body), "urn:suiss:access:problem:kids");
 }
 
-// OP-149 m.28 (c), m.8, CR-58: a Party's status is answered like a key: the canonical form is
-// the COSE_Sign1 under usage `party-lookup` with its excerpt, the ETag is the ledger position,
-// a live Party is cached briefly, a departed one is immutable, and JSON carries the same
-// content unsigned with the consistency token
+// OP-149 m.28 (c), m.8, CR-58
 #[tokio::test]
 async fn a_party_status_is_answered_like_a_key() {
     for accept in [None, Some("application/cose"), Some("*/*")] {
@@ -1035,8 +1017,7 @@ async fn a_party_status_is_answered_like_a_key() {
     assert_eq!(v["parties"][0]["ended"]["time"], "2026-11-04T10:01:00Z");
 }
 
-// OP-149 m.28 (c): an unknown Party is a 404, a malformed Party or domain a 400, a position
-// past the head the key lookup's 503, and a domain the PEP may not read the key lookup's refusal
+// OP-149 m.28 (c)
 #[tokio::test]
 async fn party_lookups_are_refused_like_key_lookups() {
     let (status, _, body) = call(app(true), get_party(Id([0xff; 16]), None, "")).await;
@@ -1086,8 +1067,7 @@ async fn party_lookups_are_refused_like_key_lookups() {
     assert_eq!(p["reason"], "unknown-domain");
 }
 
-// OP-149 m.28 (c): a batch answers up to 100 Parties at one position, lists the unknown ones
-// and refuses a repeated or malformed entry
+// OP-149 m.28 (c)
 #[tokio::test]
 async fn a_batch_answers_up_to_a_hundred_parties() {
     let (status, headers, body) = call(
@@ -1116,7 +1096,7 @@ async fn a_batch_answers_up_to_a_hundred_parties() {
     assert_eq!(status, StatusCode::BAD_REQUEST);
 }
 
-// OP-149 m.4: tenant snapshots one by one and by cursor
+// OP-149 m.4
 #[tokio::test]
 async fn tenants_are_listed_by_cursor() {
     let get = |path: &str| Request::get(path).body(Body::empty()).unwrap();
@@ -1217,8 +1197,7 @@ async fn eligibility(body: &Value) -> (StatusCode, Value) {
     (status, serde_json::from_slice(&bytes).unwrap())
 }
 
-// OP-149 m.10, §9.5.2: the eligibility check is an anonymous `check` for the subject; its set
-// may not choose a mode or a nonce
+// OP-149 m.10, §9.5.2
 #[tokio::test]
 async fn eligibility_is_a_check_for_the_subject() {
     let (status, v) = eligibility(&eligibility_request()).await;
@@ -1243,8 +1222,7 @@ fn settings() -> Settings {
     }
 }
 
-// OP-149 m.3, CR-58 m.3: Domain Metadata `discovery` is the deterministic CBOR of the same
-// endpoints map the realm document carries
+// OP-149 m.3, CR-58 m.3
 #[test]
 fn discovery_cbor_is_the_endpoints_map() {
     let issuer = Issuer::parse("https://acme.id.example").unwrap();
@@ -1307,8 +1285,7 @@ async fn body_of(req: Request<Body>) -> Value {
     serde_json::from_slice(&body).unwrap()
 }
 
-// OP-65, OP-149 m.1: every example is what the code produces or accepts, and validates
-// against the committed document's schemas
+// OP-65, OP-149 m.1
 #[tokio::test]
 async fn committed_examples_match_the_code_and_the_schema() {
     let doc = openapi();
@@ -1574,9 +1551,7 @@ fn validate(doc: &Value, schema: &Value, value: &Value, name: &str) {
     assert!(errs.is_empty(), "{errs:#?}");
 }
 
-// OP-149 m.4, m.16 (a), m.17 (g): the platform route examples meet the contract, and its
-// routes name the platform client scheme instead of a client certificate; the server tests
-// check the live answers against the same schemas
+// OP-149 m.4, m.16 (a), m.17 (g)
 #[test]
 fn platform_examples_meet_the_contract() {
     let doc = openapi();
@@ -1619,8 +1594,7 @@ fn platform_examples_meet_the_contract() {
         doc["components"]["securitySchemes"]["platform_client"]["scheme"],
         "bearer"
     );
-    // OP-149 m.37: the routes a platform client may also call name both schemes; the receipt
-    // route, Claim Ingest and the ADP keep the client certificate alone
+    // OP-149 m.37
     for (path, method) in [
         ("/access/v1/tenants", "get"),
         ("/access/v1/tenants/{tenant}/snapshot", "get"),
@@ -1649,8 +1623,7 @@ fn platform_examples_meet_the_contract() {
     assert_eq!(doc["security"], json!([{ "client": [] }]));
 }
 
-// OP-149 m.5, SAI-46, OP-149 m.12: while a domain's first operational key is in its publish
-// lead, the signed answer is a 503 whose reason says so; the unsigned form is answered
+// OP-149 m.5, SAI-46, OP-149 m.12
 #[tokio::test]
 async fn a_signed_lookup_names_why_it_waits() {
     let (status, _, body) = call(app(true), get_key(PENDING, None, "")).await;
@@ -1700,8 +1673,7 @@ async fn eligibility_with<P: Pdp + 'static>(pdp: P, body: &Value) -> (StatusCode
     (status, serde_json::from_slice(&bytes).unwrap())
 }
 
-// OP-149 m.10, m.12, RFC 9457 §3: a refused eligibility check names the part of the body it
-// is about, by stable code and JSON Pointer, never by value; a 503 names its reason
+// OP-149 m.10, m.12, RFC 9457 §3
 #[tokio::test]
 async fn eligibility_problems_name_the_refused_part() {
     let mut body = eligibility_request();
@@ -1755,8 +1727,7 @@ async fn eligibility_problems_name_the_refused_part() {
     assert_eq!(v["reason"], "lease-held");
 }
 
-// OP-150 m.2, m.3 (a), OP-149 m.3, CMP-8: Claim Ingest and the status list endpoint are served
-// and discovered
+// OP-150 m.2, m.3 (a), OP-149 m.3, CMP-8
 #[test]
 fn stage6_entries_are_documented_and_discovered_once_served() {
     let doc = openapi();

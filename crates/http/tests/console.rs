@@ -597,7 +597,7 @@ fn json(bytes: &[u8]) -> serde_json::Value {
     serde_json::from_slice(bytes).unwrap()
 }
 
-// TN-128, TN-129, TN-33: the hand-off opens a console session with a strict host-only cookie
+// TN-128, TN-129, TN-33
 #[tokio::test]
 async fn sign_in_opens_a_strict_console_session() {
     let h = Harness::new();
@@ -631,7 +631,7 @@ async fn sign_in_opens_a_strict_console_session() {
     }
 }
 
-// TN-131: a callback without the state this browser started with opens nothing
+// TN-131
 #[tokio::test]
 async fn a_forged_callback_opens_nothing() {
     let h = Harness::new();
@@ -651,7 +651,7 @@ async fn a_forged_callback_opens_nothing() {
     assert!(h.env().sessions.rows.lock().unwrap().is_empty());
 }
 
-// TN-129, OP-151 m.3 (f): 15 minutes idle ends the session
+// TN-129, OP-151 m.3 (f)
 #[tokio::test]
 async fn idle_sessions_end_after_fifteen_minutes() {
     let h = Harness::new();
@@ -669,7 +669,7 @@ async fn idle_sessions_end_after_fifteen_minutes() {
     assert_eq!(json(&body)["code"], "console-session-required");
 }
 
-// TN-129, OP-151 m.3 (f): 12 hours absolute, however busy
+// TN-129, OP-151 m.3 (f)
 #[tokio::test]
 async fn sessions_end_after_twelve_hours() {
     let h = Harness::new();
@@ -684,7 +684,7 @@ async fn sessions_end_after_twelve_hours() {
     assert_eq!(json(&body)["reason"], "expired");
 }
 
-// TN-129, OP-151 m.1 (b): bound to the /24 without a `GeoResolver` source; the realm may bind the address
+// TN-129, OP-151 m.1 (b)
 #[tokio::test]
 async fn sessions_are_bound_to_the_network() {
     let h = Harness::new();
@@ -706,7 +706,6 @@ async fn sessions_are_bound_to_the_network() {
     assert_eq!(r.status(), StatusCode::UNAUTHORIZED);
 }
 
-// Ek B 2973: a session store failure is a 503; nothing is passed through (fail closed)
 #[tokio::test]
 async fn a_session_store_failure_fails_closed() {
     let h = Harness::new();
@@ -736,8 +735,7 @@ async fn a_session_store_failure_fails_closed() {
     assert_eq!(r.status(), StatusCode::SEE_OTHER);
 }
 
-// TN-131: state-changing calls need the configured Origin and the session's CSRF token; Host
-// is never consulted
+// TN-131
 #[tokio::test]
 async fn writes_need_origin_and_the_sessions_csrf_token() {
     let h = Harness::new();
@@ -781,8 +779,7 @@ async fn writes_need_origin_and_the_sessions_csrf_token() {
     assert_eq!(r.status(), StatusCode::UNAUTHORIZED);
 }
 
-// TN-128, MD-14, OP-151 m.3 (s), TNI-12: the cookie alone neither reads through the admin
-// proxy nor writes through it; nothing reaches the management API
+// TN-128, MD-14, OP-151 m.3 (s), TNI-12
 #[tokio::test]
 async fn the_cookie_alone_cannot_read_or_write() {
     let h = Harness::new();
@@ -804,7 +801,7 @@ async fn the_cookie_alone_cannot_read_or_write() {
     assert_eq!(h.env().grants.issued.load(Ordering::SeqCst), 0);
 }
 
-// TN-128, OP-151 m.3 (e): a key other than the session's device Instance proves nothing
+// TN-128, OP-151 m.3 (e)
 #[tokio::test]
 async fn another_key_proves_nothing() {
     let h = Harness::new();
@@ -845,8 +842,7 @@ async fn another_key_proves_nothing() {
     assert!(h.env().up.take().is_empty());
 }
 
-// TN-128, TN-130, OP-151 m.3 (c), (e): a read proof by the session's Instance gets the
-// session's DPoP-bound read token attached; the cookie and the AIS stay at the BFF
+// TN-128, TN-130, OP-151 m.3 (c), (e)
 #[tokio::test]
 async fn a_read_proof_gets_the_holder_bound_read_token() {
     let h = Harness::new();
@@ -895,8 +891,7 @@ async fn a_read_proof_gets_the_holder_bound_read_token() {
     );
 }
 
-// OP-151 m.11 (a), TN-130: drafting an intent is a read; it needs a read proof over the POST
-// and goes up with the read token, never as a write
+// OP-151 m.11 (a), TN-130
 #[tokio::test]
 async fn drafting_an_intent_is_a_read() {
     let h = Harness::new();
@@ -931,7 +926,7 @@ async fn drafting_an_intent_is_a_read() {
     assert!(!names.contains(&"x-access-ais"));
 }
 
-// TN-130: no read token for the session means no read
+// TN-130
 #[tokio::test]
 async fn no_read_token_means_no_read() {
     let h = Harness::new();
@@ -951,7 +946,7 @@ async fn no_read_token_means_no_read() {
     assert!(h.env().up.take().is_empty());
 }
 
-// TN-110, MD-14: a write passes on the browser's AIS and carries no token
+// TN-110, MD-14
 #[tokio::test]
 async fn a_write_passes_on_the_browsers_ais_only() {
     let h = Harness::new();
@@ -982,7 +977,7 @@ async fn a_write_passes_on_the_browsers_ais_only() {
     assert_eq!(h.env().grants.issued.load(Ordering::SeqCst), 0);
 }
 
-// TN-128, OP-151 m.3 (e): before the session registered its device Instance nothing goes up
+// TN-128, OP-151 m.3 (e)
 #[tokio::test]
 async fn no_instance_no_proxy() {
     let h = Harness::new();
@@ -1000,8 +995,7 @@ async fn no_instance_no_proxy() {
     assert!(h.env().up.take().is_empty());
 }
 
-// TN-128, OP-151 m.3 (s), TNI-12: ADP reads go on as the browser wrote them; the BFF adds no
-// credential, so a body without the browser's AIS reads as Anonymous; nothing else is reachable
+// TN-128, OP-151 m.3 (s), TNI-12
 #[tokio::test]
 async fn adp_reads_carry_no_bff_credential() {
     let h = Harness::new();
@@ -1029,7 +1023,7 @@ async fn adp_reads_carry_no_bff_credential() {
         let (r, _) = h.send(s.post(path, "{}"), CLIENT).await;
         assert_eq!(r.status(), StatusCode::NOT_FOUND, "{path}");
     }
-    // OP-151 m.19: without the browser's Instance there is no commit to forward
+    // OP-151 m.19
     let (r, _) = h
         .send(s.post("/console/api/proxy/adp/evaluation", "{}"), CLIENT)
         .await;
@@ -1041,7 +1035,7 @@ async fn adp_reads_carry_no_bff_credential() {
     assert!(h.env().up.take().is_empty());
 }
 
-// Ek B 3089, TN-128: own sessions with the cookie; another account's session is not found
+// Ek B 3089, TN-128
 #[tokio::test]
 async fn own_sessions_list_and_revoke() {
     let h = Harness::new();
@@ -1087,7 +1081,6 @@ async fn own_sessions_list_and_revoke() {
     assert_eq!(json(&body)["code"], "console-session-required");
 }
 
-// Ek B 3089: the own profile is a cookie-only read
 #[tokio::test]
 async fn own_profile_is_a_cookie_read() {
     let h = Harness::new();
@@ -1102,7 +1095,7 @@ async fn own_profile_is_a_cookie_read() {
     assert_eq!(r.status(), StatusCode::UNAUTHORIZED);
 }
 
-// OP-149 m.6, OP-151 m.3 (e): the registration binds the session to its device Instance once
+// OP-149 m.6, OP-151 m.3 (e)
 #[tokio::test]
 async fn registration_binds_the_session_instance_once() {
     let h = Harness::new();
@@ -1136,7 +1129,7 @@ async fn registration_binds_the_session_instance_once() {
     assert_eq!(r.status(), StatusCode::CONFLICT);
 }
 
-// TN-33: the DBSC handshake answers 501 until DBSC lands; nothing is faked
+// TN-33
 #[tokio::test]
 async fn dbsc_is_not_faked() {
     let h = Harness::new();
@@ -1152,7 +1145,7 @@ async fn dbsc_is_not_faked() {
     }
 }
 
-// TN-131: every console answer carries the strict headers; unknown API paths are 404
+// TN-131
 #[tokio::test]
 async fn every_answer_carries_the_console_headers() {
     let h = Harness::new();
@@ -1196,9 +1189,7 @@ fn console_dist() -> std::path::PathBuf {
     dir
 }
 
-// TN-113, TN-128 (S-2): the console is served at its one canonical spelling, `/console`, with
-// its screens and its assets under the Vite base `/console/`; the sign-in returns there, and
-// the trailing-slash spelling is refused, never rewritten
+// TN-113, TN-128 (S-2)
 #[tokio::test]
 async fn the_console_is_served_at_its_canonical_path() {
     let h = Harness::serving(Some(Assets::load(&console_dist()).unwrap()));
@@ -1216,7 +1207,7 @@ async fn the_console_is_served_at_its_canonical_path() {
     h.sign_in().await;
 }
 
-// TN-131: an ambiguous cookie is refused rather than guessed
+// TN-131
 #[tokio::test]
 async fn ambiguous_cookies_are_refused() {
     let h = Harness::new();
@@ -1256,9 +1247,7 @@ fn with_body(s: &Session, path: &str, body: String) -> Request<Body> {
         .unwrap()
 }
 
-// TN-110, TN-128, MD-14, OP-151 m.19: ADP `evaluation` and `audit/export` go on only as a
-// `commit` the session's device Instance signed for the session's domain; a check, another
-// key, another domain, a stale statement or no statement is refused and nothing goes up
+// TN-110, TN-128, MD-14, OP-151 m.19
 #[tokio::test]
 #[allow(
     clippy::many_single_char_names,
@@ -1316,9 +1305,7 @@ async fn adp_commits_need_the_browsers_commit_ais() {
     }
 }
 
-// OP-151 m.19 (a), m.12 (c), PI-7: the BFF drafts a catalogued intent for the session's realm
-// for a read proof over the draft route; without the proof, or for anything else, nothing is
-// drafted, and a draft never goes upstream
+// OP-151 m.19 (a), m.12 (c), PI-7
 #[tokio::test]
 #[allow(
     clippy::many_single_char_names,
@@ -1495,9 +1482,7 @@ fn eligibility_body(subject: [u8; 16], domain: &Digest) -> String {
     .to_string()
 }
 
-// TN-128, OP-151 m.12 (e) (W-5): the ADP proxy is not an oracle over other tenants: a read
-// names the session's own domain, an eligibility check the session's own Party, and an AIS the
-// session's own device Instance; anything else is refused and nothing goes up
+// TN-128, OP-151 m.12 (e) (W-5)
 #[tokio::test]
 async fn adp_reads_are_the_sessions_own() {
     let h = Harness::new();
@@ -1549,8 +1534,7 @@ async fn adp_reads_are_the_sessions_own() {
     assert!(h.env().up.take().is_empty());
 }
 
-// OP-141 m.23 (a), OP-151 m.12 (e) (W-5): each console session is its own requester under the
-// console's PEP, so one session's reads never spend another's limit
+// OP-141 m.23 (a), OP-151 m.12 (e) (W-5)
 #[tokio::test]
 async fn each_session_is_its_own_requester() {
     let h = Harness::new();

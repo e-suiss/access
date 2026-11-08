@@ -224,7 +224,7 @@ async fn run<E: Env>(
     let write = row.access == Access::Write;
     let surface = row.surface;
     let group = rate::group_of(row.path, GROUPS);
-    // TN-127 layer 1: per surface instance, method and route group
+    // TN-127
     let quota = rate::group_quota(surface, write);
     let key = BucketKey {
         layer: "group",
@@ -237,7 +237,7 @@ async fn run<E: Env>(
     if !take.allowed {
         return throttled(surface, "group", Some(quota), take.reset_s);
     }
-    // TN-127 layer 2: requests in flight per surface instance
+    // TN-127
     let surface_slot = format!("surface:{}", scope.key());
     if !limiter.enter(&surface_slot, SURFACE_CONCURRENCY) {
         return throttled(surface, "concurrency", None, 1);
@@ -287,7 +287,7 @@ async fn run<E: Env>(
             )
         }
         Access::Write => {
-            // TN-110, TN-130: a write is the caller's AIS; a token alone never writes
+            // TN-110, TN-130
             let header_ais = values(&parts.headers, &HeaderName::from_static(AIS_HEADER))
                 .unwrap_or_else(|| vec!["\0", "\0"]);
             let sign1 = match ais_bytes(&header_ais, &body) {
@@ -315,7 +315,7 @@ async fn run<E: Env>(
             (Caller::Write(caller), kid, domain)
         }
     };
-    // TN-127 layer 3: per caller
+    // TN-127
     let actor_quota = rate::actor_quota(surface, write);
     let actor = BucketKey {
         layer: "actor",

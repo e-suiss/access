@@ -372,7 +372,7 @@ pub fn resolution_json(req: &ResolveRequest, found: &super::ports::Resolved) -> 
         .iter()
         .map(|(p, s)| json!({ "party": b64url_encode(p), "sub": s }))
         .collect();
-    // OP-149 m.34 (b): a client without a Party resolves to its client_id
+    // OP-149 m.34 (b)
     pairs.extend(
         found
             .clients

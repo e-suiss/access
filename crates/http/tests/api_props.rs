@@ -521,7 +521,7 @@ impl World {
                 prop_assert!(sent.contains(secret), "{secret} leaked for {g:?}: {text}");
             }
         }
-        // IDP-7, TN-104, must-never #16
+        // IDP-7, TN-104, MUST-NEVER-16
         if let Some(to) = headers.get(header::LOCATION) {
             let to = to.to_str().unwrap();
             let allowed = [CB, NATIVE, BYE, "http://127.0.0.1"]
@@ -552,8 +552,7 @@ impl World {
     }
 }
 
-// TN-23, §12.1.3, OP-138, MD-5, TN-2, TN-7, G50, IDP-7, TN-104, X41, must-never #16: test 3 of
-// the six cross-tenant isolation tests, over the HTTP API
+// TN-23, §12.1.3, OP-138, MD-5, TN-2, TN-7, G50, IDP-7, TN-104, X41, MUST-NEVER-16
 #[test]
 fn http_api_never_crosses_realms_or_fails() {
     // K05
@@ -585,8 +584,7 @@ fn http_api_never_crosses_realms_or_fails() {
     }
 }
 
-// §10.4.6, IDP-24, OIDC Session Management (iframe) yok: no session management iframe or check
-// session endpoint is routed, at the host root or under a path issuer
+// §10.4.6, IDP-24, OIDC
 #[test]
 fn no_session_management_iframe() {
     let rt = tokio::runtime::Runtime::new().unwrap();

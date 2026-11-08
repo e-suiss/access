@@ -46,9 +46,7 @@ async fn settle(h: &Harness, id: &str) -> Value {
     panic!("the job did not finish")
 }
 
-// TN-125, TN-110, X20: a sequential job runs each item as its own Exercise; after a refused
-// item the rest are failed dependencies (424); the envelope counts each kind and the per-item
-// file names the Exercise or the problem
+// TN-125, TN-110, X20
 #[tokio::test]
 async fn a_sequential_job_commits_items_one_by_one_and_stops_at_a_failure() {
     let h = Harness::new();
@@ -61,7 +59,7 @@ async fn a_sequential_job_commits_items_one_by_one_and_stops_at_a_failure() {
     };
     let body = json!({"mode": "sequential",
                       "operations": [item(1, "a1"), item(2, HIDDEN_KEY), item(3, "a3")]});
-    // TN-110: the envelope's AIS signs the job digest the draft names
+    // TN-110
     let (r, drafted) = send(
         &router,
         Request::builder()
@@ -125,8 +123,7 @@ async fn a_sequential_job_commits_items_one_by_one_and_stops_at_a_failure() {
     );
 }
 
-// TN-125: in a parallel job the items are independent; an item whose AIS is another
-// Instance's is refused on its own line and the others commit
+// TN-125
 #[tokio::test]
 async fn a_parallel_job_keeps_going_and_refuses_a_foreign_item_ais() {
     let h = Harness::new();

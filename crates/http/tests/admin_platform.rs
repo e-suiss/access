@@ -27,8 +27,7 @@ fn platform_rows() -> impl Iterator<Item = &'static access_http::api::manifest::
     MANIFEST.iter().filter(|r| r.surface == Surface::Platform)
 }
 
-// TN-119, OP-151 m.3 (a), m.6 (f): a realm-admin token never reads the platform surface; the
-// answer is 401 before anything is looked up
+// TN-119, OP-151 m.3 (a), m.6 (f)
 #[tokio::test]
 async fn a_realm_admin_token_is_refused_on_the_platform_surface() {
     let h = Harness::new();
@@ -95,8 +94,7 @@ fn names(doc: &Value, schema: &Value, out: &mut Vec<String>, depth: usize) {
     }
 }
 
-// INV-29, X31: every platform route's response schema names no account, client, grant, record
-// or claim member, at any depth; each object is closed
+// INV-29, X31
 #[test]
 fn platform_responses_are_content_free_by_contract() {
     let doc = openapi();
@@ -145,7 +143,7 @@ fn keys(v: &Value, out: &mut Vec<String>) {
     }
 }
 
-// INV-29, X31: whatever the port returns, a platform answer shows only the kind's members
+// INV-29, X31
 #[tokio::test]
 async fn platform_reads_drop_what_the_kind_may_not_show() {
     let h = Harness::new();
@@ -169,9 +167,7 @@ async fn platform_reads_drop_what_the_kind_may_not_show() {
     }
 }
 
-// TN-110, TN-111, INV-29: a provisioning write is the caller's AIS compiled to one Exercise; the
-// answer carries the Exercise, the created resource and the Genesis summary, no secret and no
-// content
+// TN-110, TN-111, INV-29
 #[tokio::test]
 async fn a_realm_creation_answers_with_its_exercise_and_genesis() {
     let h = Harness::new();
@@ -215,7 +211,7 @@ async fn a_realm_creation_answers_with_its_exercise_and_genesis() {
     }
     assert_eq!(h.position(), 1);
 
-    // TN-119: a realm surface's Instance does not write on the platform surface
+    // TN-119
     let other = h.instance(realm_domain());
     let nonce = [10; 16];
     let request = Request::post(path)
@@ -233,9 +229,7 @@ async fn a_realm_creation_answers_with_its_exercise_and_genesis() {
     assert_eq!(h.position(), 1);
 }
 
-// TN-110, MD-14, CMP-15.5, Ek B "no super-admin shortcut": the platform surface covers tenants,
-// realm metadata, sandbox domains, streams and the operator's health only; it has no route into
-// a realm's resources, settings or authority state
+// TN-110, MD-14, CMP-15.5
 #[test]
 fn the_platform_surface_has_no_super_admin_shortcut() {
     let allowed = [
@@ -273,7 +267,7 @@ fn the_platform_surface_has_no_super_admin_shortcut() {
     assert_eq!(platform_rows().count(), ROWS.len() + 1);
 }
 
-// TN-130, MD-9, X37, must-never #19: nothing on either surface lets anyone act as a user
+// TN-130, MD-9, X37, MUST-NEVER-19
 #[test]
 fn no_route_acts_as_a_user() {
     for row in MANIFEST {

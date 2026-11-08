@@ -102,8 +102,7 @@ async fn code(line: &SandboxLine<Reached, Fixed>, inc: Incoming) -> &'static str
     }
 }
 
-// OP-151 m.3 (m), X21: no Acceptance opens a production domain to a sandbox or a sandbox to a
-// production domain; within one side the request reaches the decision point
+// OP-151 m.3 (m), X21
 #[tokio::test]
 async fn no_authority_crosses_the_sandbox_line() {
     let line = SandboxLine {
@@ -134,7 +133,7 @@ async fn no_authority_crosses_the_sandbox_line() {
     assert_eq!(line.inner.0.load(Ordering::SeqCst), 2);
 }
 
-// MD-8: a side that cannot be told is not taken for either; nothing is decided
+// MD-8
 #[tokio::test]
 async fn an_unknown_side_is_unavailable() {
     let line = SandboxLine {
@@ -149,8 +148,7 @@ async fn an_unknown_side_is_unavailable() {
     assert_eq!(line.inner.0.load(Ordering::SeqCst), 0);
 }
 
-// OP-151 m.3 (m): the domain a request addresses is never its own foreign side, and content that
-// names no foreign issuer adds none
+// OP-151 m.3 (m)
 #[test]
 fn only_other_domains_are_foreign() {
     let own = incoming(

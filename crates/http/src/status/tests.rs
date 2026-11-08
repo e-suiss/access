@@ -46,9 +46,8 @@ async fn get(path: &str, if_none_match: Option<&str>) -> Response {
         .unwrap()
 }
 
-// OP-150 m.3 (a), (s), CR-58 m.1: the list is served as application/statuslist+cwt with its key
-// excerpt, a short cache lifetime and the reflected position and publication as its ETag (E13:
-// a heartbeat at the same position is a new representation)
+// OP-150 m.3 (a), (s), CR-58 m.1
+// E13
 #[tokio::test]
 async fn the_latest_list_is_served_with_its_excerpt() {
     let r = get(&uri(1, "0"), None).await;
@@ -68,8 +67,7 @@ async fn the_latest_list_is_served_with_its_excerpt() {
     assert_eq!(again.status(), StatusCode::NOT_MODIFIED);
 }
 
-// OP-150 m.3 (a), PI-9: an unknown list or domain is 404, a store outage 503 and never an
-// empty list; a malformed domain is 400
+// OP-150 m.3 (a), PI-9
 #[tokio::test]
 async fn no_list_is_never_an_empty_list() {
     assert_eq!(

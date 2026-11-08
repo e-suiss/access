@@ -51,9 +51,7 @@ fn realm_writes() -> impl Iterator<Item = &'static Route> {
         .filter(|r| r.access == Access::Write && r.path.starts_with("/admin/v1/realms/"))
 }
 
-// §9.7, TN-110, OP-151 m.3 (s): for every realm write, no AIS, another realm's or the platform's
-// Instance, a statement for another domain, or a nonce already spent on another request
-// leaves the log where it was; the caller's own AIS moves it by one Exercise
+// §9.7, TN-110, OP-151 m.3 (s)
 #[tokio::test]
 async fn every_realm_write_without_its_actor_proof_changes_nothing() {
     let h = Harness::new();
@@ -90,7 +88,7 @@ async fn every_realm_write_without_its_actor_proof_changes_nothing() {
             );
             assert_eq!(h.position(), before, "{op} case {i}");
         }
-        // TN-125: a job's envelope is checked in its own test
+        // TN-125
         if op == "createJob" {
             continue;
         }
@@ -102,9 +100,9 @@ async fn every_realm_write_without_its_actor_proof_changes_nothing() {
             body["exercise_id"].is_string() && body["position"].is_string(),
             "{op}"
         );
-        // IDI-4: the RP ID answer marks the change irreversible
+        // IDI-4
         assert_eq!(body["irreversible"] == true, op == "putRpId", "{op}");
-        // TN-135, TN-136: a hook's or webhook's verification key is shown once, by its name
+        // TN-135, TN-136
         assert_eq!(
             body["verification_key"].is_string(),
             matches!(op, "registerHook" | "registerWebhook" | "rotateWebhookKey"),
@@ -115,8 +113,7 @@ async fn every_realm_write_without_its_actor_proof_changes_nothing() {
             "{op}"
         );
         let (r, _) = send(&router, write(row, nonce, Some(&signed), "{\"other\":1}")).await;
-        // TN-126: a kept answer refuses the key at once; a secret answer is never kept, and
-        // the spent nonce refuses the Exercise
+        // TN-126
         assert!(
             matches!(
                 r.status(),
@@ -129,8 +126,7 @@ async fn every_realm_write_without_its_actor_proof_changes_nothing() {
     }
 }
 
-// TN-113, OP-151 m.3 (s): a resource of another realm is 404 like a missing one, and a token
-// of another realm never reads this one
+// TN-113, OP-151 m.3 (s)
 #[tokio::test]
 async fn reads_see_only_the_realms_own_resources() {
     let h = Harness::new();
@@ -168,7 +164,7 @@ async fn reads_see_only_the_realms_own_resources() {
     assert_eq!(r.status(), StatusCode::UNAUTHORIZED);
 }
 
-// OP-65: a list filters with the SCIM subset over its own attributes only
+// OP-65
 #[tokio::test]
 async fn lists_filter_over_their_attributes() {
     let h = Harness::new();
@@ -192,8 +188,7 @@ async fn lists_filter_over_their_attributes() {
     );
 }
 
-// OP-65, RFC 9110 §13.1.1: an update names the version it replaces: 428 without If-Match, 412
-// for another version, and the ETag a read returned goes through
+// OP-65, RFC 9110 §13.1.1
 #[tokio::test]
 async fn updates_are_conditional_on_the_etag() {
     let h = Harness::new();
@@ -229,8 +224,7 @@ async fn updates_are_conditional_on_the_etag() {
     assert!(r.headers().contains_key("etag"));
 }
 
-// TN-110, PI-7: drafting a write returns the intent its AIS signs and changes nothing; an
-// operation that is not a realm write cannot be drafted
+// TN-110, PI-7
 #[tokio::test]
 async fn a_draft_returns_the_intent_and_changes_nothing() {
     let h = Harness::new();
@@ -266,8 +260,7 @@ async fn a_draft_returns_the_intent_and_changes_nothing() {
     assert_eq!(h.commits(), 0);
 }
 
-// TN-61, TNI-6, CR-38, OP-151 m.3 (s): no resource schema of the contract has a credential
-// member; a client secret appears only in a write's one-time answer
+// TN-61, TNI-6, CR-38, OP-151 m.3 (s)
 #[test]
 fn no_resource_schema_carries_a_credential() {
     let doc = openapi();

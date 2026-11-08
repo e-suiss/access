@@ -76,8 +76,7 @@ fn app() -> Router {
     router(Discovery::new(Rows, KeySet).with_suiss(settings()))
 }
 
-// OP-149 m.3: each realm serves its Suiss discovery document with the deployment's settings,
-// the served endpoints and a five-minute cache; a path realm at both well-known variants
+// OP-149 m.3
 #[tokio::test]
 async fn a_realm_serves_its_suiss_configuration() {
     let (status, headers, body) = get("/.well-known/suiss-configuration", "acme.id.test").await;
@@ -148,8 +147,7 @@ async fn get(path: &str, host: &str) -> (StatusCode, axum::http::HeaderMap, Stri
     (status, headers, String::from_utf8(bytes.to_vec()).unwrap())
 }
 
-// TN-10, §17.9.6, §10.4.6: both discovery documents and the PRM of a subdomain realm name its
-// stored issuer byte for byte
+// TN-10, §17.9.6, §10.4.6
 #[tokio::test]
 async fn a_subdomain_realm_serves_its_documents() {
     for path in [
@@ -172,7 +170,7 @@ async fn a_subdomain_realm_serves_its_documents() {
     );
 }
 
-// CR-25, CMP-15.1: the JWKS carries its media type and cache policy
+// CR-25, CMP-15.1
 #[tokio::test]
 async fn the_jwks_has_its_media_type_and_cache_policy() {
     let (status, headers, body) = get("/jwks.json", "acme.id.test").await;
@@ -185,7 +183,7 @@ async fn the_jwks_has_its_media_type_and_cache_policy() {
     assert_eq!(body, r#"{"keys":[{"kid":"k1"}]}"#);
 }
 
-// TN-10, §11.4.5: a path realm answers at every well-known variant; its signer outage is 503
+// TN-10, §11.4.5
 #[tokio::test]
 async fn a_path_realm_answers_at_every_variant() {
     for path in [
@@ -203,7 +201,7 @@ async fn a_path_realm_answers_at_every_variant() {
     assert_eq!(headers[header::CONTENT_TYPE], "application/problem+json");
 }
 
-// §17.9.6: an unknown host gets the router's 404, which names no realm
+// §17.9.6
 #[tokio::test]
 async fn an_unknown_host_gets_a_plain_404() {
     for (path, host) in [

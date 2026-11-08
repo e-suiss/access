@@ -44,9 +44,7 @@ fn server_config() -> std::sync::Arc<access_http::tls::ServerConfig> {
         .unwrap()
 }
 
-// CR-51, CR-12, OP-125, OP-142, RFC 7748 §6.1, RFC 8446 §7.4.2: the server's X25519 and
-// X25519MLKEM768 groups refuse a client share whose X25519 part has small order, as the server
-// would receive it in a ClientHello; a normal share still completes
+// CR-51, CR-12, OP-125, OP-142, RFC 7748 §6.1, RFC 8446 §7.4.2
 #[test]
 fn v3_tls_key_exchange_refuses_a_zero_shared_secret() {
     let config = server_config();
@@ -79,8 +77,7 @@ fn v3_tls_key_exchange_refuses_a_zero_shared_secret() {
     assert!(seen.contains(&NamedGroup::X25519), "{seen:?}");
 }
 
-// CR-51, CR-53, RFC 7748 §6.1: aws-lc-rs agrees with every Wycheproof X25519 vector and
-// refuses every case whose shared secret would be zero
+// CR-51, CR-53, RFC 7748 §6.1
 #[test]
 fn v3_wycheproof_x25519() {
     let path = format!(

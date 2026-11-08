@@ -470,7 +470,7 @@ pub fn decode_batch(body: &[u8], max_len: usize) -> R<(Vec<Item>, Semantic)> {
             decode_value(&Json::Object(merged))
         })
         .collect();
-    // OP-141 m.22 (a): short-circuiting would leave it open which commit happened
+    // OP-141 m.22 (a)
     if semantic != Semantic::ExecuteAll
         && decoded
             .iter()
@@ -886,7 +886,7 @@ pub fn encode_for(response: &Response, mode: Mode, scope: Scope) -> Out {
             Scope::Audit => {}
         }
     }
-    // P41, §9.6.1: `reason_user` is the requester scope's closed codes
+    // P41, §9.6.1
     let user = reason_user(&response.decision);
     if !user.is_empty() {
         context.insert(String::from("reason_user"), Out::from(user));
@@ -903,21 +903,21 @@ pub fn encode_for(response: &Response, mode: Mode, scope: Scope) -> Out {
     if let Some(t) = &response.consistency {
         context.insert(String::from("consistency_token"), Out::from(t.as_str()));
     }
-    // OP-141 m.22 (e): the record is named by an opaque reference, never its position
+    // OP-141 m.22 (e)
     if let Some(r) = &response.basis_ref {
         context.insert(String::from("basis_ref"), Out::from(r.as_str()));
     }
     if response.replayed {
         context.insert(String::from("replayed"), Out::Bool(true));
     }
-    // §9.8, L2-RCP-2: only a signed receipt leaves the decision point
+    // §9.8, L2-RCP-2
     if let Some((sign1, excerpt)) = &response.signed_receipt {
         context.insert(
             String::from("receipt"),
             serde_json::json!({ "sign1": b64url_encode(sign1), "excerpt": b64url_encode(excerpt) }),
         );
     }
-    // L2-PAP-2: the PAP of an allowed projection.issue, signed
+    // L2-PAP-2
     if let Some((sign1, excerpt)) = &response.signed_pap {
         context.insert(
             String::from("pap"),

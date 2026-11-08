@@ -45,7 +45,7 @@ fn decode(kind: &str, query: &str) -> Result<Query, &'static str> {
         .map_err(|e| e.0)
 }
 
-// L1-ADP-16, §8.17.10: each developer kind reads its own query
+// L1-ADP-16, §8.17.10
 #[test]
 fn developer_kinds_decode_their_queries() {
     let id = b64url_encode(&[7; 16]);
@@ -95,7 +95,7 @@ fn developer_kinds_decode_their_queries() {
     );
 }
 
-// SEC15, §5.4: a query names exactly one subject; anything else is a protocol error
+// SEC15, §5.4
 #[test]
 fn ambiguous_or_unknown_queries_are_refused() {
     let id = b64url_encode(&[7; 16]);
@@ -122,8 +122,7 @@ fn ambiguous_or_unknown_queries_are_refused() {
     );
 }
 
-// X21, E10, E11: a publication report says where the version stands, that existing grants are
-// unchanged and which actions are new, and carries no accept
+// X21, E10, E11
 #[test]
 fn a_publication_report_has_no_accept() {
     let offer = Offer {
@@ -165,7 +164,7 @@ fn a_publication_report_has_no_accept() {
     );
 }
 
-// §5.4, XI-3: the revocation report carries the exposure and the aftermath fields
+// §5.4, XI-3
 #[test]
 fn a_revocation_report_carries_exposure_and_aftermath() {
     let report = RevocationImpact {

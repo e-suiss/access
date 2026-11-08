@@ -65,7 +65,7 @@ fn segments() -> impl Strategy<Value = Vec<Vec<u8>>> {
     )
 }
 
-// TN-113: real routes, the root and the well-known documents are canonical
+// TN-113
 #[test]
 fn ordinary_paths_are_canonical() {
     for p in [
@@ -79,7 +79,7 @@ fn ordinary_paths_are_canonical() {
     }
 }
 
-// TN-113: every other spelling of a path is refused, never rewritten
+// TN-113
 #[test]
 fn other_spellings_are_refused() {
     for (p, e) in [
@@ -111,8 +111,7 @@ fn other_spellings_are_refused() {
 }
 
 proptest! {
-    // TN-113: canonical paths and segment lists correspond one to one; decoding a canonical path
-    // never yields a dot or empty segment or a byte that changes the structure
+    // TN-113
     #[test]
     fn canonical_paths_round_trip(segs in segments()) {
         let path = encode(&segs);
@@ -121,8 +120,7 @@ proptest! {
         prop_assert_eq!(decode(&path), segs);
     }
 
-    // TN-113: any accepted path decodes without dot segments, empty segments or structural
-    // bytes, and is the canonical spelling of its own decoding
+    // TN-113
     #[test]
     fn accepted_paths_are_their_own_canonical_form(raw in "/[a-zA-Z0-9%./\\\\:@!$&'()*+,;=~_-]{0,40}") {
         if check(&raw).is_ok() {
@@ -135,8 +133,7 @@ proptest! {
         }
     }
 
-    // TN-113: encoding a character that has a plain spelling, lower-casing hex, or adding a dot
-    // or empty segment to a canonical path is refused
+    // TN-113
     #[test]
     fn alternative_spellings_are_refused(segs in segments().prop_filter("one", |s| !s.is_empty()), at in any::<prop::sample::Index>()) {
         let path = encode(&segs);

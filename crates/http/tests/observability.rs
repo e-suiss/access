@@ -60,7 +60,7 @@ fn failing(body: &str) -> Vec<String> {
         .collect()
 }
 
-// OP-67 m.3: the metric exposition is the SDK's, with no tenant or realm label
+// OP-67 m.3
 #[tokio::test]
 async fn metrics_are_exposed() {
     access_telemetry::signals::HTTP_RESPONSES.incr(["2xx"]);
@@ -70,7 +70,7 @@ async fn metrics_are_exposed() {
     assert!(!body.contains("tenant_id") && !body.contains("realm_id"));
 }
 
-// OP-67 m.3, MD-8, OP-53: unset start-up flags keep the process not ready, by name
+// OP-67 m.3, MD-8, OP-53
 #[tokio::test]
 async fn readiness_fails_closed_during_start() {
     let readiness = Readiness::default();
@@ -95,8 +95,7 @@ fn ping(pool: access_store::Pool) -> impl Fn() -> Probe + Send + Sync + 'static 
     }
 }
 
-// OP-67 m.3: a database pool that cannot hand out a connection and a signer whose socket is
-// closed make the process not ready; the answer names the checks, never an address or secret
+// OP-67 m.3
 #[tokio::test]
 async fn readiness_fails_when_a_dependency_is_down() {
     let db = access_store::testing::fresh().await.unwrap();
@@ -126,8 +125,7 @@ async fn readiness_fails_when_a_dependency_is_down() {
     let _ = std::fs::remove_dir(&dir);
 }
 
-// §17.8.2, SEC31, OP-47: advisory volume per Instance is exported to security tooling from the
-// internal listener
+// §17.8.2, SEC31, OP-47
 #[tokio::test]
 async fn oracle_watch_is_exported() {
     ORACLE.record(&[0xab; 16], Advisory::Explain, 42);
@@ -179,8 +177,7 @@ async fn call(traceparent: Option<&str>) -> (String, String) {
     (id, String::from_utf8(bytes.to_vec()).unwrap())
 }
 
-// OP-67 m.1, OP-65 m.4: a well-formed traceparent is continued, Request-Id is its trace id and
-// the handler sees the same trace for what it calls next
+// OP-67 m.1, OP-65 m.4
 #[tokio::test]
 async fn traceparent_is_accepted_and_propagated() {
     let (id, seen) = call(Some(
@@ -191,8 +188,7 @@ async fn traceparent_is_accepted_and_propagated() {
     assert_eq!(seen, id);
 }
 
-// OP-67 m.1: without one, or with a malformed one, a trace is started from the RNG port and the
-// handler continues it
+// OP-67 m.1
 #[tokio::test]
 async fn traceparent_is_generated_when_absent_or_malformed() {
     let (a, seen) = call(None).await;

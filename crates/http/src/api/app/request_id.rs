@@ -144,7 +144,7 @@ pub async fn request_id(
 mod tests {
     use super::*;
 
-    // §17.8.2: 429 and 503 are counted apart from their classes
+    // §17.8.2
     #[test]
     fn status_classes_are_fixed() {
         assert_eq!(status_class(StatusCode::TOO_MANY_REQUESTS), "429");
@@ -154,7 +154,7 @@ mod tests {
         assert_eq!(status_class(StatusCode::OK), "2xx");
     }
 
-    // OP-67 m.1: a trace started here keeps its drawn trace id in the span's parent
+    // OP-67 m.1
     #[test]
     fn a_started_trace_keeps_its_id() {
         let trace = TraceContext::start([7; 16]);

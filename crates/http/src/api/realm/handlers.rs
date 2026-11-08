@@ -284,7 +284,7 @@ async fn draft<E: Env>(ctx: &Ctx<E>, raw: &[u8]) -> Result<Response, &'static Co
         .filter(|r| r.access == crate::api::manifest::Access::Write)
         .ok_or(&codes::realm::UNKNOWN_OPERATION)?;
     let (kind, shape) = spec(operation.operation_id).ok_or(&codes::realm::UNKNOWN_OPERATION)?;
-    // TN-125: a job's envelope AIS signs the job digest, not an Exercise intent
+    // TN-125
     if shape == Shape::JobCreate {
         let Some(Value::Object(body)) = request.remove("body") else {
             return Err(&codes::realm::INVALID_JOB);
@@ -332,7 +332,6 @@ async fn draft<E: Env>(ctx: &Ctx<E>, raw: &[u8]) -> Result<Response, &'static Co
         Drafted::Draft(d) => d,
         Drafted::Rejected(code) => return Err(code),
     };
-    // a PATCH is sent as the patch; the validity and any assigned key come from the draft
     let send = if matches!(shape, Shape::Write { patch: Some(_), .. }) {
         let mut b = body;
         if let Some(v) = d.body.get(VALIDITY) {
@@ -381,7 +380,7 @@ pub(super) async fn commit<E: Env>(
     let current = if conditional {
         let current = one(ctx.api.env().realm(), slug(ctx), kind, key.clone()).await?;
         match &current {
-            // OP-65: an update names the version it replaces
+            // OP-65
             Some(item) => require_match(headers, Some(&tag(kind, key.as_deref(), item)))?,
             None if patch.is_some() => return Err(&codes::NOT_FOUND),
             None if headers.contains_key(header::IF_MATCH) => {
@@ -429,10 +428,10 @@ pub(super) async fn commit<E: Env>(
             o.insert("resource".to_owned(), r.body.clone());
         }
         if let Some(s) = secret {
-            // CR-38, TN-135, TN-136: shown once, never kept (the row's answer is not replayed)
+            // CR-38, TN-135, TN-136
             o.insert(secret_member(kind).to_owned(), Value::String(s));
         }
-        // IDI-4: an RP ID change cannot be undone; the answer says so
+        // IDI-4
         if ctx.row.operation_id == "putRpId" {
             o.insert("irreversible".to_owned(), Value::Bool(true));
         }
