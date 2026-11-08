@@ -250,6 +250,7 @@ async fn console(label: &str, with_adp: bool) -> Console {
         crate::admin::realm::Realms {
             app: w.db.app.clone(),
             reads: w.db.app.clone(),
+            checkpointer: w.db.checkpointer.clone(),
             router: w.db.router.clone(),
             ids: Arc::clone(&ids),
             plane: w.plane.clone(),
@@ -927,4 +928,102 @@ async fn the_consoles_section_probes_are_answered_by_the_real_decision_point() {
         );
     }
     assert_eq!(w.domains.head(domain).await.unwrap().0, before);
+}
+
+// OP-41, OP-44, U53, §17.6.8, X22, Ek B 3157, 3171, 3209: the realm's full-taxonomy audit
+// stream (channel B) is served on the management surface to a read proof of the console: the
+// realm's own audit rows as OCSF events, CEF lines or SET claims, each with its three times
+// (occurred, recorded, checkpointed once a checkpoint reaches it); every read is first written
+// as an `audit.read` row of the operational stream, and an unknown rendering is refused
+#[tokio::test]
+async fn the_audit_stream_is_served_in_three_renderings_and_each_read_is_audited() {
+    let Console {
+        management,
+        browser,
+        domain,
+        w,
+        ..
+    } = console("mgmt-audit", false).await;
+    let basis = ExerciseBasis::Anchor(meta::object_id(&domain, kind::ANCHOR, IDP_ANCHOR));
+    let read = |target: &str| {
+        let proof = browser.ais(
+            domain,
+            &access_crypto::random::bytes::<16>().unwrap(),
+            read_intent(&Method::GET, target),
+            Mode::Check,
+            basis,
+        );
+        browser
+            .request(
+                &Method::GET,
+                &target.replacen("/admin/v1/", "/console/api/proxy/admin/", 1),
+                "",
+            )
+            .header("x-access-ais", proof)
+            .body(Body::empty())
+            .unwrap()
+    };
+    let audit_reads = || async {
+        access_store::operational::operational_rows(&w.db.checkpointer, 10_000)
+            .await
+            .unwrap()
+            .into_iter()
+            .filter(|r| r.event_type == "audit.read")
+            .collect::<Vec<_>>()
+    };
+    let before = audit_reads().await.len();
+    let (r, body) = send(&management, read("/admin/v1/realms/acme/audit/events")).await;
+    assert_eq!(
+        r.status(),
+        StatusCode::OK,
+        "{}",
+        String::from_utf8_lossy(&body)
+    );
+    let ocsf: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    let events = ocsf["items"].as_array().unwrap();
+    assert!(
+        !events.is_empty(),
+        "the bootstrap and sign-in wrote audit rows"
+    );
+    assert!(events.iter().all(|e| e["class_uid"].is_u64()), "{ocsf}");
+    let (r, body) = send(
+        &management,
+        read("/admin/v1/realms/acme/audit/events?format=cef"),
+    )
+    .await;
+    assert_eq!(r.status(), StatusCode::OK);
+    let cef: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert!(
+        cef["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|l| l.as_str().is_some_and(|l| l.starts_with("CEF:0|"))),
+        "{cef}"
+    );
+    let (r, body) = send(
+        &management,
+        read("/admin/v1/realms/acme/audit/events?format=set"),
+    )
+    .await;
+    assert_eq!(r.status(), StatusCode::OK);
+    let set: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert!(
+        set["items"][0]["iss"]
+            .as_str()
+            .unwrap()
+            .starts_with("urn:suiss:access:realm:"),
+        "{set}"
+    );
+    let (r, body) = send(
+        &management,
+        read("/admin/v1/realms/acme/audit/events?format=leef"),
+    )
+    .await;
+    assert_eq!(r.status(), StatusCode::BAD_REQUEST);
+    let p: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(p["code"], "invalid-audit-format");
+    let reads = audit_reads().await;
+    assert_eq!(reads.len(), before + 3, "one audit.read per answered query");
+    assert!(reads.iter().all(|r| r.domain == Some(domain.0)));
 }

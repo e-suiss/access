@@ -1,0 +1,31 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT r.n AS \"n!\", (extract(epoch FROM c.created_at) * 1000)::bigint AS at_ms\n             FROM unnest($1::bigint[], $2::bigint[]) WITH ORDINALITY AS r(xid, id, n)\n             LEFT JOIN LATERAL (\n               SELECT created_at FROM access_ops.audit_checkpoint\n                WHERE (xid, id) >= (r.xid::text::xid8, r.id)\n                ORDER BY size LIMIT 1) c ON true\n            ORDER BY r.n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "n!",
+        "type_info": "Int8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "at_ms",
+        "type_info": "Int8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8Array",
+        "Int8Array"
+      ]
+    },
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "310ad79b44b20ee1ba24b22d755ed06bb8ecda28e3bd61114aa97146d320d6f9"
+}

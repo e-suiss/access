@@ -312,6 +312,54 @@ pub trait RealmResources: Send + Sync {
 
     /// Commits `write` with the caller's verified AIS.
     fn commit(&self, write: ResourceWrite, caller: WriteCaller) -> Pending<'_, Written>;
+
+    /// A page of the realm's full-taxonomy audit stream (channel B) in `query.format`, after
+    /// the read itself was audited (OP-41, OP-44); `None` when there is no such realm. None by
+    /// default.
+    fn audit(&self, query: AuditQuery) -> Pending<'_, Option<Listing>> {
+        let _ = query;
+        Box::pin(async { Err(Unavailable) })
+    }
+}
+
+/// A rendering of the full-taxonomy audit stream, channel B (OP-41, §17.6.8): a copy, not the
+/// record (X22).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AuditFormat {
+    /// An OCSF event object.
+    Ocsf,
+    /// A CEF line.
+    Cef,
+    /// The claims of a Security Event Token (RFC 8417).
+    Set,
+}
+
+impl AuditFormat {
+    /// The format a `format` query value names.
+    #[must_use]
+    pub fn parse(s: &str) -> Option<Self> {
+        match s {
+            "ocsf" => Some(Self::Ocsf),
+            "cef" => Some(Self::Cef),
+            "set" => Some(Self::Set),
+            _ => None,
+        }
+    }
+}
+
+/// A read of one page of the realm's audit stream.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AuditQuery {
+    /// The realm's slug.
+    pub slug: String,
+    /// The rendering.
+    pub format: AuditFormat,
+    /// The event the page starts after, as a previous page's `last`.
+    pub after: Option<String>,
+    /// Page size.
+    pub limit: u32,
+    /// The reader, the read token's pseudonymous subject, as the `audit.read` event names it.
+    pub reader: String,
 }
 
 /// Realm resources that do not exist: every read finds no realm and every write is refused

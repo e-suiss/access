@@ -2220,6 +2220,7 @@ mod provision {
         crate::admin::realm::Realms {
             app: w.db.app.clone(),
             reads: w.db.app.clone(),
+            checkpointer: w.db.checkpointer.clone(),
             router: w.db.router.clone(),
             ids: Arc::new(crate::ids::CellIds::new(w.keys.clone())),
             plane: w.plane.clone(),

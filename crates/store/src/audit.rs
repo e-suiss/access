@@ -116,6 +116,78 @@ impl TenantTx {
     }
 }
 
+impl TenantTx {
+    /// The realm's audit rows after row `after`, oldest first, up to `limit` (OP-41: the
+    /// full-taxonomy stream); the scope decides what is visible.
+    ///
+    /// # Errors
+    /// [`StoreError`].
+    pub async fn audit_page(
+        &mut self,
+        after: Option<i64>,
+        limit: u32,
+    ) -> Result<Vec<AuditRow>, StoreError> {
+        let rows = sqlx::query!(
+            r#"SELECT tenant_id, realm_id, (extract(epoch FROM at) * 1000)::bigint AS "at_ms!", id,
+                      xid::text::bigint AS "xid!", event_type, actor, target, correlation
+                 FROM access.identity_audit WHERE id > $1 ORDER BY id LIMIT $2"#,
+            after.unwrap_or(0),
+            i64::from(limit),
+        )
+        .fetch_all(&mut *self.tx)
+        .await?;
+        rows.into_iter()
+            .map(|r| {
+                Ok(AuditRow {
+                    tenant: *r.tenant_id.as_bytes(),
+                    realm: *r.realm_id.as_bytes(),
+                    at_ms: r.at_ms,
+                    id: r.id,
+                    xid: unsigned(r.xid)?,
+                    event_type: r.event_type,
+                    actor: r.actor,
+                    target: r.target,
+                    correlation: r.correlation,
+                })
+            })
+            .collect()
+    }
+}
+
+/// When each of `rows` was first integrated into a checkpoint, in order: the time of the first
+/// checkpoint whose cursor reaches the row (OP-38, OP-41: the third timestamp), `None` while it
+/// is not yet integrated (checkpointer role).
+///
+/// # Errors
+/// [`StoreError`].
+pub async fn checkpointed_at(
+    checkpointer: &PgPool,
+    rows: &[Cursor],
+) -> Result<Vec<Option<u64>>, StoreError> {
+    let xids = rows
+        .iter()
+        .map(|c| i64::try_from(c.xid).map_err(|_| StoreError::Range))
+        .collect::<Result<Vec<_>, _>>()?;
+    let ids: Vec<i64> = rows.iter().map(|c| c.id).collect();
+    let found = sqlx::query!(
+        r#"SELECT r.n AS "n!", (extract(epoch FROM c.created_at) * 1000)::bigint AS at_ms
+             FROM unnest($1::bigint[], $2::bigint[]) WITH ORDINALITY AS r(xid, id, n)
+             LEFT JOIN LATERAL (
+               SELECT created_at FROM access_ops.audit_checkpoint
+                WHERE (xid, id) >= (r.xid::text::xid8, r.id)
+                ORDER BY size LIMIT 1) c ON true
+            ORDER BY r.n"#,
+        &xids,
+        &ids,
+    )
+    .fetch_all(checkpointer)
+    .await?;
+    found
+        .into_iter()
+        .map(|r| r.at_ms.map(unsigned).transpose())
+        .collect()
+}
+
 fn unsigned(v: i64) -> Result<u64, StoreError> {
     u64::try_from(v).map_err(|_| StoreError::Corrupt)
 }

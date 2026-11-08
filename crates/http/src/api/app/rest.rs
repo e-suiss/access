@@ -24,7 +24,8 @@ pub struct PageRequest {
     pub after: Option<Vec<u8>>,
     /// The filter, over the endpoint's attributes only.
     pub filter: Option<Filter>,
-    params: BTreeMap<String, String>,
+    /// The query parameters as given.
+    pub params: BTreeMap<String, String>,
     context: Vec<u8>,
 }
 

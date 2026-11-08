@@ -9,6 +9,10 @@
 //! the drafted body with the AIS. `PUT` and `PATCH` (JSON Merge Patch) need `If-Match` with the
 //! resource's `ETag`, the position of the decision that last changed it; a retire is a `POST`
 //! to `…/{key}/retire`, never a `DELETE` (OP-73). No route writes a credential (TN-61).
+//!
+//! `GET …/audit/events` is the realm's full-taxonomy audit stream (channel B, OP-41) as OCSF
+//! events, CEF lines or SET claims (`format`), oldest first, each with the time it occurred, was
+//! recorded and was checkpointed; every read is first written as an `audit.read` event (OP-44).
 
 mod handlers;
 pub mod jobs;
@@ -27,6 +31,11 @@ use crate::problem::{Code, codes};
 pub use handlers::{id_member, serve};
 
 const LIST: &[&str] = &[PAGE_SIZE, CURSOR, FILTER];
+
+/// The query parameter naming the audit stream's rendering.
+pub const FORMAT: &str = "format";
+
+const FEED: &[&str] = &[PAGE_SIZE, CURSOR, FORMAT];
 
 const fn read(path: &'static str, operation_id: &'static str, summary: &'static str) -> Route {
     Route {
@@ -417,6 +426,14 @@ pub const ROWS: &[Route] = &[
         "getAnalytics",
         "The realm's daily sign-in counts of the last 30 days and failed sign-in surges; never a decision input.",
     ),
+    Route {
+        query: FEED,
+        ..read(
+            "/admin/v1/realms/{slug}/audit/events",
+            "listAuditEvents",
+            "The realm's full-taxonomy audit stream, oldest first, as OCSF, CEF or SET claims; a copy, not the record. Each read is itself audited.",
+        )
+    },
 ];
 
 /// How a row is served.
@@ -445,6 +462,8 @@ pub enum Shape {
     JobGet,
     /// A bulk job's per-item results.
     JobItems,
+    /// A page of the audit stream, channel B (OP-41).
+    Audit,
 }
 
 const CLIENT_PATCH: &[&str] = &[
@@ -600,6 +619,8 @@ pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
         "listWebhookDeliveries" => (Deliveries, Shape::List(&["event", "state"])),
         "getSignals" => (Signals, Shape::Get),
         "getAnalytics" => (Analytics, Shape::Get),
+        // OP-41
+        "listAuditEvents" => (Analytics, Shape::Audit),
         _ => return None,
     })
 }

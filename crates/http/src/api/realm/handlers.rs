@@ -16,7 +16,8 @@ use crate::api::domain::SurfaceScope;
 use crate::api::domain::caller::AIS_FIELD;
 use crate::api::domain::conditional::etag;
 use crate::api::ports::{
-    Clock, Drafted, Env, Item, RealmResources, ResourceKind, ResourceQuery, ResourceWrite, Written,
+    AuditFormat, AuditQuery, Clock, Drafted, Env, Item, RealmResources, ResourceKind,
+    ResourceQuery, ResourceWrite, Written,
 };
 use crate::problem::{Code, codes};
 
@@ -110,6 +111,7 @@ pub async fn serve<E: Env>(
             None => Err(&codes::NOT_FOUND),
         },
         Shape::Write { .. } => commit(&ctx, kind, shape, key, &headers, &body).await,
+        Shape::Audit => audit(&ctx, &uri).await,
     };
     answer.unwrap_or_else(problem)
 }
@@ -148,6 +150,45 @@ async fn list<E: Env>(
         .map(|i| i.body)
         .filter(|b| request.filter.as_ref().is_none_or(|f| matches(f, b)))
         .collect();
+    let mut response = (StatusCode::OK, axum::Json(json!({ "items": items }))).into_response();
+    if let Some(last) = listing.last {
+        let (name, value) = next_link(ctx, &request, uri.path(), last.as_bytes())?;
+        response.headers_mut().insert(name, value);
+    }
+    Ok(response)
+}
+
+/// A page of the realm's audit stream in the asked rendering (OP-41, OP-44, §17.6.8): only for
+/// a read token, oldest first; the reader is the `audit.read` event's actor.
+async fn audit<E: Env>(ctx: &Ctx<E>, uri: &Uri) -> Result<Response, &'static Code> {
+    let Caller::Read(reader) = &ctx.caller else {
+        return Err(&codes::NOT_FOUND);
+    };
+    let request = page_request(ctx, uri.query(), &[])?;
+    let format = match request.params.get(super::FORMAT) {
+        None => AuditFormat::Ocsf,
+        Some(f) => AuditFormat::parse(f).ok_or(&codes::realm::INVALID_AUDIT_FORMAT)?,
+    };
+    let after = request
+        .after
+        .as_deref()
+        .map(|a| String::from_utf8(a.to_vec()).map_err(|_| &codes::INVALID_CURSOR))
+        .transpose()?;
+    let listing = ctx
+        .api
+        .env()
+        .realm()
+        .audit(AuditQuery {
+            slug: slug(ctx),
+            format,
+            after,
+            limit: request.size,
+            reader: reader.token.subject.clone(),
+        })
+        .await
+        .map_err(|_| &codes::UNAVAILABLE)?
+        .ok_or(&codes::NOT_FOUND)?;
+    let items: Vec<Value> = listing.items.into_iter().map(|i| i.body).collect();
     let mut response = (StatusCode::OK, axum::Json(json!({ "items": items }))).into_response();
     if let Some(last) = listing.last {
         let (name, value) = next_link(ctx, &request, uri.path(), last.as_bytes())?;

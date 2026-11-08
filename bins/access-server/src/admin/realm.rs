@@ -9,8 +9,9 @@ use std::sync::Arc;
 use access_http::api::domain::SurfaceScope;
 use access_http::api::domain::caller::WriteCaller;
 use access_http::api::ports::{
-    Draft, Drafted, Item, JobItem, JobView, Jobs, Listing, NewJob, Pending, RealmResources,
-    ResourceKind, ResourceQuery, ResourceWrite, Surfaces, Unavailable, Written,
+    AuditFormat, AuditQuery, Draft, Drafted, Item, JobItem, JobView, Jobs, Listing, NewJob,
+    Pending, RealmResources, ResourceKind, ResourceQuery, ResourceWrite, Surfaces, Unavailable,
+    Written,
 };
 use access_http::api::realm::problem_of;
 use access_http::problem::codes;
@@ -49,6 +50,8 @@ pub(crate) struct Realms<P> {
     /// Admin listing (OP-27, §17.4.6): the read replica when one is configured, else `app`.
     /// One resource, which a conditional write compares against, is read from `app`.
     pub(crate) reads: Pool,
+    /// The checkpointer role, which alone reads when an audit row was checkpointed (OP-38).
+    pub(crate) checkpointer: Pool,
     pub(crate) router: Pool,
     pub(crate) ids: Arc<CellIds>,
     pub(crate) plane: P,
@@ -488,6 +491,107 @@ impl<P: Decider + Governance + Instances + Clone + Send + Sync + 'static> RealmR
 
     fn commit(&self, write: ResourceWrite, caller: WriteCaller) -> Pending<'_, Written> {
         Box::pin(self.commit_inner(write, caller))
+    }
+
+    fn audit(&self, query: AuditQuery) -> Pending<'_, Option<Listing>> {
+        Box::pin(self.audit_inner(query))
+    }
+}
+
+/// The `audit.read` event of a channel B read (OP-44, U53).
+const AUDIT_READ: &str = access_authority_core::adapters::AUDIT_EVENT_READ;
+
+/// One audit row rendered as channel B carries it (OP-41, §17.6.8); `None` for an event
+/// outside the taxonomy, which is never rendered.
+fn rendered(
+    row: &access_store::audit::AuditRow,
+    checkpoint_at_ms: Option<u64>,
+    format: AuditFormat,
+) -> Option<Value> {
+    use access_identity_audit::adapters::{cef, ocsf, set};
+    use access_identity_audit::domain::record::{AuditRecord, uuid_text};
+    let record = AuditRecord::identity(row, checkpoint_at_ms).ok()?;
+    match format {
+        AuditFormat::Ocsf => ocsf::render(&record).ok(),
+        AuditFormat::Cef => cef::render(&record).ok().map(Value::String),
+        AuditFormat::Set => set::claims(
+            &record,
+            &format!("urn:suiss:access:realm:{}", uuid_text(&row.realm)),
+        )
+        .ok(),
+    }
+}
+
+impl<P: Decider + Governance + Instances + Clone + Send + Sync + 'static> Realms<P> {
+    /// A page of the realm's audit stream; the read is written to the operational audit
+    /// stream first, and without that row nothing is answered (OP-44, U53).
+    async fn audit_inner(&self, q: AuditQuery) -> Result<Option<Listing>, Unavailable> {
+        let Some((tenant, realm)) = self.locate(&q.slug).await? else {
+            return Ok(None);
+        };
+        let Some(domain) = self.domain(&q.slug).await? else {
+            return Ok(None);
+        };
+        let after = match q.after.as_deref() {
+            None => None,
+            Some(a) => Some(a.parse::<i64>().map_err(|_| Unavailable)?),
+        };
+        let now = u64::try_from(
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_err(|_| Unavailable)?
+                .as_millis(),
+        )
+        .map_err(|_| Unavailable)?;
+        let reader = access_authority_core::adapters::audit_text(&q.reader);
+        let target = format!("audit:{}", q.slug);
+        let correlation = access_authority_core::adapters::audit_text(&format!(
+            "{}:{}",
+            q.slug,
+            after.unwrap_or(0)
+        ));
+        access_store::operational::record_operational(
+            &self.app,
+            &access_store::operational::OperationalEvent {
+                occurred_at_ms: now,
+                tenant: Some(*tenant.as_bytes()),
+                domain: Some(domain.0),
+                event_type: AUDIT_READ,
+                actor: &reader,
+                target: &access_authority_core::adapters::audit_text(&target),
+                reason: "",
+                correlation: &correlation,
+            },
+        )
+        .await
+        .map_err(|_| Unavailable)?;
+        let mut t = TenantTx::begin(&self.reads, tenant, realm)
+            .await
+            .map_err(|_| Unavailable)?;
+        let rows = t
+            .audit_page(after, q.limit)
+            .await
+            .map_err(|_| Unavailable)?;
+        t.commit().await.map_err(|_| Unavailable)?;
+        let cursors: Vec<access_store::identity::Cursor> = rows
+            .iter()
+            .map(|r| access_store::identity::Cursor {
+                xid: r.xid,
+                id: r.id,
+            })
+            .collect();
+        let at = access_store::audit::checkpointed_at(&self.checkpointer, &cursors)
+            .await
+            .map_err(|_| Unavailable)?;
+        let full = rows.len() == usize::try_from(q.limit).unwrap_or(usize::MAX);
+        let last = rows.last().map(|r| r.id.to_string()).filter(|_| full);
+        let items = rows
+            .iter()
+            .zip(at)
+            .filter_map(|(row, at)| rendered(row, at, q.format))
+            .map(|body| Item { body, version: 0 })
+            .collect();
+        Ok(Some(Listing { items, last }))
     }
 }
 

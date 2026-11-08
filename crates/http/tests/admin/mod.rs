@@ -23,10 +23,10 @@ use access_http::api::domain::SurfaceScope;
 use access_http::api::domain::caller::WriteCaller;
 use access_http::api::manifest::{PLATFORM_ROOT, REALM_ROOT, Route};
 use access_http::api::ports::{
-    Clock, CursorSeal, Draft, Drafted, Entropy, Env, Item, JobItem, JobView, Jobs, Listing, NewJob,
-    Pending, PlatformKind, PlatformQuery, PlatformResources, PlatformWrite, Presented, RateLimiter,
-    ReadToken, ReadTokens, RealmResources, ResourceKind, ResourceQuery, ResourceWrite, Surfaces,
-    Unavailable, Written,
+    AuditQuery, Clock, CursorSeal, Draft, Drafted, Entropy, Env, Item, JobItem, JobView, Jobs,
+    Listing, NewJob, Pending, PlatformKind, PlatformQuery, PlatformResources, PlatformWrite,
+    Presented, RateLimiter, ReadToken, ReadTokens, RealmResources, ResourceKind, ResourceQuery,
+    ResourceWrite, Surfaces, Unavailable, Written,
 };
 use access_kernel::ais::{CONTENT_TYPE, Statement};
 use access_kernel::codec::Canonical;
@@ -243,6 +243,17 @@ impl RealmResources for Shared {
                 pep: "access-identity".to_owned(),
             }))
         })
+    }
+
+    fn audit(&self, q: AuditQuery) -> Pending<'_, Option<Listing>> {
+        let listing = (q.slug == REALM).then(|| Listing {
+            items: vec![Item {
+                body: json!({ "format": format!("{:?}", q.format), "reader": q.reader }),
+                version: 0,
+            }],
+            last: None,
+        });
+        Box::pin(async move { Ok(listing) })
     }
 
     fn commit(&self, w: ResourceWrite, caller: WriteCaller) -> Pending<'_, Written> {

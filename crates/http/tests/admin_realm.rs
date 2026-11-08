@@ -300,3 +300,36 @@ fn no_resource_schema_carries_a_credential() {
     let result = schemas["WriteResult"]["properties"].as_object().unwrap();
     assert!(result.contains_key("client_secret"));
 }
+
+/// A read of the audit stream at `path`, its DPoP proof over the URI without the query.
+fn feed(path: &str, token: &str) -> Request<Body> {
+    Request::get(path)
+        .header("authorization", format!("DPoP {token}"))
+        .header("dpop", proof("GET", "/admin/v1/realms/acme/audit/events"))
+        .body(Body::empty())
+        .unwrap()
+}
+
+// OP-41, OP-44, §17.6.8, Ek B 3157, 3171, 3209: the audit stream is a realm read: a read token
+// of the realm reads it in the asked rendering (OCSF by default), with the token's subject as
+// the reader the audit.read event names; an unknown rendering or an AIS is refused
+#[tokio::test]
+async fn the_audit_stream_is_read_in_its_renderings() {
+    let h = Harness::new();
+    let router = h.router();
+    let token = h.token("audit", "access-admin:realm:acme", &["realm.read"], 600_000);
+    for (query, format) in [("", "Ocsf"), ("?format=cef", "Cef"), ("?format=set", "Set")] {
+        let path = format!("/admin/v1/realms/acme/audit/events{query}");
+        let (r, body) = send(&router, feed(&path, &token)).await;
+        assert_eq!(r.status(), StatusCode::OK, "{query}: {body}");
+        assert_eq!(body["items"][0]["format"], format);
+        assert_eq!(body["items"][0]["reader"], "sub");
+    }
+    let path = "/admin/v1/realms/acme/audit/events?format=leef";
+    let (r, body) = send(&router, feed(path, &token)).await;
+    assert_eq!(r.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(body["code"], "invalid-audit-format");
+    let path = "/admin/v1/realms/acme/audit/events?since=1";
+    let (r, _) = send(&router, feed(path, &token)).await;
+    assert_eq!(r.status(), StatusCode::BAD_REQUEST);
+}

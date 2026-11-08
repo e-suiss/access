@@ -310,3 +310,10 @@ pub const HOOK_POINT_TAKEN: Code = code(
     "Conflict",
     "The call point has a live hook already; retire it first (OP-151 m.10 (d)).",
 );
+/// An audit stream rendering other than `ocsf`, `cef` or `set` (OP-41).
+pub const INVALID_AUDIT_FORMAT: Code = code(
+    "invalid-audit-format",
+    400,
+    "Bad Request",
+    "An audit stream rendering other than ocsf, cef or set (OP-41).",
+);

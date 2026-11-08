@@ -1087,6 +1087,7 @@ async fn serve(
         checkpointer: checkpointer_pool,
         ..
     } = all;
+    let admin_checkpointer = checkpointer_pool.clone();
     let (sign_in, hosted) = login(
         config,
         router_pool.clone(),
@@ -1183,6 +1184,7 @@ async fn serve(
         admin::realm::Realms {
             app: admin_app,
             reads: admin_reads,
+            checkpointer: admin_checkpointer,
             router: tenants_pool.clone(),
             ids: admin_ids,
             plane: idp_plane.clone(),
