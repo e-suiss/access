@@ -7,6 +7,7 @@
 //! extension it must understand), is refused, never assumed (MD-8, TI-9).
 
 use alloc::vec::Vec;
+use core::fmt::Write as _;
 
 use access_kernel::algebra::Catalog;
 use access_kernel::codec::Canonical;
@@ -169,9 +170,10 @@ impl StepUp {
             self.max_age_s
         );
         if let Some(a) = self.aal {
-            out.push_str(&alloc::format!(
+            let _ = write!(
+                out,
                 ", acr_values=\"http://idmanagement.gov/ns/assurance/aal/{a}\""
-            ));
+            );
         }
         out
     }
