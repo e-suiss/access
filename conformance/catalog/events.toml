@@ -393,3 +393,11 @@ severity = "warn"
 since = "unreleased"
 fields = ["error"]
 ocsf = "application_error"
+
+[[event]]
+name = "privacy.job.completed"
+plane = "identity"
+severity = "info"
+since = "unreleased"
+fields = ["job", "sealed", "tombstoned", "destroyed", "kept", "deactivated"]
+ocsf = "application_lifecycle"

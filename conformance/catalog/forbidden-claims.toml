@@ -277,8 +277,8 @@ honest = "Logical isolation; hardware isolation with the dedicated option."
 [[claim]]
 id = "suiss-cannot-access"
 scope = "all"
-phrases = ["suiss can't access your keys", "suiss cannot access your keys", "suiss can't see your data", "suiss cannot see your data"]
-sources = ["§13.8"]
+phrases = ["suiss can't access your keys", "suiss cannot access your keys", "suiss can't see your data", "suiss cannot see your data", "we can't see your data", "we cannot see your data", "the operator cannot read your data", "even we cannot read"]
+sources = ["§13.8", "OP-153 m.3 (bb)"]
 rows = ["N-16", "N-22"]
 honest = "Keys held by Suiss for you — you can move them to your own device; data minimisation is described instead."
 
@@ -294,9 +294,9 @@ honest = "Not said (EI-24)."
 [[claim]]
 id = "data-deleted"
 scope = "all"
-phrases = ["all your data is gone", "your data has been deleted", "instantly deleted", "permanently erased"]
+phrases = ["all your data is gone", "your data has been deleted", "instantly deleted", "permanently erased", "deleted instantly", "deleted immediately", "immediately deleted", "instant deletion", "gdpr erasure", "gdpr-compliant erasure", "crypto-shredding is deletion"]
 negation = true
-sources = ["§8.10", "§13.8", "SA-50", "OP-73"]
+sources = ["§8.10", "§13.8", "SA-50", "OP-73", "OP-42", "CR-32", "HL-9", "OP-153 m.3 (bb)"]
 rows = ["N-42"]
 honest = "Personal fields are made unreadable within the declared period; the pseudonymous audit skeleton is kept."
 
