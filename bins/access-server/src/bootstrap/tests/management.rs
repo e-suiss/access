@@ -139,7 +139,7 @@ impl Browser {
         )
     }
 
-    fn ais_for(
+    pub(super) fn ais_for(
         &self,
         pep: &str,
         domain: Digest,
@@ -186,6 +186,11 @@ pub(super) struct Console {
 /// authorization server and registered the browser's key as the session's device Instance; the
 /// console's ADP proxy reaches the real decision point when `with_adp`.
 pub(super) async fn console(label: &str, with_adp: bool) -> Console {
+    console_with(label, with_adp, &plan()).await
+}
+
+/// [`console`] bootstrapped from `plan`.
+pub(super) async fn console_with(label: &str, with_adp: bool, plan: &Plan) -> Console {
     let w = World::new(label).await;
     let declared = DeclaredTargets::default();
     Bootstrap {
@@ -198,7 +203,7 @@ pub(super) async fn console(label: &str, with_adp: bool) -> Console {
         declared: &declared,
         console: Some(ORIGIN),
     }
-    .run(&plan())
+    .run(plan)
     .await
     .unwrap();
     w.domains.release().await;
