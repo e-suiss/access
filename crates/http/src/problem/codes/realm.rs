@@ -339,6 +339,20 @@ pub const LAST_OWNER: Code = code(
     "Conflict",
     "The organization keeps at least one active owner on every path; add another owner first (TN-91).",
 );
+/// An unknown social preset or a malformed client (IDP-31).
+pub const INVALID_SOCIAL_PROVIDER: Code = code(
+    "invalid-social-provider",
+    400,
+    "Bad Request",
+    "The preset is not one Access ships, or the client id and secret reference are not given together (IDP-31).",
+);
+/// A shared development client named for a realm that is not a sandbox (IDP-31 (4)).
+pub const SHARED_SOCIAL_KEY_IN_PRODUCTION: Code = code(
+    "shared-social-key-in-production",
+    409,
+    "Conflict",
+    "Only a sandbox realm may use the shared development client; give the realm its own client id and secret reference (IDP-31).",
+);
 /// An audit stream rendering other than `ocsf`, `cef` or `set` (OP-41).
 pub const INVALID_AUDIT_FORMAT: Code = code(
     "invalid-audit-format",

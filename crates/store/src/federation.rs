@@ -197,16 +197,12 @@ impl TenantTx {
         let (tenant, realm) = scope(self)?;
         let status = if row.active { "active" } else { "disabled" };
         let changed = row.client_changed_ms.map(i64_of).transpose()?;
-        sqlx::query!(
-            "INSERT INTO access.idp_social_providers (tenant_id, realm_id, preset, client_id,
-                    client_secret_ref, status, previous_client_id, client_changed_ms, domain_id,
-                    decision_pos)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-             ON CONFLICT (tenant_id, realm_id, preset) DO UPDATE
-                SET client_id = EXCLUDED.client_id, client_secret_ref = EXCLUDED.client_secret_ref,
-                    status = EXCLUDED.status, previous_client_id = EXCLUDED.previous_client_id,
-                    client_changed_ms = EXCLUDED.client_changed_ms, domain_id = EXCLUDED.domain_id,
-                    decision_pos = EXCLUDED.decision_pos",
+        let domain = bound.domain.as_bytes().as_slice();
+        let updated = sqlx::query!(
+            "UPDATE access.idp_social_providers
+                SET client_id = $4, client_secret_ref = $5, status = $6, previous_client_id = $7,
+                    client_changed_ms = $8, domain_id = $9, decision_pos = $10
+              WHERE tenant_id = $1 AND realm_id = $2 AND preset = $3",
             tenant,
             realm,
             row.preset,
@@ -215,11 +211,32 @@ impl TenantTx {
             status,
             row.previous_client_id,
             changed,
-            bound.domain.as_bytes().as_slice(),
+            domain,
             bound.position,
         )
         .execute(&mut *self.tx)
-        .await?;
+        .await?
+        .rows_affected();
+        if updated == 0 {
+            sqlx::query!(
+                "INSERT INTO access.idp_social_providers (tenant_id, realm_id, preset, client_id,
+                        client_secret_ref, status, previous_client_id, client_changed_ms,
+                        domain_id, decision_pos)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
+                tenant,
+                realm,
+                row.preset,
+                row.client_id,
+                row.client_secret_ref,
+                status,
+                row.previous_client_id,
+                changed,
+                domain,
+                bound.position,
+            )
+            .execute(&mut *self.tx)
+            .await?;
+        }
         Ok(())
     }
 

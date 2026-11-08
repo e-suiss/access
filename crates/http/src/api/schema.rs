@@ -156,6 +156,30 @@ fn schemas() -> Value {
                 "status": { "type": "string", "enum": ["active", "retired"], "readOnly": true },
             },
         },
+        "SocialProvider": {
+            "type": "object",
+            "additionalProperties": false,
+            "description": "A social preset the realm enabled (IDP-31, OP-153 m.3 (l)): its client secret only by `secret://` reference; no client means the operator's shared development client, which only a sandbox realm may use. Warnings never refuse anything (TN-87, IDP-31 (5)).",
+            "properties": {
+                "preset": { "type": "string", "enum": ["apple", "facebook", "github", "google", "linkedin", "microsoft"] },
+                "client_id": { "type": ["string", "null"] },
+                "client_secret_ref": { "type": ["string", "null"], "pattern": "^secret://" },
+                "shared_development_client": { "type": "boolean", "readOnly": true },
+                "status": { "type": "string", "enum": ["active", "disabled"], "readOnly": true },
+                "warnings": {
+                    "type": "array",
+                    "readOnly": true,
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "code": { "type": "string", "enum": ["social-client-id-changed", "apple-transfer-window", "apple-sign-in-recommended"] },
+                            "at": r("schemas", "Time"),
+                            "until": r("schemas", "Time"),
+                        },
+                    },
+                },
+            },
+        },
         "Hook": {
             "type": "object",
             "additionalProperties": false,
@@ -547,6 +571,7 @@ fn body_of(row: &Route) -> &'static str {
             ResourceKind::Signals => "Signals",
             ResourceKind::Analytics => "Analytics",
             ResourceKind::Deliveries => "Page",
+            ResourceKind::SocialProviders => "SocialProvider",
         },
         _ => "ExerciseRef",
     }

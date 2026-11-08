@@ -525,6 +525,28 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                     return Err(AdminError::Conflict);
                 }
             }
+            Change::SocialEnable(s) | Change::SocialUpdate(s) => {
+                let row = t.social_provider(s.preset.as_str()).await?;
+                let active = row.is_some_and(|r| r.active);
+                match change {
+                    Change::SocialEnable(_) if active => return Err(Invalid::SocialExists.into()),
+                    Change::SocialUpdate(_) if !active => return Err(Invalid::NoSocial.into()),
+                    _ => {}
+                }
+                // IDP-31 (4), OP-153 m.3 (l)
+                if s.client.is_none() && !t.realm_is_sandbox().await? {
+                    return Err(Invalid::SharedSocialKey.into());
+                }
+            }
+            Change::SocialDisable(preset) => {
+                if !t
+                    .social_provider(preset.as_str())
+                    .await?
+                    .is_some_and(|r| r.active)
+                {
+                    return Err(Invalid::NoSocial.into());
+                }
+            }
             Change::CimdPolicy(_)
             | Change::MapperSet { .. }
             | Change::JoseAlg(_)
@@ -1288,6 +1310,20 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             | Change::AccountTapIssue(_) => true,
             Change::OrgInviteRevoke { invitation, .. } => t.revoke_invitation(*invitation).await?,
             Change::OrgUpdate(u) => orgs::update(t, self.ids, u, self.app).await?,
+            Change::SocialEnable(s) | Change::SocialUpdate(s) => {
+                write_social(t, bound, s).await?;
+                true
+            }
+            Change::SocialDisable(preset) => {
+                let mut row = t
+                    .social_provider(preset.as_str())
+                    .await?
+                    .filter(|r| r.active)
+                    .ok_or(Invalid::NoSocial)?;
+                row.active = false;
+                t.put_social_provider(bound, &row).await?;
+                true
+            }
             Change::OrgMemberRemove(m) => {
                 let org = t
                     .org_by_party(m.org)
@@ -1331,6 +1367,36 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             Err(AdminError::Conflict)
         }
     }
+}
+
+/// IDP-31, TN-87: writes the preset's new client; a changed client id keeps the one before and
+/// when it changed, which the provider's view turns into its warnings.
+async fn write_social(
+    t: &mut TenantTx,
+    bound: &idp::Bound,
+    s: &crate::domain::Social,
+) -> Result<(), AdminError> {
+    let now = t.server_time().await?;
+    let before = t.social_provider(s.preset.as_str()).await?;
+    let new_id = s.client.as_ref().map(|c| c.client_id.clone());
+    let (previous, changed) = match &before {
+        Some(b) if b.client_id.is_some() && b.client_id != new_id => {
+            (b.client_id.clone(), Some(now))
+        }
+        Some(b) => (b.previous_client_id.clone(), b.client_changed_ms),
+        None => (None, None),
+    };
+    let row = access_store::federation::SocialRow {
+        preset: String::from(s.preset.as_str()),
+        client_id: new_id,
+        client_secret_ref: s.client.as_ref().map(|c| c.secret_ref.clone()),
+        active: true,
+        previous_client_id: previous,
+        client_changed_ms: changed,
+        position: 0,
+    };
+    t.put_social_provider(bound, &row).await?;
+    Ok(())
 }
 
 /// TN-91, OP-153 m.3 (p): the member exists, and removing it leaves an active owner.

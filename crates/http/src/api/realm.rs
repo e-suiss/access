@@ -226,6 +226,34 @@ pub const ROWS: &[Route] = &[
         "retireUpstreamIdp",
         "Retires an upstream identity provider.",
     ),
+    list(
+        "/admin/v1/realms/{slug}/social-providers",
+        "listSocialProviders",
+        "The social presets the realm enabled, with their warnings (IDP-31, TN-87).",
+    ),
+    read(
+        "/admin/v1/realms/{slug}/social-providers/{preset}",
+        "getSocialProvider",
+        "One social preset the realm enabled.",
+    ),
+    write(
+        Verb::Put,
+        "/admin/v1/realms/{slug}/social-providers/{preset}",
+        "putSocialProvider",
+        "Enables or changes a social preset; only a sandbox realm may omit its own client (idp.social.enable, update).",
+    ),
+    write(
+        Verb::Patch,
+        "/admin/v1/realms/{slug}/social-providers/{preset}",
+        "patchSocialProvider",
+        "Changes a social preset's client by JSON Merge Patch (idp.social.update).",
+    ),
+    write(
+        Verb::Post,
+        "/admin/v1/realms/{slug}/social-providers/{preset}/disable",
+        "disableSocialProvider",
+        "Stops offering a social preset; linked sign-ins stay (idp.social.disable).",
+    ),
     write(
         Verb::Post,
         "/admin/v1/realms/{slug}/organizations",
@@ -541,6 +569,7 @@ const UPSTREAM_PATCH: &[&str] = &[
     "jwks_uri",
     "ssf",
 ];
+const SOCIAL_PATCH: &[&str] = &["client_id", "client_secret_ref"];
 const SIGNIN_PATCH: &[&str] = &[
     "methods",
     "required_fields",
@@ -599,8 +628,8 @@ const fn put(section: &'static str) -> Shape {
 #[must_use]
 pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
     use ResourceKind::{
-        Accounts, Analytics, Clients, Deliveries, Groups, Hooks, Settings, Signals, UpstreamIdps,
-        Webhooks,
+        Accounts, Analytics, Clients, Deliveries, Groups, Hooks, Settings, Signals,
+        SocialProviders, UpstreamIdps, Webhooks,
     };
     const CREATE: Shape = Shape::Write {
         patch: None,
@@ -650,6 +679,11 @@ pub fn spec(operation_id: &str) -> Option<(ResourceKind, Shape)> {
         "putUpstreamIdp" => (UpstreamIdps, w(true)),
         "patchUpstreamIdp" => (UpstreamIdps, patch(UPSTREAM_PATCH, None)),
         "retireUpstreamIdp" | "linkUpstreamSubject" => (UpstreamIdps, w(false)),
+        "listSocialProviders" => (SocialProviders, Shape::List(&["preset", "status"])),
+        "getSocialProvider" => (SocialProviders, Shape::Get),
+        "putSocialProvider" => (SocialProviders, w(true)),
+        "patchSocialProvider" => (SocialProviders, patch(SOCIAL_PATCH, None)),
+        "disableSocialProvider" => (SocialProviders, w(false)),
         "getSettings" => (Settings, Shape::Get),
         "putSigninPolicy" => (Settings, put("signin_policy")),
         "patchSigninPolicy" => (Settings, patch(SIGNIN_PATCH, Some("signin_policy"))),
@@ -753,7 +787,7 @@ pub fn problem_of(e: &AdminError) -> &'static Code {
             Invalid::ExtensionPolicy => &r::INVALID_EXTENSION_POLICY,
             Invalid::HookPointTaken => &r::HOOK_POINT_TAKEN,
             Invalid::CatalogUpgradeRequired => &r::CATALOG_UPGRADE_REQUIRED,
-            Invalid::OrgExists => &r::RESOURCE_EXISTS,
+            Invalid::OrgExists | Invalid::SocialExists => &r::RESOURCE_EXISTS,
             Invalid::LastOwner => &r::LAST_OWNER,
             Invalid::RecoveryPolicy => &r::INVALID_RECOVERY_POLICY,
             Invalid::RecoveryOption => &r::RECOVERY_OPTION_OFF,
@@ -762,6 +796,8 @@ pub fn problem_of(e: &AdminError) -> &'static Code {
             Invalid::OrgLimit | Invalid::InviteLimit => &codes::RATE_LIMITED,
             Invalid::Invitation => &r::INVALID_INVITATION,
             Invalid::HrdUnverified => &r::HRD_NEEDS_VERIFIED_DOMAIN,
+            Invalid::Social => &r::INVALID_SOCIAL_PROVIDER,
+            Invalid::SharedSocialKey => &r::SHARED_SOCIAL_KEY_IN_PRODUCTION,
             Invalid::NoClient
             | Invalid::NoKey
             | Invalid::NoGroup
@@ -772,6 +808,7 @@ pub fn problem_of(e: &AdminError) -> &'static Code {
             | Invalid::NoOrg
             | Invalid::NoMember
             | Invalid::NoInvitation => &codes::NOT_FOUND,
+            Invalid::NoSocial => &codes::NOT_FOUND,
         },
         AdminError::Issuer(_) | AdminError::NoRealm => &codes::NOT_FOUND,
         AdminError::Refused(_) => &codes::EXERCISE_REFUSED,

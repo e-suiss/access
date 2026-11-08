@@ -31,7 +31,7 @@ pub mod realm;
 
 pub use realm::{
     Binding, Group, Members, MembershipIssuer, Name, SessionPolicy, SigninMethod, SigninPolicy,
-    Upstream, UpstreamLink,
+    Social, SocialClient, Upstream, UpstreamLink,
 };
 
 /// Context label of a change digest.
@@ -372,6 +372,18 @@ pub enum Invalid {
     /// TN-98).
     #[error("home realm discovery needs a verified domain")]
     HrdUnverified,
+    /// An unknown preset or a malformed client (IDP-31).
+    #[error("bad social provider")]
+    Social,
+    /// The realm has not enabled the preset, or disabled it.
+    #[error("no such social provider")]
+    NoSocial,
+    /// The realm offers the preset already.
+    #[error("social provider exists")]
+    SocialExists,
+    /// The shared development client named in a realm that is not a sandbox (IDP-31 (4)).
+    #[error("shared social key in production")]
+    SharedSocialKey,
 }
 
 impl Invalid {
@@ -390,6 +402,10 @@ impl Invalid {
             Self::Invitation => "invalid-invitation",
             Self::NoInvitation => "no-such-invitation",
             Self::HrdUnverified => "hrd-needs-verified-domain",
+            Self::Social => "invalid-social-provider",
+            Self::NoSocial => "no-such-social-provider",
+            Self::SocialExists => "social-provider-exists",
+            Self::SharedSocialKey => "shared-social-key-in-production",
             Self::DisplayName => "invalid-display-name",
             Self::RedirectUri | Self::RedirectUris => "invalid-redirect-uri",
             Self::JwksUri => "invalid-jwks-uri",
@@ -1319,6 +1335,12 @@ pub enum Change {
         /// The invitation.
         invitation: [u8; 16],
     },
+    /// `idp.social.enable` (OP-153 m.3 (l)).
+    SocialEnable(Social),
+    /// `idp.social.update`.
+    SocialUpdate(Social),
+    /// `idp.social.disable`.
+    SocialDisable(Name),
 }
 
 /// A change to an organization's profile (TN-98): its name, and whether home realm discovery
@@ -1581,6 +1603,9 @@ impl Change {
             Self::OrgInvite(_) => IdpAction::OrgInvite,
             Self::OrgUpdate(_) => IdpAction::OrgUpdate,
             Self::OrgInviteRevoke { .. } => IdpAction::OrgInviteRevoke,
+            Self::SocialEnable(_) => IdpAction::SocialEnable,
+            Self::SocialUpdate(_) => IdpAction::SocialUpdate,
+            Self::SocialDisable(_) => IdpAction::SocialDisable,
         }
     }
 
@@ -1622,9 +1647,11 @@ impl Change {
                 policy.validate().map_err(|_| Invalid::RecoveryPolicy)
             }
             Self::OrgCreate(o) => o.check(),
+            Self::SocialEnable(c) | Self::SocialUpdate(c) => c.check(),
             Self::OrgInvite(i) => i.check(),
             Self::OrgUpdate(u) => u.check(),
             Self::OrgInviteRevoke { .. }
+            | Self::SocialDisable(_)
             | Self::OrgMemberRemove(_)
             | Self::Hook(_)
             | Self::Webhook(_)
@@ -1726,6 +1753,10 @@ impl Change {
                 (Value::text("org"), Value::Bytes(org.to_vec())),
                 (Value::text("invitation"), Value::Bytes(invitation.to_vec())),
             ]),
+            Self::SocialEnable(c) | Self::SocialUpdate(c) => c.to_value(),
+            Self::SocialDisable(n) => {
+                Value::Map(vec![(Value::text("preset"), Value::text(n.as_str()))])
+            }
         }
     }
 
@@ -1804,6 +1835,11 @@ impl Change {
             | Self::OrgUpdate(OrgUpdate { org, .. })
             | Self::OrgInviteRevoke { org, .. } => {
                 path.extend([String::from("org"), b64url_encode(org)]);
+            }
+            Self::SocialEnable(Social { preset, .. })
+            | Self::SocialUpdate(Social { preset, .. })
+            | Self::SocialDisable(preset) => {
+                path.extend([String::from("social"), String::from(preset.as_str())]);
             }
         }
         ResourceRef {

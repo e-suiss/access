@@ -97,6 +97,7 @@ fn kind(k: ResourceKind) -> Kind {
         ResourceKind::Signals => Kind::Signals,
         ResourceKind::Analytics => Kind::Analytics,
         ResourceKind::Deliveries => Kind::Deliveries,
+        ResourceKind::SocialProviders => Kind::Socials,
     }
 }
 

@@ -11,6 +11,7 @@ use access_identity_account::domain::recovery_policy;
 
 use access_kernel::json::{b64url_decode, b64url_encode};
 use access_kernel::model::Window;
+use access_store::federation::SocialRow;
 use access_store::identity::{RealmId, TenantId, TenantTx};
 use access_store::idp::realm::{self as resources, AccountRow, GroupRow, UpstreamRow};
 use access_store::idp::{self, ClientRow};
@@ -25,7 +26,8 @@ use crate::domain::{
     Disclosure, ExtensionPolicy, Group, HOOK_PREFIX, HookChange, HookPoint, HookSpec, Invalid,
     JoseAlg, Members, MembershipIssuer, Name, OnNoAnswer, OrgCreate, OrgInvite, OrgMember,
     OrgUpdate, ProtectionMode, RedirectUri, RpId, SessionPolicy, SigninMethod, SigninPolicy,
-    Signing, Subject, Upstream, UpstreamLink, WEBHOOK_PREFIX, WebhookChange, WebhookSpec,
+    Signing, Social, SocialClient, Subject, Upstream, UpstreamLink, WEBHOOK_PREFIX, WebhookChange,
+    WebhookSpec,
 };
 use crate::ports::{Decider, Governance, Instances, RealmKeys};
 use access_identity_events::domain::webhook::event_names;
@@ -121,6 +123,10 @@ pub enum Op {
     RevokeInvitation,
     /// `patchOrganization`: `idp.org.update` (TN-98).
     PatchOrganization,
+    /// `putSocialProvider`: `idp.social.enable` or `update` (OP-153 m.3 (l)).
+    PutSocial,
+    /// `disableSocialProvider`: `idp.social.disable`.
+    DisableSocial,
 }
 
 impl Op {
@@ -167,6 +173,8 @@ impl Op {
             "createInvitation" => Self::CreateInvitation,
             "revokeInvitation" => Self::RevokeInvitation,
             "patchOrganization" => Self::PatchOrganization,
+            "putSocialProvider" | "patchSocialProvider" => Self::PutSocial,
+            "disableSocialProvider" => Self::DisableSocial,
             _ => return None,
         })
     }
@@ -405,6 +413,26 @@ pub fn compile(op: Op, key: Option<&str>, body: &Json, ids: &IdKey) -> Result<Ch
                 party: party_of(text(m, "party")?, Invalid::Body)?,
                 display_name: String::from(text(m, "display_name")?),
             })
+        }
+        Op::PutSocial => {
+            only(m, &["preset", "client_id", "client_secret_ref", "status"])?;
+            let preset = Name::parse(key_of(key)?)?;
+            if opt_text(m, "preset")?.is_some_and(|n| n != preset.as_str()) {
+                return Err(Invalid::Name);
+            }
+            let client = match (opt_text(m, "client_id")?, opt_text(m, "client_secret_ref")?) {
+                (None, None) => None,
+                (Some(id), Some(r)) => Some(SocialClient {
+                    client_id: String::from(id),
+                    secret_ref: String::from(r),
+                }),
+                _ => return Err(Invalid::Social),
+            };
+            Change::SocialEnable(Social { preset, client })
+        }
+        Op::DisableSocial => {
+            only(m, &[])?;
+            Change::SocialDisable(Name::parse(key_of(key)?)?)
         }
         Op::RemoveOrganizationMember => {
             only(m, &["account_id"])?;
@@ -891,6 +919,44 @@ pub fn upstream_view(u: &UpstreamRow) -> Json {
     })
 }
 
+/// Whether a client is a native app: a redirect URI with a private-use scheme or a loopback
+/// address (RFC 8252).
+fn native(c: &ClientRow) -> bool {
+    c.active
+        && c.redirect_uris.iter().any(|u| {
+            !u.starts_with("https://")
+                && (!u.starts_with("http://")
+                    || u.starts_with("http://127.0.0.1")
+                    || u.starts_with("http://[::1]"))
+        })
+}
+
+/// A social preset's view: the secret only by its reference, and its warnings (TN-87,
+/// IDP-31 (5)); a warning never refuses anything.
+#[must_use]
+pub fn social_view(s: &SocialRow, apple_recommended: bool) -> Json {
+    use access_identity_federation::domain::rules::{APPLE_TRANSFER_MS, Warning};
+    let mut warnings = Vec::new();
+    if let Some(at) = s.client_changed_ms {
+        warnings.push(json!({ "code": Warning::ClientIdChanged.code(), "at": rfc3339(at) }));
+        if s.preset == access_identity_federation::domain::rules::APPLE {
+            let until = at.saturating_add(APPLE_TRANSFER_MS);
+            warnings.push(json!({ "code": Warning::AppleTransferUntil(until).code(), "until": rfc3339(until) }));
+        }
+    }
+    if apple_recommended && s.active {
+        warnings.push(json!({ "code": Warning::AppleRecommended.code() }));
+    }
+    json!({
+        "preset": s.preset,
+        "client_id": s.client_id,
+        "client_secret_ref": s.client_secret_ref,
+        "shared_development_client": s.client_id.is_none(),
+        "status": if s.active { "active" } else { "disabled" },
+        "warnings": warnings,
+    })
+}
+
 /// An account's view: its state, never a credential (TN-61, §12.3.1).
 #[must_use]
 pub fn account_view(a: &AccountRow, ids: &IdKey) -> Json {
@@ -1020,6 +1086,8 @@ pub enum Kind {
     Analytics,
     /// One webhook's delivery log, by its `webhook_id` (TN-136): no event body.
     Deliveries,
+    /// The social presets the realm enabled, with their warnings (IDP-31, TN-87).
+    Socials,
 }
 
 /// How many days the analytics read covers, today included (PD).
@@ -1139,6 +1207,13 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                     policy,
                 }
             }
+            Change::SocialEnable(s)
+                if t.social_provider(s.preset.as_str())
+                    .await?
+                    .is_some_and(|r| r.active) =>
+            {
+                Change::SocialUpdate(s)
+            }
             // OP-151 m.14 (f)
             Change::ProtectionMode { mode, .. } => {
                 let tier = access_identity_risk::app::settings::change_tier(&mut t, &mode)
@@ -1254,6 +1329,28 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                         .iter()
                         .map(|u| (upstream_view(u), u.position))
                         .collect(),
+                }
+            }
+            (Kind::Socials, _) => {
+                let rows = t.social_providers().await?;
+                let clients = resources::clients(t, "", 1000).await?;
+                let enabled: Vec<&str> = rows
+                    .iter()
+                    .filter(|r| r.active)
+                    .map(|r| r.preset.as_str())
+                    .collect();
+                // IDP-31 (5)
+                let apple = access_identity_federation::domain::rules::apple_recommended(
+                    clients.iter().any(|(c, _)| native(c)),
+                    enabled,
+                );
+                Read {
+                    items: rows
+                        .iter()
+                        .filter(|r| key.is_none_or(|k| k == r.preset))
+                        .map(|r| (social_view(r, apple), r.position))
+                        .collect(),
+                    last: None,
                 }
             }
             (Kind::Accounts, Some(k)) => {

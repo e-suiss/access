@@ -450,6 +450,8 @@ pub const CODES: &[Code] = &[
     codes::realm::NOT_AN_ORGANIZATION,
     codes::realm::INVALID_INVITATION,
     codes::realm::HRD_NEEDS_VERIFIED_DOMAIN,
+    codes::realm::INVALID_SOCIAL_PROVIDER,
+    codes::realm::SHARED_SOCIAL_KEY_IN_PRODUCTION,
     codes::realm::INVALID_AUDIT_FORMAT,
 ];
 

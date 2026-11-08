@@ -323,6 +323,67 @@ impl Upstream {
     }
 }
 
+/// A social preset as a realm enables or changes it (IDP-31, OP-153 m.3 (l)): its own client,
+/// or `None` for the operator's shared development client, which only a sandbox realm may use.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Social {
+    /// The preset id.
+    pub preset: Name,
+    /// The realm's client.
+    pub client: Option<SocialClient>,
+}
+
+/// A realm's own client at a social provider; its secret only by reference.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SocialClient {
+    /// The client id.
+    pub client_id: String,
+    /// The secret's reference, `secret://…`.
+    pub secret_ref: String,
+}
+
+fn secret_ref_ok(r: &str) -> bool {
+    r.len() <= 255
+        && r.strip_prefix("secret://").is_some_and(|rest| {
+            !rest.is_empty()
+                && rest
+                    .bytes()
+                    .all(|c| c.is_ascii_alphanumeric() || matches!(c, b'/' | b'-' | b'_' | b'.'))
+        })
+}
+
+impl Social {
+    /// Checks the preset against the shipped presets and the client's shape.
+    ///
+    /// # Errors
+    /// [`Invalid::Social`].
+    pub fn check(&self) -> Result<(), Invalid> {
+        let known = access_identity_federation::domain::preset::Presets::shipped()
+            .is_ok_and(|p| p.get(self.preset.as_str()).is_some());
+        let client_ok = self.client.as_ref().is_none_or(|c| {
+            (1..=255).contains(&c.client_id.len())
+                && c.client_id.bytes().all(|b| b.is_ascii_graphic())
+                && secret_ref_ok(&c.secret_ref)
+        });
+        if known && client_ok {
+            Ok(())
+        } else {
+            Err(Invalid::Social)
+        }
+    }
+
+    /// The deterministic CBOR the change carries.
+    #[must_use]
+    pub fn to_value(&self) -> Value {
+        let mut m = vec![(Value::text("preset"), Value::text(self.preset.as_str()))];
+        if let Some(c) = &self.client {
+            m.push((Value::text("client_id"), Value::text(&c.client_id)));
+            m.push((Value::text("client_secret_ref"), Value::text(&c.secret_ref)));
+        }
+        Value::Map(m)
+    }
+}
+
 /// A sign-in method a realm may enable (TN-132).
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum SigninMethod {

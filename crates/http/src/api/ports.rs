@@ -181,6 +181,8 @@ pub enum ResourceKind {
     Analytics,
     /// One webhook's delivery log, by `webhook_id` (TN-136).
     Deliveries,
+    /// Social presets, by preset id (IDP-31).
+    SocialProviders,
 }
 
 impl ResourceKind {
@@ -198,6 +200,7 @@ impl ResourceKind {
             Self::Signals => "signals",
             Self::Analytics => "analytics",
             Self::Deliveries => "deliveries",
+            Self::SocialProviders => "social-providers",
         }
     }
 }

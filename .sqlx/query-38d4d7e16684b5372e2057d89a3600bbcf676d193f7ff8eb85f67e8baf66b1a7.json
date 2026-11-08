@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE access.idp_social_providers\n                SET client_id = $4, client_secret_ref = $5, status = $6, previous_client_id = $7,\n                    client_changed_ms = $8, domain_id = $9, decision_pos = $10\n              WHERE tenant_id = $1 AND realm_id = $2 AND preset = $3",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Int8",
+        "Bytea",
+        "Int8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "38d4d7e16684b5372e2057d89a3600bbcf676d193f7ff8eb85f67e8baf66b1a7"
+}

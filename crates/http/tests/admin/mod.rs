@@ -190,6 +190,10 @@ fn fake_item(kind: ResourceKind, key: &str, version: u64) -> Item {
         ResourceKind::Clients => json!({ "client_id": key, "display_name": "Shop",
                                          "redirect_uris": [], "status": "active" }),
         ResourceKind::Accounts => json!({ "account_id": key, "status": "active" }),
+        ResourceKind::SocialProviders => json!({ "preset": key, "client_id": "c",
+                                                 "client_secret_ref": "secret://s",
+                                                 "shared_development_client": false,
+                                                 "status": "active", "warnings": [] }),
         ResourceKind::Groups | ResourceKind::UpstreamIdps => {
             json!({ "name": key, "display_name": "Fake", "status": "active" })
         }
