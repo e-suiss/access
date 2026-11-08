@@ -473,6 +473,18 @@ async fn env_core(
     signin: RealmSignin,
     signup: access_identity_ui::app::signup::Signup,
 ) -> Env {
+    env_legacy(seed, slug, auth, live, signin, signup, None).await
+}
+
+async fn env_legacy(
+    seed: u8,
+    slug: &str,
+    auth: AuthPolicy,
+    live: bool,
+    signin: RealmSignin,
+    signup: access_identity_ui::app::signup::Signup,
+    legacy: Option<Arc<dyn access_identity_account::ports::LegacyIdp>>,
+) -> Env {
     let db = fresh().await.unwrap();
     let tenant = create_tenant(&db.app, "pool-default").await.unwrap();
     let d = DomainId::from_bytes([seed; 32]);
@@ -513,7 +525,10 @@ async fn env_core(
         clock: clock.clone(),
         messages: outbox.clone(),
         gate: LoginGate::new(LocalLimiter::default(), ThrottlePolicy::DEFAULT, 0),
-        hasher: Hasher::new(config),
+        hasher: match legacy {
+            Some(idp) => Hasher::new(config).with_legacy_idp(idp),
+            None => Hasher::new(config),
+        },
         redirect_to: "/".into(),
         hooks: std::sync::Arc::new(access_identity_hooks::ports::NoHooks),
         risk: access_identity_session::app::RiskServices::without_sources(),
@@ -3034,6 +3049,188 @@ async fn the_realm_domain_lists_and_required_name_hold_at_sign_up() {
         )
         .await;
     assert_eq!(done.step(), "complete");
+}
+
+/// The previous identity provider of a lazy migration: knows one password, or is down.
+struct OldIdp {
+    up: bool,
+    asked: Arc<AtomicU64>,
+}
+
+impl access_identity_account::ports::LegacyIdp for OldIdp {
+    fn verify<'a>(
+        &'a self,
+        identifier: &'a str,
+        password: &'a [u8],
+        reference: &'a str,
+    ) -> access_identity_account::ports::LegacyIdpFuture<'a> {
+        Box::pin(async move {
+            self.asked.fetch_add(1, Ordering::SeqCst);
+            if !self.up {
+                return Err(access_identity_account::ports::LegacyIdpUnavailable);
+            }
+            Ok(identifier == "old@example.com" && reference == "u-77" && password == PW.as_bytes())
+        })
+    }
+}
+
+impl Env {
+    async fn import(
+        &self,
+        line: serde_json::Value,
+    ) -> access_identity_account::app::import::Imported {
+        let pg = PgAccounts::sealed(self.db.app.clone(), self.kit.vault());
+        access_identity_account::app::import::import_line(
+            &pg,
+            &self.realm(),
+            &line.to_string(),
+            &ADMIN,
+        )
+        .await
+        .unwrap()
+    }
+
+    async fn legacy_count(&self) -> u64 {
+        let day = u32::try_from(self.clock.now_ms() / 86_400_000).unwrap();
+        let mut t = TenantTx::begin(&self.db.app, self.tenant, self.realm)
+            .await
+            .unwrap();
+        let (row, _) = t.aggregate_day(day).await.unwrap();
+        t.commit().await.unwrap();
+        row.legacy_password_accounts
+    }
+
+    async fn password_algorithm(&self, subject: [u8; 16]) -> Vec<String> {
+        let mut t = TenantTx::begin(&self.db.app, self.tenant, self.realm)
+            .await
+            .unwrap();
+        let c = t.credentials(subject, "password").await.unwrap();
+        t.commit().await.unwrap();
+        c.into_iter().map(|c| c.algorithm).collect()
+    }
+}
+
+// 3567, 3568, 4049, 4089, TN-85, CR-37, OP-153 m.11 (h), (gg)
+#[tokio::test]
+async fn a_legacy_bcrypt_user_signs_in_and_is_stored_as_argon2id_after_one_login() {
+    use access_identity_account::app::import::{Imported, Skipped};
+    let e = env(38, "mig-a", AuthPolicy::DEFAULT).await;
+    let hash = "$2y$05$pjDCtN..zgfjuaFwV5NMLeoCrLFlrr5.A2o2bXoe4BtTIrESvFIDe";
+    let Imported::Created { subject, legacy } = e
+        .import(json!({ "email": "ann@example.com", "password_hash": hash }))
+        .await
+    else {
+        panic!("not imported");
+    };
+    assert!(legacy);
+    assert_eq!(e.password_algorithm(subject).await, vec!["legacy-bcrypt"]);
+    // 3569, 3894
+    assert_eq!(e.legacy_count().await, 1);
+    assert_eq!(
+        e.import(json!({ "email": "ann@example.com", "password_hash": hash }))
+            .await,
+        Imported::Skipped(Skipped::Taken)
+    );
+    assert!(matches!(
+        e.import(
+            json!({ "email": "x@example.com", "password_hash": "d41d8cd98f00b204e9800998ecf8427e" })
+        )
+        .await,
+        Imported::Skipped(Skipped::Hash(_))
+    ));
+    let mut wrong = e.browser("mig-a0");
+    let at = wrong.identify("ann@example.com").await;
+    let refused = wrong
+        .submit(&at, "password", json!({ "password": "not the one" }))
+        .await;
+    assert_eq!(refused.status, StatusCode::UNAUTHORIZED);
+    assert_eq!(e.password_algorithm(subject).await, vec!["legacy-bcrypt"]);
+    e.advance(2_000);
+    let mut b = e.browser("mig-a1");
+    let done = b.sign_in("ann@example.com").await;
+    assert_eq!(
+        done.step(),
+        "complete",
+        "{}",
+        String::from_utf8_lossy(&done.body)
+    );
+    assert_eq!(e.password_algorithm(subject).await, vec!["argon2id"]);
+    assert_eq!(e.legacy_count().await, 0);
+    e.advance(2_000);
+    let mut again = e.browser("mig-a2");
+    assert_eq!(again.sign_in("ann@example.com").await.step(), "complete");
+}
+
+// 3568, TN-85, MD-8, TI-9
+#[tokio::test]
+async fn a_legacy_idp_outage_fails_the_login_closed() {
+    use access_identity_account::app::import::Imported;
+    let asked = Arc::new(AtomicU64::new(0));
+    let down = OldIdp {
+        up: false,
+        asked: asked.clone(),
+    };
+    let e = env_legacy(
+        39,
+        "mig-b",
+        AuthPolicy::DEFAULT,
+        false,
+        RealmSignin::default(),
+        access_identity_ui::app::signup::Signup::without_providers().unwrap(),
+        Some(Arc::new(down)),
+    )
+    .await;
+    let Imported::Created { subject, legacy } = e
+        .import(json!({ "email": "old@example.com", "legacy_idp_reference": "u-77" }))
+        .await
+    else {
+        panic!("not imported");
+    };
+    assert!(legacy);
+    let mut b = e.browser("mig-b1");
+    let at = b.identify("old@example.com").await;
+    let r = b.submit(&at, "password", json!({ "password": PW })).await;
+    assert_eq!(r.status, StatusCode::UNAUTHORIZED);
+    assert_eq!(asked.load(Ordering::SeqCst), 1);
+    assert_eq!(e.password_algorithm(subject).await, vec!["legacy-idp"]);
+
+    let up = env_legacy(
+        40,
+        "mig-c",
+        AuthPolicy::DEFAULT,
+        false,
+        RealmSignin::default(),
+        access_identity_ui::app::signup::Signup::without_providers().unwrap(),
+        Some(Arc::new(OldIdp {
+            up: true,
+            asked: asked.clone(),
+        })),
+    )
+    .await;
+    let Imported::Created { subject, .. } = up
+        .import(json!({ "email": "old@example.com", "legacy_idp_reference": "u-77" }))
+        .await
+    else {
+        panic!("not imported");
+    };
+    let mut c = up.browser("mig-c1");
+    assert_eq!(c.sign_in("old@example.com").await.step(), "complete");
+    assert_eq!(up.password_algorithm(subject).await, vec!["argon2id"]);
+    let without = env(41, "mig-d", AuthPolicy::DEFAULT).await;
+    let Imported::Created { subject, .. } = without
+        .import(json!({ "email": "old@example.com", "legacy_idp_reference": "u-77" }))
+        .await
+    else {
+        panic!("not imported");
+    };
+    let mut d = without.browser("mig-d1");
+    let at = d.identify("old@example.com").await;
+    let r = d.submit(&at, "password", json!({ "password": PW })).await;
+    assert_eq!(r.status, StatusCode::UNAUTHORIZED);
+    assert_eq!(
+        without.password_algorithm(subject).await,
+        vec!["legacy-idp"]
+    );
 }
 
 /// A resolver with fixed answers (OP-153 m.11 (f)).

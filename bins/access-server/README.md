@@ -12,6 +12,7 @@ access-server migrate                           # apply the schema migrations an
 access-server bootstrap <plan.toml>             # a local deployment's tenants and fixtures
 access-server client-update <plan.toml> <product> <display name>
 access-server client-retire <plan.toml> <product>
+access-server import-accounts <realm> <file.jsonl>   # accounts from another identity provider
 ```
 
 There is no other mode and no flag that relaxes a check. Two signer processes run beside it and
@@ -170,6 +171,47 @@ start.
 | `privacy_pass_issuer`, `privacy_pass_origin` | none | The challenge the hosted page presents (required with issuer keys). |
 | `mail_domain_check` | `true` | Look up the address's MX record (or A/AAAA without MX) at the host's first nameserver; a domain that takes no mail is refused, an unanswered lookup is not. |
 | `dns_timeout_ms` | `1500` | How long one DNS query may take. |
+
+### `[migration]`
+
+| Key | Default | Meaning |
+|---|---|---|
+| `legacy_idp_verify_url` | none | The previous identity provider's password check (`https://…`) for imported accounts that brought no hash. |
+
+## Moving accounts in
+
+`import-accounts` reads one JSON object per line and prints a summary; a line that cannot be
+imported is reported by its number and reason, never echoed:
+
+```json
+{"email": "ann@example.com", "password_hash": "$2y$10$…"}
+{"email": "bob@example.com", "password_hash": "…", "hash_transform": "prehash=sha256-hex"}
+{"username": "cem", "legacy_idp_reference": "auth0|5f1c…"}
+```
+
+- **Hashes are not converted on import.** Argon2id strings are kept as they are. Every other
+  scheme stays sealed as it came and is checked once, at the account's next sign-in, then
+  replaced by Argon2id in the same request. The import list covers bcrypt (`$2a$`, `$2b$`,
+  `$2y$`, cut at 72 bytes), Argon2i/d, scrypt, Firebase scrypt, PBKDF2-SHA1/256/512, md5-crypt,
+  sha256-crypt, sha512-crypt, LDAP `{SSHA}`-style hashes and the Kratos `$md5$`/`$sha*$`
+  pattern forms. A pepper or a pre-hash such as `bcrypt(sha256(password))` is data in
+  `hash_transform` (`pepper=prefix|suffix|hmac-sha256:<base64>`,
+  `prehash=md5-hex|sha1-hex|sha256-hex|sha256-raw|sha512-hex|sha256-base64`), not code.
+- **Without a hash**, the first sign-in asks `legacy_idp_verify_url` with
+  `POST {"identifier", "password", "reference"}` and expects `200 {"valid": true|false}`.
+  Anything else, or no URL configured, refuses the sign-in.
+- The console's sign-in analytics and the `access_legacy_hash_accounts` gauge count the accounts
+  still waiting.
+- **What does not move:** sessions, refresh tokens, consents and the audit history stay with the
+  previous provider. People sign in again; apps ask for consent again, and that consent is
+  recorded here as a Grant.
+- **Moving identity providers is not a domain handover.** Importing accounts changes where people
+  sign in. It does not move a domain's authority to another operator.
+- **Passkeys and Parties.** A passkey belongs to its relying party ID, which is your own domain,
+  so passkeys keep working when you move to or away from Access as long as the domain stays
+  the same. A passkey cannot follow a domain change, and the Credential Exchange Format is not a
+  way to move passkeys between relying parties. Party IDs and their key events are portable and
+  free to export, so people keep their own keys when the provider changes.
 
 ## Background work
 

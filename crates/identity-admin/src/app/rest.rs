@@ -1164,6 +1164,7 @@ fn analytics_view(r: &access_identity_risk::app::analytics::Report) -> Json {
             "active_accounts": d.accounts_active,
             "passkey_accounts": d.accounts_with_passkey,
             "mfa_accounts": d.accounts_with_mfa,
+            "legacy_password_accounts": d.legacy_password_accounts,
             "mfa_setup": d.mfa_setup_completed,
             "methods": {
                 "password": d.method_password,

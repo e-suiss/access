@@ -420,6 +420,10 @@ test("the analytics panel shows counts and says they are not a decision input", 
   await expect(page.getByRole("region", { name: "Sign-in analytics" })).toContainText(
     "Failed sign-ins surged on 2026-11-06: 300",
   );
+  // TN-85, CR-37, Ek B 3569, 3894
+  await expect(page.getByTestId("analytics-legacy")).toHaveText(
+    "Imported passwords still waiting to move to Argon2id at their next sign-in: 7",
+  );
 });
 
 // §8.17.10.4, E-2, X21, Ek B 3114–3117: advisory check, explain, sandbox as an ordinary domain

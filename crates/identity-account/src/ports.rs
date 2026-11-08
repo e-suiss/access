@@ -177,6 +177,29 @@ pub trait AccountTx: Send {
     fn commit(self) -> impl Future<Output = Result<(), AccountError>> + Send;
 }
 
+/// The previous identity provider did not answer, or answered outside its format.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
+#[error("previous identity provider unavailable")]
+pub struct LegacyIdpUnavailable;
+
+/// The future a [`LegacyIdp`] check returns.
+pub type LegacyIdpFuture<'a> =
+    std::pin::Pin<Box<dyn Future<Output = Result<bool, LegacyIdpUnavailable>> + Send + 'a>>;
+
+/// The previous identity provider during a lazy migration (§12.3.7, TN-85): it checks a
+/// password once, at the account's first sign-in here. An unanswered check fails the sign-in;
+/// there is no "allow when unavailable" (MD-8, TI-9).
+pub trait LegacyIdp: Send + Sync {
+    /// Whether `password` is the password of `identifier`, whose previous provider reference
+    /// is `reference` (empty when the import gave none).
+    fn verify<'a>(
+        &'a self,
+        identifier: &'a str,
+        password: &'a [u8],
+        reference: &'a str,
+    ) -> LegacyIdpFuture<'a>;
+}
+
 /// Whether an address's domain can receive mail (TN-80 step 1, OP-153 m.11 (f)).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Deliverability {

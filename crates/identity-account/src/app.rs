@@ -7,6 +7,7 @@ pub mod claims;
 pub mod events;
 pub mod external;
 pub mod hasher;
+pub mod import;
 pub mod local;
 pub mod login;
 pub mod privacy;

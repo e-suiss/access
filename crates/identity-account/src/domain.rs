@@ -10,6 +10,7 @@ pub mod events;
 pub mod gcra;
 pub mod identifier;
 pub mod invitation;
+pub mod legacy;
 pub mod login;
 pub mod password;
 pub mod recovery_policy;

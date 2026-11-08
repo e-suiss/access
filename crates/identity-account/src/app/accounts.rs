@@ -336,6 +336,22 @@ pub async fn store_password<T: AccountTx>(
     phc: &str,
     who: &Actor<'_>,
 ) -> Result<[u8; 16], AccountError> {
+    store_password_as(tx, realm, subject, phc, ALGORITHM, who).await
+}
+
+/// [`store_password`] for a secret of `algorithm`: an imported hash is `legacy-<scheme>` until
+/// its first sign-in (TN-85).
+///
+/// # Errors
+/// [`AccountError::NotFound`] for a deleted account; [`AccountError`].
+pub async fn store_password_as<T: AccountTx>(
+    tx: &mut T,
+    realm: &Realm<'_>,
+    subject: [u8; 16],
+    phc: &str,
+    algorithm: &str,
+    who: &Actor<'_>,
+) -> Result<[u8; 16], AccountError> {
     let row = tx
         .subject(subject, true)
         .await?
@@ -358,7 +374,7 @@ pub async fn store_password<T: AccountTx>(
         .insert_credential(&NewCredential {
             subject,
             kind: PASSWORD,
-            algorithm: ALGORITHM,
+            algorithm,
             sealed: &sealed,
         })
         .await?;

@@ -100,6 +100,7 @@ export function seed(bff: ConsoleMock): void {
         failed: 20,
         passkey_accounts: 40,
         mfa_setup: 55,
+        legacy_password_accounts: 7,
         methods: { passkey: 60, email: 40 },
       },
     ],

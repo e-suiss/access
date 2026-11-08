@@ -193,7 +193,7 @@ pub(crate) async fn analytics_tick(
             continue;
         };
         let mut done = true;
-        let (mut fp, mut reviews) = (0_u64, 0_u64);
+        let (mut fp, mut reviews, mut legacy) = (0_u64, 0_u64, 0_u64);
         for realm in routes(router).await? {
             let step = async {
                 let mut tx = TenantTx::begin(app, realm.tenant, realm.realm).await?;
@@ -219,6 +219,7 @@ pub(crate) async fn analytics_tick(
             match step.await {
                 Ok((Ok(a), window)) => {
                     out.realms = out.realms.saturating_add(1);
+                    legacy = legacy.saturating_add(a.day.legacy_password_accounts);
                     out.surges = out.surges.saturating_add(u32::from(a.surge.is_some()));
                     for d in &window {
                         fp = fp.saturating_add(d.risk_false_positives);
@@ -240,6 +241,10 @@ pub(crate) async fn analytics_tick(
         // OP-151 m.3 (o), OP-47
         let ratio = access_identity_risk::domain::analytics::ppm(fp, reviews).unwrap_or(0);
         access_telemetry::signals::RISK_FP_RATIO.set_u64(ratio, []);
+        // TN-85, CR-37, OP-47
+        if done {
+            access_telemetry::signals::LEGACY_HASH_ACCOUNTS.set_u64(legacy, []);
+        }
         if done && complete(app, job.id, worker).await? {
             tracing::info!(
                 event = "analytics.aggregated",

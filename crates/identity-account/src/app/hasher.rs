@@ -11,7 +11,9 @@ use access_crypto::Secret;
 use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 
 use crate::AccountError;
+use crate::domain::legacy;
 use crate::domain::password::{self, Argon2Params, HashFailure, Password, Verification};
+use crate::ports::{LegacyIdp, LegacyIdpUnavailable};
 
 /// CR-36 m.3: the longest wait for a permit.
 pub const QUEUE_WAIT: Duration = Duration::from_millis(500);
@@ -100,6 +102,7 @@ pub struct Hasher {
     config: HasherConfig,
     semaphore: Arc<Semaphore>,
     metrics: HashMetrics,
+    legacy_idp: Option<Arc<dyn LegacyIdp>>,
 }
 
 impl Hasher {
@@ -110,7 +113,15 @@ impl Hasher {
             semaphore: Arc::new(Semaphore::new(config.permits.max(1))),
             config,
             metrics: HashMetrics::default(),
+            legacy_idp: None,
         }
+    }
+
+    /// This service with the previous identity provider of a lazy migration (TN-85).
+    #[must_use]
+    pub fn with_legacy_idp(mut self, idp: Arc<dyn LegacyIdp>) -> Self {
+        self.legacy_idp = Some(idp);
+        self
     }
 
     /// The settings; `permits` is `max_hash_threads`.
@@ -196,6 +207,46 @@ impl Hasher {
         let password = password.clone();
         self.run(move || password::verify(&password, &phc, &params))
             .await
+    }
+
+    /// Checks `password` against an imported hash of `algorithm` (TN-85, OP-153 m.11 (h)), on
+    /// the same pool and semaphore as Argon2id.
+    ///
+    /// # Errors
+    /// [`AccountError::Busy`]; [`AccountError::Hash`] for a stored text outside its format.
+    pub async fn verify_legacy(
+        &self,
+        algorithm: &str,
+        stored: Secret<String>,
+        password: &Password,
+    ) -> Result<bool, AccountError> {
+        let algorithm = algorithm.to_owned();
+        let password = password.clone();
+        self.run(move || {
+            legacy::verify(&algorithm, stored.expose(), &password)
+                .map_err(|_| HashFailure::Malformed)
+        })
+        .await
+    }
+
+    /// Asks the previous identity provider (TN-85) while holding a permit, so the path waits
+    /// in the same queue. No provider configured is unavailable: the sign-in fails closed.
+    ///
+    /// # Errors
+    /// [`AccountError::Busy`].
+    pub async fn ask_legacy_idp(
+        &self,
+        identifier: &str,
+        password: &Password,
+        reference: &str,
+    ) -> Result<Result<bool, LegacyIdpUnavailable>, AccountError> {
+        let permit = self.permit().await?;
+        let answer = match &self.legacy_idp {
+            Some(idp) => idp.verify(identifier, password.bytes(), reference).await,
+            None => Err(LegacyIdpUnavailable),
+        };
+        drop(permit);
+        Ok(answer)
     }
 
     /// Takes and returns a permit without hashing: the path without a stored hash waits in

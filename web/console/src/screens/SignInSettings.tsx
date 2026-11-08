@@ -40,6 +40,7 @@ export interface AnalyticsDay {
   readonly failed: number;
   readonly passkey_accounts: number;
   readonly mfa_setup: number;
+  readonly legacy_password_accounts?: number;
   readonly methods?: Readonly<Record<string, number>>;
 }
 
@@ -319,6 +320,13 @@ export function AnalyticsPanel({ ctx }: { readonly ctx: Ctx }): ReactElement {
       <Show l={l}>
         {(a) => (
           <>
+            {a.days.length > 0 && (
+              <p data-testid="analytics-legacy">
+                {t("analyticsLegacy", {
+                  count: String(a.days[a.days.length - 1]?.legacy_password_accounts ?? 0),
+                })}
+              </p>
+            )}
             {(a.surges ?? []).map((s) => (
               <p key={s.day} role="status" className="banner">
                 {t("analyticsSurge", { day: s.day, count: String(s.failed) })}

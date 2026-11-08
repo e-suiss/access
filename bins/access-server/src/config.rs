@@ -76,6 +76,19 @@ pub(crate) struct Config {
     /// Sign-up's outside sources: the bot signal and the MX/A lookup (OP-153 m.1 (b), m.11 (f)).
     #[serde(default)]
     pub(crate) signup: Signup,
+    /// Account import and lazy migration (§12.3.7, TN-85).
+    #[serde(default)]
+    pub(crate) migration: Migration,
+}
+
+/// Account import and lazy migration (§12.3.7, TN-85).
+#[derive(Debug, Default, Deserialize, Serialize)]
+#[serde(deny_unknown_fields, default)]
+pub(crate) struct Migration {
+    /// The previous identity provider's password check, `https://…`, for imported accounts
+    /// that brought no hash. Without it such an account cannot sign in with its password
+    /// (fail closed, MD-8).
+    pub(crate) legacy_idp_verify_url: Option<String>,
 }
 
 /// Sign-up's outside sources (OP-153 m.1 (b), m.3 (h), m.11 (f), TN-81). A provider that does
@@ -498,6 +511,7 @@ impl Default for Config {
             risk: Risk::default(),
             social: Social::default(),
             signup: Signup::default(),
+            migration: Migration::default(),
         }
     }
 }
@@ -549,6 +563,10 @@ pub(crate) enum ConfigError {
         "signup: bot_provider is friendly_captcha (with bot_site_key and bot_secret_file) or turnstile (with bot_secret_file), bot_verify_url an https URL, privacy_pass_key_files need privacy_pass_issuer and privacy_pass_origin, timeouts 1..=10000 ms (OP-153 m.1 (b))"
     )]
     Signup,
+    #[error(
+        "migration.legacy_idp_verify_url must be an https URL with a lowercase host and a path (TN-85)"
+    )]
+    Migration,
     #[error(transparent)]
     SecretEnvironment(#[from] access_crypto::secret_file::SecretFileError),
     #[error(
@@ -672,6 +690,12 @@ impl Config {
         // OP-153 m.1 (b), m.11 (f)
         if !self.signup.valid() {
             return Err(ConfigError::Signup);
+        }
+        // TN-85
+        if let Some(u) = &self.migration.legacy_idp_verify_url
+            && DeclaredTarget::new(u, None).is_err()
+        {
+            return Err(ConfigError::Migration);
         }
         // OP-151 m.3 (o)
         if let Some(base) = &self.risk.breach_range_api

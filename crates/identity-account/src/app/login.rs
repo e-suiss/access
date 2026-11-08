@@ -19,6 +19,7 @@ use crate::app::local::LocalLimiter;
 use crate::app::sealing::{open_password, seal_password, subject_key};
 use crate::app::{Actor, Realm};
 use crate::domain::identifier::normalize;
+use crate::domain::legacy;
 use crate::domain::login::{PasswordLogin, ceil_seconds, counter_key, network};
 use crate::domain::password::{ALGORITHM, Password};
 use crate::domain::status::AccountStatus;
@@ -144,6 +145,7 @@ struct Verified {
     epoch: i64,
     credential: [u8; 16],
     reseal: Option<SealedSecret>,
+    migrated: bool,
 }
 
 /// The counter key of an identifier in a realm, for recovery to clear (I5).
@@ -271,6 +273,10 @@ async fn record<D: AccountDb>(
             None => false,
         };
         let target = realm.external(v.subject)?;
+        // TN-85, CR-37
+        if rehashed && v.migrated {
+            audit(&mut tx, "credential.password.migrated", &actor, &target).await?;
+        }
         audit(&mut tx, "login.password.succeeded", &actor, &target).await?;
         tx.commit().await?;
         return Ok(rehashed);
@@ -326,7 +332,14 @@ pub async fn password_login<D: AccountDb, C: Clock, E: Entropy>(
             Admission::Admitted(candidate, failures) => (candidate.map(|c| *c), failures),
         };
     let presented = Password::presented(attempt.password);
-    let verified = verify(realm, services, candidate.as_ref(), presented.as_ref()).await?;
+    let verified = verify(
+        realm,
+        services,
+        candidate.as_ref(),
+        presented.as_ref(),
+        &normalized,
+    )
+    .await?;
     let rehashed = record(
         db,
         realm,
@@ -408,6 +421,7 @@ async fn verify<C: Clock, E: Entropy>(
     services: &LoginServices<'_, C, E>,
     candidate: Option<&Candidate>,
     presented: Option<&Password>,
+    identifier: &str,
 ) -> Result<Option<Verified>, AccountError> {
     let usable = candidate.and_then(|c| {
         let active =
@@ -423,20 +437,59 @@ async fn verify<C: Clock, E: Entropy>(
     };
     let subject = c.subject.id;
     let dek = subject_key(realm, &c.subject)?;
-    let (phc, unpeppered) = open_password(realm, &dek, &subject, &cred.sealed)?;
-    let v = services.hasher.verify(pw, phc).await?;
-    if !v.matched {
+    let (stored, unpeppered) = open_password(realm, &dek, &subject, &cred.sealed)?;
+    let algorithm = cred.algorithm.as_str();
+    let migrated = legacy::is_legacy(algorithm);
+    // TN-85, OP-153 m.11 (h)
+    let (matched, rehash) = if algorithm == legacy::IDP {
+        if let Ok(m) = services
+            .hasher
+            .ask_legacy_idp(identifier, pw, stored.expose())
+            .await?
+        {
+            (m, true)
+        } else {
+            tracing::warn!(
+                event = "login.legacy_idp.unavailable",
+                outcome = "deny",
+                "previous identity provider did not answer; sign-in refused (TN-85)"
+            );
+            (false, false)
+        }
+    } else if migrated {
+        (
+            services.hasher.verify_legacy(algorithm, stored, pw).await?,
+            true,
+        )
+    } else {
+        let v = services.hasher.verify(pw, stored).await?;
+        (v.matched, v.rehash || unpeppered)
+    };
+    if !matched {
         return Ok(None);
     }
-    // CR-37, OP-150 m.3 (f)
-    let reseal = if v.rehash || unpeppered {
-        let fresh = services.hasher.hash(pw, services.entropy.salt()?).await?;
-        Some(seal_password(
-            realm,
-            &dek,
-            &subject,
-            fresh.expose().as_bytes(),
-        )?)
+    // CR-37, OP-150 m.3 (f), TN-85
+    let reseal = if rehash {
+        match services.entropy.salt() {
+            Ok(salt) => match services.hasher.hash(pw, salt).await {
+                Ok(fresh) => Some(seal_password(
+                    realm,
+                    &dek,
+                    &subject,
+                    fresh.expose().as_bytes(),
+                )?),
+                Err(e) if migrated => {
+                    tracing::warn!(error = %e, "imported password kept until the next sign-in");
+                    None
+                }
+                Err(e) => return Err(e),
+            },
+            Err(e) if migrated => {
+                tracing::warn!(error = %e, "imported password kept until the next sign-in");
+                None
+            }
+            Err(e) => return Err(e),
+        }
     } else {
         None
     };
@@ -445,5 +498,6 @@ async fn verify<C: Clock, E: Entropy>(
         epoch: c.subject.session_epoch,
         credential: cred.id,
         reseal,
+        migrated,
     }))
 }

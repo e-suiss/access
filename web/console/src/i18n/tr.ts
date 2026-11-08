@@ -370,6 +370,7 @@ export const tr: Record<Key, string> = {
   analyticsPasskey: "Passkey'i olan hesaplar",
   analyticsMfa: "İkinci adımı kurulu",
   analyticsMethods: "Kullanılan yöntemler",
+  analyticsLegacy: "Bir sonraki girişte Argon2id'ye geçmeyi bekleyen içe aktarılmış parolalar: {count}",
   analyticsSurge: "{day} günü başarısız girişler arttı: {count} (önceki günün en az 3 katı).",
   schemasIntro:
     "Tipli eylem tanımları yayımlayın. Her domain bir sürümü kabul edip etmeyeceğine kendisi karar verir; onun yerine kabul edemezsiniz.",

@@ -22,6 +22,7 @@ mod ids;
 mod ingest;
 mod jobs;
 mod login;
+mod migration;
 mod oauth;
 mod orgs;
 mod platform;
@@ -143,6 +144,9 @@ enum Command {
     Migrate,
     /// A one-shot job over a local deployment's plan (OP-69, OP-149 m.26 (c)).
     Local(PathBuf, Job),
+    /// `import-accounts <realm slug> <file.jsonl>`: accounts from another identity provider
+    /// (§12.3.7, TN-85).
+    Import(String, PathBuf),
 }
 
 /// A one-shot job over the bootstrap plan.
@@ -174,6 +178,9 @@ fn command(args: &[OsString]) -> Option<Command> {
                 display_name: text(name)?,
             },
         )),
+        [c, slug, file] if c == "import-accounts" => {
+            Some(Command::Import(text(slug)?, PathBuf::from(file)))
+        }
         [c, plan, product] if c == "client-retire" => Some(Command::Local(
             PathBuf::from(plan),
             Job::ClientRetire {
@@ -191,7 +198,8 @@ fn main() -> ExitCode {
         {
             eprintln!(
                 "usage: access-server [migrate | bootstrap <plan.toml> | client-update <plan.toml> \
-                 <product> <display name> | client-retire <plan.toml> <product>]"
+                 <product> <display name> | client-retire <plan.toml> <product> | \
+                 import-accounts <realm> <file.jsonl>]"
             );
         }
         return ExitCode::FAILURE;
@@ -214,7 +222,7 @@ fn main() -> ExitCode {
             .config(&config.log, "access-server", env!("CARGO_PKG_VERSION"));
     let logged = match command {
         Command::Serve => access_telemetry::install(&settings, std::io::stdout),
-        Command::Migrate | Command::Local(..) => {
+        Command::Migrate | Command::Local(..) | Command::Import(..) => {
             settings.otlp_endpoint = None;
             access_telemetry::install(&settings, std::io::stderr)
         }
@@ -238,6 +246,54 @@ fn main() -> ExitCode {
         }
         Command::Migrate => migrate_main(&config),
         Command::Local(plan, job) => local_main(&config, &plan, job),
+        Command::Import(slug, file) => import_main(&config, &slug, &file),
+    }
+}
+
+/// `import-accounts`: reads the file before the lockdown, then imports it into the realm named
+/// `slug` and prints what it did as JSON (§12.3.7, TN-85).
+fn import_main(config: &Config, slug: &str, file: &Path) -> ExitCode {
+    let run = || -> Result<String, String> {
+        let text = std::fs::read_to_string(file).map_err(|e| format!("{}: {e}", file.display()))?;
+        let prepared = prepare(config, tls_config(config)?)?;
+        let runtime = locked(config)?;
+        let report = runtime.block_on(async {
+            let all = pools(config, &prepared).await?;
+            ids::open_root(&all.app, &prepared.identity_keys).await?;
+            let route = access_store::tenancy::routes(&all.router)
+                .await
+                .map_err(|e| e.to_string())?
+                .into_iter()
+                .find(|r| r.slug == slug)
+                .ok_or_else(|| format!("no live realm {slug}"))?;
+            let vault = login::RealmKeks::new(prepared.login_keys.clone())
+                .vault(route.realm)
+                .ok_or("the realm's vault keys are unavailable")?;
+            let id_key = ids::CellIds::new(prepared.identity_keys.clone())
+                .key()
+                .ok_or("the cell id key is unavailable")?;
+            let realm = access_identity_account::app::Realm {
+                tenant: route.tenant,
+                realm: route.realm,
+                kek: &*vault.kek,
+                ids: &id_key,
+            };
+            migration::import(&all.app, vault.clone(), &realm, &text).await
+        })?;
+        serde_json::to_string_pretty(&report).map_err(|e| e.to_string())
+    };
+    match run() {
+        Ok(json) => {
+            #[allow(clippy::print_stdout)]
+            {
+                println!("{json}");
+            }
+            ExitCode::SUCCESS
+        }
+        Err(error) => {
+            tracing::error!(%error, "the account import failed");
+            ExitCode::FAILURE
+        }
     }
 }
 
@@ -1031,11 +1087,21 @@ fn login(
             ThrottlePolicy::DEFAULT,
             config.login.hash_mean_ms,
         ),
-        hasher: Hasher::new(HasherConfig::sized(
-            Argon2Params::CANONICAL,
-            cores(),
-            cgroup_memory_budget(),
-        )),
+        hasher: {
+            let h = Hasher::new(HasherConfig::sized(
+                Argon2Params::CANONICAL,
+                cores(),
+                cgroup_memory_budget(),
+            ));
+            // TN-85
+            match migration::legacy_idp(
+                config.migration.legacy_idp_verify_url.as_deref(),
+                outbound(config)?,
+            ) {
+                Some(idp) => h.with_legacy_idp(idp),
+                None => h,
+            }
+        },
         redirect_to: config.login.redirect_to.clone(),
         hooks,
         risk,
@@ -1726,8 +1792,14 @@ mod commands {
             Some(Command::Local(p, Job::ClientRetire { product }))
                 if p.ends_with("bootstrap-work.toml") && product == "work"
         ));
+        // TN-85
+        assert!(matches!(
+            command(&args(&["import-accounts", "acme", "/import/users.jsonl"])),
+            Some(Command::Import(slug, p)) if slug == "acme" && p.ends_with("users.jsonl")
+        ));
         for bad in [
             &["bootstrap"][..],
+            &["import-accounts", "acme"],
             &["migrate", "--force"],
             &["serve"],
             &["--dev"],

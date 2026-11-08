@@ -18,7 +18,7 @@ fn scope(t: &TenantTx) -> Result<(Uuid, Uuid), StoreError> {
 }
 
 /// The columns of `access.analytics_daily` besides its key: every one a non-negative count.
-pub const COUNTERS: [&str; 18] = [
+pub const COUNTERS: [&str; 19] = [
     "flows_started",
     "identifier_entered",
     "first_factor_passed",
@@ -37,6 +37,7 @@ pub const COUNTERS: [&str; 18] = [
     "risk_step_ups",
     "risk_reviews",
     "risk_false_positives",
+    "legacy_password_accounts",
 ];
 
 /// The other columns of `access.analytics_daily`: the realm, the day and when it was computed.
@@ -87,6 +88,8 @@ pub struct AnalyticsDay {
     pub risk_reviews: u64,
     /// Review items marked false positive.
     pub risk_false_positives: u64,
+    /// Active accounts whose password is still an imported hash (TN-85, CR-37).
+    pub legacy_password_accounts: u64,
 }
 
 /// A failed-login surge (IDP-36).
@@ -124,6 +127,10 @@ impl TenantTx {
                        JOIN a USING (subject_id)
                       WHERE c.tenant_id = $1 AND c.realm_id = $2 AND c.status = 'active'
                         AND c.kind IN ('webauthn', 'totp')),
+               lp AS (SELECT DISTINCT c.subject_id FROM access.identity_credentials c
+                       JOIN a USING (subject_id)
+                      WHERE c.tenant_id = $1 AND c.realm_id = $2 AND c.status = 'active'
+                        AND c.kind = 'password' AND c.algorithm LIKE 'legacy-%'),
                w AS (SELECT to_timestamp($3::bigint * 86400) AS lo,
                             to_timestamp(($3::bigint + 1) * 86400) AS hi)
              INSERT INTO access.analytics_daily AS t (tenant_id, realm_id, day, flows_started,
@@ -131,7 +138,7 @@ impl TenantTx {
                     sessions_created, method_password, method_passkey, method_email_code,
                     method_magic_link, accounts_active, accounts_with_passkey, accounts_with_mfa,
                     mfa_setup_started, mfa_setup_completed, failed_logins, risk_step_ups,
-                    risk_reviews, risk_false_positives)
+                    risk_reviews, risk_false_positives, legacy_password_accounts)
              SELECT $1, $2, $3,
                     (SELECT count(*) FROM l),
                     (SELECT count(*) FROM l WHERE jsonb_typeof(s -> 'identifier') = 'array'),
@@ -161,7 +168,8 @@ impl TenantTx {
                         AND created_at >= w.lo AND created_at < w.hi),
                     (SELECT count(*) FROM access.risk_review, w
                       WHERE tenant_id = $1 AND realm_id = $2 AND state = 'false_positive'
-                        AND decided_at >= w.lo AND decided_at < w.hi)
+                        AND decided_at >= w.lo AND decided_at < w.hi),
+                    (SELECT count(*) FROM lp)
              ON CONFLICT (tenant_id, realm_id, day) DO UPDATE
                 SET flows_started = EXCLUDED.flows_started,
                     identifier_entered = EXCLUDED.identifier_entered,
@@ -181,6 +189,7 @@ impl TenantTx {
                     risk_step_ups = EXCLUDED.risk_step_ups,
                     risk_reviews = EXCLUDED.risk_reviews,
                     risk_false_positives = EXCLUDED.risk_false_positives,
+                    legacy_password_accounts = EXCLUDED.legacy_password_accounts,
                     computed_at = now()
              RETURNING t.day, t.flows_started, t.identifier_entered, t.first_factor_passed,
                     t.second_factor_passed, t.sessions_created, t.method_password,
@@ -188,6 +197,7 @@ impl TenantTx {
                     t.accounts_active, t.accounts_with_passkey, t.accounts_with_mfa,
                     t.mfa_setup_started, t.mfa_setup_completed, t.failed_logins,
                     t.risk_step_ups, t.risk_reviews, t.risk_false_positives,
+                    t.legacy_password_accounts,
                     (SELECT p.failed_logins FROM access.analytics_daily p
                       WHERE p.tenant_id = $1 AND p.realm_id = $2 AND p.day = $3 - 1)
                       AS previous"#,
@@ -217,6 +227,7 @@ impl TenantTx {
             risk_step_ups: count(r.risk_step_ups)?,
             risk_reviews: count(r.risk_reviews)?,
             risk_false_positives: count(r.risk_false_positives)?,
+            legacy_password_accounts: count(r.legacy_password_accounts)?,
         };
         Ok((row, r.previous.map(count).transpose()?.unwrap_or(0)))
     }
@@ -257,7 +268,7 @@ impl TenantTx {
                     second_factor_passed, sessions_created, method_password, method_passkey,
                     method_email_code, method_magic_link, accounts_active, accounts_with_passkey,
                     accounts_with_mfa, mfa_setup_started, mfa_setup_completed, failed_logins,
-                    risk_step_ups, risk_reviews, risk_false_positives
+                    risk_step_ups, risk_reviews, risk_false_positives, legacy_password_accounts
                FROM access.analytics_daily
               WHERE tenant_id = $1 AND realm_id = $2 AND day BETWEEN $3 AND $4
               ORDER BY day",
@@ -290,6 +301,7 @@ impl TenantTx {
                     risk_step_ups: count(r.risk_step_ups)?,
                     risk_reviews: count(r.risk_reviews)?,
                     risk_false_positives: count(r.risk_false_positives)?,
+                    legacy_password_accounts: count(r.legacy_password_accounts)?,
                 })
             })
             .collect()
