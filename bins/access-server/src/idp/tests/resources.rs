@@ -45,8 +45,7 @@ async fn refused(
     }
 }
 
-// TN-117: a group has one membership issuer; members change through idp.group.members_* only
-// when the administration issues them, and the issuer never changes
+// TN-117
 #[tokio::test]
 async fn a_group_keeps_its_one_membership_issuer() {
     let (w, at, d) = ready("groups").await;
@@ -63,7 +62,7 @@ async fn a_group_keeps_its_one_membership_issuer() {
     )
     .unwrap();
     written(&run(&w, at, d, up, 1).await.unwrap());
-    // OP-151 m.7 (g): the registration declared the provider as an inbound transmitter
+    // OP-151 m.7 (g)
     let mut t = TenantTx::begin(&w.db.app, at.0, at.1).await.unwrap();
     let transmitters = t.transmitters().await.unwrap();
     t.commit().await.unwrap();
@@ -126,7 +125,7 @@ async fn a_group_keeps_its_one_membership_issuer() {
         .unwrap();
     assert_eq!(groups.items.len(), 2);
     assert_eq!(groups.items[0].0["membership_issuer"], "admin");
-    // EI-25, OP-151 m.3 (l): retiring the provider ends its transmitter under that decision
+    // EI-25, OP-151 m.3 (l)
     let retire = compile(Op::RetireUpstream, Some("google"), &json!({}), &w.ids).unwrap();
     written(&run(&w, at, d, retire, 7).await.unwrap());
     let mut t = TenantTx::begin(&w.db.app, at.0, at.1).await.unwrap();
@@ -136,8 +135,7 @@ async fn a_group_keeps_its_one_membership_issuer() {
     assert!(transmitters[0].disabled);
 }
 
-// §12.3.1, TN-49: a suspension ends the account's sessions and is reversed only by a
-// reactivation; a second suspension finds nothing to leave
+// §12.3.1, TN-49
 #[tokio::test]
 async fn an_account_is_suspended_and_reactivated_through_commit() {
     let (w, at, d) = ready("suspend").await;
@@ -175,9 +173,7 @@ async fn an_account_is_suspended_and_reactivated_through_commit() {
         .unwrap()
         .unwrap()
         .session_epoch;
-    // TN-49, TN-41, OP-150 L2, OP-151 m.3 (i): a decided suspension does what any status move
-    // does in its transaction: the session ends, the session-revoked and account-disabled
-    // signals, the realm issuer's account_status Claim and the webhook events are queued
+    // TN-49, TN-41, OP-150 L2, OP-151 m.3 (i)
     let ended = t.session_by_id(session).await.unwrap().unwrap();
     let kinds = t.outbox_kinds().await.unwrap();
     t.commit().await.unwrap();
@@ -211,13 +207,11 @@ async fn an_account_is_suspended_and_reactivated_through_commit() {
     assert!(kinds.iter().any(|k| k == "event.account.reactivated"));
 }
 
-// TN-129, TN-132, OP-151 m.3 (f): the policies are written by their own Exercises and read
-// back in the settings view; an unbound console session is refused
+// TN-129, TN-132, OP-151 m.3 (f)
 #[tokio::test]
 async fn the_realm_policies_change_through_commit() {
     let (w, at, d) = ready("policies").await;
-    // TN-129, OP-151 m.3 (f), m.11 (d): the console binds to the prefix by default and to the
-    // full address once the realm's session policy says `ip`
+    // TN-129, OP-151 m.3 (f), m.11 (d)
     let network = crate::console::sessions::RealmBinding {
         app: w.db.app.clone(),
         directory: access_identity_oauth::adapters::PgDirectory::new(w.db.router.clone()),
@@ -280,8 +274,7 @@ async fn the_realm_policies_change_through_commit() {
     assert_eq!(refused(&w, at, d, open, 3).await, Invalid::SessionPolicy);
 }
 
-// CR-38: a rotation issues a new secret shown once; a client without a secret has none to
-// rotate
+// CR-38
 #[tokio::test]
 async fn a_client_secret_rotates_with_a_new_one_shown_once() {
     let (w, at, d) = ready("rotate").await;
@@ -306,7 +299,7 @@ async fn a_client_secret_rotates_with_a_new_one_shown_once() {
         panic!("a rotation shows the new secret")
     };
     assert_ne!(old.expose(), new.expose());
-    // CR-38, OP-151 m.11 (g): the old secret stays acceptable, as a digest, for the overlap
+    // CR-38, OP-151 m.11 (g)
     let mut t = access_store::identity::TenantTx::begin(&w.db.app, at.0, at.1)
         .await
         .unwrap();
@@ -340,9 +333,7 @@ async fn a_client_secret_rotates_with_a_new_one_shown_once() {
     );
 }
 
-// OP-151 m.3 (o), m.14 (f): tightening the protection mode is idp.realm.protection_mode (CT1),
-// loosening it idp.realm.protection_mode_loosen (CT2); an intent drawn for the wrong one is
-// refused; the settings view reads the mode back
+// OP-151 m.3 (o), m.14 (f)
 #[tokio::test]
 async fn the_protection_mode_action_follows_its_tier() {
     use access_internal_api::idp::IdpAction;
@@ -384,7 +375,7 @@ async fn the_protection_mode_action_follows_its_tier() {
         Err(AdminError::Conflict)
     ));
     written(&run(&w, at, d, loosen, 3).await.unwrap());
-    // TI-9: brute-force protection has no monitor mode
+    // TI-9
     assert_eq!(
         compile(
             Op::PutProtectionMode,
@@ -396,11 +387,7 @@ async fn the_protection_mode_action_follows_its_tier() {
     );
 }
 
-// TN-110, EI-25, MD-8: a commit that was never drafted is checked against the realm's state on
-// the first application of its decision: a client id already registered is the write's problem
-// (400), not a storage failure (503), and nothing is bound; a retry of a written decision is
-// still answered without a check. A write the database refuses for the state it found is a
-// conflict (409)
+// TN-110, EI-25, MD-8
 #[tokio::test]
 async fn a_commit_is_checked_against_the_state_on_first_application() {
     let (w, at, d) = ready("first-application").await;
@@ -441,7 +428,7 @@ async fn a_commit_is_checked_against_the_state_on_first_application() {
         Applied::AlreadyWritten { .. }
     ));
 
-    // TN-16, INV-32: a second realm on a taken slug is refused by the database's unique index
+    // TN-16, INV-32
     let tenant = access_store::tenancy::create_tenant(&w.db.app, "pool-default")
         .await
         .unwrap();
@@ -467,7 +454,7 @@ async fn a_commit_is_checked_against_the_state_on_first_application() {
     assert_eq!(conflict.problem().0, 409);
 }
 
-// §4.4, OP-151 m.14 (f): an account becomes a canary through idp.account.canary (CT2), once
+// §4.4, OP-151 m.14 (f)
 #[tokio::test]
 async fn an_account_becomes_a_canary_through_commit() {
     let (w, at, d) = ready("canary").await;
@@ -484,10 +471,7 @@ async fn an_account_becomes_a_canary_through_commit() {
     ));
 }
 
-// §13.4 G54, §12.3.1, TN-49, OP-150 m.11 (f): a write signed by an Instance of a Party whose
-// account in the realm is suspended, locked or deactivated is refused before a decision, with
-// or without a session naming that account; while the account is active, and for a Party bound
-// to no account of the realm (the operator's root), the write goes on
+// §13.4 G54, §12.3.1, TN-49, OP-150 m.11 (f)
 #[tokio::test]
 async fn a_party_whose_account_cannot_act_changes_nothing() {
     let (w, at, d) = ready("standing").await;
@@ -542,8 +526,7 @@ async fn a_party_whose_account_cannot_act_changes_nothing() {
     written(&run(&w, at, d, client, nonce).await.unwrap());
 }
 
-// OP-150 m.11 (b), TN-61: account deletion, realm rehoming and reset intents are declared and
-// never compiled into a change here
+// OP-150 m.11 (b), TN-61
 #[test]
 fn reserved_operations_compile_to_nothing() {
     let ids = access_crypto::opaque_id::IdKey::new(access_crypto::Secret::new([7; 32]));

@@ -352,10 +352,7 @@ impl access_authority_ingest::ports::Clock for Now {
     }
 }
 
-// OP-149 m.26 (b), (c), TN-49, L2-CLM-5, MD-14: the bootstrap makes the test user with a
-// password and the public client once, accepts the local declarant's party_compromise Claims so
-// a PEP's unsigned declaration is admitted, and a second run finds all of it; the one-shot
-// client changes commit idp.client.update and idp.client.retire and queue their events
+// OP-149 m.26 (b), (c), TN-49, L2-CLM-5, MD-14
 #[tokio::test]
 async fn local_fixtures_are_made_once_and_produce_events() {
     use access_identity_account::adapters::pg::PgAccounts;
@@ -403,9 +400,7 @@ async fn local_fixtures_are_made_once_and_produce_events() {
     );
     assert_eq!(client.platform_product, None);
 
-    // OP-149 m.28 (b), m.16 (a), OP-150 m.12 (d): the user is bound to the Party its device key
-    // registered, the device key is recorded, the binding Claims are queued, and the user's
-    // pairwise sub resolves to that Party
+    // OP-149 m.28 (b), m.16 (a), OP-150 m.12 (d)
     {
         use crate::product::PgSubjects;
         use access_http::product::ports::{Sector, SubjectQuery, Subjects as _};
@@ -489,7 +484,7 @@ async fn local_fixtures_are_made_once_and_produce_events() {
         w.domains.release().await;
     }
 
-    // OP-149 m.26 (c): the declarant's unsigned Claim over a PEP channel is admitted
+    // OP-149 m.26 (c)
     let compromise = first.compromise.clone().unwrap();
     assert!(compromise.created);
     assert_eq!(compromise.domain, acme.domain);
@@ -555,7 +550,6 @@ async fn local_fixtures_are_made_once_and_produce_events() {
         ),
         "{verdict:?}"
     );
-    // another issuer is not accepted
     let stranger = access_kernel::claim::Unsigned {
         statement: access_kernel::claim::Statement {
             issuer: Id([0x66; 16]),
@@ -582,7 +576,7 @@ async fn local_fixtures_are_made_once_and_produce_events() {
     assert!(!accepted.created);
     assert_eq!(accepted.issuer, compromise.issuer);
 
-    // OP-149 m.26 (c), m.4: the platform client changes
+    // OP-149 m.26 (c), m.4
     let bootstrap = Bootstrap {
         app: &w.db.app,
         router: &w.db.router,
@@ -655,7 +649,6 @@ async fn local_fixtures_are_made_once_and_produce_events() {
     )
     .await;
     assert!(has(&events, "event.api_client.created"));
-    // a retired client has no active row to change
     assert!(
         bootstrap
             .change_product_client(&plan, "work", local::ProductChange::Retire)
@@ -665,11 +658,7 @@ async fn local_fixtures_are_made_once_and_produce_events() {
     w.domains.release().await;
 }
 
-// OP-149 m.28 (a), OP-31, TI-2: a one-shot client change commits while another process, as
-// `serve`, leads the platform domain and renews its lease. The lease is not taken from the live
-// leader: it hands the domain over at its next renewal, the one-shot leads it for its commit,
-// and the leader leads again on its next request. A commit without the handoff is unavailable
-// with the reason `lease-held`
+// OP-149 m.28 (a), OP-31, TI-2
 #[tokio::test]
 async fn a_one_shot_change_commits_while_another_process_leads() {
     use access_authority_core::CoreError;
@@ -752,9 +741,7 @@ async fn a_one_shot_change_commits_while_another_process_leads() {
     serve.release().await;
 }
 
-// OP-69, OP-149 m.21, TN-111, L0-META-7, OP-149 m.4, MD-14, EI-25, OP-137: the bootstrap creates
-// the platform tenant, a sample tenant and the Work client through the identity plane's paths,
-// and a second run finds all of it and creates nothing
+// OP-69, OP-149 m.21, TN-111, L0-META-7, OP-149 m.4, MD-14, EI-25, OP-137
 #[tokio::test]
 async fn the_bootstrap_is_idempotent() {
     let w = World::new("bootstrap").await;
@@ -788,7 +775,7 @@ async fn the_bootstrap_is_idempotent() {
     assert_eq!(first.clients.len(), 1);
     assert!(first.clients[0].created);
     assert_eq!(first.clients[0].audience, platform.issuer);
-    // OP-149 m.35: the summary names the product's return addresses, the first one twice
+    // OP-149 m.35
     assert_eq!(
         first.clients[0].redirect_uris,
         [
@@ -821,7 +808,7 @@ async fn the_bootstrap_is_idempotent() {
             .unwrap();
         let g = idp::governance(&mut t).await.unwrap().unwrap();
         t.commit().await.unwrap();
-        // L0-META-7: the root's Instance is registered once in each governing domain
+        // L0-META-7
         let challenge =
             root_challenge(&root_key(&w.keys).unwrap(), Digest(*g.domain.as_bytes())).unwrap();
         for nonce in [challenge.clone(), register_nonce(&challenge)] {
@@ -851,7 +838,7 @@ async fn the_bootstrap_is_idempotent() {
     assert_eq!(row.auth_method, "private_key_jwt");
     assert_eq!(row.platform_product.as_deref(), Some("work"));
     assert_eq!(row.event_receiver.as_deref(), Some("https://work.test/ssf"));
-    // OP-149 m.35: the registration carries the whole list
+    // OP-149 m.35
     assert_eq!(
         row.redirect_uris,
         [
@@ -861,8 +848,7 @@ async fn the_bootstrap_is_idempotent() {
     );
 }
 
-// OP-149 m.4: a product client is registered only in the platform tenant's realm, never in a
-// sample tenant's
+// OP-149 m.4
 #[tokio::test]
 async fn product_clients_live_in_the_platform_realm() {
     let w = World::new("bootstrap-platform").await;
@@ -878,7 +864,7 @@ async fn product_clients_live_in_the_platform_realm() {
     assert!(there.is_none());
 }
 
-// OP-149 m.20: a plan names one public key per file, as a JWK or a one-key JWKS
+// OP-149 m.20
 #[test]
 fn plan_keys_are_one_public_jwk() {
     let dir = std::env::temp_dir().join(format!("abs-jwk-{}", std::process::id()));
@@ -902,7 +888,7 @@ fn plan_keys_are_one_public_jwk() {
     assert!(jwk(&private).is_err());
 }
 
-// OP-69, TI-9: a plan is checked whole; an unknown key is refused
+// OP-69, TI-9
 #[test]
 fn plans_refuse_unknown_settings() {
     let dir = std::env::temp_dir().join(format!("abs-plan-{}", std::process::id()));
@@ -922,9 +908,7 @@ fn plans_refuse_unknown_settings() {
     assert!(Plan::load(&dir.join("missing.toml")).is_err());
 }
 
-// OP-150 m.3 (m), MUST-NEVER-13, XI-18: a plan registers any product name within the grammar as
-// a platform product; Suiss's own names are not a list the plan is checked against, and the
-// default display name is the product's own
+// OP-150 m.3 (m), MUST-NEVER-13, XI-18
 #[test]
 fn a_plan_registers_any_product_name() {
     // OP-149 m.4, OP-69
@@ -956,9 +940,7 @@ fn a_plan_registers_any_product_name() {
     for bad in ["Work", "acme_ledger", "a", "urn:suiss:work"] {
         assert!(plan("bad", bad).is_err(), "{bad}");
     }
-    // OP-149 m.35, RFC 6749 §3.1.2, RFC 8252: a product registers a list of return addresses,
-    // https or loopback http, without repeats; the one redirect_uri of an older plan is a list of
-    // one, and a plan names one of the two keys
+    // OP-149 m.35, RFC 6749 §3.1.2, RFC 8252
     let uris = |name: &str, keys: &str| {
         let path = dir.join(format!("{name}.toml"));
         std::fs::write(
@@ -1021,8 +1003,7 @@ fn a_plan_registers_any_product_name() {
     );
 }
 
-// OP-149 m.22 (g), OP-141 m.18 (d), m.22 (d), TN-111: a realm created through the admin path
-// alone has its domain's event-id and token keys, and the domain can be led at once
+// OP-149 m.22 (g), OP-141 m.18 (d), m.22 (d), TN-111
 #[tokio::test]
 async fn admin_realm_creation_opens_the_domain_keys() {
     let w = World::new("bootstrap-admin-realm").await;
@@ -1062,9 +1043,7 @@ async fn admin_realm_creation_opens_the_domain_keys() {
     w.domains.release().await;
 }
 
-// OP-152 m.5 (i), OP-149 m.29 (b), SI-5, §10.1.4 rule 3: a realm created through the admin
-// path with no further predicate-input classes is still born accepting its issuer's
-// authentication Claims as predicate input
+// OP-152 m.5 (i), OP-149 m.29 (b), SI-5, §10.1.4 rule 3
 #[tokio::test]
 async fn admin_realms_accept_issuer_authentication_by_default() {
     let (w, _) = World::open("bs-predicate", false).await;
@@ -1092,9 +1071,7 @@ async fn admin_realms_accept_issuer_authentication_by_default() {
     w.domains.release().await;
 }
 
-// OP-149 m.5, SAI-46, CR-25, CR-59, OP-146 m.16 (m): a realm created through the admin path
-// opens its domain's keyring at Genesis, where its founding operational key signs at once, so
-// signed key lookups are answered from the realm's creation on, with no schedule round between
+// OP-149 m.5, SAI-46, CR-25, CR-59, OP-146 m.16 (m)
 #[tokio::test]
 async fn admin_realms_sign_key_lookups_from_genesis() {
     use access_authority_core::keys::AsOf;
@@ -1146,10 +1123,7 @@ async fn admin_realms_sign_key_lookups_from_genesis() {
     w.domains.release().await;
 }
 
-// OP-149 m.28 (c), m.8, L0-META-7: a realm answers the status of the Parties its ledger admitted,
-// signed under `party-lookup` by the founding operational key from Genesis on: the root's kind
-// and the `party_register` record's position and trusted time; a Party not admitted at the
-// position is unknown, and a position past the head is not answered
+// OP-149 m.28 (c), m.8, L0-META-7
 #[tokio::test]
 async fn admin_realms_answer_party_lookups() {
     use access_authority_core::keys::AsOf;
@@ -1269,10 +1243,7 @@ fn eligibility_body(sample: &serde_json::Value, subject: &str, now: u64) -> Vec<
     .into_bytes()
 }
 
-// OP-149 m.10, OP-141 m.35 (c), OP-69: the sample realm's Genesis publishes the Work catalog,
-// its root grants the sample action to the sample subject by a grant_issue Exercise, and the
-// summary is what an eligibility check names: the subject is eligible, another Party is not,
-// and a second run issues nothing new
+// OP-149 m.10, OP-141 m.35 (c), OP-69
 #[tokio::test]
 async fn the_bootstrapped_sample_is_eligible() {
     use access_http::adp::app::{Reply, Service};
@@ -1336,7 +1307,7 @@ fn shipped(path: &Path, keys: &Path) -> Plan {
     std::fs::write(keys.join("work-service.jwk"), service.to_string()).unwrap();
     let text = std::fs::read_to_string(path).unwrap();
     let local = keys.join(path.file_name().unwrap());
-    // OP-149 m.26 (b): the shipped plans take the test password from the environment
+    // OP-149 m.26 (b)
     assert!(
         text.contains("password_env = \"BOOTSTRAP_TEST_PASSWORD\""),
         "{}",
@@ -1355,8 +1326,7 @@ fn shipped(path: &Path, keys: &Path) -> Plan {
     Plan::load(&local).unwrap()
 }
 
-// OP-69, OP-149 m.21, IDP-7, OP-149 m.23: every plan the local deployment ships loads, and each
-// product client it registers passes the checks of idp.client.register
+// OP-69, OP-149 m.21, IDP-7, OP-149 m.23
 #[test]
 fn every_shipped_plan_is_valid() {
     let dir = Path::new(concat!(
@@ -1379,7 +1349,7 @@ fn every_shipped_plan_is_valid() {
         plans += 1;
         let plan = shipped(&path, &keys);
         assert_eq!(plan.platform, "platform", "{name}");
-        // OP-149 m.26 (b), (c): every shipped plan has the test user and the declarant
+        // OP-149 m.26 (b), (c)
         let user = plan.test_user.as_ref().unwrap();
         assert_eq!(user.realm, "acme", "{name}");
         assert_eq!(plan.compromise.as_ref().unwrap().realm, "acme", "{name}");
@@ -1395,8 +1365,7 @@ fn every_shipped_plan_is_valid() {
     assert!(plans >= 2);
 }
 
-// OP-69, OP-141 m.35 (a): a sample names one of the plan's tenants and a catalog entry the
-// kernel accepts, outside the namespaces Access publishes itself
+// OP-69, OP-141 m.35 (a)
 #[test]
 fn a_sample_names_a_tenant_and_a_valid_action() {
     let dir = std::env::temp_dir().join(format!("abs-sample-{}", std::process::id()));
@@ -1417,7 +1386,7 @@ fn a_sample_names_a_tenant_and_a_valid_action() {
     assert!(plan("idp", "acme", "idp.client").is_err());
     assert!(plan("upper", "acme", "Work").is_err());
     let ok = plan("ok", "acme", "work").unwrap().sample.unwrap();
-    // OP-149 m.30 (a): the allowed resources default to Work's ledgers
+    // OP-149 m.30 (a)
     assert_eq!(ok.resource_namespace, "work.ledger");
     assert_eq!(ok.resource_path_prefix, "led_");
     let resource = |name: &str, namespace: &str, prefix: &str| {
@@ -1441,8 +1410,7 @@ fn a_sample_names_a_tenant_and_a_valid_action() {
     assert!(resource("idp", "idp.client", "led_").is_err());
     assert!(resource("upper-ns", "Work.ledger", "led_").is_err());
     assert!(resource("empty-prefix", "work.ledger", "").is_err());
-    // OP-149 m.33 (c): the step-up is absent by default, "aal2" is its one level, and it needs
-    // an allowed action to attach to
+    // OP-149 m.33 (c)
     assert_eq!(ok.step_up, None);
     let stepped = |name: &str, allowed: &str, step_up: &str| {
         let path = dir.join(format!("{name}.toml"));
@@ -1467,8 +1435,7 @@ fn a_sample_names_a_tenant_and_a_valid_action() {
     assert!(stepped("no-allowed", "", "aal2").is_err());
 }
 
-// OP-149 m.26 (b), TI-9: the test user names one of the plan's tenants and takes its password
-// from exactly one place, the plan or a named environment variable that is set; never a default
+// OP-149 m.26 (b), TI-9
 #[test]
 fn a_test_user_takes_its_password_from_one_named_place() {
     let dir = std::env::temp_dir().join(format!("abs-test-user-{}", std::process::id()));
@@ -1601,25 +1568,13 @@ fn commit_intent(allowed: &serde_json::Value, ledger: &str, now: u64) -> serde_j
     })
 }
 
-// OP-149 m.29 (b), m.26 (e), m.9, §9.14.1 A, §9.14.5, §9.8, §13.7.3: the bootstrap publishes
-// the allowed action beside the sample one and grants it to the test user's Party under an
-// approval requirement, with the Grant to contribute that approval; the headless client then
-// signs in with the software passkey, gets REQUIRE_ACTION for a commit as the product's PEP,
-// pushes the request with the contribution its device signed, approves it on the real surface
-// with one assertion over H(AAS), commits again and verifies the receipt the ALLOW carries
-// against the domain's published metadata. A request for an intent nothing waits for is "the
-// request changed"; another key is no passkey of the user. A second bootstrap run finds all of
-// it.
+// OP-149 m.29 (b), m.26 (e), m.9, §9.14.1, §9.14.5, §9.8, §13.7.3
 #[tokio::test]
 async fn the_local_client_approves_an_allowed_exercise() {
     approval_through_the_local_client("bootstrap-approve", None).await;
 }
 
-// OP-149 m.33 (c), §13.7.3, §8.17.5.4: with `step_up = "aal2"` the allowed Grant also asks for
-// the actor's fresh AAL2 authentication bound to their Instance, so the first commit leaves an
-// authentication term unmet beside the approval (Work's step-up); the one passkey assertion on
-// the surface issues a Claim bound to H(AAS) and to the approver's Instance, and the second
-// commit, with the contribution and that Claim, is allowed
+// OP-149 m.33 (c), §13.7.3, §8.17.5.4
 #[tokio::test]
 async fn the_local_client_approves_an_allowed_exercise_with_a_step_up() {
     approval_through_the_local_client("bootstrap-approve-step-up", Some(StepUp::Aal2)).await;
@@ -1675,7 +1630,7 @@ async fn approval_through_the_local_client(world: &str, step_up: Option<StepUp>)
     let first = w.run(&plan).await;
     schedule(&signer);
     schedule(&signer);
-    // OP-146 m.5 (f): the day partitions the serving process opens
+    // OP-146 m.5 (f)
     let today = i32::try_from(server_time(&w.db.app).await.unwrap() / 86_400_000).unwrap();
     for o in access_store::ephemeral::open_days(&w.db.archive, today, 1).await {
         o.result.unwrap();
@@ -1684,11 +1639,11 @@ async fn approval_through_the_local_client(world: &str, step_up: Option<StepUp>)
     let allowed = serde_json::to_value(user.allowed.clone().unwrap()).unwrap();
     assert_eq!(allowed["action"]["name"], "commit");
     assert_eq!(allowed["params"]["ledger"], "text");
-    // OP-149 m.30 (a): the covered resources are Work's ledgers
+    // OP-149 m.30 (a)
     assert_eq!(allowed["resource"]["namespace"], "work.ledger");
     assert_eq!(allowed["resource"]["path_prefix"], "led_");
     assert_eq!(allowed["contribution"]["class"], "approve");
-    // OP-149 m.33 (c): the summary names the step-up exactly when the plan asks for one
+    // OP-149 m.33 (c)
     assert_eq!(
         allowed.get("step_up").and_then(serde_json::Value::as_str),
         step_up.map(StepUp::word)
@@ -1706,8 +1661,6 @@ async fn approval_through_the_local_client(world: &str, step_up: Option<StepUp>)
     let acme = first.realms.iter().find(|r| r.slug == "acme").unwrap();
     assert_eq!(allowed["domain"], acme.domain.as_str());
 
-    // the server, in this process: the hosted login and Frontend API over the bootstrap's
-    // plane, the ADP and the product routes, TLS from a test CA with the PEP's client CA
     let tls = test_tls("access.test");
     let keks = RealmKeks::new(Arc::clone(&w.keys));
     let hosted = Arc::new(Hosted {
@@ -1792,7 +1745,6 @@ async fn approval_through_the_local_client(world: &str, step_up: Option<StepUp>)
         let _ = stopped.await;
     }));
 
-    // the client, with the test user's keys from the token and the PEP certificate
     let pin = Secret::new(String::from(PIN));
     let token = KeyStore::open(&w.module, &w.label, &pin).unwrap();
     let device = token.signer(local::TEST_DEVICE_LABEL).unwrap();
@@ -1831,10 +1783,7 @@ async fn approval_through_the_local_client(world: &str, step_up: Option<StepUp>)
         reason: "Close the main ledger for the period.",
         request: None,
     };
-    // the local deployment's sequence before the approval (OP-149 m.26 (b), (c), (e)): the
-    // sign-in with the password and the passkey, the sign-in with the passkey alone, the
-    // compromise declaration over the PEP certificate, and the realm issuer's courier taking
-    // their Claims to the authority plane, as the serving process's courier does every 2 s
+    // (OP-149 m.26 (b), (c), (e))
     let password = local_plan().test_user.unwrap().password;
     sign_in(
         &http,
@@ -1873,8 +1822,6 @@ async fn approval_through_the_local_client(world: &str, step_up: Option<StepUp>)
     .await
     .unwrap();
     assert_eq!(declared["disposition"], "admit", "{declared}");
-    // the outbox reader shows a row once it is below the cluster-wide snapshot horizon, so the
-    // courier steps until both sign-ins' Claims are answered
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
     let mut answered = 0;
     loop {
@@ -1890,7 +1837,7 @@ async fn approval_through_the_local_client(world: &str, step_up: Option<StepUp>)
     }
     let done = approve(&http, &request).await.unwrap();
     assert_eq!(done["receipt"]["verified"], true, "{done}");
-    // OP-149 m.32: the approval session was bound to the test user's device Instance
+    // OP-149 m.32
     assert_eq!(
         done["instance"],
         serde_json::Value::from(user.instance.clone())
@@ -1902,8 +1849,7 @@ async fn approval_through_the_local_client(world: &str, step_up: Option<StepUp>)
             .len(),
         32
     );
-    // OP-149 m.33 (c): the first commit asked for the step-up exactly when the plan did, and
-    // the approver's Claim came back from the surface either way
+    // OP-149 m.33 (c)
     assert_eq!(done["step_up"], step_up.is_some(), "{done}");
     assert_eq!(
         access_kernel::json::b64url_decode(done["claim"].as_str().unwrap())
@@ -1913,14 +1859,12 @@ async fn approval_through_the_local_client(world: &str, step_up: Option<StepUp>)
     );
     assert_eq!(done["receipt"]["exercise"], done["exercise"]);
     assert_ne!(done["contribution"], done["exercise"]);
-    // the receipt names this PEP by its leaf
     assert_eq!(
         done["receipt"]["audience"],
         access_local_client::adp::pep_name(&leaf)
     );
 
-    // §9.14.2, XI-7: a request for an intent no decision point asked about is "the request
-    // changed"; nothing is approved
+    // §9.14.2, XI-7
     let other = commit_intent(&allowed, "other", now);
     let other_digest =
         access_kernel::intent::intent_digest(&access_local_client::intent::parse(&other).unwrap())
@@ -1955,7 +1899,7 @@ async fn approval_through_the_local_client(world: &str, step_up: Option<StepUp>)
         "{changed}"
     );
 
-    // §10.2.4, CR-40: another key is no passkey of the user; the sign-in refuses it
+    // §10.2.4, CR-40
     let (stranger, _) = SoftSigner::generate_ed25519().unwrap();
     let forged = Passkey {
         key: &stranger,
@@ -1981,7 +1925,6 @@ async fn approval_through_the_local_client(world: &str, step_up: Option<StepUp>)
     let _ = served.await;
     w.domains.release().await;
 
-    // a second run finds the passkey and both Grants
     let second = w.run(&plan).await;
     let again = second.test_user.unwrap();
     assert!(!again.created);
@@ -2048,10 +1991,7 @@ mod provision {
         }
     }
 
-    // TN-110, TN-111, OP-151 m.2 M2, m.3 (m): a provisioning write is an `idp.platform.*`
-    // Exercise in the platform realm's domain; a realm is opened by a Genesis with the caller's
-    // root and says recovery is not available; a sandbox gets its own domain with the template's
-    // budget; a sole root needs the acknowledgement; a taken slug is never opened twice
+    // TN-110, TN-111, OP-151 m.2 M2, m.3 (m)
     #[tokio::test]
     async fn platform_provisioning_commits_then_opens_a_genesis() {
         let w = World::new("provision").await;
@@ -2099,7 +2039,7 @@ mod provision {
                 .is_some()
         );
 
-        // TN-111, §13.7.7: a sole root without the acknowledgement is refused before a decision
+        // TN-111, §13.7.7
         let sole = PlatformChange::Realm(realm(tenant, "solo", Root::Sole(founder), false));
         assert!(matches!(
             provision(&w, &admin, &platform, &sole, [2; 16]).await,
@@ -2132,9 +2072,7 @@ mod provision {
             panic!("not a production realm");
         };
         assert_eq!(recovery, Recovery::NotAvailable);
-        // OP-149 m.29 (b), SI-5, §10.1.4 rule 3: the Genesis of a platform-created realm accepts
-        // its issuer for actor-binding and, as the local plan's realms, its authentication
-        // Claims as predicate input, so an approval on its surface proves with them (aas-binding)
+        // OP-149 m.29 (b), SI-5, §10.1.4 rule 3
         let gates: Vec<access_kernel::claim::Gate> =
             access_store::authority::state(&w.db.sequencer, &DomainId::from_bytes(domain.0))
                 .await
@@ -2165,14 +2103,14 @@ mod provision {
                 .is_none()
         );
 
-        // TN-16, INV-32: a taken slug is refused before a decision
+        // TN-16, INV-32
         let again = provision(&w, &admin, &platform, &shop, [3; 16]).await;
         assert!(matches!(
             again,
             Err(ProvisionError::Invalid(ProvisionInvalid::SlugTaken))
         ));
 
-        // OP-151 m.3 (m): a sandbox is a domain of its own with the template's budget
+        // OP-151 m.3 (m)
         let play = PlatformChange::Sandbox(realm(tenant, "shop-sandbox", joint, false));
         let Provisioned::Done {
             exercise: sandbox_exercise,
@@ -2322,10 +2260,7 @@ mod provision {
         surface.commit(write, caller).await.unwrap()
     }
 
-    // TN-110, TN-16, INV-32, OP-151 m.3 (m): a sandbox creation committed straight through the
-    // platform surface, with no draft, on the slug of a production realm is refused once the
-    // decision is bound: the production domain is never marked a sandbox. A retry of a
-    // committed creation finishes the realm its own Exercise opened, and nothing else
+    // TN-110, TN-16, INV-32, OP-151 m.3 (m)
     #[tokio::test]
     async fn a_commit_without_a_draft_never_turns_a_taken_slug_into_a_sandbox() {
         use access_http::api::ports::Written;
@@ -2408,7 +2343,6 @@ mod provision {
                 .is_none()
         );
 
-        // a retry of a committed creation finishes its own realm and answers alike
         let signed = signed_write(
             &w,
             ("createSandboxDomain", &tenant_text),

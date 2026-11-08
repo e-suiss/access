@@ -13,8 +13,7 @@ fn open(module: &std::path::Path, label: &str) -> &'static KeyStore {
     Box::leak(Box::new(KeyStore::open(module, label, &pin).unwrap()))
 }
 
-// OP-137, OP-149 m.22 (g): servers of one cell starting together leave one opaque-id root in
-// the token, and every one of them derives the same id key from it
+// OP-137, OP-149 m.22 (g)
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn concurrent_starts_make_one_opaque_id_root() {
     let db = fresh().await.unwrap();

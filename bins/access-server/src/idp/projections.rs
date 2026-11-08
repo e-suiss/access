@@ -32,7 +32,7 @@ fn refused(code: &str) -> TokenProjection {
 /// The core's order for `r`, or the stable code that refuses it.
 pub(crate) fn order(r: TokenProjectionRequest) -> Result<TokenOrder, &'static str> {
     let payload = Payload::from_bytes(&r.payload).map_err(|_| "projection-payload")?;
-    // §9.9.3 rule 1: one resource, never a default one
+    // §9.9.3 rule 1
     let [audience] = <[String; 1]>::try_from(r.resources).map_err(|_| "invalid-target")?;
     let authority = match (r.kind, r.target) {
         (TokenKind::Bounds, None) => TokenAuthority::Bounds,

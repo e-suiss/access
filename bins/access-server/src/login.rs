@@ -262,13 +262,12 @@ impl HsmKits {
             .next()
             .unwrap_or_default();
         let wa = WaRealm::from_bytes(*entry.realm.as_bytes());
-        // TN-132, MD-8: the realm's stored sign-in policy narrows the flows; one that does
-        // not decode refuses the realm's sign-ins instead of falling back to the defaults
+        // TN-132, MD-8
         let signin = match &settings.signin {
             Some(bytes) => RealmSignin::decode(bytes).ok_or("sign-in policy")?,
             None => RealmSignin::default(),
         };
-        // IDP-5, IDI-4: a pinned RP ID serves when it covers the issuer's host
+        // IDP-5, IDI-4
         let rp_id = match &settings.rp_id {
             Some(pinned) => RpId::parse(pinned)
                 .filter(|r| r.as_str() == host || host.ends_with(&format!(".{}", r.as_str())))

@@ -78,7 +78,7 @@ fn response(outcome: Outcome) -> Response {
     }
 }
 
-// §9.9.3 rule 1, AG-8: one resource is the audience; none or two refuse, nothing is decided
+// §9.9.3 rule 1, AG-8
 #[test]
 fn a_token_order_has_exactly_one_resource() {
     let one = vec![String::from("https://rs.example")];
@@ -98,7 +98,7 @@ fn a_token_order_has_exactly_one_resource() {
         order(request(two, TokenKind::Bounds, None)).err(),
         Some("invalid-target")
     );
-    // §9.9.1: an exact-intent token names its intent, a bounds token none
+    // §9.9.1
     assert_eq!(
         order(request(one.clone(), TokenKind::Intent, None)).err(),
         Some("projection-authority")
@@ -109,8 +109,7 @@ fn a_token_order_has_exactly_one_resource() {
     );
 }
 
-// §9.9.5, K17, §16.7.1: DENY and REQUIRE_ACTION stay apart; an unreachable signer is a 503,
-// never a token from another key
+// §9.9.5, K17, §16.7.1
 #[test]
 fn projections_answer_each_outcome() {
     assert!(matches!(

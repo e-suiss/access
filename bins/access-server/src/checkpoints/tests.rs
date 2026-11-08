@@ -153,22 +153,20 @@ async fn write_rows(db: &TestDb) {
     .unwrap();
 }
 
-// A-1, OP-38, OP-44, OP-150 m.3 (h), CR-23: a written identity audit row and a written
-// operational row each reach a checkpoint signed by the identity signer's cell
-// `audit-checkpoint` key through the server's checkpointer, under their own origins
+// A-1, OP-38, OP-44, OP-150 m.3 (h), CR-23
 #[tokio::test]
 async fn an_audit_row_reaches_a_signed_checkpoint() {
     let db = fresh().await.unwrap();
     let socket = identity_signer("audit");
     let signer = SignerNotes(socket.clone());
-    // CR-23, G42: nothing is appended while the signer is down
+    // CR-23, G42
     let down = SignerNotes(socket.with_file_name("absent.sock"));
     write_rows(&db).await;
     let deadline = Instant::now() + Duration::from_secs(20);
     loop {
         let t = audit_tick(&db.checkpointer, "a", &down, NOW).await;
         assert_eq!((t.identity, t.operational), (0, 0));
-        // the watermark is cluster-wide (OP-131 m.4): rows count once every older transaction ends
+        // (OP-131 m.4)
         let t = audit_tick(&db.checkpointer, "a", &signer, NOW).await;
         assert_eq!(t.failed, 0);
         let identity = last_checkpoint(&db.checkpointer).await.unwrap();
@@ -195,13 +193,11 @@ async fn an_audit_row_reaches_a_signed_checkpoint() {
         assert!(Instant::now() < deadline, "no checkpoint after 20 s");
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
-    // nothing new ended: a second tick appends nothing
     let again = audit_tick(&db.checkpointer, "a", &signer, NOW + 1).await;
     assert_eq!(again, AuditTick::default());
 }
 
-// OP-152 m.5 (k), OP-38, OP-44: one writer per cell audit chain; a second replica's checkpointer
-// stays on standby while the first holds both chains' leases, and signs nothing
+// OP-152 m.5 (k), OP-38, OP-44
 #[tokio::test]
 async fn only_the_lease_holding_replica_signs_the_cell_chains() {
     let db = fresh().await.unwrap();
@@ -309,9 +305,7 @@ async fn domain(db: &TestDb) -> Digest {
     d
 }
 
-// A-1, CMP-6, T16, T20, OP-143 m.10: the committed head of a led domain is signed by the
-// authority signer under usage `checkpoint` and appended with its key excerpt; a quiet domain
-// gets a new one at the next cadence (heartbeat) though its head did not move
+// A-1, CMP-6, T16, T20, OP-143 m.10
 #[tokio::test]
 async fn a_led_domain_gets_signed_checkpoints() {
     let db = fresh().await.unwrap();

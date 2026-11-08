@@ -188,9 +188,7 @@ async fn authority_event(db: &TestDb, tenant: TenantId, domain: &DomainId, event
         .unwrap();
 }
 
-// OP-149 m.17a, m.4, m.7, OP-131: the server's delivery tasks carry an identity outbox event
-// and an event of a live realm's governing domain to a webhook subscriber, signed per Standard
-// Webhooks with the secret sealed under the realm KEK from the HSM
+// OP-149 m.17a, m.4, m.7, OP-131
 #[tokio::test]
 #[expect(
     clippy::too_many_lines,
@@ -272,7 +270,7 @@ async fn the_server_delivers_events_to_a_webhook() {
     .await;
 
     let (port, got) = receiver().await;
-    // A-7, OP-67 m.3: the consumers' start-up flag holds while they run
+    // A-7, OP-67 m.3
     let ready = access_http::internal::Readiness::default();
     let consumers = ready.flag("outbox.consumers");
     consumers.set(true);
@@ -293,7 +291,7 @@ async fn the_server_delivers_events_to_a_webhook() {
     }
     assert!(!ready.failing().await.contains(&"outbox.consumers"));
     delivery.stop().await;
-    // MD-8: once a consumer ended, the process is not ready
+    // MD-8
     assert!(ready.failing().await.contains(&"outbox.consumers"));
 
     let mut types = Vec::new();

@@ -149,7 +149,7 @@ impl Upstream for InProcess {
         call(&self.admin, request, None).await
     }
 
-    // TN-128, OP-151 m.12 (e): only explain, search and the eligibility check reach here
+    // TN-128, OP-151 m.12 (e)
     async fn adp(&self, request: Forward, requester: String) -> Result<Forwarded, Unavailable> {
         let caller = (Pep(String::from(CONSOLE_PEP)), Requester(requester));
         call(&self.adp, request, Some(caller)).await
@@ -285,7 +285,7 @@ mod tests {
 
     use super::*;
 
-    // RFC 9449, OP-151 m.3 (c): one key per session, a proof naming method, URI and token hash
+    // RFC 9449, OP-151 m.3 (c)
     #[test]
     fn dpop_proofs_are_per_session_and_bound_to_the_request() {
         let keys = MemoryDpop::default();

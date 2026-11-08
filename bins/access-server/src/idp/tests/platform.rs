@@ -325,10 +325,7 @@ async fn products(w: &World, named: &[(&str, u8)]) -> (Vec<Product>, TenantId, R
     (out, pt, pr)
 }
 
-// OP-149 m.4, m.16 (a), L0-META-7: a platform product pairs with a tenant's realm by signing
-// its own party_register and instance_create with its service key; Access hands out the
-// challenge and what the Exercises name, binds the key to the product's Party and forwards
-// them, and never holds the private key. A repeat answers with the same Instance.
+// OP-149 m.4, m.16 (a), L0-META-7
 #[tokio::test]
 async fn a_platform_product_pairs_with_a_tenant_by_signing_its_own_exercises() {
     // TN-50, CR-24, OP-62
@@ -356,7 +353,7 @@ async fn a_platform_product_pairs_with_a_tenant_by_signing_its_own_exercises() {
         panic!("basis");
     };
     assert_eq!(t["basis"], b64url_encode(&grant.0));
-    // OP-149 m.17b (e): party_register uses the challenge followed by 0x01
+    // OP-149 m.17b (e)
     let challenge = b64url_decode(t["challenge"].as_str().unwrap()).unwrap();
     assert_eq!(t["instance_create"]["nonce"], t["challenge"]);
     assert_eq!(
@@ -383,11 +380,9 @@ async fn a_platform_product_pairs_with_a_tenant_by_signing_its_own_exercises() {
         let intent = intent_digest(&self_signed_intent(payload, party, validity).unwrap()).unwrap();
         assert_eq!(t[member]["intent"], b64url_encode(&intent.0));
     }
-    // a challenge still valid is handed out again
     let (_, again) = p.call("POST", &challenges, None).await;
     assert_eq!(again["targets"][0]["challenge"], t["challenge"]);
 
-    // a new Party needs its party_register
     let mut half = Product::signed(t);
     half.as_object_mut().unwrap().remove("register_ais");
     let pairing = format!("/access/v1/tenants/{tnt}/pairing");
@@ -414,7 +409,7 @@ async fn a_platform_product_pairs_with_a_tenant_by_signing_its_own_exercises() {
         0,
     );
     assert_eq!(paired["instance"], b64url_encode(&instance.0));
-    // L0-META-7: the binding lasts only while the Exercises are forwarded
+    // L0-META-7
     assert!(
         w.plane
             .actors
@@ -424,7 +419,6 @@ async fn a_platform_product_pairs_with_a_tenant_by_signing_its_own_exercises() {
     let stream = v["event_stream"].clone();
     assert!(stream.is_string(), "{v}");
 
-    // a repeat opens nothing new
     let (_, v) = p.call("POST", &pairing, Some(&body)).await;
     assert_eq!(v["targets"][0], *paired);
     assert_eq!(v["event_stream"], stream);
@@ -432,8 +426,7 @@ async fn a_platform_product_pairs_with_a_tenant_by_signing_its_own_exercises() {
     assert_eq!(v["targets"][0], *paired);
 }
 
-// OP-149 m.4, RFC 7523: only a fresh assertion of an active platform client whose aud is its
-// realm's issuer is accepted
+// OP-149 m.4, RFC 7523
 #[tokio::test]
 async fn the_platform_api_takes_a_fresh_client_assertion() {
     // §10.4.5, TN-30
@@ -478,12 +471,11 @@ async fn the_platform_api_takes_a_fresh_client_assertion() {
     );
 }
 
-// OP-149 m.4, m.17 (e), (g): pairing opens one SSF push stream to the client's
-// suiss_event_receiver, however many tenants it pairs with; the client reads, lists and closes
-// its own streams through the management routes, and nothing is deleted (OP-73)
+// OP-149 m.4, m.17 (e), (g)
+// OP-73
 #[tokio::test]
 async fn pairing_opens_one_push_stream_the_client_manages() {
-    // RFC 8935, SSF 1.0 §8.1.1
+    // §8.1.1
     let w = World::new().await;
     let (p, _, _) = product(&w).await;
     let (t2, _, _) = w.realm("acme").await;
@@ -533,7 +525,7 @@ async fn pairing_opens_one_push_stream_the_client_manages() {
     let path = format!("/access/v1/platform/streams/{id}");
     let (s, v) = p.call("GET", &path, None).await;
     assert_eq!((s, v["status"].as_str()), (StatusCode::OK, Some("enabled")));
-    // SSF 1.0 §8.1.2, OP-149 m.26 (c): the status route with the rules of /ssf/status
+    // SSF §8.1.2, OP-149 m.26 (c)
     let status = format!("{path}/status");
     let (s, v) = p.call("GET", &status, None).await;
     assert_eq!(s, StatusCode::OK, "{v}");
@@ -598,17 +590,12 @@ async fn pairing_opens_one_push_stream_the_client_manages() {
         )
         .await;
     assert_eq!(s, StatusCode::NOT_FOUND);
-    // a closed stream is replaced by the next pairing
     let (t4, _, _) = w.realm("gamma").await;
     let third = p.pair(&p.tenant(t4)).await;
     assert_ne!(third["event_stream"], first["event_stream"]);
 }
 
-// OP-150 m.3 (m), MUST-NEVER-13, XI-18, PI-13: platform_product is a role the operator gives any
-// registered product. A third party's product walks the same routes as Suiss Work and gets the
-// same answers: it is registered under the same CT2 rule, pairs under the same bootstrap basis
-// and PEP with no Acceptance or anchor of its own, opens and manages its streams, carries its
-// name in the api_client events, and meets the same refusals; Work can do nothing it cannot
+// OP-150 m.3 (m), MUST-NEVER-13, XI-18, PI-13
 #[tokio::test]
 async fn a_third_party_product_holds_the_same_platform_role_as_work() {
     // OP-149 m.4, m.17 (e), m.19 (d), (e), (f), CT2, §9.13.2
@@ -622,7 +609,7 @@ async fn a_third_party_product_holds_the_same_platform_role_as_work() {
         panic!("basis");
     };
 
-    // CT2: outside the platform tenant the third party is refused exactly as Work is
+    // CT2
     for name in ["work", third] {
         let c = platform_client(
             w.admin().new_client_id().await.unwrap(),
@@ -713,7 +700,6 @@ async fn a_third_party_product_holds_the_same_platform_role_as_work() {
     assert_eq!(outcomes[0][7].0, StatusCode::NOT_FOUND);
     assert_ne!(streams[0], streams[1]);
 
-    // neither product reaches the other's stream
     for (p, other) in [(&ps[0], &streams[1]), (&ps[1], &streams[0])] {
         let (s, _) = p
             .call("GET", &format!("/access/v1/platform/streams/{other}"), None)
@@ -721,7 +707,7 @@ async fn a_third_party_product_holds_the_same_platform_role_as_work() {
         assert_eq!(s, StatusCode::NOT_FOUND);
     }
 
-    // OP-149 m.17a: each registration event names its own product
+    // OP-149 m.17a
     let created = identity_events(&w.db, "event.api_client.", 2).await;
     let mut names: Vec<String> = created
         .iter()
@@ -738,10 +724,7 @@ async fn a_third_party_product_holds_the_same_platform_role_as_work() {
     assert_eq!(names, [third, "work"]);
 }
 
-// OP-149 m.37, m.19 (e), m.19 (g), m.5: over the real plane, a paired product reads its tenant's
-// snapshot and resolves its own Party in the tenant's realm with its client assertion, verified
-// by the same platform API as its pairing; the sector is the product itself; a replayed jti and
-// a bare request are refused; the agency route stays a PEP's
+// OP-149 m.37, m.19 (e), m.19 (g), m.5
 #[tokio::test]
 async fn a_paired_product_reads_its_tenant_with_its_assertion() {
     // MD-10, OP-141 m.22 (f)

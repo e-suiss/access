@@ -387,7 +387,7 @@ impl SignIn for RealmSignIn {
             ("nonce", &nonce),
             ("code_challenge", &challenge),
             ("code_challenge_method", "S256"),
-            // TN-129: every console session starts from a fresh authentication
+            // TN-129
             ("prompt", "login"),
         ]);
         Ok(Some(format!(

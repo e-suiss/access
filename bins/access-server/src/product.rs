@@ -155,8 +155,7 @@ impl<D: Consistency> Subjects for PgSubjects<D> {
             .map_err(down)?;
         let mut pairs = Vec::new();
         let mut clients = Vec::new();
-        // OP-149 m.31 (a): a platform product's service Party resolves like a user's, to the
-        // pairwise value its service tokens carry
+        // OP-149 m.31 (a)
         match lookup {
             SubjectQuery::Parties(parties) => {
                 for party in parties {

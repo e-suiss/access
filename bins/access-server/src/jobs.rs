@@ -198,7 +198,7 @@ pub(crate) async fn analytics_tick(
             let step = async {
                 let mut tx = TenantTx::begin(app, realm.tenant, realm.realm).await?;
                 let a = aggregate(&mut tx, day).await.map_err(|e| e.to_string());
-                // OP-151 m.3 (i), IDP-36: the surge also goes to the realm's webhooks
+                // OP-151 m.3 (i), IDP-36
                 if let Ok(Some(s)) = a.as_ref().map(|a| a.surge) {
                     let id = access_crypto::random::bytes::<32>().map_err(|_| StoreError::Range)?;
                     let event = IdentityEvent::login_failed_surge(
@@ -237,7 +237,7 @@ pub(crate) async fn analytics_tick(
                 }
             }
         }
-        // OP-151 m.3 (o), OP-47: one process-wide ratio, no realm label
+        // OP-151 m.3 (o), OP-47
         let ratio = access_identity_risk::domain::analytics::ppm(fp, reviews).unwrap_or(0);
         access_telemetry::signals::RISK_FP_RATIO.set_u64(ratio, []);
         if done && complete(app, job.id, worker).await? {
@@ -302,8 +302,7 @@ mod tests {
 
     use super::*;
 
-    // IDP-36, OP-151 m.3 (n), OP-129 m.2: one node aggregates yesterday for every live realm
-    // through the jobs table; a second tick the same day finds nothing to do
+    // IDP-36, OP-151 m.3 (n), OP-129 m.2
     #[tokio::test]
     async fn analytics_aggregate_yesterday_once() {
         use access_store::authority::{LogRecord, create_domain};
@@ -347,8 +346,7 @@ mod tests {
         assert_eq!(rows[0].flows_started, 0);
     }
 
-    // OP-146 m.5 (f), m.7 (d), OP-129 m.2: one node opens today and the days ahead of every
-    // ephemeral table through the jobs table; a second tick the same day finds nothing to do
+    // OP-146 m.5 (f), m.7 (d), OP-129 m.2
     #[tokio::test]
     async fn the_opener_opens_days_ahead_once() {
         let db = fresh().await.unwrap();
@@ -383,23 +381,21 @@ mod tests {
         for name in ["login_throttle_20241004", "login_throttle_20241007"] {
             assert!(throttle.iter().any(|t| t == name), "{throttle:?}");
         }
-        // D-1, OP-13b, OP-134 m.2: this month's and next month's identity audit partitions
+        // D-1, OP-13b, OP-134 m.2
         let audit = partitions(&db.owner, "identity_audit").await.unwrap();
         for name in ["identity_audit_202410", "identity_audit_202411"] {
             assert!(audit.iter().any(|t| t == name), "{audit:?}");
         }
     }
 
-    // D-1, OP-13b: the months turn over a year's end
+    // D-1, OP-13b
     #[test]
     fn the_months_of_a_day() {
         assert_eq!(months(20_000), Some([(2024, 10), (2024, 11)]));
         assert_eq!(months(20_088), Some([(2024, 12), (2025, 1)]));
     }
 
-    // D-1, OP-13b, OP-73: a month whose rows already sit in the default partition cannot get its
-    // own partition; it stays in the default, the next month is opened ahead, and the job still
-    // completes
+    // D-1, OP-13b, OP-73
     #[tokio::test]
     async fn a_month_already_in_the_default_partition_opens_the_next() {
         use access_store::audit::AuditEvent;
@@ -433,8 +429,7 @@ mod tests {
         assert!(audit.contains(&name(next)), "{audit:?}");
     }
 
-    // D-4, TN-126, OP-151 m.3 (c), OP-73: an answer past its retention is cleared and its key
-    // released in place; a live answer is kept and nothing is deleted
+    // D-4, TN-126, OP-151 m.3 (c), OP-73
     #[tokio::test]
     async fn expired_idempotency_answers_are_released() {
         use access_store::api_idempotency::{Begun, begin, finish};

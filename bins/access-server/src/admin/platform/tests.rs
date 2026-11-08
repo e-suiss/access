@@ -20,8 +20,7 @@ fn body(v: &Value) -> Map<String, Value> {
 const SOLE: &str = "AQEBAQEBAQEBAQEBAQEBAQ";
 const OTHER: &str = "AgICAgICAgICAgICAgICAg";
 
-// OP-151 m.3 (m): `sandbox: true` on a realm creation, or the sandbox route, opens the domain
-// from the sandbox template; the sandbox route never opens a production domain
+// OP-151 m.3 (m)
 #[test]
 fn the_sandbox_flag_picks_the_template() {
     let k = ids();
@@ -46,7 +45,7 @@ fn the_sandbox_flag_picks_the_template() {
     );
 }
 
-// TN-111: a root names its Parties by id; a joint root lists each Party once
+// TN-111
 #[test]
 fn roots_are_read_strictly() {
     assert!(matches!(
@@ -75,8 +74,7 @@ fn roots_are_read_strictly() {
     assert_eq!(root(None).err(), Some(&codes::platform::INVALID_ROOT));
 }
 
-// TN-112: a member the operation does not take is refused, as is a tenant the server did not
-// name
+// TN-112
 #[test]
 fn unknown_members_and_foreign_tenant_ids_are_refused() {
     let k = ids();
@@ -97,7 +95,7 @@ fn unknown_members_and_foreign_tenant_ids_are_refused() {
     );
 }
 
-// CR-25: the first key signs at the latest one publish lead after the realm is created
+// CR-25
 #[test]
 fn signing_is_available_one_publish_lead_after_creation() {
     assert_eq!(signing_available_ms(1_000), 1_000 + 90 * 60_000);

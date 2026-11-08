@@ -517,7 +517,7 @@ fn device() -> Registrant {
     }
 }
 
-// L0-META-7, TN-111: the basis a self-signed registration names is the Genesis bootstrap Grant
+// L0-META-7, TN-111
 #[test]
 fn the_registration_basis_is_the_bootstrap_grant() {
     assert_eq!(
@@ -630,9 +630,7 @@ fn written(a: &Applied) -> u64 {
     }
 }
 
-// TN-111, TN-16, TN-10, OP-146 m.8 (c), §12.1.1 2a: creating a realm opens its governing
-// domain with a Genesis, fixes the issuer on the realm row and starts the realm on the
-// Genesis defaults; there is no master realm
+// TN-111, TN-16, TN-10, OP-146 m.8 (c), §12.1.1
 #[tokio::test]
 async fn realm_creation_opens_genesis_and_fixes_the_issuer() {
     // MD-5a, INV-2, INV-29, L0-META-7, CMP-26
@@ -687,9 +685,7 @@ async fn realm_creation_opens_genesis_and_fixes_the_issuer() {
     assert!(taken.is_err());
 }
 
-// MD-14, EI-25, TN-15, TN-110, IDP-7: a client is registered by an idp.* Exercise committed in
-// the governing domain; its row is bound to that ALLOW, its client_id is opaque and its
-// redirect URIs are kept as exact strings; a retry writes nothing twice
+// MD-14, EI-25, TN-15, TN-110, IDP-7
 #[tokio::test]
 async fn a_client_is_registered_through_commit() {
     // E34, OP-137, TN-20, CMP-15.5
@@ -715,7 +711,7 @@ async fn a_client_is_registered_through_commit() {
         w.admin().apply(&p, ais).await.unwrap(),
         Applied::AlreadyWritten { position, .. } if position == pos
     ));
-    // OP-149 m.4: the write queued one api_client.created in its transaction; the retry none
+    // OP-149 m.4
     let queued = identity_events(&w.db, "event.api_client.", 1).await;
     assert_eq!(queued.len(), 1);
     assert_eq!(queued[0].kind, "event.api_client.created");
@@ -736,8 +732,7 @@ async fn a_client_is_registered_through_commit() {
     fold_check(&w.db.sequencer, d).await.unwrap();
 }
 
-// MD-14, TN-110, INV-2: nothing reaches the configuration without its own committed ALLOW: an
-// actor without authority is denied, and a statement over another change is not accepted
+// MD-14, TN-110, INV-2
 #[tokio::test]
 async fn no_write_bypasses_the_commit() {
     // EI-25, PI-7, MUST-NEVER-1
@@ -777,9 +772,7 @@ async fn no_write_bypasses_the_commit() {
     assert!(client(&mut t, c.id.as_str()).await.unwrap().is_none());
 }
 
-// MD-5a, TN-1, INV-37, F21: a realm has one governing domain; an idp.* commit about it in a
-// domain that only consumes its Claims, even by that domain's own root, finds no covering
-// authority, and the identity plane binds only its governing domain's decision
+// MD-5a, TN-1, INV-37, F21
 #[tokio::test]
 async fn only_the_governing_domain_commits_a_realm_change() {
     // MD-14, CI-15, EI-25, E34
@@ -832,8 +825,7 @@ async fn only_the_governing_domain_commits_a_realm_change() {
     assert!(client(&mut t, c.id.as_str()).await.unwrap().is_none());
 }
 
-// IDP-5, IDI-4, OP-141 m.34 (b): the RP ID change is reserved and CT3, so its intent may stay
-// valid up to the CT3 ceiling; a CT1 retire may not
+// IDP-5, IDI-4, OP-141 m.34 (b)
 #[tokio::test]
 async fn an_rp_id_change_is_a_ct3_exercise() {
     // §13.7.1, §13.7.3, TI-RT3, K15
@@ -891,8 +883,7 @@ async fn an_rp_id_change_is_a_ct3_exercise() {
     assert!(w.admin().prepare(&foreign).await.is_err());
 }
 
-// OP-33, OP-146 m.4 (f), m.8 (e): realm Argon2 parameters rise and the JOSE algorithm changes
-// only through commit
+// OP-33, OP-146 m.4 (f), m.8 (e)
 #[tokio::test]
 async fn realm_settings_change_through_commit() {
     // CR-36, §17.5.2, K05
@@ -953,9 +944,7 @@ async fn realm_settings_change_through_commit() {
     );
 }
 
-// OP-146 m.16 (m), m.15 (e), m.7 (b), OP-94: a new realm's KEK, decoy key and DPoP nonce keys
-// are made in the HSM once under their labels; the authorization server loads the nonce
-// rings from them, and a realm without keys has none
+// OP-146 m.16 (m), m.15 (e), m.7 (b), OP-94
 #[test]
 fn realm_keys_are_made_once_in_the_hsm() {
     static STORE: std::sync::OnceLock<Arc<KeyStore>> = std::sync::OnceLock::new();
@@ -1003,8 +992,7 @@ fn platform_client(id: ClientId, product: PlatformProduct, seed: u8) -> Client {
     }
 }
 
-// OP-149 m.4, CT2: only the platform tenant registers a platform product client; it uses
-// private_key_jwt with one registered key and names its service key and event receiver
+// OP-149 m.4, CT2
 #[tokio::test]
 async fn a_platform_client_is_registered_in_the_platform_tenant() {
     // MD-14, EI-25, RFC 7523, OP-62
@@ -1111,8 +1099,7 @@ async fn a_platform_client_is_registered_in_the_platform_tenant() {
     assert_eq!(disabled.payload["platform_product"], "work");
 }
 
-// OP-149 m.6, OP-146 m.4 (i): a device Instance is ended by an instance_terminate its own Party
-// signed, forwarded as the identity plane's PEP
+// OP-149 m.6, OP-146 m.4 (i)
 #[tokio::test]
 async fn a_party_terminates_its_own_instance_through_the_identity_plane() {
     // L0-META-1, TN-50
@@ -1189,10 +1176,7 @@ impl access_identity_events::ports::Sealer for NoSeal {
     }
 }
 
-// OP-149 m.17 (e), m.26 (d), m.4: a stream owned by a platform product client receives the
-// events of every tenant, tenant.created among them, each SET naming the tenant it happened in
-// (the platform tenant's own too); a tenant's own stream receives only its tenant's events
-// without the claim, and only a platform client may own such a stream
+// OP-149 m.17 (e), m.26 (d), m.4
 #[tokio::test]
 async fn a_platform_subscription_receives_every_tenant() {
     // OP-131, TN-1, OP-132 m.3
@@ -1324,10 +1308,7 @@ async fn a_platform_subscription_receives_every_tenant() {
     t.commit().await.unwrap();
 }
 
-// OP-149 m.16 (a), L0-META-7, §7.9.2.3: a registration commits only with Exercises the new key
-// itself signed while the identity plane binds it to the checked Party; another key's
-// signature, someone else's Party or a Party that was never registered gets nothing, and the
-// binding ends with the request
+// OP-149 m.16 (a), L0-META-7, §7.9.2.3
 #[tokio::test]
 async fn self_signed_registration_binds_only_the_signing_key() {
     // E6, OP-141 m.2

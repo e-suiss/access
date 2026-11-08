@@ -159,7 +159,7 @@ fn change(
             Some(_) => return Err(&codes::realm::INVALID_BODY),
         },
     };
-    // OP-151 m.3 (m): `sandbox: true` opens the realm's domain from the sandbox template
+    // OP-151 m.3 (m)
     let sandbox = match body.get("sandbox") {
         None | Some(Value::Null) => operation == "createSandboxDomain",
         Some(Value::Bool(b)) => *b,
@@ -521,7 +521,7 @@ impl<P: Decider + Governance + Instances + Clone + Send + Sync + 'static> Realms
                         "key_state".to_owned(),
                         json!(key_state(&self.keys, m, crate::admin::WallClock::now()).await),
                     );
-                    // TN-111, §13.7.7: the Genesis digest is the DomainID; recovery is declared
+                    // TN-111, §13.7.7
                     o.insert(
                         "genesis".to_owned(),
                         json!({

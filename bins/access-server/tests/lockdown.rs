@@ -79,8 +79,7 @@ fn op_90_server_refuses_to_start_without_lockdown() {
             command.env_remove(key);
         }
     }
-    // CR-12, OP-141 m.18: the server reads its TLS files, credentials and token before it
-    // reaches the lockdown
+    // CR-12, OP-141 m.18
     let dir = std::env::temp_dir().join(format!("access-server-lockdown-{}", std::process::id()));
     std::fs::create_dir_all(&dir).expect("temp dir");
     let cert =
@@ -97,7 +96,7 @@ fn op_90_server_refuses_to_start_without_lockdown() {
                 .expect("chmod");
         }
     }
-    // OP-146 m.12 (f): the built login app is read before the lockdown too
+    // OP-146 m.12 (f)
     let dist = dir.join("login-dist");
     std::fs::create_dir_all(&dist).expect("dist dir");
     std::fs::write(dist.join("index.html"), "<!doctype html>").expect("write index");

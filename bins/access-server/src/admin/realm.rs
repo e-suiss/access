@@ -145,7 +145,7 @@ impl<P: Decider + Governance + Instances + Clone + Send + Sync + 'static> Realms
             pep: IDENTITY_PEP,
             base: &self.base,
             keys: self.keys.as_ref(),
-            // OP-149 m.4: platform product clients are not written on the realm-admin surface
+            // OP-149 m.4
             platform_tenant: None,
             declared: self.declared.clone(),
             vault: Some(&self.vault),
@@ -205,7 +205,7 @@ impl<P: Decider + Governance + Instances + Clone + Send + Sync + 'static> Realms
                     Value::String(id.as_str().to_owned()),
                 );
             }
-            // TN-135, TN-136: a new hook's or webhook's id is assigned with its draft
+            // TN-135, TN-136
             let assigned = match op {
                 Op::RegisterHook => Some(("hook_id", HOOK_PREFIX)),
                 Op::RegisterWebhook => Some(("webhook_id", WEBHOOK_PREFIX)),
@@ -233,14 +233,14 @@ impl<P: Decider + Governance + Instances + Clone + Send + Sync + 'static> Realms
             Ok(c) => c,
             Err(e) => return refusal(&e).map(Err),
         };
-        // MD-10, OIDC Core §8.1: the sector document lists every redirect URI, on each write
+        // MD-10, OIDC §8.1
         if let Change::ClientRegister(c) | Change::ClientUpdate(c) = &change
             && let Some(uri) = &c.subject.sector_identifier_uri
             && let Err(i) = self.sector(uri, c).await?
         {
             return Ok(Err(problem_of(&AdminError::Invalid(i))));
         }
-        // IDI-4: an RP ID change makes every registered passkey unusable; the caller says so
+        // IDI-4
         if matches!(change, Change::RpId(_)) {
             let n = match admin.passkey_count(tenant, realm).await {
                 Ok(n) => n,
@@ -301,7 +301,7 @@ impl<P: Decider + Governance + Instances + Clone + Send + Sync + 'static> Realms
             validity: c.validity,
             basis,
             capacity,
-            // OP-151 m.2 M1: a REST caller has no realm session; its Instance is the actor
+            // OP-151 m.2 M1
             subject: None,
         }
     }
@@ -408,7 +408,7 @@ impl<P: Decider + Governance + Instances + Clone + Send + Sync + 'static> Realms
             return Ok(None);
         };
         let ids = self.ids.key().ok_or(Unavailable)?;
-        // OP-27: a page of a collection may come from the replica; never a security read
+        // OP-27
         let pool = if q.key.is_none() {
             &self.reads
         } else {
@@ -463,7 +463,7 @@ where
     async fn domain(&self, scope: &SurfaceScope) -> Result<Option<Digest>, Unavailable> {
         match scope {
             SurfaceScope::Realm(slug) => Realms::domain(self, slug).await,
-            // OP-151 m.2 M2, TN-119: the platform surface is governed by the platform realm's domain
+            // OP-151 m.2 M2, TN-119
             SurfaceScope::Platform => match self.platform.as_deref() {
                 Some(slug) => Realms::domain(self, slug).await,
                 None => Ok(None),
@@ -799,7 +799,7 @@ impl<P: Decider + Governance + Instances + Clone + Send + Sync + 'static> Jobs f
 mod job_ids {
     use super::*;
 
-    // TN-125: a job id reads back only in its one canonical form
+    // TN-125
     #[test]
     fn job_ids_round_trip_in_one_form() {
         let id = [0xab; 16];

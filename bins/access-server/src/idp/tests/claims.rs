@@ -91,12 +91,8 @@ fn held(i: &Issued) -> Option<Quarantine> {
     }
 }
 
-// OP-150 L2, OP-144, §10.1.4 rule 3, §10.1.7, L2-CLM-1, L2-CLM-3, E18, INV-2, INV-12, CI-2,
-// IDI-3: creating a realm fixes its issuer Party, names it in the Genesis and opens its Claim
-// issuer key's Instance in the governing domain; the issuer's authentication and
-// authenticator_binding Claims are admitted for actor-binding there, its other classes wait for an
-// explicit Acceptance, a status Claim only narrows, a risk signal gates nothing, and a repeat opens
-// nothing new
+// OP-150 L2, OP-144, §10.1.4 rule 3, §10.1.7, L2-CLM-1, L2-CLM-3, E18, INV-2, INV-12, CI-2
+// IDI-3
 #[tokio::test]
 async fn the_realm_issuer_claims_are_accepted_for_actor_binding() {
     let w = World::new().await;
@@ -150,14 +146,13 @@ async fn the_realm_issuer_claims_are_accepted_for_actor_binding() {
     assert!(admitted(&c.issue(t, r, &passkey).await.unwrap()));
     let removed = authenticator_removed(alice, AuthenticatorKind::Passkey, &[0xc3; 16], NOW);
     assert!(admitted(&c.issue(t, r, &removed).await.unwrap()));
-    // TN-49, §12.3.1, E5: the realm issuer's status Claim is accepted by default and only narrows
+    // TN-49, §12.3.1, E5
     assert!(admitted(
         &c.issue(t, r, &account_status(alice, "suspended", NOW))
             .await
             .unwrap()
     ));
-    // §7.6 TN-O4: a risk signal is no actor-binding input; it waits for a predicate-input
-    // Acceptance and gates nothing
+    // §7.6 TN-O4
     assert_eq!(
         held(
             &c.issue(t, r, &risk(alice, RiskSignal::NewDevice, Bind::None, NOW))

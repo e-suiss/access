@@ -202,7 +202,6 @@ async fn console(label: &str, with_adp: bool) -> Console {
             .unwrap();
     }
 
-    // the realm's founder signs in: a subject bound to the founding root's Party
     let route = route_by_slug(&w.db.router, "acme").await.unwrap().unwrap();
     let root = root_party(&root_key(&w.keys).unwrap().public_key());
     let mut t = TenantTx::begin(&w.db.app, route.tenant, route.realm)
@@ -288,7 +287,7 @@ async fn console(label: &str, with_adp: bool) -> Console {
         10, 1, 2, 3,
     )))));
 
-    // TN-131, OP-151 m.12 (b): the console sends the browser to the realm's /authorize
+    // TN-131, OP-151 m.12 (b)
     let (r, _) = send(
         &management,
         Request::get("/console/api/sign-in?realm=acme")
@@ -356,7 +355,7 @@ async fn console(label: &str, with_adp: bool) -> Console {
     let callback = location(&r);
     assert!(callback.starts_with(&format!("{ORIGIN}/console/api/sign-in/callback?")));
 
-    // TN-128, TN-129: the callback exchanges the code with the client key and opens the session
+    // TN-128, TN-129
     let jar = started
         .iter()
         .map(|(k, v)| format!("{k}={v}"))
@@ -401,7 +400,7 @@ async fn console(label: &str, with_adp: bool) -> Console {
     assert_eq!(session["realm"], "acme");
     assert!(session["instance"].is_null());
 
-    // OP-149 m.6, OP-151 m.3 (e): the browser's key opens the session's device Instance
+    // OP-149 m.6, OP-151 m.3 (e)
     let key = b64url_encode(&cose_key(&browser.key.public_key()));
     let (r, body) = send(
         &management,
@@ -463,11 +462,7 @@ async fn console(label: &str, with_adp: bool) -> Console {
     }
 }
 
-// OP-151 m.12 (b), (c), (e), TN-128, TN-129, TN-130, TN-110, TN-27, Ek B 3300: the console
-// signs in at the realm's own authorization server with its client key, opens its session,
-// registers the browser's Instance, reads the settings through the BFF with a read proof and a
-// DPoP-bound realm read token, and writes branding with the browser's AIS: the Exercise is
-// committed by the real sequencer and the domain's log moves
+// OP-151 m.12 (b), (c), (e), TN-128, TN-129, TN-130, TN-110, TN-27, Ek B 3300
 #[tokio::test]
 async fn the_console_signs_in_reads_and_writes_through_the_sequencer() {
     let Console {
@@ -479,7 +474,7 @@ async fn the_console_signs_in_reads_and_writes_through_the_sequencer() {
         subject,
         ..
     } = console("mgmt-e2e", false).await;
-    // TN-128, TN-130: a read proof gets a realm-issued, DPoP-bound read token at the BFF
+    // TN-128, TN-130
     let basis = ExerciseBasis::Anchor(meta::object_id(&domain, kind::ANCHOR, IDP_ANCHOR));
     let target = "/admin/v1/realms/acme/settings";
     let proof = browser.ais(
@@ -512,8 +507,7 @@ async fn the_console_signs_in_reads_and_writes_through_the_sequencer() {
     let settings: serde_json::Value = serde_json::from_slice(&body).unwrap();
     assert!(settings.get("branding").is_some());
 
-    // §8.13, IDP-36, TN-136, OP-151 m.19 (e): signals state a missing GeoIP source, analytics
-    // are counts of the realm's own days, and an unknown webhook has no delivery log
+    // §8.13, IDP-36, TN-136, OP-151 m.19 (e)
     let read = |target: &'static str| {
         let proof = browser.ais(
             domain,
@@ -559,7 +553,7 @@ async fn the_console_signs_in_reads_and_writes_through_the_sequencer() {
     .await;
     assert_eq!(r.status(), StatusCode::NOT_FOUND);
 
-    // the cookie alone reads nothing (OP-151 m.3 (s))
+    // OP-151
     let (r, _) = send(
         &management,
         browser
@@ -574,7 +568,7 @@ async fn the_console_signs_in_reads_and_writes_through_the_sequencer() {
     .await;
     assert_ne!(r.status(), StatusCode::OK);
 
-    // TN-110, OP-151 m.11 (a): the draft is a read; the write carries the browser's AIS
+    // TN-110, OP-151 m.11 (a)
     let drafts = "/admin/v1/realms/acme/intents";
     let ask = serde_json::json!({
         "operation": "putBranding",
@@ -641,9 +635,7 @@ async fn the_console_signs_in_reads_and_writes_through_the_sequencer() {
     assert!(position > before, "{position} > {before}");
     assert!(written["exercise_id"].is_string());
 
-    // TN-130, TN-27, OP-21: the verifier takes a realm read token only with a fresh proof by
-    // its bound key; a bearer presentation, another key, a replayed proof, another surface or a
-    // token whose console session ended reads nothing
+    // TN-130, TN-27, OP-21
     let tokens = crate::admin::tokens::ManagementTokens {
         directory: PgDirectory::new(w.db.router.clone()),
         signer: SignerKeys::new(w.identity_signer.clone()),
@@ -723,10 +715,7 @@ async fn the_console_signs_in_reads_and_writes_through_the_sequencer() {
     browser.jar.clear();
 }
 
-// TN-110, TN-128, MD-14, OP-151 m.19 (a), (d), m.8 (b), Ek B 3088: the console drafts the
-// `access`/`audit_export` intent through the BFF, the browser signs the commit, the BFF passes it
-// on to ADP only with that AIS (a commit without it, or a check, is refused before ADP), the real
-// sequencer commits it and the domain's log moves, and the same request fetches the package
+// TN-110, TN-128, MD-14, OP-151 m.19 (a), (d), m.8 (b), Ek B 3088
 #[tokio::test]
 async fn a_console_commit_goes_to_adp_only_with_the_browsers_ais() {
     let Console {
@@ -769,7 +758,7 @@ async fn a_console_commit_goes_to_adp_only_with_the_browsers_ais() {
     );
     let draft: serde_json::Value = serde_json::from_slice(&body).unwrap();
     let digest = envelope_digest(draft["envelope"].as_str().unwrap());
-    // the founding root roots the meta-anchor and so audits the domain (OP-141 m.38 (d))
+    // OP-141
     let auditor = ExerciseBasis::Anchor(meta::meta_anchor(&domain));
     let nonce = access_crypto::random::bytes::<16>().unwrap();
     let body_with = |ais: Option<String>| {

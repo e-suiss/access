@@ -1194,7 +1194,7 @@ where
         let mut sample = None;
         let mut test_user = None;
         let mut compromise = None;
-        // OP-149 m.26 (c): the declarant is accepted at the realm's Genesis
+        // OP-149 m.26 (c)
         let declarant = match &plan.compromise {
             Some(_) => Some(self.declarant()?),
             None => None,
@@ -1216,7 +1216,7 @@ where
                     slug,
                     style,
                     party,
-                    // OP-151 m.2 M2: only the platform realm's domain decides provisioning
+                    // OP-151 m.2 M2
                     if is_platform {
                         vec![access_identity_admin::domain::provision::catalog(party)]
                     } else {
@@ -1710,8 +1710,7 @@ where
         if found.is_some() {
             return Ok(());
         }
-        // OP-151 m.12 (b): an origin no client may name (a single-label host) gets no console
-        // client; the console then signs no one in there
+        // OP-151 m.12 (b)
         let Ok(redirect) = RedirectUri::parse(&callback) else {
             tracing::warn!(
                 event = "console.client.skipped",

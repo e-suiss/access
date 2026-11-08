@@ -164,10 +164,7 @@ async fn get(app: &Pool, d: Digest, if_none_match: Option<&str>) -> axum::respon
         .unwrap()
 }
 
-// OP-150 m.3 (a), (s), m.10 (a), (d), (e), T24, G43, PI-9: the list a family's token names
-// is fetched at GET /access/v1/status-lists/{list}; it shows the family's bit clear while the
-// family lives and set in the publication after its revocation, the ETag moving with the
-// reflected position; an unpublished list is 404, never an empty list
+// OP-150 m.3 (a), (s), m.10 (a), (d), (e), T24, G43, PI-9
 #[tokio::test]
 async fn the_served_list_shows_a_revocation() {
     let db = fresh().await.unwrap();
@@ -204,7 +201,6 @@ async fn the_served_list_shows_a_revocation() {
     let body = to_bytes(r.into_body(), 1 << 20).await.unwrap();
     assert_eq!(set_entries(&body), Some(0));
 
-    // revoked at the head, published once the head has moved past it
     assert!(
         revoke_family(&db.sequencer, &scope, &family.family, 1)
             .await
@@ -232,9 +228,7 @@ async fn the_served_list_shows_a_revocation() {
     );
 }
 
-// E13, T16, §9.16 heartbeat, T24, OP-150 m.10 (d): a quiet domain's list is signed again on its
-// heartbeat though the head did not move: the same position and bits, a fresh iat and a new
-// ETag, so a verifier that holds a list for its ttl never finds an idle domain's list stale
+// E13, T16, §9.16, T24, OP-150 m.10 (d)
 #[tokio::test]
 async fn an_idle_domains_list_stays_fresh() {
     use access_authority_core::status::{HEARTBEAT_MS, TTL_S};
@@ -273,7 +267,6 @@ async fn an_idle_domains_list_stays_fresh() {
         .unwrap();
     let first = token(&first);
     assert_eq!((first.as_of, first.iat), (1, (NOW + 1_000) / 1_000));
-    // nothing moves: before the heartbeat nothing is signed
     let quiet = NOW + 1_000 + HEARTBEAT_MS;
     assert_eq!(publisher.publish(d, quiet - 1).await.unwrap().len(), 0);
     SIGNER_NOW.store(quiet, std::sync::atomic::Ordering::Relaxed);

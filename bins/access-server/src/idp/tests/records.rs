@@ -6,9 +6,7 @@ use access_http::product::ports::{Sector, SubjectQuery, Subjects as _};
 use super::*;
 use crate::product::PgSubjects;
 
-// OP-149 A11, MD-10: a realm's Party resolves to the pairwise sub one of its clients sees and
-// back; the sub is the one the client's tokens carry, assigned once; what does not resolve is
-// left out, and the answer carries the governing domain's consistency token
+// OP-149 A11, MD-10
 #[tokio::test]
 async fn parties_resolve_to_a_clients_pairwise_sub_and_back() {
     // OP-141 m.22 (f), OP-149 m.16 (a)
@@ -98,8 +96,7 @@ fn b64url(b: &[u8]) -> String {
     access_kernel::json::b64url_encode(b)
 }
 
-// OP-149 m.9, §9.8, L2-RCP-2: the receipt of each new ALLOW is kept, so an allowed Exercise is
-// read back by its id with that receipt; an Exercise the domain never allowed is not found
+// OP-149 m.9, §9.8, L2-RCP-2
 #[tokio::test]
 async fn an_allowed_exercise_is_read_back_with_its_receipt() {
     // OP-141 m.6

@@ -30,8 +30,7 @@ fn cert(names: &[&str]) -> Vec<u8> {
     params.self_signed(&key).unwrap().pem().into_bytes()
 }
 
-// OP-148, §17.9.6: the certificate covers the issuer and the management origin, or the server
-// does not start
+// OP-148, §17.9.6
 #[test]
 fn the_certificate_must_cover_both_origins() {
     let c = config("https://access.example", "https://api.access.example:9443");
@@ -51,7 +50,7 @@ fn the_certificate_must_cover_both_origins() {
     assert!(tls_names(&c, b"not a certificate").is_err());
 }
 
-// L1-ADP-11, OP-148: an issuer or a management origin out of its one form fails the check
+// L1-ADP-11, OP-148
 #[test]
 fn origins_are_in_their_one_form() {
     let names = cert(&["access.example"]);
@@ -74,7 +73,7 @@ fn origins_are_in_their_one_form() {
     );
 }
 
-// MD-8, OP-148: one failed check fails the report; the report names every check
+// MD-8, OP-148
 #[test]
 fn any_failed_check_refuses_to_serve() {
     let mut ok = Report::default();
@@ -91,8 +90,8 @@ fn any_failed_check_refuses_to_serve() {
     assert!(e.contains("authority-signer"), "{e}");
 }
 
-// OP-148, CMP-22b: a configured authority signer that does not answer fails; none configured
-// passes (receipts are then not signed, OP-143 m.5)
+// OP-148, CMP-22b
+// OP-143
 #[tokio::test]
 async fn an_unreachable_signer_fails_the_start() {
     assert_eq!(authority_signer(None).await, Ok(()));
@@ -100,7 +99,7 @@ async fn an_unreachable_signer_fails_the_start() {
     assert!(authority_signer(Some(&missing)).await.is_err());
 }
 
-// OP-138, §17.9.7: the identity plane's failures land on their own check
+// OP-138, §17.9.7
 #[test]
 fn identity_failures_name_their_check() {
     let cases: [(Result<usize, StartupError>, &[&str]); 4] = [
@@ -122,7 +121,7 @@ fn identity_failures_name_their_check() {
     }
 }
 
-// OP-148, §17.9.6: the admin interface is never on the public listener
+// OP-148, §17.9.6
 #[test]
 fn a_shared_admin_listener_fails_the_start() {
     let mut c = config("https://access.example", "https://access.example:9443");

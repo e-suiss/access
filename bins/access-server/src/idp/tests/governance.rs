@@ -42,10 +42,7 @@ fn brand(logo: &str) -> Branding {
     }
 }
 
-// §13.4 G54, G53, MD-14, MD-9, OP-149 m.16 (a), OP-63: an idp.* change asked for in a realm
-// subject's session commits only when a live Instance of the Party that subject is bound to
-// signed it; another Party's key (the realm's own administrator acting inside a user's
-// session), or a subject bound to no Party, is refused before anything is decided
+// §13.4 G54, G53, MD-14, MD-9, OP-149 m.16 (a), OP-63
 #[tokio::test]
 async fn idp_commits_carry_the_sessions_actor_binding() {
     // L0-META-7, INV-2, PI-7
@@ -106,8 +103,7 @@ async fn idp_commits_carry_the_sessions_actor_binding() {
     );
 }
 
-// TN-106, MD-14, K06: a realm's branding is data written only by an idp.realm.branding
-// Exercise; a logo outside its CSP origins is refused before anything is decided
+// TN-106, MD-14, K06
 #[tokio::test]
 async fn branding_changes_through_commit() {
     // §12.4.2, E34, EI-25
@@ -143,8 +139,7 @@ async fn branding_changes_through_commit() {
     ));
 }
 
-// §9.9.6, P55, PI-8, S-1, INV-33: a claim mapper takes a standard profile attribute and never
-// defines a claim only an authority projection carries
+// §9.9.6, P55, PI-8, S-1, INV-33
 #[tokio::test]
 async fn claim_mappers_stay_inside_the_profile() {
     // MD-14, TN-117
@@ -173,9 +168,7 @@ async fn claim_mappers_stay_inside_the_profile() {
     );
 }
 
-// CR-59, SAI-46, CR-25, OP-146 m.16 (m): a realm created through the admin path signs a token
-// with its founding key the moment it is open, with no schedule round and no clock advance; the
-// JWKS already lists that key first and a published backup, which waits the full lead
+// CR-59, SAI-46, CR-25, OP-146 m.16 (m)
 #[tokio::test]
 async fn a_new_realm_signs_tokens_at_once() {
     let w = World::new().await;
@@ -213,10 +206,7 @@ async fn a_new_realm_signs_tokens_at_once() {
     assert_ne!(kids(&w, realm)[0], kid);
 }
 
-// §13.2, §13.7.1, §13.7.7, SEC9, MD-7: a compromised realm key is dropped by a narrowing
-// idp.realm.key_drop Exercise; it leaves the JWKS at once, the drop records the issuer cutoff
-// 24 hours before the compromise, a retry changes nothing, and a key the realm does not
-// publish is refused
+// §13.2, §13.7.1, §13.7.7, SEC9, MD-7
 #[tokio::test]
 async fn a_compromised_key_is_dropped_at_once() {
     // CR-23, CR-27, OP-73, X11, SI-4
@@ -254,7 +244,7 @@ async fn a_compromised_key_is_dropped_at_once() {
     assert_eq!(changes[0].action, "idp.realm.key_drop");
     assert_eq!(changes[0].kid, Some(active));
     assert_eq!(changes[0].cutoff_at, Some(at - CUTOFF_MARGIN_MS));
-    // CR-27, TN-41: one realm-wide credential-compromise signal, queued with the drop
+    // CR-27, TN-41
     let mut t = TenantTx::begin(&w.db.app, tenant, realm).await.unwrap();
     let signals = t.outbox_kinds().await.unwrap();
     t.commit().await.unwrap();
@@ -281,9 +271,7 @@ async fn a_compromised_key_is_dropped_at_once() {
     ));
 }
 
-// TN-118, MD-6, CR-25, CR-26, §13.7.1: a manual rotation and a new rotation policy are
-// reserved idp.realm Exercises; the rotation makes the published backup sign and keeps the old
-// key in the JWKS, and a policy the realm may not take is refused before anything is decided
+// TN-118, MD-6, CR-25, CR-26, §13.7.1
 #[tokio::test]
 async fn a_rotation_and_a_policy_are_decided() {
     // SAI-46, TN-118

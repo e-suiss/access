@@ -152,9 +152,7 @@ fn verified(key: &str, got: &Got) {
     ));
 }
 
-// TN-135, TN-136, MD-14, TN-110, OP-151 m.10 (d), m.11: a hook and a webhook registered through
-// the realm-admin resources are each one idp.* Exercise; the verification key is shown once
-// and never read back; the hook is then called and the webhook delivered, signed with it
+// TN-135, TN-136, MD-14, TN-110, OP-151 m.10 (d), m.11
 #[tokio::test]
 async fn a_hook_and_a_webhook_registered_through_rest_then_fire() {
     let (w, at, d) = ready("hooks").await;
@@ -179,7 +177,7 @@ async fn a_hook_and_a_webhook_registered_through_rest_then_fire() {
     assert_eq!(view["hook_id"], hook_id.as_str());
     assert_eq!(view["public_key"], hook_key.as_str());
     assert_eq!(view["status"], "active");
-    // TN-61: only the public key is ever read back
+    // TN-61
     let mut members: Vec<&String> = view.as_object().unwrap().keys().collect();
     members.sort();
     assert_eq!(
@@ -195,7 +193,7 @@ async fn a_hook_and_a_webhook_registered_through_rest_then_fire() {
             "url"
         ]
     );
-    // OP-151 m.10 (d): one live hook per call point
+    // OP-151 m.10 (d)
     let second = compile(
         Op::RegisterHook,
         None,
@@ -265,7 +263,6 @@ async fn a_hook_and_a_webhook_registered_through_rest_then_fire() {
         reader: w.db.reader.clone(),
         ids: Arc::new(IdKey::new(Secret::new([8; 32]))),
     };
-    // the outbox is read behind the cluster's oldest running transaction
     let fanout = WebhookFanout::new(db(), SystemClock);
     let deadline = std::time::Instant::now() + Duration::from_secs(30);
     while fanout.step().await.unwrap() == 0 {
@@ -291,7 +288,7 @@ async fn a_hook_and_a_webhook_registered_through_rest_then_fire() {
         "{event}"
     );
 
-    // TN-135, TN-136: retiring narrows; the hook is no longer called
+    // TN-135, TN-136
     let retire = compile(Op::RetireHook, Some(&hook_id), &json!({}), &w.ids).unwrap();
     written(&run(&w, at, d, retire, 4).await.unwrap());
     let quiet = HookReceiver::default();
@@ -314,9 +311,7 @@ async fn a_hook_and_a_webhook_registered_through_rest_then_fire() {
     assert!(quiet.0.lock().unwrap().is_empty());
 }
 
-// OP-151 m.10 (e), OP-149 m.23: a private target needs both the realm's extension policy and
-// the operator's declaration; a disclosure needs the policy's permission; the policy is itself
-// an idp.realm.extension_policy Exercise and shows in the settings
+// OP-151 m.10 (e), OP-149 m.23
 #[tokio::test]
 async fn private_targets_and_disclosure_need_the_extension_policy() {
     let (w, at, d) = ready("policy").await;
@@ -367,7 +362,7 @@ async fn private_targets_and_disclosure_need_the_extension_policy() {
         settings.items[0].0["extension_policy"],
         json!({"allow_private_targets": true, "hook_disclosure": ["email"]})
     );
-    // OP-149 m.23: the realm allows private targets, the operator has not declared this one
+    // OP-149 m.23
     assert_eq!(
         refused(&w, at, d, hook(4, private, &[]), 4).await,
         Invalid::ExtensionTarget
@@ -386,8 +381,7 @@ async fn private_targets_and_disclosure_need_the_extension_policy() {
     assert!(key.starts_with("whpk_"));
 }
 
-// TN-136: a key rotation keeps the webhook's URL and events and shows the new key once; an
-// update changes them; both are idp.webhook.update Exercises
+// TN-136
 #[tokio::test]
 async fn a_webhook_is_updated_and_its_key_rotated() {
     let (w, at, d) = ready("rotate").await;

@@ -88,7 +88,7 @@ impl<P: LiveKeys> ManagementTokens<P> {
     async fn realm_of(&self, surface: &Surface) -> Result<Option<RealmEntry>, Unavailable> {
         match surface {
             Surface::Realm(slug) => self.directory.by_slug(slug).await.map_err(down),
-            // OP-151 m.2 M2: the platform realm issues the platform surface's tokens
+            // OP-151 m.2 M2
             Surface::Platform => match self.platform.as_deref() {
                 Some(slug) => self.directory.by_slug(slug).await.map_err(down),
                 None => Ok(None),
@@ -260,7 +260,7 @@ impl<P: LiveKeys + 'static> ReadTokens for ManagementTokens<P> {
         let Ok(claims) = read_claims(p.token, &keys, realm.issuer.as_str()) else {
             return Ok(None);
         };
-        // TN-27, RFC 9449 §7: exactly one proof, by the bound key, for this request and token
+        // TN-27, RFC 9449 §7
         let [proof] = p.proofs else {
             return Ok(None);
         };
