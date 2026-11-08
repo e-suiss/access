@@ -41,6 +41,14 @@ pub fn challenge_digest(
     out
 }
 
+/// `token_key_id` (RFC 9578 §6.5): SHA-256 of the issuer's published token key encoding.
+#[must_use]
+pub fn token_key_id(encoded: &[u8]) -> [u8; 32] {
+    let mut out = [0; 32];
+    out.copy_from_slice(digest(&SHA256, encoded).as_ref());
+    out
+}
+
 /// Whether `token` is a valid type `0x0002` token for `challenge` from one of `issuers`.
 #[must_use]
 pub fn verify(token: &[u8], challenge: &[u8; 32], issuers: &[Issuer]) -> bool {

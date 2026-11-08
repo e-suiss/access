@@ -152,6 +152,25 @@ Each source is optional; a missing one makes its signals `unavailable`, never "f
 | `breach_range_api` | A k-anonymity range API base (`https://…`). |
 | `breach_ranges_dir` | A local mirror of the range files, used when no range API is set. |
 
+### `[signup]`
+
+Sign-up never shows a puzzle. A bot signal only decides whether a request is counted as risky;
+it never refuses one and never replaces the e-mailed code. A provider that does not answer is a
+missing signal. A configured provider whose secret or trust anchors cannot be read stops the
+start.
+
+| Key | Default | Meaning |
+|---|---|---|
+| `bot_provider` | none | `friendly_captcha` or `turnstile`. |
+| `bot_site_key` | none | The site key (required for Friendly Captcha). |
+| `bot_secret_file` | none | The provider secret, readable by the server's user only. |
+| `bot_verify_url` | the provider's | The verify endpoint, `https://host/path`. |
+| `bot_timeout_ms` | `2000` | How long the provider may take. |
+| `privacy_pass_key_files` | `[]` | DER token keys of the Privacy Pass issuers whose tokens count as a positive signal. |
+| `privacy_pass_issuer`, `privacy_pass_origin` | none | The challenge the hosted page presents (required with issuer keys). |
+| `mail_domain_check` | `true` | Look up the address's MX record (or A/AAAA without MX) at the host's first nameserver; a domain that takes no mail is refused, an unanswered lookup is not. |
+| `dns_timeout_ms` | `1500` | How long one DNS query may take. |
+
 ## Background work
 
 While serving, the process also runs, each stopping with the server:

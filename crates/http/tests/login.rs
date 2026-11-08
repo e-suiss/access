@@ -461,6 +461,18 @@ async fn env_with(seed: u8, slug: &str, auth: AuthPolicy, live: bool) -> Env {
 }
 
 async fn env_full(seed: u8, slug: &str, auth: AuthPolicy, live: bool, signin: RealmSignin) -> Env {
+    let signup = access_identity_ui::app::signup::Signup::without_providers().unwrap();
+    env_core(seed, slug, auth, live, signin, signup).await
+}
+
+async fn env_core(
+    seed: u8,
+    slug: &str,
+    auth: AuthPolicy,
+    live: bool,
+    signin: RealmSignin,
+    signup: access_identity_ui::app::signup::Signup,
+) -> Env {
     let db = fresh().await.unwrap();
     let tenant = create_tenant(&db.app, "pool-default").await.unwrap();
     let d = DomainId::from_bytes([seed; 32]);
@@ -505,7 +517,7 @@ async fn env_full(seed: u8, slug: &str, auth: AuthPolicy, live: bool, signin: Re
         redirect_to: "/".into(),
         hooks: std::sync::Arc::new(access_identity_hooks::ports::NoHooks),
         risk: access_identity_session::app::RiskServices::without_sources(),
-        signup: access_identity_ui::app::signup::Signup::without_providers().unwrap(),
+        signup,
     });
     let assets = Assets::load(&fixture()).unwrap();
     let signer = ArtifactKey(Arc::new(SoftSigner::generate_ed25519().unwrap().0));
@@ -2969,6 +2981,68 @@ async fn the_realm_domain_lists_and_required_name_hold_at_sign_up() {
         )
         .await;
     assert_eq!(done.step(), "complete");
+}
+
+/// A resolver with fixed answers (OP-153 m.11 (f)).
+struct FakeDns;
+
+impl access_identity_account::ports::MailDomains for FakeDns {
+    fn deliverable<'a>(
+        &'a self,
+        domain: &'a str,
+    ) -> access_identity_account::ports::MailFuture<'a> {
+        use access_identity_account::ports::Deliverability;
+        Box::pin(async move {
+            match domain {
+                "no-mail.example" | "null-mx.example" => Deliverability::Undeliverable,
+                "slow-dns.example" => Deliverability::Unknown,
+                _ => Deliverability::Deliverable,
+            }
+        })
+    }
+}
+
+// TN-80, OP-153 m.11 (f), CR-40
+#[tokio::test]
+async fn an_address_whose_domain_takes_no_mail_is_refused_before_any_code() {
+    let mut signup = access_identity_ui::app::signup::Signup::without_providers().unwrap();
+    signup.mail = Arc::new(FakeDns);
+    let e = env_core(
+        36,
+        "su-mx",
+        AuthPolicy::DEFAULT,
+        false,
+        RealmSignin::default(),
+        signup,
+    )
+    .await;
+    let owner = e.account("held@null-mx.example").await;
+    let mut answers = Vec::new();
+    for (i, who) in ["held@null-mx.example", "free@no-mail.example"]
+        .iter()
+        .enumerate()
+    {
+        let mut b = e.browser(&format!("su-mx{i}"));
+        let a = b.register(who).await;
+        assert_eq!(a.status, StatusCode::BAD_REQUEST);
+        assert_eq!(a.messages(), vec!["registration.failed"]);
+        answers.push(masked(&a));
+    }
+    // CR-40
+    assert_eq!(answers[0], answers[1]);
+    assert!(e.sent().is_empty());
+    let _ = owner;
+    let mut b = e.browser("su-mx-unknown");
+    assert_eq!(
+        b.register("someone@slow-dns.example").await.status,
+        StatusCode::OK
+    );
+    assert_eq!(e.sent().last().unwrap().0, "relay.message.otp.v1");
+    let mut b = e.browser("su-mx-ok");
+    assert_eq!(
+        b.register("someone@mail.example").await.status,
+        StatusCode::OK
+    );
 }
 
 // TN-64, TNI-5, §12.3.3 rule 1

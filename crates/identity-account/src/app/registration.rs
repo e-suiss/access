@@ -33,7 +33,7 @@ use crate::domain::status::AccountStatus;
 use crate::domain::throttle::DAY_MS;
 use crate::notify::message::{Address, Body, Message, Notice, OtpPurpose};
 use crate::notify::ports::Notifier;
-use crate::ports::{AccountTx, BotSignals};
+use crate::ports::{AccountTx, BotSignals, Deliverability, MailDomains};
 
 /// The cheap gate's network: the /24 or /48 prefix (OP-153 m.3 (g)).
 #[must_use]
@@ -154,6 +154,8 @@ pub struct Registrar<'a, B, N> {
     pub bots: &'a B,
     /// The disposable-domain list.
     pub disposable: &'a DisposableDomains,
+    /// The MX/A lookup (OP-153 m.11 (f)).
+    pub mail: &'a dyn MailDomains,
     /// The Relay seam.
     pub notifier: &'a N,
 }
@@ -312,6 +314,10 @@ impl<B: BotSignals, N: Notifier + Sync> Registrar<'_, B, N> {
             }
         }
         tx.commit().await?;
+        // TN-80, OP-153 m.11 (f)
+        if self.mail.deliverable(email.domain()).await == Deliverability::Undeliverable {
+            return Ok(Started::Refused(Refused::Address));
+        }
         // TN-81, OP-153 m.3 (h)
         let bot = self.bots.assess(req.bot_token, req.prefix).await;
         let assessment = Assessment {
@@ -672,6 +678,11 @@ impl<B: BotSignals, N: Notifier + Sync> Registrar<'_, B, N> {
         if let Some(retry_after_ms) = gate(&mut tx, &key, ACCOUNT_MAIL_RATE, req.now_ms).await? {
             tx.commit().await?;
             return Ok(Started::Refused(Refused::Throttled { retry_after_ms }));
+        }
+        // TN-80, OP-153 m.11 (f)
+        if self.mail.deliverable(email.domain()).await == Deliverability::Undeliverable {
+            tx.commit().await?;
+            return Ok(Started::Refused(Refused::Address));
         }
         let index = self.vault.index_of(&tenant, &realm, email.raw())?;
         let free = tx.subject_by_identifier(email.raw()).await?.is_none()

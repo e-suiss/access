@@ -7,6 +7,8 @@
 //! Every answer of the first step is padded to the 250 ms floor and says nothing about whether
 //! the address has an account (TN-80 invariants 2 and 4, CR-40).
 
+use std::sync::Arc;
+
 use access_identity_account::adapters::bot::BotProviders;
 use access_identity_account::app::Actor;
 use access_identity_account::app::registration::{
@@ -16,6 +18,7 @@ use access_identity_account::domain::login::Problem;
 use access_identity_account::domain::registration::{
     DisposableDomains, DisposableListError, FLOOR_MS,
 };
+use access_identity_account::ports::{MailDomains, NoResolver};
 use access_identity_oauth::ports::RealmEntry;
 use access_identity_session::app::sessions::SessionStatus;
 use access_identity_session::app::{FLOW_GONE, Step as Outcome};
@@ -50,17 +53,27 @@ pub const STEP_UP_REQUIRED: Problem = Problem {
 };
 
 /// What sign-up needs beyond the login's services.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Signup {
     /// The bot signal sources (OP-153 m.1 (b)).
     pub bots: BotProviders,
     /// The disposable-domain list (TN-81).
     pub disposable: DisposableDomains,
+    /// The MX/A lookup of the first step (OP-153 m.11 (f)).
+    pub mail: Arc<dyn MailDomains>,
+}
+
+impl core::fmt::Debug for Signup {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("Signup")
+            .field("bots", &self.bots)
+            .finish_non_exhaustive()
+    }
 }
 
 impl Signup {
-    /// No bot provider: every signal is `Unavailable` and sign-up goes on through the cheap gate
-    /// and the out-of-band code (OP-153 m.1 (b)).
+    /// No bot provider and no resolver: every signal is `Unavailable`, every domain `Unknown`,
+    /// and sign-up goes on through the cheap gate and the out-of-band code (OP-153 m.1 (b)).
     ///
     /// # Errors
     /// [`DisposableListError`] when the shipped list is outside its format.
@@ -68,6 +81,7 @@ impl Signup {
         Ok(Self {
             bots: BotProviders::default(),
             disposable: DisposableDomains::embedded()?,
+            mail: Arc::new(NoResolver),
         })
     }
 }
@@ -270,6 +284,7 @@ where
             vault: &vault,
             bots: &self.signup.bots,
             disposable: &self.signup.disposable,
+            mail: self.signup.mail.as_ref(),
             notifier: &notifier,
         };
         let actor = Actor {
@@ -444,6 +459,7 @@ where
             vault: &vault,
             bots: &self.signup.bots,
             disposable: &self.signup.disposable,
+            mail: self.signup.mail.as_ref(),
             notifier: &notifier,
         };
         let actor_ref = kit.realm().external(subject).unwrap_or_default();
@@ -528,6 +544,7 @@ where
             vault: &vault,
             bots: &self.signup.bots,
             disposable: &self.signup.disposable,
+            mail: self.signup.mail.as_ref(),
             notifier: &notifier,
         };
         let actor_ref = kit.realm().external(subject).unwrap_or_default();

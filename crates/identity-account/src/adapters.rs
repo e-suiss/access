@@ -2,6 +2,7 @@
 //! host's clock, randomness and memory budget.
 
 pub mod bot;
+pub mod dns;
 pub mod hibp;
 pub mod pg;
 pub mod system;

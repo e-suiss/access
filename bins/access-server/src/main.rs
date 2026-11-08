@@ -918,6 +918,88 @@ fn social(
     })
 }
 
+/// Sign-up's outside sources (OP-153 m.1 (b), m.11 (f)), read before the lockdown: the score
+/// provider's secret over the operator's trust anchors, the Privacy Pass issuer keys, and the
+/// host's first nameserver for the MX/A lookup. A configured provider whose secret or trust
+/// anchors cannot be read stops the start (TI-9); none configured is a missing signal.
+fn signup(config: &Config) -> Result<access_identity_ui::app::signup::Signup, String> {
+    use access_identity_account::adapters::bot::{PrivacyPass, ScoreProvider, connector};
+    let c = &config.signup;
+    let mut s =
+        access_identity_ui::app::signup::Signup::without_providers().map_err(|e| e.to_string())?;
+    s.bots.timeout = Some(Duration::from_millis(c.bot_timeout_ms));
+    if let (Some(provider), Some(secret)) = (
+        c.bot_provider
+            .as_deref()
+            .and_then(access_identity_account::domain::bot::BotProvider::parse),
+        &c.bot_secret_file,
+    ) {
+        let (host, path) = c.verify_endpoint().ok_or("signup.bot_verify_url")?;
+        let secret = SecretFile::load(secret).map_err(|e| e.to_string())?;
+        let pem = match config
+            .identity
+            .as_ref()
+            .and_then(|i| i.outbound_ca_file.clone())
+        {
+            Some(f) => std::fs::read(&f).map_err(|e| format!("{}: {e}", f.display()))?,
+            None => SYSTEM_ROOTS
+                .iter()
+                .find_map(|f| std::fs::read(f).ok())
+                .ok_or("signup.bot_provider needs trust anchors (identity.outbound_ca_file)")?,
+        };
+        let tls = access_http::tls::client_config(&pem).map_err(|e| e.to_string())?;
+        s.bots.tls = Some(connector(tls));
+        s.bots.score = Some(ScoreProvider {
+            provider,
+            host,
+            path,
+            site_key: c.bot_site_key.clone().unwrap_or_default(),
+            secret: secret.value().clone(),
+        });
+    }
+    if let (Some(issuer), Some(origin)) = (&c.privacy_pass_issuer, &c.privacy_pass_origin)
+        && !c.privacy_pass_key_files.is_empty()
+    {
+        let issuers = c
+            .privacy_pass_key_files
+            .iter()
+            .map(|f| {
+                let key = std::fs::read(f).map_err(|e| format!("{}: {e}", f.display()))?;
+                Ok(access_crypto::privacy_pass::Issuer {
+                    key_id: access_crypto::privacy_pass::token_key_id(&key),
+                    key,
+                })
+            })
+            .collect::<Result<Vec<_>, String>>()?;
+        s.bots.privacy_pass = Some(PrivacyPass {
+            issuers,
+            challenge: access_crypto::privacy_pass::challenge_digest(issuer, &[], origin),
+        });
+    }
+    if c.mail_domain_check {
+        if let Some(server) = std::fs::read_to_string("/etc/resolv.conf")
+            .ok()
+            .as_deref()
+            .and_then(access_identity_account::adapters::dns::nameserver)
+        {
+            s.mail = Arc::new(access_identity_account::adapters::dns::DnsMailDomains::new(
+                server,
+                Duration::from_millis(c.dns_timeout_ms),
+            ));
+        } else {
+            tracing::warn!(
+                "no nameserver in /etc/resolv.conf; sign-up does not look up MX/A records"
+            );
+        }
+    }
+    tracing::info!(
+        bot_provider = c.bot_provider.as_deref().unwrap_or("none"),
+        privacy_pass_issuers = c.privacy_pass_key_files.len(),
+        "sign-up sources (OP-153 m.1 (b))"
+    );
+    Ok(s)
+}
+
 /// The hosted login (OP-146 m.12): the request's `Host` selects the realm as for discovery;
 /// realm keys come from the HSM on first use.
 fn login(
@@ -957,8 +1039,7 @@ fn login(
         redirect_to: config.login.redirect_to.clone(),
         hooks,
         risk,
-        signup: access_identity_ui::app::signup::Signup::without_providers()
-            .map_err(|e| e.to_string())?,
+        signup: signup(config)?,
     });
     Ok((login_router(discovery, hosted.clone(), assets), hosted))
 }

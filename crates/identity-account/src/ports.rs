@@ -176,3 +176,35 @@ pub trait AccountTx: Send {
     /// Commits.
     fn commit(self) -> impl Future<Output = Result<(), AccountError>> + Send;
 }
+
+/// Whether an address's domain can receive mail (TN-80 step 1, OP-153 m.11 (f)).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Deliverability {
+    /// A usable MX record, or no MX and an A or AAAA record (RFC 5321 §5.1).
+    Deliverable,
+    /// The domain does not exist, publishes a null MX (RFC 7505) or has neither MX nor address.
+    Undeliverable,
+    /// The resolver did not answer in time or in its format.
+    Unknown,
+}
+
+/// The future a [`MailDomains`] lookup returns.
+pub type MailFuture<'a> = std::pin::Pin<Box<dyn Future<Output = Deliverability> + Send + 'a>>;
+
+/// The MX/A lookup of the sign-up's first step (OP-153 m.11 (f)). The answer never depends on
+/// whether an account holds the address.
+pub trait MailDomains: Send + Sync {
+    /// Whether `domain` (lower-case ASCII) receives mail.
+    fn deliverable<'a>(&'a self, domain: &'a str) -> MailFuture<'a>;
+}
+
+/// No resolver configured: every domain is [`Deliverability::Unknown`] and the out-of-band
+/// code stays the only proof of the mailbox.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct NoResolver;
+
+impl MailDomains for NoResolver {
+    fn deliverable<'a>(&'a self, _: &'a str) -> MailFuture<'a> {
+        Box::pin(async { Deliverability::Unknown })
+    }
+}

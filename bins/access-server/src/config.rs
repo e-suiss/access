@@ -73,6 +73,99 @@ pub(crate) struct Config {
     /// Social sign-in (IDP-31, OP-153 m.3 (l)).
     #[serde(default)]
     pub(crate) social: Social,
+    /// Sign-up's outside sources: the bot signal and the MX/A lookup (OP-153 m.1 (b), m.11 (f)).
+    #[serde(default)]
+    pub(crate) signup: Signup,
+}
+
+/// Sign-up's outside sources (OP-153 m.1 (b), m.3 (h), m.11 (f), TN-81). A provider that does
+/// not answer is a missing signal, never a refusal and never an acceptance: the out-of-band code
+/// is always required (TI-9).
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields, default)]
+pub(crate) struct Signup {
+    /// The score provider: `friendly_captcha` or `turnstile`; none by default.
+    pub(crate) bot_provider: Option<String>,
+    /// The site key the provider checks the answer against.
+    pub(crate) bot_site_key: Option<String>,
+    /// The provider secret (Friendly Captcha API key, Turnstile secret), owner-readable only.
+    pub(crate) bot_secret_file: Option<PathBuf>,
+    /// The verify endpoint, `https://host/path`; the provider's own by default.
+    pub(crate) bot_verify_url: Option<String>,
+    /// How long a provider may take, milliseconds.
+    pub(crate) bot_timeout_ms: u64,
+    /// DER token keys of the Privacy Pass issuers whose tokens count as a positive signal.
+    pub(crate) privacy_pass_key_files: Vec<PathBuf>,
+    /// The issuer name of the challenge the hosted page presents (RFC 9577 §2.1).
+    pub(crate) privacy_pass_issuer: Option<String>,
+    /// The origin info of that challenge.
+    pub(crate) privacy_pass_origin: Option<String>,
+    /// Whether the first step looks up the address's MX/A records (OP-153 m.11 (f)).
+    pub(crate) mail_domain_check: bool,
+    /// How long one DNS query may take, milliseconds.
+    pub(crate) dns_timeout_ms: u64,
+}
+
+impl Default for Signup {
+    fn default() -> Self {
+        Self {
+            bot_provider: None,
+            bot_site_key: None,
+            bot_secret_file: None,
+            bot_verify_url: None,
+            bot_timeout_ms: 2_000,
+            privacy_pass_key_files: Vec::new(),
+            privacy_pass_issuer: None,
+            privacy_pass_origin: None,
+            mail_domain_check: true,
+            dns_timeout_ms: 1_500,
+        }
+    }
+}
+
+impl Signup {
+    /// The provider's verify endpoint as host and path.
+    pub(crate) fn verify_endpoint(&self) -> Option<(String, String)> {
+        let provider = access_identity_account::domain::bot::BotProvider::parse(
+            self.bot_provider.as_deref()?,
+        )?;
+        let url = match (&self.bot_verify_url, provider) {
+            (Some(u), _) => u.as_str(),
+            (None, access_identity_account::domain::bot::BotProvider::Turnstile) => {
+                "https://challenges.cloudflare.com/turnstile/v0/siteverify"
+            }
+            (None, access_identity_account::domain::bot::BotProvider::FriendlyCaptcha) => {
+                "https://global.frcapi.com/api/v2/captcha/siteverify"
+            }
+            (None, access_identity_account::domain::bot::BotProvider::PrivacyPass) => return None,
+        };
+        let rest = url.strip_prefix("https://")?;
+        let (host, path) = rest.split_once('/')?;
+        let host_ok = !host.is_empty()
+            && host
+                .bytes()
+                .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'.' || b == b'-');
+        (host_ok && !path.contains(['?', '#', ' '])).then(|| (host.to_owned(), format!("/{path}")))
+    }
+
+    fn valid(&self) -> bool {
+        let score = match self.bot_provider.as_deref() {
+            None => self.bot_site_key.is_none() && self.bot_secret_file.is_none(),
+            Some("friendly_captcha") => {
+                self.bot_site_key.is_some()
+                    && self.bot_secret_file.is_some()
+                    && self.verify_endpoint().is_some()
+            }
+            Some("turnstile") => self.bot_secret_file.is_some() && self.verify_endpoint().is_some(),
+            Some(_) => false,
+        };
+        let privacy_pass = self.privacy_pass_key_files.is_empty()
+            || (self.privacy_pass_issuer.is_some() && self.privacy_pass_origin.is_some());
+        score
+            && privacy_pass
+            && (1..=10_000).contains(&self.bot_timeout_ms)
+            && (1..=10_000).contains(&self.dns_timeout_ms)
+    }
 }
 
 /// Social sign-in (IDP-31, OP-153 m.3 (l)): where the realms' client secrets are mounted and the
@@ -404,6 +497,7 @@ impl Default for Config {
             telemetry: access_telemetry::Settings::default(),
             risk: Risk::default(),
             social: Social::default(),
+            signup: Signup::default(),
         }
     }
 }
@@ -451,6 +545,10 @@ pub(crate) enum ConfigError {
     DeliveryTargets,
     #[error(transparent)]
     Telemetry(#[from] access_telemetry::SettingsError),
+    #[error(
+        "signup: bot_provider is friendly_captcha (with bot_site_key and bot_secret_file) or turnstile (with bot_secret_file), bot_verify_url an https URL, privacy_pass_key_files need privacy_pass_issuer and privacy_pass_origin, timeouts 1..=10000 ms (OP-153 m.1 (b))"
+    )]
+    Signup,
     #[error(transparent)]
     SecretEnvironment(#[from] access_crypto::secret_file::SecretFileError),
     #[error(
@@ -571,6 +669,10 @@ impl Config {
         }
         // OP-67
         self.telemetry.validate()?;
+        // OP-153 m.1 (b), m.11 (f)
+        if !self.signup.valid() {
+            return Err(ConfigError::Signup);
+        }
         // OP-151 m.3 (o)
         if let Some(base) = &self.risk.breach_range_api
             && access_identity_risk::adapters::range_api::RangeApi::new(base, ()).is_err()
@@ -877,6 +979,72 @@ mod tests {
             .unwrap();
         config.validate().unwrap();
         assert!(config.database.and_then(|d| d.migrator).is_some());
+    }
+
+    // OP-153 m.1 (b), m.11 (f), TN-81, TI-9
+    #[test]
+    fn the_signup_sources_are_declared_exactly() {
+        let base = with_tls();
+        assert!(base.signup.mail_domain_check);
+        assert!(base.signup.bot_provider.is_none());
+        let good = Signup {
+            bot_provider: Some("turnstile".to_owned()),
+            bot_secret_file: Some(PathBuf::from("/run/secrets/turnstile")),
+            ..Signup::default()
+        };
+        assert_eq!(
+            good.verify_endpoint(),
+            Some((
+                "challenges.cloudflare.com".to_owned(),
+                "/turnstile/v0/siteverify".to_owned()
+            ))
+        );
+        Config {
+            signup: good,
+            ..with_tls()
+        }
+        .validate()
+        .unwrap();
+        for bad in [
+            Signup {
+                bot_provider: Some("recaptcha".to_owned()),
+                bot_secret_file: Some(PathBuf::from("/s")),
+                ..Signup::default()
+            },
+            Signup {
+                bot_provider: Some("friendly_captcha".to_owned()),
+                bot_secret_file: Some(PathBuf::from("/s")),
+                ..Signup::default()
+            },
+            Signup {
+                bot_provider: Some("turnstile".to_owned()),
+                ..Signup::default()
+            },
+            Signup {
+                bot_provider: Some("turnstile".to_owned()),
+                bot_secret_file: Some(PathBuf::from("/s")),
+                bot_verify_url: Some("http://challenges.cloudflare.com/x".to_owned()),
+                ..Signup::default()
+            },
+            Signup {
+                bot_site_key: Some("k".to_owned()),
+                ..Signup::default()
+            },
+            Signup {
+                privacy_pass_key_files: vec![PathBuf::from("/k.der")],
+                ..Signup::default()
+            },
+            Signup {
+                dns_timeout_ms: 0,
+                ..Signup::default()
+            },
+        ] {
+            let config = Config {
+                signup: bad,
+                ..with_tls()
+            };
+            assert!(matches!(config.validate(), Err(ConfigError::Signup)));
+        }
     }
 
     // OP-149 m.23, TI-9, OP-69
