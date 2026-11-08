@@ -792,6 +792,311 @@ owner = "access"
 protected = false
 
 [[message]]
+key = "ladder-requested"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = true
+guarantee = "BS"
+
+[[message]]
+key = "ladder-approval_recorded"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = true
+guarantee = "BS"
+
+[[message]]
+key = "ladder-gate_satisfied"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = true
+guarantee = "BS"
+
+[[message]]
+key = "ladder-allowed"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = true
+guarantee = "BS"
+
+[[message]]
+key = "ladder-not_allowed"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = true
+guarantee = "BS"
+
+[[message]]
+key = "ladder-decision_unknown"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = true
+guarantee = "BS"
+
+[[message]]
+key = "ladder-started"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = true
+guarantee = "BS"
+
+[[message]]
+key = "ladder-reported_done"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = true
+guarantee = "BS"
+
+[[message]]
+key = "ladder-reported_not_done"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = true
+guarantee = "BS"
+
+[[message]]
+key = "ladder-reported_unknown"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = true
+guarantee = "BS"
+
+[[message]]
+key = "ladder-reported_differs"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = true
+guarantee = "BS"
+
+[[message]]
+key = "state-reached"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = false
+
+[[message]]
+key = "state-not_reached"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = false
+
+[[message]]
+key = "state-unknown"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = false
+
+[[message]]
+key = "state-not_applicable"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = false
+
+[[message]]
+key = "owner-access"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = false
+
+[[message]]
+key = "owner-executor"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = false
+
+[[message]]
+key = "owner-verifier"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = false
+
+[[message]]
+key = "owner-relay"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = false
+
+[[message]]
+key = "owner-pay"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = false
+
+[[message]]
+key = "owner-coordinator"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = false
+
+[[message]]
+key = "owner-requester"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = false
+
+[[message]]
+key = "why-derived"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = true
+
+[[message]]
+key = "why-advisory"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = true
+
+[[message]]
+key = "why-past"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = false
+
+[[message]]
+key = "why-hypothetical"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = false
+
+[[message]]
+key = "why-could_change"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = false
+
+[[message]]
+key = "why-depth-default"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = false
+
+[[message]]
+key = "why-depth-expert"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = false
+
+[[message]]
+key = "why-depth-audit"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = false
+
+[[message]]
+key = "stepup-title"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = false
+
+[[message]]
+key = "stepup-start"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = false
+
+[[message]]
+key = "stepup-cancel"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = false
+
+[[message]]
+key = "outcome-submitted"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = true
+
+[[message]]
+key = "outcome-confirmed"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = true
+
+[[message]]
+key = "outcome-not_allowed"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = true
+
+[[message]]
+key = "outcome-not_confirmed_checking"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = true
+
+[[message]]
+key = "outcome-witness_pending"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = true
+
+[[message]]
+key = "outcome-not_recorded"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = true
+
+[[message]]
+key = "outcome-couldnt_reach"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = true
+
+[[message]]
+key = "outcome-busy_retry"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = true
+
+[[message]]
+key = "outcome-unavailable_time_check"
+surface = "hub"
+class = "status"
+owner = "access"
+protected = true
+
+[[message]]
 key = "mail-otp-subject"
 surface = "mail"
 class = "notice"
