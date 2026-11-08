@@ -317,12 +317,12 @@ impl Ui {
     /// go. Only the identifier and first-factor steps change; later steps keep a passkey as a
     /// second factor.
     #[must_use]
-    pub fn with_first_steps(mut self, password: bool, passkey: bool) -> Self {
+    pub fn with_first_steps(mut self, memorized: bool, passkey: bool) -> Self {
         if !matches!(self.step, Step::Identifier | Step::Authenticate) {
             return self;
         }
         self.nodes.retain(|n| match n.method() {
-            Some(Method::Password) => password,
+            Some(Method::Password) => memorized,
             Some(Method::Passkey) => passkey,
             _ => true,
         });
