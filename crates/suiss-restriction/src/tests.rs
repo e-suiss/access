@@ -80,7 +80,7 @@ fn require(refs: &[&str]) -> Outcome {
     Outcome::Require(refs.iter().map(|s| (*s).to_owned()).collect())
 }
 
-// OP-103 criterion 1, MUST-NEVER-2
+// OP-103, MUST-NEVER-2
 #[test]
 fn permit_and_out_of_profile_policies_are_rejected() {
     let c = |src: &str| Engine::compile(SCHEMA, src, Limits::default()).err();
@@ -132,7 +132,7 @@ fn permit_and_out_of_profile_policies_are_rejected() {
     );
 }
 
-// OP-103 criterion 2, OP-104 m.4
+// OP-103, OP-104
 #[test]
 fn outcomes_and_deny_overrides() {
     let e = engine(MAIN);
@@ -209,7 +209,7 @@ fn outcomes_and_deny_overrides() {
     );
 }
 
-// OP-103 criterion 3: plain Cedar skips an erroring forbid; the wrapper denies
+// OP-103
 #[test]
 fn evaluation_errors_are_deny() {
     let e = engine(ERRORS);
@@ -287,7 +287,7 @@ fn input_outside_schema_or_limits_is_rejected() {
     assert_eq!(unknown_action, Err(InputRejected));
 }
 
-// OP-103 criterion 4, OP-104 m.2, m.3, TI-14
+// OP-103, OP-104, TI-14
 #[test]
 fn static_limits() {
     let c = |src: &str, limits: Limits| Engine::compile(SCHEMA, src, limits).err();
@@ -389,7 +389,7 @@ mod properties {
     }
 }
 
-// OP-140 m.2, CR-10: limits only narrow
+// OP-140 m.2, CR-10
 #[test]
 fn limits_only_narrow() {
     let narrow = Limits::default().narrowed(Narrow::Policies(4)).unwrap();
