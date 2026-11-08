@@ -129,7 +129,7 @@ pub(super) async fn reconcile(
     let bound = contract
         .as_ref()
         .is_some_and(|c| c.contract_digest == report.contract.0);
-    // L2-RPT-2: the chain continues the last head, or starts the projection's
+    // L2-RPT-2
     let previous = last_report(app, &id, &report.exercise.0).await?;
     let continuous = match &previous {
         Some(p) => report::continues(
@@ -142,7 +142,6 @@ pub(super) async fn reconcile(
         ),
         None => report.previous.is_none() && report.first_seq == 0,
     };
-    // the draws the earlier reports already made, so the slice is counted once across them
     let mut used: BTreeMap<Digest, u64> = BTreeMap::new();
     for earlier in reports(app, &id, &report.exercise.0).await? {
         if let Ok((_, s)) = report::verify_bytes(&earlier.body) {

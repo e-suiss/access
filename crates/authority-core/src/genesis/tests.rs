@@ -44,8 +44,7 @@ fn order(root: Root) -> GenesisOrder {
     }
 }
 
-// TN-111, L0-META-7, OP-141 m.35 (d): the template is a valid Genesis whose `idp` Anchor is
-// rooted in the founder and whose state accepts every `idp.*` catalog
+// TN-111, L0-META-7, OP-141 m.35 (d)
 #[test]
 fn a_realm_genesis_roots_idp_and_accepts_its_catalogs() {
     // INV-2, INV-29, E34, MD-14
@@ -67,7 +66,7 @@ fn a_realm_genesis_roots_idp_and_accepts_its_catalogs() {
     assert!(!values(&order(Root::Sole(founder))).contains_key("policy"));
 }
 
-// §12.5.1: a joint founding root is kept as it is, and the time-lock default can be set
+// §12.5.1
 #[test]
 fn a_joint_root_and_a_time_lock_are_carried() {
     // TN-111, OP-141 m.34 (d)
@@ -99,8 +98,8 @@ fn intent(action: IdpAction) -> IntentEnvelope {
     }
 }
 
-// OP-141 m.34 (a), m.35 (g): the tier of each `idp.*` action follows from its schema; the RP
-// ID change is reserved and irreversible, so CT3 (IDP-5, IDI-4)
+// OP-141 m.34 (a), m.35 (g)
+// IDP-5, IDI-4
 #[test]
 fn idp_actions_carry_their_consequence_tiers() {
     // IDP-5, IDI-4, TN-95, TN-117, §13.7.1
@@ -122,8 +121,7 @@ fn idp_actions_carry_their_consequence_tiers() {
     assert_eq!(tier(IdpAction::AccountDelete), Tier::Ct3);
     assert_eq!(tier(IdpAction::RealmBranding), Tier::Ct2);
     assert_eq!(tier(IdpAction::RealmKeyDrop), Tier::Ct1);
-    // TN-117, TN-129, TN-132, CR-38, §12.3.1, OP-151 m.2 M1: narrowing is CT1, widening CT2,
-    // an upstream registration reserved CT3
+    // TN-117, TN-129, TN-132, CR-38, §12.3.1, OP-151 m.2 M1
     for (a, t) in [
         (IdpAction::GroupCreate, Tier::Ct2),
         (IdpAction::GroupUpdate, Tier::Ct2),
@@ -137,8 +135,7 @@ fn idp_actions_carry_their_consequence_tiers() {
         (IdpAction::UpstreamRetire, Tier::Ct1),
         (IdpAction::RealmSigninPolicy, Tier::Ct2),
         (IdpAction::RealmSessionPolicy, Tier::Ct2),
-        // OP-151 m.14 (f): tightening the protection mode is CT1, loosening it and planting a
-        // canary CT2
+        // OP-151 m.14 (f)
         (IdpAction::RealmProtectionMode, Tier::Ct1),
         (IdpAction::RealmProtectionModeLoosen, Tier::Ct2),
         (IdpAction::AccountCanary, Tier::Ct2),
@@ -170,9 +167,7 @@ fn catalog(publisher: Id, namespace: &str) -> access_kernel::schema::Spp {
     }
 }
 
-// OP-141 m.35 (c), OP-149 m.10, SEC8: a Genesis may publish further catalogs of the founder in
-// namespaces of their own; one by another publisher, or in a namespace Access publishes, is
-// refused
+// OP-141 m.35 (c), OP-149 m.10, SEC8
 #[test]
 fn a_genesis_publishes_the_founders_further_catalogs() {
     let d = Digest([7; 32]);
@@ -198,9 +193,7 @@ fn a_genesis_publishes_the_founders_further_catalogs() {
     assert!(realm(&o, &mut Fixed).is_err());
 }
 
-// §10.1.4 rule 3, E18, OP-142, INV-12, G45, PI-13, first-party neutrality (§9.13.2): a domain is
-// born accepting its realm's issuer for actor-binding only; predicate input and subject selection
-// are not implied
+// §10.1.4 rule 3, E18, OP-142, INV-12, G45, PI-13 (§9.13.2)
 #[test]
 fn the_realm_issuer_is_accepted_for_actor_binding_only() {
     let d = Digest([7; 32]);
@@ -229,8 +222,7 @@ fn the_realm_issuer_is_accepted_for_actor_binding_only() {
     );
 }
 
-// MD-5a, TN-1, INV-37: the `idp` Anchor covers only its own realm's resources, so the domain
-// governs that realm alone; a Genesis without a slug is refused
+// MD-5a, TN-1, INV-37
 #[test]
 fn the_idp_anchor_covers_its_realm_only() {
     let o = order(Root::Sole(Id([2; 16])));

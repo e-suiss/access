@@ -187,10 +187,7 @@ async fn metadata(socket: &std::path::Path, d: Digest) -> DomainMetadata {
     access_kernel::verify::key_scope::verify_metadata(&PureBackend, &bytes, &trusted).unwrap()
 }
 
-// OP-150 m.3 (a), (s), (l), §11.20, T24, L2-STL-1, L2-STL-2, L2-STL-3: families take
-// consecutive entries of one list; a revoked family's bit is set in the list the publisher signs
-// under the status-list key, whose iat is the reflected position's recorded_at and whose as_of is
-// that position; publishing again at the same head signs nothing
+// OP-150 m.3 (a), (s), (l), §11.20, T24, L2-STL-1, L2-STL-2, L2-STL-3
 #[tokio::test]
 async fn a_revoked_family_is_set_in_the_signed_list() {
     let db = fresh().await.unwrap();
@@ -277,8 +274,7 @@ async fn a_revoked_family_is_set_in_the_signed_list() {
     assert!(!set(2));
 }
 
-// §11.20, OP-150 m.3 (a): a full list is followed by the next one, and concurrent openings
-// never share an entry
+// §11.20, OP-150 m.3 (a)
 #[tokio::test]
 async fn entries_are_unique_and_lists_roll_over() {
     let db = fresh().await.unwrap();
@@ -315,9 +311,7 @@ async fn entries_are_unique_and_lists_roll_over() {
     );
 }
 
-// §9.9.3 k.6, P50, §9.16, OP-150 m.3 (a): ending a holder revokes its live families once, at
-// the position that ended it, and sets their entries; a family already revoked is not revoked
-// again and another holder's family is untouched
+// §9.9.3 k.6, P50, §9.16, OP-150 m.3 (a)
 #[tokio::test]
 async fn ending_a_holder_invalidates_its_families_once() {
     use access_authority_core::status::adapters::revoke_holder;

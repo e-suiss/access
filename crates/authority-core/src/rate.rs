@@ -165,7 +165,7 @@ mod tests {
         Who::Instance(Id([1; 16]))
     }
 
-    // §13.7.4: commit has a burst of 100 and refills 20 per second
+    // §13.7.4
     #[test]
     fn commit_bursts_then_refills() {
         let mut l = Limiter::default();
@@ -178,7 +178,7 @@ mod tests {
         assert!(l.admit(Class::Commit, Who::Pep(String::from("pep")), 1_050));
     }
 
-    // §13.7.4: check 60 per minute, explain 30, search 10; a new minute starts over
+    // §13.7.4
     #[test]
     fn reads_are_counted_per_minute() {
         let mut l = Limiter::default();
@@ -195,7 +195,7 @@ mod tests {
         }
     }
 
-    // §13.7.4: explain stops at 500 a day across minutes
+    // §13.7.4
     #[test]
     fn explain_has_a_daily_limit() {
         let mut l = Limiter::default();

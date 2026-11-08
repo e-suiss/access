@@ -66,15 +66,14 @@ fn word(class: BlockerClass) -> String {
     }
 }
 
-// P41, §9.6.1, §8.17.8.2: the table has one row per explanation category, in the spec's order
+// P41, §9.6.1, §8.17.8.2
 #[test]
 fn p41_every_explanation_category_has_one_row() {
     let names: Vec<&str> = REASONS.iter().map(|r| r.category).collect();
     assert_eq!(names, CATEGORIES);
 }
 
-// P41, X19: every closed blocker class has exactly one DENY row, and its `reason_user` code is
-// the class's own wire word, so `reason_user` never says more than the requester scope
+// P41, X19
 #[test]
 fn p41_every_blocker_class_maps_to_its_wire_word() {
     for class in CLASSES {
@@ -88,8 +87,7 @@ fn p41_every_blocker_class_maps_to_its_wire_word() {
     }
 }
 
-// P41, §9.6.1: REQUIRE_ACTION rows name their proof kind; `reason_user` codes are closed words,
-// unique, and every audit row adds the StateBasis (`reason_admin` = audit scope)
+// P41, §9.6.1
 #[test]
 fn p41_reason_user_is_a_closed_word_and_reason_admin_the_audit_scope() {
     for (i, r) in REASONS.iter().enumerate() {

@@ -462,9 +462,7 @@ fn kyc(d: Digest, issuer: Id, n: u8) -> Statement {
     statement(d, issuer, ROOT, "kyc", EqValue::Int(i64::from(n)))
 }
 
-// CMP-8, L2-CLM-3, L2-CLM-4, INV-2, PI-22, §9.13 rule 3: an accepted Claim is admitted once and a
-// resubmission answers with its record; an issuer without an Acceptance is held, a Claim that
-// does not verify is refused and not recorded
+// CMP-8, L2-CLM-3, L2-CLM-4, INV-2, PI-22, §9.13 rule 3
 #[tokio::test]
 async fn ingest_admits_holds_or_refuses() {
     let db = fresh().await.unwrap();
@@ -520,8 +518,7 @@ async fn ingest_admits_holds_or_refuses() {
     assert_eq!(core.head(), before);
 }
 
-// G44, P19, §13.7.4: past twice the declared quota a qualifying Claim is held and opens no
-// episode, while a narrowing Claim of the same issuer is still admitted
+// G44, P19, §13.7.4
 #[tokio::test]
 async fn the_issuer_quota_holds_only_qualifying_claims() {
     let db = fresh().await.unwrap();
@@ -609,9 +606,7 @@ fn passkey(d: Digest, issuer: Id, seed: u8) -> ClaimSubmission {
     sub
 }
 
-// P21, §9.13.1 rules 2 and 4, E18, U26: an authenticator binding needs the domain's actor-binding
-// Acceptance and the subject's designation of its issuer; without a key-state the Acceptance
-// alone decides, and a key-state that drops the issuer holds its later Claims
+// P21, §9.13.1 and, E18, U26
 #[tokio::test]
 async fn designation_and_acceptance_must_both_hold() {
     let db = fresh().await.unwrap();
@@ -689,9 +684,7 @@ fn id_token(sub: &str, seed: u8) -> Vec<u8> {
     format!("{input}.{}", b64url_encode(&sig.to_bytes())).into_bytes()
 }
 
-// B7, P-ID-2, E18, INV-12, G45, IDI-9, §9.13 (pinned key set), §10.1.1: an upstream ID token
-// verified under the Acceptance's pinned key set becomes an authentication Claim of the IdP, only
-// for a Party an identity binding holds; another key or an unbound Party is refused
+// B7, P-ID-2, E18, INV-12, G45, IDI-9, §9.13, §10.1.1
 #[tokio::test]
 async fn an_external_idp_enters_through_its_pinned_acceptance() {
     let db = fresh().await.unwrap();
@@ -793,8 +786,7 @@ impl Clock for Fixed {
     }
 }
 
-// L2-CLM-3, §9.13 rule 3, G44, §16.7: the domains as ledger index a held Claim by its record,
-// answer a resubmission with it, and note an issuer's used-up quota once per window
+// L2-CLM-3, §9.13 rule 3, G44, §16.7
 #[tokio::test]
 async fn the_ledger_indexes_held_claims_and_quota_notices() {
     let db = fresh().await.unwrap();
@@ -924,9 +916,7 @@ fn status(d: Digest, party: Id, value: &str, issued_at: u64, supersedes: Option<
     }
 }
 
-// TN-49, TN-50, SEC12, X36, E5, CI-2, TI-RT7, G36: a narrowing account status denies the Party's
-// Instances from its ingest on, as a restriction; a newer status in the issuer line lifts it,
-// and one without an order keeps it (the disqualifying side wins)
+// TN-49, TN-50, SEC12, X36, E5, CI-2, TI-RT7, G36
 // PI-22
 #[tokio::test]
 async fn account_status_overlays_the_party_until_superseded() {
@@ -947,7 +937,7 @@ async fn account_status_overlays_the_party_until_superseded() {
         add_key(&mut core, d, (ALICE, ALICE_KEY), (51, 21), NOW).await,
         (Outcome::Deny, Some("account-status".to_owned()))
     );
-    // OP-149 m.7, m.19 (f): the producer of party.disabled{suspended}
+    // OP-149 m.7, m.19 (f)
     let events: Vec<_> =
         access_store::authority::read_outbox(&db.app, &DomainId::from_bytes(d.0), (0, 0), 100)
             .await
@@ -985,8 +975,7 @@ async fn account_status_overlays_the_party_until_superseded() {
     );
 }
 
-// §7.9.2.4, §10.1.5, E5: termination denies every Instance of the Party and its actor-binding
-// fails closed; an identity break denies the Instances established before it
+// §7.9.2.4, §10.1.5, E5
 #[tokio::test]
 async fn termination_and_identity_break_restrict_instances() {
     // EI-7
@@ -1020,8 +1009,7 @@ async fn termination_and_identity_break_restrict_instances() {
     );
 }
 
-// SEC12, §7.9.2.3, §7.9.2.4: Instances set up after a compromise are denied; after the Party
-// recovers, an Instance set up later is not, and the ones before stay denied
+// SEC12, §7.9.2.3, §7.9.2.4
 #[tokio::test]
 async fn party_recovery_frees_only_instances_created_after_it() {
     let db = fresh().await.unwrap();
@@ -1066,8 +1054,7 @@ async fn party_recovery_frees_only_instances_created_after_it() {
     assert_eq!(act(&mut core, d, 50, 44, 31_000).await.0, Outcome::Deny);
 }
 
-// §9.12.3, §9.12.4, E30, P28, INV-21, PI-9: a PEP's authority-state acknowledgement is admitted
-// and recorded as a detection signal only: it derives no event and changes no decision
+// §9.12.3, §9.12.4, E30, P28, INV-21, PI-9
 #[tokio::test]
 async fn an_authority_state_ack_is_recorded_and_widens_nothing() {
     use access_kernel::claim::body::{AckEvent, AckScope, AuthorityStateAck};
@@ -1235,9 +1222,7 @@ async fn dropped_realm_key(db: &TestDb, kid: [u8; 32], cutoff_at: u64) {
     t.commit().await.unwrap();
 }
 
-// §13.7.7, SEC9, OP-150 m.11 (c), (j): once a realm key is dropped, an ID token it signed and
-// dated after the drop's issuer cutoff is held at ingest, not admitted; one dated before the
-// cutoff is still admitted, and a key nobody dropped is untouched
+// §13.7.7, SEC9, OP-150 m.11 (c), (j)
 #[tokio::test]
 async fn a_dropped_realm_key_signs_nothing_admitted_after_its_cutoff() {
     let db = fresh().await.unwrap();

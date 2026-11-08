@@ -68,8 +68,7 @@ where
             .await
             .map_err(|_| CoreError::Unavailable("time"))?;
         let mut result = led.core.ingest(sub, now).await;
-        // §9.9.3 k.6, P50: the holders an admitted compromise declaration ended lose their
-        // live families at its record, under the same leader
+        // §9.9.3 k.6, P50
         if let Ok(done) = &result
             && let (ClaimVerdict::Admitted { position, .. }, false) =
                 (&done.verdict, done.ended.is_empty())
@@ -89,8 +88,7 @@ where
                 }
             }
         }
-        // §9.12.1, §7.9.4.1: an admitted Verifier Profile is kept by the verifier it names; an
-        // admitted Offline Exercise Report is bound to its projection and reconciled
+        // §9.12.1, §7.9.4.1
         if let Ok(done) = &result
             && let ClaimVerdict::Admitted {
                 position,
@@ -192,7 +190,7 @@ where
         else {
             return Ok(());
         };
-        // L2-CLM-3: kept by record, never dropped
+        // L2-CLM-3
         let row = QuarantineRow {
             pos: position,
             claim: claim.0,

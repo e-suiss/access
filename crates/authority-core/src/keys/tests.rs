@@ -22,8 +22,7 @@ fn row(since: u64, ended: Option<u64>) -> KeyRow {
     }
 }
 
-// OP-149 m.5: a key is unknown before its Instance holds it, active while it does and ended
-// from the record that ends it; the successor shows only once ended
+// OP-149 m.5
 #[test]
 fn a_key_is_read_at_a_ledger_position() {
     let r = row(5, Some(9));
@@ -37,8 +36,7 @@ fn a_key_is_read_at_a_ledger_position() {
     assert_eq!(ended.successor, Some(Id([4; 16])));
 }
 
-// OP-149 m.5, SEC12, OP-141 m.31: a key set up at or after a declared compromise's occurredAt
-// is compromised from the declaration on; an older key is not
+// OP-149 m.5, SEC12, OP-141 m.31
 #[test]
 fn a_compromise_covers_keys_set_up_in_its_window() {
     let c = Compromise {
@@ -62,8 +60,7 @@ fn a_compromise_covers_keys_set_up_in_its_window() {
     );
 }
 
-// OP-149 m.5, L0-META-6: an Instance state puts its key with its successor and end; a removed
-// thumbprint entry ends the key it named; other effects change nothing
+// OP-149 m.5, L0-META-6
 #[test]
 fn state_effects_become_key_changes() {
     use access_kernel::meta::{Ended, EndedHow};
@@ -112,7 +109,7 @@ fn state_effects_become_key_changes() {
     assert_eq!(change(meta::kind::GRANT, &[1; 16], None, 7, 7_000), None);
 }
 
-// OP-149 m.5: `public_key` is an RFC 9052 COSE_Key and `alg` its COSE algorithm
+// OP-149 m.5
 #[test]
 fn keys_are_cose_keys() {
     let ed = dcbor::encode(&cose_key(&PublicKey::Ed25519([9; 32])), Limits::CEILING).unwrap();
@@ -127,7 +124,7 @@ fn keys_are_cose_keys() {
     assert_eq!(alg(&PublicKey::P256(point)), -9);
 }
 
-// OP-149 m.5: the payload is canonical CBOR in the order asked
+// OP-149 m.5
 #[test]
 fn the_payload_is_deterministic() {
     let lookup = Lookup {
@@ -163,9 +160,7 @@ fn committed(id: &str) -> Vec<u8> {
         .collect()
 }
 
-// OP-149 m.5, OP-149 m.8, CR-24: the payload is byte for byte the committed examples of
-// `conformance/cddl/examples/key-lookup.json`, which meet `key-lookup.cddl`; every key names its
-// Party's actor kind
+// OP-149 m.5, OP-149 m.8, CR-24
 #[test]
 fn the_payload_is_the_committed_example() {
     let ended = Lookup {

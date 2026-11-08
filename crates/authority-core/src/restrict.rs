@@ -165,7 +165,7 @@ pub fn results(
                 undisclosed,
             })
         };
-        // OP-104 m.2: a policy that does not compile or errors denies
+        // OP-104 m.2
         let outcome = match cache.engine(&version, &state.content) {
             None => deny(false),
             Some(engine) => match engine.evaluate(&request).map_err(|_| Rejection::Input)? {

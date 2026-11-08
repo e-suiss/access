@@ -209,7 +209,7 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
 mod tests {
     use super::*;
 
-    // OP-39, OP-44: a caller-chosen string never fails the audit write and never forges a column
+    // OP-39, OP-44
     #[test]
     fn audit_text_fits_the_columns() {
         assert_eq!(audit_text("pep.example"), "pep.example");

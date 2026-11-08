@@ -76,8 +76,7 @@ fn root_of(log: &[Vec<u8>], size: usize) -> Hash {
     f.root()
 }
 
-// AP-14, INV-27, PI-6: a package re-folds to the log's root from its own content, for a range
-// inside the log and for one from Genesis, and its bytes round-trip deterministically
+// AP-14, INV-27, PI-6
 #[test]
 fn ap_14_inv_27_a_package_refolds_its_checkpoint_root() {
     let l = log(8);
@@ -95,8 +94,7 @@ fn ap_14_inv_27_a_package_refolds_its_checkpoint_root() {
     }
 }
 
-// AP-14, §9.16: a redacted package opens nothing but the version vectors and declares
-// digest-level replay; a full one opens every field
+// AP-14, §9.16
 #[test]
 fn ap_14_redacted_records_are_digests_and_declared() {
     let l = log(6);
@@ -120,7 +118,7 @@ fn ap_14_redacted_records_are_digests_and_declared() {
     assert_eq!(verify(&full).unwrap().root, verify(&redacted).unwrap().root);
 }
 
-// INV-27, G32: any change to a package is caught by re-folding it
+// INV-27, G32
 #[test]
 fn inv_27_a_changed_package_does_not_verify() {
     let l = log(6);
@@ -149,8 +147,7 @@ fn inv_27_a_changed_package_does_not_verify() {
     assert_eq!(verify(&domain), Err(ExportError::Chain));
 }
 
-// AP-14: a range outside the log, reversed or over the ceiling is refused; trailing bytes are not
-// a package
+// AP-14
 #[test]
 fn ap_14_ranges_and_bytes_are_checked() {
     let l = log(4);

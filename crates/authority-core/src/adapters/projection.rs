@@ -162,7 +162,7 @@ fn precheck(order: &TokenOrder, tier: Option<Tier>, now: u64) -> Option<&'static
             (INTENT_HORIZON_MS, Tier::Ct2)
         }
     };
-    // §9.9.3 rule 4: CT2+ only as exact intent, CT3 never
+    // §9.9.3 rule 4
     match tier {
         None => return Some("projection-authority"),
         Some(t) if t > ceiling => return Some("projection-tier"),
@@ -346,7 +346,7 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
         let Ok(Json::Object(mut claims)) = access_token_claims(&projection, &refs) else {
             return Ok(Err("projection-authority"));
         };
-        // P50: the family a revocation ends, read back by introspection
+        // P50
         claims.push((
             String::from(FAMILY_CLAIM),
             Json::Str(b64url_encode(&family)),
@@ -362,7 +362,7 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
                 Json::Array(roles.into_iter().map(Json::Str).collect()),
             ));
         }
-        // OP-150 m.3 (a), §11.20: the list entry a revocation sets, for verifiers
+        // OP-150 m.3 (a), §11.20
         if let Some(entry) = status {
             let Some(claim) = status_claim(entry) else {
                 return Ok(Err("status-entry"));

@@ -506,8 +506,7 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
             Err(e) => return Err(e.into()),
         };
         let reader = PgReader::new(s.app.clone(), id);
-        // SAI-46: started without holding the lease's connection; the first signed artefact
-        // opens the keyring again if this has not finished
+        // SAI-46
         if let Some(path) = s.signer.clone() {
             tokio::spawn(async move {
                 open_keyring(&path, domain).await;
@@ -903,7 +902,7 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
         let Some(led) = guard.as_mut() else {
             return Err(CoreError::Unavailable("leader"));
         };
-        // OP-150 m.10 (a): the family and its entry exist before the PAP that names them
+        // OP-150 m.10 (a)
         let family = self.pap_family(led, inc, opening).await?;
         let with_status: Option<Box<Incoming>> = family.as_ref().map(|f| {
             Box::new(Incoming {
@@ -912,7 +911,7 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
             })
         });
         let inc = with_status.as_deref().unwrap_or(inc);
-        // OP-141 m.22 (f): a reader ahead of this head gets no answer
+        // OP-141 m.22 (f)
         if let Some(t) = &inc.request.consistency {
             let seen = led
                 .tokens
@@ -955,8 +954,7 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
                     .map_err(|_| CoreError::Unavailable("token-key"))?,
             );
         }
-        // §9.9.3 k.6, P50: the ended holders' live families are revoked at the record that
-        // ended them, under the same leader so no family of theirs opens in between
+        // §9.9.3 k.6, P50
         if let Ok(r) = &result
             && let Some(pos) = r.record
             && !r.replayed
@@ -1119,7 +1117,7 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
     ) -> Result<(Vec<Hit>, Option<String>), CoreError> {
         let result = self.search_led(inc, query, page).await;
         let (hits, next, audited) = self.audited(inc, "search", result).await?;
-        // U53, OP-44: every report served to an auditor is one row, written before it leaves
+        // U53, OP-44
         if let Some(instance) = audited {
             self.operational(
                 inc,
@@ -1160,7 +1158,7 @@ impl<K: Keys, B: Binding + Clone, S: Salts + Clone, C: Clock + Clone> Domains<K,
                     .ok_or(CoreError::Protocol("page"))
             })
             .transpose()?;
-        // §9.7.1: past the deadline there is no answer, never a partial list
+        // §9.7.1
         let found = tokio::time::timeout(SEARCH_DEADLINE, led.core.search(inc, query, after, now))
             .await
             .map_err(|_| CoreError::Unavailable("deadline"))??;

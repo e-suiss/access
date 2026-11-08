@@ -347,7 +347,7 @@ impl<L: DomainLog, R: Reader, B: Binding, S: Salts> Authority<L, R, B, S> {
         let on = |r: &ResourceRef| resource_le(&ResourceSelector::Exact(r.clone()), &set.resource);
         match query {
             Query::Subject { action, resource } => {
-                // OP-141 m.22 (j), m.41 (c): only Grants the reader views
+                // OP-141 m.22 (j), m.41 (c)
                 if !crate::domain::views(view, &ExerciseBasis::Public(*g), &actor.party) {
                     return None;
                 }

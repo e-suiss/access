@@ -21,8 +21,7 @@ fn state(kind: ActorKind, since: u64, ended: Option<u64>) -> PartyState {
     }
 }
 
-// OP-149 m.28 (c): a Party is unknown before the record that admitted it, present from it with
-// the kind its registration recorded, and ended from the record that ended it
+// OP-149 m.28 (c)
 #[test]
 fn a_party_is_read_at_a_ledger_position() {
     let s = state(ActorKind::System, 5, Some(9));
@@ -63,8 +62,7 @@ fn committed(id: &str) -> Vec<u8> {
         .collect()
 }
 
-// OP-149 m.28 (c), m.8: the payload is byte for byte the committed examples of
-// `conformance/cddl/examples/party-lookup.json`, which meet `party-lookup.cddl`
+// OP-149 m.28 (c), m.8
 #[test]
 fn the_payload_is_the_committed_example() {
     let human = Lookup {

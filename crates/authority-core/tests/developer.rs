@@ -205,7 +205,7 @@ fn genesis() -> BTreeMap<String, Opened> {
             "acceptances".to_owned(),
             opened(Value::Array(vec![shop_schemas()])),
         ),
-        // OP-141 m.34 (d): the scenarios below run without the CT3 time-lock
+        // OP-141 m.34 (d)
         (
             "policy".to_owned(),
             opened(Value::Map(vec![(
@@ -512,8 +512,7 @@ async fn status_in(db: &TestDb, d: Digest, p: &Publication) -> publishing::Statu
         .unwrap()
 }
 
-// X21, E10, E11: a published version waits in each domain that accepts its publisher until that
-// domain's own `acceptance.amend` pins its exact fingerprint; the publisher has no accept path
+// X21, E10, E11
 #[tokio::test]
 async fn a_publication_reaches_a_domain_only_by_its_own_acceptance() {
     let db = fresh().await.unwrap();
@@ -557,7 +556,7 @@ async fn a_publication_reaches_a_domain_only_by_its_own_acceptance() {
         acceptance,
         content: schemas_with(spp),
     };
-    // X21: Alice, without the domain's authority, cannot accept for it
+    // X21
     let by_alice = send(
         &mut core,
         meta_request(d, 20, meta_anchor(d), amend(&p2.spp)),
@@ -566,7 +565,7 @@ async fn a_publication_reaches_a_domain_only_by_its_own_acceptance() {
     .await;
     assert!(by_alice.is_err() || by_alice.unwrap().decision.outcome != Outcome::Allow);
     assert_eq!(status_in(&db, d, &p2).await.pending_acceptance, [d]);
-    // E10: accepting another package is not accepting this fingerprint
+    // E10
     let other = publishing::publish(ROOT, v2_draft(3), Some(&v1()), NOW)
         .unwrap()
         .publication;
@@ -580,7 +579,6 @@ async fn a_publication_reaches_a_domain_only_by_its_own_acceptance() {
         .unwrap(),
     );
     assert_eq!(status_in(&db, d, &p2).await.pending_acceptance, [d]);
-    // the domain's root pins the exact fingerprint
     allowed(
         &send(
             &mut core,
@@ -659,9 +657,7 @@ async fn clerk_grant(core: &mut Core, d: Digest, nonce: u8) -> (Id, ExerciseBasi
     (grant, holding)
 }
 
-// C28, X20, INV-10, TN-121: a role version pair is previewed per ability with its holders; a
-// widening move carries the expansion requirements, a narrowing one none; the preview writes
-// nothing and the move stays one `grant.amend` per Grant
+// C28, X20, INV-10, TN-121
 #[tokio::test]
 async fn a_role_move_is_previewed_and_never_applied() {
     let db = fresh().await.unwrap();
@@ -694,7 +690,7 @@ async fn a_role_move_is_previewed_and_never_applied() {
         (refund[0].holders_gaining, refund[0].holders_losing),
         (1, 0)
     );
-    // INV-10: the widening move needs the expansion requirements
+    // INV-10
     let expansion = wider.expansion.unwrap();
     assert_eq!(expansion.joint_root_quorum, meta::CT3_QUORUM);
     assert_eq!(wider.pin.1, 2);
@@ -704,7 +700,7 @@ async fn a_role_move_is_previewed_and_never_applied() {
     assert!(narrower.expansion.is_none());
     assert!(narrower.abilities.iter().all(|a| a.holders_gaining == 0));
     assert!(narrower.orphans.empty_scopes.is_empty());
-    // TN-121: no Grant pins v2, so a move from it has nothing to move
+    // TN-121
     let none = core.change_role("clerk", 2, 3, NOW).await.unwrap().unwrap();
     assert!(none.moves.is_empty());
     assert!(
@@ -715,7 +711,7 @@ async fn a_role_move_is_previewed_and_never_applied() {
     );
     assert_eq!(core.head(), head, "a preview writes nothing");
 
-    // §8.17.9.2: the admin view lists covered meta-actions one by one, reserved apart
+    // §8.17.9.2
     let admin = core
         .admin_grant(&meta::object_id(&d, kind::GRANT, 0), NOW)
         .await
@@ -741,8 +737,7 @@ fn search_request(d: Digest, nonce: u8, kind: &str) -> Request {
     }
 }
 
-// §8.17.10, X21: the developer reports are search kinds only the domain's auditors get; each
-// is one page and records nothing
+// §8.17.10, X21
 #[tokio::test]
 async fn developer_reports_are_for_the_domains_auditors_only() {
     let db = fresh().await.unwrap();
@@ -782,7 +777,7 @@ async fn developer_reports_are_for_the_domains_auditors_only() {
     assert_eq!(core.head(), head);
 }
 
-// §9.7, X21: Check is advisory and records nothing; only `check` is accepted
+// §9.7, X21
 #[tokio::test]
 async fn a_lab_check_records_nothing() {
     let db = fresh().await.unwrap();
@@ -810,7 +805,7 @@ async fn a_lab_check_records_nothing() {
         .await,
         Err(CoreError::Protocol("lab-mode"))
     ));
-    // §8.17.10.4 Explain: the holder views her own basis and sees its path
+    // §8.17.10.4
     let explained = core
         .lab_explain(
             &incoming(shop_request(d, 13, Mode::Check, holding), ALICE_KEY),
@@ -826,7 +821,7 @@ async fn a_lab_check_records_nothing() {
     assert_eq!(core.head(), head);
 }
 
-// INV-27: a recorded decision replays to the same decision for an auditor; others are refused
+// INV-27
 #[tokio::test]
 async fn a_recorded_decision_replays_to_a_match() {
     let db = fresh().await.unwrap();
@@ -866,7 +861,7 @@ async fn a_recorded_decision_replays_to_a_match() {
     assert_eq!(core.head(), head);
 }
 
-// §18.3, §5.8: a candidate policy is simulated over a sample and counted; nothing is set
+// §18.3, §5.8
 #[tokio::test]
 async fn a_policy_candidate_is_simulated_and_previewed() {
     let db = fresh().await.unwrap();
@@ -903,7 +898,7 @@ async fn a_policy_candidate_is_simulated_and_previewed() {
             .await,
         Err(CoreError::Protocol("lab-scope"))
     ));
-    // §5.8: without the control-plane solver the relation is unknown, never equivalent
+    // §5.8
     let preview = core
         .change_policy(None, &candidate, &access_authority_core::ports::NoAnalysis)
         .await
@@ -916,8 +911,7 @@ async fn a_policy_candidate_is_simulated_and_previewed() {
     assert_eq!(core.head(), head);
 }
 
-// §5.4, SEC15, RR-13: revocation impact names the subtree and counts orphan index rows; the
-// compromise query lists what an Instance did inside the window
+// §5.4, SEC15, RR-13
 #[tokio::test]
 async fn revocation_and_compromise_impact_are_derived() {
     let db = fresh().await.unwrap();
@@ -953,7 +947,7 @@ async fn revocation_and_compromise_impact_are_derived() {
         .await
         .unwrap(),
     );
-    // §5.4: the index has not seen the revocation yet; its live row is an orphan tuple
+    // §5.4
     let after = core
         .revocation_impact(Revoked::Instance(alice_instance(d)), NOW)
         .await
@@ -1009,8 +1003,7 @@ impl access_authority_core::ports::PolicyAnalysis for Narrows {
     }
 }
 
-// OP-105, §5.8: the policy change-impact report asks the analysis the core was given, not a
-// fixed "unknown"
+// OP-105, §5.8
 #[tokio::test]
 async fn op_105_the_change_impact_report_asks_the_wired_analysis() {
     let db = fresh().await.unwrap();

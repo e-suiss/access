@@ -41,7 +41,7 @@ fn last(seq: u64, applied_pos: u64, iat_ms: u64) -> Publication {
     }
 }
 
-// OP-150 m.3 (a): a list is addressed under the API base by number and domain
+// OP-150 m.3 (a)
 #[test]
 fn a_list_uri_names_its_number_and_domain() {
     let uri = list_uri("https://api.example/", &Digest([0; 32]), 3);
@@ -54,8 +54,7 @@ fn a_list_uri_names_its_number_and_domain() {
     );
 }
 
-// L2-STL-3, OP-150 m.3 (s): one bit per entry, least significant first; an entry outside the
-// list is refused
+// L2-STL-3, OP-150 m.3 (s)
 #[test]
 fn bits_set_exactly_the_revoked_entries() {
     let b = bits(16, &[0, 9, 15]).unwrap();
@@ -64,8 +63,7 @@ fn bits_set_exactly_the_revoked_entries() {
     assert_eq!(bits(0, &[]).unwrap(), vec![0]);
 }
 
-// T24, OP-150 m.3 (l), m.6 (d), L2-STL-2: the token's iat is the reflected position's
-// recorded_at in seconds and as_of is that position; its compressed list reads back the bits
+// T24, OP-150 m.3 (l), m.6 (d), L2-STL-2
 #[test]
 fn a_token_reflects_its_position_and_bits() {
     let t = token(&list(), &snapshot(42, 1_700_000_123_999, &[3, 10])).unwrap();
@@ -84,8 +82,7 @@ fn a_token_reflects_its_position_and_bits() {
     assert!(!lookup(&t, &raw, &r(4)).unwrap());
 }
 
-// G43, T24: a list never goes back to an earlier position, and changed entries are never
-// published at a position already published
+// G43, T24
 #[test]
 fn a_publication_never_goes_back() {
     let l = last(4, 20, 1_000);
@@ -107,8 +104,7 @@ fn a_publication_never_goes_back() {
     );
 }
 
-// T24, §17.4.2: a revocation is published at once; an unchanged list only when its iat is a
-// heartbeat old
+// T24, §17.4.2
 #[test]
 fn a_revocation_is_published_first_and_a_quiet_list_on_heartbeat() {
     let l = last(4, 20, 1_000_000);
@@ -142,9 +138,7 @@ fn a_revocation_is_published_first_and_a_quiet_list_on_heartbeat() {
     );
 }
 
-// E13, T16, §9.16 heartbeat, T24: a quiet domain's unchanged list is signed again once its last
-// publication is a heartbeat old, issued at the trusted time read before the unmoved head, so
-// a verifier holding it for its ttl never finds it stale while nothing changed
+// E13, T16, §9.16, T24
 #[test]
 fn a_quiet_list_is_signed_again_on_its_heartbeat() {
     let l = last(4, 20, 1_000_000);
@@ -200,8 +194,7 @@ impl ListSigner for Refusing {
     }
 }
 
-// T24, §17.4.2, PI-9: without a head to read, or without a signer, no list is published; the
-// last one stays and ages, so a verifier's Δ decides
+// T24, §17.4.2, PI-9
 #[tokio::test]
 async fn no_snapshot_or_no_signer_publishes_nothing() {
     let store = Store {

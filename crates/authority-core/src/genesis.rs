@@ -221,7 +221,7 @@ pub fn realm(
     if order.slug.is_empty() {
         return Err(CoreError::Protocol("genesis-slug"));
     }
-    // L0-META-5, L2-CLM-3: an Acceptance the Kernel cannot read as a gate opens no domain
+    // L0-META-5, L2-CLM-3
     if order
         .acceptances
         .iter()
