@@ -363,7 +363,8 @@ export const en = {
   analyticsPasskey: "Accounts with a passkey",
   analyticsMfa: "Second step set up",
   analyticsMethods: "Methods used",
-  analyticsLegacy: "Imported passwords still waiting to move to Argon2id at their next sign-in: {count}",
+  analyticsLegacy:
+    "Imported passwords still waiting to move to Argon2id at their next sign-in: {count}",
   analyticsSurge: "Failed sign-ins surged on {day}: {count} (at least 3 times the day before).",
   schemasIntro:
     "Publish typed action definitions. Each domain decides on its own whether to accept a version; you can't accept for it.",
