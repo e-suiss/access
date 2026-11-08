@@ -1337,3 +1337,115 @@ async fn an_ownership_handover_waits_for_its_recipient_and_delay_and_any_party_c
     );
     t.commit().await.unwrap();
 }
+
+// OP-142, §8.17.12, C11, OP-153 m.3 (gg), Ek B 4082: "members can delegate to apps in this list
+// only" is the role Grant's downstream holder class; a member's onward delegation to an app on
+// the list is allowed, to any other holder refused by the class, not by the lookup
+#[tokio::test]
+async fn members_delegate_only_to_the_apps_their_role_lists() {
+    use access_kernel::model::{
+        CanonicalAuthority, ConstraintSet, DelegationTerms, SubjectSelector,
+    };
+    const APP: Id = Id([0x5a; 16]);
+    const OTHER: Id = Id([0x5b; 16]);
+    let (w, at, d, founder) = ready("org-apps").await;
+    let _org = create_org(&w, at, d, founder).await;
+    onboard(&w.plane, d, ALICE, ALICE_KEY).await;
+    let idp = meta::object_id(&d, kind::ANCHOR, IDP_ANCHOR);
+    let role = |holder: SubjectSelector, depth: u64, class: Option<SubjectSelector>, basis| {
+        access_kernel::meta::GrantContent {
+            basis,
+            holder,
+            authority: CanonicalAuthority {
+                authority: member_set("org-apps"),
+                constraints: ConstraintSet {
+                    validity: Window {
+                        from: 0,
+                        until: u64::MAX / 2,
+                    },
+                    conditions: std::collections::BTreeSet::new(),
+                    budget: std::collections::BTreeSet::new(),
+                },
+                delegation: DelegationTerms {
+                    depth,
+                    downstream_holder_class: class,
+                },
+                requirements: std::collections::BTreeSet::new(),
+            },
+            agency: std::collections::BTreeSet::from([Capacity::Own]),
+            named: None,
+        }
+    };
+    let member = role(
+        SubjectSelector::Party(ALICE),
+        1,
+        Some(SubjectSelector::Party(APP)),
+        access_kernel::meta::GrantBasis::Anchor(idp),
+    );
+    let Applied::Written { position, .. } = w
+        .admin()
+        .meta(
+            at,
+            meta_write(
+                d,
+                0xa0,
+                Payload::GrantIssue(member),
+                ExerciseBasis::Anchor(idp),
+                ROOT_KEY,
+            ),
+        )
+        .await
+        .unwrap()
+    else {
+        panic!("member role");
+    };
+    let held = access_kernel::meta::HoldingRef {
+        grant: meta::object_id(&meta::exercise_id(&d, &[0xa0; 16]).unwrap(), kind::GRANT, 0),
+        holder: ALICE,
+        since: position,
+    };
+    let onward = |to: Id| {
+        role(
+            SubjectSelector::Party(to),
+            0,
+            Some(SubjectSelector::Party(APP)),
+            access_kernel::meta::GrantBasis::Holding(held),
+        )
+    };
+    let refused = w
+        .admin()
+        .meta(
+            at,
+            meta_write(
+                d,
+                0xa1,
+                Payload::GrantIssue(onward(OTHER)),
+                ExerciseBasis::Holding(held),
+                ALICE_KEY,
+            ),
+        )
+        .await
+        .unwrap();
+    let Applied::NotAllowed { decision, .. } = refused else {
+        panic!("{refused:?}");
+    };
+    assert_eq!(
+        decision.blockers[0].subcode.as_deref(),
+        Some("meta-not-within")
+    );
+    written(
+        &w.admin()
+            .meta(
+                at,
+                meta_write(
+                    d,
+                    0xa2,
+                    Payload::GrantIssue(onward(APP)),
+                    ExerciseBasis::Holding(held),
+                    ALICE_KEY,
+                ),
+            )
+            .await
+            .unwrap(),
+    );
+}
