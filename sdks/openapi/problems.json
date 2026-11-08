@@ -669,6 +669,41 @@
       "description": "The account is in the grace period after a recovery; deleting it, a new client secret, an identity provider link and the other restricted changes wait until it ends (TN-56, OP-153 m.3 (e))."
     },
     {
+      "code": "invalid-domain-claim",
+      "type": "urn:suiss:access:problem:invalid-domain-claim",
+      "status": 400,
+      "title": "Bad Request",
+      "description": "A domain that is not a lower-case DNS name, or a verification method other than dns_txt, https or idp (TN-90)."
+    },
+    {
+      "code": "consumer-domain",
+      "type": "urn:suiss:access:problem:consumer-domain",
+      "status": 409,
+      "title": "Conflict",
+      "description": "Autojoin is refused on a consumer, free mail, ISP or university domain (TN-90)."
+    },
+    {
+      "code": "domain-contested",
+      "type": "urn:suiss:access:problem:domain-contested",
+      "status": 409,
+      "title": "Conflict",
+      "description": "Another organization claims the domain too, so none of them gets autojoin (TN-90)."
+    },
+    {
+      "code": "domain-not-verified",
+      "type": "urn:suiss:access:problem:domain-not-verified",
+      "status": 409,
+      "title": "Conflict",
+      "description": "The organization's claim of the domain is not verified now (TN-90)."
+    },
+    {
+      "code": "invalid-connection-draft",
+      "type": "urn:suiss:access:problem:invalid-connection-draft",
+      "status": 400,
+      "title": "Bad Request",
+      "description": "A connection draft whose issuer is not an https URL or whose client id is empty or too long (TN-120)."
+    },
+    {
       "code": "invalid-audit-format",
       "type": "urn:suiss:access:problem:invalid-audit-format",
       "status": 400,
