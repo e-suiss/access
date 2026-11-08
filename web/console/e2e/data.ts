@@ -53,6 +53,18 @@ export function seed(bff: ConsoleMock): void {
     ],
   });
   bff.admin.set("realms/acme/upstream-idps", { items: [{ name: "corp", status: "active" }] });
+  bff.admin.set("realms/acme/social-providers", {
+    items: [
+      {
+        preset: "google",
+        client_id: "goog-1",
+        client_secret_ref: "secret://social/google",
+        shared_development_client: false,
+        status: "active",
+        warnings: [{ code: "apple-sign-in-recommended" }],
+      },
+    ],
+  });
   bff.admin.set("realms/acme/hooks", {
     items: [
       {

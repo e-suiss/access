@@ -361,6 +361,18 @@ test("sign-in settings states delays, missing sources and the first signing time
   await expect(page.getByTestId("related-origins")).toContainText("at most 5 distinct labels");
 });
 
+// IDP-31 (5), Ek B 3655: a native app offering another social sign-in is told to add Apple
+test("sign-in settings recommend Sign in with Apple next to another social provider", async ({
+  page,
+  bff,
+}) => {
+  await open(page, bff, "/console/admin/sign-in");
+  await expect(page.getByTestId("social-providers")).toContainText("google");
+  await expect(page.getByTestId("social-warning")).toHaveText(
+    "Your iOS app offers another social sign-in without Sign in with Apple. The App Store asks for Sign in with Apple next to it: enable Apple too.",
+  );
+});
+
 // IDI-4, TN-17, Ek B 3382: the RP ID change needs the passkey count and is marked irreversible
 test("an RP ID change needs the passkey count", async ({ page, bff }) => {
   await open(page, bff, "/console/admin/sign-in");

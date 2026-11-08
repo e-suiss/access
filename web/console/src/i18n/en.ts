@@ -325,6 +325,15 @@ export const en = {
     "Each related origin must be on a registrable domain from the public suffix list, and at most 5 distinct labels are allowed.",
   settingsClients: "Apps",
   settingsUpstreams: "Upstream providers",
+  settingsSocial: "Social sign-in",
+  socialDisabled: "not offered",
+  socialSharedClient: "shared development client, sandbox only",
+  socialAppleRecommended:
+    "Your iOS app offers another social sign-in without Sign in with Apple. The App Store asks for Sign in with Apple next to it: enable Apple too.",
+  socialClientChanged:
+    "The client id changed on {at}: the provider names every user by a new identifier, so earlier sign-ins no longer match.",
+  socialAppleTransfer:
+    "Apple moves existing users over to the new client until {until}; after that they can't be moved.",
   upstreamLinkTitle: "Link a provider's user to an account",
   upstreamLinkIntro:
     "Security signals the provider sends about this user then reach the account. They can only end sessions or restrict it, never grant anything.",

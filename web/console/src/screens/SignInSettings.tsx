@@ -257,6 +257,63 @@ function Listing({
   );
 }
 
+interface SocialWarning {
+  readonly code: string;
+  readonly at?: string;
+  readonly until?: string;
+}
+
+interface Socials {
+  readonly items: readonly {
+    readonly preset: string;
+    readonly client_id?: string | null;
+    readonly shared_development_client: boolean;
+    readonly status: "active" | "disabled";
+    readonly warnings: readonly SocialWarning[];
+  }[];
+}
+
+/** One social warning as text; a warning never refuses anything (TN-87, IDP-31 (5)). */
+function socialWarning(w: SocialWarning): string {
+  switch (w.code) {
+    case "apple-sign-in-recommended":
+      return t("socialAppleRecommended");
+    case "social-client-id-changed":
+      return t("socialClientChanged", { at: w.at ?? "" });
+    case "apple-transfer-window":
+      return t("socialAppleTransfer", { until: w.until ?? "" });
+    default:
+      return w.code;
+  }
+}
+
+/** IDP-31, TN-87, Ek B 3572, 3655: the social presets and their warnings. */
+function SocialProviders({ ctx }: { readonly ctx: Ctx }): ReactElement {
+  const l = useLoad(() => adminGet<Socials>(ctx.instance, realmPath(ctx, "/social-providers")));
+  return (
+    <Panel id="social" title={t("settingsSocial")}>
+      <Show l={l}>
+        {(v) => (
+          <ul data-testid="social-providers">
+            {v.items.map((s) => (
+              <li key={s.preset}>
+                <span className="mono">{s.preset}</span>
+                {s.status === "disabled" && ` (${t("socialDisabled")})`}
+                {s.shared_development_client && ` — ${t("socialSharedClient")}`}
+                {s.warnings.map((w) => (
+                  <p key={w.code} role="status" className="banner" data-testid="social-warning">
+                    {socialWarning(w)}
+                  </p>
+                ))}
+              </li>
+            ))}
+          </ul>
+        )}
+      </Show>
+    </Panel>
+  );
+}
+
 /** IDP-36, K14: counts only, never a decision input. */
 export function AnalyticsPanel({ ctx }: { readonly ctx: Ctx }): ReactElement {
   const l = useLoad(() => adminGet<Analytics>(ctx.instance, realmPath(ctx, "/analytics")));
@@ -327,6 +384,7 @@ export function SignInSettings({ ctx }: { readonly ctx: Ctx }): ReactElement {
       </Show>
       <Listing ctx={ctx} path="/clients" title={t("settingsClients")} id="clients" />
       <Listing ctx={ctx} path="/upstream-idps" title={t("settingsUpstreams")} id="upstreams" />
+      <SocialProviders ctx={ctx} />
       <UpstreamLink ctx={ctx} />
       <AnalyticsPanel ctx={ctx} />
     </>
