@@ -388,3 +388,69 @@ ocsf_class = 6001
 ocsf_activity = 7
 caep = ""
 webhook = false
+
+[[event]]
+event = "account.deletion_requested"
+plane = "identity"
+class = "account"
+outcome = "success"
+fields = ["actor", "target"]
+ocsf_class = 3001
+ocsf_activity = 99
+caep = ""
+webhook = false
+
+[[event]]
+event = "account.deletion_cancelled"
+plane = "identity"
+class = "account"
+outcome = "success"
+fields = ["actor", "target"]
+ocsf_class = 3001
+ocsf_activity = 99
+caep = ""
+webhook = false
+
+[[event]]
+event = "account.destroyed"
+plane = "identity"
+class = "account"
+outcome = "success"
+fields = ["actor", "target"]
+ocsf_class = 3001
+ocsf_activity = 99
+caep = ""
+webhook = false
+
+[[event]]
+event = "account.inactivity_notice"
+plane = "identity"
+class = "account"
+outcome = "success"
+fields = ["actor", "target"]
+ocsf_class = 3001
+ocsf_activity = 99
+caep = ""
+webhook = false
+
+[[event]]
+event = "preference.changed"
+plane = "identity"
+class = "account"
+outcome = "success"
+fields = ["actor", "target"]
+ocsf_class = 3001
+ocsf_activity = 99
+caep = ""
+webhook = true
+
+[[event]]
+event = "document.accepted"
+plane = "identity"
+class = "account"
+outcome = "success"
+fields = ["actor", "target"]
+ocsf_class = 3001
+ocsf_activity = 99
+caep = ""
+webhook = true

@@ -535,7 +535,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Erases an account by crypto-shredding: declared and reserved, never applied. */
+        /** Deletes an account after its cancellation window; its personal data becomes unreadable when its keys are destroyed later (reserved). */
         post: operations["deleteAccount"];
         delete?: never;
         options?: never;
