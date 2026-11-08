@@ -532,12 +532,15 @@ async fn a_party_whose_account_cannot_act_changes_nothing() {
 fn reserved_operations_compile_to_nothing() {
     let ids = access_crypto::opaque_id::IdKey::new(access_crypto::Secret::new([7; 32]));
     let account = ids.encode(SUBJECT_PREFIX, [1; 16]).unwrap();
-    for op in [Op::DeleteAccount, Op::ResetIntent] {
-        assert_eq!(
-            compile(op, Some(&account), &json!({}), &ids),
-            Err(Invalid::Reserved)
-        );
-    }
+    assert_eq!(
+        compile(Op::ResetIntent, Some(&account), &json!({}), &ids),
+        Err(Invalid::Reserved)
+    );
+    // OP-153 m.3 (bb)
+    assert_eq!(
+        compile(Op::DeleteAccount, Some(&account), &json!({}), &ids),
+        Ok(Change::AccountDelete([1; 16]))
+    );
     assert_eq!(
         compile(Op::RehomeRealm, None, &json!({}), &ids),
         Err(Invalid::Reserved)

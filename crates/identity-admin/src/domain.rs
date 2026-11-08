@@ -1213,6 +1213,8 @@ pub enum Change {
     },
     /// `idp.account.canary`: the subject's internal id (§4.4).
     AccountCanary([u8; 16]),
+    /// `idp.account.delete`: the subject's internal id; reserved, CT3 (OP-153 m.3 (bb)).
+    AccountDelete([u8; 16]),
     /// `idp.realm.extension_policy`.
     ExtensionPolicy(ExtensionPolicy),
     /// `idp.hook.register` or `idp.hook.retire` (TN-135).
@@ -1260,6 +1262,7 @@ impl Change {
             Self::ProtectionMode { loosens: false, .. } => IdpAction::RealmProtectionMode,
             Self::ProtectionMode { loosens: true, .. } => IdpAction::RealmProtectionModeLoosen,
             Self::AccountCanary(_) => IdpAction::AccountCanary,
+            Self::AccountDelete(_) => IdpAction::AccountDelete,
             Self::ExtensionPolicy(_) => IdpAction::RealmExtensionPolicy,
             Self::Hook(h) => h.action().idp(),
             Self::Webhook(w) => w.action().idp(),
@@ -1304,7 +1307,8 @@ impl Change {
             | Self::AccountReactivate(_)
             | Self::UpstreamRetire(_)
             | Self::ProtectionMode { .. }
-            | Self::AccountCanary(_) => Ok(()),
+            | Self::AccountCanary(_)
+            | Self::AccountDelete(_) => Ok(()),
         }
     }
 
@@ -1355,7 +1359,10 @@ impl Change {
                 Value::Map(vec![(Value::text("name"), Value::text(n.as_str()))])
             }
             Self::GroupMembersAdd(m) | Self::GroupMembersRemove(m) => m.to_value(),
-            Self::AccountSuspend(s) | Self::AccountReactivate(s) | Self::AccountCanary(s) => {
+            Self::AccountSuspend(s)
+            | Self::AccountReactivate(s)
+            | Self::AccountCanary(s)
+            | Self::AccountDelete(s) => {
                 Value::Map(vec![(Value::text("subject"), Value::Bytes(s.to_vec()))])
             }
             Self::ProtectionMode { mode, .. } => Value::Map(vec![(
@@ -1403,7 +1410,10 @@ impl Change {
             | Self::GroupMembersRemove(Members { group: name, .. }) => {
                 path.extend([String::from("group"), String::from(name.as_str())]);
             }
-            Self::AccountSuspend(s) | Self::AccountReactivate(s) | Self::AccountCanary(s) => {
+            Self::AccountSuspend(s)
+            | Self::AccountReactivate(s)
+            | Self::AccountCanary(s)
+            | Self::AccountDelete(s) => {
                 path.extend([String::from("account"), b64url_encode(s)]);
             }
             Self::UpstreamRegister(Upstream { name, .. })

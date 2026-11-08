@@ -325,7 +325,7 @@ pub const ROWS: &[Route] = &[
         Verb::Post,
         "/admin/v1/realms/{slug}/accounts/{account_id}/delete",
         "deleteAccount",
-        "Erases an account by crypto-shredding: declared and reserved, never applied.",
+        "Deletes an account after its cancellation window; its personal data becomes unreadable when its keys are destroyed later (reserved).",
     ),
     write(
         Verb::Post,

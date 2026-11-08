@@ -86,7 +86,7 @@ pub enum Op {
     PutProtectionMode,
     /// `markCanaryAccount` (§4.4).
     MarkCanary,
-    /// `deleteAccount`: `idp.account.delete`, reserved and declaration only (OP-150 m.11 (b)).
+    /// `deleteAccount`: `idp.account.delete`, reserved (OP-153 m.3 (bb)).
     DeleteAccount,
     /// `rehomeRealm`: `idp.realm.rehome`, reserved and declaration only (OP-150 m.11 (b)).
     RehomeRealm,
@@ -525,7 +525,11 @@ pub fn compile(op: Op, key: Option<&str>, body: &Json, ids: &IdKey) -> Result<Ch
             Change::RpId(RpId::parse(text(m, "rp_id")?)?)
         }
         // OP-150 m.11 (b), TN-61
-        Op::DeleteAccount | Op::RehomeRealm | Op::ResetIntent => return Err(Invalid::Reserved),
+        Op::DeleteAccount => {
+            only(m, &[])?;
+            Change::AccountDelete(subject(ids, key_of(key)?)?)
+        }
+        Op::RehomeRealm | Op::ResetIntent => return Err(Invalid::Reserved),
         Op::PutJoseAlg => {
             only(m, &["alg"])?;
             Change::JoseAlg(JoseAlg::from_name(text(m, "alg")?).ok_or(Invalid::JoseAlg)?)

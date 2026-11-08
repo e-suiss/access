@@ -449,7 +449,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                     return Err(Invalid::NoUpstream.into());
                 }
             }
-            Change::AccountCanary(s) => {
+            Change::AccountCanary(s) | Change::AccountDelete(s) => {
                 if resources::account(t, *s).await?.is_none() {
                     return Err(Invalid::NoAccount.into());
                 }
@@ -712,6 +712,29 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
             status_moved(&mut t, &named, subject, (from, to), &who)
                 .await
                 .map_err(account)?;
+        }
+        if let Change::AccountDelete(subject) = &p.change {
+            // OP-153 m.3 (bb), TN-78
+            let correlation = access_kernel::json::b64url_encode(&exercise.0);
+            let who = access_identity_account::app::Actor {
+                actor: DECIDED_BY,
+                correlation: &correlation,
+            };
+            let named = access_identity_account::app::Named {
+                realm: p.realm,
+                ids: self.ids,
+            };
+            access_identity_account::app::privacy::request_deletion(
+                &mut t,
+                &named,
+                *subject,
+                access_identity_account::app::privacy::DeletionSource::Admin,
+                Some(&exercise.0),
+                access_kernel::meta::CT3_DELAY_DEFAULT_S,
+                &who,
+            )
+            .await
+            .map_err(account)?;
         }
         declare_transmitter(&mut t.0, bound, &p.change, exercise).await?;
         self.announce(&mut t.0, p, exercise).await?;
@@ -1026,6 +1049,7 @@ impl<D: Decider, G: Governance + Instances, K: RealmKeys> Admin<'_, D, G, K> {
                     .await?
                     .ok_or(Invalid::UpstreamSubjectLinked)?
             }
+            Change::AccountDelete(_) => true,
         };
         if done {
             Ok(secret)
